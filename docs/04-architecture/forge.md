@@ -30,6 +30,7 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | conflate (block, score, cluster) | **built** (S5) | below |
 | aliases | **built** (S5) | below |
 | dem | **built** (S5) | below |
+| dem-ref, geoid | **built** (S6) | below |
 | geofix-consensus | S5 | weighted Weiszfeld |
 | the rest | Phase 2 | |
 
@@ -59,6 +60,11 @@ country with no folder.
   tile: name, SHA-256 and size, or `absent` where upstream has no tile (the sea). The lock pins
   the manifest's hash. The tile names come from the `bbox` and `tile` parameters, and the url
   carries `{tile}`. Four tiles download at once; `--pin` writes the manifest (D-061).
+- A tileset with a `query` posts one request per tile to a subsetting API instead: the body is
+  the template rendered with `query_params` and the tile's corners (`{{W}}`, `{{S}}`, `{{E}}`,
+  `{{N}}`). `query_params.parallel` sets how many run at once (`1` for a shared public service).
+  The stored bytes are the raw response. ICESat-2 ATL08 through SlideRule is fetched this way
+  (D-063).
 
 `forge path <id>` prints where a fetched source is stored.
 
@@ -181,6 +187,26 @@ and writes `data/build/dem/<tileset>/<source>.parquet` (`id`, `dem_m`, `slope_de
   shifted by half a pixel. Heights are bilinear and slope is Horn's method in metres.
 - Measured on Nepal: 179,470 points in 7.0 s, 278 MB. Results:
   [S5](../02-research/benches/s5-nepal.md#dem-disagreement-s56).
+
+## DEM against a ground reference (`dem-ref`) and the geoid
+
+`forge dem-ref <dem-tileset> <reference-tileset> <geoid-source>` compares the DEM with ICESat-2
+ATL08 terrain heights, the method of the
+[elevation-reference note](../02-research/notes/elevation-reference.md):
+- Each reference tile is a SlideRule response. The decoder takes the Parquet file out of its
+  records and rejects a response holding any server error, so a tile with a failed granule or
+  beam is never measured as complete.
+- ATL08 heights are ellipsoidal, so they become EGM2008 heights (the DEM's datum) by H = h − N.
+  N comes from `geoid`, which interpolates GeographicLib's 5′ EGM2008 grid bilinearly.
+- Tiles run four at a time, each with its one DEM tile. Statistics go into fixed 0.1 m
+  histograms per stratum (slope, land cover, snow, day or night, height), so memory does not
+  grow with the number of points.
+- Output: the summary, plus every tile's points in `data/build/dem-ref/<dem>/<reference>/`
+  for calibrating σ_DEM.
+
+`forge geoid <source> <lat> <lon> […]` prints N at points. On 2026-11-07 it agreed with
+GeographicLib's online egm2008-1 values within 0.12 m at five points (Kathmandu, Everest,
+Kalapani, the eastern Terai, Sydney); the grid's documented maximum is 0.48 m.
 
 **Clean-up.** `cargo xtask clean` removes build output from both workspaces and keeps the
 store: fetched sources are pinned inputs, not build output.

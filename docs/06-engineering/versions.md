@@ -68,6 +68,9 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | unicode-script | 0.5.9 | 2026-11-06 | crates.io | 2026-12-06 |
 | unicode-normalization | 0.1.26 | 2026-11-06 | crates.io | 2026-12-06 |
 | sha2 (forge fetch) | 0.11.1 | 2026-11-06 | crates.io | 2026-12-06 |
+| bytes (forge: in-memory Parquet) | 1.12.1 | 2026-11-07 | crates.io | 2026-12-07 |
+| SlideRule server (ATL08 reference, S6) | v5.8.0 | 2026-11-07 | `/source/version` | 2026-12-07 |
+| GeographicLib geoid grid egm2008-5 | 2009-08-29 | 2026-11-07 | SourceForge `geoids-distrib` | 2027-11-07 |
 | toml (lock files) | 1.2.1 | 2026-11-06 | crates.io | 2026-12-06 |
 | zip (forge readers; releases almost daily) | 9.4.1 | 2026-11-06 | crates.io | 2026-12-06 |
 | arrow-array / arrow-schema (forge) | 60.1.0 | 2026-11-06 | crates.io | 2026-12-06 |

@@ -55,7 +55,10 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
   - [x] S5.5 links and conflation: cross-source pairs, position disagreement, the matcher, aliases into search (D-056, D-059, D-060)
   - [x] S5.6 DEM disagreement (Copernicus GLO-30)
   - [x] S5.7 results page: the summary and the accuracy targets (Q-005, D-062)
-- [ ] S6 Elevation validation: ICESat-2 ATL08 against Copernicus GLO-30, NASADEM and GEDTM30 over Nepal ([ADR-0034](../../03-decisions/adr/ADR-0034-elevation-method.md))
+- [ ] S6 Elevation validation: ICESat-2 ATL08 against Copernicus GLO-30, NASADEM and GEDTM30 over Nepal ([ADR-0034](../../03-decisions/adr/ADR-0034-elevation-method.md)) ([note](../../02-research/notes/elevation-reference.md))
+  - [x] S6.1 the reference: ATL08 through SlideRule pinned as a POST tileset, the EGM2008 geoid, `forge dem-ref` (D-063)
+  - [x] S6.2 Copernicus GLO-30 against ATL08 over the Nepal box, by slope, land cover, snow, light and height ([results](../../02-research/benches/s6-elevation.md)): LE90 18.7 m inside Nepal
+  - [ ] S6.3 GEDTM30 (range reads of its global COG) and NASADEM (needs an Earthdata login or an OpenTopography key: maintainer)
 
 ### 0.5 Exit review
 - [ ] M0 criteria met; progress updated; maintainer review
@@ -68,3 +71,4 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
 | 2026-11-06 | S3 done; the COD-AB join key ignores spaces (a conflation bug found by S3), golden set regenerated (512 queries) | Spike S3 |
 | 2026-11-06 | Country folders (`data/countries/<cc>/`: profile, lexicon, curated golden) and `check-data`; golden set v0 | Maintainer: everything world-general (P16) |
 | 2026-11-06 | Benchmarking note and catalogue added; S2 done | Maintainer asked for proper benchmarks across features, cases and bindings |
+| 2026-11-07 | S5 done (S5.6 DEM disagreement, S5.7 targets, D-061, D-062); S6 split into S6.1–S6.3 after the elevation-reference research (D-063) | Spike S5; elevation-reference note |
