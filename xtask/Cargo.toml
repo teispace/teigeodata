@@ -9,6 +9,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+teigeodata-names.workspace = true
 serde = { version = "1.0.229", features = ["derive"] }
 serde-saphyr = "2.1.1"
 toml = "1.2.1"

@@ -37,6 +37,9 @@ struct Profile {
     /// The country's Wikidata item (`Q837`), for per-country source queries.
     #[serde(default)]
     wikidata: Option<String>,
+    /// The phonetic key its names use, by algorithm name (`teigeodata_names::PhoneticKey`).
+    #[serde(default)]
+    phonetic_key: Option<String>,
     /// BCP 47 language codes, official ones first.
     languages: Vec<String>,
     /// ISO 15924 scripts in use.
@@ -228,6 +231,15 @@ fn check_profile(cc: &str, text: &str) -> Vec<String> {
             && !q[1..].starts_with('0'))
     {
         out.push(format!("wikidata `{q}` is not a Wikidata item ID (Q…)"));
+    }
+    if let Some(k) = &p.phonetic_key
+        && teigeodata_names::PhoneticKey::from_name(k).is_none()
+    {
+        let known: Vec<&str> = teigeodata_names::PhoneticKey::ALL
+            .iter()
+            .map(|(n, _)| *n)
+            .collect();
+        out.push(format!("phonetic_key `{k}` is not one of {known:?}"));
     }
     if p.languages.is_empty() {
         out.push("languages is empty".to_string());
@@ -425,6 +437,11 @@ sources:
                 "name: Nepal",
                 "name: Nepal\nwikidata: P837",
                 "Wikidata item ID",
+            ),
+            (
+                "name: Nepal",
+                "name: Nepal\nphonetic_key: soundex",
+                "phonetic_key `soundex`",
             ),
             ("languages: [ne, en]", "languages: [nepali, en]", "BCP 47"),
             (

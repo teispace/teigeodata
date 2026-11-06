@@ -6,6 +6,8 @@ country: NP
 iso3: NPL
 name: Nepal
 wikidata: Q837
+# Phonetic key for matching and search (teigeodata-names): Latin and Devanagari names.
+phonetic_key: indic-v0
 # Nepal Bhasa (new) is written in Devanagari and in Newa (Prachalit) script.
 languages: [ne, en, new]
 scripts: [Deva, Latn, Newa]

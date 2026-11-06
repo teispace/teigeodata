@@ -16,7 +16,10 @@ general feature: design it for every country and record it in the decision log.
 ```
 data/countries/<cc>/        lower-case ISO 3166-1 alpha-2
   profile.yaml              required: languages, scripts, admin ladder, unit types,
-                            abbreviations, droppable suffixes, source codes
+                            abbreviations, droppable suffixes, source codes;
+                            optional: wikidata (the country item, for per-country
+                            queries), phonetic_key (an algorithm of teigeodata-names,
+                            such as indic-v0)
   lexicon.yaml              generic place-name terms and their canonical spellings
   corrections/<id>.yaml     reviewed corrections (ADR-0036)
   golden-curated.yaml       hand-written search queries for the golden set

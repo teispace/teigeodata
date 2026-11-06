@@ -635,8 +635,7 @@ dependencies = [
  "fst",
  "serde",
  "serde-saphyr",
- "unicode-normalization",
- "unicode-script",
+ "teigeodata-names",
 ]
 
 [[package]]
@@ -654,6 +653,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "teigeodata-names"
+version = "0.0.0"
+dependencies = [
+ "unicode-normalization",
+ "unicode-script",
 ]
 
 [[package]]
@@ -835,6 +842,7 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "serde-saphyr",
+ "teigeodata-names",
  "toml",
  "unicode-normalization",
  "unicode-script",

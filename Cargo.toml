@@ -3,7 +3,16 @@
 # reach the runtime graph (ADR-0001). xtask holds every repository task (ADR-0021).
 [workspace]
 resolver = "3"
-members = ["xtask", "spikes/s1-codecs", "spikes/s2-region-index", "spikes/s3-search"]
+members = [
+    "crates/teigeodata-names",
+    "xtask",
+    "spikes/s1-codecs",
+    "spikes/s2-region-index",
+    "spikes/s3-search",
+]
+
+[workspace.dependencies]
+teigeodata-names = { version = "0.0.0", path = "crates/teigeodata-names" }
 
 [workspace.package]
 version = "0.0.0"

@@ -52,7 +52,9 @@ part; the ADR each part comes from is linked.
 | `xtask` | every repository task and gate | no | [ADR-0021](../03-decisions/adr/ADR-0021-rust-tooling.md) |
 | `forge/*` (own workspace) | the data pipeline and source adapters | no | [ADR-0001](../03-decisions/adr/ADR-0001-rust-core.md) |
 
-Crates are created when their phase starts, not before.
+Crates are created when their phase starts, not before. The one exception is
+`teigeodata-names`: it was started in Phase 0 with the fold and the phonetic keys from spike S3,
+because the forge's matcher must compare names exactly as search does (D-057).
 
 ## 3. Capabilities and features
 
@@ -78,3 +80,4 @@ its research note lands.
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-06 | First draft | Project start |
+| 2026-11-06 | `teigeodata-names` started early | One name code path for the forge and search (D-057) |

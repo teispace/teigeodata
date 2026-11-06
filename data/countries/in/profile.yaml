@@ -6,6 +6,8 @@ country: IN
 iso3: IND
 name: India
 wikidata: Q668
+# Phonetic key for matching and search (teigeodata-names): Latin and Devanagari names.
+phonetic_key: indic-v0
 languages: [hi, en]
 scripts: [Deva, Latn, Beng, Guru, Gujr, Orya, Taml, Telu, Knda, Mlym, Arab, Olck, Mtei]
 admin_levels:
