@@ -175,3 +175,33 @@ licence = "Computed from NGA EGM2008, released for public use (exact wording unv
 licence_class = "public-domain"
 countries = ["*"]
 used_by = "spike S6 (ellipsoidal to EGM2008 heights)"
+
+[[source]]
+id = "nasadem-np"
+title = "NASADEM HGT v001, Cloud Optimized GeoTIFF tiles over Nepal (Microsoft Planetary Computer)"
+kind = "tileset"
+url = "https://nasademeuwest.blob.core.windows.net/nasadem-cog/v001/{tile}.tif"
+tiles = "data/sources/nasadem-np.tiles"
+query_params = { bbox = "80,26,88,30", tile = "NASADEM_HGT_{ns}{LAT2}{ew}{LON3}", token_url = "https://planetarycomputer.microsoft.com/api/sas/v1/token/nasadem", geoid = "egm96-5" }
+version = "NASADEM_HGT v001 (Int16, DEFLATE, PixelIsPoint, EGM96 heights)"
+retrieved = "2026-11-06"
+sha256 = "330d7fde8ac7513ae361a25dc1e326f8bca75dca7c965b190720fdb87f277850"
+size = 4294
+licence = "NASA data, no restriction on use (public domain); credit NASA JPL / LP DAAC; hosted by Microsoft Planetary Computer"
+licence_class = "public-domain"
+countries = ["NP"]
+used_by = "spike S6.3 (the lite-build DEM against ATL08)"
+
+[[source]]
+id = "egm96-5"
+title = "EGM96 geoid undulation, 5-minute grid (GeographicLib PGM)"
+kind = "http"
+url = "https://sourceforge.net/projects/geographiclib/files/geoids-distrib/egm96-5.zip/download"
+version = "GeographicLib geoids egm96-5 (2009-08-29)"
+retrieved = "2026-11-07"
+sha256 = "dba71b3af87e306d4aab12babe62f6cbcd0efc10b84c9176cd90f9f66641690f"
+size = 16736810
+licence = "Computed from NGA/NASA EGM96, released for public use (exact wording unverified; see the elevation-reference note)"
+licence_class = "public-domain"
+countries = ["*"]
+used_by = "spike S6.3 (EGM96 DEMs to EGM2008)"

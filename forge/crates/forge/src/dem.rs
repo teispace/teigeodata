@@ -78,8 +78,11 @@ impl Grid {
             .skip(1)
             .any(|k| k.first() == Some(&1025) && k.get(3) == Some(&2));
         let half = if is_point { 0.0 } else { 0.5 };
-        let DecodingResult::F32(z) = d.read_image().map_err(err)? else {
-            return Err(format!("{}: not a Float32 raster", path.display()));
+        let z = match d.read_image().map_err(err)? {
+            DecodingResult::F32(v) => v,
+            // Integer DEMs (SRTM, NASADEM): the no-data value is below the validity bound in `at`.
+            DecodingResult::I16(v) => v.into_iter().map(f32::from).collect(),
+            _ => return Err(format!("{}: not a Float32 or Int16 raster", path.display())),
         };
         Ok(Self {
             lon0: x0 + (half - i0) * dx,

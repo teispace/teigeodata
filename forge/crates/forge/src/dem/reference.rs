@@ -223,8 +223,17 @@ pub(crate) fn run(
         .into_iter()
         .filter(|t| t.sha256.is_some())
         .collect();
-    let g = lock.get(geoid)?;
-    let geoid = Geoid::open_zip(&root.join("data/cache/store/sha256").join(&g.sha256))?;
+    let open = |id: &str| {
+        lock.get(id)
+            .and_then(|g| Geoid::open_zip(&root.join("data/cache/store/sha256").join(&g.sha256)))
+    };
+    // A DEM on another geoid (`query_params.geoid`, e.g. EGM96 for SRTM and NASADEM) is moved
+    // to the reference geoid: H = H_dem + N_dem − N_ref.
+    let dem_geoid = match dem_src.query_params.get("geoid") {
+        Some(g) if g != geoid => Some(open(g)?),
+        _ => None,
+    };
+    let geoid = open(geoid)?;
     let region = within
         .map(|b| crate::pip::Region::load(root, b))
         .transpose()?;
@@ -240,6 +249,7 @@ pub(crate) fn run(
         template,
         dem_tiles: &dem_tiles,
         geoid: &geoid,
+        dem_geoid: dem_geoid.as_ref(),
         dir: &dir,
         region: region.as_ref(),
     };
@@ -271,6 +281,7 @@ struct Ctx<'a> {
     template: &'a str,
     dem_tiles: &'a std::collections::BTreeMap<String, Tile>,
     geoid: &'a Geoid,
+    dem_geoid: Option<&'a Geoid>,
     dir: &'a Path,
     region: Option<&'a crate::pip::Region>,
 }
@@ -324,8 +335,14 @@ impl Ctx<'_> {
             else {
                 continue;
             };
-            #[allow(clippy::cast_possible_truncation, reason = "a height in metres")]
-            let reference = (f64::from(h) - self.geoid.undulation(lat, lon)) as f32;
+            let n_ref = self.geoid.undulation(lat, lon);
+            #[allow(clippy::cast_possible_truncation, reason = "heights in metres")]
+            let (reference, dem) = (
+                (f64::from(h) - n_ref) as f32,
+                self.dem_geoid.map_or(dem, |g| {
+                    (f64::from(dem) + g.undulation(lat, lon) - n_ref) as f32
+                }),
+            );
             let p = Point {
                 lat,
                 lon,

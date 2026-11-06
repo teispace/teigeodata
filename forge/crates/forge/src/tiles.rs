@@ -4,8 +4,12 @@
 //! the tiles of `query_params.bbox` with the `query_params.tile` name template and downloads
 //! them. Tiles are stored by hash like any other source.
 //!
-//! The name template takes `{NS}`/`{EW}` (hemisphere letters), `{LAT2}` and `{LON3}`
-//! (zero-padded absolute degrees of the tile's south-west corner).
+//! The name template takes `{NS}`/`{EW}` (hemisphere letters; `{ns}`/`{ew}` in lower case),
+//! `{LAT2}` and `{LON3}` (zero-padded absolute degrees of the tile's south-west corner).
+//!
+//! A host that hands out short-lived anonymous read tokens (an Azure SAS) sets
+//! `query_params.token_url`: one token is fetched per run (JSON `{"token": …}`) and appended as
+//! the url's query. Tokens are never stored or printed; the pinned hashes prove the bytes.
 //!
 //! A GET tileset puts the name in its url (`{tile}`). A POST tileset, a server-side subsetting
 //! API, has a `query` template instead: its body is rendered per tile with the lock's
@@ -42,6 +46,8 @@ pub(crate) fn tile_name(template: &str, lon: i32, lat: i32) -> String {
     template
         .replace("{NS}", if lat < 0 { "S" } else { "N" })
         .replace("{EW}", if lon < 0 { "W" } else { "E" })
+        .replace("{ns}", if lat < 0 { "s" } else { "n" })
+        .replace("{ew}", if lon < 0 { "w" } else { "e" })
         .replace("{LAT2}", &format!("{:02}", lat.unsigned_abs()))
         .replace("{LON3}", &format!("{:03}", lon.unsigned_abs()))
 }
@@ -142,6 +148,15 @@ pub(crate) fn fetch(
         .get("parallel")
         .map_or(Ok(PARALLEL), |v| v.parse::<usize>())
         .map_err(|e| format!("{}: query_params.parallel: {e}", s.id))?;
+    let missing = |n: &String| {
+        known
+            .get(n)
+            .is_none_or(|t| t.sha256.is_some() && tile_path(root, t).is_none_or(|p| !p.is_file()))
+    };
+    let token = match s.query_params.get("token_url") {
+        Some(u) if pin || names.iter().any(|(n, _, _)| missing(n)) => Some(read_token(u)?),
+        _ => None,
+    };
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(parallel.max(1))
         .build()
@@ -154,6 +169,7 @@ pub(crate) fn fetch(
                     name,
                     lon: *lon,
                     lat: *lat,
+                    token: token.as_deref(),
                 };
                 fetch_tile(root, s, &want, known.get(name), pin, verify)
             })
@@ -245,11 +261,30 @@ fn confirm_empty(s: &Source, url: &str, beams: &[(String, String)]) -> Result<()
     Ok(())
 }
 
-/// A tile to fetch: its name and south-west corner.
+/// A tile to fetch: its name, south-west corner and the run's read token.
 struct Want<'a> {
     name: &'a str,
     lon: i32,
     lat: i32,
+    token: Option<&'a str>,
+}
+
+/// A short-lived anonymous read token from `url` (JSON `{"token": "…"}`).
+fn read_token(url: &str) -> Result<String, String> {
+    let mut resp = ureq::get(url)
+        .header("User-Agent", crate::fetch::USER_AGENT)
+        .call()
+        .map_err(|e| format!("token {url}: {e}"))?;
+    let text = resp
+        .body_mut()
+        .read_to_string()
+        .map_err(|e| format!("token {url}: {e}"))?;
+    let v: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("token {url}: {e}"))?;
+    v.get("token")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| format!("token {url}: no `token` field"))
 }
 
 fn fetch_tile(
@@ -279,7 +314,10 @@ fn fetch_tile(
             Some(_) => {}
         }
     }
-    let url = s.url.replace("{tile}", name);
+    let url = match want.token {
+        None => s.url.replace("{tile}", name),
+        Some(t) => format!("{}?{t}", s.url.replace("{tile}", name)),
+    };
     let body = match &s.query {
         None => None,
         Some(template) => {
@@ -339,6 +377,11 @@ mod tests {
             "Copernicus_DSM_COG_10_S01_00_W003_00_DEM"
         );
         assert_eq!(names_in("80,26,88,30", t).map(|v| v.len()), Ok(45));
+        assert_eq!(
+            tile_name("NASADEM_HGT_{ns}{LAT2}{ew}{LON3}", 85, 27),
+            "NASADEM_HGT_n27e085"
+        );
+        assert_eq!(tile_name("{ns}{LAT2}{ew}{LON3}", -71, -13), "s13w071");
         assert_eq!(
             names_in("85,27,86,27", "x{EW}{LON3}").ok(),
             Some(vec![

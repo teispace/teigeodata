@@ -178,6 +178,8 @@ pub(crate) fn get_to(
     body: Option<&str>,
     partial: &Path,
 ) -> Result<Option<(String, u64)>, String> {
+    // A url's query may hold a read token: never print it.
+    let shown = url.split('?').next().unwrap_or(url);
     let mut last = String::new();
     for attempt in 1..=ATTEMPTS {
         let sent = match body {
@@ -195,11 +197,11 @@ pub(crate) fn get_to(
             Err(ureq::Error::StatusCode(404)) => return Ok(None),
             Err(e) => last = e.to_string(),
         }
-        say(&format!("{url}: attempt {attempt} failed: {last}"));
+        say(&format!("{shown}: attempt {attempt} failed: {last}"));
         std::thread::sleep(Duration::from_secs(u64::from(attempt) * 5));
     }
     let _ = fs::remove_file(partial);
-    Err(format!("{url}: {last}"))
+    Err(format!("{shown}: {last}"))
 }
 
 /// Streams a body into `partial` through SHA-256.
