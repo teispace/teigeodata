@@ -64,7 +64,12 @@ country with no folder.
   the template rendered with `query_params` and the tile's corners (`{{W}}`, `{{S}}`, `{{E}}`,
   `{{N}}`). `query_params.parallel` sets how many run at once (`1` for a shared public service).
   The stored bytes are the raw response. ICESat-2 ATL08 through SlideRule is fetched this way
-  (D-063).
+  (D-063). With `query_params.response = "sliderule"`, a response that reports a server error
+  is fetched again and never pinned.
+- `query_params.token_url` names an endpoint that hands out short-lived anonymous read tokens
+  (an Azure SAS, as for NASADEM on Planetary Computer). One token is fetched per run and
+  appended to each tile url; it is never stored or printed.
+- Tile names take `{NS}`/`{EW}` or lower-case `{ns}`/`{ew}`.
 
 `forge path <id>` prints where a fetched source is stored.
 
@@ -198,6 +203,10 @@ ATL08 terrain heights, the method of the
   beam is never measured as complete.
 - ATL08 heights are ellipsoidal, so they become EGM2008 heights (the DEM's datum) by H = h − N.
   N comes from `geoid`, which interpolates GeographicLib's 5′ EGM2008 grid bilinearly.
+- A DEM on another geoid names it (`query_params.geoid`, `egm96-5` for NASADEM) and is moved
+  per point: H = H_dem + N_dem − N_ref. Float32 and Int16 rasters are read.
+- An optional boundary source restricts the measurement to its area (the finest level, exact
+  point in polygon).
 - Tiles run four at a time, each with its one DEM tile. Statistics go into fixed 0.1 m
   histograms per stratum (slope, land cover, snow, day or night, height), so memory does not
   grow with the number of points.

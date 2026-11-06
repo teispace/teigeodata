@@ -118,10 +118,28 @@ SlideRule (University of Washington and NASA GSFC) is given.
 
 ## 6. Impact on the plan
 
-- Phase 0 S6 starts with Copernicus against ATL08 over the Nepal box. NASADEM needs an
-  Earthdata login (LP DAAC) or an OpenTopography key, and GEDTM30 is one global COG on Zenodo.
-  Both come after the Copernicus measurement: NASADEM when the maintainer provides access,
-  GEDTM30 through range reads of its COG.
+- Phase 0 S6 starts with Copernicus against ATL08 over the Nepal box.
+- **NASADEM needs no account after all (2026-11-07):**
+  - Microsoft Planetary Computer serves it as COGs:
+    `nasademeuwest.blob.core.windows.net/nasadem-cog/v001/NASADEM_HGT_<n27e085>.tif`.
+  - Access uses a short-lived anonymous SAS token from
+    `planetarycomputer.microsoft.com/api/sas/v1/token/nasadem`.
+  - Each tile is Int16, DEFLATE, 512² blocks, 3601², PixelIsPoint, no-data −32768, EGM96
+    heights.
+  - Forge fetches one token per run (`query_params.token_url`) and never stores or prints it.
+  - EGM96 to EGM2008 uses GeographicLib's `egm96-5` grid: H₂₀₀₈ = H₉₆ + N₉₆ − N₂₀₀₈.
+    `forge geoid` matches GeographicLib within 0.02 m; the two geoids differ by −2.0 m at
+    Kathmandu.
+- **GEDTM30 cannot be scored against ATL08 (Q-016):**
+  - The paper (Ho et al. 2025) trained it on ICESat-2 ATL08 v6 `h_te_best_fit_20m` and on
+    GEDI, with no year range and no spatial or temporal hold-out.
+  - Scoring it against ATL08 2023 would test it on its own training data, so the result
+    would be optimistic by an unknown amount.
+  - Its own independent check (LiDAR DTMs) "completely under-represents Asia".
+  - The 30 m COG is at `s3.opengeohub.org/global/dtm/v1.2/` (CC BY 4.0, EGM2008, Float32,
+    no-data 3.4e38). The release is marked "for testing purposes".
+  - It waits for an independent reference: survey benchmarks, GNSS on monuments, or airborne
+    LiDAR.
 - σ_DEM priors (timezone and elevation note §3.B.1) are calibrated from this measurement.
 
 ## 7. Risks and open items

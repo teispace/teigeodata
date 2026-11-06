@@ -91,7 +91,46 @@ LE90 6.2 m, bias +0.4 m and 0.29% above 50 m. Nepal is harder than the region ar
   The measured LE90 of 27.7 m above 30° is σ ≈ 17 m. The prior is the right order and slightly
   conservative. Fitting it to the per-point output is Phase 2 work.
 
-## What follows (D-063)
+## NASADEM, the lite-build DEM (S6.3)
+
+`forge dem-ref nasadem-np sliderule-atl08-np-2023 egm2008-5 codab-np-geojson`, run 2026-11-07:
+- 45 NASADEM tiles from Planetary Computer, pinned (fetched with an anonymous token, 15 min);
+- moved from EGM96 to EGM2008 per point;
+- 5.2 s, 665 MB peak RSS (box run).
+
+Inside Nepal, on the same 497,717 segments, NASADEM has bias +2.8 m, RMSE 14.8 m, **LE90 17.7 m**,
+P99 52.2 m and 1.10% above 50 m. Over the whole box it has LE90 8.0 m, against 6.2 m for
+Copernicus.
+
+**Paired, point by point.** Both runs' per-point outputs are joined on the point; 132 extra
+pairs come from coincident segments. Slope is Copernicus's.
+
+| Cover | Slope | Points | Copernicus LE90 | NASADEM LE90 | NASADEM closer | Mean of both, LE90 |
+|---|---|---:|---:|---:|---:|---:|
+| **all** | | 497,849 | 18.7 | 17.7 | 43.3% | **17.3** |
+| forest | all | 201,050 | 22.0 | **19.7** | 60.0% | 19.9 |
+| forest | 0–5° | 20,033 | 17.1 | 14.5 | 66.7% | 15.4 |
+| forest | ≥ 30° | 66,425 | 26.2 | 24.2 | 58.0% | 23.8 |
+| open | all | 244,469 | **9.8** | 12.2 | 31.6% | 10.1 |
+| open | 0–5° | 115,701 | **2.3** | 3.5 | 26.1% | 2.5 |
+| open | 5–15° | 29,360 | **9.8** | 13.4 | 30.9% | 10.8 |
+| open | ≥ 30° | 45,879 | 26.5 | 25.7 | 41.6% | 24.2 |
+| snow | all | 52,330 | 25.7 | 25.6 | 34.3% | 23.2 |
+
+**Findings:**
+- **Copernicus is the better DEM** (closer on 57% of points, and much better on open ground)
+  everywhere except under forest.
+- **Under forest NASADEM wins:** C-band reaches further through the canopy than X-band. This is
+  the forest bias seen above (+8.8 m for Copernicus), and it is why NASADEM's overall LE90 is
+  lower in forested Nepal.
+- **Both DEMs meet the vertical target alone.** The lite build can use NASADEM (public domain)
+  with LE90 17.7 m.
+- **Land-cover-aware fusion is worth measuring.** The plain mean of both is already the best
+  overall (LE90 17.3 m). Copernicus on open ground, with a forest correction or NASADEM under
+  canopy, is the Phase 2 candidate (idea recorded). It is fitted on the per-point outputs and
+  must be scored against a held-out part of the reference.
+
+## What follows (D-063, D-064)
 
 - ATL08 through SlideRule is the elevation reference for every country: one lock entry per
   country and year, the same stage.

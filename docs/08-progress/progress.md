@@ -31,13 +31,14 @@ updated: 2026-11-07
   (D-060). `forge dem` samples Copernicus GLO-30, pinned as a tileset: stated elevations are P90
   100–430 m off, so elevation comes from the DEM at the conflated point (S5.6, D-061). S5 is done:
   Q-005 is answered by the S5.7 summary, with horizontal targets set by terrain slope (D-062).
-- **S6 in progress:** ICESat-2 ATL08 through SlideRule is pinned as a POST tileset, with the
-  EGM2008 geoid; `forge dem-ref` measures Copernicus at LE90 18.7 m inside Nepal (497,717
-  segments; at most 32.6 m in any stratum), so the DEM meets the vertical target by itself
-  (S6.1, S6.2, D-063; [results](../02-research/benches/s6-elevation.md)).
-- **Next:** S6.3 (GEDTM30 through COG range reads; NASADEM needs the maintainer's Earthdata
-  login or an OpenTopography key); then S4 bindings; then the M0 review. Phase 2 carries the S5
-  follow-ups: the settlement core, geofix-consensus, and growing the colloquial class.
+- **S6 done:** ICESat-2 ATL08 through SlideRule (no account), pinned as a POST tileset with
+  response checks; EGM2008 and EGM96 geoids; `forge dem-ref`. Inside Nepal (497,717 segments):
+  Copernicus LE90 18.7 m, NASADEM 17.7 m. Copernicus is better except under forest; both meet
+  the vertical target alone (D-063, D-064; [results](../02-research/benches/s6-elevation.md)).
+  GEDTM30 waits for an independent reference (Q-016).
+- **Next:** S4 bindings (C ABI, IDL, generator, one slice into Node, Dart, Python, JNI and
+  Swift; marshalling cost); then the M0 review. Phase 2 carries the S5 and S6 follow-ups:
+  the settlement core, geofix-consensus, land-cover-aware DEM fusion, and the colloquial class.
 - **Blocked:** nothing.
 
 ## Session log
@@ -51,3 +52,4 @@ updated: 2026-11-07
 | 2026-11-06 | Spike S3: recall gates met on Nepal, p99 depends on load (D-052); own Damerau automaton about 10× faster than the `fst` DFA; phonetic key at low weight; pkey pair sets; COD-AB join bug fixed and golden set regenerated (512 queries) | S5 baseline accuracy |
 | 2026-11-07 | S5 done: matcher, aliases into search (S3 recall@1 0.959), DEM tilesets and `forge dem` (S5.6), the summary and accuracy targets (S5.7, D-058 to D-062) | S6 elevation validation |
 | 2026-11-07 | S6.1–S6.2: elevation-reference research; POST tilesets with response checks; SlideRule decoder; EGM2008 geoid; `forge dem-ref`: Copernicus LE90 18.7 m in Nepal (D-063) | S6.3 GEDTM30 |
+| 2026-11-07 | S6.3: NASADEM via Planetary Computer tokens and EGM96; paired comparison with Copernicus (D-064); GEDTM30 circularity recorded (Q-016) | S4 bindings |
