@@ -34,8 +34,8 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
 - [x] [Competitive analysis](../../02-research/notes/competitive-analysis.md): GeoNames, Who's On First, Pelias, Photon, Nominatim, Overture, commercial geocoders, offline SDKs
 - [x] [Benchmarking](../../02-research/notes/benchmarking.md): harnesses, CI method and bindings; catalogue in [benchmarks](../../06-engineering/benchmarks.md)
 
-- [x] Golden query set for Nepal v0: 524 queries (512 generated, seeded and reproducible, from GeoNames, COD-AB and the country folder; 12 curated with sources), checked by `cargo xtask check-data`. Known gap: `colloquial` has 14 sourced queries (target 30); filled from OSM `short_name`/`alt_name` in S5 and curated review ([ADR-0032](../../03-decisions/adr/ADR-0032-text-search.md))
-- [ ] pkey pair sets (positive and negative) for S3
+- [x] Golden query set for Nepal v0: 512 queries (500 generated, seeded and reproducible, from GeoNames, COD-AB and the country folder; 12 curated with sources), checked by `cargo xtask check-data`. Known gap: `colloquial` has 14 sourced queries (target 30); filled from OSM `short_name`/`alt_name` in S5 and curated review ([ADR-0032](../../03-decisions/adr/ADR-0032-text-search.md))
+- [x] pkey pair sets for S3: 303 positive pairs from the lexicons, 34.5 million negative pairs (distinct names under one parent), bucket sizes; measured in the S3 run ([results](../../02-research/benches/s3-search.md))
 - [x] Lexicon starter `data/countries/np/lexicon.yaml` and `in`, plus country profiles, with schema check ([ADR-0031](../../03-decisions/adr/ADR-0031-canonical-spelling.md)): `cargo xtask check-data` (YAML via `serde-saphyr` 2.1.1; NFC, scripts, variant collisions, evidence); it found four merged India terms, now split
 
 ### 0.3 Revise the plan from research
@@ -45,7 +45,7 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
 ### 0.4 Spikes (measured; heavy lane, one at a time)
 - [x] S1 Codecs: coordinates, elevation and names on GeoNames Nepal ([results](../../02-research/benches/s1-codecs.md)); rank/select presence moves to benchmark B6
 - [x] S2 Region index: world timezone exactness (differential, zero mismatches) and ns/lookup against tzf-rs ([results](../../02-research/benches/s2-region-index.md)): exact; packed layout and zone precedence (Q-013) go to Phase 2
-- [ ] S3 Search: FST plus the phonetic key on Nepali names; recall@1/@5 on a first golden set
+- [x] S3 Search: FST maps, own Damerau automaton, prefix and the phonetic key on the Nepal golden set ([results](../../02-research/benches/s3-search.md)): recall@1 0.953, recall@5 0.986, MRR@10 0.969, 3.6 MB: recall gates met; p99 78–116 µs, depending on load (100 µs gate: faster automaton in Phase 2). The misses left are data (aliases, conflation) for S5 and the forge
 - [ ] S4 Bindings: C ABI + IDL + generator on one slice into Node, Dart, Python, JNI and Swift; marshalling cost
 - [ ] S5 Baseline accuracy: GeoNames vs OSM vs Wikidata for Nepal (duplicates, rounded coordinates, DEM disagreement); check COD-AB geometry for the 2020 claim (Q-010)
 - [ ] S6 Elevation validation: ICESat-2 ATL08 against Copernicus GLO-30, NASADEM and GEDTM30 over Nepal ([ADR-0034](../../03-decisions/adr/ADR-0034-elevation-method.md))
@@ -58,5 +58,6 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-06 | Phase 0 planned | Project start |
+| 2026-11-06 | S3 done; the COD-AB join key ignores spaces (a conflation bug found by S3), golden set regenerated (512 queries) | Spike S3 |
 | 2026-11-06 | Country folders (`data/countries/<cc>/`: profile, lexicon, curated golden) and `check-data`; golden set v0 | Maintainer: everything world-general (P16) |
 | 2026-11-06 | Benchmarking note and catalogue added; S2 done | Maintainer asked for proper benchmarks across features, cases and bindings |

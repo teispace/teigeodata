@@ -309,7 +309,7 @@ pub fn load(profile: &Profile, geonames: &str, codab_xlsx: Option<&str>) -> Vec<
     let mut same_level: BTreeMap<(String, String), usize> = BTreeMap::new();
     for r in &recs {
         if r.fcode == gn_level {
-            same_level.insert((fold(&r.name), fold(&r.district)), r.group);
+            same_level.insert((join_key(&r.name), fold(&r.district)), r.group);
         }
     }
     for (j, row) in it.enumerate() {
@@ -330,7 +330,7 @@ pub fn load(profile: &Profile, geonames: &str, codab_xlsx: Option<&str>) -> Vec<
             .unwrap_or(profile.unit_types.len());
         let importance = 85u32.saturating_sub(10 * rank as u32).max(20);
         let group = same_level
-            .get(&(fold(&name), map_parent(&parent)))
+            .get(&(join_key(&name), map_parent(&parent)))
             .copied()
             .unwrap_or(base + j);
         recs.push(Rec {
@@ -346,6 +346,12 @@ pub fn load(profile: &Profile, geonames: &str, codab_xlsx: Option<&str>) -> Vec<
         });
     }
     recs
+}
+
+/// The cross-source join key: the fold without spaces, since sources split compound names
+/// differently ("Necha Salyan" and "Nechasalyan").
+fn join_key(s: &str) -> String {
+    fold(s).replace(' ', "")
 }
 
 fn cell(d: &Data) -> String {
@@ -450,5 +456,313 @@ mod tests {
         // Han and Hangul pass through.
         assert_eq!(fold("東京"), "東京");
         assert_eq!(fold("서울"), "서울");
+    }
+}
+
+// ---------- phonetic keys (a library of named algorithms; a country's profile picks them) ----
+
+/// `indic-v0`: the phonetic key of names-and-search §5.3 for Indic place names written in
+/// Latin or Devanagari. A candidate generator only: false merges are expected and ranking
+/// sorts them out. Step order fixed by this spike: nasals are resolved before the non-initial
+/// A is dropped (the note's hand examples needed both orders; pre-vowel nasals are real
+/// consonants, so they stay).
+#[must_use]
+pub fn pkey_indic_v0(s: &str) -> String {
+    pkey_indic(s, false)
+}
+
+/// `indic-v1` candidate: `indic-v0` plus a dropped word-final I or U after a consonant, so
+/// Latin "Tole", "Kote" and "Pokhary" meet Devanagari टोल, कोट and पोखरी. Spike S3 A/B only.
+#[must_use]
+pub fn pkey_indic_v1(s: &str) -> String {
+    pkey_indic(s, true)
+}
+
+fn pkey_indic(s: &str, drop_final_vowel: bool) -> String {
+    let folded = fold(s);
+    let mut classes: Vec<char> = Vec::new();
+    for word in folded.split(' ') {
+        // A word may mix scripts ("Anantaपुर"): classify each script run with its own rules.
+        let is_deva = |c: char| ('\u{0900}'..='\u{097F}').contains(&c);
+        let mut w = Vec::new();
+        let mut run = String::new();
+        let mut run_deva = false;
+        for c in word.chars().chain(std::iter::once('\0')) {
+            if c == '\0' || (!run.is_empty() && is_deva(c) != run_deva) {
+                w.extend(if run_deva {
+                    deva_classes(&run)
+                } else {
+                    latin_classes(&run)
+                });
+                run.clear();
+            }
+            if c != '\0' {
+                run_deva = is_deva(c);
+                run.push(c);
+            }
+        }
+        w = resolve_nasals(&w);
+        // Drop every A that is not word-initial.
+        let mut out: Vec<char> = Vec::with_capacity(w.len());
+        for (i, c) in w.iter().enumerate() {
+            if *c == 'A' && i > 0 {
+                continue;
+            }
+            out.push(*c);
+        }
+        if drop_final_vowel
+            && out.len() > 2
+            && matches!(out.last(), Some('I' | 'U'))
+            && !is_vowel_class(out[out.len() - 2])
+        {
+            out.pop();
+        }
+        classes.extend(out);
+    }
+    classes.dedup();
+    if classes.is_empty() {
+        return folded;
+    }
+    classes.into_iter().collect()
+}
+
+fn is_vowel_class(c: char) -> bool {
+    matches!(c, 'A' | 'I' | 'U')
+}
+
+/// `Ŋ` (a written velar nasal) stays as N unless a consonant follows. Other nasals (N, M) before a consonant class
+/// are dropped; a word-final nasal after a vowel is dropped; otherwise M → N except before B or
+/// P.
+fn resolve_nasals(w: &[char]) -> Vec<char> {
+    let mut out = Vec::with_capacity(w.len());
+    for (i, &c) in w.iter().enumerate() {
+        if c == 'Ŋ' && w.get(i + 1).is_none_or(|n| is_vowel_class(*n)) {
+            // A velar nasal written as a full consonant (ङ, final "ng") stays, unless a
+            // consonant follows (ङ्ग is homorganic, like any nasal before a consonant).
+            out.push('N');
+        } else if c == 'N' || c == 'M' || c == 'Ŋ' {
+            let dropped = match w.get(i + 1) {
+                Some(&n) => !is_vowel_class(n),
+                None => i > 0 && is_vowel_class(w[i - 1]),
+            };
+            if !dropped {
+                let labial = matches!(w.get(i + 1), Some('B' | 'P'));
+                out.push(if c == 'M' && labial { 'M' } else { 'N' });
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+fn latin_classes(word: &str) -> Vec<char> {
+    let b: Vec<char> = word.chars().filter(char::is_ascii_lowercase).collect();
+    let n = b.len();
+    let at = |i: usize| b.get(i).copied();
+    let is_v = |c: Option<char>| matches!(c, Some('a' | 'e' | 'i' | 'o' | 'u'));
+    let starts = |i: usize, p: &str| p.chars().enumerate().all(|(k, c)| at(i + k) == Some(c));
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < n {
+        let prev_vowel = out.last().is_some_and(|c| is_vowel_class(*c));
+        let prev_consonant = out.last().is_some_and(|c| !is_vowel_class(*c));
+        let (class, len): (Option<char>, usize) = if starts(i, "kchh") {
+            (Some('C'), 4)
+        } else if starts(i, "ksh") || starts(i, "chh") {
+            (Some('C'), 3)
+        } else if starts(i, "ch") {
+            (Some('C'), 2)
+        } else if starts(i, "ck") {
+            (Some('K'), 2)
+        } else if at(i) == Some('c') {
+            (
+                Some(if matches!(at(i + 1), Some('a' | 'o' | 'u')) {
+                    'K'
+                } else {
+                    'C'
+                }),
+                1,
+            )
+        } else if at(i) == Some('x') {
+            (Some('C'), 1)
+        } else if starts(i, "sh") || starts(i, "ss") {
+            (Some('S'), 2)
+        } else if (starts(i, "gy") || starts(i, "jn") || starts(i, "gn")) && is_v(at(i + 2)) {
+            (Some('G'), 2)
+        } else if starts(i, "jh") {
+            (Some('J'), 2)
+        } else if starts(i, "ph")
+            || starts(i, "bh")
+            || starts(i, "kh")
+            || starts(i, "gh")
+            || starts(i, "th")
+            || starts(i, "dh")
+            || starts(i, "rh")
+        {
+            (
+                Some(match at(i).unwrap_or('x') {
+                    'p' => 'P',
+                    'b' => 'B',
+                    'k' => 'K',
+                    'g' => 'G',
+                    't' => 'T',
+                    // 'd' and 'r' ("rh" as in Garhi is the flap ढ़)
+                    _ => 'D',
+                }),
+                2,
+            )
+        } else if starts(i, "ng") && i + 2 == n {
+            (Some('Ŋ'), 2)
+        } else if starts(i, "aa") {
+            (Some('A'), 2)
+        } else if starts(i, "ee")
+            || starts(i, "ii")
+            || starts(i, "ai")
+            || starts(i, "ei")
+            || (starts(i, "ay") && i + 2 == n)
+        {
+            (Some('I'), 2)
+        } else if starts(i, "oo")
+            || starts(i, "uu")
+            || starts(i, "au")
+            || starts(i, "ou")
+            || starts(i, "ow")
+        {
+            (Some('U'), 2)
+        } else {
+            let c = at(i).unwrap_or('x');
+            let class = match c {
+                'a' => Some('A'),
+                'e' | 'i' => Some('I'),
+                'o' | 'u' => Some('U'),
+                'w' if prev_vowel => Some('U'),
+                'w' | 'b' | 'v' => Some('B'),
+                'f' | 'p' => Some('P'),
+                'z' | 'j' => Some('J'),
+                's' => Some('S'),
+                'q' | 'k' => Some('K'),
+                'g' => Some('G'),
+                't' => Some('T'),
+                'd' => Some('D'),
+                'm' => Some('M'),
+                'n' => Some('N'),
+                'r' => Some('R'),
+                'l' => Some('L'),
+                // h and y after a consonant mark aspiration or a glide: dropped.
+                'h' | 'y' if prev_consonant => None,
+                'h' => Some('H'),
+                'y' => Some('Y'),
+                _ => None,
+            };
+            (class, 1)
+        };
+        if let Some(c) = class {
+            out.push(c);
+        }
+        i += len;
+    }
+    out
+}
+
+fn deva_classes(word: &str) -> Vec<char> {
+    let chars: Vec<char> = word.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        // क्ष → C, ज्ञ → G
+        if (c == 'क' || c == 'ज')
+            && chars.get(i + 1) == Some(&'\u{094D}')
+            && matches!(chars.get(i + 2), Some('ष' | 'ञ'))
+        {
+            out.push(if c == 'क' { 'C' } else { 'G' });
+            i += 3;
+            out.extend(inherent(&chars, i));
+            continue;
+        }
+        let consonant = match c {
+            'क' | 'ख' => Some('K'),
+            'ग' | 'घ' => Some('G'),
+            'ङ' => Some('Ŋ'),
+            'ञ' | 'ण' | 'न' => Some('N'),
+            'च' | 'छ' => Some('C'),
+            'ज' | 'झ' => Some('J'),
+            'ट' | 'ठ' | 'त' | 'थ' => Some('T'),
+            'ड' | 'ढ' | 'द' | 'ध' => Some('D'),
+            'प' | 'फ' => Some('P'),
+            'ब' | 'भ' | 'व' => Some('B'),
+            'म' => Some('M'),
+            'य' => Some('Y'),
+            'र' => Some('R'),
+            'ल' => Some('L'),
+            'श' | 'ष' | 'स' => Some('S'),
+            'ह' => Some('H'),
+            _ => None,
+        };
+        if let Some(k) = consonant {
+            // y after a consonant is dropped, as in the Latin path.
+            let after_consonant = i >= 2 && chars[i - 1] == '\u{094D}';
+            if !(k == 'Y' && after_consonant) {
+                out.push(k);
+            }
+            i += 1;
+            out.extend(inherent(&chars, i));
+            continue;
+        }
+        let v = match c {
+            'अ' | 'आ' | 'ा' => Some(vec!['A']),
+            'इ' | 'ई' | 'ए' | 'ऐ' | 'ि' | 'ी' | 'े' | 'ै' => Some(vec!['I']),
+            'उ' | 'ऊ' | 'ओ' | 'औ' | 'ु' | 'ू' | 'ो' | 'ौ' => Some(vec!['U']),
+            'ऋ' | 'ृ' => Some(vec!['R', 'I']),
+            'ं' => Some(vec!['N']),
+            _ => None,
+        };
+        if let Some(v) = v {
+            out.extend(v);
+        }
+        i += 1;
+    }
+    out
+}
+
+/// The inherent vowel A after a consonant at `i - 1`, unless a virama or a vowel sign follows,
+/// or the consonant ends the word (word-final schwa deletion, as Nepali and Hindi speak it).
+fn inherent(chars: &[char], i: usize) -> Option<char> {
+    match chars.get(i) {
+        None | Some('\u{094D}') => None,
+        Some(c) if ('\u{093E}'..='\u{094C}').contains(c) || *c == '\u{0943}' => None,
+        _ => Some('A'),
+    }
+}
+
+#[cfg(test)]
+mod pkey_tests {
+    use super::pkey_indic_v0 as k;
+
+    #[test]
+    fn variants_share_a_key() {
+        let groups: [&[&str]; 8] = [
+            &["Lahachowk", "Lahachok", "Lahachouk", "लहाचोक"],
+            &["Kathmandu", "Kathamandu", "काठमाडौं"],
+            &["Bazar", "Bajar", "Bazaar", "बजार"],
+            &["Gaun", "Gaon", "Gau", "गाउँ"],
+            &["Bhanjyang", "Bhanjang", "भञ्ज्याङ"],
+            &["Deurali", "Dewrali", "Deorali", "देउराली"],
+            &["Biratnagar", "Viratnagar", "विराटनगर"],
+            &["Gadhi", "Garhi", "गढी", "गढ़ी"],
+        ];
+        for g in groups {
+            let keys: Vec<String> = g.iter().map(|s| k(s)).collect();
+            assert!(keys.windows(2).all(|w| w[0] == w[1]), "{g:?} → {keys:?}");
+        }
+    }
+
+    #[test]
+    fn distinct_places_differ() {
+        assert_eq!(k("Anantapur"), k("Anantaपुर"));
+        assert_eq!(k("Dhunga"), k("ढुङ्गा"));
+        assert_ne!(k("Pokhara"), k("Pokhari"));
+        assert_ne!(k("Lalitpur"), k("Lamjung"));
     }
 }

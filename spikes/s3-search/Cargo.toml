@@ -1,6 +1,6 @@
 [package]
 name = "spike-s3-search"
-description = "Phase 0 spike S3: name search on Nepal, and the golden query generator."
+description = "Phase 0 spike S3: name search evaluation and the golden query generator."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

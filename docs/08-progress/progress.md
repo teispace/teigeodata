@@ -11,13 +11,17 @@ updated: 2026-11-06
 - **Phase:** 0, foundations and research ([phase file](../07-planning/phases/phase-0.md)).
 - **Now:** Phase 0.
   - **Done:** 0.1 and 0.2; the 0.3 research notes applied (ADR-0035 to ADR-0038); schema and
-    pack-format drafts; spikes S1 and S2.
+    pack-format drafts; spikes S1, S2 and S3.
   - **World-general (P16):** every country lives in its own folder,
     `data/countries/<cc>/` (profile, lexicon, curated golden queries), validated by
     `cargo xtask check-data`.
-  - **Golden set:** Nepal v0 has 524 queries (gap: `colloquial` has 14 of a target 30).
-- **Next:** pkey pair sets; spike S3 (search on the golden set); S5 (adds OSM short and
-  alternate names, which fill the colloquial gap); S6; S4.
+  - **Golden set:** Nepal v0 has 512 queries (gap: `colloquial` has 14 of a target 30).
+  - **Search (S3):** the recall gates are met on Nepal: recall@1 0.953, recall@5 0.986,
+    3.6 MB; p99 78–116 µs, depending on load ([results](../02-research/benches/s3-search.md), D-052). The misses left are aliases
+    and conflation, which are S5 and forge work.
+- **Next:** S5 (OSM, Wikidata and COD-AB geometry for Nepal: aliases fill the colloquial gap
+  and the curated misses; re-test pkey `indic-v1` on OSM name pairs; Q-010); then S6 and S4;
+  then the M0 review.
 - **Blocked:** nothing.
 
 ## Session log
@@ -27,4 +31,5 @@ updated: 2026-11-06
 | 2026-11-06 | Discussion and decisions (see the [decision log](../03-decisions/log.md)). Repository initialised; AGENTS.md, conventions, vision, principles, scope, 26 ADRs, roadmap, Phase 0 plan. Research agents launched: Nepal sources, source licences, format/compression/indexing, bindings and MCP, names and search, timezone and elevation. | Finish 0.1; collect the research notes |
 | 2026-11-06 | Foundation files, workspace, xtask gates and hooks; bindings and format research applied; ADR-0027 (JNI), ADR-0028 (MCP baseline), ADR-0029 (1e-7° grid) | Commit, create repo, apply the other notes |
 | 2026-11-06 | Spike S2 made exact (3 bugs found by set-based differential testing; source overlaps found, Q-013); leaf-size sweep; forge, offline-loading and competitive notes landed; benchmarking research and catalogue (D-042) | Push, apply the new notes, then S3 |
-| 2026-11-06 | Lexicon and data checks; per-country folders and profiles (P16); world-general search fold; golden set v0 for Nepal (524 queries, reproducible) | S3 search spike |
+| 2026-11-06 | Lexicon and data checks; per-country folders and profiles (P16); world-general search fold; golden set v0 for Nepal (reproducible) | S3 search spike |
+| 2026-11-06 | Spike S3: recall gates met on Nepal, p99 depends on load (D-052); own Damerau automaton about 10× faster than the `fst` DFA; phonetic key at low weight; pkey pair sets; COD-AB join bug fixed and golden set regenerated (512 queries) | S5 baseline accuracy |

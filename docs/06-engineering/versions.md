@@ -63,6 +63,10 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | ureq | 3.5 | 2026-11-06 | crates.io | 2026-12-06 |
 | tough (test oracle) | 0.24 | 2026-11-06 | crates.io | 2026-12-06 |
 | serde-saphyr (xtask YAML) | 2.1.1 | 2026-11-06 | crates.io (serde_yaml is deprecated) | 2026-12-06 |
+| fst (search spike; own automaton, not its Levenshtein DFA) | 0.4.7 | 2026-11-06 | crates.io (last release 2021-06-06) | 2026-12-06 |
+| calamine (COD-AB workbooks, spikes) | 0.38.0 | 2026-11-06 | crates.io | 2026-12-06 |
+| unicode-script | 0.5.9 | 2026-11-06 | crates.io | 2026-12-06 |
+| unicode-normalization | 0.1.26 | 2026-11-06 | crates.io | 2026-12-06 |
 | unicode-normalization | 0.1.26 | 2026-11-06 | crates.io | 2026-12-06 |
 | TUF specification | 1.0.37 | 2026-11-06 | theupdateframework.github.io | 2027-02-06 |
 

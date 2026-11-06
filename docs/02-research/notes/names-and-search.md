@@ -394,6 +394,18 @@ Because the non-initial A is dropped, no schwa-deletion model is needed for the 
 | Biratnagar, Viratnagar, विराटनगर | BIRTGR | |
 | Gadhi, Garhi, गढी, गढ़ी | GDI | |
 
+**Spike S3 findings (2026-11-06, [results](../benches/s3-search.md)):**
+1. Nasals are resolved *before* the non-initial A is dropped (pre-vowel nasals are real
+   consonants).
+2. Devanagari word-final schwa is deleted, so बजार and Bazar meet.
+3. A written velar nasal (ङ, final "ng") stays unless a consonant follows (ढुङ्गा = Dhunga).
+4. Each script run in a mixed word is classified on its own ("Anantaपुर" = Anantapur).
+5. Measured: pair recall 0.789 on 303 lexicon pairs, false-merge rate 1e-4 on 34.5 million
+   negative pairs, bucket p99 33.
+6. A variant that drops word-final I/U raised pair recall to 0.855, but raised false merges by
+   60% with no golden gain. It is rejected until S5's OSM pairs.
+7. In ranking the key works only at low weight, below fuzzy and prefix.
+
 **Known weaknesses.** Short keys (BJN, GU) produce huge buckets. Merging o/u, e/i and b/v/w is lossy by design. Tamil-style voicing ambiguity is out of scope for v0.
 
 **Mitigation:** search the per-token key and the whole-name key together, and require that the specific (non-generic) part of the name contributes at least 2 consonant classes before a phonetic match counts.
