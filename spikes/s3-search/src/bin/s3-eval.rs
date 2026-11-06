@@ -135,6 +135,34 @@ impl Knobs {
     }
 }
 
+/// With `S3_ALIASES=<tsv>` (the forge `aliases` output), every alias joins its anchor
+/// record's alternate names, so the index answers names that only OSM or Wikidata know.
+fn add_aliases(recs: &mut [Rec]) {
+    let Some(path) = std::env::var_os("S3_ALIASES") else {
+        return;
+    };
+    let text = std::fs::read_to_string(&path).expect("read the aliases file");
+    let mut by_key: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for line in text.lines().skip(1) {
+        let mut f = line.split('\t');
+        if let (Some(anchor), Some(alias)) = (f.next(), f.next()) {
+            by_key.entry(anchor).or_default().push(alias);
+        }
+    }
+    let mut added = 0;
+    for r in recs.iter_mut() {
+        if let Some(aliases) = by_key.get(r.key.as_str()) {
+            for a in aliases {
+                if !r.alts.iter().any(|x| x == a) && r.name != *a {
+                    r.alts.push((*a).to_string());
+                    added += 1;
+                }
+            }
+        }
+    }
+    println!("aliases: {added} added from {}", path.to_string_lossy());
+}
+
 /// The phonetic key under test: `indic-v0`, or `indic-v1` with `S3_PKEY=v1`.
 fn pkey(s: &str) -> String {
     static V1: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -476,7 +504,8 @@ fn main() {
     let dir = format!("data/countries/{cc}");
     let prof = profile(&format!("{dir}/profile.yaml"));
     let t0 = Instant::now();
-    let recs = load(&prof, &args[1], args.get(2).map(String::as_str));
+    let mut recs = load(&prof, &args[1], args.get(2).map(String::as_str));
+    add_aliases(&mut recs);
     let t_load = t0.elapsed();
     let t0 = Instant::now();
     let engine = Engine::new(&recs, &dir);

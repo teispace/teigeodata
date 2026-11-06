@@ -182,7 +182,51 @@ note, which is maintainer review work.
 the checked-in m/u table; Splink as an oracle. These are Phase 2 forge work (the plan is in
 the note).
 
+## Aliases into search (S5.5, third part)
+
+`forge aliases np geonames-np geofabrik-np+geonames-np+wikidata-np` carries the names of every
+OSM and Wikidata member of a cluster to its `GeoNames` record. Two rules apply (module docs):
+- **Corroboration:** a member must share a name with the record.
+- **Collision:** an alias that is, by fold or phonetic key, the primary name of an admin unit
+  anywhere, or of another record within 30 km, is not carried.
+
+Measured 2026-11-07: 1.6 s, 251 MB peak RSS, byte-identical output on a second run.
+
+| Run | Aliases carried | Records gaining names | Members not corroborated | Aliases held back as collisions |
+|---|---:|---:|---:|---:|
+| No rules | 32,163 | 7,109 | – | – |
+| Corroboration only | 30,409 | 6,633 | 483 | – |
+| Both rules (kept) | 20,017 | 5,207 | 483 | 11,421 |
+
+**Why the rules exist.** Two errors entered search through the first run, and both are fixed
+by rules that apply to any country:
+- OSM node 303021945 at Lukla is named "नेपाल". It is linked to Lukla's Wikidata item, so
+  the merge is right but the name is wrong, and a search for नेपाल ranked Lukla first.
+- Wikidata lists हेटौंडा (Hetauda) as an alias of Makwanpur District, whose seat it is, so
+  हेटौंडा ranked the district above the city.
+
+**S3 with the aliases in the index** (`S3_ALIASES`, same golden set, 512 queries):
+
+| Run | recall@1 | recall@5 | pass@max_rank |
+|---|---:|---:|---:|
+| `GeoNames` only (the S3 result) | 0.953 | 0.986 | 0.980 |
+| + aliases, no rules | 0.943 | 0.994 | 0.984 |
+| + aliases, both rules | **0.959** | **0.994** | **0.988** |
+
+With both rules no class is worse than the baseline:
+- colloquial: recall@5 0.857 → 1.000;
+- historical: recall@1 0.932 → 0.977;
+- exact_native: 0.952 as before.
+
+The misses left are two Newa-script queries (no source has those names yet), ranking ties,
+and one variant. The collision rule is precision-first; tuning it against the golden set is
+Phase 2 work.
+
+**The golden set stays independent of the forge (D-060).** Golden queries are never generated
+from the aliases this stage produces, because that would test the stage against its own
+output. The colloquial class (14 of a target 30) grows from curated queries with independent
+sources.
+
 ## Still to come
 
-S5.5 aliases from all three sources into the golden set; S5.6 DEM disagreement; S5.7 the
-summary for Q-005.
+S5.6 DEM disagreement; S5.7 the summary for Q-005.

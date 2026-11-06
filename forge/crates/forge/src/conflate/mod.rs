@@ -207,7 +207,7 @@ fn header(sources: &[String], points: usize, key: Option<&str>, counts: [usize; 
 }
 
 /// The phonetic key a country's profile names.
-fn phonetic_key(root: &Path, cc: &str) -> Result<Option<String>, String> {
+pub(crate) fn phonetic_key(root: &Path, cc: &str) -> Result<Option<String>, String> {
     let path = root.join("data/countries").join(cc).join("profile.yaml");
     let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let profile: Profile =

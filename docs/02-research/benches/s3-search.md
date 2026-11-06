@@ -20,6 +20,8 @@ few MB, with every country rule read from data ([principle P16](../../00-vision/
 **Code:** `spikes/s3-search`. The run is
 `cargo run --release -p spike-s3-search --bin s3-eval -- np <NP.txt> <COD-AB xlsx>`.
 `S3_MISSES=1` lists every miss. The A/B switches are documented in the binary.
+`S3_ALIASES=<tsv>` adds the forge `aliases` output to the index. With it, recall@1 is 0.959 and
+recall@5 0.994 ([S5](s5-nepal.md#aliases-into-search-s55-third-part), D-060).
 
 **Machine:** Apple M2 Pro, shared (load 3–10 during the runs), single thread. A query's
 latency is the median of 21 runs; p50 and p99 are taken over the queries.

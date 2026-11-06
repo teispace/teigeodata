@@ -8,6 +8,7 @@
 //! forge geofix <points> [<boundary-source>]      flag rounded, stacked, snapped points
 //! forge links <points> <points> [...]            stated same-as pairs and their distances
 //! forge conflate <cc> <points> <points> [...]     match records across sources
+//! forge aliases <cc> <anchor> <a+b+...>          carry cluster names to the anchor's records
 //! forge path <source-id>                          print a fetched source's store path
 //! ```
 //!
@@ -18,6 +19,7 @@
     reason = "a command-line tool: `path` prints its answer to stdout"
 )]
 
+mod aliases;
 mod conflate;
 mod fetch;
 mod geofix;
@@ -94,6 +96,12 @@ fn main() -> ExitCode {
         Some("conflate") => {
             Err("usage: forge conflate <cc> <points-source> <points-source> [...]".into())
         }
+        Some("aliases") => match (args.get(1), args.get(2), args.get(3)) {
+            (Some(cc), Some(anchor), Some(run)) => {
+                aliases::run(&root, cc, anchor, run).map(|summary| eprintln_safe(&summary))
+            }
+            _ => Err("usage: forge aliases <cc> <anchor-source> <source+source+...>".into()),
+        },
         Some("path") => match args.get(1) {
             Some(id) => path(&root, id),
             None => Err("usage: forge path <source-id>".to_string()),

@@ -28,6 +28,7 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | geofix-detect | **built** (S5) | below |
 | links | **built** (S5) | below |
 | conflate (block, score, cluster) | **built** (S5) | below |
+| aliases | **built** (S5) | below |
 | geofix-consensus | S5 | weighted Weiszfeld; DEM sampling |
 | the rest | Phase 2 | |
 
@@ -151,6 +152,14 @@ smallest member) and a `summary.md`. The summary holds the model's weights, the 
 source composition and the silver-label evaluation. Names are compared with
 `teigeodata-names`, the code path search uses. Results:
 [S5](../02-research/benches/s5-nepal.md#the-matcher-s55-second-part).
+
+## Aliases (`aliases`)
+
+`forge aliases <cc> <anchor-source> <a+b+…>` carries every name of the other members of a
+conflation cluster to the anchor record, subject to the corroboration and collision rules
+(D-060). It writes `data/build/aliases/<run>/<anchor>.tsv` (anchor, text, language, kind,
+member) and the list of uncorroborated members, a QA queue for upstream fixes. Results:
+[S5](../02-research/benches/s5-nepal.md#aliases-into-search-s55-third-part).
 
 **Clean-up.** `cargo xtask clean` removes build output from both workspaces and keeps the
 store: fetched sources are pinned inputs, not build output.

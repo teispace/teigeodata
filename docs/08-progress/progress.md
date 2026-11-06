@@ -27,7 +27,8 @@ updated: 2026-11-06
   sources' own links: villages disagree by P50 360–1,100 m; 31% of `GeoNames`–Wikidata pairs
   are copies (D-056). `forge conflate` (Fellegi–Sunter) recovers 83–88% of those links at
   precision 0.991–1.000 without using them (D-059); `teigeodata-names` now exists (D-057).
-  Next: aliases into the golden set (S5.5), then DEM disagreement (S5.6).
+  `forge aliases` carries cluster names into search: S3 recall@1 0.959, recall@5 0.994
+  (D-060). Next: DEM disagreement (S5.6), then the S5 summary for Q-005 (S5.7).
 - **Next:** S5 (OSM, Wikidata and COD-AB geometry for Nepal: aliases fill the colloquial gap
   and the curated misses; re-test pkey `indic-v1` on OSM name pairs); then S6 and S4;
   then the M0 review.
