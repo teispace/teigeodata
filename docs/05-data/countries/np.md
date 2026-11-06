@@ -13,7 +13,7 @@ rules: [ADR-0030](../../03-decisions/adr/ADR-0030-source-admission.md).
 
 | Level | Count | Key | Main source | Lite source |
 |---|---:|---|---|---|
-| Country | 1 | ISO `NP` | OSM relation joined with the disputed relation 13559363 (`claimed_by=NP`) | COD-AB (claim area to verify, Q-010) |
+| Country | 1 | ISO `NP` | OSM relation joined with the disputed relation 13559363 (`claimed_by=NP`) | COD-AB excludes the 2020 claim area (D-054); claim polygon to be sourced clean-room (Q-015) |
 | Province (प्रदेश) | 7 | CBS code | OCHA COD-AB v02 | COD-AB v02 |
 | District (जिल्ला) | 77 | CBS code | COD-AB v02 | COD-AB v02 |
 | Local level (पालिका) | 753 (+22 protected-area units) | CBS code (e.g. Kathmandu Metropolitan City `30608`) | COD-AB v02 | COD-AB v02 |

@@ -20,6 +20,7 @@ The default boundary set follows **Nepal's official map (2020)**. Disputed areas
 
 - The region index answers under the selected perspective.
 - Docs warn app developers about local map regulations; the choice is theirs.
+- Sources do not all follow the 2020 map: the OCHA COD-AB outline excludes the Limpiyadhura claim (D-054), so the claim polygon is a separate input joined on top.
 
 ## Alternatives considered
 

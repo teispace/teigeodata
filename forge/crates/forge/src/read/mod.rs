@@ -1,6 +1,7 @@
 //! The `read/<source>` stages: each turns fetched bytes into the common record tables
 //! ([`crate::record`]) under `data/build/read/<source-id>/`.
 
+pub(crate) mod boundaries;
 mod geonames;
 mod osm;
 mod wikidata;

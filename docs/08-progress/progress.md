@@ -20,9 +20,10 @@ updated: 2026-11-06
     3.6 MB; p99 78–116 µs, depending on load ([results](../02-research/benches/s3-search.md), D-052). The misses left are aliases
     and conflation, which are S5 and forge work.
 - **S5 in progress:** sources pinned in `data/sources.lock`; the forge fetches them and reads
-  OSM, GeoNames and Wikidata into Parquet (S5.1, S5.2). Next: S5.3 (Q-010).
+  OSM, GeoNames and Wikidata into Parquet (S5.1, S5.2); `forge pip` assigns points to COD-AB units
+  exactly, and Q-010 is answered: COD-AB excludes the 2020 claim (S5.3, D-054). Next: S5.4 geofix detectors.
 - **Next:** S5 (OSM, Wikidata and COD-AB geometry for Nepal: aliases fill the colloquial gap
-  and the curated misses; re-test pkey `indic-v1` on OSM name pairs; Q-010); then S6 and S4;
+  and the curated misses; re-test pkey `indic-v1` on OSM name pairs); then S6 and S4;
   then the M0 review.
 - **Blocked:** nothing.
 

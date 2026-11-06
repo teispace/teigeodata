@@ -50,7 +50,7 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
 - [ ] S5 Baseline accuracy: GeoNames vs OSM vs Wikidata for Nepal (duplicates, rounded coordinates, DEM disagreement); check COD-AB geometry for the 2020 claim (Q-010)
   - [x] S5.1 `data/sources.lock` (8 sources pinned, checked by `check-data`), the forge workspace and `forge fetch` (content store, SHA-256, `--pin`, `--verify`; a wrong pin proven to fail) ([forge](../../04-architecture/forge.md))
   - [x] S5.2 readers for OSM, GeoNames (with alternate names and hierarchy) and Wikidata: deterministic Parquet record tables
-  - [ ] S5.3 COD-AB boundaries and Q-010
+  - [x] S5.3 COD-AB boundary reader and the `pip` stage (exact point in polygon); Q-010 answered (D-054)
   - [ ] S5.4 geofix detectors: rounding, stacking, centroid snap
   - [ ] S5.5 links and conflation: cross-source pairs, position disagreement, aliases into the golden set
   - [ ] S5.6 DEM disagreement (Copernicus GLO-30)
