@@ -65,8 +65,7 @@ terms:
     kind: generic
     meaning: "town (Jaipur, older Cawnpore)"
     status: proposed
-    evidence:
-      - { kind: usage, detail: "" }
+    evidence: []
   - id: in.nagar
     canonical: "Nagar"
     native:
@@ -75,8 +74,7 @@ terms:
     kind: generic
     meaning: "town"
     status: proposed
-    evidence:
-      - { kind: usage, detail: "" }
+    evidence: []
   - id: in.ganj
     canonical: "Ganj"
     native:
@@ -118,17 +116,26 @@ terms:
     status: proposed
     evidence:
       - { kind: usage, detail: "proposed" }
-  - id: in.pura-puri
-    canonical: "Pura / Puri"
+  - id: in.pura
+    canonical: "Pura"
     native:
       - { lang: hi, script: Deva, text: "पुरा" }
+    variants: []
+    kind: generic
+    meaning: "quarter, hamlet"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "Distinct from Pur and Puri; do not fold" }
+  - id: in.puri
+    canonical: "Puri"
+    native:
       - { lang: hi, script: Deva, text: "पुरी" }
     variants: []
     kind: generic
-    meaning: "quarter / town"
+    meaning: "town, city"
     status: proposed
     evidence:
-      - { kind: usage, detail: "Do not fold into Pur" }
+      - { kind: usage, detail: "Distinct from Pur and Pura; do not fold" }
   - id: in.khera
     canonical: "Khera"
     native:
@@ -139,39 +146,66 @@ terms:
     status: proposed
     evidence:
       - { kind: usage, detail: "proposed" }
-  - id: in.kalan-khurd
-    canonical: "Kalan / Khurd"
+  - id: in.kalan
+    canonical: "Kalan"
     native:
       - { lang: hi, script: Deva, text: "कलाँ" }
-      - { lang: hi, script: Deva, text: "खुर्द" }
-    variants: ["Kalaan / Khurad"]
+    variants: ["Kalaan"]
     kind: qualifier
-    meaning: "greater / lesser (twin villages)"
+    meaning: "greater (the larger of twin villages)"
     status: proposed
     evidence:
-      - { kind: usage, detail: "Qualifier: affects identity, never drop" }
-  - id: in.palli-halli
-    canonical: "Palli / Halli"
+      - { kind: usage, detail: "Qualifier: affects identity, never drop; pairs with Khurd" }
+  - id: in.khurd
+    canonical: "Khurd"
+    native:
+      - { lang: hi, script: Deva, text: "खुर्द" }
+    variants: ["Khurad"]
+    kind: qualifier
+    meaning: "lesser (the smaller of twin villages)"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "Qualifier: affects identity, never drop; pairs with Kalan" }
+  - id: in.palli
+    canonical: "Palli"
     native:
       - { lang: te, script: Telu, text: "పల్లి" }
-      - { lang: kn, script: Knda, text: "ಹಳ್ಳಿ" }
-    variants: ["Pally", "Palle / Hally"]
+    variants: ["Pally", "Palle"]
     kind: generic
-    meaning: "village"
+    meaning: "village (Telugu)"
     status: proposed
     evidence:
-      - { kind: usage, detail: "Entity overrides (Kukatpally); languages te/kn" }
-  - id: in.peth-pet
-    canonical: "Peth / Pet"
+      - { kind: usage, detail: "Entity spellings override the term (Kukatpally)" }
+  - id: in.halli
+    canonical: "Halli"
+    native:
+      - { lang: kn, script: Knda, text: "ಹಳ್ಳಿ" }
+    variants: ["Hally"]
+    kind: generic
+    meaning: "village (Kannada)"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "Kannada cognate of Palli; kept separate" }
+  - id: in.peth
+    canonical: "Peth"
     native:
       - { lang: mr, script: Deva, text: "पेठ" }
-      - { lang: kn, script: Knda, text: "ಪೇಟೆ" }
-    variants: ["Peit", "Pete"]
+    variants: ["Peit"]
     kind: generic
-    meaning: "market quarter"
+    meaning: "market quarter (Marathi)"
     status: proposed
     evidence:
-      - { kind: usage, detail: "mr/kn; proposed" }
+      - { kind: usage, detail: "Marathi; Pune's peths" }
+  - id: in.pet
+    canonical: "Pet"
+    native:
+      - { lang: kn, script: Knda, text: "ಪೇಟೆ" }
+    variants: ["Pete"]
+    kind: generic
+    meaning: "market quarter (Kannada)"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "Kannada; Bengaluru's petes" }
   - id: in.wadi
     canonical: "Wadi"
     native:

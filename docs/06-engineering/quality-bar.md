@@ -20,6 +20,7 @@ ones on every pull request, the slow ones nightly, and all of them before a rele
 | vet | audited dependencies (`cargo vet`) | release |
 | typos | spelling in code and docs | PR |
 | docs | `cargo xtask check-docs`; rustdoc with no broken links; doc examples run | PR |
+| lexicon | `cargo xtask check-lexicon`: schema v1, IDs, NFC, scripts, variant collisions, evidence, dated maintainer rulings | PR |
 | msrv | builds on the recorded MSRV | nightly |
 
 ## Correctness

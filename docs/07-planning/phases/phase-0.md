@@ -35,7 +35,7 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
 - [x] [Benchmarking](../../02-research/notes/benchmarking.md): harnesses, CI method and bindings; catalogue in [benchmarks](../../06-engineering/benchmarks.md)
 
 - [ ] Golden query set for Nepal (≥500 graded queries, 11 classes) and pkey pair sets ([ADR-0032](../../03-decisions/adr/ADR-0032-text-search.md))
-- [ ] Lexicon starter `data/lexicon/np.yaml` and `in.yaml` with schema check ([ADR-0031](../../03-decisions/adr/ADR-0031-canonical-spelling.md))
+- [x] Lexicon starter `data/lexicon/np.yaml` and `in.yaml` with schema check ([ADR-0031](../../03-decisions/adr/ADR-0031-canonical-spelling.md)): `cargo xtask check-lexicon` (YAML via `serde-saphyr` 2.1.1; NFC, scripts, variant collisions, evidence); it found four merged India terms, now split
 
 ### 0.3 Revise the plan from research
 - [x] Each note's "impact on the plan" applied: ADR statuses (`proposed` → `accepted` or superseded), architecture pages, this roadmap (ADR-0035 to ADR-0038; ADR-0013 accepted; ADR-0009 and ADR-0016 stay proposed until format freeze and spike S4)

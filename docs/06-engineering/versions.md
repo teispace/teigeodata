@@ -62,6 +62,8 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | blake3 | 1.8 | 2026-11-06 | crates.io | 2026-12-06 |
 | ureq | 3.5 | 2026-11-06 | crates.io | 2026-12-06 |
 | tough (test oracle) | 0.24 | 2026-11-06 | crates.io | 2026-12-06 |
+| serde-saphyr (xtask YAML) | 2.1.1 | 2026-11-06 | crates.io (serde_yaml is deprecated) | 2026-12-06 |
+| unicode-normalization | 0.1.26 | 2026-11-06 | crates.io | 2026-12-06 |
 | TUF specification | 1.0.37 | 2026-11-06 | theupdateframework.github.io | 2027-02-06 |
 
 Libraries chosen in Phase 0 research are added here when adopted.

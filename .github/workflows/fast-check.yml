@@ -34,6 +34,8 @@ jobs:
         run: cargo test --workspace --locked
       - name: Docs check
         run: cargo xtask check-docs
+      - name: Lexicon
+        run: cargo xtask check-lexicon
 
   deny:
     runs-on: ubuntu-latest

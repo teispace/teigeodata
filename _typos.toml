@@ -14,6 +14,8 @@ bhanjyang = "bhanjyang"
 palika = "palika"
 # Level of detail (boundary geometry).
 lod = "lod"
+# ISO 15924 script codes.
+beng = "beng"
 # Names of people and organisations cited in research.
 beling = "beling"
 linz = "linz"

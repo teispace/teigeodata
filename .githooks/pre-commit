@@ -3,3 +3,4 @@
 set -e
 cargo fmt --all --check
 cargo xtask check-docs
+cargo xtask check-lexicon

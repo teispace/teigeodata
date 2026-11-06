@@ -10,6 +10,7 @@
 mod clean;
 mod commit;
 mod docs;
+mod lexicon;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -22,6 +23,8 @@ Tasks:
                     the ADR index across docs/ and the root Markdown files.
   check-commit <f>  Check a commit message file (Conventional Commits, scopes, DCO
                     sign-off, no AI attribution); run by the commit-msg hook.
+  check-lexicon     Check data/lexicon/*.yaml (schema v1, IDs, NFC, scripts, variant
+                    collisions, evidence).
   clean [--all]     Free disk: incremental caches and scratch; --all also runs `cargo clean`.
   help              Show this message.
 ";
@@ -41,6 +44,7 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         }
+        "check-lexicon" => report(lexicon::check(&root)),
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
         "help" | "-h" | "--help" => {
             print!("{HELP}");
