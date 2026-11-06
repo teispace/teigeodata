@@ -26,6 +26,8 @@ use rayon::prelude::*;
 use tiff::decoder::{Decoder, DecodingResult};
 use tiff::tags::Tag;
 
+pub(crate) mod reference;
+
 use crate::lock::Lock;
 use crate::record::{self, column, f32s, strings, write_table};
 use crate::tiles::{self, Tile};

@@ -1175,6 +1175,7 @@ version = "0.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
+ "bytes",
  "osmpbf",
  "parquet",
  "rayon",

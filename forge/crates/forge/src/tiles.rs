@@ -6,6 +6,11 @@
 //!
 //! The name template takes `{NS}`/`{EW}` (hemisphere letters), `{LAT2}` and `{LON3}`
 //! (zero-padded absolute degrees of the tile's south-west corner).
+//!
+//! A GET tileset puts the name in its url (`{tile}`). A POST tileset, a server-side subsetting
+//! API, has a `query` template instead: its body is rendered per tile with the lock's
+//! `query_params` and the tile's corners `{{W}}`, `{{S}}`, `{{E}}`, `{{N}}`. Such a source may
+//! set `query_params.parallel` (for example `1`, to be polite to a shared service).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -14,11 +19,14 @@ use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
 
-use crate::fetch::{get_to, hash_file, say};
+use crate::fetch::{get_to, hash_file, render, say};
 use crate::lock::Source;
+use crate::sliderule;
 
 /// Parallel downloads: enough to fill a link, few enough to be polite to the host.
 const PARALLEL: usize = 4;
+/// Attempts at a tile whose response reports an error.
+const ATTEMPTS: u32 = 3;
 
 /// One manifest line.
 #[derive(Clone, Debug)]
@@ -38,8 +46,9 @@ pub(crate) fn tile_name(template: &str, lon: i32, lat: i32) -> String {
         .replace("{LON3}", &format!("{:03}", lon.unsigned_abs()))
 }
 
-/// Tile names for every south-west corner in `lon_min,lat_min,lon_max,lat_max` (inclusive).
-fn names_in(bbox: &str, template: &str) -> Result<Vec<String>, String> {
+/// Tile names and south-west corners for every 1° tile in `lon_min,lat_min,lon_max,lat_max`
+/// (corners inclusive).
+fn names_in(bbox: &str, template: &str) -> Result<Vec<(String, i32, i32)>, String> {
     let v: Vec<i32> = bbox
         .split(',')
         .map(|x| x.trim().parse::<i32>())
@@ -51,7 +60,7 @@ fn names_in(bbox: &str, template: &str) -> Result<Vec<String>, String> {
         ));
     };
     Ok((*y0..=*y1)
-        .flat_map(|lat| (*x0..=*x1).map(move |lon| tile_name(template, lon, lat)))
+        .flat_map(|lat| (*x0..=*x1).map(move |lon| (tile_name(template, lon, lat), lon, lat)))
         .collect())
 }
 
@@ -118,24 +127,36 @@ pub(crate) fn fetch(
             .map(|t| (t.name.clone(), t))
             .collect()
     };
-    let names: Vec<String> = if pin {
-        let p = |k: &str| {
-            s.query_params
-                .get(k)
-                .ok_or_else(|| format!("{}: query_params.{k} is missing", s.id))
-        };
-        names_in(p("bbox")?, p("tile")?)?
-    } else {
-        known.keys().cloned().collect()
+    let p = |k: &str| {
+        s.query_params
+            .get(k)
+            .ok_or_else(|| format!("{}: query_params.{k} is missing", s.id))
     };
+    let mut names = names_in(p("bbox")?, p("tile")?)?;
+    if !pin {
+        // A plain fetch restores the pinned tiles only.
+        names.retain(|(n, _, _)| known.contains_key(n));
+    }
+    let parallel = s
+        .query_params
+        .get("parallel")
+        .map_or(Ok(PARALLEL), |v| v.parse::<usize>())
+        .map_err(|e| format!("{}: query_params.parallel: {e}", s.id))?;
     let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(PARALLEL)
+        .num_threads(parallel.max(1))
         .build()
         .map_err(|e| e.to_string())?;
     let tiles: Vec<Tile> = pool.install(|| {
         names
             .par_iter()
-            .map(|name| fetch_tile(root, s, name, known.get(name), pin, verify))
+            .map(|(name, lon, lat)| {
+                let want = Want {
+                    name,
+                    lon: *lon,
+                    lat: *lat,
+                };
+                fetch_tile(root, s, &want, known.get(name), pin, verify)
+            })
             .collect::<Result<Vec<_>, String>>()
     })?;
     let present = tiles.iter().filter(|t| t.sha256.is_some()).count();
@@ -169,14 +190,77 @@ pub(crate) fn fetch(
     hash_file(&path).map(Some)
 }
 
+/// Downloads a tile and, when the source names a response format (`query_params.response`),
+/// checks it: a response that reports a server error is fetched again, up to [`ATTEMPTS`]
+/// times, and never stored.
+fn download(
+    s: &Source,
+    name: &str,
+    url: &str,
+    body: Option<&str>,
+    partial: &Path,
+) -> Result<Option<(String, u64)>, String> {
+    let check = s.query_params.get("response").map(String::as_str);
+    let mut last = String::new();
+    for attempt in 1..=ATTEMPTS {
+        let Some(got) = get_to(url, body, partial)? else {
+            return Ok(None);
+        };
+        let verdict = match check {
+            None => Ok(()),
+            Some("sliderule") => fs::read(partial)
+                .map_err(|e| e.to_string())
+                .and_then(|b| sliderule::read(&b))
+                .and_then(|r| confirm_empty(s, url, &r.empty_beams)),
+            Some(other) => Err(format!("unknown response format `{other}`")),
+        };
+        match verdict {
+            Ok(()) => return Ok(Some(got)),
+            Err(e) => last = e,
+        }
+        say(&format!("{}: tile {name}, attempt {attempt}: {last}", s.id));
+        std::thread::sleep(std::time::Duration::from_secs(u64::from(attempt) * 10));
+    }
+    let _ = fs::remove_file(partial);
+    Err(format!("{}: tile {name}: {last}", s.id))
+}
+
+/// Confirms with the server that every beam a `SlideRule` response could not read is absent
+/// from its granule; an existing beam that failed is a transient error.
+fn confirm_empty(s: &Source, url: &str, beams: &[(String, String)]) -> Result<(), String> {
+    let service = url.split("/source/").next().unwrap_or(url);
+    let asset = s
+        .query_params
+        .get("asset")
+        .map_or("icesat2-atl08", String::as_str);
+    for (granule, beam) in beams {
+        if !sliderule::beam_absent(service, asset, granule, beam)? {
+            return Err(format!("{granule} {beam} exists but failed to read"));
+        }
+        say(&format!(
+            "{}: {granule} has no {beam}/land_segments (confirmed)",
+            s.id
+        ));
+    }
+    Ok(())
+}
+
+/// A tile to fetch: its name and south-west corner.
+struct Want<'a> {
+    name: &'a str,
+    lon: i32,
+    lat: i32,
+}
+
 fn fetch_tile(
     root: &Path,
     s: &Source,
-    name: &str,
+    want: &Want<'_>,
     known: Option<&Tile>,
     pin: bool,
     verify: bool,
 ) -> Result<Tile, String> {
+    let name = want.name;
     if let Some(t) = known {
         match tile_path(root, t) {
             None => return Ok(t.clone()),
@@ -196,10 +280,27 @@ fn fetch_tile(
         }
     }
     let url = s.url.replace("{tile}", name);
+    let body = match &s.query {
+        None => None,
+        Some(template) => {
+            let corners = [
+                ("W", want.lon),
+                ("S", want.lat),
+                ("E", want.lon + 1),
+                ("N", want.lat + 1),
+            ]
+            .map(|(k, v)| (k.to_string(), v.to_string()));
+            let params = s
+                .query_params
+                .iter()
+                .chain(corners.iter().map(|(k, v)| (k, v)));
+            Some(render(root, template, params)?)
+        }
+    };
     let partial = root
         .join("data/cache/store/sha256")
         .join(format!(".partial-{name}"));
-    let Some((hash, size)) = get_to(&url, &partial)? else {
+    let Some((hash, size)) = download(s, name, &url, body.as_deref(), &partial)? else {
         return Ok(Tile {
             name: name.to_string(),
             sha256: None,
@@ -238,6 +339,13 @@ mod tests {
             "Copernicus_DSM_COG_10_S01_00_W003_00_DEM"
         );
         assert_eq!(names_in("80,26,88,30", t).map(|v| v.len()), Ok(45));
+        assert_eq!(
+            names_in("85,27,86,27", "x{EW}{LON3}").ok(),
+            Some(vec![
+                ("xE085".to_string(), 85, 27),
+                ("xE086".to_string(), 86, 27)
+            ])
+        );
         let m = parse("# c\na\t0f\t10\nb\tabsent\t0\n");
         assert_eq!(m.len(), 2);
         assert!(m.get(1).is_some_and(|t| t.sha256.is_none()));

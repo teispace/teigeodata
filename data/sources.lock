@@ -143,3 +143,35 @@ licence = "Copernicus DEM licence (fixed notice: © DLR e.V. 2010-2014 and © Ai
 licence_class = "proprietary"
 countries = ["NP"]
 used_by = "spike S5.6 (DEM disagreement)"
+
+[[source]]
+id = "sliderule-atl08-np-2023"
+title = "ICESat-2 ATL08 land segments over the Nepal box, 2023, subset by SlideRule (public atl08x endpoint)"
+kind = "tileset"
+url = "https://sliderule.slideruleearth.io/source/atl08x"
+moving = true
+tiles = "data/sources/sliderule-atl08-np-2023.tiles"
+query = "forge/queries/sliderule-atl08x.json"
+query_params = { bbox = "80,26,88,30", tile = "atl08-{NS}{LAT2}{EW}{LON3}", T0 = "2023-01-01T00:00:00Z", T1 = "2024-01-01T00:00:00Z", TE_QUALITY = "70", parallel = "1", response = "sliderule", asset = "icesat2-atl08" }
+version = "ATL08 release 007 through SlideRule v5.8.0 (raw response streams: records wrapping GeoParquet)"
+retrieved = "2026-11-06"
+sha256 = "3e5b4ff4afc7d3b181e10496fddb8fd72bb276c2e91e63a93256c6087b6d54f7"
+size = 4008
+licence = "NASA Earth science data, no restriction on use (NASA ESDIS data policy); credit NASA NSIDC DAAC and SlideRule (University of Washington, NASA GSFC)"
+licence_class = "public-domain"
+countries = ["NP"]
+used_by = "spike S6 (elevation reference)"
+
+[[source]]
+id = "egm2008-5"
+title = "EGM2008 geoid undulation, 5-minute grid (GeographicLib PGM)"
+kind = "http"
+url = "https://sourceforge.net/projects/geographiclib/files/geoids-distrib/egm2008-5.zip/download"
+version = "GeographicLib geoids egm2008-5 (2009-08-29)"
+retrieved = "2026-11-07"
+sha256 = "408f05e0c04a9f2e17b9ea2d27123f936e9dea60128bb3411a272f8ddbe318dd"
+size = 16773259
+licence = "Computed from NGA EGM2008, released for public use (exact wording unverified; see the elevation-reference note)"
+licence_class = "public-domain"
+countries = ["*"]
+used_by = "spike S6 (ellipsoidal to EGM2008 heights)"

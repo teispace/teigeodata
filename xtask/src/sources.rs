@@ -164,8 +164,14 @@ fn check_kind(s: &Source, root: &Path, at: &str, p: &mut Vec<String>) {
         p.push(format!("{at}: only a tileset source has a tiles manifest"));
     }
     match (s.kind.as_str(), &s.query) {
-        ("tileset", None) => check_tileset(s, root, at, p),
-        ("tileset", Some(_)) => p.push(format!("{at}: a tileset source has no query")),
+        ("tileset", q) => {
+            if let Some(q) = q
+                && !root.join(q).is_file()
+            {
+                p.push(format!("{at}: query file `{q}` not found"));
+            }
+            check_tileset(s, root, at, p);
+        }
         ("http", None) => {}
         ("http", Some(_)) => p.push(format!("{at}: an http source has no query")),
         ("sparql", Some(q)) => {
@@ -203,7 +209,8 @@ fn check_tileset(s: &Source, root: &Path, at: &str, p: &mut Vec<String>) {
             p.push(format!("{at}: a tileset source needs query_params.{key}"));
         }
     }
-    if !s.url.contains("{tile}") {
+    // A GET tileset names the tile in its url; a POST tileset (with a query) in its body.
+    if s.query.is_none() && !s.url.contains("{tile}") {
         p.push(format!("{at}: a tileset url needs a {{tile}} placeholder"));
     }
     let Some(manifest) = &s.tiles else {
@@ -288,6 +295,22 @@ used_by = "spike S5"
         let other = "0f3a9c0e5b2d4f6a8c1e3b5d7f9a2c4e6b8d0f1a3c5e7b9d2f4a6c8e0b1d3f5a";
         let (_, bad) = check_text(&tileset(other, "m.tiles"), &dir, &countries());
         assert!(bad.iter().any(|e| e.contains("does not match")), "{bad:?}");
+        // A POST tileset names tiles in its query body, so its url has no {tile}; a GET one must.
+        let no_tile = tileset(&hex, "m.tiles").replace("{tile}.tif", "x.tif");
+        let (_, get) = check_text(&no_tile, &dir, &countries());
+        assert!(get.iter().any(|e| e.contains("{tile}")), "{get:?}");
+        std::fs::write(dir.join("q.json"), "{}").ok();
+        let post = no_tile.replace(
+            "kind = \"tileset\"",
+            "kind = \"tileset\"\nquery = \"q.json\"",
+        );
+        let (_, post_ok) = check_text(&post, &dir, &countries());
+        assert!(post_ok.is_empty(), "{post_ok:?}");
+        let (_, no_query) = check_text(&post.replace("q.json", "none.json"), &dir, &countries());
+        assert!(
+            no_query.iter().any(|e| e.contains("query file")),
+            "{no_query:?}"
+        );
         let (_, missing) = check_text(&tileset(&hex, "none.tiles"), &dir, &countries());
         assert!(
             missing.iter().any(|e| e.contains("not found")),

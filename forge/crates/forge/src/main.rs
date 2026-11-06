@@ -10,6 +10,8 @@
 //! forge conflate <cc> <points> <points> [...]     match records across sources
 //! forge aliases <cc> <anchor> <a+b+...>          carry cluster names to the anchor's records
 //! forge dem <tileset> <points> [...]             DEM heights against stated elevations
+//! forge dem-ref <dem> <ref> <geoid> [<boundary>]  the DEM against a ground reference
+//! forge geoid <source> <lat> <lon> [...]          geoid undulation N at points
 //! forge path <source-id>                          print a fetched source's store path
 //! ```
 //!
@@ -25,12 +27,14 @@ mod conflate;
 mod dem;
 mod fetch;
 mod geofix;
+mod geoid;
 mod geom;
 mod links;
 mod lock;
 mod pip;
 mod read;
 mod record;
+mod sliderule;
 mod tiles;
 
 use std::path::{Path, PathBuf};
@@ -66,60 +70,17 @@ fn main() -> ExitCode {
                 fetch::run(&root, &ids, pin, verify)
             }
         }
-        Some("read") => match (args.get(1), args.get(2..)) {
-            (Some(reader), Some(ids)) if !ids.is_empty() => {
-                read::run(&root, reader, ids).map(|summary| eprintln_safe(&summary))
-            }
-            _ => Err("usage: forge read <geonames|osm|wikidata> <source-id> [<source-id>…]".into()),
-        },
-        Some("pip") => match (
-            args.get(1),
-            args.get(2).map(|l| l.parse::<u8>()),
-            args.get(3),
-        ) {
-            (Some(b), Some(Ok(level)), Some(p)) => {
-                pip::run(&root, b, level, p).map(|summary| eprintln_safe(&summary))
-            }
-            _ => Err("usage: forge pip <boundary-source> <level> <points-source>".into()),
-        },
-        Some("geofix") => match args.get(1) {
-            Some(p) => geofix::run(&root, p, args.get(2).map(String::as_str))
-                .map(|summary| eprintln_safe(&summary)),
-            None => Err("usage: forge geofix <points-source> [<boundary-source>]".into()),
-        },
-        Some("links") if args.len() >= 3 => links::run(&root, args.get(1..).unwrap_or_default())
-            .map(|summary| eprintln_safe(&summary)),
-        Some("links") => Err("usage: forge links <points-source> <points-source> [...]".into()),
-        Some("conflate") if args.len() >= 4 => match (args.get(1), args.get(2..)) {
-            (Some(cc), Some(sources)) => {
-                conflate::run(&root, cc, sources).map(|summary| eprintln_safe(&summary))
-            }
-            _ => Err("usage: forge conflate <cc> <points-source> <points-source> [...]".into()),
-        },
-        Some("conflate") => {
-            Err("usage: forge conflate <cc> <points-source> <points-source> [...]".into())
-        }
-        Some("aliases") => match (args.get(1), args.get(2), args.get(3)) {
-            (Some(cc), Some(anchor), Some(run)) => {
-                aliases::run(&root, cc, anchor, run).map(|summary| eprintln_safe(&summary))
-            }
-            _ => Err("usage: forge aliases <cc> <anchor-source> <source+source+...>".into()),
-        },
-        Some("dem") if args.len() >= 3 => match (args.get(1), args.get(2..)) {
-            (Some(t), Some(sources)) => {
-                dem::run(&root, t, sources).map(|summary| eprintln_safe(&summary))
-            }
-            _ => Err("usage: forge dem <tileset-source> <points-source> [...]".into()),
-        },
-        Some("dem") => Err("usage: forge dem <tileset-source> <points-source> [...]".into()),
         Some("path") => match args.get(1) {
             Some(id) => path(&root, id),
             None => Err("usage: forge path <source-id>".to_string()),
         },
-        _ => Err(
-            "usage: forge fetch [--pin] [--verify] [<source-id>…] | forge path <source-id>"
-                .to_string(),
-        ),
+        _ => match stage(&root, &args) {
+            Some(r) => r.map(|summary| eprintln_safe(&summary)),
+            None => Err(
+                "usage: forge fetch [--pin] [--verify] [<source-id>…] | forge path <source-id> | forge <stage> … (see the module docs)"
+                    .to_string(),
+            ),
+        },
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -128,6 +89,56 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// The stages: each returns its summary. `None` when `args` names no stage.
+fn stage(root: &Path, args: &[String]) -> Option<Result<String, String>> {
+    Some(match args.first().map(String::as_str)? {
+        "read" => match (args.get(1), args.get(2..)) {
+            (Some(reader), Some(ids)) if !ids.is_empty() => read::run(root, reader, ids),
+            _ => Err("usage: forge read <geonames|osm|wikidata> <source-id> [<source-id>…]".into()),
+        },
+        "pip" => match (
+            args.get(1),
+            args.get(2).map(|l| l.parse::<u8>()),
+            args.get(3),
+        ) {
+            (Some(b), Some(Ok(level)), Some(p)) => pip::run(root, b, level, p),
+            _ => Err("usage: forge pip <boundary-source> <level> <points-source>".into()),
+        },
+        "geofix" => match args.get(1) {
+            Some(p) => geofix::run(root, p, args.get(2).map(String::as_str)),
+            None => Err("usage: forge geofix <points-source> [<boundary-source>]".into()),
+        },
+        "links" if args.len() >= 3 => links::run(root, args.get(1..).unwrap_or_default()),
+        "links" => Err("usage: forge links <points-source> <points-source> [...]".into()),
+        "conflate" if args.len() >= 4 => match (args.get(1), args.get(2..)) {
+            (Some(cc), Some(sources)) => conflate::run(root, cc, sources),
+            _ => Err("usage: forge conflate <cc> <points-source> <points-source> [...]".into()),
+        },
+        "conflate" => {
+            Err("usage: forge conflate <cc> <points-source> <points-source> [...]".into())
+        }
+        "aliases" => match (args.get(1), args.get(2), args.get(3)) {
+            (Some(cc), Some(anchor), Some(run)) => aliases::run(root, cc, anchor, run),
+            _ => Err("usage: forge aliases <cc> <anchor-source> <source+source+...>".into()),
+        },
+        "dem" if args.len() >= 3 => match (args.get(1), args.get(2..)) {
+            (Some(t), Some(sources)) => dem::run(root, t, sources),
+            _ => Err("usage: forge dem <tileset-source> <points-source> [...]".into()),
+        },
+        "dem-ref" => match (args.get(1), args.get(2), args.get(3)) {
+            (Some(d), Some(r), Some(g)) => {
+                dem::reference::run(root, d, r, g, args.get(4).map(String::as_str))
+            }
+            _ => {
+                Err("usage: forge dem-ref <dem-tileset> <reference-tileset> <geoid-source> [<boundary-source>]".into())
+            }
+        },
+        "geoid" if args.len() >= 4 => geoid::run(root, args.get(1..).unwrap_or_default()),
+        "dem" => Err("usage: forge dem <tileset-source> <points-source> [...]".into()),
+        _ => return None,
+    })
 }
 
 fn path(root: &Path, id: &str) -> Result<(), String> {

@@ -14,7 +14,8 @@ use sha2::{Digest, Sha256};
 
 use crate::lock::{self, Lock, Source};
 
-const USER_AGENT: &str = "teigeodata-forge/0.0 (+https://github.com/teispace/teigeodata)";
+pub(crate) const USER_AGENT: &str =
+    "teigeodata-forge/0.0 (+https://github.com/teispace/teigeodata)";
 const ATTEMPTS: u32 = 3;
 
 /// The content-store path of a source's pinned bytes.
@@ -142,14 +143,7 @@ fn download_once(
             .map_err(|e| e.to_string())?,
         "sparql" => {
             let template = s.query.as_ref().ok_or("a sparql source needs a query")?;
-            let mut q =
-                fs::read_to_string(root.join(template)).map_err(|e| format!("{template}: {e}"))?;
-            for (k, v) in &s.query_params {
-                q = q.replace(&format!("{{{{{k}}}}}"), v);
-            }
-            if q.contains("{{") {
-                return Err(format!("{template}: a template parameter is not set"));
-            }
+            let q = render(root, template, s.query_params.iter())?;
             ureq::post(&url)
                 .header("User-Agent", USER_AGENT)
                 .header("Accept", "text/tab-separated-values")
@@ -161,12 +155,39 @@ fn download_once(
     stream_to(resp.body_mut().as_reader(), partial)
 }
 
-/// Downloads one URL into `partial` (GET, with retries); `Ok(None)` when the server has no
-/// such file (404), which a tileset records as an absent tile.
-pub(crate) fn get_to(url: &str, partial: &Path) -> Result<Option<(String, u64)>, String> {
+/// Reads a query template and fills its `{{KEY}}` parameters; every one must be set.
+pub(crate) fn render<'a>(
+    root: &Path,
+    template: &str,
+    params: impl Iterator<Item = (&'a String, &'a String)>,
+) -> Result<String, String> {
+    let mut q = fs::read_to_string(root.join(template)).map_err(|e| format!("{template}: {e}"))?;
+    for (k, v) in params {
+        q = q.replace(&format!("{{{{{k}}}}}"), v);
+    }
+    if q.contains("{{") {
+        return Err(format!("{template}: a template parameter is not set"));
+    }
+    Ok(q)
+}
+
+/// Downloads one URL into `partial` (GET, or POST of a JSON `body`, with retries); `Ok(None)`
+/// when the server has no such file (404), which a tileset records as an absent tile.
+pub(crate) fn get_to(
+    url: &str,
+    body: Option<&str>,
+    partial: &Path,
+) -> Result<Option<(String, u64)>, String> {
     let mut last = String::new();
     for attempt in 1..=ATTEMPTS {
-        match ureq::get(url).header("User-Agent", USER_AGENT).call() {
+        let sent = match body {
+            None => ureq::get(url).header("User-Agent", USER_AGENT).call(),
+            Some(b) => ureq::post(url)
+                .header("User-Agent", USER_AGENT)
+                .header("Content-Type", "application/json")
+                .send(b),
+        };
+        match sent {
             Ok(mut resp) => match stream_to(resp.body_mut().as_reader(), partial) {
                 Ok(r) => return Ok(Some(r)),
                 Err(e) => last = e,

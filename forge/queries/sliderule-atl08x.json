@@ -1,0 +1,8 @@
+{"parms": {
+  "poly": [{"lon": {{W}}, "lat": {{S}}}, {"lon": {{E}}, "lat": {{S}}}, {"lon": {{E}}, "lat": {{N}}}, {"lon": {{W}}, "lat": {{N}}}, {"lon": {{W}}, "lat": {{S}}}],
+  "t0": "{{T0}}",
+  "t1": "{{T1}}",
+  "te_quality_filter": {{TE_QUALITY}},
+  "atl08_fields": ["terrain/h_te_best_fit"],
+  "output": {"path": "atl08.parquet", "format": "parquet", "open_on_complete": false}
+}}

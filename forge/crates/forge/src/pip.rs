@@ -18,6 +18,37 @@ use crate::record::{self, Point, strings, write_table};
 /// 0.1° cells: a few polygons per cell at local-unit scale.
 const CELL_E7: i32 = 1_000_000;
 
+/// The area covered by a boundary set, at its finest level: many small polygons make the exact
+/// test cheap. Used to restrict a measurement to a country.
+pub(crate) struct Region {
+    polys: Vec<crate::geom::Polygon>,
+    index: GridIndex,
+}
+
+impl Region {
+    pub(crate) fn load(root: &Path, boundary: &str) -> Result<Self, String> {
+        let lock = Lock::read(&root.join("data/sources.lock"))?;
+        let zip = store_path(root, lock.get(boundary)?);
+        let level = boundaries::levels(&zip)?
+            .into_iter()
+            .max()
+            .ok_or_else(|| format!("{boundary}: no levels"))?;
+        let polys: Vec<_> = boundaries::read(&zip, level)?
+            .into_iter()
+            .map(|u| u.polygon)
+            .collect();
+        let index = GridIndex::new(&polys, CELL_E7);
+        Ok(Self { polys, index })
+    }
+
+    /// Whether a point on the 1e-7° grid lies in any unit (on an edge counts as inside).
+    pub(crate) fn contains(&self, lon: i32, lat: i32) -> bool {
+        self.index
+            .candidates(lon, lat)
+            .any(|i| self.polys.get(i).is_some_and(|p| p.contains(lon, lat)))
+    }
+}
+
 /// `forge pip <boundary-source> <level> <points-source>`.
 pub(crate) fn run(root: &Path, boundary: &str, level: u8, points: &str) -> Result<String, String> {
     let t = Instant::now();
