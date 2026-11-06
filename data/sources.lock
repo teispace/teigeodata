@@ -1,0 +1,128 @@
+# Pinned data sources (AGENTS.md §5, ADR-0035), schema teigeodata/sources/v1.
+#
+# Every byte a build or spike reads is listed here with its licence class (CLEAN_ROOM.md rule 1)
+# and pinned by SHA-256 and size. `forge fetch` downloads into data/cache/store/sha256/ and keeps
+# only matching bytes; `forge fetch --pin <id>` records new bytes deliberately. `moving = true`
+# marks an upstream that replaces files in place (no dated archive): such a source needs a
+# mirror_url (our release asset) before a release build reads it. `cargo xtask check-data`
+# validates this file.
+
+schema = "teigeodata/sources/v1"
+
+[[source]]
+id = "geofabrik-np"
+title = "OpenStreetMap Nepal extract (Geofabrik), dated file"
+kind = "http"
+url = "https://download.geofabrik.de/asia/nepal-261105.osm.pbf"
+version = "2026-11-05"
+retrieved = "2026-11-06"
+sha256 = "0f2a5f19bd07420d252d08533853aa1205ab2df497802ae4cd96fb0db5892da5"
+size = 414872957
+licence = "ODbL-1.0"
+licence_class = "odbl"
+countries = ["NP"]
+used_by = "spike S5 (main build only)"
+
+[[source]]
+id = "geonames-np"
+title = "GeoNames Nepal dump (NP.zip)"
+kind = "http"
+url = "https://download.geonames.org/export/dump/NP.zip"
+moving = true
+version = "daily dump"
+retrieved = "2026-11-06"
+sha256 = "e14643d6bfda199049196e1e17cbbb4a166732b23ce644910a35da499c29b0fd"
+size = 3459538
+licence = "CC-BY-4.0"
+licence_class = "cc-by"
+countries = ["NP"]
+used_by = "spikes S1, S2, S3, S5"
+
+[[source]]
+id = "geonames-alternate-names"
+title = "GeoNames alternate names V2 (all countries; with language and colloquial, short and historic flags)"
+kind = "http"
+url = "https://download.geonames.org/export/dump/alternateNamesV2.zip"
+moving = true
+version = "daily dump"
+retrieved = "2026-11-06"
+sha256 = "6caa9b37dcf1695cc8b56fda1d29eab64741ff5bbe4e0bb9ea6ea69ce8602464"
+size = 205188519
+licence = "CC-BY-4.0"
+licence_class = "cc-by"
+countries = ["*"]
+used_by = "spike S5"
+
+[[source]]
+id = "geonames-hierarchy"
+title = "GeoNames hierarchy (parent-child links, all countries)"
+kind = "http"
+url = "https://download.geonames.org/export/dump/hierarchy.zip"
+moving = true
+version = "daily dump"
+retrieved = "2026-11-06"
+sha256 = "f878e8ae517d853437851174bc38231de6cdfbd5c91c731a037d4869203318a0"
+size = 2073538
+licence = "CC-BY-4.0"
+licence_class = "cc-by"
+countries = ["*"]
+used_by = "spike S5"
+
+[[source]]
+id = "codab-np-xlsx"
+title = "OCHA COD-AB Nepal v02, attribute tables (XLSX)"
+kind = "http"
+url = "https://data.humdata.org/dataset/07db728a-4f0f-4e98-8eb0-8fa9df61f01c/resource/5bf18581-ef08-471c-b5d4-582c2d70228d/download/npl_admin_boundaries.xlsx"
+version = "v02, HDX resource of 2026-08-14"
+retrieved = "2026-11-06"
+sha256 = "b9798479194594671174e06370a56c518a37721b7517e6d1a45d5014121240be"
+size = 249180
+licence = "CC-BY-IGO-3.0"
+licence_class = "cc-by-igo"
+countries = ["NP"]
+used_by = "spikes S3, S5"
+
+[[source]]
+id = "codab-np-geojson"
+title = "OCHA COD-AB Nepal v02, boundaries (GeoJSON, zipped)"
+kind = "http"
+url = "https://data.humdata.org/dataset/07db728a-4f0f-4e98-8eb0-8fa9df61f01c/resource/dea34e50-37d5-4e36-98ae-2b7b1b4c43de/download/npl_admin_boundaries.geojson.zip"
+version = "v02, HDX resource of 2026-08-14"
+retrieved = "2026-11-06"
+sha256 = "9f6713c41d65396f611ddce5879faecf8e2d494edbd1d6611612445ad46b6707"
+size = 60438906
+licence = "CC-BY-IGO-3.0"
+licence_class = "cc-by-igo"
+countries = ["NP"]
+used_by = "spike S5 (Q-010, point in polygon)"
+
+[[source]]
+id = "wikidata-np"
+title = "Wikidata places in Nepal with a coordinate (QLever snapshot)"
+kind = "sparql"
+url = "https://qlever.dev/api/wikidata"
+moving = true
+version = "QLever Wikidata snapshot"
+retrieved = "2026-11-06"
+sha256 = "a47af5e3ed719af2975921900cb74a0ec9fc6922fa301979907d48c7db88fe71"
+size = 3126903
+licence = "CC0-1.0"
+licence_class = "cc0"
+countries = ["NP"]
+used_by = "spike S5"
+query = "forge/queries/wikidata-places.rq"
+query_params = { COUNTRY = "wd:Q837" }
+
+[[source]]
+id = "tbb-2026f"
+title = "timezone-boundary-builder 2026f, zones with oceans (GeoJSON, zipped)"
+kind = "http"
+url = "https://github.com/evansiroky/timezone-boundary-builder/releases/download/2026f/timezones-with-oceans.geojson.zip"
+version = "2026f"
+retrieved = "2026-11-06"
+sha256 = "838b3c9161e09ee944edb64cc4d9e4d2eb3ad0a3ec3d8d6a1520a5f8f6e21ac9"
+size = 56156331
+licence = "ODbL-1.0"
+licence_class = "odbl"
+countries = ["*"]
+used_by = "spike S2 (main build only)"

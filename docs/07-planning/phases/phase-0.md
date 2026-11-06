@@ -48,6 +48,13 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
 - [x] S3 Search: FST maps, own Damerau automaton, prefix and the phonetic key on the Nepal golden set ([results](../../02-research/benches/s3-search.md)): recall@1 0.953, recall@5 0.986, MRR@10 0.969, 3.6 MB: recall gates met; p99 78–116 µs, depending on load (100 µs gate: faster automaton in Phase 2). The misses left are data (aliases, conflation) for S5 and the forge
 - [ ] S4 Bindings: C ABI + IDL + generator on one slice into Node, Dart, Python, JNI and Swift; marshalling cost
 - [ ] S5 Baseline accuracy: GeoNames vs OSM vs Wikidata for Nepal (duplicates, rounded coordinates, DEM disagreement); check COD-AB geometry for the 2020 claim (Q-010)
+  - [x] S5.1 `data/sources.lock` (8 sources pinned, checked by `check-data`), the forge workspace and `forge fetch` (content store, SHA-256, `--pin`, `--verify`; a wrong pin proven to fail) ([forge](../../04-architecture/forge.md))
+  - [x] S5.2 readers for OSM, GeoNames (with alternate names and hierarchy) and Wikidata: deterministic Parquet record tables
+  - [ ] S5.3 COD-AB boundaries and Q-010
+  - [ ] S5.4 geofix detectors: rounding, stacking, centroid snap
+  - [ ] S5.5 links and conflation: cross-source pairs, position disagreement, aliases into the golden set
+  - [ ] S5.6 DEM disagreement (Copernicus GLO-30)
+  - [ ] S5.7 results page
 - [ ] S6 Elevation validation: ICESat-2 ATL08 against Copernicus GLO-30, NASADEM and GEDTM30 over Nepal ([ADR-0034](../../03-decisions/adr/ADR-0034-elevation-method.md))
 
 ### 0.5 Exit review

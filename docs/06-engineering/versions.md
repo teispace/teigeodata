@@ -67,7 +67,11 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | calamine (COD-AB workbooks, spikes) | 0.38.0 | 2026-11-06 | crates.io | 2026-12-06 |
 | unicode-script | 0.5.9 | 2026-11-06 | crates.io | 2026-12-06 |
 | unicode-normalization | 0.1.26 | 2026-11-06 | crates.io | 2026-12-06 |
-| unicode-normalization | 0.1.26 | 2026-11-06 | crates.io | 2026-12-06 |
+| sha2 (forge fetch) | 0.11.1 | 2026-11-06 | crates.io | 2026-12-06 |
+| toml (lock files) | 1.2.1 | 2026-11-06 | crates.io | 2026-12-06 |
+| zip (forge readers; releases almost daily) | 9.4.1 | 2026-11-06 | crates.io | 2026-12-06 |
+| arrow-array / arrow-schema (forge) | 60.1.0 | 2026-11-06 | crates.io | 2026-12-06 |
+| QLever (Wikidata endpoint, moved to qlever.dev) | service | 2026-11-06 | qlever.dev | 2026-12-06 |
 | TUF specification | 1.0.37 | 2026-11-06 | theupdateframework.github.io | 2027-02-06 |
 
 Libraries chosen in Phase 0 research are added here when adopted.

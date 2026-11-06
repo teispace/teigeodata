@@ -1,0 +1,27 @@
+[package]
+name = "teigeodata-forge"
+description = "The teigeodata data pipeline: fetch, read, conflate, fix and pack (ADR-0035)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "forge"
+path = "src/main.rs"
+
+[dependencies]
+arrow-array = "60.1.0"
+arrow-schema = "60.1.0"
+osmpbf = "0.3.8"
+parquet = { version = "60.1.0", default-features = false, features = ["arrow", "zstd"] }
+serde = { version = "1.0.229", features = ["derive"] }
+sha2 = "0.11.1"
+toml = "1.2.1"
+ureq = "3.5.1"
+zip = { version = "9.4.1", default-features = false, features = ["deflate"] }
+
+[lints]
+workspace = true

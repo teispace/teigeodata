@@ -16,7 +16,7 @@ Rules for writing here: [CONVENTIONS.md](CONVENTIONS.md).
 | The plan | [roadmap](07-planning/roadmap.md), [phase 0](07-planning/phases/phase-0.md), [open questions](07-planning/open-questions.md) |
 | What is decided | [decision log and ADRs](03-decisions/log.md) |
 | What we learned | `02-research/notes/` |
-| How it is built | [architecture overview](04-architecture/overview.md), [pack format](04-architecture/pack-format.md) |
+| How it is built | [architecture overview](04-architecture/overview.md), [pack format](04-architecture/pack-format.md), [forge](04-architecture/forge.md) |
 | The data | [schema](05-data/schema.md), [adding a country](05-data/adding-a-country.md), [Nepal](05-data/countries/np.md) |
 | How we work | [quality bar](06-engineering/quality-bar.md), [CI](06-engineering/ci.md), [versions](06-engineering/versions.md), [resources](06-engineering/resources.md), [benchmarks](06-engineering/benchmarks.md) |
 | How to contribute a specific thing | `09-guidelines/`, and [CONTRIBUTING.md](../CONTRIBUTING.md) |

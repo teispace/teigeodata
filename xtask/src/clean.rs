@@ -4,14 +4,18 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-/// Removes incremental caches and scratch directories; with `all`, runs `cargo clean` too.
+/// Removes incremental caches and scratch directories of both workspaces (the main one and
+/// `forge/`); with `all`, runs `cargo clean` in both too. The fetched sources in
+/// `data/cache/store/` are kept: they are pinned inputs, not build output.
 pub(crate) fn run(root: &Path, all: bool) -> Result<String, Vec<String>> {
     let mut removed = Vec::new();
     let mut problems = Vec::new();
 
     let mut candidates = vec![root.join("scratch"), root.join("data/build")];
-    for profile_dir in read_dirs(&root.join("target")) {
-        candidates.push(profile_dir.join("incremental"));
+    for target in [root.join("target"), root.join("forge/target")] {
+        for profile_dir in read_dirs(&target) {
+            candidates.push(profile_dir.join("incremental"));
+        }
     }
     for dir in candidates {
         if dir.is_dir() {
@@ -23,14 +27,22 @@ pub(crate) fn run(root: &Path, all: bool) -> Result<String, Vec<String>> {
     }
 
     if all {
-        let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
-            .arg("clean")
-            .current_dir(root)
-            .status();
-        match status {
-            Ok(s) if s.success() => removed.push("target/ (cargo clean)".into()),
-            Ok(s) => problems.push(format!("cargo clean exited with {s}")),
-            Err(e) => problems.push(format!("cargo clean: {e}")),
+        for (dir, shown) in [
+            (root.to_path_buf(), "target/"),
+            (root.join("forge"), "forge/target/"),
+        ] {
+            if !dir.join("Cargo.toml").is_file() {
+                continue;
+            }
+            let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
+                .arg("clean")
+                .current_dir(&dir)
+                .status();
+            match status {
+                Ok(s) if s.success() => removed.push(format!("{shown} (cargo clean)")),
+                Ok(s) => problems.push(format!("cargo clean in {shown} exited with {s}")),
+                Err(e) => problems.push(format!("cargo clean in {shown}: {e}")),
+            }
         }
     }
 

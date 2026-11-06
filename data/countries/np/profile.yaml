@@ -5,6 +5,7 @@ schema: teigeodata/profile/v1
 country: NP
 iso3: NPL
 name: Nepal
+wikidata: Q837
 # Nepal Bhasa (new) is written in Devanagari and in Newa (Prachalit) script.
 languages: [ne, en, new]
 scripts: [Deva, Latn, Newa]

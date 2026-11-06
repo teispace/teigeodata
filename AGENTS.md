@@ -142,6 +142,10 @@ Plain, clear, specific English. One fact, one home: link instead of repeating
 ## 11. Standing preferences of the maintainer
 
 - **Best, not good enough:** extreme efficiency, optimisation and robustness; measured.
+- **Production-ready at world scale, DRY:** every stage and query is designed for the whole
+  planet, not the country it was first tried on: stream instead of loading, bounded memory, no
+  per-element allocation in hot loops, one shared code path instead of copies. Search and every
+  other feature are fast, clean and optimised on large data.
 - **Accuracy order:** coordinates and elevation first (P90 vertical ≤ 50 m acceptable, improve
   later), then names, then population. Optional data may be null.
 - **v1 is everything** (no feature is pushed to a v2). Country coverage grows by data releases.

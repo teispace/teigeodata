@@ -5,6 +5,7 @@ schema: teigeodata/profile/v1
 country: IN
 iso3: IND
 name: India
+wikidata: Q668
 languages: [hi, en]
 scripts: [Deva, Latn, Beng, Guru, Gujr, Orya, Taml, Telu, Knda, Mlym, Arab, Olck, Mtei]
 admin_levels:

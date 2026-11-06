@@ -13,6 +13,8 @@ mod data;
 mod docs;
 mod golden;
 mod lexicon;
+mod sources;
+mod workspace;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -27,8 +29,11 @@ Tasks:
                     sign-off, no AI attribution); run by the commit-msg hook.
   check-data        Check every data/countries/<cc>/ folder: profile.yaml (admin ladder,
                     unit types, source codes), lexicon.yaml (IDs, NFC, scripts, variant
-                    collisions, evidence) and golden query files.
-  clean [--all]     Free disk: incremental caches and scratch; --all also runs `cargo clean`.
+                    collisions, evidence) and golden query files; and data/sources.lock
+                    (pins, licence classes, query templates).
+  check-workspace   Check that forge/Cargo.toml keeps the main workspace's lint table.
+  clean [--all]     Free disk: incremental caches and scratch of both workspaces; --all
+                    also runs `cargo clean` in both. Fetched sources are kept.
   help              Show this message.
 ";
 
@@ -48,6 +53,7 @@ fn main() -> ExitCode {
             }
         }
         "check-data" => report(data::check(&root)),
+        "check-workspace" => report(workspace::check(&root)),
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
         "help" | "-h" | "--help" => {
             print!("{HELP}");

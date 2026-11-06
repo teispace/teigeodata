@@ -19,6 +19,8 @@ updated: 2026-11-06
   - **Search (S3):** the recall gates are met on Nepal: recall@1 0.953, recall@5 0.986,
     3.6 MB; p99 78–116 µs, depending on load ([results](../02-research/benches/s3-search.md), D-052). The misses left are aliases
     and conflation, which are S5 and forge work.
+- **S5 in progress:** sources pinned in `data/sources.lock`; the forge fetches them and reads
+  OSM, GeoNames and Wikidata into Parquet (S5.1, S5.2). Next: S5.3 (Q-010).
 - **Next:** S5 (OSM, Wikidata and COD-AB geometry for Nepal: aliases fill the colloquial gap
   and the curated misses; re-test pkey `indic-v1` on OSM name pairs; Q-010); then S6 and S4;
   then the M0 review.

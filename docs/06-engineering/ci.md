@@ -15,7 +15,7 @@ and checked again before each workflow change.
 
 | Workflow | Trigger | Jobs | Budget |
 |---|---|---|---|
-| `fast-check` | every push and PR | fmt, clippy, unit and property tests on fixtures, `check-docs`, `cargo deny`, typos | ≤ 10 min |
+| `fast-check` | every push and PR | fmt, clippy, unit and property tests on fixtures, `check-docs`, `check-data` (country folders and the source lock), `check-workspace`; the same fmt, clippy and tests for the `forge/` workspace in its own job; `cargo deny` for both workspaces; typos | ≤ 10 min |
 | `verify` | push to `main` | full tests on Linux x64/arm64, macOS arm64, Windows x64; doc tests; golden; parity (fast set) | ≤ 30 min |
 | `bindings` | push to `main`, release | cross-compile matrix (Android ABIs, iOS slices, WASM variants, desktop targets), binding tests per language | ≤ 45 min |
 | `nightly` | schedule | fuzzing, Miri, sanitizers, mutants, coverage, differential, benchmarks against baselines | ≤ 6 h per job |

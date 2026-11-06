@@ -2,5 +2,7 @@
 # Fast checks before every commit; CI runs the full set.
 set -e
 cargo fmt --all --check
+cargo fmt --manifest-path forge/Cargo.toml --all --check
 cargo xtask check-docs
 cargo xtask check-data
+cargo xtask check-workspace

@@ -10,7 +10,8 @@
 //! - `golden-curated.yaml` (optional) and the generated `tests/golden/<cc>.yaml`: golden search
 //!   queries ([`crate::golden`]).
 //!
-//! The same checks run for every country, so adding one is adding a folder.
+//! The same checks run for every country, so adding one is adding a folder. The source lock,
+//! `data/sources.lock`, is checked here too ([`crate::sources`]).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -21,6 +22,7 @@ use unicode_script::Script;
 
 use crate::golden;
 use crate::lexicon::{self, Evidence, EvidenceKind, Native, Status};
+use crate::sources;
 
 const PROFILE_SCHEMA: &str = "teigeodata/profile/v1";
 
@@ -32,6 +34,9 @@ struct Profile {
     /// ISO 3166-1 alpha-3 (some sources, such as COD-AB, key by it).
     iso3: String,
     name: String,
+    /// The country's Wikidata item (`Q837`), for per-country source queries.
+    #[serde(default)]
+    wikidata: Option<String>,
     /// BCP 47 language codes, official ones first.
     languages: Vec<String>,
     /// ISO 15924 scripts in use.
@@ -163,9 +168,23 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
             }
         }
     }
+    let folders: BTreeSet<String> = countries
+        .iter()
+        .filter_map(|p| p.file_name()?.to_str().map(str::to_string))
+        .collect();
+    let lock = root.join("data/sources.lock");
+    let mut pinned = 0usize;
+    match fs::read_to_string(&lock) {
+        Ok(text) => {
+            let (n, found) = sources::check_text(&text, root, &folders);
+            pinned = n;
+            problems.extend(found.into_iter().map(|p| format!("data/sources.lock: {p}")));
+        }
+        Err(e) => problems.push(format!("data/sources.lock: {e}")),
+    }
     if problems.is_empty() {
         Ok(format!(
-            "data ok: {} countries, {terms} lexicon terms, {queries} golden queries checked",
+            "data ok: {} countries, {terms} lexicon terms, {queries} golden query entries, {pinned} pinned sources checked",
             countries.len()
         ))
     } else {
@@ -201,6 +220,14 @@ fn check_profile(cc: &str, text: &str) -> Vec<String> {
     }
     if p.name.trim().is_empty() {
         out.push("name is empty".to_string());
+    }
+    if let Some(q) = &p.wikidata
+        && !(q.len() > 1
+            && q.starts_with('Q')
+            && q[1..].bytes().all(|b| b.is_ascii_digit())
+            && !q[1..].starts_with('0'))
+    {
+        out.push(format!("wikidata `{q}` is not a Wikidata item ID (Q…)"));
     }
     if p.languages.is_empty() {
         out.push("languages is empty".to_string());
@@ -394,6 +421,11 @@ sources:
         let cases = [
             ("country: NP", "country: IN", "must be `NP`"),
             ("iso3: NPL", "iso3: np", "three upper-case"),
+            (
+                "name: Nepal",
+                "name: Nepal\nwikidata: P837",
+                "Wikidata item ID",
+            ),
             ("languages: [ne, en]", "languages: [nepali, en]", "BCP 47"),
             (
                 "scripts: [Deva, Latn]",

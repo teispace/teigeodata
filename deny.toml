@@ -22,8 +22,11 @@ allow = [
 ]
 # tzf-rs's data crate is ODbL. It is a benchmark rival in spike S2 only (publish = false) and
 # never ships or feeds a pack. Any new use needs its own decision (ADR-0030).
+# webpki-roots is Mozilla's CA root bundle (CDLA-Permissive-2.0, a permissive data licence),
+# pulled in by the forge's HTTPS client. It reaches the forge only, never a runtime crate.
 exceptions = [
   { crate = "tzf-dist", allow = ["ODbL-1.0"] },
+  { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
 ]
 
 [bans]

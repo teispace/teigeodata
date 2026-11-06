@@ -34,8 +34,27 @@ jobs:
         run: cargo test --workspace --locked
       - name: Docs check
         run: cargo xtask check-docs
-      - name: Country data
+      - name: Country data and source lock
         run: cargo xtask check-data
+      - name: Workspace lint tables
+        run: cargo xtask check-workspace
+
+  forge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: forge
+      - name: Format
+        run: cargo fmt --manifest-path forge/Cargo.toml --all --check
+      - name: Lints
+        run: cargo clippy --manifest-path forge/Cargo.toml --workspace --all-targets --locked
+      - name: Tests
+        run: cargo test --manifest-path forge/Cargo.toml --workspace --locked
 
   deny:
     runs-on: ubuntu-latest
@@ -43,6 +62,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          manifest-path: forge/Cargo.toml
 
   typos:
     runs-on: ubuntu-latest

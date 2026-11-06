@@ -1,0 +1,38 @@
+# Wikidata places of one country with a coordinate (forge reader `wikidata-snapshot`, ADR-0035).
+# World-general: {{COUNTRY}} is the country item from data/countries/<cc>/profile.yaml
+# (`wikidata`), substituted by `forge fetch`. One row per item. Each multi-valued field is
+# grouped in its own subquery (no cross products) and joined with "|". Labels, aliases,
+# nicknames (P1449) and short names (P1813) come in every language, as "text@lang".
+PREFIX wd: <http://www.wikidata.org/entity/>
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+SELECT ?item ?coords ?classes ?parents ?geonames_ids ?osm_relations ?populations ?elevations ?dissolved_dates ?labels ?aliases ?nicknames ?short_names
+WHERE {
+  { SELECT DISTINCT ?item WHERE { ?item wdt:P17 {{COUNTRY}} ; wdt:P625 ?c } }
+  { SELECT ?item (GROUP_CONCAT(DISTINCT STR(?v); SEPARATOR="|") AS ?coords)
+    WHERE { ?item wdt:P17 {{COUNTRY}} . ?item wdt:P625 ?v } GROUP BY ?item }
+  OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT STR(?v); SEPARATOR="|") AS ?classes)
+    WHERE { ?item wdt:P17 {{COUNTRY}} . ?item wdt:P31 ?v } GROUP BY ?item }
+  OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT STR(?v); SEPARATOR="|") AS ?parents)
+    WHERE { ?item wdt:P17 {{COUNTRY}} . ?item wdt:P131 ?v } GROUP BY ?item }
+  OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT ?v; SEPARATOR="|") AS ?geonames_ids)
+    WHERE { ?item wdt:P17 {{COUNTRY}} . ?item wdt:P1566 ?v } GROUP BY ?item }
+  OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT ?v; SEPARATOR="|") AS ?osm_relations)
+    WHERE { ?item wdt:P17 {{COUNTRY}} . ?item wdt:P402 ?v } GROUP BY ?item }
+  OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT STR(?v); SEPARATOR="|") AS ?populations)
+    WHERE { ?item wdt:P17 {{COUNTRY}} . ?item wdt:P1082 ?v } GROUP BY ?item }
+  OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT STR(?v); SEPARATOR="|") AS ?elevations)
+    WHERE { ?item wdt:P17 {{COUNTRY}} . ?item wdt:P2044 ?v } GROUP BY ?item }
+  OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT STR(?v); SEPARATOR="|") AS ?dissolved_dates)
+    WHERE { ?item wdt:P17 {{COUNTRY}} . ?item wdt:P576 ?v } GROUP BY ?item }
+  OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT CONCAT(STR(?v), "@", LANG(?v)); SEPARATOR="|") AS ?labels)
+    WHERE { ?item wdt:P17 {{COUNTRY}} . ?item rdfs:label ?v } GROUP BY ?item }
+  OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT CONCAT(STR(?v), "@", LANG(?v)); SEPARATOR="|") AS ?aliases)
+    WHERE { ?item wdt:P17 {{COUNTRY}} . ?item skos:altLabel ?v } GROUP BY ?item }
+  OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT CONCAT(STR(?v), "@", LANG(?v)); SEPARATOR="|") AS ?nicknames)
+    WHERE { ?item wdt:P17 {{COUNTRY}} . ?item wdt:P1449 ?v } GROUP BY ?item }
+  OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT CONCAT(STR(?v), "@", LANG(?v)); SEPARATOR="|") AS ?short_names)
+    WHERE { ?item wdt:P17 {{COUNTRY}} . ?item wdt:P1813 ?v } GROUP BY ?item }
+}
+ORDER BY ?item
