@@ -28,6 +28,8 @@ sur = "sur"
 somme = "somme"
 # A source's own spelling, quoted on purpose (CBS local-level list).
 metropolitian = "metropolitian"
+# SlideRule's API field name for request parameters (`{"parms": …}`).
+parms = "parms"
 
 [files]
 extend-exclude = [
