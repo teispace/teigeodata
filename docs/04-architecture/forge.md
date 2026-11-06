@@ -25,7 +25,8 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | fetch | **built** (S5) | below |
 | read/osm, read/geonames, read/wikidata | **built** (S5) | below |
 | read/boundaries, pip | **built** (S5) | below |
-| geofix-detect, block, score, cluster | S5 | rounding, stacking and centroid-snap flags; Fellegi–Sunter |
+| geofix-detect | **built** (S5) | below |
+| block, score, cluster | S5 | Fellegi–Sunter |
 | geofix-consensus | S5 | weighted Weiszfeld; DEM sampling |
 | the rest | Phase 2 | |
 
@@ -112,6 +113,19 @@ Measured on Nepal, 2026-11-06 (M2 Pro), 21,686 OSM points:
 Every level assigns the same 21,125 points and none to two units, so the levels nest. The 561
 points outside are mostly just across the border in India and China (the Geofabrik extract is
 cut with a buffer), plus 20 in the Limpiyadhura claim area, which COD-AB excludes (D-054).
+
+## Geofix detectors (`geofix`)
+
+`forge geofix <points-source> [<boundary-source>]` flags every point that was rounded, stacked
+or snapped to a unit centroid, and writes `data/build/geofix/<points>/flags.parquet` (`id`,
+`decimals`, `grid_1min`, `grid_01min`, `grid_1sec`, `stack`, `snap_level`, `snap_m`) and a
+`summary.md` of rates against a measured null, with 95% intervals. The method and the Nepal
+results are in [S5](../02-research/benches/s5-nepal.md#rounding-stacking-and-centroid-snap-s54).
+
+- Every grid test is integer arithmetic on the 1e-7° grid.
+- Stacks come from one parallel sort of the points, not a hash map of strings.
+- Centroids are exact area centroids (holes subtracted whatever the ring orientation), in a
+  0.01° cell index for the 50 m query. The levels come from the boundary set itself.
 
 **Clean-up.** `cargo xtask clean` removes build output from both workspaces and keeps the
 store: fetched sources are pinned inputs, not build output.

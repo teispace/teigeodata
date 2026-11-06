@@ -21,7 +21,9 @@ updated: 2026-11-06
     and conflation, which are S5 and forge work.
 - **S5 in progress:** sources pinned in `data/sources.lock`; the forge fetches them and reads
   OSM, GeoNames and Wikidata into Parquet (S5.1, S5.2); `forge pip` assigns points to COD-AB units
-  exactly, and Q-010 is answered: COD-AB excludes the 2020 claim (S5.3, D-054). Next: S5.4 geofix detectors.
+  exactly, and Q-010 is answered: COD-AB excludes the 2020 claim (S5.3, D-054). `forge geofix`
+  measures rounding, stacking and snap against measured nulls (S5.4, D-055;
+  [results](../02-research/benches/s5-nepal.md)). Next: S5.5 conflation.
 - **Next:** S5 (OSM, Wikidata and COD-AB geometry for Nepal: aliases fill the colloquial gap
   and the curated misses; re-test pkey `indic-v1` on OSM name pairs); then S6 and S4;
   then the M0 review.

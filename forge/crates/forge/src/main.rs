@@ -5,6 +5,7 @@
 //! forge fetch [--pin] [--verify] [<source-id>…]   download and verify pinned sources
 //! forge read <reader> <source-id> [<source-id>…]  turn fetched bytes into record tables
 //! forge pip <boundary-source> <level> <points>    assign read points to admin units
+//! forge geofix <points> [<boundary-source>]      flag rounded, stacked, snapped points
 //! forge path <source-id>                          print a fetched source's store path
 //! ```
 //!
@@ -16,6 +17,7 @@
 )]
 
 mod fetch;
+mod geofix;
 mod geom;
 mod lock;
 mod pip;
@@ -70,6 +72,11 @@ fn main() -> ExitCode {
                 pip::run(&root, b, level, p).map(|summary| eprintln_safe(&summary))
             }
             _ => Err("usage: forge pip <boundary-source> <level> <points-source>".into()),
+        },
+        Some("geofix") => match args.get(1) {
+            Some(p) => geofix::run(&root, p, args.get(2).map(String::as_str))
+                .map(|summary| eprintln_safe(&summary)),
+            None => Err("usage: forge geofix <points-source> [<boundary-source>]".into()),
         },
         Some("path") => match args.get(1) {
             Some(id) => path(&root, id),

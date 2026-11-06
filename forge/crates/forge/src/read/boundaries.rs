@@ -41,6 +41,27 @@ enum Geometry {
     },
 }
 
+/// The admin levels present in a boundary set, ascending.
+pub(crate) fn levels(zip_path: &Path) -> Result<Vec<u8>, String> {
+    let file = File::open(zip_path).map_err(|e| format!("{}: {e}", zip_path.display()))?;
+    let archive = zip::ZipArchive::new(file).map_err(|e| format!("{}: {e}", zip_path.display()))?;
+    let mut levels: Vec<u8> = archive
+        .file_names()
+        .filter_map(Result::ok)
+        .filter(|n| !n.contains("_em"))
+        .filter_map(|n| {
+            n.strip_suffix(".geojson")?
+                .rsplit_once("admin")?
+                .1
+                .parse()
+                .ok()
+        })
+        .collect();
+    levels.sort_unstable();
+    levels.dedup();
+    Ok(levels)
+}
+
 /// Reads the units of one level.
 pub(crate) fn read(zip_path: &Path, level: u8) -> Result<Vec<Unit>, String> {
     let file = File::open(zip_path).map_err(|e| format!("{}: {e}", zip_path.display()))?;

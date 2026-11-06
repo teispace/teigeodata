@@ -11,10 +11,13 @@ use std::fs::{self, File};
 use std::path::Path;
 use std::sync::Arc;
 
-use arrow_array::builder::{Float32Builder, Int32Builder, Int64Builder, StringBuilder};
-use arrow_array::{ArrayRef, RecordBatch};
+use arrow_array::builder::{
+    BooleanBuilder, Float32Builder, Int32Builder, Int64Builder, StringBuilder,
+};
+use arrow_array::{Array, ArrayRef, Int32Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use parquet::arrow::ArrowWriter;
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
@@ -160,7 +163,7 @@ impl Output {
     }
 }
 
-fn strings<'a>(it: impl Iterator<Item = &'a str>) -> ArrayRef {
+pub(crate) fn strings<'a>(it: impl Iterator<Item = &'a str>) -> ArrayRef {
     let mut b = StringBuilder::new();
     for v in it {
         b.append_value(v);
@@ -168,7 +171,7 @@ fn strings<'a>(it: impl Iterator<Item = &'a str>) -> ArrayRef {
     Arc::new(b.finish())
 }
 
-fn opt_strings<'a>(it: impl Iterator<Item = Option<&'a str>>) -> ArrayRef {
+pub(crate) fn opt_strings<'a>(it: impl Iterator<Item = Option<&'a str>>) -> ArrayRef {
     let mut b = StringBuilder::new();
     for v in it {
         b.append_option(v);
@@ -176,7 +179,7 @@ fn opt_strings<'a>(it: impl Iterator<Item = Option<&'a str>>) -> ArrayRef {
     Arc::new(b.finish())
 }
 
-fn i32s(it: impl Iterator<Item = Option<i32>>) -> ArrayRef {
+pub(crate) fn i32s(it: impl Iterator<Item = Option<i32>>) -> ArrayRef {
     let mut b = Int32Builder::new();
     for v in it {
         b.append_option(v);
@@ -184,7 +187,7 @@ fn i32s(it: impl Iterator<Item = Option<i32>>) -> ArrayRef {
     Arc::new(b.finish())
 }
 
-fn i64s(it: impl Iterator<Item = Option<i64>>) -> ArrayRef {
+pub(crate) fn i64s(it: impl Iterator<Item = Option<i64>>) -> ArrayRef {
     let mut b = Int64Builder::new();
     for v in it {
         b.append_option(v);
@@ -192,7 +195,7 @@ fn i64s(it: impl Iterator<Item = Option<i64>>) -> ArrayRef {
     Arc::new(b.finish())
 }
 
-fn f32s(it: impl Iterator<Item = Option<f32>>) -> ArrayRef {
+pub(crate) fn f32s(it: impl Iterator<Item = Option<f32>>) -> ArrayRef {
     let mut b = Float32Builder::new();
     for v in it {
         b.append_option(v);
@@ -200,12 +203,56 @@ fn f32s(it: impl Iterator<Item = Option<f32>>) -> ArrayRef {
     Arc::new(b.finish())
 }
 
+pub(crate) fn bools(it: impl Iterator<Item = bool>) -> ArrayRef {
+    let mut b = BooleanBuilder::new();
+    for v in it {
+        b.append_value(v);
+    }
+    Arc::new(b.finish())
+}
+
+/// A record's point: (id, lon, lat) on the grid.
+pub(crate) type Point = (String, i32, i32);
+
+/// Every record with a point from a `records.parquet`, in file order (sorted by id).
+pub(crate) fn read_points(path: &Path) -> Result<Vec<Point>, String> {
+    let file =
+        File::open(path).map_err(|e| format!("{}: {e}: run forge read first", path.display()))?;
+    let reader = ParquetRecordBatchReaderBuilder::try_new(file)
+        .map_err(|e| e.to_string())?
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for batch in reader {
+        let b = batch.map_err(|e| e.to_string())?;
+        let col = |n: &str| b.column_by_name(n).ok_or_else(|| format!("no column {n}"));
+        let ids = col("id")?
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .ok_or("id type")?;
+        let lat = col("lat_e7")?
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .ok_or("lat type")?;
+        let lon = col("lon_e7")?
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .ok_or("lon type")?;
+        for i in 0..b.num_rows() {
+            if lat.is_valid(i) && lon.is_valid(i) {
+                out.push((ids.value(i).to_string(), lon.value(i), lat.value(i)));
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Rows per batch and per row group: memory stays bounded at any table size.
 const ROW_GROUP: usize = 128 * 1024;
 
 /// Writes `rows` in batches of [`ROW_GROUP`] with fixed settings: zstd level 3, page
 /// statistics, and no writer metadata that varies between runs.
-fn write_table<T>(
+pub(crate) fn write_table<T>(
     path: &Path,
     fields: Vec<Field>,
     rows: &[T],
