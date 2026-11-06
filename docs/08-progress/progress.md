@@ -19,7 +19,7 @@ updated: 2026-11-07
   - **Search (S3):** the recall gates are met on Nepal: recall@1 0.953, recall@5 0.986,
     3.6 MB; p99 78–116 µs, depending on load ([results](../02-research/benches/s3-search.md), D-052). The misses left are aliases
     and conflation, which are S5 and forge work.
-- **S5 in progress:** sources pinned in `data/sources.lock`; the forge fetches them and reads
+- **S5 done:** sources pinned in `data/sources.lock`; the forge fetches them and reads
   OSM, GeoNames and Wikidata into Parquet (S5.1, S5.2); `forge pip` assigns points to COD-AB units
   exactly, and Q-010 is answered: COD-AB excludes the 2020 claim (S5.3, D-054). `forge geofix`
   measures rounding, stacking and snap against measured nulls (S5.4, D-055;
@@ -29,11 +29,11 @@ updated: 2026-11-07
   precision 0.991–1.000 without using them (D-059); `teigeodata-names` now exists (D-057).
   `forge aliases` carries cluster names into search: S3 recall@1 0.959, recall@5 0.994
   (D-060). `forge dem` samples Copernicus GLO-30, pinned as a tileset: stated elevations are P90
-  100–430 m off, so elevation comes from the DEM at the conflated point (S5.6, D-061). Next: the
-  S5 summary for Q-005 (S5.7).
-- **Next:** S5 (OSM, Wikidata and COD-AB geometry for Nepal: aliases fill the colloquial gap
-  and the curated misses; re-test pkey `indic-v1` on OSM name pairs); then S6 and S4;
-  then the M0 review.
+  100–430 m off, so elevation comes from the DEM at the conflated point (S5.6, D-061). S5 is done:
+  Q-005 is answered by the S5.7 summary, with horizontal targets set by terrain slope (D-062).
+- **Next:** S6 (ICESat-2 ATL08 against Copernicus, NASADEM and GEDTM30 over Nepal; it measures
+  the DEM part of the vertical target); then S4 bindings; then the M0 review. Phase 2 carries
+  the S5 follow-ups: the settlement core, geofix-consensus, and growing the colloquial class.
 - **Blocked:** nothing.
 
 ## Session log
@@ -45,3 +45,4 @@ updated: 2026-11-07
 | 2026-11-06 | Spike S2 made exact (3 bugs found by set-based differential testing; source overlaps found, Q-013); leaf-size sweep; forge, offline-loading and competitive notes landed; benchmarking research and catalogue (D-042) | Push, apply the new notes, then S3 |
 | 2026-11-06 | Lexicon and data checks; per-country folders and profiles (P16); world-general search fold; golden set v0 for Nepal (reproducible) | S3 search spike |
 | 2026-11-06 | Spike S3: recall gates met on Nepal, p99 depends on load (D-052); own Damerau automaton about 10× faster than the `fst` DFA; phonetic key at low weight; pkey pair sets; COD-AB join bug fixed and golden set regenerated (512 queries) | S5 baseline accuracy |
+| 2026-11-07 | S5 done: matcher, aliases into search (S3 recall@1 0.959), DEM tilesets and `forge dem` (S5.6), the summary and accuracy targets (S5.7, D-058 to D-062) | S6 elevation validation |

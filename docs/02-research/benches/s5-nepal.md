@@ -1,7 +1,7 @@
 ---
 title: "Spike S5: GeoNames, OSM and Wikidata for Nepal"
 status: research
-updated: 2026-11-06
+updated: 2026-11-07
 ---
 
 # Spike S5: GeoNames, OSM and Wikidata for Nepal
@@ -264,6 +264,20 @@ Copernicus height at one source's point minus the height at the other's:
 | OSM–`GeoNames` | 426 | 25.3 | 445.1 | 1,376.7 | 41.5% |
 | OSM–Wikidata | 543 | 23.8 | 440.4 | 1,657.3 | 40.5% |
 
+The same 5,196 links by the mean slope at both points. "Predicted" is the height difference a
+uniform slope would give over the distance (d·tan slope); the gradient is |Δh| / d.
+
+| Slope | Pairs | Distance P50 | Distance P90 | \|Δh\| P50 | \|Δh\| P90 | Predicted P90 | Gradient P50 | Gradient P90 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0–5° | 1,593 | 645 m | 2.2 km | 1.9 m | 12.5 m | 65.0 m | 3 m/km | 27 m/km |
+| 5–15° | 774 | 320 m | 3.4 km | 13.1 m | 247.4 m | 584.5 m | 75 m/km | 246 m/km |
+| 15–30° | 1,899 | 717 m | 3.2 km | 114.1 m | 479.4 m | 1,396.3 m | 170 m/km | 408 m/km |
+| ≥ 30° | 930 | 796 m | 4.7 km | 149.4 m | 690.1 m | 3,595.1 m | 205 m/km | 563 m/km |
+
+Over kilometres a uniform slope overstates the height difference at P90 by 2.4 to 5 times,
+since terrain turns. The observed gradient is the usable number: it converts a horizontal error into
+a vertical one.
+
 **What follows (D-061):**
 - Elevation is sampled from the DEM at the conflated point. A source's stated elevation is
   never the value; it is a QA cross-check, and a disagreement beyond 50 m queues the record.
@@ -272,6 +286,49 @@ Copernicus height at one source's point minus the height at the other's:
   height. Position comes first, as the accuracy order says, and geofix-consensus and the
   settlement core are the levers (D-056).
 
-## Still to come
+## Summary: accuracy targets (S5.7, Q-005)
 
-S5.7 the summary for Q-005.
+**What S5 measured on Nepal** (sources pinned 2026-11-06; every number above is reproducible):
+
+| Finding | Number | Where it goes |
+|---|---|---|
+| Wikidata points are rounded | 66% one decimal short, 35% ≤ 3 decimals, 8% stacked | σ prior ≥ step/√12 (D-055) |
+| `GeoNames`–Wikidata copies | 31% of linked pairs within 1 m | one observation (D-056) |
+| Independent sources disagree on villages | P50 360–1,100 m, P90 2–5 km | settlement core (D-056) |
+| The matcher without stated links | recall 0.83–0.88, precision 0.991–1.000 | D-059 |
+| Aliases into search | recall@1 0.953 → 0.959, recall@5 0.986 → 0.994 | D-060 |
+| Stated elevations against Copernicus | P90 100–430 m | DEM at the point (D-061) |
+| Height per km of horizontal error | P90 27 m/km below 5°, 246–563 m/km above | the targets below |
+
+**The vertical target sets the horizontal one.** The maintainer's vertical target is P90
+≤ 50 m. Copernicus is good to a few metres, so nearly all of the vertical error comes from
+the point being in the wrong place. A point d off is about g·d off in height, where g is the
+gradient of its terrain, so P90 ≤ 50 m needs d ≤ 50 m / g₉₀:
+
+| DEM slope at the point | g₉₀ | Horizontal for 50 m vertical |
+|---|---:|---:|
+| < 5° | 27 m/km | 1.85 km |
+| 5–15° | 246 m/km | 200 m |
+| 15–30° | 408 m/km | 120 m |
+| ≥ 30° | 563 m/km | 90 m |
+
+Pairing a P90 gradient with a P90 distance is conservative: few points are at the tail of both.
+
+**The targets (D-062), P90 against held-out ground truth, per country and class:**
+- **Populated places:** the point is the settlement core (the densest built-up cell, from
+  building footprints).
+  - Within 500 m of the core on ground under 5°.
+  - Within 150 m of the core on 5° or steeper.
+  - Today's sources are 2–5 km apart at P90, so this is the lever the consensus stage must
+    deliver, and it is measured, not assumed.
+- **Admin units:** the point lies inside the unit's own polygon, 100%, by the exact
+  `pip`. It is the seat's point when the unit has a seat (D-058), else the polygon's label point.
+- **Elevation:** sampled from the DEM at the final point. P90 ≤ 50 m against ICESat-2 ground
+  returns at populated places (S6 measures the DEM part).
+- **Natural features** (peaks, passes, lakes) are not in the S5 sources at scale. Their
+  targets are set when their readers land, by the same rule.
+
+The ground truth must be independent of the build. For settlement cores it is building
+footprints with a licence fit for the build, held out from the consensus. The forge note
+lists Google Open Buildings (CC BY 4.0) as optional for S5. The `accuracy` gate in the quality
+bar reports these numbers per release in `ACCURACY.md`.

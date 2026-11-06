@@ -47,14 +47,14 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
 - [x] S2 Region index: world timezone exactness (differential, zero mismatches) and ns/lookup against tzf-rs ([results](../../02-research/benches/s2-region-index.md)): exact; packed layout and zone precedence (Q-013) go to Phase 2
 - [x] S3 Search: FST maps, own Damerau automaton, prefix and the phonetic key on the Nepal golden set ([results](../../02-research/benches/s3-search.md)): recall@1 0.953, recall@5 0.986, MRR@10 0.969, 3.6 MB: recall gates met; p99 78–116 µs, depending on load (100 µs gate: faster automaton in Phase 2). The misses left are data (aliases, conflation) for S5 and the forge
 - [ ] S4 Bindings: C ABI + IDL + generator on one slice into Node, Dart, Python, JNI and Swift; marshalling cost
-- [ ] S5 Baseline accuracy: GeoNames vs OSM vs Wikidata for Nepal (duplicates, rounded coordinates, DEM disagreement); check COD-AB geometry for the 2020 claim (Q-010) ([results so far](../../02-research/benches/s5-nepal.md))
+- [x] S5 Baseline accuracy: GeoNames vs OSM vs Wikidata for Nepal (duplicates, rounded coordinates, DEM disagreement); check COD-AB geometry for the 2020 claim (Q-010) ([results so far](../../02-research/benches/s5-nepal.md))
   - [x] S5.1 `data/sources.lock` (8 sources pinned, checked by `check-data`), the forge workspace and `forge fetch` (content store, SHA-256, `--pin`, `--verify`; a wrong pin proven to fail) ([forge](../../04-architecture/forge.md))
   - [x] S5.2 readers for OSM, GeoNames (with alternate names and hierarchy) and Wikidata: deterministic Parquet record tables
   - [x] S5.3 COD-AB boundary reader and the `pip` stage (exact point in polygon); Q-010 answered (D-054)
   - [x] S5.4 geofix detectors: rounding, stacking, centroid snap
   - [x] S5.5 links and conflation: cross-source pairs, position disagreement, the matcher, aliases into search (D-056, D-059, D-060)
   - [x] S5.6 DEM disagreement (Copernicus GLO-30)
-  - [ ] S5.7 results page
+  - [x] S5.7 results page: the summary and the accuracy targets (Q-005, D-062)
 - [ ] S6 Elevation validation: ICESat-2 ATL08 against Copernicus GLO-30, NASADEM and GEDTM30 over Nepal ([ADR-0034](../../03-decisions/adr/ADR-0034-elevation-method.md))
 
 ### 0.5 Exit review
