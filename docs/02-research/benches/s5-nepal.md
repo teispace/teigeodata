@@ -132,8 +132,57 @@ Measured 2026-11-06: 0.06 s, 54 MB peak RSS, 179,470 points.
 Stated links are scored like any other evidence. A wrong link beyond the class's distance
 gate is cut, and the cut is listed for upstream fixing.
 
+## The matcher (S5.5, second part)
+
+`forge conflate np geofabrik-np geonames-np wikidata-np`; the method is in the module docs
+and the [forge note](../notes/forge-pipeline.md). Measured 2026-11-07: 0.43 s, 180 MB peak
+RSS, 179,470 points; the clusters are byte-identical on a second run.
+
+- **Blocking:** a shared join key or `indic-v0` phonetic key (named by the profile) within
+  neighbouring 0.1° cells. That gives 98,967 cross-source pairs. 54,448 of them pair a
+  populated place with an admin unit, a cannot-link, which leaves 44,519. The stated links
+  add 3,808 pairs between compatible kinds.
+- **Model:** u from 1,000,000 seeded random cross-source pairs. m from three EM sessions, each
+  conditioned on the field its blocking selected on (name, then ID, then name). The global
+  prior λ is 1.0×10⁻⁵.
+
+| Field | Level weights in bits (strongest agreement first) |
+|---|---|
+| name | fold equal +14.3; join key +10.4; phonetic key +6.6; none −3.0 |
+| distance | < 250 m +16.0; < 1 km +12.2; < 3 km +9.4; < 10 km +5.5; farther −3.0 |
+| kind | same family +0.5; one side vague 0.0; different −17.8 |
+| ID | stated link +16.2; none −0.1 |
+
+**Silver-label evaluation.** A model **without** the ID field is scored against the stated
+links. 3,039 links are left out because they are farther than 10 km apart or join a populated
+place to an admin unit (D-056).
+- Recall is the share of links whose records end in one cluster.
+- Precision covers the merged cross-source pairs whose records both carry stated links to
+  the other source: the share the links agree with.
+
+| Source pair | Links | Recall | Merged pairs with links on both sides | Precision |
+|---|---:|---:|---:|---:|
+| OSM–Wikidata | 492 | 0.882 | 434 | 1.000 |
+| `GeoNames`–Wikidata | 3,231 | 0.832 | 2,713 | 0.991 |
+
+The full model clusters 1,107 places across all three sources, 12,469 OSM–`GeoNames`,
+4,354 `GeoNames`–Wikidata and 402 OSM–Wikidata.
+
+**What the misses are.** A sample of the stated OSM–Wikidata links the full model leaves
+apart:
+- **A town node against its eponymous municipality item:** Kawasoti, Tokha, "Ilam
+  Municipality". The cannot-link keeps these two entities apart by design. They are joined
+  by the unit's `seat` (D-058).
+- **A wrong or loose stated link:** मैत्री नगर tagged as Sitapaila, बैतडी as Khalanga.
+
+The misses have not been counted by class yet. That needs the labelled 500-pair sample of the
+note, which is maintainer review work.
+
+**Not yet done here:** term-frequency adjustment for common names (Chisapani, Bhanjyang);
+the checked-in m/u table; Splink as an oracle. These are Phase 2 forge work (the plan is in
+the note).
+
 ## Still to come
 
-S5.5 the probabilistic matcher (blocking, Fellegi–Sunter, evaluated against these links as
-silver labels) and aliases into the golden set; S5.6 DEM disagreement; S5.7 the summary for
-Q-005.
+S5.5 aliases from all three sources into the golden set; S5.6 DEM disagreement; S5.7 the
+summary for Q-005.

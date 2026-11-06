@@ -7,6 +7,7 @@
 //! forge pip <boundary-source> <level> <points>    assign read points to admin units
 //! forge geofix <points> [<boundary-source>]      flag rounded, stacked, snapped points
 //! forge links <points> <points> [...]            stated same-as pairs and their distances
+//! forge conflate <cc> <points> <points> [...]     match records across sources
 //! forge path <source-id>                          print a fetched source's store path
 //! ```
 //!
@@ -17,6 +18,7 @@
     reason = "a command-line tool: `path` prints its answer to stdout"
 )]
 
+mod conflate;
 mod fetch;
 mod geofix;
 mod geom;
@@ -83,6 +85,15 @@ fn main() -> ExitCode {
         Some("links") if args.len() >= 3 => links::run(&root, args.get(1..).unwrap_or_default())
             .map(|summary| eprintln_safe(&summary)),
         Some("links") => Err("usage: forge links <points-source> <points-source> [...]".into()),
+        Some("conflate") if args.len() >= 4 => match (args.get(1), args.get(2..)) {
+            (Some(cc), Some(sources)) => {
+                conflate::run(&root, cc, sources).map(|summary| eprintln_safe(&summary))
+            }
+            _ => Err("usage: forge conflate <cc> <points-source> <points-source> [...]".into()),
+        },
+        Some("conflate") => {
+            Err("usage: forge conflate <cc> <points-source> <points-source> [...]".into())
+        }
         Some("path") => match args.get(1) {
             Some(id) => path(&root, id),
             None => Err("usage: forge path <source-id>".to_string()),

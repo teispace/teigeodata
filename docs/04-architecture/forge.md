@@ -27,7 +27,7 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | read/boundaries, pip | **built** (S5) | below |
 | geofix-detect | **built** (S5) | below |
 | links | **built** (S5) | below |
-| block, score, cluster | S5 | Fellegi–Sunter |
+| conflate (block, score, cluster) | **built** (S5) | below |
 | geofix-consensus | S5 | weighted Weiszfeld; DEM sampling |
 | the rest | Phase 2 | |
 
@@ -135,6 +135,22 @@ outputs with union-find and writes `data/build/links/<sources joined by +>/pairs
 (`a`, `b`, `stated`, `metres`) and a `summary.md`. The summary gives position disagreement by
 source pair and by the kinds of both ends, counts copies (< 1 m) apart, and counts clusters
 holding two records of one source. Results: [S5](../02-research/benches/s5-nepal.md#stated-links-and-position-disagreement-s55-first-part).
+
+## Conflation (`conflate`)
+
+`forge conflate <cc> <points-source> <points-source> […]` matches records across sources. The
+method follows the forge note:
+- **Blocking:** a shared name key within neighbouring 0.1° cells; the phonetic key is named by
+  the country's profile.
+- **Model:** Fellegi–Sunter, with u from seeded random pairs and m by EM over pattern counts.
+- **Clustering:** union-find by descending weight; it never joins two records of one source,
+  or a populated place and an admin unit.
+
+It writes `data/build/conflate/<sources>/clusters.parquet` (`id`, `cluster`, named by the
+smallest member) and a `summary.md`. The summary holds the model's weights, the clusters by
+source composition and the silver-label evaluation. Names are compared with
+`teigeodata-names`, the code path search uses. Results:
+[S5](../02-research/benches/s5-nepal.md#the-matcher-s55-second-part).
 
 **Clean-up.** `cargo xtask clean` removes build output from both workspaces and keeps the
 store: fetched sources are pinned inputs, not build output.

@@ -35,20 +35,20 @@ pub(crate) fn haversine(a: &Point, b: &Point) -> f64 {
 }
 
 /// Union-find with path halving and union by size.
-struct Sets {
+pub(crate) struct Sets {
     parent: Vec<u32>,
     size: Vec<u32>,
 }
 
 impl Sets {
-    fn new(n: usize) -> Self {
+    pub(crate) fn new(n: usize) -> Self {
         Self {
             parent: (0..u32::try_from(n).unwrap_or(u32::MAX)).collect(),
             size: vec![1; n],
         }
     }
 
-    fn find(&mut self, mut x: u32) -> u32 {
+    pub(crate) fn find(&mut self, mut x: u32) -> u32 {
         while let Some(&p) = self.parent.get(x as usize) {
             if p == x {
                 break;
@@ -62,7 +62,7 @@ impl Sets {
         x
     }
 
-    fn union(&mut self, a: u32, b: u32) {
+    pub(crate) fn union(&mut self, a: u32, b: u32) {
         let (a, b) = (self.find(a), self.find(b));
         if a == b {
             return;
@@ -168,7 +168,10 @@ pub(crate) fn run(root: &Path, sources: &[String]) -> Result<String, String> {
 }
 
 /// The points of every source, concatenated, with each point's source index.
-fn load_points(read: &Path, sources: &[String]) -> Result<(Vec<Point>, Vec<u8>), String> {
+pub(crate) fn load_points(
+    read: &Path,
+    sources: &[String],
+) -> Result<(Vec<Point>, Vec<u8>), String> {
     let mut pts: Vec<Point> = Vec::new();
     let mut src: Vec<u8> = Vec::new();
     for (s, name) in sources.iter().enumerate() {
@@ -183,7 +186,11 @@ fn load_points(read: &Path, sources: &[String]) -> Result<(Vec<Point>, Vec<u8>),
 }
 
 /// Every `same_as` link whose two ends both have points, as sorted, unique index pairs.
-fn stated_links(read: &Path, sources: &[String], pts: &[Point]) -> Result<Vec<(u32, u32)>, String> {
+pub(crate) fn stated_links(
+    read: &Path,
+    sources: &[String],
+    pts: &[Point],
+) -> Result<Vec<(u32, u32)>, String> {
     let index: HashMap<&str, u32> = pts
         .iter()
         .enumerate()

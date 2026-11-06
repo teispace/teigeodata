@@ -44,7 +44,8 @@ from; this page gathers them in one place and does not override them.
 | `point` | lat, lon, *required* | Consensus point (weighted geometric median). Stored on the 1e-6° grid for places; geometry uses 1e-7° ([ADR-0029](../03-decisions/adr/ADR-0029-coordinate-grid.md), D-035) |
 | `uncertainty_m` | u16 | Horizontal σ, in metres |
 | `label_point` | lat, lon | For areas: a point inside the polygon (polylabel) |
-| `admin_centre` | lat, lon | Seat of an admin unit, where known |
+| `admin_centre` | lat, lon | Seat of an admin unit, where known: the point of its `seat` |
+| `seat` | place ID | The populated place that is the unit's seat (OSM `admin_centre` role, Wikidata P36). A town and its eponymous unit stay two entities joined by this link (D-058) |
 | `elevation_m` | i16 | Orthometric (EGM2008). The API also converts to ellipsoidal heights |
 | `ele_uncertainty_m` | u16 | Vertical σ, including σ_h·tan(slope) ([ADR-0034](../03-decisions/adr/ADR-0034-elevation-method.md)) |
 | `ele_method` | enum | `dem_consensus`, `surveyed`, `source_stated` |
