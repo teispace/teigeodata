@@ -9,7 +9,7 @@ updated: 2026-11-06
 ## Where we are
 
 - **Phase:** 0, foundations and research ([phase file](../07-planning/phases/phase-0.md)).
-- **Now:** 0.1 done locally (first commit pending push). All ten research notes have landed:
+- **Now:** 0.1 done: repository public, `fast-check` green on GitHub, `main` protected against deletion and force-push. All ten research notes have landed:
   bindings and MCP, format, Nepal sources, licences, names and search, timezone and elevation,
   forge, offline loading and trust, competitive analysis, and benchmarking. The last four still
   need their "impact on the plan" applied (0.3): the forge and ID-stability ADRs, keys and
@@ -17,7 +17,7 @@ updated: 2026-11-06
   in `source-licences.md`. Spikes S1 and S2 are done; S2 is exact
   ([results](../02-research/benches/s2-region-index.md)). The benchmark catalogue is in
   [benchmarks](../06-engineering/benchmarks.md).
-- **Next:** push and get `fast-check` green; apply the four new notes; lexicon schema check and
+- **Next:** apply the four new notes; lexicon schema check and
   the Nepal golden set; schema and pack-format drafts; then spikes S3 to S6, one at a time.
 - **Blocked:** nothing.
 

@@ -20,7 +20,7 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
 - [x] Cargo workspace with the lint wall, `rust-toolchain.toml`, `deny.toml`, formatting and typos config
 - [x] `xtask`: `check-docs`, `check-commit`, `clean`, `help`; both checks proven red
 - [x] Git hooks: commit message (Conventional Commits, DCO, no AI attribution), pre-commit (fmt, docs)
-- [ ] GitHub repository `teispace/teigeodata` (public), settings, branch protection, the `fast-check` workflow green
+- [x] GitHub repository `teispace/teigeodata` (public), settings (squash merge only, delete merged branches, private vulnerability reporting), ruleset `protect-main` (no deletion, no force-push; required checks and PRs once contributors arrive), the `fast-check` workflow green (2026-11-06)
 
 ### 0.2 Research notes (parallel, light)
 - [x] [Nepal sources](../../02-research/notes/nepal-sources.md)
