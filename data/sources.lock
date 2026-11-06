@@ -126,3 +126,20 @@ licence = "ODbL-1.0"
 licence_class = "odbl"
 countries = ["*"]
 used_by = "spike S2 (main build only)"
+
+[[source]]
+id = "copernicus-glo30-np"
+title = "Copernicus DEM GLO-30 Public (DGED), Cloud Optimized GeoTIFF tiles over Nepal (AWS open data)"
+kind = "tileset"
+url = "https://copernicus-dem-30m.s3.amazonaws.com/{tile}/{tile}.tif"
+tiles = "data/sources/copernicus-glo30-np.tiles"
+query_params = { bbox = "80,26,88,30", tile = "Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_DEM" }
+version = "GLO-30 Public DGED, AWS COG (Float32, DEFLATE, predictor 3, PixelIsPoint)"
+retrieved = "2026-11-06"
+sha256 = "6c5c6de35f6e27da64ec1e84f0bf205fe62ce3ab1c96013cddc623ec6e5820f1"
+size = 5259
+licence = "Copernicus DEM licence (fixed notice: © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved)"
+# Custom terms: main build only, with the notice in every pack; lite uses NASADEM (ADR-0030, D-031).
+licence_class = "proprietary"
+countries = ["NP"]
+used_by = "spike S5.6 (DEM disagreement)"

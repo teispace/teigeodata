@@ -2,7 +2,8 @@
 //! `data/cache/store/sha256/<hex>`, streaming through SHA-256, and keeps only bytes that match
 //! the pin. A `sparql` source posts its query template with the parameters from the lock; its
 //! snapshot is pinned like a file. `--pin` records new bytes in the lock instead (first fetch,
-//! or a deliberate update of a moving source).
+//! or a deliberate update of a moving source). A `tileset` source is pinned by its manifest,
+//! which pins every tile ([`crate::tiles`]).
 
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Read, Write};
@@ -37,6 +38,22 @@ pub(crate) fn run(root: &Path, ids: &[String], pin: bool, verify: bool) -> Resul
     fs::create_dir_all(&store).map_err(|e| format!("{}: {e}", store.display()))?;
     let mut lock_text = None;
     for s in chosen {
+        if s.kind == "tileset" {
+            if let Some((hash, size)) = crate::tiles::fetch(root, s, pin, verify)? {
+                let text = match lock_text.take() {
+                    Some(t) => t,
+                    None => fs::read_to_string(&lock_path).map_err(|e| e.to_string())?,
+                };
+                let updated = lock::repin(&text, &s.id, &hash, size, &today())
+                    .ok_or_else(|| format!("{}: source block not found in the lock", s.id))?;
+                lock_text = Some(updated);
+                say(&format!(
+                    "{}: manifest pinned sha256 {hash}, {size} bytes",
+                    s.id
+                ));
+            }
+            continue;
+        }
         let target = store_path(root, s);
         if !pin && target.is_file() {
             if verify {
@@ -86,7 +103,7 @@ pub(crate) fn run(root: &Path, ids: &[String], pin: bool, verify: bool) -> Resul
     Ok(())
 }
 
-fn say(msg: &str) {
+pub(crate) fn say(msg: &str) {
     let _ = writeln!(io::stderr(), "{msg}");
 }
 
@@ -141,7 +158,31 @@ fn download_once(
         }
         k => return Err(format!("unknown kind `{k}`")),
     };
-    let mut reader = resp.body_mut().as_reader();
+    stream_to(resp.body_mut().as_reader(), partial)
+}
+
+/// Downloads one URL into `partial` (GET, with retries); `Ok(None)` when the server has no
+/// such file (404), which a tileset records as an absent tile.
+pub(crate) fn get_to(url: &str, partial: &Path) -> Result<Option<(String, u64)>, String> {
+    let mut last = String::new();
+    for attempt in 1..=ATTEMPTS {
+        match ureq::get(url).header("User-Agent", USER_AGENT).call() {
+            Ok(mut resp) => match stream_to(resp.body_mut().as_reader(), partial) {
+                Ok(r) => return Ok(Some(r)),
+                Err(e) => last = e,
+            },
+            Err(ureq::Error::StatusCode(404)) => return Ok(None),
+            Err(e) => last = e.to_string(),
+        }
+        say(&format!("{url}: attempt {attempt} failed: {last}"));
+        std::thread::sleep(Duration::from_secs(u64::from(attempt) * 5));
+    }
+    let _ = fs::remove_file(partial);
+    Err(format!("{url}: {last}"))
+}
+
+/// Streams a body into `partial` through SHA-256.
+fn stream_to(mut reader: impl Read, partial: &Path) -> Result<(String, u64), String> {
     let file = File::create(partial).map_err(|e| format!("{}: {e}", partial.display()))?;
     let mut out = BufWriter::with_capacity(1 << 20, file);
     let mut hasher = Sha256::new();
@@ -161,7 +202,7 @@ fn download_once(
     Ok((hex(&hasher.finalize()), size))
 }
 
-fn hash_file(path: &Path) -> Result<(String, u64), String> {
+pub(crate) fn hash_file(path: &Path) -> Result<(String, u64), String> {
     let mut f = File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 1 << 20];
@@ -186,7 +227,7 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 /// Today's UTC date, `YYYY-MM-DD` (Howard Hinnant's civil-from-days).
-fn today() -> String {
+pub(crate) fn today() -> String {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());

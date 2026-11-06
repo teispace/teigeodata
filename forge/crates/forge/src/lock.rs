@@ -31,6 +31,9 @@ pub(crate) struct Source {
     pub(crate) query: Option<String>,
     #[serde(default)]
     pub(crate) query_params: BTreeMap<String, String>,
+    /// `tileset` only: the manifest that pins each tile; `sha256` and `size` pin the manifest.
+    #[serde(default)]
+    pub(crate) tiles: Option<String>,
 }
 
 impl Lock {

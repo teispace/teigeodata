@@ -9,6 +9,7 @@
 //! forge links <points> <points> [...]            stated same-as pairs and their distances
 //! forge conflate <cc> <points> <points> [...]     match records across sources
 //! forge aliases <cc> <anchor> <a+b+...>          carry cluster names to the anchor's records
+//! forge dem <tileset> <points> [...]             DEM heights against stated elevations
 //! forge path <source-id>                          print a fetched source's store path
 //! ```
 //!
@@ -21,6 +22,7 @@
 
 mod aliases;
 mod conflate;
+mod dem;
 mod fetch;
 mod geofix;
 mod geom;
@@ -29,6 +31,7 @@ mod lock;
 mod pip;
 mod read;
 mod record;
+mod tiles;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -102,6 +105,13 @@ fn main() -> ExitCode {
             }
             _ => Err("usage: forge aliases <cc> <anchor-source> <source+source+...>".into()),
         },
+        Some("dem") if args.len() >= 3 => match (args.get(1), args.get(2..)) {
+            (Some(t), Some(sources)) => {
+                dem::run(&root, t, sources).map(|summary| eprintln_safe(&summary))
+            }
+            _ => Err("usage: forge dem <tileset-source> <points-source> [...]".into()),
+        },
+        Some("dem") => Err("usage: forge dem <tileset-source> <points-source> [...]".into()),
         Some("path") => match args.get(1) {
             Some(id) => path(&root, id),
             None => Err("usage: forge path <source-id>".to_string()),

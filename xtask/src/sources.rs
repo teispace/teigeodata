@@ -37,7 +37,7 @@ struct Lock {
 struct Source {
     id: String,
     title: String,
-    /// `http` (a file) or `sparql` (a query snapshot).
+    /// `http` (a file), `sparql` (a query snapshot) or `tileset` (tiles pinned by a manifest).
     kind: String,
     url: String,
     /// Our own copy (a release asset); required before a release build reads the source.
@@ -61,6 +61,10 @@ struct Source {
     query: Option<String>,
     #[serde(default)]
     query_params: Option<toml::Table>,
+    /// `tileset` only: the manifest (`tile<TAB>sha256<TAB>size` per line) that pins every tile.
+    /// The source's own `sha256` and `size` pin the manifest.
+    #[serde(default)]
+    tiles: Option<String>,
 }
 
 /// Validates the lock text. `root` resolves query paths; `countries` are the country folders.
@@ -149,22 +153,96 @@ pub(crate) fn check_text(
                 p.push(format!("{at}: country `{c}` has no data/countries folder"));
             }
         }
-        match (s.kind.as_str(), &s.query) {
-            ("http", None) => {}
-            ("http", Some(_)) => p.push(format!("{at}: an http source has no query")),
-            ("sparql", Some(q)) => {
-                if !root.join(q).is_file() {
-                    p.push(format!("{at}: query file `{q}` not found"));
-                }
-                if s.query_params.is_none() {
-                    p.push(format!("{at}: a sparql source needs query_params"));
-                }
-            }
-            ("sparql", None) => p.push(format!("{at}: a sparql source needs a query")),
-            (k, _) => p.push(format!("{at}: unknown kind `{k}`")),
-        }
+        check_kind(s, root, &at, &mut p);
     }
     (lock.sources.len(), p)
+}
+
+/// The kind's own fields: a query for `sparql`, a manifest for `tileset`, neither for `http`.
+fn check_kind(s: &Source, root: &Path, at: &str, p: &mut Vec<String>) {
+    if s.kind != "tileset" && s.tiles.is_some() {
+        p.push(format!("{at}: only a tileset source has a tiles manifest"));
+    }
+    match (s.kind.as_str(), &s.query) {
+        ("tileset", None) => check_tileset(s, root, at, p),
+        ("tileset", Some(_)) => p.push(format!("{at}: a tileset source has no query")),
+        ("http", None) => {}
+        ("http", Some(_)) => p.push(format!("{at}: an http source has no query")),
+        ("sparql", Some(q)) => {
+            if !root.join(q).is_file() {
+                p.push(format!("{at}: query file `{q}` not found"));
+            }
+            if s.query_params.is_none() {
+                p.push(format!("{at}: a sparql source needs query_params"));
+            }
+        }
+        ("sparql", None) => p.push(format!("{at}: a sparql source needs a query")),
+        (k, _) => p.push(format!("{at}: unknown kind `{k}`")),
+    }
+}
+
+/// Lower-case hex SHA-256.
+fn sha256_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let digest = sha2::Digest::finalize(<sha2::Sha256 as sha2::Digest>::new_with_prefix(bytes));
+    digest.iter().fold(String::with_capacity(64), |mut s, b| {
+        let _ = write!(s, "{b:02x}");
+        s
+    })
+}
+
+/// A tileset's manifest exists, matches the source's pin, and pins every tile.
+fn check_tileset(s: &Source, root: &Path, at: &str, p: &mut Vec<String>) {
+    let params = s.query_params.as_ref();
+    for key in ["bbox", "tile"] {
+        if params
+            .and_then(|t| t.get(key))
+            .and_then(toml::Value::as_str)
+            .is_none()
+        {
+            p.push(format!("{at}: a tileset source needs query_params.{key}"));
+        }
+    }
+    if !s.url.contains("{tile}") {
+        p.push(format!("{at}: a tileset url needs a {{tile}} placeholder"));
+    }
+    let Some(manifest) = &s.tiles else {
+        p.push(format!("{at}: a tileset source needs a tiles manifest"));
+        return;
+    };
+    let Ok(bytes) = std::fs::read(root.join(manifest)) else {
+        p.push(format!("{at}: tiles manifest `{manifest}` not found"));
+        return;
+    };
+    if sha256_hex(&bytes) != s.sha256 || u64::try_from(bytes.len()).ok() != Some(s.size) {
+        p.push(format!(
+            "{at}: tiles manifest `{manifest}` does not match the pinned sha256 and size"
+        ));
+    }
+    let text = String::from_utf8_lossy(&bytes);
+    for (n, line) in text
+        .lines()
+        .enumerate()
+        .filter(|(_, l)| !l.starts_with('#') && !l.is_empty())
+    {
+        let f: Vec<&str> = line.split('\t').collect();
+        let ok = match f.as_slice() {
+            [tile, sha, size] => {
+                !tile.is_empty()
+                    && ((sha.len() == 64
+                        && sha.bytes().all(|b| b.is_ascii_hexdigit())
+                        && size.parse::<u64>().is_ok_and(|v| v > 0))
+                        || (*sha == "absent" && *size == "0"))
+            }
+            _ => false,
+        };
+        if !ok {
+            p.push(format!(
+                "{at}: {manifest} line {}: expected tile, sha256 (or `absent`), size",
+                n + 1
+            ));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -191,6 +269,35 @@ licence_class = "odbl"
 countries = ["NP"]
 used_by = "spike S5"
 "#;
+
+    #[test]
+    fn checks_tileset_manifests() {
+        let dir = std::env::temp_dir().join(format!("xtask-tiles-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).ok();
+        let manifest = "t1\t7f3a9c0e5b2d4f6a8c1e3b5d7f9a2c4e6b8d0f1a3c5e7b9d2f4a6c8e0b1d3f5a\t10\nt2\tabsent\t0\n";
+        std::fs::write(dir.join("m.tiles"), manifest).ok();
+        let hex = super::sha256_hex(manifest.as_bytes());
+        let tileset = |sha: &str, tiles: &str| {
+            GOOD.replace("kind = \"http\"", &format!("kind = \"tileset\"\ntiles = \"{tiles}\"\nquery_params = {{ bbox = \"80,26,88,30\", tile = \"T{{LAT2}}\" }}"))
+                .replace("nepal-261105.osm.pbf", "{tile}.tif")
+                .replace("7f3a9c0e5b2d4f6a8c1e3b5d7f9a2c4e6b8d0f1a3c5e7b9d2f4a6c8e0b1d3f5a", sha)
+                .replace("size = 414872957", &format!("size = {}", manifest.len()))
+        };
+        let (_, ok) = check_text(&tileset(&hex, "m.tiles"), &dir, &countries());
+        assert!(ok.is_empty(), "{ok:?}");
+        let other = "0f3a9c0e5b2d4f6a8c1e3b5d7f9a2c4e6b8d0f1a3c5e7b9d2f4a6c8e0b1d3f5a";
+        let (_, bad) = check_text(&tileset(other, "m.tiles"), &dir, &countries());
+        assert!(bad.iter().any(|e| e.contains("does not match")), "{bad:?}");
+        let (_, missing) = check_text(&tileset(&hex, "none.tiles"), &dir, &countries());
+        assert!(
+            missing.iter().any(|e| e.contains("not found")),
+            "{missing:?}"
+        );
+        std::fs::write(dir.join("m.tiles"), "t1\tnot-a-hash\t10\n").ok();
+        let (_, line) = check_text(&tileset(&hex, "m.tiles"), &dir, &countries());
+        assert!(line.iter().any(|e| e.contains("line 1")), "{line:?}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     fn countries() -> BTreeSet<String> {
         ["np".to_string()].into_iter().collect()
