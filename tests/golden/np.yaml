@@ -1,0 +1,3083 @@
+# Golden query set v0 for NP (ADR-0032; names-and-search §5.7). GENERATED: do not edit.
+# Regenerate: cargo run --release -p spike-s3-search --bin gen-golden -- np \
+#   <GeoNames NP.txt> [<COD-AB workbook>] > tests/golden/np.yaml
+# Inputs: NP.txt, npl_admin_boundaries.xlsx
+# Derived from GeoNames (CC-BY 4.0, geonames.org) and, where used, OCHA COD-AB (licence per dataset).
+# Keys are source keys until our stable IDs exist; a hit is any expected key with grade ≥ 2
+# within max_rank. Hand-written queries come from data/countries/np/golden-curated.yaml.
+# Counts: abbreviation 40, ambiguous 40, colloquial 10, exact_latin 70, exact_native 40, historical 40, mixed_script 35, prefix 40, typo 80, variant 45, with_context 60
+schema: teigeodata/golden/v0
+country: NP
+queries:
+  - id: np-0001
+    class: exact_latin
+    query: "Aandhikhola"
+    expect: { "codab:NP0441401": 3, "geonames:12096159": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0002
+    class: exact_latin
+    query: "Aatharai Tribeni"
+    expect: { "codab:NP0101406": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0003
+    class: exact_latin
+    query: "Badi Kedar"
+    expect: { "codab:NP0770406": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0004
+    class: exact_latin
+    query: "Bagmati Province"
+    expect: { "geonames:12095449": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0005
+    class: exact_latin
+    query: "Balchhig"
+    expect: { "geonames:12725328": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0006
+    class: exact_latin
+    query: "Barhagaun Muktichhetra"
+    expect: { "geonames:12095689": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0007
+    class: exact_latin
+    query: "Batraui"
+    expect: { "geonames:11245262": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0008
+    class: exact_latin
+    query: "Bedkot"
+    expect: { "codab:NP0772303": 3, "geonames:12095834": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0009
+    class: exact_latin
+    query: "Benighat Rorang"
+    expect: { "codab:NP0330408": 3, "geonames:12095749": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0010
+    class: exact_latin
+    query: "Bethanchowk"
+    expect: { "codab:NP0324403": 3, "geonames:12095772": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0011
+    class: exact_latin
+    query: "Bhume"
+    expect: { "geonames:12096269": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0012
+    class: exact_latin
+    query: "Bites"
+    expect: { "geonames:11772939": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0013
+    class: exact_latin
+    query: "Bogtan"
+    expect: { "geonames:12095870": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0014
+    class: exact_latin
+    query: "Chakraghatta"
+    expect: { "codab:NP0219404": 3, "geonames:12095995": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0015
+    class: exact_latin
+    query: "Chandannath"
+    expect: { "codab:NP0663301": 3, "geonames:12095641": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0016
+    class: exact_latin
+    query: "Chhathar Jorpati"
+    expect: { "codab:NP0107402": 3, "geonames:12095868": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0017
+    class: exact_latin
+    query: "Chingad"
+    expect: { "codab:NP0659403": 3, "geonames:12095670": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0018
+    class: exact_latin
+    query: "Chitwan"
+    expect: { "geonames:12095461": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0019
+    class: exact_latin
+    query: "Dhawalagiri"
+    expect: { "codab:NP0444401": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0020
+    class: exact_latin
+    query: "Dulma"
+    expect: { "geonames:11883207": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0021
+    class: exact_latin
+    query: "Durga Bagwati"
+    expect: { "geonames:12096166": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0022
+    class: exact_latin
+    query: "Ekdanra"
+    expect: { "geonames:12095915": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0023
+    class: exact_latin
+    query: "Falelung"
+    expect: { "codab:NP0102403": 3, "geonames:12096210": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0024
+    class: exact_latin
+    query: "Gajuri"
+    expect: { "codab:NP0330409": 3, "geonames:12095745": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0025
+    class: exact_latin
+    query: "Gautamanagar"
+    expect: { "geonames:11845060": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0026
+    class: exact_latin
+    query: "Godwari"
+    expect: { "geonames:9172511": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0027
+    class: exact_latin
+    query: "Gulmidarbar"
+    expect: { "geonames:12095602": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0028
+    class: exact_latin
+    query: "Hariwan"
+    expect: { "codab:NP0219302": 3, "geonames:12096147": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0029
+    class: exact_latin
+    query: "Isma"
+    expect: { "codab:NP0551404": 3, "geonames:12095938": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0030
+    class: exact_latin
+    query: "Jaimuni"
+    expect: { "codab:NP0443304": 3, "geonames:12095699": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0031
+    class: exact_latin
+    query: "Jalthale Kharka"
+    expect: { "geonames:13121685": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0032
+    class: exact_latin
+    query: "Janki Tola"
+    expect: { "geonames:12503822": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0033
+    class: exact_latin
+    query: "Jhimruk"
+    expect: { "geonames:12095927": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0034
+    class: exact_latin
+    query: "Jwalamukhi"
+    expect: { "codab:NP0330406": 3, "geonames:12095688": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0035
+    class: exact_latin
+    query: "Kalikot District"
+    expect: { "geonames:1283268": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0036
+    class: exact_latin
+    query: "Karmapur"
+    expect: { "geonames:12723467": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0037
+    class: exact_latin
+    query: "Karnali Province"
+    expect: { "geonames:12095452": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0038
+    class: exact_latin
+    query: "Khunpur"
+    expect: { "geonames:11886380": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0039
+    class: exact_latin
+    query: "Kot Bhairab"
+    expect: { "geonames:10344730": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0040
+    class: exact_latin
+    query: "Kukhare"
+    expect: { "geonames:10322049": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0041
+    class: exact_latin
+    query: "Kukun"
+    expect: { "geonames:12474812": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0042
+    class: exact_latin
+    query: "Lakeside"
+    expect: { "geonames:7910868": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0043
+    class: exact_latin
+    query: "Lakshminiya"
+    expect: { "geonames:12096115": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0044
+    class: exact_latin
+    query: "Marsyangdi Gaunpalika"
+    expect: { "geonames:12096190": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0045
+    class: exact_latin
+    query: "Masta"
+    expect: { "codab:NP0767408": 3, "geonames:12095822": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0046
+    class: exact_latin
+    query: "Mithila Bihari"
+    expect: { "codab:NP0217305": 3, "geonames:12095606": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0047
+    class: exact_latin
+    query: "Myagang"
+    expect: { "codab:NP0328401": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0048
+    class: exact_latin
+    query: "Myagde"
+    expect: { "codab:NP0440401": 3, "geonames:12096281": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0049
+    class: exact_latin
+    query: "Naraharinath"
+    expect: { "codab:NP0664401": 3, "geonames:12095638": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0050
+    class: exact_latin
+    query: "Narayan"
+    expect: { "codab:NP0661304": 3, "geonames:12096175": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0051
+    class: exact_latin
+    query: "Nechasalyan"
+    expect: { "geonames:12096064": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0052
+    class: exact_latin
+    query: "Pachaljharana"
+    expect: { "geonames:12095622": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0053
+    class: exact_latin
+    query: "Paterwasugauli"
+    expect: { "geonames:12096130": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0054
+    class: exact_latin
+    query: "Pauwa Dunma"
+    expect: { "codab:NP0110405": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0055
+    class: exact_latin
+    query: "Phaphlu"
+    expect: { "geonames:1282921": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0056
+    class: exact_latin
+    query: "Phembu"
+    expect: { "geonames:1282919": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0057
+    class: exact_latin
+    query: "Purbichouki"
+    expect: { "codab:NP0770403": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0058
+    class: exact_latin
+    query: "Rumshil"
+    expect: { "geonames:12257756": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0059
+    class: exact_latin
+    query: "Ruruchhetra"
+    expect: { "codab:NP0551408": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0060
+    class: exact_latin
+    query: "Saine Bagar"
+    expect: { "geonames:13037639": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0061
+    class: exact_latin
+    query: "Sakhuwa Prasauni"
+    expect: { "codab:NP0234404": 3, "geonames:12096131": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0062
+    class: exact_latin
+    query: "Saptakoshi"
+    expect: { "codab:NP0215304": 3, "geonames:12096098": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0063
+    class: exact_latin
+    query: "Sibaratha"
+    expect: { "geonames:8469134": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0064
+    class: exact_latin
+    query: "Suklaphat"
+    expect: { "geonames:12095854": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0065
+    class: exact_latin
+    query: "Sundarharaicha"
+    expect: { "codab:NP0105302": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0066
+    class: exact_latin
+    query: "Tanjakot"
+    expect: { "codab:NP0666406": 3, "geonames:12095586": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0067
+    class: exact_latin
+    query: "Tarkeshwar"
+    expect: { "geonames:12095757": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0068
+    class: exact_latin
+    query: "Tilathi Koiladi"
+    expect: { "codab:NP0215409": 3, "geonames:12096191": 2 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0069
+    class: exact_latin
+    query: "Woreng"
+    expect: { "geonames:12095588": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0070
+    class: exact_latin
+    query: "Yamunamai"
+    expect: { "codab:NP0232401": 3 }
+    max_rank: 1
+    source: "generated: unique name"
+  - id: np-0071
+    class: exact_native
+    query: "अमलेखगञ्ज"
+    expect: { "geonames:1283737": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0072
+    class: exact_native
+    query: "कमलामाई"
+    expect: { "geonames:8410804": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0073
+    class: exact_native
+    query: "काँकडभिट्टा"
+    expect: { "geonames:7955003": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0074
+    class: exact_native
+    query: "काठमांडू"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0075
+    class: exact_native
+    query: "किपू नगरपालिका"
+    expect: { "geonames:1283190": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0076
+    class: exact_native
+    query: "जनकपुर"
+    expect: { "geonames:1283318": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0077
+    class: exact_native
+    query: "जनगाँऊ"
+    expect: { "geonames:7948586": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0078
+    class: exact_native
+    query: "जिरी"
+    expect: { "geonames:1283298": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0079
+    class: exact_native
+    query: "तम्घास"
+    expect: { "geonames:1283365": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0080
+    class: exact_native
+    query: "थिमि"
+    expect: { "geonames:8411054": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0081
+    class: exact_native
+    query: "दिक्तेल"
+    expect: { "geonames:1283439": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0082
+    class: exact_native
+    query: "दिपायल"
+    expect: { "geonames:6254845": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0083
+    class: exact_native
+    query: "देउखुरी"
+    expect: { "geonames:13653221": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0084
+    class: exact_native
+    query: "धनकुटा"
+    expect: { "geonames:1283465": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0085
+    class: exact_native
+    query: "धुलिखेल"
+    expect: { "geonames:1283448": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0086
+    class: exact_native
+    query: "नाम्चे"
+    expect: { "geonames:1283011": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0087
+    class: exact_native
+    query: "नेपाल"
+    expect: { "geonames:1282988": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0088
+    class: exact_native
+    query: "पिपरा सिमरा"
+    expect: { "geonames:1282778": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0089
+    class: exact_native
+    query: "पोखरा उपमहानगरपालिका"
+    expect: { "geonames:1282898": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0090
+    class: exact_native
+    query: "फेरिचे"
+    expect: { "geonames:7996832": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0091
+    class: exact_native
+    query: "बनेपा"
+    expect: { "geonames:1283679": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0092
+    class: exact_native
+    query: "बाहुनटार"
+    expect: { "geonames:7948594": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0093
+    class: exact_native
+    query: "बिराटनगर"
+    expect: { "geonames:1283582": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0094
+    class: exact_native
+    query: "बुटवल"
+    expect: { "geonames:1283562": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0095
+    class: exact_native
+    query: "बेतिनी"
+    expect: { "geonames:1283633": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0096
+    class: exact_native
+    query: "भक्तपुर नगरपालिका"
+    expect: { "geonames:12095459": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0097
+    class: exact_native
+    query: "भट्टराई डाँडा"
+    expect: { "geonames:11154397": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0098
+    class: exact_native
+    query: "भरतपुर"
+    expect: { "geonames:1283613": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0099
+    class: exact_native
+    query: "भिमदत्त"
+    expect: { "geonames:1283095": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0100
+    class: exact_native
+    query: "मकैसिंग"
+    expect: { "geonames:1283088": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0101
+    class: exact_native
+    query: "मनाङ"
+    expect: { "geonames:1283076": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0102
+    class: exact_native
+    query: "मर्तादी"
+    expect: { "geonames:6254834": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0103
+    class: exact_native
+    query: "मिरकोट गोरखा"
+    expect: { "geonames:8469125": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0104
+    class: exact_native
+    query: "मेघौली"
+    expect: { "geonames:1283046": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0105
+    class: exact_native
+    query: "रुकुमकोट"
+    expect: { "geonames:1282842": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0106
+    class: exact_native
+    query: "लांगटांग"
+    expect: { "geonames:1283142": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0107
+    class: exact_native
+    query: "लुकला"
+    expect: { "geonames:1283113": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0108
+    class: exact_native
+    query: "वीरेन्द्रनगर"
+    expect: { "geonames:6254843": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0109
+    class: exact_native
+    query: "सिमिकोट"
+    expect: { "geonames:1282779": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0110
+    class: exact_native
+    query: "हेटौंडा"
+    expect: { "geonames:1283339": 3 }
+    max_rank: 1
+    source: "generated: unique native-script alternate"
+  - id: np-0111
+    class: typo
+    query: "Ajaymru"
+    expect: { "geonames:12095861": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0112
+    class: typo
+    query: "Amardsha"
+    expect: { "geonames:1283740": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0113
+    class: typo
+    query: "Ambathn"
+    expect: { "geonames:8740346": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0114
+    class: typo
+    query: "Baahudarmai"
+    expect: { "codab:NP0234302": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0115
+    class: typo
+    query: "Badrghat"
+    expect: { "geonames:8410808": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0116
+    class: typo
+    query: "Bammnai"
+    expect: { "geonames:13071538": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0117
+    class: typo
+    query: "Banfokot"
+    expect: { "geonames:12096298": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0118
+    class: typo
+    query: "Bangalchuli"
+    expect: { "geonames:12095914": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0119
+    class: typo
+    query: "Baoefi"
+    expect: { "geonames:12096283": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0120
+    class: typo
+    query: "Bedkoot"
+    expect: { "codab:NP0772303": 3, "geonames:12095834": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0121
+    class: typo
+    query: "Braget"
+    expect: { "geonames:11606645": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0122
+    class: typo
+    query: "Cainapur"
+    expect: { "codab:NP0109303": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0123
+    class: typo
+    query: "Chhipahamai"
+    expect: { "codab:NP0234407": 3, "geonames:12095986": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0124
+    class: typo
+    query: "Chhjnnamasta"
+    expect: { "codab:NP0215408": 3, "geonames:12096228": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0125
+    class: typo
+    query: "Chhodepatan"
+    expect: { "geonames:8556026": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0126
+    class: typo
+    query: "Chittwan"
+    expect: { "geonames:12095461": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0127
+    class: typo
+    query: "Dahnushadham"
+    expect: { "codab:NP0217304": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0128
+    class: typo
+    query: "Dakneshwri"
+    expect: { "geonames:12096132": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0129
+    class: typo
+    query: "Daknesshwori"
+    expect: { "codab:NP0215307": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0130
+    class: typo
+    query: "Dogaakedar"
+    expect: { "geonames:12095859": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0131
+    class: typo
+    query: "Dubkot"
+    expect: { "geonames:8469148": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0132
+    class: typo
+    query: "Dugrathali"
+    expect: { "codab:NP0767406": 3, "geonames:12095579": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0133
+    class: typo
+    query: "Dupcheshor"
+    expect: { "codab:NP0328408": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0134
+    class: typo
+    query: "Ekdwnra"
+    expect: { "geonames:12095915": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0135
+    class: typo
+    query: "Falgnanda"
+    expect: { "codab:NP0102405": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0136
+    class: typo
+    query: "Gajuei"
+    expect: { "codab:NP0330409": 3, "geonames:12095745": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0137
+    class: typo
+    query: "Ghywnglekh"
+    expect: { "geonames:12095802": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0138
+    class: typo
+    query: "Ghyzru"
+    expect: { "geonames:6941687": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0139
+    class: typo
+    query: "Hilihng"
+    expect: { "geonames:12096005": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0140
+    class: typo
+    query: "Indrasarawoor"
+    expect: { "geonames:12095769": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0141
+    class: typo
+    query: "Indraswrowar"
+    expect: { "codab:NP0331405": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0142
+    class: typo
+    query: "Jalewsor"
+    expect: { "geonames:12095931": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0143
+    class: typo
+    query: "Jhikruk"
+    expect: { "geonames:12095927": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0144
+    class: typo
+    query: "Jhimle"
+    expect: { "geonames:10328487": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0145
+    class: typo
+    query: "Jhulghat"
+    expect: { "geonames:8531877": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0146
+    class: typo
+    query: "Jyaaruk"
+    expect: { "geonames:8469114": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0147
+    class: typo
+    query: "Kafnali"
+    expect: { "geonames:12095836": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0148
+    class: typo
+    query: "Khupacahgu"
+    expect: { "geonames:8469121": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0149
+    class: typo
+    query: "Koolhabi"
+    expect: { "codab:NP0233302": 3, "geonames:12096237": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0150
+    class: typo
+    query: "Kqmalbazar"
+    expect: { "geonames:12096202": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0151
+    class: typo
+    query: "Ksipang"
+    expect: { "codab:NP0328402": 3, "geonames:12095576": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0152
+    class: typo
+    query: "Kutharppekot"
+    expect: { "geonames:1283166": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0153
+    class: typo
+    query: "Kwholasothwr"
+    expect: { "geonames:12095718": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0154
+    class: typo
+    query: "Laakeside"
+    expect: { "geonames:7910868": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0155
+    class: typo
+    query: "Lugneo"
+    expect: { "geonames:13106324": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0156
+    class: typo
+    query: "Magdi"
+    expect: { "geonames:12095495": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0157
+    class: typo
+    query: "Mahagadhmiai"
+    expect: { "codab:NP0233303": 3, "geonames:12096235": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0158
+    class: typo
+    query: "Mahanpir"
+    expect: { "geonames:11846593": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0159
+    class: typo
+    query: "Makundapuur"
+    expect: { "geonames:8469123": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0160
+    class: typo
+    query: "Marygo"
+    expect: { "geonames:12426288": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0161
+    class: typo
+    query: "Mothila"
+    expect: { "codab:NP0217301": 3, "geonames:12096111": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0162
+    class: typo
+    query: "Mugumakarmafog"
+    expect: { "codab:NP0665403": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0163
+    class: typo
+    query: "Nachaja"
+    expect: { "geonames:12341745": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0164
+    class: typo
+    query: "Nawaduga"
+    expect: { "codab:NP0773403": 3, "geonames:12095857": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0165
+    class: typo
+    query: "Nunpattti"
+    expect: { "geonames:8469127": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0166
+    class: typo
+    query: "Panchhtar"
+    expect: { "geonames:12095500": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0167
+    class: typo
+    query: "Pansirppu"
+    expect: { "geonames:7932695": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0168
+    class: typo
+    query: "Phedihola"
+    expect: { "codab:NP0441402": 3, "geonames:12095608": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0169
+    class: typo
+    query: "Pohro"
+    expect: { "geonames:12473864": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0170
+    class: typo
+    query: "Rakdhuni"
+    expect: { "codab:NP0106302": 3, "geonames:12096059": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0171
+    class: typo
+    query: "Rattuwamai"
+    expect: { "codab:NP0105308": 3, "geonames:12096044": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0172
+    class: typo
+    query: "Sahiidnagar"
+    expect: { "geonames:12095603": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0173
+    class: typo
+    query: "Sakktikhor"
+    expect: { "geonames:8469132": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0174
+    class: typo
+    query: "Saklea"
+    expect: { "codab:NP0112405": 3, "geonames:12096079": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0175
+    class: typo
+    query: "Sangurgiadhi"
+    expect: { "codab:NP0107403": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0176
+    class: typo
+    query: "Satakoshi"
+    expect: { "codab:NP0215304": 3, "geonames:12096098": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0177
+    class: typo
+    query: "Shambhunah"
+    expect: { "codab:NP0215303": 3, "geonames:12095849": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0178
+    class: typo
+    query: "Shhuklagandaki"
+    expect: { "codab:NP0440301": 3, "geonames:12095567": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0179
+    class: typo
+    query: "Shraada"
+    expect: { "codab:NP0653303": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0180
+    class: typo
+    query: "Shuddhdohan"
+    expect: { "codab:NP0549404": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0181
+    class: typo
+    query: "Sibaartha"
+    expect: { "geonames:8469134": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0182
+    class: typo
+    query: "Sicingba"
+    expect: { "codab:NP0101408": 3, "geonames:12096045": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0183
+    class: typo
+    query: "Sidhalek"
+    expect: { "codab:NP0330407": 3, "geonames:12095733": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0184
+    class: typo
+    query: "Sukko"
+    expect: { "geonames:11902377": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0185
+    class: typo
+    query: "Sukohi"
+    expect: { "geonames:12096068": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0186
+    class: typo
+    query: "Susari"
+    expect: { "geonames:12095524": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0187
+    class: typo
+    query: "Syojjap"
+    expect: { "geonames:12341586": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0188
+    class: typo
+    query: "Takatne"
+    expect: { "geonames:12343693": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0189
+    class: typo
+    query: "Terhathuum"
+    expect: { "geonames:1282699": 3 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0190
+    class: typo
+    query: "Umakudna"
+    expect: { "codab:NP0321404": 3, "geonames:12095792": 2 }
+    max_rank: 5
+    source: "generated: one keyboard edit"
+  - id: np-0191
+    class: prefix
+    query: "Arju"
+    expect: { "codab:NP0104304": 3, "geonames:12096029": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0192
+    class: prefix
+    query: "Badi"
+    expect: { "codab:NP0768302": 3, "geonames:12095828": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0193
+    class: prefix
+    query: "Bedk"
+    expect: { "codab:NP0772303": 3, "geonames:12095834": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0194
+    class: prefix
+    query: "Belo"
+    expect: { "codab:NP0772306": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0195
+    class: prefix
+    query: "Bher"
+    expect: { "codab:NP0659302": 3, "geonames:12095675": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0196
+    class: prefix
+    query: "Bhir"
+    expect: { "codab:NP0441302": 3, "geonames:12096183": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0197
+    class: prefix
+    query: "Birt"
+    expect: { "codab:NP0104307": 3, "geonames:12096021": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0198
+    class: prefix
+    query: "Bode"
+    expect: { "codab:NP0215306": 3, "geonames:12096103": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0199
+    class: prefix
+    query: "Bung"
+    expect: { "codab:NP0767301": 3, "geonames:12095823": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0200
+    class: prefix
+    query: "Butw"
+    expect: { "codab:NP0548201": 3, "geonames:12095965": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0201
+    class: prefix
+    query: "Chap"
+    expect: { "codab:NP0441305": 3, "geonames:12095713": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0202
+    class: prefix
+    query: "Chhe"
+    expect: { "codab:NP0660301": 3, "geonames:12095657": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0203
+    class: prefix
+    query: "Chit"
+    expect: { "geonames:12095461": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0204
+    class: prefix
+    query: "Dewa"
+    expect: { "codab:NP0232307": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0205
+    class: prefix
+    query: "Dipa"
+    expect: { "geonames:6254845": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0206
+    class: prefix
+    query: "Ishw"
+    expect: { "codab:NP0219306": 3, "geonames:12096143": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0207
+    class: prefix
+    query: "Itah"
+    expect: { "codab:NP0106202": 3, "geonames:12096052": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0208
+    class: prefix
+    query: "Jaya"
+    expect: { "codab:NP0767302": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0209
+    class: prefix
+    query: "Kabi"
+    expect: { "codab:NP0219307": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0210
+    class: prefix
+    query: "Kail"
+    expect: { "geonames:12095479": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0211
+    class: prefix
+    query: "Kali"
+    expect: { "geonames:12095480": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0212
+    class: prefix
+    query: "Karn"
+    expect: { "geonames:12095452": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0213
+    class: prefix
+    query: "Kavr"
+    expect: { "geonames:12095485": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0214
+    class: prefix
+    query: "Khan"
+    expect: { "codab:NP0109301": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0215
+    class: prefix
+    query: "Kirt"
+    expect: { "codab:NP0327309": 3, "geonames:12096293": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0216
+    class: prefix
+    query: "Lalb"
+    expect: { "codab:NP0219303": 3, "geonames:12096141": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0217
+    class: prefix
+    query: "Lamk"
+    expect: { "codab:NP0771306": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0218
+    class: prefix
+    query: "Maul"
+    expect: { "codab:NP0232306": 3, "geonames:12095583": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0219
+    class: prefix
+    query: "Mela"
+    expect: { "codab:NP0323301": 3, "geonames:12096251": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0220
+    class: prefix
+    query: "Must"
+    expect: { "geonames:12095494": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0221
+    class: prefix
+    query: "Nepa"
+    expect: { "codab:NP0557201": 3, "geonames:12095570": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0222
+    class: prefix
+    query: "Phal"
+    expect: { "codab:NP0442302": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0223
+    class: prefix
+    query: "Shai"
+    expect: { "codab:NP0775302": 3, "geonames:12095814": 2 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0224
+    class: prefix
+    query: "Shit"
+    expect: { "codab:NP0550303": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0225
+    class: prefix
+    query: "Sind"
+    expect: { "geonames:12095520": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0226
+    class: prefix
+    query: "Sund"
+    expect: { "codab:NP0105302": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0227
+    class: prefix
+    query: "Tapl"
+    expect: { "geonames:12095528": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0228
+    class: prefix
+    query: "Thul"
+    expect: { "codab:NP0662302": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0229
+    class: prefix
+    query: "Tila"
+    expect: { "codab:NP0664303": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0230
+    class: prefix
+    query: "Urla"
+    expect: { "codab:NP0105305": 3 }
+    max_rank: 5
+    source: "generated: 4-letter prefix, target most important"
+  - id: np-0231
+    class: ambiguous
+    query: "Ajirkot"
+    expect: { "codab:NP0436402": 3, "geonames:12095726": 2, "geonames:7948629": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0232
+    class: ambiguous
+    query: "Balara"
+    expect: { "codab:NP0219311": 3, "geonames:12096028": 2, "geonames:7991541": 1, "geonames:11245341": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0233
+    class: ambiguous
+    query: "Balawa"
+    expect: { "codab:NP0218307": 3, "geonames:7967198": 1, "geonames:7962565": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0234
+    class: ambiguous
+    query: "Bansgadhi"
+    expect: { "codab:NP0558306": 3, "geonames:8009841": 1, "geonames:7987091": 1, "geonames:7938278": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0235
+    class: ambiguous
+    query: "Baraha Pokhari"
+    expect: { "codab:NP0112407": 3, "geonames:7964106": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0236
+    class: ambiguous
+    query: "Bhangaha"
+    expect: { "codab:NP0218304": 3, "geonames:12096122": 2, "geonames:8009508": 1, "geonames:7990797": 1, "geonames:7988450": 1, "geonames:7982825": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0237
+    class: ambiguous
+    query: "Bijayanagar"
+    expect: { "codab:NP0549401": 3, "geonames:12095952": 2, "geonames:7972967": 1, "geonames:7959990": 1, "geonames:7959196": 1, "geonames:7956465": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0238
+    class: ambiguous
+    query: "Birtamod"
+    expect: { "codab:NP0104307": 3, "geonames:12096021": 2, "geonames:7953899": 1, "geonames:7953886": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0239
+    class: ambiguous
+    query: "Chaudandigadhi"
+    expect: { "codab:NP0114303": 3, "geonames:8006663": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0240
+    class: ambiguous
+    query: "Chaukune"
+    expect: { "codab:NP0659401": 3, "geonames:12095680": 2, "geonames:7975381": 1, "geonames:7956967": 1, "geonames:7947410": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0241
+    class: ambiguous
+    query: "Dhanakaul"
+    expect: { "codab:NP0219403": 3, "geonames:7991655": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0242
+    class: ambiguous
+    query: "Dhanauji"
+    expect: { "codab:NP0217404": 3, "geonames:7943698": 1, "geonames:7934942": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0243
+    class: ambiguous
+    query: "Dilasaini"
+    expect: { "codab:NP0774401": 3, "geonames:12095874": 2, "geonames:12184592": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0244
+    class: ambiguous
+    query: "Dudhouli"
+    expect: { "codab:NP0320302": 3, "geonames:12095812": 2, "geonames:10330224": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0245
+    class: ambiguous
+    query: "Galchhi"
+    expect: { "codab:NP0330410": 3, "geonames:7992408": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0246
+    class: ambiguous
+    query: "Gauriganj"
+    expect: { "codab:NP0104403": 3, "geonames:12096022": 2, "geonames:7959285": 1, "geonames:7954457": 1, "geonames:7934216": 1, "geonames:7934213": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0247
+    class: ambiguous
+    query: "Haripurwa"
+    expect: { "codab:NP0219310": 3, "geonames:12096140": 2, "geonames:7991804": 1, "geonames:7991802": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0248
+    class: ambiguous
+    query: "Jahada"
+    expect: { "codab:NP0105407": 3, "geonames:12096047": 2, "geonames:8007808": 1, "geonames:7987266": 1, "geonames:7973014": 1, "geonames:7971068": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0249
+    class: ambiguous
+    query: "Jaleshwor"
+    expect: { "codab:NP0218309": 3, "geonames:7967403": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0250
+    class: ambiguous
+    query: "Kamalamai"
+    expect: { "codab:NP0320301": 3, "geonames:12095808": 2, "geonames:8410804": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0251
+    class: ambiguous
+    query: "Kaski"
+    expect: { "geonames:12095483": 3, "geonames:1283242": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0252
+    class: ambiguous
+    query: "Koshi"
+    expect: { "geonames:12095447": 3, "codab:NP0106401": 1, "geonames:12096054": 1, "geonames:7997876": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0253
+    class: ambiguous
+    query: "Krishnapur"
+    expect: { "codab:NP0772305": 3, "geonames:12096208": 2, "geonames:7967465": 1, "geonames:7967463": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0254
+    class: ambiguous
+    query: "Kushma"
+    expect: { "codab:NP0442301": 3, "geonames:12095700": 2, "geonames:7979028": 1, "geonames:7959912": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0255
+    class: ambiguous
+    query: "Madhuwan"
+    expect: { "codab:NP0558302": 3, "geonames:12096135": 2, "geonames:7959870": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0256
+    class: ambiguous
+    query: "Mechinagar"
+    expect: { "codab:NP0104305": 3, "geonames:12096033": 2, "geonames:9610386": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0257
+    class: ambiguous
+    query: "Melamchi"
+    expect: { "codab:NP0323301": 3, "geonames:12096251": 2, "geonames:7995133": 1, "geonames:10321854": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0258
+    class: ambiguous
+    query: "Nuwakot"
+    expect: { "geonames:12095497": 3, "geonames:13037676": 1, "geonames:13037618": 1, "geonames:1282994": 1, "geonames:1282993": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0259
+    class: ambiguous
+    query: "Parashuram"
+    expect: { "codab:NP0773301": 3, "geonames:12095866": 2, "geonames:7936506": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0260
+    class: ambiguous
+    query: "Prasauni"
+    expect: { "codab:NP0233402": 3, "geonames:12096240": 2, "geonames:7973253": 1, "geonames:7934965": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0261
+    class: ambiguous
+    query: "Punarbas"
+    expect: { "codab:NP0772307": 3, "geonames:12095832": 2, "geonames:7997458": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0262
+    class: ambiguous
+    query: "Rajgadh"
+    expect: { "codab:NP0215406": 3, "geonames:7955181": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0263
+    class: ambiguous
+    query: "Rupa"
+    expect: { "codab:NP0439404": 3, "geonames:12095593": 2, "geonames:7952774": 1, "geonames:7945654": 1, "geonames:7945645": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0264
+    class: ambiguous
+    query: "Rupani"
+    expect: { "codab:NP0215401": 3, "geonames:12096100": 2, "geonames:8006855": 1, "geonames:7991389": 1, "geonames:7945507": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0265
+    class: ambiguous
+    query: "Sarlahi"
+    expect: { "geonames:12095519": 3, "geonames:8002067": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0266
+    class: ambiguous
+    query: "Sayal"
+    expect: { "codab:NP0770402": 3, "geonames:12095852": 2, "geonames:7957099": 1, "geonames:7945912": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0267
+    class: ambiguous
+    query: "Shikhar"
+    expect: { "codab:NP0770301": 3, "geonames:12095872": 2, "geonames:8006769": 1, "geonames:7993124": 1, "geonames:7977009": 1, "geonames:7976021": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0268
+    class: ambiguous
+    query: "Tamakoshi"
+    expect: { "codab:NP0322407": 3, "geonames:12095791": 2, "geonames:8740262": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0269
+    class: ambiguous
+    query: "khalanga"
+    expect: { "geonames:1283484": 3, "geonames:8007618": 1, "geonames:7980727": 1, "geonames:7948628": 1, "geonames:7947114": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0270
+    class: ambiguous
+    query: "mahendranagar"
+    expect: { "geonames:1283095": 3, "geonames:8008767": 1, "geonames:7998080": 1, "geonames:7954110": 1, "geonames:7944028": 1 }
+    max_rank: 1
+    source: "generated: shared name, dominant entity first"
+  - id: np-0271
+    class: with_context
+    query: "Adhikaritol, Morang"
+    expect: { "geonames:7970555": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0272
+    class: with_context
+    query: "Ambarpur, Kailali"
+    expect: { "geonames:7956207": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0273
+    class: with_context
+    query: "Banspani, Dolakha"
+    expect: { "geonames:7945122": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0274
+    class: with_context
+    query: "Baḍgāũ, Baglung"
+    expect: { "geonames:13038071": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0275
+    class: with_context
+    query: "Bhaise, Sindhuli"
+    expect: { "geonames:7993717": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0276
+    class: with_context
+    query: "Bhangachaur, Rolpa"
+    expect: { "geonames:7984286": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0277
+    class: with_context
+    query: "Bhādgāũ, Tanahun"
+    expect: { "geonames:11771941": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0278
+    class: with_context
+    query: "Bolgaun, Sindhupalchowk"
+    expect: { "geonames:7994347": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0279
+    class: with_context
+    query: "Dandatol, Mahottari"
+    expect: { "geonames:7967261": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0280
+    class: with_context
+    query: "Deupuje, Solukhumbu"
+    expect: { "geonames:11205818": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0281
+    class: with_context
+    query: "Dhairchaur, Okhaldhunga"
+    expect: { "geonames:7974984": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0282
+    class: with_context
+    query: "Dhaireni, Pyuthan"
+    expect: { "geonames:7979676": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0283
+    class: with_context
+    query: "Dhaje, Ilam"
+    expect: { "geonames:7951992": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0284
+    class: with_context
+    query: "Dhituṅ, Khotang"
+    expect: { "geonames:11772126": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0285
+    class: with_context
+    query: "Dhorpatan, Myagdi"
+    expect: { "codab:NP0444598": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0286
+    class: with_context
+    query: "Dumrebesi, Chitwan"
+    expect: { "geonames:7934550": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0287
+    class: with_context
+    query: "Duni, Dadeldhura"
+    expect: { "geonames:7935950": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0288
+    class: with_context
+    query: "Ghaderi, Gulmi"
+    expect: { "geonames:7949789": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0289
+    class: with_context
+    query: "Ghimiretol, Morang"
+    expect: { "geonames:7970115": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0290
+    class: with_context
+    query: "Gurungkholagaun, Dang"
+    expect: { "geonames:7938207": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0291
+    class: with_context
+    query: "Halhale, Parbat"
+    expect: { "geonames:7978654": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0292
+    class: with_context
+    query: "Jamunaghari, Kanchanpur"
+    expect: { "geonames:7958920": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0293
+    class: with_context
+    query: "Janatachok, Sunsari"
+    expect: { "geonames:7997569": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0294
+    class: with_context
+    query: "Kabretar, Panchthar"
+    expect: { "geonames:7977709": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0295
+    class: with_context
+    query: "Kalidanda, Tanahun"
+    expect: { "geonames:8004755": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0296
+    class: with_context
+    query: "Kanyadanda, Sunsari"
+    expect: { "geonames:7997625": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0297
+    class: with_context
+    query: "Karahiya, Kapilbastu"
+    expect: { "geonames:7960093": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0298
+    class: with_context
+    query: "Kharkhet, Nuwakot"
+    expect: { "geonames:7974624": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0299
+    class: with_context
+    query: "Kotegaun, Kavrepalanchok"
+    expect: { "geonames:7963606": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0300
+    class: with_context
+    query: "Kubhinde, Parbat"
+    expect: { "geonames:7979149": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0301
+    class: with_context
+    query: "Kukurgare, Rolpa"
+    expect: { "geonames:7983748": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0302
+    class: with_context
+    query: "Kushma, Kapilbastu"
+    expect: { "geonames:7959912": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0303
+    class: with_context
+    query: "Kā̃prā, Salyan"
+    expect: { "geonames:11898929": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0304
+    class: with_context
+    query: "Lamachaur, Lamjung"
+    expect: { "geonames:7966973": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0305
+    class: with_context
+    query: "Matepani, Baglung"
+    expect: { "geonames:7949488": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0306
+    class: with_context
+    query: "Nadawa, Nawalparasi"
+    expect: { "geonames:7973471": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0307
+    class: with_context
+    query: "Narjamandap, Nuwakot"
+    expect: { "geonames:7974520": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0308
+    class: with_context
+    query: "Naubise, Kavrepalanchok"
+    expect: { "geonames:7963346": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0309
+    class: with_context
+    query: "Nipane, Pyuthan"
+    expect: { "geonames:7980940": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0310
+    class: with_context
+    query: "Panchghare, Dolakha"
+    expect: { "geonames:7944623": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0311
+    class: with_context
+    query: "Panimula, Achham"
+    expect: { "geonames:7934339": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0312
+    class: with_context
+    query: "Parashawa, Rupandehi"
+    expect: { "geonames:7986944": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0313
+    class: with_context
+    query: "Pari̇̄kā̃ḍā, Salyan"
+    expect: { "geonames:11900940": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0314
+    class: with_context
+    query: "Pathakgaun, Dhading"
+    expect: { "geonames:7942162": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0315
+    class: with_context
+    query: "Rajpur, Doti"
+    expect: { "geonames:7946388": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0316
+    class: with_context
+    query: "Rangapur, Rautahat"
+    expect: { "geonames:7982762": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0317
+    class: with_context
+    query: "Ratanpur, Sarlahi"
+    expect: { "geonames:7991942": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0318
+    class: with_context
+    query: "Rāni̇̄gāũ, Jhapa"
+    expect: { "geonames:11767820": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0319
+    class: with_context
+    query: "Sagara, Nawalparasi"
+    expect: { "geonames:7973437": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0320
+    class: with_context
+    query: "Sakhubani, Saptari"
+    expect: { "geonames:7990934": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0321
+    class: with_context
+    query: "Santapur, Saptari"
+    expect: { "geonames:7991099": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0322
+    class: with_context
+    query: "Shivanagar, Udayapur"
+    expect: { "geonames:8006738": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0323
+    class: with_context
+    query: "Tamaghat, Kavrepalanchok"
+    expect: { "geonames:7963619": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0324
+    class: with_context
+    query: "Tamangtol, Morang"
+    expect: { "geonames:7969688": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0325
+    class: with_context
+    query: "Thaprek, Nuwakot"
+    expect: { "geonames:7974894": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0326
+    class: with_context
+    query: "Thula Chaur, Salyan"
+    expect: { "geonames:7988815": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0327
+    class: with_context
+    query: "Tikachaur, Rukum"
+    expect: { "geonames:7985147": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0328
+    class: with_context
+    query: "Tilar, Dhading"
+    expect: { "geonames:7942349": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0329
+    class: with_context
+    query: "Tinpiple, Kathmandu"
+    expect: { "geonames:7962093": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0330
+    class: with_context
+    query: "Tudikhel, Kaski"
+    expect: { "geonames:7961399": 3 }
+    max_rank: 1
+    source: "generated: shared name, unique in its district"
+  - id: np-0331
+    class: historical
+    query: "Atarpur"
+    expect: { "geonames:7802464": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0332
+    class: historical
+    query: "Atrouli"
+    expect: { "geonames:7798834": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0333
+    class: historical
+    query: "BalahaSadhara"
+    expect: { "geonames:7800047": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0334
+    class: historical
+    query: "Banouta"
+    expect: { "geonames:7800882": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0335
+    class: historical
+    query: "Bhagyaswori"
+    expect: { "geonames:7798785": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0336
+    class: historical
+    query: "Bocha"
+    expect: { "geonames:7801797": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0337
+    class: historical
+    query: "Chhampi"
+    expect: { "geonames:7799950": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0338
+    class: historical
+    query: "Chhimkeshwori"
+    expect: { "geonames:7801504": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0339
+    class: historical
+    query: "Dalamchaur"
+    expect: { "geonames:7799740": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0340
+    class: historical
+    query: "DhulikhelN.P"
+    expect: { "geonames:7798640": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0341
+    class: historical
+    query: "Dibyapuri"
+    expect: { "geonames:7800972": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0342
+    class: historical
+    query: "Drabesh"
+    expect: { "geonames:7799215": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0343
+    class: historical
+    query: "Duwagadhi"
+    expect: { "geonames:7801907": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0344
+    class: historical
+    query: "Gwadha"
+    expect: { "geonames:7801830": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0345
+    class: historical
+    query: "Hawangdi"
+    expect: { "geonames:7801837": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0346
+    class: historical
+    query: "JungaThapachaur"
+    expect: { "geonames:7801891": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0347
+    class: historical
+    query: "Kaskikot"
+    expect: { "geonames:7801959": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0348
+    class: historical
+    query: "Kharukyanhi"
+    expect: { "geonames:7802514": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0349
+    class: historical
+    query: "Khatiwada"
+    expect: { "geonames:7798779": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0350
+    class: historical
+    query: "Laxminiwas"
+    expect: { "geonames:7800597": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0351
+    class: historical
+    query: "LaxmipurKodraha"
+    expect: { "geonames:7799238": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0352
+    class: historical
+    query: "LaxmipurPatari"
+    expect: { "geonames:7801382": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0353
+    class: historical
+    query: "Mahuwa(Pra.Khe)"
+    expect: { "geonames:7801773": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0354
+    class: historical
+    query: "Masel"
+    expect: { "geonames:7799251": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0355
+    class: historical
+    query: "Mashtabamdali"
+    expect: { "geonames:7798547": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0356
+    class: historical
+    query: "Mathairaj"
+    expect: { "geonames:7800422": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0357
+    class: historical
+    query: "Natharpu"
+    expect: { "geonames:7799752": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0358
+    class: historical
+    query: "Panchkhuwadeurali"
+    expect: { "geonames:7799285": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0359
+    class: historical
+    query: "Pipariya(Paroha)"
+    expect: { "geonames:7799701": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0360
+    class: historical
+    query: "Pouthak"
+    expect: { "geonames:7801551": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0361
+    class: historical
+    query: "RakhaDipsung"
+    expect: { "geonames:7799926": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0362
+    class: historical
+    query: "Rampurkhadauna"
+    expect: { "geonames:7802120": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0363
+    class: historical
+    query: "Samari"
+    expect: { "geonames:7801017": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0364
+    class: historical
+    query: "SikharAmbote"
+    expect: { "geonames:7799746": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0365
+    class: historical
+    query: "Syafru"
+    expect: { "geonames:7801162": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0366
+    class: historical
+    query: "SyauleBazar"
+    expect: { "geonames:7802490": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0367
+    class: historical
+    query: "Talladehi"
+    expect: { "geonames:7800437": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0368
+    class: historical
+    query: "Thalakanda"
+    expect: { "geonames:7800438": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0369
+    class: historical
+    query: "Uchidiha"
+    expect: { "geonames:7799707": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0370
+    class: historical
+    query: "Yangshila"
+    expect: { "geonames:7799622": 3 }
+    max_rank: 3
+    source: "generated: unique former unit"
+  - id: np-0371
+    class: variant
+    query: "Agegaon"
+    expect: { "geonames:8005667": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0372
+    class: variant
+    query: "Aprethoke"
+    expect: { "geonames:7974293": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0373
+    class: variant
+    query: "Arwathoke"
+    expect: { "geonames:7949709": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0374
+    class: variant
+    query: "Bedegaon"
+    expect: { "geonames:7936934": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0375
+    class: variant
+    query: "Bherikharkha"
+    expect: { "geonames:7984225": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0376
+    class: variant
+    query: "Bhittatole"
+    expect: { "geonames:7994005": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0377
+    class: variant
+    query: "Bhukedaanda"
+    expect: { "geonames:7957716": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0378
+    class: variant
+    query: "Bijekharkha"
+    expect: { "geonames:7975194": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0379
+    class: variant
+    query: "Charkholetole"
+    expect: { "geonames:7942895": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0380
+    class: variant
+    query: "Chhadketole"
+    expect: { "geonames:7970879": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0381
+    class: variant
+    query: "Chhuchhumbatalgaon"
+    expect: { "geonames:7971888": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0382
+    class: variant
+    query: "Chukpedi"
+    expect: { "geonames:7951402": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0383
+    class: variant
+    query: "Daudedada"
+    expect: { "geonames:7988504": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0384
+    class: variant
+    query: "Dobhanghaat"
+    expect: { "geonames:8003752": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0385
+    class: variant
+    query: "Dumchhakola"
+    expect: { "geonames:7965229": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0386
+    class: variant
+    query: "Gobharpoor"
+    expect: { "geonames:8008081": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0387
+    class: variant
+    query: "Gularidada"
+    expect: { "geonames:8006650": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0388
+    class: variant
+    query: "Guthitaar"
+    expect: { "geonames:7942716": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0389
+    class: variant
+    query: "Jagarnathtole"
+    expect: { "geonames:7991709": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0390
+    class: variant
+    query: "Jareghaat"
+    expect: { "geonames:7999802": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0391
+    class: variant
+    query: "Kandrikharkha"
+    expect: { "geonames:7966681": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0392
+    class: variant
+    query: "Khadka Tole"
+    expect: { "geonames:7937864": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0393
+    class: variant
+    query: "Khareltole"
+    expect: { "geonames:7995169": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0394
+    class: variant
+    query: "Khoplanbazar"
+    expect: { "geonames:7948804": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0395
+    class: variant
+    query: "Khurpathoke"
+    expect: { "geonames:8005996": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0396
+    class: variant
+    query: "Ksatritole"
+    expect: { "geonames:7979560": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0397
+    class: variant
+    query: "Labatoliya Miyantole"
+    expect: { "geonames:7997967": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0398
+    class: variant
+    query: "Lamagaragaon"
+    expect: { "geonames:7951057": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0399
+    class: variant
+    query: "Latthaghaat"
+    expect: { "geonames:7958562": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0400
+    class: variant
+    query: "Liuredhaara"
+    expect: { "geonames:7984372": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0401
+    class: variant
+    query: "Mallo Syalkote"
+    expect: { "geonames:7936494": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0402
+    class: variant
+    query: "Milanchouk"
+    expect: { "geonames:8002068": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0403
+    class: variant
+    query: "Pahadi Jitpoor"
+    expect: { "geonames:7934863": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0404
+    class: variant
+    query: "Panjikholagaon"
+    expect: { "geonames:7941282": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0405
+    class: variant
+    query: "Rajarampoor"
+    expect: { "geonames:8009577": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0406
+    class: variant
+    query: "Rajkishortole"
+    expect: { "geonames:7991553": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0407
+    class: variant
+    query: "Rudauli Purbatole"
+    expect: { "geonames:7944095": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0408
+    class: variant
+    query: "Sanotaal"
+    expect: { "geonames:7990505": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0409
+    class: variant
+    query: "Shingkar Kharkha"
+    expect: { "geonames:7969500": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0410
+    class: variant
+    query: "Syauledada"
+    expect: { "geonames:8002573": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0411
+    class: variant
+    query: "Thokargaon"
+    expect: { "geonames:8005790": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0412
+    class: variant
+    query: "Thumsardada"
+    expect: { "geonames:7976422": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0413
+    class: variant
+    query: "Tilingkharkha"
+    expect: { "geonames:8000193": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0414
+    class: variant
+    query: "Tinchalnedada"
+    expect: { "geonames:7994587": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0415
+    class: variant
+    query: "Upallo Ramtole"
+    expect: { "geonames:7962232": 3 }
+    max_rank: 5
+    source: "generated: lexicon spelling swap"
+  - id: np-0416
+    class: mixed_script
+    query: "Anantaपुर"
+    expect: { "geonames:8009962": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0417
+    class: mixed_script
+    query: "Bambuटार"
+    expect: { "geonames:7962366": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0418
+    class: mixed_script
+    query: "Barali Daगढ"
+    expect: { "geonames:7981260": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0419
+    class: mixed_script
+    query: "Bhimsenगाउँ"
+    expect: { "geonames:8010183": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0420
+    class: mixed_script
+    query: "Chhataटार"
+    expect: { "geonames:7949562": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0421
+    class: mixed_script
+    query: "Chhepeटार"
+    expect: { "geonames:7949278": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0422
+    class: mixed_script
+    query: "Daleliबजार"
+    expect: { "geonames:7970588": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0423
+    class: mixed_script
+    query: "Daukholaगाउँ"
+    expect: { "geonames:7979638": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0424
+    class: mixed_script
+    query: "Deviगाउँ"
+    expect: { "geonames:7936223": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0425
+    class: mixed_script
+    query: "Dhandraटोल"
+    expect: { "geonames:7954803": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0426
+    class: mixed_script
+    query: "Gorचौर"
+    expect: { "geonames:7957824": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0427
+    class: mixed_script
+    query: "Halaleचौर"
+    expect: { "geonames:7951822": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0428
+    class: mixed_script
+    query: "Jamaचौर"
+    expect: { "geonames:7986291": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0429
+    class: mixed_script
+    query: "Kaphleचौर"
+    expect: { "geonames:7996525": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0430
+    class: mixed_script
+    query: "Khalliलेक"
+    expect: { "geonames:7946955": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0431
+    class: mixed_script
+    query: "Khelडाँडा"
+    expect: { "geonames:7974024": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0432
+    class: mixed_script
+    query: "Khunkholaगाउँ"
+    expect: { "geonames:8001016": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0433
+    class: mixed_script
+    query: "Kidannaगाउँ"
+    expect: { "geonames:7989455": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0434
+    class: mixed_script
+    query: "Kutteडाँडा"
+    expect: { "geonames:7976670": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0435
+    class: mixed_script
+    query: "Lamबेंसी"
+    expect: { "geonames:7942070": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0436
+    class: mixed_script
+    query: "Lapkadadaगाउँ"
+    expect: { "geonames:7981095": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0437
+    class: mixed_script
+    query: "Lungadaगाउँ"
+    expect: { "geonames:7935157": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0438
+    class: mixed_script
+    query: "Lunginटार"
+    expect: { "geonames:8007569": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0439
+    class: mixed_script
+    query: "Maimaटोल"
+    expect: { "geonames:8002549": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0440
+    class: mixed_script
+    query: "Mechiगाउँ"
+    expect: { "geonames:7952625": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0441
+    class: mixed_script
+    query: "Nagखर्क"
+    expect: { "geonames:7996563": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0442
+    class: mixed_script
+    query: "Padaगाउँ"
+    expect: { "geonames:7971445": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0443
+    class: mixed_script
+    query: "Phyaताल"
+    expect: { "geonames:7945021": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0444
+    class: mixed_script
+    query: "Salगढी"
+    expect: { "geonames:7936012": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0445
+    class: mixed_script
+    query: "Sapkotaटोल"
+    expect: { "geonames:7993213": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0446
+    class: mixed_script
+    query: "Satiकोट"
+    expect: { "geonames:7973076": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0447
+    class: mixed_script
+    query: "Siligeडाँडा"
+    expect: { "geonames:7965831": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0448
+    class: mixed_script
+    query: "Siro Rasunगञ्ज"
+    expect: { "geonames:7954855": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0449
+    class: mixed_script
+    query: "Thapleचौर"
+    expect: { "geonames:7953310": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0450
+    class: mixed_script
+    query: "Tharaleगाउँ"
+    expect: { "geonames:7956154": 3 }
+    max_rank: 5
+    source: "generated: Latin stem + native-script generic"
+  - id: np-0451
+    class: abbreviation
+    query: "Aamachhodingmo RM"
+    expect: { "codab:NP0329401": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0452
+    class: abbreviation
+    query: "Aatharai Tribeni RM"
+    expect: { "codab:NP0101406": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0453
+    class: abbreviation
+    query: "Arnama RM"
+    expect: { "codab:NP0216403": 3, "geonames:12096162": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0454
+    class: abbreviation
+    query: "Baganaskali RM"
+    expect: { "codab:NP0546405": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0455
+    class: abbreviation
+    query: "Baraha Pokhari RM"
+    expect: { "codab:NP0112407": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0456
+    class: abbreviation
+    query: "Benighat Rorang RM"
+    expect: { "codab:NP0330408": 3, "geonames:12095749": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0457
+    class: abbreviation
+    query: "Bhairabi RM"
+    expect: { "codab:NP0661402": 3, "geonames:12095661": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0458
+    class: abbreviation
+    query: "Bigu RM"
+    expect: { "codab:NP0322401": 3, "geonames:12095786": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0459
+    class: abbreviation
+    query: "Bihadi RM"
+    expect: { "codab:NP0442403": 3, "geonames:12095692": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0460
+    class: abbreviation
+    query: "Chaubise RM"
+    expect: { "codab:NP0107404": 3, "geonames:12096061": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0461
+    class: abbreviation
+    query: "Chhatrakot RM"
+    expect: { "codab:NP0551407": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0462
+    class: abbreviation
+    query: "Chure RM"
+    expect: { "codab:NP0771401": 3, "geonames:12095835": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0463
+    class: abbreviation
+    query: "Dhangadhi SMC"
+    expect: { "codab:NP0771201": 3, "geonames:12095844": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0464
+    class: abbreviation
+    query: "Dharche RM"
+    expect: { "codab:NP0436404": 3, "geonames:12095728": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0465
+    class: abbreviation
+    query: "Dupcheshwor RM"
+    expect: { "codab:NP0328408": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0466
+    class: abbreviation
+    query: "Falgunanda RM"
+    expect: { "codab:NP0102405": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0467
+    class: abbreviation
+    query: "Janaki RM"
+    expect: { "codab:NP0557403": 3, "geonames:12095897": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0468
+    class: abbreviation
+    query: "Kaligandaki RM"
+    expect: { "codab:NP0441406": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0469
+    class: abbreviation
+    query: "Kalinchowk RM"
+    expect: { "codab:NP0322403": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0470
+    class: abbreviation
+    query: "Kanaka Sundari RM"
+    expect: { "codab:NP0663401": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0471
+    class: abbreviation
+    query: "Khatyad RM"
+    expect: { "codab:NP0665401": 3, "geonames:12095613": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0472
+    class: abbreviation
+    query: "Kuse RM"
+    expect: { "codab:NP0660402": 3, "geonames:12095655": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0473
+    class: abbreviation
+    query: "Laxminiya RM"
+    expect: { "codab:NP0217402": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0474
+    class: abbreviation
+    query: "Mahankal RM"
+    expect: { "codab:NP0325403": 3, "geonames:12096255": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0475
+    class: abbreviation
+    query: "Mellekh RM"
+    expect: { "codab:NP0769402": 3, "geonames:12095851": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0476
+    class: abbreviation
+    query: "Myagang RM"
+    expect: { "codab:NP0328401": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0477
+    class: abbreviation
+    query: "Myagde RM"
+    expect: { "codab:NP0440401": 3, "geonames:12096281": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0478
+    class: abbreviation
+    query: "Paterwa Sugauli RM"
+    expect: { "codab:NP0234403": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0479
+    class: abbreviation
+    query: "Rajpur RM"
+    expect: { "codab:NP0556404": 3, "geonames:12095905": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0480
+    class: abbreviation
+    query: "Rupani RM"
+    expect: { "codab:NP0215401": 3, "geonames:12096100": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0481
+    class: abbreviation
+    query: "Sakhuwa Nankarkatti RM"
+    expect: { "codab:NP0216408": 3, "geonames:12096242": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0482
+    class: abbreviation
+    query: "Sanibheri RM"
+    expect: { "codab:NP0652401": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0483
+    class: abbreviation
+    query: "Shivanath RM"
+    expect: { "codab:NP0774405": 3, "geonames:12095877": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0484
+    class: abbreviation
+    query: "Tapli RM"
+    expect: { "codab:NP0114401": 3, "geonames:12096093": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0485
+    class: abbreviation
+    query: "Temkemaiyum RM"
+    expect: { "codab:NP0110402": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0486
+    class: abbreviation
+    query: "Thasang RM"
+    expect: { "codab:NP0445405": 3, "geonames:12096177": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0487
+    class: abbreviation
+    query: "Thulung Dudhkoshi RM"
+    expect: { "codab:NP0111406": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0488
+    class: abbreviation
+    query: "Tila RM"
+    expect: { "codab:NP0663405": 3 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0489
+    class: abbreviation
+    query: "Tirahut RM"
+    expect: { "codab:NP0215403": 3, "geonames:12096106": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0490
+    class: abbreviation
+    query: "Tripurasundari RM"
+    expect: { "codab:NP0323408": 3, "geonames:12095544": 2 }
+    max_rank: 3
+    source: "generated: unit-type abbreviation from the profile"
+  - id: np-0491
+    class: colloquial
+    query: "Dhanusha"
+    expect: { "codab:NP0217304": 3 }
+    max_rank: 5
+    source: "generated: sourced short form"
+  - id: np-0492
+    class: colloquial
+    query: "Diktel"
+    expect: { "geonames:1283439": 3 }
+    max_rank: 5
+    source: "generated: sourced short form"
+  - id: np-0493
+    class: colloquial
+    query: "Jhunga"
+    expect: { "geonames:1283300": 3 }
+    max_rank: 5
+    source: "generated: sourced short form"
+  - id: np-0494
+    class: colloquial
+    query: "Kanthapur"
+    expect: { "geonames:1283252": 3 }
+    max_rank: 5
+    source: "generated: sourced short form"
+  - id: np-0495
+    class: colloquial
+    query: "Parasi"
+    expect: { "geonames:1282940": 3 }
+    max_rank: 5
+    source: "generated: sourced short form"
+  - id: np-0496
+    class: colloquial
+    query: "Purtighat"
+    expect: { "geonames:1282890": 3 }
+    max_rank: 5
+    source: "generated: sourced short form"
+  - id: np-0497
+    class: colloquial
+    query: "Ridi"
+    expect: { "geonames:1282849": 3 }
+    max_rank: 5
+    source: "generated: sourced short form"
+  - id: np-0498
+    class: colloquial
+    query: "Tamghas"
+    expect: { "geonames:1283365": 3 }
+    max_rank: 5
+    source: "generated: sourced short form"
+  - id: np-0499
+    class: colloquial
+    query: "Thimi"
+    expect: { "geonames:8411054": 3 }
+    max_rank: 5
+    source: "generated: sourced short form"
+  - id: np-0500
+    class: colloquial
+    query: "Umse"
+    expect: { "geonames:1282623": 3 }
+    max_rank: 5
+    source: "generated: sourced short form"
+  - id: np-c001
+    class: colloquial
+    query: "Khwopa"
+    expect: { "geonames:1283617": 3 }
+    max_rank: 3
+    source: "Wikipedia, Bhaktapur: 'known locally as Khwopa' (accessed 2026-11-06)"
+  - id: np-c002
+    class: historical
+    query: "Bhadgaon"
+    expect: { "geonames:1283617": 3 }
+    max_rank: 3
+    source: "Wikipedia, Bhaktapur: 'historically called Bhadgaon' (accessed 2026-11-06)"
+  - id: np-c003
+    class: historical
+    query: "Kantipur"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 3
+    source: "Wikipedia, Kathmandu: 'was known as Kantipur' (accessed 2026-11-06)"
+  - id: np-c004
+    class: historical
+    query: "Kasthamandap"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 5
+    source: "Wikipedia, Kathmandu: 'also referred to as Kasthamandap' (accessed 2026-11-06)"
+  - id: np-c005
+    class: colloquial
+    query: "Yen"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 5
+    source: "Wikipedia, Kathmandu: Newar 'Yeṃ Dey'; 'Yen' is the shorter form of Yambu (accessed 2026-11-06)"
+  - id: np-c006
+    class: historical
+    query: "Yambu"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 5
+    source: "Wikipedia, Kathmandu, Etymology (accessed 2026-11-06)"
+  - id: np-c007
+    class: colloquial
+    query: "Patan"
+    expect: { "geonames:1282931": 3 }
+    max_rank: 1
+    source: "GeoNames 1282931 primary name Pātan; Wikipedia, Lalitpur: also known as Patan"
+  - id: np-c008
+    class: colloquial
+    query: "Yala"
+    expect: { "geonames:1282931": 3 }
+    max_rank: 3
+    source: "GeoNames 1282931 alternate name; Nepal Bhasa name of Patan"
+  - id: np-c009
+    class: exact_native
+    query: "𑐏𑑂𑐰𑐥𑑅"
+    expect: { "geonames:1283617": 3 }
+    max_rank: 1
+    source: "Wikipedia, Bhaktapur infobox: Newar (Nepal Bhasa) script (accessed 2026-11-06)"
+  - id: np-c010
+    class: exact_native
+    query: "𑐫𑐾𑑃"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 1
+    source: "Wikipedia, Kathmandu infobox: Newar name (accessed 2026-11-06)"
+  - id: np-c011
+    class: abbreviation
+    query: "KTM"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 1
+    source: "GeoNames 1283240 alternate name (also the airport's IATA code)"
+  - id: np-c012
+    class: ambiguous
+    query: "Lalitpur"
+    expect: { "geonames:1282931": 3, "geonames:12096256": 3, "geonames:12095487": 2 }
+    max_rank: 1
+    source: "Lalitpur names the city (Patan), the metropolitan city and the district; India also has a Lalitpur"

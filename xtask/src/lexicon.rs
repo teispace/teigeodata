@@ -1,4 +1,4 @@
-//! `check-lexicon`: validates `data/lexicon/<cc>.yaml` against schema `teigeodata/lexicon/v1`
+//! Lexicon rules for `data/countries/<cc>/lexicon.yaml`, schema `teigeodata/lexicon/v1`
 //! ([ADR-0031](../../docs/03-decisions/adr/ADR-0031-canonical-spelling.md)).
 //!
 //! Beyond the shape (unknown fields are errors), it checks what a reviewer would otherwise have
@@ -7,11 +7,10 @@
 //! an English gloss on admin suffixes.
 
 use std::collections::BTreeMap;
-use std::fs;
-use std::path::Path;
 
 use serde::Deserialize;
 use unicode_normalization::is_nfc;
+use unicode_script::{Script, UnicodeScript};
 
 const SCHEMA: &str = "teigeodata/lexicon/v1";
 
@@ -53,29 +52,29 @@ enum Kind {
 
 #[derive(Deserialize, PartialEq, Eq, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
-enum Status {
+pub(crate) enum Status {
     Accepted,
     Proposed,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Native {
-    lang: String,
-    script: String,
-    text: String,
+pub(crate) struct Native {
+    pub(crate) lang: String,
+    pub(crate) script: String,
+    pub(crate) text: String,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Evidence {
-    kind: EvidenceKind,
-    detail: String,
+pub(crate) struct Evidence {
+    pub(crate) kind: EvidenceKind,
+    pub(crate) detail: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
-enum EvidenceKind {
+pub(crate) enum EvidenceKind {
     /// Counts of spellings in use (OSM, signage surveys).
     Usage,
     /// A ruling by the maintainer, with its date.
@@ -88,52 +87,9 @@ enum EvidenceKind {
     Dictionary,
 }
 
-/// Checks every lexicon file under `data/lexicon/`.
-pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
-    let dir = root.join("data/lexicon");
-    let mut files: Vec<_> = match fs::read_dir(&dir) {
-        Ok(entries) => entries
-            .filter_map(Result::ok)
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|x| x == "yaml"))
-            .collect(),
-        Err(e) => return Err(vec![format!("{}: {e}", dir.display())]),
-    };
-    files.sort();
-    let mut problems = Vec::new();
-    let mut terms = 0usize;
-    for path in &files {
-        let name = path
-            .strip_prefix(root)
-            .unwrap_or(path)
-            .display()
-            .to_string();
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or_default();
-        match fs::read_to_string(path) {
-            Ok(text) => {
-                let (n, found) = check_text(stem, &text);
-                terms += n;
-                problems.extend(found.into_iter().map(|p| format!("{name}: {p}")));
-            }
-            Err(e) => problems.push(format!("{name}: {e}")),
-        }
-    }
-    if problems.is_empty() {
-        Ok(format!(
-            "lexicon ok: {} files, {terms} terms checked",
-            files.len()
-        ))
-    } else {
-        Err(problems)
-    }
-}
-
 /// Validates one file's text; `stem` is the file name without `.yaml` (the country code).
 /// Returns the number of terms read and the problems found.
-fn check_text(stem: &str, text: &str) -> (usize, Vec<String>) {
+pub(crate) fn check_text(stem: &str, text: &str) -> (usize, Vec<String>) {
     let file: LexiconFile = match serde_saphyr::from_str(text) {
         Ok(f) => f,
         Err(e) => return (0, vec![format!("not a valid lexicon: {e}")]),
@@ -243,13 +199,17 @@ fn check_variants(at: &str, t: &Term, canon: &BTreeMap<String, &str>, p: &mut Ve
     }
 }
 
-fn check_native(at: &str, n: &Native, p: &mut Vec<String>) {
+pub(crate) fn check_native(at: &str, n: &Native, p: &mut Vec<String>) {
     let lang_ok = (2..=3).contains(&n.lang.len()) && n.lang.bytes().all(|b| b.is_ascii_lowercase());
     if !lang_ok {
         p.push(format!("{at}: lang `{}` is not an ISO 639 code", n.lang));
     }
-    let Some(range) = script_ranges(&n.script) else {
-        p.push(format!("{at}: unknown script `{}`", n.script));
+    // Any ISO 15924 script, by the Unicode Script property (world-general, principle P16).
+    let Some(script) = Script::from_short_name(&n.script) else {
+        p.push(format!(
+            "{at}: `{}` is not an ISO 15924 script code",
+            n.script
+        ));
         return;
     };
     if n.text.trim().is_empty() {
@@ -261,7 +221,10 @@ fn check_native(at: &str, n: &Native, p: &mut Vec<String>) {
     let foreign: Vec<char> = n
         .text
         .chars()
-        .filter(|&c| !is_neutral(c) && !range.iter().any(|&(lo, hi)| (lo..=hi).contains(&c)))
+        .filter(|&c| {
+            let s = c.script();
+            !is_neutral(c) && s != script && s != Script::Common && s != Script::Inherited
+        })
         .collect();
     if !foreign.is_empty() {
         p.push(format!(
@@ -269,31 +232,6 @@ fn check_native(at: &str, n: &Native, p: &mut Vec<String>) {
             n.text, n.script
         ));
     }
-}
-
-/// ISO 15924 scripts we use, with their Unicode blocks.
-fn script_ranges(script: &str) -> Option<&'static [(char, char)]> {
-    Some(match script {
-        "Deva" => &[('\u{0900}', '\u{097F}'), ('\u{A8E0}', '\u{A8FF}')],
-        "Beng" => &[('\u{0980}', '\u{09FF}')],
-        "Guru" => &[('\u{0A00}', '\u{0A7F}')],
-        "Gujr" => &[('\u{0A80}', '\u{0AFF}')],
-        "Orya" => &[('\u{0B00}', '\u{0B7F}')],
-        "Taml" => &[('\u{0B80}', '\u{0BFF}')],
-        "Telu" => &[('\u{0C00}', '\u{0C7F}')],
-        "Knda" => &[('\u{0C80}', '\u{0CFF}')],
-        "Mlym" => &[('\u{0D00}', '\u{0D7F}')],
-        "Sinh" => &[('\u{0D80}', '\u{0DFF}')],
-        "Tibt" => &[('\u{0F00}', '\u{0FFF}')],
-        "Arab" => &[
-            ('\u{0600}', '\u{06FF}'),
-            ('\u{0750}', '\u{077F}'),
-            ('\u{FB50}', '\u{FDFF}'),
-            ('\u{FE70}', '\u{FEFF}'),
-        ],
-        "Thaa" => &[('\u{0780}', '\u{07BF}')],
-        _ => return None,
-    })
 }
 
 /// Characters allowed in any script: spaces, joiners and common punctuation.
@@ -316,12 +254,12 @@ fn fold(s: &str) -> String {
     s.trim().to_lowercase()
 }
 
-fn has_date(s: &str) -> bool {
+pub(crate) fn has_date(s: &str) -> bool {
     s.char_indices()
         .any(|(i, _)| s.get(i..i + 10).is_some_and(is_date))
 }
 
-fn is_date(s: &str) -> bool {
+pub(crate) fn is_date(s: &str) -> bool {
     let b = s.as_bytes();
     b.len() == 10
         && b.get(4) == Some(&b'-')
@@ -373,6 +311,7 @@ terms:
             ("country: NP", "country: IN", "upper-case ISO code"),
             ("id: np.chowk", "id: np.Chowk", "id must be"),
             ("text: \"चोक\"", "text: \"চোক\"", "outside Deva"),
+            ("script: Deva", "script: Dvna", "not an ISO 15924"),
             (
                 "variants: [\"Chok\"]",
                 "variants: [\"Nagarpalika\"]",

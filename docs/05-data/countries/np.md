@@ -27,7 +27,7 @@ rules: [ADR-0030](../../03-decisions/adr/ADR-0030-source-admission.md).
 - **Timezone:** `Asia/Kathmandu`: +05:30 from 1920, +05:45 from 1986 (tzdb).
 - **Names:** Nepali (Devanagari) official names come with the CBS codes; canonical Latin
   spelling follows [ADR-0031](../../03-decisions/adr/ADR-0031-canonical-spelling.md) and
-  [the lexicon](../../../data/lexicon/np.yaml). Endonyms in other local languages are sparse in
+  [the lexicon](../../../data/countries/np/lexicon.yaml) and the [country profile](../../../data/countries/np/profile.yaml). Endonyms in other local languages are sparse in
   open sources.
 - **Postal codes:** unresolved ([Q-001](../../07-planning/open-questions.md)).
 - **Elevation ground truth:** Survey Department trig points are sold, not open; validation uses

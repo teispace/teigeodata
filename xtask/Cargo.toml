@@ -12,6 +12,7 @@ publish = false
 serde = { version = "1.0.229", features = ["derive"] }
 serde-saphyr = "2.1.1"
 unicode-normalization = "0.1.26"
+unicode-script = "0.5.9"
 
 [lints]
 workspace = true

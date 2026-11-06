@@ -25,3 +25,4 @@ Numbered so decisions can cite them (`P3`).
 | P13 | **Contributors are first-class** | Small fixtures, one toolchain, data corrections without Rust, clear guides, fast review. |
 | P14 | **Respect for places and people** | Local names in local scripts, official spellings, the Nepal perspective declared openly, and no telemetry. |
 | P15 | **Built for the hosted future, without depending on it** | Auth, metering and multi-tenancy stay outside the core, so a hosted tier is an operations task, not a redesign. |
+| P16 | **World-general by design; countries are data** | Every schema, algorithm, check and tool works for every country, script and language. Country specifics (admin ladders, unit types, abbreviations, lexicons, transliteration, keyboard layouts, sources) live in per-country data files, never in code. Nepal is the first data release, not a special case. |

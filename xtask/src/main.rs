@@ -9,7 +9,9 @@
 
 mod clean;
 mod commit;
+mod data;
 mod docs;
+mod golden;
 mod lexicon;
 
 use std::path::{Path, PathBuf};
@@ -23,8 +25,9 @@ Tasks:
                     the ADR index across docs/ and the root Markdown files.
   check-commit <f>  Check a commit message file (Conventional Commits, scopes, DCO
                     sign-off, no AI attribution); run by the commit-msg hook.
-  check-lexicon     Check data/lexicon/*.yaml (schema v1, IDs, NFC, scripts, variant
-                    collisions, evidence).
+  check-data        Check every data/countries/<cc>/ folder: profile.yaml (admin ladder,
+                    unit types, source codes), lexicon.yaml (IDs, NFC, scripts, variant
+                    collisions, evidence) and golden query files.
   clean [--all]     Free disk: incremental caches and scratch; --all also runs `cargo clean`.
   help              Show this message.
 ";
@@ -44,7 +47,7 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         }
-        "check-lexicon" => report(lexicon::check(&root)),
+        "check-data" => report(data::check(&root)),
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
         "help" | "-h" | "--help" => {
             print!("{HELP}");

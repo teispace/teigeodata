@@ -1,0 +1,77 @@
+# Hand-written golden queries for NP, appended to the generated set by gen-golden.
+# Every entry cites its source. Keys are source keys until our stable IDs exist.
+schema: teigeodata/golden/v0
+country: NP
+queries:
+  - id: np-c001
+    class: colloquial
+    query: "Khwopa"
+    expect: { "geonames:1283617": 3 }
+    max_rank: 3
+    source: "Wikipedia, Bhaktapur: 'known locally as Khwopa' (accessed 2026-11-06)"
+  - id: np-c002
+    class: historical
+    query: "Bhadgaon"
+    expect: { "geonames:1283617": 3 }
+    max_rank: 3
+    source: "Wikipedia, Bhaktapur: 'historically called Bhadgaon' (accessed 2026-11-06)"
+  - id: np-c003
+    class: historical
+    query: "Kantipur"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 3
+    source: "Wikipedia, Kathmandu: 'was known as Kantipur' (accessed 2026-11-06)"
+  - id: np-c004
+    class: historical
+    query: "Kasthamandap"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 5
+    source: "Wikipedia, Kathmandu: 'also referred to as Kasthamandap' (accessed 2026-11-06)"
+  - id: np-c005
+    class: colloquial
+    query: "Yen"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 5
+    source: "Wikipedia, Kathmandu: Newar 'Yeṃ Dey'; 'Yen' is the shorter form of Yambu (accessed 2026-11-06)"
+  - id: np-c006
+    class: historical
+    query: "Yambu"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 5
+    source: "Wikipedia, Kathmandu, Etymology (accessed 2026-11-06)"
+  - id: np-c007
+    class: colloquial
+    query: "Patan"
+    expect: { "geonames:1282931": 3 }
+    max_rank: 1
+    source: "GeoNames 1282931 primary name Pātan; Wikipedia, Lalitpur: also known as Patan"
+  - id: np-c008
+    class: colloquial
+    query: "Yala"
+    expect: { "geonames:1282931": 3 }
+    max_rank: 3
+    source: "GeoNames 1282931 alternate name; Nepal Bhasa name of Patan"
+  - id: np-c009
+    class: exact_native
+    query: "𑐏𑑂𑐰𑐥𑑅"
+    expect: { "geonames:1283617": 3 }
+    max_rank: 1
+    source: "Wikipedia, Bhaktapur infobox: Newar (Nepal Bhasa) script (accessed 2026-11-06)"
+  - id: np-c010
+    class: exact_native
+    query: "𑐫𑐾𑑃"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 1
+    source: "Wikipedia, Kathmandu infobox: Newar name (accessed 2026-11-06)"
+  - id: np-c011
+    class: abbreviation
+    query: "KTM"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 1
+    source: "GeoNames 1283240 alternate name (also the airport's IATA code)"
+  - id: np-c012
+    class: ambiguous
+    query: "Lalitpur"
+    expect: { "geonames:1282931": 3, "geonames:12096256": 3, "geonames:12095487": 2 }
+    max_rank: 1
+    source: "Lalitpur names the city (Patan), the metropolitan city and the district; India also has a Lalitpur"

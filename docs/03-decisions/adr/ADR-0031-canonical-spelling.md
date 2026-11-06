@@ -27,7 +27,7 @@ The canonical display spelling is a **curated convention without diacritics**, c
 
 ## Consequences
 
-- `data/lexicon/<country>.yaml` with a schema checked by `xtask`; a starter list of 60 Nepal and India terms comes from the research note.
+- `data/countries/<cc>/lexicon.yaml` with a schema checked by `cargo xtask check-data`; a starter list of 60 Nepal and India terms comes from the research note.
 - Names carry `source` and `evidence`; search returns the `matched_name`.
 - The forge detects the script of OSM `name` (Latin or Devanagari in Nepal) and collects official name registers as override sources.
 

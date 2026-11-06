@@ -14,7 +14,7 @@ Corrections, from contributors and from our QA, must survive monthly rebuilds. T
 
 ## Decision
 
-- **Storage:** each correction is a reviewed YAML file, one per file: `data/corrections/<country>/<id>.yaml`. Its fields are:
+- **Storage:** each correction is a reviewed YAML file, one per file: `data/countries/<cc>/corrections/<id>.yaml`. Its fields are:
   - a stable, never-reused `id`;
   - a `target` (a stable place ID, or a source record for fixes made before merging);
   - an `op`: `set`, `unset`, `same-as`, `not-same-as`, `split`, `retire` or `move`;

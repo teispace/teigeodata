@@ -10,11 +10,11 @@ A wrong position, a wrong elevation, a misspelled name, a missing place, an old 
    it there helps everyone, and our next data release picks it up.
 2. Otherwise, open an issue with the **"Data correction"** form and give your evidence: a
    coordinate, a photo of a sign, a GPS track, or an official document.
-3. Or open a pull request that adds a correction file under `data/corrections/<country>/`.
+3. Or open a pull request that adds a correction file under `data/countries/<cc>/corrections/`.
    The format and examples are in `docs/09-guidelines/` (the correction guide comes with
    Phase 3). CI validates it and posts a preview.
 
-Spellings follow the sourced lexicon in `data/lexicon/` (for example चोक is spelled **Chowk**). If
+Spellings follow the sourced lexicon in `data/countries/<cc>/lexicon.yaml` (for example चोक is spelled **Chowk**). If
 you think a lexicon rule is wrong, open an issue with your sources.
 
 ## Changing code

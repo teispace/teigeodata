@@ -105,3 +105,4 @@ Every decision, newest last. Architecture-shaping decisions link their ADR ([con
 | D-048 | 2026-11-06 | The HTTP server and CLI offer native, Nominatim-compatible JSON and GeoJSON outputs | [ADR-0038](adr/ADR-0038-compatibility-outputs.md) |
 | D-049 | 2026-11-06 | Positioning: "the open, offline gazetteer you are allowed to keep"; rivals are compared on measured pages only | [Competitive analysis](../02-research/notes/competitive-analysis.md) |
 | D-050 | 2026-11-06 | Standing instruction: work autonomously without pauses; push regularly; keep main the single branch | [AGENTS.md §11](../../AGENTS.md) |
+| D-051 | 2026-11-06 | Everything is world-general: schema, algorithms, checks and tools work for every country and script; country specifics are per-country data (profiles, lexicons), never code (principle P16) | [principles](../00-vision/principles.md) |

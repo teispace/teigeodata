@@ -34,8 +34,9 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
 - [x] [Competitive analysis](../../02-research/notes/competitive-analysis.md): GeoNames, Who's On First, Pelias, Photon, Nominatim, Overture, commercial geocoders, offline SDKs
 - [x] [Benchmarking](../../02-research/notes/benchmarking.md): harnesses, CI method and bindings; catalogue in [benchmarks](../../06-engineering/benchmarks.md)
 
-- [ ] Golden query set for Nepal (≥500 graded queries, 11 classes) and pkey pair sets ([ADR-0032](../../03-decisions/adr/ADR-0032-text-search.md))
-- [x] Lexicon starter `data/lexicon/np.yaml` and `in.yaml` with schema check ([ADR-0031](../../03-decisions/adr/ADR-0031-canonical-spelling.md)): `cargo xtask check-lexicon` (YAML via `serde-saphyr` 2.1.1; NFC, scripts, variant collisions, evidence); it found four merged India terms, now split
+- [x] Golden query set for Nepal v0: 524 queries (512 generated, seeded and reproducible, from GeoNames, COD-AB and the country folder; 12 curated with sources), checked by `cargo xtask check-data`. Known gap: `colloquial` has 14 sourced queries (target 30); filled from OSM `short_name`/`alt_name` in S5 and curated review ([ADR-0032](../../03-decisions/adr/ADR-0032-text-search.md))
+- [ ] pkey pair sets (positive and negative) for S3
+- [x] Lexicon starter `data/countries/np/lexicon.yaml` and `in`, plus country profiles, with schema check ([ADR-0031](../../03-decisions/adr/ADR-0031-canonical-spelling.md)): `cargo xtask check-data` (YAML via `serde-saphyr` 2.1.1; NFC, scripts, variant collisions, evidence); it found four merged India terms, now split
 
 ### 0.3 Revise the plan from research
 - [x] Each note's "impact on the plan" applied: ADR statuses (`proposed` → `accepted` or superseded), architecture pages, this roadmap (ADR-0035 to ADR-0038; ADR-0013 accepted; ADR-0009 and ADR-0016 stay proposed until format freeze and spike S4)
@@ -57,4 +58,5 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-06 | Phase 0 planned | Project start |
+| 2026-11-06 | Country folders (`data/countries/<cc>/`: profile, lexicon, curated golden) and `check-data`; golden set v0 | Maintainer: everything world-general (P16) |
 | 2026-11-06 | Benchmarking note and catalogue added; S2 done | Maintainer asked for proper benchmarks across features, cases and bindings |

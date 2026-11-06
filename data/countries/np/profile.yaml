@@ -1,0 +1,52 @@
+# Country profile for Nepal (principle P16: countries are data). Schema: teigeodata/profile/v1.
+# Facts: the federal structure of 2017 (7 provinces, 77 districts, 753 local levels, 6,743 wards);
+# unit-type codes measured in OCHA COD-AB v02 P-codes on 2026-11-06 (counts match exactly).
+schema: teigeodata/profile/v1
+country: NP
+iso3: NPL
+name: Nepal
+# Nepal Bhasa (new) is written in Devanagari and in Newa (Prachalit) script.
+languages: [ne, en, new]
+scripts: [Deva, Latn, Newa]
+admin_levels:
+  - { level: 1, english: Province, native: [{ lang: ne, script: Deva, text: "प्रदेश" }] }
+  - { level: 2, english: District, native: [{ lang: ne, script: Deva, text: "जिल्ला" }] }
+  - { level: 3, english: Local level, native: [{ lang: ne, script: Deva, text: "स्थानीय तह" }] }
+  - { level: 4, english: Ward, native: [{ lang: ne, script: Deva, text: "वडा" }] }
+unit_types:
+  - id: metropolitan_city
+    level: 3
+    english: Metropolitan City
+    native: [{ lang: ne, script: Deva, text: "महानगरपालिका" }]
+    expected_count: 6
+    source_codes: { codab: "1" }
+  - id: sub_metropolitan_city
+    level: 3
+    english: Sub-Metropolitan City
+    native: [{ lang: ne, script: Deva, text: "उपमहानगरपालिका" }]
+    expected_count: 11
+    abbreviations: [{ text: SMC, status: proposed }]
+    source_codes: { codab: "2" }
+  - id: municipality
+    level: 3
+    english: Municipality
+    native: [{ lang: ne, script: Deva, text: "नगरपालिका" }]
+    expected_count: 276
+    source_codes: { codab: "3" }
+  - id: rural_municipality
+    level: 3
+    english: Rural Municipality
+    native: [{ lang: ne, script: Deva, text: "गाउँपालिका" }]
+    expected_count: 460
+    abbreviations: [{ text: RM, status: proposed }]
+    source_codes: { codab: "4" }
+  - id: protected_area
+    level: 3
+    english: Protected area
+    expected_count: 22
+    source_codes: { codab: "5" }
+droppable_suffixes:
+  # "Janakpurdham" is commonly written "Janakpur".
+  - { text: dham, status: proposed }
+sources:
+  codab: { unit_type_code: { field: adm3_pcode, offset: 6, length: 1 } }

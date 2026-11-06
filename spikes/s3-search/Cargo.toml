@@ -1,0 +1,19 @@
+[package]
+name = "spike-s3-search"
+description = "Phase 0 spike S3: name search on Nepal, and the golden query generator."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+calamine = "0.38.0"
+fst = "0.4.7"
+serde = { version = "1.0.229", features = ["derive"] }
+serde-saphyr = "2.1.1"
+unicode-normalization = "0.1.26"
+unicode-script = "0.5.9"
+
+[lints]
+workspace = true

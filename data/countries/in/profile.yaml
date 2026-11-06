@@ -1,0 +1,14 @@
+# Country profile for India (principle P16). Schema: teigeodata/profile/v1.
+# Starter: the admin ladder only. Unit types, abbreviations and source codes are added in the
+# India wave, from the Local Government Directory (LGD), with evidence.
+schema: teigeodata/profile/v1
+country: IN
+iso3: IND
+name: India
+languages: [hi, en]
+scripts: [Deva, Latn, Beng, Guru, Gujr, Orya, Taml, Telu, Knda, Mlym, Arab, Olck, Mtei]
+admin_levels:
+  - { level: 1, english: State or union territory }
+  - { level: 2, english: District }
+  - { level: 3, english: Sub-district }
+  - { level: 4, english: Village or town }

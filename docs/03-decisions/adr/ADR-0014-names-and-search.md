@@ -21,7 +21,7 @@ Index design from [format, compression and indexing](../../02-research/notes/for
 ## Consequences
 
 - A golden query set gates recall@1/@5.
-- The lexicon lives in `data/lexicon/` with a schema and sources.
+- The lexicon lives in `data/countries/<cc>/lexicon.yaml` with a schema and sources.
 
 ## Alternatives considered
 

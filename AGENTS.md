@@ -72,7 +72,7 @@ standard or platform:
 
 **Data correctness is research too.** Spellings, codes and boundaries are checked against
 sources, never guessed. Example: the Nepali generic term चोक is spelled **Chowk**
-(Lahachowk, not Lahachok); such rules live in the lexicon under `data/lexicon/`, each with its
+(Lahachowk, not Lahachok); such rules live in each country's lexicon, `data/countries/<cc>/lexicon.yaml`, each with its
 source.
 
 ## 5. Stay current
@@ -153,6 +153,8 @@ Plain, clear, specific English. One fact, one home: link instead of repeating
 - No hosted service for now, but nothing may block a future hosted tier.
 - teigeodata stands alone; other Teispace projects adopt it later, not the reverse.
 - Update docs and memory continuously so any session can continue from any point.
+- **World-general, countries are data** (principle P16): nothing in code may assume Nepal or any
+  one country, script or language. Country rules live in per-country data files.
 - **Work autonomously, no pauses.** Follow the plan and the recorded decisions without stopping
   to ask; decide by the research and the plan, record the decision, keep going. Ask only for what
   only the maintainer can provide (legal, accounts, physical devices).

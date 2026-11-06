@@ -21,6 +21,12 @@ Search must find a place from Latin or Devanagari input, with typos, variants an
 - **Ranking:** match quality, then importance (admin level, log population, Wikipedia pageviews, OSM tag richness), then proximity to a focus point, then name type.
 - **Golden set:** at least 500 graded queries per country in 11 query classes; recall@1, recall@5, MRR@10 per class, latency p50/p99 and index size; a release gate for each country's pack.
 
+Refined 2026-11-06 for world data (principle P16, D-051):
+
+- **Folds are per Unicode script, never per country.** Optional accents are dropped only in Latin, Greek and Cyrillic. Elsewhere, marks that carry meaning are kept: Indic vowel signs and virama, Arabic harakat, Thai vowels and tone marks. Brahmic folds (nukta dropped, chandrabindu → anusvara) apply to every Brahmic script. The production `names` crate derives these sets from the Unicode properties (`Indic_Syllabic_Category` = Nukta and Bindu) instead of code-point lists, so new scripts such as Newa are covered.
+- **Country rules are data.** Unit types, abbreviations, droppable suffixes and native scripts come from the country profile; the golden generator and the search index read them.
+- **Golden sets are per country.** The generated `tests/golden/<cc>.yaml` and the curated `data/countries/<cc>/golden-curated.yaml` share the schema `teigeodata/golden/v0`. Keys are source keys until stable IDs exist. Nepal v0 has 524 queries.
+
 ## Consequences
 
 - SymSpell is benchmarked against Levenshtein automata; BM25/tantivy are not used at runtime.

@@ -3,7 +3,7 @@
 # reach the runtime graph (ADR-0001). xtask holds every repository task (ADR-0021).
 [workspace]
 resolver = "3"
-members = ["xtask", "spikes/s1-codecs", "spikes/s2-region-index"]
+members = ["xtask", "spikes/s1-codecs", "spikes/s2-region-index", "spikes/s3-search"]
 
 [workspace.package]
 version = "0.0.0"

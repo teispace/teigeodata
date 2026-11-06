@@ -8,3 +8,7 @@ Data packs built by this project are separate works with their own licences:
 - the lite build is made available under Creative Commons Attribution 4.0 International.
 Each pack's manifest and the project's ATTRIBUTION.md list the sources and their required
 attributions.
+
+Test data in tests/golden/ and data/countries/*/golden-curated.yaml contains place names and
+identifiers derived from GeoNames (geonames.org, CC BY 4.0) and OCHA Common Operational
+Datasets (data.humdata.org; Nepal COD-AB v02 under CC BY-IGO).
