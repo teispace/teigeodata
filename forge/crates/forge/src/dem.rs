@@ -253,7 +253,7 @@ pub(crate) fn run(root: &Path, tileset: &str, sources: &[String]) -> Result<Stri
         "## dem: {tileset}\n\nStated elevation minus the DEM at the record's own point, in metres (bias is the median signed difference).\n\n| Source | Field | Points | Bias | P50 | P90 | P99 | > 50 m |\n|---|---|---:|---:|---:|---:|---:|---:|\n"
     );
     let mut by_slope = String::new();
-    let mut heights: BTreeMap<String, f32> = BTreeMap::new();
+    let mut heights: BTreeMap<String, (f32, f32)> = BTreeMap::new();
     for name in sources {
         let recs = read_recs(
             &root
@@ -264,8 +264,8 @@ pub(crate) fn run(root: &Path, tileset: &str, sources: &[String]) -> Result<Stri
         let pts: Vec<(f64, f64)> = recs.iter().map(|r| (r.lon, r.lat)).collect();
         let sampled = sample_all(root, template, &manifest, &pts)?;
         for (r, v) in recs.iter().zip(&sampled) {
-            if let Some((h, _)) = v {
-                heights.insert(r.id.clone(), *h);
+            if let Some((h, slope)) = v {
+                heights.insert(r.id.clone(), (*h, *slope));
             }
         }
         write_source(&dir, name, &recs, &sampled)?;
@@ -320,7 +320,7 @@ pub(crate) fn run(root: &Path, tileset: &str, sources: &[String]) -> Result<Stri
 fn linked_heights(
     root: &Path,
     sources: &[String],
-    heights: &BTreeMap<String, f32>,
+    heights: &BTreeMap<String, (f32, f32)>,
     out: &mut String,
 ) -> Result<(), String> {
     let path = root
@@ -331,6 +331,8 @@ fn linked_heights(
         return Ok(());
     }
     let mut groups: BTreeMap<String, Vec<f32>> = BTreeMap::new();
+    // Per slope band (the mean of both points): metres apart, observed |Δh|, d·tan(slope).
+    let mut bands: [Banded; SLOPE_BANDS.len()] = Default::default();
     record::for_each_batch(&path, |b| {
         let (a, bb, m) = (
             column::<StringArray>(b, "a")?,
@@ -338,15 +340,30 @@ fn linked_heights(
             column::<Float32Array>(b, "metres")?,
         );
         for i in 0..b.num_rows() {
-            if m.value(i) < 1.0 {
+            let metres = m.value(i);
+            if metres < 1.0 {
                 continue;
             }
-            if let (Some(ha), Some(hb)) = (heights.get(a.value(i)), heights.get(bb.value(i))) {
-                let scheme = |s: &str| s.split(':').next().unwrap_or("").to_string();
-                groups
-                    .entry(format!("{}–{}", scheme(a.value(i)), scheme(bb.value(i))))
-                    .or_default()
-                    .push(ha - hb);
+            let (Some(&(ha, sa)), Some(&(hb, sb))) =
+                (heights.get(a.value(i)), heights.get(bb.value(i)))
+            else {
+                continue;
+            };
+            let scheme = |s: &str| s.split(':').next().unwrap_or("").to_string();
+            groups
+                .entry(format!("{}–{}", scheme(a.value(i)), scheme(bb.value(i))))
+                .or_default()
+                .push(ha - hb);
+            let slope = f32::midpoint(sa, sb);
+            if let Some(band) = SLOPE_BANDS
+                .iter()
+                .position(|&hi| slope < hi)
+                .and_then(|k| bands.get_mut(k))
+            {
+                band.metres.push(metres);
+                band.observed.push((ha - hb).abs());
+                band.expected.push(metres * slope.to_radians().tan());
+                band.gradient.push(1000.0 * (ha - hb).abs() / metres);
             }
         }
         Ok(())
@@ -358,23 +375,64 @@ fn linked_heights(
     for (pair, v) in groups {
         row(out, &format!("| {pair} | DEM at both points "), v);
     }
+    let _ = write!(
+        out,
+        "\nThe same links by the mean DEM slope of both points: horizontal distance, the observed height difference, and the height difference a uniform slope predicts (d·tan slope), and the observed gradient |Δh| / d in metres per km.\n\n| Slope | Pairs | Distance P50 | Distance P90 | Observed P50 | Observed P90 | Predicted P50 | Predicted P90 | Gradient P50 | Gradient P90 |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
+    );
+    let mut lo = 0.0;
+    for (hi, band) in SLOPE_BANDS.iter().zip(&mut bands) {
+        for v in [
+            &mut band.metres,
+            &mut band.observed,
+            &mut band.expected,
+            &mut band.gradient,
+        ] {
+            v.sort_unstable_by(f32::total_cmp);
+        }
+        let (d, o, e, g) = (&band.metres, &band.observed, &band.expected, &band.gradient);
+        let _ = writeln!(
+            out,
+            "| {lo:.0}–{hi:.0}° | {} | {:.0} m | {:.0} m | {:.1} | {:.1} | {:.1} | {:.1} | {:.0} | {:.0} |",
+            d.len(),
+            quantile(d, 0.5),
+            quantile(d, 0.9),
+            quantile(o, 0.5),
+            quantile(o, 0.9),
+            quantile(e, 0.5),
+            quantile(e, 0.9),
+            quantile(g, 0.5),
+            quantile(g, 0.9)
+        );
+        lo = *hi;
+    }
     Ok(())
+}
+
+/// Distances and height differences of the links in one slope band.
+#[derive(Default)]
+struct Banded {
+    metres: Vec<f32>,
+    observed: Vec<f32>,
+    expected: Vec<f32>,
+    gradient: Vec<f32>,
+}
+
+/// The nearest-rank quantile of sorted values (NaN when empty).
+fn quantile(sorted: &[f32], q: f64) -> f32 {
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "an index"
+    )]
+    let k = ((q * sorted.len() as f64).ceil() as usize).max(1) - 1;
+    sorted.get(k).copied().unwrap_or(f32::NAN)
 }
 
 /// Appends a table row: count, median signed, |Δ| P50/P90/P99, share above 50 m.
 fn row(out: &mut String, label: &str, mut d: Vec<f32>) {
     d.sort_unstable_by(f32::total_cmp);
-    let pick = |v: &[f32], q: f64| {
-        #[allow(
-            clippy::cast_precision_loss,
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "an index"
-        )]
-        let k = ((q * v.len() as f64).ceil() as usize).max(1) - 1;
-        v.get(k).copied().unwrap_or(f32::NAN)
-    };
-    let bias = pick(&d, 0.5);
+    let bias = quantile(&d, 0.5);
     let mut abs: Vec<f32> = d.iter().map(|x| x.abs()).collect();
     abs.sort_unstable_by(f32::total_cmp);
     let over = abs.iter().filter(|&&x| x > 50.0).count();
@@ -384,9 +442,9 @@ fn row(out: &mut String, label: &str, mut d: Vec<f32>) {
         out,
         "{label}| {} | {bias:+.1} | {:.1} | {:.1} | {:.1} | {share:.1}% |",
         abs.len(),
-        pick(&abs, 0.5),
-        pick(&abs, 0.9),
-        pick(&abs, 0.99)
+        quantile(&abs, 0.5),
+        quantile(&abs, 0.9),
+        quantile(&abs, 0.99)
     );
 }
 
