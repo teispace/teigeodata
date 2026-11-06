@@ -153,6 +153,11 @@ Plain, clear, specific English. One fact, one home: link instead of repeating
 - No hosted service for now, but nothing may block a future hosted tier.
 - teigeodata stands alone; other Teispace projects adopt it later, not the reverse.
 - Update docs and memory continuously so any session can continue from any point.
+- **Work autonomously, no pauses.** Follow the plan and the recorded decisions without stopping
+  to ask; decide by the research and the plan, record the decision, keep going. Ask only for what
+  only the maintainer can provide (legal, accounts, physical devices).
+- **Keep `main` current.** Push verified batches regularly, merge finished work into `main`, pull,
+  and delete merged or stale branches (local and remote) so `main` is the single source.
 
 ## 12. Where things are
 

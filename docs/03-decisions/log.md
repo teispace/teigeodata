@@ -24,7 +24,7 @@ Every decision, newest last. Architecture-shaping decisions link their ADR ([con
 | [ADR-0010](adr/ADR-0010-addressing-and-baseline.md) | Deterministic pack addressing and an embedded baseline | accepted |
 | [ADR-0011](adr/ADR-0011-layered-engine.md) | Layered packs merged live | accepted |
 | [ADR-0012](adr/ADR-0012-offline-loading.md) | Offline-first loading: catalog, downloads, storage | accepted |
-| [ADR-0013](adr/ADR-0013-region-index.md) | One exact region index for timezone, admin and perspective lookup | proposed |
+| [ADR-0013](adr/ADR-0013-region-index.md) | One exact region index for timezone, admin and perspective lookup | accepted |
 | [ADR-0014](adr/ADR-0014-names-and-search.md) | Names: English plus local; canonical spelling by lexicon; cross-script search | accepted |
 | [ADR-0015](adr/ADR-0015-tree-shaking.md) | Tree-shakable everywhere | accepted |
 | [ADR-0016](adr/ADR-0016-bindings.md) | Bindings: designed C ABI, our own IDL and generators, parity gate | proposed |
@@ -46,6 +46,10 @@ Every decision, newest last. Architecture-shaping decisions link their ADR ([con
 | [ADR-0032](adr/ADR-0032-text-search.md) | Text normalisation and the search index | accepted |
 | [ADR-0033](adr/ADR-0033-timezone-data.md) | Timezone data: boundary-builder with oceans, and our own tzdb bundle | accepted |
 | [ADR-0034](adr/ADR-0034-elevation-method.md) | Elevation method: position first, interval QA, a Nepal validation | accepted |
+| [ADR-0035](adr/ADR-0035-forge-architecture.md) | Forge architecture: a content-addressed DAG over Parquet | accepted |
+| [ADR-0036](adr/ADR-0036-corrections-as-data.md) | Corrections as reviewed data with guards | accepted |
+| [ADR-0037](adr/ADR-0037-keys-and-hosting.md) | Signing keys and metadata hosting | accepted |
+| [ADR-0038](adr/ADR-0038-compatibility-outputs.md) | Compatibility outputs: Nominatim-style JSON and GeoJSON | accepted |
 
 ## Decisions
 
@@ -93,3 +97,11 @@ Every decision, newest last. Architecture-shaping decisions link their ADR ([con
 | D-040 | 2026-11-06 | Region index stores original source edges per cell with a crossing count from the cell-centre reference point; exact i128 predicates on the 1e-7° grid; straight lon/lat edges | [ADR-0013](adr/ADR-0013-region-index.md) |
 | D-041 | 2026-11-06 | Region index proven exact (spike S2: 0 in-domain mismatches on 40,000 points incl. 1 cm from borders). Rules: reference points strictly inside their cell and never on an edge; covering zones are a set; lookups return every containing zone; out-of-domain queries are rejected | [S2](../02-research/benches/s2-region-index.md) |
 | D-042 | 2026-11-06 | Benchmarks: one workload definition run by every harness and binding; gungraun instruction counts gate PRs, criterion wall-clock runs nightly, tango-bench for research A/B; own JSON results and generated BENCHMARKS.md; CodSpeed and Bencher evaluated in Phase 1 | [Benchmarks](../06-engineering/benchmarks.md) |
+| D-043 | 2026-11-06 | The forge is our own content-addressed DAG over Parquet/GeoArrow, sharded by country; DuckDB for QA only; inputs mirrored by SHA-256 | [ADR-0035](adr/ADR-0035-forge-architecture.md) |
+| D-044 | 2026-11-06 | Corrections are reviewed YAML with guards; each build applies, retires or flags each one as stale | [ADR-0036](adr/ADR-0036-corrections-as-data.md) |
+| D-045 | 2026-11-06 | Catalog trust is a TUF subset with our own client (2-of-3 offline root, 14-day timestamp); metadata on GitHub Pages, packs on immutable releases | [ADR-0037](adr/ADR-0037-keys-and-hosting.md) |
+| D-046 | 2026-11-06 | Q-006 answered: GitHub Releases is enough for native apps; browser apps need a CORS mirror (provider pending an account, Q-014) | [ADR-0037](adr/ADR-0037-keys-and-hosting.md) |
+| D-047 | 2026-11-06 | IDs follow WOF-style supersedes/superseded_by plus a registry, changelog and bridge files; split and merge always traceable | [ADR-0008](adr/ADR-0008-stable-ids.md) |
+| D-048 | 2026-11-06 | The HTTP server and CLI offer native, Nominatim-compatible JSON and GeoJSON outputs | [ADR-0038](adr/ADR-0038-compatibility-outputs.md) |
+| D-049 | 2026-11-06 | Positioning: "the open, offline gazetteer you are allowed to keep"; rivals are compared on measured pages only | [Competitive analysis](../02-research/notes/competitive-analysis.md) |
+| D-050 | 2026-11-06 | Standing instruction: work autonomously without pauses; push regularly; keep main the single branch | [AGENTS.md §11](../../AGENTS.md) |

@@ -38,7 +38,7 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
 - [ ] Lexicon starter `data/lexicon/np.yaml` and `in.yaml` with schema check ([ADR-0031](../../03-decisions/adr/ADR-0031-canonical-spelling.md))
 
 ### 0.3 Revise the plan from research
-- [ ] Each note's "impact on the plan" applied: ADR statuses (`proposed` → `accepted` or superseded), architecture pages, this roadmap
+- [x] Each note's "impact on the plan" applied: ADR statuses (`proposed` → `accepted` or superseded), architecture pages, this roadmap (ADR-0035 to ADR-0038; ADR-0013 accepted; ADR-0009 and ADR-0016 stay proposed until format freeze and spike S4)
 - [ ] Data schema v1 draft (`docs/05-data/schema.md`) and the pack format draft (`docs/04-architecture/pack-format.md`)
 
 ### 0.4 Spikes (measured; heavy lane, one at a time)

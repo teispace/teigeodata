@@ -5,6 +5,10 @@ hierarchy down to the lowest level, boundaries, local names, exact IANA timezone
 and population, cleaned and deduplicated from the best open sources. It ships as small, signed
 packs that you bundle at build time or download at runtime, with one API in every major language.
 
+**The open, offline gazetteer you are allowed to keep.** Commercial geocoding APIs limit how
+long you may store their results; teigeodata's data is yours to store, ship and redistribute
+under its licence.
+
 A [Teispace](https://github.com/teispace) project. Code under Apache-2.0; data under ODbL, with
 a CC-BY 4.0 lite build.
 

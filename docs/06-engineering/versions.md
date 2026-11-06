@@ -51,5 +51,17 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | BenchmarkDotNet | 0.15.8 | 2026-11-06 | NuGet | 2026-12-06 |
 | benchmark_harness (Dart) | 2.4.0 | 2026-11-06 | pub.dev | 2026-12-06 |
 | Go | 1.27.3 | 2026-11-06 | go.dev | 2026-12-06 |
+| osmpbf | 0.3.8 | 2026-11-06 | crates.io | 2026-12-06 |
+| parquet / arrow | 60.1 | 2026-11-06 | crates.io | 2026-12-06 |
+| geoarrow / geoparquet | 0.10 | 2026-11-06 | crates.io | 2026-12-06 |
+| i_overlay | 9.1 | 2026-11-06 | crates.io | 2026-12-06 |
+| geo | 0.33 | 2026-11-06 | crates.io | 2026-12-06 |
+| tiff | 0.11.3 | 2026-11-06 | crates.io | 2026-12-06 |
+| duckdb (QA only) | 1.20000.1 (DuckDB 2.0) | 2026-11-06 | crates.io | 2026-12-06 |
+| ed25519-dalek | 3.0 | 2026-11-06 | crates.io | 2026-12-06 |
+| blake3 | 1.8 | 2026-11-06 | crates.io | 2026-12-06 |
+| ureq | 3.5 | 2026-11-06 | crates.io | 2026-12-06 |
+| tough (test oracle) | 0.24 | 2026-11-06 | crates.io | 2026-12-06 |
+| TUF specification | 1.0.37 | 2026-11-06 | theupdateframework.github.io | 2027-02-06 |
 
 Libraries chosen in Phase 0 research are added here when adopted.

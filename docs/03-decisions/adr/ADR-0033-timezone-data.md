@@ -21,7 +21,7 @@ Exact timezone lookup needs current boundaries and current rules. The Rust tzdb 
 ## Consequences
 
 - A tz freshness check in the data build: the bundle's tzdb version must equal the latest release.
-- Estimated exact world pack: 15–25 MB (to be measured in spike S2).
+- Exact world pack with oceans: spike S2 estimated about 43 MB (64 edges per leaf, edge-ID runs, 33 MB of vertices). Shared arcs should cut that further; format benchmarks B9 and B10 measure it ([S2](../../02-research/benches/s2-region-index.md)).
 
 ## Alternatives considered
 

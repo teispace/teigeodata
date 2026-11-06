@@ -1,12 +1,12 @@
 ---
 title: "ADR-0013: One exact region index for timezone, admin and perspective lookup"
-status: proposed
+status: accepted
 updated: 2026-11-06
 ---
 
 # ADR-0013: One exact region index for timezone, admin and perspective lookup
 
-Status: proposed, 2026-11-06
+Status: accepted, 2026-11-06 (proven by spike S2)
 
 ## Context
 

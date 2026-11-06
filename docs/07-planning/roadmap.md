@@ -19,8 +19,8 @@ After v1.0, coverage grows by data waves.
 | 1 | Core and format | 0 | **M1**: `core` types and codecs, `.tgd` reader/writer with every section kind, fuzzed, benchmarked, specified |
 | 2 | Indexes | 1 | **M2**: spatial index, exact region index (world timezone pack proven exact), search index with the phonetic key, perfect-hash ID maps; all A/B-benchmarked |
 | 3 | Forge and Nepal data | 1, 2 | **M3**: Nepal main and lite builds reproducible; geo-fix, conflation, hierarchy, names lexicon, postal, timezone; every QA gate; `ACCURACY.md` for Nepal |
-| 4 | Engine, baseline and sync | 2, 3 | **M4**: layered engine, embedded baseline, catalog, download and storage managers, delta updates, CLI `tgd` complete |
-| 5 | Boundary and bindings | 4 | **M5**: C ABI, IDL, generators, every binding with packaging, the parity gate green across all |
+| 4 | Engine, baseline and sync | 2, 3 | **M4**: layered engine, embedded baseline, catalog, download and storage managers, delta updates (section re-download first), the 15 sync gates of ADR-0037, CLI `tgd` complete |
+| 5 | Boundary and bindings | 4 | **M5**: C ABI, IDL, generators, every binding with packaging (Swift privacy manifest, Android `noCompress` for bundled packs), the parity gate and the X benchmarks green across all |
 | 6 | Servers | 4 | **M6**: MCP server (latest revision) and HTTP server, hosted-ready seams |
 | 7 | Docs site | 5, 6 | **M7**: Fumadocs site, generated reference, guides per language, per-country pages, playground |
 | 8 | Hardening and release | all | **M8 = v1.0.0**: fuzzing campaign, performance pass, security review, docs complete, first data release (Nepal) |

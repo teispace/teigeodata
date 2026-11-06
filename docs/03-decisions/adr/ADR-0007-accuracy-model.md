@@ -16,6 +16,8 @@ Accuracy of coordinates and elevation is the top priority. Sources disagree, and
 
 Every place has a consensus `point` (weighted robust centre of the candidates, checked against built-up evidence) with `uncertainty_m`, plus `label_point` and, where known, `admin_centre`. Elevation comes from elevation models sampled with interpolation, with `ele_uncertainty_m` and optional footprint statistics; peaks use surveyed heights where authoritative. Heights are orthometric (EGM2008), and the API converts to ellipsoidal heights. **Targets for v1:** P90 vertical ≤ 50 m for settlements (tighter where achievable), published per country; horizontal targets are set from the Phase 0 measurement.
 
+Refined by [forge pipeline](../../02-research/notes/forge-pipeline.md) (2026-11-06): the consensus point is a weighted Weiszfeld geometric median. Inputs to σ_h include a rounding and stacking detector tested against a uniform baseline, and the building-density peak as an extra source ([ADR-0035](ADR-0035-forge-architecture.md)).
+
 ## Consequences
 
 - QA gates: reported-vs-DEM, neighbour consistency, rounded-coordinate detection, point-in-parent.

@@ -18,6 +18,8 @@ A custom binary format, `.tgd`: self-describing (manifest, coverage, schema, dep
 
 Refined by [format, compression and indexing](../../02-research/notes/format-compression-indexing.md) (2026-11-06): 64-byte aligned sections; little-endian unaligned types read through `zerocopy`; everything a reader needs to plan reads in the first 16 KiB; a footer; per-column encoding descriptors; codecs chosen by the builder per column from measured samples. The reader is our own small crate (almost no crate can read a layout we define in place); heavy crates run only in the builder or as test oracles. Runtime dependencies are limited to `zerocopy`, `blake3`, `ed25519-dalek`, `fst` and, if the benchmark pays, `ruzstd`. Codecs stay *candidates* until their A/B benchmark passes; the format freezes only when all 14 benchmarks of the note are recorded.
 
+Refined by [offline loading and trust](../../02-research/notes/offline-loading-and-trust.md) (2026-11-06): the section table sits in the first 16 KiB and is hashable on its own (its hash goes in the catalog's `custom.sections`). Builds keep section boundaries stable between releases where the data did not change, so updates can re-download only the changed sections.
+
 ## Consequences
 
 - Readers validate every offset and length before use; decoders are fuzzed.

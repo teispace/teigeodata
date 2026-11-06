@@ -49,6 +49,11 @@ ones on every pull request, the slow ones nightly, and all of them before a rele
 | licence | lite builds contain no ODbL/share-alike/NC provenance; `ATTRIBUTION.md` matches the sources | data build |
 | id stability | no ID reused; every removal is a tombstone or a redirect; release diff report | data build |
 | reproducibility | the same `sources.lock` gives byte-identical packs | data build |
+| point in polygon | every place lies in exactly one region per covered admin level; unassigned places listed and capped | data build |
+| conflation | precision ≥ 0.98 and recall ≥ 0.95 on labelled pairs (targets set from spike S5) | data build |
+| corrections | no stale correction unreviewed for longer than one release ([ADR-0036](../03-decisions/adr/ADR-0036-corrections-as-data.md)) | data build |
+| budget | every forge stage within its declared disk and RSS budget; every CI shard at least 30 % under 6 h | data build |
+| sync | the 15 trust and install gates of [ADR-0037](../03-decisions/adr/ADR-0037-keys-and-hosting.md) (rollback, freeze, crash during install, resume against a host that ignores `If-Range`, …) | PR touching `sync` |
 
 ## Performance and resources
 

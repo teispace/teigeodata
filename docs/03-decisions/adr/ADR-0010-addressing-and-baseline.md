@@ -16,6 +16,8 @@ An app must know which file covers a query without a network round trip, and it 
 
 Packs have **deterministic addresses** derived from coverage: an admin code first (`np`, `ae-du`), split into fixed grid tiles for very large units (`in-br-t07`), plus the component (`ae-du.places.tgd`). A small **embedded baseline** (countries, first-level admin units, large cities, world timezones, and a locator mapping any point to its pack address) is compiled in, so every query has an answer offline. Every answer states its precision tier. Installed packs override the baseline automatically. Packs are found through an ordered **pack path** (app bundle, downloaded folder, developer folders, custom storage).
 
+Refined by [offline loading and trust](../../02-research/notes/offline-loading-and-trust.md) (2026-11-06): the physical file name is `address.component.release.hash8.tgd`. Each version gets a new name and is never written over a file that may be mapped.
+
 ## Consequences
 
 - `reverse()` can say which pack is missing for a point.

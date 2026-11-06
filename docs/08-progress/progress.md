@@ -9,16 +9,11 @@ updated: 2026-11-06
 ## Where we are
 
 - **Phase:** 0, foundations and research ([phase file](../07-planning/phases/phase-0.md)).
-- **Now:** 0.1 done: repository public, `fast-check` green on GitHub, `main` protected against deletion and force-push. All ten research notes have landed:
-  bindings and MCP, format, Nepal sources, licences, names and search, timezone and elevation,
-  forge, offline loading and trust, competitive analysis, and benchmarking. The last four still
-  need their "impact on the plan" applied (0.3): the forge and ID-stability ADRs, keys and
-  hosting (Q-006: web apps need a CORS mirror), and the DIGIPIN licence correction (Apache-2.0)
-  in `source-licences.md`. Spikes S1 and S2 are done; S2 is exact
-  ([results](../02-research/benches/s2-region-index.md)). The benchmark catalogue is in
-  [benchmarks](../06-engineering/benchmarks.md).
-- **Next:** apply the four new notes; lexicon schema check and
-  the Nepal golden set; schema and pack-format drafts; then spikes S3 to S6, one at a time.
+- **Now:** 0.1 and 0.2 done; 0.3 notes applied (ADR-0035 forge, ADR-0036 corrections,
+  ADR-0037 keys and hosting, ADR-0038 compatibility outputs; ADR-0013 accepted after S2). Spikes
+  S1 and S2 done. Benchmark catalogue in [benchmarks](../06-engineering/benchmarks.md).
+- **Next:** lexicon schema check in `xtask`; data schema and pack-format drafts; Nepal golden
+  query set; spikes S3 (search), S5 (baseline accuracy), S6 (elevation), S4 (bindings).
 - **Blocked:** nothing.
 
 ## Session log
