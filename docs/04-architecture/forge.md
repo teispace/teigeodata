@@ -29,7 +29,8 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | links | **built** (S5) | below |
 | conflate (block, score, cluster) | **built** (S5) | below |
 | aliases | **built** (S5) | below |
-| geofix-consensus | S5 | weighted Weiszfeld; DEM sampling |
+| dem | **built** (S5) | below |
+| geofix-consensus | S5 | weighted Weiszfeld |
 | the rest | Phase 2 | |
 
 ## Sources and `fetch`
@@ -54,6 +55,10 @@ country with no folder.
 - A `sparql` source posts its query template (`forge/queries/*.rq`) with the parameters from
   the lock. Templates are world-general: a country's Wikidata item comes from its profile.
 - A fetch prefers `mirror_url`, our release asset, when one is set.
+- A `tileset` source (a DEM) pins a manifest, `data/sources/<id>.tiles`, with one line per
+  tile: name, SHA-256 and size, or `absent` where upstream has no tile (the sea). The lock pins
+  the manifest's hash. The tile names come from the `bbox` and `tile` parameters, and the url
+  carries `{tile}`. Four tiles download at once; `--pin` writes the manifest (D-061).
 
 `forge path <id>` prints where a fetched source is stored.
 
@@ -160,6 +165,22 @@ conflation cluster to the anchor record, subject to the corroboration and collis
 (D-060). It writes `data/build/aliases/<run>/<anchor>.tsv` (anchor, text, language, kind,
 member) and the list of uncorroborated members, a QA queue for upstream fixes. Results:
 [S5](../02-research/benches/s5-nepal.md#aliases-into-search-s55-third-part).
+
+## DEM sampling (`dem`)
+
+`forge dem <tileset-source> <points-source> […]` samples the tileset at every record's point
+and writes `data/build/dem/<tileset>/<source>.parquet` (`id`, `dem_m`, `slope_deg`,
+`stated_m`, `source_dem_m`) and a `summary.md`:
+- stated elevations against the DEM, overall and by slope band;
+- for every stated link of the same sources (a `links` run), the height difference between
+  the two points.
+
+- Points are grouped by tile and each tile is decoded once, four at a time, so memory is
+  bounded whatever the extent (about 52 MB per Copernicus tile).
+- The grid comes from the GeoTIFF tags, raster type included, so a PixelIsPoint tile is not
+  shifted by half a pixel. Heights are bilinear and slope is Horn's method in metres.
+- Measured on Nepal: 179,470 points in 7.0 s, 278 MB. Results:
+  [S5](../02-research/benches/s5-nepal.md#dem-disagreement-s56).
 
 **Clean-up.** `cargo xtask clean` removes build output from both workspaces and keeps the
 store: fetched sources are pinned inputs, not build output.

@@ -53,7 +53,7 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
   - [x] S5.3 COD-AB boundary reader and the `pip` stage (exact point in polygon); Q-010 answered (D-054)
   - [x] S5.4 geofix detectors: rounding, stacking, centroid snap
   - [x] S5.5 links and conflation: cross-source pairs, position disagreement, the matcher, aliases into search (D-056, D-059, D-060)
-  - [ ] S5.6 DEM disagreement (Copernicus GLO-30)
+  - [x] S5.6 DEM disagreement (Copernicus GLO-30)
   - [ ] S5.7 results page
 - [ ] S6 Elevation validation: ICESat-2 ATL08 against Copernicus GLO-30, NASADEM and GEDTM30 over Nepal ([ADR-0034](../../03-decisions/adr/ADR-0034-elevation-method.md))
 

@@ -77,7 +77,7 @@ Measured on 2026-11-06 for Nepal (S5 inputs): the Geofabrik extract is 414.9 MB;
 
 **GeoTIFF/COG in pure Rust.**
 
-- `tiff` 0.11.3 (image-rs, 2026-02) decodes tiled and striped TIFF with DEFLATE and LZW, and it reads individual chunks (tiles), which gives windowed reads for free. Whether it supports predictor 3 (floating-point), which Copernicus COGs may use, is **unverified**. Test it in B3.
+- `tiff` 0.11.3 (image-rs, 2026-02) decodes tiled and striped TIFF with DEFLATE and LZW, and it reads individual chunks (tiles), which gives windowed reads for free. Whether it supports predictor 3 (floating-point), which Copernicus COGs may use, is **unverified**. Test it in B3. **B3 result (2026-11-07):** it does; the Copernicus tiles (DEFLATE, predictor 3, 1024² tiles) decode bit-identically to libtiff in 0.33 s per tile (D-061).
 - `geotiff` 0.1.0 (georust, 2025-06) adds GeoKeys and the model transform. It is thin, and reading the `ModelTiepoint` and `ModelPixelScale` tags ourselves is about 50 lines.
 - `async-tiff` 0.4.0 (2026-09) reads COGs over object stores by HTTP range.
 - `gdal` 0.19 is the full GDAL binding: a system library, heavy and non-reproducible across GDAL versions. Use it as a **test oracle** only.
@@ -285,7 +285,7 @@ Measured on 2026-11-06 for Nepal (S5 inputs): the Geofabrik extract is 414.9 MB;
 | `parquet`/`arrow` + `geoarrow`/`geoparquet` | pure Rust, range reads, bbox pruning | geoarrow API churn | Apache-2.0 / MIT-Apache | 60.1 / 0.10.0 | **Use**, pin exactly |
 | DuckDB (`duckdb`) + spatial | SQL, fast, reads everything | C++ build, runtime extension download, non-deterministic order and float aggregates | MIT | crate 1.20000.1 = DuckDB 2.0.0 | **Analysis/QA only** |
 | SedonaDB / geodatafusion | pure Rust SQL | immature | Apache-2.0 / MIT | 0.5.0 / 0.6.0 | Revisit 2027 |
-| `tiff` (+ own GeoKeys) | pure Rust, chunk reads | float predictor support unverified | MIT | 0.11.3 | **Use** (pending B3) |
+| `tiff` (+ own GeoKeys) | pure Rust, chunk reads | float predictor support unverified | MIT | 0.11.3 | **Use** (B3 passed) |
 | `gdal` | complete | system dependency, version drift | MIT (bindings) | 0.19.0 | **Oracle** |
 | Wikidata SPARQL snapshot (QLever/WDQS) | tiny, fast, current | endpoint not reproducible; WDQS timeouts | CC0 data | QLever v0.6.0 | **Use**, snapshot mirrored |
 | Wikidata dump filter | complete, reproducible by dump date | 103.6 GB, hours of bz2 | CC0 | weekly dumps | Quarterly cross-check |

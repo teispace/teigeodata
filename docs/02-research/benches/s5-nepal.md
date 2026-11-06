@@ -227,6 +227,51 @@ from the aliases this stage produces, because that would test the stage against 
 output. The colloquial class (14 of a target 30) grows from curated queries with independent
 sources.
 
+## DEM disagreement (S5.6)
+
+`forge dem copernicus-glo30-np geofabrik-np geonames-np wikidata-np` samples Copernicus
+GLO-30 (45 pinned tiles, D-061) at every record's point. Run 2026-11-07, M2 Pro: 179,470
+points in 7.0 s, peak RSS 278 MB. Heights are bilinear between pixel centres; slope is Horn's
+3×3 method. Geoid differences between sources are not corrected (EGM96 against EGM2008 is a
+few metres here, below every effect below).
+
+**The sampler is checked against an independent DEM.** `GeoNames` states an SRTM3-derived
+`dem` for every record. It agrees with Copernicus at P50 7.0 m and P90 32.3 m over 148,198
+points. With the grid shifted by half a pixel (the PixelIsArea reading of a PixelIsPoint
+tile) the agreement is worse, P90 35.5 m, so the registration in the tags is read correctly.
+Twelve points fall on voids.
+
+**Stated elevations** (stated minus Copernicus at the record's own point, metres; bias is the
+median signed difference):
+
+| Source | Points | Bias | P50 | P90 | P99 | > 50 m |
+|---|---:|---:|---:|---:|---:|---:|
+| OSM `ele` | 238 | +3.9 | 15.6 | 102.6 | 687.5 | 19.3% |
+| `GeoNames` `elevation` | 186 | +26.6 | 40.4 | 314.2 | 1,902.5 | 45.2% |
+| Wikidata P2044 | 601 | +21.6 | 50.1 | 430.0 | 2,333.5 | 50.1% |
+| `GeoNames` `dem` (SRTM3) | 148,198 | +2.6 | 7.0 | 32.3 | 300.3 | 6.9% |
+
+On steep ground the error grows, and it is biased upwards. For Wikidata, P50 is 15.1 m below
+5° of slope and 116.1 m above 30°, with a bias of +102.7 m. A stated height often belongs to
+somewhere else in the place, a ridge or the highest point of the area, not the point given.
+
+**Position disagreement costs height.** For the stated links that are not copies, the
+Copernicus height at one source's point minus the height at the other's:
+
+| Pair | Pairs | P50 | P90 | P99 | > 50 m |
+|---|---:|---:|---:|---:|---:|
+| `GeoNames`–Wikidata | 4,227 | 26.9 | 362.0 | 1,552.4 | 43.8% |
+| OSM–`GeoNames` | 426 | 25.3 | 445.1 | 1,376.7 | 41.5% |
+| OSM–Wikidata | 543 | 23.8 | 440.4 | 1,657.3 | 40.5% |
+
+**What follows (D-061):**
+- Elevation is sampled from the DEM at the conflated point. A source's stated elevation is
+  never the value; it is a QA cross-check, and a disagreement beyond 50 m queues the record.
+- The vertical target (P90 ≤ 50 m) is limited by the horizontal one in the hills: the DEM itself
+  is good to a few metres, but a point a few hundred metres off is hundreds of metres off in
+  height. Position comes first, as the accuracy order says, and geofix-consensus and the
+  settlement core are the levers (D-056).
+
 ## Still to come
 
-S5.6 DEM disagreement; S5.7 the summary for Q-005.
+S5.7 the summary for Q-005.
