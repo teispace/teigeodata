@@ -1,0 +1,7 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "labels": ["deps"],
+  "commitMessagePrefix": "chore(deps):",
+  "schedule": ["before 6am on monday"]
+}

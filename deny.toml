@@ -1,0 +1,36 @@
+# cargo-deny configuration (docs/06-engineering/quality-bar.md, "deny").
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Zlib",
+  "CC0-1.0",
+]
+# tzf-rs's data crate is ODbL. It is a benchmark rival in spike S2 only (publish = false) and
+# never ships or feeds a pack. Any new use needs its own decision (ADR-0030).
+exceptions = [
+  { crate = "tzf-dist", allow = ["ODbL-1.0"] },
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

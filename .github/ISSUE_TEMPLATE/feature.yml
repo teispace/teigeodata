@@ -1,0 +1,15 @@
+name: Feature request
+description: Something teigeodata should do.
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you need and why
+    validations:
+      required: true
+  - type: textarea
+    id: shape
+    attributes:
+      label: How you would like to use it
+      render: text

@@ -1,0 +1,10 @@
+teigeodata
+Copyright 2026 Teispace and the teigeodata contributors
+
+This product's source code is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Data packs built by this project are separate works with their own licences:
+- the main build is made available under the Open Database License (ODbL) 1.0;
+- the lite build is made available under Creative Commons Attribution 4.0 International.
+Each pack's manifest and the project's ATTRIBUTION.md list the sources and their required
+attributions.

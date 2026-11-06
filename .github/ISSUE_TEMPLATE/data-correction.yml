@@ -1,0 +1,49 @@
+name: Data correction
+description: A wrong position, elevation, name, boundary, code or a missing place.
+labels: ["data", "triage"]
+body:
+  - type: input
+    id: place
+    attributes:
+      label: Place
+      description: Name, and the teigeodata ID if you have it.
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is wrong
+      options:
+        - Position (lat/lon)
+        - Elevation
+        - Name or spelling
+        - Boundary
+        - Hierarchy (wrong parent)
+        - Timezone
+        - Postal code
+        - Population
+        - Duplicate
+        - Missing place
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: correct
+    attributes:
+      label: What is correct
+      description: The right value, for example a coordinate as "27.7172, 85.3240" or a spelling.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: A photo of a sign, a GPS track, an official document or map, a link. Say where it comes from and its licence if known.
+    validations:
+      required: true
+  - type: checkboxes
+    id: upstream
+    attributes:
+      label: Upstream
+      options:
+        - label: I also fixed it in OpenStreetMap or Wikidata (or it is not there)

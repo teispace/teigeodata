@@ -1,0 +1,184 @@
+# Generic place-name terms for IN: canonical Latin spellings (ADR-0031).
+# India entries are all `proposed` until reviewed. Starter list from docs/02-research/notes/names-and-search.md §5.2; `proposed` entries need a reviewer.
+# Contributor rules: docs/02-research/notes/names-and-search.md §5.5.
+schema: teigeodata/lexicon/v1
+country: IN
+updated: 2026-11-06
+terms:
+  - id: in.chowk
+    canonical: "Chowk"
+    native:
+      - { lang: hi, script: Deva, text: "चौक" }
+    variants: ["Chauk", "Chok"]
+    kind: generic
+    meaning: "square (Chandni Chowk)"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "proposed; same canonical as NP" }
+  - id: in.bazar
+    canonical: "Bazar"
+    native:
+      - { lang: hi, script: Deva, text: "बाज़ार" }
+      - { lang: hi, script: Deva, text: "बाजार" }
+    variants: ["Bazaar", "Bajar"]
+    kind: generic
+    meaning: "market"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "Hunterian Bāzār; proposed" }
+  - id: in.gaon
+    canonical: "Gaon"
+    native:
+      - { lang: hi, script: Deva, text: "गाँव" }
+      - { lang: mr, script: Deva, text: "गाव" }
+    variants: ["Gaun", "Gaanv", "Gav"]
+    kind: generic
+    meaning: "village (Goregaon)"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "Differs from NP; proposed" }
+  - id: in.garh
+    canonical: "Garh"
+    native:
+      - { lang: hi, script: Deva, text: "गढ़" }
+    variants: ["Gadh", "Gad"]
+    kind: generic
+    meaning: "fort (Chandigarh)"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "Hindi ढ़ = ṛh" }
+  - id: in.garhi
+    canonical: "Garhi"
+    native:
+      - { lang: hi, script: Deva, text: "गढ़ी" }
+    variants: ["Gadhi"]
+    kind: generic
+    meaning: "small fort"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "proposed" }
+  - id: in.pur
+    canonical: "Pur"
+    native:
+      - { lang: hi, script: Deva, text: "पुर" }
+    variants: ["Poor", "Pore"]
+    kind: generic
+    meaning: "town (Jaipur, older Cawnpore)"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "" }
+  - id: in.nagar
+    canonical: "Nagar"
+    native:
+      - { lang: hi, script: Deva, text: "नगर" }
+    variants: ["Nagara"]
+    kind: generic
+    meaning: "town"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "" }
+  - id: in.ganj
+    canonical: "Ganj"
+    native:
+      - { lang: hi, script: Deva, text: "गंज" }
+    variants: ["Gunj"]
+    kind: generic
+    meaning: "market (Daryaganj)"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "Entity overrides apply (Tollygunge)" }
+  - id: in.abad
+    canonical: "Abad"
+    native:
+      - { lang: hi, script: Deva, text: "आबाद" }
+    variants: ["Abaad", "Bad"]
+    kind: generic
+    meaning: "settled (Ahmedabad)"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "proposed" }
+  - id: in.bagh
+    canonical: "Bagh"
+    native:
+      - { lang: hi, script: Deva, text: "बाग़" }
+    variants: ["Baag", "Bag"]
+    kind: generic
+    meaning: "garden"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "proposed" }
+  - id: in.mandi
+    canonical: "Mandi"
+    native:
+      - { lang: hi, script: Deva, text: "मंडी" }
+      - { lang: hi, script: Deva, text: "मण्डी" }
+    variants: ["Mundi"]
+    kind: generic
+    meaning: "market"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "proposed" }
+  - id: in.pura-puri
+    canonical: "Pura / Puri"
+    native:
+      - { lang: hi, script: Deva, text: "पुरा" }
+      - { lang: hi, script: Deva, text: "पुरी" }
+    variants: []
+    kind: generic
+    meaning: "quarter / town"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "Do not fold into Pur" }
+  - id: in.khera
+    canonical: "Khera"
+    native:
+      - { lang: hi, script: Deva, text: "खेड़ा" }
+    variants: ["Kheda", "Kheraa"]
+    kind: generic
+    meaning: "hamlet"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "proposed" }
+  - id: in.kalan-khurd
+    canonical: "Kalan / Khurd"
+    native:
+      - { lang: hi, script: Deva, text: "कलाँ" }
+      - { lang: hi, script: Deva, text: "खुर्द" }
+    variants: ["Kalaan / Khurad"]
+    kind: qualifier
+    meaning: "greater / lesser (twin villages)"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "Qualifier: affects identity, never drop" }
+  - id: in.palli-halli
+    canonical: "Palli / Halli"
+    native:
+      - { lang: te, script: Telu, text: "పల్లి" }
+      - { lang: kn, script: Knda, text: "ಹಳ್ಳಿ" }
+    variants: ["Pally", "Palle / Hally"]
+    kind: generic
+    meaning: "village"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "Entity overrides (Kukatpally); languages te/kn" }
+  - id: in.peth-pet
+    canonical: "Peth / Pet"
+    native:
+      - { lang: mr, script: Deva, text: "पेठ" }
+      - { lang: kn, script: Knda, text: "ಪೇಟೆ" }
+    variants: ["Peit", "Pete"]
+    kind: generic
+    meaning: "market quarter"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "mr/kn; proposed" }
+  - id: in.wadi
+    canonical: "Wadi"
+    native:
+      - { lang: mr, script: Deva, text: "वाडी" }
+    variants: ["Vadi", "Wari", "Vaadi"]
+    kind: generic
+    meaning: "hamlet"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "mr; proposed" }

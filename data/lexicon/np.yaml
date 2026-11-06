@@ -1,0 +1,448 @@
+# Generic place-name terms for NP: canonical Latin spellings (ADR-0031).
+# Starter list from docs/02-research/notes/names-and-search.md §5.2; `proposed` entries need a reviewer.
+# Contributor rules: docs/02-research/notes/names-and-search.md §5.5.
+schema: teigeodata/lexicon/v1
+country: NP
+updated: 2026-11-06
+terms:
+  - id: np.chowk
+    canonical: "Chowk"
+    native:
+      - { lang: ne, script: Deva, text: "चोक" }
+      - { lang: ne, script: Deva, text: "चौक" }
+    variants: ["Chok", "Chouk", "Chauk"]
+    kind: generic
+    meaning: "square, crossroads"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 758 vs 476; maintainer ruling (Lahachowk)" }
+      - { kind: maintainer, detail: "Maintainer ruling 2026-11-06: Lahachowk, not Lahachok" }
+  - id: np.bazar
+    canonical: "Bazar"
+    native:
+      - { lang: ne, script: Deva, text: "बजार" }
+    variants: ["Bajar", "Bazaar", "Bajaar"]
+    kind: generic
+    meaning: "market town"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 389/95/79" }
+  - id: np.gaun
+    canonical: "Gaun"
+    native:
+      - { lang: ne, script: Deva, text: "गाउँ" }
+    variants: ["Gaon", "Gau", "Gaaun"]
+    kind: generic
+    meaning: "village"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 377 vs 14" }
+  - id: np.tole
+    canonical: "Tole"
+    native:
+      - { lang: ne, script: Deva, text: "टोल" }
+    variants: ["Tol", "Tola"]
+    kind: generic
+    meaning: "neighbourhood"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 468 vs 457 (close); Kathmandu usage (Asan Tole)" }
+  - id: np.danda
+    canonical: "Danda"
+    native:
+      - { lang: ne, script: Deva, text: "डाँडा" }
+    variants: ["Dada", "Daanda", "Dandaa"]
+    kind: generic
+    meaning: "ridge"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 224 vs 228; nasal kept, following NSD n-before-ḍ" }
+  - id: np.khola
+    canonical: "Khola"
+    native:
+      - { lang: ne, script: Deva, text: "खोला" }
+    variants: ["Kola", "Kholaa"]
+    kind: generic
+    meaning: "river, stream"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 2,945" }
+  - id: np.kot
+    canonical: "Kot"
+    native:
+      - { lang: ne, script: Deva, text: "कोट" }
+    variants: ["Kote", "Kotte"]
+    kind: generic
+    meaning: "fort, hill fort"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 66 vs 1 (Sarangkot, Nuwakot)" }
+  - id: np.kharka
+    canonical: "Kharka"
+    native:
+      - { lang: ne, script: Deva, text: "खर्क" }
+    variants: ["Kharkha", "Kharaka"]
+    kind: generic
+    meaning: "high pasture"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 115" }
+  - id: np.ghat
+    canonical: "Ghat"
+    native:
+      - { lang: ne, script: Deva, text: "घाट" }
+    variants: ["Ghaat"]
+    kind: generic
+    meaning: "riverbank steps"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 67" }
+  - id: np.besi
+    canonical: "Besi"
+    native:
+      - { lang: ne, script: Deva, text: "बेंसी" }
+      - { lang: ne, script: Deva, text: "बेसी" }
+    variants: ["Beshi", "Bensi", "Beshee"]
+    kind: generic
+    meaning: "valley floor"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 45 vs 12" }
+  - id: np.phedi
+    canonical: "Phedi"
+    native:
+      - { lang: ne, script: Deva, text: "फेदी" }
+    variants: ["Pedi", "Fedi", "Phedee"]
+    kind: generic
+    meaning: "foot of a hill"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 61 vs 2" }
+  - id: np.bhanjyang
+    canonical: "Bhanjyang"
+    native:
+      - { lang: ne, script: Deva, text: "भञ्ज्याङ" }
+      - { lang: ne, script: Deva, text: "भन्ज्याङ" }
+    variants: ["Bhanjang", "Bhanjyan", "Bhanjyaang", "Bhangyang"]
+    kind: generic
+    meaning: "pass"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 140/6/16" }
+  - id: np.deurali
+    canonical: "Deurali"
+    native:
+      - { lang: ne, script: Deva, text: "देउराली" }
+    variants: ["Dewrali", "Deorali", "Deuraali"]
+    kind: generic
+    meaning: "pass with shrine"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 275" }
+  - id: np.pokhari
+    canonical: "Pokhari"
+    native:
+      - { lang: ne, script: Deva, text: "पोखरी" }
+    variants: ["Pokhri", "Pokhree", "Pokhary"]
+    kind: generic
+    meaning: "pond"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 691 vs 5" }
+  - id: np.thok
+    canonical: "Thok"
+    native:
+      - { lang: ne, script: Deva, text: "थोक" }
+    variants: ["Thoke"]
+    kind: generic
+    meaning: "(in toponyms) cluster, place"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "OSM 5; proposed" }
+  - id: np.gadhi
+    canonical: "Gadhi"
+    native:
+      - { lang: ne, script: Deva, text: "गढी" }
+    variants: ["Garhi", "Gadi", "Ghadi"]
+    kind: generic
+    meaning: "fort"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 42 vs 0 (Sindhuligadhi); India uses Garhi" }
+  - id: np.gadh
+    canonical: "Gadh"
+    native:
+      - { lang: ne, script: Deva, text: "गढ" }
+    variants: ["Garh", "Gad"]
+    kind: generic
+    meaning: "fort"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "Narayangadh; proposed" }
+  - id: np.tar
+    canonical: "Tar"
+    native:
+      - { lang: ne, script: Deva, text: "टार" }
+    variants: ["Taar"]
+    kind: generic
+    meaning: "river terrace"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 28 vs 9" }
+  - id: np.tal
+    canonical: "Tal"
+    native:
+      - { lang: ne, script: Deva, text: "ताल" }
+    variants: ["Taal"]
+    kind: generic
+    meaning: "lake"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 82 vs 51 (Phewa Tal)" }
+  - id: np.daha
+    canonical: "Daha"
+    native:
+      - { lang: ne, script: Deva, text: "दह" }
+    variants: ["Dah", "Dahaa"]
+    kind: generic
+    meaning: "lake, pool"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 61" }
+  - id: np.dobhan
+    canonical: "Dobhan"
+    native:
+      - { lang: ne, script: Deva, text: "दोभान" }
+    variants: ["Dovan", "Doban", "Dobhaan"]
+    kind: generic
+    meaning: "confluence"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 20 vs 13" }
+  - id: np.chaur
+    canonical: "Chaur"
+    native:
+      - { lang: ne, script: Deva, text: "चौर" }
+    variants: ["Chour", "Chowr"]
+    kind: generic
+    meaning: "meadow"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 121" }
+  - id: np.chautara
+    canonical: "Chautara"
+    native:
+      - { lang: ne, script: Deva, text: "चौतारा" }
+    variants: ["Chautaara"]
+    kind: generic
+    meaning: "resting platform (also a town)"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 160" }
+  - id: np.chautari
+    canonical: "Chautari"
+    native:
+      - { lang: ne, script: Deva, text: "चौतारी" }
+    variants: ["Chautaari", "Chautary"]
+    kind: generic
+    meaning: "resting platform"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 433; distinct from #23" }
+  - id: np.bari
+    canonical: "Bari"
+    native:
+      - { lang: ne, script: Deva, text: "बारी" }
+    variants: ["Baari"]
+    kind: generic
+    meaning: "garden, field"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 73" }
+  - id: np.pati
+    canonical: "Pati"
+    native:
+      - { lang: ne, script: Deva, text: "पाटी" }
+    variants: ["Paati"]
+    kind: generic
+    meaning: "rest house"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 52" }
+  - id: np.dhunga
+    canonical: "Dhunga"
+    native:
+      - { lang: ne, script: Deva, text: "ढुङ्गा" }
+    variants: ["Dhungaa", "Dunga"]
+    kind: generic
+    meaning: "stone"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 47" }
+  - id: np.lek
+    canonical: "Lek"
+    native:
+      - { lang: ne, script: Deva, text: "लेक" }
+    variants: ["Lekh"]
+    kind: generic
+    meaning: "highland"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "OSM \"lekh\" 11; proposed, Nepali spelling is लेक" }
+  - id: np.himal
+    canonical: "Himal"
+    native:
+      - { lang: ne, script: Deva, text: "हिमाल" }
+    variants: ["Himaal"]
+    kind: generic
+    meaning: "snow range"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "proposed" }
+  - id: np.dhara
+    canonical: "Dhara"
+    native:
+      - { lang: ne, script: Deva, text: "धारा" }
+    variants: ["Dhaara"]
+    kind: generic
+    meaning: "water spout (Sundhara)"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "proposed" }
+  - id: np.bahal
+    canonical: "Bahal"
+    native:
+      - { lang: ne, script: Deva, text: "बहाल" }
+    variants: ["Baha", "Bahaal", "Bahil"]
+    kind: generic
+    meaning: "Newar monastery courtyard"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "proposed; endonym in `new`" }
+  - id: np.than
+    canonical: "Than"
+    native:
+      - { lang: ne, script: Deva, text: "थान" }
+      - { lang: ne, script: Deva, text: "स्थान" }
+    variants: ["Thaan", "Sthan", "Asthan"]
+    kind: generic
+    meaning: "shrine site"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "proposed" }
+  - id: np.marg
+    canonical: "Marg"
+    native:
+      - { lang: ne, script: Deva, text: "मार्ग" }
+    variants: ["Marga", "Maarg"]
+    kind: street_type
+    meaning: "road"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 2,875 (streets only)" }
+  - id: np.path
+    canonical: "Path"
+    native:
+      - { lang: ne, script: Deva, text: "पथ" }
+    variants: ["Patha"]
+    kind: street_type
+    meaning: "road"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "OSM 1,280 (streets only)" }
+  - id: np.galli
+    canonical: "Galli"
+    native:
+      - { lang: ne, script: Deva, text: "गल्ली" }
+    variants: ["Gali"]
+    kind: street_type
+    meaning: "lane"
+    status: proposed
+    evidence:
+      - { kind: usage, detail: "proposed" }
+  - id: np.nagar
+    canonical: "Nagar"
+    native:
+      - { lang: ne, script: Deva, text: "नगर" }
+    variants: ["Nagara", "Nagr"]
+    kind: generic
+    meaning: "town"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "ICU/sanscript output \"nagara\" is a variant to fold" }
+  - id: np.pur
+    canonical: "Pur"
+    native:
+      - { lang: ne, script: Deva, text: "पुर" }
+    variants: ["Poor", "Pore", "Pura"]
+    kind: generic
+    meaning: "town"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "-puri and -pura are different morphemes (#55)" }
+  - id: np.ganj
+    canonical: "Ganj"
+    native:
+      - { lang: ne, script: Deva, text: "गञ्ज" }
+      - { lang: ne, script: Deva, text: "गंज" }
+    variants: ["Gunj", "Gunge"]
+    kind: generic
+    meaning: "market town"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "Overridden per entity: Birgunj, Nepalgunj" }
+  - id: np.gaunpalika
+    canonical: "Gaunpalika"
+    native:
+      - { lang: ne, script: Deva, text: "गाउँपालिका" }
+    variants: ["Gaupalika", "Gaunpaalika"]
+    kind: admin_suffix
+    meaning: "Rural Municipality"
+    english: "Rural Municipality"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "Admin suffix; English display \"Rural Municipality\"" }
+  - id: np.nagarpalika
+    canonical: "Nagarpalika"
+    native:
+      - { lang: ne, script: Deva, text: "नगरपालिका" }
+    variants: ["Nagarpaalika"]
+    kind: admin_suffix
+    meaning: "Municipality"
+    english: "Municipality"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "Admin suffix" }
+  - id: np.upamahanagarpalika
+    canonical: "Upamahanagarpalika"
+    native:
+      - { lang: ne, script: Deva, text: "उपमहानगरपालिका" }
+    variants: ["Upa-mahanagarpalika"]
+    kind: admin_suffix
+    meaning: "Sub-Metropolitan City"
+    english: "Sub-Metropolitan City"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "Admin suffix" }
+  - id: np.mahanagarpalika
+    canonical: "Mahanagarpalika"
+    native:
+      - { lang: ne, script: Deva, text: "महानगरपालिका" }
+    variants: ["Mahanagarpaalika"]
+    kind: admin_suffix
+    meaning: "Metropolitan City"
+    english: "Metropolitan City"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "Admin suffix" }
+  - id: np.ward
+    canonical: "Ward"
+    native:
+      - { lang: ne, script: Deva, text: "वडा" }
+    variants: ["Wada", "Woda", "Wodaa"]
+    kind: admin_suffix
+    meaning: "ward"
+    english: "Ward"
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "Admin suffix" }

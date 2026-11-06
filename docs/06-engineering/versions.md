@@ -1,0 +1,55 @@
+---
+title: "Versions register"
+status: living
+updated: 2026-11-06
+---
+
+# Versions register
+
+Every pinned tool, toolchain and major dependency, with when it was checked. Check live
+(registries and release notes) and record here; review monthly.
+
+| Thing | Version | Checked | Source | Recheck |
+|---|---|---|---|---|
+| Rust toolchain (stable) | 1.99.1 | 2026-11-06 | `rustc --version` | 2026-12-06 |
+| Rust edition | 2024 | 2026-11-06 | Rust reference | — |
+| Node.js (site, Node binding) | 26.13.0 | 2026-11-06 | `node --version` | 2026-12-06 |
+| pnpm | 12.16.1 | 2026-11-06 | `pnpm --version` | 2026-12-06 |
+| Contributor Covenant | 3.0 | 2026-11-06 | EthicalSource repository | 2027-05-06 |
+| DCO | 1.1 | 2026-11-06 | developercertificate.org | — |
+| napi (napi-rs) | 3.16.1 | 2026-11-06 | crates.io | 2026-12-06 |
+| @napi-rs/cli | 3.10.12 | 2026-11-06 | npm | 2026-12-06 |
+| wasm-bindgen | 0.2.130 | 2026-11-06 | crates.io | 2026-12-06 |
+| binaryen (wasm-opt) | version_133 | 2026-11-06 | GitHub releases | 2026-12-06 |
+| PyO3 | 0.30 | 2026-11-06 | crates.io | 2026-12-06 |
+| maturin | 1.16 | 2026-11-06 | PyPI | 2026-12-06 |
+| cibuildwheel | 4.3 | 2026-11-06 | PyPI | 2026-12-06 |
+| jni (crate) | 0.22 | 2026-11-06 | crates.io | 2026-12-06 |
+| cargo-ndk | 4.1 | 2026-11-06 | crates.io | 2026-12-06 |
+| Android NDK | r30 | 2026-11-06 | developer.android.com | 2026-12-06 |
+| cbindgen | 0.29 | 2026-11-06 | crates.io | 2026-12-06 |
+| Flutter / Dart | 3.47.9 / 3.13.7 | 2026-11-06 | flutter.dev | 2026-12-06 |
+| native_toolchain_rust | 1.0.7 | 2026-11-06 | pub.dev | 2026-12-06 |
+| rmcp (MCP Rust SDK) | 3.9.0 | 2026-11-06 | crates.io | 2026-12-06 |
+| MCP protocol | 2026-07-28 (fallback 2025-11-25) | 2026-11-06 | modelcontextprotocol.io | 2027-01-06 |
+| purego (Go) | 0.11 | 2026-11-06 | pkg.go.dev | 2026-12-06 |
+| GitHub actions/checkout | v7.0.1 | 2026-11-06 | GitHub | 2026-12-06 |
+| Swatinem/rust-cache | v2.9.3 | 2026-11-06 | GitHub | 2026-12-06 |
+| cargo-deny (action / local) | v2.1.1 / 0.20.2 | 2026-11-06 | GitHub / Homebrew | 2026-12-06 |
+| typos | v1.52.0 | 2026-11-06 | GitHub | 2026-12-06 |
+| criterion | 0.8.2 | 2026-11-06 | crates.io | 2026-12-06 |
+| gungraun | 0.20.0 | 2026-11-06 | crates.io | 2026-12-06 |
+| tango-bench | 0.9.0 | 2026-11-06 | crates.io | 2026-12-06 |
+| hyperfine | 2.0.0 | 2026-11-06 | GitHub releases | 2026-12-06 |
+| Google Benchmark | 1.10.0 | 2026-11-06 | GitHub releases | 2026-12-06 |
+| pyperf | 2.10.0 | 2026-11-06 | PyPI | 2026-12-06 |
+| mitata | 1.0.34 | 2026-11-06 | npm | 2026-12-06 |
+| Playwright | 1.65.0 | 2026-11-06 | npm | 2026-12-06 |
+| JMH | 1.37 | 2026-11-06 | Maven Central | 2026-12-06 |
+| androidx.benchmark | 1.5.0 | 2026-11-06 | Google Maven | 2026-12-06 |
+| package-benchmark (Swift) | 1.38.1 | 2026-11-06 | GitHub releases | 2026-12-06 |
+| BenchmarkDotNet | 0.15.8 | 2026-11-06 | NuGet | 2026-12-06 |
+| benchmark_harness (Dart) | 2.4.0 | 2026-11-06 | pub.dev | 2026-12-06 |
+| Go | 1.27.3 | 2026-11-06 | go.dev | 2026-12-06 |
+
+Libraries chosen in Phase 0 research are added here when adopted.

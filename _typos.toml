@@ -1,0 +1,36 @@
+[default]
+extend-ignore-re = [
+  # Devanagari and transliterated place names are not English words.
+  "[\\u0900-\\u097F]+",
+]
+
+[default.extend-words]
+# Nepali and Indian place-name terms.
+tole = "tole"
+chowk = "chowk"
+khola = "khola"
+danda = "danda"
+bhanjyang = "bhanjyang"
+palika = "palika"
+# Level of detail (boundary geometry).
+lod = "lod"
+# Names of people and organisations cited in research.
+beling = "beling"
+linz = "linz"
+alos = "alos"
+gir = "gir"
+iit = "iit"
+# Crate names and a cited French title (Weiszfeld 1937).
+flate = "flate"
+sur = "sur"
+somme = "somme"
+# A source's own spelling, quoted on purpose (CBS local-level list).
+metropolitian = "metropolitian"
+
+[files]
+extend-exclude = [
+  # Licence and conduct texts are copied verbatim.
+  "LICENSE",
+  "DCO",
+  "CODE_OF_CONDUCT.md",
+]

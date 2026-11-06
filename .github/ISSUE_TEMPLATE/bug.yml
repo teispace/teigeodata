@@ -1,0 +1,29 @@
+name: Bug
+description: The library, a binding, the CLI or a server does something wrong.
+labels: ["bug", "triage"]
+body:
+  - type: input
+    id: surface
+    attributes:
+      label: Where
+      description: Rust crate, binding (which language), CLI, MCP or HTTP server, and the version.
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Smallest reproduction
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS, architecture, runtime version.

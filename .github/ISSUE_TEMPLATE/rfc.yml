@@ -1,0 +1,22 @@
+name: RFC
+description: A change to the format, the public API, the data model or a data licence.
+labels: ["rfc"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options considered, with measurements where they matter
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal and consequences
+    validations:
+      required: true

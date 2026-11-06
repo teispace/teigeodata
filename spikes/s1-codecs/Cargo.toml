@@ -1,0 +1,16 @@
+[package]
+name = "spike-s1-codecs"
+description = "Phase 0 spike S1: coordinate and name codecs measured on a real Nepal sample."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+zstd = "0.14.3"
+fsst-rs = "0.7.0"
+lz4_flex = "0.14.0"
+
+[lints]
+workspace = true

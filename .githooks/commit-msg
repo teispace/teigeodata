@@ -1,0 +1,3 @@
+#!/bin/sh
+# Conventional Commits, known scope, DCO sign-off, no AI attribution (AGENTS.md §8).
+exec cargo xtask check-commit "$1"

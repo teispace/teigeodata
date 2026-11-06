@@ -1,0 +1,12 @@
+/target/
+/forge/target/
+/scratch/
+/data/cache/
+/data/build/
+*.tgd
+!/fixtures/**/*.tgd
+node_modules/
+.next/
+/site/out/
+.DS_Store
+*.profraw

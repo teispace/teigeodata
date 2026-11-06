@@ -1,0 +1,67 @@
+# The teigeodata workspace. Runtime crates live under crates/ (created as their phase starts);
+# the data pipeline is a separate workspace under forge/ so that its heavy dependencies never
+# reach the runtime graph (ADR-0001). xtask holds every repository task (ADR-0021).
+[workspace]
+resolver = "3"
+members = ["xtask", "spikes/s1-codecs", "spikes/s2-region-index"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/teispace/teigeodata"
+homepage = "https://github.com/teispace/teigeodata"
+rust-version = "1.99"
+publish = false
+
+# Lints are `warn` here and errors in CI (`-D warnings`), so an editor shows them without a
+# local build failing mid-edit. Library code must not panic, print or index unchecked: a
+# library that does takes its host down (P6). A tooling binary may allow a lint at crate level
+# with a comment saying why.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+unimplemented = "warn"
+todo = "warn"
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+indexing_slicing = "warn"
+allow_attributes_without_reason = "warn"
+
+# Dev builds fill disks (docs/06-engineering/resources.md): line tables for our crates, no
+# debug info for dependencies.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+# Shipped native libraries: smallest fast build; measured per variant by the sizes gate.
+[profile.dist]
+inherits = "release"
+lto = "fat"
+panic = "abort"
+strip = "symbols"
+
+# WASM modules: optimised for size; the choice is re-measured in Phase 1 (A/B: s vs z vs 3).
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = "fat"
+panic = "abort"
+strip = "symbols"

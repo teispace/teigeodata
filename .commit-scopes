@@ -1,0 +1,27 @@
+# One scope per line. Add a scope in the same commit that first uses it.
+repo
+docs
+research
+decisions
+planning
+xtask
+ci
+hooks
+core
+format
+index
+names
+tz
+dem
+engine
+sync
+ffi
+idl
+bindings
+cli
+mcp
+server
+forge
+data
+site
+deps
