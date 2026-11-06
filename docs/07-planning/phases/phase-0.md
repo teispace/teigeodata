@@ -39,7 +39,7 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
 
 ### 0.3 Revise the plan from research
 - [x] Each note's "impact on the plan" applied: ADR statuses (`proposed` → `accepted` or superseded), architecture pages, this roadmap (ADR-0035 to ADR-0038; ADR-0013 accepted; ADR-0009 and ADR-0016 stay proposed until format freeze and spike S4)
-- [ ] Data schema v1 draft (`docs/05-data/schema.md`) and the pack format draft (`docs/04-architecture/pack-format.md`)
+- [x] [Data schema v1 draft](../../05-data/schema.md) and the [pack format draft](../../04-architecture/pack-format.md) (freeze after B1–B14)
 
 ### 0.4 Spikes (measured; heavy lane, one at a time)
 - [x] S1 Codecs: coordinates, elevation and names on GeoNames Nepal ([results](../../02-research/benches/s1-codecs.md)); rank/select presence moves to benchmark B6
