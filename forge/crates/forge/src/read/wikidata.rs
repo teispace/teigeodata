@@ -28,6 +28,7 @@ pub(crate) fn read(path: &Path) -> Result<Output, String> {
         item: col("item")?,
         coords: col("coords")?,
         classes: col("classes")?,
+        roots: col("roots")?,
         parents: col("parents")?,
         geonames: col("geonames_ids")?,
         osm: col("osm_relations")?,
@@ -75,7 +76,7 @@ fn row(line: &str, c: &Cols, out: &mut Output) {
     out.records.push(Record {
         id: id.clone(),
         class: classes.join("|"),
-        kind: "unknown".into(),
+        kind: kind(get(c.roots)).into(),
         name,
         lat_e7: lat,
         lon_e7: lon,
@@ -141,6 +142,7 @@ struct Cols {
     item: usize,
     coords: usize,
     classes: usize,
+    roots: usize,
     parents: usize,
     geonames: usize,
     osm: usize,
@@ -180,6 +182,17 @@ fn unquote(cell: &str) -> String {
     out
 }
 
+/// The common kind from the root classes an item reaches (the query's `?roots`), in order
+/// of precedence: a city that is also an admin unit is a populated place, as in `GeoNames`.
+fn kind(roots: &str) -> &'static str {
+    const KINDS: [(&str, &str); 2] = [("Q486972", "populated_place"), ("Q56061", "admin")];
+    let roots = values(roots);
+    KINDS
+        .iter()
+        .find(|(q, _)| roots.iter().any(|r| r.strip_prefix(ENTITY) == Some(*q)))
+        .map_or("other", |(_, k)| k)
+}
+
 fn values(cell: &str) -> Vec<&str> {
     cell.split('|').filter(|v| !v.is_empty()).collect()
 }
@@ -204,10 +217,14 @@ fn point(v: &str) -> Option<(f64, f64)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{names, point, unquote};
+    use super::{ENTITY, kind, names, point, unquote};
 
     #[test]
     fn parses_cells() {
+        let both = format!("{ENTITY}Q56061|{ENTITY}Q486972");
+        assert_eq!(kind(&both), "populated_place");
+        assert_eq!(kind(&format!("{ENTITY}Q56061")), "admin");
+        assert_eq!(kind(""), "other");
         assert_eq!(unquote("<http://x/Q1>"), "http://x/Q1");
         assert_eq!(unquote("\"a\\\"b\""), "a\"b");
         assert_eq!(

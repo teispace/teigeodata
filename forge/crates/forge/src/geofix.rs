@@ -168,7 +168,7 @@ pub(crate) fn run(root: &Path, points: &str, boundary: Option<&str>) -> Result<S
     };
     // Native precision: the finest decimal count held by at least 1% of points.
     let mut hist = [0usize; 8];
-    for (_, x, y) in &pts {
+    for Point { lon: x, lat: y, .. } in &pts {
         if let Some(h) = hist.get_mut(usize::from(decimals(*x).max(decimals(*y)))) {
             *h += 1;
         }
@@ -183,7 +183,7 @@ pub(crate) fn run(root: &Path, points: &str, boundary: Option<&str>) -> Result<S
     let flags: Vec<Flags> = pts
         .par_iter()
         .zip(&stacks)
-        .map(|((_, x, y), &stack)| {
+        .map(|(Point { lon: x, lat: y, .. }, &stack)| {
             let d = decimals(*x).max(decimals(*y));
             let test = |i: usize, shift: i64| {
                 GRIDS.get(i).zip(Some(shift)).is_some_and(|((_, f), s)| {
@@ -222,7 +222,7 @@ pub(crate) fn run(root: &Path, points: &str, boundary: Option<&str>) -> Result<S
 /// For each point, how many points of the source share its exact coordinates.
 fn stack_sizes(pts: &[Point]) -> Vec<u32> {
     let mut order: Vec<usize> = (0..pts.len()).collect();
-    let key = |i: usize| pts.get(i).map(|(_, x, y)| (*x, *y));
+    let key = |i: usize| pts.get(i).map(|p| (p.lon, p.lat));
     order.par_sort_unstable_by_key(|&i| key(i));
     let mut out = vec![1u32; pts.len()];
     for group in order.chunk_by(|&a, &b| key(a) == key(b)) {
@@ -237,11 +237,7 @@ fn stack_sizes(pts: &[Point]) -> Vec<u32> {
 }
 
 fn write_flags(dir: &Path, pts: &[Point], flags: &[Flags]) -> Result<(), String> {
-    let rows: Vec<(&str, &Flags)> = pts
-        .iter()
-        .map(|(id, _, _)| id.as_str())
-        .zip(flags)
-        .collect();
+    let rows: Vec<(&str, &Flags)> = pts.iter().map(|p| p.id.as_str()).zip(flags).collect();
     write_table(
         &dir.join("flags.parquet"),
         vec![
@@ -360,7 +356,7 @@ fn summarise(
 
 #[cfg(test)]
 mod tests {
-    use super::{decimals, null_shift, on_grid, stack_sizes, wilson};
+    use super::{Point, decimals, null_shift, on_grid, stack_sizes, wilson};
 
     #[test]
     fn decimals_and_grids() {
@@ -384,7 +380,11 @@ mod tests {
 
     #[test]
     fn stacks_and_intervals() {
-        let p = |x, y| (String::new(), x, y);
+        let p = |lon, lat| Point {
+            lon,
+            lat,
+            ..Point::default()
+        };
         assert_eq!(
             stack_sizes(&[p(1, 1), p(2, 2), p(1, 1), p(1, 1)]),
             vec![3, 1, 3, 3]

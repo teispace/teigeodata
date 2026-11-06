@@ -211,39 +211,62 @@ pub(crate) fn bools(it: impl Iterator<Item = bool>) -> ArrayRef {
     Arc::new(b.finish())
 }
 
-/// A record's point: (id, lon, lat) on the grid.
-pub(crate) type Point = (String, i32, i32);
+/// A record's point on the grid, with its coarse kind.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Point {
+    pub(crate) id: String,
+    pub(crate) kind: String,
+    pub(crate) lon: i32,
+    pub(crate) lat: i32,
+}
 
-/// Every record with a point from a `records.parquet`, in file order (sorted by id).
-pub(crate) fn read_points(path: &Path) -> Result<Vec<Point>, String> {
-    let file =
-        File::open(path).map_err(|e| format!("{}: {e}: run forge read first", path.display()))?;
+/// Reads a Parquet table batch by batch, calling `f` on each.
+pub(crate) fn for_each_batch(
+    path: &Path,
+    mut f: impl FnMut(&RecordBatch) -> Result<(), String>,
+) -> Result<(), String> {
+    let file = File::open(path)
+        .map_err(|e| format!("{}: {e}: run the stage that writes it", path.display()))?;
     let reader = ParquetRecordBatchReaderBuilder::try_new(file)
         .map_err(|e| e.to_string())?
         .build()
         .map_err(|e| e.to_string())?;
-    let mut out = Vec::new();
     for batch in reader {
-        let b = batch.map_err(|e| e.to_string())?;
-        let col = |n: &str| b.column_by_name(n).ok_or_else(|| format!("no column {n}"));
-        let ids = col("id")?
-            .as_any()
-            .downcast_ref::<StringArray>()
-            .ok_or("id type")?;
-        let lat = col("lat_e7")?
-            .as_any()
-            .downcast_ref::<Int32Array>()
-            .ok_or("lat type")?;
-        let lon = col("lon_e7")?
-            .as_any()
-            .downcast_ref::<Int32Array>()
-            .ok_or("lon type")?;
+        f(&batch.map_err(|e| e.to_string())?)?;
+    }
+    Ok(())
+}
+
+/// A typed column of a batch, by name.
+pub(crate) fn column<'a, A: Array + 'static>(
+    b: &'a RecordBatch,
+    name: &str,
+) -> Result<&'a A, String> {
+    b.column_by_name(name)
+        .and_then(|c| c.as_any().downcast_ref::<A>())
+        .ok_or_else(|| format!("no column {name} of the expected type"))
+}
+
+/// Every record with a point from a `records.parquet`, in file order (sorted by id).
+pub(crate) fn read_points(path: &Path) -> Result<Vec<Point>, String> {
+    let mut out = Vec::new();
+    for_each_batch(path, |b| {
+        let ids = column::<StringArray>(b, "id")?;
+        let kinds = column::<StringArray>(b, "kind")?;
+        let lat = column::<Int32Array>(b, "lat_e7")?;
+        let lon = column::<Int32Array>(b, "lon_e7")?;
         for i in 0..b.num_rows() {
             if lat.is_valid(i) && lon.is_valid(i) {
-                out.push((ids.value(i).to_string(), lon.value(i), lat.value(i)));
+                out.push(Point {
+                    id: ids.value(i).to_string(),
+                    kind: kinds.value(i).to_string(),
+                    lon: lon.value(i),
+                    lat: lat.value(i),
+                });
             }
         }
-    }
+        Ok(())
+    })?;
     Ok(out)
 }
 

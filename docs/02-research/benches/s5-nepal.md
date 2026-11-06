@@ -88,6 +88,52 @@ quantisation noise of its detected precision, step/√12. That is 32 m per axis 
 in the same source count as one observation, so a shared parent coordinate cannot outvote an
 independent source.
 
+## Stated links and position disagreement (S5.5, first part)
+
+`forge links geofabrik-np geonames-np wikidata-np`. The sources' own `same_as` links (OSM
+`wikidata=*`, Wikidata P1566 and P402, `GeoNames` `wkdt`) are joined by union-find, so an
+OSM–`GeoNames` pair stated only through Wikidata counts too. Each cross-source pair's
+great-circle distance measures position disagreement without depending on our matcher.
+Measured 2026-11-06: 0.06 s, 54 MB peak RSS, 179,470 points.
+
+- 6,762 stated links between records with points form 6,045 clusters.
+- **Copies:** a pair closer than 1 m is one point copied between sources, not two
+  observations, so it is counted and kept out of the percentiles.
+  - **31% of the linked `GeoNames`–Wikidata pairs are copies** (1,959 of 6,235).
+  - Of these, 1,290 are former VDC units (`ADM4H`), most with no P31 class: bot items
+    created from `GeoNames`.
+  - OSM is independent of both: 3 copies in 984 pairs.
+- **Granularity mismatch:** most OSM–`GeoNames` pairs join an OSM village node to a `GeoNames`
+  former VDC (`ADM4H`), through a Wikidata item that stands for both. That is two entities
+  joined by a link, not a position error, so pairs are reported by the kinds of both ends.
+
+| Pair (both populated places) | Pairs | Copies | P50 | P90 | P99 | > 10 km |
+|---|---:|---:|---:|---:|---:|---:|
+| OSM–`GeoNames` | 145 | 0 | 360 m | 2.1 km | 90.0 km | 4 |
+| OSM–Wikidata | 489 | 2 | 884 m | 3.6 km | 38.7 km | 14 |
+| `GeoNames`–Wikidata | 477 | 18 | 1.1 km | 4.7 km | 171.1 km | 25 |
+| `GeoNames` former VDC–Wikidata place (admin / populated place) | 2,908 | 274 | 795 m | 2.8 km | 13.0 km | 44 |
+
+**Findings:**
+- **Villages disagree by hundreds of metres between independent sources:** P50 360–1,100 m
+  and P90 2–5 km. A village is spread out, and each source puts its point somewhere
+  different. The point is not the problem the rounding detector solves: a settlement-core
+  estimate (the mean-shift building source of the note) is what can bring P90 down. This
+  feeds Q-005.
+- **The tail is wrong links,** not noise. Examples: Mahādevtār joined to a same-named place
+  90 km away, and pairs at 300 km and 702 km inside an 880 km country. The matcher must check
+  links rather than trust them; a stated link is evidence, not truth.
+- **Duplicates inside a source:** clusters with two or more records of one source number 233
+  for Wikidata, 74 for `GeoNames` and 4 for OSM. In Wikidata, 234 `GeoNames` IDs are each held
+  by two items. Typically one is curated (Sangachok, Q486972) and one is a classless Cebuano
+  bot item ("conseho sa kaayuhan sa balangay", that is, VDC).
+
+**Consequence (D-056):** cross-source copies count as one observation, as stacks do (D-055).
+Stated links are scored like any other evidence. A wrong link beyond the class's distance
+gate is cut, and the cut is listed for upstream fixing.
+
 ## Still to come
 
-S5.5 conflation and position disagreement, S5.6 DEM disagreement, S5.7 the summary for Q-005.
+S5.5 the probabilistic matcher (blocking, Fellegi–Sunter, evaluated against these links as
+silver labels) and aliases into the golden set; S5.6 DEM disagreement; S5.7 the summary for
+Q-005.

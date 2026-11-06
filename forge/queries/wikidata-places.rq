@@ -3,17 +3,22 @@
 # (`wikidata`), substituted by `forge fetch`. One row per item. Each multi-valued field is
 # grouped in its own subquery (no cross products) and joined with "|". Labels, aliases,
 # nicknames (P1449) and short names (P1813) come in every language, as "text@lang".
+# ?roots names the world-general root classes an item is an instance of, through the
+# subclass graph (P31/P279*): human settlement (Q486972), administrative territorial entity
+# (Q56061). The reader maps them to the common kinds.
 PREFIX wd: <http://www.wikidata.org/entity/>
 PREFIX wdt: <http://www.wikidata.org/prop/direct/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-SELECT ?item ?coords ?classes ?parents ?geonames_ids ?osm_relations ?populations ?elevations ?dissolved_dates ?labels ?aliases ?nicknames ?short_names
+SELECT ?item ?coords ?classes ?roots ?parents ?geonames_ids ?osm_relations ?populations ?elevations ?dissolved_dates ?labels ?aliases ?nicknames ?short_names
 WHERE {
   { SELECT DISTINCT ?item WHERE { ?item wdt:P17 {{COUNTRY}} ; wdt:P625 ?c } }
   { SELECT ?item (GROUP_CONCAT(DISTINCT STR(?v); SEPARATOR="|") AS ?coords)
     WHERE { ?item wdt:P17 {{COUNTRY}} . ?item wdt:P625 ?v } GROUP BY ?item }
   OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT STR(?v); SEPARATOR="|") AS ?classes)
     WHERE { ?item wdt:P17 {{COUNTRY}} . ?item wdt:P31 ?v } GROUP BY ?item }
+  OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT STR(?v); SEPARATOR="|") AS ?roots)
+    WHERE { VALUES ?v { wd:Q486972 wd:Q56061 } ?item wdt:P17 {{COUNTRY}} . ?item wdt:P31/wdt:P279* ?v } GROUP BY ?item }
   OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT STR(?v); SEPARATOR="|") AS ?parents)
     WHERE { ?item wdt:P17 {{COUNTRY}} . ?item wdt:P131 ?v } GROUP BY ?item }
   OPTIONAL { SELECT ?item (GROUP_CONCAT(DISTINCT ?v; SEPARATOR="|") AS ?geonames_ids)

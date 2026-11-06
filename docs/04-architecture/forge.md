@@ -26,6 +26,7 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | read/osm, read/geonames, read/wikidata | **built** (S5) | below |
 | read/boundaries, pip | **built** (S5) | below |
 | geofix-detect | **built** (S5) | below |
+| links | **built** (S5) | below |
 | block, score, cluster | S5 | Fellegi–Sunter |
 | geofix-consensus | S5 | weighted Weiszfeld; DEM sampling |
 | the rest | Phase 2 | |
@@ -126,6 +127,14 @@ results are in [S5](../02-research/benches/s5-nepal.md#rounding-stacking-and-cen
 - Stacks come from one parallel sort of the points, not a hash map of strings.
 - Centroids are exact area centroids (holes subtracted whatever the ring orientation), in a
   0.01° cell index for the 50 m query. The levels come from the boundary set itself.
+
+## Stated links (`links`)
+
+`forge links <points-source> <points-source> […]` joins every `same_as` link of the given read
+outputs with union-find and writes `data/build/links/<sources joined by +>/pairs.parquet`
+(`a`, `b`, `stated`, `metres`) and a `summary.md`. The summary gives position disagreement by
+source pair and by the kinds of both ends, counts copies (< 1 m) apart, and counts clusters
+holding two records of one source. Results: [S5](../02-research/benches/s5-nepal.md#stated-links-and-position-disagreement-s55-first-part).
 
 **Clean-up.** `cargo xtask clean` removes build output from both workspaces and keeps the
 store: fetched sources are pinned inputs, not build output.

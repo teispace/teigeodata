@@ -13,7 +13,7 @@ use crate::fetch::store_path;
 use crate::geom::GridIndex;
 use crate::lock::Lock;
 use crate::read::boundaries;
-use crate::record::{self, strings, write_table};
+use crate::record::{self, Point, strings, write_table};
 
 /// 0.1° cells: a few polygons per cell at local-unit scale.
 const CELL_E7: i32 = 1_000_000;
@@ -33,7 +33,7 @@ pub(crate) fn run(root: &Path, boundary: &str, level: u8, points: &str) -> Resul
     )?;
     let hits: Vec<(usize, usize)> = pts
         .par_iter()
-        .map(|(_, x, y)| {
+        .map(|Point { lon: x, lat: y, .. }| {
             let mut found = index
                 .candidates(*x, *y)
                 .filter(|&i| polys.get(i).is_some_and(|p| p.contains(*x, *y)));
@@ -49,7 +49,7 @@ pub(crate) fn run(root: &Path, boundary: &str, level: u8, points: &str) -> Resul
     let rows: Vec<(&str, &str, &str)> = pts
         .iter()
         .zip(&hits)
-        .map(|((id, _, _), (u, _))| {
+        .map(|(Point { id, .. }, (u, _))| {
             let u = unit(u);
             (
                 id.as_str(),
