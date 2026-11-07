@@ -6,8 +6,10 @@
 //!   ([`E7`]) for geometry
 //!   ([ADR-0029](https://github.com/teispace/teigeodata/blob/main/docs/03-decisions/adr/ADR-0029-coordinate-grid.md)).
 //! - [`hilbert`]: the Hilbert index that orders the rows of every pack (spike S1).
+//! - [`bitpack`]: frame-of-reference bit-packing in lane-interleaved blocks (B1); encoders with
+//!   the `alloc` feature.
 //!
-//! `no_std`, no dependencies, no allocation, no panics.
+//! `no_std`, no dependencies, no panics; nothing allocates without the `alloc` feature.
 //!
 //! ```
 //! use teigeodata_core::{E6, PlaceId, Point};
@@ -23,9 +25,12 @@
 
 #![no_std]
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+pub mod bitpack;
 mod grid;
 mod hilbert;
 mod id;

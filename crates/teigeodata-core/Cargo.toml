@@ -9,7 +9,14 @@ homepage.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[features]
+# Encoders (the forge, tests). Decoders need no allocation.
+alloc = []
+
 [dependencies]
+
+[dev-dependencies]
+teigeodata-core = { path = ".", features = ["alloc"] }
 
 [lints]
 workspace = true

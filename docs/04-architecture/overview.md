@@ -35,7 +35,7 @@ part; the ADR each part comes from is linked.
 
 | Crate | Role | `no_std` | Decision |
 |---|---|---|---|
-| `teigeodata-core` | Stable IDs and their text form (D-070), grid points (`E6`, `E7`), Hilbert order; the codecs (bit-packing, varints, strings, arcs) as Phase 1 adds them. No dependencies | yes | [ADR-0001](../03-decisions/adr/ADR-0001-rust-core.md) |
+| `teigeodata-core` | Stable IDs and their text form (D-070), grid points (`E6`, `E7`), Hilbert order; `bitpack`, the integer codec (D-073; encoders with `alloc`); the other codecs as Phase 1 adds them. No dependencies | yes | [ADR-0001](../03-decisions/adr/ADR-0001-rust-core.md) |
 | `teigeodata-format` | `.tgd` container: a canonical validating reader (no allocation), a deterministic writer (`write`), Ed25519 (`signature`), fuzz harnesses (`fuzz`). Depends on `zerocopy`, `blake3`, `teigeodata-core` | yes | [ADR-0009](../03-decisions/adr/ADR-0009-pack-format.md) |
 | `teigeodata-index` | Spatial index, region index, search index, perfect-hash ID maps | yes | [ADR-0013](../03-decisions/adr/ADR-0013-region-index.md), [ADR-0014](../03-decisions/adr/ADR-0014-names-and-search.md) |
 | `teigeodata-names` | Normalisation, transliteration, phonetic key, lexicon | yes | [ADR-0014](../03-decisions/adr/ADR-0014-names-and-search.md) |

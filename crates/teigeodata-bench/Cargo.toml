@@ -11,10 +11,12 @@ publish.workspace = true
 
 [dependencies]
 ed25519-dalek = { version = "3.0.0", default-features = false }
-teigeodata-core.workspace = true
+teigeodata-core = { workspace = true, features = ["alloc"] }
 teigeodata-format = { workspace = true, features = ["write", "signature"] }
 
 [dev-dependencies]
+# The B1 rival (tantivy's bit-packer).
+bitpacking = "0.9.3"
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 
 [[bench]]
@@ -23,6 +25,10 @@ harness = false
 
 [[bench]]
 name = "format"
+harness = false
+
+[[bench]]
+name = "b1"
 harness = false
 
 [lints]

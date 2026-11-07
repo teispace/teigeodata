@@ -83,6 +83,99 @@ pub fn pack_of_size(bytes: usize, seed: u64) -> Result<Vec<u8>, Error> {
     layout.assemble(&refs)
 }
 
+/// The integer columns of B1, from a real dataset, rows in Hilbert order.
+#[derive(Clone, Debug, Default)]
+pub struct Columns {
+    /// Latitude on the 1e-6° grid, biased to u32 (order-preserving).
+    pub lat: Vec<u32>,
+    /// Longitude on the 1e-6° grid, biased to u32.
+    pub lon: Vec<u32>,
+    /// Elevation in metres, biased to u32.
+    pub elevation: Vec<u32>,
+    /// Source IDs, sorted ascending (the shape of an ID map).
+    pub ids: Vec<u32>,
+}
+
+/// An i32 as an order-preserving u32: `i32::MIN` → 0.
+#[must_use]
+pub const fn bias(v: i32) -> u32 {
+    v.cast_unsigned() ^ 0x8000_0000
+}
+
+/// The `GeoNames` Nepal extract (S1's input), if present at `path`: one row per place, in Hilbert
+/// order of the point. `None` if the file is missing, so benchmarks can skip it.
+#[must_use]
+pub fn geonames_columns(path: &std::path::Path) -> Option<Columns> {
+    use teigeodata_core::{E6, hilbert};
+    let text = std::fs::read_to_string(path).ok()?;
+    let mut rows: Vec<(u64, u32, i32, i32, i32)> = text
+        .lines()
+        .filter_map(|line| {
+            let f: Vec<&str> = line.split('\t').collect();
+            let id = f.first()?.parse().ok()?;
+            let lat: f64 = f.get(4)?.parse().ok()?;
+            let lon: f64 = f.get(5)?.parse().ok()?;
+            let dem = f.get(16).and_then(|v| v.parse().ok()).unwrap_or(0);
+            let p = Point::<E6>::from_degrees(lat, lon).ok()?;
+            Some((hilbert(p), id, p.lat(), p.lon(), dem))
+        })
+        .collect();
+    rows.sort_unstable();
+    let mut ids: Vec<u32> = rows.iter().map(|r| r.1).collect();
+    ids.sort_unstable();
+    Some(Columns {
+        lat: rows.iter().map(|r| bias(r.2)).collect(),
+        lon: rows.iter().map(|r| bias(r.3)).collect(),
+        elevation: rows.iter().map(|r| bias(r.4)).collect(),
+        ids,
+    })
+}
+
+/// The default location of the S1 input in a checkout: `data/cache/geonames-np/NP.txt`.
+#[must_use]
+pub fn geonames_path() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/cache/geonames-np/NP.txt")
+}
+
+/// LEB128 zigzag deltas: S1's baseline (no random access).
+#[must_use]
+pub fn leb128_delta(values: &[u32]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(values.len() * 2);
+    let mut prev = 0_u32;
+    for &v in values {
+        let d = v.wrapping_sub(prev).cast_signed();
+        prev = v;
+        let mut z = ((d << 1) ^ (d >> 31)).cast_unsigned();
+        while z >= 0x80 {
+            out.push(u8::try_from(z & 0x7f).unwrap_or(0) | 0x80);
+            z >>= 7;
+        }
+        out.push(u8::try_from(z).unwrap_or(0));
+    }
+    out
+}
+
+/// Decodes [`leb128_delta`] into `out`; returns the number of values.
+pub fn leb128_delta_decode(bytes: &[u8], out: &mut [u32]) -> usize {
+    let (mut n, mut prev, mut z, mut shift) = (0, 0_u32, 0_u32, 0);
+    for &b in bytes {
+        z |= u32::from(b & 0x7f) << shift;
+        if b & 0x80 == 0 {
+            let d = (z >> 1) ^ (z & 1).wrapping_neg();
+            prev = prev.wrapping_add(d);
+            if let Some(o) = out.get_mut(n) {
+                *o = prev;
+            }
+            n += 1;
+            z = 0;
+            shift = 0;
+        } else {
+            shift = (shift + 7) & 31;
+        }
+    }
+    n
+}
+
 /// The classic iterative Hilbert loop: the definition of the order and the A/B baseline for
 /// `teigeodata_core::hilbert`.
 #[must_use]
@@ -116,6 +209,19 @@ pub fn hilbert_reference(p: Point<E7>) -> u64 {
 mod tests {
     use super::{hilbert_reference, pack_of_size, world_points};
     use teigeodata_format::Pack;
+
+    #[test]
+    fn leb128_round_trips() {
+        let v: Vec<u32> = (0..5000_u32)
+            .map(|i| i.wrapping_mul(2_654_435_761))
+            .collect();
+        let mut out = vec![0; v.len()];
+        assert_eq!(
+            super::leb128_delta_decode(&super::leb128_delta(&v), &mut out),
+            v.len()
+        );
+        assert_eq!(out, v);
+    }
 
     #[test]
     fn workloads_are_valid() {
