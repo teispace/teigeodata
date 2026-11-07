@@ -14,18 +14,23 @@ publish.workspace = true
 write = ["teigeodata-core/alloc"]
 # Ed25519 pack signatures: verification, and signing with `write`.
 signature = ["dep:ed25519-dalek"]
+# BLOBS decoding with `ruzstd` (pure Rust; allocates; internal `unsafe` accepted, D-079).
+zstd = ["dep:ruzstd"]
 # The fuzz and property harnesses, shared by `cargo test` and cargo-fuzz (D-072).
-fuzz = ["write", "signature"]
+fuzz = ["write", "signature", "zstd"]
 
 [dependencies]
 blake3 = { version = "1.8.7", default-features = false }
 ed25519-dalek = { version = "3.0.0", default-features = false, optional = true }
+ruzstd = { version = "0.9.1", default-features = false, optional = true }
 teigeodata-core.workspace = true
 zerocopy = { version = "0.8.63", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
 # Unit and integration tests see the writer, signatures and harnesses without extra flags.
 teigeodata-format = { path = ".", features = ["fuzz"] }
+# C zstd, as the forge compresses BLOBS: dictionaries and level 19 (`ruzstd` encodes neither).
+zstd = { version = "0.14.3", default-features = false, features = ["zdict_builder"] }
 
 [lints]
 workspace = true

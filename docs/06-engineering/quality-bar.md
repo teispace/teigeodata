@@ -17,6 +17,7 @@ ones on every pull request, the slow ones nightly, and all of them before a rele
 | fmt | `cargo fmt --check` | PR |
 | lints | workspace lints as errors: pedantic clippy, no `unwrap`/`expect`/`panic`/indexing in libraries, `unsafe_code = forbid` outside the audited module, `missing_docs` | PR |
 | deny | licences, advisories, bans, sources (`cargo deny`) | PR |
+| dependency `unsafe` | our crates stay `forbid(unsafe_code)`; a dependency's internal `unsafe` is accepted when it is widely used, fuzzed upstream and replaces a large job (today `blake3` and `ed25519-dalek` SIMD and field arithmetic, and `ruzstd` behind the opt-in `zstd` feature, D-079). Untrusted input reaching it is bounded first (lengths, window) and covered by our fuzz targets | PR |
 | vet | audited dependencies (`cargo vet`) | release |
 | typos | spelling in code and docs | PR |
 | docs | `cargo xtask check-docs`; rustdoc with no broken links; doc examples run | PR |

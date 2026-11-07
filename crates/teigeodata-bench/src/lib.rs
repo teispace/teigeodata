@@ -66,28 +66,54 @@ pub fn pack_of_size(bytes: usize, seed: u64) -> Result<Vec<u8>, Error> {
             v
         })
         .collect();
-    let mut w = Writer::new("np", "places", "2026.11.0")?;
-    w.build_id(seed).created_unix(1_762_473_600);
     let kinds = [Kind::IDMAP, Kind::PLACES, Kind::NAMES];
-    let mut all: Vec<(Kind, &[u8])> = kinds
+    let sections: Vec<Section<'_>> = kinds
         .into_iter()
-        .zip(bodies.iter().map(Vec::as_slice))
+        .zip(&bodies)
+        .map(|(k, b)| {
+            (
+                k,
+                Encoding::RAW,
+                u64::try_from(b.len() / 8).unwrap_or(0),
+                b.as_slice(),
+            )
+        })
         .collect();
-    for &(kind, body) in &all {
-        let items = u64::try_from(body.len() / 8).unwrap_or(0);
-        w.section_bytes(kind, Encoding::RAW, items, body)?;
+    pack_with("places", seed, &sections, true)
+}
+
+/// A section for [`pack_with`]: kind, encoding, item count, body.
+pub type Section<'b> = (Kind, Encoding, u64, &'b [u8]);
+
+/// A pack of `sections` for component `component`, with the block hashes its sections of
+/// 1 MiB or more need (B12), signed with [`bench_key`] if `signed`; the build ID is `seed`.
+///
+/// # Errors
+/// From the writer.
+pub fn pack_with(
+    component: &str,
+    seed: u64,
+    sections: &[Section<'_>],
+    signed: bool,
+) -> Result<Vec<u8>, Error> {
+    let mut w = Writer::new("np", component, "2026.11.0")?;
+    w.build_id(seed).created_unix(1_762_473_600);
+    let mut all: Vec<(Kind, &[u8])> = sections.iter().map(|s| (s.0, s.3)).collect();
+    for &(kind, encoding, items, body) in sections {
+        w.section_bytes(kind, encoding, items, body)?;
     }
-    // Sections of 1 MiB or more need their block hashes (B12).
     let list = teigeodata_format::blocks::encode(&all)?;
     if let Some(l) = &list {
         let items = teigeodata_format::blocks::item_count(l);
         w.section_bytes(Kind::BLOCK_HASHES, Encoding::RAW, items, l)?;
         all.push((Kind::BLOCK_HASHES, l));
     }
-    let mut layout = w.layout(true)?;
-    let key = bench_key();
-    let block = signer(&key)(layout.digest());
-    layout.set_signature(&block)?;
+    let mut layout = w.layout(signed)?;
+    if signed {
+        let key = bench_key();
+        let block = signer(&key)(layout.digest());
+        layout.set_signature(&block)?;
+    }
     let refs: Vec<&[u8]> = layout
         .placed()
         .iter()

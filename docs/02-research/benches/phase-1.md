@@ -332,3 +332,35 @@ format -- L2`, sections of a half, a third and a sixth of the pack; the lazy col
 - **Eager hashing is unchanged** by the list (5.58 and 55.6 ms, p > 0.5), and small packs keep it.
 - The 16 against 64 KiB comparison, the memo cost (0.7 ns a check) and the parallel full verify
   are in the [note](../notes/block-hashes.md); phone and wasm numbers are not measured yet.
+
+## B4: blobs (zstd)
+
+**Question:** how are cold strings stored so a pack stays small and one can still be read
+alone? **Design:** zstd frames of whole blobs ([names storage](../notes/names-storage.md), D-079).
+**Bench:** `cargo run --release -p teigeodata-bench --example b4-blobs`: each `GeoNames` Nepal row
+(148,210 rows, 17.2 MB, 115.8 B each) as a blob; C zstd 19 without dictionary ID or checksum,
+a 16 KiB dictionary trained by `zstd::dict::from_samples`; `ruzstd` 0.9.1 decode; 2026-11-07,
+load 4.
+
+| Frames | Dictionary | B per blob | of raw | Random blob | All in order | Encode |
+|---:|---|---:|---:|---:|---:|---:|
+| 1 KiB | none | 37.4 | 0.323 | 5.5 µs | 158 MB/s | 2.0 s |
+| 1 KiB | 16 KiB | 29.7 | 0.256 | 4.1 µs | 207 MB/s | 2.4 s |
+| 4 KiB | none | 26.2 | 0.226 | 13.6 µs | 237 MB/s | 2.3 s |
+| 4 KiB | 16 KiB | 24.6 | 0.212 | 13.0 µs | 242 MB/s | 2.4 s |
+| **16 KiB** | **none** | **22.4** | **0.194** | **43.9 µs** | **293 MB/s** | 2.8 s |
+| 16 KiB | 16 KiB | 22.2 | 0.191 | 42.9 µs | 291 MB/s | 1.9 s |
+| 64 KiB | none | 20.9 | 0.181 | 150 µs | 322 MB/s | 3.2 s |
+| 64 KiB | 16 KiB | 20.9 | 0.181 | 153 µs | 302 MB/s | 1.9 s |
+
+**Findings:**
+- **A random read costs one frame:** the time grows with the frame (4 µs at 1 KiB, 150 µs at
+  64 KiB), and the size falls slowly (−7% from 16 to 64 KiB). 16 KiB is the default: cold data
+  is read rarely, and 43 µs is below a frame of a UI.
+- **A dictionary pays only for small frames:** −21% at 1 KiB, −6% at 4 KiB, −1% at 16 KiB. The
+  forge trains one only for frames of 4 KiB or less (blobs read per result).
+- **`ruzstd` decodes at 160–320 MB/s** in order, against about 1.1 GB/s for C zstd in the
+  research note: enough for cold data, and it keeps C out of the runtime.
+- **A decompression bomb is refused at its stated length:** an 8 MiB frame of zeros (a few
+  hundred bytes) stated as 100 bytes is refused after one step (`tests/blobs.rs`).
+

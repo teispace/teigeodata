@@ -6,6 +6,7 @@
 //! - [`Writer`] (feature `write`) lays out a pack deterministically. It plans the layout from
 //!   section lengths and hashes, so a large pack streams to disk with bounded memory.
 //! - Feature `signature`: Ed25519 signatures over the head digest.
+//! - Feature `zstd`: reading [BLOBS](blobs) (cold data in zstd frames, with `alloc`).
 //!
 //! The encoding is canonical: [`Pack::open`] accepts a file only if it is exactly what the
 //! writer produces for its content.
@@ -27,11 +28,12 @@
 
 #![no_std]
 
-#[cfg(feature = "write")]
+#[cfg(any(feature = "write", feature = "zstd"))]
 extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+pub mod blobs;
 pub mod blocks;
 mod columns;
 pub mod components;

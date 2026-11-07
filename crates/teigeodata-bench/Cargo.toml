@@ -12,12 +12,14 @@ publish.workspace = true
 [dependencies]
 ed25519-dalek = { version = "3.0.0", default-features = false }
 teigeodata-core = { workspace = true, features = ["alloc"] }
-teigeodata-format = { workspace = true, features = ["write", "signature"] }
+teigeodata-format = { workspace = true, features = ["write", "signature", "zstd"] }
 
 [dev-dependencies]
 # The B1 rival (tantivy's bit-packer).
 bitpacking = "0.9.3"
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
+# The forge's BLOBS compressor, for B4.
+zstd = { version = "0.14.3", default-features = false, features = ["zdict_builder"] }
 
 [[bench]]
 name = "core"

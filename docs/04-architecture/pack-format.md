@@ -128,7 +128,7 @@ parameters).
 | 11 | POSTAL | FST over codes → postal records | `postal` | `fst` |
 | 12 | COMPONENTS | per component: presence (none, a bitmap or sorted rows) + dense field columns | `components` | column table (D-076): a bitmap costs 0.129 B per row, sparse sorted rows far less |
 | 13 | DEM | tile directory + coded tiles at ±1 m | `dem` | MED prediction + entropy coder (B11) |
-| 14 | BLOBS | cold data (attribution text, long strings) | `zstd` | zstd blocks with a dictionary, `ruzstd` decode (B4) |
+| 14 | BLOBS | cold data (attribution text, long strings) | `blobs` | column table (D-079): zstd frames of whole blobs, an optional dictionary, `ruzstd` decode; 22 B per 116 B row on Nepal, a random blob in 43 µs |
 | 15 | BLOCK_HASHES | per-block BLAKE3 for large sections (lazy verification) | `verify` | raw (D-078): the BLAKE3 chaining value of each 16 KiB block of every section of 1 MiB or more |
 | 16 | REDIRECTS | retired IDs: each to its survivor, or to none for a tombstone ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)) | `core` | column table (D-075): sorted ID pairs |
 
@@ -291,6 +291,32 @@ Optional per-place fields, grouped into the schema's
   sorted rows increase and stay below the row count.
 - What each component and field number means is assigned with the forge (Phase 3), from the
   schema.
+
+### BLOBS
+
+Cold byte strings: attribution text, licences, long descriptions (D-079,
+[names storage](../02-research/notes/names-storage.md)). `item_count` is the number of blobs.
+
+| ID | Column | |
+|---:|---|---|
+| 1 | frame ends in the heap | required |
+| 2 | each frame's decoded end in the blobs' concatenation | required |
+| 3 | each blob's end in the concatenation | required |
+| 4 | the dictionary's end (one value): the zstd dictionary is the heap's start | optional |
+| 5 | heap: the dictionary, then the zstd frames, padded to 4 | required |
+
+- **Frames hold whole blobs**, are non-empty and decode to at most 8 MiB; a blob larger than the
+  frame target gets a frame of its own. With a dictionary, every frame uses it, and frames carry
+  no dictionary ID or checksum (the section hash covers them).
+- **Frame size is the forge's choice:** 16 KiB by default (B4: 0.19 of raw, a random blob in
+  43 µs); 4 KiB with a trained dictionary where blobs are read per result (0.21, 13 µs).
+- **The forge compresses** with C zstd at level 19; the writer (`blobs::encode`) reads every blob
+  back through the reader before it accepts the section.
+- **Reading** (feature `zstd`, `ruzstd`) finds a blob's frame by binary search and decodes it,
+  keeping the last frame. Output is bounded by the frame's stated length, so a crafted frame
+  cannot expand past it; the window is capped at 8 MiB.
+- **Opening** checks the columns' structure and the dictionary's span; **the deep check** checks
+  every span, and `Decoder::check` decodes every frame.
 
 ### BLOCK_HASHES
 
