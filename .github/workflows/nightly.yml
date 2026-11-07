@@ -1,0 +1,103 @@
+# Nightly hardening (docs/06-engineering/ci.md): libFuzzer on every harness, and Miri on the
+# reader and codec tests. Budget: well under the 6 h per job limit.
+name: nightly
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds of fuzzing per target
+        default: "300"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # One job per target. The corpus is cached between runs (restored from the newest, saved
+  # under the run ID, minimised first), so each night continues where the last one stopped. A
+  # crash fails the job and uploads the input that caused it.
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [open, round_trip, mutate, manifest, sections, bitpack, table, bits]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Nightly toolchain and cargo-fuzz
+        run: rustup toolchain install nightly --profile minimal
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: cargo-fuzz@0.13.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: fuzz
+          key: ${{ matrix.target }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-${{ matrix.target }}-
+      - name: Fuzz
+        working-directory: fuzz
+        run: |
+          mkdir -p corpus/${{ matrix.target }}
+          cargo +nightly fuzz run ${{ matrix.target }} corpus/${{ matrix.target }} -- \
+            -max_total_time=${{ inputs.seconds || '300' }} -max_len=4096 -rss_limit_mb=2048 \
+            -timeout=10 -print_final_stats=1
+      - name: Minimise the corpus
+        if: success()
+        working-directory: fuzz
+        run: cargo +nightly fuzz cmin ${{ matrix.target }} corpus/${{ matrix.target }}
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: success()
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore
+
+  # Miri: undefined behaviour, out-of-bounds and alignment errors in the zero-copy reader and
+  # the codecs. Miri is ~1000x slower than native, so the seeded fuzz drivers run a few inputs
+  # each (TG_FUZZ_ITERS); libFuzzer covers volume. The determinism gate is byte equality of
+  # safe code and runs natively under `cargo test`; under Miri its 2,000-row packs take too long.
+  miri:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Nightly toolchain with Miri
+        run: |
+          rustup toolchain install nightly --profile minimal --component miri,rust-src
+          cargo +nightly miri setup
+      # Locally 5 of the 34 core tests passed in 9 minutes under Miri: the property tests run
+      # thousands of cases. Bounded here until they take fewer cases under `cfg(miri)`.
+      - name: Core codecs
+        timeout-minutes: 90
+        run: cargo +nightly miri test --locked -p teigeodata-core --lib
+      - name: Pack reader and sections
+        if: ${{ !cancelled() }}
+        timeout-minutes: 60
+        run: cargo +nightly miri test --locked -p teigeodata-format --lib --test open
+      # Hashing and signing whole packs under Miri is slow: locally, 3 inputs per harness did
+      # not finish in 9 minutes. One input each, in its own bounded step.
+      - name: Seeded fuzz harnesses
+        if: ${{ !cancelled() }}
+        timeout-minutes: 60
+        env:
+          TG_FUZZ_ITERS: "1"
+        run: cargo +nightly miri test --locked -p teigeodata-format --test fuzz

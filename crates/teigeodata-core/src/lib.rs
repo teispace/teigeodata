@@ -34,6 +34,18 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+/// Cases for a property test: `n` natively, a thousandth (at least 4) under Miri, which runs
+/// about 1,000× slower; libFuzzer covers volume (docs/06-engineering/ci.md).
+#[cfg(test)]
+pub(crate) const fn cases(n: usize) -> usize {
+    if cfg!(miri) {
+        let m = n / 1000;
+        if m < 4 { 4 } else { m }
+    } else {
+        n
+    }
+}
+
 pub mod bitpack;
 pub mod bits;
 pub mod fsst;

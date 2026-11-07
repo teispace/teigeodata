@@ -272,7 +272,7 @@ mod tests {
     fn degrees_round_trip_through_the_grid() {
         // Every grid value comes back from its f64 degrees to the same units.
         let mut s = 1_u64;
-        for _ in 0..500_000 {
+        for _ in 0..crate::cases(500_000) {
             s ^= s << 13;
             s ^= s >> 7;
             s ^= s << 17;

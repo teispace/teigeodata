@@ -151,14 +151,15 @@ mod tests {
                 assert_eq!(xy_to_index(x, y), reference(x, y), "{x} {y}");
             }
         }
-        // Every cell of the first 64 × 64 block, where each sub-curve turns.
-        for x in 0..64 {
-            for y in 0..64 {
+        // Every cell of the first 64 × 64 block, where each sub-curve turns (8 × 8 under Miri).
+        let side = if cfg!(miri) { 8 } else { 64 };
+        for x in 0..side {
+            for y in 0..side {
                 assert_eq!(xy_to_index(x, y), reference(x, y), "{x} {y}");
             }
         }
         let mut s = 0x2545_f491_4f6c_dd1d;
-        for _ in 0..1_000_000 {
+        for _ in 0..crate::cases(1_000_000) {
             let v = rng(&mut s);
             let [x, y] = [v >> 32, v & 0xffff_ffff].map(|h| u32::try_from(h).unwrap_or_default());
             assert_eq!(xy_to_index(x, y), reference(x, y), "{x} {y}");
@@ -170,7 +171,7 @@ mod tests {
         // The inverse undoes it, and consecutive indexes are neighbouring cells: the property
         // that makes Hilbert order compress (S1).
         let mut s = 0x9e37_79b9_7f4a_7c15;
-        for _ in 0..20_000 {
+        for _ in 0..crate::cases(20_000) {
             let start = rng(&mut s).wrapping_sub(64);
             let mut prev = inverse(start);
             for d in start.wrapping_add(1)..start.saturating_add(64) {

@@ -444,6 +444,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "trains tables on a corpus twice: hours under Miri; smaller tests here and libFuzzer cover it"
+    )]
     fn round_trips_and_compresses() {
         let strings = corpus();
         let enc = train(&strings);
@@ -488,6 +492,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "exhaustive sizes: hours under Miri; smaller tests here and libFuzzer cover it"
+    )]
     fn rejects() {
         let enc = train(&corpus());
         let good = enc.to_bytes();
@@ -536,12 +544,16 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "exhaustive sizes: hours under Miri; smaller tests here and libFuzzer cover it"
+    )]
     fn never_panics() {
         let enc = train(&corpus());
         let base = enc.to_bytes();
         let mut s = 77;
         let mut out = [0; 300];
-        for _ in 0..20_000 {
+        for _ in 0..crate::cases(20_000) {
             let mut b = base.clone();
             let at = rng(&mut s) as usize % b.len();
             b[at] = rng(&mut s) as u8;

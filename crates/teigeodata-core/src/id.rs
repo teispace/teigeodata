@@ -377,7 +377,7 @@ mod tests {
     #[test]
     fn random_round_trips() {
         let mut s = 0x9e37_79b9_7f4a_7c15_u64;
-        for _ in 0..200_000 {
+        for _ in 0..crate::cases(200_000) {
             s = s.wrapping_add(0x9e37_79b9_7f4a_7c15);
             let mut z = s;
             z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);

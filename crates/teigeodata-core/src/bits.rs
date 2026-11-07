@@ -243,6 +243,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "exhaustive sizes: hours under Miri; smaller tests here and libFuzzer cover it"
+    )]
     fn rank_agrees_with_counting() {
         let mut s = 0x1234_5678_9abc_def1;
         for len in [
@@ -312,7 +316,7 @@ mod tests {
     fn never_panics() {
         let base = encode(3000, (0..3000).filter(|i| i % 7 < 3)).unwrap_or_default();
         let mut s = 99;
-        for _ in 0..20_000 {
+        for _ in 0..crate::cases(20_000) {
             let mut b = base.clone();
             let at = rng(&mut s) as usize % b.len();
             b[at] = rng(&mut s) as u8;

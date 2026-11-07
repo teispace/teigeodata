@@ -667,6 +667,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "exhaustive sizes: hours under Miri; smaller tests here and libFuzzer cover it"
+    )]
     fn round_trips_every_width_and_length() {
         let mut s = 0x2545_f491_4f6c_dd1d;
         // Every width 0–32, at lengths around block edges.

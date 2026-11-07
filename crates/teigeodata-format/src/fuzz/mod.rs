@@ -12,6 +12,10 @@
 //! - [`mutate`]: a valid pack with edited structure and a recomputed head hash, so the checks
 //!   behind the hash are reached, then [`open`].
 //! - [`manifest`]: `Manifest::parse` never panics and accepts only canonical encodings.
+//! - [`sections`]: PLACES, HIERARCHY, IDMAP, REDIRECTS and BLOBS, each in a pack from the writer.
+//! - [`bitpack`]: `Packed::parse`; every accessor agrees with a full decode.
+//! - [`table`]: `Table::parse`; an accepted table is canonical (it re-encodes to its bytes).
+//! - [`bits`]: `Bits::parse` and `check`; ranks agree with bits; a checked bitmap is canonical.
 
 #![allow(
     clippy::missing_panics_doc,
@@ -20,6 +24,10 @@
     clippy::cast_possible_truncation,
     reason = "test harnesses: a panic is how a property failure is reported, and inputs are bounded"
 )]
+
+mod payloads;
+
+pub use payloads::{bitpack, bits, sections, table};
 
 use alloc::vec::Vec;
 
@@ -43,6 +51,21 @@ impl<'a> Cursor<'a> {
     }
     fn u64(&mut self) -> u64 {
         u64::from_le_bytes([0; 8].map(|_| self.u8()))
+    }
+    fn u32(&mut self) -> u32 {
+        u32::from_le_bytes([0; 4].map(|_| self.u8()))
+    }
+    /// A value below `n` (0 if `n` is 0).
+    fn below(&mut self, n: usize) -> usize {
+        if n == 0 {
+            0
+        } else {
+            usize::from(self.u16()) % n
+        }
+    }
+    /// Every byte left.
+    fn rest(&mut self) -> &'a [u8] {
+        core::mem::take(&mut self.0)
     }
     fn bytes(&mut self, max: usize) -> &'a [u8] {
         let n = usize::from(self.u16()) % (max + 1);

@@ -376,7 +376,7 @@ mod tests {
         let (_, _, base) = sample();
         let mut s: u64 = 7;
         let mut out = std::vec![0; 2048];
-        for _ in 0..20_000 {
+        for _ in 0..crate::cases(20_000) {
             s ^= s << 13;
             s ^= s >> 7;
             s ^= s << 17;

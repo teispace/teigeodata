@@ -52,3 +52,23 @@ fn mutated_packs() {
 fn manifests() {
     drive(4, iterations(20_000), fuzz::manifest);
 }
+
+#[test]
+fn section_payloads() {
+    drive(11, iterations(4_000), fuzz::sections);
+}
+
+#[test]
+fn packed_columns() {
+    drive(12, iterations(4_000), fuzz::bitpack);
+}
+
+#[test]
+fn column_tables() {
+    drive(13, iterations(4_000), fuzz::table);
+}
+
+#[test]
+fn bitmaps() {
+    drive(14, iterations(4_000), fuzz::bits);
+}

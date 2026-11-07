@@ -1,0 +1,83 @@
+# libFuzzer targets for the pack reader and the core codecs (D-072, docs/06-engineering/ci.md).
+# Its own workspace, so cargo-fuzz's nightly-only flags and libfuzzer-sys never reach the main
+# one. The properties are plain `fn(&[u8])` in `teigeodata_format::fuzz`; the same functions run
+# under `cargo test` on seeded inputs (`crates/teigeodata-format/tests/fuzz.rs`) and here under
+# libFuzzer, so there is one harness per property.
+#
+#   cargo +nightly fuzz list
+#   cargo +nightly fuzz run <target> -- -max_total_time=60
+[package]
+name = "teigeodata-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "0.4.13"
+teigeodata-format = { path = "../crates/teigeodata-format", features = ["fuzz"] }
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "open"
+path = "fuzz_targets/open.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "round_trip"
+path = "fuzz_targets/round_trip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mutate"
+path = "fuzz_targets/mutate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "manifest"
+path = "fuzz_targets/manifest.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sections"
+path = "fuzz_targets/sections.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bitpack"
+path = "fuzz_targets/bitpack.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "table"
+path = "fuzz_targets/table.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bits"
+path = "fuzz_targets/bits.rs"
+test = false
+doc = false
+bench = false
