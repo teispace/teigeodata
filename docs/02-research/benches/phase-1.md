@@ -364,3 +364,34 @@ load 4.
 - **A decompression bomb is refused at its stated length:** an 8 MiB frame of zeros (a few
   hundred bytes) stated as 100 bytes is refused after one step (`tests/blobs.rs`).
 
+## Z2: library sizes per feature set
+
+**Question:** what does each part of `teigeodata-core` and `teigeodata-format` add to a linked
+library? **Method:** `cargo xtask sizes` builds `tools/size-probe`, a cdylib whose features each
+export one entry point, natively (release, fat LTO, `panic = "abort"`, stripped) and for
+`wasm32-unknown-unknown` (`opt-level = "s"`, before `wasm-opt`), and subtracts a baseline that
+links what any host library already has (`std` formatting, a panic path, the allocator:
+278.5 KiB native, 16.1 KiB wasm32). 2026-11-07, aarch64-apple-darwin, Rust 1.99.
+
+| Feature set | native gzip | wasm32 | wasm32 gzip |
+|---|---:|---:|---:|
+| open: head checks, section lookup (BLAKE3 of the head) | 12.2 KiB | 17.4 KiB | 7.8 KiB |
+| open + BLAKE3 of every section | 13.0 KiB | 18.9 KiB | 8.4 KiB |
+| open + Ed25519 signature check | 27.4 KiB | 46.3 KiB | 19.2 KiB |
+| open + every section view (places, hierarchy, ID map, names, components) | 35.9 KiB | 102.2 KiB | 24.9 KiB |
+| open + BLOBS (`ruzstd`) | 42.9 KiB | 122.6 KiB | 33.7 KiB |
+| **the whole reader** | **73.3 KiB** | **170.5 KiB** | **52.8 KiB** |
+| the writer alone (forge side) | 15.9 KiB | 24.6 KiB | 10.6 KiB |
+
+**Findings:**
+- **The whole reader is 53 KiB gzipped in WASM** (171 KiB raw), before `wasm-opt` (Z3). Opening
+  and verifying a pack costs 8 KiB; everything else is opt-in by what a caller touches.
+- **The section views are the largest part** (85 KiB raw wasm): mostly the bit-unpacking kernels
+  for every width, which B1 measured as 98 KB alone. They compress 4× (25 KiB gzipped).
+- **`ruzstd` adds 105 KiB raw wasm and 26 KiB gzipped**: worth its opt-in `zstd` feature, since
+  BLOBS is cold data a web client may never read.
+- **Ed25519 adds 29 KiB wasm** (11 KiB gzipped), without the precomputed tables (L3).
+- Native raw sizes move in 16 KiB steps (Mach-O pages on arm64), so they are left out here;
+  gzip shows the code itself. Other targets (Linux, Windows, Android, iOS) are measured when
+  their CI runners build the probe (Phase 4).
+

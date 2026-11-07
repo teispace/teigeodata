@@ -1,5 +1,6 @@
 /target/
 /forge/target/
+/tools/size-probe/target/
 /scratch/
 /data/cache/
 /data/build/

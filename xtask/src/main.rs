@@ -14,6 +14,7 @@ mod data;
 mod docs;
 mod golden;
 mod lexicon;
+mod sizes;
 mod sources;
 mod workspace;
 
@@ -39,6 +40,9 @@ Tasks:
                     table (boundary crates may only lower unsafe_code to deny).
   clean [--all]     Free disk: incremental caches and scratch of both workspaces; --all
                     also runs `cargo clean` in both. Fetched sources are kept.
+  sizes [--native|--wasm]
+                    Z2: the bytes each feature set of core and format adds to a linked
+                    library, native and wasm32, raw and gzipped (tools/size-probe).
   help              Show this message.
 ";
 
@@ -61,6 +65,11 @@ fn main() -> ExitCode {
         "check-data" => report(data::check(&root)),
         "check-workspace" => report(workspace::check(&root)),
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
+        "sizes" => {
+            let only = |f: &str| rest.iter().any(|a| a == f);
+            let (native, wasm) = (!only("--wasm"), !only("--native"));
+            report(sizes::run(&root, wasm, native))
+        }
         "help" | "-h" | "--help" => {
             print!("{HELP}");
             ExitCode::SUCCESS

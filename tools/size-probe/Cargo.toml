@@ -1,0 +1,49 @@
+# Z2 size probe (docs/06-engineering/benchmarks.md): a cdylib whose features each export one
+# entry point into the runtime crates, so `cargo xtask sizes` can measure what each feature set
+# adds to a linked library (minus the empty build). Its own workspace, like `fuzz/`, so its
+# release profiles never touch the main one.
+[package]
+name = "size-probe"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[workspace]
+members = ["."]
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[features]
+# The reader: open a pack and look up a section (head checks only).
+open = []
+# BLAKE3 of every section.
+verify = ["open"]
+# Ed25519 signature verification.
+signature = ["open", "teigeodata-format/signature", "dep:ed25519-dalek"]
+# Every section view: places, hierarchy, ID map, names (FSST), components.
+sections = ["open"]
+# BLOBS through ruzstd.
+blobs = ["open", "teigeodata-format/zstd"]
+# The writer (forge side).
+write = ["teigeodata-format/write"]
+# Everything a runtime reader uses.
+reader = ["verify", "signature", "sections", "blobs"]
+
+[dependencies]
+ed25519-dalek = { version = "3.0.0", default-features = false, optional = true }
+teigeodata-core = { path = "../../crates/teigeodata-core" }
+teigeodata-format = { path = "../../crates/teigeodata-format" }
+
+# Measured as shipped: the workspace's dist profile for native, wasm for wasm32.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
