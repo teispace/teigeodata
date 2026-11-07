@@ -8,9 +8,9 @@ updated: 2026-11-07
 
 ## Where we are
 
-- **Phase:** 3, forge and Nepal data ([roadmap](../07-planning/roadmap.md)); its research note and phase file come first.
+- **Phase:** 3, forge and Nepal data ([phase file](../07-planning/phases/phase-3.md)); research done in four notes (D-088 to D-091), order in D-092.
 - **M2 met** on 2026-11-07 (D-087), evidence in [phase 2 §2.4](../07-planning/phases/phase-2.md#24-exit-review); POSTAL moved to Phase 3.
-- **Now:** Phase 3 research: the forge pipeline from the S5 stages to reproducible Nepal main and lite packs.
+- **Now:** step 3.1, the vertical slice: the forge writes, signs and reads back a Nepal pack.
 - **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
@@ -116,3 +116,4 @@ updated: 2026-11-07
 | 2026-11-07 | B6 COMPONENTS, B3 NAMES, B12 BLOCK_HASHES, B4 BLOBS (D-076 to D-079); 1.5 nightly fuzz and Miri, the counts gate, Z2 sizes; M1 met (D-080) | Phase 2 research |
 | 2026-11-07 | Phase 2: indexes note (D-081); B8 PLACE_INDEX (D-082); B9 REGION, Q-013 answered (D-083, D-084) | B7 SEARCH |
 | 2026-11-07 | B7 SEARCH: own FST, bit-parallel NFA on code points, FOR lists by importance, block maxima; 1.50 MB, p99 41.2 µs unanchored (D-085, D-086); M2 met, POSTAL to Phase 3 (D-087) | Phase 3 research |
+| 2026-11-07 | Phase 3 research: geometry (D-088), DEM (D-089), postal and Q-001 (D-090), settlement core and building licences (D-091); plan and order (D-092) | 3.1 vertical slice |

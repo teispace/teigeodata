@@ -90,7 +90,7 @@ Every losing spelling is kept as an `alt` name, so search still finds it.
 | Field | Type | Notes |
 |---|---|---|
 | `timezone` | IANA zone ID | Exact point lookup from the region index. Where source zones overlap, the precedence rule applies (Q-013) |
-| `postal` | list of postal records | Each record has `code`, `scheme` (for example `np-5`, `np-7`, `in-pin`), `kind` (`area`, `post_office`, `point`), `valid_from`, `valid_to` and `redirect_to`. Current and former codes coexist |
+| `postal` | list of postal records | Each record has `code`, `scheme` (for example `np`, `np-1991`, `in-pin`; D-090), `kind` (`area`, `post_office`, `point`), `valid_from`, `valid_to` and `redirect_to`. Current and former codes coexist |
 | `digipin` | string | India only: computed from the point, never stored as a source fact |
 
 ## Population and other optional data
@@ -127,4 +127,3 @@ For each field: `source` (adapter ID), `source_version`, `licence_class` (as in
 
 - The class dictionary: drafted per country during Phase 3 from source mappings.
 - The importance formula: set and tested against the golden set (spike S3).
-- Postal schemes for Nepal: Q-001.
