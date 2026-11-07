@@ -4,7 +4,8 @@
 //! checked; a failed call throws the generated exception for its code.
 #![allow(
     unsafe_code,
-    reason = "JNI entry points must be exported unmangled; jni-rs checks every call"
+    reason = "JNI entry points must be exported unmangled; one unchecked call per callback, \
+              with the method resolved and its signature fixed (audited)"
 )]
 #![allow(
     clippy::redundant_closure_call,
@@ -15,6 +16,7 @@
 )]
 
 use jni::objects::{JByteArray, JClass, JObject, JString};
+use jni::signature::{Primitive, ReturnType};
 use jni::strings::JNIString;
 use jni::sys::jlong;
 use jni::{Env, EnvUnowned, errors::ThrowRuntimeExAndDefault, jni_sig, jni_str};
@@ -145,14 +147,33 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_progress<'caller>
             let result = (|| -> Result<_, teigeodata_api::Error> {
                 let steps: u32 = narrow("steps", steps)?;
                 // A Java exception inside the callback cancels the call and stays pending,
-                // so Java sees it in place of the cancellation.
+                // so Java sees it in place of the cancellation. The method is resolved once
+                // per call, not per callback.
+                if on_step.is_null() {
+                    return Err(teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: "on_step is null".into(),
+                    });
+                }
+                let method = env
+                    .get_object_class(&on_step)
+                    .and_then(|class| env.get_method_id(&class, jni_str!("call"), jni_sig!("(J)Z")))
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::Internal,
+                        message: format!("on_step: {e}"),
+                    })?;
                 let mut on_step_fn = |a0: u32| {
-                    env.call_method(
-                        &on_step,
-                        jni_str!("call"),
-                        jni_sig!("(J)Z"),
-                        &[jni::JValue::Long(i64::from(a0))],
-                    )
+                    let args = [jni::JValue::Long(i64::from(a0)).as_jni()];
+                    // SAFETY: `method` was resolved on this object's class with exactly this
+                    // signature, and `args` matches it.
+                    unsafe {
+                        env.call_method_unchecked(
+                            &on_step,
+                            method,
+                            ReturnType::Primitive(Primitive::Boolean),
+                            &args,
+                        )
+                    }
                     .and_then(jni::JValueOwned::z)
                     .unwrap_or(false)
                 };

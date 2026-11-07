@@ -4,7 +4,8 @@
 //! checked; a failed call throws the generated exception for its code.
 #![allow(
     unsafe_code,
-    reason = "JNI entry points must be exported unmangled; jni-rs checks every call"
+    reason = "JNI entry points must be exported unmangled; one unchecked call per callback, \
+              with the method resolved and its signature fixed (audited)"
 )]
 #![allow(
     clippy::redundant_closure_call,
@@ -16,6 +17,7 @@
 
 use jni::objects::{JByteArray, JClass, JObject, JString};
 use jni::strings::JNIString;
+use jni::signature::{Primitive, ReturnType};
 use jni::sys::jlong;
 use jni::{Env, EnvUnowned, errors::ThrowRuntimeExAndDefault, jni_sig, jni_str};
 use teigeodata_api::ErrorCode;
@@ -72,14 +74,39 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_{{ f.name | camel
 {% endfor %}
 {% if cb %}
                 // A Java exception inside the callback cancels the call and stays pending,
-                // so Java sees it in place of the cancellation.
+                // so Java sees it in place of the cancellation. The method is resolved once
+                // per call, not per callback.
+                if {{ cb.name }}.is_null() {
+                    return Err(teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: "{{ cb.name }} is null".into(),
+                    });
+                }
+                let method = env
+                    .get_object_class(&{{ cb.name }})
+                    .and_then(|class| {
+                        env.get_method_id(
+                            &class,
+                            jni_str!("call"),
+                            jni_sig!("({% for a in cb.callback.args %}{{ sig(a) }}{% endfor %})Z"),
+                        )
+                    })
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::Internal,
+                        message: format!("{{ cb.name }}: {e}"),
+                    })?;
                 let mut {{ cb.name }}_fn = |{% for a in cb.callback.args %}a{{ loop.index0 }}: {{ a }}{% if not loop.last %}, {% endif %}{% endfor %}| {
-                    env.call_method(
-                        &{{ cb.name }},
-                        jni_str!("call"),
-                        jni_sig!("({% for a in cb.callback.args %}{{ sig(a) }}{% endfor %})Z"),
-                        &[{% for a in cb.callback.args %}{{ jval(a, "a" ~ loop.index0) }}{% if not loop.last %}, {% endif %}{% endfor %}],
-                    )
+                    let args = [{% for a in cb.callback.args %}{{ jval(a, "a" ~ loop.index0) }}.as_jni(){% if not loop.last %}, {% endif %}{% endfor %}];
+                    // SAFETY: `method` was resolved on this object's class with exactly this
+                    // signature, and `args` matches it.
+                    unsafe {
+                        env.call_method_unchecked(
+                            &{{ cb.name }},
+                            method,
+                            ReturnType::Primitive(Primitive::Boolean),
+                            &args,
+                        )
+                    }
                     .and_then(jni::JValueOwned::z)
                     .unwrap_or(false)
                 };

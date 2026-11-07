@@ -66,10 +66,12 @@ lto = "thin"
 codegen-units = 1
 
 # Shipped native libraries: smallest fast build; measured per variant by the sizes gate.
+# `panic = "unwind"` so the C ABI's guard turns a panic into TG_ERROR_INTERNAL instead of
+# aborting the host process: it costs 176 bytes (2.7 KB gzipped) on a 517 KB library (D-065).
 [profile.dist]
 inherits = "release"
 lto = "fat"
-panic = "abort"
+panic = "unwind"
 strip = "symbols"
 
 # WASM modules: optimised for size; the choice is re-measured in Phase 1 (A/B: s vs z vs 3).

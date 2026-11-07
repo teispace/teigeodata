@@ -142,3 +142,26 @@ pub(crate) fn callback<F>(f: Option<F>, name: &str) -> Result<F, Error> {
 
 /// The context pointer handed back to a callback, unchanged.
 pub type Ctx = *mut c_void;
+
+#[cfg(test)]
+mod tests {
+    use super::{TgBytes, call, tg_bytes_free, tg_last_error};
+
+    /// A panic inside a call becomes `TG_ERROR_INTERNAL` with a message, and the thread can
+    /// keep calling. (Holds in builds with `panic = "unwind"`, as the shipped library is.)
+    #[test]
+    fn a_panic_stops_at_the_boundary() {
+        let status = call(|| -> Result<(), teigeodata_api::Error> { panic!("deliberate") });
+        assert_eq!(status, teigeodata_api::ErrorCode::Internal as i32);
+        let mut m = TgBytes::EMPTY;
+        // SAFETY: a valid out pointer; the message is freed once.
+        let code = unsafe { tg_last_error(&raw mut m) };
+        assert_eq!(code, 3);
+        // SAFETY: as above.
+        let text = unsafe { core::slice::from_raw_parts(m.ptr, m.len) };
+        assert!(core::str::from_utf8(text).unwrap().contains("panic"));
+        // SAFETY: freed once.
+        unsafe { tg_bytes_free(m) };
+        assert_eq!(call(|| Ok(())), 0);
+    }
+}

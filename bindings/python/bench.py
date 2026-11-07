@@ -24,7 +24,7 @@ def lat_sum(blob: bytes) -> float:
 
 
 def row(case: str, ns: float) -> None:
-    print(f"{'python':<10} {case:<22} {ns:>10.1} ns")
+    print(f"{'python':<10} {case:<22} {ns:>10.1f} ns")
 
 
 row("noop", best(1_000_000, tg.noop))

@@ -120,7 +120,7 @@ pub fn sample_rows(rows: u32) -> Result<Blob> {
         lon.push(unit(z >> 32) * 360.0 - 180.0);
         elevation.push(f32::from(u16::try_from(z >> 48).unwrap_or(0)) / 8.0 - 500.0);
         names.push_str("place ");
-        names.push_str(&i.to_string());
+        push_decimal(&mut names, i);
         ends.push(names.len());
     }
     let mut start = 0;
@@ -140,6 +140,22 @@ pub fn sample_rows(rows: u32) -> Result<Blob> {
         ("name", Column::Utf8(&name)),
     ])
     .map_err(|e| Error::new(ErrorCode::Internal, e.to_string()))
+}
+
+/// Appends `v` in decimal without allocating.
+fn push_decimal(out: &mut String, mut v: u32) {
+    let mut digits = [0u8; 10];
+    let mut start = digits.len();
+    for slot in digits.iter_mut().rev() {
+        // `v % 10` < 10, so the cast cannot truncate.
+        *slot = b'0' + (v % 10) as u8;
+        start -= 1;
+        v /= 10;
+        if v == 0 {
+            break;
+        }
+    }
+    out.push_str(core::str::from_utf8(digits.get(start..).unwrap_or_default()).unwrap_or_default());
 }
 
 /// Calls `on_step` once per step with the step number, from 1 to `steps`, on the calling
