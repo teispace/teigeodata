@@ -395,3 +395,30 @@ links what any host library already has (`std` formatting, a panic path, the all
   gzip shows the code itself. Other targets (Linux, Windows, Android, iOS) are measured when
   their CI runners build the probe (Phase 4).
 
+## Counts: instructions of the hot paths (the PR gate)
+
+**Method:** `benches/counts.rs` under Callgrind (gungraun 0.20.0) on GitHub's `ubuntu-latest`,
+run 42345045178, 2026-11-07. Each count includes its own parsing (`Packed::parse`,
+`Pack::open`, the section's `open`), since a caller pays that too; inputs are synthetic and built
+in setup. A pull request fails above +1% on any line (`.github/workflows/counts.yml`).
+
+| Path | Instructions |
+|---|---:|
+| `Packed::get`, FOR / delta / ramp (parse a 10,000-value column, read one) | 1,000 / 3,266 / 1,005 |
+| `Packed::decode_all`, delta, 10,000 values | 161,338 |
+| Hilbert index of 1,000 points | 230,197 |
+| `Bits::rank` (parse a 100,000-bit bitmap, one rank) | 270 |
+| `Pack::open`, 1 MiB pack | 7,038 |
+| `verify_sections`, 1 MiB | 2,652,311 |
+| `verify_signature` (Ed25519) | 741,172 |
+| first read of a 16 KiB block (`Blocks::verify`, 4 MiB pack) | 133,726 |
+| ID to row (open, IDMAP open, lookup; 20,000 IDs) | 24,227 |
+| canonical name (open, NAMES open, decode; 5,000 places) | 14,869 |
+| one blob (open, BLOBS open, decoder, 16 KiB frame) | 511,366 |
+
+**Findings:**
+- **Counts are stable where wall clock is not:** they are the same on every run of the same code,
+  so 1% is a real limit; the wall-clock pages keep their load notes.
+- **A blob costs a frame:** 511k instructions, mostly the 16 KiB decode and the decoder's
+  allocation; a caller reading many blobs keeps one `Decoder`.
+

@@ -43,8 +43,10 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-          # The base builds into the same target directory, so dependencies are reused.
-          CARGO_TARGET_DIR: ${{ github.workspace }}/target
+          # Its own target directory: Cargo keys path crates by their path inside the
+          # workspace, so a shared one would reuse the base's binary for the PR (the newer
+          # checkout looks up to date) and compare the base with itself.
+          CARGO_TARGET_DIR: ${{ github.workspace }}/../base-target
         run: |
           git worktree add ../base "$BASE"
           if [ -f ../base/crates/teigeodata-bench/benches/counts.rs ]; then
