@@ -20,6 +20,7 @@ use alloc::vec::Vec;
 use crate::blobs::{self, Blobs};
 use crate::hierarchy::{self, Hierarchy, MAX_DEPTH};
 use crate::idmap::{self, IdMap};
+use crate::place_index::{self, MAX_NODE, MIN_NODE, Neighbour, PlaceIndex, Rect};
 use crate::places::{self, PlaceColumns, Places};
 use crate::redirects::{self, Fate, Redirects, Resolved, resolve};
 use crate::{Encoding, Kind, Pack, Writer};
@@ -103,12 +104,127 @@ pub fn sections(data: &[u8]) {
     let mut c = Cursor(data);
     let mode = c.u8();
     let structured = mode & 0x80 != 0;
-    match mode % 5 {
+    match mode % 6 {
         0 => places_case(&mut c, structured),
         1 => hierarchy_case(&mut c, structured),
         2 => idmap_case(&mut c, structured),
         3 => redirects_case(&mut c, structured),
+        4 => place_index_case(&mut c, structured),
         _ => blobs_case(&mut c, structured),
+    }
+}
+
+/// A point from the input: in a small area mostly, sometimes anywhere, sometimes on a pole or
+/// the antimeridian.
+fn point(c: &mut Cursor<'_>) -> Point<E6> {
+    let (lat, lon) = match c.u8() & 7 {
+        0 => (
+            (c.u32() % 180_000_001) as i32 - 90_000_000,
+            (c.u32() % 360_000_001) as i32 - 180_000_000,
+        ),
+        1 => (90_000_000 * if c.u8() & 1 == 0 { 1 } else { -1 }, 0),
+        2 => (
+            i32::from(c.u16()),
+            180_000_000 * if c.u8() & 1 == 0 { 1 } else { -1 },
+        ),
+        _ => (
+            27_000_000 + i32::from(c.u16()),
+            85_000_000 + i32::from(c.u16()),
+        ),
+    };
+    Point::from_units(lat, lon).unwrap_or_else(|| panic!("a point on the grid is refused"))
+}
+
+/// `PLACE_INDEX` over a valid PLACES section: built and maybe edited, or raw bytes. Queries never
+/// panic; on an index that passes its check, box queries equal brute force and the nearest row
+/// is at the least distance.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "the query names of the brute-force model"
+)]
+fn place_index_case(c: &mut Cursor<'_>, structured: bool) {
+    let n = c.below(MAX_ROWS + 1);
+    let mut points: Vec<Point<E6>> = (0..n).map(|_| point(c)).collect();
+    points.sort_by_key(|p| hilbert(*p));
+    let kinds = vec![PlaceKind::Settlement; n];
+    let cols = PlaceColumns {
+        points: &points,
+        kinds: &kinds,
+        ..PlaceColumns::default()
+    };
+    let places_body = places::encode(&cols).unwrap_or_else(|e| panic!("valid places: {e}"));
+    let mut items = n as u64;
+    let (mut body, mut valid) = (Vec::new(), false);
+    if structured {
+        let node = MIN_NODE + c.below(MAX_NODE - MIN_NODE + 1);
+        body = place_index::encode(&points, node).unwrap_or_else(|e| panic!("an index: {e}"));
+        valid = !edit(c, &mut body, &mut items);
+    } else {
+        body.extend_from_slice(c.rest());
+    }
+    let Some(file) = pack(&[
+        (Kind::PLACES, n as u64, &places_body),
+        (Kind::PLACE_INDEX, items, &body),
+    ]) else {
+        return;
+    };
+    let p = open(&file);
+    let places = Places::open(&section(&p, Kind::PLACES)).unwrap_or_else(|e| panic!("{e}"));
+    let ix = match PlaceIndex::open(&section(&p, Kind::PLACE_INDEX), places) {
+        Ok(ix) => ix,
+        Err(e) => {
+            assert!(!valid, "a written place index is refused: {e}");
+            return;
+        }
+    };
+    let checked = ix.check().is_ok();
+    assert!(checked || !valid, "a written place index fails its check");
+    for _ in 0..4 {
+        let (a, b) = (point(c), point(c));
+        let q = Rect {
+            min_lat: a.lat().min(b.lat()),
+            max_lat: a.lat().max(b.lat()),
+            min_lon: a.lon(),
+            max_lon: b.lon(),
+        };
+        let mut got = Vec::new();
+        let _ = ix.within(q, |row| {
+            got.push(row);
+            core::ops::ControlFlow::Continue(())
+        });
+        assert!(got.iter().all(|&r| r < n), "a row past the end");
+        let at = point(c);
+        let mut out = [Neighbour::default(); 8];
+        let k = 1 + c.below(out.len());
+        let found = ix.nearest(at, out.get_mut(..k).unwrap_or_default());
+        assert!(found <= k.min(n));
+        if checked {
+            got.sort_unstable();
+            let inside = |p: &Point<E6>| {
+                let lon = if q.min_lon <= q.max_lon {
+                    q.min_lon <= p.lon() && p.lon() <= q.max_lon
+                } else {
+                    p.lon() >= q.min_lon || p.lon() <= q.max_lon
+                };
+                q.min_lat <= p.lat() && p.lat() <= q.max_lat && lon
+            };
+            let want: Vec<usize> = (0..n)
+                .filter(|&r| points.get(r).is_some_and(inside))
+                .collect();
+            assert_eq!(got, want, "a box query differs from brute force");
+            assert_eq!(found, k.min(n));
+            let query = place_index::nearest::Query::new(at);
+            let best = points
+                .iter()
+                .map(|p| query.haversine(p.lat(), p.lon()))
+                .fold(f64::INFINITY, f64::min);
+            if let Some(first) = out.first().filter(|_| found > 0) {
+                assert!(
+                    first.haversine.to_bits() == best.to_bits(),
+                    "not the nearest row"
+                );
+            }
+        }
     }
 }
 

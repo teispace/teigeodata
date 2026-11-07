@@ -18,13 +18,17 @@ mod counts {
     use std::hint::black_box;
 
     use gungraun::prelude::*;
-    use teigeodata_bench::{bench_key, pack_of_size, pack_with, world_points};
+    use std::ops::ControlFlow;
+
+    use teigeodata_bench::{Rng, bench_key, pack_of_size, pack_with, world_points};
     use teigeodata_core::bitpack::{Coding, Packed, encode};
     use teigeodata_core::bits::{self, Bits};
-    use teigeodata_core::{Namespace, PlaceId, hilbert};
+    use teigeodata_core::{E6, Namespace, PlaceId, PlaceKind, Point, hilbert};
     use teigeodata_format::blobs::{self, Blobs};
     use teigeodata_format::idmap::{self, IdMap};
     use teigeodata_format::names::{self, NameRecord, Names, TEXT_BUFFER};
+    use teigeodata_format::place_index::{self, Neighbour, PlaceIndex, Rect};
+    use teigeodata_format::places::{self, PlaceColumns, Places};
     use teigeodata_format::{Encoding, Kind, Pack};
 
     /// Setup data lives for the whole run: leaked once per benchmark process.
@@ -197,6 +201,77 @@ mod counts {
         black_box(d.get(black_box(2_345)).map_or(0, <[u8]>::len))
     }
 
+    /// 100,000 uniform world places in Hilbert order, with their `PLACE_INDEX` at node 16.
+    fn places_pack() -> &'static [u8] {
+        let mut r = Rng::new(11);
+        let mut points: Vec<Point<E6>> = (0..100_000)
+            .filter_map(|_| {
+                let v = r.next_u64();
+                let lat = i32::try_from(v % 180_000_001).ok()? - 90_000_000;
+                let lon = i32::try_from((v >> 28) % 360_000_001).ok()? - 180_000_000;
+                Point::from_units(lat, lon)
+            })
+            .collect();
+        points.sort_by_key(|p| (hilbert(*p), *p));
+        let kinds = vec![PlaceKind::Settlement; points.len()];
+        let body = places::encode(&PlaceColumns {
+            points: &points,
+            kinds: &kinds,
+            ..PlaceColumns::default()
+        })
+        .unwrap();
+        let index = place_index::encode(&points, 16).unwrap();
+        let n = points.len() as u64;
+        leak(
+            pack_with(
+                "places",
+                1,
+                &[
+                    (Kind::PLACES, Encoding::TABLE, n, body.as_slice()),
+                    (Kind::PLACE_INDEX, Encoding::TABLE, n, index.as_slice()),
+                ],
+                false,
+            )
+            .unwrap(),
+        )
+    }
+
+    fn place_index(p: &Pack<'static>) -> PlaceIndex<'static> {
+        let places = Places::open(&p.section(Kind::PLACES).unwrap()).unwrap();
+        PlaceIndex::open(&p.section(Kind::PLACE_INDEX).unwrap(), places).unwrap()
+    }
+
+    // A 1° box around Kathmandu.
+    #[library_benchmark]
+    #[bench::district(places_pack())]
+    fn place_within(bytes: &'static [u8]) -> usize {
+        let p = Pack::open(bytes).unwrap();
+        let ix = place_index(&p);
+        let rect = Rect {
+            min_lat: 27_200_000,
+            max_lat: 28_200_000,
+            min_lon: 84_800_000,
+            max_lon: 85_800_000,
+        };
+        let mut n = 0;
+        let _ = ix.within(black_box(rect), |_| {
+            n += 1;
+            ControlFlow::Continue(())
+        });
+        black_box(n)
+    }
+
+    // The 10 places nearest to a mid-latitude point.
+    #[library_benchmark]
+    #[bench::k10(places_pack())]
+    fn place_nearest(bytes: &'static [u8]) -> usize {
+        let p = Pack::open(bytes).unwrap();
+        let ix = place_index(&p);
+        let mut out = [Neighbour::default(); 10];
+        let at = Point::<E6>::from_units(27_700_000, 85_300_000).unwrap();
+        black_box(ix.nearest(black_box(at), &mut out))
+    }
+
     library_benchmark_group!(
         name = core_paths,
         benchmarks = [bitpack_get, bitpack_decode_all, hilbert_1000, bits_rank]
@@ -210,7 +285,9 @@ mod counts {
             block_first_read,
             idmap_row,
             names_canonical,
-            blob_get
+            blob_get,
+            place_within,
+            place_nearest
         ]
     );
 }

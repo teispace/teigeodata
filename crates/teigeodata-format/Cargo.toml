@@ -17,11 +17,14 @@ signature = ["dep:ed25519-dalek"]
 # BLOBS decoding with `ruzstd` (pure Rust; allocates; internal `unsafe` accepted, D-079).
 zstd = ["dep:ruzstd"]
 # The fuzz and property harnesses, shared by `cargo test` and cargo-fuzz (D-072).
-fuzz = ["write", "signature", "zstd"]
+# Nearest-place queries: haversine with pure-Rust `libm`, the same result on every platform.
+spatial = ["dep:libm"]
+fuzz = ["write", "signature", "zstd", "spatial"]
 
 [dependencies]
 blake3 = { version = "1.8.7", default-features = false }
 ed25519-dalek = { version = "3.0.0", default-features = false, optional = true }
+libm = { version = "0.2.16", default-features = false, optional = true }
 ruzstd = { version = "0.9.1", default-features = false, optional = true }
 teigeodata-core.workspace = true
 zerocopy = { version = "0.8.63", default-features = false, features = ["derive"] }

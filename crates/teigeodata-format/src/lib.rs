@@ -7,6 +7,7 @@
 //!   section lengths and hashes, so a large pack streams to disk with bounded memory.
 //! - Feature `signature`: Ed25519 signatures over the head digest.
 //! - Feature `zstd`: reading [BLOBS](blobs) (cold data in zstd frames, with `alloc`).
+//! - Feature `spatial`: nearest places on the [place index](place_index) (pure-Rust `libm`).
 //!
 //! The encoding is canonical: [`Pack::open`] accepts a file only if it is exactly what the
 //! writer produces for its content.
@@ -46,6 +47,7 @@ pub mod idmap;
 mod layout;
 mod manifest;
 pub mod names;
+pub mod place_index;
 pub mod places;
 mod read;
 pub mod redirects;

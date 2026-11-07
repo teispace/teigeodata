@@ -20,3 +20,4 @@ node_modules/
 /bindings/jvm/build/
 __pycache__/
 /bindings/dart/pubspec.lock
+mutants.out*/

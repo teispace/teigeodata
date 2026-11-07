@@ -310,6 +310,30 @@ impl<'a> Packed<'a> {
         n
     }
 
+    /// Decodes the values from `start` into `out`, as many as fit and exist; returns how many it
+    /// wrote. A block at a time into a stack buffer, with no iterator state: the fast way to
+    /// read a short run (the children of an index node) that [`Packed::values`] reads with
+    /// more overhead.
+    pub fn run(&self, start: usize, out: &mut [u32]) -> usize {
+        let end = start.saturating_add(out.len()).min(self.count);
+        let mut buf = [0; BLOCK_LEN];
+        let (mut at, mut written) = (start, 0);
+        while at < end {
+            let (b, j) = (at / BLOCK_LEN, at % BLOCK_LEN);
+            let take = (BLOCK_LEN - j).min(end - at);
+            self.decode_block(b, &mut buf);
+            let (Some(dst), Some(src)) =
+                (out.get_mut(written..written + take), buf.get(j..j + take))
+            else {
+                break;
+            };
+            dst.copy_from_slice(src);
+            at += take;
+            written += take;
+        }
+        written
+    }
+
     /// Value `i`, or `None` past the end. O(1) for [`Coding::For`]; for [`Coding::Delta`],
     /// unpacks its block and sums the deltas up to `i`.
     #[must_use]
@@ -646,6 +670,31 @@ mod tests {
                     assert_eq!(p.get(i), Some(*v), "{coding:?} at {i}");
                 }
                 assert_eq!(p.get(values.len()), None);
+                // Runs of every short length from several starts, across block edges and the
+                // end, against the values.
+                for start in [
+                    0,
+                    1,
+                    100,
+                    127,
+                    128,
+                    200,
+                    values.len().saturating_sub(5),
+                    values.len(),
+                ] {
+                    for len in [0, 1, 16, 64, 130] {
+                        let mut out = std::vec![u32::MAX; len];
+                        let want = values
+                            .get(start..)
+                            .map_or(&[][..], |t| &t[..len.min(t.len())]);
+                        assert_eq!(
+                            p.run(start, &mut out),
+                            want.len(),
+                            "{coding:?} run {start}+{len}"
+                        );
+                        assert_eq!(&out[..want.len()], want, "{coding:?} run {start}+{len}");
+                    }
+                }
                 for b in 0..=p.blocks() {
                     assert_eq!(p.block_first(b), values.get(b * BLOCK_LEN).copied());
                     if let Some(c) = p.block_constant(b) {

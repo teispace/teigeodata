@@ -99,6 +99,12 @@ impl<'a> Places<'a> {
         Point::from_units(unbias(self.lat.get(row)?), unbias(self.lon.get(row)?))
     }
 
+    /// The stored (biased) latitudes and longitudes from row `start` into `lat` and `lon`;
+    /// returns how many rows it read. The index reads its leaves through this.
+    pub(crate) fn run(&self, start: usize, lat: &mut [u32], lon: &mut [u32]) -> usize {
+        self.lat.run(start, lat).min(self.lon.run(start, lon))
+    }
+
     /// The kind of `row`; `None` past the end or for an unknown code.
     #[must_use]
     pub fn kind(&self, row: usize) -> Option<PlaceKind> {
