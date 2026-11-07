@@ -55,6 +55,21 @@ const TARGETS: &[Target] = &[
         output: "bindings/node/index.d.ts",
         rustfmt: false,
     },
+    Target {
+        template: "jni.rs.j2",
+        output: "bindings/jvm/src/lib.rs",
+        rustfmt: true,
+    },
+    Target {
+        template: "java.j2",
+        output: "bindings/jvm/java/org/teispace/teigeodata/TeiGeodata.java",
+        rustfmt: false,
+    },
+    Target {
+        template: "java-exceptions.j2",
+        output: "bindings/jvm/java/org/teispace/teigeodata/TeiGeodataException.java",
+        rustfmt: false,
+    },
 ];
 
 const IDL_OUTPUT: &str = "bindings/idl.json";
