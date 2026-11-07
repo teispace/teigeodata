@@ -13,7 +13,8 @@ Measured with `crates/teigeodata-bench`. IDs are from the
 **Machine:** M2 Pro, 16 GB, macOS, release profile, single thread, 2026-11-07. The machine was
 shared, with load averages of 4.4 to 5.1, which is above the catalogue's local limit of 2. These are
 indicative numbers. The PR gate is the instruction count in `benches/counts.rs`
-(`place_within`, `place_nearest`, `region_at`), which does not depend on load.
+(`place_within`, `place_nearest`, `region_at`, `search_get`, `search_fuzzy`, `search_prefix`),
+which does not depend on load.
 
 ## B8: PLACE_INDEX
 
@@ -197,4 +198,103 @@ pinned, as are `index` at the cell edges and the reference candidates, and plant
 each (reference, `max1`, `index`, `normalise`) fail. Two `check_sets` refusals were added. The
 `|` → `^` survivors in `spread`, `compact` and `morton` are equivalent: the bits combined never
 overlap.
+
+## B7: SEARCH
+
+```
+cargo run --release -p spike-s3-search --bin fuzzy-ab -- np <NP.txt> <COD-AB xlsx>
+S3_INDEX=pack cargo run --release -p spike-s3-search --bin s3-eval -- np <NP.txt> <COD-AB xlsx>
+```
+
+The layout is specified in the [pack format](../../04-architecture/pack-format.md#search); the
+research is in [the SEARCH note](../notes/search-index.md). The inputs are spike S3's: 130,574
+`GeoNames` and COD-AB records of Nepal, the 512 golden queries of Nepal v0, and the same folds
+and scoring. `S3_INDEX=pack` runs S3's pipeline unchanged on a SEARCH section built by
+`search::encode` and opened from a pack, so the two runs differ only in the index calls. Load
+average 3.1 on 2026-11-07, so times are indicative; the gate is the instruction count.
+
+**The automaton A/B** (`fuzzy-ab`): every golden query matched with one edit against the
+91,633 folded exact keys, anchored on the first character as in S3. Medians of the queries,
+503 of them in the fuzzy window:
+
+| Variant | p50 µs | p99 µs | mean µs |
+|---|---:|---:|---:|
+| `fst` 0.4.7 + byte-level OSA row (S3) | 22.3 | 54.0 | 23.4 |
+| sorted keys + character OSA row | 12.0 | 35.2 | 12.4 |
+| sorted keys + bit-parallel NFA | 6.4 | 13.8 | 6.4 |
+| **own FST + bit-parallel NFA** | **3.7** | **7.5** | **3.7** |
+
+The NFA and the dynamic program agree on every key of every query (239,017 steps each), and
+the FST walk agrees with the sorted walk. Over bytes, 3 queries match differently: a one-letter
+Devanagari edit is up to 3 byte edits, which is why S3 missed native typos. Sorted keys cost
+6,514 keys per query to skip under dead prefixes; the FST tries about 340 transitions. The
+parametric (Schulz–Mihov) arm was not built: at 3.7 µs the walk is no longer the query's cost
+(the rest of S3's pipeline is), and the NFA needs no per-query construction or tables.
+
+**Dictionary size** (the same 91,633 keys):
+
+| Layout | Bytes |
+|---|---:|
+| `fst` 0.4.7 set (keys only) | 381,461 |
+| `fst` 0.4.7 map with ordinals | 470,423 |
+| **own FST with ordinals** | **456,707** |
+| front-coded blocks of 16 (research note §3.1, approximate fold) | about 421,000 + offsets |
+
+Front coding is smaller as a set but has no ordinal outputs or walk; it is the sorted-keys
+variant above, twice as slow.
+
+**The SEARCH section on Nepal** (all three maps in one automaton, 1,498,652 B against S3's
+3,633,491 B of three `fst` maps and `u32` postings):
+
+| Column | Bytes |
+|---|---:|
+| AUTOMATON | 767,072 |
+| IDS | 605,588 |
+| STARTS | 108,228 |
+| IMPORTANCE | 16,592 |
+| BLOCK_MAX | 1,100 |
+| LENGTH and the table directory | 72 |
+
+A loose key stores only the rows its exact twin lacks (a loose lookup reads both lists); before
+that dedupe the section was 2.13 MB. Block sizes of 16, 32, 64 and 128 keys for BLOCK_MAX gave
+the same recall and times, so 128 (one B1 block) stays.
+
+**Recall and speed on the golden set** (S3's pipeline, 512 queries):
+
+| Run | recall@1 | recall@5 | MRR@10 | first-letter probe | native one-letter probe | p50 µs | p99 µs |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| S3 (`fst`, byte row, anchored) | 0.953 | 0.986 | 0.969 | 0.900 | 0.659 | 26.0 | 71.2 |
+| SEARCH, anchored | 0.953 | 0.986 | 0.969 | 0.900 | 0.976 | 7.0 | 27.4 |
+| **SEARCH, unanchored** | 0.953 | 0.986 | 0.969 | **1.000** | 0.976 | 20.6 | 41.2 |
+
+Every recall gate of D-052 holds and p99 is under the 100 µs gate in both modes. Counting edits
+in characters lifts the native one-letter typo probe from 0.659 to 0.976. Unanchored fuzzy
+finds every first-letter typo for 14 µs more at p99, still below S3 anchored, so it is the
+default (D-086).
+
+**The prefix tier.** S3 read the first 64 keys of a prefix range in key order. The pack reads
+the best K rows by importance with `best_in`, which skips blocks and keys whose maximum cannot
+enter. K = 16, 32 and 64 gave the same recall; K = 16 has the lowest p99 (29.5 µs in that run),
+so it is kept.
+
+**Correctness.** `search::fuzzy` is compared with the OSA dynamic program on 200,000 random
+cases and never prunes a key that matches. `search::fst` is compared with the sorted keys for
+lookups, ranges and walks (tagged keys, anchors, 0 to 2 edits); hand-built non-canonical nodes
+and 20,000 automata with 1 to 3 random bytes changed are refused or answered without a panic, within the step
+budget. `tests/search.rs` compares the section with brute force over its input (exact, prefix,
+best-first, fuzzy, list order, importance), and each structural refusal asserts its exact
+problem; more than half of 200 single-bit flips are refused. The fuzz harness builds random
+sections over ASCII, two- and three-byte UTF-8 keys and compares every unedited section with
+its model; a planted bug in `rows_of` fails it.
+
+**Optimisations tried:**
+
+| Change | Effect | Kept |
+|---|---|---|
+| Walking sorted keys with the DP state shared by prefix | 12.0 µs p50; dead prefixes cost a linear skip | replaced by the FST |
+| Bit-parallel NFA on code points | 12.0 → 6.4 µs on sorted keys | yes |
+| Own FST, the child parsed only after the matcher keeps a transition | 6.4 → 3.7 µs | yes |
+| The one form (one transition, any target) and the implied first output | own FST 488 → 457 KB | yes |
+| Loose keys store only the rows their exact twin lacks | section 2.13 → 1.50 MB | yes |
+| Best K by importance for the prefix tier, K = 16 | p99 of the prefix class down, recall unchanged | yes |
 

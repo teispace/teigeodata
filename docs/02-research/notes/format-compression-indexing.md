@@ -216,7 +216,7 @@ Recommendation:
 - RMQ options: a sparse table (n log n words, too big), a block sparse table, or a succinct RMQ (Fischer & Heun, SICOMP 2011: 2n + o(n) bits). `vers-vecs` has an RMQ to benchmark against.
 - A precomputed top-k for all 1–2-character prefixes removes the worst case (huge ranges for short prefixes).
 
-**Verdict.**
+**Verdict** (superseded by D-085 and the [SEARCH note](search-index.md): own FST, a bit-parallel NFA, FOR lists and block maxima).
 
 - **Use `fst`** for v1 behind the `search` feature, with ordinals as outputs.
 - **Use `levenshtein_automata`** for fuzzy search if it works with `fst` 0.4's `Automaton` trait (**unverified**; it targets tantivy-fst). Otherwise vendor the Schulz–Mihov construction.

@@ -119,7 +119,7 @@ parameters).
 | 2 | PLACES | point (1e-6° grid), kind, admin level, class code, flags; rows in Hilbert order | `core` | column table (D-074): 5.2 B per place on Nepal |
 | 3 | HIERARCHY | parent row; children lists (CSR) | `core` | column table (D-074): 3.0 B per place; below Elias–Fano |
 | 4 | NAMES | name records (lang, script, type, validity, rule), text | `names` | column table (D-077): records + FSST text with per-script tables; 10.6 B per place on Nepal, a canonical name in 65 ns |
-| 5 | SEARCH | FST over normalised keys and phonetic keys; postings; scores; top-k structure | `search` | `fst` + Elias–Fano postings + block RMQ (B7; spike S3) |
+| 5 | SEARCH | tagged name keys (exact, loose, phonetic) → lists of rows by importance; fuzzy and top-k prefix | `search` | column table (D-085): own FST + FOR lists + block maxima; 1.50 MB on Nepal, [below](#search) |
 | 6 | PLACE_INDEX | packed Hilbert R-tree whose leaves are the PLACES rows | `core`; nearest needs `spatial` | column table (D-082): u16 boxes inside the parent; 0.55 B per place at node size 16 |
 | 7 | ARCS | shared arcs, delta coordinates on 1e-7°, per-vertex LOD level | `geometry` | bit-packed deltas (B10) |
 | 8 | POLYGONS | ring and part tables (signed arc refs), bbox, label point | `geometry` | — |
@@ -194,6 +194,65 @@ Columns not listed are refused, so a new column comes with a format minor versio
 An optional column is left out when every value is 0, and reads as 0. The deep check also
 checks that rows are in Hilbert order of their points, that every point is on the grid and
 every kind known, and that only admin units have a level.
+
+### SEARCH
+
+Name keys to places, for exact, prefix and fuzzy search (D-085, D-086,
+[ADR-0032](../03-decisions/adr/ADR-0032-text-search.md),
+[research](../02-research/notes/search-index.md), measured in
+[B7](../02-research/benches/phase-2.md#b7-search)). Code: `teigeodata_format::search`.
+`item_count` is the number of rows (places); a listed row is below it.
+
+| ID | Column | Values |
+|---:|---|---|
+| 1 | LENGTH | one value: the automaton's length in bytes |
+| 2 | AUTOMATON | raw bytes: the automaton, zero-padded to a multiple of 4 |
+| 3 | STARTS | per key and one more: its list's first entry in IDS, from 0, strictly increasing |
+| 4 | IDS | every list in key order: rows by importance descending, then row ascending |
+| 5 | IMPORTANCE | per row: 0 to 255 |
+| 6 | BLOCK_MAX | per 128 keys in ordinal order: the highest importance in their lists |
+
+A column ID of 0 or above 6 is refused.
+
+- **Keys** are a tag byte, then the folded name in UTF-8: 1 exact, 2 loose, 3 phonetic. The
+  forge defines each fold. A key is at most 255 bytes. A key's ordinal is its position in
+  sorted byte order across all maps, so one map's keys are one ordinal range.
+- **The automaton** is an acyclic FST whose path outputs sum to the ordinal, minimal up to the
+  writer's registry (below). Nodes are
+  written children first and read backwards from their address (the offset of their last
+  byte); the root is the last byte, and a transition's target is `address − delta` with
+  `delta ≥ 1`, so every walk ends. Four forms, little-endian:
+
+  ```text
+  leaf     header: bit 7 final, bits 0–6 zero
+  next     label, header (bit 7 final, bit 6 set): one transition to address − 2
+  one      delta [wt bytes], label, header (bit 7 final, bit 5 set, bits 0–1 wt − 1)
+  general  outputs [(n − 1) × wo], deltas [n × wt], labels [n] strictly increasing,
+           widths (wt 1–4 in bits 0–3, wo 0–4 in bits 4–7), [n − 1 if n ≥ 31],
+           header (bits 0–4 n from 2 to 30, or 31 for the escape)
+  ```
+
+  A transition's output is the number of keys before it in its node (1 if the node is final,
+  plus the keys under earlier transitions); the first is implied by the final bit. The writer
+  is canonical: the next form whenever it applies, else the one form for one transition, and
+  the smallest widths.
+- **Queries:** `get(tag, key)` and `range(tag, prefix)` give ordinals; `rows_of` gives a key's
+  rows, most important first; `best_in(range, floor, visit)` visits only keys and blocks whose
+  maximum beats a rising floor (top-k prefix); `walk(tag, matcher, anchor, budget, visit)`
+  visits in key order the keys a matcher accepts, with at most `budget` transitions. The
+  matcher in `search::fuzzy` is a bit-parallel OSA NFA over code points: up to 2 edits and 63
+  characters. Queries never allocate or panic, on any bytes.
+- **Open** checks the directory, the column lengths against the key and row counts, the padding
+  and the root node in O(1). **`check`** walks the whole automaton with a fixed stack: every
+  node canonical and inside the bytes, labels increasing, each key's ordinal the running count,
+  every transition leading to a key (so work is bounded by keys × 255), no key longer than 255
+  bytes, the key count exact. It then checks every list start, list order, row bound,
+  importance and block maximum: O(automaton + entries). A well-formed node that no transition
+  reaches is not detected; it changes no answer and the signature guards the bytes.
+- **The writer** (`search::encode`, feature `write`) takes the sorted map of tagged keys to row
+  sets and every row's importance, refuses an empty key or list, a key over 255 bytes and a row
+  past the end, and is deterministic. Its node registry is a bounded direct-mapped table of
+  2^18 slots, so a missed share costs size, never memory.
 
 ### PLACE_INDEX
 
@@ -531,6 +590,6 @@ A new version always gets a new file. A file that may be mapped is never written
 ## Open items
 
 - The 14 benchmarks B1–B14 (catalogue in [benchmarks](../06-engineering/benchmarks.md)).
-- Payloads that follow in later phases inside the frame fixed in Phase 1 (D-071): SEARCH,
-  POSTAL in Phase 2; ARCS, POLYGONS and POLY_INDEX with B10 (D-083); DEM with B11.
+- Payloads that follow in later phases inside the frame fixed in Phase 1 (D-071): POSTAL in
+  Phase 2; ARCS, POLYGONS and POLY_INDEX with B10 (D-083); DEM with B11.
 - Whether the reader crate keeps `#![forbid(unsafe_code)]` with mmap outside it (B13).

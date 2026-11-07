@@ -9,7 +9,7 @@ updated: 2026-11-07
 ## Where we are
 
 - **Phase:** 2, indexes ([phase file](../07-planning/phases/phase-2.md)); research done in [indexes](../02-research/notes/indexes.md) (D-081).
-- **Now:** step 2.3, B7 SEARCH.
+- **Now:** step 2.4, the phase 2 exit review (M2).
 - **Phase 2 so far:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
@@ -19,6 +19,11 @@ updated: 2026-11-07
   places, twice as fast as `tzf-rs` with full data, zero mismatches against even–odd (D-083);
   Q-013 answered by ID order (D-084)
   ([results](../02-research/benches/phase-2.md#b9-region)).
+  2.3 B7 SEARCH, one section for the exact, loose and phonetic maps on our own checked FST with
+  a bit-parallel fuzzy NFA over code points: 1.50 MB on Nepal against S3's 3.63 MB, one-edit
+  walks 6× faster than `fst`, golden recall unchanged, p99 41.2 µs unanchored against S3's
+  71.2 µs, native one-letter typos 0.659 → 0.976 (D-085, D-086)
+  ([results](../02-research/benches/phase-2.md#b7-search)).
 - **M1 met** on 2026-11-07 (D-080), evidence in [phase 1 §1.6](../07-planning/phases/phase-1.md#16-exit-review). Done in Phase 1:
   - 1.1 `teigeodata-core`: the stable ID and its text form, grid points, and a Hilbert index
     4–5× faster than the classic loop and proven equal to it;

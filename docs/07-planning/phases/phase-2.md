@@ -50,10 +50,18 @@ validating zero-copy reader, a brute-force oracle in its tests, a fuzz harness i
 - POLY_INDEX moves to B10 with POLYGONS, whose boxes it indexes (D-083)
 
 ### 2.3 B7 SEARCH
-- [ ] The S3 design in the SEARCH section (three FSTs, postings, scores)
-- [ ] The automaton A/B: our anchored Damerau automaton against a parametric one; top-k with an
-  early stop on importance-ordered postings; p99 against S3 on the golden set, recall gates of
-  D-052 held
+- [x] The S3 design in one SEARCH section: one automaton over tagged keys (exact, loose,
+  phonetic), FOR row lists by importance, per-row importance and block maxima (D-085,
+  [layout](../../04-architecture/pack-format.md#search)); 1.50 MB on Nepal against S3's 3.63 MB
+- [x] The automaton A/B: `fst` + byte row (S3), sorted keys + character row, sorted keys + NFA,
+  own FST + NFA: 22.3 → 3.7 µs p50 per one-edit walk; the parametric arm was not needed
+  ([results](../../02-research/benches/phase-2.md#b7-search))
+- [x] Top-k prefix with an early stop on the block maxima (best 16 by importance); p99 41.2 µs
+  unanchored against S3's 71.2 µs, recall gates of D-052 held, first-letter probe 1.000 and
+  native one-letter probe 0.976 (D-086)
+- [x] Oracles: the OSA dynamic program (200,000 cases), brute force over the keys and the
+  section's input, exact refusal strings, a fuzz harness on the section; the counts gate covers
+  `search_get`, `search_fuzzy` and `search_prefix`
 
 ### 2.4 Exit review
 - [ ] M2 criteria met; progress updated
@@ -65,3 +73,4 @@ validating zero-copy reader, a brute-force oracle in its tests, a fuzz harness i
 | 2026-11-07 | Phase 2 planned; order B8, B9, B7 | the indexes note (D-081) |
 | 2026-11-07 | B8 done: u16 boxes inside the parent, not i32 | measured 0.55 B against about 1.1 B per place (D-082) |
 | 2026-11-07 | B9 done: absolute FOR vertices, not deltas with an offsets column; POLY_INDEX moved to B10 | measured smaller; POLY_INDEX indexes POLYGONS boxes (D-083) |
+| 2026-11-07 | B7 done: own FST and a bit-parallel NFA, not `fst` and `levenshtein_automata`; unanchored fuzzy by default | `fst` is `std`-only and unsafe on hostile bytes; measured 6× faster and 2.4× smaller (D-085, D-086) |
