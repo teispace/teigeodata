@@ -89,6 +89,7 @@ jobs:
           cargo fmt --manifest-path bindings/Cargo.toml --all --check
           cargo clippy --manifest-path bindings/Cargo.toml --workspace --all-targets --locked
       - name: Build the C ABI and the shims
+        id: build
         run: |
           cargo build --release --locked -p teigeodata-ffi --lib
           cd bindings
@@ -97,30 +98,36 @@ jobs:
           cp target/release/libteigeodata_python.so python/teigeodata/_native.abi3.so
           cp target/release/libteigeodata_node.so node/teigeodata.node
       - name: C
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           cc -std=c11 -Wall -Wextra -Werror -pedantic bindings/c/parity.c -Ibindings/c \
             -Ltarget/release -lteigeodata_ffi -Wl,-rpath,"$PWD/target/release" -o target/c-parity
           target/c-parity
           echo '#include "teigeodata.h"' | c++ -x c++ -std=c++17 -Wall -Wextra -Werror -fsyntax-only -Ibindings/c -
       - name: Python
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         working-directory: bindings/python
         run: PYTHONPATH=. python3 -m unittest discover -s tests -v
       - name: Node.js
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         working-directory: bindings/node
-        run: node --test test/
+        run: node --test test/parity.test.js
       - name: JVM
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         working-directory: bindings
         run: |
           javac -d jvm/build jvm/java/org/teispace/teigeodata/*.java jvm/test/org/teispace/teigeodata/*.java
           java --enable-native-access=ALL-UNNAMED -Djava.library.path=target/release -cp jvm/build \
             org.teispace.teigeodata.ParityTest parity.json
       - name: Dart
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         working-directory: bindings/dart
         run: |
           dart pub get
           dart analyze --fatal-infos
           LD_LIBRARY_PATH="$GITHUB_WORKSPACE/target/release" dart test
       - name: Swift
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         working-directory: bindings/swift
         run: |
           swift --version

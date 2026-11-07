@@ -89,7 +89,7 @@ passing.
 | Rust ABI | `cargo test -p teigeodata-ffi` | the same |
 | C | `cargo build --release -p teigeodata-ffi --lib` | `bindings/c/parity.c` (command in its header) |
 | Python | `cd bindings && PYO3_BUILD_EXTENSION_MODULE=1 cargo build --release -p teigeodata-python`, copy the library to `python/teigeodata/_native.abi3.so` | `PYTHONPATH=. python3 -m unittest discover -s tests` |
-| Node | `cargo build --release -p teigeodata-node`, copy to `node/teigeodata.node` | `node --test test/` |
+| Node | `cargo build --release -p teigeodata-node`, copy to `node/teigeodata.node` | `node --test test/parity.test.js` |
 | JVM | `cargo build --release -p teigeodata-jvm`, `javac` | `java -Djava.library.path=target/release … ParityTest parity.json` |
 | Swift | the C ABI library | `swift run -c release Parity ../parity.json` |
 | Dart | the C ABI library | `dart test` |

@@ -1,5 +1,5 @@
 // Parity: the Node.js binding gives the results bindings/parity.json expects (checked there
-// against Rust). Run with `node --test test/` after building teigeodata.node.
+// against Rust). Run with `node --test test/parity.test.js` after building teigeodata.node.
 "use strict";
 const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
