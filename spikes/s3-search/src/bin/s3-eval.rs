@@ -73,27 +73,26 @@ struct Packed {
 }
 
 fn packed(maps: [(u8, &BTreeMap<String, BTreeSet<u32>>); 3], recs: &[Rec]) -> Packed {
-    let mut keys: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
-    let exact = maps[0].1;
-    let dedupe = std::env::var_os("S3_NO_DEDUPE").is_none();
-    for (tag, m) in maps {
-        for (k, v) in m {
-            // A loose key keeps only the rows its exact twin (the same text) lacks: a loose
-            // lookup reads both.
-            let v: BTreeSet<u32> = match exact.get(k) {
-                Some(e) if dedupe && tag == T_LOOSE => v.difference(e).copied().collect(),
-                _ => v.clone(),
-            };
-            if v.is_empty() {
-                continue;
-            }
-            let mut key = vec![tag];
-            key.extend_from_slice(k.as_bytes());
-            keys.insert(key, v);
-        }
-    }
     let importance: Vec<u8> = recs.iter().map(|r| r.importance.min(255) as u8).collect();
-    let body = tsearch::encode(&keys, &importance).unwrap();
+    let body = if std::env::var_os("S3_NO_DEDUPE").is_none() {
+        // The shared builder (D-086): what the forge writes.
+        let m = tsearch::Maps {
+            exact: maps[0].1.clone(),
+            loose: maps[1].1.clone(),
+            phonetic: maps[2].1.clone(),
+        };
+        tsearch::encode_maps(&m, &importance).unwrap()
+    } else {
+        let mut keys: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
+        for (tag, m) in maps {
+            for (k, v) in m {
+                let mut key = vec![tag];
+                key.extend_from_slice(k.as_bytes());
+                keys.insert(key, v.clone());
+            }
+        }
+        tsearch::encode(&keys, &importance).unwrap()
+    };
     let t = teigeodata_core::table::Table::parse(&body).unwrap();
     let columns = t
         .ids()
@@ -300,15 +299,13 @@ impl<'a> Engine<'a> {
         for (i, r) in recs.iter().enumerate() {
             let i = i as u32;
             for n in std::iter::once(&r.name).chain(&r.alts) {
-                let f = fold(n);
-                add(&mut loose, despace(&f), i);
-                for d in &droppable {
-                    if let Some(stem) = f.strip_suffix(d.as_str()) {
-                        add(&mut loose, despace(stem), i);
-                    }
-                }
+                // The shared key builder: what the forge writes. The phonetic key is added
+                // here, since the spike can switch it (`S3_PKEY`).
+                teigeodata_names::search_keys(n, &droppable, None, |map, k| match map {
+                    teigeodata_names::SearchMap::Exact => add(&mut exact, k, i),
+                    _ => add(&mut loose, k, i),
+                });
                 add(&mut phon, pkey(n), i);
-                add(&mut exact, f, i);
             }
         }
         let pack = (std::env::var("S3_INDEX").is_ok_and(|v| v == "pack")).then(|| {

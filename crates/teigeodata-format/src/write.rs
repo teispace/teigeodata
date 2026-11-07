@@ -30,6 +30,9 @@ struct Planned {
     hash: [u8; 32],
 }
 
+/// Makes the 72-byte signature block for a head digest (see `signer`).
+pub type Sign<'s> = dyn Fn(&[u8; 32]) -> [u8; 72] + 's;
+
 /// Collects a pack's manifest and section descriptions.
 #[derive(Clone, Debug)]
 pub struct Writer {
@@ -197,6 +200,41 @@ impl Writer {
                 "BLOCK_HASHES must cover exactly the sections of 1 MiB or more (blocks::encode)",
             )),
         }
+    }
+
+    /// Writes a whole pack in memory: adds `sections` (kind, encoding, item count, bytes), the
+    /// `BLOCK_HASHES` list they need, plans the layout, signs it with `sign` when given (see
+    /// `signer`), and assembles the file. For packs that fit in memory; a larger pack streams
+    /// its sections at [`Layout::placed`] offsets instead.
+    ///
+    /// # Errors
+    /// As [`Writer::section_bytes`], [`Writer::layout`] and [`Layout::assemble`].
+    pub fn pack(
+        mut self,
+        sections: &[(Kind, Encoding, u64, &[u8])],
+        sign: Option<&Sign<'_>>,
+    ) -> Result<Vec<u8>, Error> {
+        let mut bodies: Vec<(Kind, &[u8])> = sections.iter().map(|s| (s.0, s.3)).collect();
+        for &(kind, encoding, items, body) in sections {
+            self.section_bytes(kind, encoding, items, body)?;
+        }
+        let list = crate::blocks::encode(&bodies)?;
+        if let Some(l) = &list {
+            let items = crate::blocks::item_count(l);
+            self.section_bytes(Kind::BLOCK_HASHES, Encoding::RAW, items, l)?;
+            bodies.push((Kind::BLOCK_HASHES, l));
+        }
+        let mut layout = self.layout(sign.is_some())?;
+        if let Some(sign) = sign {
+            let block = sign(layout.digest());
+            layout.set_signature(&block)?;
+        }
+        let ordered: Vec<&[u8]> = layout
+            .placed()
+            .iter()
+            .filter_map(|p| bodies.iter().find(|b| b.0 == p.kind).map(|b| b.1))
+            .collect();
+        layout.assemble(&ordered)
     }
 
     /// Plans the file. With `signed`, a 72-byte signature slot follows the manifest, to be

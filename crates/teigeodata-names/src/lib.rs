@@ -123,6 +123,40 @@ pub fn join_key(s: &str) -> String {
     fold(s).replace(' ', "")
 }
 
+/// The search map a key belongs to (the SEARCH section's three maps, D-085).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SearchMap {
+    /// The fold.
+    Exact,
+    /// The fold without spaces, and without a droppable suffix.
+    Loose,
+    /// The phonetic key.
+    Phonetic,
+}
+
+/// Calls `out` with every search key of `name` (D-052, D-086): its fold (exact); the fold
+/// without spaces, and again with each droppable suffix removed (loose); and its phonetic key
+/// when the profile names one. `droppable` holds the profile's droppable suffixes, folded.
+/// Keys may repeat or be empty; the SEARCH writer drops empty ones.
+pub fn search_keys(
+    name: &str,
+    droppable: &[String],
+    phonetic: Option<PhoneticKey>,
+    mut out: impl FnMut(SearchMap, String),
+) {
+    let f = fold(name);
+    out(SearchMap::Loose, f.replace(' ', ""));
+    for d in droppable {
+        if let Some(stem) = f.strip_suffix(d.as_str()) {
+            out(SearchMap::Loose, stem.replace(' ', ""));
+        }
+    }
+    if let Some(p) = phonetic {
+        out(SearchMap::Phonetic, p.key(name));
+    }
+    out(SearchMap::Exact, f);
+}
+
 /// The first script of a text that is not Common or Inherited.
 #[must_use]
 pub fn script_of(s: &str) -> Script {
@@ -547,5 +581,50 @@ mod pkey_tests {
         assert_eq!(k("Dhunga"), k("ढुङ्गा"));
         assert_ne!(k("Pokhara"), k("Pokhari"));
         assert_ne!(k("Lalitpur"), k("Lamjung"));
+    }
+}
+
+#[cfg(test)]
+mod search_key_tests {
+    use super::{PhoneticKey, SearchMap, search_keys};
+    use alloc::string::{String, ToString};
+    use alloc::vec::Vec;
+
+    fn keys(name: &str, droppable: &[&str], p: Option<PhoneticKey>) -> Vec<(SearchMap, String)> {
+        let d: Vec<String> = droppable.iter().map(ToString::to_string).collect();
+        let mut out = Vec::new();
+        search_keys(name, &d, p, |m, k| out.push((m, k)));
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn every_map_gets_its_keys() {
+        let got = keys(
+            "Lahan Bazar",
+            &["bazar", "chowk"],
+            Some(PhoneticKey::IndicV0),
+        );
+        let s = |m, k: &str| (m, k.to_string());
+        assert_eq!(
+            got,
+            [
+                s(SearchMap::Exact, "lahan bazar"),
+                s(SearchMap::Loose, "lahan"),
+                s(SearchMap::Loose, "lahanbazar"),
+                s(
+                    SearchMap::Phonetic,
+                    &PhoneticKey::IndicV0.key("Lahan Bazar")
+                ),
+            ]
+        );
+        // No phonetic key without a profile key; no stem when no suffix matches.
+        assert_eq!(
+            keys("Pokhara", &["bazar"], None),
+            [
+                s(SearchMap::Exact, "pokhara"),
+                s(SearchMap::Loose, "pokhara")
+            ]
+        );
     }
 }

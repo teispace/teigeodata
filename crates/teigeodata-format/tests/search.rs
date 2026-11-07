@@ -18,7 +18,7 @@ use teigeodata_core::bitpack::{Coding, encode as pack_col, encode_direct};
 use teigeodata_core::table::{self, Codec};
 use teigeodata_format::search::fuzzy::Fuzzy;
 use teigeodata_format::search::{self, EXACT, LOOSE, Search};
-use teigeodata_format::{Encoding, Error, Kind, Pack, Writer, blocks};
+use teigeodata_format::{Encoding, Error, Kind, Pack, Writer};
 
 struct Rng(u64);
 
@@ -75,27 +75,10 @@ fn input(r: &mut Rng, rows: usize) -> (Keys, Vec<u8>) {
 }
 
 fn with_body(body: &[u8], rows: u64) -> Vec<u8> {
-    let mut w = Writer::new("np", "search", "2026.11.0").unwrap();
-    w.section_bytes(Kind::SEARCH, Encoding::TABLE, rows, body)
-        .unwrap();
-    let list = blocks::encode(&[(Kind::SEARCH, body)]).unwrap();
-    if let Some(l) = &list {
-        w.section_bytes(Kind::BLOCK_HASHES, Encoding::RAW, blocks::item_count(l), l)
-            .unwrap();
-    }
-    let layout = w.layout(false).unwrap();
-    let refs: Vec<&[u8]> = layout
-        .placed()
-        .iter()
-        .map(|p| {
-            if p.kind == Kind::SEARCH {
-                body
-            } else {
-                list.as_deref().unwrap_or(&[])
-            }
-        })
-        .collect();
-    layout.assemble(&refs).unwrap()
+    Writer::new("np", "search", "2026.11.0")
+        .unwrap()
+        .pack(&[(Kind::SEARCH, Encoding::TABLE, rows, body)], None)
+        .unwrap()
 }
 
 fn open(bytes: &[u8]) -> Result<Search<'_>, Error> {
@@ -384,4 +367,37 @@ fn bad_columns_are_refused() {
         "{refused} of 200 automaton bit flips refused"
     );
     let _ = keys;
+}
+
+#[test]
+fn loose_keys_keep_only_rows_their_exact_twin_lacks() {
+    let set = |v: &[u32]| v.iter().copied().collect::<BTreeSet<u32>>();
+    let mut m = search::Maps::default();
+    m.exact.insert("pokhara".into(), set(&[0, 1]));
+    m.loose.insert("pokhara".into(), set(&[0, 1, 2]));
+    m.loose.insert("lahan".into(), set(&[1]));
+    m.loose.insert(String::new(), set(&[0]));
+    m.phonetic.insert("pkr".into(), set(&[0, 2]));
+    let body = search::encode_maps(&m, &[3, 2, 1]).unwrap();
+    let file = with_body(&body, 3);
+    let ix = open(&file).unwrap();
+    let rows = |tag, key| {
+        let mut out = Vec::new();
+        if let Some(o) = ix.get(tag, key) {
+            ix.rows_of(o, |r| {
+                out.push(r);
+                ControlFlow::Continue(())
+            });
+        }
+        out
+    };
+    assert_eq!(rows(EXACT, "pokhara"), [0, 1]);
+    assert_eq!(
+        rows(LOOSE, "pokhara"),
+        [2],
+        "the twin's rows are not repeated"
+    );
+    assert_eq!(rows(LOOSE, "lahan"), [1]);
+    assert_eq!(rows(search::PHONETIC, "pkr"), [0, 2]);
+    assert_eq!(ix.keys(), 4, "the empty key is skipped");
 }

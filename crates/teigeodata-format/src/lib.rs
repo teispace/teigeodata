@@ -69,7 +69,7 @@ pub use signature::signer;
 #[cfg(feature = "signature")]
 pub use signature::{SIGNATURE_DOMAIN, key_id};
 #[cfg(feature = "write")]
-pub use write::{Layout, Placed, Writer};
+pub use write::{Layout, Placed, Sign, Writer};
 
 /// The format major version this crate writes. 0 until the format freezes (D-029).
 pub const FORMAT_MAJOR: u16 = 0;

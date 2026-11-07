@@ -98,28 +98,12 @@ pub fn pack_with(
 ) -> Result<Vec<u8>, Error> {
     let mut w = Writer::new("np", component, "2026.11.0")?;
     w.build_id(seed).created_unix(1_762_473_600);
-    let mut all: Vec<(Kind, &[u8])> = sections.iter().map(|s| (s.0, s.3)).collect();
-    for &(kind, encoding, items, body) in sections {
-        w.section_bytes(kind, encoding, items, body)?;
-    }
-    let list = teigeodata_format::blocks::encode(&all)?;
-    if let Some(l) = &list {
-        let items = teigeodata_format::blocks::item_count(l);
-        w.section_bytes(Kind::BLOCK_HASHES, Encoding::RAW, items, l)?;
-        all.push((Kind::BLOCK_HASHES, l));
-    }
-    let mut layout = w.layout(signed)?;
     if signed {
         let key = bench_key();
-        let block = signer(&key)(layout.digest());
-        layout.set_signature(&block)?;
+        w.pack(sections, Some(&signer(&key)))
+    } else {
+        w.pack(sections, None)
     }
-    let refs: Vec<&[u8]> = layout
-        .placed()
-        .iter()
-        .filter_map(|p| all.iter().find(|s| s.0 == p.kind).map(|s| s.1))
-        .collect();
-    layout.assemble(&refs)
 }
 
 /// The integer columns of B1, from a real dataset, rows in Hilbert order.

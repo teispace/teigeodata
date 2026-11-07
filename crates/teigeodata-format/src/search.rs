@@ -341,7 +341,7 @@ fn tagged<'b>(buf: &'b mut [u8; fst::MAX_KEY], tag: u8, key: &str) -> Option<&'b
 }
 
 #[cfg(feature = "write")]
-pub use write::encode;
+pub use write::{Maps, encode, encode_maps};
 
 #[cfg(feature = "write")]
 mod write {
@@ -352,8 +352,51 @@ mod write {
     use teigeodata_core::table::{self, Codec};
 
     use super::fst::Builder;
-    use super::{AUTOMATON, BLOCK, BLOCK_MAX, IDS, IMPORTANCE, LENGTH, STARTS};
+    use super::{
+        AUTOMATON, BLOCK, BLOCK_MAX, EXACT, IDS, IMPORTANCE, LENGTH, LOOSE, PHONETIC, STARTS,
+    };
     use crate::Error;
+
+    /// The three maps of a SEARCH section, each from a key's text to its rows.
+    #[derive(Clone, Debug, Default)]
+    pub struct Maps {
+        /// The search fold of each name.
+        pub exact: BTreeMap<alloc::string::String, BTreeSet<u32>>,
+        /// The fold without spaces, and without a droppable suffix.
+        pub loose: BTreeMap<alloc::string::String, BTreeSet<u32>>,
+        /// The phonetic key.
+        pub phonetic: BTreeMap<alloc::string::String, BTreeSet<u32>>,
+    }
+
+    /// Encodes a SEARCH body from its three maps (D-086): a loose key keeps only the rows its
+    /// exact twin (the same text) lacks, since a loose lookup reads both, and is left out when
+    /// none remain. Empty keys are skipped.
+    ///
+    /// # Errors
+    /// As [`encode`].
+    pub fn encode_maps(maps: &Maps, importance: &[u8]) -> Result<Vec<u8>, Error> {
+        let mut keys: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
+        for (tag, map) in [
+            (EXACT, &maps.exact),
+            (LOOSE, &maps.loose),
+            (PHONETIC, &maps.phonetic),
+        ] {
+            for (text, rows) in map {
+                let rows: BTreeSet<u32> = match maps.exact.get(text) {
+                    Some(twin) if tag == LOOSE => rows.difference(twin).copied().collect(),
+                    _ => rows.clone(),
+                };
+                if text.is_empty() || rows.is_empty() {
+                    continue;
+                }
+                let mut key = Vec::with_capacity(text.len() + 1);
+                key.push(tag);
+                key.extend_from_slice(text.as_bytes());
+                keys.insert(key, rows);
+            }
+        }
+        encode(&keys, importance)
+    }
 
     /// Encodes a SEARCH body: `keys` maps each tagged key (tag byte, then the folded text) to
     /// its rows; `importance` holds every row's importance (its length is the row count).
