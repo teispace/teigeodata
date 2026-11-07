@@ -44,8 +44,8 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 - [x] The [pack format](../../04-architecture/pack-format.md) updated to what was built (format 0.1); kinds and tags checked against it by tests
 
 ### 1.3 Benchmarks
-- [ ] `teigeodata-bench`: criterion locally, gungraun in CI; L1 (open) and L3 (signature)
-- [ ] B13: checked against unchecked access; decides whether `forbid(unsafe_code)` holds
+- [x] `teigeodata-bench`: shared seeded workloads, criterion suites `core` and `format`; L1 0.71 µs at 1–100 MB, L2 1.76 GiB/s, L3 34 µs; Hilbert 4.75× the loop ([results](../../02-research/benches/phase-1.md))
+- [ ] B13: checked against unchecked access, measured inside B1's decoder (the first hot loop); decides whether `forbid(unsafe_code)` holds
 
 ### 1.4 Codecs and their sections (each with its A/B benchmark)
 - [ ] B1 integer blocks: frame-of-reference bit-packing, delta and zigzag → PLACES and HIERARCHY
@@ -56,6 +56,7 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 
 ### 1.5 Hardening
 - [ ] Nightly CI: cargo-fuzz (libFuzzer) on the same harness functions, Miri on the reader tests
+- [ ] gungraun instruction-count benchmarks in CI (Valgrind; Linux), the load-independent PR gate
 - [ ] Determinism gate: every test pack built twice, bytes compared
 - [ ] Sizes (Z2) of `core` and `format` per feature set
 
@@ -69,3 +70,4 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 | 2026-11-07 | Phase 1 planned | M0 met (D-069) |
 | 2026-11-07 | 1.1 done: `teigeodata-core` | the plan held |
 | 2026-11-07 | 1.2 done: the container; bolero replaced by plain harness functions | D-072 |
+| 2026-11-07 | 1.3: criterion suites; gungraun moved to 1.5 with the other CI work; B13 moved into B1 | B13 needs a decoder hot loop, which B1 creates |

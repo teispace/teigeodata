@@ -5,6 +5,7 @@
 resolver = "3"
 members = [
     "crates/teigeodata-api",
+    "crates/teigeodata-bench",
     "crates/teigeodata-blob",
     "crates/teigeodata-core",
     "crates/teigeodata-ffi",

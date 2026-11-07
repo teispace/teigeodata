@@ -9,13 +9,15 @@ updated: 2026-11-07
 ## Where we are
 
 - **Phase:** 1, core and format ([phase file](../07-planning/phases/phase-1.md)).
-- **Now:** step 1.3, benchmarks (`teigeodata-bench`, L1, L3, B13). Done in Phase 1:
+- **Now:** step 1.4, B1 integer blocks (with B13 inside it). Done in Phase 1:
   - 1.1 `teigeodata-core`: the stable ID and its text form, grid points, and a Hilbert index
     4–5× faster than the classic loop and proven equal to it;
   - 1.2 `teigeodata-format`: format 0.1. A canonical, validating zero-copy reader (`no_std`, no
     allocation), a streaming-friendly deterministic writer, Ed25519 signatures, and four fuzz
     properties under `cargo test`, each proven on planted bugs (D-072). The research is in
     [core and format](../02-research/notes/core-and-format.md) (D-070, D-071).
+  - 1.3 `teigeodata-bench`: open costs 0.71 µs at any size (head only), eager hashing
+    1.76 GiB/s, a signature check 34 µs ([results](../02-research/benches/phase-1.md)).
 - **M0 met** on 2026-11-07 (D-069): each criterion with its evidence in
   [phase 0 §0.5](../07-planning/phases/phase-0.md#05-exit-review). The maintainer's review is
   asynchronous. Phase 0 in short:
