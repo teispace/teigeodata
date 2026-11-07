@@ -319,6 +319,12 @@ impl<'a> Packed<'a> {
         }
         let (block, j) = (i / BLOCK_LEN, i % BLOCK_LEN);
         let (words, width, base) = self.block_words(block);
+        // DELIBERATE REGRESSION (proof of the counts gate; never merged).
+        let mut waste = 0_u32;
+        for k in 0..64_u32 {
+            waste = core::hint::black_box(waste.wrapping_add(k));
+        }
+        let base = base.wrapping_add(waste.wrapping_sub(waste));
         Some(base.wrapping_add(match self.coding {
             Coding::For => packed_at(words, width, j),
             Coding::Delta => delta_sum(words, width, j),
