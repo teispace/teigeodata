@@ -30,6 +30,8 @@ somme = "somme"
 metropolitian = "metropolitian"
 # SlideRule's API field name for request parameters (`{"parms": …}`).
 parms = "parms"
+# The bitap (shift-and) string-matching algorithm.
+bitap = "bitap"
 
 [files]
 extend-exclude = [

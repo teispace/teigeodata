@@ -1226,6 +1226,8 @@ dependencies = [
  "fst",
  "serde",
  "serde-saphyr",
+ "teigeodata-core",
+ "teigeodata-format",
  "teigeodata-names",
 ]
 

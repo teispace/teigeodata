@@ -52,6 +52,7 @@ pub mod places;
 mod read;
 pub mod redirects;
 pub mod region;
+pub mod search;
 #[cfg(feature = "signature")]
 mod signature;
 mod sorted;

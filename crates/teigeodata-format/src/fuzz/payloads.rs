@@ -15,6 +15,8 @@
     reason = "harnesses: one model builder per section, grid units below 2^31, mode bits read as masks"
 )]
 
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -25,6 +27,8 @@ use crate::place_index::{self, MAX_NODE, MIN_NODE, Neighbour, PlaceIndex, Rect};
 use crate::places::{self, PlaceColumns, Places};
 use crate::redirects::{self, Fate, Redirects, Resolved, resolve};
 use crate::region::{self, Region};
+use crate::search::fuzzy::Fuzzy;
+use crate::search::{self, Search};
 use crate::{Encoding, Kind, Pack, Writer};
 use teigeodata_core::bitpack::{self, BLOCK_LEN, Coding, Packed};
 use teigeodata_core::bits::{self as bitmap, Bits};
@@ -106,13 +110,14 @@ pub fn sections(data: &[u8]) {
     let mut c = Cursor(data);
     let mode = c.u8();
     let structured = mode & 0x80 != 0;
-    match mode % 7 {
+    match mode % 8 {
         0 => places_case(&mut c, structured),
         1 => hierarchy_case(&mut c, structured),
         2 => idmap_case(&mut c, structured),
         3 => redirects_case(&mut c, structured),
         4 => place_index_case(&mut c, structured),
         5 => region_case(&mut c, structured),
+        6 => search_case(&mut c, structured),
         _ => blobs_case(&mut c, structured),
     }
 }
@@ -244,6 +249,152 @@ fn region_case(c: &mut Cursor<'_>, structured: bool) {
         }
         if valid {
             assert_eq!(got, &region::even_odd(&regions, at)[..], "at {at:?}");
+        }
+    }
+}
+
+/// Characters of the search model: ASCII, two-byte and three-byte UTF-8, so walks assemble
+/// multi-byte labels and edits cut them.
+const SEARCH_CHARS: [char; 8] = ['a', 'b', 'c', 'k', '\u{e9}', '\u{928}', '\u{947}', ' '];
+
+/// A short text over [`SEARCH_CHARS`].
+fn search_text(c: &mut Cursor<'_>) -> String {
+    (0..=c.below(6))
+        .map(|_| SEARCH_CHARS[c.below(SEARCH_CHARS.len())])
+        .collect()
+}
+
+fn search_case(c: &mut Cursor<'_>, structured: bool) {
+    let rows = 1 + c.below(limit(300, 24));
+    let importance: Vec<u8> = (0..rows).map(|_| c.u8()).collect();
+    let mut model: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
+    for _ in 0..c.below(limit(200, 16)) {
+        let mut key = vec![1 + c.u8() % 3];
+        key.extend_from_slice(search_text(c).as_bytes());
+        let list = model.entry(key).or_default();
+        for _ in 0..=c.below(4) {
+            list.insert(c.below(rows) as u32);
+        }
+    }
+    let mut items = rows as u64;
+    let (mut body, mut valid) = (Vec::new(), false);
+    if structured {
+        body = search::encode(&model, &importance).unwrap_or_else(|e| panic!("a search: {e}"));
+        valid = !edit(c, &mut body, &mut items);
+    } else {
+        body.extend_from_slice(c.rest());
+    }
+    let Some(file) = pack(&[(Kind::SEARCH, items, &body)]) else {
+        return;
+    };
+    let p = open(&file);
+    let ix = match Search::open(&section(&p, Kind::SEARCH)) {
+        Ok(ix) => ix,
+        Err(e) => {
+            assert!(!valid, "a written search section is refused: {e}");
+            return;
+        }
+    };
+    let checked = ix.check().is_ok();
+    assert!(
+        checked || !valid,
+        "a written search section fails its check"
+    );
+    let keys: Vec<(&Vec<u8>, &BTreeSet<u32>)> = model.iter().collect();
+    for _ in 0..4 {
+        let tag = 1 + c.u8() % 3;
+        let query = match keys.get(c.below(keys.len() + 2)) {
+            Some((k, _)) if k[0] == tag && c.u8() & 1 == 0 => {
+                String::from_utf8(k[1..].to_vec()).unwrap_or_default()
+            }
+            _ => search_text(c),
+        };
+        let found = ix.get(tag, &query);
+        let range = ix.range(tag, &query);
+        let edits = c.u8() % 3;
+        let mut walked = Vec::new();
+        if let Some(m) = Fuzzy::new(&query, edits) {
+            ix.walk(tag, &m, None, 1 << 14, |o, d| {
+                walked.push((o, d));
+                core::ops::ControlFlow::Continue(())
+            });
+        }
+        let mut best = Vec::new();
+        let floor = c.u8();
+        let read = ix.best_in(
+            range.clone(),
+            || i32::from(floor),
+            |o| {
+                best.push(o);
+                core::ops::ControlFlow::Continue(())
+            },
+        );
+        assert!(read <= range.len(), "best_in reads past its range");
+        if checked {
+            assert!(
+                range.end <= ix.keys() && range.start <= range.end,
+                "a bad range"
+            );
+            assert!(
+                walked.windows(2).all(|w| w[0].0 < w[1].0),
+                "a walk out of order"
+            );
+            assert!(walked.iter().all(|w| w.0 < ix.keys() && w.1 <= edits));
+            for o in walked.iter().map(|w| w.0).chain(found) {
+                let mut last: Option<(u8, u32)> = None;
+                ix.rows_of(o, |r| {
+                    let here = (ix.importance(r), r);
+                    assert!((r as usize) < ix.rows(), "a row past the end");
+                    if let Some(l) = last {
+                        assert!(
+                            here.0 < l.0 || (here.0 == l.0 && here.1 > l.1),
+                            "list order"
+                        );
+                    }
+                    last = Some(here);
+                    core::ops::ControlFlow::Continue(())
+                });
+                assert!(last.is_some(), "an empty list");
+            }
+            assert!(
+                best.iter()
+                    .all(|&o| range.contains(&o) && i32::from(ix.key_max(o)) > i32::from(floor))
+            );
+        }
+        if valid {
+            let mut tagged = vec![tag];
+            tagged.extend_from_slice(query.as_bytes());
+            let at = model.keys().position(|k| *k == tagged).map(|i| i as u32);
+            assert_eq!(found, at, "get {query:?}");
+            let lo = model.range(..tagged.clone()).count() as u32;
+            let hi = lo
+                + model
+                    .range(tagged.clone()..)
+                    .take_while(|(k, _)| k.starts_with(&tagged))
+                    .count() as u32;
+            assert_eq!(range, lo..hi, "range {query:?}");
+            if let Some(m) = Fuzzy::new(&query, edits) {
+                let want: Vec<(u32, u8)> = keys
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (k, _))| k[0] == tag)
+                    .filter_map(|(i, (k, _))| {
+                        let text = core::str::from_utf8(&k[1..]).unwrap_or_default();
+                        m.matches(text).map(|d| (i as u32, d))
+                    })
+                    .collect();
+                assert_eq!(walked, want, "walk {query:?} with {edits} edits");
+            }
+            for (i, (_, list)) in keys.iter().enumerate() {
+                let mut got = Vec::new();
+                ix.rows_of(i as u32, |r| {
+                    got.push(r);
+                    core::ops::ControlFlow::Continue(())
+                });
+                let mut want: Vec<u32> = list.iter().copied().collect();
+                want.sort_by_key(|&r| (core::cmp::Reverse(importance[r as usize]), r));
+                assert_eq!(got, want, "list {i}");
+            }
         }
     }
 }

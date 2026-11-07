@@ -36,6 +36,11 @@ use serde::Deserialize;
 use spike_s3_search::{
     Rec, fold, levenshtein, lexicon, load, pkey_indic_v0, pkey_indic_v1, profile,
 };
+use teigeodata_format::search::fuzzy::Fuzzy;
+use teigeodata_format::search::{
+    self as tsearch, EXACT as T_EXACT, LOOSE as T_LOOSE, PHONETIC as T_PHON, Search,
+};
+use teigeodata_format::{Encoding, Kind, Pack, Writer};
 
 #[derive(Deserialize)]
 struct GoldenFile {
@@ -55,6 +60,81 @@ struct GoldenQuery {
 struct Index {
     map: Map<Vec<u8>>,
     postings: Vec<Vec<u32>>,
+}
+
+/// B7: the same maps as one SEARCH section in a pack (`S3_INDEX=pack`), with a prefix tier
+/// that takes the most important keys (`S3_PREFIX=best`, the default with the pack) or the
+/// first in key order (`S3_PREFIX=order`, as S3).
+struct Packed {
+    ix: Search<'static>,
+    body_len: usize,
+    columns: Vec<(u16, usize)>,
+    best_prefix: bool,
+}
+
+fn packed(maps: [(u8, &BTreeMap<String, BTreeSet<u32>>); 3], recs: &[Rec]) -> Packed {
+    let mut keys: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
+    let exact = maps[0].1;
+    let dedupe = std::env::var_os("S3_NO_DEDUPE").is_none();
+    for (tag, m) in maps {
+        for (k, v) in m {
+            // A loose key keeps only the rows its exact twin (the same text) lacks: a loose
+            // lookup reads both.
+            let v: BTreeSet<u32> = match exact.get(k) {
+                Some(e) if dedupe && tag == T_LOOSE => v.difference(e).copied().collect(),
+                _ => v.clone(),
+            };
+            if v.is_empty() {
+                continue;
+            }
+            let mut key = vec![tag];
+            key.extend_from_slice(k.as_bytes());
+            keys.insert(key, v);
+        }
+    }
+    let importance: Vec<u8> = recs.iter().map(|r| r.importance.min(255) as u8).collect();
+    let body = tsearch::encode(&keys, &importance).unwrap();
+    let t = teigeodata_core::table::Table::parse(&body).unwrap();
+    let columns = t
+        .ids()
+        .map(|id| (id, t.column_raw(id).map_or(0, |c| c.1.len())))
+        .collect();
+    let mut w = Writer::new("np", "search", "2026.11.0").unwrap();
+    w.section_bytes(Kind::SEARCH, Encoding::TABLE, recs.len() as u64, &body)
+        .unwrap();
+    // Sections of 1 MiB or more carry block hashes (D-078).
+    let list = teigeodata_format::blocks::encode(&[(Kind::SEARCH, &body)]).unwrap();
+    if let Some(l) = &list {
+        w.section_bytes(
+            Kind::BLOCK_HASHES,
+            Encoding::RAW,
+            teigeodata_format::blocks::item_count(l),
+            l,
+        )
+        .unwrap();
+    }
+    let layout = w.layout(false).unwrap();
+    let refs: Vec<&[u8]> = layout
+        .placed()
+        .iter()
+        .map(|p| {
+            if p.kind == Kind::SEARCH {
+                body.as_slice()
+            } else {
+                list.as_deref().unwrap_or(&[])
+            }
+        })
+        .collect();
+    let bytes: &'static [u8] = Box::leak(layout.assemble(&refs).unwrap().into_boxed_slice());
+    let pack: &'static Pack<'static> = Box::leak(Box::new(Pack::open(bytes).unwrap()));
+    let ix = Search::open(&pack.section(Kind::SEARCH).unwrap()).unwrap();
+    ix.check().unwrap();
+    Packed {
+        ix,
+        body_len: body.len(),
+        columns,
+        best_prefix: std::env::var("S3_PREFIX").map_or(true, |v| v != "order"),
+    }
 }
 
 impl Index {
@@ -94,6 +174,7 @@ struct Engine<'a> {
     districts: Vec<String>,
     droppable: Vec<String>,
     knobs: Knobs,
+    pack: Option<Packed>,
 }
 
 /// A/B switches, from the environment: `S3_FUZZY2` (the length from which two edits are
@@ -230,7 +311,14 @@ impl<'a> Engine<'a> {
                 add(&mut exact, f, i);
             }
         }
+        let pack = (std::env::var("S3_INDEX").is_ok_and(|v| v == "pack")).then(|| {
+            packed(
+                [(T_EXACT, &exact), (T_LOOSE, &loose), (T_PHON, &phon)],
+                recs,
+            )
+        });
         Self {
+            pack,
             recs,
             exact: Index::build(exact),
             loose: Index::build(loose),
@@ -245,6 +333,20 @@ impl<'a> Engine<'a> {
 
     /// Adds every record whose folded name is within `dist` OSA edits of `q`.
     fn fuzzy(&self, q: &str, dist: u8, anchored: bool, best: &mut BTreeMap<u32, i64>) {
+        if let Some(p) = &self.pack {
+            let Some(f) = Fuzzy::new(q, dist) else { return };
+            let anchor = if anchored { q.chars().next() } else { None };
+            p.ix.walk(T_EXACT, &f, anchor, usize::MAX, |o, e| {
+                let bonus = FUZZY - FUZZY_PER_EDIT * i64::from(e);
+                p.ix.rows_of(o, |i| {
+                    let v = best.entry(i).or_insert(i64::MIN);
+                    *v = (*v).max(bonus);
+                    std::ops::ControlFlow::Continue(())
+                });
+                std::ops::ControlFlow::Continue(())
+            });
+            return;
+        }
         let aut = Damerau::new(q, dist);
         if anchored {
             let first = &q[..q.chars().next().map_or(0, char::len_utf8)];
@@ -262,6 +364,86 @@ impl<'a> Engine<'a> {
                 let e = best.entry(i).or_insert(i64::MIN);
                 *e = (*e).max(bonus);
             }
+        }
+    }
+
+    /// The rows of `key` in map `tag`, from the pack or the S3 index.
+    fn get(&self, tag: u8, key: &str) -> Vec<u32> {
+        if let Some(p) = &self.pack {
+            let mut v = Vec::new();
+            let mut add = |tag| {
+                if let Some(o) = p.ix.get(tag, key) {
+                    p.ix.rows_of(o, |r| {
+                        v.push(r);
+                        std::ops::ControlFlow::Continue(())
+                    });
+                }
+            };
+            add(tag);
+            if tag == T_LOOSE {
+                add(T_EXACT);
+            }
+            return v;
+        }
+        let idx = match tag {
+            T_EXACT => &self.exact,
+            T_LOOSE => &self.loose,
+            _ => &self.phon,
+        };
+        idx.get(key).to_vec()
+    }
+
+    /// The prefix tier on the pack: the first `prefix_scan` keys in order (as S3), or the rows
+    /// of highest importance (the best `K`, skipping keys and blocks that cannot enter).
+    fn prefix_packed(&self, p: &Packed, q: &str, best: &mut BTreeMap<u32, i64>) {
+        const K: usize = 16;
+        let range = p.ix.range(T_EXACT, q);
+        if !p.best_prefix {
+            for o in range.take(self.knobs.prefix_scan) {
+                p.ix.rows_of(o, |i| {
+                    let v = best.entry(i).or_insert(i64::MIN);
+                    *v = (*v).max(PREFIX);
+                    std::ops::ControlFlow::Continue(())
+                });
+            }
+            return;
+        }
+        // The best K rows by importance, as (importance, row), and the floor to beat once full.
+        let top = std::cell::RefCell::new(Vec::<(u8, u32)>::with_capacity(K));
+        let low = std::cell::Cell::new(-1_i32);
+        p.ix.best_in(
+            range,
+            || low.get(),
+            |o| {
+                p.ix.rows_of(o, |r| {
+                    let imp = p.ix.importance(r);
+                    if i32::from(imp) <= low.get() {
+                        return std::ops::ControlFlow::Break(());
+                    }
+                    let mut t = top.borrow_mut();
+                    if t.iter().any(|e| e.1 == r) {
+                        return std::ops::ControlFlow::Continue(());
+                    }
+                    if t.len() == K {
+                        let at = t
+                            .iter()
+                            .enumerate()
+                            .min_by_key(|(_, e)| e.0)
+                            .map_or(0, |(i, _)| i);
+                        t.swap_remove(at);
+                    }
+                    t.push((imp, r));
+                    if t.len() == K {
+                        low.set(i32::from(t.iter().map(|e| e.0).min().unwrap_or(0)));
+                    }
+                    std::ops::ControlFlow::Continue(())
+                });
+                std::ops::ControlFlow::Continue(())
+            },
+        );
+        for &(_, i) in top.borrow().iter() {
+            let v = best.entry(i).or_insert(i64::MIN);
+            *v = (*v).max(PREFIX);
         }
     }
 
@@ -294,31 +476,46 @@ impl<'a> Engine<'a> {
             let e = best.entry(i).or_insert(i64::MIN);
             *e = (*e).max(bonus);
         };
-        for &i in self.exact.get(&q) {
+        for i in self.get(T_EXACT, &q) {
             hit(&mut best, i, EXACT);
         }
         for f in &forms {
-            for &i in self.loose.get(&despace(f)) {
+            for i in self.get(T_LOOSE, &despace(f)) {
                 hit(&mut best, i, LOOSE);
             }
             if self.knobs.phonetic {
-                for &i in self.phon.get(&pkey(f)) {
+                for i in self.get(T_PHON, &pkey(f)) {
                     hit(&mut best, i, self.knobs.phonetic_bonus);
                 }
             }
         }
         for d in &self.droppable {
             if let Some(stem) = q.strip_suffix(d.as_str()) {
-                for &i in self.loose.get(&despace(stem)) {
+                for i in self.get(T_LOOSE, &despace(stem)) {
                     hit(&mut best, i, LOOSE - 5);
                 }
             }
         }
-        let n = q.len();
-        if self.knobs.fuzzy && (4..=FUZZY_MAX_LEN).contains(&n) {
+        // The fuzzy length window: bytes for S3's byte automaton, characters for the pack's.
+        let n = if self.pack.is_some() {
+            q.chars().count()
+        } else {
+            q.len()
+        };
+        let fuzzy_max = if self.pack.is_some() {
+            teigeodata_format::search::fuzzy::MAX_CHARS
+        } else {
+            FUZZY_MAX_LEN
+        };
+        if self.knobs.fuzzy && (4..=fuzzy_max).contains(&n) {
             self.fuzzy(&q, 1, self.knobs.anchored, &mut best);
         }
-        if self.knobs.prefix && n >= 3 {
+        if self.knobs.prefix
+            && n >= 3
+            && let Some(p) = &self.pack
+        {
+            self.prefix_packed(p, &q, &mut best);
+        } else if self.knobs.prefix && n >= 3 {
             let mut s = self
                 .exact
                 .map
@@ -340,7 +537,7 @@ impl<'a> Engine<'a> {
         // not count): one edit anywhere (first-letter typos), then two edits.
         let strong =
             |best: &BTreeMap<u32, i64>| best.values().any(|&b| b >= FUZZY - FUZZY_PER_EDIT);
-        if self.knobs.fuzzy && !strong(&best) && (4..=FUZZY_MAX_LEN).contains(&n) {
+        if self.knobs.fuzzy && !strong(&best) && (4..=fuzzy_max).contains(&n) {
             if self.knobs.anchored {
                 self.fuzzy(&q, 1, false, &mut best);
             }
@@ -621,6 +818,33 @@ fn main() {
         f64::from(probe_hit5) / f64::from(probe_n)
     );
 
+    // Probe: one letter replaced in the middle of every exact_native query (one edit in
+    // characters, two or three in UTF-8 bytes), never the first letter.
+    let (mut native_n, mut native_hit5) = (0u32, 0u32);
+    for q in golden.queries.iter().filter(|q| q.class == "exact_native") {
+        let mut cs: Vec<char> = q.query.chars().collect();
+        if cs.len() < 4 {
+            continue;
+        }
+        let at = cs.len() / 2;
+        cs[at] = if cs[at] == 'क' { 'ख' } else { 'क' };
+        let typo: String = cs.into_iter().collect();
+        let want: BTreeSet<usize> = q
+            .expect
+            .iter()
+            .filter(|(_, g)| **g >= 2)
+            .filter_map(|(k, _)| key_group.get(k.as_str()).copied())
+            .collect();
+        native_n += 1;
+        if engine.search(&typo, 5).iter().any(|g| want.contains(g)) {
+            native_hit5 += 1;
+        }
+    }
+    println!(
+        "probe native one-letter typo: recall@5 {:.3} ({native_hit5}/{native_n})",
+        f64::from(native_hit5) / f64::from(native_n)
+    );
+
     // pkey pair sets (names-and-search §5.3): positives are every pair of spellings of one
     // lexicon term, Latin and native; negatives are distinct folded names of different
     // entities in the same parent unit. Plus the bucket-size distribution.
@@ -697,6 +921,9 @@ fn main() {
         t_load,
         t_build
     );
+    if let Some(p) = &engine.pack {
+        println!("SEARCH section: {} B; columns {:?}", p.body_len, p.columns);
+    }
     println!(
         "index bytes: exact {}, loose {}, phonetic {}, total {}",
         engine.exact.bytes(),

@@ -15,6 +15,7 @@
     allow(dead_code, reason = "run on Linux only, where Valgrind is")
 )]
 mod counts {
+    use std::collections::{BTreeMap, BTreeSet};
     use std::hint::black_box;
 
     use gungraun::prelude::*;
@@ -30,6 +31,8 @@ mod counts {
     use teigeodata_format::place_index::{self, Neighbour, PlaceIndex, Rect};
     use teigeodata_format::places::{self, PlaceColumns, Places};
     use teigeodata_format::region::{self, Options, Region};
+    use teigeodata_format::search::fuzzy::Fuzzy;
+    use teigeodata_format::search::{self as search_section, EXACT, Search};
     use teigeodata_format::{Encoding, Kind, Pack};
 
     /// Setup data lives for the whole run: leaked once per benchmark process.
@@ -335,6 +338,122 @@ mod counts {
         black_box(ix.region(black_box(at)).unwrap_or(0))
     }
 
+    /// Syllables of the synthetic search keys: Latin names of 2 to 4 syllables.
+    const SYLLABLES: [&str; 24] = [
+        "ka", "kha", "ga", "cha", "ja", "ta", "thu", "da", "na", "pa", "pha", "bi", "ma", "ya",
+        "ra", "la", "wa", "sa", "ha", "kot", "pur", "gaun", "bazar", "chowk",
+    ];
+
+    /// A synthetic key of 2 to 4 syllables.
+    fn search_key(r: &mut Rng) -> String {
+        let n = 2 + (r.next_u64() % 3) as usize;
+        (0..n)
+            .map(|_| {
+                let at = (r.next_u64() % SYLLABLES.len() as u64) as usize;
+                SYLLABLES.get(at).copied().unwrap_or("ka")
+            })
+            .collect()
+    }
+
+    /// A SEARCH section of about 30,000 exact keys over 20,000 rows of random importance, with
+    /// "kathmandu" among them (the benchmarks' query).
+    fn search_pack() -> &'static [u8] {
+        let mut r = Rng::new(23);
+        let rows = 20_000_u32;
+        let importance: Vec<u8> = (0..rows).map(|_| r.next_u64() as u8).collect();
+        let mut keys: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
+        for _ in 0..30_000 {
+            let mut k = vec![EXACT];
+            k.extend_from_slice(search_key(&mut r).as_bytes());
+            keys.entry(k)
+                .or_default()
+                .insert((r.next_u64() % u64::from(rows)) as u32);
+        }
+        keys.entry([&[EXACT][..], b"kathmandu"].concat())
+            .or_default()
+            .extend([7, 70, 700]);
+        let body = search_section::encode(&keys, &importance).unwrap();
+        leak(
+            pack_with(
+                "search",
+                1,
+                &[(
+                    Kind::SEARCH,
+                    Encoding::TABLE,
+                    u64::from(rows),
+                    body.as_slice(),
+                )],
+                false,
+            )
+            .unwrap(),
+        )
+    }
+
+    fn search_of(bytes: &'static [u8]) -> Search<'static> {
+        let p = Pack::open(bytes).unwrap();
+        let section = p.section(Kind::SEARCH).unwrap();
+        Search::open(&section).unwrap()
+    }
+
+    // An exact key and its best row.
+    #[library_benchmark]
+    #[bench::hit(search_pack())]
+    fn search_get(bytes: &'static [u8]) -> u32 {
+        let ix = search_of(bytes);
+        let o = ix.get(EXACT, black_box("kathmandu")).unwrap_or(0);
+        let mut best = 0;
+        ix.rows_of(o, |row| {
+            best = row;
+            ControlFlow::Break(())
+        });
+        black_box(best)
+    }
+
+    // One edit, unanchored, over the whole map: the fuzzy tier of a query.
+    #[library_benchmark]
+    #[bench::one_edit(search_pack())]
+    fn search_fuzzy(bytes: &'static [u8]) -> u32 {
+        let ix = search_of(bytes);
+        let m = Fuzzy::new(black_box("kathmandi"), 1).unwrap();
+        let mut hits = 0_u32;
+        ix.walk(EXACT, &m, None, 1 << 20, |_, _| {
+            hits += 1;
+            ControlFlow::Continue(())
+        });
+        black_box(hits)
+    }
+
+    // The prefix tier: the best 16 rows by importance under a two-letter prefix.
+    #[library_benchmark]
+    #[bench::k16(search_pack())]
+    fn search_prefix(bytes: &'static [u8]) -> usize {
+        let ix = search_of(bytes);
+        let range = ix.range(EXACT, black_box("ka"));
+        let mut top: Vec<u8> = Vec::with_capacity(17);
+        let floor = std::cell::Cell::new(-1_i32);
+        ix.best_in(
+            range,
+            || floor.get(),
+            |o| {
+                ix.rows_of(o, |row| {
+                    let v = ix.importance(row);
+                    if i32::from(v) <= floor.get() {
+                        return ControlFlow::Break(());
+                    }
+                    let at = top.partition_point(|&t| t >= v);
+                    top.insert(at, v);
+                    top.truncate(16);
+                    if let Some(&last) = top.get(15) {
+                        floor.set(i32::from(last));
+                    }
+                    ControlFlow::Continue(())
+                });
+                ControlFlow::Continue(())
+            },
+        );
+        black_box(top.len())
+    }
+
     library_benchmark_group!(
         name = core_paths,
         benchmarks = [bitpack_get, bitpack_decode_all, hilbert_1000, bits_rank]
@@ -351,7 +470,10 @@ mod counts {
             blob_get,
             place_within,
             place_nearest,
-            region_at
+            region_at,
+            search_get,
+            search_fuzzy,
+            search_prefix
         ]
     );
 }

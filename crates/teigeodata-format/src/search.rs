@@ -1,0 +1,418 @@
+//! `SEARCH` (kind 5): name keys to places, for exact, prefix and fuzzy search (D-052, B7).
+//!
+//! Keys are byte strings that start with a **tag** naming their map ([`EXACT`], [`LOOSE`],
+//! [`PHONETIC`]; the forge defines how each map folds a name), then the folded name. All maps
+//! share one [automaton](fst), so their common suffixes are stored once. A key's ordinal (its
+//! position in sorted order) indexes its **list** of rows: the places with that key, most
+//! important first. Fuzzy matching counts edits in characters, so every script costs the same
+//! ([`fuzzy`]).
+//!
+//! A [column table](teigeodata_core::table) with these columns:
+//!
+//! | ID | Column | Values |
+//! |---:|---|---|
+//! | 1 | [`LENGTH`] | one value: the automaton's length in bytes |
+//! | 2 | [`AUTOMATON`] | bytes: the [automaton](fst), zero-padded to a multiple of 4 |
+//! | 3 | [`STARTS`] | per key and one more: its list's first entry in IDS, from 0 |
+//! | 4 | [`IDS`] | every list: rows by importance descending, then row ascending |
+//! | 5 | [`IMPORTANCE`] | per row: its importance, 0 to 255 |
+//! | 6 | [`BLOCK_MAX`] | per [`BLOCK`] keys: the highest importance in their lists |
+//!
+//! Its item count is the number of places (rows). [`Search::open`] checks the structure;
+//! [`Search::check`] every key, list, importance and block maximum. Queries never panic and never
+//! allocate, and return only rows below the row count.
+
+pub mod fst;
+pub mod fuzzy;
+
+use core::ops::{ControlFlow, Range};
+
+use teigeodata_core::bitpack::Packed;
+use teigeodata_core::table::Table;
+
+use crate::{Error, Kind, Section, columns};
+use fst::{Fst, Matcher, Walked};
+
+/// Column: the automaton's length.
+pub const LENGTH: u16 = 1;
+/// Column: the automaton.
+pub const AUTOMATON: u16 = 2;
+/// Column: each key's first list entry.
+pub const STARTS: u16 = 3;
+/// Column: the lists of rows.
+pub const IDS: u16 = 4;
+/// Column: each row's importance.
+pub const IMPORTANCE: u16 = 5;
+/// Column: the highest importance per block of keys.
+pub const BLOCK_MAX: u16 = 6;
+
+/// Tag of the exact map: the search fold of each name.
+pub const EXACT: u8 = 1;
+/// Tag of the loose map: the fold without spaces, and without a droppable suffix.
+pub const LOOSE: u8 = 2;
+/// Tag of the phonetic map: the phonetic key.
+pub const PHONETIC: u8 = 3;
+
+/// Keys per block maximum.
+pub const BLOCK: usize = 128;
+
+fn fail(column: u16, problem: &'static str) -> Error {
+    Error::Payload {
+        kind: Kind::SEARCH.0,
+        column,
+        problem,
+    }
+}
+
+/// A view of a SEARCH section.
+#[derive(Clone, Copy, Debug)]
+pub struct Search<'a> {
+    fst: Fst<'a>,
+    starts: Packed<'a>,
+    ids: Packed<'a>,
+    importance: Packed<'a>,
+    block_max: Packed<'a>,
+    rows: usize,
+}
+
+impl<'a> Search<'a> {
+    /// Opens the section: the frame, every column's structure and length, and the automaton's
+    /// root, in O(columns + blocks).
+    ///
+    /// # Errors
+    /// [`Error::Payload`] if the section is not a SEARCH column table, or a column is missing,
+    /// malformed or of the wrong length.
+    pub fn open(section: &Section<'a>) -> Result<Self, Error> {
+        let t: Table<'a> = columns::open(section, Kind::SEARCH)?;
+        let rows = usize::try_from(section.item_count())
+            .map_err(|_| fail(0, "the row count does not fit this platform"))?;
+        if t.ids().any(|id| id == 0 || id > BLOCK_MAX) {
+            return Err(fail(0, "an unknown column"));
+        }
+        let length = columns::required(&t, Kind::SEARCH, LENGTH, Some(1))?;
+        let len = length
+            .get(0)
+            .and_then(|v| usize::try_from(v).ok())
+            .unwrap_or(0);
+        let padded = t
+            .bytes(AUTOMATON)
+            .map_err(|e| columns::map(Kind::SEARCH, e))?;
+        if padded.len() != len.next_multiple_of(4) {
+            return Err(fail(
+                AUTOMATON,
+                "the automaton length differs from its column",
+            ));
+        }
+        let (bytes, pad) = padded.split_at(len);
+        if pad.iter().any(|&b| b != 0) || len == 0 {
+            return Err(fail(
+                AUTOMATON,
+                "the automaton is empty or its padding is not zero",
+            ));
+        }
+        let starts = columns::required(&t, Kind::SEARCH, STARTS, None)?;
+        let keys = starts
+            .len()
+            .checked_sub(1)
+            .ok_or(fail(STARTS, "the list starts are empty"))?;
+        let keys32 = u32::try_from(keys).map_err(|_| fail(STARTS, "too many keys"))?;
+        let entries = starts
+            .get(keys)
+            .and_then(|v| usize::try_from(v).ok())
+            .ok_or(fail(STARTS, "the list starts are empty"))?;
+        let ids = columns::required(&t, Kind::SEARCH, IDS, Some(entries))?;
+        let importance = columns::required(&t, Kind::SEARCH, IMPORTANCE, Some(rows))?;
+        let block_max = columns::required(&t, Kind::SEARCH, BLOCK_MAX, Some(keys.div_ceil(BLOCK)))?;
+        let fst =
+            Fst::new(bytes, keys32).ok_or(fail(AUTOMATON, "the automaton's root is malformed"))?;
+        Ok(Self {
+            fst,
+            starts,
+            ids,
+            importance,
+            block_max,
+            rows,
+        })
+    }
+
+    /// The number of keys.
+    #[must_use]
+    pub const fn keys(&self) -> u32 {
+        self.fst.keys()
+    }
+
+    /// The number of places.
+    #[must_use]
+    pub const fn rows(&self) -> usize {
+        self.rows
+    }
+
+    /// The automaton.
+    #[must_use]
+    pub const fn automaton(&self) -> Fst<'a> {
+        self.fst
+    }
+
+    /// The ordinal of `key` in map `tag`.
+    #[must_use]
+    pub fn get(&self, tag: u8, key: &str) -> Option<u32> {
+        let mut buf = [0_u8; fst::MAX_KEY];
+        let k = tagged(&mut buf, tag, key)?;
+        self.fst.get(k)
+    }
+
+    /// The ordinals of the keys of map `tag` starting with `prefix`.
+    #[must_use]
+    pub fn range(&self, tag: u8, prefix: &str) -> Range<u32> {
+        let mut buf = [0_u8; fst::MAX_KEY];
+        match tagged(&mut buf, tag, prefix) {
+            Some(p) => {
+                let (lo, hi) = self.fst.range(p);
+                lo..hi
+            }
+            None => 0..0,
+        }
+    }
+
+    /// Visits, in key order, the keys of map `tag` that `matcher` accepts (see [`Fst::walk`]).
+    pub fn walk<M: Matcher>(
+        &self,
+        tag: u8,
+        matcher: &M,
+        anchor: Option<char>,
+        budget: usize,
+        visit: impl FnMut(u32, u8) -> ControlFlow<()>,
+    ) -> Walked {
+        self.fst.walk(&[tag], matcher, anchor, budget, visit)
+    }
+
+    /// The entries of key `ordinal`'s list in IDS; empty past the end.
+    #[must_use]
+    pub fn list(&self, ordinal: u32) -> Range<usize> {
+        let o = ordinal as usize;
+        match (self.starts.get(o), self.starts.get(o + 1)) {
+            (Some(a), Some(b)) if a <= b => a as usize..(b as usize).min(self.ids.len()),
+            _ => 0..0,
+        }
+    }
+
+    /// The row at list entry `entry`, if it is below the row count.
+    #[must_use]
+    pub fn row(&self, entry: usize) -> Option<u32> {
+        self.ids.get(entry).filter(|&r| (r as usize) < self.rows)
+    }
+
+    /// Calls `f` with the rows of key `ordinal`, most important first, until it breaks.
+    pub fn rows_of(&self, ordinal: u32, mut f: impl FnMut(u32) -> ControlFlow<()>) {
+        for r in self.ids.values(self.list(ordinal)) {
+            if (r as usize) < self.rows && f(r).is_break() {
+                return;
+            }
+        }
+    }
+
+    /// Row `row`'s importance (0 past the end).
+    #[must_use]
+    pub fn importance(&self, row: u32) -> u8 {
+        self.importance
+            .get(row as usize)
+            .map_or(0, |v| u8::try_from(v).unwrap_or(u8::MAX))
+    }
+
+    /// The highest importance in key `ordinal`'s list: its first row's.
+    #[must_use]
+    pub fn key_max(&self, ordinal: u32) -> u8 {
+        let first = self.list(ordinal).start;
+        self.row(first).map_or(0, |r| self.importance(r))
+    }
+
+    /// The highest importance in the lists of the keys of block `block`.
+    #[must_use]
+    pub fn block_max(&self, block: usize) -> u8 {
+        self.block_max
+            .get(block)
+            .map_or(0, |v| u8::try_from(v).unwrap_or(u8::MAX))
+    }
+
+    /// Visits the keys in `range` whose lists can still beat `floor`: whole blocks whose maximum
+    /// is not above `floor()` are skipped, as are single keys. `floor` is read again after
+    /// every visit, so a caller keeping the best `k` raises it as it fills. Returns the keys
+    /// read.
+    pub fn best_in(
+        &self,
+        range: Range<u32>,
+        mut floor: impl FnMut() -> i32,
+        mut visit: impl FnMut(u32) -> ControlFlow<()>,
+    ) -> usize {
+        let mut read = 0;
+        let mut o = range.start;
+        while o < range.end {
+            let block = o as usize / BLOCK;
+            let end = u32::try_from((block + 1) * BLOCK)
+                .unwrap_or(u32::MAX)
+                .min(range.end);
+            if i32::from(self.block_max(block)) <= floor() {
+                o = end;
+                continue;
+            }
+            while o < end {
+                read += 1;
+                if i32::from(self.key_max(o)) > floor() && visit(o).is_break() {
+                    return read;
+                }
+                o += 1;
+            }
+        }
+        read
+    }
+
+    /// Checks every key, list, importance and block maximum: O(automaton + entries).
+    ///
+    /// # Errors
+    /// [`Error::Payload`] if the automaton is not canonical, a list is empty, out of order or
+    /// names a row past the end, an importance is above 255, or a block maximum is wrong.
+    pub fn check(&self) -> Result<(), Error> {
+        self.fst.check(|_, _| {}).map_err(|p| fail(AUTOMATON, p))?;
+        let mut prev = 0_u32;
+        for o in 0..self.starts.len() {
+            let s = self
+                .starts
+                .get(o)
+                .ok_or(fail(STARTS, "a list start is missing"))?;
+            if o == 0 && s != 0 {
+                return Err(fail(STARTS, "the first list does not start at 0"));
+            }
+            if o > 0 && s <= prev {
+                return Err(fail(STARTS, "a list is empty or the starts decrease"));
+            }
+            prev = s;
+        }
+        for r in 0..self.rows {
+            if self
+                .importance
+                .get(r)
+                .is_none_or(|v| v > u32::from(u8::MAX))
+            {
+                return Err(fail(IMPORTANCE, "an importance is above 255"));
+            }
+        }
+        let mut block_best = 0_u8;
+        for o in 0..self.keys() {
+            let mut last: Option<(u8, u32)> = None;
+            for e in self.list(o) {
+                let r = self
+                    .ids
+                    .get(e)
+                    .ok_or(fail(IDS, "a list entry is missing"))?;
+                if r as usize >= self.rows {
+                    return Err(fail(IDS, "a list names a row past the end"));
+                }
+                let imp = self.importance(r);
+                if let Some((li, lr)) = last
+                    && (imp > li || (imp == li && r <= lr))
+                {
+                    return Err(fail(IDS, "a list is not in importance order"));
+                }
+                last = Some((imp, r));
+            }
+            block_best = block_best.max(self.key_max(o));
+            let o = o as usize;
+            if (o + 1).is_multiple_of(BLOCK) || o + 1 == self.keys() as usize {
+                if self.block_max(o / BLOCK) != block_best
+                    || self.block_max.get(o / BLOCK).is_none_or(|v| v > 255)
+                {
+                    return Err(fail(BLOCK_MAX, "a block maximum is wrong"));
+                }
+                block_best = 0;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// `tag` then `key` in `buf`, if it fits a key.
+fn tagged<'b>(buf: &'b mut [u8; fst::MAX_KEY], tag: u8, key: &str) -> Option<&'b [u8]> {
+    let n = key.len() + 1;
+    let out = buf.get_mut(..n)?;
+    let (t, rest) = out.split_first_mut()?;
+    *t = tag;
+    rest.copy_from_slice(key.as_bytes());
+    Some(out)
+}
+
+#[cfg(feature = "write")]
+pub use write::encode;
+
+#[cfg(feature = "write")]
+mod write {
+    use alloc::collections::{BTreeMap, BTreeSet};
+    use alloc::vec::Vec;
+
+    use teigeodata_core::bitpack::{Coding, encode as pack, encode_direct};
+    use teigeodata_core::table::{self, Codec};
+
+    use super::fst::Builder;
+    use super::{AUTOMATON, BLOCK, BLOCK_MAX, IDS, IMPORTANCE, LENGTH, STARTS};
+    use crate::Error;
+
+    /// Encodes a SEARCH body: `keys` maps each tagged key (tag byte, then the folded text) to
+    /// its rows; `importance` holds every row's importance (its length is the row count).
+    ///
+    /// # Errors
+    /// [`Error::Write`] if a key is empty or too long, a list is empty, or a row is past the
+    /// end.
+    pub fn encode(
+        keys: &BTreeMap<Vec<u8>, BTreeSet<u32>>,
+        importance: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        let mut b = Builder::new();
+        let mut starts = Vec::with_capacity(keys.len() + 1);
+        let mut ids = Vec::new();
+        let mut block_max = Vec::with_capacity(keys.len().div_ceil(BLOCK));
+        let mut best = 0_u8;
+        for (i, (key, rows)) in keys.iter().enumerate() {
+            if key.is_empty() || rows.is_empty() {
+                return Err(Error::Write("a search key or its list is empty"));
+            }
+            b.insert(key)?;
+            starts.push(
+                u32::try_from(ids.len()).map_err(|_| Error::Write("too many search entries"))?,
+            );
+            let mut list: Vec<(u8, u32)> = Vec::with_capacity(rows.len());
+            for &r in rows {
+                let imp = *importance
+                    .get(r as usize)
+                    .ok_or(Error::Write("a search list names a row past the end"))?;
+                list.push((imp, r));
+            }
+            list.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+            best = best.max(list.first().map_or(0, |e| e.0));
+            ids.extend(list.iter().map(|e| e.1));
+            if (i + 1).is_multiple_of(BLOCK) || i + 1 == keys.len() {
+                block_max.push(u32::from(best));
+                best = 0;
+            }
+        }
+        starts.push(u32::try_from(ids.len()).map_err(|_| Error::Write("too many search entries"))?);
+        let (mut automaton, _) = b.finish()?;
+        let len = u32::try_from(automaton.len())
+            .map_err(|_| Error::Write("the search automaton is too large"))?;
+        automaton.resize(automaton.len().next_multiple_of(4), 0);
+        let imp: Vec<u32> = importance.iter().map(|&v| u32::from(v)).collect();
+        let cols = [
+            (LENGTH, encode_direct(&[len])),
+            (STARTS, pack(&starts, Coding::Delta)),
+            (IDS, encode_direct(&ids)),
+            (IMPORTANCE, encode_direct(&imp)),
+            (BLOCK_MAX, encode_direct(&block_max)),
+        ];
+        let mut with: Vec<(u16, Codec, &[u8])> = cols
+            .iter()
+            .map(|(id, b)| (*id, Codec::Bitpack, b.as_slice()))
+            .collect();
+        with.push((AUTOMATON, Codec::Bytes, automaton.as_slice()));
+        with.sort_by_key(|c| c.0);
+        table::encode_with(&with)
+            .map_err(|_| Error::Write("the search table could not be laid out"))
+    }
+}
