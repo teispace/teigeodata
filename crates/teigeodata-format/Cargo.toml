@@ -1,0 +1,31 @@
+[package]
+name = "teigeodata-format"
+description = "The .tgd pack container of teigeodata: a validating zero-copy reader, and a deterministic writer."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[features]
+# The writer: the forge and tests. Needs `alloc`; the reader does not.
+write = []
+# Ed25519 pack signatures: verification, and signing with `write`.
+signature = ["dep:ed25519-dalek"]
+# The fuzz and property harnesses, shared by `cargo test` and cargo-fuzz (D-072).
+fuzz = ["write", "signature"]
+
+[dependencies]
+blake3 = { version = "1.8.7", default-features = false }
+ed25519-dalek = { version = "3.0.0", default-features = false, optional = true }
+teigeodata-core.workspace = true
+zerocopy = { version = "0.8.63", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+# Unit and integration tests see the writer, signatures and harnesses without extra flags.
+teigeodata-format = { path = ".", features = ["fuzz"] }
+
+[lints]
+workspace = true

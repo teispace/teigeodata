@@ -1,0 +1,167 @@
+//! The `.tgd` pack container ([pack format](https://github.com/teispace/teigeodata/blob/main/docs/04-architecture/pack-format.md),
+//! [ADR-0009](https://github.com/teispace/teigeodata/blob/main/docs/03-decisions/adr/ADR-0009-pack-format.md)).
+//!
+//! - [`Pack::open`] validates a pack in place, without copying or allocating, and gives
+//!   zero-copy views of its sections and manifest. It never panics, on any input.
+//! - [`Writer`] (feature `write`) lays out a pack deterministically. It plans the layout from
+//!   section lengths and hashes, so a large pack streams to disk with bounded memory.
+//! - Feature `signature`: Ed25519 signatures over the head digest.
+//!
+//! The encoding is canonical: [`Pack::open`] accepts a file only if it is exactly what the
+//! writer produces for its content.
+//!
+//! ```
+//! # #[cfg(feature = "write")] {
+//! use teigeodata_format::{Encoding, Kind, Pack, Writer};
+//!
+//! let mut w = Writer::new("np", "places", "2026.11.0")?;
+//! w.section_bytes(Kind::PLACES, Encoding::RAW, 3, b"abc")?;
+//! let bytes = w.layout(false)?.assemble(&[b"abc"])?;
+//!
+//! let pack = Pack::open_verified(&bytes)?;
+//! assert_eq!(pack.manifest().address(), "np");
+//! assert_eq!(pack.section(Kind::PLACES).map(|s| s.bytes()), Some(&b"abc"[..]));
+//! # }
+//! # Ok::<(), teigeodata_format::Error>(())
+//! ```
+
+#![no_std]
+
+#[cfg(feature = "write")]
+extern crate alloc;
+#[cfg(test)]
+extern crate std;
+
+mod error;
+#[cfg(feature = "fuzz")]
+#[doc(hidden)]
+pub mod fuzz;
+mod layout;
+mod manifest;
+mod read;
+#[cfg(feature = "signature")]
+mod signature;
+#[cfg(feature = "write")]
+mod write;
+
+use core::fmt;
+
+pub use error::Error;
+pub use manifest::{Bbox, Entries, Manifest, Tag};
+pub use read::{Pack, Section};
+#[cfg(all(feature = "signature", feature = "write"))]
+pub use signature::signer;
+#[cfg(feature = "signature")]
+pub use signature::{SIGNATURE_DOMAIN, key_id};
+#[cfg(feature = "write")]
+pub use write::{Layout, Placed, Writer};
+
+/// The format major version this crate writes. 0 until the format freezes (D-029).
+pub const FORMAT_MAJOR: u16 = 0;
+/// The format minor version this crate writes.
+pub const FORMAT_MINOR: u16 = 1;
+/// The newest `min_reader_major` this reader accepts.
+pub const READER_MAJOR: u16 = 0;
+
+/// A section kind. Unknown kinds are kept and skipped, so newer packs stay readable.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Kind(pub u32);
+
+impl Kind {
+    /// Stable u64 IDs and ID → row.
+    pub const IDMAP: Self = Self(1);
+    /// Points, kind and class codes, flags.
+    pub const PLACES: Self = Self(2);
+    /// Parent rows, children lists, validity.
+    pub const HIERARCHY: Self = Self(3);
+    /// Name records and text.
+    pub const NAMES: Self = Self(4);
+    /// The text-search index.
+    pub const SEARCH: Self = Self(5);
+    /// The spatial index over points.
+    pub const PLACE_INDEX: Self = Self(6);
+    /// Shared polygon arcs.
+    pub const ARCS: Self = Self(7);
+    /// Ring and part tables.
+    pub const POLYGONS: Self = Self(8);
+    /// The spatial index over polygons.
+    pub const POLY_INDEX: Self = Self(9);
+    /// The exact region index.
+    pub const REGION: Self = Self(10);
+    /// Postal codes.
+    pub const POSTAL: Self = Self(11);
+    /// Optional column groups with presence bitmaps.
+    pub const COMPONENTS: Self = Self(12);
+    /// Elevation tiles.
+    pub const DEM: Self = Self(13);
+    /// Cold data: attribution text, long strings.
+    pub const BLOBS: Self = Self(14);
+    /// Per-block hashes of large sections.
+    pub const BLOCK_HASHES: Self = Self(15);
+    /// Retired IDs and their survivors.
+    pub const REDIRECTS: Self = Self(16);
+
+    /// This reader's name for the kind, if it knows it.
+    #[must_use]
+    pub fn name(self) -> Option<&'static str> {
+        KINDS.iter().find(|(k, _)| *k == self).map(|(_, n)| *n)
+    }
+}
+
+/// Every kind this reader knows, with its name in the spec.
+pub(crate) const KINDS: &[(Kind, &str)] = &[
+    (Kind::IDMAP, "IDMAP"),
+    (Kind::PLACES, "PLACES"),
+    (Kind::HIERARCHY, "HIERARCHY"),
+    (Kind::NAMES, "NAMES"),
+    (Kind::SEARCH, "SEARCH"),
+    (Kind::PLACE_INDEX, "PLACE_INDEX"),
+    (Kind::ARCS, "ARCS"),
+    (Kind::POLYGONS, "POLYGONS"),
+    (Kind::POLY_INDEX, "POLY_INDEX"),
+    (Kind::REGION, "REGION"),
+    (Kind::POSTAL, "POSTAL"),
+    (Kind::COMPONENTS, "COMPONENTS"),
+    (Kind::DEM, "DEM"),
+    (Kind::BLOBS, "BLOBS"),
+    (Kind::BLOCK_HASHES, "BLOCK_HASHES"),
+    (Kind::REDIRECTS, "REDIRECTS"),
+];
+
+impl fmt::Display for Kind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.name() {
+            Some(n) => f.write_str(n),
+            None => write!(f, "kind {}", self.0),
+        }
+    }
+}
+
+/// How a section's bytes are encoded as a whole. Column codecs inside a section are described
+/// by its own header or the manifest's column descriptors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Encoding(pub u16);
+
+impl Encoding {
+    /// Stored as is.
+    pub const RAW: Self = Self(0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{KINDS, Kind};
+
+    #[test]
+    fn every_kind_is_documented_with_its_number() {
+        let spec = include_str!("../../../docs/04-architecture/pack-format.md");
+        for (i, (k, name)) in KINDS.iter().enumerate() {
+            assert_eq!(u32::try_from(i + 1).ok(), Some(k.0), "{name}");
+            let row = std::format!("| {} | {name} |", k.0);
+            assert!(
+                spec.contains(&row),
+                "pack-format.md has no row starting {row}"
+            );
+        }
+        assert_eq!(Kind(99).name(), None);
+    }
+}

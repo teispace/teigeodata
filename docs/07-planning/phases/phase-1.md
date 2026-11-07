@@ -35,13 +35,13 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 - [x] Hilbert index on the grid, the row order of every pack (S1): a branch-free prefix-scan version equal to the classic loop on 10⁶ random points, every edge and the first 64 × 64 cells; 8–12 ns per point against 39–47 ns for the loop (load 12, 2026-11-07); continuity and inverse tested. Each test proven to fail on a planted bug
 
 ### 1.2 `teigeodata-format`: the container
-- [ ] Header, section table and footer as `zerocopy` structs, sizes asserted at compile time
-- [ ] The TLV manifest: canonical order, the critical bit, nested values
-- [ ] Writer (`write` feature): 64-byte alignment, BLAKE3 per section, deterministic UUID and time, the first-16-KiB rule
-- [ ] Reader: every check of "verification on open", typed errors, no panic on any input
-- [ ] Signature (`signature` feature): Ed25519 `verify_strict` over BLAKE3(header ‖ table ‖ manifest)
-- [ ] bolero harnesses: raw bytes into `open`; a model through the writer and back; the manifest alone; each proven to find a planted bug
-- [ ] The [pack format](../../04-architecture/pack-format.md) updated to what was built
+- [x] Header, section table and footer as `zerocopy` structs, sizes and the hashed prefix asserted at compile time
+- [x] The TLV manifest: canonical order, the critical bit, tag 0 reserved, known values checked on open, one tag registry shared by reader, writer and a docs test (nesting reuses the parser on a value; first used by column descriptors)
+- [x] Writer (`write` feature): plans from lengths and hashes so large packs stream with bounded memory; 64-byte alignment, BLAKE3 per section, deterministic UUID and time, the first-16-KiB rule; a failed call leaves it unchanged (a bug the round-trip harness found)
+- [x] Reader: every check of "verification on open", typed errors, no panic on any input; canonical (an accepted file is exactly what the writer produces)
+- [x] Signature (`signature` feature): Ed25519 `verify_strict` over a domain prefix and the head digest; key IDs; a 72-byte slot filled from the digest alone (offline keys)
+- [x] Harnesses (D-072: plain functions, a seeded driver under `cargo test`): raw bytes into `open` with the canonical oracle; a model through the writer and back with every single-byte change and truncation detected; structure-aware mutation with resealing; the manifest alone. Ten planted bugs, each caught
+- [x] The [pack format](../../04-architecture/pack-format.md) updated to what was built (format 0.1); kinds and tags checked against it by tests
 
 ### 1.3 Benchmarks
 - [ ] `teigeodata-bench`: criterion locally, gungraun in CI; L1 (open) and L3 (signature)
@@ -55,7 +55,7 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 - [ ] B12 integrity: eager against lazy hashing, 16 against 64 KiB blocks → BLOCK_HASHES; L2
 
 ### 1.5 Hardening
-- [ ] Nightly CI: libFuzzer through `cargo bolero test`, Miri on the reader tests
+- [ ] Nightly CI: cargo-fuzz (libFuzzer) on the same harness functions, Miri on the reader tests
 - [ ] Determinism gate: every test pack built twice, bytes compared
 - [ ] Sizes (Z2) of `core` and `format` per feature set
 
@@ -68,3 +68,4 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 |---|---|---|
 | 2026-11-07 | Phase 1 planned | M0 met (D-069) |
 | 2026-11-07 | 1.1 done: `teigeodata-core` | the plan held |
+| 2026-11-07 | 1.2 done: the container; bolero replaced by plain harness functions | D-072 |

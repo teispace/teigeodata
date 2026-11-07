@@ -54,10 +54,12 @@ It feeds [phase 1](../../07-planning/phases/phase-1.md).
   - `created_unix` comes from `SOURCE_DATE_EPOCH`, else 0;
   - nothing else depends on time, thread count or hash-map order;
   - a test builds every pack twice and compares the bytes.
-- **Fuzzing:** **bolero** 0.13.
-  - One harness is a property test under `cargo test` on stable, which runs random inputs.
-  - The same harness runs as libFuzzer under `cargo bolero test` in a nightly CI job.
-  - `cargo-fuzz` would need a second copy of every harness.
+- **Fuzzing:** one plain function per property over raw bytes (D-072).
+  - A seeded random driver runs it under `cargo test` on stable.
+  - cargo-fuzz (libFuzzer) runs the same function in a nightly CI job.
+  - bolero was the first choice (one harness for both), but its derive crate pins `indexmap`
+    and conflicts with the workspace (§3.5); the plain functions keep its benefit with no
+    dependency.
 - **Benchmarks:**
   - **criterion** 0.8 for wall-clock time, local and CI;
   - **gungraun** 0.20 for instruction counts, CI on Linux only, because it needs Valgrind;
@@ -148,7 +150,10 @@ It feeds [phase 1](../../07-planning/phases/phase-1.md).
 
 ### 3.5 Harnesses
 
-- **bolero** 0.13.7 (2026-10-03):
+- **bolero** 0.13.7 (2026-10-03). **Rejected when built (D-072):** `bolero-generator` 0.13.6
+  depends on `bolero-generator-derive` 0.13.5 unconditionally, and that pins
+  `indexmap = "=2.11.2"`; the workspace's `toml` 1.2 needs `indexmap` 2.13 or later, so Cargo
+  cannot resolve both. What it offered:
   - `bolero::check!().with_type::<T>()` or `.with_generator(...)` runs under `cargo test` with
     random inputs, and replays a corpus directory;
   - `cargo bolero test <name>` runs the same harness under libFuzzer, AFL or honggfuzz;
@@ -176,8 +181,8 @@ It feeds [phase 1](../../07-planning/phases/phase-1.md).
 | ID: namespace + serial | no coordination; text from u64 alone | namespace is the allocating country | — | — | **use** |
 | ID: opaque central sequence | simplest | one allocator for every build | — | WOF | no |
 | ID: UUID | no coordination | 128 bits; unreadable | — | Overture | no |
-| bolero | one harness for tests and fuzzing | Linux libs for cargo-bolero | MIT | 0.13.7, 2026-10-03 | **use** |
-| cargo-fuzz | standard | nightly; harness copies | MIT / Apache | 0.13.2 | no |
+| bolero | one harness for tests and fuzzing | its derive crate pins `indexmap =2.11.2`: unresolvable here | MIT | 0.13.7, 2026-10-03 | no (D-072) |
+| plain harness functions + seeded driver + cargo-fuzz | one harness for both, no dependency | no shrinking | ours; cargo-fuzz MIT / Apache | cargo-fuzz 0.13.2 | **use** |
 | criterion + gungraun | wall clock and stable counts | gungraun Linux-only | Apache / MIT | 0.8.2; 0.20.0 | **use both** |
 
 ## 5. What we build ourselves, and why
@@ -214,8 +219,7 @@ It feeds [phase 1](../../07-planning/phases/phase-1.md).
 
 - **zerocopy's derive and the `indexing_slicing` lint:** the reader uses `get` and
   `Ref::from_prefix`, never `[]`. B13 measures what that costs in hot loops.
-- **bolero's random mode under `cargo test` must be proven** to find a planted bug before it is
-  trusted (AGENTS.md §6).
+- **Every harness must be proven** to find a planted bug before it is trusted (AGENTS.md §6).
 - **The critical-tag rule** must be tested both ways: an unknown non-critical tag is skipped, and
   an unknown critical one refuses the pack.
 - **ID namespace exhaustion is not a risk:** 676 countries of 2.8 × 10¹⁴ serials each.

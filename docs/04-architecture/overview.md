@@ -36,7 +36,7 @@ part; the ADR each part comes from is linked.
 | Crate | Role | `no_std` | Decision |
 |---|---|---|---|
 | `teigeodata-core` | Stable IDs and their text form (D-070), grid points (`E6`, `E7`), Hilbert order; the codecs (bit-packing, varints, strings, arcs) as Phase 1 adds them. No dependencies | yes | [ADR-0001](../03-decisions/adr/ADR-0001-rust-core.md) |
-| `teigeodata-format` | `.tgd` reader and writer: header, manifest, sections, components, checksums, signature | yes | [ADR-0009](../03-decisions/adr/ADR-0009-pack-format.md) |
+| `teigeodata-format` | `.tgd` container: a canonical validating reader (no allocation), a deterministic writer (`write`), Ed25519 (`signature`), fuzz harnesses (`fuzz`). Depends on `zerocopy`, `blake3`, `teigeodata-core` | yes | [ADR-0009](../03-decisions/adr/ADR-0009-pack-format.md) |
 | `teigeodata-index` | Spatial index, region index, search index, perfect-hash ID maps | yes | [ADR-0013](../03-decisions/adr/ADR-0013-region-index.md), [ADR-0014](../03-decisions/adr/ADR-0014-names-and-search.md) |
 | `teigeodata-names` | Normalisation, transliteration, phonetic key, lexicon | yes | [ADR-0014](../03-decisions/adr/ADR-0014-names-and-search.md) |
 | `teigeodata-tz` | Timezone lookup over the region index; optional tzdb rules | yes | [ADR-0022](../03-decisions/adr/ADR-0022-timezone-and-postal.md) |
@@ -85,4 +85,4 @@ its research note lands.
 | 2026-11-07 | Binding crates from spike S4; the IDL is extracted from the safe API, not the C ABI; no `teigeodata-idl` crate (it lives in `xtask`) | [S4](../02-research/benches/s4-bindings.md), D-066 |
 | 2026-11-06 | First draft | Project start |
 | 2026-11-06 | `teigeodata-names` started early | One name code path for the forge and search (D-057) |
-| 2026-11-07 | `teigeodata-core` created (Phase 1) | [core and format](../02-research/notes/core-and-format.md) |
+| 2026-11-07 | `teigeodata-core` and `teigeodata-format` created (Phase 1) | [core and format](../02-research/notes/core-and-format.md) |

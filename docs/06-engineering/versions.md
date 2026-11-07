@@ -30,6 +30,9 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | cbindgen (header cross-check) | 0.29.4 | 2026-11-07 | crates.io | 2026-12-07 |
 | syn / proc-macro2 (IDL extractor) | 3.0.9 / 1.0.107 | 2026-11-07 | crates.io | 2026-12-07 |
 | minijinja (binding templates) | 3.0.5 | 2026-11-07 | crates.io | 2026-12-07 |
+| zerocopy (pack views, `derive`) | 0.8.63 | 2026-11-07 | crates.io | 2026-12-07 |
+| blake3 (section and head hashes, no default features) | 1.8.7 | 2026-11-07 | crates.io | 2026-12-07 |
+| ed25519-dalek (pack signatures, no default features) | 3.0.0 | 2026-11-07 | crates.io | 2026-12-07 |
 | Dart `ffi` package | 2.2.0 | 2026-11-07 | pub.dev | 2026-12-07 |
 | Java (JVM binding, CI) | 25 (Temurin) | 2026-11-07 | `java --version` | 2026-12-07 |
 | Swift (SwiftPM, local) | 6.4.2 | 2026-11-07 | `swift --version` | 2026-12-07 |

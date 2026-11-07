@@ -8,6 +8,7 @@ members = [
     "crates/teigeodata-blob",
     "crates/teigeodata-core",
     "crates/teigeodata-ffi",
+    "crates/teigeodata-format",
     "crates/teigeodata-names",
     "xtask",
     "spikes/s1-codecs",
@@ -19,6 +20,7 @@ members = [
 teigeodata-api = { version = "0.0.0", path = "crates/teigeodata-api" }
 teigeodata-blob = { version = "0.0.0", path = "crates/teigeodata-blob" }
 teigeodata-core = { version = "0.0.0", path = "crates/teigeodata-core" }
+teigeodata-format = { version = "0.0.0", path = "crates/teigeodata-format" }
 teigeodata-names = { version = "0.0.0", path = "crates/teigeodata-names" }
 
 [workspace.package]

@@ -9,9 +9,13 @@ updated: 2026-11-07
 ## Where we are
 
 - **Phase:** 1, core and format ([phase file](../07-planning/phases/phase-1.md)).
-- **Now:** step 1.2, the container in `teigeodata-format`. Step 1.1 is done:
-  `teigeodata-core` has the stable ID and its text form, grid points and a Hilbert index 4–5×
-  faster than the classic loop and proven equal to it. The Phase 1 research is done ([core and format](../02-research/notes/core-and-format.md), D-070, D-071).
+- **Now:** step 1.3, benchmarks (`teigeodata-bench`, L1, L3, B13). Done in Phase 1:
+  - 1.1 `teigeodata-core`: the stable ID and its text form, grid points, and a Hilbert index
+    4–5× faster than the classic loop and proven equal to it;
+  - 1.2 `teigeodata-format`: format 0.1. A canonical, validating zero-copy reader (`no_std`, no
+    allocation), a streaming-friendly deterministic writer, Ed25519 signatures, and four fuzz
+    properties under `cargo test`, each proven on planted bugs (D-072). The research is in
+    [core and format](../02-research/notes/core-and-format.md) (D-070, D-071).
 - **M0 met** on 2026-11-07 (D-069): each criterion with its evidence in
   [phase 0 §0.5](../07-planning/phases/phase-0.md#05-exit-review). The maintainer's review is
   asynchronous. Phase 0 in short:
@@ -66,3 +70,4 @@ updated: 2026-11-07
 | 2026-11-07 | S6.3: NASADEM via Planetary Computer tokens and EGM96; paired comparison with Copernicus (D-064); GEDTM30 circularity recorded (Q-016) | S4 bindings |
 | 2026-11-07 | S4: safe API crate, syn IDL, generated C ABI, header, Swift, Dart, Python, Node and JVM layers; parity in all; benchmarks; cbindgen and lint-table gates; `dist` unwinds (D-065 to D-068); ASCII fold fast path | M0 review |
 | 2026-11-07 | CI's binding suites green on Linux (Node test path fixed); M0 review (D-069); Phase 1 research note and plan: crate split, TLV manifest, stable ID text form, bolero, REDIRECTS (D-070, D-071) | 1.1 `teigeodata-core` |
+| 2026-11-07 | 1.1 `teigeodata-core`; 1.2 `teigeodata-format` (format 0.1): reader, writer, signatures, fuzz properties; a writer bug found by the round-trip harness; bolero dropped (D-072) | 1.3 benchmarks |
