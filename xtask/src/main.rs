@@ -35,7 +35,8 @@ Tasks:
                     unit types, source codes), lexicon.yaml (IDs, NFC, scripts, variant
                     collisions, evidence) and golden query files; and data/sources.lock
                     (pins, licence classes, query templates).
-  check-workspace   Check that forge/Cargo.toml keeps the main workspace's lint table.
+  check-workspace   Check that the forge, bindings/ and the C ABI crate keep the main lint
+                    table (boundary crates may only lower unsafe_code to deny).
   clean [--all]     Free disk: incremental caches and scratch of both workspaces; --all
                     also runs `cargo clean` in both. Fetched sources are kept.
   help              Show this message.

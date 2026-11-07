@@ -3,8 +3,9 @@
 //!
 //! Generated files are checked in. `--check` renders everything in memory and fails on any
 //! difference, so a change to the API that was not regenerated, or a hand edit to a generated
-//! file, fails CI.
+//! file, fails CI. It also compares the header with cbindgen's reading of the ABI crate.
 
+mod cheader;
 mod idl;
 
 use std::fs;
@@ -32,7 +33,7 @@ const TARGETS: &[Target] = &[
     },
     Target {
         template: "c.h.j2",
-        output: "bindings/c/teigeodata.h",
+        output: HEADER_OUTPUT,
         rustfmt: false,
     },
     Target {
@@ -82,6 +83,7 @@ const TARGETS: &[Target] = &[
     },
 ];
 
+const HEADER_OUTPUT: &str = "bindings/c/teigeodata.h";
 const IDL_OUTPUT: &str = "bindings/idl.json";
 const API_SOURCE: &str = "crates/teigeodata-api/src/lib.rs";
 
@@ -113,6 +115,9 @@ pub(crate) fn run(root: &Path, check: bool) -> Result<String, Vec<String>> {
     }
     if !problems.is_empty() {
         return Err(problems);
+    }
+    if check && let Some((_, header)) = files.iter().find(|(rel, _)| *rel == HEADER_OUTPUT) {
+        cheader::check(root, header)?;
     }
     let mut changed = Vec::new();
     for (rel, text) in &files {

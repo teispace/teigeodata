@@ -1,0 +1,6 @@
+# cbindgen reads the ABI crate's Rust source. `cargo xtask bindings --check` compares every
+# function, callback type and constant it declares with the generated bindings/c/teigeodata.h:
+# an independent check that the header matches the library.
+language = "C"
+style = "type"
+usize_is_size_t = true
