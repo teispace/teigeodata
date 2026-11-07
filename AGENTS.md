@@ -162,6 +162,9 @@ Plain, clear, specific English. One fact, one home: link instead of repeating
 - **Work autonomously, no pauses.** Follow the plan and the recorded decisions without stopping
   to ask; decide by the research and the plan, record the decision, keep going. Ask only for what
   only the maintainer can provide (legal, accounts, physical devices).
+- **Never idle on slow checks.** Nightly jobs (fuzzing, Miri) and long CI runs never block the
+  next step: push, keep working, fix a failure when it is found (D-080). Avoid hour-long local
+  runs; split slow work into parallel CI jobs and bound it.
 - **Keep `main` current.** Push verified batches regularly, merge finished work into `main`, pull,
   and delete merged or stale branches (local and remote) so `main` is the single source.
 

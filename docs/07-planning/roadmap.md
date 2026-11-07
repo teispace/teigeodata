@@ -49,3 +49,4 @@ parallel lanes: research notes, docs, one heavy build lane, one test or benchmar
 |---|---|---|
 | 2026-11-06 | Roadmap created | Project start |
 | 2026-11-07 | M0 met; phase 1 file | D-069 |
+| 2026-11-07 | M1 met; Phase 2 next, research first | D-080 |

@@ -57,13 +57,29 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 - [x] B12 integrity: 16 KiB BLAKE3 chaining values per section of 1 MiB or more, merged into the table hash (no separate trust root); proof 237 µs and a first read 8.8 µs at 100 MB, against 55.6 ms eager (D-078, [note](../../02-research/notes/block-hashes.md), [results](../../02-research/benches/phase-1.md#b12-integrity-block_hashes)) → BLOCK_HASHES; L2
 
 ### 1.5 Hardening
-- [x] Nightly CI: cargo-fuzz (libFuzzer) on the same harness functions, Miri on the reader tests
+- [x] Nightly CI: cargo-fuzz (libFuzzer) on the same harness functions, Miri on the reader tests. All 8 fuzz targets green on GitHub (run 42346102103); Miri runs as four parallel jobs with its tests bounded under `cfg(miri)`
 - [x] gungraun instruction-count benchmarks in CI (Valgrind; Linux), the load-independent PR gate: 11 hot paths in `benches/counts.rs`, a PR fails above +1% instructions against its base. Proven on a planted regression (PR #1, run 42345671437: `Packed::get` +26%, a canonical name +8.7%, failed); green on `main` (run 42345662682) ([results](../../02-research/benches/phase-1.md#counts-instructions-of-the-hot-paths-the-pr-gate))
 - [x] Determinism gate: every test pack built twice, bytes compared
 - [x] Sizes (Z2) of `core` and `format` per feature set: `cargo xtask sizes` (`tools/size-probe`); the whole reader 171 KiB wasm32, 53 KiB gzipped ([results](../../02-research/benches/phase-1.md#z2-library-sizes-per-feature-set))
 
 ### 1.6 Exit review
-- [ ] M1 criteria met; progress updated
+- [x] M1 criteria met (2026-11-07), each against the [roadmap](../roadmap.md):
+  - `core` types and codecs: the stable ID, grid points, the Hilbert index, the B1 integer
+    codec, the column table, rank bitmaps and FSST (1.1, 1.4);
+  - `.tgd` reader and writer with every section kind: all 16 kinds have their number, frame,
+    validation and round trip (the `round_trip` harness writes and reads every kind; the writer
+    makes BLOCK_HASHES); real payloads for IDMAP, PLACES, HIERARCHY, NAMES, COMPONENTS, BLOBS,
+    BLOCK_HASHES and REDIRECTS; the rest come in Phase 2 and with B10 and B11, as D-071 planned;
+  - fuzzed: eight harnesses run on seeded inputs in every `fast-check` and as libFuzzer
+    targets nightly (run 42346102103: all eight green); Miri nightly on core and the reader;
+  - benchmarked: B1, B3–B6, B12, B13, L1–L3, Z2 and the instruction counts, on the
+    [results page](../../02-research/benches/phase-1.md); the `counts` gate proven on a planted
+    regression (run 42345671437);
+  - specified: the [pack format](../../04-architecture/pack-format.md), format 0.1, checked
+    against the code by tests;
+  - CI: `fast-check` and `counts` green on `main` (runs 42359284121, 42359284151).
+- [x] Progress updated; Phase 2 starts with its research
+- [ ] Maintainer review: asynchronous, does not block Phase 2 (as D-069 did for M0)
 
 ## Changelog
 
@@ -81,5 +97,6 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 | 2026-11-07 | 1.5: nightly fuzz (8 libFuzzer targets: the 4 pack harnesses plus sections, bitpack, table, bits) and Miri; determinism gate in `tests/determinism.rs` | D-072: one harness per property, run by `cargo test` and libFuzzer |
 | 2026-11-07 | Z2 done: `cargo xtask sizes` with a probe cdylib and a std baseline; the payload fuzz harnesses moved into `teigeodata_format::fuzz`, so all eight run on every PR | measured sizes per feature set; one home per harness |
 | 2026-11-07 | B4 done: frames of whole blobs, dictionary optional; dependency `unsafe` policy in the quality bar | measured: a random read costs one frame, so 16 KiB frames; dictionaries pay only below 4 KiB |
-| 2026-11-07 | gungraun counts gate done; the base is built in its own target directory | a shared one reused the base binary for the PR, so the first proof run passed a +26% regression |
 | 2026-11-07 | B12 done: 16 KiB block CVs, coverage canonical | measured: 16 KiB reads 4× faster than 64 KiB for 0.15% more size; the hazmat merge removes a separate root |
+| 2026-11-07 | gungraun counts gate done; the base is built in its own target directory | a shared one reused the base binary for the PR, so the first proof run passed a +26% regression |
+| 2026-11-07 | M1 met; Miri split into four parallel nightly jobs that do not gate work | nightly Miri took over an hour per step; the phase waited on it |
