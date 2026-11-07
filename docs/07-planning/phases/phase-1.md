@@ -30,9 +30,9 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 - [x] [Core and format](../../02-research/notes/core-and-format.md): crate split, `zerocopy` views, the TLV manifest, the stable ID, reproducible bytes, bolero, criterion and gungraun (D-070, D-071)
 
 ### 1.1 `teigeodata-core`
-- [ ] Stable ID: namespace and serial, the text form `tgd:<cc>/<serial>` (Crockford base32), parse and format, round-trip tests on every edge
-- [ ] Grid points at 1e-6° and 1e-7°, with checked conversion from degrees (range, NaN, rounding)
-- [ ] Hilbert index on the grid, the row order of every pack (S1), proven against a reference implementation
+- [x] Stable ID: namespace and serial, the text form `tgd:<cc>/<serial>` (Crockford base32), parse and format, round-trip tests on every edge (every namespace, serial 1 and 2⁴⁸ − 1, 200,000 random IDs, 19 rejected forms)
+- [x] Grid points at 1e-6° and 1e-7°, with checked conversion from degrees (range, NaN, exact half-away rounding; 500,000 random grid values round-trip through `f64` degrees)
+- [x] Hilbert index on the grid, the row order of every pack (S1): a branch-free prefix-scan version equal to the classic loop on 10⁶ random points, every edge and the first 64 × 64 cells; 8–12 ns per point against 39–47 ns for the loop (load 12, 2026-11-07); continuity and inverse tested. Each test proven to fail on a planted bug
 
 ### 1.2 `teigeodata-format`: the container
 - [ ] Header, section table and footer as `zerocopy` structs, sizes asserted at compile time
@@ -67,3 +67,4 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-07 | Phase 1 planned | M0 met (D-069) |
+| 2026-11-07 | 1.1 done: `teigeodata-core` | the plan held |

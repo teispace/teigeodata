@@ -9,8 +9,9 @@ updated: 2026-11-07
 ## Where we are
 
 - **Phase:** 1, core and format ([phase file](../07-planning/phases/phase-1.md)).
-- **Now:** step 1.1, `teigeodata-core` (stable ID, grid points, Hilbert order). The Phase 1
-  research is done ([core and format](../02-research/notes/core-and-format.md), D-070, D-071).
+- **Now:** step 1.2, the container in `teigeodata-format`. Step 1.1 is done:
+  `teigeodata-core` has the stable ID and its text form, grid points and a Hilbert index 4–5×
+  faster than the classic loop and proven equal to it. The Phase 1 research is done ([core and format](../02-research/notes/core-and-format.md), D-070, D-071).
 - **M0 met** on 2026-11-07 (D-069): each criterion with its evidence in
   [phase 0 §0.5](../07-planning/phases/phase-0.md#05-exit-review). The maintainer's review is
   asynchronous. Phase 0 in short:
@@ -46,8 +47,7 @@ updated: 2026-11-07
   call; a new function takes one regeneration. Gates: drift, the header against cbindgen,
   boundary lint tables (D-065 to D-068; [results](../02-research/benches/s4-bindings.md)). The
   name fold got a 10× ASCII fast path on the way.
-- **Next:** step 1.2, the container in `teigeodata-format`; then the benchmarks and codecs of
-  1.3 and 1.4. Phase 2 carries the S5 and S6 follow-ups: the settlement core,
+- **Next:** the benchmarks and codecs of 1.3 and 1.4. Phase 2 carries the S5 and S6 follow-ups: the settlement core,
   geofix-consensus, land-cover-aware DEM fusion, and the colloquial class. The result-format
   spike decides blob v0's successor and zero-copy blobs for Python, the JVM and Dart.
 - **Blocked:** nothing.

@@ -41,7 +41,7 @@ jobs:
       - name: no_std crates build without std
         run: |
           rustup target add thumbv7em-none-eabihf
-          cargo build --locked -p teigeodata-names -p teigeodata-blob --target thumbv7em-none-eabihf
+          cargo build --locked -p teigeodata-core -p teigeodata-names -p teigeodata-blob --target thumbv7em-none-eabihf
 
   forge:
     runs-on: ubuntu-latest

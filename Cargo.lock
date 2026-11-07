@@ -742,6 +742,10 @@ name = "teigeodata-blob"
 version = "0.0.0"
 
 [[package]]
+name = "teigeodata-core"
+version = "0.0.0"
+
+[[package]]
 name = "teigeodata-ffi"
 version = "0.0.0"
 dependencies = [
