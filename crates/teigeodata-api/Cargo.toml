@@ -1,0 +1,20 @@
+[package]
+name = "teigeodata-api"
+description = "The safe public API of teigeodata: the one source every language binding is generated from."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+teigeodata-blob.workspace = true
+teigeodata-names.workspace = true
+
+[dev-dependencies]
+serde_json = "1.0.154"
+
+[lints]
+workspace = true

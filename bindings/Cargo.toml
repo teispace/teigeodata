@@ -1,0 +1,46 @@
+# The language shims that call teigeodata-api directly (PyO3, napi-rs, JNI). A separate
+# workspace, like the forge (ADR-0001), so their dependencies never reach the runtime graph.
+# The C, Swift and Dart layers use the C ABI crate in the main workspace instead.
+[workspace]
+resolver = "3"
+members = ["python", "node", "jvm"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/teispace/teigeodata"
+homepage = "https://github.com/teispace/teigeodata"
+rust-version = "1.99"
+publish = false
+
+[workspace.dependencies]
+teigeodata-api = { version = "0.0.0", path = "../crates/teigeodata-api" }
+
+# The main workspace's lint table with `unsafe_code` lowered from forbid to deny: the
+# generated shim modules allow it with a reason. `cargo xtask check-workspace` keeps every
+# other entry equal to the main table.
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+unimplemented = "warn"
+todo = "warn"
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+indexing_slicing = "warn"
+allow_attributes_without_reason = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

@@ -4,6 +4,9 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/teigeodata-api",
+    "crates/teigeodata-blob",
+    "crates/teigeodata-ffi",
     "crates/teigeodata-names",
     "xtask",
     "spikes/s1-codecs",
@@ -12,6 +15,8 @@ members = [
 ]
 
 [workspace.dependencies]
+teigeodata-api = { version = "0.0.0", path = "crates/teigeodata-api" }
+teigeodata-blob = { version = "0.0.0", path = "crates/teigeodata-blob" }
 teigeodata-names = { version = "0.0.0", path = "crates/teigeodata-names" }
 
 [workspace.package]

@@ -1,0 +1,131 @@
+{
+  "format": 1,
+  "source": "crates/teigeodata-api/src/lib.rs",
+  "error_codes": [
+    {
+      "name": "InvalidArgument",
+      "value": 1,
+      "doc": [
+        "An argument is outside its documented range."
+      ]
+    },
+    {
+      "name": "Cancelled",
+      "value": 2,
+      "doc": [
+        "A callback asked to stop."
+      ]
+    },
+    {
+      "name": "Internal",
+      "value": 3,
+      "doc": [
+        "A bug inside teigeodata (a panic caught at the boundary, or a broken invariant)."
+      ]
+    }
+  ],
+  "constants": [
+    {
+      "name": "SAMPLE_ROWS_MAX",
+      "ty": "u32",
+      "value": 1000000,
+      "doc": [
+        "Most rows `sample_rows` builds in one call."
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "name": "version",
+      "doc": [
+        "The library version, from its package metadata."
+      ],
+      "params": [],
+      "returns": "string",
+      "fallible": false
+    },
+    {
+      "name": "noop",
+      "doc": [
+        "Does nothing. Measures the bare cost of a call across each boundary."
+      ],
+      "params": [],
+      "returns": "void",
+      "fallible": false
+    },
+    {
+      "name": "fold",
+      "doc": [
+        "The search fold of a name: NFKD, lower case, optional accents dropped by script, spaces",
+        "collapsed, recomposed to NFC. The same fold the forge and the search index use."
+      ],
+      "params": [
+        {
+          "name": "text",
+          "ty": "str"
+        }
+      ],
+      "returns": "string",
+      "fallible": false
+    },
+    {
+      "name": "sample_rows",
+      "doc": [
+        "Builds `rows` deterministic sample places as a blob with the columns `id` (`u32`), `lat`",
+        "and `lon` (`f64`, degrees), `elevation` (`f32`, metres) and `name` (UTF-8). Exercises the",
+        "result path of every binding.",
+        "",
+        "# Errors",
+        "",
+        "`ErrorCode::InvalidArgument` if `rows` exceeds `SAMPLE_ROWS_MAX`."
+      ],
+      "params": [
+        {
+          "name": "rows",
+          "ty": "u32"
+        }
+      ],
+      "returns": "blob",
+      "fallible": true
+    },
+    {
+      "name": "progress",
+      "doc": [
+        "Calls `on_step` once per step with the step number, from 1 to `steps`, on the calling",
+        "thread, and returns the number of steps run. Exercises callbacks in every binding.",
+        "",
+        "# Errors",
+        "",
+        "`ErrorCode::Cancelled` if `on_step` returns `false`."
+      ],
+      "params": [
+        {
+          "name": "steps",
+          "ty": "u32"
+        },
+        {
+          "name": "on_step",
+          "ty": "callback",
+          "callback": {
+            "id": "u32",
+            "args": [
+              "u32"
+            ],
+            "returns": "bool"
+          }
+        }
+      ],
+      "returns": "u32",
+      "fallible": true
+    }
+  ],
+  "callbacks": [
+    {
+      "id": "u32",
+      "args": [
+        "u32"
+      ],
+      "returns": "bool"
+    }
+  ]
+}

@@ -458,6 +458,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "minijinja"
+version = "3.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00f5a04892e86ddb4fc254e9160835370b63a0d44042d3ab4725bc2dbcbab136"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -720,6 +729,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "teigeodata-api"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "teigeodata-blob",
+ "teigeodata-names",
+]
+
+[[package]]
+name = "teigeodata-blob"
+version = "0.0.0"
+
+[[package]]
+name = "teigeodata-ffi"
+version = "0.0.0"
+dependencies = [
+ "teigeodata-api",
+]
+
+[[package]]
 name = "teigeodata-names"
 version = "0.0.0"
 dependencies = [
@@ -910,9 +939,13 @@ checksum = "8c3b93199df0ab874cdf0c6a94f0a0dc3423fe41f1cafb62b8bd7b1deb277aef"
 name = "xtask"
 version = "0.0.0"
 dependencies = [
+ "minijinja",
+ "proc-macro2",
  "serde",
  "serde-saphyr",
+ "serde_json",
  "sha2",
+ "syn",
  "teigeodata-names",
  "toml",
  "unicode-normalization",

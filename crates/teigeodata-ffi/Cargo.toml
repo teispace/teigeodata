@@ -1,0 +1,41 @@
+[package]
+name = "teigeodata-ffi"
+description = "The C ABI of teigeodata, generated from teigeodata-api by `cargo xtask bindings`."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+# cdylib for Swift, Dart and C callers; staticlib for static linking; lib for the ABI tests.
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[dependencies]
+teigeodata-api.workspace = true
+
+# A boundary crate: the workspace lints, with `unsafe_code` lowered from forbid to deny so the
+# audited modules (abi.rs, generated.rs) can allow it with a reason. `cargo xtask
+# check-workspace` keeps this table equal to the workspace's in every other entry.
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+unimplemented = "warn"
+todo = "warn"
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+indexing_slicing = "warn"
+allow_attributes_without_reason = "warn"

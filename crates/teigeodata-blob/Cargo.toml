@@ -1,0 +1,13 @@
+[package]
+name = "teigeodata-blob"
+description = "The columnar result blob of teigeodata: one aligned buffer of typed columns, read as views in every language."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

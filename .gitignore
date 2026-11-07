@@ -10,3 +10,11 @@ node_modules/
 /site/out/
 .DS_Store
 *.profraw
+# Binding build outputs (bindings/ is its own Cargo workspace).
+/bindings/target/
+/bindings/python/teigeodata/*.so
+/bindings/node/*.node
+/bindings/dart/.dart_tool/
+/bindings/swift/.build/
+/bindings/jvm/build/
+__pycache__/

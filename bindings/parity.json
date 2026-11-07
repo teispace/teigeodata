@@ -1,0 +1,29 @@
+{
+  "about": "Expected results every binding's parity test checks; teigeodata-api's tests check this file against Rust.",
+  "version": "0.0.0",
+  "fold": [
+    ["São Paulo", "sao paulo"],
+    ["  Lahachowk  BAZAR ", "lahachowk bazar"],
+    ["काठमाडौं", "काठमाडौं"],
+    ["Ærøskøbing", "ærøskøbing"],
+    ["İstanbul", "istanbul"],
+    ["東京都", "東京都"],
+    ["ﬁ ①", "fi 1"],
+    ["", ""]
+  ],
+  "sample_rows": {
+    "rows": 1000,
+    "bytes": 37120,
+    "columns": ["id", "lat", "lon", "elevation", "name"],
+    "lat_sum": -1116.085741496645,
+    "elevation_sum": 3528269.125,
+    "last_name": "place 999"
+  },
+  "sample_rows_max": 1000000,
+  "progress": {
+    "steps": 10,
+    "cancel_after": 4,
+    "cancelled_message": "cancelled at step 4 of 10"
+  },
+  "error_codes": {"InvalidArgument": 1, "Cancelled": 2, "Internal": 3}
+}

@@ -7,6 +7,7 @@
     reason = "a command-line tool reports on stdout and stderr"
 )]
 
+mod bindings;
 mod clean;
 mod commit;
 mod data;
@@ -23,6 +24,9 @@ const HELP: &str = "\
 cargo xtask <task>
 
 Tasks:
+  bindings [--check]
+                    Extract the IDL from crates/teigeodata-api into bindings/idl.json and
+                    generate every binding layer from it; --check fails on any drift.
   check-docs        Check frontmatter, statuses, dates, links, research-note sections and
                     the ADR index across docs/ and the root Markdown files.
   check-commit <f>  Check a commit message file (Conventional Commits, scopes, DCO
@@ -43,6 +47,7 @@ fn main() -> ExitCode {
     let task = args.first().map_or("help", String::as_str);
     let rest = args.get(1..).unwrap_or_default();
     match task {
+        "bindings" => report(bindings::run(&root, rest.iter().any(|a| a == "--check"))),
         "check-docs" => report(docs::check(&root)),
         "check-commit" => {
             if let Some(file) = rest.first() {
