@@ -1,7 +1,7 @@
 ---
 title: "Quality bar"
 status: accepted
-updated: 2026-11-06
+updated: 2026-11-07
 ---
 
 # Quality bar
@@ -17,7 +17,7 @@ ones on every pull request, the slow ones nightly, and all of them before a rele
 | fmt | `cargo fmt --check` | PR |
 | lints | workspace lints as errors: pedantic clippy, no `unwrap`/`expect`/`panic`/indexing in libraries, `unsafe_code = forbid` outside the audited module, `missing_docs` | PR |
 | deny | licences, advisories, bans, sources (`cargo deny`) | PR |
-| dependency `unsafe` | our crates stay `forbid(unsafe_code)`; a dependency's internal `unsafe` is accepted when it is widely used, fuzzed upstream and replaces a large job (today `blake3` and `ed25519-dalek` SIMD and field arithmetic, and `ruzstd` behind the opt-in `zstd` feature, D-079). Untrusted input reaching it is bounded first (lengths, window) and covered by our fuzz targets | PR |
+| dependency `unsafe` | our crates stay `forbid(unsafe_code)`; a dependency's internal `unsafe` is accepted when it is widely used, fuzzed upstream and replaces a large job (today `blake3` and `ed25519-dalek` SIMD and field arithmetic; `ruzstd` behind the opt-in `zstd` feature, D-079; `libm`'s trigonometry behind the opt-in `spatial` feature, without its `arch` default, so distances give the same bits on every platform, D-082). Untrusted input reaching it is bounded first (lengths, window) and covered by our fuzz targets | PR |
 | vet | audited dependencies (`cargo vet`) | release |
 | typos | spelling in code and docs | PR |
 | docs | `cargo xtask check-docs`; rustdoc with no broken links; doc examples run | PR |

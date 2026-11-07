@@ -34,9 +34,12 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | blake3 (section and head hashes, no default features) | 1.8.7 | 2026-11-07 | crates.io | 2026-12-07 |
 | ed25519-dalek (pack signatures, no default features) | 3.0.0 | 2026-11-07 | crates.io | 2026-12-07 |
 | ruzstd (BLOBS decoding, feature `zstd`, no default features) | 0.9.1 | 2026-11-07 | crates.io | 2026-12-07 |
+| libm (PLACE_INDEX haversine, feature `spatial`, no default features) | 0.2.16 | 2026-11-07 | crates.io | 2026-12-07 |
 | zstd (C zstd 1.5.7 via `zstd-sys` 2.1.2; BLOBS compression in tests, benches and the forge) | 0.14.3 | 2026-11-07 | crates.io | 2026-12-07 |
 | criterion (wall-clock benchmarks, `cargo_bench_support` only) | 0.8.2 | 2026-11-07 | crates.io | 2026-12-07 |
 | bitpacking (B1 rival, dev-dependency of `teigeodata-bench` only) | 0.9.3 | 2026-11-07 | crates.io | 2026-12-07 |
+| geo-index (B8 rival, flatbush with f64 boxes; dev-dependency of `teigeodata-bench` only) | 0.4.0 | 2026-11-07 | crates.io | 2026-12-07 |
+| rstar (B8 rival, R*-tree; dev-dependency of `teigeodata-bench` only) | 0.14.0 | 2026-11-07 | crates.io | 2026-12-07 |
 | Dart `ffi` package | 2.2.0 | 2026-11-07 | pub.dev | 2026-12-07 |
 | Java (JVM binding, CI) | 25 (Temurin) | 2026-11-07 | `java --version` | 2026-12-07 |
 | Swift (SwiftPM, local) | 6.4.2 | 2026-11-07 | `swift --version` | 2026-12-07 |

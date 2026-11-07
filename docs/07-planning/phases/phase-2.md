@@ -24,13 +24,18 @@ validating zero-copy reader, a brute-force oracle in its tests, a fuzz harness i
   REGION in a packed layout, SEARCH on the S3 design; KDBush rejected on size (D-081)
 
 ### 2.1 B8 PLACE_INDEX
-- [ ] Node boxes per level over the Hilbert-ordered rows, node size A/B (8, 16, 32); i32 boxes
-  against u16 boxes inside the parent
-- [ ] Box query and kNN (best-first, bounded heap, no allocation), antimeridian split; the
-  distance lower bound proven by a property test
-- [ ] Oracles: brute force over every row, and `geo-index` 0.4.0; fuzz harness on the section
-- [ ] Measured on Nepal and on 10⁷ synthetic world points: size per place, box and kNN (k = 1,
-  10) latency, against `geo-index` and `rstar`
+- [x] Node boxes per level over the Hilbert-ordered rows, node size A/B (8, 16, 32); u16 boxes
+  inside the parent chosen over i32: 0.55 B per place at node 16, against 38.4 B for
+  `geo-index`'s f64 boxes (D-082, [layout](../../04-architecture/pack-format.md#place_index))
+- [x] Box query and kNN (best-first on a fixed heap with a depth-first fallback, no
+  allocation), antimeridian split; the distance lower bound proven by a property test on
+  200,000 cases
+- [x] Oracles: brute force over every row (7 sizes × 4 node sizes, a 60,000-place pack),
+  `geo-index` 0.4.0 and `rstar` 0.14.0 as rivals; fuzz harness on the section; the counts gate
+  covers `place_within` and `place_nearest`
+- [x] Measured on Nepal and on 10⁶ and 10⁷ synthetic world points: a city box in 1.2–1.8 µs,
+  k = 1 in 3.5–17 µs (4–12× the in-memory rivals, which are 70× bigger and rank by planar
+  degrees) ([results](../../02-research/benches/phase-2.md#b8-place_index))
 
 ### 2.2 B9 REGION and POLY_INDEX
 - [ ] Packed layout: dense top grid, Morton-sorted leaves, edge-ID runs; shared arcs in B1 blocks
@@ -54,3 +59,4 @@ validating zero-copy reader, a brute-force oracle in its tests, a fuzz harness i
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-07 | Phase 2 planned; order B8, B9, B7 | the indexes note (D-081) |
+| 2026-11-07 | B8 done: u16 boxes inside the parent, not i32 | measured 0.55 B against about 1.1 B per place (D-082) |

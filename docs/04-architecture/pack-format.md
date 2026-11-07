@@ -120,7 +120,7 @@ parameters).
 | 3 | HIERARCHY | parent row; children lists (CSR) | `core` | column table (D-074): 3.0 B per place; below Elias–Fano |
 | 4 | NAMES | name records (lang, script, type, validity, rule), text | `names` | column table (D-077): records + FSST text with per-script tables; 10.6 B per place on Nepal, a canonical name in 65 ns |
 | 5 | SEARCH | FST over normalised keys and phonetic keys; postings; scores; top-k structure | `search` | `fst` + Elias–Fano postings + block RMQ (B7; spike S3) |
-| 6 | PLACE_INDEX | packed Hilbert R-tree over points | `spatial` | flatbush-style layout with i32 boxes (B8) |
+| 6 | PLACE_INDEX | packed Hilbert R-tree whose leaves are the PLACES rows | `core`; nearest needs `spatial` | column table (D-082): u16 boxes inside the parent; 0.55 B per place at node size 16 |
 | 7 | ARCS | shared arcs, delta coordinates on 1e-7°, per-vertex LOD level | `geometry` | bit-packed deltas (B10) |
 | 8 | POLYGONS | ring and part tables (signed arc refs), bbox, label point | `geometry` | — |
 | 9 | POLY_INDEX | packed R-tree over polygon boxes | `geometry` | as 6 |
@@ -134,8 +134,8 @@ parameters).
 
 ### Column tables (encoding 1)
 
-Every section made of integer columns (PLACES, HIERARCHY, IDMAP, REDIRECTS and COMPONENTS) is
-one column table (D-074, `teigeodata_core::table`):
+Every section made of integer columns (PLACES, PLACE_INDEX, HIERARCHY, IDMAP, REDIRECTS and
+COMPONENTS) is one column table (D-074, `teigeodata_core::table`):
 
 ```text
 columns u16, reserved u16 (0)
@@ -194,6 +194,55 @@ Columns not listed are refused, so a new column comes with a format minor versio
 An optional column is left out when every value is 0, and reads as 0. The deep check also
 checks that rows are in Hilbert order of their points, that every point is on the grid and
 every kind known, and that only admin units have a level.
+
+### PLACE_INDEX
+
+A packed Hilbert R-tree over the PLACES points (D-081, D-082,
+[indexes note](../02-research/notes/indexes.md#31-place_index-over-the-existing-row-order)).
+PLACES rows are already in Hilbert order, so they are the tree's leaves and only the boxes
+above them are stored. `item_count` equals PLACES'. Columns other than these three are refused.
+
+| ID | Column | Values |
+|---:|---|---|
+| 1 | node size | one value: children per box, 4 to 32 (`MIN_NODE`, `MAX_NODE`); 16 by default |
+| 2 | root | four values: the south, north, west and east edge of the root box on the 1e-6° grid, biased as PLACES' lat; exactly the bounds of the rows; empty when there are no places |
+| 3 | boxes | four values per box, for every box but the root, level 0 first: its south, north, west and east edge as offsets 0 to 65,535 (`QUANTA`) across its parent's decoded box |
+
+- **Levels:** with `n` rows and node size `m`, level 0 has ⌈n / m⌉ boxes (box `i` covers rows
+  `i·m` to `i·m + m − 1`), and each level above has ⌈below / m⌉, up to a level of one box, the
+  root. 1 to `m` rows give the root alone and an empty boxes column; 0 rows give no levels. At
+  most 16 levels (4¹⁶ = 2³² rows).
+- **Offsets:** for a parent edge range `[p_lo, p_hi]` of span `s = p_hi − p_lo`, a child's
+  exact range `[lo, hi]` is stored as `⌊(lo − p_lo) · 65535 / s⌋` and `⌈(hi − p_lo) · 65535 / s⌉`
+  (0 and 0 when `s = 0`), and decodes to `p_lo + ⌊q_lo · s / 65535⌋` and
+  `p_lo + ⌈q_hi · s / 65535⌉`. Rounding outward makes every decoded box contain the rows below
+  it. A child is quantised against its parent's decoded box, not its exact one, so encoding runs
+  top down. The B1 codec packs the offsets: 0.55 B per place at node size 16.
+- **Opening** (`PlaceIndex::open`) refuses an item count other than PLACES', a node size column
+  without exactly one value in range, a tree deeper than 16 levels, a root column without four
+  values (zero for no places), a boxes column without four values per stored box, and an
+  unknown column.
+- **The deep check** (`PlaceIndex::check`) walks the tree once in row order, O(rows) with no
+  allocation: every box has children, the root is exactly the rows' bounds, and every stored
+  offset equals the one the writer derives from the exact bounds below it and its parent's
+  decoded box. Offsets are compared, not decoded boxes: on a narrow parent several offsets
+  decode to the same edge and only one is canonical. A checked index is canonical.
+- **Box query** (`within`): every row whose point is in a box, edges included, in no set
+  order, stopping when the caller breaks. A box with west above east crosses the antimeridian
+  and is searched as two, `[west, 180°]` and `[−180°, east]`; south above north matches
+  nothing. A tree box wholly inside the query yields its rows without testing them. Depth-first
+  on fixed buffers, no allocation.
+- **Nearest** (`nearest`, feature `spatial`): the `k` rows nearest a point by great-circle
+  distance on a sphere of radius 6,371,008.8 m (`EARTH_RADIUS_M`, the IUGG mean), nearest first,
+  ties by row; fewer only when the pack has fewer places. Each result carries the haversine of
+  the central angle, compared exactly; `Neighbour::meters` turns it into metres. Distances use
+  `libm`, so every platform gives the same bits. The search is best-first on a fixed heap
+  of 409 boxes (16 KiB), falling back to a depth-first walk of a subtree when the heap is full;
+  boxes are pruned by integer latitude and longitude gates and a trigonometry-free lower bound
+  (D-082).
+- **On an index that fails the check,** queries still never panic or allocate and only return
+  rows below the row count, but their answers are not guaranteed; the forge and the tests run
+  the check.
 
 ### HIERARCHY
 
@@ -390,5 +439,5 @@ A new version always gets a new file. A file that may be mapped is never written
 
 - The 14 benchmarks B1–B14 (catalogue in [benchmarks](../06-engineering/benchmarks.md)).
 - Payloads that follow in later phases inside the frame fixed in Phase 1 (D-071): SEARCH,
-  PLACE_INDEX, POLY_INDEX, REGION and POSTAL in Phase 2; ARCS and POLYGONS with B10; DEM with B11.
+  POLY_INDEX, REGION and POSTAL in Phase 2; ARCS and POLYGONS with B10; DEM with B11.
 - Whether the reader crate keeps `#![forbid(unsafe_code)]` with mmap outside it (B13).
