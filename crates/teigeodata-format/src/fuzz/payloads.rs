@@ -28,13 +28,12 @@ use teigeodata_core::bits::{self as bitmap, Bits};
 use teigeodata_core::table::{self as frame, Codec, Table, TableError};
 use teigeodata_core::{E6, Namespace, PlaceId, PlaceKind, Point, SERIAL_MAX, hilbert};
 
-use super::Cursor;
+use super::{Cursor, limit};
 
-/// Reads structured values from fuzz bytes; runs out into zeros.
 /// The most rows a model has: several 128-value blocks, a short last one.
-const MAX_ROWS: usize = 600;
+const MAX_ROWS: usize = limit(600, 200);
 /// The most rows whose accessors are read on a raw payload (plus the last few).
-const READ_ROWS: usize = 512;
+const READ_ROWS: usize = limit(512, 64);
 
 /// Rows worth reading: the first [`READ_ROWS`], the last few, and two past the end.
 fn rows(len: usize) -> impl Iterator<Item = usize> {
@@ -123,12 +122,12 @@ fn blobs_case(c: &mut Cursor<'_>, structured: bool) {
         // Short runs of a few byte values, so frames compress; some blobs empty.
         let all: Vec<Vec<u8>> = (0..n)
             .map(|_| {
-                let (len, a, b) = (c.below(300), c.u8(), c.u8());
+                let (len, a, b) = (c.below(limit(300, 40)), c.u8(), c.u8());
                 (0..len).map(|i| if i % 7 < 4 { a } else { b }).collect()
             })
             .collect();
         let refs: Vec<&[u8]> = all.iter().map(Vec::as_slice).collect();
-        let target = 1 + c.below(4096);
+        let target = 1 + c.below(limit(4096, 512));
         let fast = |raw: &[u8]| {
             Some(ruzstd::encoding::compress_to_vec(
                 raw,
@@ -429,7 +428,7 @@ fn idmap_case(c: &mut Cursor<'_>, structured: bool) {
 
 fn redirects_case(c: &mut Cursor<'_>, structured: bool) {
     // The current IDs are always valid; the redirects are built or raw.
-    let n = c.below(200);
+    let n = c.below(limit(200, 40));
     let Some(current) = ids(c, n) else { return };
     let map_body = idmap::encode(&current).unwrap_or_else(|e| panic!("{e}"));
     let (mut body, mut model) = (Vec::new(), None);
@@ -498,7 +497,7 @@ pub fn bitpack(data: &[u8]) {
     let mode = c.u8();
     let (mut bytes, mut model) = (Vec::new(), None);
     if mode & 0x80 != 0 {
-        let n = usize::from(c.u16()) % 2000;
+        let n = usize::from(c.u16()) % limit(2000, 300);
         let mut acc = c.u32();
         let values: Vec<u32> = (0..n)
             .map(|_| match mode % 4 {
@@ -580,7 +579,7 @@ pub fn table(data: &[u8]) {
         let mut id = u16::from(c.u8());
         let mut cols = Vec::new();
         for _ in 0..c.u8() % 6 {
-            let n = c.below(300);
+            let n = c.below(limit(300, 40));
             if c.u8() & 1 == 0 {
                 let values: Vec<u32> = (0..n).map(|_| u32::from(c.u8())).collect();
                 cols.push((id, Codec::Bitpack, bitpack::encode_auto(&values)));
@@ -651,7 +650,7 @@ pub fn bits(data: &[u8]) {
     let mode = c.u8();
     let (mut bytes, mut model) = (Vec::new(), None);
     if mode & 0x80 != 0 {
-        let len = usize::from(c.u16()) % 5000;
+        let len = usize::from(c.u16()) % limit(5000, 300);
         let mut set = vec![false; len];
         if len > 0 {
             for _ in 0..c.u8() {

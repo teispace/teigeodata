@@ -76,31 +76,33 @@ jobs:
           if-no-files-found: ignore
 
   # Miri: undefined behaviour, out-of-bounds and alignment errors in the zero-copy reader and
-  # the codecs. Miri is ~1000x slower than native, so the seeded fuzz drivers run a few inputs
-  # each (TG_FUZZ_ITERS); libFuzzer covers volume. The determinism gate is byte equality of
-  # safe code and runs natively under `cargo test`; under Miri its 2,000-row packs take too long.
+  # the codecs. Miri is about a million times slower than native, so each test group is its own
+  # parallel job with its own budget, and the tests shrink under `cfg(miri)` (`crate::cases`,
+  # `fuzz::limit`): one seeded input per harness; libFuzzer covers volume. The determinism gate
+  # is byte equality of safe code and runs natively under `cargo test`.
   miri:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: core
+            args: -p teigeodata-core --lib
+          - group: format-lib
+            args: -p teigeodata-format --lib
+          - group: format-open
+            args: -p teigeodata-format --test open
+          - group: format-fuzz
+            args: -p teigeodata-format --test fuzz
+    name: miri (${{ matrix.group }})
+    env:
+      TG_FUZZ_ITERS: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Nightly toolchain with Miri
         run: |
           rustup toolchain install nightly --profile minimal --component miri,rust-src
           cargo +nightly miri setup
-      # The property tests take a thousandth of their cases under Miri (`crate::cases`).
-      - name: Core codecs
-        timeout-minutes: 90
-        run: cargo +nightly miri test --locked -p teigeodata-core --lib
-      - name: Pack reader and sections
-        if: ${{ !cancelled() }}
-        timeout-minutes: 60
-        run: cargo +nightly miri test --locked -p teigeodata-format --lib --test open
-      # Hashing and signing whole packs under Miri is slow: locally, 3 inputs per harness did
-      # not finish in 9 minutes. One input each, in its own bounded step.
-      - name: Seeded fuzz harnesses
-        if: ${{ !cancelled() }}
-        timeout-minutes: 60
-        env:
-          TG_FUZZ_ITERS: "1"
-        run: cargo +nightly miri test --locked -p teigeodata-format --test fuzz
+      - name: Miri
+        run: cargo +nightly miri test --locked ${{ matrix.args }}

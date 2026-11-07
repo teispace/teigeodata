@@ -11,8 +11,9 @@ fn iterations(default: u64) -> u64 {
         .unwrap_or(default)
 }
 
-/// Seeded inputs of 0 to 2,047 random bytes.
+/// Seeded inputs of 0 to 2,047 random bytes (255 under Miri, where one input per harness runs).
 fn drive(seed: u64, n: u64, harness: fn(&[u8])) {
+    let max: u64 = if cfg!(miri) { 256 } else { 2048 };
     let mut s = seed;
     let mut next = || {
         s = s.wrapping_add(0x9e37_79b9_7f4a_7c15);
@@ -23,7 +24,7 @@ fn drive(seed: u64, n: u64, harness: fn(&[u8])) {
     };
     let mut buf = Vec::new();
     for _ in 0..n {
-        let len = usize::try_from(next() % 2048).unwrap_or(0);
+        let len = usize::try_from(next() % max).unwrap_or(0);
         buf.clear();
         while buf.len() < len {
             buf.extend_from_slice(&next().to_le_bytes());

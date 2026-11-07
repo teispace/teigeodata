@@ -37,6 +37,13 @@ use zerocopy::FromBytes;
 use crate::layout::{FOOTER_LEN, HEADER_HASHED, HEADER_LEN, Header, head_digest};
 use crate::{Encoding, Error, FORMAT_MAJOR, FORMAT_MINOR, Kind, Manifest, Pack, Tag, Writer};
 
+/// A size limit of a harness: `native` normally, `miri` under Miri, where the nightly job runs
+/// one input per harness and each costs up to a million times its native time. The Miri limits
+/// still span more than one 128-value block; libFuzzer covers the native limits.
+pub(crate) const fn limit(native: usize, miri: usize) -> usize {
+    if cfg!(miri) { miri } else { native }
+}
+
 /// Reads structured values from fuzz bytes; runs out into zeros.
 struct Cursor<'a>(&'a [u8]);
 
@@ -175,7 +182,7 @@ pub fn round_trip(data: &[u8]) {
     for _ in 0..c.u8() % 12 {
         let kind = model_kind(c.u8());
         let encoding = Encoding(u16::from(c.u8() % 3));
-        let bytes = c.bytes(300);
+        let bytes = c.bytes(limit(300, 64));
         let items = c.u64();
         let len = bytes.len() as u64;
         let decoded = if encoding == Encoding::RAW {

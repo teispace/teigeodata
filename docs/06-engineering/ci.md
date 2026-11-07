@@ -51,11 +51,14 @@ fuzzing time per target as an input).
   `open`, `round_trip`, `mutate`, `manifest`, `sections`, `bitpack`, `table` and `bits`, all in
   `teigeodata_format::fuzz`. The corpus of each target is restored from the Actions cache, minimised
   with `cargo fuzz cmin` and saved again; a crash fails the job and uploads its input.
-- **miri**: the `teigeodata-core` unit tests, and the format crate's unit tests, `open` and
-  `fuzz` (one seeded input per harness, `TG_FUZZ_ITERS=1`, in a step capped at 60 minutes:
-  hashing and signing whole packs is slow under Miri) tests under Miri. On an Apple
-  silicon Mac, run Miri with `--target x86_64-unknown-linux-gnu`: `sha2` calls an aarch64
-  crypto intrinsic that Miri does not support.
+- **miri**: four parallel jobs (core lib; format lib; format `open`; format `fuzz` with one
+  seeded input per harness, `TG_FUZZ_ITERS=1`), each with its own 5-hour budget. Miri runs 10³ to
+  10⁶ times slower than native (most for hashing and signatures), so tests shrink under `cfg(miri)`: the hashing and search
+  tests take fewer lengths and smaller key sets, and the harnesses take smaller limits
+  (`fuzz::limit`). On an Apple silicon Mac, run Miri with `RUSTFLAGS='--cfg sha2_backend="soft"'`:
+  `sha2` calls an aarch64 crypto intrinsic that Miri does not support (cross-compiling to x86
+  Linux fails on the C `zstd` dev-dependency). Nightly results do not gate work: a failure is
+  fixed when it is found.
   The core property tests take their case counts from `crate::cases(n)`: `n` natively, a
   thousandth (at least 4) under Miri; libFuzzer covers the volume.
 
