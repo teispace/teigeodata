@@ -53,6 +53,18 @@ do {
     check(error.code == .invalidArgument && error.message.contains("at most"), "\(error)")
 }
 
+let dm = p["distance_m"] as! [String: Any]
+let da = dm["args"] as! [Double]
+let d = try TeiGeodata.distanceM(da[0], lon1: da[1], lat2: da[2], lon2: da[3])
+check(abs(d - (dm["metres"] as! Double)) < 1e-6, "distance \(d)")
+let bad = dm["out_of_range"] as! [Double]
+do {
+    _ = try TeiGeodata.distanceM(bad[0], lon1: bad[1], lat2: bad[2], lon2: bad[3])
+    check(false, "no range error")
+} catch {
+    check(error.code == .invalidArgument, "\(error)")
+}
+
 var seen: [UInt32] = []
 check(try TeiGeodata.progress(3) { seen.append($0); return true } == 3 && seen == [1, 2, 3], "progress")
 let g = p["progress"] as! [String: Any]

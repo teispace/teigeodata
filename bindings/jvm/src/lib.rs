@@ -168,3 +168,32 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_progress<'caller>
         })
         .resolve::<ThrowRuntimeExAndDefault>()
 }
+
+/// Great-circle distance in metres between two points in degrees, by the haversine formula on
+/// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+/// -180..=180, or any value is not finite.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_distanceM<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    lat1: jni::sys::jdouble,
+    lon1: jni::sys::jdouble,
+    lat2: jni::sys::jdouble,
+    lon2: jni::sys::jdouble,
+) -> jni::sys::jdouble {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jni::sys::jdouble> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                teigeodata_api::distance_m(lat1, lon1, lat2, lon2)
+            })();
+            match result {
+                Ok(value) => Ok(value),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}

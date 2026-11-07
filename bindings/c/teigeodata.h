@@ -82,6 +82,17 @@ int32_t tg_sample_rows(uint32_t rows, tg_bytes *out);
  */
 int32_t tg_progress(uint32_t steps, tg_callback_u32 on_step, void *on_step_ctx, uint32_t *out);
 
+/*
+ * Great-circle distance in metres between two points in degrees, by the haversine formula on
+ * the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+ * -180..=180, or any value is not finite.
+ */
+int32_t tg_distance_m(double lat1, double lon1, double lat2, double lon2, double *out);
+
 #ifdef __cplusplus
 }
 #endif

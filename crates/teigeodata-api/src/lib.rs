@@ -160,10 +160,55 @@ pub fn progress(steps: u32, on_step: &mut dyn FnMut(u32) -> bool) -> Result<u32>
     Ok(steps)
 }
 
+/// Mean Earth radius of WGS84, metres (IUGG R1 = (2a + b) / 3).
+const EARTH_RADIUS_M: f64 = 6_371_008.8;
+
+/// Great-circle distance in metres between two points in degrees, by the haversine formula on
+/// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+///
+/// # Errors
+///
+/// [`ErrorCode::InvalidArgument`] if a latitude is outside -90..=90, a longitude outside
+/// -180..=180, or any value is not finite.
+pub fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> Result<f64> {
+    for (name, v, max) in [
+        ("lat1", lat1, 90.0),
+        ("lon1", lon1, 180.0),
+        ("lat2", lat2, 90.0),
+        ("lon2", lon2, 180.0),
+    ] {
+        if !(-max..=max).contains(&v) {
+            return Err(Error::new(
+                ErrorCode::InvalidArgument,
+                format!("{name} is {v}; it must be within ±{max}"),
+            ));
+        }
+    }
+    let (p1, p2) = (lat1.to_radians(), lat2.to_radians());
+    let dp = p2 - p1;
+    let dl = (lon2 - lon1).to_radians();
+    let h = (dp / 2.0).sin().powi(2) + p1.cos() * p2.cos() * (dl / 2.0).sin().powi(2);
+    Ok(2.0 * EARTH_RADIUS_M * h.sqrt().min(1.0).asin())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{ErrorCode, SAMPLE_ROWS_MAX, fold, progress, sample_rows, version};
     use teigeodata_blob::{Reader, View};
+
+    #[test]
+    fn distance_is_haversine_and_checks_ranges() {
+        // Kathmandu to Pokhara: 142.4 km on the sphere.
+        let d = super::distance_m(27.7172, 85.3240, 28.2096, 83.9856).unwrap();
+        assert!((d - 142_394.0).abs() < 1.0, "{d}");
+        assert_eq!(super::distance_m(1.0, 2.0, 1.0, 2.0), Ok(0.0));
+        let half = super::distance_m(0.0, 0.0, 0.0, 180.0).unwrap();
+        assert!((half - core::f64::consts::PI * super::EARTH_RADIUS_M).abs() < 1e-6);
+        for bad in [f64::NAN, 91.0, -90.5, f64::INFINITY] {
+            let e = super::distance_m(bad, 0.0, 0.0, 0.0).unwrap_err();
+            assert_eq!(e.code, ErrorCode::InvalidArgument);
+        }
+    }
 
     #[test]
     fn version_is_the_package_version() {
@@ -272,6 +317,15 @@ mod tests {
         })
         .unwrap_err();
         assert_eq!(err.message, prog["cancelled_message"].as_str().unwrap());
+        let d = &parity["distance_m"];
+        let args: Vec<f64> = d["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect();
+        let got = super::distance_m(args[0], args[1], args[2], args[3]).unwrap();
+        assert!((got - d["metres"].as_f64().unwrap()).abs() < 1e-6, "{got}");
         let codes = &parity["error_codes"];
         for (code, name) in [
             (ErrorCode::InvalidArgument, "InvalidArgument"),

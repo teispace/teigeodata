@@ -110,3 +110,27 @@ pub unsafe extern "C" fn tg_progress(
         Ok(())
     })
 }
+
+/// Great-circle distance in metres between two points in degrees, by the haversine formula on
+/// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+/// -180..=180, or any value is not finite.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_distance_m(
+    lat1: f64,
+    lon1: f64,
+    lat2: f64,
+    lon2: f64,
+    out: *mut f64,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        let value = teigeodata_api::distance_m(lat1, lon1, lat2, lon2)?;
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}

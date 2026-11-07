@@ -61,4 +61,15 @@ public final class TeiGeodata {
      * `ErrorCode::Cancelled` if `on_step` returns `false`.
      */
     public static native long progress(long steps, CallbackU32 onStep);
+
+    /**
+     * Great-circle distance in metres between two points in degrees, by the haversine formula on
+     * the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+     *
+     * # Errors
+     *
+     * `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+     * -180..=180, or any value is not finite.
+     */
+    public static native double distanceM(double lat1, double lon1, double lat2, double lon2);
 }

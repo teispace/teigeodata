@@ -48,6 +48,12 @@ class Parity(unittest.TestCase):
         self.assertEqual(sum(float(v) for v in column(blob, "elevation")), s["elevation_sum"])
         self.assertEqual(tg.SAMPLE_ROWS_MAX, PARITY["sample_rows_max"])
 
+    def test_distance(self) -> None:
+        d = PARITY["distance_m"]
+        self.assertAlmostEqual(tg.distance_m(*d["args"]), d["metres"], delta=1e-6)
+        with self.assertRaises(tg.InvalidArgumentError):
+            tg.distance_m(*d["out_of_range"])
+
     def test_errors(self) -> None:
         with self.assertRaises(tg.InvalidArgumentError) as e:
             tg.sample_rows(tg.SAMPLE_ROWS_MAX + 1)

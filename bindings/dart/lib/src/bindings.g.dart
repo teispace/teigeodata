@@ -63,7 +63,8 @@ final class TeiGeodata {
         _noop = lib.lookupFunction<Int32 Function(), int Function()>('tg_noop', isLeaf: true),
         _fold = lib.lookupFunction<Int32 Function(Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_fold', isLeaf: true),
         _sampleRows = lib.lookupFunction<Int32 Function(Uint32, Pointer<TgBytes>), int Function(int, Pointer<TgBytes>)>('tg_sample_rows', isLeaf: true),
-        _progress = lib.lookupFunction<Int32 Function(Uint32, Pointer<NativeFunction<CallbackU32>>, Pointer<Void>, Pointer<Uint32>), int Function(int, Pointer<NativeFunction<CallbackU32>>, Pointer<Void>, Pointer<Uint32>)>('tg_progress');
+        _progress = lib.lookupFunction<Int32 Function(Uint32, Pointer<NativeFunction<CallbackU32>>, Pointer<Void>, Pointer<Uint32>), int Function(int, Pointer<NativeFunction<CallbackU32>>, Pointer<Void>, Pointer<Uint32>)>('tg_progress'),
+        _distanceM = lib.lookupFunction<Int32 Function(Double, Double, Double, Double, Pointer<Double>), int Function(double, double, double, double, Pointer<Double>)>('tg_distance_m', isLeaf: true);
 
   /// Opens the library at [path] (for example `libteigeodata_ffi.dylib`).
   factory TeiGeodata.open(String path) => TeiGeodata._(DynamicLibrary.open(path));
@@ -75,6 +76,7 @@ final class TeiGeodata {
   final int Function(Pointer<Uint8>, int, Pointer<TgBytes>) _fold;
   final int Function(int, Pointer<TgBytes>) _sampleRows;
   final int Function(int, Pointer<NativeFunction<CallbackU32>>, Pointer<Void>, Pointer<Uint32>) _progress;
+  final int Function(double, double, double, double, Pointer<Double>) _distanceM;
 
   // Scratch memory reused by every call: the output slots and a growing input buffer.
   final Pointer<TgBytes> _bytes = calloc<TgBytes>();
@@ -189,5 +191,18 @@ final class TeiGeodata {
     if (raised != null) Error.throwWithStackTrace(raised!, trace!);
     _check(status);
     return _word.cast<Uint32>().value;
+  }
+
+  /// Great-circle distance in metres between two points in degrees, by the haversine formula on
+  /// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+  /// -180..=180, or any value is not finite.
+  double distanceM(double lat1, double lon1, double lat2, double lon2) {
+    final status = _distanceM(lat1, lon1, lat2, lon2, _word.cast());
+    _check(status);
+    return _word.cast<Double>().value;
   }
 }

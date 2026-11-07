@@ -25,5 +25,11 @@
     "cancel_after": 4,
     "cancelled_message": "cancelled at step 4 of 10"
   },
+  "distance_m": {
+    "about": "Kathmandu to Pokhara; libm differs by platform, so compare within 1e-6 m",
+    "args": [27.7172, 85.324, 28.2096, 83.9856],
+    "metres": 142393.9132189373,
+    "out_of_range": [91.0, 0.0, 0.0, 0.0]
+  },
   "error_codes": {"InvalidArgument": 1, "Cancelled": 2, "Internal": 3}
 }

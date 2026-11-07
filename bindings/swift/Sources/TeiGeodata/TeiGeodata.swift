@@ -110,4 +110,18 @@ public enum TeiGeodata {
         try check(status)
         return out
     }
+
+    /// Great-circle distance in metres between two points in degrees, by the haversine formula on
+    /// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+    /// -180..=180, or any value is not finite.
+    public static func distanceM(_ lat1: Double, lon1: Double, lat2: Double, lon2: Double) throws(TeiGeodataError) -> Double {
+        var out: Double = 0
+        let status = tg_distance_m(lat1, lon1, lat2, lon2, &out)
+        try check(status)
+        return out
+    }
 }

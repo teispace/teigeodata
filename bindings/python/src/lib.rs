@@ -109,13 +109,27 @@ fn progress(steps: u32, on_step: &Bound<'_, PyAny>) -> PyResult<u32> {
     Ok(value)
 }
 
+/// Great-circle distance in metres between two points in degrees, by the haversine formula on
+/// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+/// -180..=180, or any value is not finite.
+#[pyfunction]
+fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> PyResult<f64> {
+    let value = teigeodata_api::distance_m(lat1, lon1, lat2, lon2);
+    let value = value.map_err(error)?;
+    Ok(value)
+}
+
 /// The native part of the `teigeodata` package.
 #[pymodule(gil_used = false)]
 mod _native {
     #[pymodule_export]
     use super::{
-        CancelledError, InternalError, InvalidArgumentError, TeiGeodataError, fold, noop, progress,
-        sample_rows, version,
+        CancelledError, InternalError, InvalidArgumentError, TeiGeodataError, distance_m, fold,
+        noop, progress, sample_rows, version,
     };
 
     /// Most rows `sample_rows` builds in one call.

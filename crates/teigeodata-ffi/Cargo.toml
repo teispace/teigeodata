@@ -16,6 +16,9 @@ crate-type = ["cdylib", "staticlib", "lib"]
 [dependencies]
 teigeodata-api.workspace = true
 
+[dev-dependencies]
+teigeodata-blob.workspace = true
+
 # A boundary crate: the workspace lints, with `unsafe_code` lowered from forbid to deny so the
 # audited modules (abi.rs, generated.rs) can allow it with a reason. `cargo xtask
 # check-workspace` keeps this table equal to the workspace's in every other entry.

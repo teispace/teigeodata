@@ -746,6 +746,7 @@ name = "teigeodata-ffi"
 version = "0.0.0"
 dependencies = [
  "teigeodata-api",
+ "teigeodata-blob",
 ]
 
 [[package]]

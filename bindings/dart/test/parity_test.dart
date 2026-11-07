@@ -69,6 +69,14 @@ void main() {
     expect(TeiGeodata.sampleRowsMax, parity['sample_rows_max']);
   });
 
+  test('distanceM', () {
+    final d = parity['distance_m'] as Map<String, dynamic>;
+    final a = (d['args'] as List).cast<num>().map((v) => v.toDouble()).toList();
+    expect(tg.distanceM(a[0], a[1], a[2], a[3]), closeTo(d['metres'] as double, 1e-6));
+    final b = (d['out_of_range'] as List).cast<num>().map((v) => v.toDouble()).toList();
+    expect(() => tg.distanceM(b[0], b[1], b[2], b[3]), throwsA(isA<InvalidArgumentException>()));
+  });
+
   test('errors carry their code', () {
     expect(
       () => tg.sampleRows(TeiGeodata.sampleRowsMax + 1),

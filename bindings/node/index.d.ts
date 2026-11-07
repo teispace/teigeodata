@@ -42,3 +42,14 @@ export function sampleRows(rows: number): Buffer;
  * `ErrorCode::Cancelled` if `on_step` returns `false`.
  */
 export function progress(steps: number, onStep: (a0: number) => boolean): number;
+
+/**
+ * Great-circle distance in metres between two points in degrees, by the haversine formula on
+ * the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+ * -180..=180, or any value is not finite.
+ */
+export function distanceM(lat1: number, lon1: number, lat2: number, lon2: number): number;

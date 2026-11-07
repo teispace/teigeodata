@@ -49,6 +49,12 @@ test("sampleRows", () => {
   assert.equal(tg.SAMPLE_ROWS_MAX, parity.sample_rows_max);
 });
 
+test("distanceM", () => {
+  const d = parity.distance_m;
+  assert.ok(Math.abs(tg.distanceM(...d.args) - d.metres) < 1e-6);
+  assert.throws(() => tg.distanceM(...d.out_of_range), { code: "InvalidArgument" });
+});
+
 test("errors carry their code", () => {
   assert.throws(() => tg.sampleRows(tg.SAMPLE_ROWS_MAX + 1), { code: "InvalidArgument", message: /at most/ });
   assert.throws(() => tg.sampleRows(-1));

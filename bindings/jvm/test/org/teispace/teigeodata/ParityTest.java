@@ -43,6 +43,13 @@ public final class ParityTest {
         expect(TeiGeodataException.InvalidArgument.class, () -> TeiGeodata.sampleRows(-1), "outside its range");
         expect(TeiGeodataException.InvalidArgument.class, () -> TeiGeodata.sampleRows(1L << 33), "outside its range");
 
+        Map<?, ?> dm = (Map<?, ?>) p.get("distance_m");
+        List<?> da = (List<?>) dm.get("args");
+        double d = TeiGeodata.distanceM(n(da, 0), n(da, 1), n(da, 2), n(da, 3));
+        check(Math.abs(d - ((Number) dm.get("metres")).doubleValue()) < 1e-6, "distance " + d);
+        List<?> bad = (List<?>) dm.get("out_of_range");
+        expect(TeiGeodataException.InvalidArgument.class, () -> TeiGeodata.distanceM(n(bad, 0), n(bad, 1), n(bad, 2), n(bad, 3)), "within");
+
         List<Long> seen = new ArrayList<>();
         check(TeiGeodata.progress(3, step -> seen.add(step)) == 3 && seen.equals(List.of(1L, 2L, 3L)), "progress");
         Map<?, ?> g = (Map<?, ?>) p.get("progress");
@@ -75,6 +82,10 @@ public final class ParityTest {
             }
         }
         throw new AssertionError("no column " + name);
+    }
+
+    static double n(List<?> l, int i) {
+        return ((Number) l.get(i)).doubleValue();
     }
 
     static void check(boolean ok, String what) {

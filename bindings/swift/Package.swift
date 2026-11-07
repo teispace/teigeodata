@@ -18,5 +18,10 @@ let package = Package(
             dependencies: ["TeiGeodata"],
             linkerSettings: [.unsafeFlags(["-L../../target/release", "-Xlinker", "-rpath", "-Xlinker", "../../target/release"])]
         ),
+        .executableTarget(
+            name: "Bench",
+            dependencies: ["TeiGeodata"],
+            linkerSettings: [.unsafeFlags(["-L../../target/release", "-Xlinker", "-rpath", "-Xlinker", "../../target/release"])]
+        ),
     ]
 )

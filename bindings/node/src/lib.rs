@@ -121,3 +121,17 @@ pub fn progress(env: Env, steps: u32, on_step: Function<'_, u32, bool>) -> napi:
     let value = value.map_err(error)?;
     Ok(value)
 }
+
+/// Great-circle distance in metres between two points in degrees, by the haversine formula on
+/// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+/// -180..=180, or any value is not finite.
+#[napi]
+pub fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> napi::Result<f64, Code> {
+    let value = teigeodata_api::distance_m(lat1, lon1, lat2, lon2);
+    let value = value.map_err(error)?;
+    Ok(value)
+}
