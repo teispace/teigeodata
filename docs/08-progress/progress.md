@@ -13,8 +13,9 @@ updated: 2026-11-07
 - **Now:** step 3.1, the vertical slice. `forge build np` writes, signs and reads back the Nepal
   pack: 96,844 places in 7.05 MB in 3.0 s, identical bytes on two builds; lite 91,266 places in
   4.26 MB ([forge build](../04-architecture/forge.md#build-a-pack-build)). The ID registry
-  keeps IDs across releases and shares them between main and lite (D-094). Left in 3.1: the
-  stage cache. Then 3.2.
+  keeps IDs across releases and shares them between main and lite (D-094). `forge make np`
+  runs every stage from `build.yaml` with a content-keyed cache: cold 7.8 s, warm 19 ms
+  (D-095). **3.1 done.** Next: 3.2, places core and consensus.
 - **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
@@ -123,3 +124,4 @@ updated: 2026-11-07
 | 2026-11-07 | Phase 3 research: geometry (D-088), DEM (D-089), postal and Q-001 (D-090), settlement core and building licences (D-091); plan and order (D-092) | 3.1 vertical slice |
 | 2026-11-07 | 3.1: `forge build` writes, signs and reads back the Nepal pack (96,844 places, 7.05 MB, 3.0 s, deterministic); lite 4.26 MB; `interior_point` for admin points; REGION place link (D-093) | Stage cache, then 3.2 |
 | 2026-11-07 | 3.1: the ID registry (D-094): lite keeps 91,153 of 91,266 main IDs, a rebuild keeps all, retirement writes REDIRECTS | Stage cache, then 3.2 |
+| 2026-11-07 | 3.1 done: `forge make` and `build.yaml`, content-keyed stages with stamped outputs (D-095) | 3.2: building readers, settlement core, consensus |

@@ -1,0 +1,14 @@
+# How `forge make np` builds Nepal's packs (D-095). Schema: teigeodata/build/v1.
+# Every source ID is pinned in data/sources.lock; the lite build reads only the sources its
+# licence gate allows (CLEAN_ROOM.md rule 2).
+schema: teigeodata/build/v1
+# Admin units: OCHA COD-AB (levels 1 to 4).
+admin: codab-np-geojson
+# IANA zones (timezone-boundary-builder, ODbL: main build only).
+timezones: tbb-2026f
+# Points sources, in priority order: the first source's record gives a place its point and
+# canonical name until the consensus stage (phase 3 step 3.2).
+points:
+  - { reader: osm, source: geofabrik-np }
+  - { reader: geonames, source: geonames-np, extra: [geonames-alternate-names, geonames-hierarchy] }
+  - { reader: wikidata, source: wikidata-np }

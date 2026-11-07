@@ -7,6 +7,8 @@
 //!   each source encodes unit types.
 //! - `lexicon.yaml` (optional, schema `teigeodata/lexicon/v1`): generic place-name terms
 //!   ([`crate::lexicon`]).
+//! - `build.yaml` (optional, schema `teigeodata/build/v1`): how `forge make` builds the
+//!   country's packs ([`crate::recipe`]).
 //! - `golden-curated.yaml` (optional) and the generated `tests/golden/<cc>.yaml`: golden search
 //!   queries ([`crate::golden`]).
 //!
@@ -22,6 +24,7 @@ use unicode_script::Script;
 
 use crate::golden;
 use crate::lexicon::{self, Evidence, EvidenceKind, Native, Status};
+use crate::recipe;
 use crate::sources;
 
 const PROFILE_SCHEMA: &str = "teigeodata/profile/v1";
@@ -122,6 +125,8 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     let mut problems = Vec::new();
     let mut terms = 0usize;
     let mut queries = 0usize;
+    let lock_text = fs::read_to_string(root.join("data/sources.lock")).unwrap_or_default();
+    let pinned = sources::ids(&lock_text);
     for path in &countries {
         let cc = path
             .file_name()
@@ -141,6 +146,13 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
                     .map(|p| format!("{at}/profile.yaml: {p}")),
             ),
             Err(e) => problems.push(format!("{at}/profile.yaml: {e}")),
+        }
+        if let Ok(text) = fs::read_to_string(path.join("build.yaml")) {
+            problems.extend(
+                recipe::check_text(&text, &pinned)
+                    .into_iter()
+                    .map(|p| format!("{at}/build.yaml: {p}")),
+            );
         }
         let mut golden_queries = 0usize;
         for file in [

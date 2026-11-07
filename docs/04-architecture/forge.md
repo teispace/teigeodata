@@ -32,6 +32,7 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | dem | **built** (S5) | below |
 | dem-ref, geoid | **built** (S6) | below |
 | build (pack writer, sign, read back) | **built** (3.1) | below |
+| make (every stage, content-keyed cache) | **built** (3.1) | below |
 | geofix-consensus | 3.2 | weighted Weiszfeld (D-091) |
 | the rest | Phase 3 | [phase 3](../07-planning/phases/phase-3.md) |
 
@@ -260,7 +261,7 @@ Measured on Nepal on 2026-11-07 (release build, Apple M2 Pro):
 
 Main: 2,042 clusters had no usable name; 195 places lie outside every COD-AB unit (border
 points) and have the country as their only ancestor. Peak memory comes from parsing the whole
-timezone GeoJSON; streaming it is follow-up work. Not built yet: the stage cache.
+timezone GeoJSON; streaming it is follow-up work.
 
 ### IDs across releases
 
@@ -295,6 +296,37 @@ registry, the input of the next main build. Measured on Nepal on 2026-11-07:
 
 The registry is 3.5 MB, 0.42 MB with `zstd -19`. Publishing it with each release and pinning
 it in `sources.lock` comes with the catalog (step 3.7).
+
+## Run every stage (`make`)
+
+`forge make <cc> --release <v> [--lite] [--key <seed-file>] [--ids <registry>] [--force]` runs a
+country's stages from its recipe, `data/countries/<cc>/build.yaml` (checked by
+`cargo xtask check-data`): `read` for each points source, `conflate` over them, then `build`
+(D-095, [ADR-0035](../03-decisions/adr/ADR-0035-forge-architecture.md)).
+- **Keys.** A stage's key is a BLAKE3 hash of the stage name, the forge binary, its pinned
+  inputs (ID, SHA-256 and size from `sources.lock`), its configuration (the profile, the
+  arguments, the ID registry, the signing seed) and the keys of the stages it reads. The whole
+  binary is the code version: any forge change reruns everything, which is always correct.
+- **Stamps.** A stage that succeeds writes `.key` (`.key-main`, `.key-lite` in the pack
+  directory) into its output directory: the key, then the BLAKE3 and size of every file it
+  owns. A stage is skipped only when both match, so an output changed by hand, or a stage
+  run by hand with other arguments, is rebuilt. The stamp is removed before a stage starts
+  and written atomically after it ends, so a killed run resumes from the first unfinished
+  stage.
+- **Licence gate.** `--lite` never schedules a reader for a source outside the lite classes.
+
+Measured on Nepal on 2026-11-07 (release build, Apple M2 Pro):
+
+| Run | Stages run | Time |
+|---|---:|---:|
+| cold (or a new forge binary) | 5 | 7.8 s, 620 MB peak |
+| nothing changed | 0 | 19 ms (outputs hashed) |
+| profile changed | 2 (conflate, build) | 3.4 s |
+| GeoNames output changed by hand | 1 (its read) | 3.1 s |
+| lite after main | 2 (its conflate and build; the reads are shared) | 2.4 s |
+
+Not yet: per-stage code versions, the disk budget check, and the stages after `build`
+(they join the recipe as they land).
 
 **Clean-up.** `cargo xtask clean` removes build output from both workspaces and keeps the
 store: fetched sources are pinned inputs, not build output.

@@ -37,7 +37,8 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   and the timezone REGION
 - [x] The ID registry: stable IDs across releases and between main and lite, with redirects
   (D-094, [forge](../../04-architecture/forge.md#ids-across-releases))
-- [ ] Content-addressed stage cache (`forge build <cc> [--lite]` is built; the cache is not)
+- [x] Content-addressed stage cache: `forge make <cc> [--lite]` from `build.yaml` (D-095,
+  [forge](../../04-architecture/forge.md#run-every-stage-make))
 - [x] Sign, open with the reader, run every section's `check`; G-det: two builds, identical bytes
   ([forge build](../../04-architecture/forge.md#build-a-pack-build))
 
@@ -80,3 +81,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-07 | Phase 3 planned; vertical slice first | the four research notes (D-088 to D-092) |
 | 2026-11-07 | 3.1: `forge build` writes, signs and reads back the Nepal pack; the cache and ID registry stay open | the slice ran end to end first |
 | 2026-11-07 | 3.1: the ID registry added as its own item (D-094) | IDs must hold across releases before any pack is published |
+| 2026-11-07 | 3.1 done: `forge make` with keyed stages and stamped outputs (D-095) | the slice runs from one command |

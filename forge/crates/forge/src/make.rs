@@ -1,0 +1,365 @@
+//! `forge make`: one country's pack from its recipe, every stage keyed by content (ADR-0035,
+//! D-095).
+//!
+//! ```text
+//! forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--force]
+//! ```
+//!
+//! The recipe is `data/countries/<cc>/build.yaml`. The stages are `read` for each points
+//! source, `conflate` over them, then `build`. Each stage's key is a BLAKE3 hash of the stage
+//! name, the forge binary, the pinned inputs (their `sources.lock` entries), the configuration
+//! (the country profile, the arguments, the ID registry) and the keys of the stages it reads.
+//! A stage whose output directory holds a stamp with its key is skipped. A stamp is written
+//! only after the stage succeeds, and removed before it starts, so a killed run resumes from
+//! the first stage it did not finish. `--force` runs every stage.
+//!
+//! The code version is the whole binary: any change to the forge reruns every stage, which is
+//! always correct and costs seconds on a country. Per-stage versions are a refinement for the
+//! planet build.
+
+use std::fmt::Write as _;
+use std::fs;
+use std::io::{ErrorKind, Read as _};
+use std::path::Path;
+use std::time::Instant;
+
+use serde::Deserialize;
+
+use crate::build;
+use crate::conflate;
+use crate::lock::Lock;
+use crate::read;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Recipe {
+    #[expect(dead_code, reason = "checked by `cargo xtask check-data`")]
+    schema: String,
+    admin: String,
+    #[serde(default)]
+    timezones: Option<String>,
+    points: Vec<Points>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Points {
+    reader: String,
+    source: String,
+    #[serde(default)]
+    extra: Vec<String>,
+}
+
+/// A stage key: BLAKE3 over length-prefixed parts, so no two part lists collide.
+fn key(parts: &[&[u8]]) -> String {
+    let mut h = blake3::Hasher::new();
+    for p in parts {
+        h.update(&(p.len() as u64).to_le_bytes());
+        h.update(p);
+    }
+    h.finalize().to_hex().to_string()
+}
+
+/// The files a stage owns in `dir` (all but stamps, or those whose name contains `owns`),
+/// one line each: BLAKE3, size, name; sorted by name.
+fn manifest(dir: &Path, owns: Option<&str>) -> Result<String, String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|n| !n.starts_with(".key") && owns.is_none_or(|o| n.contains(o)))
+        .collect();
+    names.sort();
+    let mut out = String::new();
+    // Streamed in fixed chunks: memory stays bounded whatever the output size.
+    let mut buf = vec![0_u8; 1 << 20];
+    for n in names {
+        let path = dir.join(&n);
+        let mut h = blake3::Hasher::new();
+        let mut f = fs::File::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        loop {
+            let n = f
+                .read(&mut buf)
+                .map_err(|e| format!("{}: {e}", path.display()))?;
+            let Some(chunk) = buf.get(..n).filter(|c| !c.is_empty()) else {
+                break;
+            };
+            h.update(chunk);
+        }
+        let size = fs::metadata(&path).map_err(|e| e.to_string())?.len();
+        let _ = writeln!(out, "{} {size} {n}", h.finalize().to_hex());
+    }
+    Ok(out)
+}
+
+/// Runs `run` unless `dir/stamp` holds `key` and the stage's files are as it left them;
+/// `Ok(None)` for a hit, else the stage's summary.
+fn stage(
+    (dir, stamp, owns): (&Path, &str, Option<&str>),
+    key: &str,
+    force: bool,
+    run: impl FnOnce() -> Result<String, String>,
+) -> Result<Option<String>, String> {
+    let path = dir.join(stamp);
+    if !force
+        && let Ok(text) = fs::read_to_string(&path)
+        && text.lines().next() == Some(key)
+        && text.split_once('\n').map(|(_, m)| m) == Some(manifest(dir, owns)?.as_str())
+    {
+        return Ok(None);
+    }
+    match fs::remove_file(&path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == ErrorKind::NotFound => {}
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    }
+    let summary = run()?;
+    fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let tmp = dir.join(format!("{stamp}.tmp"));
+    let text = format!("{key}\n{}", manifest(dir, owns)?);
+    fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    fs::rename(&tmp, &path).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(Some(summary))
+}
+
+/// The pinned identity of sources: each one's ID, SHA-256 and size.
+fn pinned(lock: &Lock, ids: &[&str]) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    for id in ids {
+        let s = lock.get(id)?;
+        out.extend_from_slice(format!("{}\t{}\t{}\n", s.id, s.sha256, s.size).as_bytes());
+    }
+    Ok(out)
+}
+
+fn read_or_empty(path: &Path) -> Result<Vec<u8>, String> {
+    match fs::read(path) {
+        Ok(b) => Ok(b),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(Vec::new()),
+        Err(e) => Err(format!("{}: {e}", path.display())),
+    }
+}
+
+/// Runs stages and keeps the stage table.
+struct Runner {
+    force: bool,
+    log: String,
+    ran: usize,
+}
+
+impl Runner {
+    fn step(
+        &mut self,
+        name: &str,
+        at: (&Path, &str, Option<&str>),
+        key: &str,
+        run: impl FnOnce() -> Result<String, String>,
+    ) -> Result<(), String> {
+        let out = stage(at, key, self.force, run)?;
+        let how = out.map_or_else(
+            || "cached".to_string(),
+            |s| {
+                self.ran += 1;
+                first_line(&s)
+            },
+        );
+        let short = key.get(..12).unwrap_or(key);
+        let _ = writeln!(self.log, "| {name} | `{short}` | {how} |");
+        Ok(())
+    }
+}
+
+/// One `read` stage per points source the build may read (G-lic at schedule time): the
+/// sources read and their stage keys, in recipe order.
+fn read_stages(
+    root: &Path,
+    recipe: &Recipe,
+    lock: &Lock,
+    code: &[u8],
+    lite: bool,
+    r: &mut Runner,
+) -> Result<(Vec<String>, Vec<String>), String> {
+    let may_read = |id: &str| -> Result<bool, String> {
+        Ok(!lite || build::LITE.contains(&lock.get(id)?.licence_class.as_str()))
+    };
+    let (mut sources, mut read_keys) = (Vec::new(), Vec::new());
+    for p in &recipe.points {
+        if !may_read(&p.source)? {
+            continue;
+        }
+        let mut ids: Vec<String> = vec![p.source.clone()];
+        for e in &p.extra {
+            if may_read(e)? {
+                ids.push(e.clone());
+            }
+        }
+        let id_refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let k = key(&[b"read", code, p.reader.as_bytes(), &pinned(lock, &id_refs)?]);
+        let dir = root.join("data/build/read").join(&p.source);
+        r.step(
+            &format!("read {}", p.source),
+            (&dir, ".key", None),
+            &k,
+            || read::run(root, &p.reader, &ids),
+        )?;
+        sources.push(p.source.clone());
+        read_keys.push(k);
+    }
+    Ok((sources, read_keys))
+}
+
+/// `forge make <cc> …`.
+pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
+    let t = Instant::now();
+    let usage = "usage: forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--force]";
+    let cc = args.first().ok_or(usage)?;
+    let pass: Vec<String> = args
+        .iter()
+        .skip(1)
+        .filter(|a| *a != "--force")
+        .cloned()
+        .collect();
+    let lite = pass.iter().any(|a| a == "--lite");
+    let flag = |name: &str| {
+        pass.iter()
+            .position(|a| a == name)
+            .and_then(|i| pass.get(i + 1))
+    };
+    if flag("--release").is_none() {
+        return Err(usage.into());
+    }
+    let country = root.join("data/countries").join(cc);
+    let recipe_path = country.join("build.yaml");
+    let text =
+        fs::read_to_string(&recipe_path).map_err(|e| format!("{}: {e}", recipe_path.display()))?;
+    let recipe: Recipe =
+        serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", recipe_path.display()))?;
+    let lock = Lock::read(&root.join("data/sources.lock"))?;
+    let profile = fs::read(country.join("profile.yaml")).map_err(|e| e.to_string())?;
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let code = blake3::hash(&fs::read(&exe).map_err(|e| format!("{}: {e}", exe.display()))?);
+    let code = code.as_bytes().as_slice();
+    let mut r = Runner {
+        force: args.iter().any(|a| a == "--force"),
+        log: String::from("| Stage | Key | Run |\n|---|---|---|\n"),
+        ran: 0,
+    };
+
+    let (sources, read_keys) = read_stages(root, &recipe, &lock, code, lite, &mut r)?;
+    if sources.len() < 2 {
+        return Err(format!(
+            "{cc}: this build may read {} points source(s); conflation needs two",
+            sources.len()
+        ));
+    }
+
+    // conflate: over the read stages, configured by the profile.
+    let joined_keys = read_keys.join(",");
+    let ck = key(&[
+        b"conflate",
+        code,
+        cc.as_bytes(),
+        &profile,
+        joined_keys.as_bytes(),
+    ]);
+    let dir = root.join("data/build/conflate").join(sources.join("+"));
+    r.step("conflate", (&dir, ".key", None), &ck, || {
+        conflate::run(root, cc, &sources)
+    })?;
+
+    // build: the conflation, the admin and timezone sources, the arguments, the ID registry
+    // and the signing seed.
+    let mut build_args: Vec<String> = vec![cc.clone()];
+    build_args.extend(pass.iter().cloned());
+    build_args.extend(["--admin".to_string(), recipe.admin.clone()]);
+    if let Some(tz) = &recipe.timezones {
+        build_args.extend(["--tz".to_string(), tz.clone()]);
+    }
+    build_args.extend(sources.iter().cloned());
+    let mut inputs: Vec<&str> = vec![recipe.admin.as_str()];
+    inputs.extend(recipe.timezones.as_deref());
+    let file = |name: &str| flag(name).map_or(Ok(Vec::new()), |p| read_or_empty(&root.join(p)));
+    let bk = key(&[
+        b"build",
+        code,
+        ck.as_bytes(),
+        &pinned(&lock, &inputs)?,
+        &profile,
+        build_args.join("\0").as_bytes(),
+        &file("--ids")?,
+        blake3::hash(&file("--key")?).as_bytes(),
+    ]);
+    let build_name = if lite { "lite" } else { "main" };
+    let dir = root.join("data/build/pack").join(cc);
+    // The pack directory holds both builds: each stamp covers only its build's files.
+    let stamp = format!(".key-{build_name}");
+    let owns = format!("-{build_name}.");
+    r.step("build", (&dir, &stamp, Some(&owns)), &bk, || {
+        build::run(root, &build_args)
+    })?;
+    let summary = dir.join(format!("summary-{build_name}.md"));
+    Ok(format!(
+        "{}\n{} in {:.1?}: {} of the stages ran.",
+        r.log,
+        summary.strip_prefix(root).unwrap_or(&summary).display(),
+        t.elapsed(),
+        r.ran,
+    ))
+}
+
+/// The first line of a stage summary, for the stage table.
+fn first_line(s: &str) -> String {
+    let line = s.lines().find(|l| !l.trim().is_empty()).unwrap_or("ran");
+    line.trim_start_matches('#').trim().replace('|', "\\|")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{key, stage};
+    use std::cell::Cell;
+    use std::fs;
+
+    #[test]
+    fn stages_skip_on_their_key_and_resume_after_a_failure() {
+        let dir = std::env::temp_dir().join(format!("forge-make-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let at = (dir.as_path(), ".key", None);
+        let runs = Cell::new(0);
+        let ok = || {
+            runs.set(runs.get() + 1);
+            fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            fs::write(dir.join("out.parquet"), b"rows").map_err(|e| e.to_string())?;
+            Ok("done".to_string())
+        };
+        let ran = Ok(Some("done".to_string()));
+        assert_eq!(stage(at, "a", false, ok), ran);
+        assert_eq!(stage(at, "a", false, ok), Ok(None), "a hit");
+        assert_eq!(stage(at, "a", true, ok), ran, "forced");
+        assert_eq!(stage(at, "b", false, ok), ran, "a new key");
+        assert_eq!(runs.get(), 3);
+        // An output changed behind the stage's back: it runs again.
+        fs::write(dir.join("out.parquet"), b"rowz").expect("write");
+        assert_eq!(stage(at, "b", false, ok), ran, "a changed output");
+        // A file the stage does not own does not count.
+        fs::write(dir.join("np-places-lite.tgd"), b"x").expect("write");
+        let main = (dir.as_path(), ".key-main", Some("-main."));
+        assert_eq!(stage(main, "m", false, ok), ran);
+        fs::write(dir.join("np-places-lite.tgd"), b"y").expect("write");
+        assert_eq!(
+            stage(main, "m", false, ok),
+            Ok(None),
+            "another build's file"
+        );
+        assert_eq!(runs.get(), 5);
+        // A failed run leaves no stamp, so the next run with the old key reruns too.
+        assert!(stage(at, "c", false, || Err("killed".into())).is_err());
+        assert!(!dir.join(".key").exists());
+        assert_eq!(stage(at, "b", false, ok), ran);
+        assert_eq!(runs.get(), 6);
+        let _ = fs::remove_dir_all(&dir);
+        // Parts are length-prefixed: moving a byte between parts changes the key.
+        assert_ne!(key(&[b"ab", b"c"]), key(&[b"a", b"bc"]));
+        assert_eq!(key(&[b"ab", b"c"]), key(&[b"ab", b"c"]));
+    }
+}

@@ -67,6 +67,13 @@ struct Source {
     tiles: Option<String>,
 }
 
+/// The source IDs of a lock text; empty when it does not parse (`check_text` reports that).
+pub(crate) fn ids(text: &str) -> BTreeSet<String> {
+    toml::from_str::<Lock>(text)
+        .map(|l| l.sources.into_iter().map(|s| s.id).collect())
+        .unwrap_or_default()
+}
+
 /// Validates the lock text. `root` resolves query paths; `countries` are the country folders.
 pub(crate) fn check_text(
     text: &str,

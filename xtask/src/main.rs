@@ -14,6 +14,7 @@ mod data;
 mod docs;
 mod golden;
 mod lexicon;
+mod recipe;
 mod sizes;
 mod sources;
 mod workspace;

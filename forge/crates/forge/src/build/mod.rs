@@ -46,7 +46,7 @@ use crate::read::boundaries;
 use crate::record::{column, for_each_batch};
 
 /// The licence classes the lite build may read (`CLEAN_ROOM.md` rule 2).
-const LITE: [&str; 6] = [
+pub(crate) const LITE: [&str; 6] = [
     "public-domain",
     "cc0",
     "cc-by",
