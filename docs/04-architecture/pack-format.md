@@ -126,7 +126,7 @@ parameters).
 | 9 | POLY_INDEX | packed R-tree over polygon boxes | `geometry` | as 6 |
 | 10 | REGION | region index: top grid, quadtree in Morton order, leaf table, edge-ID runs, region ID → (kind, target) | `region` | spike S2 design (below) |
 | 11 | POSTAL | FST over codes → postal records | `postal` | `fst` |
-| 12 | COMPONENTS | per component: presence bitmap + rank directory + dense columns | `components` | rank9-style directory (B6) |
+| 12 | COMPONENTS | per component: presence (none, a bitmap or sorted rows) + dense field columns | `components` | column table (D-076): a bitmap costs 0.129 B per row, sparse sorted rows far less |
 | 13 | DEM | tile directory + coded tiles at ±1 m | `dem` | MED prediction + entropy coder (B11) |
 | 14 | BLOBS | cold data (attribution text, long strings) | `zstd` | zstd blocks with a dictionary, `ruzstd` decode (B4) |
 | 15 | BLOCK_HASHES | per-block BLAKE3 for large sections (lazy verification) | `verify` | 16 or 64 KiB blocks (B12) |
@@ -134,12 +134,12 @@ parameters).
 
 ### Column tables (encoding 1)
 
-Every section made of integer columns (PLACES, HIERARCHY, and later IDMAP, REDIRECTS and the
-dense columns of COMPONENTS) is one column table (D-074, `teigeodata_core::table`):
+Every section made of integer columns (PLACES, HIERARCHY, IDMAP, REDIRECTS and COMPONENTS) is
+one column table (D-074, `teigeodata_core::table`):
 
 ```text
 columns u16, reserved u16 (0)
-directory [{ id u16, codec u8 (0 = bitpack), reserved u8 (0), len u32 }; columns]
+directory [{ id u16, codec u8 (0 bitpack, 1 bitmap), reserved u8 (0), len u32 }; columns]
 bodies    each column's bytes in directory order, back to back
 ```
 
@@ -160,6 +160,16 @@ bodies    each column's bytes in directory order, back to back
   the block's first value and the packed values are zigzag deltas from the previous one. Ramp:
   `base + j + packed` (D-075). The writer takes the smaller of FOR and ramp (both O(1) to
   read), and delta only when it is at least 10% smaller than that.
+- Codec 1 is a bitmap with a rank directory (D-076, `teigeodata_core::bits`), after poppy:
+
+  ```text
+  len u32 (bits), reserved u32 (0)
+  words     [u64; ceil(len / 64)]     bit i is bit i % 64 of word i / 64; bits past len are 0
+  directory [u64; ceil(len / 2048)]   ones before the block (low 32 bits), then the ones of
+                                      its first three 512-bit sub-blocks (10 bits each)
+  ```
+
+  Overhead 3.125%; a rank reads one entry and popcounts at most eight words.
 - A FOR block's base and width bound its values (`base` to `base + 2^w − 1`), which serves as
   a zone map for free.
 - Opening a section checks the frame and every column's structure (O(blocks)); a deep check of
@@ -222,6 +232,27 @@ REDIRECTS has one value per retired ID, in increasing order of the retired ID:
   in IDMAP looks in REDIRECTS (one hop: chains are flattened).
 - **Deep checks:** sorted IDs strictly increasing and each at the row `order` names (which
   makes `order` a permutation); every ID valid; retired IDs not current; survivors current.
+
+### COMPONENTS
+
+Optional per-place fields, grouped into the schema's
+[components](../05-data/schema.md#components). `item_count` equals PLACES'. Column IDs are
+`component << 8 | field`; component 0 is reserved.
+
+| Field | Column | |
+|---:|---|---|
+| 0 | presence: which rows have the component | absent: every row; codec 1: a bitmap of one bit per row; codec 0: the present rows, strictly increasing |
+| 1–255 | a field: one value per present row, in row order | codec 0 |
+
+- **The writer picks the smallest presence form** per component. B6 measured the crossover
+  near 10% of rows: below it the sorted rows win (70× at 0.1%), above it the bitmap does.
+- **Lookup:** a row's value is at its index among the present rows: its rank in the bitmap
+  (O(1)), its position in the sorted rows (the IDMAP search), or the row itself.
+- **Opening** checks every column's codec, structure and length (a field has as many values as
+  the component has present rows); **the deep check** proves each bitmap's directory and that
+  sorted rows increase and stay below the row count.
+- What each component and field number means is assigned with the forge (Phase 3), from the
+  schema.
 
 ### REGION (from spike S2)
 

@@ -1,5 +1,6 @@
-//! A strictly increasing list of u64 keys stored as two packed columns (high and low 32 bits):
-//! the one search IDMAP and REDIRECTS share (B5).
+//! A strictly increasing list of u64 keys stored as two packed columns (high and low 32 bits),
+//! or of u32 keys as one: the one search IDMAP, REDIRECTS and COMPONENTS' sparse presence share
+//! (B5, B6).
 //!
 //! A lookup binary-searches the blocks by their first key, which [`Packed::block_first`] reads
 //! in O(1), then unpacks one block of each column and searches it.
@@ -11,16 +12,21 @@ pub(crate) const fn key(hi: u32, lo: u32) -> u64 {
     ((hi as u64) << 32) | lo as u64
 }
 
-/// High and low halves of a sorted key list, of equal length.
+/// High and low halves of a sorted key list, of equal length; no high column means the high
+/// halves are all 0 (u32 keys).
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Sorted<'a> {
-    pub(crate) hi: Packed<'a>,
+    pub(crate) hi: Option<Packed<'a>>,
     pub(crate) lo: Packed<'a>,
 }
 
 impl Sorted<'_> {
     fn block_key(&self, b: usize) -> Option<u64> {
-        Some(key(self.hi.block_first(b)?, self.lo.block_first(b)?))
+        let hi = match self.hi {
+            Some(hi) => hi.block_first(b)?,
+            None => 0,
+        };
+        Some(key(hi, self.lo.block_first(b)?))
     }
 
     /// The index of `k`, if present.
@@ -29,10 +35,13 @@ impl Sorted<'_> {
         let (mut his, mut los) = ([0_u32; BLOCK_LEN], [0_u32; BLOCK_LEN]);
         let n = self.lo.decode_block(b, &mut los);
         // The high halves are almost always one value per block: no unpacking then.
-        let hi_constant = self.hi.block_constant(b);
-        if hi_constant.is_none() {
-            self.hi.decode_block(b, &mut his);
-        }
+        let hi_constant = match self.hi {
+            Some(hi) => hi.block_constant(b).or_else(|| {
+                hi.decode_block(b, &mut his);
+                None
+            }),
+            None => Some(0),
+        };
         let at = |j: usize| {
             let hi = hi_constant.or_else(|| his.get(j).copied()).unwrap_or(0);
             key(hi, los.get(j).copied().unwrap_or(0))
@@ -94,10 +103,10 @@ impl Sorted<'_> {
     /// Every key, in order, streamed a block at a time.
     pub(crate) fn iter(&self) -> impl Iterator<Item = u64> + '_ {
         let n = self.lo.len();
-        self.hi
+        let mut hi = self.hi.map(|h| h.values(0..n));
+        self.lo
             .values(0..n)
-            .zip(self.lo.values(0..n))
-            .map(|(h, l)| key(h, l))
+            .map(move |l| key(hi.as_mut().and_then(Iterator::next).unwrap_or(0), l))
     }
 
     /// Whether the keys are strictly increasing.
@@ -168,20 +177,28 @@ mod tests {
             let (Ok(hi), Ok(lo)) = (Packed::parse(&hb), Packed::parse(&lb)) else {
                 panic!("encode");
             };
-            let sorted = Sorted { hi, lo };
-            assert!(sorted.is_strictly_increasing());
-            for (i, &k) in keys.iter().enumerate() {
-                assert_eq!(sorted.find(k), Some(i), "key {k}");
-                for probe in [k.wrapping_sub(1), k.wrapping_add(1)] {
-                    assert_eq!(
-                        sorted.find(probe),
-                        keys.binary_search(&probe).ok(),
-                        "probe {probe}"
-                    );
+            // u32 keys also as one column, with no high half.
+            let narrow = keys.iter().all(|&k| k >> 32 == 0);
+            let views = [
+                Some(Sorted { hi: Some(hi), lo }),
+                narrow.then_some(Sorted { hi: None, lo }),
+            ];
+            for sorted in views.into_iter().flatten() {
+                assert!(sorted.is_strictly_increasing());
+                assert!(sorted.iter().eq(keys.iter().copied()));
+                for (i, &k) in keys.iter().enumerate() {
+                    assert_eq!(sorted.find(k), Some(i), "key {k}");
+                    for probe in [k.wrapping_sub(1), k.wrapping_add(1)] {
+                        assert_eq!(
+                            sorted.find(probe),
+                            keys.binary_search(&probe).ok(),
+                            "probe {probe}"
+                        );
+                    }
                 }
+                assert_eq!(sorted.find(u64::MAX), keys.binary_search(&u64::MAX).ok());
+                assert_eq!(sorted.find(0), keys.binary_search(&0).ok());
             }
-            assert_eq!(sorted.find(u64::MAX), keys.binary_search(&u64::MAX).ok());
-            assert_eq!(sorted.find(0), keys.binary_search(&0).ok());
         }
         assert_eq!(key(1, 2), (1 << 32) | 2);
     }

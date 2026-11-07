@@ -21,7 +21,9 @@ use teigeodata_bench::{
     Rng, geonames_columns, geonames_path, geonames_tree, leb128_delta, leb128_delta_decode,
 };
 use teigeodata_core::bitpack::{BLOCK_LEN, Coding, Packed, encode};
+use teigeodata_core::bits::{self, Bits};
 use teigeodata_core::{Namespace, PlaceId};
+use teigeodata_format::components::{self, ComponentColumns, Components};
 use teigeodata_format::hierarchy::{self, Hierarchy};
 use teigeodata_format::idmap::{self, IdMap};
 use teigeodata_format::places::{self, PlaceColumns, Places};
@@ -271,5 +273,95 @@ fn ids(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, b1, sections, ids);
+/// B6: rank on a bitmap, and a component field read through each presence form (every row, a
+/// bitmap, sorted rows), at 10⁶ rows. Sizes: `--example b6-sizes`.
+fn presence(c: &mut Criterion) {
+    let n = 1_000_000_usize;
+    let mut rng = Rng::new(6);
+    let mut group = c.benchmark_group("B6-presence");
+    group.throughput(Throughput::Elements(4096));
+    let probes: Vec<usize> = (0..4096)
+        .map(|_| (rng.next_u64() % n as u64) as usize)
+        .collect();
+    // Three components: every row (1), 70% (2, a bitmap) and 1% (3, sorted rows).
+    let mut sets: Vec<Vec<u32>> = Vec::new();
+    for per_mille in [1000, 700, 10] {
+        sets.push(
+            (0..n as u32)
+                .filter(|_| per_mille >= 1000 || rng.next_u64() % 1000 < per_mille)
+                .collect(),
+        );
+    }
+    let Ok(bitmap) = bits::encode(n, sets[1].iter().map(|&r| r as usize)) else {
+        return;
+    };
+    let Ok(b) = Bits::parse(&bitmap) else {
+        return;
+    };
+    group.bench_function("rank", |bench| {
+        bench.iter(|| probes.iter().map(|&i| b.rank(black_box(i))).sum::<usize>());
+    });
+    // Unordered values (an elevation, say), so each field is FOR and the times are presence
+    // plus one O(1) read.
+    let values: Vec<Vec<u32>> = sets
+        .iter()
+        .map(|s| s.iter().map(|_| (rng.next_u64() % 5000) as u32).collect())
+        .collect();
+    let fields: Vec<[(u8, &[u32]); 1]> = values.iter().map(|v| [(1, v.as_slice())]).collect();
+    let comps: Vec<ComponentColumns<'_>> = (0..3)
+        .map(|k| ComponentColumns {
+            id: k as u8 + 1,
+            rows: &sets[k],
+            fields: &fields[k],
+        })
+        .collect();
+    let Ok(body) = components::encode(n, &comps) else {
+        return;
+    };
+    let Ok(mut w) = Writer::new("np", "places", "2026.11.0") else {
+        return;
+    };
+    if w.section_bytes(Kind::COMPONENTS, Encoding::TABLE, n as u64, &body)
+        .is_err()
+    {
+        return;
+    }
+    let Ok(bytes) = w.layout(false).and_then(|l| l.assemble(&[&body])) else {
+        return;
+    };
+    let Ok(pack) = Pack::open(&bytes) else {
+        return;
+    };
+    let Some(Ok(view)) = pack.section(Kind::COMPONENTS).map(|s| Components::open(&s)) else {
+        return;
+    };
+    for (id, name) in [(1, "all"), (2, "bitmap-70%"), (3, "sorted-1%")] {
+        let Some(comp) = view.component(id) else {
+            return;
+        };
+        let Some(field) = comp.field(1) else {
+            return;
+        };
+        group.bench_function(format!("index/{name}"), |bench| {
+            bench.iter(|| {
+                probes
+                    .iter()
+                    .filter_map(|&r| comp.index(black_box(r)))
+                    .sum::<usize>()
+            });
+        });
+        group.bench_function(format!("get/{name}"), |bench| {
+            bench.iter(|| {
+                probes
+                    .iter()
+                    .filter_map(|&r| field.get(black_box(r)))
+                    .map(u64::from)
+                    .sum::<u64>()
+            });
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, b1, sections, ids, presence);
 criterion_main!(benches);

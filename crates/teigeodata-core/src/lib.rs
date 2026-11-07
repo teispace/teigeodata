@@ -9,6 +9,7 @@
 //! - [`hilbert`]: the Hilbert index that orders the rows of every pack (spike S1).
 //! - [`bitpack`]: frame-of-reference bit-packing in lane-interleaved blocks (B1); encoders with
 //!   the `alloc` feature.
+//! - [`bits`]: a bitmap with a rank directory, the presence of optional fields (B6, D-076).
 //! - [`table`]: a table of packed columns, the payload of every integer-column section (D-074).
 //!
 //! `no_std`, no dependencies, no panics; nothing allocates without the `alloc` feature.
@@ -33,6 +34,7 @@ extern crate alloc;
 extern crate std;
 
 pub mod bitpack;
+pub mod bits;
 mod grid;
 mod hilbert;
 mod id;

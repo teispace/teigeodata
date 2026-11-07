@@ -72,7 +72,7 @@ impl<'a> Redirects<'a> {
         }
         Ok(Self {
             old: Sorted {
-                hi: col(OLD_HI)?,
+                hi: Some(col(OLD_HI)?),
                 lo: col(OLD_LO)?,
             },
             new_hi: col(NEW_HI)?,

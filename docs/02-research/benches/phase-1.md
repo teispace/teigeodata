@@ -225,3 +225,45 @@ at 10⁷.
   MPHF route on both counts.
 - **The ramp coding** took IDMAP from 1.10 to 0.35 B per place and is now a codec coding
   (D-075); interpolation over block firsts took a hit from 216 to 87 ns.
+
+## B6: presence (COMPONENTS)
+
+```
+cargo run --release -p teigeodata-bench --example b6-sizes          # sizes
+cargo bench -p teigeodata-bench --bench b1 -- B6-presence            # reads, 10⁶ rows
+```
+
+**Sizes** (2026-11-07), bytes per row of the presence form, rows present at random or in runs
+of mean length 64; the bitmap costs 0.129 B per row (1.03 bits) at any density:
+
+| Density | Sorted rows, random | Sorted rows, runs | Smaller |
+|---:|---:|---:|---|
+| 0.1% | 0.0018 | 0.0024 | sorted (70×) |
+| 1% | 0.0139 | 0.0163 | sorted (9×) |
+| 3% | 0.0357 | 0.0411 | sorted (3.5×) |
+| 10% | 0.0963 | 0.1172 | sorted (1.1–1.3×) |
+| 50% | 0.3251 | 0.4164 | bitmap (2.5–3.2×) |
+| 90% | 0.4142 | 0.4598 | bitmap (3.2–3.6×) |
+| 99% | 0.2091 | 0.2656 | bitmap (1.6–2.1×) |
+
+(10⁷ rows; 1.5 × 10⁵ rows gives the same within 1%.)
+
+**Reads** per lookup, 10⁶ rows, random probes, load average 11–13 (indicative):
+
+| Read | Every row | Bitmap, 70% | Sorted rows, 1% |
+|---|---:|---:|---:|
+| `Bits::rank` | | 6.9 ns | |
+| `Component::index` | 0.5 ns | 4.7 ns | 130 ns |
+| `Field::get` (index + one FOR read) | 7.4 ns | 20 ns | 130 ns |
+
+**Findings:**
+- **Both forms are needed:** neither wins everywhere, and the loss of a single form is large at
+  either end (70× for a bitmap of a sparse component, 3.6× for sorted rows of a dense one). The
+  writer measures both per component (D-076).
+- **A field handle, not a per-read lookup:** the first API reopened the field column on every
+  read (an O(blocks) validation) and took 4.8 µs; `Component::field` now returns a `Field` that
+  keeps the validated column.
+- **A delta-coded field costs a block unpack per read** (the first bench's values were ordered,
+  so the writer picked delta, and a read took 51 ns). Fields of ordered values stay smaller
+  that way; a hot field can be written FOR.
+

@@ -67,7 +67,7 @@ impl<'a> IdMap<'a> {
             hi: col(ID_HI)?,
             lo: col(ID_LO)?,
             sorted: Sorted {
-                hi: col(SORTED_HI)?,
+                hi: Some(col(SORTED_HI)?),
                 lo: col(SORTED_LO)?,
             },
             order: col(ORDER)?,

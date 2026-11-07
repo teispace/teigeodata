@@ -9,7 +9,7 @@ updated: 2026-11-07
 ## Where we are
 
 - **Phase:** 1, core and format ([phase file](../07-planning/phases/phase-1.md)).
-- **Now:** step 1.4, B6 (rank and select → COMPONENTS). Done in Phase 1:
+- **Now:** step 1.4, B3 and B4 (NAMES and BLOBS; research in [names storage](../02-research/notes/names-storage.md)). Done in Phase 1:
   - 1.1 `teigeodata-core`: the stable ID and its text form, grid points, and a Hilbert index
     4–5× faster than the classic loop and proven equal to it;
   - 1.2 `teigeodata-format`: format 0.1. A canonical, validating zero-copy reader (`no_std`, no
@@ -24,6 +24,8 @@ updated: 2026-11-07
     3–10 ns, CSR children below the Elias–Fano bound (D-074).
     B5: IDMAP and REDIRECTS, sorted IDs with a new ramp coding: 0.35 B per place, 82–91 ns per
     hit; PtrHash is 12× bigger for 3–27 ns and stays the upgrade path (D-075).
+    B6: COMPONENTS, presence as a poppy rank bitmap or sorted rows, the smaller per component
+    (crossover near 10%); rank 6.9 ns, a field read 7–20 ns (D-076).
 - **M0 met** on 2026-11-07 (D-069): each criterion with its evidence in
   [phase 0 §0.5](../07-planning/phases/phase-0.md#05-exit-review). The maintainer's review is
   asynchronous. Phase 0 in short:

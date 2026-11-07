@@ -6,21 +6,48 @@
 //! Layout, all little-endian:
 //! ```text
 //! columns u16, reserved u16 (0)
-//! directory [{ id u16, codec u8 (0 = bitpack), reserved u8 (0), len u32 }; columns]
+//! directory [{ id u16, codec u8, reserved u8 (0), len u32 }; columns]
 //! bodies    each column's bytes in directory order, back to back
 //! ```
-//! IDs are strictly increasing and every length is a multiple of 4, so every body starts 4-byte
+//! Codec 0 is a [`bitpack`](crate::bitpack) column, codec 1 a [`bits`](crate::bits) bitmap
+//! (D-076). IDs are strictly increasing and every length is a multiple of 4, so every body starts 4-byte
 //! aligned and a table has exactly one encoding. [`Table::parse`] checks the frame in O(columns);
 //! [`Table::column`] validates one column when a section opens it.
 
 use core::fmt;
 
 use crate::bitpack::{PackError, Packed};
+use crate::bits::{Bits, BitsError};
 
 const HEADER: usize = 4;
 const ENTRY: usize = 8;
-/// The only codec so far: a [`bitpack`](crate::bitpack) column.
-const CODEC_BITPACK: u8 = 0;
+/// How a column's bytes are coded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Codec {
+    /// A [`bitpack`](crate::bitpack) column (code 0).
+    Bitpack,
+    /// A [`bits`](crate::bits) bitmap with its rank directory (code 1).
+    Bits,
+}
+
+impl Codec {
+    #[cfg(feature = "alloc")]
+    const fn code(self) -> u8 {
+        match self {
+            Self::Bitpack => 0,
+            Self::Bits => 1,
+        }
+    }
+
+    const fn from_code(code: u8) -> Option<Self> {
+        match code {
+            0 => Some(Self::Bitpack),
+            1 => Some(Self::Bits),
+            _ => None,
+        }
+    }
+}
 
 /// Why bytes are not a table, or a column of it is missing or invalid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -35,6 +62,10 @@ pub enum TableError {
     Missing(u16),
     /// This column is not a valid packed column.
     Column(u16, PackError),
+    /// This column is not a valid bitmap.
+    Bits(u16, BitsError),
+    /// This column has another codec than the section needs.
+    Codec(u16),
 }
 
 impl fmt::Display for TableError {
@@ -44,6 +75,8 @@ impl fmt::Display for TableError {
             Self::Directory => f.write_str("the column table directory is invalid"),
             Self::Missing(id) => write!(f, "the column table has no column {id}"),
             Self::Column(id, e) => write!(f, "column {id}: {e}"),
+            Self::Bits(id, e) => write!(f, "column {id}: {e}"),
+            Self::Codec(id) => write!(f, "column {id} has the wrong codec"),
         }
     }
 }
@@ -84,7 +117,11 @@ impl<'a> Table<'a> {
         let mut last: Option<u16> = None;
         for &e in directory {
             let (id, codec, reserved, len) = entry(e);
-            if codec != CODEC_BITPACK || reserved != 0 || len % 4 != 0 || last >= Some(id) {
+            if Codec::from_code(codec).is_none()
+                || reserved != 0
+                || len % 4 != 0
+                || last >= Some(id)
+            {
                 return Err(TableError::Directory);
             }
             last = Some(id);
@@ -105,28 +142,55 @@ impl<'a> Table<'a> {
         self.directory.iter().map(|&e| entry(e).0)
     }
 
-    /// The bytes of column `id`, or `None` if the table has no such column.
+    /// The codec and bytes of column `id`, or `None` if the table has no such column.
     #[must_use]
-    pub fn column_bytes(&self, id: u16) -> Option<&'a [u8]> {
+    pub fn column_raw(&self, id: u16) -> Option<(Codec, &'a [u8])> {
         let mut start = 0;
         for &e in self.directory {
-            let (eid, _, _, len) = entry(e);
+            let (eid, codec, _, len) = entry(e);
             if eid == id {
-                return self.bodies.get(start..start + len);
+                return Some((
+                    Codec::from_code(codec)?,
+                    self.bodies.get(start..start + len)?,
+                ));
             }
             start += len;
         }
         None
     }
 
+    /// The bytes of column `id`, or `None` if the table has no such column.
+    #[must_use]
+    pub fn column_bytes(&self, id: u16) -> Option<&'a [u8]> {
+        self.column_raw(id).map(|c| c.1)
+    }
+
     /// Column `id`, validated.
     ///
     /// # Errors
-    /// [`TableError::Missing`] if there is no such column; [`TableError::Column`] if it is
-    /// invalid.
+    /// [`TableError::Missing`] if there is no such column; [`TableError::Codec`] if it is not a
+    /// packed column; [`TableError::Column`] if it is invalid.
     pub fn column(&self, id: u16) -> Result<Packed<'a>, TableError> {
-        let bytes = self.column_bytes(id).ok_or(TableError::Missing(id))?;
-        Packed::parse(bytes).map_err(|e| TableError::Column(id, e))
+        match self.column_raw(id) {
+            None => Err(TableError::Missing(id)),
+            Some((Codec::Bitpack, bytes)) => {
+                Packed::parse(bytes).map_err(|e| TableError::Column(id, e))
+            }
+            Some(_) => Err(TableError::Codec(id)),
+        }
+    }
+
+    /// Bitmap column `id`, its structure validated ([`Bits::check`] proves its directory).
+    ///
+    /// # Errors
+    /// [`TableError::Missing`] if there is no such column; [`TableError::Codec`] if it is not a
+    /// bitmap; [`TableError::Bits`] if it is invalid.
+    pub fn bits(&self, id: u16) -> Result<Bits<'a>, TableError> {
+        match self.column_raw(id) {
+            None => Err(TableError::Missing(id)),
+            Some((Codec::Bits, bytes)) => Bits::parse(bytes).map_err(|e| TableError::Bits(id, e)),
+            Some(_) => Err(TableError::Codec(id)),
+        }
     }
 
     /// Column `id` if the table has it (an optional column).
@@ -142,31 +206,45 @@ impl<'a> Table<'a> {
     }
 }
 
-/// Builds a table from encoded columns (feature `alloc`): `(id, bytes)` pairs in strictly
+/// Builds a table of packed columns (feature `alloc`): `(id, bytes)` pairs in strictly
 /// increasing ID order, each from [`bitpack::encode`](crate::bitpack::encode).
+///
+/// # Errors
+/// As [`encode_with`].
+#[cfg(feature = "alloc")]
+pub fn encode(columns: &[(u16, &[u8])]) -> Result<alloc::vec::Vec<u8>, TableError> {
+    let with: alloc::vec::Vec<_> = columns
+        .iter()
+        .map(|&(id, bytes)| (id, Codec::Bitpack, bytes))
+        .collect();
+    encode_with(&with)
+}
+
+/// Builds a table from encoded columns of any codec (feature `alloc`): `(id, codec, bytes)` in
+/// strictly increasing ID order.
 ///
 /// # Errors
 /// [`TableError::Directory`] if the IDs are not strictly increasing, there are more than 65,535
 /// columns, or a column is not a multiple of 4 bytes or above 4 GiB.
 #[cfg(feature = "alloc")]
-pub fn encode(columns: &[(u16, &[u8])]) -> Result<alloc::vec::Vec<u8>, TableError> {
+pub fn encode_with(columns: &[(u16, Codec, &[u8])]) -> Result<alloc::vec::Vec<u8>, TableError> {
     let count = u16::try_from(columns.len()).map_err(|_| TableError::Directory)?;
-    let body: usize = columns.iter().map(|c| c.1.len()).sum();
+    let body: usize = columns.iter().map(|c| c.2.len()).sum();
     let mut out = alloc::vec::Vec::with_capacity(HEADER + columns.len() * ENTRY + body);
     out.extend_from_slice(&count.to_le_bytes());
     out.extend_from_slice(&[0, 0]);
     let mut last: Option<u16> = None;
-    for &(id, bytes) in columns {
+    for &(id, codec, bytes) in columns {
         let len = u32::try_from(bytes.len()).map_err(|_| TableError::Directory)?;
         if last >= Some(id) || len % 4 != 0 {
             return Err(TableError::Directory);
         }
         last = Some(id);
         out.extend_from_slice(&id.to_le_bytes());
-        out.extend_from_slice(&[CODEC_BITPACK, 0]);
+        out.extend_from_slice(&[codec.code(), 0]);
         out.extend_from_slice(&len.to_le_bytes());
     }
-    for &(_, bytes) in columns {
+    for &(_, _, bytes) in columns {
         out.extend_from_slice(bytes);
     }
     Ok(out)
@@ -178,8 +256,9 @@ pub fn encode(columns: &[(u16, &[u8])]) -> Result<alloc::vec::Vec<u8>, TableErro
     reason = "test inputs are cut from a 64-bit generator on purpose"
 )]
 mod tests {
-    use super::{Table, TableError, encode};
+    use super::{Codec, Table, TableError, encode, encode_with};
     use crate::bitpack::{self, Coding, PackError};
+    use crate::bits::{self, BitsError};
     use std::vec::Vec;
 
     fn sample() -> (Vec<u32>, Vec<u32>, Vec<u8>) {
@@ -207,6 +286,26 @@ mod tests {
         assert_eq!(t.column(2).err(), Some(TableError::Missing(2)));
         assert!(t.optional(2).is_ok_and(|c| c.is_none()));
         assert!(t.optional(9).is_ok_and(|c| c.is_some()));
+        // A bitmap column beside a packed one; each refuses to open as the other.
+        let bm = bits::encode(70, [3, 69]).unwrap_or_default();
+        let ea = bitpack::encode(&a, Coding::Delta);
+        let mixed =
+            encode_with(&[(1, Codec::Bitpack, &ea), (4, Codec::Bits, &bm)]).unwrap_or_default();
+        let t = Table::parse(&mixed).unwrap_or_else(|e| panic!("{e}"));
+        let b4 = t.bits(4).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!((b4.len(), b4.count(), b4.get(69)), (70, 2, true));
+        assert_eq!(t.column_raw(4).map(|c| c.0), Some(Codec::Bits));
+        assert_eq!(t.column(4).err(), Some(TableError::Codec(4)));
+        assert_eq!(t.bits(1).err(), Some(TableError::Codec(1)));
+        assert_eq!(t.bits(2).err(), Some(TableError::Missing(2)));
+        assert!(t.column(1).is_ok());
+        let mut bad = mixed.clone();
+        bad[4 + 2 * 8 + ea.len() + 4] = 1; // the bitmap's reserved bytes
+        let t = Table::parse(&bad).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            t.bits(4).err(),
+            Some(TableError::Bits(4, BitsError::Header))
+        );
         let empty = encode(&[]).unwrap_or_default();
         assert_eq!(Table::parse(&empty).map(|t| t.ids().len()), Ok(0));
     }
@@ -233,7 +332,7 @@ mod tests {
         extra.extend_from_slice(&[0; 4]);
         assert_eq!(Table::parse(&extra).err(), Some(TableError::Directory));
         // Header reserved, then the first entry's codec, reserved, ID order and length.
-        for (at, v) in [(2, 1), (6, 1), (7, 1), (12, 1), (8, 3)] {
+        for (at, v) in [(2, 1), (6, 2), (7, 1), (12, 1), (8, 3)] {
             let mut b = good.clone();
             b[at] = v;
             assert!(Table::parse(&b).is_err(), "byte {at} = {v}");

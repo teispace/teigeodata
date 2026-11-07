@@ -62,13 +62,15 @@ fn check_len(
     }
 }
 
-fn map(kind: Kind, e: TableError) -> Error {
+pub(crate) fn map(kind: Kind, e: TableError) -> Error {
     let (column, problem) = match e {
         TableError::Truncated => (0, "the column table is truncated"),
         TableError::Missing(id) => (id, "a required column is missing"),
         TableError::Column(id, PackError::Truncated) => (id, "the column is truncated"),
         TableError::Column(id, PackError::Header) => (id, "the column header is invalid"),
         TableError::Column(id, _) => (id, "the column directory is inconsistent"),
+        TableError::Bits(id, _) => (id, "the bitmap is invalid"),
+        TableError::Codec(id) => (id, "the column has the wrong codec"),
         _ => (0, "the column table directory is invalid"),
     };
     Error::Payload {

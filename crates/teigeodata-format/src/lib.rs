@@ -33,6 +33,7 @@ extern crate alloc;
 extern crate std;
 
 mod columns;
+pub mod components;
 mod error;
 #[cfg(feature = "fuzz")]
 #[doc(hidden)]
