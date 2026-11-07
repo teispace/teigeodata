@@ -29,6 +29,7 @@ mod counts {
     use teigeodata_format::names::{self, NameRecord, Names, TEXT_BUFFER};
     use teigeodata_format::place_index::{self, Neighbour, PlaceIndex, Rect};
     use teigeodata_format::places::{self, PlaceColumns, Places};
+    use teigeodata_format::region::{self, Options, Region};
     use teigeodata_format::{Encoding, Kind, Pack};
 
     /// Setup data lives for the whole run: leaked once per benchmark process.
@@ -272,6 +273,68 @@ mod counts {
         black_box(ix.nearest(black_box(at), &mut out))
     }
 
+    /// A 4 × 4 jittered grid of regions over Nepal's box, with a world background: shared
+    /// borders, edge-free leaves and border leaves.
+    fn region_pack() -> &'static [u8] {
+        let mut r = Rng::new(17);
+        let (x0, y0, step) = (800_000_000_i32, 260_000_000_i32, 20_000_000_i32);
+        let mut jit = |v: i32| v + i32::try_from(r.next_u64() % 2_000_001).unwrap() - 1_000_000;
+        let lattice: Vec<Vec<[i32; 2]>> = (0..5)
+            .map(|j| {
+                (0..5)
+                    .map(|i| {
+                        let inner = |k: i32| k > 0 && k < 4;
+                        let x = x0 + i * step;
+                        let y = y0 + j * step;
+                        [
+                            if inner(i) { jit(x) } else { x },
+                            if inner(j) { jit(y) } else { y },
+                        ]
+                    })
+                    .collect()
+            })
+            .collect();
+        let mut regions: Vec<Vec<Vec<[i32; 2]>>> = Vec::new();
+        for (row, up) in lattice.iter().zip(lattice.iter().skip(1)) {
+            for ((a, b), (c, d)) in row
+                .iter()
+                .zip(row.iter().skip(1))
+                .zip(up.iter().zip(up.iter().skip(1)))
+            {
+                regions.push(vec![vec![*a, *b, *d, *c, *a]]);
+            }
+        }
+        regions.push(vec![vec![
+            [-1_800_000_000, -900_000_000],
+            [1_800_000_000, -900_000_000],
+            [1_800_000_000, 900_000_000],
+            [-1_800_000_000, 900_000_000],
+        ]]);
+        let body = region::encode(&regions, &Options::default()).unwrap();
+        let n = regions.len() as u64;
+        leak(
+            pack_with(
+                "regions",
+                1,
+                &[(Kind::REGION, Encoding::TABLE, n, body.as_slice())],
+                false,
+            )
+            .unwrap(),
+        )
+    }
+
+    // Kathmandu, inside a border leaf of the grid.
+    #[library_benchmark]
+    #[bench::border(region_pack())]
+    fn region_at(bytes: &'static [u8]) -> u32 {
+        let p = Pack::open(bytes).unwrap();
+        let ix = Region::open(&p.section(Kind::REGION).unwrap()).unwrap();
+        let at = Point::<E6>::from_units(27_700_000, 85_300_000)
+            .unwrap()
+            .to_e7();
+        black_box(ix.region(black_box(at)).unwrap_or(0))
+    }
+
     library_benchmark_group!(
         name = core_paths,
         benchmarks = [bitpack_get, bitpack_decode_all, hilbert_1000, bits_rank]
@@ -287,7 +350,8 @@ mod counts {
             names_canonical,
             blob_get,
             place_within,
-            place_nearest
+            place_nearest,
+            region_at
         ]
     );
 }

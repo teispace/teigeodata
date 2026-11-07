@@ -253,6 +253,14 @@ fn open_refuses_the_wrong_section() {
     ])
     .unwrap();
     assert_eq!(problem(places_of(&extra, 4)), (0, "an unknown column"));
+    let zero = table(&[
+        (0, &kind),
+        (places::LAT, &lat),
+        (places::LON, &lat),
+        (places::KIND, &kind),
+    ])
+    .unwrap();
+    assert_eq!(problem(places_of(&zero, 4)), (0, "an unknown column"));
 }
 
 #[test]

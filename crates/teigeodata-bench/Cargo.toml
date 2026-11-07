@@ -23,6 +23,10 @@ zstd = { version = "0.14.3", default-features = false, features = ["zdict_builde
 # B8 rivals: flatbush with f64 boxes, and an in-memory R*-tree.
 geo-index = "0.4.0"
 rstar = "0.14.0"
+# B9: the world timezones (GeoJSON) and the rival, tzf-rs with its full data loaded from a file.
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tzf-rs = { version = "=2.3.0", default-features = false }
 # Instruction counts under Callgrind (the `counts` bench; it runs on Linux, with Valgrind).
 gungraun = "0.20.0"
 

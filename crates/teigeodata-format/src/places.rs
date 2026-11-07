@@ -69,7 +69,7 @@ impl<'a> Places<'a> {
         for (slot, id) in optional.iter_mut().zip(OPTIONAL) {
             *slot = columns::optional(&table, Kind::PLACES, id, rows)?;
         }
-        if table.ids().any(|id| id > FLAGS) {
+        if table.ids().any(|id| id == 0 || id > FLAGS) {
             return Err(fail(0, "an unknown column"));
         }
         Ok(Self {

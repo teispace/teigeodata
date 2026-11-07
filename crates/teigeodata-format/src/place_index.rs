@@ -220,7 +220,7 @@ impl<'a> PlaceIndex<'a> {
             Some(if depth == 0 { 0 } else { 4 }),
         )?;
         let boxes = columns::required(&table, Kind::PLACE_INDEX, BOXES, Some(4 * stored))?;
-        if table.ids().any(|id| id > BOXES) {
+        if table.ids().any(|id| id == 0 || id > BOXES) {
             return Err(fail(0, "an unknown column"));
         }
         let mut edges = [0; 4];

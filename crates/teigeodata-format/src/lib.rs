@@ -51,6 +51,7 @@ pub mod place_index;
 pub mod places;
 mod read;
 pub mod redirects;
+pub mod region;
 #[cfg(feature = "signature")]
 mod signature;
 mod sorted;

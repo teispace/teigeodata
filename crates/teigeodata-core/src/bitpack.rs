@@ -32,6 +32,9 @@ use core::fmt;
 const L: usize = 4;
 /// Values per block.
 pub const BLOCK_LEN: usize = 32 * L;
+/// Spans up to this long are read value by value by [`Packed::run`] (measured in B9: a short run
+/// of edges costs a fifth of a block decode).
+const SHORT_RUN: usize = 24;
 
 /// How values are coded inside a block.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -316,12 +319,33 @@ impl<'a> Packed<'a> {
     /// more overhead.
     pub fn run(&self, start: usize, out: &mut [u32]) -> usize {
         let end = start.saturating_add(out.len()).min(self.count);
-        let mut buf = [0; BLOCK_LEN];
+        let mut buf: Option<[u32; BLOCK_LEN]> = None;
         let (mut at, mut written) = (start, 0);
         while at < end {
             let (b, j) = (at / BLOCK_LEN, at % BLOCK_LEN);
             let take = (BLOCK_LEN - j).min(end - at);
-            self.decode_block(b, &mut buf);
+            // A short span of directly addressable values: read each, not the whole block.
+            if take <= SHORT_RUN && self.coding != Coding::Delta {
+                let (words, width, base) = self.block_words(b);
+                let Some(dst) = out.get_mut(written..written + take) else {
+                    break;
+                };
+                for (k, d) in (j..).zip(dst.iter_mut()) {
+                    let v = base.wrapping_add(packed_at(words, width, k));
+                    #[allow(clippy::cast_possible_truncation, reason = "k < 128")]
+                    let ramp = if self.coding == Coding::Ramp {
+                        k as u32
+                    } else {
+                        0
+                    };
+                    *d = v.wrapping_add(ramp);
+                }
+                at += take;
+                written += take;
+                continue;
+            }
+            let buf = buf.get_or_insert([0; BLOCK_LEN]);
+            self.decode_block(b, buf);
             let (Some(dst), Some(src)) =
                 (out.get_mut(written..written + take), buf.get(j..j + take))
             else {

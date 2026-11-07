@@ -316,6 +316,14 @@ fn bad_frames() -> Vec<(Parts, usize, (&'static str, u16))> {
             2,
             ("open", 0),
         ),
+        (
+            with(|p| {
+                p.extra
+                    .push((0, Codec::Bitpack, packed(&[0, 0, 0], Coding::For)));
+            }),
+            2,
+            ("open", 0),
+        ),
         // Tables.
         (with(|p| p.tables[0] = 0), 2, ("open", TABLES)),
         (with(|p| p.tables = vec![0; 4]), 2, ("open", TABLES)),

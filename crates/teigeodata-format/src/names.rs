@@ -225,7 +225,7 @@ impl<'a> Names<'a> {
         }
         let bytes = |id| t.bytes(id).map_err(|e| columns::map(Kind::NAMES, e));
         let (tables_bytes, heap) = (bytes(TABLES)?, bytes(HEAP)?);
-        if t.ids().any(|id| id > HEAP) {
+        if t.ids().any(|id| id == 0 || id > HEAP) {
             return Err(fail(0, "an unknown column"));
         }
         Ok(Self {

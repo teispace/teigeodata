@@ -11,6 +11,7 @@
     clippy::too_many_lines,
     clippy::cast_possible_wrap,
     clippy::verbose_bit_mask,
+    clippy::many_single_char_names,
     reason = "harnesses: one model builder per section, grid units below 2^31, mode bits read as masks"
 )]
 
@@ -23,11 +24,12 @@ use crate::idmap::{self, IdMap};
 use crate::place_index::{self, MAX_NODE, MIN_NODE, Neighbour, PlaceIndex, Rect};
 use crate::places::{self, PlaceColumns, Places};
 use crate::redirects::{self, Fate, Redirects, Resolved, resolve};
+use crate::region::{self, Region};
 use crate::{Encoding, Kind, Pack, Writer};
 use teigeodata_core::bitpack::{self, BLOCK_LEN, Coding, Packed};
 use teigeodata_core::bits::{self as bitmap, Bits};
 use teigeodata_core::table::{self as frame, Codec, Table, TableError};
-use teigeodata_core::{E6, Namespace, PlaceId, PlaceKind, Point, SERIAL_MAX, hilbert};
+use teigeodata_core::{E6, E7, Namespace, PlaceId, PlaceKind, Point, SERIAL_MAX, hilbert};
 
 use super::{Cursor, limit};
 
@@ -104,12 +106,13 @@ pub fn sections(data: &[u8]) {
     let mut c = Cursor(data);
     let mode = c.u8();
     let structured = mode & 0x80 != 0;
-    match mode % 6 {
+    match mode % 7 {
         0 => places_case(&mut c, structured),
         1 => hierarchy_case(&mut c, structured),
         2 => idmap_case(&mut c, structured),
         3 => redirects_case(&mut c, structured),
         4 => place_index_case(&mut c, structured),
+        5 => region_case(&mut c, structured),
         _ => blobs_case(&mut c, structured),
     }
 }
@@ -142,6 +145,109 @@ fn point(c: &mut Cursor<'_>) -> Point<E6> {
     clippy::many_single_char_names,
     reason = "the query names of the brute-force model"
 )]
+/// A vertex for a region model: in a small box (deep leaves), anywhere, on the domain's edges,
+/// or a vertex already drawn (shared borders and junctions).
+fn region_vertex(c: &mut Cursor<'_>, seen: &[[i32; 2]]) -> [i32; 2] {
+    match c.u8() & 7 {
+        0 | 1 => [
+            850_000_000 + (c.u32() % 2_000_001) as i32,
+            270_000_000 + (c.u32() % 2_000_001) as i32,
+        ],
+        2 => [
+            (i64::from(c.u32() % 3_600_000_001) - 1_800_000_000) as i32,
+            (c.u32() % 1_800_000_001) as i32 - 900_000_000,
+        ],
+        3 => [
+            [-1_800_000_000, 1_800_000_000][c.below(2)],
+            (c.u32() % 1_800_000_001) as i32 - 900_000_000,
+        ],
+        4 => [
+            (i64::from(c.u32() % 3_600_000_001) - 1_800_000_000) as i32,
+            [-900_000_000, 900_000_000][c.below(2)],
+        ],
+        _ => seen.get(c.below(seen.len())).copied().unwrap_or([0, 0]),
+    }
+}
+
+/// A query point: anywhere, or on, beside or between model vertices.
+fn region_point(c: &mut Cursor<'_>, seen: &[[i32; 2]]) -> Point<E7> {
+    let mut v = region_vertex(c, seen);
+    if c.u8() & 1 == 1
+        && let Some(w) = seen.get(c.below(seen.len()))
+    {
+        v = [i32::midpoint(v[0], w[0]), i32::midpoint(v[1], w[1])];
+    }
+    let d = i32::from(c.u8() % 3) - 1;
+    Point::from_units(
+        (v[1] + d).clamp(-900_000_000, 900_000_000),
+        (v[0] - d).clamp(-1_800_000_000, 1_800_000_000),
+    )
+    .unwrap_or_else(|| Point::from_units(0, 0).unwrap_or_else(|| panic!("the origin")))
+}
+
+fn region_case(c: &mut Cursor<'_>, structured: bool) {
+    // A written index has at least 4^MIN_TOP top cells: too slow to build under Miri, and
+    // half the inputs natively (libFuzzer covers volume).
+    let structured = structured && !cfg!(miri) && c.u8() & 1 == 0;
+    let mut seen: Vec<[i32; 2]> = Vec::new();
+    let regions: Vec<Vec<Vec<[i32; 2]>>> = (0..c.below(7))
+        .map(|_| {
+            (0..=c.below(2))
+                .map(|_| {
+                    (0..3 + c.below(limit(10, 4)))
+                        .map(|_| {
+                            let v = region_vertex(c, &seen);
+                            seen.push(v);
+                            v
+                        })
+                        .collect()
+                })
+                .collect()
+        })
+        .collect();
+    let mut items = regions.len() as u64;
+    let (mut body, mut valid) = (Vec::new(), false);
+    if structured {
+        let opts = region::Options {
+            leaf_max: 1 + c.below(8),
+            top: region::MIN_TOP,
+        };
+        body = region::encode(&regions, &opts).unwrap_or_else(|e| panic!("a region index: {e}"));
+        valid = !edit(c, &mut body, &mut items);
+    } else {
+        body.extend_from_slice(c.rest());
+    }
+    let Some(file) = pack(&[(Kind::REGION, items, &body)]) else {
+        return;
+    };
+    let p = open(&file);
+    let ix = match Region::open(&section(&p, Kind::REGION)) {
+        Ok(ix) => ix,
+        Err(e) => {
+            assert!(!valid, "a written region index is refused: {e}");
+            return;
+        }
+    };
+    let checked = ix.check().is_ok();
+    assert!(checked || !valid, "a written region index fails its check");
+    let mut out = [0_u32; 8];
+    for _ in 0..8 {
+        let at = region_point(c, &seen);
+        let n = ix.regions_at(at, &mut out);
+        let got = out.get(..n.min(out.len())).unwrap_or_default();
+        assert!(got.windows(2).all(|w| w[0] < w[1]), "regions out of order");
+        if checked {
+            assert!(
+                got.iter().all(|&z| (z as usize) < ix.regions()),
+                "a region past the end"
+            );
+        }
+        if valid {
+            assert_eq!(got, &region::even_odd(&regions, at)[..], "at {at:?}");
+        }
+    }
+}
+
 fn place_index_case(c: &mut Cursor<'_>, structured: bool) {
     let n = c.below(MAX_ROWS + 1);
     let mut points: Vec<Point<E6>> = (0..n).map(|_| point(c)).collect();

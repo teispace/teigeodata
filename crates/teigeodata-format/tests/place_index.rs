@@ -296,6 +296,7 @@ fn refusals() {
         ];
         if let Some(id) = extra {
             cols.push((id, col(&[1])));
+            cols.sort_by_key(|(i, _)| *i);
         }
         let refs: Vec<(u16, &[u8])> = cols.iter().map(|(i, c)| (*i, &c[..])).collect();
         table(&refs).unwrap()
@@ -308,6 +309,10 @@ fn refusals() {
     assert_eq!(problem(&pack_of(33, None, 4, 84), rows), (1, range));
     assert_eq!(
         problem(&pack_of(16, Some(9), 4, 84), rows).1,
+        "an unknown column"
+    );
+    assert_eq!(
+        problem(&pack_of(16, Some(0), 4, 84), rows).1,
         "an unknown column"
     );
     // The right shape opens; its made-up boxes fail the check.
