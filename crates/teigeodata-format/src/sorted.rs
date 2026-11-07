@@ -151,22 +151,31 @@ mod tests {
             s ^= s << 17;
             s
         };
+        // Under Miri the large sets keep their shape at a fiftieth of the size, and the small
+        // lists keep one per block edge (15 minutes at a twentieth and every edge, 2026-11-07).
+        let size = |n: u64| if cfg!(miri) { n / 50 } else { n };
         let mut sets: Vec<Vec<u64>> = Vec::new();
-        sets.push((1..5000).collect());
+        sets.push((1..size(5000)).collect());
+        let half = size(1500);
         sets.push(
-            (0..3000)
-                .map(|i| if i < 1500 { i } else { (1 << 40) + i })
+            (0..2 * half)
+                .map(|i| if i < half { i } else { (1 << 40) + i })
                 .collect(),
         );
         sets.push((0..40).map(|i| 1_u64 << i).collect());
-        sets.push((0..4000).map(|_| next() % 100_000).collect());
-        sets.push((0..2000).map(|_| next()).collect());
+        sets.push((0..size(4000)).map(|_| next() % 100_000).collect());
+        sets.push((0..size(2000)).map(|_| next()).collect());
         sets.push(
-            (0..2000)
+            (0..size(2000))
                 .map(|i| (i % 7) << 32 | (next() % 50_000))
                 .collect(),
         );
-        for n in [1, 2, 127, 128, 129, 255, 256, 257, 385] {
+        let small: &[u64] = if cfg!(miri) {
+            &[1, 128, 129]
+        } else {
+            &[1, 2, 127, 128, 129, 255, 256, 257, 385]
+        };
+        for &n in small {
             sets.push((0..n).map(|i| 10 + 3 * i).collect());
         }
         for mut keys in sets {

@@ -58,7 +58,7 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 
 ### 1.5 Hardening
 - [x] Nightly CI: cargo-fuzz (libFuzzer) on the same harness functions, Miri on the reader tests
-- [ ] gungraun instruction-count benchmarks in CI (Valgrind; Linux), the load-independent PR gate
+- [x] gungraun instruction-count benchmarks in CI (Valgrind; Linux), the load-independent PR gate: 11 hot paths in `benches/counts.rs`, a PR fails above +1% instructions against its base. Proven on a planted regression (PR #1, run 42345671437: `Packed::get` +26%, a canonical name +8.7%, failed); green on `main` (run 42345662682) ([results](../../02-research/benches/phase-1.md#counts-instructions-of-the-hot-paths-the-pr-gate))
 - [x] Determinism gate: every test pack built twice, bytes compared
 - [x] Sizes (Z2) of `core` and `format` per feature set: `cargo xtask sizes` (`tools/size-probe`); the whole reader 171 KiB wasm32, 53 KiB gzipped ([results](../../02-research/benches/phase-1.md#z2-library-sizes-per-feature-set))
 
@@ -81,4 +81,5 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 | 2026-11-07 | 1.5: nightly fuzz (8 libFuzzer targets: the 4 pack harnesses plus sections, bitpack, table, bits) and Miri; determinism gate in `tests/determinism.rs` | D-072: one harness per property, run by `cargo test` and libFuzzer |
 | 2026-11-07 | Z2 done: `cargo xtask sizes` with a probe cdylib and a std baseline; the payload fuzz harnesses moved into `teigeodata_format::fuzz`, so all eight run on every PR | measured sizes per feature set; one home per harness |
 | 2026-11-07 | B4 done: frames of whole blobs, dictionary optional; dependency `unsafe` policy in the quality bar | measured: a random read costs one frame, so 16 KiB frames; dictionaries pay only below 4 KiB |
+| 2026-11-07 | gungraun counts gate done; the base is built in its own target directory | a shared one reused the base binary for the PR, so the first proof run passed a +26% regression |
 | 2026-11-07 | B12 done: 16 KiB block CVs, coverage canonical | measured: 16 KiB reads 4× faster than 64 KiB for 0.15% more size; the hazmat merge removes a separate root |

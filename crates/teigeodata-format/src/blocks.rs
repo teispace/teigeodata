@@ -403,11 +403,21 @@ mod tests {
     #[test]
     fn root_equals_the_hash() {
         let data: Vec<u8> = (0..(70 * BLOCK + 1000)).map(|i| (i % 251) as u8).collect();
+        // Under Miri, hashing is about a million times slower: an even count, an odd count and
+        // a partial last block take every merge path (8 minutes for 2 to 5 blocks, 2026-11-07).
+        let (blocks, extra): (&[usize], &[usize]) = if cfg!(miri) {
+            (&[2], &[BLOCK + 1, 3 * BLOCK + 1])
+        } else {
+            (
+                &[2, 3, 4, 5, 7, 8, 9, 16, 17, 31, 63, 64, 65, 70],
+                &[BLOCK + 1, 2 * BLOCK + 1023, 31_744 + BLOCK, 102_400],
+            )
+        };
         let mut lens: Vec<usize> = Vec::new();
-        for b in [2, 3, 4, 5, 7, 8, 9, 16, 17, 31, 63, 64, 65, 70] {
+        for b in blocks {
             lens.extend([b * BLOCK - 1, b * BLOCK, b * BLOCK + 1]);
         }
-        lens.extend([BLOCK + 1, 2 * BLOCK + 1023, 31_744 + BLOCK, 102_400]);
+        lens.extend(extra);
         for len in lens {
             let bytes = &data[..len];
             let cvs: Vec<[u8; 32]> = bytes
