@@ -40,6 +40,9 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | bitpacking (B1 rival, dev-dependency of `teigeodata-bench` only) | 0.9.3 | 2026-11-07 | crates.io | 2026-12-07 |
 | geo-index (B8 rival, flatbush with f64 boxes; dev-dependency of `teigeodata-bench` only) | 0.4.0 | 2026-11-07 | crates.io | 2026-12-07 |
 | rstar (B8 rival, R*-tree; dev-dependency of `teigeodata-bench` only) | 0.14.0 | 2026-11-07 | crates.io | 2026-12-07 |
+| tzf-rs (B9 rival, `default-features = false`; dev-dependency of `teigeodata-bench` only) | 2.3.0 | 2026-11-07 | crates.io | 2026-12-07 |
+| tzf-dist `full.tzb` (B9 rival data, release asset `v0.0.2026-f`, SHA-256 `75513a16…35d8a3`) | 2026f | 2026-11-07 | GitHub release of ringsaturn/tzf-dist | 2026-12-07 |
+| serde, serde_json (B9 example reads the tbb GeoJSON; dev-dependencies of `teigeodata-bench` only) | 1.0.229, 1.0.154 | 2026-11-07 | crates.io | 2026-12-07 |
 | Dart `ffi` package | 2.2.0 | 2026-11-07 | pub.dev | 2026-12-07 |
 | Java (JVM binding, CI) | 25 (Temurin) | 2026-11-07 | `java --version` | 2026-12-07 |
 | Swift (SwiftPM, local) | 6.4.2 | 2026-11-07 | `swift --version` | 2026-12-07 |

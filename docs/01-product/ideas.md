@@ -1,7 +1,7 @@
 ---
 title: "Ideas inbox"
 status: living
-updated: 2026-11-06
+updated: 2026-11-07
 ---
 
 # Ideas inbox
@@ -19,3 +19,4 @@ Ideas not yet planned. Each is researched before it is scheduled.
 | 2026-11-07 | Faster strings into the JVM and Node (JNI UTF-16 critical access; one napi call instead of two) | They cost 470 ns and 190 ns per string round trip today (S4); matters for single-name calls |
 | 2026-11-07 | Java FFM (Panama) for desktop and server JVMs, JNI kept for Android | FFM upcalls should be cheaper than JNI's 234 ns per callback; measure before deciding |
 | 2026-11-07 | A PtrHash-style MPHF next to IDMAP for bulk ID lookups (3–27 ns instead of 82–91 ns, at +0.37 B per place: B5) | Worth it only if a measured workload resolves IDs in bulk, for example a server joining large ID lists |
+| 2026-11-07 | Interleave each B1 block's header (width, base, offset) in one array instead of three | A cold `get` touches about four cache lines today; one would do. A/B on B1 before the format freezes |

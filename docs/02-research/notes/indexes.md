@@ -94,8 +94,10 @@ The method is proven exact (S2: zero mismatches in the domain on 20,000 uniform 
   against 44 ns on places). A dense top grid (one directory read) plus Morton-sorted leaves
   bounds a query to a directory read, a short descent and one leaf.
 - **Shared arcs.** Neighbouring zones share their border; storing each border once is
-  estimated to halve the 33 MB of vertices (S2 conclusion 2). Arcs are i32 deltas in B1 blocks,
-  with random access to an arc's start through a ramp-coded offsets column (D-075).
+  estimated to halve the 33 MB of vertices (S2 conclusion 2). The plan was i32 deltas in B1
+  blocks with a ramp-coded offsets column; B9 measured absolute FOR-coded x and y smaller, and
+  edges are addressed by vertex number with no offsets column (D-083, 20.5 MB for 4.1 M
+  vertices).
 - **Precedence** for points in more than one zone is open question Q-013; the index returns
   the set, and precedence is applied above it.
 

@@ -1,7 +1,7 @@
 ---
 title: "Open questions"
 status: living
-updated: 2026-11-06
+updated: 2026-11-07
 ---
 
 # Open questions
@@ -22,5 +22,4 @@ move it to the [decision log](../03-decisions/log.md) and delete it here.
 | Q-016 | Which independent vertical reference can score GEDTM30 (CC BY 4.0), when it was trained on ICESat-2 ATL08 and GEDI, our reference? | Use a source never used in its training: national survey benchmarks or LiDAR where open (USA 3DEP when the rollout reaches it), GNSS on monuments. Until then the lite build uses NASADEM (scored against ATL08 in S6.3) | Research; maintainer for Nepal survey data |
 | Q-011 | Census 2021 ward-level tables: format and licence (NSO sites refused automated access) | Manual check by the maintainer or a later fetch | Maintainer |
 | Q-014 | Which CORS mirror serves packs to browser apps (ADR-0037)? | An object store with free egress and a custom domain; needs an account | Maintainer (account) |
-| Q-013 | Zone precedence where source polygons overlap (S2 found Shanghai/Urumqi, Hebron/Jerusalem, Juba/Khartoum, Tbilisi/Moscow and Kathmandu/Kolkata overlaps in timezone-boundary-builder 2026f) | Return every zone; the single answer follows our admin layer under the Nepal perspective, else the source's documented preference, else the lowest zone ID; list each overlap in the release notes | Phase 2 |
 | Q-012 | Can the CC-BY lite build be *tested* against ODbL boundaries without contaminating it? | Treat tests as non-ingest only if the result never feeds back; get a legal opinion | Maintainer (legal) |

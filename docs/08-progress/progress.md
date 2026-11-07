@@ -9,11 +9,16 @@ updated: 2026-11-07
 ## Where we are
 
 - **Phase:** 2, indexes ([phase file](../07-planning/phases/phase-2.md)); research done in [indexes](../02-research/notes/indexes.md) (D-081).
-- **Now:** step 2.2, B9 REGION and POLY_INDEX.
+- **Now:** step 2.3, B7 SEARCH.
 - **Phase 2 so far:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
   [results](../02-research/benches/phase-2.md#b8-place_index)).
+  2.2 B9 REGION, an exact point-in-region index on a top grid and Morton-sorted leaves with
+  shared arcs: the world timezones with oceans in 25.7 MB, 50 ns uniform and 41 ns on Nepal
+  places, twice as fast as `tzf-rs` with full data, zero mismatches against even–odd (D-083);
+  Q-013 answered by ID order (D-084)
+  ([results](../02-research/benches/phase-2.md#b9-region)).
 - **M1 met** on 2026-11-07 (D-080), evidence in [phase 1 §1.6](../07-planning/phases/phase-1.md#16-exit-review). Done in Phase 1:
   - 1.1 `teigeodata-core`: the stable ID and its text form, grid points, and a Hilbert index
     4–5× faster than the classic loop and proven equal to it;

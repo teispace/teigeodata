@@ -37,13 +37,17 @@ validating zero-copy reader, a brute-force oracle in its tests, a fuzz harness i
   k = 1 in 3.5–17 µs (4–12× the in-memory rivals, which are 70× bigger and rank by planar
   degrees) ([results](../../02-research/benches/phase-2.md#b8-place_index))
 
-### 2.2 B9 REGION and POLY_INDEX
-- [ ] Packed layout: dense top grid, Morton-sorted leaves, edge-ID runs; shared arcs in B1 blocks
-- [ ] Exact: zero mismatches against the even–odd reference on the world timezones with oceans
-  (uniform, 1 cm from edges, real places); the on-edge tie-break documented
-- [ ] Below 100 ns per query on uniform world points and on Nepal places; size against S2's
-  43 MB estimate; `tzf-rs` 2.3.0 full data as the rival
-- [ ] Q-013 (zone precedence) answered
+### 2.2 B9 REGION
+- [x] Packed layout: dense top grid with TOP_ZONES, Morton-sorted leaves, edge-ID runs; shared
+  arcs as FOR-coded x and y (D-083, [layout](../../04-architecture/pack-format.md#region))
+- [x] Exact: zero mismatches against the even–odd reference on the world timezones with oceans
+  (20,000 uniform, 19,998 at 1e-7° from an edge, 148,210 Nepal places); the on-edge rule is the
+  (ε, ε²) perturbation
+- [x] Below 100 ns per query: 50 ns uniform and 41 ns on Nepal places at the default, against
+  111 and 78 ns for `tzf-rs` 2.3.0 full data; 25.7 MB against S2's 43 MB estimate
+  ([results](../../02-research/benches/phase-2.md#b9-region))
+- [x] Q-013 (zone precedence) answered: ID order, set by the forge (D-084)
+- POLY_INDEX moves to B10 with POLYGONS, whose boxes it indexes (D-083)
 
 ### 2.3 B7 SEARCH
 - [ ] The S3 design in the SEARCH section (three FSTs, postings, scores)
@@ -60,3 +64,4 @@ validating zero-copy reader, a brute-force oracle in its tests, a fuzz harness i
 |---|---|---|
 | 2026-11-07 | Phase 2 planned; order B8, B9, B7 | the indexes note (D-081) |
 | 2026-11-07 | B8 done: u16 boxes inside the parent, not i32 | measured 0.55 B against about 1.1 B per place (D-082) |
+| 2026-11-07 | B9 done: absolute FOR vertices, not deltas with an offsets column; POLY_INDEX moved to B10 | measured smaller; POLY_INDEX indexes POLYGONS boxes (D-083) |

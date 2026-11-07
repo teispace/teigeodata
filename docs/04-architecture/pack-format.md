@@ -124,7 +124,7 @@ parameters).
 | 7 | ARCS | shared arcs, delta coordinates on 1e-7°, per-vertex LOD level | `geometry` | bit-packed deltas (B10) |
 | 8 | POLYGONS | ring and part tables (signed arc refs), bbox, label point | `geometry` | — |
 | 9 | POLY_INDEX | packed R-tree over polygon boxes | `geometry` | as 6 |
-| 10 | REGION | region index: top grid, quadtree in Morton order, leaf table, edge-ID runs, region ID → (kind, target) | `region` | spike S2 design (below) |
+| 10 | REGION | exact point → regions (timezones, later admin units): shared-arc borders, a dense top grid, quadtree leaves in Morton order with edge-ID runs, region sets | `region` | column table (D-083): [below](#region) |
 | 11 | POSTAL | FST over codes → postal records | `postal` | `fst` |
 | 12 | COMPONENTS | per component: presence (none, a bitmap or sorted rows) + dense field columns | `components` | column table (D-076): a bitmap costs 0.129 B per row, sparse sorted rows far less |
 | 13 | DEM | tile directory + coded tiles at ±1 m | `dem` | MED prediction + entropy coder (B11) |
@@ -134,8 +134,8 @@ parameters).
 
 ### Column tables (encoding 1)
 
-Every section made of integer columns (PLACES, PLACE_INDEX, HIERARCHY, IDMAP, REDIRECTS and
-COMPONENTS) is one column table (D-074, `teigeodata_core::table`):
+Every section made of integer columns (PLACES, PLACE_INDEX, REGION, HIERARCHY, IDMAP, REDIRECTS
+and COMPONENTS) is one column table (D-074, `teigeodata_core::table`):
 
 ```text
 columns u16, reserved u16 (0)
@@ -243,6 +243,119 @@ above them are stored. `item_count` equals PLACES'. Columns other than these thr
 - **On an index that fails the check,** queries still never panic or allocate and only return
   rows below the row count, but their answers are not guaranteed; the forge and the tests run
   the check.
+
+### REGION
+
+Which regions (timezones now, admin units later) hold a point, exactly against the source
+quantised once to the 1e-7° grid (D-083, [ADR-0013](../03-decisions/adr/ADR-0013-region-index.md),
+[indexes note](../02-research/notes/indexes.md#32-region), method proven in
+[spike S2](../02-research/benches/s2-region-index.md), measured in
+[B9](../02-research/benches/phase-2.md#b9-region)). Code: `teigeodata_format::region`.
+`item_count` is the number of regions; a region ID is below it. Edges are straight in
+lon/lat. A column ID of 0 or above 15 is refused.
+
+- **Domain and grid:** the closed world rectangle, longitude −1,800,000,000 to 1,800,000,000
+  and latitude −900,000,000 to 900,000,000 in 1e-7° units. A quadtree over it goes down to
+  level 24 (`LEVELS`). At level `l`, cell edge `i` across an axis with minimum `min` and span
+  `span` is `min + ⌊i · span / 2^l⌋`, so a cell at level 24 is 214 or 215 units wide and 107 or
+  108 high. A cell includes its edges when edges are tested against it. A point belongs to the
+  level-24 column (row) of the last edge at or before it, clamped to the last column (row): a
+  point on a shared cell edge belongs to the cell east (north) of it.
+- **Morton keys:** a cell's key is its level-24 column and row interleaved, column bits in the
+  even positions (48 bits). A leaf at level `l` starts at a key that is a multiple of
+  `4^(24 − l)`. The top grid is level `g` (`MIN_TOP` 8 to `MAX_TOP` 12), and top cell
+  `key >> 2(24 − g)` is in Morton order too.
+
+| ID | Column | Values |
+|---:|---|---|
+| 1 | TOP | one value: the top-grid level `g` |
+| 2 | DIR | 4^g + 1 values: the number of leaves that start before each top cell, then the leaf count |
+| 3 | KEY | per leaf: its key minus its top cell's first key (below 2³² because `g` ≥ 8) |
+| 4 | LEVEL | per leaf: its level, up to 24 |
+| 5 | ZONES | per leaf: the region set at its reference point (the whole leaf's set if it has no edges) |
+| 6 | NUDGE | optional, per leaf: which candidate is its reference point; absent reads as 0, and the writer leaves it out when every value is 0 |
+| 7 | RUNS | per leaf and one more: its first run |
+| 8 | RUN_EDGE | per run: its first edge |
+| 9 | RUN_LEN | per run: its number of edges, at least 1 |
+| 10 | RUN_ZONES | per run: the region set its edges toggle |
+| 11 | X | per vertex: longitude in 1e-7° units, biased (`teigeodata_core::bitpack::bias`) |
+| 12 | Y | per vertex: latitude, biased |
+| 13 | SET_START | per region set and one more: its first entry in SET_ZONES, from 0 |
+| 14 | SET_ZONES | the region IDs of every set, each set strictly increasing, at most 64 (`MAX_SET`) |
+| 15 | TOP_ZONES | per top cell: 1 + the region set of the edge-free leaf that holds the whole cell, or 0 |
+
+- **Region sets:** set `z` is the single region `z` for every region ID `z`, so a leaf or run of
+  one region is read without the set tables. Sets of no region or of several follow, numbered
+  by the writer's first use. Source regions overlap, so a leaf holds a set, not one ID.
+- **Arcs:** each border is stored once, with every region it separates in one set. X and Y hold
+  arcs back to back; edge `e` joins vertices `e` and `e + 1`, and the last vertex of an arc
+  starts no edge. A leaf lists the edges that touch its closed cell as runs of consecutive edge
+  numbers; the edges of a run lie on one arc, so they share its set. REGION keeps its own
+  vertices and does not refer to ARCS (row 7).
+- **Reference point:** candidate `k` of a cell `[x0, x1] × [y0, y1]`, with `w = x1 − x0`,
+  `h = y1 − y0`, `hx = max(1, ⌊w/2⌋)` and `hy = max(1, ⌊h/2⌋)`, is
+  `(x0 + ⌊w/2⌋ + (7 + 31k) mod hx, y0 + ⌊h/2⌋ + (13 + 17k) mod hy)`, strictly inside the cell.
+  The writer takes the first `k` below 4,096 whose point lies on the line of no edge of the
+  parent cell (all edges, for the root), and stores it in NUDGE. A leaf without edges stores 0.
+- **Query** (`Region::regions_at`, and `Region::region` for the single answer):
+  1. Normalise: longitude 180° is read as −180° (the same meridian), latitude 90° as
+     899,999,999 units.
+  2. Find the point's key and top cell `c`. If `TOP_ZONES[c]` is not 0, the answer is set
+     `TOP_ZONES[c] − 1`: one read.
+  3. Otherwise binary-search KEY between `DIR[c]` and `DIR[c + 1]` for the last leaf starting
+     at or before the point; with none, the leaf is `DIR[c] − 1`, a leaf coarser than the top
+     grid that started in an earlier top cell.
+  4. Start from the leaf's ZONES set. For each of its runs, count the edges crossed by the
+     segment from the leaf's reference point to the query point; an odd count toggles the
+     run's set. Vertices are decoded 128 at a time into a fixed buffer.
+  5. Return every region, in increasing ID order. A query never panics or allocates; it keeps
+     at most 64 regions.
+- **Points on a border:** the query point `p` is read as `p + (ε, ε²)` for an infinitesimal ε
+  (simulation of simplicity), so it is never on an edge, and the reference point is on no
+  edge's line. Every predicate is exact `i128` arithmetic. A point on a border belongs to the
+  regions just east-north-east of it: east of a border that runs north–south, north of
+  one that runs east–west. The answer equals an even–odd
+  ray cast to the east that counts an edge when its ends lie on opposite sides of the point's
+  latitude (an end exactly on it counts as south) and it crosses strictly east of the point;
+  `region::even_odd` is that ray cast over the input rings, the oracle of the tests.
+- **Precedence:** region IDs are in precedence order. Where regions overlap, the lowest ID is
+  the single answer, and the forge orders the IDs (Q-013).
+- **Opening** (`Region::open`) refuses a missing required column, a top level outside 8 to 12,
+  a column of the wrong length (DIR 4^g + 1; KEY, LEVEL, ZONES and NUDGE one per leaf; RUNS one
+  more; the run columns one per run; Y as long as X; TOP_ZONES 4^g; SET_ZONES the last
+  SET_START), and a column ID of 0 or above 15.
+- **The deep check** (`Region::check`), one pass over each column:
+  - sets: starts increase from 0, each set has at most 64 members in strictly increasing order
+    below the item count, and set `z` is `{z}`;
+  - leaves: the directory counts the leaves in order, levels are at most 24, and the keys tile
+    the world exactly in Morton order, each aligned to its level; every set reference is in
+    range;
+  - a nonzero TOP_ZONES entry has a holding leaf no deeper than the top grid whose edges all
+    miss the closed top cell;
+  - runs: in range, non-empty, ending inside the vertices, in increasing order within a leaf
+    and never adjacent (the writer's runs are maximal); every edge has two distinct ends,
+    touches its leaf's closed cell, and its line misses the leaf's reference point; NUDGE is
+    below 4,096, and 0 for a leaf without edges.
+
+  It does **not** re-derive the region sets (ZONES, RUN_ZONES, TOP_ZONES) from the geometry,
+  nor that NUDGE is the writer's first good candidate, that NUDGE is left out when every value
+  is 0, or that runs are split where one arc ends and the next begins, so a pack that passes can still answer
+  wrongly if it was edited. The pack signature guards those; answers are exact on a pack built
+  by `region::encode`.
+- **The writer** (`region::encode`, feature `write`) takes each region's rings (outer rings and
+  holes alike, since membership is even–odd), as `[lon, lat]` on the 1e-7° grid, closed or not,
+  and refuses a vertex outside the domain. It keeps every distinct edge with the regions that
+  use it an odd number of times (a ring given twice cancels), joins edges into arcs through
+  vertices where exactly two edges of one set meet, and orders arcs by the key of their first
+  vertex. It finds the root's sets by an east ray cast, then splits top down: a cell with more
+  than `leaf_max` edges splits, down to level 24, and a child's set is its parent's toggled by
+  the edges crossed between their reference points. The writer is deterministic.
+  - **Options:** `leaf_max` (at least 1, 32 by default) and `top` (8 to 12, 10 by default).
+  - **Stuck rule:** a cell with at most 16 edges stays a leaf when one child would keep all of
+    them while another child has edges too, so edges that meet at a point or overlap do not
+    split down to level 24.
+  - **Refusals:** a leaf whose set and run sets together hold more than 64 regions (`MAX_SET`),
+    and a cell with no good reference point among the 4,096 candidates.
 
 ### HIERARCHY
 
@@ -390,26 +503,6 @@ the number of chaining values.
 - **Opening** checks the header, the directory and the coverage against the section table;
   the writer proves every entry's content before it assembles.
 
-### REGION (from spike S2)
-
-The design proven exact in [spike S2](../02-research/benches/s2-region-index.md):
-
-- **Grid and edges:** source edges are quantised to the 1e-7° grid, and edges are straight in
-  lon/lat. Edge geometry is shared with ARCS where the source allows (B9).
-- **Leaves:** a leaf holds up to about 64 edges. It stores:
-  - its reference point (strictly inside the cell, never on an edge);
-  - the zone parity at that point for each zone with edges in the leaf;
-  - the **set** of zones covering it, because source zones overlap;
-  - its edges, as runs of consecutive edge IDs.
-- **Edge-free leaves** store only their covering set. Runs of identical leaves collapse.
-- **Layout:** a flat top-level grid, then Morton-sorted leaves, with each leaf's edges stored
-  next to it. The target is under 100 ns per lookup on every distribution.
-- **Lookups:**
-  - a lookup returns every containing zone, and the single answer follows the precedence rule
-    (Q-013);
-  - points outside lat [−90, 90] and lon [−180, 180] are rejected;
-  - points exactly on an edge follow a documented half-open rule.
-
 ## Verification on open
 
 `Pack::open` checks, in order, and refuses on the first failure:
@@ -439,5 +532,5 @@ A new version always gets a new file. A file that may be mapped is never written
 
 - The 14 benchmarks B1–B14 (catalogue in [benchmarks](../06-engineering/benchmarks.md)).
 - Payloads that follow in later phases inside the frame fixed in Phase 1 (D-071): SEARCH,
-  POLY_INDEX, REGION and POSTAL in Phase 2; ARCS and POLYGONS with B10; DEM with B11.
+  POSTAL in Phase 2; ARCS, POLYGONS and POLY_INDEX with B10 (D-083); DEM with B11.
 - Whether the reader crate keeps `#![forbid(unsafe_code)]` with mmap outside it (B13).
