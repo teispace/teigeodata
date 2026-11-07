@@ -97,6 +97,19 @@ Load average 1.5–1.8 during the run, so these numbers count.
 | Delta prefix sum row by row: one carry addition per row of 4 on the chain, not one per value | | **2.86 G/s** |
 | Delta `get`: unpack with the vector code, then sum (associative) instead of a scalar walk | | 136 → 23 ns |
 
+**WebAssembly** (the same latitude column, decoder built for `wasm32-unknown-unknown` with LTO
+and run in Node.js 26, V8):
+
+| Build | FOR decode | Delta decode | FOR `get` | Delta `get` |
+|---|---:|---:|---:|---:|
+| scalar | 3.42 G/s | 1.76 G/s | 9.6 ns | 69 ns |
+| `+simd128` | **3.98 G/s** | 1.96 G/s | 9.9 ns | 36 ns |
+
+**Against the targets** of the [format note](../notes/format-compression-indexing.md):
+decode ≥ 2 G/s native (8.5–11) and ≥ 0.5 G/s in WASM (3.4–4.0); random access ≤ 5 ns
+native (4.0–5.0); size within 5% of `bitpacking` (FOR: +1.4% on points, +2.4% on elevation,
++3.0% on IDs). All met.
+
 **Code size (Z2),** the decoder alone (`parse`, `decode_all`, `get`) in a release cdylib with LTO,
 minus an empty one: **50 KB native (9 KB gzipped), 98 KB wasm32 (24 KB gzipped)**. Before the
 bounds checks went, the same code took 116 KB, and the 1024-value layout another 300 KB.
@@ -119,3 +132,58 @@ bounds checks went, the same code took 116 KB, and the 1024-value layout another
   decode,** with no random access: block bit-packing replaces them everywhere.
 - **Elevation is the one column where `bitpacking` is 2% smaller:** it stores no offsets.
   Offsets give O(1) access to any block, so they stay.
+
+## B1 on sections: PLACES and HIERARCHY
+
+```
+cargo run --release -p teigeodata-bench --example b1-sections
+cargo bench -p teigeodata-bench --bench b1 -- --warm-up-time 1 --measurement-time 3 B1-sections
+```
+
+**Input:** the same 148,210 places as a tree (`teigeodata_bench::geonames_tree`): the country
+at the root, `ADMn` units under the unit above them with the same `GeoNames` admin codes, and
+every other place under its most specific unit. 148,209 places have a parent, and the deepest
+chain is 3. The codes stand in for point-in-polygon, so the shape is real enough for sizes and
+speeds, not for accuracy.
+
+**Size** (the column table's frame included):
+
+| Section | Column | Coding (picked by the 10% rule) | B per place |
+|---|---|---|---:|
+| PLACES | lat | FOR | 2.221 |
+| | lon | FOR | 2.224 |
+| | kind | FOR | 0.319 |
+| | admin level | FOR | 0.445 |
+| | **total** | | **5.210** |
+| HIERARCHY | parent (row + 1) | FOR | 1.825 |
+| | child end (running count) | FOR | 0.185 |
+| | children (rows, grouped) | delta | 1.017 |
+| | **total** | | **3.027** |
+
+**A/B:**
+- **Children against Elias–Fano:** the CSR columns take 0.185 and 1.017 B per place; the
+  Elias–Fano bounds for the same lists are 0.250 (the running ends, one list) and 1.116 (each
+  child list on its own). Block bit-packing is smaller than Elias–Fano here because child lists
+  are runs of nearby rows. Elias–Fano is not needed.
+- **Parent as an offset from its row** (zigzag of parent − row): 1.921 B per place, against
+  1.825 for the row itself. A unit's children spread over its whole Hilbert range, so the offset
+  is no smaller. The row itself stays.
+- **S1's 4.06 B per place** for the point was measured with a different delta scheme; the
+  point here costs 4.445 B under FOR and 4.180 under delta. The 10% rule keeps FOR for
+  coordinates (6% smaller is not worth a 4.6× slower `get`).
+
+**Speed** (load average 2.2–2.5):
+
+| Operation | Time |
+|---|---:|
+| Open PLACES and HIERARCHY (frame and every column's structure) | 4.9 µs |
+| `point(row)`, random row | 9.7 ns |
+| `kind(row)` | 2.9 ns |
+| `parent(row)` | 4.5 ns |
+| `ancestors(row)`, the whole chain | 29 ns |
+| `children(row)`, the whole list, per admin unit | 12 ns |
+| `Places::check` (deep, every row) | 1.6 ms (10.7 ns per row) |
+| `Hierarchy::check` (deep, every row) | 5.1 ms (34 ns per row) |
+
+At world size (about 12 million places) the deep checks take about 0.4 s, which the forge runs
+once per build; opening stays in the sub-millisecond range, since it checks blocks, not rows.

@@ -32,12 +32,15 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+mod columns;
 mod error;
 #[cfg(feature = "fuzz")]
 #[doc(hidden)]
 pub mod fuzz;
+pub mod hierarchy;
 mod layout;
 mod manifest;
+pub mod places;
 mod read;
 #[cfg(feature = "signature")]
 mod signature;
@@ -145,6 +148,8 @@ pub struct Encoding(pub u16);
 impl Encoding {
     /// Stored as is.
     pub const RAW: Self = Self(0);
+    /// A table of packed columns (`teigeodata_core::table`, D-074).
+    pub const TABLE: Self = Self(1);
 }
 
 #[cfg(test)]

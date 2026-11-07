@@ -304,6 +304,20 @@ impl<'a> Packed<'a> {
         }))
     }
 
+    /// The values in `range`, cut to [`Packed::len`], decoded a block at a time: the way to
+    /// stream a column or read a run (a children list) without a buffer of its own.
+    #[must_use]
+    pub fn values(&self, range: core::ops::Range<usize>) -> Values<'a> {
+        let end = range.end.min(self.count);
+        Values {
+            column: *self,
+            next: range.start.min(end),
+            end,
+            block: usize::MAX,
+            buf: [0; BLOCK_LEN],
+        }
+    }
+
     /// Decodes values into `out` from the first; returns how many it wrote, at most
     /// [`Packed::len`]. Rounding `out` up to a whole block lets the last block be unpacked in
     /// place too; entries of `out` past the returned count may then be overwritten.
@@ -347,6 +361,52 @@ fn delta_sum(words: &[[u8; 4]], w: u32, j: usize) -> u32 {
         .unwrap_or(deltas)
         .iter()
         .fold(0, |a, &z| a.wrapping_add(unzigzag(z)))
+}
+
+/// An iterator over a run of a column ([`Packed::values`]).
+#[derive(Clone, Debug)]
+pub struct Values<'a> {
+    column: Packed<'a>,
+    next: usize,
+    end: usize,
+    block: usize,
+    buf: [u32; BLOCK_LEN],
+}
+
+impl Iterator for Values<'_> {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<u32> {
+        if self.next >= self.end {
+            return None;
+        }
+        let (b, j) = (self.next / BLOCK_LEN, self.next % BLOCK_LEN);
+        if b != self.block {
+            self.column.decode_block(b, &mut self.buf);
+            self.block = b;
+        }
+        self.next += 1;
+        self.buf.get(j).copied()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let n = self.end - self.next;
+        (n, Some(n))
+    }
+}
+
+impl ExactSizeIterator for Values<'_> {}
+
+/// An i32 as an order-preserving u32 (`i32::MIN` → 0), so signed columns pack like unsigned.
+#[must_use]
+pub const fn bias(v: i32) -> u32 {
+    v.cast_unsigned() ^ 0x8000_0000
+}
+
+/// The inverse of [`bias`].
+#[must_use]
+pub const fn unbias(v: u32) -> i32 {
+    (v ^ 0x8000_0000).cast_signed()
 }
 
 fn split_words(b: &[u8], n: usize) -> Result<(&[[u8; 4]], &[u8]), PackError> {
@@ -463,13 +523,26 @@ pub fn encode(values: &[u32], coding: Coding) -> alloc::vec::Vec<u8> {
     out
 }
 
+/// Encodes a column with the coding D-073 picks (feature `alloc`): delta when it is at least
+/// 10% smaller than FOR, FOR otherwise, since FOR reads a single value 4–5× faster.
+#[cfg(feature = "alloc")]
+#[must_use]
+pub fn encode_auto(values: &[u32]) -> alloc::vec::Vec<u8> {
+    let (fixed, delta) = (encode(values, Coding::For), encode(values, Coding::Delta));
+    if delta.len() * 10 <= fixed.len() * 9 {
+        delta
+    } else {
+        fixed
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::cast_possible_truncation,
     reason = "test inputs are cut from a 64-bit generator on purpose"
 )]
 mod tests {
-    use super::{BLOCK_LEN, Coding, PackError, Packed, encode, unzigzag, zigzag};
+    use super::{BLOCK_LEN, Coding, PackError, Packed, encode, encode_auto, unzigzag, zigzag};
     use std::vec::Vec;
 
     fn rng(s: &mut u64) -> u64 {
@@ -543,6 +616,65 @@ mod tests {
         let d = encode(&v, Coding::Delta).len();
         // Steps of 17 need 12 bits under FOR (127 × 17 = 2159) and 6 under delta (zigzag 34).
         assert!(d * 10 < f * 6, "delta {d} vs for {f}");
+    }
+
+    #[test]
+    fn auto_picks_delta_only_when_it_pays() {
+        let sorted: Vec<u32> = (0..10_000).map(|i| 50_000_000 + i * 17).collect();
+        let auto = |v: &[u32]| Packed::parse(&encode_auto(v)).map(|p| p.coding());
+        assert_eq!(auto(&sorted), Ok(Coding::Delta));
+        let mut s = 3;
+        let noise: Vec<u32> = (0..10_000).map(|_| rng(&mut s) as u32 & 0xfff).collect();
+        assert_eq!(auto(&noise), Ok(Coding::For));
+        // Delta a little smaller (under 10%): FOR, for its faster reads. Per 128-value block,
+        // noise costs FOR 12 bits and delta 13; a ramp of step 30 costs FOR 12 and delta 6. One
+        // ramp per four noise blocks: delta saves (6 - 4) / 60 = 3.3%.
+        let mixed: Vec<u32> = (0..50 * BLOCK_LEN)
+            .map(|i| {
+                let (block, j) = (i / BLOCK_LEN, (i % BLOCK_LEN) as u32);
+                if block % 5 == 0 {
+                    j * 30
+                } else {
+                    (rng(&mut s) as u32 & 0xfff) | if j == 0 { 0xfff } else { 0 }
+                }
+            })
+            .collect();
+        let (f, d) = (
+            encode(&mixed, Coding::For).len(),
+            encode(&mixed, Coding::Delta).len(),
+        );
+        assert!(
+            d < f && d * 10 > f * 9,
+            "the case must be in the band: {d} vs {f}"
+        );
+        assert_eq!(auto(&mixed), Ok(Coding::For));
+    }
+
+    #[test]
+    fn values_stream_any_range() {
+        let v: Vec<u32> = (0..1000_u32)
+            .map(|i| i.wrapping_mul(2_654_435_761))
+            .collect();
+        for coding in [Coding::For, Coding::Delta] {
+            let bytes = encode(&v, coding);
+            let p = Packed::parse(&bytes).unwrap_or_else(|e| panic!("{e}"));
+            for (a, b) in [
+                (0, 1000),
+                (0, 0),
+                (5, 6),
+                (127, 129),
+                (300, 2000),
+                (999, 1000),
+                (1200, 1300),
+            ] {
+                let got: Vec<u32> = p.values(a..b).collect();
+                let want = v.get(a.min(1000)..b.min(1000)).unwrap_or_default();
+                assert_eq!(got, want, "{coding:?} {a}..{b}");
+                assert_eq!(p.values(a..b).len(), want.len());
+            }
+        }
+        assert_eq!(super::unbias(super::bias(-5)), -5);
+        assert!(super::bias(-1) < super::bias(0) && super::bias(i32::MIN) == 0);
     }
 
     #[test]

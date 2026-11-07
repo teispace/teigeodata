@@ -5,9 +5,11 @@
 //! - [`Point`]: a position on a fixed integer grid, 1e-6° ([`E6`]) for place points and 1e-7°
 //!   ([`E7`]) for geometry
 //!   ([ADR-0029](https://github.com/teispace/teigeodata/blob/main/docs/03-decisions/adr/ADR-0029-coordinate-grid.md)).
+//! - [`PlaceKind`]: the kind of a place and its one-byte code.
 //! - [`hilbert`]: the Hilbert index that orders the rows of every pack (spike S1).
 //! - [`bitpack`]: frame-of-reference bit-packing in lane-interleaved blocks (B1); encoders with
 //!   the `alloc` feature.
+//! - [`table`]: a table of packed columns, the payload of every integer-column section (D-074).
 //!
 //! `no_std`, no dependencies, no panics; nothing allocates without the `alloc` feature.
 //!
@@ -34,7 +36,10 @@ pub mod bitpack;
 mod grid;
 mod hilbert;
 mod id;
+mod kind;
+pub mod table;
 
 pub use grid::{E6, E7, Grid, GridError, Point};
 pub use hilbert::hilbert;
 pub use id::{IdError, Namespace, PlaceId, SERIAL_MAX};
+pub use kind::PlaceKind;

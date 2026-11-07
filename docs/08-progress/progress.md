@@ -9,7 +9,7 @@ updated: 2026-11-07
 ## Where we are
 
 - **Phase:** 1, core and format ([phase file](../07-planning/phases/phase-1.md)).
-- **Now:** step 1.4, B1's sections (PLACES and HIERARCHY on the codec), then B5. Done in Phase 1:
+- **Now:** step 1.4, B5 (IDMAP and REDIRECTS on the column table). Done in Phase 1:
   - 1.1 `teigeodata-core`: the stable ID and its text form, grid points, and a Hilbert index
     4–5× faster than the classic loop and proven equal to it;
   - 1.2 `teigeodata-format`: format 0.1. A canonical, validating zero-copy reader (`no_std`, no
@@ -20,6 +20,8 @@ updated: 2026-11-07
     1.76 GiB/s, a signature check 34 µs ([results](../02-research/benches/phase-1.md)).
   - 1.4 so far, B1 and B13: the integer codec decodes 8.5–11 G/s in safe code, 22–44% faster
     than the `unsafe` `bitpacking` crate; delta halves sorted IDs; 128-value blocks chosen (D-073).
+    PLACES and HIERARCHY on one shared column table: 5.2 and 3.0 B per place on Nepal, reads
+    3–10 ns, CSR children below the Elias–Fano bound (D-074).
 - **M0 met** on 2026-11-07 (D-069): each criterion with its evidence in
   [phase 0 §0.5](../07-planning/phases/phase-0.md#05-exit-review). The maintainer's review is
   asynchronous. Phase 0 in short:
@@ -76,3 +78,4 @@ updated: 2026-11-07
 | 2026-11-07 | CI's binding suites green on Linux (Node test path fixed); M0 review (D-069); Phase 1 research note and plan: crate split, TLV manifest, stable ID text form, bolero, REDIRECTS (D-070, D-071) | 1.1 `teigeodata-core` |
 | 2026-11-07 | 1.1 `teigeodata-core`; 1.2 `teigeodata-format` (format 0.1): reader, writer, signatures, fuzz properties; a writer bug found by the round-trip harness; bolero dropped (D-072) | 1.3 benchmarks |
 | 2026-11-07 | 1.3 benchmarks (L1–L3, core); B1 integer codec and B13: 128-value blocks, safe decoder 8.5–11 G/s, beats `bitpacking`; 1024 layout dropped (D-073) | B1 sections, then B5 |
+| 2026-11-07 | B1 on sections: column table, PLACES, HIERARCHY, `PlaceKind`; WASM decode 4 G/s; all B1 targets met (D-074) | B5 IDMAP and REDIRECTS |

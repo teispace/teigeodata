@@ -75,7 +75,8 @@ FOOTER (32 B), right after the last section: magic, file_len u64, head_hash[16]
   `verify_strict`. The key ID is the first 8 bytes of BLAKE3 of the public key. The writer
   leaves a 72-byte slot and the signer fills it from the digest alone, so an offline key never
   sees the pack.
-- **Raw sections** (`encoding` 0) have `decoded_length = length`.
+- **Section encodings:** 0 RAW (stored as is) and 1 TABLE (a column table, below). Both have
+  `decoded_length = length`.
 - The section table's hash goes in the catalog entry (`custom.sections`), so a client can
   compare installed and new packs section by section.
 
@@ -115,8 +116,8 @@ parameters).
 | # | Kind | Content | Feature | Codec (candidate until benchmarked) |
 |---:|---|---|---|---|
 | 1 | IDMAP | stable u64 IDs; ID → row | `core` | FOR bit-packed IDs; MPHF or sorted search (B5) |
-| 2 | PLACES | point (1e-6° grid, delta in Hilbert order), kind and class codes, flags | `core` | delta + zigzag + bit-packed blocks of 128 with zone maps (S1: 4.06 B per place; B1) |
-| 3 | HIERARCHY | parent row; children lists; validity | `core` | bit-packed parents; Elias–Fano children |
+| 2 | PLACES | point (1e-6° grid), kind, admin level, class code, flags; rows in Hilbert order | `core` | column table (D-074): 5.2 B per place on Nepal |
+| 3 | HIERARCHY | parent row; children lists (CSR) | `core` | column table (D-074): 3.0 B per place; below Elias–Fano |
 | 4 | NAMES | name records (lang, script, type), text | `names` | zstd blocks of 64 names or FSST per script group (S1: 1.15 MB against 2.06 MB for Nepal; B3, B4) |
 | 5 | SEARCH | FST over normalised keys and phonetic keys; postings; scores; top-k structure | `search` | `fst` + Elias–Fano postings + block RMQ (B7; spike S3) |
 | 6 | PLACE_INDEX | packed Hilbert R-tree over points | `spatial` | flatbush-style layout with i32 boxes (B8) |
@@ -130,6 +131,71 @@ parameters).
 | 14 | BLOBS | cold data (attribution text, long strings) | `zstd` | zstd blocks with a dictionary, `ruzstd` decode (B4) |
 | 15 | BLOCK_HASHES | per-block BLAKE3 for large sections (lazy verification) | `verify` | 16 or 64 KiB blocks (B12) |
 | 16 | REDIRECTS | retired IDs: each to its survivor, or to none for a tombstone ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)) | `core` | sorted ID pairs, as IDMAP (B5) |
+
+### Column tables (encoding 1)
+
+Every section made of integer columns (PLACES, HIERARCHY, and later IDMAP, REDIRECTS and the
+dense columns of COMPONENTS) is one column table (D-074, `teigeodata_core::table`):
+
+```text
+columns u16, reserved u16 (0)
+directory [{ id u16, codec u8 (0 = bitpack), reserved u8 (0), len u32 }; columns]
+bodies    each column's bytes in directory order, back to back
+```
+
+- IDs are strictly increasing; every length is a multiple of 4, so every column starts 4-byte
+  aligned; the lengths add up to the rest of the section exactly.
+- Codec 0 is the B1 integer codec (D-073, `teigeodata_core::bitpack`): blocks of 128 values in
+  4 interleaved lanes, one base and bit width per block, FOR or zigzag delta per column:
+
+  ```text
+  count u32, lanes u8 (4), coding u8 (0 FOR, 1 delta), reserved u16 (0)
+  bases   [u32; blocks]
+  offsets [u32; blocks]   word offset of each block in the payload
+  widths  [u8; blocks], zero padding to a multiple of 4
+  payload [u32]           block after block, w × 4 words each
+  ```
+
+  Value `j` of a block is in lane `j % 4`, row `j / 4`. FOR: `base + packed`. Delta: `base` is
+  the block's first value and the packed values are zigzag deltas from the previous one. The
+  forge picks delta when it saves at least 10%.
+- A FOR block's base and width bound its values (`base` to `base + 2^w − 1`), which serves as
+  a zone map for free.
+- Opening a section checks the frame and every column's structure (O(blocks)); a deep check of
+  the values is the forge's and the tests' (O(rows)). Reads never panic either way.
+
+### PLACES
+
+The section's `item_count` is the number of places; every column has one value per place.
+Columns not listed are refused, so a new column comes with a format minor version.
+
+| ID | Column | Values | |
+|---:|---|---|---|
+| 1 | lat | latitude on the 1e-6° grid, biased to u32 (`i32::MIN` → 0) | required |
+| 2 | lon | longitude, the same | required |
+| 3 | kind | kind code: 1 country, 2 admin, 3 settlement, 4 locality, 5 natural, 6 postal area, 7 timezone area ([schema](../05-data/schema.md#kind)) | required |
+| 4 | admin level | 0 for a country or a place that is not an admin unit | optional |
+| 5 | class | class dictionary code, 0 = none | optional |
+| 6 | flags | none defined yet | optional |
+
+An optional column is left out when every value is 0, and reads as 0. The deep check also
+checks that rows are in Hilbert order of their points, that every point is on the grid and
+every kind known, and that only admin units have a level.
+
+### HIERARCHY
+
+`item_count` equals PLACES'. Three required columns:
+
+| ID | Column | Values |
+|---:|---|---|
+| 1 | parent | parent row + 1; 0 for a root |
+| 2 | child end | for each row, the running end of its children in column 3 |
+| 3 | children | child rows, grouped by parent row, ascending within a group |
+
+The children of row `r` are `children[end[r − 1] .. end[r]]`, from 0 for row 0. A chain of
+parents is at most 32 long (`MAX_DEPTH`), which bounds every walk up the tree. The deep check
+proves that the columns describe one forest: each row's children are exactly the rows that
+name it as parent, and no chain is a cycle.
 
 ### REGION (from spike S2)
 

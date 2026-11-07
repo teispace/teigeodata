@@ -41,6 +41,15 @@ pub enum Error {
         /// The section's kind.
         kind: u32,
     },
+    /// A section's payload is malformed (its frame, a column, or the data across columns).
+    Payload {
+        /// The section's kind.
+        kind: u32,
+        /// The column it is about; 0 for the section as a whole.
+        column: u16,
+        /// What is wrong.
+        problem: &'static str,
+    },
     /// The signature is missing, from an unknown key, or invalid.
     Signature(&'static str),
     /// The writer was given something it cannot write.
@@ -67,6 +76,20 @@ impl fmt::Display for Error {
             Self::SectionHash { kind } => write!(
                 f,
                 "section {} is corrupted: its hash does not match",
+                crate::Kind(*kind)
+            ),
+            Self::Payload {
+                kind,
+                column: 0,
+                problem,
+            } => write!(f, "section {}: {problem}", crate::Kind(*kind)),
+            Self::Payload {
+                kind,
+                column,
+                problem,
+            } => write!(
+                f,
+                "section {}, column {column}: {problem}",
                 crate::Kind(*kind)
             ),
             Self::Signature(p) => write!(f, "pack signature: {p}"),

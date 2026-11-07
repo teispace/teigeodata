@@ -131,6 +131,125 @@ pub fn geonames_columns(path: &std::path::Path) -> Option<Columns> {
     })
 }
 
+/// PLACES and HIERARCHY input from a real dataset: one row per place in Hilbert order, with
+/// kinds, admin levels and parents by row.
+#[derive(Clone, Debug, Default)]
+pub struct Tree {
+    /// Points, Hilbert-sorted.
+    pub points: Vec<Point<teigeodata_core::E6>>,
+    /// Kinds.
+    pub kinds: Vec<teigeodata_core::PlaceKind>,
+    /// Admin levels (0 for non-admin places).
+    pub levels: Vec<u8>,
+    /// Parent row of each row.
+    pub parents: Vec<Option<u32>>,
+}
+
+/// Hilbert index, point, kind, admin level, (admin1, admin2) codes.
+type GeonamesRow = (
+    u64,
+    Point<teigeodata_core::E6>,
+    teigeodata_core::PlaceKind,
+    u8,
+    [String; 2],
+);
+
+/// A tree from the `GeoNames` Nepal extract, if present: the country (`PCLI`) at the root, each
+/// `ADMn` unit under the unit of the level above with the same codes, and every other place
+/// under its most specific unit. `GeoNames` codes stand in for point-in-polygon here, so the
+/// shape (how many children, how deep) is real enough for sizes and speeds, not for accuracy.
+#[must_use]
+pub fn geonames_tree(path: &std::path::Path) -> Option<Tree> {
+    use std::collections::HashMap;
+    use teigeodata_core::{E6, PlaceKind, hilbert};
+    let text = std::fs::read_to_string(path).ok()?;
+    let mut rows: Vec<GeonamesRow> = Vec::new();
+    for line in text.lines() {
+        let f: Vec<&str> = line.split('\t').collect();
+        let (Some(lat), Some(lon)) = (f.get(4), f.get(5)) else {
+            continue;
+        };
+        let Ok(p) = Point::<E6>::from_degrees(lat.parse().ok()?, lon.parse().ok()?) else {
+            continue;
+        };
+        let (class, code) = (
+            f.get(6).copied().unwrap_or(""),
+            f.get(7).copied().unwrap_or(""),
+        );
+        let (kind, level) = match (class, code) {
+            ("A", "PCLI") => (PlaceKind::Country, 0),
+            ("A", c) if c.starts_with("ADM") => {
+                let level = c.get(3..4).and_then(|d| d.parse().ok()).unwrap_or(0);
+                if level == 0 {
+                    (PlaceKind::Locality, 0)
+                } else {
+                    (PlaceKind::Admin, level)
+                }
+            }
+            ("P", _) => (PlaceKind::Settlement, 0),
+            ("H" | "T" | "U" | "V", _) => (PlaceKind::Natural, 0),
+            _ => (PlaceKind::Locality, 0),
+        };
+        let codes = [f.get(10), f.get(11)].map(|c| c.copied().unwrap_or("").to_owned());
+        rows.push((hilbert(p), p, kind, level, codes));
+    }
+    rows.sort_by_key(|r| (r.0, r.1.lat(), r.1.lon()));
+    // The unit for each code prefix: level 1 by admin1, level 2 by (admin1, admin2).
+    let mut country = None;
+    let mut units: HashMap<(u8, String, String), u32> = HashMap::new();
+    for (row, r) in rows.iter().enumerate() {
+        let row = u32::try_from(row).ok()?;
+        match (r.2, r.3) {
+            (PlaceKind::Country, _) => country = country.or(Some(row)),
+            (PlaceKind::Admin, 1) => {
+                units
+                    .entry((1, r.4[0].clone(), String::new()))
+                    .or_insert(row);
+            }
+            (PlaceKind::Admin, 2) => {
+                units
+                    .entry((2, r.4[0].clone(), r.4[1].clone()))
+                    .or_insert(row);
+            }
+            _ => {}
+        }
+    }
+    let unit = |level: u8, codes: &[String; 2]| {
+        let key = |l: u8| {
+            (
+                l,
+                codes[0].clone(),
+                if l == 2 {
+                    codes[1].clone()
+                } else {
+                    String::new()
+                },
+            )
+        };
+        (1..=level.min(2))
+            .rev()
+            .find_map(|l| units.get(&key(l)).copied())
+    };
+    let parents = rows
+        .iter()
+        .enumerate()
+        .map(|(row, r)| {
+            let up = match (r.2, r.3) {
+                (PlaceKind::Country, _) => None,
+                (PlaceKind::Admin, l) => unit(l.saturating_sub(1), &r.4).or(country),
+                _ => unit(2, &r.4).or(country),
+            };
+            up.filter(|&p| usize::try_from(p).ok() != Some(row))
+        })
+        .collect();
+    Some(Tree {
+        points: rows.iter().map(|r| r.1).collect(),
+        kinds: rows.iter().map(|r| r.2).collect(),
+        levels: rows.iter().map(|r| r.3).collect(),
+        parents,
+    })
+}
+
 /// The default location of the S1 input in a checkout: `data/cache/geonames-np/NP.txt`.
 #[must_use]
 pub fn geonames_path() -> std::path::PathBuf {

@@ -17,8 +17,13 @@ use std::hint::black_box;
 
 use bitpacking::{BitPacker, BitPacker4x};
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use teigeodata_bench::{Rng, geonames_columns, geonames_path, leb128_delta, leb128_delta_decode};
+use teigeodata_bench::{
+    Rng, geonames_columns, geonames_path, geonames_tree, leb128_delta, leb128_delta_decode,
+};
 use teigeodata_core::bitpack::{BLOCK_LEN, Coding, Packed, encode};
+use teigeodata_format::hierarchy::{self, Hierarchy};
+use teigeodata_format::places::{self, PlaceColumns, Places};
+use teigeodata_format::{Encoding, Kind, Pack, Writer};
 
 const VARIANTS: [(Coding, &str); 2] = [(Coding::For, "ours-for"), (Coding::Delta, "ours-delta")];
 
@@ -109,5 +114,93 @@ fn b1(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, b1);
+/// PLACES and HIERARCHY of the Nepal tree: reads at random rows, and the deep checks.
+fn sections(c: &mut Criterion) {
+    let Some(tree) = geonames_tree(&geonames_path()) else {
+        return;
+    };
+    let n = tree.points.len();
+    let cols = PlaceColumns {
+        points: &tree.points,
+        kinds: &tree.kinds,
+        admin_levels: &tree.levels,
+        ..PlaceColumns::default()
+    };
+    let (Ok(pl), Ok(hi)) = (places::encode(&cols), hierarchy::encode(&tree.parents)) else {
+        return;
+    };
+    let items = n as u64;
+    let Ok(mut w) = Writer::new("np", "places", "2026.11.0") else {
+        return;
+    };
+    if w.section_bytes(Kind::PLACES, Encoding::TABLE, items, &pl)
+        .is_err()
+        || w.section_bytes(Kind::HIERARCHY, Encoding::TABLE, items, &hi)
+            .is_err()
+    {
+        return;
+    }
+    let Ok(bytes) = w.layout(false).and_then(|l| l.assemble(&[&pl, &hi])) else {
+        return;
+    };
+    let Ok(pack) = Pack::open(&bytes) else {
+        return;
+    };
+    let (Some(ps), Some(hs)) = (pack.section(Kind::PLACES), pack.section(Kind::HIERARCHY)) else {
+        return;
+    };
+    let (Ok(places), Ok(tree_view)) = (Places::open(&ps), Hierarchy::open(&hs)) else {
+        return;
+    };
+    let mut rng = Rng::new(5);
+    let rows: Vec<usize> = (0..4096)
+        .map(|_| (rng.next_u64() % n as u64) as usize)
+        .collect();
+    // Units with children: reading a children list is how a browse starts.
+    let units: Vec<usize> = (0..n).filter(|&r| tree.levels[r] > 0).collect();
+
+    let mut group = c.benchmark_group("B1-sections");
+    group.throughput(Throughput::Elements(rows.len() as u64));
+    group.bench_function("open-places-and-hierarchy", |b| {
+        b.iter(|| Places::open(black_box(&ps)).is_ok() && Hierarchy::open(black_box(&hs)).is_ok());
+    });
+    group.bench_function("point", |b| {
+        b.iter(|| {
+            rows.iter().fold(0_i32, |a, &r| {
+                a ^ places.point(r).map_or(0, teigeodata_core::Point::lat)
+            })
+        });
+    });
+    group.bench_function("kind", |b| {
+        b.iter(|| rows.iter().filter(|&&r| places.kind(r).is_some()).count());
+    });
+    group.bench_function("parent", |b| {
+        b.iter(|| {
+            rows.iter()
+                .fold(0, |a, &r| a ^ tree_view.parent(r).unwrap_or(0))
+        });
+    });
+    group.bench_function("ancestors", |b| {
+        b.iter(|| {
+            rows.iter()
+                .map(|&r| tree_view.ancestors(r).count())
+                .sum::<usize>()
+        });
+    });
+    group.throughput(Throughput::Elements(units.len() as u64));
+    group.bench_function("children-of-every-unit", |b| {
+        b.iter(|| {
+            units
+                .iter()
+                .map(|&r| tree_view.children(r).count())
+                .sum::<usize>()
+        });
+    });
+    group.throughput(Throughput::Elements(items));
+    group.bench_function("check-places", |b| b.iter(|| places.check().is_ok()));
+    group.bench_function("check-hierarchy", |b| b.iter(|| tree_view.check().is_ok()));
+    group.finish();
+}
+
+criterion_group!(benches, b1, sections);
 criterion_main!(benches);
