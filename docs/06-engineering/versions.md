@@ -1,7 +1,7 @@
 ---
 title: "Versions register"
 status: living
-updated: 2026-11-06
+updated: 2026-11-07
 ---
 
 # Versions register
@@ -33,6 +33,8 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | zerocopy (pack views, `derive`) | 0.8.63 | 2026-11-07 | crates.io | 2026-12-07 |
 | blake3 (section and head hashes, no default features) | 1.8.7 | 2026-11-07 | crates.io | 2026-12-07 |
 | ed25519-dalek (pack signatures, no default features) | 3.0.0 | 2026-11-07 | crates.io | 2026-12-07 |
+| ruzstd (BLOBS decoding, feature `zstd`, no default features) | 0.9.1 | 2026-11-07 | crates.io | 2026-12-07 |
+| zstd (C zstd 1.5.7 via `zstd-sys` 2.1.2; BLOBS compression in tests, benches and the forge) | 0.14.3 | 2026-11-07 | crates.io | 2026-12-07 |
 | criterion (wall-clock benchmarks, `cargo_bench_support` only) | 0.8.2 | 2026-11-07 | crates.io | 2026-12-07 |
 | bitpacking (B1 rival, dev-dependency of `teigeodata-bench` only) | 0.9.3 | 2026-11-07 | crates.io | 2026-12-07 |
 | Dart `ffi` package | 2.2.0 | 2026-11-07 | pub.dev | 2026-12-07 |
@@ -47,10 +49,15 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | purego (Go) | 0.11 | 2026-11-06 | pkg.go.dev | 2026-12-06 |
 | GitHub actions/checkout | v7.0.1 | 2026-11-06 | GitHub | 2026-12-06 |
 | Swatinem/rust-cache | v2.9.3 | 2026-11-06 | GitHub | 2026-12-06 |
+| GitHub actions/cache | v6.1.0 | 2026-11-07 | GitHub | 2026-12-07 |
+| GitHub actions/upload-artifact | v7.0.2 | 2026-11-07 | GitHub | 2026-12-07 |
+| cargo-fuzz | 0.13.2 | 2026-11-07 | crates.io | 2026-12-07 |
+| libfuzzer-sys | 0.4.13 | 2026-11-07 | crates.io | 2026-12-07 |
+| Rust nightly (cargo-fuzz, Miri; unpinned in CI, latest each night) | 1.101.0-nightly 2026-10-20 locally | 2026-11-07 | `rustc +nightly --version` | 2026-12-07 |
 | cargo-deny (action / local) | v2.1.1 / 0.20.2 | 2026-11-06 | GitHub / Homebrew | 2026-12-06 |
 | typos | v1.52.0 | 2026-11-06 | GitHub | 2026-12-06 |
 | criterion | 0.8.2 | 2026-11-06 | crates.io | 2026-12-06 |
-| gungraun | 0.20.0 | 2026-11-06 | crates.io | 2026-12-06 |
+| gungraun and gungraun-runner (the `counts` CI gate; the versions must match) | 0.20.0 | 2026-11-07 | crates.io | 2026-12-07 |
 | tango-bench | 0.9.0 | 2026-11-06 | crates.io | 2026-12-06 |
 | hyperfine | 2.0.0 | 2026-11-06 | GitHub releases | 2026-12-06 |
 | Google Benchmark | 1.10.0 | 2026-11-06 | GitHub releases | 2026-12-06 |

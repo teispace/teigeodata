@@ -1,7 +1,7 @@
 ---
 title: "CI"
 status: draft
-updated: 2026-11-06
+updated: 2026-11-07
 ---
 
 # CI
@@ -16,6 +16,7 @@ and checked again before each workflow change.
 | Workflow | Trigger | Jobs | Budget |
 |---|---|---|---|
 | `fast-check` | every push and PR | fmt, clippy, unit and property tests on fixtures, `check-docs`, `check-data` (country folders and the source lock), `check-workspace`; the same fmt, clippy and tests for the `forge/` workspace in its own job; `cargo deny` for both workspaces; typos | ≤ 10 min |
+| `counts` | push to `main` and PRs touching `crates/` | instruction counts of the hot paths under Callgrind (gungraun, `teigeodata-bench/benches/counts.rs`): a PR measures its base first and fails above +1% instructions on any benchmark | ≤ 40 min |
 | `verify` | push to `main` | full tests on Linux x64/arm64, macOS arm64, Windows x64; doc tests; golden; parity (fast set) | ≤ 30 min |
 | `bindings` | push to `main`, release | cross-compile matrix (Android ABIs, iOS slices, WASM variants, desktop targets), binding tests per language | ≤ 45 min |
 | `nightly` | schedule | fuzzing, Miri, sanitizers, mutants, coverage, differential, benchmarks against baselines | ≤ 6 h per job |
@@ -23,7 +24,14 @@ and checked again before each workflow change.
 | `release` | tag | crates.io, npm, PyPI, pub.dev, Maven Central, NuGet, SwiftPM, CLI binaries; signing, SBOM, provenance attestations | |
 | `docs` | push to `main` | the Fumadocs site with generated pages, to GitHub Pages | ≤ 10 min |
 
-Workflows are added when the code they test exists. `fast-check` exists from Phase 0.
+Workflows are added when the code they test exists. `fast-check` exists from Phase 0; `nightly`
+and `counts` from Phase 1.
+
+**Counts, not wall clock, gate PRs:** this machine and shared runners vary up to 2× with load,
+while instruction counts are the same on every run of the same code. The `counts` bench builds on
+every host (so `cargo clippy --all-targets` checks it), but runs only on Linux, where Valgrind is;
+locally: `cargo bench -p teigeodata-bench --bench counts` on Linux with `gungraun-runner` 0.20.0.
+The criterion suites stay for wall-clock numbers on the results pages.
 
 ## Rules
 
@@ -31,3 +39,26 @@ Workflows are added when the code they test exists. `fast-check` exists from Pha
 - Least-privilege `permissions:` per workflow; `pull_request_target` is not used with untrusted code.
 - Caches are keyed by lockfiles; large data intermediates go to release assets, not the Actions cache.
 - Pushes are batched; a PR body says which checks ran.
+
+## Nightly
+
+`.github/workflows/nightly.yml` runs at 02:17 UTC and on demand (`workflow_dispatch`, with the
+fuzzing time per target as an input).
+
+- **fuzz**: one job per libFuzzer target in `fuzz/` (its own Cargo workspace), 300 s each by
+  default, inputs up to 4 KiB. The targets call the same `fn(&[u8])` harnesses that
+  `cargo test` runs on seeded inputs on every PR (D-072, `crates/teigeodata-format/tests/fuzz.rs`):
+  `open`, `round_trip`, `mutate`, `manifest`, `sections`, `bitpack`, `table` and `bits`, all in
+  `teigeodata_format::fuzz`. The corpus of each target is restored from the Actions cache, minimised
+  with `cargo fuzz cmin` and saved again; a crash fails the job and uploads its input.
+- **miri**: the `teigeodata-core` unit tests, and the format crate's unit tests, `open` and
+  `fuzz` (one seeded input per harness, `TG_FUZZ_ITERS=1`, in a step capped at 60 minutes:
+  hashing and signing whole packs is slow under Miri) tests under Miri. On an Apple
+  silicon Mac, run Miri with `--target x86_64-unknown-linux-gnu`: `sha2` calls an aarch64
+  crypto intrinsic that Miri does not support.
+  The core property tests take their case counts from `crate::cases(n)`: `n` natively, a
+  thousandth (at least 4) under Miri; libFuzzer covers the volume.
+
+Locally: `cargo +nightly fuzz run <target> -- -max_total_time=30 -rss_limit_mb=1024`; the
+seeded run is part of `cargo test -p teigeodata-format`.
+Delete `fuzz/target` afterwards (about 0.5 GB).

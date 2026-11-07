@@ -9,7 +9,7 @@ updated: 2026-11-07
 ## Where we are
 
 - **Phase:** 1, core and format ([phase file](../07-planning/phases/phase-1.md)).
-- **Now:** step 1.5, the rest of hardening (gungraun CI, Z2 sizes), then 1.6, the M1 exit review. Done in Phase 1:
+- **Now:** step 1.5, the `counts` gate (gungraun, `.github/workflows/counts.yml`): written, first run on GitHub pending; then 1.6, the M1 exit review. Done in Phase 1:
   - 1.1 `teigeodata-core`: the stable ID and its text form, grid points, and a Hilbert index
     4–5× faster than the classic loop and proven equal to it;
   - 1.2 `teigeodata-format`: format 0.1. A canonical, validating zero-copy reader (`no_std`, no
@@ -34,6 +34,10 @@ updated: 2026-11-07
     B4: BLOBS, zstd frames of whole blobs (C zstd 19 in the forge, `ruzstd` behind the `zstd`
     feature): 0.19 of raw on Nepal rows, a random blob in 43 µs; the dependency-`unsafe` policy
     is in the quality bar (D-079).
+  - 1.5 so far: nightly libFuzzer (8 targets) and Miri (core: 30 tests pass, 5 exhaustive ones
+    skipped with a reason); all eight harnesses run on every PR from `teigeodata_format::fuzz`;
+    a determinism gate. Z2 (`cargo xtask sizes`): the whole reader adds 171 KiB to a wasm32
+    module, 53 KiB gzipped ([results](../02-research/benches/phase-1.md#z2-library-sizes-per-feature-set)).
 - **M0 met** on 2026-11-07 (D-069): each criterion with its evidence in
   [phase 0 §0.5](../07-planning/phases/phase-0.md#05-exit-review). The maintainer's review is
   asynchronous. Phase 0 in short:

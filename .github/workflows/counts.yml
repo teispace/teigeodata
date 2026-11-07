@@ -1,0 +1,65 @@
+# Instruction counts of the hot paths under Callgrind (gungraun), the load-independent gate
+# (docs/06-engineering/ci.md). On a pull request the base commit is measured first and saved as
+# a baseline; the PR fails if any benchmark runs more than 1% more instructions.
+name: counts
+
+on:
+  push:
+    branches: [main]
+    paths: ["crates/**", "Cargo.lock", ".github/workflows/counts.yml"]
+  pull_request:
+    paths: ["crates/**", "Cargo.lock", ".github/workflows/counts.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: counts-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # One results directory for the base and the PR run, so the baseline is found.
+  GUNGRAUN_HOME: /tmp/gungraun
+
+jobs:
+  counts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Valgrind
+        run: sudo apt-get update -q && sudo apt-get install -y -q valgrind
+      # The runner must match the gungraun library version in Cargo.lock.
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: gungraun-runner@0.20.0
+      - name: Baseline from the base commit
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          # The base builds into the same target directory, so dependencies are reused.
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target
+        run: |
+          git worktree add ../base "$BASE"
+          if [ -f ../base/crates/teigeodata-bench/benches/counts.rs ]; then
+            cd ../base
+            cargo bench --locked -p teigeodata-bench --bench counts -- --save-baseline=base
+          else
+            echo "the base has no counts bench yet: nothing to compare"
+          fi
+      - name: Counts
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            cargo bench --locked -p teigeodata-bench --bench counts -- \
+              --baseline=base --callgrind-limits='ir=1%'
+          else
+            cargo bench --locked -p teigeodata-bench --bench counts
+          fi
