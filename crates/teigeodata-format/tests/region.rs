@@ -526,3 +526,31 @@ fn refusals() {
     zero.insert(0, (0, vec![0]));
     assert!(open(&with_body(&rebuild(&zero), regions.len() as u64)).is_err());
 }
+
+#[test]
+fn regions_link_to_their_places() {
+    let regions = vec![star(&mut Rng(5), 0, 0, 50_000_000, false), world()];
+    let body = region::encode(&regions, &Options::default()).unwrap();
+    let plain = with_body(&body, 2);
+    let ix = open(&plain).unwrap();
+    assert_eq!(ix.place(0), None, "an unlinked section has no places");
+
+    let linked = region::link(&body, &[41, 7]).unwrap();
+    // Linking again replaces the link, and the answers do not change.
+    let relinked = region::link(&linked, &[41, 7]).unwrap();
+    assert_eq!(linked, relinked);
+    let file = with_body(&linked, 2);
+    let ix = open(&file).unwrap();
+    assert_eq!(
+        (ix.place(0), ix.place(1), ix.place(2)),
+        (Some(41), Some(7), None)
+    );
+    assert!(ix.check().is_ok());
+    let at = Point::<E7>::from_units(0, 0).unwrap();
+    assert_eq!(ix.region(at), open(&plain).unwrap().region(at));
+
+    // A link of the wrong length, or an empty one, is refused.
+    let short = region::link(&body, &[41]).unwrap();
+    assert!(open(&with_body(&short, 2)).is_err());
+    assert!(region::link(&body, &[]).is_err());
+}

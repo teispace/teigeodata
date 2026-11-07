@@ -552,6 +552,27 @@ impl Tree<'_> {
     }
 }
 
+/// Adds the [`PLACE`](super::PLACE) column to an encoded REGION payload: `places[id]` is the
+/// PLACES row of region `id`'s place. Replaces an existing link.
+///
+/// # Errors
+/// [`Error::Write`] if `body` is not a column table or `places` is empty.
+pub fn link(body: &[u8], places: &[u32]) -> Result<Vec<u8>, Error> {
+    let bad = Error::Write("the region payload is not a column table");
+    if places.is_empty() {
+        return Err(Error::Write("a region link needs a row for every region"));
+    }
+    let t = table::Table::parse(body).map_err(|_| bad)?;
+    let column = encode_direct(places);
+    let mut cols: Vec<(u16, table::Codec, &[u8])> = Vec::new();
+    for id in t.ids().filter(|&id| id != super::PLACE) {
+        let (codec, bytes) = t.column_raw(id).ok_or(bad)?;
+        cols.push((id, codec, bytes));
+    }
+    cols.push((super::PLACE, table::Codec::Bitpack, &column));
+    table::encode_with(&cols).map_err(|_| bad)
+}
+
 /// The reference answer for `regions` (as given to [`encode`]) at `at`: an even–odd ray cast to
 /// the east over every ring edge with the rule of the module documentation, in increasing ID
 /// order. O(edges); independent of the index, for tests and fuzzing.

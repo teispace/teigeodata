@@ -311,7 +311,7 @@ quantised once to the 1e-7° grid (D-083, [ADR-0013](../03-decisions/adr/ADR-001
 [spike S2](../02-research/benches/s2-region-index.md), measured in
 [B9](../02-research/benches/phase-2.md#b9-region)). Code: `teigeodata_format::region`.
 `item_count` is the number of regions; a region ID is below it. Edges are straight in
-lon/lat. A column ID of 0 or above 15 is refused.
+lon/lat. A column ID of 0 or above 16 is refused.
 
 - **Domain and grid:** the closed world rectangle, longitude −1,800,000,000 to 1,800,000,000
   and latitude −900,000,000 to 900,000,000 in 1e-7° units. A quadtree over it goes down to
@@ -342,6 +342,7 @@ lon/lat. A column ID of 0 or above 15 is refused.
 | 13 | SET_START | per region set and one more: its first entry in SET_ZONES, from 0 |
 | 14 | SET_ZONES | the region IDs of every set, each set strictly increasing, at most 64 (`MAX_SET`) |
 | 15 | TOP_ZONES | per top cell: 1 + the region set of the edge-free leaf that holds the whole cell, or 0 |
+| 16 | PLACE | optional, per region: the PLACES row of its place (a timezone area, later an admin unit), added by `region::link` (D-093) |
 
 - **Region sets:** set `z` is the single region `z` for every region ID `z`, so a leaf or run of
   one region is read without the set tables. Sets of no region or of several follow, numbered

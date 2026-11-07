@@ -37,6 +37,7 @@
 //! | 13 | [`SET_START`] | per region set and one more: its first entry |
 //! | 14 | [`SET_ZONES`] | the region IDs of every set, each set strictly increasing |
 //! | 15 | [`TOP_ZONES`] | per top cell: 1 + the region set of the leaf without edges that holds the whole cell, or 0 |
+//! | 16 | [`PLACE`] | optional, per region: the PLACES row of its place (a timezone area, an admin unit), set by [`link`] |
 //!
 //! Set `z` is the single region `z` for every region ID `z`, so a leaf or an arc of one region
 //! is read without the set tables; sets of none or of several regions follow.
@@ -61,7 +62,7 @@ use crate::{Error, Kind, Section, columns};
 #[cfg(feature = "write")]
 mod build;
 #[cfg(feature = "write")]
-pub use build::{Options, encode, even_odd};
+pub use build::{Options, encode, even_odd, link};
 
 /// Column: the top-grid level.
 pub const TOP: u16 = 1;
@@ -93,6 +94,8 @@ pub const SET_START: u16 = 13;
 pub const SET_ZONES: u16 = 14;
 /// Column: per top cell, the set of the edge-free leaf holding it whole (plus 1), else 0.
 pub const TOP_ZONES: u16 = 15;
+/// Column: per region, the PLACES row of its place (optional).
+pub const PLACE: u16 = 16;
 
 /// The deepest quadtree level; leaves there are about 2.4 m by 1.2 m at the equator.
 pub const LEVELS: u32 = 24;
@@ -365,6 +368,7 @@ pub struct Region<'a> {
     top_zones: Packed<'a>,
     set_start: Packed<'a>,
     set_zones: Packed<'a>,
+    place: Option<Packed<'a>>,
 }
 
 impl<'a> Region<'a> {
@@ -409,12 +413,14 @@ impl<'a> Region<'a> {
             .and_then(|v| usize::try_from(v).ok())
             .ok_or_else(|| fail(SET_START, "the sets have no count"))?;
         let set_zones = req(SET_ZONES, Some(entries))?;
-        if table.ids().any(|id| id == 0 || id > TOP_ZONES) {
+        if table.ids().any(|id| id == 0 || id > PLACE) {
             return Err(fail(0, "an unknown column"));
         }
+        let regions =
+            usize::try_from(section.item_count()).map_err(|_| fail(0, "too many regions"))?;
+        let place = columns::optional(&table, Kind::REGION, PLACE, regions)?;
         Ok(Self {
-            regions: usize::try_from(section.item_count())
-                .map_err(|_| fail(0, "too many regions"))?,
+            regions,
             top,
             leaves,
             dir,
@@ -431,6 +437,7 @@ impl<'a> Region<'a> {
             top_zones,
             set_start,
             set_zones,
+            place,
         })
     }
 
@@ -438,6 +445,12 @@ impl<'a> Region<'a> {
     #[must_use]
     pub const fn regions(&self) -> usize {
         self.regions
+    }
+
+    /// The PLACES row of region `region`'s place, when the section links them ([`PLACE`]).
+    #[must_use]
+    pub fn place(&self, region: u32) -> Option<u32> {
+        self.place.as_ref()?.get(region as usize)
     }
 
     /// The number of leaves.
