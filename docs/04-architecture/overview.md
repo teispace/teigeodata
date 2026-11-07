@@ -1,7 +1,7 @@
 ---
 title: "Architecture overview"
 status: draft
-updated: 2026-11-06
+updated: 2026-11-07
 ---
 
 # Architecture overview
@@ -23,9 +23,9 @@ part; the ADR each part comes from is linked.
         ▼
  runtime: core → format → index → engine (+ baseline, + sync)
         │
-        ├─ Rust façade (teigeodata)
-        ├─ C ABI (ffi) → IDL → generated bindings: C/C++, Node, WASM, Dart/Flutter, Python,
-        │                       JVM, Android, Swift, .NET, Go
+        ├─ safe Rust API (teigeodata-api) → IDL (syn) → generated layers:
+        │     C ABI (ffi) → C/C++, Swift, Dart/Flutter, .NET, Go
+        │     shims → Python (PyO3), Node (napi-rs), JVM/Android (JNI), WASM
         ├─ CLI (tgd)
         ├─ MCP server
         └─ HTTP server (self-hosted; hosted-ready)
@@ -43,18 +43,21 @@ part; the ADR each part comes from is linked.
 | `teigeodata-dem` | Elevation raster codec and `elevation_at` | yes | [ADR-0007](../03-decisions/adr/ADR-0007-accuracy-model.md) |
 | `teigeodata-engine` | Layered pack sets, federated queries, snapshots, baseline | partly | [ADR-0010](../03-decisions/adr/ADR-0010-addressing-and-baseline.md), [ADR-0011](../03-decisions/adr/ADR-0011-layered-engine.md) |
 | `teigeodata-sync` | Catalog, downloads, storage, trust metadata, deltas | no | [ADR-0012](../03-decisions/adr/ADR-0012-offline-loading.md) |
-| `teigeodata` | The Rust façade: the API every binding mirrors | no | [ADR-0016](../03-decisions/adr/ADR-0016-bindings.md) |
-| `teigeodata-ffi` | The C ABI boundary, result blobs | no | [ADR-0016](../03-decisions/adr/ADR-0016-bindings.md) |
-| `teigeodata-idl` | API description extractor and per-language emitters | no | [ADR-0016](../03-decisions/adr/ADR-0016-bindings.md) |
+| `teigeodata-api` | The safe public API: the single source of every binding ([bindings](bindings.md)) | no | [ADR-0016](../03-decisions/adr/ADR-0016-bindings.md) |
+| `teigeodata-blob` | The columnar result blob, encoder and validating reader | yes | D-068 |
+| `teigeodata-ffi` | The C ABI, generated from the API ([C ABI](abi.md)) | no | [ADR-0016](../03-decisions/adr/ADR-0016-bindings.md) |
+| `bindings/*` (own workspace) | Generated PyO3, napi-rs and JNI shims; Swift and Dart wrappers | no | D-067 |
 | `teigeodata-mcp` | MCP server | no | [ADR-0017](../03-decisions/adr/ADR-0017-mcp.md) |
 | `teigeodata-server` | HTTP server | no | [ADR-0025](../03-decisions/adr/ADR-0025-hosted-ready.md) |
 | `teigeodata-cli` (`tgd`) | build, extract, inspect, verify, diff, merge, tiles, export | no | |
-| `xtask` | every repository task and gate | no | [ADR-0021](../03-decisions/adr/ADR-0021-rust-tooling.md) |
+| `xtask` | every repository task and gate, including the IDL extractor and generators | no | [ADR-0021](../03-decisions/adr/ADR-0021-rust-tooling.md) |
 | `forge/*` (own workspace) | the data pipeline and source adapters | no | [ADR-0001](../03-decisions/adr/ADR-0001-rust-core.md) |
 
-Crates are created when their phase starts, not before. The one exception is
-`teigeodata-names`: it was started in Phase 0 with the fold and the phonetic keys from spike S3,
-because the forge's matcher must compare names exactly as search does (D-057).
+Crates are created when their phase starts, not before. Two exceptions started in Phase 0:
+- `teigeodata-names`, with the fold and the phonetic keys from spike S3, because the forge's
+  matcher must compare names exactly as search does (D-057);
+- the binding slice from spike S4 (`teigeodata-api`, `teigeodata-blob`, `teigeodata-ffi`,
+  `bindings/`), which the façade grows from in Phase 1 (D-066).
 
 ## 3. Capabilities and features
 
@@ -72,12 +75,13 @@ and its parameters are specified in `docs/01-product/api.md` (Phase 1).
 ## 5. Pages to come
 
 `pack-format.md`, `engine.md`, `region-index.md`, `search.md`, `timezone.md`,
-`offline-loading.md`, `bindings.md`, `mcp.md`, `security.md`, `performance.md`: each written when
+`offline-loading.md`, `mcp.md`, `security.md`, `performance.md`: each written when
 its research note lands.
 
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-07 | Binding crates from spike S4; the IDL is extracted from the safe API, not the C ABI; no `teigeodata-idl` crate (it lives in `xtask`) | [S4](../02-research/benches/s4-bindings.md), D-066 |
 | 2026-11-06 | First draft | Project start |
 | 2026-11-06 | `teigeodata-names` started early | One name code path for the forge and search (D-057) |

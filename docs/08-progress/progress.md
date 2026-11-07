@@ -36,9 +36,16 @@ updated: 2026-11-07
   Copernicus LE90 18.7 m, NASADEM 17.7 m. Copernicus is better except under forest; both meet
   the vertical target alone (D-063, D-064; [results](../02-research/benches/s6-elevation.md)).
   GEDTM30 waits for an independent reference (Q-016).
-- **Next:** S4 bindings (C ABI, IDL, generator, one slice into Node, Dart, Python, JNI and
-  Swift; marshalling cost); then the M0 review. Phase 2 carries the S5 and S6 follow-ups:
-  the settlement core, geofix-consensus, land-cover-aware DEM fusion, and the colloquial class.
+- **S4 done:** `crates/teigeodata-api` is the single source of every binding; `cargo xtask
+  bindings` extracts the IDL with `syn` and generates the C ABI and header, Swift, Dart, PyO3,
+  napi-rs and JNI layers. All six languages pass one parity suite; the C ABI adds 0.3 ns per
+  call; a new function takes one regeneration. Gates: drift, the header against cbindgen,
+  boundary lint tables (D-065 to D-068; [results](../02-research/benches/s4-bindings.md)). The
+  name fold got a 10× ASCII fast path on the way.
+- **Next:** the M0 review (phase-0 exit criteria). Then Phase 1. Phase 2 carries the S5 and S6
+  follow-ups: the settlement core, geofix-consensus, land-cover-aware DEM fusion, and the
+  colloquial class. The result-format spike decides blob v0's successor and zero-copy blobs for
+  Python, the JVM and Dart.
 - **Blocked:** nothing.
 
 ## Session log
@@ -53,3 +60,4 @@ updated: 2026-11-07
 | 2026-11-07 | S5 done: matcher, aliases into search (S3 recall@1 0.959), DEM tilesets and `forge dem` (S5.6), the summary and accuracy targets (S5.7, D-058 to D-062) | S6 elevation validation |
 | 2026-11-07 | S6.1–S6.2: elevation-reference research; POST tilesets with response checks; SlideRule decoder; EGM2008 geoid; `forge dem-ref`: Copernicus LE90 18.7 m in Nepal (D-063) | S6.3 GEDTM30 |
 | 2026-11-07 | S6.3: NASADEM via Planetary Computer tokens and EGM96; paired comparison with Copernicus (D-064); GEDTM30 circularity recorded (Q-016) | S4 bindings |
+| 2026-11-07 | S4: safe API crate, syn IDL, generated C ABI, header, Swift, Dart, Python, Node and JVM layers; parity in all; benchmarks; cbindgen and lint-table gates; `dist` unwinds (D-065 to D-068); ASCII fold fast path | M0 review |

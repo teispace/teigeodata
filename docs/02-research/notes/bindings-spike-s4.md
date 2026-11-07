@@ -17,6 +17,12 @@ ADR-0016 is accepted as written.
 
 ## 2. Summary and recommendation
 
+**Result (2026-11-07):** built and measured as recommended below. Six functions reach C,
+Swift, Dart, Python, Node and the JVM, and every language passes one parity suite. The C ABI
+adds 0.3 ns per call, and a new function takes one regeneration. The shipped library unwinds
+(176 bytes, D-065). Numbers: [S4 results](../benches/s4-bindings.md).
+
+
 - **The source of truth is a safe Rust API crate,** `teigeodata-api`, written by hand: plain
   `pub fn`s with doc comments, using only the types the boundary allows. Nothing else is
   written per language except tests, benchmarks and a thin idiomatic layer.
@@ -49,10 +55,10 @@ tg_string*)` does not say the input is UTF-8 or who frees the output. The PyO3, 
 shims call the core directly and need exactly that meaning. Extracting from the safe API
 keeps one meaning for both kinds of backend.
 
-**Panics:** the workspace `dist` profile sets `panic = "abort"`. With it, `catch_unwind` at the
+**Panics:** the workspace `dist` profile set `panic = "abort"`. With it, `catch_unwind` at the
 boundary cannot catch anything, and a panic takes the host process down. Library lints forbid
-panics, but a dependency could still panic. The spike measures the size cost of
-`panic = "unwind"` for the shipped library, so the choice is made on numbers.
+panics, but a dependency could still panic. Measured: `unwind` costs 176 bytes on a 517 KB
+library, so `dist` now unwinds (D-065).
 
 ## 4. Options compared
 
@@ -86,7 +92,7 @@ panics, but a dependency could still panic. The spike measures the size cost of
 
 ## 6. Impact on the plan
 
-- ADR-0016 is accepted, or revised, on the results.
+- ADR-0016 is revised on the results; it is accepted after the result-format spike (D-066).
 - A boundary-crate page (ABI rules) and an IDL page go in `docs/04-architecture/`.
 - New gates: bindings drift (`--check`), the header diff against cbindgen, and parity in each
   language.

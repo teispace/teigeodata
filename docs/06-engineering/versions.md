@@ -17,17 +17,24 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | pnpm | 12.16.1 | 2026-11-06 | `pnpm --version` | 2026-12-06 |
 | Contributor Covenant | 3.0 | 2026-11-06 | EthicalSource repository | 2027-05-06 |
 | DCO | 1.1 | 2026-11-06 | developercertificate.org | — |
-| napi (napi-rs) | 3.16.1 | 2026-11-06 | crates.io | 2026-12-06 |
+| napi / napi-derive / napi-build (napi-rs) | 3.16.1 / 3.7.0 / 2.6.0 | 2026-11-07 | crates.io | 2026-12-07 |
 | @napi-rs/cli | 3.10.12 | 2026-11-06 | npm | 2026-12-06 |
 | wasm-bindgen | 0.2.130 | 2026-11-06 | crates.io | 2026-12-06 |
 | binaryen (wasm-opt) | version_133 | 2026-11-06 | GitHub releases | 2026-12-06 |
-| PyO3 | 0.30 | 2026-11-06 | crates.io | 2026-12-06 |
+| PyO3 | 0.30.1 | 2026-11-07 | crates.io | 2026-12-07 |
 | maturin | 1.16 | 2026-11-06 | PyPI | 2026-12-06 |
 | cibuildwheel | 4.3 | 2026-11-06 | PyPI | 2026-12-06 |
-| jni (crate) | 0.22 | 2026-11-06 | crates.io | 2026-12-06 |
+| jni (crate) | 0.22.4 | 2026-11-07 | crates.io | 2026-12-07 |
 | cargo-ndk | 4.1 | 2026-11-06 | crates.io | 2026-12-06 |
 | Android NDK | r30 | 2026-11-06 | developer.android.com | 2026-12-06 |
-| cbindgen | 0.29 | 2026-11-06 | crates.io | 2026-12-06 |
+| cbindgen (header cross-check) | 0.29.4 | 2026-11-07 | crates.io | 2026-12-07 |
+| syn / proc-macro2 (IDL extractor) | 3.0.9 / 1.0.107 | 2026-11-07 | crates.io | 2026-12-07 |
+| minijinja (binding templates) | 3.0.5 | 2026-11-07 | crates.io | 2026-12-07 |
+| Dart `ffi` package | 2.2.0 | 2026-11-07 | pub.dev | 2026-12-07 |
+| Java (JVM binding, CI) | 25 (Temurin) | 2026-11-07 | `java --version` | 2026-12-07 |
+| Swift (SwiftPM, local) | 6.4.2 | 2026-11-07 | `swift --version` | 2026-12-07 |
+| Python (local) | 3.15.2 | 2026-11-07 | `python3 --version` | 2026-12-07 |
+| taiki-e/install-action / setup-java / setup-dart | v2.90.2 / v6.2.0 / v1.8.1 | 2026-11-07 | GitHub | 2026-12-07 |
 | Flutter / Dart | 3.47.9 / 3.13.7 | 2026-11-06 | flutter.dev | 2026-12-06 |
 | native_toolchain_rust | 1.0.7 | 2026-11-06 | pub.dev | 2026-12-06 |
 | rmcp (MCP Rust SDK) | 3.9.0 | 2026-11-06 | crates.io | 2026-12-06 |
