@@ -35,10 +35,11 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | geofix-consensus | 3.2 | weighted Weiszfeld (D-091) |
 | the rest | Phase 3 | [phase 3](../07-planning/phases/phase-3.md) |
 
-**ID allocation (pack writer, D-075):** a country's first build allocates serials in the
-Hilbert order of its rows, and later builds give new places the next serials. ID order then
-follows row order, which makes IDMAP 0.35 B per place instead of 4.6–6.4 (B5). Redirect chains
-are flattened, so every survivor in REDIRECTS is a current place.
+**ID allocation (pack writer, D-075, D-094):** a country's first build allocates serials in
+the Hilbert order of its rows, and later builds give new places the next serials through the
+[ID registry](#ids-across-releases). ID order then follows row order, which makes IDMAP
+0.35 B per place instead of 4.6–6.4 (B5). Redirect chains are flattened, so every survivor in
+REDIRECTS is a current place.
 
 ## Sources and `fetch`
 
@@ -225,9 +226,9 @@ Kalapani, the eastern Terai, Sydney); the grid's documented maximum is 0.48 m.
 
 ## Build a pack (`build`)
 
-`forge build <cc> --release <v> --admin <boundary> [--tz <tz>] [--lite] [--key <seed-file>] <sources…>`
-writes `data/build/pack/<cc>/<cc>-places-<main|lite>.tgd` and `summary-<main|lite>.md` from
-the `conflate` output of the same sources:
+`forge build <cc> --release <v> --admin <boundary> [--tz <tz>] [--lite] [--key <seed-file>] [--ids <registry>] <sources…>`
+writes `data/build/pack/<cc>/<cc>-places-<main|lite>.tgd`, `summary-<main|lite>.md` and the
+ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same sources:
 - **Licence gate (G-lic).** `--lite` refuses any source whose licence class is not
   public-domain, CC0, CC BY, CC BY-IGO, ODC-By or GODL. The timezone source (tbb, ODbL) is
   main only, so a lite pack has no timezone REGION yet.
@@ -238,8 +239,8 @@ the `conflate` output of the same sources:
   zone that meets the country's box (D-093). A place keeps the names that fit the search key
   limit; a place with none is left out and counted.
 - **Sections.** Rows in Hilbert order (ties by key), so IDs follow rows (D-075): IDMAP,
-  PLACES, HIERARCHY, NAMES, SEARCH, PLACE_INDEX, and the timezone REGION linked to its places
-  (column 16). Importance is provisional (kind, admin level, log population).
+  PLACES, HIERARCHY, NAMES, SEARCH, PLACE_INDEX, the timezone REGION linked to its places
+  (column 16), and REDIRECTS when the registry has retired serials. Importance is provisional (kind, admin level, log population).
 - **Determinism (G-det).** The build ID is BLAKE3 of the forge version, `sources.lock` and
   the arguments; the creation time is `SOURCE_DATE_EPOCH` or 0. Two builds give identical
   bytes.
@@ -247,7 +248,8 @@ the `conflate` output of the same sources:
   opened with the runtime reader: hashes and signature are checked, every section is opened
   and passes `check`, and every place keeps its ID, point, parent and canonical name, is found
   by an exact search of that name and is its own nearest place. Every zone holds its own
-  point and links to its row.
+  point and links to its row. Every row has the registry's ID, and REDIRECTS passes `check`
+  and gives every retired ID the registry's fate.
 
 Measured on Nepal on 2026-11-07 (release build, Apple M2 Pro):
 
@@ -258,8 +260,41 @@ Measured on Nepal on 2026-11-07 (release build, Apple M2 Pro):
 
 Main: 2,042 clusters had no usable name; 195 places lie outside every COD-AB unit (border
 points) and have the country as their only ancestor. Peak memory comes from parsing the whole
-timezone GeoJSON; streaming it is follow-up work. Not built yet: the stage cache and stable
-IDs across releases (the ID registry).
+timezone GeoJSON; streaming it is follow-up work. Not built yet: the stage cache.
+
+### IDs across releases
+
+The registry (D-094, [ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)) is a text file,
+one line per serial ever allocated in the country's namespace, sorted by serial, with three
+tab-separated columns:
+- the serial;
+- its state: the builds whose packs hold it (`lite,main`), `>N` when it retired into serial N,
+  or `x` for a tombstone;
+- the source keys the place was made of (`geonames:…`, `osm:node/…`, `wikidata:Q…`,
+  `admin:<pcode>`, `tz:<IANA ID>`), so it doubles as the bridge file from source IDs to ours.
+
+A build reads the previous registry with `--ids` and writes the updated one:
+1. Each place takes the live serial it shares most keys with. Ties go to a serial this build
+   held before, then to the smaller serial. A split keeps the serial with the half holding
+   most of its keys.
+2. The other places get the next serials in row order. Serials are never reused.
+3. A serial that no build holds any more retires into the live serial holding most of its
+   keys (a merge), or else becomes a tombstone. Chains are flattened.
+4. A build only updates the keys of the namespaces it reads, so a lite build (no OSM) keeps
+   a main place's OSM keys.
+
+The release order is main, then lite on main's registry; the lite registry is the release's
+registry, the input of the next main build. Measured on Nepal on 2026-11-07:
+
+| Run | Kept | New | Retired | Redirects |
+|---|---:|---:|---:|---:|
+| main, first build | 0 | 96,844 | 0 | 0 |
+| lite on main's registry | 91,153 | 113 | 0 | 0 |
+| main on lite's registry | 96,844 | 0 | 0 | 0 |
+| main without OSM (a test of retirement) | 91,272 | 0 | 18 merged, 5,667 tombstones | 5,685 |
+
+The registry is 3.5 MB, 0.42 MB with `zstd -19`. Publishing it with each release and pinning
+it in `sources.lock` comes with the catalog (step 3.7).
 
 **Clean-up.** `cargo xtask clean` removes build output from both workspaces and keeps the
 store: fetched sources are pinned inputs, not build output.

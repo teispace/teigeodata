@@ -12,11 +12,13 @@ use teigeodata_format::idmap::{self, IdMap};
 use teigeodata_format::names::{self, NameRecord, Names, TEXT_BUFFER};
 use teigeodata_format::place_index::{self, Neighbour, PlaceIndex};
 use teigeodata_format::places::{self, PlaceColumns, Places};
+use teigeodata_format::redirects::{self, Fate, Redirects};
 use teigeodata_format::region::{self, Options, Region};
 use teigeodata_format::search::{self, EXACT, Maps, Search};
 use teigeodata_format::{Bbox, Encoding, Kind, Pack, Tag, Writer};
 use teigeodata_names::{SearchMap, fold, search_keys};
 
+use super::ids::{Assignment, Registry, assign};
 use super::{Args, Place, Profile, Zones, tags};
 
 /// Whether a name can be stored: something is left after the search fold (not "?" or "-"),
@@ -38,6 +40,9 @@ pub(super) struct Input<'a> {
     /// (min lon, min lat, max lon, max lat).
     pub(super) coverage: (i32, i32, i32, i32),
     pub(super) file: &'a Path,
+    /// The ID registry the build starts from, and where the updated one goes.
+    pub(super) registry: &'a Registry,
+    pub(super) ids_file: &'a Path,
 }
 
 /// The search importance of a place, 0 to 130 as in spike S3 (D-052), from what every source
@@ -115,17 +120,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
         .collect();
     let hierarchy_body = hierarchy::encode(&parents).map_err(|e| e.to_string())?;
 
-    // IDs in row order (D-075). A first build: later builds keep IDs through the ID registry.
-    let cc: [u8; 2] = input
-        .args
-        .cc
-        .as_bytes()
-        .try_into()
-        .map_err(|_| format!("{}: not a two-letter country code", input.args.cc))?;
-    let ns = Namespace::from_country(cc).ok_or("not a country namespace")?;
-    let ids: Vec<PlaceId> = (1..=n as u64)
-        .map(|s| PlaceId::new(ns, s).ok_or("serial out of range"))
-        .collect::<Result<_, _>>()?;
+    let (ids, moved, assigned) = allocate(input, &rows)?;
     let idmap_body = idmap::encode(&ids).map_err(|e| e.to_string())?;
 
     let (names_body, search_body) = name_sections(&rows, input.profile)?;
@@ -156,12 +151,26 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
         let body = region::link(&body, &zone_rows).map_err(|e| e.to_string())?;
         sections.push((Kind::REGION, Encoding::TABLE, zone_rows.len() as u64, body));
     }
+    if !moved.is_empty() {
+        let body = redirects::encode(&moved).map_err(|e| e.to_string())?;
+        sections.push((Kind::REDIRECTS, Encoding::TABLE, moved.len() as u64, body));
+    }
 
     let (bytes, key) = assemble(input, &sections)?;
     fs::write(input.file, &bytes).map_err(|e| format!("{}: {e}", input.file.display()))?;
 
     let mut report = String::new();
-    verify(&bytes, &rows, input, key.as_ref(), &mut report)?;
+    verify(
+        &bytes,
+        &rows,
+        (&ids, &moved),
+        input,
+        key.as_ref(),
+        &mut report,
+    )?;
+    fs::write(input.ids_file, assigned.registry.render())
+        .map_err(|e| format!("{}: {e}", input.ids_file.display()))?;
+    ids_report(&assigned, input, &mut report);
     let _ = writeln!(report, "\n| Section | Bytes |\n|---|---:|");
     for s in &sections {
         let _ = writeln!(report, "| {} | {} |", s.0, s.3.len());
@@ -175,7 +184,62 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
     Ok(report)
 }
 
+/// IDs: kept through the registry, new ones in row order (D-075, D-094); and this pack's
+/// redirects.
+#[allow(
+    clippy::type_complexity,
+    reason = "the IDs, the redirects and the registry outcome"
+)]
+fn allocate(
+    input: &Input<'_>,
+    rows: &[&Place],
+) -> Result<(Vec<PlaceId>, Vec<(PlaceId, Option<PlaceId>)>, Assignment), String> {
+    let cc: [u8; 2] = input
+        .args
+        .cc
+        .as_bytes()
+        .try_into()
+        .map_err(|_| format!("{}: not a two-letter country code", input.args.cc))?;
+    let ns = Namespace::from_country(cc).ok_or("not a country namespace")?;
+    let keys: Vec<Vec<String>> = rows.iter().map(|p| p.sources.clone()).collect();
+    let assigned = assign(input.registry, &keys, input.args.build_name())?;
+    let id = |s: u64| PlaceId::new(ns, s).ok_or("serial out of range");
+    let ids: Vec<PlaceId> = assigned
+        .serials
+        .iter()
+        .map(|&s| id(s))
+        .collect::<Result<_, _>>()?;
+    let moved: Vec<(PlaceId, Option<PlaceId>)> = assigned
+        .redirects
+        .iter()
+        .map(|&(s, t)| Ok((id(s)?, t.map(id).transpose()?)))
+        .collect::<Result<_, &str>>()?;
+    Ok((ids, moved, assigned))
+}
+
 type Body = (Kind, Encoding, u64, Vec<u8>);
+
+fn ids_report(a: &Assignment, input: &Input<'_>, report: &mut String) {
+    let _ = writeln!(
+        report,
+        "\nIDs ({}): {} kept, {} new, {} retired into a successor, {} retired with none; {} redirects in the pack. Registry: `{}`.",
+        if input.registry.entries.is_empty() {
+            "first build"
+        } else {
+            "from the registry"
+        },
+        a.kept,
+        a.new,
+        a.merged,
+        a.gone,
+        a.redirects.len(),
+        input
+            .ids_file
+            .strip_prefix(input.root)
+            .unwrap_or(input.ids_file)
+            .display(),
+    );
+}
 
 /// The pack file: the manifest (coverage box, build ID, `SOURCE_DATE_EPOCH`), the sections,
 /// and the signature when a key is given.
@@ -198,6 +262,7 @@ fn assemble(
     h.update(env!("CARGO_PKG_VERSION").as_bytes());
     h.update(&fs::read(input.root.join("data/sources.lock")).map_err(|e| e.to_string())?);
     h.update(format!("{:?}", input.args).as_bytes());
+    h.update(input.registry.render().as_bytes());
     let digest = h.finalize();
     let id = u64::from_le_bytes(digest.as_bytes()[..8].try_into().unwrap_or([0; 8]));
     let epoch = std::env::var("SOURCE_DATE_EPOCH")
@@ -294,6 +359,7 @@ fn signing_key(path: &Path) -> Result<ed25519_dalek::SigningKey, String> {
 fn verify(
     bytes: &[u8],
     rows: &[&Place],
+    (want_ids, moved): (&[PlaceId], &[(PlaceId, Option<PlaceId>)]),
     input: &Input<'_>,
     key: Option<&ed25519_dalek::SigningKey>,
     report: &mut String,
@@ -311,6 +377,23 @@ fn verify(
     hier.check().map_err(e)?;
     let ids = IdMap::open(&section(Kind::IDMAP)?).map_err(e)?;
     ids.check().map_err(e)?;
+    for (row, want) in want_ids.iter().enumerate() {
+        if ids.id(row) != Some(*want) {
+            return Err(format!("row {row}: the ID differs from the registry's"));
+        }
+    }
+    if let Some(s) = p.section(Kind::REDIRECTS) {
+        let r = Redirects::open(&s).map_err(e)?;
+        r.check(&ids).map_err(e)?;
+        for &(from, to) in moved {
+            let want = to.map_or(Fate::Tombstone, Fate::Redirect);
+            if r.get(from) != Some(want) {
+                return Err(format!("{from}: its redirect differs from the registry's"));
+            }
+        }
+    } else if !moved.is_empty() {
+        return Err("no REDIRECTS section".into());
+    }
     let names = Names::open(&section(Kind::NAMES)?).map_err(e)?;
     names.check().map_err(e)?;
     let search = Search::open(&section(Kind::SEARCH)?).map_err(e)?;

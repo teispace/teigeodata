@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>]
-//!       [--lite] [--key <seed-file>] <points-source> <points-source> […]
+//!       [--lite] [--key <seed-file>] [--ids <registry>] <points-source> <points-source> […]
 //! ```
 //!
 //! The points sources are the conflated run (`forge conflate <cc> <the same sources>`), in
@@ -16,12 +16,16 @@
 //!   admin unit that holds its point;
 //! - every timezone zone whose box meets the country's (D-093), at a point inside it.
 //!
-//! Rows are in Hilbert order, ties broken by the place's key, and IDs are allocated in row
-//! order (D-075), so the same inputs give the same pack, byte for byte. `--lite` refuses every
+//! Rows are in Hilbert order, ties broken by the place's key. IDs come from the ID registry
+//! (`--ids`, the previous build's `<cc>-ids-<build>.tsv`): places keep their serials by shared
+//! source keys and new ones are allocated in row order (D-075, D-094). The same inputs give the
+//! same pack, byte for byte. `--lite` refuses every
 //! source outside the attribution-only licence classes (`CLEAN_ROOM.md` rule 2) before reading
 //! it, and leaves out the sections that would need one. Output:
-//! `data/build/pack/<cc>/<cc>-places-<build>.tgd` and `summary.md` beside it.
+//! `data/build/pack/<cc>/<cc>-places-<build>.tgd`, with `summary-<build>.md` and the updated
+//! registry `<cc>-ids-<build>.tsv` beside it.
 
+mod ids;
 mod pack;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -63,15 +67,18 @@ pub(crate) struct Args {
     pub(crate) tz: Option<String>,
     pub(crate) lite: bool,
     pub(crate) key: Option<String>,
+    /// The ID registry of the previous build or release; none for a country's first build.
+    pub(crate) ids: Option<String>,
     pub(crate) sources: Vec<String>,
 }
 
 impl Args {
     pub(crate) fn parse(args: &[String]) -> Result<Self, String> {
-        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--lite] [--key <seed-file>] <points-source> <points-source> [...]";
+        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--lite] [--key <seed-file>] [--ids <registry>] <points-source> <points-source> [...]";
         let mut it = args.iter();
         let cc = it.next().ok_or(usage)?.clone();
-        let (mut release, mut admin, mut tz, mut key, mut lite) = (None, None, None, None, false);
+        let (mut release, mut admin, mut tz, mut key, mut ids, mut lite) =
+            (None, None, None, None, None, false);
         let mut sources = Vec::new();
         while let Some(a) = it.next() {
             let mut value = || it.next().cloned().ok_or(usage);
@@ -80,6 +87,7 @@ impl Args {
                 "--admin" => admin = Some(value()?),
                 "--tz" => tz = Some(value()?),
                 "--key" => key = Some(value()?),
+                "--ids" => ids = Some(value()?),
                 "--lite" => lite = true,
                 s if s.starts_with("--") => return Err(format!("unknown flag `{s}`; {usage}")),
                 s => sources.push(s.to_string()),
@@ -95,11 +103,12 @@ impl Args {
             tz,
             lite,
             key,
+            ids,
             sources,
         })
     }
 
-    fn build_name(&self) -> &'static str {
+    pub(crate) fn build_name(&self) -> &'static str {
         if self.lite { "lite" } else { "main" }
     }
 }
@@ -127,6 +136,9 @@ pub(crate) struct Place {
     pub(crate) population: Option<i64>,
     /// The key of the parent place.
     pub(crate) parent: Option<String>,
+    /// The source keys it was made of (`osm:node/1`, `geonames:2`, `admin:NP0101`): what the ID
+    /// registry matches across builds.
+    pub(crate) sources: Vec<String>,
 }
 
 /// A record of a points source, as the build needs it.
@@ -198,6 +210,14 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let out_dir = build.join("pack").join(&a.cc);
     fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
     let file = out_dir.join(format!("{}-places-{}.tgd", a.cc, a.build_name()));
+    let registry = match &a.ids {
+        Some(path) => {
+            let path = root.join(path);
+            let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            ids::Registry::parse(&text).map_err(|e| format!("{}: {e}", path.display()))?
+        }
+        None => ids::Registry::default(),
+    };
     let report = pack::write(&pack::Input {
         root,
         args: &a,
@@ -206,6 +226,8 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         zones: &zones,
         coverage,
         file: &file,
+        registry: &registry,
+        ids_file: &out_dir.join(format!("{}-ids-{}.tsv", a.cc, a.build_name())),
     })?;
     let mut summary = format!(
         "## build: {} {}\n\n{} places from {}; boundaries {}; timezones {}.\n",
@@ -325,7 +347,8 @@ fn admin_places(root: &Path, lock: &Lock, source: &str) -> Result<Units, String>
         units.sort_by(|a, b| a.pcode.cmp(&b.pcode));
         let (mut keys, mut polys) = (Vec::new(), Vec::new());
         for u in units {
-            let key = format!("{source}:{}", u.pcode);
+            // National codes, not the source ID: a new boundary release keeps the IDs.
+            let key = format!("admin:{}", u.pcode);
             let point = u
                 .polygon
                 .interior_point()
@@ -349,6 +372,7 @@ fn admin_places(root: &Path, lock: &Lock, source: &str) -> Result<Units, String>
                 }],
                 population: None,
                 parent,
+                sources: vec![key.clone()],
             });
             keys.push(key);
             polys.push(u.polygon);
@@ -526,6 +550,7 @@ fn cluster_places(
             names: all,
             population: recs.iter().find_map(|(r, _, _)| r.population),
             parent: deepest(levels, point),
+            sources: members.into_iter().map(|(_, id)| id).collect(),
         });
     }
     Ok((out, unnamed))
@@ -558,6 +583,7 @@ fn country_place(
                 }
             }
             return Ok(Some(Place {
+                sources: vec![id.clone()],
                 key: id,
                 kind: PlaceKind::Country,
                 admin_level: 0,
@@ -673,6 +699,7 @@ fn zone_places(
             .ok_or_else(|| format!("{tzid}: no point inside the zone"))?;
         out.places.push(Place {
             key: format!("tz:{tzid}"),
+            sources: vec![format!("tz:{tzid}")],
             kind: PlaceKind::TimezoneArea,
             admin_level: 0,
             point,
