@@ -45,6 +45,16 @@ const TARGETS: &[Target] = &[
         output: "bindings/python/teigeodata/_native.pyi",
         rustfmt: false,
     },
+    Target {
+        template: "node.rs.j2",
+        output: "bindings/node/src/lib.rs",
+        rustfmt: true,
+    },
+    Target {
+        template: "node.d.ts.j2",
+        output: "bindings/node/index.d.ts",
+        rustfmt: false,
+    },
 ];
 
 const IDL_OUTPUT: &str = "bindings/idl.json";
