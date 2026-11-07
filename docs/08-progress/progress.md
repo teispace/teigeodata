@@ -8,8 +8,8 @@ updated: 2026-11-07
 
 ## Where we are
 
-- **Phase:** 2, indexes (research first; the phase file is written from that research).
-- **Now:** Phase 2 research: the spatial index (flatbush-layout reader with i32 boxes against f64 and KDBush), the exact region index (the S2 spike and the world timezone pack), the search index on the S3 design (D-052), all A/B-benchmarked.
+- **Phase:** 2, indexes ([phase file](../07-planning/phases/phase-2.md)); research done in [indexes](../02-research/notes/indexes.md) (D-081).
+- **Now:** step 2.1, B8 PLACE_INDEX: node boxes over the Hilbert-ordered PLACES rows, box and kNN queries.
 - **M1 met** on 2026-11-07 (D-080), evidence in [phase 1 §1.6](../07-planning/phases/phase-1.md#16-exit-review). Done in Phase 1:
   - 1.1 `teigeodata-core`: the stable ID and its text form, grid points, and a Hilbert index
     4–5× faster than the classic loop and proven equal to it;

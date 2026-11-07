@@ -13,7 +13,7 @@ Rules for writing here: [CONVENTIONS.md](CONVENTIONS.md).
 |---|---|
 | What we are building and why | [vision](00-vision/vision.md), [principles](00-vision/principles.md), [scope](00-vision/scope.md) |
 | Where the work stands | [progress](08-progress/progress.md) |
-| The plan | [roadmap](07-planning/roadmap.md), [phase 0](07-planning/phases/phase-0.md), [open questions](07-planning/open-questions.md) |
+| The plan | [roadmap](07-planning/roadmap.md), [phase 0](07-planning/phases/phase-0.md), [phase 1](07-planning/phases/phase-1.md), [phase 2](07-planning/phases/phase-2.md), [open questions](07-planning/open-questions.md) |
 | What is decided | [decision log and ADRs](03-decisions/log.md) |
 | What we learned | `02-research/notes/` |
 | How it is built | [architecture overview](04-architecture/overview.md), [pack format](04-architecture/pack-format.md), [forge](04-architecture/forge.md) |
