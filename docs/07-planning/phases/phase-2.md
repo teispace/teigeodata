@@ -64,7 +64,22 @@ validating zero-copy reader, a brute-force oracle in its tests, a fuzz harness i
   `search_get`, `search_fuzzy` and `search_prefix`
 
 ### 2.4 Exit review
-- [ ] M2 criteria met; progress updated
+- [x] M2 criteria met (2026-11-07), each against the [roadmap](../roadmap.md):
+  - spatial index: PLACE_INDEX, exact against brute force, A/B against `geo-index` and `rstar`
+    (2.1, D-082);
+  - exact region index: REGION with zero mismatches against even–odd on the world timezones
+    with oceans, A/B against `tzf-rs` (2.2, D-083, D-084);
+  - search index with the phonetic key: SEARCH holds the exact, loose and phonetic maps in one
+    automaton; the S3 pipeline on it keeps every D-052 gate and its pkey numbers, A/B against
+    S3's `fst` maps (2.3, D-085, D-086);
+  - all A/B-benchmarked, on the [results page](../../02-research/benches/phase-2.md), with
+    instruction counts for every query path in `benches/counts.rs`;
+  - fuzzed: harnesses for PLACE_INDEX, REGION and SEARCH run in every `fast-check`;
+  - CI: `fast-check` and `counts` green on `main` (runs 42388498874, 42388498901).
+- [x] POSTAL moves to Phase 3 with its data (D-087): M2 does not list it, its codes are not
+  known yet (Q-001), and it reuses `search::fst`
+- [x] Progress updated; Phase 3 starts with its research
+- [ ] Maintainer review: asynchronous, does not block Phase 3 (as D-069 and D-080)
 
 ## Changelog
 
@@ -74,3 +89,4 @@ validating zero-copy reader, a brute-force oracle in its tests, a fuzz harness i
 | 2026-11-07 | B8 done: u16 boxes inside the parent, not i32 | measured 0.55 B against about 1.1 B per place (D-082) |
 | 2026-11-07 | B9 done: absolute FOR vertices, not deltas with an offsets column; POLY_INDEX moved to B10 | measured smaller; POLY_INDEX indexes POLYGONS boxes (D-083) |
 | 2026-11-07 | B7 done: own FST and a bit-parallel NFA, not `fst` and `levenshtein_automata`; unanchored fuzzy by default | `fst` is `std`-only and unsafe on hostile bytes; measured 6× faster and 2.4× smaller (D-085, D-086) |
+| 2026-11-07 | M2 met; POSTAL moved to Phase 3 | D-087 |

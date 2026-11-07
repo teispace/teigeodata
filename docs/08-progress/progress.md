@@ -8,9 +8,10 @@ updated: 2026-11-07
 
 ## Where we are
 
-- **Phase:** 2, indexes ([phase file](../07-planning/phases/phase-2.md)); research done in [indexes](../02-research/notes/indexes.md) (D-081).
-- **Now:** step 2.4, the phase 2 exit review (M2).
-- **Phase 2 so far:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
+- **Phase:** 3, forge and Nepal data ([roadmap](../07-planning/roadmap.md)); its research note and phase file come first.
+- **M2 met** on 2026-11-07 (D-087), evidence in [phase 2 §2.4](../07-planning/phases/phase-2.md#24-exit-review); POSTAL moved to Phase 3.
+- **Now:** Phase 3 research: the forge pipeline from the S5 stages to reproducible Nepal main and lite packs.
+- **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
   [results](../02-research/benches/phase-2.md#b8-place_index)).
@@ -88,9 +89,10 @@ updated: 2026-11-07
   call; a new function takes one regeneration. Gates: drift, the header against cbindgen,
   boundary lint tables (D-065 to D-068; [results](../02-research/benches/s4-bindings.md)). The
   name fold got a 10× ASCII fast path on the way.
-- **Next:** the benchmarks and codecs of 1.3 and 1.4. Phase 2 carries the S5 and S6 follow-ups: the settlement core,
-  geofix-consensus, land-cover-aware DEM fusion, and the colloquial class. The result-format
-  spike decides blob v0's successor and zero-copy blobs for Python, the JVM and Dart.
+- **Next:** Phase 3 (M3): the forge builds Nepal's packs end to end with every section,
+  carrying the S5 and S6 follow-ups (the settlement core, geofix consensus, land-cover-aware DEM
+  fusion, the colloquial class) and POSTAL (D-087). The result-format spike decides blob v0's
+  successor and zero-copy blobs for Python, the JVM and Dart.
 - **Blocked:** nothing.
 
 ## Session log
@@ -111,3 +113,6 @@ updated: 2026-11-07
 | 2026-11-07 | 1.3 benchmarks (L1–L3, core); B1 integer codec and B13: 128-value blocks, safe decoder 8.5–11 G/s, beats `bitpacking`; 1024 layout dropped (D-073) | B1 sections, then B5 |
 | 2026-11-07 | B1 on sections: column table, PLACES, HIERARCHY, `PlaceKind`; WASM decode 4 G/s; all B1 targets met (D-074) | B5 IDMAP and REDIRECTS |
 | 2026-11-07 | B5: research note, IDMAP and REDIRECTS, ramp coding, interpolated search; PtrHash compared out of tree (D-075) | B6 rank and select |
+| 2026-11-07 | B6 COMPONENTS, B3 NAMES, B12 BLOCK_HASHES, B4 BLOBS (D-076 to D-079); 1.5 nightly fuzz and Miri, the counts gate, Z2 sizes; M1 met (D-080) | Phase 2 research |
+| 2026-11-07 | Phase 2: indexes note (D-081); B8 PLACE_INDEX (D-082); B9 REGION, Q-013 answered (D-083, D-084) | B7 SEARCH |
+| 2026-11-07 | B7 SEARCH: own FST, bit-parallel NFA on code points, FOR lists by importance, block maxima; 1.50 MB, p99 41.2 µs unanchored (D-085, D-086); M2 met, POSTAL to Phase 3 (D-087) | Phase 3 research |

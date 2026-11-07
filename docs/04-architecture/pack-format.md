@@ -591,5 +591,5 @@ A new version always gets a new file. A file that may be mapped is never written
 
 - The 14 benchmarks B1–B14 (catalogue in [benchmarks](../06-engineering/benchmarks.md)).
 - Payloads that follow in later phases inside the frame fixed in Phase 1 (D-071): POSTAL in
-  Phase 2; ARCS, POLYGONS and POLY_INDEX with B10 (D-083); DEM with B11.
+  Phase 3 (D-087); ARCS, POLYGONS and POLY_INDEX with B10 (D-083); DEM with B11.
 - Whether the reader crate keeps `#![forbid(unsafe_code)]` with mmap outside it (B13).
