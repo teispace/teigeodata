@@ -41,6 +41,7 @@ fn report(name: &str, bytes: &[u8], ids: &[(u16, &str)], n: usize) {
             let coding = Packed::parse(b).map_or("?", |p| match p.coding() {
                 teigeodata_core::bitpack::Coding::For => "FOR",
                 teigeodata_core::bitpack::Coding::Delta => "delta",
+                teigeodata_core::bitpack::Coding::Ramp => "ramp",
             });
             println!(
                 "| {label} | {coding} | {} | {:.3} |",

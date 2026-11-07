@@ -50,7 +50,7 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 ### 1.4 Codecs and their sections (each with its A/B benchmark)
 - [x] B1 integer blocks, the codec: `teigeodata_core::bitpack`, 128-value lane-interleaved blocks, FOR or zigzag delta; 8.5–11 G/s FOR decode, `get` 5 ns (FOR) and 23 ns (delta); 50 KB of code (D-073, [results](../../02-research/benches/phase-1.md#b1-integer-blocks-with-b13))
 - [x] B1 into sections: one column table for every integer section (D-074); PLACES 5.2 B and HIERARCHY 3.0 B per place on Nepal, children below Elias–Fano; reads 3–10 ns; WASM decode 4 G/s ([results](../../02-research/benches/phase-1.md#b1-on-sections-places-and-hierarchy))
-- [ ] B5 ID to row: sorted search, Eytzinger, MPHF → IDMAP; REDIRECTS
+- [x] B5 ID to row: sorted IDs and a permutation on the column table, with a new ramp coding; 0.35 B per place, hit 82–91 ns, miss 32–41 ns; PtrHash measured (3–27 ns, 12× bigger) and kept as the upgrade path (D-075, [note](../../02-research/notes/id-to-row.md), [results](../../02-research/benches/phase-1.md#b5-id-to-row-idmap-and-redirects)) → IDMAP; REDIRECTS
 - [ ] B6 rank and select → COMPONENTS (presence bitmaps)
 - [ ] B3 and B4 names: FSST, zstd blocks (`ruzstd` against C zstd), lz4 → NAMES, BLOBS
 - [ ] B12 integrity: eager against lazy hashing, 16 against 64 KiB blocks → BLOCK_HASHES; L2
@@ -74,3 +74,4 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 | 2026-11-07 | 1.3: criterion suites; gungraun moved to 1.5 with the other CI work; B13 moved into B1 | B13 needs a decoder hot loop, which B1 creates |
 | 2026-11-07 | B1 codec and B13 done; the 1024-value layout dropped; B1's sections split into their own step | measured: 128-value blocks are smaller on every column, and safe code beats the `unsafe` rival |
 | 2026-11-07 | B1's sections done: a shared column table; HIERARCHY as CSR, Elias–Fano dropped | measured: block bit-packing beats the Elias–Fano bound on child lists |
+| 2026-11-07 | B5 done: sorted list over MPHF; ramp coding added to the codec | measured: 12× smaller at 3.4× the lookup time; size matters more offline |

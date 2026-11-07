@@ -115,7 +115,7 @@ parameters).
 
 | # | Kind | Content | Feature | Codec (candidate until benchmarked) |
 |---:|---|---|---|---|
-| 1 | IDMAP | stable u64 IDs; ID → row | `core` | FOR bit-packed IDs; MPHF or sorted search (B5) |
+| 1 | IDMAP | each row's stable ID; ID → row | `core` | column table (D-075): sorted IDs and the row permutation; 0.35 B per place |
 | 2 | PLACES | point (1e-6° grid), kind, admin level, class code, flags; rows in Hilbert order | `core` | column table (D-074): 5.2 B per place on Nepal |
 | 3 | HIERARCHY | parent row; children lists (CSR) | `core` | column table (D-074): 3.0 B per place; below Elias–Fano |
 | 4 | NAMES | name records (lang, script, type), text | `names` | zstd blocks of 64 names or FSST per script group (S1: 1.15 MB against 2.06 MB for Nepal; B3, B4) |
@@ -130,7 +130,7 @@ parameters).
 | 13 | DEM | tile directory + coded tiles at ±1 m | `dem` | MED prediction + entropy coder (B11) |
 | 14 | BLOBS | cold data (attribution text, long strings) | `zstd` | zstd blocks with a dictionary, `ruzstd` decode (B4) |
 | 15 | BLOCK_HASHES | per-block BLAKE3 for large sections (lazy verification) | `verify` | 16 or 64 KiB blocks (B12) |
-| 16 | REDIRECTS | retired IDs: each to its survivor, or to none for a tombstone ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)) | `core` | sorted ID pairs, as IDMAP (B5) |
+| 16 | REDIRECTS | retired IDs: each to its survivor, or to none for a tombstone ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)) | `core` | column table (D-075): sorted ID pairs |
 
 ### Column tables (encoding 1)
 
@@ -149,7 +149,7 @@ bodies    each column's bytes in directory order, back to back
   4 interleaved lanes, one base and bit width per block, FOR or zigzag delta per column:
 
   ```text
-  count u32, lanes u8 (4), coding u8 (0 FOR, 1 delta), reserved u16 (0)
+  count u32, lanes u8 (4), coding u8 (0 FOR, 1 delta, 2 ramp), reserved u16 (0)
   bases   [u32; blocks]
   offsets [u32; blocks]   word offset of each block in the payload
   widths  [u8; blocks], zero padding to a multiple of 4
@@ -157,8 +157,9 @@ bodies    each column's bytes in directory order, back to back
   ```
 
   Value `j` of a block is in lane `j % 4`, row `j / 4`. FOR: `base + packed`. Delta: `base` is
-  the block's first value and the packed values are zigzag deltas from the previous one. The
-  forge picks delta when it saves at least 10%.
+  the block's first value and the packed values are zigzag deltas from the previous one. Ramp:
+  `base + j + packed` (D-075). The writer takes the smaller of FOR and ramp (both O(1) to
+  read), and delta only when it is at least 10% smaller than that.
 - A FOR block's base and width bound its values (`base` to `base + 2^w − 1`), which serves as
   a zone map for free.
 - Opening a section checks the frame and every column's structure (O(blocks)); a deep check of
@@ -196,6 +197,31 @@ The children of row `r` are `children[end[r − 1] .. end[r]]`, from 0 for row 0
 parents is at most 32 long (`MAX_DEPTH`), which bounds every walk up the tree. The deep check
 proves that the columns describe one forest: each row's children are exactly the rows that
 name it as parent, and no chain is a cycle.
+
+### IDMAP and REDIRECTS
+
+An ID is a u64 and the codec is u32, so each ID column is a pair: the high and the low 32 bits.
+IDMAP's `item_count` equals PLACES'; all five columns have one value per row:
+
+| ID | Column | Values |
+|---:|---|---|
+| 1, 2 | ID high, low | each row's ID |
+| 3, 4 | sorted high, low | the IDs in increasing order |
+| 5 | order | the row of each sorted ID |
+
+REDIRECTS has one value per retired ID, in increasing order of the retired ID:
+
+| ID | Column | Values |
+|---:|---|---|
+| 1, 2 | old high, low | the retired ID |
+| 3, 4 | new high, low | its survivor, a current place of the pack; 0 and 0 for a tombstone |
+
+- **Lookup:** interpolation, then binary search, over the sorted column's block firsts (O(1)
+  each); one block unpacked and searched; one read of `order`; and a check that the row holds
+  the ID, so even a pack that skipped the deep check never answers with the wrong place. A miss
+  in IDMAP looks in REDIRECTS (one hop: chains are flattened).
+- **Deep checks:** sorted IDs strictly increasing and each at the row `order` names (which
+  makes `order` a permutation); every ID valid; retired IDs not current; survivors current.
 
 ### REGION (from spike S2)
 

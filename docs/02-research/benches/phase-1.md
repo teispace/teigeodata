@@ -187,3 +187,41 @@ speeds, not for accuracy.
 
 At world size (about 12 million places) the deep checks take about 0.4 s, which the forge runs
 once per build; opening stays in the sub-millisecond range, since it checks blocks, not rows.
+
+## B5: ID to row (IDMAP and REDIRECTS)
+
+```
+cargo bench -p teigeodata-bench --bench b1 -- B5-idmap       # in tree, 1.5 × 10⁵ and 10⁶
+```
+
+The comparison with `ptr_hash` 2.1.3 runs out of tree, because `ptr_hash` and `ph` both pull in
+crates with unmaintained advisories (`fxhash`; `derivative`, `pin-utils`) that `cargo deny`
+rightly refuses in the workspace. A scratch crate depends on `teigeodata-format` by path and on
+`ptr_hash`, and times both in one loop over the same 10⁶ random queries. `ptr_hash` uses
+`StrongerIntHash`: its default `FastIntHash` took 10 s to build 10⁵ consecutive keys.
+
+**Keys:** dense `np` serials 1..n, allocated in row order (the forge's rule, D-075) or shuffled
+(the worst case). The rival gets a plain u32 permutation and a plain u64 ID array, its best case.
+Load average 4.6–5.4 during the run (other work on the machine), so these numbers are
+indicative.
+
+| n | Serials | Ours, B per place | Ours, hit | Ours, miss | PtrHash + perm, B per place | PtrHash + perm + verify |
+|---:|---|---:|---:|---:|---:|---:|
+| 10⁵ | row order | **0.353** | 82 ns | 32 ns | 4.374 | 2.7 ns |
+| 10⁵ | shuffled | 4.607 | 101 ns | 43 ns | 4.374 | 4.3 ns |
+| 10⁶ | row order | **0.352** | 87 ns | 35 ns | 4.374 | 9.0 ns |
+| 10⁶ | shuffled | 5.352 | 129 ns | 33 ns | 4.374 | 8.3 ns |
+| 10⁷ | row order | **0.352** | 91 ns | 41 ns | 4.374 | 26.9 ns |
+| 10⁷ | shuffled | 6.352 | 237 ns | 36 ns | 4.374 | 26.3 ns |
+
+`id(row)` takes 5–8 ns (in tree). PtrHash alone: 1.0–2.5 ns, 2.99 bits per key, built in 0.71 s
+at 10⁷.
+
+**Findings:**
+- **Size decides:** with serials in row order IDMAP is 12× smaller than the MPHF route (4 MB
+  against 52 MB for the planet), at 60–80 ns more per lookup. Resolving stored IDs is rare, so
+  the sorted list is adopted (D-075).
+- **The forge must allocate serials in row order:** shuffled, ours is bigger and slower than the
+  MPHF route on both counts.
+- **The ramp coding** took IDMAP from 1.10 to 0.35 B per place and is now a codec coding
+  (D-075); interpolation over block firsts took a hit from 216 to 87 ns.

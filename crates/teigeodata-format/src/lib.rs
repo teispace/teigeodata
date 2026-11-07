@@ -38,12 +38,15 @@ mod error;
 #[doc(hidden)]
 pub mod fuzz;
 pub mod hierarchy;
+pub mod idmap;
 mod layout;
 mod manifest;
 pub mod places;
 mod read;
+pub mod redirects;
 #[cfg(feature = "signature")]
 mod signature;
+mod sorted;
 #[cfg(feature = "write")]
 mod write;
 

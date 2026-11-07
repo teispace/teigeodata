@@ -34,6 +34,11 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | geofix-consensus | S5 | weighted Weiszfeld |
 | the rest | Phase 2 | |
 
+**ID allocation (pack writer, D-075):** a country's first build allocates serials in the
+Hilbert order of its rows, and later builds give new places the next serials. ID order then
+follows row order, which makes IDMAP 0.35 B per place instead of 4.6–6.4 (B5). Redirect chains
+are flattened, so every survivor in REDIRECTS is a current place.
+
 ## Sources and `fetch`
 
 Every input is listed in `data/sources.lock` (schema `teigeodata/sources/v1`) with:

@@ -7,15 +7,17 @@
 //! Boytsov 2015). B1 measured 1024-value blocks (`FastLanes`, Afroozeh & Boncz 2023) too: they
 //! decode 2.3× faster but are 6–41% larger on real columns and cost 300 KB more code.
 //!
-//! Value `j` of a block is in lane `j % 4`, row `j / 4`. Two codings:
+//! Value `j` of a block is in lane `j % 4`, row `j / 4`. Three codings:
 //! - **FOR:** a value is `base + packed`; any value is read in O(1).
 //! - **Delta:** `base` is the block's first value, and the packed values are zigzag deltas from
 //!   the previous value (the first delta is 0). Sorted or spatially ordered columns (IDs, points in
 //!   Hilbert order) shrink most; reading value `j` unpacks its block and sums its deltas up to `j`.
+//! - **Ramp:** a value is `base + j + packed`; O(1), for dense sorted runs and near-identity
+//!   permutations (D-075).
 //!
 //! Column layout, all little-endian:
 //! ```text
-//! count u32, lanes u8 (4), coding u8 (0 FOR, 1 delta), reserved u16 (0)
+//! count u32, lanes u8 (4), coding u8 (0 FOR, 1 delta, 2 ramp), reserved u16 (0)
 //! bases   [u32; blocks]
 //! offsets [u32; blocks]   word offset of each block in the payload
 //! widths  [u8; blocks], zero padding to a multiple of 4
@@ -38,6 +40,10 @@ pub enum Coding {
     For = 0,
     /// Zigzag deltas from the block's first value.
     Delta = 1,
+    /// `base + j + packed`, `j` the value's index in its block: FOR around a ramp of step 1.
+    /// Dense sorted runs (serials 1, 2, 4, 5, …) and near-identity permutations pack to a few
+    /// bits, or none, with O(1) access (D-075).
+    Ramp = 2,
 }
 
 /// Why bytes are not a packed column.
@@ -200,6 +206,7 @@ impl<'a> Packed<'a> {
         let coding = match coding {
             0 => Coding::For,
             1 => Coding::Delta,
+            2 => Coding::Ramp,
             _ => return Err(PackError::Header),
         };
         if (r0, r1) != (0, 0) {
@@ -301,7 +308,31 @@ impl<'a> Packed<'a> {
         Some(base.wrapping_add(match self.coding {
             Coding::For => packed_at(words, width, j),
             Coding::Delta => delta_sum(words, width, j),
+            #[allow(clippy::cast_possible_truncation, reason = "j < 128")]
+            Coding::Ramp => packed_at(words, width, j).wrapping_add(j as u32),
         }))
+    }
+
+    /// The first value of block `b` in O(1), without unpacking it; `None` past the end. On a
+    /// sorted column these are the keys of a search over blocks.
+    #[must_use]
+    pub fn block_first(&self, b: usize) -> Option<u32> {
+        if b >= self.blocks() {
+            return None;
+        }
+        let (words, width, base) = self.block_words(b);
+        Some(match self.coding {
+            Coding::For | Coding::Ramp => base.wrapping_add(packed_at(words, width, 0)),
+            Coding::Delta => base,
+        })
+    }
+
+    /// The value of every entry of block `b` if they are all equal and that is known without
+    /// unpacking (a width-0 FOR or delta block); `None` otherwise.
+    #[must_use]
+    pub fn block_constant(&self, b: usize) -> Option<u32> {
+        let (_, width, base) = self.block_words(b);
+        (b < self.blocks() && width == 0 && self.coding != Coding::Ramp).then_some(base)
     }
 
     /// The values in `range`, cut to [`Packed::len`], decoded a block at a time: the way to
@@ -421,7 +452,7 @@ fn split_words(b: &[u8], n: usize) -> Result<(&[[u8; 4]], &[u8]), PackError> {
 fn decode(words: &[[u8; 4]], width: u32, base: u32, coding: Coding, out: &mut [u32]) {
     let rows = words.as_chunks::<L>().0;
     let fill = |block: &mut [[u32; L]; 32]| {
-        let for_base = if coding == Coding::For { base } else { 0 };
+        let for_base = if coding == Coding::Delta { 0 } else { base };
         unpack(rows, width, for_base, block);
         if coding == Coding::Delta {
             // A prefix sum row by row: the sums inside a row of 4 are independent, so only one
@@ -433,6 +464,10 @@ fn decode(words: &[[u8; 4]], width: u32, base: u32, coding: Coding, out: &mut [u
                 let abc = ab.wrapping_add(c);
                 *row = [a, ab, abc, abc.wrapping_add(d)].map(|v| carry.wrapping_add(v));
                 carry = row[3];
+            }
+        } else if coding == Coding::Ramp {
+            for (j, v) in (0_u32..).zip(block.as_flattened_mut()) {
+                *v = v.wrapping_add(j);
             }
         }
     };
@@ -477,6 +512,14 @@ pub fn encode(values: &[u32], coding: Coding) -> alloc::vec::Vec<u8> {
                     prev = *v;
                 }
                 first
+            }
+            Coding::Ramp => {
+                let ramp = |(j, v): (u32, &u32)| v.wrapping_sub(j);
+                let min = (0_u32..).zip(chunk).map(ramp).min().unwrap_or(0);
+                for (p, d) in packed.iter_mut().zip((0_u32..).zip(chunk).map(ramp)) {
+                    *p = d.wrapping_sub(min);
+                }
+                min
             }
         };
         let width = 32 - packed.iter().fold(0, |a, v| a | v).leading_zeros();
@@ -523,16 +566,23 @@ pub fn encode(values: &[u32], coding: Coding) -> alloc::vec::Vec<u8> {
     out
 }
 
-/// Encodes a column with the coding D-073 picks (feature `alloc`): delta when it is at least
-/// 10% smaller than FOR, FOR otherwise, since FOR reads a single value 4–5× faster.
+/// Encodes a column with the coding D-073 and D-075 pick (feature `alloc`): the smaller of FOR
+/// and ramp (both O(1) to read; FOR on a tie), unless delta is at least 10% smaller than that,
+/// since delta reads a single value 4–5× slower.
 #[cfg(feature = "alloc")]
 #[must_use]
 pub fn encode_auto(values: &[u32]) -> alloc::vec::Vec<u8> {
-    let (fixed, delta) = (encode(values, Coding::For), encode(values, Coding::Delta));
-    if delta.len() * 10 <= fixed.len() * 9 {
-        delta
+    let (fixed, ramp) = (encode(values, Coding::For), encode(values, Coding::Ramp));
+    let direct = if ramp.len() < fixed.len() {
+        ramp
     } else {
         fixed
+    };
+    let delta = encode(values, Coding::Delta);
+    if delta.len() * 10 <= direct.len() * 9 {
+        delta
+    } else {
+        direct
     }
 }
 
@@ -554,7 +604,7 @@ mod tests {
 
     fn check(values: &[u32]) {
         {
-            for coding in [Coding::For, Coding::Delta] {
+            for coding in [Coding::For, Coding::Delta, Coding::Ramp] {
                 let bytes = encode(values, coding);
                 let p = Packed::parse(&bytes).unwrap_or_else(|e| panic!("{e}"));
                 assert_eq!(p.len(), values.len());
@@ -574,6 +624,13 @@ mod tests {
                     assert_eq!(p.get(i), Some(*v), "{coding:?} at {i}");
                 }
                 assert_eq!(p.get(values.len()), None);
+                for b in 0..=p.blocks() {
+                    assert_eq!(p.block_first(b), values.get(b * BLOCK_LEN).copied());
+                    if let Some(c) = p.block_constant(b) {
+                        let block = values.iter().skip(b * BLOCK_LEN).take(BLOCK_LEN);
+                        assert!(block.clone().all(|&v| v == c), "{coding:?} block {b}");
+                    }
+                }
             }
         }
     }
@@ -601,6 +658,7 @@ mod tests {
         // Sorted, constant, extremes, and wrapping deltas.
         check(&(0..5000).map(|i| i * 3 + 1_000_000).collect::<Vec<_>>());
         check(&[7; 2000]);
+        check(&(0..3000).collect::<Vec<_>>()); // width-0 ramp blocks
         check(&[0, u32::MAX, 0, u32::MAX, 1]);
         check(
             &(0..3000_u32)
@@ -616,6 +674,31 @@ mod tests {
         let d = encode(&v, Coding::Delta).len();
         // Steps of 17 need 12 bits under FOR (127 × 17 = 2159) and 6 under delta (zigzag 34).
         assert!(d * 10 < f * 6, "delta {d} vs for {f}");
+    }
+
+    #[test]
+    fn ramp_packs_runs_to_nothing() {
+        // The identity, and a dense run with a few gaps: ramp, O(1), nearly no payload.
+        let identity: Vec<u32> = (0..10_000).collect();
+        let gaps: Vec<u32> = (0..10_000).map(|i| 7 + i + i / 1000).collect();
+        for v in [&identity, &gaps] {
+            let bytes = encode_auto(v);
+            let p = Packed::parse(&bytes).unwrap_or_else(|e| panic!("{e}"));
+            assert_eq!(p.coding(), Coding::Ramp);
+            // Header, bases, offsets and widths only, plus one word per lane for a gap block.
+            assert!(
+                bytes.len() < 8 + 9 * p.blocks() + 4 + 16 * 10,
+                "{}",
+                bytes.len()
+            );
+            assert_eq!(p.get(9_999), v.last().copied());
+        }
+        // Values below their index wrap around; still exact, never compact.
+        let down: Vec<u32> = (0..300).rev().collect();
+        let p = encode(&down, Coding::Ramp);
+        let mut out = std::vec![0; 300];
+        assert_eq!(Packed::parse(&p).map(|c| c.decode_all(&mut out)), Ok(300));
+        assert_eq!(out, down);
     }
 
     #[test]
@@ -655,7 +738,7 @@ mod tests {
         let v: Vec<u32> = (0..1000_u32)
             .map(|i| i.wrapping_mul(2_654_435_761))
             .collect();
-        for coding in [Coding::For, Coding::Delta] {
+        for coding in [Coding::For, Coding::Delta, Coding::Ramp] {
             let bytes = encode(&v, coding);
             let p = Packed::parse(&bytes).unwrap_or_else(|e| panic!("{e}"));
             for (a, b) in [
@@ -695,7 +778,7 @@ mod tests {
         b[4] = 32; // the 1024-value layout B1 measured and rejected
         assert_eq!(Packed::parse(&b).err(), Some(PackError::Header));
         let mut b = good.clone();
-        b[5] = 2;
+        b[5] = 3;
         assert_eq!(Packed::parse(&b).err(), Some(PackError::Header));
         // Three blocks: widths start at 8 + 12 + 12 = 32.
         let mut b = good.clone();
@@ -709,11 +792,15 @@ mod tests {
     #[test]
     fn parse_never_panics() {
         let values: Vec<u32> = (0..2000).map(|i| i * 7).collect();
-        let bases = [encode(&values, Coding::For), encode(&values, Coding::Delta)];
+        let bases = [
+            encode(&values, Coding::For),
+            encode(&values, Coding::Delta),
+            encode(&values, Coding::Ramp),
+        ];
         let mut s = 1;
         let mut out = std::vec![0; 4096];
         for k in 0..20_000 {
-            let mut b = bases[k % 2].clone();
+            let mut b = bases[k % 3].clone();
             let at = rng(&mut s) as usize % b.len();
             b[at] = rng(&mut s) as u8;
             let cut = rng(&mut s) as usize % (b.len() + 1);

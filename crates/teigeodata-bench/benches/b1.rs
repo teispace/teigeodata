@@ -21,7 +21,9 @@ use teigeodata_bench::{
     Rng, geonames_columns, geonames_path, geonames_tree, leb128_delta, leb128_delta_decode,
 };
 use teigeodata_core::bitpack::{BLOCK_LEN, Coding, Packed, encode};
+use teigeodata_core::{Namespace, PlaceId};
 use teigeodata_format::hierarchy::{self, Hierarchy};
+use teigeodata_format::idmap::{self, IdMap};
 use teigeodata_format::places::{self, PlaceColumns, Places};
 use teigeodata_format::{Encoding, Kind, Pack, Writer};
 
@@ -202,5 +204,72 @@ fn sections(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, b1, sections);
+/// B5: ID → row through IDMAP, at a country's size and at 10⁶, with serials allocated in row
+/// order (the forge's first build) and shuffled (the worst case). The out-of-tree comparison with
+/// `ptr_hash` is on the results page.
+fn ids(c: &mut Criterion) {
+    let Some(np) = Namespace::from_country(*b"np") else {
+        return;
+    };
+    let mut group = c.benchmark_group("B5-idmap");
+    for n in [150_000_usize, 1_000_000] {
+        for order in ["row-order", "shuffled"] {
+            let mut rng = Rng::new(n as u64);
+            let mut v: Vec<PlaceId> = (1..=n as u64).filter_map(|s| PlaceId::new(np, s)).collect();
+            if order == "shuffled" {
+                for i in (1..v.len()).rev() {
+                    v.swap(i, (rng.next_u64() % (i as u64 + 1)) as usize);
+                }
+            }
+            let Ok(body) = idmap::encode(&v) else {
+                return;
+            };
+            let Ok(mut w) = Writer::new("np", "places", "2026.11.0") else {
+                return;
+            };
+            if w.section_bytes(Kind::IDMAP, Encoding::TABLE, n as u64, &body)
+                .is_err()
+            {
+                return;
+            }
+            let Ok(bytes) = w.layout(false).and_then(|l| l.assemble(&[&body])) else {
+                return;
+            };
+            let Ok(pack) = Pack::open(&bytes) else {
+                return;
+            };
+            let Some(Ok(map)) = pack.section(Kind::IDMAP).map(|s| IdMap::open(&s)) else {
+                return;
+            };
+            let hits: Vec<PlaceId> = (0..4096)
+                .map(|_| v[(rng.next_u64() % n as u64) as usize])
+                .collect();
+            let misses: Vec<PlaceId> = (0..4096)
+                .filter_map(|_| PlaceId::new(np, n as u64 + 1 + rng.next_u64() % n as u64))
+                .collect();
+            group.throughput(Throughput::Elements(4096));
+            group.bench_function(format!("row-hit/{n}/{order}"), |b| {
+                b.iter(|| {
+                    hits.iter()
+                        .filter_map(|&k| map.row(black_box(k)))
+                        .sum::<usize>()
+                });
+            });
+            group.bench_function(format!("row-miss/{n}/{order}"), |b| {
+                b.iter(|| {
+                    misses
+                        .iter()
+                        .filter(|&&k| map.row(black_box(k)).is_some())
+                        .count()
+                });
+            });
+            group.bench_function(format!("id/{n}/{order}"), |b| {
+                b.iter(|| (0..4096).filter_map(|i| map.id(black_box(i * 31))).count());
+            });
+        }
+    }
+    group.finish();
+}
+
+criterion_group!(benches, b1, sections, ids);
 criterion_main!(benches);
