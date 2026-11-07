@@ -52,7 +52,8 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 - [x] B1 into sections: one column table for every integer section (D-074); PLACES 5.2 B and HIERARCHY 3.0 B per place on Nepal, children below Elias–Fano; reads 3–10 ns; WASM decode 4 G/s ([results](../../02-research/benches/phase-1.md#b1-on-sections-places-and-hierarchy))
 - [x] B5 ID to row: sorted IDs and a permutation on the column table, with a new ramp coding; 0.35 B per place, hit 82–91 ns, miss 32–41 ns; PtrHash measured (3–27 ns, 12× bigger) and kept as the upgrade path (D-075, [note](../../02-research/notes/id-to-row.md), [results](../../02-research/benches/phase-1.md#b5-id-to-row-idmap-and-redirects)) → IDMAP; REDIRECTS
 - [x] B6 presence → COMPONENTS: a poppy rank bitmap (column-table codec 1) or sorted rows, the smaller per component; crossover near 10%; rank 6.9 ns, a field read 7–20 ns; select not needed (D-076, [note](../../02-research/notes/presence.md), [results](../../02-research/benches/phase-1.md#b6-presence-components))
-- [ ] B3 and B4 names: FSST, zstd blocks (`ruzstd` against C zstd), lz4 → NAMES, BLOBS
+- [x] B3 names: FSST with our own safe decoder and deterministic trainer (3–5% smaller than `fsst-rs`), per-script tables, column-table codec 2 → NAMES; 10.6 B per place on Nepal, a canonical name 65 ns (D-077, [note](../../02-research/notes/names-storage.md), [results](../../02-research/benches/phase-1.md#b3-names-fsst))
+- [ ] B4 blobs: zstd frames, `ruzstd` decode → BLOBS (research in the names note)
 - [ ] B12 integrity: eager against lazy hashing, 16 against 64 KiB blocks → BLOCK_HASHES; L2
 
 ### 1.5 Hardening
@@ -76,4 +77,5 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 | 2026-11-07 | B1's sections done: a shared column table; HIERARCHY as CSR, Elias–Fano dropped | measured: block bit-packing beats the Elias–Fano bound on child lists |
 | 2026-11-07 | B5 done: sorted list over MPHF; ramp coding added to the codec | measured: 12× smaller at 3.4× the lookup time; size matters more offline |
 | 2026-11-07 | B6 done: two presence forms instead of a bitmap only; select dropped | measured: each form loses 3.6–70× at the other end of the density range; no reader needs select |
+| 2026-11-07 | B3 and B4 split; B3 done with FSST, lz4 rejected | measured: FSST is the only option both small and fast per place; zstd is 230× slower per place |
 | 2026-11-07 | 1.5: nightly fuzz (8 libFuzzer targets: the 4 pack harnesses plus sections, bitpack, table, bits) and Miri; determinism gate in `tests/determinism.rs` | D-072: one harness per property, run by `cargo test` and libFuzzer |

@@ -10,7 +10,8 @@
 //! bodies    each column's bytes in directory order, back to back
 //! ```
 //! Codec 0 is a [`bitpack`](crate::bitpack) column, codec 1 a [`bits`](crate::bits) bitmap
-//! (D-076). IDs are strictly increasing and every length is a multiple of 4, so every body starts 4-byte
+//! (D-076), codec 2 raw bytes whose meaning the section defines, zero-padded to a multiple of 4
+//! (D-077). IDs are strictly increasing and every length is a multiple of 4, so every body starts 4-byte
 //! aligned and a table has exactly one encoding. [`Table::parse`] checks the frame in O(columns);
 //! [`Table::column`] validates one column when a section opens it.
 
@@ -29,6 +30,8 @@ pub enum Codec {
     Bitpack,
     /// A [`bits`](crate::bits) bitmap with its rank directory (code 1).
     Bits,
+    /// Raw bytes, zero-padded to a multiple of 4 (code 2).
+    Bytes,
 }
 
 impl Codec {
@@ -37,6 +40,7 @@ impl Codec {
         match self {
             Self::Bitpack => 0,
             Self::Bits => 1,
+            Self::Bytes => 2,
         }
     }
 
@@ -44,6 +48,7 @@ impl Codec {
         match code {
             0 => Some(Self::Bitpack),
             1 => Some(Self::Bits),
+            2 => Some(Self::Bytes),
             _ => None,
         }
     }
@@ -180,6 +185,19 @@ impl<'a> Table<'a> {
         }
     }
 
+    /// Bytes column `id`, with its padding.
+    ///
+    /// # Errors
+    /// [`TableError::Missing`] if there is no such column; [`TableError::Codec`] if it is not a
+    /// bytes column.
+    pub fn bytes(&self, id: u16) -> Result<&'a [u8], TableError> {
+        match self.column_raw(id) {
+            None => Err(TableError::Missing(id)),
+            Some((Codec::Bytes, bytes)) => Ok(bytes),
+            Some(_) => Err(TableError::Codec(id)),
+        }
+    }
+
     /// Bitmap column `id`, its structure validated ([`Bits::check`] proves its directory).
     ///
     /// # Errors
@@ -299,6 +317,12 @@ mod tests {
         assert_eq!(t.bits(1).err(), Some(TableError::Codec(1)));
         assert_eq!(t.bits(2).err(), Some(TableError::Missing(2)));
         assert!(t.column(1).is_ok());
+        assert_eq!(t.bytes(4).err(), Some(TableError::Codec(4)));
+        let raw = encode_with(&[(7, Codec::Bytes, b"abcd")]).unwrap_or_default();
+        let t7 = Table::parse(&raw).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(t7.bytes(7), Ok(&b"abcd"[..]));
+        assert_eq!(t7.bytes(8).err(), Some(TableError::Missing(8)));
+        assert_eq!(t7.column(7).err(), Some(TableError::Codec(7)));
         let mut bad = mixed.clone();
         bad[4 + 2 * 8 + ea.len() + 4] = 1; // the bitmap's reserved bytes
         let t = Table::parse(&bad).unwrap_or_else(|e| panic!("{e}"));
@@ -332,7 +356,7 @@ mod tests {
         extra.extend_from_slice(&[0; 4]);
         assert_eq!(Table::parse(&extra).err(), Some(TableError::Directory));
         // Header reserved, then the first entry's codec, reserved, ID order and length.
-        for (at, v) in [(2, 1), (6, 2), (7, 1), (12, 1), (8, 3)] {
+        for (at, v) in [(2, 1), (6, 3), (7, 1), (12, 1), (8, 3)] {
             let mut b = good.clone();
             b[at] = v;
             assert!(Table::parse(&b).is_err(), "byte {at} = {v}");

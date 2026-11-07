@@ -9,7 +9,7 @@ updated: 2026-11-07
 ## Where we are
 
 - **Phase:** 1, core and format ([phase file](../07-planning/phases/phase-1.md)).
-- **Now:** step 1.4, B3 and B4 (NAMES and BLOBS; research in [names storage](../02-research/notes/names-storage.md)). Done in Phase 1:
+- **Now:** step 1.4, B4 (BLOBS) and B12 (BLOCK_HASHES; research in [block hashes](../02-research/notes/block-hashes.md)). Done in Phase 1:
   - 1.1 `teigeodata-core`: the stable ID and its text form, grid points, and a Hilbert index
     4–5× faster than the classic loop and proven equal to it;
   - 1.2 `teigeodata-format`: format 0.1. A canonical, validating zero-copy reader (`no_std`, no
@@ -26,6 +26,8 @@ updated: 2026-11-07
     hit; PtrHash is 12× bigger for 3–27 ns and stays the upgrade path (D-075).
     B6: COMPONENTS, presence as a poppy rank bitmap or sorted rows, the smaller per component
     (crossover near 10%); rank 6.9 ns, a field read 7–20 ns (D-076).
+    B3: NAMES with FSST, our own decoder and deterministic trainer, per-script tables:
+    10.6 B per place on Nepal, a canonical name in 65 ns (D-077).
 - **M0 met** on 2026-11-07 (D-069): each criterion with its evidence in
   [phase 0 §0.5](../07-planning/phases/phase-0.md#05-exit-review). The maintainer's review is
   asynchronous. Phase 0 in short:

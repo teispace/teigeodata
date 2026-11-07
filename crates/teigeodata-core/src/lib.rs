@@ -10,6 +10,7 @@
 //! - [`bitpack`]: frame-of-reference bit-packing in lane-interleaved blocks (B1); encoders with
 //!   the `alloc` feature.
 //! - [`bits`]: a bitmap with a rank directory, the presence of optional fields (B6, D-076).
+//! - [`fsst`]: FSST string compression, the text of names (B3, D-077).
 //! - [`table`]: a table of packed columns, the payload of every integer-column section (D-074).
 //!
 //! `no_std`, no dependencies, no panics; nothing allocates without the `alloc` feature.
@@ -35,6 +36,7 @@ extern crate std;
 
 pub mod bitpack;
 pub mod bits;
+pub mod fsst;
 mod grid;
 mod hilbert;
 mod id;

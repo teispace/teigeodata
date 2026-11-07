@@ -267,3 +267,48 @@ of mean length 64; the bitmap costs 0.129 B per row (1.03 bits) at any density:
   so the writer picked delta, and a read took 51 ns). Fields of ordered values stay smaller
   that way; a hot field can be written FOR.
 
+## B3: names (FSST)
+
+```
+cargo run --release -p teigeodata-bench --example b3-fsst     # trainer and decoder
+cargo run --release -p teigeodata-bench --example b3-names    # the NAMES section
+```
+
+**Corpus:** `GeoNames` Nepal, 148,210 places, 183,248 names after deduplication per place,
+1,892,140 B of UTF-8 ([names storage](../notes/names-storage.md) §3.1). 2026-11-07, load
+average 10–26 (other work on the machine), so the times are indicative.
+
+**Our trainer against `fsst-rs` 0.7.0** (the research note's run, same corpus):
+
+| | Ours | `fsst-rs` |
+|---|---:|---:|
+| one table, text B | 1,005,961 (0.532) | 1,034,553 (0.547) |
+| per script group, text B | 967,386 | 1,019,373 |
+| Devanagari with its own table | 0.267 | 0.306 |
+| training | 48 ms (5 generations, 1 MiB sample) | 1–3 ms (16 KiB sample) |
+
+Decode: all names 750 MB/s; one random name 27 ns (load 26).
+
+**The NAMES section** (records with script and type, as the writer makes them):
+
+| Text ends | B per place | Locate a place's records | Canonical name | All names of a place | Deep check |
+|---|---:|---:|---:|---:|---:|
+| delta where 10% smaller | 9.99 | 11 ns | 158 ns | 166 ns | 13 ms |
+| **O(1) codings (adopted)** | **10.64** | 10 ns | **65 ns** | **89 ns** | 8.6 ms |
+
+**Findings:**
+- **Our trainer is 3–5% smaller than `fsst-rs`**, because it samples 1 MiB instead of 16 KiB, and
+  it is deterministic by construction (no hashing; ties broken by bytes). It runs on the forge,
+  so its 48 ms do not matter.
+- **Per-script tables are needed**: the shared table codes Devanagari at 1.17× its size, its own
+  table at 0.27×. A table for a script holding half the text or more only duplicates the shared
+  one, so it is skipped.
+- **Hot offsets stay O(1):** delta-coded text ends saved 6% and more than doubled the time of a
+  canonical name; `bitpack::encode_direct` is the writer's choice for them.
+- **A deep check must stream:** the first `check` read each record's offsets with `get`, which on
+  a delta column unpacks a block per record; streaming every column cut the test suite from 34 s
+  to 4 s and makes the check O(records).
+- **Open:** a canonical name takes 65 ns against the research bench's 20 ns for a bare FSST
+  heap; re-profile on an idle machine (two offset reads, the table pick and the UTF-8 check are
+  the candidates).
+

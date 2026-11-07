@@ -42,6 +42,7 @@ pub mod hierarchy;
 pub mod idmap;
 mod layout;
 mod manifest;
+pub mod names;
 pub mod places;
 mod read;
 pub mod redirects;

@@ -566,18 +566,26 @@ pub fn encode(values: &[u32], coding: Coding) -> alloc::vec::Vec<u8> {
     out
 }
 
-/// Encodes a column with the coding D-073 and D-075 pick (feature `alloc`): the smaller of FOR
-/// and ramp (both O(1) to read; FOR on a tie), unless delta is at least 10% smaller than that,
-/// since delta reads a single value 4–5× slower.
+/// Encodes a column with the smaller of FOR and ramp (feature `alloc`): both read one value
+/// in O(1); FOR on a tie. For columns read on every lookup.
 #[cfg(feature = "alloc")]
 #[must_use]
-pub fn encode_auto(values: &[u32]) -> alloc::vec::Vec<u8> {
+pub fn encode_direct(values: &[u32]) -> alloc::vec::Vec<u8> {
     let (fixed, ramp) = (encode(values, Coding::For), encode(values, Coding::Ramp));
-    let direct = if ramp.len() < fixed.len() {
+    if ramp.len() < fixed.len() {
         ramp
     } else {
         fixed
-    };
+    }
+}
+
+/// Encodes a column with the coding D-073 and D-075 pick (feature `alloc`):
+/// [`encode_direct`]'s, unless delta is at least 10% smaller than that, since delta reads a
+/// single value 4–5× slower.
+#[cfg(feature = "alloc")]
+#[must_use]
+pub fn encode_auto(values: &[u32]) -> alloc::vec::Vec<u8> {
+    let direct = encode_direct(values);
     let delta = encode(values, Coding::Delta);
     if delta.len() * 10 <= direct.len() * 9 {
         delta

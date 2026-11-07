@@ -118,7 +118,7 @@ parameters).
 | 1 | IDMAP | each row's stable ID; ID → row | `core` | column table (D-075): sorted IDs and the row permutation; 0.35 B per place |
 | 2 | PLACES | point (1e-6° grid), kind, admin level, class code, flags; rows in Hilbert order | `core` | column table (D-074): 5.2 B per place on Nepal |
 | 3 | HIERARCHY | parent row; children lists (CSR) | `core` | column table (D-074): 3.0 B per place; below Elias–Fano |
-| 4 | NAMES | name records (lang, script, type), text | `names` | zstd blocks of 64 names or FSST per script group (S1: 1.15 MB against 2.06 MB for Nepal; B3, B4) |
+| 4 | NAMES | name records (lang, script, type, validity, rule), text | `names` | column table (D-077): records + FSST text with per-script tables; 10.6 B per place on Nepal, a canonical name in 65 ns |
 | 5 | SEARCH | FST over normalised keys and phonetic keys; postings; scores; top-k structure | `search` | `fst` + Elias–Fano postings + block RMQ (B7; spike S3) |
 | 6 | PLACE_INDEX | packed Hilbert R-tree over points | `spatial` | flatbush-style layout with i32 boxes (B8) |
 | 7 | ARCS | shared arcs, delta coordinates on 1e-7°, per-vertex LOD level | `geometry` | bit-packed deltas (B10) |
@@ -139,7 +139,7 @@ one column table (D-074, `teigeodata_core::table`):
 
 ```text
 columns u16, reserved u16 (0)
-directory [{ id u16, codec u8 (0 bitpack, 1 bitmap), reserved u8 (0), len u32 }; columns]
+directory [{ id u16, codec u8 (0 bitpack, 1 bitmap, 2 bytes), reserved u8 (0), len u32 }; columns]
 bodies    each column's bytes in directory order, back to back
 ```
 
@@ -170,6 +170,8 @@ bodies    each column's bytes in directory order, back to back
   ```
 
   Overhead 3.125%; a rank reads one entry and popcounts at most eight words.
+- Codec 2 is raw bytes whose meaning the section defines, zero-padded to a multiple of 4
+  (D-077): NAMES' symbol tables and text.
 - A FOR block's base and width bound its values (`base` to `base + 2^w − 1`), which serves as
   a zone map for free.
 - Opening a section checks the frame and every column's structure (O(blocks)); a deep check of
@@ -232,6 +234,42 @@ REDIRECTS has one value per retired ID, in increasing order of the retired ID:
   in IDMAP looks in REDIRECTS (one hop: chains are flattened).
 - **Deep checks:** sorted IDs strictly increasing and each at the row `order` names (which
   makes `order` a permutation); every ID valid; retired IDs not current; survivors current.
+
+### NAMES
+
+`item_count` equals PLACES'. A place's records are adjacent, its canonical name (the schema's
+required `name`) first, so a display name is one O(1) read and one decode.
+
+| ID | Column | Values | |
+|---:|---|---|---|
+| 1 | first | per place and one more: its first record; at least one record per place | required, O(1) coding |
+| 2 | text end | per record: where its codes end in the heap (they start where the previous ones end) | required, O(1) coding |
+| 3 | table | per record: its symbol table | required |
+| 4 | lang | BCP 47 language, up to 4 ASCII letters packed little-endian into a u32; 0 = undetermined | optional |
+| 5 | script | ISO 15924 script, packed the same way; 0 = unknown | optional |
+| 6 | type | 1 official, 2 local, 3 alt, 4 colloquial, 5 historical, 6 former official; 0 = unspecified | optional |
+| 7, 8 | valid from, to | a biased day since 1970-01-01; 0 = open | optional |
+| 9 | rule | the precedence step behind a canonical name; 0 = none | optional |
+| 10 | tables | codec 2: count u32 (1 to 16), then each FSST symbol table | required |
+| 11 | heap | codec 2: every record's codes, back to back, zero-padded to a multiple of 4 | required |
+
+- **FSST** (`teigeodata_core::fsst`): a table of up to 255 symbols of 1 to 8 bytes; code 255
+  escapes one literal byte; a record is at most 255 codes, so a 2,040-byte buffer holds any
+  name. Table layout:
+
+  ```text
+  symbols u8, reserved [u8; 7] (0)
+  lens    [u8; symbols], zero padding to a multiple of 8
+  bytes   [[u8; 8]; symbols]   zero past each symbol's length
+  ```
+- **Tables:** table 0 is trained on every text; each script with at least 16 KiB of text and
+  less than half of all text gets its own (largest first, up to 15 more). Each record takes the
+  table that codes it shorter. Training is deterministic.
+- **Text end and first** always take an O(1) coding (FOR or ramp): delta saved 6% on Nepal but
+  added 50 ns to every read.
+- **Deep check:** places start at record 0, each has records, the last ends at the last record;
+  text spans increase and stay in the heap, whose padding is zero and under 4 bytes; every text
+  decodes to UTF-8 with a valid table; tags and types are valid.
 
 ### COMPONENTS
 
