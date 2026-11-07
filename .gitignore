@@ -18,3 +18,4 @@ node_modules/
 /bindings/swift/.build/
 /bindings/jvm/build/
 __pycache__/
+/bindings/dart/pubspec.lock

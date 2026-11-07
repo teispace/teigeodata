@@ -70,6 +70,16 @@ const TARGETS: &[Target] = &[
         output: "bindings/jvm/java/org/teispace/teigeodata/TeiGeodataException.java",
         rustfmt: false,
     },
+    Target {
+        template: "swift.j2",
+        output: "bindings/swift/Sources/TeiGeodata/TeiGeodata.swift",
+        rustfmt: false,
+    },
+    Target {
+        template: "dart.j2",
+        output: "bindings/dart/lib/src/bindings.g.dart",
+        rustfmt: false,
+    },
 ];
 
 const IDL_OUTPUT: &str = "bindings/idl.json";
@@ -168,6 +178,19 @@ fn pascal(s: &str) -> String {
         .map_or_else(String::new, |f| f.to_uppercase().chain(chars).collect())
 }
 
+/// `SCREAMING_SNAKE` or `CamelCase` to `lowerCamelCase`: `SAMPLE_ROWS_MAX` → `sampleRowsMax`,
+/// `InvalidArgument` → `invalidArgument`.
+fn camel_lower(s: &str) -> String {
+    let snake = if s.contains('_') || s.chars().all(|c| !c.is_lowercase()) {
+        s.to_lowercase()
+    } else {
+        let mut c = s.chars();
+        c.next()
+            .map_or_else(String::new, |f| f.to_lowercase().chain(c).collect())
+    };
+    camel(&snake)
+}
+
 /// `CamelCase` to `SCREAMING_SNAKE_CASE`.
 fn screaming(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 4);
@@ -193,6 +216,7 @@ fn environment(root: &Path) -> Result<Environment<'static>, String> {
     env.add_filter("camel", |s: &str| camel(s));
     env.add_filter("pascal", |s: &str| pascal(s));
     env.add_filter("screaming", |s: &str| screaming(s));
+    env.add_filter("camel_lower", |s: &str| camel_lower(s));
     let dir = root.join("xtask/templates");
     let entries = fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     for entry in entries.flatten() {
@@ -235,7 +259,7 @@ fn rustfmt(root: &Path, text: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{camel, pascal, screaming};
+    use super::{camel, camel_lower, pascal, screaming};
 
     #[test]
     fn cases() {
@@ -243,5 +267,8 @@ mod tests {
         assert_eq!(pascal("sample_rows"), "SampleRows");
         assert_eq!(pascal("InvalidArgument"), "InvalidArgument");
         assert_eq!(screaming("InvalidArgument"), "INVALID_ARGUMENT");
+        assert_eq!(camel_lower("SAMPLE_ROWS_MAX"), "sampleRowsMax");
+        assert_eq!(camel_lower("InvalidArgument"), "invalidArgument");
+        assert_eq!(camel_lower("MAX"), "max");
     }
 }

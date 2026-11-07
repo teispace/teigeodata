@@ -1,0 +1,5 @@
+module CTeiGeodata [system] {
+    header "shim.h"
+    link "teigeodata_ffi"
+    export *
+}
