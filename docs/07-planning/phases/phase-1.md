@@ -54,7 +54,7 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 - [x] B6 presence → COMPONENTS: a poppy rank bitmap (column-table codec 1) or sorted rows, the smaller per component; crossover near 10%; rank 6.9 ns, a field read 7–20 ns; select not needed (D-076, [note](../../02-research/notes/presence.md), [results](../../02-research/benches/phase-1.md#b6-presence-components))
 - [x] B3 names: FSST with our own safe decoder and deterministic trainer (3–5% smaller than `fsst-rs`), per-script tables, column-table codec 2 → NAMES; 10.6 B per place on Nepal, a canonical name 65 ns (D-077, [note](../../02-research/notes/names-storage.md), [results](../../02-research/benches/phase-1.md#b3-names-fsst))
 - [ ] B4 blobs: zstd frames, `ruzstd` decode → BLOBS (research in the names note)
-- [ ] B12 integrity: eager against lazy hashing, 16 against 64 KiB blocks → BLOCK_HASHES; L2
+- [x] B12 integrity: 16 KiB BLAKE3 chaining values per section of 1 MiB or more, merged into the table hash (no separate trust root); proof 237 µs and a first read 8.8 µs at 100 MB, against 55.6 ms eager (D-078, [note](../../02-research/notes/block-hashes.md), [results](../../02-research/benches/phase-1.md#b12-integrity-block_hashes)) → BLOCK_HASHES; L2
 
 ### 1.5 Hardening
 - [x] Nightly CI: cargo-fuzz (libFuzzer) on the same harness functions, Miri on the reader tests
@@ -79,3 +79,4 @@ fuzzed, benchmarked and specified. Exit: milestone **M1** ([roadmap](../roadmap.
 | 2026-11-07 | B6 done: two presence forms instead of a bitmap only; select dropped | measured: each form loses 3.6–70× at the other end of the density range; no reader needs select |
 | 2026-11-07 | B3 and B4 split; B3 done with FSST, lz4 rejected | measured: FSST is the only option both small and fast per place; zstd is 230× slower per place |
 | 2026-11-07 | 1.5: nightly fuzz (8 libFuzzer targets: the 4 pack harnesses plus sections, bitpack, table, bits) and Miri; determinism gate in `tests/determinism.rs` | D-072: one harness per property, run by `cargo test` and libFuzzer |
+| 2026-11-07 | B12 done: 16 KiB block CVs, coverage canonical | measured: 16 KiB reads 4× faster than 64 KiB for 0.15% more size; the hazmat merge removes a separate root |

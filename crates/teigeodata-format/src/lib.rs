@@ -32,6 +32,7 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+pub mod blocks;
 mod columns;
 pub mod components;
 mod error;

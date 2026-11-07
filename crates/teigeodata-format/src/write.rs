@@ -171,12 +171,41 @@ impl Writer {
         self.section(kind, encoding, item_count, len, len, hash)
     }
 
+    /// The coverage rule of `BLOCK_HASHES` (B12), from the planned lengths: a list exactly when
+    /// a section is 1 MiB or more, of the length and item count those sections need.
+    fn check_block_hashes(&self) -> Result<(), Error> {
+        use crate::blocks::{blocks_of, covered};
+        let big: Vec<u64> = self
+            .sections
+            .iter()
+            .filter(|(k, p)| covered(**k, p.length))
+            .map(|(_, p)| p.length)
+            .collect();
+        let cvs: u64 = big.iter().map(|&l| blocks_of(l)).sum();
+        let want = 16 + 16 * big.len() as u64 + 32 * cvs;
+        match self.sections.get(&Kind::BLOCK_HASHES) {
+            None if big.is_empty() => Ok(()),
+            Some(p)
+                if !big.is_empty()
+                    && p.encoding == Encoding::RAW
+                    && p.length == want
+                    && p.item_count == cvs =>
+            {
+                Ok(())
+            }
+            _ => Err(Error::Write(
+                "BLOCK_HASHES must cover exactly the sections of 1 MiB or more (blocks::encode)",
+            )),
+        }
+    }
+
     /// Plans the file. With `signed`, a 72-byte signature slot follows the manifest, to be
     /// filled by [`Layout::set_signature`] from [`Layout::digest`].
     ///
     /// # Errors
     /// [`Error::Write`] if the head exceeds 16 KiB or the file exceeds `u64`.
     pub fn layout(&self, signed: bool) -> Result<Layout, Error> {
+        self.check_block_hashes()?;
         let too_big = Error::Write("the head is longer than 16 KiB");
         let mut manifest = Vec::new();
         for (tag, v) in &self.manifest {
@@ -358,6 +387,14 @@ impl Layout {
                 return Err(Error::Write(
                     "a section's bytes differ from its length or hash",
                 ));
+            }
+            if p.kind == Kind::BLOCK_HASHES {
+                let all: Vec<(Kind, u64, [u8; 32])> = self
+                    .placed
+                    .iter()
+                    .map(|q| (q.kind, q.length, q.hash))
+                    .collect();
+                crate::blocks::prove_all(bytes, &all)?;
             }
             out.resize(usize::try_from(p.offset).unwrap_or(usize::MAX), 0);
             out.extend_from_slice(bytes);

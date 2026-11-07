@@ -9,7 +9,7 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use teigeodata_bench::{bench_key, pack_of_size};
-use teigeodata_format::Pack;
+use teigeodata_format::{Kind, Pack};
 
 const MB: usize = 1 << 20;
 
@@ -48,6 +48,30 @@ fn open(c: &mut Criterion) {
                 b.iter(|| p.verify_sections().is_ok());
             },
         );
+    }
+    g.finish();
+
+    // B12: a covered section read lazily. The proof of its block hashes once, then the first
+    // read of one record: one 16 KiB block hashed.
+    let mut g = c.benchmark_group("L2-verify-lazy");
+    for (mb, bytes) in &packs {
+        let Ok(pack) = Pack::open(bytes) else {
+            continue;
+        };
+        let Ok(Some(blocks)) = pack.blocks(Kind::IDMAP) else {
+            continue;
+        };
+        g.bench_function(format!("prove/{mb}MB"), |b| {
+            b.iter(|| pack.blocks(black_box(Kind::IDMAP)).is_ok());
+        });
+        let n = blocks.len();
+        let mut i = 0;
+        g.bench_function(format!("first-read/{mb}MB"), |b| {
+            b.iter(|| {
+                i = (i * 7 + 13) % n;
+                blocks.verify(black_box(i)).is_ok()
+            });
+        });
     }
     g.finish();
 

@@ -129,7 +129,7 @@ parameters).
 | 12 | COMPONENTS | per component: presence (none, a bitmap or sorted rows) + dense field columns | `components` | column table (D-076): a bitmap costs 0.129 B per row, sparse sorted rows far less |
 | 13 | DEM | tile directory + coded tiles at ±1 m | `dem` | MED prediction + entropy coder (B11) |
 | 14 | BLOBS | cold data (attribution text, long strings) | `zstd` | zstd blocks with a dictionary, `ruzstd` decode (B4) |
-| 15 | BLOCK_HASHES | per-block BLAKE3 for large sections (lazy verification) | `verify` | 16 or 64 KiB blocks (B12) |
+| 15 | BLOCK_HASHES | per-block BLAKE3 for large sections (lazy verification) | `verify` | raw (D-078): the BLAKE3 chaining value of each 16 KiB block of every section of 1 MiB or more |
 | 16 | REDIRECTS | retired IDs: each to its survivor, or to none for a tombstone ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)) | `core` | column table (D-075): sorted ID pairs |
 
 ### Column tables (encoding 1)
@@ -292,6 +292,29 @@ Optional per-place fields, grouped into the schema's
 - What each component and field number means is assigned with the forge (Phase 3), from the
   schema.
 
+### BLOCK_HASHES
+
+Lazy verification of large sections (D-078, [note](../02-research/notes/block-hashes.md)). Every
+section of **1 MiB or more** (other than this one) has an entry, and no other section does: the
+coverage is canonical, checked on open, and the writer refuses a pack without it. `item_count` is
+the number of chaining values.
+
+| Part | Bytes | Content |
+|---|---:|---|
+| header | 16 | `block_log2` u8 (14: 16 KiB), 3 reserved zero bytes, `entries` u32, `cvs` u64 |
+| directory | 16 per entry | `kind` u32, reserved zero u32, `first` u64 (the index of the section's first CV); kinds strictly increasing |
+| chaining values | 32 per block | the BLAKE3 chaining value of each 16 KiB block, the last one short |
+
+- **The list needs no trust root of its own:** the CVs of a section are exactly the leaves of
+  its BLAKE3 tree at 16-chunk granularity, so merging them in tree order (`blake3::hazmat`)
+  gives the section hash in the table, which the head digest covers. `Pack::blocks(kind)` proves
+  a section's slice once (78 ns per block, 237 µs for 50 MB); `Blocks::verify(i)` then hashes one block on its
+  first read (8.8 µs), and `Blocks::bytes(range)` verifies the blocks a range touches.
+- **Memo:** `Blocks::with_memo` takes a caller's slice of `AtomicUsize` (`memo_words` long) as a
+  bitmap of verified blocks, so a block is hashed once; the reader allocates nothing.
+- **Opening** checks the header, the directory and the coverage against the section table;
+  the writer proves every entry's content before it assembles.
+
 ### REGION (from spike S2)
 
 The design proven exact in [spike S2](../02-research/benches/s2-region-index.md):
@@ -327,8 +350,10 @@ The design proven exact in [spike S2](../02-research/benches/s2-region-index.md)
 Then, on demand:
 - `Pack::verify_signature(keys)` against a set of trusted keys;
 - `Pack::verify_sections()` or `Section::verify()` for the BLAKE3 of each section: eagerly for
-  small packs (`Pack::open_verified`), or lazily on first use (B12 decides the default and the
-  per-block hashes of large sections).
+  small packs (`Pack::open_verified`, 55.6 ms per 100 MB);
+- `Pack::blocks(kind)` for a section of 1 MiB or more: its block hashes proved once, then each
+  16 KiB block verified on first read ([BLOCK_HASHES](#block_hashes), D-078). The engine (Phase 4)
+  reads large sections this way and verifies small ones whole.
 
 ## Physical file names and installs
 

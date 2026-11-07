@@ -125,6 +125,13 @@ pub fn open(data: &[u8]) {
     }
 }
 
+/// A section kind for a model: any of 0 to 39 except `BLOCK_HASHES`, which is derived from the
+/// other sections (`blocks::encode`); model sections are under 1 MiB, so a pack has none.
+fn model_kind(b: u8) -> Kind {
+    let k = u32::from(b) % 39;
+    Kind(k + u32::from(k >= Kind::BLOCK_HASHES.0))
+}
+
 /// A model from fuzz bytes: written, read back unchanged, every change detected.
 pub fn round_trip(data: &[u8]) {
     let mut c = Cursor(data);
@@ -143,7 +150,7 @@ pub fn round_trip(data: &[u8]) {
     }
     let mut sections = Vec::new();
     for _ in 0..c.u8() % 12 {
-        let kind = Kind(u32::from(c.u8()) % 40);
+        let kind = model_kind(c.u8());
         let encoding = Encoding(u16::from(c.u8() % 3));
         let bytes = c.bytes(300);
         let items = c.u64();
@@ -230,6 +237,12 @@ pub fn round_trip(data: &[u8]) {
         Pack::open(&bytes[..at]).is_err(),
         "a truncation to {at} bytes was accepted"
     );
+}
+
+/// Recomputes the head hash after an edit of the head, for tests that forge a field the
+/// writer always sets right.
+pub fn reseal_head(bytes: &mut [u8]) {
+    reseal(bytes);
 }
 
 /// Recomputes the head hash after an edit, so the reader's later checks are reached.

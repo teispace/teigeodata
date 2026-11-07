@@ -68,18 +68,31 @@ pub fn pack_of_size(bytes: usize, seed: u64) -> Result<Vec<u8>, Error> {
         .collect();
     let mut w = Writer::new("np", "places", "2026.11.0")?;
     w.build_id(seed).created_unix(1_762_473_600);
-    for (kind, body) in [Kind::IDMAP, Kind::PLACES, Kind::NAMES]
+    let kinds = [Kind::IDMAP, Kind::PLACES, Kind::NAMES];
+    let mut all: Vec<(Kind, &[u8])> = kinds
         .into_iter()
-        .zip(&bodies)
-    {
+        .zip(bodies.iter().map(Vec::as_slice))
+        .collect();
+    for &(kind, body) in &all {
         let items = u64::try_from(body.len() / 8).unwrap_or(0);
         w.section_bytes(kind, Encoding::RAW, items, body)?;
+    }
+    // Sections of 1 MiB or more need their block hashes (B12).
+    let list = teigeodata_format::blocks::encode(&all)?;
+    if let Some(l) = &list {
+        let items = teigeodata_format::blocks::item_count(l);
+        w.section_bytes(Kind::BLOCK_HASHES, Encoding::RAW, items, l)?;
+        all.push((Kind::BLOCK_HASHES, l));
     }
     let mut layout = w.layout(true)?;
     let key = bench_key();
     let block = signer(&key)(layout.digest());
     layout.set_signature(&block)?;
-    let refs: Vec<&[u8]> = bodies.iter().map(Vec::as_slice).collect();
+    let refs: Vec<&[u8]> = layout
+        .placed()
+        .iter()
+        .filter_map(|p| all.iter().find(|s| s.0 == p.kind).map(|s| s.1))
+        .collect();
     layout.assemble(&refs)
 }
 
@@ -353,5 +366,15 @@ mod tests {
         let pack = pack_of_size(100_000, 1);
         assert!(pack.as_ref().is_ok_and(|b| Pack::open_verified(b).is_ok()));
         assert_eq!(pack, pack_of_size(100_000, 1));
+        // Large enough to need block hashes: it still opens, verifies, and its blocks prove.
+        let big = pack_of_size(6 << 20, 1);
+        let open = big.as_ref().map(|b| Pack::open_verified(b));
+        assert!(open.as_ref().is_ok_and(Result::is_ok));
+        if let Ok(Ok(p)) = &open {
+            assert!(
+                p.blocks(teigeodata_format::Kind::IDMAP)
+                    .is_ok_and(|b| b.is_some())
+            );
+        }
     }
 }

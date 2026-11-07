@@ -251,14 +251,30 @@ impl<'a> Pack<'a> {
             None => None,
         };
         check_sections(bytes, table, head.end, len - FOOTER_LEN)?;
-        Ok(Self {
+        let pack = Self {
             bytes,
             header,
             table,
             manifest,
             digest,
             signature,
-        })
+        };
+        crate::blocks::check(pack.section(Kind::BLOCK_HASHES), pack.sections())?;
+        Ok(pack)
+    }
+
+    /// Section `kind`'s block hashes, proven against its hash (B12): O(blocks) merges, no
+    /// hashing of the section; then [`Blocks::verify`](crate::blocks::Blocks::verify) checks
+    /// a block on first read. `None` if there is no such section or it is under 1 MiB (verify
+    /// it whole with [`Section::verify`]).
+    ///
+    /// # Errors
+    /// [`Error::SectionHash`] if the block hashes do not give the section hash.
+    pub fn blocks(&self, kind: Kind) -> Result<Option<crate::blocks::Blocks<'a, 'static>>, Error> {
+        match self.section(kind) {
+            Some(s) => crate::blocks::Blocks::prove(s, self.section(Kind::BLOCK_HASHES)),
+            None => Ok(None),
+        }
     }
 
     /// Opens a pack and hashes every section: [`Pack::open`] then [`Pack::verify_sections`].

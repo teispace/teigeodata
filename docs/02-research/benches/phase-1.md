@@ -45,8 +45,9 @@ Packs of 1, 10 and 100 MB: three sections of pseudo-random bytes, a manifest and
 **Findings:**
 - **Opening costs the same at every size,** because `open` reads only the head (at most 16 KiB).
   A 100 MB pack is usable after 0.7 µs. Hashing is what scales with size: eager hashing of
-  100 MB takes 55 ms on one core. B12 decides when sections are hashed (eager, on first use, or
-  per block), and that decides the default.
+  100 MB takes 55 ms on one core. Large sections are verified per block instead
+  ([B12](#b12-integrity-block_hashes)): 0.24 ms to prove the block hashes, then 8.8 µs per block
+  on its first read.
 - **BLAKE3 already uses NEON:** enabling the `neon` feature changed nothing (p = 0.90). The
   runtime keeps `default-features = false`.
 - **Ed25519 precomputed tables** (the `fast` feature) verify in 31.9 µs, against 34.4 µs without
@@ -312,3 +313,22 @@ Decode: all names 750 MB/s; one random name 27 ns (load 26).
   heap; re-profile on an idle machine (two offset reads, the table pick and the UTF-8 check are
   the candidates).
 
+## B12: integrity (BLOCK_HASHES)
+
+**Question:** how is a large section verified without hashing it whole on first use?
+**Design:** the BLAKE3 chaining value of each 16 KiB block, merged into the table hash
+([note](../notes/block-hashes.md), D-078). **Bench:** `cargo bench -p teigeodata-bench --bench
+format -- L2`, sections of a half, a third and a sixth of the pack; the lazy columns read the half (IDMAP); 2026-11-07, load 6.
+
+| Pack | Eager: hash every section | Prove the half's block hashes | First read of one block |
+|---|---:|---:|---:|
+| 10 MB | 5.58 ms | 23.8 µs | 8.79 µs |
+| 100 MB | 55.6 ms | 237 µs | 8.86 µs |
+
+**Findings:**
+- **A first read costs one 16 KiB hash at any size:** 8.8 µs, 6,300× less than hashing the
+  100 MB pack. The proof grows with the section (78 ns per block, about 5 ms per GiB) and runs
+  once per open.
+- **Eager hashing is unchanged** by the list (5.58 and 55.6 ms, p > 0.5), and small packs keep it.
+- The 16 against 64 KiB comparison, the memo cost (0.7 ns a check) and the parallel full verify
+  are in the [note](../notes/block-hashes.md); phone and wasm numbers are not measured yet.
