@@ -68,6 +68,9 @@ pub(crate) fn map(kind: Kind, e: TableError) -> Error {
         TableError::Missing(id) => (id, "a required column is missing"),
         TableError::Column(id, PackError::Truncated) => (id, "the column is truncated"),
         TableError::Column(id, PackError::Header) => (id, "the column header is invalid"),
+        TableError::Column(id, PackError::Block) => {
+            (id, "a delta block does not start at its base")
+        }
         TableError::Column(id, _) => (id, "the column directory is inconsistent"),
         TableError::Bits(id, _) => (id, "the bitmap is invalid"),
         TableError::Codec(id) => (id, "the column has the wrong codec"),

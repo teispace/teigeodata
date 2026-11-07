@@ -57,6 +57,9 @@ pub enum PackError {
     /// A width above 32, an offset that does not follow from the widths, non-zero padding, or
     /// bytes after the payload.
     Directory,
+    /// A delta block whose first delta is not 0: the base is the block's first value, so a
+    /// block's first value reads the same through `get` and `block_first`.
+    Block,
 }
 
 impl fmt::Display for PackError {
@@ -65,6 +68,7 @@ impl fmt::Display for PackError {
             Self::Truncated => "the packed column is truncated",
             Self::Header => "the packed column header is invalid",
             Self::Directory => "the packed column directory is inconsistent",
+            Self::Block => "a delta block does not start at its base",
         })
     }
 }
@@ -235,14 +239,24 @@ impl<'a> Packed<'a> {
         if !tail.is_empty() || payload.len() as u64 != next {
             return Err(PackError::Directory);
         }
-        Ok(Self {
+        let column = Self {
             count,
             coding,
             bases,
             offsets,
             widths,
             payload,
-        })
+        };
+        // Canonical delta blocks: the first delta is 0 (O(1) per block, no unpacking).
+        if coding == Coding::Delta
+            && (0..blocks).any(|b| {
+                let (words, width, _) = column.block_words(b);
+                packed_at(words, width, 0) != 0
+            })
+        {
+            return Err(PackError::Block);
+        }
+        Ok(column)
     }
 
     /// The number of values.
@@ -673,6 +687,23 @@ mod tests {
                 .map(|i| i.wrapping_mul(2_654_435_761_u32).rotate_left(i % 31))
                 .collect::<Vec<_>>(),
         );
+    }
+
+    #[test]
+    fn a_delta_block_must_start_at_its_base() {
+        let values: Vec<u32> = (0..200).map(|i| i * 7 + i % 3).collect();
+        let good = encode(&values, Coding::Delta);
+        let p = Packed::parse(&good).unwrap();
+        assert_eq!(p.block_first(1), p.get(BLOCK_LEN));
+        // Two blocks: the payload starts after the header, two bases, two offsets and the
+        // padded widths; its first word holds lane 0's first delta in its low bits.
+        let mut bad = good.clone();
+        bad[8 + 8 + 8 + 4] |= 1;
+        assert_eq!(Packed::parse(&bad).err(), Some(PackError::Block));
+        // FOR has no such rule: the same edit is a valid FOR column.
+        let mut f = encode(&values, Coding::For);
+        f[8 + 8 + 8 + 4] ^= 1;
+        assert!(Packed::parse(&f).is_ok());
     }
 
     #[test]
