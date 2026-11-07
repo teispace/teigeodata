@@ -28,6 +28,8 @@ jobs:
   fuzz:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      TARGET: x86_64-unknown-linux-gnu
     strategy:
       fail-fast: false
       matrix:
@@ -50,15 +52,17 @@ jobs:
           restore-keys: fuzz-corpus-${{ matrix.target }}-
       - name: Fuzz
         working-directory: fuzz
+        # The prebuilt cargo-fuzz is a musl binary and defaults to its own build target, where
+        # the sanitizers cannot link: name the host target.
         run: |
           mkdir -p corpus/${{ matrix.target }}
-          cargo +nightly fuzz run ${{ matrix.target }} corpus/${{ matrix.target }} -- \
+          cargo +nightly fuzz run --target "$TARGET" ${{ matrix.target }} corpus/${{ matrix.target }} -- \
             -max_total_time=${{ inputs.seconds || '300' }} -max_len=4096 -rss_limit_mb=2048 \
             -timeout=10 -print_final_stats=1
       - name: Minimise the corpus
         if: success()
         working-directory: fuzz
-        run: cargo +nightly fuzz cmin ${{ matrix.target }} corpus/${{ matrix.target }}
+        run: cargo +nightly fuzz cmin --target "$TARGET" ${{ matrix.target }} corpus/${{ matrix.target }}
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: success()
         with:
@@ -84,8 +88,7 @@ jobs:
         run: |
           rustup toolchain install nightly --profile minimal --component miri,rust-src
           cargo +nightly miri setup
-      # Locally 5 of the 34 core tests passed in 9 minutes under Miri: the property tests run
-      # thousands of cases. Bounded here until they take fewer cases under `cfg(miri)`.
+      # The property tests take a thousandth of their cases under Miri (`crate::cases`).
       - name: Core codecs
         timeout-minutes: 90
         run: cargo +nightly miri test --locked -p teigeodata-core --lib
