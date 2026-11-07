@@ -1,7 +1,7 @@
 ---
 title: "The forge (data pipeline)"
 status: draft
-updated: 2026-11-06
+updated: 2026-11-07
 ---
 
 # The forge (data pipeline)
@@ -31,8 +31,9 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | aliases | **built** (S5) | below |
 | dem | **built** (S5) | below |
 | dem-ref, geoid | **built** (S6) | below |
-| geofix-consensus | S5 | weighted Weiszfeld |
-| the rest | Phase 2 | |
+| build (pack writer, sign, read back) | **built** (3.1) | below |
+| geofix-consensus | 3.2 | weighted Weiszfeld (D-091) |
+| the rest | Phase 3 | [phase 3](../07-planning/phases/phase-3.md) |
 
 **ID allocation (pack writer, D-075):** a country's first build allocates serials in the
 Hilbert order of its rows, and later builds give new places the next serials. ID order then
@@ -221,6 +222,44 @@ ATL08 terrain heights, the method of the
 `forge geoid <source> <lat> <lon> […]` prints N at points. On 2026-11-07 it agreed with
 GeographicLib's online egm2008-1 values within 0.12 m at five points (Kathmandu, Everest,
 Kalapani, the eastern Terai, Sydney); the grid's documented maximum is 0.48 m.
+
+## Build a pack (`build`)
+
+`forge build <cc> --release <v> --admin <boundary> [--tz <tz>] [--lite] [--key <seed-file>] <sources…>`
+writes `data/build/pack/<cc>/<cc>-places-<main|lite>.tgd` and `summary-<main|lite>.md` from
+the `conflate` output of the same sources:
+- **Licence gate (G-lic).** `--lite` refuses any source whose licence class is not
+  public-domain, CC0, CC BY, CC BY-IGO, ODC-By or GODL. The timezone source (tbb, ODbL) is
+  main only, so a lite pack has no timezone REGION yet.
+- **Places.** The country (from its Wikidata item), the admin units of every COD-AB level
+  below it (a point inside each polygon, its parent the unit of the level above), one place
+  per conflated cluster (a settlement when any record is a populated place, else a locality;
+  the parent is the deepest admin unit holding it), and one `timezone_area` place per IANA
+  zone that meets the country's box (D-093). A place keeps the names that fit the search key
+  limit; a place with none is left out and counted.
+- **Sections.** Rows in Hilbert order (ties by key), so IDs follow rows (D-075): IDMAP,
+  PLACES, HIERARCHY, NAMES, SEARCH, PLACE_INDEX, and the timezone REGION linked to its places
+  (column 16). Importance is provisional (kind, admin level, log population).
+- **Determinism (G-det).** The build ID is BLAKE3 of the forge version, `sources.lock` and
+  the arguments; the creation time is `SOURCE_DATE_EPOCH` or 0. Two builds give identical
+  bytes.
+- **Sign and read back.** `--key` signs with an Ed25519 seed (64 hex digits). The pack is then
+  opened with the runtime reader: hashes and signature are checked, every section is opened
+  and passes `check`, and every place keeps its ID, point, parent and canonical name, is found
+  by an exact search of that name and is its own nearest place. Every zone holds its own
+  point and links to its row.
+
+Measured on Nepal on 2026-11-07 (release build, Apple M2 Pro):
+
+| Build | Places | Pack | Time | Peak memory |
+|---|---:|---:|---:|---:|
+| main (geofabrik, geonames, wikidata; tbb 2026f) | 96,844 | 7.05 MB | 3.0 s | about 670 MB |
+| lite (geonames, wikidata; no timezones) | 91,266 | 4.26 MB | 1.8 s | |
+
+Main: 2,042 clusters had no usable name; 195 places lie outside every COD-AB unit (border
+points) and have the country as their only ancestor. Peak memory comes from parsing the whole
+timezone GeoJSON; streaming it is follow-up work. Not built yet: the stage cache and stable
+IDs across releases (the ID registry).
 
 **Clean-up.** `cargo xtask clean` removes build output from both workspaces and keeps the
 store: fetched sources are pinned inputs, not build output.

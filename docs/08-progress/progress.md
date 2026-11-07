@@ -10,7 +10,10 @@ updated: 2026-11-07
 
 - **Phase:** 3, forge and Nepal data ([phase file](../07-planning/phases/phase-3.md)); research done in four notes (D-088 to D-091), order in D-092.
 - **M2 met** on 2026-11-07 (D-087), evidence in [phase 2 §2.4](../07-planning/phases/phase-2.md#24-exit-review); POSTAL moved to Phase 3.
-- **Now:** step 3.1, the vertical slice: the forge writes, signs and reads back a Nepal pack.
+- **Now:** step 3.1, the vertical slice. `forge build np` writes, signs and reads back the Nepal
+  pack: 96,844 places in 7.05 MB in 3.0 s, identical bytes on two builds; lite 91,266 places in
+  4.26 MB ([forge build](../04-architecture/forge.md#build-a-pack-build)). Left in 3.1: the
+  stage cache and the ID registry. Then 3.2.
 - **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
@@ -117,3 +120,4 @@ updated: 2026-11-07
 | 2026-11-07 | Phase 2: indexes note (D-081); B8 PLACE_INDEX (D-082); B9 REGION, Q-013 answered (D-083, D-084) | B7 SEARCH |
 | 2026-11-07 | B7 SEARCH: own FST, bit-parallel NFA on code points, FOR lists by importance, block maxima; 1.50 MB, p99 41.2 µs unanchored (D-085, D-086); M2 met, POSTAL to Phase 3 (D-087) | Phase 3 research |
 | 2026-11-07 | Phase 3 research: geometry (D-088), DEM (D-089), postal and Q-001 (D-090), settlement core and building licences (D-091); plan and order (D-092) | 3.1 vertical slice |
+| 2026-11-07 | 3.1: `forge build` writes, signs and reads back the Nepal pack (96,844 places, 7.05 MB, 3.0 s, deterministic); lite 4.26 MB; `interior_point` for admin points; REGION place link (D-093) | Stage cache and ID registry, then 3.2 |

@@ -32,11 +32,13 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 - [x] The four notes above; D-088 to D-092; Q-001 answered as far as primary sources go (D-090)
 
 ### 3.1 Vertical slice
-- [ ] The forge depends on `teigeodata-format` (`write`) and writes a pack from the stages that
+- [x] The forge depends on `teigeodata-format` (`write`) and writes a pack from the stages that
   exist: IDMAP (serials in Hilbert order, D-075), PLACES, HIERARCHY, NAMES, SEARCH, PLACE_INDEX
   and the timezone REGION
-- [ ] Content-addressed stage cache; `forge build <cc> --main|--lite`
-- [ ] Sign, open with the reader, run every section's `check`; G-det: two builds, identical bytes
+- [ ] Content-addressed stage cache (`forge build <cc> [--lite]` is built; the cache and the
+  ID registry for stable IDs across releases are not)
+- [x] Sign, open with the reader, run every section's `check`; G-det: two builds, identical bytes
+  ([forge build](../../04-architecture/forge.md#build-a-pack-build))
 
 ### 3.2 Places: core and consensus
 - [ ] Building readers (OSM, Microsoft, Google Open Buildings v3), tiled and streaming
@@ -75,3 +77,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-07 | Phase 3 planned; vertical slice first | the four research notes (D-088 to D-092) |
+| 2026-11-07 | 3.1: `forge build` writes, signs and reads back the Nepal pack; the cache and ID registry stay open | the slice ran end to end first |

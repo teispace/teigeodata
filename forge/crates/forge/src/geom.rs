@@ -63,6 +63,53 @@ impl Polygon {
         }
         (area2 != 0.0).then(|| (cx / area2, cy / area2))
     }
+
+    /// A point inside the polygon and off its edges, found the same way on every run: on a
+    /// horizontal line through the box (the middle first, then the quarters and eighths), the
+    /// middle of the widest even–odd inside interval, checked with [`Polygon::contains`] and by
+    /// not lying on an edge. `None` when no line gives one (a polygon thinner than the grid).
+    /// Phase 3's polylabel replaces it for labels (D-088); this one only promises "inside".
+    #[allow(clippy::many_single_char_names, reason = "the scanline's coordinates")]
+    pub(crate) fn interior_point(&self) -> Option<(i32, i32)> {
+        let (_, y0, _, y1) = self.bbox()?;
+        let (y0, h) = (i64::from(y0), i64::from(y1) - i64::from(y0));
+        for k in [4_i64, 2, 6, 1, 3, 5, 7] {
+            let Ok(y) = i32::try_from(y0 + h * k / 8) else {
+                continue;
+            };
+            let mut xs: Vec<f64> = Vec::new();
+            for ring in &self.rings {
+                for (a, b) in edges(ring) {
+                    // Half-open in y, so a vertex on the line is counted once.
+                    if (a.1 <= y) != (b.1 <= y) {
+                        let t = (f64::from(y) - f64::from(a.1)) / (f64::from(b.1) - f64::from(a.1));
+                        xs.push(f64::from(a.0) + t * (f64::from(b.0) - f64::from(a.0)));
+                    }
+                }
+            }
+            xs.sort_by(f64::total_cmp);
+            let widest = xs
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|&[l, r]| (l, r))
+                .max_by(|a, b| (a.1 - a.0).total_cmp(&(b.1 - b.0)));
+            let Some((l, r)) = widest else { continue };
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "the middle of two grid longitudes is on the grid"
+            )]
+            let x = f64::midpoint(l, r).round() as i32;
+            let on_edge = self
+                .rings
+                .iter()
+                .any(|ring| ring_parity(ring, (x, y)).is_none());
+            if r - l >= 2.0 && !on_edge && self.contains(x, y) {
+                return Some((x, y));
+            }
+        }
+        None
+    }
 }
 
 /// Edges of a ring, including the closing one (a zero-length no-op when the ring is closed).
@@ -201,6 +248,50 @@ mod tests {
         };
         assert!(wide.contains(0, 0));
         assert!(!wide.contains(1_800_000_000, 0));
+    }
+
+    #[test]
+    fn interior_point_avoids_holes_and_concavities() {
+        let off_edge = |p: &Polygon, (x, y): (i32, i32)| {
+            p.contains(x, y)
+                && p.rings
+                    .iter()
+                    .all(|r| super::ring_parity(r, (x, y)).is_some())
+        };
+        // A hole across the middle line: the point lands beside it, never in it.
+        let holed = Polygon {
+            rings: vec![square(0, 0, 100), square(30, 30, 40)],
+        };
+        let p = holed.interior_point().expect("a point");
+        assert!(off_edge(&holed, p) && !(30..=70).contains(&p.0), "{p:?}");
+        // A C whose centroid and box middle are both outside it.
+        let c = Polygon {
+            rings: vec![vec![
+                (0, 0),
+                (100, 0),
+                (100, 20),
+                (20, 20),
+                (20, 80),
+                (100, 80),
+                (100, 100),
+                (0, 100),
+                (0, 0),
+            ]],
+        };
+        let p = c.interior_point().expect("a point");
+        assert!(off_edge(&c, p), "{p:?}");
+        // The same on every run, and on hostile grids far from the origin.
+        assert_eq!(c.interior_point(), Some(p));
+        let far = Polygon {
+            rings: vec![square(1_799_999_000, 899_999_000, 900)],
+        };
+        assert!(far.interior_point().is_some_and(|q| off_edge(&far, q)));
+        // Thinner than the grid, or empty: no point rather than a wrong one.
+        let thin = Polygon {
+            rings: vec![vec![(0, 0), (1, 0), (1, 100), (0, 100), (0, 0)]],
+        };
+        assert_eq!(thin.interior_point(), None);
+        assert_eq!(Polygon { rings: vec![] }.interior_point(), None);
     }
 
     #[test]

@@ -12,6 +12,7 @@
 //! forge dem <tileset> <points> [...]             DEM heights against stated elevations
 //! forge dem-ref <dem> <ref> <geoid> [<boundary>]  the DEM against a ground reference
 //! forge geoid <source> <lat> <lon> [...]          geoid undulation N at points
+//! forge build <cc> --release <v> --admin <b> …    write and check a country's pack
 //! forge path <source-id>                          print a fetched source's store path
 //! ```
 //!
@@ -23,6 +24,7 @@
 )]
 
 mod aliases;
+mod build;
 mod conflate;
 mod dem;
 mod fetch;
@@ -94,6 +96,7 @@ fn main() -> ExitCode {
 /// The stages: each returns its summary. `None` when `args` names no stage.
 fn stage(root: &Path, args: &[String]) -> Option<Result<String, String>> {
     Some(match args.first().map(String::as_str)? {
+        "build" => build::run(root, args.get(1..).unwrap_or_default()),
         "read" => match (args.get(1), args.get(2..)) {
             (Some(reader), Some(ids)) if !ids.is_empty() => read::run(root, reader, ids),
             _ => Err("usage: forge read <geonames|osm|wikidata> <source-id> [<source-id>…]".into()),
