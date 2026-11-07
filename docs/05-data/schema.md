@@ -22,7 +22,7 @@ from; this page gathers them in one place and does not override them.
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | u64, *required* | Stable, never reused ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)). Text form `tgd:<cc>/<kind>/<base32>`, which round-trips. |
+| `id` | u64, *required* | Stable, never reused ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)). Text form `tgd:<cc>/<serial>`: the allocating country and the serial in Crockford base32, which round-trips (D-070). |
 | `supersedes` | list of u64 | IDs merged into this one |
 | `superseded_by` | u64 | Set on redirects; a tombstone has `superseded_by = null` and `status = retired` |
 | `status` | enum, *required* | `current`, `redirect`, `retired` |
@@ -125,7 +125,6 @@ For each field: `source` (adapter ID), `source_version`, `licence_class` (as in
 
 ## Open items
 
-- The text form of IDs and the base32 alphabet: settle in Phase 1 with round-trip tests.
 - The class dictionary: drafted per country during Phase 3 from source mappings.
 - The importance formula: set and tested against the golden set (spike S3).
 - Postal schemes for Nepal: Q-001.

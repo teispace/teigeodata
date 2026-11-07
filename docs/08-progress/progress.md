@@ -8,10 +8,14 @@ updated: 2026-11-07
 
 ## Where we are
 
-- **Phase:** 0, foundations and research ([phase file](../07-planning/phases/phase-0.md)).
-- **Now:** Phase 0.
-  - **Done:** 0.1 and 0.2; the 0.3 research notes applied (ADR-0035 to ADR-0038); schema and
-    pack-format drafts; spikes S1, S2 and S3.
+- **Phase:** 1, core and format ([phase file](../07-planning/phases/phase-1.md)).
+- **Now:** step 1.1, `teigeodata-core` (stable ID, grid points, Hilbert order). The Phase 1
+  research is done ([core and format](../02-research/notes/core-and-format.md), D-070, D-071).
+- **M0 met** on 2026-11-07 (D-069): each criterion with its evidence in
+  [phase 0 §0.5](../07-planning/phases/phase-0.md#05-exit-review). The maintainer's review is
+  asynchronous. Phase 0 in short:
+  - **Done:** 0.1 to 0.4: foundation, ten research notes applied, schema and pack-format
+    drafts, spikes S1 to S6.
   - **World-general (P16):** every country lives in its own folder,
     `data/countries/<cc>/` (profile, lexicon, curated golden queries), validated by
     `cargo xtask check-data`.
@@ -42,10 +46,10 @@ updated: 2026-11-07
   call; a new function takes one regeneration. Gates: drift, the header against cbindgen,
   boundary lint tables (D-065 to D-068; [results](../02-research/benches/s4-bindings.md)). The
   name fold got a 10× ASCII fast path on the way.
-- **Next:** the M0 review (phase-0 exit criteria). Then Phase 1. Phase 2 carries the S5 and S6
-  follow-ups: the settlement core, geofix-consensus, land-cover-aware DEM fusion, and the
-  colloquial class. The result-format spike decides blob v0's successor and zero-copy blobs for
-  Python, the JVM and Dart.
+- **Next:** step 1.2, the container in `teigeodata-format`; then the benchmarks and codecs of
+  1.3 and 1.4. Phase 2 carries the S5 and S6 follow-ups: the settlement core,
+  geofix-consensus, land-cover-aware DEM fusion, and the colloquial class. The result-format
+  spike decides blob v0's successor and zero-copy blobs for Python, the JVM and Dart.
 - **Blocked:** nothing.
 
 ## Session log
@@ -61,3 +65,4 @@ updated: 2026-11-07
 | 2026-11-07 | S6.1–S6.2: elevation-reference research; POST tilesets with response checks; SlideRule decoder; EGM2008 geoid; `forge dem-ref`: Copernicus LE90 18.7 m in Nepal (D-063) | S6.3 GEDTM30 |
 | 2026-11-07 | S6.3: NASADEM via Planetary Computer tokens and EGM96; paired comparison with Copernicus (D-064); GEDTM30 circularity recorded (Q-016) | S4 bindings |
 | 2026-11-07 | S4: safe API crate, syn IDL, generated C ABI, header, Swift, Dart, Python, Node and JVM layers; parity in all; benchmarks; cbindgen and lint-table gates; `dist` unwinds (D-065 to D-068); ASCII fold fast path | M0 review |
+| 2026-11-07 | CI's binding suites green on Linux (Node test path fixed); M0 review (D-069); Phase 1 research note and plan: crate split, TLV manifest, stable ID text form, bolero, REDIRECTS (D-070, D-071) | 1.1 `teigeodata-core` |

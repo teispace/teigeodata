@@ -1,7 +1,7 @@
 ---
 title: "The .tgd pack format v1 (draft)"
 status: draft
-updated: 2026-11-06
+updated: 2026-11-07
 ---
 
 # The .tgd pack format v1 (draft)
@@ -25,7 +25,10 @@ recorded. The format freezes only when all are (D-029). Until then `format_major
   16 KiB. One range request plans every later read, including the section-delta update
   ([ADR-0037](../03-decisions/adr/ADR-0037-keys-and-hosting.md)).
 - **Deterministic:** the same inputs and builder version give the same bytes. Rows are sorted in
-  Hilbert order of their point (spike S1), ties broken by ID.
+  Hilbert order of their point (spike S1), ties broken by ID. `created_unix` is
+  `SOURCE_DATE_EPOCH` (else 0), and `pack_uuid` is the first 16 bytes of
+  BLAKE3("teigeodata pack uuid" ‖ address ‖ component ‖ release), never random
+  ([core and format](../02-research/notes/core-and-format.md#34-reproducibility)).
 - **Stable section boundaries:** a section whose data did not change between releases keeps its
   bytes and hash, so an update downloads only changed sections.
 - **Forward compatible:** readers skip unknown section kinds by the table. A reader refuses a
@@ -57,6 +60,16 @@ installed and new packs section by section.
 
 ## Manifest
 
+The encoding is our own canonical TLV
+([core and format](../02-research/notes/core-and-format.md#32-the-manifest)):
+- **An entry** is a tag (u16 LE), a length (u32 LE) and that many value bytes.
+- **Canonical:** tags are strictly increasing, so a manifest has exactly one encoding. A reader
+  refuses repeated or out-of-order tags.
+- **Unknown tags:** a reader skips an unknown tag, unless its high bit (`0x8000`) is set. That
+  bit means "must understand": a reader that does not know the tag refuses the pack, so a field
+  that changes meaning is never ignored silently.
+- **Nesting:** a structured value, such as a column descriptor, is itself a TLV list.
+
 | Entry | Content |
 |---|---|
 | identity | address (`np`, `ae-du`, `in-br-t07`), component, release, pack UUID ([ADR-0010](../03-decisions/adr/ADR-0010-addressing-and-baseline.md)) |
@@ -87,6 +100,7 @@ installed and new packs section by section.
 | 13 | DEM | tile directory + coded tiles at ±1 m | `dem` | MED prediction + entropy coder (B11) |
 | 14 | BLOBS | cold data (attribution text, long strings) | `zstd` | zstd blocks with a dictionary, `ruzstd` decode (B4) |
 | 15 | BLOCK_HASHES | per-block BLAKE3 for large sections (lazy verification) | `verify` | 16 or 64 KiB blocks (B12) |
+| 16 | REDIRECTS | retired IDs: each to its survivor, or to none for a tombstone ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)) | `core` | sorted ID pairs, as IDMAP (B5) |
 
 ### REGION (from spike S2)
 
@@ -125,5 +139,7 @@ A new version always gets a new file. A file that may be mapped is never written
 ## Open items
 
 - The 14 benchmarks B1–B14 (catalogue in [benchmarks](../06-engineering/benchmarks.md)).
-- The manifest TLV tag list and its fuzz corpus.
+- The manifest tag list and its fuzz corpus (Phase 1, step 1.2).
+- Payloads that follow in later phases inside the frame fixed in Phase 1 (D-071): SEARCH,
+  PLACE_INDEX, POLY_INDEX, REGION and POSTAL in Phase 2; ARCS and POLYGONS with B10; DEM with B11.
 - Whether the reader crate keeps `#![forbid(unsafe_code)]` with mmap outside it (B13).

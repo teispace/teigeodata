@@ -1,7 +1,7 @@
 ---
 title: "Phase 0: foundations and research"
 status: living
-updated: 2026-11-06
+updated: 2026-11-07
 ---
 
 # Phase 0: foundations and research
@@ -61,13 +61,21 @@ repository has its working machinery. Exit: milestone **M0** ([roadmap](../roadm
   - [x] S6.3 NASADEM, the lite-build DEM, against ATL08 (Planetary Computer, anonymous token): LE90 17.7 m, Copernicus better except under forest (D-064); GEDTM30 waits for an independent reference (Q-016: it was trained on ATL08)
 
 ### 0.5 Exit review
-- [ ] M0 criteria met; progress updated; maintainer review
+- [x] M0 criteria met (2026-11-07), each against the [roadmap](../roadmap.md):
+  - docs system: 92 Markdown files, `cargo xtask check-docs` green, conventions and templates in place;
+  - research notes: the ten notes of 0.2, applied to the plan in 0.3;
+  - spikes measured: S1 to S6, each with a results page in `docs/02-research/benches/`;
+  - baseline accuracy of existing data for Nepal: S5 ([results](../../02-research/benches/s5-nepal.md)) and S6 ([results](../../02-research/benches/s6-elevation.md)), with the accuracy targets (D-062);
+  - CI fast-check green: run 42325281678, every job, including the six binding suites on Linux.
+- [x] Progress updated; Phase 1 planned ([phase 1](phase-1.md))
+- [ ] Maintainer review: asynchronous, does not block Phase 1 (D-069)
 
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-06 | Phase 0 planned | Project start |
+| 2026-11-07 | M0 met; maintainer review made asynchronous | D-069 |
 | 2026-11-06 | S3 done; the COD-AB join key ignores spaces (a conflation bug found by S3), golden set regenerated (512 queries) | Spike S3 |
 | 2026-11-06 | Country folders (`data/countries/<cc>/`: profile, lexicon, curated golden) and `check-data`; golden set v0 | Maintainer: everything world-general (P16) |
 | 2026-11-06 | Benchmarking note and catalogue added; S2 done | Maintainer asked for proper benchmarks across features, cases and bindings |

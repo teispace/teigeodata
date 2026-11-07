@@ -1,7 +1,7 @@
 ---
 title: "Decision log"
 status: living
-updated: 2026-11-06
+updated: 2026-11-07
 ---
 
 # Decision log
@@ -123,3 +123,6 @@ Every decision, newest last. Architecture-shaping decisions link their ADR ([con
 | D-066 | 2026-11-07 | Bindings as built in S4: the hand-written safe crate `teigeodata-api` is the single source; `cargo xtask bindings` extracts `bindings/idl.json` from it with `syn` (not from the C ABI, whose signatures lose meaning) and renders every mechanical layer from minijinja templates; generated files are checked in, with a drift gate and a header cross-check against cbindgen. Six functions reach C, Swift, Dart, Python, Node and the JVM; a new function costs one Rust function, one regeneration and one parity line per language | [S4](../02-research/benches/s4-bindings.md), [bindings](../04-architecture/bindings.md) |
 | D-067 | 2026-11-07 | The PyO3, napi-rs and JNI shims live in their own Cargo workspace (`bindings/`), like the forge, so their dependencies never reach the runtime graph. Boundary crates copy the main lint table with only `unsafe_code` lowered to `deny`; `check-workspace` enforces it | [C ABI](../04-architecture/abi.md) |
 | D-068 | 2026-11-07 | Result blob format v0 (`teigeodata-blob`): 16-byte header, 40-byte descriptors, typed columns 8-byte aligned, Arrow-style UTF-8 offsets; a validating reader. Swift and Node receive blobs without a copy; Python, the JVM and Dart copy once for now. v0 is the baseline the result-format spike must beat | [bindings](../04-architecture/bindings.md#3-results-the-blob) |
+| D-069 | 2026-11-07 | M0 is met: each roadmap criterion checked with its evidence in phase 0 §0.5. The maintainer's review is asynchronous and does not block Phase 1, per the standing preference to work without pauses; anything it raises is applied when it comes | [phase 0](../07-planning/phases/phase-0.md#05-exit-review) |
+| D-070 | 2026-11-07 | The stable ID is a u64 of a 16-bit allocation namespace (the allocating country, from its two letters; 0 for none) and a 48-bit serial. Its text form is `tgd:<cc>/<serial>`, the serial in lower-case Crockford base32 with no leading zeros, one text per ID. Kind leaves the ID because a place's kind can change and its ID cannot. Country builds allocate without coordination | [core and format](../02-research/notes/core-and-format.md#33-the-stable-id) |
+| D-071 | 2026-11-07 | Phase 1 builds `teigeodata-core` (`no_std`, no dependencies) and `teigeodata-format` (`zerocopy` views, own canonical TLV manifest with a critical bit, `write` and `signature` features), fuzzed with bolero and measured with criterion and gungraun. M1's "every section kind" means every kind has its frame, validation and round trip; index, geometry and DEM payloads follow in their phases. Section kind 16, REDIRECTS, is added for ADR-0008's redirects and tombstones | [phase 1](../07-planning/phases/phase-1.md) |
