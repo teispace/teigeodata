@@ -62,7 +62,11 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 - [x] ARCS and POLYGONS sections, in the Nepal packs (D-097)
 - [x] POLY_INDEX on the tree shared with PLACE_INDEX, in the Nepal packs; leaf order and node
   size A/B (D-099, [B10](../../02-research/benches/phase-3.md#b10-poly_index-and-ring-reads))
-- [ ] The admin REGION on the shared arcs; the A/B and timing against D-083
+- [x] The admin REGION on the shared arcs (ADMIN_REGION, D-100): 977 KB against 3.63 MB with
+  its own vertices, same answers and speed
+  ([B10](../../02-research/benches/phase-3.md#admin-region-on-the-shared-arcs))
+- [ ] REGION's top grid over the pack's extent instead of the world (admin queries at
+  150–300 ns; a world level-12 grid is 20% faster but 2.2 MB larger)
 - [ ] Coarse levels of detail without decoding every vertex (per-block level bounds with the
   checkpoints, or an overview arc set), measured on a whole-country and a whole-world render
 
@@ -99,3 +103,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-08 | 3.2: readers, core and consensus built (D-096); DEM elevation moved to 3.4; labelling is a maintainer task | elevation needs the DEM section; labels must come from people, not the forge |
 | 2026-11-08 | 3.3: ARCS, POLYGONS and the topology stage built (D-097, D-098); noding by `i_overlay` waits for a source that needs it | COD-AB is noded; the stage refuses a source that is not |
 | 2026-11-08 | 3.3: POLY_INDEX built (D-099); a coarse-LOD read item added | B10 measured coarse reads costing as much as full ones |
+| 2026-11-08 | 3.3: ADMIN_REGION on ARCS built (D-100); a per-pack top grid item added | B10: dense admin borders make the world top grid the limit |

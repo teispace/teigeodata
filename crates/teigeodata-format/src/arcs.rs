@@ -77,7 +77,7 @@ pub const MAX_SCALE: u32 = 7;
 const POW10: [i32; 8] = [1, 10, 100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000];
 
 /// 10^k, for a scale `k` up to [`MAX_SCALE`] (1 above it, which [`Arcs::check`] refuses).
-fn pow10(k: u32) -> i32 {
+pub(crate) fn pow10(k: u32) -> i32 {
     POW10.get(k as usize).copied().unwrap_or(1)
 }
 const X_MAX: i64 = 1_800_000_000;
@@ -203,6 +203,74 @@ impl<'a> Arcs<'a> {
     #[must_use]
     pub fn scale(&self, a: usize) -> u32 {
         self.scale.and_then(|c| c.get(a)).unwrap_or(0)
+    }
+
+    /// Whether some arc has a decimal scale (the `SCALE` column is present).
+    #[must_use]
+    pub const fn has_scale(&self) -> bool {
+        self.scale.is_some()
+    }
+
+    /// The delta columns `DX` and `DY`, for readers that sum a slice of them from a known point
+    /// ([REGION](crate::region) on these arcs).
+    pub(crate) const fn deltas(&self) -> (Packed<'a>, Packed<'a>) {
+        (self.dx, self.dy)
+    }
+
+    /// The arc holding vertex `v`: a binary search of `START`, O(log arcs). `None` past the
+    /// end.
+    #[must_use]
+    pub fn arc_of(&self, v: usize) -> Option<usize> {
+        if v >= self.vertices() {
+            return None;
+        }
+        // The last arc whose start is at or before `v`.
+        let (mut lo, mut hi) = (0, self.len());
+        while lo < hi {
+            let m = lo + (hi - lo) / 2;
+            if self.start.get(m).is_some_and(|s| s as usize <= v) {
+                lo = m + 1;
+            } else {
+                hi = m;
+            }
+        }
+        lo.checked_sub(1)
+    }
+
+    /// Vertex `v` of arc `a` as `(x, y)` on the grid: from the arc's base or its block's
+    /// checkpoint, whichever is later, plus at most 127 deltas. `None` if `v` is not in `a`.
+    #[must_use]
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "arc a, vertex v, range r, start s, count n, point x, y"
+    )]
+    pub fn vertex(&self, a: usize, v: usize) -> Option<(i32, i32)> {
+        let r = self.range(a)?;
+        if !r.contains(&v) {
+            return None;
+        }
+        let block = v / BLOCK_LEN;
+        let s = (block * BLOCK_LEN).max(r.start);
+        let (x0, y0) = if s == r.start {
+            (self.base_x.get(a)?, self.base_y.get(a)?)
+        } else {
+            (self.chk_x.get(block)?, self.chk_y.get(block)?)
+        };
+        let (mut x, mut y) = (unbias(x0), unbias(y0));
+        let mul = pow10(self.scale(a));
+        let (mut dx, mut dy) = ([0_u32; BLOCK_LEN], [0_u32; BLOCK_LEN]);
+        let n = v - s;
+        let (Some(bx), Some(by)) = (dx.get_mut(..n), dy.get_mut(..n)) else {
+            return None;
+        };
+        if self.dx.run(s + 1, bx) != n || self.dy.run(s + 1, by) != n {
+            return None;
+        }
+        for (ddx, ddy) in bx.iter().zip(by.iter()) {
+            x = x.wrapping_add(unzigzag(*ddx).cast_signed().wrapping_mul(mul));
+            y = y.wrapping_add(unzigzag(*ddy).cast_signed().wrapping_mul(mul));
+        }
+        Some((x, y))
     }
 
     /// The first point of arc `a`.

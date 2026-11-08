@@ -329,9 +329,11 @@ levels of detail and every unit into a polygon of arc references (B10, D-088, D-
 Output in `data/build/topology/<source>/`: `arcs.bin` (the ARCS payload), `polygons.tsv`
 (level, P-code, label, hectares, the box of every ring vertex, parts as references) and
 `summary.md`. `build --topology` links each polygon to its place (the country for level 0,
-`admin:<pcode>` otherwise), writes POLYGONS grouped by level and POLY_INDEX over the boxes
-(D-099), and reads all three sections back with their checks; POLY_INDEX's check recomputes
-every box from the arcs, so a wrong box in `polygons.tsv` stops the build.
+`admin:<pcode>` otherwise), writes POLYGONS grouped by level, POLY_INDEX over the boxes
+(D-099) and ADMIN_REGION on the arcs (D-100), and reads them back with their checks;
+POLY_INDEX's check recomputes every box from the arcs, so a wrong box in `polygons.tsv` stops
+the build, and ADMIN_REGION must give the same polygons as POLY_INDEX with
+`Polygons::contains` at every label point and every 97th place.
 
 Measured on COD-AB Nepal on 2026-11-08:
 
@@ -345,8 +347,9 @@ Measured on COD-AB Nepal on 2026-11-08:
 | ARCS | 2.66 MB, 4.48 B per vertex (model 4.47) |
 | POLYGONS | 21 KB |
 | POLY_INDEX | 8.2 KB, 9.5 B per polygon, 3 levels at node 16 |
+| ADMIN_REGION | 977 KB, 63,619 leaves, 47,233 runs; agrees at 1,859 points |
 | Time, memory | 1.5 s, 346 MB |
-| Packs | main 7.05 → 9.74 MB, lite 4.48 → 7.18 MB |
+| Packs | main 7.05 → 10.72 MB, lite 4.48 → 8.16 MB |
 
 ## Build a pack (`build`)
 

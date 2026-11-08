@@ -16,8 +16,8 @@ use teigeodata_core::table;
 
 use super::{
     Cell, DIR, KEY, LEVEL, LEVELS, MAX_SET, MAX_TOP, MIN_TOP, NUDGE, NUDGES, RUN_EDGE, RUN_LEN,
-    RUN_ZONES, RUNS, SET_START, SET_ZONES, TOP, TOP_ZONES, X, X_MIN, X_SPAN, Y, Y_MIN, Y_SPAN,
-    ZONES, cell, crosses, orient, reference, touches,
+    RUN_SCALE, RUN_X, RUN_Y, RUN_ZONES, RUNS, SET_START, SET_ZONES, TOP, TOP_ZONES, X, X_MIN,
+    X_SPAN, Y, Y_MIN, Y_SPAN, ZONES, cell, crosses, orient, reference, touches,
 };
 use crate::Error;
 
@@ -55,20 +55,108 @@ impl Default for Options {
 /// [`Error::Write`] if a vertex is outside the domain, the options are out of range, or a leaf
 /// would need more than [`MAX_SET`] regions or no reference point can be placed.
 pub fn encode(regions: &[Vec<Vec<[i32; 2]>>], opts: &Options) -> Result<Vec<u8>, Error> {
-    if !(MIN_TOP..=MAX_TOP).contains(&opts.top) || opts.leaf_max == 0 {
-        return Err(Error::Write("the region options are out of range"));
-    }
-    u32::try_from(regions.len()).map_err(|_| Error::Write("too many regions"))?;
-    let mut sets = Sets::default();
-    // Set z is the single region z (the reader skips the set tables for those).
-    for z in 0..u32::try_from(regions.len()).unwrap_or(0) {
-        sets.id(&[z])?;
-    }
+    let mut sets = start(regions.len(), opts)?;
     let edges = border_edges(regions, &mut sets)?;
     let arcs = Arcs::build(&edges);
     drop(edges);
+    finish(&arcs, sets, opts, None)
+}
+
+/// Encodes a REGION payload that reads its vertices from an ARCS section: `arcs` are that
+/// section's arcs in its order (each `[x, y]` on the 1e-7° grid), `scales` their decimal scales
+/// (empty when the section has none), and `regions[id]` the arcs region `id`'s rings use. An
+/// arc borders the regions that use it an odd number of times. Runs then number ARCS's
+/// vertices, and each run stores its first vertex; the reader opens the payload with
+/// [`Region::open_on_arcs`](super::Region::open_on_arcs). The item count is `regions.len()`.
+///
+/// # Errors
+/// As [`encode`], and if an arc has fewer than 2 vertices or a repeated vertex in a row, an
+/// arc reference is past the arcs, or `scales` is neither empty nor one per arc.
+pub fn encode_on_arcs(
+    arcs: &[Vec<[i32; 2]>],
+    scales: &[u32],
+    regions: &[Vec<u32>],
+    opts: &Options,
+) -> Result<Vec<u8>, Error> {
+    let mut sets = start(regions.len(), opts)?;
+    if !scales.is_empty() && scales.len() != arcs.len() {
+        return Err(Error::Write("one scale per arc, or none"));
+    }
+    let mut uses: Vec<Vec<u32>> = vec![Vec::new(); arcs.len()];
+    for (z, list) in (0_u32..).zip(regions) {
+        for &a in list {
+            uses.get_mut(a as usize)
+                .ok_or(Error::Write("an arc reference past the arcs"))?
+                .push(z);
+        }
+    }
+    let n: usize = arcs.iter().map(Vec::len).sum();
+    let mut shared = Arcs {
+        x: Vec::with_capacity(n),
+        y: Vec::with_capacity(n),
+        set: Vec::with_capacity(n),
+    };
+    let mut starts = Vec::with_capacity(arcs.len());
+    for (pts, users) in arcs.iter().zip(&mut uses) {
+        if pts.len() < 2 || pts.windows(2).any(|w| w[0] == w[1]) {
+            return Err(Error::Write(
+                "an arc has fewer than 2 vertices or a repeated vertex",
+            ));
+        }
+        if !pts.iter().all(|p| in_domain(*p)) {
+            return Err(Error::Write("a region vertex is outside the domain"));
+        }
+        // Sorted, an odd multiplicity keeps a region and an even one cancels.
+        users.sort_unstable();
+        let mut odd: Vec<u32> = Vec::new();
+        for &z in users.iter() {
+            if odd.last() == Some(&z) {
+                odd.pop();
+            } else {
+                odd.push(z);
+            }
+        }
+        let s = if odd.is_empty() {
+            u32::MAX
+        } else {
+            sets.id(&odd)?
+        };
+        starts.push(shared.x.len());
+        for (i, p) in pts.iter().enumerate() {
+            shared.x.push(p[0]);
+            shared.y.push(p[1]);
+            shared
+                .set
+                .push(if i + 1 < pts.len() { s } else { u32::MAX });
+        }
+    }
+    finish(&shared, sets, opts, Some((scales, &starts)))
+}
+
+/// Checks the options and the region count; the sets with set `z` = the single region `z`.
+fn start(regions: usize, opts: &Options) -> Result<Sets, Error> {
+    if !(MIN_TOP..=MAX_TOP).contains(&opts.top) || opts.leaf_max == 0 {
+        return Err(Error::Write("the region options are out of range"));
+    }
+    let count = u32::try_from(regions).map_err(|_| Error::Write("too many regions"))?;
+    let mut sets = Sets::default();
+    // Set z is the single region z (the reader skips the set tables for those).
+    for z in 0..count {
+        sets.id(&[z])?;
+    }
+    Ok(sets)
+}
+
+/// The quadtree over `arcs` and the payload; `on_arcs` is the scales and first vertex of each
+/// arc when the vertices live in ARCS.
+fn finish(
+    arcs: &Arcs,
+    sets: Sets,
+    opts: &Options,
+    on_arcs: Option<(&[u32], &[usize])>,
+) -> Result<Vec<u8>, Error> {
     let mut tree = Tree {
-        arcs: &arcs,
+        arcs,
         sets,
         opts: *opts,
         leaves: Vec::new(),
@@ -77,7 +165,13 @@ pub fn encode(regions: &[Vec<Vec<[i32; 2]>>], opts: &Options) -> Result<Vec<u8>,
         run_zones: Vec::new(),
     };
     tree.build()?;
-    tree.encode()
+    tree.encode(on_arcs)
+}
+
+/// Whether `p` is inside the 1e-7° world rectangle.
+fn in_domain(p: [i32; 2]) -> bool {
+    (X_MIN..=X_MIN + X_SPAN).contains(&i64::from(p[0]))
+        && (Y_MIN..=Y_MIN + Y_SPAN).contains(&i64::from(p[1]))
 }
 
 /// Interned region sets: each distinct sorted set once, numbered by first use.
@@ -121,10 +215,7 @@ fn border_edges(
     regions: &[Vec<Vec<[i32; 2]>>],
     sets: &mut Sets,
 ) -> Result<Vec<(Pt, Pt, u32)>, Error> {
-    let inside = |p: &[i32; 2]| {
-        (X_MIN..=X_MIN + X_SPAN).contains(&i64::from(p[0]))
-            && (Y_MIN..=Y_MIN + Y_SPAN).contains(&i64::from(p[1]))
-    };
+    let inside = |p: &[i32; 2]| in_domain(*p);
     let mut rec: Vec<(Pt, Pt, u32)> = Vec::new();
     for (zone, rings) in (0_u32..).zip(regions) {
         for ring in rings {
@@ -486,7 +577,7 @@ impl Tree<'_> {
         Ok(self.sets.id(&zones)? + 1)
     }
 
-    fn encode(&mut self) -> Result<Vec<u8>, Error> {
+    fn encode(&mut self, on_arcs: Option<(&[u32], &[usize])>) -> Result<Vec<u8>, Error> {
         let to32 = |v: usize| u32::try_from(v).map_err(|_| Error::Write("too many leaves"));
         let shift = 2 * (LEVELS - self.opts.top);
         let cells = 1_usize << (2 * self.opts.top);
@@ -524,8 +615,43 @@ impl Tree<'_> {
             set_zones.extend_from_slice(s);
             set_start.push(to32(set_zones.len())?);
         }
-        let x: Vec<u32> = self.arcs.x.iter().map(|&v| bias(v)).collect();
-        let y: Vec<u32> = self.arcs.y.iter().map(|&v| bias(v)).collect();
+        // Own vertices, or on ARCS each run's first vertex (and its arc's scale when any is set).
+        let (x, y, scale): (Vec<u32>, Vec<u32>, Vec<u32>) = match on_arcs {
+            None => (
+                self.arcs.x.iter().map(|&v| bias(v)).collect(),
+                self.arcs.y.iter().map(|&v| bias(v)).collect(),
+                Vec::new(),
+            ),
+            Some((scales, starts)) => {
+                let x = self
+                    .run_edge
+                    .iter()
+                    .map(|&e| bias(self.arcs.x[e as usize]))
+                    .collect();
+                let y = self
+                    .run_edge
+                    .iter()
+                    .map(|&e| bias(self.arcs.y[e as usize]))
+                    .collect();
+                let scale = if scales.iter().any(|&s| s != 0) {
+                    self.run_edge
+                        .iter()
+                        .map(|e| {
+                            let a = starts.partition_point(|&s| s <= *e as usize) - 1;
+                            scales[a]
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                (x, y, scale)
+            }
+        };
+        let (x_id, y_id) = if on_arcs.is_some() {
+            (RUN_X, RUN_Y)
+        } else {
+            (X, Y)
+        };
         let cols = [
             (TOP, encode_direct(&[self.opts.top])),
             (DIR, encode_direct(&dir)),
@@ -537,17 +663,20 @@ impl Tree<'_> {
             (RUN_EDGE, encode_direct(&self.run_edge)),
             (RUN_LEN, encode_direct(&self.run_len)),
             (RUN_ZONES, encode_direct(&self.run_zones)),
-            (X, encode_direct(&x)),
-            (Y, encode_direct(&y)),
             (SET_START, encode_direct(&set_start)),
             (SET_ZONES, encode_direct(&set_zones)),
             (TOP_ZONES, encode_direct(&top_zones)),
+            (x_id, encode_direct(&x)),
+            (y_id, encode_direct(&y)),
+            (RUN_SCALE, encode_direct(&scale)),
         ];
-        let keep: Vec<(u16, &[u8])> = cols
+        let mut keep: Vec<(u16, &[u8])> = cols
             .iter()
             .filter(|(id, _)| *id != NUDGE || nudge.iter().any(|&n| n != 0))
+            .filter(|(id, _)| *id != RUN_SCALE || !scale.is_empty())
             .map(|(id, b)| (*id, b.as_slice()))
             .collect();
+        keep.sort_by_key(|c| c.0);
         table::encode(&keep).map_err(|_| Error::Write("the region table could not be laid out"))
     }
 }

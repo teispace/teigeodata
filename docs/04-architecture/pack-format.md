@@ -131,6 +131,7 @@ parameters).
 | 14 | BLOBS | cold data (attribution text, long strings) | `blobs` | column table (D-079): zstd frames of whole blobs, an optional dictionary, `ruzstd` decode; 22 B per 116 B row on Nepal, a random blob in 43 µs |
 | 15 | BLOCK_HASHES | per-block BLAKE3 for large sections (lazy verification) | `verify` | raw (D-078): the BLAKE3 chaining value of each 16 KiB block of every section of 1 MiB or more |
 | 16 | REDIRECTS | retired IDs: each to its survivor, or to none for a tombstone ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)) | `core` | column table (D-075): sorted ID pairs |
+| 17 | ADMIN_REGION | exact point → admin units: REGION's layout on the ARCS vertices, region `i` = polygon `i` | `geometry` | column table (D-100), [below](#admin_region) |
 
 ### Column tables (encoding 1)
 
@@ -399,7 +400,9 @@ quantised once to the 1e-7° grid (D-083, [ADR-0013](../03-decisions/adr/ADR-001
 [spike S2](../02-research/benches/s2-region-index.md), measured in
 [B9](../02-research/benches/phase-2.md#b9-region)). Code: `teigeodata_format::region`.
 `item_count` is the number of regions; a region ID is below it. Edges are straight in
-lon/lat. A column ID of 0 or above 16 is refused.
+lon/lat. A column ID of 0 or above 19 is refused. Vertices come from the section's own X and
+Y, or from ARCS (columns 17 to 19, [ADMIN_REGION](#admin_region)); a section has one or the
+other.
 
 - **Domain and grid:** the closed world rectangle, longitude −1,800,000,000 to 1,800,000,000
   and latitude −900,000,000 to 900,000,000 in 1e-7° units. A quadtree over it goes down to
@@ -431,6 +434,9 @@ lon/lat. A column ID of 0 or above 16 is refused.
 | 14 | SET_ZONES | the region IDs of every set, each set strictly increasing, at most 64 (`MAX_SET`) |
 | 15 | TOP_ZONES | per top cell: 1 + the region set of the edge-free leaf that holds the whole cell, or 0 |
 | 16 | PLACE | optional, per region: the PLACES row of its place (a timezone area, later an admin unit), added by `region::link` (D-093) |
+| 17 | RUN_X | on ARCS, instead of X and Y: per run, its first vertex's longitude, biased |
+| 18 | RUN_Y | on ARCS: per run, its first vertex's latitude, biased |
+| 19 | RUN_SCALE | on ARCS, when the arcs have decimal scales: per run, its arc's scale |
 
 - **Region sets:** set `z` is the single region `z` for every region ID `z`, so a leaf or run of
   one region is read without the set tables. Sets of no region or of several follow, numbered
@@ -438,8 +444,8 @@ lon/lat. A column ID of 0 or above 16 is refused.
 - **Arcs:** each border is stored once, with every region it separates in one set. X and Y hold
   arcs back to back; edge `e` joins vertices `e` and `e + 1`, and the last vertex of an arc
   starts no edge. A leaf lists the edges that touch its closed cell as runs of consecutive edge
-  numbers; the edges of a run lie on one arc, so they share its set. REGION keeps its own
-  vertices and does not refer to ARCS (row 7).
+  numbers; the edges of a run lie on one arc, so they share its set. The timezone REGION keeps
+  its own vertices; ADMIN_REGION numbers the ARCS vertices instead (D-100).
 - **Reference point:** candidate `k` of a cell `[x0, x1] × [y0, y1]`, with `w = x1 − x0`,
   `h = y1 − y0`, `hx = max(1, ⌊w/2⌋)` and `hy = max(1, ⌊h/2⌋)`, is
   `(x0 + ⌊w/2⌋ + (7 + 31k) mod hx, y0 + ⌊h/2⌋ + (13 + 17k) mod hy)`, strictly inside the cell.
@@ -471,7 +477,7 @@ lon/lat. A column ID of 0 or above 16 is refused.
 - **Opening** (`Region::open`) refuses a missing required column, a top level outside 8 to 12,
   a column of the wrong length (DIR 4^g + 1; KEY, LEVEL, ZONES and NUDGE one per leaf; RUNS one
   more; the run columns one per run; Y as long as X; TOP_ZONES 4^g; SET_ZONES the last
-  SET_START), and a column ID of 0 or above 15.
+  SET_START), a column ID of 0 or above 19, and run vertex columns next to X and Y.
 - **The deep check** (`Region::check`), one pass over each column:
   - sets: starts increase from 0, each set has at most 64 members in strictly increasing order
     below the item count, and set `z` is `{z}`;
@@ -504,6 +510,30 @@ lon/lat. A column ID of 0 or above 16 is refused.
     split down to level 24.
   - **Refusals:** a leaf whose set and run sets together hold more than 64 regions (`MAX_SET`),
     and a cell with no good reference point among the 4,096 candidates.
+
+### ADMIN_REGION
+
+Which admin units hold a point, exactly: REGION's layout, query and border rule, with the
+vertices read from ARCS (D-100, [B10](../02-research/benches/phase-3.md#admin-region-on-the-shared-arcs)).
+Code: `Region::open_on_arcs` and `region::encode_on_arcs`. `item_count` is the number of
+polygons, and region `i` is polygon `i` of POLYGONS, so a query returns the country, province,
+district and local level in one pass, coarse to fine.
+
+- **Vertices:** edge `e` joins ARCS vertices `e` and `e + 1`; a run's edges lie in one arc. Each
+  run stores its first vertex absolute (RUN_X, RUN_Y); the query adds the arc's zigzag deltas
+  (times 10^scale, from RUN_SCALE when the arcs have a SCALE column) for the rest, decoding only
+  the run's slice of DX and DY. X and Y are absent.
+- **Sets:** an arc borders the polygons that use it an odd number of times, so a parent and
+  its child share their common border's arc and toggle together.
+- **Opening** needs the pack's ARCS: `Region::open` refuses the section, and
+  `Region::open_on_arcs` refuses RUN_SCALE present without a SCALE column in ARCS or absent
+  with one, and X or Y next to the run columns.
+- **The deep check** adds, per run: it lies inside one arc (its last vertex is the arc's last at
+  most), its stored first vertex is that ARCS vertex, and its scale is the arc's. Errors name
+  REGION's columns.
+- **Size and speed on Nepal** (860 polygons, 4 levels): 977 KB against 3.63 MB with its own X
+  and Y (which repeat ARCS's 2.66 MB of vertices), the same leaves and runs, and the same
+  answers at 20,000 points; 153 ns against 155 ns per query on uniform points.
 
 ### HIERARCHY
 

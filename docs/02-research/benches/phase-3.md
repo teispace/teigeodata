@@ -63,6 +63,42 @@ The index is not the cost (fewer than one candidate per point); the ring test is
 vertex. This confirms the note's §3.7: point → admin unit is REGION's job (41–50 ns, D-083), and
 `containing` is its oracle and the fallback of a pack without REGION.
 
+### Admin REGION on the shared arcs
+
+One REGION over all 860 polygons (region `i` = polygon `i`), D-083's defaults (leaf 32, top
+grid 10), built once with its own X and Y as D-083 lays it out and once on the pack's ARCS,
+where each run stores its first vertex and reads the rest as a slice of ARCS's deltas.
+
+| Vertices | Bytes | Of which vertices | Leaves | Runs | Build | ns per query (uniform) |
+|---|---:|---:|---:|---:|---:|---:|
+| own X and Y | 3,627,624 | 2,916,528 (X, Y) | 63,619 | 47,233 | 490 ms | 153 |
+| **on ARCS** | **977,344** | 264,280 (run first vertices) | 63,619 | 47,233 | 274 ms | **155** |
+
+Both give the same regions at all 20,000 points, and the own-vertex one agrees with
+`Polygons::contains` at all of them. The rest of the on-ARCS section: leaves 368 KB, top grid
+150 KB, runs 177 KB. Sharing ARCS saves 2.65 MB (27% of the main pack) for 1% of query time,
+so D-088's choice stands and the fallback to own vertices is not needed (D-100).
+
+Leaf size and top grid, on ARCS (a second run, so the default row differs from the table above
+by machine noise):
+
+| Leaf max | Top | Bytes | Leaves | Runs | Uniform ns | Places ns |
+|---:|---:|---:|---:|---:|---:|---:|
+| 8 | 10 | 3,238,524 | 306,619 | 164,705 | 144 | 265 |
+| 16 | 10 | 1,727,504 | 139,558 | 86,478 | 142 | 269 |
+| **32** | **10** | **977,344** | 63,619 | 47,233 | 184 | 298 |
+| 64 | 10 | 600,444 | 28,762 | 27,209 | 187 | 362 |
+| 16 | 12 | 3,913,008 | 139,558 | 86,478 | 109 | 204 |
+| 32 | 12 | 3,176,496 | 63,619 | 47,233 | 126 | 238 |
+
+- Admin borders are dense: almost no top cell is free of edges, so the timezone index's
+  one-read answer (41 ns on Nepal places, D-083) rarely applies, and a query costs 150–300 ns,
+  more on places (they sit where borders are) than on uniform points.
+- A finer top grid helps (−20% at level 12) but the grid covers the whole world, so it costs
+  2.2 MB more for one country. A top grid over the pack's own extent would give that speed
+  for a few KB: an open item for 3.3.
+- Leaf 32 stays the default: smaller leaves buy little time for much size.
+
 ### Ring decode speed by level of detail
 
 Every ring of every polygon read through `Polygons::ring` (shared arcs are read once per ring

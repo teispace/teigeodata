@@ -567,8 +567,9 @@ polygon (the estimate was 8.5); level-first order reads 3 to 4.5 nodes per point
 against 5.7 for one Hilbert sort; ring reads cost 6.6 ns per vertex at full resolution, and a
 coarse level costs as much as the full one because every vertex is still decoded (an open item
 for 3.3). `containing` through POLYGONS takes 9 µs (local level) to 354 µs (country), so
-point → admin stays on REGION as §3.7 recommends. Still to measure: the admin REGION on shared
-arcs, India.
+point → admin stays on REGION as §3.7 recommends. The admin REGION on the shared arcs
+(D-100): 977 KB against 3.63 MB with its own vertices, the same answers, 155 against 153 ns, so
+the shared store wins as §3.7 expected. Still to measure: India.
 
 ## 7. Risks and open items
 

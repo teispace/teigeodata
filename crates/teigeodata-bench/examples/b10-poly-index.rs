@@ -29,10 +29,12 @@ use std::ops::{ControlFlow, Range};
 use std::time::Instant;
 
 use teigeodata_bench::{Rng, pack_with};
+use teigeodata_core::table::Table;
 use teigeodata_core::{E7, Point, hilbert};
 use teigeodata_format::arcs::Arcs;
 use teigeodata_format::poly_index::{self, PolyIndex, Rect, polygon_box};
 use teigeodata_format::polygons::Polygons;
+use teigeodata_format::region::{self, Options, Region};
 use teigeodata_format::{Encoding, Kind, Pack};
 
 const PACK: &str = "data/build/pack/np/np-places-main.tgd";
@@ -224,6 +226,181 @@ fn main() {
             g.len(),
             cand as f64 / points.len() as f64,
             found as f64 / points.len() as f64
+        );
+    }
+
+    // The admin REGION with its own vertices (D-083's layout), every level in one section.
+    let regions: Vec<Vec<Vec<[i32; 2]>>> = (0..n)
+        .map(|p| {
+            polys
+                .all_rings(p)
+                .map(|r| {
+                    polys
+                        .ring(&arcs, r, 0)
+                        .map(|v| [v.lon(), v.lat()])
+                        .collect()
+                })
+                .collect()
+        })
+        .collect();
+    let t0 = Instant::now();
+    let body = region::encode(&regions, &Options::default()).unwrap();
+    let built = t0.elapsed();
+    let file = pack_with(
+        "places",
+        1,
+        &[(Kind::REGION, Encoding::TABLE, n as u64, &body)],
+        false,
+    )
+    .unwrap();
+    let rp = Pack::open(&file).unwrap();
+    let reg = Region::open(&rp.section(Kind::REGION).unwrap()).unwrap();
+    reg.check().unwrap();
+    let table = Table::parse(&body).unwrap();
+    let col = |id: u16| table.column_raw(id).map_or(0, |(_, b)| b.len());
+    println!(
+        "\nAdmin REGION, own vertices: {} B in {built:.1?}; {} leaves, {} runs, {} vertices; X+Y {} B, runs {} B",
+        body.len(),
+        reg.leaves(),
+        reg.runs(),
+        reg.vertices(),
+        col(region::X) + col(region::Y),
+        col(region::RUN_EDGE) + col(region::RUN_LEN) + col(region::RUN_ZONES)
+    );
+    let mut out = [0_u32; 8];
+    let mut agree = 0;
+    for p in &points {
+        let k = reg.regions_at(*p, &mut out);
+        let mut want: Vec<u32> = (0..n)
+            .filter(|&q| polys.contains(&arcs, q, *p))
+            .map(|q| q as u32)
+            .collect();
+        want.sort_unstable();
+        if out.get(..k.min(8)) == Some(&want[..]) {
+            agree += 1;
+        }
+    }
+    let ns = time(points.len(), |i| {
+        black_box(reg.regions_at(points[i], &mut [0_u32; 8]));
+    });
+    println!(
+        "{agree} of {} uniform points agree with Polygons::contains; {ns:.0} ns per query (all levels)",
+        points.len()
+    );
+
+    // The same REGION on the pack's ARCS: runs store their first vertex, the rest are deltas.
+    let arc_pts: Vec<Vec<[i32; 2]>> = (0..arcs.len())
+        .map(|a| {
+            arcs.points(a, false, 0)
+                .map(|v| [v.lon(), v.lat()])
+                .collect()
+        })
+        .collect();
+    let scales: Vec<u32> = if arcs.has_scale() {
+        (0..arcs.len()).map(|a| arcs.scale(a)).collect()
+    } else {
+        Vec::new()
+    };
+    let uses: Vec<Vec<u32>> = (0..n)
+        .map(|p| {
+            polys
+                .all_rings(p)
+                .flat_map(|r| polys.refs(r).map(|(a, _)| a as u32))
+                .collect()
+        })
+        .collect();
+    let t0 = Instant::now();
+    let shared = region::encode_on_arcs(&arc_pts, &scales, &uses, &Options::default()).unwrap();
+    let built = t0.elapsed();
+    let file2 = pack_with(
+        "places",
+        1,
+        &[(Kind::REGION, Encoding::TABLE, n as u64, &shared)],
+        false,
+    )
+    .unwrap();
+    let rp2 = Pack::open(&file2).unwrap();
+    let reg2 = Region::open_on_arcs(&rp2.section(Kind::REGION).unwrap(), &arcs).unwrap();
+    let t1 = Instant::now();
+    reg2.check().unwrap();
+    let checked = t1.elapsed();
+    let table2 = Table::parse(&shared).unwrap();
+    let col2 = |id: u16| table2.column_raw(id).map_or(0, |(_, b)| b.len());
+    println!(
+        "Admin REGION on ARCS: {} B in {built:.1?} (check {checked:.1?}); {} leaves, {} runs; run first vertices {} B; top grid (DIR + TOP_ZONES) {} B; leaves (KEY, LEVEL, ZONES, NUDGE, RUNS) {} B",
+        shared.len(),
+        reg2.leaves(),
+        reg2.runs(),
+        col2(region::RUN_X) + col2(region::RUN_Y) + col2(region::RUN_SCALE),
+        col2(region::DIR) + col2(region::TOP_ZONES),
+        [
+            region::KEY,
+            region::LEVEL,
+            region::ZONES,
+            region::NUDGE,
+            region::RUNS
+        ]
+        .iter()
+        .map(|&c| col2(c))
+        .sum::<usize>()
+    );
+    let mut same = 0;
+    let (mut a1, mut a2) = ([0_u32; 8], [0_u32; 8]);
+    for p in &points {
+        let (k1, k2) = (reg.regions_at(*p, &mut a1), reg2.regions_at(*p, &mut a2));
+        if a1[..k1.min(8)] == a2[..k2.min(8)] {
+            same += 1;
+        }
+    }
+    let ns2 = time(points.len(), |i| {
+        black_box(reg2.regions_at(points[i], &mut [0_u32; 8]));
+    });
+    let ns1 = time(points.len(), |i| {
+        black_box(reg.regions_at(points[i], &mut [0_u32; 8]));
+    });
+    println!(
+        "{same} of {} points give the same regions; own vertices {ns1:.0} ns, on ARCS {ns2:.0} ns per query",
+        points.len()
+    );
+
+    // Leaf size and top grid on ARCS, on uniform points and on the pack's place points.
+    let places =
+        teigeodata_format::places::Places::open(&pack.section(Kind::PLACES).unwrap()).unwrap();
+    let mut at_places: Vec<Point<E7>> = (0..places.len())
+        .filter_map(|r| places.point(r))
+        .map(|p| Point::<E7>::from_units(p.lat() * 10, p.lon() * 10).unwrap())
+        .collect();
+    // A fixed shuffle so the cache sees places in no spatial order.
+    let mut srng = Rng::new(12);
+    for i in (1..at_places.len()).rev() {
+        at_places.swap(i, (srng.next_u64() % (i as u64 + 1)) as usize);
+    }
+    at_places.truncate(20_000);
+    println!("\n| Leaf max | Top | Bytes | Leaves | Runs | Uniform ns | Places ns |");
+    println!("|---:|---:|---:|---:|---:|---:|---:|");
+    for (leaf_max, top) in [(8, 10), (16, 10), (32, 10), (64, 10), (16, 12), (32, 12)] {
+        let body =
+            region::encode_on_arcs(&arc_pts, &scales, &uses, &Options { leaf_max, top }).unwrap();
+        let file = pack_with(
+            "places",
+            1,
+            &[(Kind::REGION, Encoding::TABLE, n as u64, &body)],
+            false,
+        )
+        .unwrap();
+        let rp = Pack::open(&file).unwrap();
+        let r = Region::open_on_arcs(&rp.section(Kind::REGION).unwrap(), &arcs).unwrap();
+        let u = time(points.len(), |i| {
+            black_box(r.regions_at(points[i], &mut [0_u32; 8]));
+        });
+        let pl = time(at_places.len(), |i| {
+            black_box(r.regions_at(at_places[i], &mut [0_u32; 8]));
+        });
+        println!(
+            "| {leaf_max} | {top} | {} | {} | {} | {u:.0} | {pl:.0} |",
+            body.len(),
+            r.leaves(),
+            r.runs()
         );
     }
 

@@ -32,6 +32,21 @@ pub struct Section<'a> {
 }
 
 impl<'a> Section<'a> {
+    /// A column-table section that is not in a pack, for a writer that reads back what it
+    /// encoded (feature `write`). Its hash is all zero, so [`Section::verify`] fails.
+    #[cfg(feature = "write")]
+    #[must_use]
+    pub const fn unpacked(kind: Kind, item_count: u64, bytes: &'a [u8]) -> Self {
+        Self {
+            kind,
+            encoding: Encoding::TABLE,
+            item_count,
+            decoded_length: bytes.len() as u64,
+            hash: &[0; 32],
+            bytes,
+        }
+    }
+
     /// The section's kind.
     #[must_use]
     pub const fn kind(&self) -> Kind {

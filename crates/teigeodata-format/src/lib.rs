@@ -119,6 +119,8 @@ impl Kind {
     pub const BLOCK_HASHES: Self = Self(15);
     /// Retired IDs and their survivors.
     pub const REDIRECTS: Self = Self(16);
+    /// The exact admin-unit index: REGION's layout on the ARCS vertices.
+    pub const ADMIN_REGION: Self = Self(17);
 
     /// This reader's name for the kind, if it knows it.
     #[must_use]
@@ -145,6 +147,7 @@ pub(crate) const KINDS: &[(Kind, &str)] = &[
     (Kind::BLOBS, "BLOBS"),
     (Kind::BLOCK_HASHES, "BLOCK_HASHES"),
     (Kind::REDIRECTS, "REDIRECTS"),
+    (Kind::ADMIN_REGION, "ADMIN_REGION"),
 ];
 
 impl fmt::Display for Kind {

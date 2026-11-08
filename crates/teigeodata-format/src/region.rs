@@ -54,15 +54,16 @@
     reason = "geometry reads as points a, b, p, r and their signs"
 )]
 
-use teigeodata_core::bitpack::{Packed, unbias};
+use teigeodata_core::bitpack::{Packed, unbias, unzigzag};
 use teigeodata_core::{E7, Point};
 
+use crate::arcs::{Arcs, pow10};
 use crate::{Error, Kind, Section, columns};
 
 #[cfg(feature = "write")]
 mod build;
 #[cfg(feature = "write")]
-pub use build::{Options, encode, even_odd, link};
+pub use build::{Options, encode, encode_on_arcs, even_odd, link};
 
 /// Column: the top-grid level.
 pub const TOP: u16 = 1;
@@ -96,6 +97,12 @@ pub const SET_ZONES: u16 = 14;
 pub const TOP_ZONES: u16 = 15;
 /// Column: per region, the PLACES row of its place (optional).
 pub const PLACE: u16 = 16;
+/// Column: on [ARCS](crate::arcs), each run's first vertex longitude (instead of [`X`]).
+pub const RUN_X: u16 = 17;
+/// Column: on ARCS, each run's first vertex latitude (instead of [`Y`]).
+pub const RUN_Y: u16 = 18;
+/// Column: on ARCS with decimal scales, each run's arc scale (optional).
+pub const RUN_SCALE: u16 = 19;
 
 /// The deepest quadtree level; leaves there are about 2.4 m by 1.2 m at the equator.
 pub const LEVELS: u32 = 24;
@@ -348,6 +355,27 @@ struct EdgeCache {
     edges: [((i32, i32), (i32, i32)); CACHED_EDGES],
 }
 
+/// Where a REGION reads its vertices.
+#[derive(Clone, Copy, Debug)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a Region is opened once and copied rarely; boxing would cost every query an indirection"
+)]
+enum Verts<'a> {
+    /// Its own absolute columns [`X`] and [`Y`].
+    Own { x: Packed<'a>, y: Packed<'a> },
+    /// The arcs of an ARCS section: each run's first vertex from [`RUN_X`] and [`RUN_Y`], the
+    /// rest by summing the arcs' deltas.
+    Arcs {
+        arcs: Arcs<'a>,
+        dx: Packed<'a>,
+        dy: Packed<'a>,
+        run_x: Packed<'a>,
+        run_y: Packed<'a>,
+        run_scale: Option<Packed<'a>>,
+    },
+}
+
 /// A validated REGION section, read in place.
 #[derive(Clone, Copy, Debug)]
 pub struct Region<'a> {
@@ -363,8 +391,7 @@ pub struct Region<'a> {
     run_edge: Packed<'a>,
     run_len: Packed<'a>,
     run_zones: Packed<'a>,
-    x: Packed<'a>,
-    y: Packed<'a>,
+    verts: Verts<'a>,
     top_zones: Packed<'a>,
     set_start: Packed<'a>,
     set_zones: Packed<'a>,
@@ -372,14 +399,35 @@ pub struct Region<'a> {
 }
 
 impl<'a> Region<'a> {
-    /// Opens a REGION section, checking its structure (O(columns + blocks), no per-row work).
+    /// Opens a REGION section with its own vertices, checking its structure (O(columns +
+    /// blocks), no per-row work).
     ///
     /// # Errors
-    /// [`Error::Payload`] if a column is missing, unknown, of the wrong length, or the top level
-    /// is out of range.
+    /// [`Error::Payload`] if a column is missing, unknown, of the wrong length, the top level
+    /// is out of range, or the section reads its vertices from ARCS
+    /// ([`Region::open_on_arcs`]).
     pub fn open(section: &Section<'a>) -> Result<Self, Error> {
-        let table = columns::open(section, Kind::REGION)?;
-        let req = |id, rows| columns::required(&table, Kind::REGION, id, rows);
+        Self::open_with(section, None)
+    }
+
+    /// Opens a REGION section that reads its vertices from `arcs` (built by
+    /// [`encode_on_arcs`]), or has its own.
+    ///
+    /// # Errors
+    /// As [`Region::open`], and if the run columns do not fit the arcs.
+    pub fn open_on_arcs(section: &Section<'a>, arcs: &Arcs<'a>) -> Result<Self, Error> {
+        Self::open_with(section, Some(arcs))
+    }
+
+    fn open_with(section: &Section<'a>, arcs: Option<&Arcs<'a>>) -> Result<Self, Error> {
+        // ADMIN_REGION has REGION's layout; errors name REGION's columns.
+        let kind = if section.kind() == Kind::ADMIN_REGION {
+            Kind::ADMIN_REGION
+        } else {
+            Kind::REGION
+        };
+        let table = columns::open(section, kind)?;
+        let req = |id, rows| columns::required(&table, kind, id, rows);
         let top = req(TOP, Some(1))?
             .get(0)
             .filter(|g| (MIN_TOP..=MAX_TOP).contains(g))
@@ -393,7 +441,7 @@ impl<'a> Region<'a> {
         let key = req(KEY, Some(leaves))?;
         let level = req(LEVEL, Some(leaves))?;
         let zones = req(ZONES, Some(leaves))?;
-        let nudge = columns::optional(&table, Kind::REGION, NUDGE, leaves)?;
+        let nudge = columns::optional(&table, kind, NUDGE, leaves)?;
         let runs = req(RUNS, Some(leaves + 1))?;
         let run_count = runs
             .get(leaves)
@@ -402,8 +450,36 @@ impl<'a> Region<'a> {
         let run_edge = req(RUN_EDGE, Some(run_count))?;
         let run_len = req(RUN_LEN, Some(run_count))?;
         let run_zones = req(RUN_ZONES, Some(run_count))?;
-        let x = req(X, None)?;
-        let y = req(Y, Some(x.len()))?;
+        let verts = if table.optional(X).ok().flatten().is_some() {
+            let x = req(X, None)?;
+            let y = req(Y, Some(x.len()))?;
+            Verts::Own { x, y }
+        } else {
+            let arcs = *arcs.ok_or_else(|| {
+                fail(
+                    RUN_X,
+                    "the region reads its vertices from ARCS: open it on them",
+                )
+            })?;
+            let run_x = req(RUN_X, Some(run_count))?;
+            let run_y = req(RUN_Y, Some(run_count))?;
+            let run_scale = columns::optional(&table, kind, RUN_SCALE, run_count)?;
+            if run_scale.is_some() != arcs.has_scale() {
+                return Err(fail(
+                    RUN_SCALE,
+                    "the run scales do not match the arcs' scales",
+                ));
+            }
+            let (dx, dy) = arcs.deltas();
+            Verts::Arcs {
+                arcs,
+                dx,
+                dy,
+                run_x,
+                run_y,
+                run_scale,
+            }
+        };
         let top_zones = req(TOP_ZONES, Some(cells))?;
         let set_start = req(SET_START, None)?;
         let entries = set_start
@@ -413,12 +489,17 @@ impl<'a> Region<'a> {
             .and_then(|v| usize::try_from(v).ok())
             .ok_or_else(|| fail(SET_START, "the sets have no count"))?;
         let set_zones = req(SET_ZONES, Some(entries))?;
-        if table.ids().any(|id| id == 0 || id > PLACE) {
+        if table.ids().any(|id| id == 0 || id > RUN_SCALE)
+            || matches!(verts, Verts::Own { .. })
+                && [RUN_X, RUN_Y, RUN_SCALE]
+                    .iter()
+                    .any(|&id| table.ids().any(|i| i == id))
+        {
             return Err(fail(0, "an unknown column"));
         }
         let regions =
             usize::try_from(section.item_count()).map_err(|_| fail(0, "too many regions"))?;
-        let place = columns::optional(&table, Kind::REGION, PLACE, regions)?;
+        let place = columns::optional(&table, kind, PLACE, regions)?;
         Ok(Self {
             regions,
             top,
@@ -432,8 +513,7 @@ impl<'a> Region<'a> {
             run_edge,
             run_len,
             run_zones,
-            x,
-            y,
+            verts,
             top_zones,
             set_start,
             set_zones,
@@ -468,7 +548,16 @@ impl<'a> Region<'a> {
     /// The number of arc vertices.
     #[must_use]
     pub const fn vertices(&self) -> usize {
-        self.x.len()
+        match self.verts {
+            Verts::Own { x, .. } => x.len(),
+            Verts::Arcs { dx, .. } => dx.len(),
+        }
+    }
+
+    /// Whether the section reads its vertices from ARCS.
+    #[must_use]
+    pub const fn on_arcs(&self) -> bool {
+        matches!(self.verts, Verts::Arcs { .. })
     }
 
     /// The top-grid level.
@@ -507,9 +596,8 @@ impl<'a> Region<'a> {
             let mask = !((1_u64 << (2 * (LEVELS - level))) - 1);
             let k = self.nudge.and_then(|n| n.get(leaf)).unwrap_or(0);
             let r = reference(cell(key & mask, level), k);
-            let mut buf = ([0_u32; CHUNK], [0_u32; CHUNK]);
             for run in first..last {
-                if self.run_crossings(run as usize, r, p, &mut buf) & 1 == 1 {
+                if self.run_crossings(run as usize, r, p) & 1 == 1 {
                     self.add_set(
                         self.run_zones.get(run as usize).unwrap_or(u32::MAX),
                         &mut acc,
@@ -561,42 +649,92 @@ impl<'a> Region<'a> {
     }
 
     /// How many edges of `run` the segment from `r` to `p` crosses.
-    fn run_crossings(
-        &self,
-        run: usize,
-        r: (i32, i32),
-        p: (i32, i32),
-        (xs, ys): &mut ([u32; CHUNK], [u32; CHUNK]),
-    ) -> u32 {
+    fn run_crossings(&self, run: usize, r: (i32, i32), p: (i32, i32)) -> u32 {
         let (Some(first), Some(len)) = (self.run_edge.get(run), self.run_len.get(run)) else {
             return 0;
         };
-        let (mut at, end) = (first as usize, first as usize + len as usize);
         let mut count = 0;
-        // Each chunk shares its first vertex with the previous chunk's last.
-        while at < end {
-            let want = (end - at + 1).min(CHUNK);
-            let (Some(xw), Some(yw)) = (xs.get_mut(..want), ys.get_mut(..want)) else {
-                break;
-            };
-            let n = self.x.run(at, xw).min(self.y.run(at, yw));
-            if n < 2 {
-                break;
+        let mut prev: Option<(i32, i32)> = None;
+        self.run_points(run, first as usize, len as usize, |v| {
+            if let Some(a) = prev
+                && a != v
+                && crosses(r, p, a, v)
+            {
+                count += 1;
             }
-            let mut prev: Option<(i32, i32)> = None;
-            for (&x, &y) in xw.iter().zip(yw.iter()).take(n) {
-                let v = (unbias(x), unbias(y));
-                if let Some(a) = prev
-                    && a != v
-                    && crosses(r, p, a, v)
-                {
-                    count += 1;
-                }
-                prev = Some(v);
-            }
-            at += n - 1;
-        }
+            prev = Some(v);
+        });
         count
+    }
+
+    /// Calls `f` with the `len + 1` vertices of `run`, whose edges are `first..first + len`, in
+    /// order. Returns `false` if a vertex is missing. Allocation-free: decodes [`CHUNK`]
+    /// values at a time; on ARCS, from the run's stored first vertex plus the arcs' deltas.
+    #[inline]
+    fn run_points<F: FnMut((i32, i32))>(
+        &self,
+        run: usize,
+        first: usize,
+        len: usize,
+        mut f: F,
+    ) -> bool {
+        let (mut xs, mut ys) = ([0_u32; CHUNK], [0_u32; CHUNK]);
+        match self.verts {
+            Verts::Own { x, y } => {
+                let (mut at, end) = (first, first + len);
+                let mut skip = false;
+                // Each chunk shares its first vertex with the previous chunk's last.
+                while at < end {
+                    let want = (end - at + 1).min(CHUNK);
+                    let (Some(xw), Some(yw)) = (xs.get_mut(..want), ys.get_mut(..want)) else {
+                        return false;
+                    };
+                    let n = x.run(at, xw).min(y.run(at, yw));
+                    if n < 2 {
+                        return false;
+                    }
+                    for (&a, &b) in xw.iter().zip(yw.iter()).take(n).skip(usize::from(skip)) {
+                        f((unbias(a), unbias(b)));
+                    }
+                    skip = true;
+                    at += n - 1;
+                }
+                true
+            }
+            Verts::Arcs {
+                dx,
+                dy,
+                run_x,
+                run_y,
+                run_scale,
+                ..
+            } => {
+                let (Some(x0), Some(y0)) = (run_x.get(run), run_y.get(run)) else {
+                    return false;
+                };
+                let mul = run_scale.map_or(1, |s| pow10(s.get(run).unwrap_or(0)));
+                let (mut x, mut y) = (unbias(x0), unbias(y0));
+                f((x, y));
+                let (mut at, end) = (first + 1, first + len + 1);
+                while at < end {
+                    let want = (end - at).min(CHUNK);
+                    let (Some(xw), Some(yw)) = (xs.get_mut(..want), ys.get_mut(..want)) else {
+                        return false;
+                    };
+                    let n = dx.run(at, xw).min(dy.run(at, yw));
+                    if n == 0 {
+                        return false;
+                    }
+                    for (&a, &b) in xw.iter().zip(yw.iter()).take(n) {
+                        x = x.wrapping_add(unzigzag(a).cast_signed().wrapping_mul(mul));
+                        y = y.wrapping_add(unzigzag(b).cast_signed().wrapping_mul(mul));
+                        f((x, y));
+                    }
+                    at += n;
+                }
+                true
+            }
+        }
     }
 
     /// Checks everything [`Region::open`] does not, in one pass over each column: the directory
@@ -724,23 +862,30 @@ impl<'a> Region<'a> {
             let (Some(a), Some(b)) = (self.runs.get(h), self.runs.get(h + 1)) else {
                 return false;
             };
-            let at = |i: usize| Some((unbias(self.x.get(i)?), unbias(self.y.get(i)?)));
             let mut n = 0;
-            'fill: for run in a..b {
+            for run in a..b {
                 let (Some(e), Some(len)) = (
                     self.run_edge.get(run as usize),
                     self.run_len.get(run as usize),
                 ) else {
                     return false;
                 };
-                for i in e as usize..e as usize + len as usize {
-                    let (Some(p), Some(q), Some(slot)) = (at(i), at(i + 1), cache.edges.get_mut(n))
-                    else {
-                        n = usize::MAX;
-                        break 'fill;
-                    };
-                    *slot = (p, q);
-                    n += 1;
+                let mut prev = None;
+                let whole = self.run_points(run as usize, e as usize, len as usize, |q| {
+                    if let Some(p) = prev {
+                        match cache.edges.get_mut(n) {
+                            Some(slot) if n != usize::MAX => {
+                                *slot = (p, q);
+                                n += 1;
+                            }
+                            _ => n = usize::MAX,
+                        }
+                    }
+                    prev = Some(q);
+                });
+                if !whole || n == usize::MAX {
+                    n = usize::MAX;
+                    break;
                 }
             }
             cache.len = n;
@@ -756,7 +901,6 @@ impl<'a> Region<'a> {
         let (Some(a), Some(b)) = (self.runs.get(h), self.runs.get(h + 1)) else {
             return false;
         };
-        let at = |i: usize| Some((unbias(self.x.get(i)?), unbias(self.y.get(i)?)));
         (a..b).all(|run| {
             let (Some(e), Some(n)) = (
                 self.run_edge.get(run as usize),
@@ -764,16 +908,20 @@ impl<'a> Region<'a> {
             ) else {
                 return false;
             };
-            (e as usize..e as usize + n as usize).all(|i| match (at(i), at(i + 1)) {
-                (Some(p), Some(q)) => !touches(c, p, q),
-                _ => false,
-            })
+            let (mut prev, mut miss) = (None, true);
+            let whole = self.run_points(run as usize, e as usize, n as usize, |q| {
+                if let Some(p) = prev {
+                    miss &= !touches(c, p, q);
+                }
+                prev = Some(q);
+            });
+            whole && miss
         })
     }
 
     fn check_runs(&self) -> Result<(), Error> {
         let sets = self.set_start.len() - 1;
-        let vertices = self.x.len();
+        let vertices = self.vertices();
         let mut key: u64 = 0;
         for leaf in 0..self.leaves {
             let level = self.level.get(leaf).unwrap_or(LEVELS).min(LEVELS);
@@ -809,30 +957,73 @@ impl<'a> Region<'a> {
                 if self.run_zones.get(run).is_none_or(|z| z as usize >= sets) {
                     return Err(fail(RUN_ZONES, "a run's set is out of range"));
                 }
-                self.check_edges(c, r, e as usize, n as usize)?;
+                self.check_on_arcs(run, e as usize, n as usize)?;
+                self.check_edges(c, r, run, e as usize, n as usize)?;
             }
             key += size;
         }
         Ok(())
     }
 
-    /// Every edge of the run touches the leaf's cell and has the reference point off its line.
-    fn check_edges(&self, c: Cell, r: (i32, i32), first: usize, len: usize) -> Result<(), Error> {
-        let at = |i: usize| -> Option<(i32, i32)> {
-            Some((unbias(self.x.get(i)?), unbias(self.y.get(i)?)))
+    /// On ARCS: the run lies in one arc, its stored first vertex is that arc's vertex, and its
+    /// scale is the arc's.
+    fn check_on_arcs(&self, run: usize, first: usize, len: usize) -> Result<(), Error> {
+        let Verts::Arcs {
+            arcs,
+            run_x,
+            run_y,
+            run_scale,
+            ..
+        } = self.verts
+        else {
+            return Ok(());
         };
-        for i in first..first + len {
-            let (Some(a), Some(b)) = (at(i), at(i + 1)) else {
-                return Err(fail(X, "a vertex is missing"));
-            };
-            if a == b || !touches(c, a, b) {
-                return Err(fail(RUN_EDGE, "a run has an edge outside its leaf"));
-            }
-            if orient(a, b, r) == 0 {
-                return Err(fail(NUDGE, "a reference point is on the line of an edge"));
-            }
+        let a = arcs
+            .arc_of(first)
+            .ok_or_else(|| fail(RUN_EDGE, "a run starts past the arcs"))?;
+        if arcs.range(a).is_none_or(|r| first + len >= r.end) {
+            return Err(fail(RUN_LEN, "a run leaves its arc"));
+        }
+        let stored = run_x
+            .get(run)
+            .zip(run_y.get(run))
+            .map(|(x, y)| (unbias(x), unbias(y)));
+        if stored.is_none() || stored != arcs.vertex(a, first) {
+            return Err(fail(RUN_X, "a run's first vertex is not its arc's"));
+        }
+        if run_scale.is_some_and(|s| s.get(run) != Some(arcs.scale(a))) {
+            return Err(fail(RUN_SCALE, "a run's scale is not its arc's"));
         }
         Ok(())
+    }
+
+    /// Every edge of the run touches the leaf's cell and has the reference point off its line.
+    fn check_edges(
+        &self,
+        c: Cell,
+        r: (i32, i32),
+        run: usize,
+        first: usize,
+        len: usize,
+    ) -> Result<(), Error> {
+        let (mut prev, mut bad) = (None, None);
+        let whole = self.run_points(run, first, len, |b| {
+            if let Some(a) = prev
+                && bad.is_none()
+            {
+                if a == b || !touches(c, a, b) {
+                    bad = Some(fail(RUN_EDGE, "a run has an edge outside its leaf"));
+                } else if orient(a, b, r) == 0 {
+                    bad = Some(fail(NUDGE, "a reference point is on the line of an edge"));
+                }
+            }
+            prev = Some(b);
+        });
+        if !whole {
+            let column = if self.on_arcs() { RUN_X } else { X };
+            return Err(fail(column, "a vertex is missing"));
+        }
+        bad.map_or(Ok(()), Err)
     }
 }
 

@@ -1435,14 +1435,51 @@ fn polygons_case(c: &mut Cursor<'_>, structured: bool) {
     let mut ix_body = poly_index::encode(&boxes, node)
         .unwrap_or_else(|e| panic!("a valid polygon index is refused: {e}"));
     let mut ix_items = boxes.len() as u64;
-    let (mut model, mut ix_model) = (true, true);
+    // ADMIN_REGION on the model arcs, region i = polygon i.
+    let model_arcs = Arcs::open(&crate::Section::unpacked(
+        Kind::ARCS,
+        topo.arcs.len() as u64,
+        &arcs_body,
+    ))
+    .unwrap_or_else(|e| panic!("model arcs: {e}"));
+    let arc_xy: Vec<Vec<[i32; 2]>> = topo
+        .arcs
+        .iter()
+        .map(|a| a.iter().map(|p| [p.lon(), p.lat()]).collect())
+        .collect();
+    let scales: Vec<u32> = if model_arcs.has_scale() {
+        (0..topo.arcs.len()).map(|a| model_arcs.scale(a)).collect()
+    } else {
+        Vec::new()
+    };
+    let uses: Vec<Vec<u32>> = topo
+        .polys
+        .iter()
+        .map(|p| p.1[0].iter().flatten().map(|r| r >> 1).collect())
+        .collect();
+    let leaf_max = 1 + c.below(32);
+    let mut rg_body = region::encode_on_arcs(
+        &arc_xy,
+        &scales,
+        &uses,
+        &region::Options { leaf_max, top: 8 },
+    )
+    .unwrap_or_else(|e| panic!("a valid admin region is refused: {e}"));
+    let mut rg_items = uses.len() as u64;
+    let (mut model, mut ix_model, mut rg_model) = (true, true, true);
     match (structured, c.u8() % 4) {
         (true, 0) => ix_model = !edit(c, &mut ix_body, &mut ix_items),
+        (true, 1) => rg_model = !edit(c, &mut rg_body, &mut rg_items),
         (true, _) => model = !edit(c, &mut body, &mut items),
         (false, 0) => {
             ix_items = u64::from(c.u8());
             ix_body = c.rest().to_vec();
             ix_model = false;
+        }
+        (false, 1) => {
+            rg_items = u64::from(c.u8());
+            rg_body = c.rest().to_vec();
+            rg_model = false;
         }
         (false, _) => {
             items = u64::from(c.u8());
@@ -1455,11 +1492,13 @@ fn polygons_case(c: &mut Cursor<'_>, structured: bool) {
         (Kind::ARCS, topo.arcs.len() as u64, &arcs_body),
         (Kind::POLYGONS, items, &body),
         (Kind::POLY_INDEX, ix_items, &ix_body),
+        (Kind::ADMIN_REGION, rg_items, &rg_body),
     ]) else {
         return;
     };
     let p = open(&file);
     let a = Arcs::open(&section(&p, Kind::ARCS)).unwrap_or_else(|e| panic!("model arcs: {e}"));
+    admin_region_checks(c, &a, &topo, rg_model, &p);
     let Ok(v) = Polygons::open(&section(&p, Kind::POLYGONS)) else {
         assert!(!model, "a written POLYGONS payload does not open");
         return;
@@ -1559,6 +1598,73 @@ fn polygons_case(c: &mut Cursor<'_>, structured: bool) {
         }
     }
     poly_index_checks(c, &v, &a, &topo, checked, model && ix_model, &p, probe);
+}
+
+/// `ADMIN_REGION` over the polygons case: queries and the check never panic; a written index
+/// checks and answers as the even–odd oracle over the model's own rings, on probes at vertices,
+/// on vertex latitudes and near them. A corrupt index that still checks may answer wrongly
+/// (the check does not re-derive sets), so only the model is held to the oracle.
+fn admin_region_checks(c: &mut Cursor<'_>, a: &Arcs<'_>, topo: &Topo, model: bool, p: &Pack<'_>) {
+    let Ok(r) = Region::open_on_arcs(&section(p, Kind::ADMIN_REGION), a) else {
+        assert!(!model, "a written ADMIN_REGION payload does not open");
+        return;
+    };
+    let verts: Vec<Point<E7>> = topo.arcs.iter().flatten().copied().collect();
+    let probe = |c: &mut Cursor<'_>| {
+        let l = verts[c.below(verts.len())];
+        let (dy, dx) = match c.u8() % 3 {
+            0 => (0, 0),
+            1 => (0, i32::from(c.u16()) - 32_768),
+            _ => (i32::from(c.u16()) - 32_768, i32::from(c.u16()) - 32_768),
+        };
+        Point::<E7>::from_units(l.lat() + dy, l.lon() + dx).unwrap_or(l)
+    };
+    let mut out = [0_u32; region::MAX_SET];
+    for _ in 0..8 {
+        let _ = r.regions_at(probe(c), &mut out);
+    }
+    let checked = r.check().is_ok();
+    if !model {
+        return;
+    }
+    assert!(
+        checked,
+        "a written ADMIN_REGION fails its check: {:?}",
+        r.check()
+    );
+    let rings: Vec<Vec<Vec<[i32; 2]>>> = topo
+        .polys
+        .iter()
+        .map(|poly| {
+            poly.1[0]
+                .iter()
+                .map(|refs| {
+                    let mut ring: Vec<[i32; 2]> = Vec::new();
+                    for &x in refs {
+                        let mut arc: Vec<[i32; 2]> = topo.arcs[(x >> 1) as usize]
+                            .iter()
+                            .map(|q| [q.lon(), q.lat()])
+                            .collect();
+                        if x & 1 == 1 {
+                            arc.reverse();
+                        }
+                        let skip = usize::from(!ring.is_empty());
+                        ring.extend(arc.into_iter().skip(skip));
+                    }
+                    ring
+                })
+                .collect()
+        })
+        .collect();
+    for _ in 0..24 {
+        let at = probe(c);
+        let k = r.regions_at(at, &mut out);
+        assert_eq!(
+            out[..k.min(out.len())].to_vec(),
+            region::even_odd(&rings, at),
+            "ADMIN_REGION at {at}"
+        );
+    }
 }
 
 /// `POLY_INDEX` over the polygons case: queries never panic; a written index checks; on a
