@@ -1266,6 +1266,7 @@ dependencies = [
  "blake3",
  "bytes",
  "ed25519-dalek",
+ "flate2",
  "osmpbf",
  "parquet",
  "rayon",

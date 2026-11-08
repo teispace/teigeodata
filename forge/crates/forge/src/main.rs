@@ -13,6 +13,9 @@
 //! forge dem-ref <dem> <ref> <geoid> [<boundary>]  the DEM against a ground reference
 //! forge geoid <source> <lat> <lon> [...]          geoid undulation N at points
 //! forge build <cc> --release <v> --admin <b> …    write and check a country's pack
+//! forge buildings <reader> <source> <extent>    one point per building, clipped
+//! forge core <points run> <buildings run>      consensus points with settlement cores
+//! forge labels sample|score …                   the hand-labelled truth set (Q-005)
 //! forge make <cc> --release <v> [--lite] …       every stage from data/countries/<cc>/build.yaml, cached
 //! forge path <source-id>                          print a fetched source's store path
 //! ```
@@ -26,12 +29,15 @@
 
 mod aliases;
 mod build;
+mod buildings;
 mod conflate;
+mod core;
 mod dem;
 mod fetch;
 mod geofix;
 mod geoid;
 mod geom;
+mod labels;
 mod links;
 mod lock;
 mod make;
@@ -100,6 +106,22 @@ fn stage(root: &Path, args: &[String]) -> Option<Result<String, String>> {
     Some(match args.first().map(String::as_str)? {
         "build" => build::run(root, args.get(1..).unwrap_or_default()),
         "make" => make::run(root, args.get(1..).unwrap_or_default()),
+        "labels" => match (args.get(1).map(String::as_str), args.get(2..).unwrap_or_default()) {
+            (Some("sample"), [cc, src, per, seed]) => match per.parse::<usize>() {
+                Ok(n) => labels::sample(root, cc, src, n, seed),
+                Err(e) => Err(format!("count per stratum: {e}")),
+            },
+            (Some("score"), [cc, run, b]) => labels::score(root, cc, run, b),
+            _ => Err("usage: forge labels sample <cc> <points-source> <count-per-stratum> <seed> | forge labels score <cc> <points run> <buildings run>".into()),
+        },
+        "core" => match (args.get(1), args.get(2)) {
+            (Some(p), Some(b)) => core::run(root, p, b),
+            _ => Err("usage: forge core <points-source>+<points-source>… <buildings-source>+…".into()),
+        },
+        "buildings" => match (args.get(1), args.get(2), args.get(3)) {
+            (Some(r), Some(id), Some(ext)) => buildings::run(root, r, id, ext),
+            _ => Err("usage: forge buildings <osm|msbuildings|google> <source-id> <west,south,east,north>".into()),
+        },
         "read" => match (args.get(1), args.get(2..)) {
             (Some(reader), Some(ids)) if !ids.is_empty() => read::run(root, reader, ids),
             _ => Err("usage: forge read <geonames|osm|wikidata> <source-id> [<source-id>…]".into()),

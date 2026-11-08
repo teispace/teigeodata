@@ -12,3 +12,12 @@ points:
   - { reader: osm, source: geofabrik-np }
   - { reader: geonames, source: geonames-np, extra: [geonames-alternate-names, geonames-hierarchy] }
   - { reader: wikidata, source: wikidata-np }
+# The country's extent with a halo of at least 0.047° (about 5 km): west,south,east,north.
+# COD-AB adm0 spans 80.0585–88.2018 E, 26.3474–30.4474 N (measured 2026-11-08).
+extent: "80.0,26.3,88.25,30.5"
+# Building sources for the settlement core (D-091); the lite build reads only those its gate
+# allows (Microsoft CDLA-Permissive 2.0, Google CC BY 4.0).
+buildings:
+  - { reader: osm, source: geofabrik-np }
+  - { reader: msbuildings, source: msbuildings-np }
+  - { reader: google, source: google-buildings-v3-np }

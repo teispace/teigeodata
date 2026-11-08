@@ -1,7 +1,7 @@
 ---
 title: "Progress"
 status: living
-updated: 2026-11-07
+updated: 2026-11-08
 ---
 
 # Progress
@@ -15,7 +15,13 @@ updated: 2026-11-07
   4.26 MB ([forge build](../04-architecture/forge.md#build-a-pack-build)). The ID registry
   keeps IDs across releases and shares them between main and lite (D-094). `forge make np`
   runs every stage from `build.yaml` with a content-keyed cache: cold 7.8 s, warm 19 ms
-  (D-095). **3.1 done.** Next: 3.2, places core and consensus.
+  (D-095). **3.1 done.**
+- **3.2 built** (D-096): building readers for OSM, Microsoft and Google v3 (47 M Nepal
+  buildings in under 10 s), the settlement core and weighted Weiszfeld consensus (88,649 of
+  98,020 places with a core; Google-only against Microsoft-only P90 146 m, gate 180 m, fatal),
+  the 301-place labelling sample (Q-017, maintainer). `forge make np` cold 30 s; main pack
+  7.05 MB, lite 4.48 MB. DEM elevation at the consensus point moved to 3.4. Next: 3.3, B10
+  geometry.
 - **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
@@ -125,3 +131,4 @@ updated: 2026-11-07
 | 2026-11-07 | 3.1: `forge build` writes, signs and reads back the Nepal pack (96,844 places, 7.05 MB, 3.0 s, deterministic); lite 4.26 MB; `interior_point` for admin points; REGION place link (D-093) | Stage cache, then 3.2 |
 | 2026-11-07 | 3.1: the ID registry (D-094): lite keeps 91,153 of 91,266 main IDs, a rebuild keeps all, retirement writes REDIRECTS | Stage cache, then 3.2 |
 | 2026-11-07 | 3.1 done: `forge make` and `build.yaml`, content-keyed stages with stamped outputs (D-095) | 3.2: building readers, settlement core, consensus |
+| 2026-11-08 | 3.2: building readers, `forge core` with a fatal agreement gate (P90 146 m) proved on a planted mismatch, the border rule, `forge labels` and the 301-place sample (D-096) | 3.3: B10 geometry |

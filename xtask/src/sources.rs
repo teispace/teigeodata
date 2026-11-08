@@ -11,13 +11,14 @@ use serde::Deserialize;
 const SCHEMA: &str = "teigeodata/sources/v1";
 
 /// The licence classes of `CLEAN_ROOM.md` rule 1.
-const CLASSES: [&str; 10] = [
+const CLASSES: [&str; 11] = [
     "public-domain",
     "cc0",
     "cc-by",
     "cc-by-igo",
     "odc-by",
     "godl",
+    "cdla-permissive",
     "odbl",
     "share-alike",
     "non-commercial",
@@ -207,7 +208,21 @@ fn sha256_hex(bytes: &[u8]) -> String {
 /// A tileset's manifest exists, matches the source's pin, and pins every tile.
 fn check_tileset(s: &Source, root: &Path, at: &str, p: &mut Vec<String>) {
     let params = s.query_params.as_ref();
-    for key in ["bbox", "tile"] {
+    // A degree-grid tileset names its tiles by template; a listed one by its list file.
+    let listed = params
+        .and_then(|t| t.get("list"))
+        .and_then(toml::Value::as_str);
+    if let Some(list) = listed
+        && !root.join(list).is_file()
+    {
+        p.push(format!("{at}: tile list `{list}` not found"));
+    }
+    let keys: &[&str] = if listed.is_some() {
+        &[]
+    } else {
+        &["bbox", "tile"]
+    };
+    for &key in keys {
         if params
             .and_then(|t| t.get(key))
             .and_then(toml::Value::as_str)
@@ -217,7 +232,7 @@ fn check_tileset(s: &Source, root: &Path, at: &str, p: &mut Vec<String>) {
         }
     }
     // A GET tileset names the tile in its url; a POST tileset (with a query) in its body.
-    if s.query.is_none() && !s.url.contains("{tile}") {
+    if s.query.is_none() && listed.is_none() && !s.url.contains("{tile}") {
         p.push(format!("{at}: a tileset url needs a {{tile}} placeholder"));
     }
     let Some(manifest) = &s.tiles else {

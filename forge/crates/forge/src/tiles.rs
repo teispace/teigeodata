@@ -7,6 +7,11 @@
 //! The name template takes `{NS}`/`{EW}` (hemisphere letters; `{ns}`/`{ew}` in lower case),
 //! `{LAT2}` and `{LON3}` (zero-padded absolute degrees of the tile's south-west corner).
 //!
+//! A tileset whose tiles are not on a degree grid (quadkeys, S2 cells) with irregular file
+//! names sets `query_params.list` instead of `bbox` and `tile`: a checked-in file of
+//! `tile<TAB>url` lines that `--pin` downloads. The list only says where to look; the manifest
+//! pins the bytes, as for any tileset.
+//!
 //! A host that hands out short-lived anonymous read tokens (an Azure SAS) sets
 //! `query_params.token_url`: one token is fetched per run (JSON `{"token": …}`) and appended as
 //! the url's query. Tokens are never stored or printed; the pinned hashes prove the bytes.
@@ -88,6 +93,30 @@ pub(crate) fn manifest(root: &Path, s: &Source) -> Result<Vec<Tile>, String> {
     Ok(parse(&text))
 }
 
+/// A tile list: `tile<TAB>https url` per line, `#` comments; names unique.
+fn parse_list(text: &str) -> Result<BTreeMap<String, String>, String> {
+    let mut out = BTreeMap::new();
+    for (i, l) in text.lines().enumerate() {
+        if l.starts_with('#') || l.is_empty() {
+            continue;
+        }
+        let (name, url) = l
+            .split_once('\t')
+            .ok_or_else(|| format!("line {}: expected tile<TAB>url", i + 1))?;
+        let safe = !name.is_empty()
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        if !safe || !url.starts_with("https://") {
+            return Err(format!("line {}: bad tile name or url", i + 1));
+        }
+        if out.insert(name.to_string(), url.to_string()).is_some() {
+            return Err(format!("line {}: tile {name} listed twice", i + 1));
+        }
+    }
+    Ok(out)
+}
+
 fn parse(text: &str) -> Vec<Tile> {
     text.lines()
         .filter(|l| !l.starts_with('#') && !l.is_empty())
@@ -138,7 +167,14 @@ pub(crate) fn fetch(
             .get(k)
             .ok_or_else(|| format!("{}: query_params.{k} is missing", s.id))
     };
-    let mut names = names_in(p("bbox")?, p("tile")?)?;
+    let (mut names, urls) = match s.query_params.get("list") {
+        Some(rel) => {
+            let text = fs::read_to_string(root.join(rel)).map_err(|e| format!("{rel}: {e}"))?;
+            let urls = parse_list(&text).map_err(|e| format!("{rel}: {e}"))?;
+            (urls.keys().map(|n| (n.clone(), 0, 0)).collect(), urls)
+        }
+        None => (names_in(p("bbox")?, p("tile")?)?, BTreeMap::new()),
+    };
     if !pin {
         // A plain fetch restores the pinned tiles only.
         names.retain(|(n, _, _)| known.contains_key(n));
@@ -167,6 +203,7 @@ pub(crate) fn fetch(
             .map(|(name, lon, lat)| {
                 let want = Want {
                     name,
+                    url: urls.get(name).map(String::as_str),
                     lon: *lon,
                     lat: *lat,
                     token: token.as_deref(),
@@ -264,6 +301,8 @@ fn confirm_empty(s: &Source, url: &str, beams: &[(String, String)]) -> Result<()
 /// A tile to fetch: its name, south-west corner and the run's read token.
 struct Want<'a> {
     name: &'a str,
+    /// From `query_params.list`; else the url template with `{tile}`.
+    url: Option<&'a str>,
     lon: i32,
     lat: i32,
     token: Option<&'a str>,
@@ -314,9 +353,12 @@ fn fetch_tile(
             Some(_) => {}
         }
     }
+    let base = want
+        .url
+        .map_or_else(|| s.url.replace("{tile}", name), str::to_string);
     let url = match want.token {
-        None => s.url.replace("{tile}", name),
-        Some(t) => format!("{}?{t}", s.url.replace("{tile}", name)),
+        None => base,
+        Some(t) => format!("{base}?{t}"),
     };
     let body = match &s.query {
         None => None,
@@ -363,7 +405,7 @@ fn fetch_tile(
 
 #[cfg(test)]
 mod tests {
-    use super::{names_in, parse, tile_name};
+    use super::{names_in, parse, parse_list, tile_name};
 
     #[test]
     fn names_and_manifests() {
@@ -389,6 +431,17 @@ mod tests {
                 ("xE086".to_string(), 86, 27)
             ])
         );
+        let l = parse_list("# c\n123\thttps://h/a.gz\n3995\thttps://h/b.gz\n").expect("list");
+        assert_eq!(l.get("3995").map(String::as_str), Some("https://h/b.gz"));
+        for bad in [
+            "a b\thttps://h\n",
+            "a\thttp://h\n",
+            "../x\thttps://h\n",
+            "a\thttps://h\na\thttps://i\n",
+            "a\n",
+        ] {
+            assert!(parse_list(bad).is_err(), "{bad:?}");
+        }
         let m = parse("# c\na\t0f\t10\nb\tabsent\t0\n");
         assert_eq!(m.len(), 2);
         assert!(m.get(1).is_some_and(|t| t.sha256.is_none()));

@@ -26,7 +26,9 @@ use std::time::Instant;
 use serde::Deserialize;
 
 use crate::build;
+use crate::buildings;
 use crate::conflate;
+use crate::core;
 use crate::lock::Lock;
 use crate::read;
 
@@ -39,6 +41,17 @@ struct Recipe {
     #[serde(default)]
     timezones: Option<String>,
     points: Vec<Points>,
+    #[serde(default)]
+    extent: Option<String>,
+    #[serde(default)]
+    buildings: Vec<Buildings>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Buildings {
+    reader: String,
+    source: String,
 }
 
 #[derive(Deserialize)]
@@ -209,6 +222,56 @@ fn read_stages(
     Ok((sources, read_keys))
 }
 
+/// The `buildings` stage of every building source the build may read, then `core` over them:
+/// the core run's name and key, or `None` when the recipe names no building source (or the
+/// build may read none).
+fn core_stages(
+    root: &Path,
+    recipe: &Recipe,
+    lock: &Lock,
+    (code, ck): (&[u8], &str),
+    sources: &[String],
+    lite: bool,
+    r: &mut Runner,
+) -> Result<Option<(String, String)>, String> {
+    let (mut names, mut keys) = (Vec::new(), Vec::new());
+    for b in &recipe.buildings {
+        if lite && !build::LITE.contains(&lock.get(&b.source)?.licence_class.as_str()) {
+            continue;
+        }
+        let extent = recipe
+            .extent
+            .as_deref()
+            .ok_or("buildings need an extent in build.yaml")?;
+        let k = key(&[
+            b"buildings",
+            code,
+            b.reader.as_bytes(),
+            &pinned(lock, &[&b.source])?,
+            extent.as_bytes(),
+        ]);
+        let dir = root.join("data/build/buildings").join(&b.source);
+        r.step(
+            &format!("buildings {}", b.source),
+            (&dir, ".key", None),
+            &k,
+            || buildings::run(root, &b.reader, &b.source, extent),
+        )?;
+        names.push(b.source.clone());
+        keys.push(k);
+    }
+    if names.is_empty() {
+        return Ok(None);
+    }
+    let (points_run, run) = (sources.join("+"), names.join("+"));
+    let k = key(&[b"core", code, ck.as_bytes(), keys.join(",").as_bytes()]);
+    let dir = root.join("data/build/core").join(&points_run).join(&run);
+    r.step("core", (&dir, ".key", None), &k, || {
+        core::run(root, &points_run, &run)
+    })?;
+    Ok(Some((run, k)))
+}
+
 /// `forge make <cc> …`.
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
@@ -268,10 +331,16 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         conflate::run(root, cc, &sources)
     })?;
 
-    // build: the conflation, the admin and timezone sources, the arguments, the ID registry
-    // and the signing seed.
+    // buildings and core: the consensus points with the settlement core (D-091).
+    let core_key = core_stages(root, &recipe, &lock, (code, &ck), &sources, lite, &mut r)?;
+
+    // build: the conflation (and core), the admin and timezone sources, the arguments, the ID
+    // registry and the signing seed.
     let mut build_args: Vec<String> = vec![cc.clone()];
     build_args.extend(pass.iter().cloned());
+    if let Some((run, _)) = &core_key {
+        build_args.extend(["--core".to_string(), run.clone()]);
+    }
     build_args.extend(["--admin".to_string(), recipe.admin.clone()]);
     if let Some(tz) = &recipe.timezones {
         build_args.extend(["--tz".to_string(), tz.clone()]);
@@ -284,6 +353,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         b"build",
         code,
         ck.as_bytes(),
+        core_key.as_ref().map_or(&b""[..], |k| k.1.as_bytes()),
         &pinned(&lock, &inputs)?,
         &profile,
         build_args.join("\0").as_bytes(),

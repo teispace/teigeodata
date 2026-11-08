@@ -2,12 +2,14 @@
 //!
 //! ```text
 //! forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>]
-//!       [--lite] [--key <seed-file>] [--ids <registry>] <points-source> <points-source> […]
+//!       [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>]
+//!       <points-source> <points-source> […]
 //! ```
 //!
 //! The points sources are the conflated run (`forge conflate <cc> <the same sources>`), in
-//! priority order: until the consensus stage (3.2) a place takes the point and the canonical
-//! name of its first source's record. Places are:
+//! priority order. A place takes the canonical name of its first source's record, and its
+//! point from the `core` stage with `--core` (the consensus with the settlement core, D-091),
+//! else its first source's point. Places are:
 //!
 //! - the country, from the profile's Wikidata item;
 //! - every admin unit of the boundary source, at its own level, at a point inside its polygon,
@@ -46,13 +48,14 @@ use crate::read::boundaries;
 use crate::record::{column, for_each_batch};
 
 /// The licence classes the lite build may read (`CLEAN_ROOM.md` rule 2).
-pub(crate) const LITE: [&str; 6] = [
+pub(crate) const LITE: [&str; 7] = [
     "public-domain",
     "cc0",
     "cc-by",
     "cc-by-igo",
     "odc-by",
     "godl",
+    "cdla-permissive",
 ];
 
 /// Zones that win an overlap, before the source's order (D-084): the Nepal perspective.
@@ -69,16 +72,18 @@ pub(crate) struct Args {
     pub(crate) key: Option<String>,
     /// The ID registry of the previous build or release; none for a country's first build.
     pub(crate) ids: Option<String>,
+    /// The buildings run of the `core` stage whose consensus points the places take.
+    pub(crate) core: Option<String>,
     pub(crate) sources: Vec<String>,
 }
 
 impl Args {
     pub(crate) fn parse(args: &[String]) -> Result<Self, String> {
-        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--lite] [--key <seed-file>] [--ids <registry>] <points-source> <points-source> [...]";
+        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] <points-source> <points-source> [...]";
         let mut it = args.iter();
         let cc = it.next().ok_or(usage)?.clone();
-        let (mut release, mut admin, mut tz, mut key, mut ids, mut lite) =
-            (None, None, None, None, None, false);
+        let (mut release, mut admin, mut tz, mut key, mut ids, mut core, mut lite) =
+            (None, None, None, None, None, None, false);
         let mut sources = Vec::new();
         while let Some(a) = it.next() {
             let mut value = || it.next().cloned().ok_or(usage);
@@ -88,6 +93,7 @@ impl Args {
                 "--tz" => tz = Some(value()?),
                 "--key" => key = Some(value()?),
                 "--ids" => ids = Some(value()?),
+                "--core" => core = Some(value()?),
                 "--lite" => lite = true,
                 s if s.starts_with("--") => return Err(format!("unknown flag `{s}`; {usage}")),
                 s => sources.push(s.to_string()),
@@ -104,6 +110,7 @@ impl Args {
             lite,
             key,
             ids,
+            core,
             sources,
         })
     }
@@ -186,8 +193,15 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let profile = Profile::read(root, &a.cc)?;
     let units = admin_places(root, &lock, &a.admin)?;
     let mut places: Vec<Place> = units.places;
-    let (clustered, unnamed_clusters) =
-        cluster_places(&build, &a.sources, &sources, &units.levels)?;
+    let core = match &a.core {
+        Some(b) => core_points(&build, &a.sources, b)?,
+        None => BTreeMap::new(),
+    };
+    let Clustered {
+        places: clustered,
+        unnamed: unnamed_clusters,
+        held,
+    } = cluster_places(&build, &a.sources, &sources, &units.levels, &core)?;
     places.extend(clustered);
     if let Some(country) = country_place(&build, &sources, &profile)? {
         places.push(country);
@@ -210,14 +224,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let out_dir = build.join("pack").join(&a.cc);
     fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
     let file = out_dir.join(format!("{}-places-{}.tgd", a.cc, a.build_name()));
-    let registry = match &a.ids {
-        Some(path) => {
-            let path = root.join(path);
-            let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-            ids::Registry::parse(&text).map_err(|e| format!("{}: {e}", path.display()))?
-        }
-        None => ids::Registry::default(),
-    };
+    let registry = registry(root, a.ids.as_deref())?;
     let report = pack::write(&pack::Input {
         root,
         args: &a,
@@ -238,12 +245,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         a.admin,
         tz.as_deref().unwrap_or("none"),
     );
-    if unnamed > 0 {
-        let _ = writeln!(summary, "Left out: {unnamed} places with no usable name.");
-    }
-    if !skipped.is_empty() {
-        let _ = writeln!(summary, "Not read (licence): {}.", skipped.join(", "));
-    }
+    notes(&mut summary, held, unnamed, &skipped);
     summary.push('\n');
     summary.push_str(&report);
     fs::write(
@@ -256,6 +258,57 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         file.strip_prefix(root).unwrap_or(&file).display(),
         t.elapsed()
     ))
+}
+
+/// The summary's notes: places held at their seed point, left out, and sources not read.
+fn notes(summary: &mut String, held: usize, unnamed: usize, skipped: &[String]) {
+    if held > 0 {
+        let _ = writeln!(
+            *summary,
+            "Kept the seed point: {held} places whose core point lies outside every admin unit."
+        );
+    }
+    if unnamed > 0 {
+        let _ = writeln!(*summary, "Left out: {unnamed} places with no usable name.");
+    }
+    if !skipped.is_empty() {
+        let _ = writeln!(*summary, "Not read (licence): {}.", skipped.join(", "));
+    }
+}
+
+/// The ID registry at `path` (relative to the root), or an empty one for a first build.
+fn registry(root: &Path, path: Option<&str>) -> Result<ids::Registry, String> {
+    let Some(path) = path else {
+        return Ok(ids::Registry::default());
+    };
+    let path = root.join(path);
+    let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    ids::Registry::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// The consensus points of a `core` run, by cluster.
+fn core_points(
+    build: &Path,
+    run: &[String],
+    buildings: &str,
+) -> Result<BTreeMap<String, (i32, i32)>, String> {
+    let path = build
+        .join("core")
+        .join(run.join("+"))
+        .join(buildings)
+        .join("points.parquet");
+    let mut out = BTreeMap::new();
+    for_each_batch(&path, |b| {
+        let cl = column::<StringArray>(b, "cluster")?;
+        let lon = column::<arrow_array::Int32Array>(b, "lon_e7")?;
+        let lat = column::<arrow_array::Int32Array>(b, "lat_e7")?;
+        for i in 0..b.num_rows() {
+            out.insert(cl.value(i).to_string(), (lon.value(i), lat.value(i)));
+        }
+        Ok(())
+    })
+    .map_err(|e| format!("{}: {e}; run forge core first", path.display()))?;
+    Ok(out)
 }
 
 /// What the build reads from the country profile.
@@ -462,12 +515,22 @@ fn name_type(kind: &str) -> Option<NameType> {
 /// One place per cluster holding a settlement or locality record. `run` is the conflated run
 /// (its order names the run's folder); `read` the sources this build may read, in priority
 /// order.
+/// The settlements and localities of the conflated clusters.
+struct Clustered {
+    places: Vec<Place>,
+    /// Clusters left out for want of a name that can be stored.
+    unnamed: usize,
+    /// Places that kept their seed point because the core point lies outside every admin unit.
+    held: usize,
+}
+
 fn cluster_places(
     build: &Path,
     run: &[String],
     read: &[String],
     levels: &[Level],
-) -> Result<(Vec<Place>, usize), String> {
+    core: &BTreeMap<String, (i32, i32)>,
+) -> Result<Clustered, String> {
     let mut records: Vec<BTreeMap<String, Rec>> = Vec::new();
     let mut names: Vec<BTreeMap<String, Vec<PlaceName>>> = Vec::new();
     for s in read {
@@ -494,7 +557,7 @@ fn cluster_places(
         }
         Ok(())
     })?;
-    let (mut out, mut unnamed) = (Vec::new(), 0_usize);
+    let (mut out, mut unnamed, mut held) = (Vec::new(), 0_usize, 0_usize);
     for (cluster, mut members) in clusters {
         members.sort();
         let recs: Vec<(&Rec, &str, usize)> = members
@@ -513,6 +576,17 @@ fn cluster_places(
             continue;
         };
         let Some(point) = first.point else { continue };
+        // The consensus point of the `core` stage, when the build reads one. A core that would
+        // take the place out of every admin unit its seed point is in (across the border, as
+        // buildings on the far side pull it) is refused: the place keeps its seed point.
+        let point = match core.get(&cluster) {
+            Some(&c) if deepest(levels, c).is_some() || deepest(levels, point).is_none() => c,
+            Some(_) => {
+                held += 1;
+                point
+            }
+            None => point,
+        };
         let mut rest: BTreeSet<PlaceName> = BTreeSet::new();
         for (_, id, s) in &recs {
             for n in names.get(*s).and_then(|m| m.get(*id)).into_iter().flatten() {
@@ -553,7 +627,11 @@ fn cluster_places(
             sources: members.into_iter().map(|(_, id)| id).collect(),
         });
     }
-    Ok((out, unnamed))
+    Ok(Clustered {
+        places: out,
+        unnamed,
+        held,
+    })
 }
 
 /// The country, from the record of its Wikidata item, when a source has it.

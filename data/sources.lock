@@ -205,3 +205,37 @@ licence = "Computed from NGA/NASA EGM96, released for public use (exact wording 
 licence_class = "public-domain"
 countries = ["*"]
 used_by = "spike S6.3 (EGM96 DEMs to EGM2008)"
+
+[[source]]
+id = "msbuildings-np"
+title = "Microsoft Global ML Building Footprints, Nepal (52 quadkey-9 files of GeoJSON lines)"
+kind = "tileset"
+url = "https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv"
+tiles = "data/sources/msbuildings-np.tiles"
+query_params = { list = "data/sources/msbuildings-np.list" }
+# The host moved twice (2024-11-07, 2026-07-24): a release build reads our mirror.
+moving = true
+version = "global-buildings 2026-02-03 partition, uploaded 2026-02-23 (Nepal 2019-2023 imagery)"
+retrieved = "2026-11-08"
+sha256 = "8579835807aefbb5bdecbb6832c4edf1134ed7a2e16800bf42f3d3ae68c200af"
+size = 4395
+licence = "CDLA-Permissive-2.0 (repository README and LICENSE, read 2026-11-07); share the agreement text with the data"
+licence_class = "cdla-permissive"
+countries = ["NP"]
+used_by = "phase 3 step 3.2 (settlement core, D-091)"
+
+[[source]]
+id = "google-buildings-v3-np"
+title = "Google Open Buildings v3 points, S2 level-6 cells over Nepal"
+kind = "tileset"
+url = "https://storage.googleapis.com/open-buildings-data/v3/points_s2_level_6_gzip_no_header/"
+tiles = "data/sources/google-buildings-v3-np.tiles"
+query_params = { list = "data/sources/google-buildings-v3-np.list" }
+version = "v3 (inference May 2023, objects dated 2023-06-23), confidence >= 0.65"
+retrieved = "2026-11-08"
+sha256 = "7e3f2e1b01d90c4e009d0151316b367958314ffef558d1aa83bfb54cd661a116"
+size = 1423
+licence = "CC-BY-4.0 (chosen of the CC BY 4.0 / ODbL dual licence); cite Sirko et al. 2021, arXiv:2107.12283"
+licence_class = "cc-by"
+countries = ["NP"]
+used_by = "phase 3 step 3.2 (settlement core, D-091)"

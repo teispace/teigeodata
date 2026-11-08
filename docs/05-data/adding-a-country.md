@@ -1,7 +1,7 @@
 ---
 title: "Adding a country"
 status: living
-updated: 2026-11-06
+updated: 2026-11-08
 ---
 
 # Adding a country
@@ -21,8 +21,9 @@ data/countries/<cc>/        lower-case ISO 3166-1 alpha-2
                             queries), phonetic_key (an algorithm of teigeodata-names,
                             such as indic-v0)
   build.yaml                how `forge make <cc>` builds the packs: the admin and timezone
-                            sources and the points sources with their readers, in
-                            priority order (D-095)
+                            sources, the points sources with their readers in priority
+                            order, the extent (the country's box with a 5 km halo) and
+                            the building sources of the settlement core (D-095, D-096)
   lexicon.yaml              generic place-name terms and their canonical spellings
   corrections/<id>.yaml     reviewed corrections (ADR-0036)
   golden-curated.yaml       hand-written search queries for the golden set

@@ -1,7 +1,7 @@
 ---
 title: "Phase 3: forge and Nepal data"
 status: living
-updated: 2026-11-07
+updated: 2026-11-08
 ---
 
 # Phase 3: forge and Nepal data
@@ -43,10 +43,16 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   ([forge build](../../04-architecture/forge.md#build-a-pack-build))
 
 ### 3.2 Places: core and consensus
-- [ ] Building readers (OSM, Microsoft, Google Open Buildings v3), tiled and streaming
-- [ ] The settlement core and the weighted Weiszfeld consensus (D-091); elevation from the DEM
-  at the consensus point, surveyed heights for summits (D-089)
-- [ ] A held-out, hand-labelled set of about 300 Nepal places for Q-005 (D-062)
+- [x] Building readers (OSM, Microsoft, Google Open Buildings v3), tiled and streaming (D-096,
+  [forge](../../04-architecture/forge.md#buildings-buildings))
+- [x] The settlement core and the weighted Weiszfeld consensus (D-091, D-096): agreement gate
+  P90 146 m against 180 m, fatal on failure, proved on a planted mismatch
+  ([forge](../../04-architecture/forge.md#settlement-core-and-consensus-core))
+- [ ] Elevation from the DEM at the consensus point, surveyed heights for summits (D-089):
+  moved to 3.4, which builds the DEM section the elevation is read from
+- [x] The labelling sample: 301 Nepal places in `tests/golden/np-places.csv`, drawn by
+  `forge labels sample` from GeoNames only, scored by `forge labels score` (D-062, D-096)
+- [ ] The labels themselves: maintainer task (Q-005); the core parameters are fitted on them
 
 ### 3.3 B10 geometry
 - [ ] Topology stage: `i_overlay` i64 noding, shared arcs, parents dissolved from children,
@@ -57,6 +63,8 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 ### 3.4 B11 DEM
 - [ ] The DEM section (D-089): codec, tile directory, point and bilinear queries; measured
   bytes and decode time against the note's model and against LERC and zstd
+- [ ] Elevation at each place's consensus point from the DEM section; surveyed heights for
+  summits (D-089; moved from 3.2)
 
 ### 3.5 Postal
 - [ ] `data/countries/np/postal.yaml`, the POSTAL section (D-090), its queries and the link to
@@ -82,3 +90,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-07 | 3.1: `forge build` writes, signs and reads back the Nepal pack; the cache and ID registry stay open | the slice ran end to end first |
 | 2026-11-07 | 3.1: the ID registry added as its own item (D-094) | IDs must hold across releases before any pack is published |
 | 2026-11-07 | 3.1 done: `forge make` with keyed stages and stamped outputs (D-095) | the slice runs from one command |
+| 2026-11-08 | 3.2: readers, core and consensus built (D-096); DEM elevation moved to 3.4; labelling is a maintainer task | elevation needs the DEM section; labels must come from people, not the forge |

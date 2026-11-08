@@ -1,7 +1,7 @@
 ---
 title: "Open questions"
 status: living
-updated: 2026-11-07
+updated: 2026-11-08
 ---
 
 # Open questions
@@ -19,6 +19,7 @@ move it to the [decision log](../03-decisions/log.md) and delete it here.
 | Q-009 | Nepal has no open postcode or ward-boundary source of its own: confirm with Nepal Post and the Survey Department whether one can be opened | Ask both; until then use HDX COD-AB (CC BY-IGO) wards and sourced postcode lists | Nepal sources research; also the GPO "UPU Postal Code English" PDF and the India Post pincode CSV, which refuse automated download (D-090) |
 | Q-015 | Where does the **lite** (CC-BY) build get the Nepal-perspective claim polygon? COD-AB excludes it (D-054) and the OSM disputed relation is ODbL | Digitise it clean-room from the Survey Department's 2020 map once its licence is confirmed; until then lite marks the area as disputed and assigns no admin unit there | Maintainer (licence) |
 | Q-016 | Which independent vertical reference can score GEDTM30 (CC BY 4.0), when it was trained on ICESat-2 ATL08 and GEDI, our reference? | Use a source never used in its training: national survey benchmarks or LiDAR where open (USA 3DEP when the rollout reaches it), GNSS on monuments. Until then the lite build uses NASADEM (scored against ATL08 in S6.3) | Research; maintainer for Nepal survey data |
+| Q-017 | Who labels the 301 Nepal places of `tests/golden/np-places.csv` (Q-005, D-062)? Each needs `label_lat`, `label_lon` at the settlement's centre from imagery or local knowledge, never from teigeodata output; rows marked `second` need a second labeller | The maintainer or Nepali volunteers, about 1 minute per place on public imagery; then `forge labels score` fits the core parameters | Maintainer |
 | Q-011 | Census 2021 ward-level tables: format and licence (NSO sites refused automated access) | Manual check by the maintainer or a later fetch | Maintainer |
 | Q-014 | Which CORS mirror serves packs to browser apps (ADR-0037)? | An object store with free egress and a custom domain; needs an account | Maintainer (account) |
 | Q-012 | Can the CC-BY lite build be *tested* against ODbL boundaries without contaminating it? | Treat tests as non-ingest only if the result never feeds back; get a legal opinion | Maintainer (legal) |

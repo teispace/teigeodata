@@ -1,7 +1,7 @@
 ---
 title: "Settlement core and consensus point for populated places"
 status: research
-updated: 2026-11-07
+updated: 2026-11-08
 owner: maintainer's agents
 revisit: 2027-05-07
 ---
@@ -381,6 +381,16 @@ No library does "the building core of a named place among crowded neighbours". T
   needs the assignment-cell restriction. It also says lite may use Microsoft "from source
   (CDLA-Permissive 2.0)", which is confirmed.
 - **ADR-0030 / source-licences:** add WorldPop's OSM covariates as evidence.
+
+### Outcome (2026-11-08, D-096)
+
+Built as recommended in `forge buildings` and `forge core`
+([forge](../../04-architecture/forge.md#settlement-core-and-consensus-core)). On all of
+Nepal's conflated places, not the 600-place sample: 88,649 of 98,020 get a core, which moves
+the seed P50 190 m, P90 369 m; Google-only and Microsoft-only cores agree P50 25 m, P90 146 m
+(the sample's 22–28 m P50 held). The planned `google-open-buildings-v3-np` pin is
+`google-buildings-v3-np`, 17 cells. Still open below: the Google threshold, city cores, the
+Microsoft licence text pin, the assignment-variant bench and the fit on the labelled set.
 
 ## 7. Risks and open items
 

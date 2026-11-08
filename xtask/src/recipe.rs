@@ -8,6 +8,8 @@ use serde::Deserialize;
 const SCHEMA: &str = "teigeodata/build/v1";
 /// The forge's points readers (`forge read <reader>`).
 const READERS: [&str; 3] = ["geonames", "osm", "wikidata"];
+/// The forge's building readers (`forge buildings <reader>`).
+const BUILDING_READERS: [&str; 3] = ["google", "msbuildings", "osm"];
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -17,6 +19,17 @@ struct Recipe {
     #[serde(default)]
     timezones: Option<String>,
     points: Vec<Points>,
+    #[serde(default)]
+    extent: Option<String>,
+    #[serde(default)]
+    buildings: Vec<Buildings>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Buildings {
+    reader: String,
+    source: String,
 }
 
 #[derive(Deserialize)]
@@ -26,6 +39,17 @@ struct Points {
     source: String,
     #[serde(default)]
     extra: Vec<String>,
+}
+
+/// `west,south,east,north` in degrees, west < east, south < north, on the globe.
+fn extent_ok(text: &str) -> bool {
+    let v: Vec<f64> = text
+        .split(',')
+        .filter_map(|x| x.trim().parse().ok())
+        .collect();
+    matches!(v.as_slice(), &[west, south, east, north]
+        if west < east && south < north && west >= -180.0 && east <= 180.0
+            && south >= -90.0 && north <= 90.0)
 }
 
 /// Problems in one recipe; `pinned` are the source IDs of `data/sources.lock`.
@@ -44,6 +68,11 @@ pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
         named.push(("points source", p.source.as_str()));
         named.extend(p.extra.iter().map(|e| ("extra source", e.as_str())));
     }
+    named.extend(
+        r.buildings
+            .iter()
+            .map(|b| ("buildings source", b.source.as_str())),
+    );
     for (what, id) in named {
         if !pinned.contains(id) {
             out.push(format!("{what} `{id}` is not pinned in data/sources.lock"));
@@ -68,6 +97,23 @@ pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
                 p.source
             ));
         }
+    }
+    for b in &r.buildings {
+        if !BUILDING_READERS.contains(&b.reader.as_str()) {
+            out.push(format!(
+                "`{}`: unknown buildings reader `{}`",
+                b.source, b.reader
+            ));
+        }
+    }
+    match (&r.extent, r.buildings.is_empty()) {
+        (None, false) => out.push("buildings need an extent".into()),
+        (Some(e), _) if !extent_ok(e) => {
+            out.push(format!(
+                "extent `{e}`: expected west,south,east,north in degrees"
+            ));
+        }
+        _ => {}
     }
     if r.points.len() < 2 {
         out.push("conflation needs at least two points sources".into());
@@ -116,6 +162,18 @@ mod tests {
             (
                 "schema: teigeodata/build/v1\nadmin: a\nzones: x\npoints: []\n",
                 "unknown field",
+            ),
+            (
+                "schema: teigeodata/build/v1\nadmin: a\npoints:\n  - { reader: osm, source: b }\n  - { reader: osm, source: c }\nbuildings:\n  - { reader: osm, source: b }\n",
+                "buildings without an extent",
+            ),
+            (
+                "schema: teigeodata/build/v1\nadmin: a\nextent: \"88,26,80,30\"\npoints:\n  - { reader: osm, source: b }\n  - { reader: osm, source: c }\n",
+                "west after east",
+            ),
+            (
+                "schema: teigeodata/build/v1\nadmin: a\nextent: \"80,26,88,30\"\npoints:\n  - { reader: osm, source: b }\n  - { reader: osm, source: c }\nbuildings:\n  - { reader: lidar, source: b }\n",
+                "buildings reader",
             ),
         ] {
             assert!(!check_text(text, &pinned).is_empty(), "{why}");

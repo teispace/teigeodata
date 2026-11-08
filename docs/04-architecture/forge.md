@@ -1,7 +1,7 @@
 ---
 title: "The forge (data pipeline)"
 status: draft
-updated: 2026-11-07
+updated: 2026-11-08
 ---
 
 # The forge (data pipeline)
@@ -33,7 +33,9 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | dem-ref, geoid | **built** (S6) | below |
 | build (pack writer, sign, read back) | **built** (3.1) | below |
 | make (every stage, content-keyed cache) | **built** (3.1) | below |
-| geofix-consensus | 3.2 | weighted Weiszfeld (D-091) |
+| buildings (OSM, Microsoft, Google) | **built** (3.2) | below |
+| core (settlement core, weighted Weiszfeld consensus) | **built** (3.2) | below |
+| labels (hand-labelled truth set) | **built** (3.2) | below |
 | the rest | Phase 3 | [phase 3](../07-planning/phases/phase-3.md) |
 
 **ID allocation (pack writer, D-075, D-094):** a country's first build allocates serials in
@@ -225,6 +227,76 @@ ATL08 terrain heights, the method of the
 GeographicLib's online egm2008-1 values within 0.12 m at five points (Kathmandu, Everest,
 Kalapani, the eastern Terai, Sydney); the grid's documented maximum is 0.48 m.
 
+## Buildings (`buildings`)
+
+`forge buildings <osm|msbuildings|google> <source-id> <W,S,E,N>` writes one point per
+building to `data/build/buildings/<source-id>/points.parquet` (`lon_e7`, `lat_e7`), sorted by
+(lat, lon) so the bytes are the same on every run (D-096). Tiles and blocks are read in
+parallel; nothing holds a whole source in memory except the output points.
+
+| Reader | Source | Point |
+|---|---|---|
+| `osm` | a PBF extract, ways tagged `building` | the way's first node (two passes: ways, then their nodes) |
+| `msbuildings` | Microsoft Global ML Building Footprints, gzipped GeoJSON lines per quadkey | vertex mean of the outer ring |
+| `google` | Google Open Buildings v3 points, gzipped CSV per S2 level-6 cell | the stated point |
+
+The Microsoft and Google tilesets are pinned by a tile list (`data/sources/<id>.list`,
+`tile<TAB>url`), fetched like any tileset. Measured on Nepal on 2026-11-08 (release, Apple
+M2 Pro):
+
+| Source | Buildings in the extent | Time | Peak memory |
+|---|---:|---:|---:|
+| OSM (geofabrik-np) | 8,296,729 | 3.2 s | 621 MB |
+| Microsoft (52 quadkeys) | 6,971,297 | 1.7 s | 150 MB |
+| Google v3 (17 cells, 1.42 GB) | 32,086,286 of 56,634,864 | 4.6 s | 556 MB |
+
+## Settlement core and consensus (`core`)
+
+`forge core <points run> <buildings run>` gives each conflated populated place and locality
+its consensus point (D-091, D-096; method in the
+[settlement-core note](../02-research/notes/settlement-core.md) §3.4):
+
+1. **Seed:** the weighted geometric median (Weiszfeld, Vardi–Zhang) of the members' points,
+   weight 1/σ, σ the larger of the source prior and the precision floor (D-055); copies within
+   1 m count once (D-056).
+2. **Cells:** each building belongs to the nearest populated-place seed, so a core never
+   climbs into a neighbour's village.
+3. **Core:** inside its own cell, buildings on a 25 m grid, a separable Gaussian blur of the
+   class bandwidth (hamlet 75 m, village 150 m, town 300 m), steepest ascent from the seed.
+   Cities get none. The blur runs only over the occupied box plus its radius, bit-identical
+   to the full blur; `exp` and `cos` are our own series, so the bytes do not depend on libm.
+4. **Gates:** at least 5 buildings, density at the seed, a mode at least half the window's
+   peak, within the class gate (500 m, 1 km, 2 km). The reason is recorded otherwise.
+5. **Consensus:** the median again with the core as one observation, σ 75 m.
+
+**Agreement gate:** with Google and Microsoft both read, the cores from each alone must agree
+P90 ≤ 180 m. A failure is an error and writes no points. A deliberate violation (each Google
+core paired with the next place's Microsoft core) fails it at P90 265 km.
+
+**Border rule (`build`):** a core point outside every admin unit, for a place whose seed lies
+in one, is refused; the place keeps its seed point and the summary counts it.
+
+Measured on Nepal on 2026-11-08:
+
+| Run | Places | Cores | Agreement P50 / P90 | Time | Peak |
+|---|---:|---:|---:|---:|---:|
+| main (OSM, Microsoft, Google) | 98,020 | 88,649 | 25 / 146 m | 11.9 s | 1.14 GB |
+| lite (Microsoft, Google) | 90,417 | 81,646 | 35 / 160 m | 11.6 s | 0.94 GB |
+
+A core moves the seed P50 190 m, P90 369 m. Main holds 50 places at their seed by the border
+rule and lite 79. Two runs give identical bytes.
+
+## Labels (`labels`)
+
+`forge labels sample <cc> <points-source> <n> <seed>` draws the hand-labelled truth set of
+Q-005 (D-062) into `tests/golden/<cc>-places.csv`: up to `n` populated places per stratum of
+class (hamlet, village, town) and terrain (the source's DEM height below 400 m as lowland),
+the lowest BLAKE3 of (seed, record ID) first, every fifth row for a second labeller. The
+locator is the source point rounded to 0.01°, and nothing from the forge's outputs is shown,
+so labels stay independent of the core they judge (D-060). It never overwrites a file.
+`forge labels score <cc> <points run> <buildings run>` reports, per stratum, the source and
+consensus distance to the labels against the targets (P90 ≤ 500 m lowland, ≤ 150 m hill).
+
 ## Build a pack (`build`)
 
 `forge build <cc> --release <v> --admin <boundary> [--tz <tz>] [--lite] [--key <seed-file>] [--ids <registry>] <sources…>`
@@ -301,7 +373,8 @@ it in `sources.lock` comes with the catalog (step 3.7).
 
 `forge make <cc> --release <v> [--lite] [--key <seed-file>] [--ids <registry>] [--force]` runs a
 country's stages from its recipe, `data/countries/<cc>/build.yaml` (checked by
-`cargo xtask check-data`): `read` for each points source, `conflate` over them, then `build`
+`cargo xtask check-data`): `read` for each points source, `conflate` over them, `buildings`
+for each building source the build may read, `core`, then `build`
 (D-095, [ADR-0035](../03-decisions/adr/ADR-0035-forge-architecture.md)).
 - **Keys.** A stage's key is a BLAKE3 hash of the stage name, the forge binary, its pinned
   inputs (ID, SHA-256 and size from `sources.lock`), its configuration (the profile, the
@@ -315,15 +388,17 @@ country's stages from its recipe, `data/countries/<cc>/build.yaml` (checked by
   stage.
 - **Licence gate.** `--lite` never schedules a reader for a source outside the lite classes.
 
-Measured on Nepal on 2026-11-07 (release build, Apple M2 Pro):
+Measured on Nepal on 2026-11-08 (release build, Apple M2 Pro), with the building and core
+stages:
 
 | Run | Stages run | Time |
 |---|---:|---:|
-| cold (or a new forge binary) | 5 | 7.8 s, 620 MB peak |
-| nothing changed | 0 | 19 ms (outputs hashed) |
-| profile changed | 2 (conflate, build) | 3.4 s |
-| GeoNames output changed by hand | 1 (its read) | 3.1 s |
-| lite after main | 2 (its conflate and build; the reads are shared) | 2.4 s |
+| cold (or a new forge binary) | 9 | 30.0 s, 1.43 GB peak |
+| nothing changed | 0 | 270 ms (outputs hashed, 432 MB of building points) |
+| lite after main | 3 (its conflate, core and build; reads and buildings are shared) | 14.3 s, 0.92 GB |
+
+Before the building stages (2026-11-07): cold 7.8 s, warm 19 ms; a changed profile reran 2
+stages in 3.4 s and a hand-changed GeoNames output 1 stage in 3.1 s.
 
 Not yet: per-stage code versions, the disk budget check, and the stages after `build`
 (they join the recipe as they land).
