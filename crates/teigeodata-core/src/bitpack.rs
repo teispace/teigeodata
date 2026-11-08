@@ -95,12 +95,15 @@ fn le(b: [u8; 4]) -> u32 {
     u32::from_le_bytes(b)
 }
 
-#[cfg(any(feature = "alloc", test))]
-const fn zigzag(d: u32) -> u32 {
+/// A two's-complement difference as a small unsigned value: 0, −1, 1, −2 … → 0, 1, 2, 3 ….
+#[must_use]
+pub const fn zigzag(d: u32) -> u32 {
     (d << 1) ^ (d.cast_signed() >> 31).cast_unsigned()
 }
 
-const fn unzigzag(z: u32) -> u32 {
+/// The inverse of [`zigzag`].
+#[must_use]
+pub const fn unzigzag(z: u32) -> u32 {
     (z >> 1) ^ (z & 1).wrapping_neg()
 }
 

@@ -121,7 +121,7 @@ parameters).
 | 4 | NAMES | name records (lang, script, type, validity, rule), text | `names` | column table (D-077): records + FSST text with per-script tables; 10.6 B per place on Nepal, a canonical name in 65 ns |
 | 5 | SEARCH | tagged name keys (exact, loose, phonetic) → lists of rows by importance; fuzzy and top-k prefix | `search` | column table (D-085): own FST + FOR lists + block maxima; 1.50 MB on Nepal, [below](#search) |
 | 6 | PLACE_INDEX | packed Hilbert R-tree whose leaves are the PLACES rows | `core`; nearest needs `spatial` | column table (D-082): u16 boxes inside the parent; 0.55 B per place at node size 16 |
-| 7 | ARCS | shared arcs, delta coordinates on 1e-7°, per-vertex LOD level | `geometry` | column table (D-088): zigzag deltas per arc in B1 FOR blocks, arc starts, 3-bit LOD level per vertex (B10) |
+| 7 | ARCS | shared arcs, delta coordinates on 1e-7°, per-vertex LOD level | `geometry` | column table (D-088, D-097): zigzag deltas per arc in B1 FOR blocks, arc bases, block checkpoints, 3-bit LOD level per vertex, [below](#arcs) |
 | 8 | POLYGONS | polygons → parts → rings → signed arc refs; PLACES row, label point, area | `geometry` | column table (D-088; boxes live in POLY_INDEX) |
 | 9 | POLY_INDEX | packed R-tree over polygon boxes | `geometry` | as 6, with a stored leaf level (D-088) |
 | 10 | REGION | exact point → regions (timezones, later admin units): shared-arc borders, a dense top grid, quadtree leaves in Morton order with edge-ID runs, region sets | `region` | column table (D-083): [below](#region) |
@@ -302,6 +302,35 @@ above them are stored. `item_count` equals PLACES'. Columns other than these thr
 - **On an index that fails the check,** queries still never panic or allocate and only return
   rows below the row count, but their answers are not guaranteed; the forge and the tests run
   the check.
+
+### ARCS
+
+Every polygon border stored once, as arcs between topology nodes (D-088, D-097,
+[geometry note](../02-research/notes/geometry-topology.md)). Code: `teigeodata_format::arcs`.
+The item count is the number of arcs; vertices are numbered across all arcs.
+
+| ID | Column | Values | |
+|---:|---|---|---|
+| 1 | START | arcs + 1 values: each arc's first vertex, then the vertex count | required |
+| 2, 3 | BASE_X, BASE_Y | per arc: its first vertex, biased | required |
+| 4, 5 | DX, DY | per vertex: zigzag(Δ ÷ 10^scale) from the previous vertex of the arc; 0 at an arc's first vertex | required, FOR |
+| 6, 7 | CHK_X, CHK_Y | per 128-vertex block: the absolute point of its first vertex | required |
+| 8 | LEVEL | per vertex: the coarsest level of detail that keeps it, 0 to 7; 7 = pinned (arc ends, a closed arc's anchor) | optional |
+| 9 | TOLERANCE | 6 values: the Douglas–Peucker tolerance of levels 1 to 6 in cm, increasing | with LEVEL |
+| 10 | SCALE | per arc: `k`, its deltas stored ÷ 10^k, the largest power of ten dividing them all | optional |
+
+- **Reads.** A vertex is one block decode away: a piece of an arc starts from the arc's base or
+  from its block's checkpoint, so an arc reads backwards (a ring that walks it reversed) at the
+  same cost as forwards. The reader yields grid points through an iterator holding one decoded
+  block (about 1.2 KB) and never allocates.
+- **Level of detail `l`** keeps the vertices whose level is at least `l`. Arc ends are pinned, so
+  neighbours stay coincident at every level.
+- **Rules** (`Arcs::check`, O(vertices)): arcs of at least 2 vertices; no repeated consecutive
+  vertex; every point on the grid; checkpoints equal to the decoded points; ends pinned; a closed
+  arc has at least 4 vertices and, with LEVEL, a pinned vertex inside, so no ring falls below a
+  triangle; tolerances positive and increasing; scales up to 7. The checkpoints are required
+  (the note had them optional): they cost about 0.05 B per vertex and make reversed reads and
+  REGION's shared use one code path.
 
 ### REGION
 

@@ -20,6 +20,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
+use crate::arcs::{self, ArcColumns, Arcs, PINNED};
 use crate::blobs::{self, Blobs};
 use crate::hierarchy::{self, Hierarchy, MAX_DEPTH};
 use crate::idmap::{self, IdMap};
@@ -110,7 +111,8 @@ pub fn sections(data: &[u8]) {
     let mut c = Cursor(data);
     let mode = c.u8();
     let structured = mode & 0x80 != 0;
-    match mode % 8 {
+    match mode % 9 {
+        8 => arcs_case(&mut c, structured),
         0 => places_case(&mut c, structured),
         1 => hierarchy_case(&mut c, structured),
         2 => idmap_case(&mut c, structured),
@@ -1079,5 +1081,199 @@ pub fn bits(data: &[u8]) {
         assert!(ones.iter().all(|&i| i < len && b.get(i)));
         let again = bitmap::encode(len, ones).unwrap_or_else(|e| panic!("checked bits: {e}"));
         assert_eq!(again, bytes, "a checked bitmap is not canonical");
+    }
+}
+
+/// One model arc: a random walk from the input's seed, sometimes on a coarse grid (a scale),
+/// sometimes closed, with levels when `levels` (ends and a closed arc's anchor pinned).
+fn model_arc(c: &mut Cursor<'_>, levels: bool) -> (Vec<Point<E7>>, Vec<u8>) {
+    let mut seed = c.u64() | 1;
+    let mut rnd = move || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    let len = 2 + c.below(limit(300, 140));
+    let unit: i64 = [1, 1, 10, 1000][c.u8() as usize % 4];
+    let wide = c.u8() & 7 == 0;
+    let unit = if wide { 1 } else { unit };
+    let (mut x, mut y): (i64, i64) = if wide {
+        (
+            (rnd() % 3_400_000_000) as i64 - 1_700_000_000,
+            (rnd() % 1_700_000_000) as i64 - 850_000_000,
+        )
+    } else {
+        (850_000_000 + (rnd() % 100_000) as i64 * unit, 280_000_000)
+    };
+    let mut pts = Vec::with_capacity(len + 1);
+    for _ in 0..len {
+        pts.push(
+            Point::<E7>::from_units(y as i32, x as i32)
+                .unwrap_or_else(|| panic!("a model point is off the grid")),
+        );
+        let span = if wide { 1 << 20 } else { 1 << 12 };
+        let (mut dx, dy) = (
+            (rnd() % span) as i64 - span as i64 / 2,
+            (rnd() % span) as i64 - span as i64 / 2,
+        );
+        if dx == 0 && dy == 0 {
+            dx = 1;
+        }
+        x = (x + dx * unit).clamp(-1_800_000_000, 1_800_000_000);
+        y = (y + dy * unit).clamp(-900_000_000, 900_000_000);
+    }
+    pts.dedup();
+    if pts.len() < 2 {
+        pts.push(Point::<E7>::from_units(pts[0].lat(), pts[0].lon() ^ 1).unwrap_or(pts[0]));
+    }
+    if c.u8() & 3 == 0 && pts.len() >= 3 && pts[pts.len() - 1] != pts[0] {
+        pts.push(pts[0]);
+    }
+    let closed = pts.len() >= 4 && pts[0] == pts[pts.len() - 1];
+    if !closed && pts[0] == pts[pts.len() - 1] {
+        pts.pop();
+    }
+    let mut lv: Vec<u8> = if levels {
+        (0..pts.len()).map(|_| (rnd() % 8) as u8).collect()
+    } else {
+        Vec::new()
+    };
+    if levels {
+        let n = lv.len();
+        lv[0] = PINNED;
+        lv[n - 1] = PINNED;
+        if closed {
+            lv[n / 2] = PINNED;
+        }
+    }
+    (pts, lv)
+}
+
+fn arcs_case(c: &mut Cursor<'_>, structured: bool) {
+    let (mut body, mut model) = (Vec::new(), None);
+    let mut items;
+    if structured {
+        let n = c.below(limit(10, 4) + 1);
+        let levels = c.u8() & 1 == 0 && n > 0;
+        let arcs: Vec<(Vec<Point<E7>>, Vec<u8>)> = (0..n).map(|_| model_arc(c, levels)).collect();
+        let pts: Vec<&[Point<E7>]> = arcs.iter().map(|a| &a.0[..]).collect();
+        let lvs: Vec<&[u8]> = if levels {
+            arcs.iter().map(|a| &a.1[..]).collect()
+        } else {
+            Vec::new()
+        };
+        let tol = [100, 500, 2_000, 10_000, 50_000, 200_000];
+        let cols = ArcColumns {
+            arcs: &pts,
+            levels: &lvs,
+            tolerances_cm: if levels { &tol } else { &[] },
+        };
+        body = arcs::encode(&cols).unwrap_or_else(|e| panic!("a valid arc model is refused: {e}"));
+        items = n as u64;
+        if !edit(c, &mut body, &mut items) {
+            model = Some(arcs);
+        }
+    } else {
+        items = u64::from(c.u8());
+        body.extend_from_slice(c.rest());
+    }
+    let Some(file) = pack(&[(Kind::ARCS, items, &body)]) else {
+        return;
+    };
+    let p = open(&file);
+    let Ok(v) = Arcs::open(&section(&p, Kind::ARCS)) else {
+        assert!(model.is_none(), "a written ARCS payload does not open");
+        return;
+    };
+    // Reads never panic, whatever the bytes.
+    for a in rows(v.len()) {
+        for lod in [0, 3, PINNED, 9] {
+            let _ = v.points(a, false, lod).take(4 * BLOCK_LEN).count();
+            let _ = v.points(a, true, lod).take(4 * BLOCK_LEN).count();
+            let _ = (v.count(a, lod), v.tolerance_cm(lod), v.first(a));
+        }
+    }
+    let checked = v.check().is_ok();
+    if let Some(m) = &model {
+        assert!(
+            checked,
+            "a written ARCS payload fails its check: {:?}",
+            v.check()
+        );
+        assert_eq!(v.len(), m.len());
+        for (a, (pts, lv)) in m.iter().enumerate() {
+            for lod in 0..=PINNED {
+                let want: Vec<Point<E7>> = pts
+                    .iter()
+                    .zip(0..)
+                    .filter(|&(_, i)| lv.is_empty() || lv[i] >= lod)
+                    .map(|(p, _)| *p)
+                    .collect();
+                let got: Vec<Point<E7>> = v.points(a, false, lod).collect();
+                assert_eq!(got, want, "arc {a} at level {lod}");
+                let mut back: Vec<Point<E7>> = v.points(a, true, lod).collect();
+                back.reverse();
+                assert_eq!(back, want, "arc {a} reversed at level {lod}");
+                assert_eq!(v.count(a, lod), want.len());
+            }
+        }
+    }
+    if checked {
+        // An oracle that shares nothing with the reader: each arc from its base and the raw
+        // delta columns, without checkpoints.
+        let t = Table::parse(section(&p, Kind::ARCS).bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+        let col = |id| {
+            t.column(id)
+                .unwrap_or_else(|e| panic!("column {id}: {e:?}"))
+        };
+        let (start, bx, by, dx, dy) = (
+            col(arcs::START),
+            col(arcs::BASE_X),
+            col(arcs::BASE_Y),
+            col(arcs::DX),
+            col(arcs::DY),
+        );
+        let scale = t.optional(arcs::SCALE).ok().flatten();
+        for a in rows(v.len()).filter(|&a| a < v.len()) {
+            let (s, e) = (
+                start.get(a).unwrap_or(0) as usize,
+                start.get(a + 1).unwrap_or(0) as usize,
+            );
+            let mul = 10_i64.pow(scale.and_then(|c| c.get(a)).unwrap_or(0));
+            let (mut x, mut y) = (
+                i64::from(bitpack::unbias(bx.get(a).unwrap_or(0))),
+                i64::from(bitpack::unbias(by.get(a).unwrap_or(0))),
+            );
+            let mut want = Vec::new();
+            for i in s..e {
+                if i > s {
+                    x += i64::from(bitpack::unzigzag(dx.get(i).unwrap_or(0)).cast_signed()) * mul;
+                    y += i64::from(bitpack::unzigzag(dy.get(i).unwrap_or(0)).cast_signed()) * mul;
+                }
+                want.push(
+                    Point::<E7>::from_units(y as i32, x as i32)
+                        .unwrap_or_else(|| panic!("a checked vertex is off the grid")),
+                );
+            }
+            let got: Vec<Point<E7>> = v.points(a, false, 0).collect();
+            assert_eq!(got, want, "a checked arc differs from its deltas");
+        }
+        for a in rows(v.len()).filter(|&a| a < v.len()) {
+            let fwd: Vec<Point<E7>> = v.points(a, false, 0).collect();
+            let mut back: Vec<Point<E7>> = v.points(a, true, 0).collect();
+            back.reverse();
+            assert_eq!(fwd, back, "a checked arc reads differently backwards");
+            assert_eq!(
+                Some(fwd.len()),
+                v.range(a).map(|r| r.len()),
+                "a checked arc loses vertices"
+            );
+            assert!(
+                fwd.windows(2).all(|w| w[0] != w[1]),
+                "a checked arc repeats a vertex"
+            );
+            assert_eq!(fwd.first().copied(), v.first(a));
+        }
     }
 }
