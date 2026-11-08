@@ -46,6 +46,7 @@ use arrow_schema::{DataType, Field};
 use rayon::prelude::*;
 
 use crate::buildings::Pt;
+use crate::num::cos_deg;
 use crate::record::{column, for_each_batch, i32s, strings, write_table};
 
 /// Metres per degree of latitude (mean Earth radius 6,371,008.8 m).
@@ -233,25 +234,6 @@ impl Plane {
         #[allow(clippy::cast_possible_truncation, reason = "range checked")]
         (ok(lon) && ok(lat)).then(|| (lon.round() as i32, lat.round() as i32))
     }
-}
-
-/// cos of an angle in degrees from basic operations: reduced to [−90°, 90°], Taylor to x^20.
-fn cos_deg(deg: f64) -> f64 {
-    let x = deg.abs() % 360.0;
-    let x = if x > 180.0 { 360.0 - x } else { x };
-    let (x, sign) = if x > 90.0 {
-        (180.0 - x, -1.0)
-    } else {
-        (x, 1.0)
-    };
-    let r = x * std::f64::consts::PI / 180.0;
-    let (mut term, mut sum) = (1.0, 1.0);
-    for i in 1..=10_u8 {
-        let n = f64::from(2 * i);
-        term *= -r * r / (n * (n - 1.0));
-        sum += term;
-    }
-    sign * sum
 }
 
 /// σ floor of a coordinate from its decimals (D-055), metres.

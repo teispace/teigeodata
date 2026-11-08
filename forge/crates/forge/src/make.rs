@@ -31,6 +31,7 @@ use crate::conflate;
 use crate::core;
 use crate::lock::Lock;
 use crate::read;
+use crate::topo;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -272,6 +273,25 @@ fn core_stages(
     Ok(Some((run, k)))
 }
 
+/// The admin source's shared arcs and polygons (B10), the same for main and lite; its key.
+fn topology_stage(
+    root: &Path,
+    admin: &str,
+    lock: &Lock,
+    code: &[u8],
+    r: &mut Runner,
+) -> Result<String, String> {
+    let k = key(&[b"topology", code, &pinned(lock, &[admin])?]);
+    let dir = root.join("data/build/topology").join(admin);
+    r.step(
+        &format!("topology {admin}"),
+        (&dir, ".key", None),
+        &k,
+        || topo::run(root, admin),
+    )?;
+    Ok(k)
+}
+
 /// `forge make <cc> …`.
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
@@ -334,9 +354,11 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     // buildings and core: the consensus points with the settlement core (D-091).
     let core_key = core_stages(root, &recipe, &lock, (code, &ck), &sources, lite, &mut r)?;
 
-    // build: the conflation (and core), the admin and timezone sources, the arguments, the ID
-    // registry and the signing seed.
-    let mut build_args: Vec<String> = vec![cc.clone()];
+    let tk = topology_stage(root, &recipe.admin, &lock, code, &mut r)?;
+
+    // build: the conflation (and core), the topology, the admin and timezone sources, the
+    // arguments, the ID registry and the signing seed.
+    let mut build_args: Vec<String> = vec![cc.clone(), "--topology".to_string()];
     build_args.extend(pass.iter().cloned());
     if let Some((run, _)) = &core_key {
         build_args.extend(["--core".to_string(), run.clone()]);
@@ -354,6 +376,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         code,
         ck.as_bytes(),
         core_key.as_ref().map_or(&b""[..], |k| k.1.as_bytes()),
+        tk.as_bytes(),
         &pinned(&lock, &inputs)?,
         &profile,
         build_args.join("\0").as_bytes(),

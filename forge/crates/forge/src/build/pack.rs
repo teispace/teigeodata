@@ -43,6 +43,8 @@ pub(super) struct Input<'a> {
     /// The ID registry the build starts from, and where the updated one goes.
     pub(super) registry: &'a Registry,
     pub(super) ids_file: &'a Path,
+    /// The admin geometry of the `topology` stage, when the build adds it.
+    pub(super) geometry: Option<&'a super::geometry::Geometry>,
 }
 
 /// The search importance of a place, 0 to 130 as in spike S3 (D-052), from what every source
@@ -151,6 +153,9 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
         let body = region::link(&body, &zone_rows).map_err(|e| e.to_string())?;
         sections.push((Kind::REGION, Encoding::TABLE, zone_rows.len() as u64, body));
     }
+    if let Some(g) = input.geometry {
+        sections.extend(super::geometry::sections(g, &rows, &row_of)?);
+    }
     if !moved.is_empty() {
         let body = redirects::encode(&moved).map_err(|e| e.to_string())?;
         sections.push((Kind::REDIRECTS, Encoding::TABLE, moved.len() as u64, body));
@@ -217,7 +222,7 @@ fn allocate(
     Ok((ids, moved, assigned))
 }
 
-type Body = (Kind, Encoding, u64, Vec<u8>);
+pub(super) type Body = (Kind, Encoding, u64, Vec<u8>);
 
 fn ids_report(a: &Assignment, input: &Input<'_>, report: &mut String) {
     let _ = writeln!(
@@ -402,6 +407,10 @@ fn verify(
     index.check().map_err(e)?;
 
     verify_rows(rows, &places, &hier, &ids, &names, &search, &index)?;
+    let geometry_line = match input.geometry {
+        Some(g) => Some(super::geometry::verify(&p, rows, g)?),
+        None => None,
+    };
     let mut zones_ok = 0;
     if let Some(s) = p.section(Kind::REGION) {
         let region = Region::open(&s).map_err(e)?;
@@ -439,6 +448,9 @@ fn verify(
         rows.len(),
         distinct.len(),
     );
+    if let Some(line) = geometry_line {
+        let _ = writeln!(report, "\n{line}");
+    }
     Ok(())
 }
 

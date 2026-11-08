@@ -16,6 +16,7 @@
 //! forge buildings <reader> <source> <extent>    one point per building, clipped
 //! forge core <points run> <buildings run>      consensus points with settlement cores
 //! forge labels sample|score …                   the hand-labelled truth set (Q-005)
+//! forge topology <boundary-source>                shared arcs, levels of detail, polygons (B10)
 //! forge make <cc> --release <v> [--lite] …       every stage from data/countries/<cc>/build.yaml, cached
 //! forge path <source-id>                          print a fetched source's store path
 //! ```
@@ -41,11 +42,13 @@ mod labels;
 mod links;
 mod lock;
 mod make;
+mod num;
 mod pip;
 mod read;
 mod record;
 mod sliderule;
 mod tiles;
+mod topo;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -113,6 +116,10 @@ fn stage(root: &Path, args: &[String]) -> Option<Result<String, String>> {
             },
             (Some("score"), [cc, run, b]) => labels::score(root, cc, run, b),
             _ => Err("usage: forge labels sample <cc> <points-source> <count-per-stratum> <seed> | forge labels score <cc> <points run> <buildings run>".into()),
+        },
+        "topology" => match args.get(1) {
+            Some(b) => topo::run(root, b),
+            None => Err("usage: forge topology <boundary-source>".into()),
         },
         "core" => match (args.get(1), args.get(2)) {
             (Some(p), Some(b)) => core::run(root, p, b),

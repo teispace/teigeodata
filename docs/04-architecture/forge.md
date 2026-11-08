@@ -36,6 +36,7 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | buildings (OSM, Microsoft, Google) | **built** (3.2) | below |
 | core (settlement core, weighted Weiszfeld consensus) | **built** (3.2) | below |
 | labels (hand-labelled truth set) | **built** (3.2) | below |
+| topology (shared arcs, dissolve, levels of detail, polygons) | **built** (3.3) | below |
 | the rest | Phase 3 | [phase 3](../07-planning/phases/phase-3.md) |
 
 **ID allocation (pack writer, D-075, D-094):** a country's first build allocates serials in
@@ -297,6 +298,53 @@ so labels stay independent of the core they judge (D-060). It never overwrites a
 `forge labels score <cc> <points run> <buildings run>` reports, per stratum, the source and
 consensus distance to the labels against the targets (P90 ≤ 500 m lowland, ≤ 150 m hill).
 
+## Topology (`topology`)
+
+`forge topology <boundary-source>` turns a boundary source's admin units into shared arcs with
+levels of detail and every unit into a polygon of arc references (B10, D-088, D-098). Code:
+`forge/crates/forge/src/topo/`.
+
+1. **Arcs.** The finest level's rings are cleaned (outer counter-clockwise, holes clockwise) and
+   cut at topology nodes: a vertex whose degree is not 2, or where the units on its two edges
+   change (REGION's arc rule). A ring without a node is one closed arc from its smallest vertex.
+   The source must be noded: two edges that cross or touch away from a shared vertex stop the
+   stage. Snap rounding with `i_overlay` (D-088) joins when a source needs it.
+2. **Dissolve.** Every coarser level, the country included, is rebuilt from the finest units by
+   their stated ancestor codes (`adm<l>_pcode`): arcs used in both directions cancel, the rest
+   chain into rings (the sharpest left turn at a vertex where a ring touches itself), and holes
+   go to the smallest outer ring holding them. Each derived unit is compared with the source's
+   own polygon of it; a source vertex more than 1 m from the derived border stops the stage.
+3. **Levels of detail.** Douglas–Peucker importance per vertex in metres, capped by the parent
+   split; levels 1 to 6 at 5 m, 20 m, 100 m, 500 m, 2 km and 5 km; ends pinned, and a closed arc
+   pins two more vertices. A guard, coarsest level first, gives back the most important removed
+   vertex of every segment that crosses or touches another and of every ring that loses its area
+   or orientation.
+4. **Measure.** Area on the WGS 84 authalic sphere; the label is the pole of inaccessibility
+   (polylabel's method, our own code, to 1/1000 of the unit's size and at least 10 m), kept
+   only if exactly inside.
+5. **Verify.** The written ARCS payload is read back through `teigeodata_format::arcs`, passes
+   its check, and at every level of detail has no crossing and no degenerate ring. A planted
+   guard that adds nothing back fails here.
+
+Output in `data/build/topology/<source>/`: `arcs.bin` (the ARCS payload), `polygons.tsv`
+(level, P-code, label, hectares, parts as references) and `summary.md`. `build --topology`
+links each polygon to its place (the country for level 0, `admin:<pcode>` otherwise), writes
+POLYGONS grouped by level, and reads both sections back with their checks.
+
+Measured on COD-AB Nepal on 2026-11-08:
+
+| Measure | Value |
+|---|---:|
+| Polygons (levels 0 to 3) | 860 |
+| Arcs, vertices | 2,315 arcs, 593,610 vertices (33.8% of 1,754,996 ring vertices) |
+| Derived parents against the source's | 99.6% of source vertices on the border, the rest within 1 cm, area 0.0000% |
+| Area against the source's `area_sqkm` | P50 0.002%, max 0.090% |
+| Guard | 1 crossing at 5 m, 4 at 500 m, 3 at pinned-only; all fixed, 29 vertices added |
+| ARCS | 2.66 MB, 4.48 B per vertex (model 4.47) |
+| POLYGONS | 21 KB |
+| Time, memory | 1.5 s, 346 MB |
+| Packs | main 7.05 → 9.73 MB, lite 4.48 → 7.17 MB |
+
 ## Build a pack (`build`)
 
 `forge build <cc> --release <v> --admin <boundary> [--tz <tz>] [--lite] [--key <seed-file>] [--ids <registry>] <sources…>`
@@ -374,7 +422,8 @@ it in `sources.lock` comes with the catalog (step 3.7).
 `forge make <cc> --release <v> [--lite] [--key <seed-file>] [--ids <registry>] [--force]` runs a
 country's stages from its recipe, `data/countries/<cc>/build.yaml` (checked by
 `cargo xtask check-data`): `read` for each points source, `conflate` over them, `buildings`
-for each building source the build may read, `core`, then `build`
+for each building source the build may read, `core`, `topology` for the admin source, then
+`build`
 (D-095, [ADR-0035](../03-decisions/adr/ADR-0035-forge-architecture.md)).
 - **Keys.** A stage's key is a BLAKE3 hash of the stage name, the forge binary, its pinned
   inputs (ID, SHA-256 and size from `sources.lock`), its configuration (the profile, the
@@ -393,9 +442,9 @@ stages:
 
 | Run | Stages run | Time |
 |---|---:|---:|
-| cold (or a new forge binary) | 9 | 30.0 s, 1.43 GB peak |
+| cold (or a new forge binary) | 10 | 32.5 s, 1.37 GB peak |
 | nothing changed | 0 | 270 ms (outputs hashed, 432 MB of building points) |
-| lite after main | 3 (its conflate, core and build; reads and buildings are shared) | 14.3 s, 0.92 GB |
+| lite after main | 3 (its conflate, core and build; reads, buildings and topology are shared) | 15.1 s, 0.92 GB |
 
 Before the building stages (2026-11-07): cold 7.8 s, warm 19 ms; a changed profile reran 2
 stages in 3.4 s and a hand-changed GeoNames output 1 stage in 3.1 s.

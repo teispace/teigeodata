@@ -1,7 +1,7 @@
 ---
 title: "Geometry: ARCS, POLYGONS, POLY_INDEX and the forge topology stage (B10)"
 status: research
-updated: 2026-11-07
+updated: 2026-11-08
 owner: maintainer's agents
 revisit: 2027-05-07
 ---
@@ -555,6 +555,15 @@ over VW); and the phase 3 plan.
 - The crossing guard's output on all Nepal levels after the dissolve, and at world scale on a
   large country.
 - WKB and GeoJSON round trips through `wkb` and `geojson` as oracles.
+
+### Outcome (2026-11-08, D-097, D-098)
+
+Built in Rust and measured on COD-AB Nepal, all four levels: 2,315 arcs and 593,610 vertices
+(33.8% of the ring vertices) as modelled; ARCS 4.48 B per vertex (model 3.98 + 0.44 level +
+0.05 checkpoints = 4.47); the dissolved parents lie within 1 cm of the source's; the guard
+found 8 crossings over all levels and fixed them with 29 vertices. Checkpoints became required
+and the label is our own polylabel (see D-097, D-098). Still to measure: ring decode speed,
+POLY_INDEX, the admin REGION on shared arcs, India.
 
 ## 7. Risks and open items
 

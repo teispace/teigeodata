@@ -27,6 +27,7 @@
 //! `data/build/pack/<cc>/<cc>-places-<build>.tgd`, with `summary-<build>.md` and the updated
 //! registry `<cc>-ids-<build>.tsv` beside it.
 
+pub(crate) mod geometry;
 mod ids;
 mod pack;
 
@@ -74,16 +75,19 @@ pub(crate) struct Args {
     pub(crate) ids: Option<String>,
     /// The buildings run of the `core` stage whose consensus points the places take.
     pub(crate) core: Option<String>,
+    /// Whether the pack carries the admin geometry of the `topology` stage (ARCS, POLYGONS).
+    pub(crate) topology: bool,
     pub(crate) sources: Vec<String>,
 }
 
 impl Args {
     pub(crate) fn parse(args: &[String]) -> Result<Self, String> {
-        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] <points-source> <points-source> [...]";
+        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--topology] <points-source> <points-source> [...]";
         let mut it = args.iter();
         let cc = it.next().ok_or(usage)?.clone();
         let (mut release, mut admin, mut tz, mut key, mut ids, mut core, mut lite) =
             (None, None, None, None, None, None, false);
+        let mut topology = false;
         let mut sources = Vec::new();
         while let Some(a) = it.next() {
             let mut value = || it.next().cloned().ok_or(usage);
@@ -95,6 +99,7 @@ impl Args {
                 "--ids" => ids = Some(value()?),
                 "--core" => core = Some(value()?),
                 "--lite" => lite = true,
+                "--topology" => topology = true,
                 s if s.starts_with("--") => return Err(format!("unknown flag `{s}`; {usage}")),
                 s => sources.push(s.to_string()),
             }
@@ -111,6 +116,7 @@ impl Args {
             key,
             ids,
             core,
+            topology,
             sources,
         })
     }
@@ -225,6 +231,11 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
     let file = out_dir.join(format!("{}-places-{}.tgd", a.cc, a.build_name()));
     let registry = registry(root, a.ids.as_deref())?;
+    let geometry = if a.topology {
+        Some(geometry::load(root, &a.admin)?)
+    } else {
+        None
+    };
     let report = pack::write(&pack::Input {
         root,
         args: &a,
@@ -235,6 +246,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         file: &file,
         registry: &registry,
         ids_file: &out_dir.join(format!("{}-ids-{}.tsv", a.cc, a.build_name())),
+        geometry: geometry.as_ref(),
     })?;
     let mut summary = format!(
         "## build: {} {}\n\n{} places from {}; boundaries {}; timezones {}.\n",

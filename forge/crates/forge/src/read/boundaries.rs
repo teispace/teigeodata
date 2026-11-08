@@ -17,6 +17,10 @@ pub(crate) struct Unit {
     pub(crate) pcode: String,
     pub(crate) name: String,
     pub(crate) polygon: Polygon,
+    /// The P-codes of its ancestors, level 0 first (`adm0_pcode` … `adm<level − 1>_pcode`).
+    pub(crate) parents: Vec<String>,
+    /// The area the source states, km² (`area_sqkm`), if any.
+    pub(crate) area_km2: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -104,10 +108,24 @@ pub(crate) fn read(zip_path: &Path, level: u8) -> Result<Vec<Unit>, String> {
                 }
                 None => Vec::new(),
             };
+            let parents = (0..level)
+                .map(|l| {
+                    f.properties
+                        .get(&format!("adm{l}_pcode"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .to_string()
+                })
+                .collect();
             Unit {
                 pcode: prop(f, "pcode"),
                 name: prop(f, "name"),
                 polygon: Polygon { rings },
+                parents,
+                area_km2: f
+                    .properties
+                    .get("area_sqkm")
+                    .and_then(serde_json::Value::as_f64),
             }
         })
         .collect();
