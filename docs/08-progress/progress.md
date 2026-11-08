@@ -20,8 +20,11 @@ updated: 2026-11-08
   buildings in under 10 s), the settlement core and weighted Weiszfeld consensus (88,649 of
   98,020 places with a core; Google-only against Microsoft-only P90 146 m, gate 180 m, fatal),
   the 301-place labelling sample (Q-017, maintainer). `forge make np` cold 30 s; main pack
-  7.05 MB, lite 4.48 MB. DEM elevation at the consensus point moved to 3.4. Next: 3.3, B10
-  geometry.
+  7.05 MB, lite 4.48 MB. DEM elevation at the consensus point moved to 3.4.
+- **3.3 in progress** (D-097, D-098): ARCS and POLYGONS sections and the forge's topology stage
+  are built; the Nepal packs carry 860 admin polygons on 2,315 shared arcs (4.48 B per vertex,
+  8 levels of detail, parents within 1 cm of COD-AB's), main 9.73 MB, lite 7.17 MB. Next:
+  POLY_INDEX, then the admin REGION on the shared arcs and its A/B against D-083.
 - **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
@@ -132,3 +135,4 @@ updated: 2026-11-08
 | 2026-11-07 | 3.1: the ID registry (D-094): lite keeps 91,153 of 91,266 main IDs, a rebuild keeps all, retirement writes REDIRECTS | Stage cache, then 3.2 |
 | 2026-11-07 | 3.1 done: `forge make` and `build.yaml`, content-keyed stages with stamped outputs (D-095) | 3.2: building readers, settlement core, consensus |
 | 2026-11-08 | 3.2: building readers, `forge core` with a fatal agreement gate (P90 146 m) proved on a planted mismatch, the border rule, `forge labels` and the 301-place sample (D-096) | 3.3: B10 geometry |
+| 2026-11-08 | 3.3: ARCS (a518086), POLYGONS (07cbe5b), topology stage and pack geometry (faebfbc); D-097, D-098 | POLY_INDEX, admin REGION A/B |
