@@ -26,6 +26,7 @@ use crate::hierarchy::{self, Hierarchy, MAX_DEPTH};
 use crate::idmap::{self, IdMap};
 use crate::place_index::{self, MAX_NODE, MIN_NODE, Neighbour, PlaceIndex, Rect};
 use crate::places::{self, PlaceColumns, Places};
+use crate::polygons::{self, PolygonInput, Polygons, arc_ref};
 use crate::redirects::{self, Fate, Redirects, Resolved, resolve};
 use crate::region::{self, Region};
 use crate::search::fuzzy::Fuzzy;
@@ -111,8 +112,9 @@ pub fn sections(data: &[u8]) {
     let mut c = Cursor(data);
     let mode = c.u8();
     let structured = mode & 0x80 != 0;
-    match mode % 9 {
+    match mode % 10 {
         8 => arcs_case(&mut c, structured),
+        9 => polygons_case(&mut c, structured),
         0 => places_case(&mut c, structured),
         1 => hierarchy_case(&mut c, structured),
         2 => idmap_case(&mut c, structured),
@@ -1274,6 +1276,256 @@ fn arcs_case(c: &mut Cursor<'_>, structured: bool) {
                 "a checked arc repeats a vertex"
             );
             assert_eq!(fwd.first().copied(), v.first(a));
+        }
+    }
+}
+
+/// A model topology: a grid of `w` × `h` square cells sharing their edges as arcs (with a few
+/// bent vertices), a parent polygon over the whole grid, and in cell 0 a square hole filled by an
+/// island polygon. Returns the arcs and, per polygon, its rings as lists of references.
+struct Topo {
+    arcs: Vec<Vec<Point<E7>>>,
+    /// Per polygon; polygon 0 is the parent (group 0).
+    polys: Vec<ModelPolygon>,
+}
+
+/// A model polygon: its row, its parts as rings of references, its label.
+type ModelPolygon = (u32, Vec<Vec<Vec<u32>>>, Point<E7>);
+
+fn grid_topo(c: &mut Cursor<'_>) -> Topo {
+    let (w, h) = (1 + c.below(3), 1 + c.below(3));
+    let size = 1_000 + i32::from(c.u16()) * 4;
+    let (x0, y0) = (
+        850_000_000 + i32::from(c.u16()) * 100,
+        280_000_000 + i32::from(c.u16()) * 100,
+    );
+    let at =
+        |x: i32, y: i32| Point::<E7>::from_units(y, x).unwrap_or_else(|| panic!("model point"));
+    let node = |i: usize, j: usize| (x0 + i as i32 * size, y0 + j as i32 * size);
+    let mut arcs: Vec<Vec<Point<E7>>> = Vec::new();
+    // An edge from node a to node b, bent by up to a tenth of a cell sideways.
+    let mut edge = |c: &mut Cursor<'_>, a: (i32, i32), b: (i32, i32)| {
+        let mut pts = vec![at(a.0, a.1)];
+        let bends = c.u8() % 4;
+        for k in 1..=bends {
+            let t = i32::from(k) * size / (i32::from(bends) + 1);
+            let off = i32::from(c.u8()) % (size / 10) - size / 20;
+            let p = if a.1 == b.1 {
+                (a.0 + t * (b.0 - a.0).signum(), a.1 + off)
+            } else {
+                (a.0 + off, a.1 + t * (b.1 - a.1).signum())
+            };
+            pts.push(at(p.0, p.1));
+        }
+        pts.push(at(b.0, b.1));
+        pts.dedup();
+        arcs.push(pts);
+        (arcs.len() - 1) as u32
+    };
+    // Horizontal edges hz[j][i] from node (i, j) to (i + 1, j); vertical vt[i][j] from (i, j) to (i, j + 1).
+    let hz: Vec<Vec<u32>> = (0..=h)
+        .map(|j| {
+            (0..w)
+                .map(|i| edge(c, node(i, j), node(i + 1, j)))
+                .collect()
+        })
+        .collect();
+    let vt: Vec<Vec<u32>> = (0..=w)
+        .map(|i| {
+            (0..h)
+                .map(|j| edge(c, node(i, j), node(i, j + 1)))
+                .collect()
+        })
+        .collect();
+    // The hole and island: a closed square in the lower-left quarter of cell 0.
+    let (q, (hx, hy)) = (size / 4, node(0, 0));
+    let sq = [
+        (hx + q / 2, hy + q / 2),
+        (hx + q + q / 2, hy + q / 2),
+        (hx + q + q / 2, hy + q + q / 2),
+        (hx + q / 2, hy + q + q / 2),
+        (hx + q / 2, hy + q / 2),
+    ];
+    arcs.push(sq.iter().map(|p| at(p.0, p.1)).collect());
+    let island = (arcs.len() - 1) as u32;
+    let mut polys = Vec::new();
+    let mut outer = Vec::new();
+    outer.extend((0..w).map(|i| arc_ref(hz[0][i], false)));
+    outer.extend((0..h).map(|j| arc_ref(vt[w][j], false)));
+    outer.extend((0..w).rev().map(|i| arc_ref(hz[h][i], true)));
+    outer.extend((0..h).rev().map(|j| arc_ref(vt[0][j], true)));
+    let centre = |i: usize, j: usize| {
+        let (x, y) = node(i, j);
+        at(x + size * 3 / 4, y + size * 3 / 4)
+    };
+    polys.push((0, vec![vec![outer]], centre(0, 0)));
+    let mut row = 1;
+    for j in 0..h {
+        for i in 0..w {
+            let ring = vec![
+                arc_ref(hz[j][i], false),
+                arc_ref(vt[i + 1][j], false),
+                arc_ref(hz[j + 1][i], true),
+                arc_ref(vt[i][j], true),
+            ];
+            let mut rings = vec![ring];
+            if i == 0 && j == 0 {
+                rings.push(vec![arc_ref(island, true)]);
+            }
+            polys.push((row, vec![rings], centre(i, j)));
+            row += 1;
+        }
+    }
+    polys.push((
+        row,
+        vec![vec![vec![arc_ref(island, false)]]],
+        at(hx + q, hy + q),
+    ));
+    Topo { arcs, polys }
+}
+
+fn polygons_case(c: &mut Cursor<'_>, structured: bool) {
+    let topo = grid_topo(c);
+    let pts: Vec<&[Point<E7>]> = topo.arcs.iter().map(|a| &a[..]).collect();
+    let arcs_body = arcs::encode(&ArcColumns {
+        arcs: &pts,
+        ..ArcColumns::default()
+    })
+    .unwrap_or_else(|e| panic!("model arcs: {e}"));
+    // Two ring lists per polygon so PolygonInput can borrow them.
+    let ring_refs: Vec<Vec<&[u32]>> = topo
+        .polys
+        .iter()
+        .map(|p| p.1[0].iter().map(|r| &r[..]).collect())
+        .collect();
+    let parts: Vec<[&[&[u32]]; 1]> = ring_refs.iter().map(|r| [&r[..]]).collect();
+    let input: Vec<PolygonInput<'_>> = topo
+        .polys
+        .iter()
+        .zip(&parts)
+        .map(|(p, parts)| PolygonInput {
+            row: p.0,
+            parts: &parts[..],
+            label: p.2,
+            area_ha: 1,
+        })
+        .collect();
+    let groups = [0_u32, 1];
+    let mut body = polygons::encode(&input, &groups)
+        .unwrap_or_else(|e| panic!("a valid polygon model is refused: {e}"));
+    let mut items = input.len() as u64;
+    let model = if structured {
+        !edit(c, &mut body, &mut items)
+    } else {
+        items = u64::from(c.u8());
+        body = c.rest().to_vec();
+        false
+    };
+    let places = topo.polys.len() + 1;
+    let Some(file) = pack(&[
+        (Kind::ARCS, topo.arcs.len() as u64, &arcs_body),
+        (Kind::POLYGONS, items, &body),
+    ]) else {
+        return;
+    };
+    let p = open(&file);
+    let a = Arcs::open(&section(&p, Kind::ARCS)).unwrap_or_else(|e| panic!("model arcs: {e}"));
+    let Ok(v) = Polygons::open(&section(&p, Kind::POLYGONS)) else {
+        assert!(!model, "a written POLYGONS payload does not open");
+        return;
+    };
+    // Probes: random near the grid, or exactly on a vertex, or on a vertex's latitude, where
+    // the border rule decides.
+    let verts: Vec<Point<E7>> = topo.arcs.iter().flatten().copied().collect();
+    let probe = |c: &mut Cursor<'_>| {
+        let l = verts[c.below(verts.len())];
+        let (dy, dx) = match c.u8() % 4 {
+            0 => (0, 0),
+            1 => (0, i32::from(c.u16()) - 32_768),
+            _ => (
+                i32::from(c.u16()) * 3 - 98_304,
+                i32::from(c.u16()) * 3 - 98_304,
+            ),
+        };
+        Point::<E7>::from_units(l.lat() + dy, l.lon() + dx).unwrap_or(l)
+    };
+    for q in rows(v.len()) {
+        let _ = (
+            v.row(q),
+            v.label(q),
+            v.area_ha(q),
+            v.parts(q),
+            v.polygon_of(q as u32),
+        );
+        let _ = v.contains(&a, q, probe(c));
+        for r in 0..8 {
+            let _ = v.ring(&a, r, 0).take(2000).count();
+            let _ = v.refs(r).take(64).count();
+        }
+    }
+    let checked = v.check(&a, places).is_ok();
+    // The oracle: REGION's own even–odd over the decoded rings.
+    let rings_of = |q: usize| -> Vec<Vec<[i32; 2]>> {
+        let mut out = Vec::new();
+        for part in v.parts(q).unwrap_or(0..0) {
+            for r in v.rings(part).unwrap_or(0..0) {
+                out.push(v.ring(&a, r, 0).map(|p| [p.lon(), p.lat()]).collect());
+            }
+        }
+        out
+    };
+    if model {
+        assert!(
+            checked,
+            "a written POLYGONS payload fails its check: {:?}",
+            v.check(&a, places)
+        );
+        assert_eq!(v.len(), topo.polys.len());
+        for (q, (row, rings, label)) in topo.polys.iter().enumerate() {
+            assert_eq!(
+                (v.row(q), v.label(q), v.polygon_of(*row)),
+                (Some(*row), Some(*label), Some(q))
+            );
+            let decoded = rings_of(q);
+            assert_eq!(decoded.len(), rings[0].len());
+            for (d, refs) in decoded.iter().zip(&rings[0]) {
+                // Built here from the model arcs, not by the reader.
+                let mut want: Vec<[i32; 2]> = Vec::new();
+                for &r in refs {
+                    let mut arc: Vec<[i32; 2]> = topo.arcs[(r >> 1) as usize]
+                        .iter()
+                        .map(|p| [p.lon(), p.lat()])
+                        .collect();
+                    if r & 1 == 1 {
+                        arc.reverse();
+                    }
+                    let skip = usize::from(!want.is_empty());
+                    want.extend(arc.into_iter().skip(skip));
+                }
+                assert_eq!(d, &want, "polygon {q} ring");
+            }
+        }
+    }
+    if checked {
+        let all: Vec<Vec<Vec<[i32; 2]>>> = (0..v.len()).map(rings_of).collect();
+        for q in 0..v.len().min(64) {
+            let label = v
+                .label(q)
+                .unwrap_or_else(|| panic!("a checked label is off the grid"));
+            assert_eq!(
+                region::even_odd(&all[q..=q], label),
+                vec![0],
+                "a checked label is outside polygon {q}"
+            );
+        }
+        for _ in 0..16 {
+            let at = probe(c);
+            let want = region::even_odd(&all, at);
+            let got: Vec<u32> = (0..v.len())
+                .filter(|&q| v.contains(&a, q, at))
+                .map(|q| q as u32)
+                .collect();
+            assert_eq!(got, want, "contains at {at}");
         }
     }
 }

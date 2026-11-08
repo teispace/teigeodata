@@ -122,7 +122,7 @@ parameters).
 | 5 | SEARCH | tagged name keys (exact, loose, phonetic) → lists of rows by importance; fuzzy and top-k prefix | `search` | column table (D-085): own FST + FOR lists + block maxima; 1.50 MB on Nepal, [below](#search) |
 | 6 | PLACE_INDEX | packed Hilbert R-tree whose leaves are the PLACES rows | `core`; nearest needs `spatial` | column table (D-082): u16 boxes inside the parent; 0.55 B per place at node size 16 |
 | 7 | ARCS | shared arcs, delta coordinates on 1e-7°, per-vertex LOD level | `geometry` | column table (D-088, D-097): zigzag deltas per arc in B1 FOR blocks, arc bases, block checkpoints, 3-bit LOD level per vertex, [below](#arcs) |
-| 8 | POLYGONS | polygons → parts → rings → signed arc refs; PLACES row, label point, area | `geometry` | column table (D-088; boxes live in POLY_INDEX) |
+| 8 | POLYGONS | polygons → parts → rings → signed arc refs; PLACES row, label point, area | `geometry` | column table (D-088, D-097; boxes live in POLY_INDEX), [below](#polygons) |
 | 9 | POLY_INDEX | packed R-tree over polygon boxes | `geometry` | as 6, with a stored leaf level (D-088) |
 | 10 | REGION | exact point → regions (timezones, later admin units): shared-arc borders, a dense top grid, quadtree leaves in Morton order with edge-ID runs, region sets | `region` | column table (D-083): [below](#region) |
 | 11 | POSTAL | scheme + code → postal records (place, kind, validity, redirect) | `postal` | column table on `search::fst` (D-090) |
@@ -331,6 +331,35 @@ The item count is the number of arcs; vertices are numbered across all arcs.
   triangle; tolerances positive and increasing; scales up to 7. The checkpoints are required
   (the note had them optional): they cost about 0.05 B per vertex and make reversed reads and
   REGION's shared use one code path.
+
+### POLYGONS
+
+Every polygon as parts, rings and signed references to ARCS (D-088, D-097). Code:
+`teigeodata_format::polygons`. The item count is the number of polygons.
+
+| ID | Column | Values | |
+|---:|---|---|---|
+| 1 | ROW | per polygon: its PLACES row, increasing within a group | required |
+| 2 | PARTS | polygons + 1: each polygon's first part | required |
+| 3 | RINGS | parts + 1: each part's first ring, its outer ring | required |
+| 4 | REFS_START | rings + 1: each ring's first reference | required |
+| 5 | REFS | per reference: `2·arc + reversed` | required, FOR |
+| 6, 7 | LABEL_X, LABEL_Y | per polygon: a point inside it (polylabel), biased | required |
+| 8 | AREA | per polygon: ellipsoidal area in hectares, rounded | required |
+| 9 | GROUPS | groups + 1: each group's first polygon (admin levels, coarse to fine) | optional, absent = one group |
+
+- **Rings** follow `TopoJSON`: each arc after the first drops its first vertex, and the last arc
+  ends where the first began. Outer rings run counter-clockwise, holes clockwise (RFC 7946).
+  `Polygons::ring(arcs, ring, lod)` yields a closed ring at any level of detail without
+  allocating.
+- **Row → polygon** is a binary search in each group.
+- **`contains`** is exact with REGION's border rule (a point is read as `p + (ε, ε²)`); it is
+  REGION's test oracle and the fallback of a pack without REGION, not the point → admin path.
+- **Rules** (`Polygons::check(arcs, places)`): offsets increasing; rows below the PLACES count,
+  increasing within a group and unique; references to existing arcs that join end to start and
+  close; rings of at least 4 vertices and non-zero area, outer rings counter-clockwise and holes
+  clockwise; each label inside its polygon. Not checked: that a hole lies inside its outer ring
+  and that rings do not cross; the forge's topology stage guarantees both.
 
 ### REGION
 

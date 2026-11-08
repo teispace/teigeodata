@@ -50,6 +50,7 @@ mod manifest;
 pub mod names;
 pub mod place_index;
 pub mod places;
+pub mod polygons;
 mod read;
 pub mod redirects;
 pub mod region;
