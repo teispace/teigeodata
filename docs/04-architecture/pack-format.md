@@ -400,9 +400,10 @@ quantised once to the 1e-7° grid (D-083, [ADR-0013](../03-decisions/adr/ADR-001
 [spike S2](../02-research/benches/s2-region-index.md), measured in
 [B9](../02-research/benches/phase-2.md#b9-region)). Code: `teigeodata_format::region`.
 `item_count` is the number of regions; a region ID is below it. Edges are straight in
-lon/lat. A column ID of 0 or above 19 is refused. Vertices come from the section's own X and
+lon/lat. A column ID of 0 or above 21 is refused. Vertices come from the section's own X and
 Y, or from ARCS (columns 17 to 19, [ADMIN_REGION](#admin_region)); a section has one or the
-other.
+other. An optional **fine grid** (columns 20 and 21, D-101) covers the regions' extent at a
+finer level than the world top grid.
 
 - **Domain and grid:** the closed world rectangle, longitude −1,800,000,000 to 1,800,000,000
   and latitude −900,000,000 to 900,000,000 in 1e-7° units. A quadtree over it goes down to
@@ -437,6 +438,8 @@ other.
 | 17 | RUN_X | on ARCS, instead of X and Y: per run, its first vertex's longitude, biased |
 | 18 | RUN_Y | on ARCS: per run, its first vertex's latitude, biased |
 | 19 | RUN_SCALE | on ARCS, when the arcs have decimal scales: per run, its arc's scale |
+| 20 | WINDOW | optional, five values: the fine level `f` (above `g`, at most 16, `MAX_FINE`), the window's first column and row at level `f`, and its column and row counts (at most 2²² cells, `MAX_FINE_CELLS`) |
+| 21 | FINE | with WINDOW, per window cell in row-major order: `2·s + 1` when the edge-free leaf holding the whole cell has set `s` (a fast answer), else `2·i` with `i` the first leaf starting at or after the cell's first key |
 
 - **Region sets:** set `z` is the single region `z` for every region ID `z`, so a leaf or run of
   one region is read without the set tables. Sets of no region or of several follow, numbered
@@ -454,7 +457,11 @@ other.
 - **Query** (`Region::regions_at`, and `Region::region` for the single answer):
   1. Normalise: longitude 180° is read as −180° (the same meridian), latitude 90° as
      899,999,999 units.
-  2. Find the point's key and top cell `c`. If `TOP_ZONES[c]` is not 0, the answer is set
+  2. Find the point's key. Inside the fine window, read its fine cell's FINE value `v`: odd,
+     the answer is set `v >> 1` (one read); even, gallop forward from leaf `v >> 1`, bounded by
+     `DIR[c + 1]` of the point's top cell `c`, for the last leaf starting at or before the point
+     (leaf `v/2 − 1` if none), and go to step 4.
+     Outside it, find the top cell `c`. If `TOP_ZONES[c]` is not 0, the answer is set
      `TOP_ZONES[c] − 1`: one read.
   3. Otherwise binary-search KEY between `DIR[c]` and `DIR[c + 1]` for the last leaf starting
      at or before the point; with none, the leaf is `DIR[c] − 1`, a leaf coarser than the top
@@ -477,7 +484,9 @@ other.
 - **Opening** (`Region::open`) refuses a missing required column, a top level outside 8 to 12,
   a column of the wrong length (DIR 4^g + 1; KEY, LEVEL, ZONES and NUDGE one per leaf; RUNS one
   more; the run columns one per run; Y as long as X; TOP_ZONES 4^g; SET_ZONES the last
-  SET_START), a column ID of 0 or above 19, and run vertex columns next to X and Y.
+  SET_START), a column ID of 0 or above 21, run vertex columns next to X and Y, a WINDOW that
+  is not five values with `g < f ≤ 16`, non-empty counts inside the level-`f` grid and at most
+  2²² cells, FINE of another length than the window's cells, and FINE without WINDOW.
 - **The deep check** (`Region::check`), one pass over each column:
   - sets: starts increase from 0, each set has at most 64 members in strictly increasing order
     below the item count, and set `z` is `{z}`;
@@ -486,12 +495,15 @@ other.
     range;
   - a nonzero TOP_ZONES entry has a holding leaf no deeper than the top grid whose edges all
     miss the closed top cell;
+  - an even FINE value names the first leaf at or after its cell's first key, and an odd one
+    has a holding leaf no deeper than the fine grid whose edges all miss the closed fine cell
+    and a set in range;
   - runs: in range, non-empty, ending inside the vertices, in increasing order within a leaf
     and never adjacent (the writer's runs are maximal); every edge has two distinct ends,
     touches its leaf's closed cell, and its line misses the leaf's reference point; NUDGE is
     below 4,096, and 0 for a leaf without edges.
 
-  It does **not** re-derive the region sets (ZONES, RUN_ZONES, TOP_ZONES) from the geometry,
+  It does **not** re-derive the region sets (ZONES, RUN_ZONES, TOP_ZONES, FINE) from the geometry,
   nor that NUDGE is the writer's first good candidate, that NUDGE is left out when every value
   is 0, or that runs are split where one arc ends and the next begins, so a pack that passes can still answer
   wrongly if it was edited. The pack signature guards those; answers are exact on a pack built
@@ -504,7 +516,10 @@ other.
   vertex. It finds the root's sets by an east ray cast, then splits top down: a cell with more
   than `leaf_max` edges splits, down to level 24, and a child's set is its parent's toggled by
   the edges crossed between their reference points. The writer is deterministic.
-  - **Options:** `leaf_max` (at least 1, 32 by default) and `top` (8 to 12, 10 by default).
+  - **Options:** `leaf_max` (at least 1, 32 by default), `top` (8 to 12, 8 by default) and
+    `fine_cells` (at most 2²², 2^18 by default, 0 for none): the fine grid takes the finest
+    level from `top + 1` to 16 whose window, the level-`f` cells holding an edge vertex, has at
+    most that many cells (D-101).
   - **Stuck rule:** a cell with at most 16 edges stays a leaf when one child would keep all of
     them while another child has edges too, so edges that meet at a point or overlap do not
     split down to level 24.

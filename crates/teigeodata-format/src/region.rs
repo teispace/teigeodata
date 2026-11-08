@@ -38,6 +38,17 @@
 //! | 14 | [`SET_ZONES`] | the region IDs of every set, each set strictly increasing |
 //! | 15 | [`TOP_ZONES`] | per top cell: 1 + the region set of the leaf without edges that holds the whole cell, or 0 |
 //! | 16 | [`PLACE`] | optional, per region: the PLACES row of its place (a timezone area, an admin unit), set by [`link`] |
+//! | 17 | [`RUN_X`] | on ARCS, per run: longitude of its first vertex, biased |
+//! | 18 | [`RUN_Y`] | on ARCS, per run: latitude of its first vertex, biased |
+//! | 19 | [`RUN_SCALE`] | on ARCS, optional, per run: its arc's decimal scale |
+//! | 20 | [`WINDOW`] | optional, five values: the level `f` of the fine grid, its first column and row, its column and row counts |
+//! | 21 | [`FINE`] | with [`WINDOW`], per fine cell in row-major order: `2·set + 1` (odd) when an edge-free leaf holds the whole cell, else `2·leaf` with `leaf` the first leaf starting at or after the cell |
+//!
+//! The **fine grid** covers the regions' extent at a finer level than the top grid, which
+//! covers the world: a pack of one country gets a fine directory for a few KB where a world
+//! grid of that level would cost megabytes (D-101). A query inside the window reads its fine
+//! cell first: one read answers it, or the cell's first leaf starts a short gallop for the
+//! holding leaf. Outside the window the top grid answers.
 //!
 //! Set `z` is the single region `z` for every region ID `z`, so a leaf or an arc of one region
 //! is read without the set tables; sets of none or of several regions follow.
@@ -55,6 +66,7 @@
 )]
 
 use teigeodata_core::bitpack::{Packed, unbias, unzigzag};
+use teigeodata_core::table::Table;
 use teigeodata_core::{E7, Point};
 
 use crate::arcs::{Arcs, pow10};
@@ -103,6 +115,14 @@ pub const RUN_X: u16 = 17;
 pub const RUN_Y: u16 = 18;
 /// Column: on ARCS with decimal scales, each run's arc scale (optional).
 pub const RUN_SCALE: u16 = 19;
+/// Column: the fine grid's level and window.
+pub const WINDOW: u16 = 20;
+/// Column: per fine cell, a fast answer or its first leaf.
+pub const FINE: u16 = 21;
+/// The deepest fine-grid level.
+pub const MAX_FINE: u32 = 16;
+/// The most fine cells.
+pub const MAX_FINE_CELLS: usize = 1 << 22;
 
 /// The deepest quadtree level; leaves there are about 2.4 m by 1.2 m at the equator.
 pub const LEVELS: u32 = 24;
@@ -396,6 +416,31 @@ pub struct Region<'a> {
     set_start: Packed<'a>,
     set_zones: Packed<'a>,
     place: Option<Packed<'a>>,
+    fine: Option<Fine<'a>>,
+}
+
+/// The fine grid: [`WINDOW`] and [`FINE`].
+#[derive(Clone, Copy, Debug)]
+struct Fine<'a> {
+    level: u32,
+    west: u32,
+    south: u32,
+    cols: u32,
+    rows: u32,
+    cells: Packed<'a>,
+}
+
+impl Fine<'_> {
+    /// The fine cell holding the point at level-[`LEVELS`] column `col_ix` and row `row_ix`, if
+    /// inside the window.
+    fn cell(&self, col_ix: u32, row_ix: u32) -> Option<usize> {
+        let shift = LEVELS - self.level;
+        let (c, r) = (
+            (col_ix >> shift).checked_sub(self.west)?,
+            (row_ix >> shift).checked_sub(self.south)?,
+        );
+        (c < self.cols && r < self.rows).then(|| r as usize * self.cols as usize + c as usize)
+    }
 }
 
 impl<'a> Region<'a> {
@@ -489,7 +534,8 @@ impl<'a> Region<'a> {
             .and_then(|v| usize::try_from(v).ok())
             .ok_or_else(|| fail(SET_START, "the sets have no count"))?;
         let set_zones = req(SET_ZONES, Some(entries))?;
-        if table.ids().any(|id| id == 0 || id > RUN_SCALE)
+        let fine = Self::open_fine(&table, kind, top)?;
+        if table.ids().any(|id| id == 0 || id > FINE)
             || matches!(verts, Verts::Own { .. })
                 && [RUN_X, RUN_Y, RUN_SCALE]
                     .iter()
@@ -518,7 +564,44 @@ impl<'a> Region<'a> {
             set_start,
             set_zones,
             place,
+            fine,
         })
+    }
+
+    fn open_fine(table: &Table<'a>, kind: Kind, top: u32) -> Result<Option<Fine<'a>>, Error> {
+        let Some(w) = columns::optional(table, kind, WINDOW, 5)? else {
+            if table.ids().any(|id| id == FINE) {
+                return Err(fail(FINE, "a fine grid without its window"));
+            }
+            return Ok(None);
+        };
+        let v: [u32; 5] = core::array::from_fn(|i| w.get(i).unwrap_or(u32::MAX));
+        let [level, west, south, cols, rows] = v;
+        let side = 1_u64 << level.min(MAX_FINE);
+        let cells = u64::from(cols) * u64::from(rows);
+        if level <= top
+            || level > MAX_FINE
+            || cols == 0
+            || rows == 0
+            || u64::from(west) + u64::from(cols) > side
+            || u64::from(south) + u64::from(rows) > side
+            || cells > MAX_FINE_CELLS as u64
+        {
+            return Err(fail(
+                WINDOW,
+                "the fine grid's level or window is out of range",
+            ));
+        }
+        #[allow(clippy::cast_possible_truncation, reason = "at most MAX_FINE_CELLS")]
+        let cells = columns::required(table, kind, FINE, Some(cells as usize))?;
+        Ok(Some(Fine {
+            level,
+            west,
+            south,
+            cols,
+            rows,
+            cells,
+        }))
     }
 
     /// The number of regions.
@@ -566,6 +649,12 @@ impl<'a> Region<'a> {
         self.top
     }
 
+    /// The fine grid's level and its column and row counts, if the section has one.
+    #[must_use]
+    pub fn fine_grid(&self) -> Option<(u32, u32, u32)> {
+        self.fine.map(|f| (f.level, f.cols, f.rows))
+    }
+
     /// The region with the lowest ID (the highest precedence) holding `at`, if any.
     #[must_use]
     pub fn region(&self, at: Point<E7>) -> Option<u32> {
@@ -577,15 +666,29 @@ impl<'a> Region<'a> {
     /// how many there are, which may exceed `out.len()`.
     pub fn regions_at(&self, at: Point<E7>, out: &mut [u32]) -> usize {
         let p = normalise(at);
-        let key = morton(index(X_MIN, X_SPAN, p.0), index(Y_MIN, Y_SPAN, p.1));
+        let (col_ix, row_ix) = (index(X_MIN, X_SPAN, p.0), index(Y_MIN, Y_SPAN, p.1));
+        let key = morton(col_ix, row_ix);
         let mut acc = Acc::new();
-        // A top cell inside one leaf without edges: one read.
-        let cell_id = usize::try_from(key >> (2 * (LEVELS - self.top))).unwrap_or(0);
-        if let Some(z) = self.top_zones.get(cell_id).and_then(|v| v.checked_sub(1)) {
-            self.add_set(z, &mut acc);
-            return acc.write(out);
-        }
-        let leaf = self.leaf(key);
+        let fine = self
+            .fine
+            .as_ref()
+            .and_then(|f| f.cell(col_ix, row_ix).and_then(|c| f.cells.get(c)));
+        let leaf = if let Some(v) = fine {
+            // A fine cell inside one leaf without edges: one read.
+            if v & 1 == 1 {
+                self.add_set(v >> 1, &mut acc);
+                return acc.write(out);
+            }
+            self.leaf_from(key, (v >> 1) as usize)
+        } else {
+            // The same for a top cell.
+            let cell_id = usize::try_from(key >> (2 * (LEVELS - self.top))).unwrap_or(0);
+            if let Some(z) = self.top_zones.get(cell_id).and_then(|v| v.checked_sub(1)) {
+                self.add_set(z, &mut acc);
+                return acc.write(out);
+            }
+            self.leaf(key)
+        };
         self.add_set(self.zones.get(leaf).unwrap_or(u32::MAX), &mut acc);
         let (first, last) = (self.runs.get(leaf), self.runs.get(leaf + 1));
         let (Some(first), Some(last)) = (first, last) else {
@@ -623,6 +726,41 @@ impl<'a> Region<'a> {
         while a < b {
             let m = a + (b - a) / 2;
             if self.key.get(m).is_some_and(|k| k <= rel) {
+                a = m + 1;
+            } else {
+                b = m;
+            }
+        }
+        a.saturating_sub(1)
+    }
+
+    /// The leaf holding Morton key `key` when `lo` is the first leaf starting at or after the
+    /// key's fine cell: a gallop from `lo`, bounded by the top cell's leaves.
+    fn leaf_from(&self, key: u64, lo: usize) -> usize {
+        let shift = 2 * (LEVELS - self.top);
+        let c = usize::try_from(key >> shift).unwrap_or(0);
+        let hi = self
+            .dir
+            .get(c + 1)
+            .map_or(0, |h| (h as usize).min(self.leaves));
+        let rel = u32::try_from(key & ((1_u64 << shift) - 1)).unwrap_or(u32::MAX);
+        let at_or_before = |m: usize| self.key.get(m).is_some_and(|k| k <= rel);
+        // Gallop: [a, b) holds the first leaf starting after `rel`.
+        let (mut a, mut step) = (lo, 1);
+        let mut b = loop {
+            let m = a.saturating_add(step - 1);
+            if m >= hi {
+                break hi;
+            }
+            if !at_or_before(m) {
+                break m;
+            }
+            a = m + 1;
+            step *= 2;
+        };
+        while a < b {
+            let m = a + (b - a) / 2;
+            if at_or_before(m) {
                 a = m + 1;
             } else {
                 b = m;
@@ -747,7 +885,73 @@ impl<'a> Region<'a> {
     pub fn check(&self) -> Result<(), Error> {
         self.check_sets()?;
         self.check_leaves()?;
+        self.check_fine()?;
         self.check_runs()
+    }
+
+    /// Every fine cell's first leaf, or its fast answer's holding leaf without edges in the
+    /// cell, against the directory [`Region::check_leaves`] checked.
+    fn check_fine(&self) -> Result<(), Error> {
+        let Some(f) = self.fine else {
+            return Ok(());
+        };
+        let sets = self.set_start.len() - 1;
+        let shift = LEVELS - f.level;
+        let top_shift = 2 * (LEVELS - self.top);
+        let mut cache = EdgeCache {
+            leaf: usize::MAX,
+            len: 0,
+            edges: [((0, 0), (0, 0)); CACHED_EDGES],
+        };
+        let mut id = 0;
+        for r in 0..f.rows {
+            for c in 0..f.cols {
+                let v = f
+                    .cells
+                    .get(id)
+                    .ok_or_else(|| fail(FINE, "a fine cell is missing"))?;
+                id += 1;
+                let start = morton((f.west + c) << shift, (f.south + r) << shift);
+                let t = usize::try_from(start >> top_shift).unwrap_or(usize::MAX);
+                let (Some(lo), Some(hi)) = (self.dir.get(t), self.dir.get(t + 1)) else {
+                    return Err(fail(DIR, "a directory entry is missing"));
+                };
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    reason = "below 2^32 under the top cell"
+                )]
+                let rel = (start & ((1_u64 << top_shift) - 1)) as u32;
+                // The first leaf of the top cell starting at or after the fine cell.
+                let (mut a, mut b) = (lo as usize, hi as usize);
+                while a < b {
+                    let m = a + (b - a) / 2;
+                    if self.key.get(m).is_some_and(|k| k < rel) {
+                        a = m + 1;
+                    } else {
+                        b = m;
+                    }
+                }
+                if v & 1 == 0 {
+                    if (v >> 1) as usize != a {
+                        return Err(fail(FINE, "a fine cell's first leaf is wrong"));
+                    }
+                    continue;
+                }
+                let holder = if a < hi as usize && self.key.get(a) == Some(rel) {
+                    Some(a)
+                } else {
+                    a.checked_sub(1)
+                };
+                let ok = holder.is_some_and(|h| {
+                    self.level.get(h).is_some_and(|l| l <= f.level)
+                        && self.edges_miss(h, cell(start, f.level), &mut cache)
+                });
+                if !ok || (v >> 1) as usize >= sets {
+                    return Err(fail(FINE, "a fine cell's fast answer has edges in it"));
+                }
+            }
+        }
+        Ok(())
     }
 
     fn check_sets(&self) -> Result<(), Error> {
@@ -1030,9 +1234,30 @@ impl<'a> Region<'a> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Cell, LEVELS, X_MIN, X_SPAN, Y_MIN, Y_SPAN, cell, compact, crosses, edge, index, morton,
-        reference, spread,
+        Cell, Fine, LEVELS, X_MIN, X_SPAN, Y_MIN, Y_SPAN, cell, compact, crosses, edge, index,
+        morton, reference, spread,
     };
+    #[cfg(feature = "write")]
+    #[test]
+    fn a_fine_cell_is_found_only_inside_the_window() {
+        let bytes = teigeodata_core::bitpack::encode_direct(&[]);
+        let f = Fine {
+            level: 10,
+            west: 5,
+            south: 7,
+            cols: 3,
+            rows: 2,
+            cells: teigeodata_core::bitpack::Packed::parse(&bytes).unwrap(),
+        };
+        let at = |col: u32, row: u32, d: u32| f.cell((col << 14) + d, (row << 14) + d);
+        assert_eq!(at(5, 7, 0), Some(0));
+        assert_eq!(at(7, 7, (1 << 14) - 1), Some(2));
+        assert_eq!(at(5, 8, 0), Some(3));
+        assert_eq!(at(7, 8, 9), Some(5));
+        for (c, r) in [(4, 7), (8, 7), (5, 6), (5, 9), (8, 8), (0, 0)] {
+            assert_eq!(at(c, r, 0), None, "column {c} row {r}");
+        }
+    }
 
     #[test]
     fn morton_round_trips() {

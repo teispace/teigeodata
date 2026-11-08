@@ -188,6 +188,20 @@ fn points(regions: &[Rings], r: &mut Rng, n: usize) -> Vec<Point<E7>> {
                 i64::midpoint(i64::from(a[1]), i64::from(b[1])),
             );
             v.extend(p(mx, my));
+            // On a grid corner near the vertex at a top or fine level, and 1 unit inside the
+            // cells around it: where a fine or top cell starts.
+            let level = 8 + (r.next() % 9) as u32;
+            let snap = |v: i64, min: i64, span: i64| {
+                let i = (i128::from(v - min) << level) / i128::from(span);
+                min + ((i * i128::from(span)) >> level) as i64
+            };
+            let (cx, cy) = (
+                snap(a[0].into(), X0, X1 - X0),
+                snap(a[1].into(), Y0, Y1 - Y0),
+            );
+            for (dx, dy) in [(0, 0), (-1, 0), (0, -1), (-1, -1)] {
+                v.extend(p(cx + dx, cy + dy));
+            }
         }
     }
     // Ring edges: midpoints, exactly on the edge when the deltas are even, and 1 unit off.
@@ -223,6 +237,9 @@ fn check(regions: &[Rings], opts: &Options, seed: u64, n: usize) {
     let ix = open(&bytes).unwrap();
     ix.check().unwrap();
     assert_eq!(ix.regions(), regions.len());
+    if let Some((level, cols, rows)) = ix.fine_grid() {
+        assert!(level > ix.top_level() && (cols * rows) as usize <= opts.fine_cells);
+    }
     let mut r = Rng(seed);
     let mut out = [0_u32; 16];
     for at in points(regions, &mut r, n) {
@@ -250,20 +267,45 @@ fn a_partition_shares_its_borders() {
         ((850_000_000, 270_000_000, 2_000_000, 1_500_000), 4),
         ((X0, Y0, X1 - X0, Y1 - Y0), 6),
     ] {
-        let mut regions = partition(&mut r, bx, m);
+        let part = partition(&mut r, bx, m);
+        let mut regions = part.clone();
         regions.push(world());
         for opts in [
             Options {
                 leaf_max: 1,
                 top: 8,
+                fine_cells: 0,
             },
             Options {
                 leaf_max: 4,
                 top: 10,
+                fine_cells: 0,
+            },
+            // Fine grids: a coarse window, then one as fine as the budget allows.
+            Options {
+                leaf_max: 2,
+                top: 8,
+                fine_cells: 64,
+            },
+            Options {
+                leaf_max: 4,
+                top: 8,
+                fine_cells: 1 << 16,
             },
             Options::default(),
         ] {
-            check(&regions, &opts, 11, 400);
+            // A fine grid covers the regions' extent: the partition alone, since the world
+            // ring's needs 4^9 cells at the least.
+            let regions = if opts.fine_cells > 0 { &part } else { &regions };
+            check(regions, &opts, 11, 400);
+            let fine = open(&pack(regions, &opts)).unwrap().fine_grid();
+            // The default budget fits the world at level 9.
+            let world = opts.fine_cells >= 1 << 17;
+            assert_eq!(
+                fine.is_some(),
+                opts.fine_cells > 0 && (m == 4 || world),
+                "{opts:?}"
+            );
         }
     }
 }
@@ -283,6 +325,17 @@ fn overlaps_holes_and_cancelling_rings() {
     // A ring given twice cancels to nothing.
     let twice = star(&mut r, 860_000_000, 280_000_000, 5_000_000, false);
     regions.push(vec![twice[0].clone(), twice[0].clone()]);
+    // A fine grid needs the regions inside a small extent: before the domain's edges.
+    check(
+        &regions,
+        &Options {
+            leaf_max: 2,
+            top: 8,
+            fine_cells: 4096,
+        },
+        17,
+        600,
+    );
     // On the domain's edges: the antimeridian and both poles.
     regions.push(star(&mut r, X1, 0, 100_000_000, false));
     regions.push(star(&mut r, X0, 0, 100_000_000, true));
@@ -293,6 +346,7 @@ fn overlaps_holes_and_cancelling_rings() {
         Options {
             leaf_max: 2,
             top: 8,
+            fine_cells: 0,
         },
         Options::default(),
     ] {
@@ -308,6 +362,7 @@ fn empty_and_tiny_inputs() {
             &Options {
                 leaf_max: 32,
                 top: 8,
+                fine_cells: 0,
             },
             3,
             50,
@@ -322,6 +377,7 @@ fn the_encoding_is_deterministic() {
     let opts = Options {
         leaf_max: 2,
         top: 8,
+        fine_cells: 0,
     };
     assert_eq!(
         region::encode(&regions, &opts).unwrap(),
@@ -342,7 +398,8 @@ fn fnv(bytes: &[u8]) -> u64 {
 #[test]
 fn the_encoding_is_pinned() {
     let mut r = Rng(21);
-    let mut part = partition(&mut r, (850_000_000, 270_000_000, 2_000_000, 1_500_000), 3);
+    let alone = partition(&mut r, (850_000_000, 270_000_000, 2_000_000, 1_500_000), 3);
+    let mut part = alone.clone();
     part.push(world());
     let mut r = Rng(9);
     let mut stars: Vec<Rings> = (0..6)
@@ -356,6 +413,7 @@ fn the_encoding_is_pinned() {
             Options {
                 leaf_max: 2,
                 top: 8,
+                fine_cells: 0,
             },
         ),
         (&part, Options::default()),
@@ -364,6 +422,15 @@ fn the_encoding_is_pinned() {
             Options {
                 leaf_max: 4,
                 top: 12,
+                fine_cells: 0,
+            },
+        ),
+        (
+            &alone,
+            Options {
+                leaf_max: 2,
+                top: 8,
+                fine_cells: 1024,
             },
         ),
     ];
@@ -383,8 +450,9 @@ fn the_encoding_is_pinned() {
     }
     let want = [
         (5_119_189_209_052_931_683, 8, 163, 107, 85),
-        (6_041_092_929_143_503_048, 10, 28, 37, 85),
+        (5_110_994_369_822_098_619, 8, 28, 37, 85),
         (3_687_082_912_245_267_465, 12, 163, 279, 86),
+        (5_761_989_076_067_299_331, 8, 163, 100, 80),
     ];
     assert_eq!(got, want);
 }
@@ -401,7 +469,8 @@ fn the_writer_refuses_bad_options_and_input() {
             &[],
             &Options {
                 leaf_max: 0,
-                top: 10
+                top: 10,
+                fine_cells: 0,
             }
         )
         .is_err()
@@ -411,7 +480,8 @@ fn the_writer_refuses_bad_options_and_input() {
             &[],
             &Options {
                 leaf_max: 8,
-                top: 7
+                top: 7,
+                fine_cells: 0,
             }
         )
         .is_err()
@@ -421,13 +491,41 @@ fn the_writer_refuses_bad_options_and_input() {
             &[],
             &Options {
                 leaf_max: 8,
-                top: 13
+                top: 13,
+                fine_cells: 0,
             }
         )
         .is_err()
     );
     let outside = vec![vec![vec![[0, 0], [0, 900_000_001], [1, 1]]]];
     assert!(region::encode(&outside, &opts).is_err());
+}
+
+/// A decoded column: its ID and values.
+type Column = (u16, Vec<u32>);
+
+/// A fast answer claimed for every fine cell that has none (its holding leaf is finer than the
+/// cell, or its edges touch the cell) is refused.
+fn forged_fast_answers_are_refused(
+    cols: &[Column],
+    rebuild: &dyn Fn(&[Column]) -> Vec<u8>,
+    items: u64,
+) {
+    let f = column_in(cols, region::FINE);
+    let mut flipped = 0;
+    for j in 0..cols[f].1.len() {
+        if cols[f].1[j] & 1 == 0 {
+            let mut bad = cols.to_vec();
+            bad[f].1[j] |= 1;
+            let bytes = with_body(&rebuild(&bad), items);
+            assert!(
+                open(&bytes).and_then(|ix| ix.check()).is_err(),
+                "fine cell {j} passed a forged fast answer"
+            );
+            flipped += 1;
+        }
+    }
+    assert!(flipped > 10, "only {flipped} fine cells have edges");
 }
 
 #[test]
@@ -439,8 +537,9 @@ fn refusals() {
     let body = region::encode(
         &regions,
         &Options {
-            leaf_max: 2,
+            leaf_max: 16,
             top: 8,
+            fine_cells: 256,
         },
     )
     .unwrap();
@@ -466,6 +565,7 @@ fn refusals() {
     // Unchanged columns re-encoded still pass.
     let same = with_body(&rebuild(&cols), regions.len() as u64);
     open(&same).unwrap().check().unwrap();
+    forged_fast_answers_are_refused(&cols, &rebuild, regions.len() as u64);
     // Every edit of a structural column is refused. Edits of a set ID or a set's bounds, a
     // run's edge or a reference candidate can keep the pack well-formed and change answers:
     // the signature, not the check, guards those (see the module documentation).
@@ -475,6 +575,8 @@ fn refusals() {
         region::KEY,
         region::LEVEL,
         region::RUNS,
+        region::WINDOW,
+        region::FINE,
     ];
     for (c, (id, v)) in cols.iter().enumerate() {
         if !structural.contains(id) || v.is_empty() {

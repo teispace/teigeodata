@@ -376,11 +376,29 @@ fn main() {
         at_places.swap(i, (srng.next_u64() % (i as u64 + 1)) as usize);
     }
     at_places.truncate(20_000);
-    println!("\n| Leaf max | Top | Bytes | Leaves | Runs | Uniform ns | Places ns |");
-    println!("|---:|---:|---:|---:|---:|---:|---:|");
-    for (leaf_max, top) in [(8, 10), (16, 10), (32, 10), (64, 10), (16, 12), (32, 12)] {
-        let body =
-            region::encode_on_arcs(&arc_pts, &scales, &uses, &Options { leaf_max, top }).unwrap();
+    println!(
+        "\n| Leaf max | Top | Fine cells | Fine grid | Bytes | Leaves | Runs | Uniform ns | Places ns | Check ms |"
+    );
+    println!("|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|");
+    let mut base: Option<Vec<[u32; 8]>> = None;
+    for (leaf_max, top, fine_cells) in [
+        (32, 10, 0),
+        (32, 12, 0),
+        (32, 8, 0),
+        (32, 8, 1 << 14),
+        (32, 8, 1 << 16),
+        (32, 8, 1 << 18),
+        (32, 8, 1 << 20),
+        (16, 8, 1 << 16),
+        (16, 8, 1 << 18),
+        (64, 8, 1 << 18),
+    ] {
+        let opts = Options {
+            leaf_max,
+            top,
+            fine_cells,
+        };
+        let body = region::encode_on_arcs(&arc_pts, &scales, &uses, &opts).unwrap();
         let file = pack_with(
             "places",
             1,
@@ -390,14 +408,34 @@ fn main() {
         .unwrap();
         let rp = Pack::open(&file).unwrap();
         let r = Region::open_on_arcs(&rp.section(Kind::REGION).unwrap(), &arcs).unwrap();
+        let t = Instant::now();
+        r.check().unwrap();
+        let check_ms = t.elapsed().as_secs_f64() * 1e3;
+        // Every configuration answers the same.
+        let answers: Vec<[u32; 8]> = points
+            .iter()
+            .chain(&at_places)
+            .map(|&p| {
+                let mut out = [u32::MAX; 8];
+                r.regions_at(p, &mut out);
+                out
+            })
+            .collect();
+        match &base {
+            None => base = Some(answers),
+            Some(b) => assert!(*b == answers, "{opts:?} answers differently"),
+        }
         let u = time(points.len(), |i| {
             black_box(r.regions_at(points[i], &mut [0_u32; 8]));
         });
         let pl = time(at_places.len(), |i| {
             black_box(r.regions_at(at_places[i], &mut [0_u32; 8]));
         });
+        let grid = r
+            .fine_grid()
+            .map_or("none".to_string(), |(l, c, w)| format!("{l}: {c}×{w}"));
         println!(
-            "| {leaf_max} | {top} | {} | {} | {} | {u:.0} | {pl:.0} |",
+            "| {leaf_max} | {top} | {fine_cells} | {grid} | {} | {} | {} | {u:.0} | {pl:.0} | {check_ms:.0} |",
             body.len(),
             r.leaves(),
             r.runs()

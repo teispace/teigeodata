@@ -95,9 +95,44 @@ by machine noise):
   one-read answer (41 ns on Nepal places, D-083) rarely applies, and a query costs 150–300 ns,
   more on places (they sit where borders are) than on uniform points.
 - A finer top grid helps (−20% at level 12) but the grid covers the whole world, so it costs
-  2.2 MB more for one country. A top grid over the pack's own extent would give that speed
-  for a few KB: an open item for 3.3.
+  2.2 MB more for one country. A grid over the pack's own extent gives that speed for a few
+  KB: [below](#a-fine-grid-over-the-packs-extent).
 - Leaf 32 stays the default: smaller leaves buy little time for much size.
+
+### A fine grid over the pack's extent
+
+The top grid covers the world, so its level is bound by its world size. The fine grid (D-101)
+covers only the box of the regions' vertices, at the finest level up to 16 whose window fits a
+cell budget, and its cells answer at once or start a gallop at their first leaf. The same
+20,000 uniform points and 20,000 places, every row giving the same regions as the first (load
+average 15–27 during the run, so compare rows rather than read absolute times):
+
+| Leaf max | Top | Fine budget | Fine grid | Bytes | Leaves | Uniform ns | Places ns | Check ms |
+|---:|---:|---:|---|---:|---:|---:|---:|---:|
+| 32 | 10 | 0 | none | 977,344 | 63,619 | 150 | 296 | 40 |
+| 32 | 12 | 0 | none | 3,176,496 | 63,619 | 119 | 230 | 303 |
+| 32 | 8 | 0 | none | 838,256 | 63,619 | 185 | 324 | 23 |
+| 32 | 8 | 2^14 | level 12, 94 × 94 | 857,508 | 63,619 | 120 | 229 | 24 |
+| 32 | 8 | 2^16 | level 13, 187 × 187 | 910,720 | 63,619 | 95 | 188 | 27 |
+| **32** | **8** | **2^18** | **level 14, 372 × 374** | **1,066,180** | 63,619 | **91** | **153** | 37 |
+| 32 | 8 | 2^20 | level 15, 742 × 747 | 1,555,120 | 63,619 | 74 | 131 | 82 |
+| 16 | 8 | 2^16 | level 13, 187 × 187 | 1,663,456 | 139,558 | 86 | 166 | 42 |
+| 16 | 8 | 2^18 | level 14, 372 × 374 | 1,830,196 | 139,558 | 74 | 131 | 55 |
+| 64 | 8 | 2^18 | level 14, 372 × 374 | 676,208 | 28,762 | 104 | 243 | 36 |
+
+- A level-12 fine grid over Nepal matches the world level-12 grid's speed for 20 KB instead of
+  2.2 MB: the world grid's cost was its extent, not its level.
+- The default is leaf 32, top 8 and a 2^18-cell budget: places 296 → 153 ns (−48%), uniform
+  150 → 91 ns, for 89 KB more (+9%). The coarse top grid shrinks to level 8 because the fine
+  grid answers inside the extent. A 2^20 budget gains 15% more for 489 KB more; leaf 16 gains
+  the same for 764 KB more.
+- On the world timezones with oceans (B9's input, `b9-region`, same load): the old default
+  (leaf 32, top 10) 25.7 MB, 138 ns uniform and 94 ns on Nepal places; the new one 25.5 MB,
+  90 and 56 ns (its window is the world, at level 9); zero mismatches against even–odd on all
+  three exactness sets. Leaf 16 with a world level-12 top grid stays the fastest there (46 and
+  29 ns) for 35.1 MB.
+- In the main pack: ADMIN_REGION 977 → 1,066 KB, the timezone REGION about 90 KB larger;
+  the pack 10.72 → 10.90 MB, lite 8.16 → 8.25 MB.
 
 ### Ring decode speed by level of detail
 

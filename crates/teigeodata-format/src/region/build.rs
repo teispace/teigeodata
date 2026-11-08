@@ -15,9 +15,10 @@ use teigeodata_core::bitpack::{bias, encode_direct};
 use teigeodata_core::table;
 
 use super::{
-    Cell, DIR, KEY, LEVEL, LEVELS, MAX_SET, MAX_TOP, MIN_TOP, NUDGE, NUDGES, RUN_EDGE, RUN_LEN,
-    RUN_SCALE, RUN_X, RUN_Y, RUN_ZONES, RUNS, SET_START, SET_ZONES, TOP, TOP_ZONES, X, X_MIN,
-    X_SPAN, Y, Y_MIN, Y_SPAN, ZONES, cell, crosses, orient, reference, touches,
+    Cell, DIR, FINE, KEY, LEVEL, LEVELS, MAX_FINE, MAX_FINE_CELLS, MAX_SET, MAX_TOP, MIN_TOP,
+    NUDGE, NUDGES, RUN_EDGE, RUN_LEN, RUN_SCALE, RUN_X, RUN_Y, RUN_ZONES, RUNS, SET_START,
+    SET_ZONES, TOP, TOP_ZONES, WINDOW, X, X_MIN, X_SPAN, Y, Y_MIN, Y_SPAN, ZONES, cell, crosses,
+    index, morton, orient, reference, touches,
 };
 use crate::Error;
 
@@ -33,13 +34,19 @@ pub struct Options {
     pub leaf_max: usize,
     /// The top-grid level, [`MIN_TOP`] to [`MAX_TOP`].
     pub top: u32,
+    /// The most cells of the fine grid over the regions' extent (D-101): the finest level up to
+    /// [`MAX_FINE`] whose window fits is used, none if no level finer than the top grid fits.
+    /// 0 turns it off. The default, 2^18 over a coarse top grid, halves admin queries on Nepal
+    /// for 9% more bytes (B10).
+    pub fine_cells: usize,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
             leaf_max: 32,
-            top: 10,
+            top: MIN_TOP,
+            fine_cells: 1 << 18,
         }
     }
 }
@@ -135,7 +142,10 @@ pub fn encode_on_arcs(
 
 /// Checks the options and the region count; the sets with set `z` = the single region `z`.
 fn start(regions: usize, opts: &Options) -> Result<Sets, Error> {
-    if !(MIN_TOP..=MAX_TOP).contains(&opts.top) || opts.leaf_max == 0 {
+    if !(MIN_TOP..=MAX_TOP).contains(&opts.top)
+        || opts.leaf_max == 0
+        || opts.fine_cells > MAX_FINE_CELLS
+    {
         return Err(Error::Write("the region options are out of range"));
     }
     let count = u32::try_from(regions).map_err(|_| Error::Write("too many regions"))?;
@@ -334,12 +344,7 @@ impl Arcs {
             }
         }
         // Arcs in Morton order of their first vertex: neighbouring arcs, short deltas.
-        let key = |p: Pt| {
-            super::morton(
-                super::index(X_MIN, X_SPAN, p.0),
-                super::index(Y_MIN, Y_SPAN, p.1),
-            )
-        };
+        let key = |p: Pt| morton(index(X_MIN, X_SPAN, p.0), index(Y_MIN, Y_SPAN, p.1));
         arcs.sort_by_key(|(path, _)| {
             let p = verts[path[0]];
             (key(p), p, path.get(1).map(|&v| verts[v]))
@@ -522,13 +527,12 @@ impl Tree<'_> {
         Ok(())
     }
 
-    /// The fast answer for top cell `c` whose first owned leaf is `first`: 1 + the region set
-    /// of the whole cell if no edge touches it, else 0. The cell then lies inside one leaf
-    /// (the only reason to split it is edges); its set is the leaf's, toggled by the leaf's
-    /// edges crossed on the way from the leaf's reference point to the cell's.
-    fn top_zone(&mut self, c: usize, first: usize) -> Result<u32, Error> {
-        let shift = 2 * (LEVELS - self.opts.top);
-        let start = (c as u64) << shift;
+    /// The fast answer for the cell of `level` starting at Morton key `start`, whose first
+    /// leaf starting at or after it is `first`: 1 + the region set of the whole cell if no edge
+    /// touches it, else 0. The cell then lies inside one leaf (the only reason to split it is
+    /// edges); its set is the leaf's, toggled by the leaf's edges crossed on the way from the
+    /// leaf's reference point to the cell's.
+    fn cell_zone(&mut self, start: u64, level: u32, first: usize) -> Result<u32, Error> {
         let h = if self.leaves.get(first).is_some_and(|l| l.key == start) {
             first
         } else {
@@ -540,7 +544,7 @@ impl Tree<'_> {
         let Some(leaf) = self.leaves.get(h) else {
             return Ok(0);
         };
-        if leaf.level > self.opts.top {
+        if leaf.level > level {
             return Ok(0);
         }
         let end = self
@@ -550,7 +554,7 @@ impl Tree<'_> {
         if end == leaf.first_run as usize {
             return Ok(leaf.zones + 1);
         }
-        let top = cell(start, self.opts.top);
+        let top = cell(start, level);
         let (from, to) = (leaf.first_run as usize, end);
         let mut edges = Vec::new();
         for run in from..to {
@@ -577,46 +581,65 @@ impl Tree<'_> {
         Ok(self.sets.id(&zones)? + 1)
     }
 
-    fn encode(&mut self, on_arcs: Option<(&[u32], &[usize])>) -> Result<Vec<u8>, Error> {
-        let to32 = |v: usize| u32::try_from(v).map_err(|_| Error::Write("too many leaves"));
-        let shift = 2 * (LEVELS - self.opts.top);
-        let cells = 1_usize << (2 * self.opts.top);
-        let mut dir = Vec::with_capacity(cells + 1);
-        let mut i = 0;
-        for c in 0..cells as u64 {
-            while self.leaves.get(i).is_some_and(|l| l.key < c << shift) {
-                i += 1;
+    /// The fine grid's [`WINDOW`] and [`FINE`] values (both empty for none): the window is
+    /// every fine cell holding an edge vertex, at the finest level that fits the options.
+    fn fine(&mut self) -> Result<(Vec<u32>, Vec<u32>), Error> {
+        let none = Ok((Vec::new(), Vec::new()));
+        let mut ends = self.arcs.edges().flat_map(|e| {
+            let (a, b) = self.arcs.edge(e);
+            [a, b]
+        });
+        let Some(first) = ends.next() else {
+            return none;
+        };
+        let at = |p: Pt| (index(X_MIN, X_SPAN, p.0), index(Y_MIN, Y_SPAN, p.1));
+        let (mut lo, mut hi) = (at(first), at(first));
+        for p in ends {
+            let (x, y) = at(p);
+            lo = (lo.0.min(x), lo.1.min(y));
+            hi = (hi.0.max(x), hi.1.max(y));
+        }
+        let span = |level: u32| {
+            let s = LEVELS - level;
+            ((hi.0 >> s) - (lo.0 >> s) + 1, (hi.1 >> s) - (lo.1 >> s) + 1)
+        };
+        let Some(level) = (self.opts.top + 1..=MAX_FINE).rev().find(|&l| {
+            let (c, r) = span(l);
+            (c as usize).saturating_mul(r as usize) <= self.opts.fine_cells
+        }) else {
+            return none;
+        };
+        let s = LEVELS - level;
+        let (cols, rows) = span(level);
+        let (west, south) = (lo.0 >> s, lo.1 >> s);
+        let mut cells = Vec::with_capacity(cols as usize * rows as usize);
+        for r in south..south + rows {
+            for c in west..west + cols {
+                let start = morton(c << s, r << s);
+                let first = self.leaves.partition_point(|l| l.key < start);
+                let z = self.cell_zone(start, level, first)?;
+                let to32 = |v: usize| u32::try_from(v).map_err(|_| Error::Write("too many leaves"));
+                cells.push(match z.checked_sub(1) {
+                    Some(set) => set
+                        .checked_mul(2)
+                        .and_then(|v| v.checked_add(1))
+                        .ok_or(Error::Write("too many sets"))?,
+                    None => to32(first)?
+                        .checked_mul(2)
+                        .ok_or(Error::Write("too many leaves"))?,
+                });
             }
-            dir.push(to32(i)?);
         }
-        dir.push(to32(self.leaves.len())?);
-        let mut top_zones = Vec::with_capacity(cells);
-        for (c, &first) in dir.iter().enumerate().take(cells) {
-            let z = self.top_zone(c, first as usize)?;
-            top_zones.push(z);
-        }
-        #[allow(
-            clippy::cast_possible_truncation,
-            reason = "below 2^32 with the top at MIN_TOP or more"
-        )]
-        let key: Vec<u32> = self
-            .leaves
-            .iter()
-            .map(|l| (l.key & ((1 << shift) - 1)) as u32)
-            .collect();
-        let level: Vec<u32> = self.leaves.iter().map(|l| l.level).collect();
-        let zones: Vec<u32> = self.leaves.iter().map(|l| l.zones).collect();
-        let nudge: Vec<u32> = self.leaves.iter().map(|l| l.nudge).collect();
-        let mut runs: Vec<u32> = self.leaves.iter().map(|l| l.first_run).collect();
-        runs.push(to32(self.run_edge.len())?);
-        let mut set_start = vec![0_u32];
-        let mut set_zones = Vec::new();
-        for s in &self.sets.list {
-            set_zones.extend_from_slice(s);
-            set_start.push(to32(set_zones.len())?);
-        }
-        // Own vertices, or on ARCS each run's first vertex (and its arc's scale when any is set).
-        let (x, y, scale): (Vec<u32>, Vec<u32>, Vec<u32>) = match on_arcs {
+        Ok((vec![level, west, south, cols, rows], cells))
+    }
+
+    /// The vertex columns: own X and Y, or on ARCS each run's first vertex and its arc's scale
+    /// (empty when no arc is scaled).
+    fn vertex_columns(
+        &self,
+        on_arcs: Option<(&[u32], &[usize])>,
+    ) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
+        match on_arcs {
             None => (
                 self.arcs.x.iter().map(|&v| bias(v)).collect(),
                 self.arcs.y.iter().map(|&v| bias(v)).collect(),
@@ -646,7 +669,49 @@ impl Tree<'_> {
                 };
                 (x, y, scale)
             }
-        };
+        }
+    }
+
+    fn encode(&mut self, on_arcs: Option<(&[u32], &[usize])>) -> Result<Vec<u8>, Error> {
+        let to32 = |v: usize| u32::try_from(v).map_err(|_| Error::Write("too many leaves"));
+        let shift = 2 * (LEVELS - self.opts.top);
+        let cells = 1_usize << (2 * self.opts.top);
+        let mut dir = Vec::with_capacity(cells + 1);
+        let mut i = 0;
+        for c in 0..cells as u64 {
+            while self.leaves.get(i).is_some_and(|l| l.key < c << shift) {
+                i += 1;
+            }
+            dir.push(to32(i)?);
+        }
+        dir.push(to32(self.leaves.len())?);
+        let mut top_zones = Vec::with_capacity(cells);
+        for (c, &first) in dir.iter().enumerate().take(cells) {
+            let z = self.cell_zone((c as u64) << shift, self.opts.top, first as usize)?;
+            top_zones.push(z);
+        }
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "below 2^32 with the top at MIN_TOP or more"
+        )]
+        let key: Vec<u32> = self
+            .leaves
+            .iter()
+            .map(|l| (l.key & ((1 << shift) - 1)) as u32)
+            .collect();
+        let (window, fine) = self.fine()?;
+        let level: Vec<u32> = self.leaves.iter().map(|l| l.level).collect();
+        let zones: Vec<u32> = self.leaves.iter().map(|l| l.zones).collect();
+        let nudge: Vec<u32> = self.leaves.iter().map(|l| l.nudge).collect();
+        let mut runs: Vec<u32> = self.leaves.iter().map(|l| l.first_run).collect();
+        runs.push(to32(self.run_edge.len())?);
+        let mut set_start = vec![0_u32];
+        let mut set_zones = Vec::new();
+        for s in &self.sets.list {
+            set_zones.extend_from_slice(s);
+            set_start.push(to32(set_zones.len())?);
+        }
+        let (x, y, scale) = self.vertex_columns(on_arcs);
         let (x_id, y_id) = if on_arcs.is_some() {
             (RUN_X, RUN_Y)
         } else {
@@ -669,11 +734,14 @@ impl Tree<'_> {
             (x_id, encode_direct(&x)),
             (y_id, encode_direct(&y)),
             (RUN_SCALE, encode_direct(&scale)),
+            (WINDOW, encode_direct(&window)),
+            (FINE, encode_direct(&fine)),
         ];
         let mut keep: Vec<(u16, &[u8])> = cols
             .iter()
             .filter(|(id, _)| *id != NUDGE || nudge.iter().any(|&n| n != 0))
             .filter(|(id, _)| *id != RUN_SCALE || !scale.is_empty())
+            .filter(|(id, _)| ![WINDOW, FINE].contains(id) || !window.is_empty())
             .map(|(id, b)| (*id, b.as_slice()))
             .collect();
         keep.sort_by_key(|c| c.0);
@@ -699,6 +767,8 @@ pub fn link(body: &[u8], places: &[u32]) -> Result<Vec<u8>, Error> {
         cols.push((id, codec, bytes));
     }
     cols.push((super::PLACE, table::Codec::Bitpack, &column));
+    // Columns are written in ID order; PLACE sits between the run and the fine-grid columns.
+    cols.sort_by_key(|c| c.0);
     table::encode_with(&cols).map_err(|_| bad)
 }
 

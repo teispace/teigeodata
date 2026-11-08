@@ -158,9 +158,15 @@ fn point(c: &mut Cursor<'_>) -> Point<E6> {
     reason = "the query names of the brute-force model"
 )]
 /// A vertex for a region model: in a small box (deep leaves), anywhere, on the domain's edges,
-/// or a vertex already drawn (shared borders and junctions).
-fn region_vertex(c: &mut Cursor<'_>, seen: &[[i32; 2]]) -> [i32; 2] {
-    match c.u8() & 7 {
+/// or a vertex already drawn (shared borders and junctions). A `local` model stays in the box,
+/// so its extent gets a fine grid.
+fn region_vertex(c: &mut Cursor<'_>, seen: &[[i32; 2]], local: bool) -> [i32; 2] {
+    let mode = c.u8() & 7;
+    match if local && (2..=4).contains(&mode) {
+        0
+    } else {
+        mode
+    } {
         0 | 1 => [
             850_000_000 + (c.u32() % 2_000_001) as i32,
             270_000_000 + (c.u32() % 2_000_001) as i32,
@@ -183,7 +189,7 @@ fn region_vertex(c: &mut Cursor<'_>, seen: &[[i32; 2]]) -> [i32; 2] {
 
 /// A query point: anywhere, or on, beside or between model vertices.
 fn region_point(c: &mut Cursor<'_>, seen: &[[i32; 2]]) -> Point<E7> {
-    let mut v = region_vertex(c, seen);
+    let mut v = region_vertex(c, seen, false);
     if c.u8() & 1 == 1
         && let Some(w) = seen.get(c.below(seen.len()))
     {
@@ -202,13 +208,14 @@ fn region_case(c: &mut Cursor<'_>, structured: bool) {
     // half the inputs natively (libFuzzer covers volume).
     let structured = structured && !cfg!(miri) && c.u8() & 1 == 0;
     let mut seen: Vec<[i32; 2]> = Vec::new();
+    let local = c.u8() & 1 == 1;
     let regions: Vec<Vec<Vec<[i32; 2]>>> = (0..c.below(7))
         .map(|_| {
             (0..=c.below(2))
                 .map(|_| {
                     (0..3 + c.below(limit(10, 4)))
                         .map(|_| {
-                            let v = region_vertex(c, &seen);
+                            let v = region_vertex(c, &seen, local);
                             seen.push(v);
                             v
                         })
@@ -223,6 +230,8 @@ fn region_case(c: &mut Cursor<'_>, structured: bool) {
         let opts = region::Options {
             leaf_max: 1 + c.below(8),
             top: region::MIN_TOP,
+            // Off, coarse or fine (the window of a small model spans few cells).
+            fine_cells: [0, 16, 4096][usize::from(c.u8() % 3)],
         };
         body = region::encode(&regions, &opts).unwrap_or_else(|e| panic!("a region index: {e}"));
         valid = !edit(c, &mut body, &mut items);
@@ -1462,7 +1471,11 @@ fn polygons_case(c: &mut Cursor<'_>, structured: bool) {
         &arc_xy,
         &scales,
         &uses,
-        &region::Options { leaf_max, top: 8 },
+        &region::Options {
+            leaf_max,
+            top: 8,
+            fine_cells: [0, 16, 4096][usize::from(c.u8() % 3)],
+        },
     )
     .unwrap_or_else(|e| panic!("a valid admin region is refused: {e}"));
     let mut rg_items = uses.len() as u64;

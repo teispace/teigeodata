@@ -100,6 +100,11 @@ The method is proven exact (S2: zero mismatches in the domain on 20,000 uniform 
   vertices).
 - **Precedence** for points in more than one zone is open question Q-013; the index returns
   the set, and precedence is applied above it.
+- **The top grid's level is bound by the world (learned in B10, 2026-11-08).** Dense borders
+  (admin units) leave few edge-free top cells, so queries pay the directory search; a finer
+  world grid costs megabytes for one country. A second, fine grid over the regions' own
+  extent gives the speed of a level-14 world grid for 89 KB on Nepal, and keeping the world
+  quadtree makes it an accelerator that cannot change an answer (D-101).
 
 ### 3.3 SEARCH
 

@@ -176,6 +176,12 @@ fn columns(body: &[u8]) -> String {
         "set start",
         "set zones",
         "top zones",
+        "place",
+        "run x",
+        "run y",
+        "run scale",
+        "window",
+        "fine",
     ];
     t.ids()
         .map(|id| {
@@ -214,26 +220,44 @@ fn main() {
     );
 
     // A/B: leaf size, then the top level.
-    println!("| Leaf max | Top | Build s | MB | Leaves | Runs | Vertices | Columns (MB) |");
-    println!("|---:|---:|---:|---:|---:|---:|---:|---|");
+    println!(
+        "| Leaf max | Top | Fine cells | Build s | MB | Leaves | Runs | Vertices | Columns (MB) |"
+    );
+    println!("|---:|---:|---:|---:|---:|---:|---:|---:|---|");
     let mut built = Vec::new();
-    for (leaf_max, top) in [(8, 10), (16, 10), (32, 10), (16, 8), (16, 12)] {
+    for (leaf_max, top, fine_cells) in [
+        (8, 10, 0),
+        (16, 10, 0),
+        (32, 10, 0),
+        (16, 8, 0),
+        (16, 12, 0),
+        (32, 8, 1 << 18),
+        (16, 8, 1 << 18),
+    ] {
         let t = Instant::now();
-        let body = region::encode(&zones, &Options { leaf_max, top }).unwrap();
+        let body = region::encode(
+            &zones,
+            &Options {
+                leaf_max,
+                top,
+                fine_cells,
+            },
+        )
+        .unwrap();
         let secs = t.elapsed().as_secs_f64();
         let file = pack(&body, zones.len());
         let p = Pack::open(&file).unwrap();
         let ix = Region::open(&p.section(Kind::REGION).unwrap()).unwrap();
         ix.check().unwrap();
         println!(
-            "| {leaf_max} | {top} | {secs:.1} | {:.1} | {} | {} | {} | {} |",
+            "| {leaf_max} | {top} | {fine_cells} | {secs:.1} | {:.1} | {} | {} | {} | {} |",
             body.len() as f64 / 1e6,
             ix.leaves(),
             ix.runs(),
             ix.vertices(),
             columns(&body)
         );
-        built.push(((leaf_max, top), file));
+        built.push(((leaf_max, top, fine_cells), file));
     }
 
     // Query sets.
@@ -271,7 +295,7 @@ fn main() {
         .unwrap_or_default();
 
     // Exactness on the default build.
-    let (_, file) = built.iter().find(|(o, _)| *o == (16, 10)).unwrap();
+    let (_, file) = built.iter().find(|(o, _)| *o == (16, 10, 0)).unwrap();
     let p = Pack::open(file).unwrap();
     let ix = Region::open(&p.section(Kind::REGION).unwrap()).unwrap();
     let oracle = Oracle::new(&zones);
@@ -319,7 +343,7 @@ fn main() {
     println!(
         "\n| Lookup | Uniform world ns | Nepal places ns | Agreement with tzf-rs (uniform / Nepal) |\n|---|---:|---:|---:|"
     );
-    for ((leaf_max, top), file) in &built {
+    for ((leaf_max, top, fine_cells), file) in &built {
         let p = Pack::open(file).unwrap();
         let ix = Region::open(&p.section(Kind::REGION).unwrap()).unwrap();
         let ours = |set: &[Point<E7>]| {
@@ -346,7 +370,7 @@ fn main() {
             100.0 * same as f64 / set.len().max(1) as f64
         };
         println!(
-            "| ours, leaf {leaf_max}, top {top} | {u:.0} | {n:.0} | {:.4}% / {:.4}% |",
+            "| ours, leaf {leaf_max}, top {top}, fine {fine_cells} | {u:.0} | {n:.0} | {:.4}% / {:.4}% |",
             agree(&uniform[..100_000]),
             agree(&places)
         );

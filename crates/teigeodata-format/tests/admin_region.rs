@@ -222,7 +222,15 @@ fn probes(arcs: &[Vec<[i32; 2]>], seed: u64) -> Vec<Point<E7>> {
 fn answers_match_even_odd() {
     for (w, h, coarse, leaf_max) in [(6, 5, false, 32), (6, 5, true, 8), (3, 2, true, 1)] {
         let (arcs, regions) = grid(w, h, coarse, 7 + w as u64);
-        let b = build(&arcs, &uses(&regions), &Options { leaf_max, top: 8 });
+        let b = build(
+            &arcs,
+            &uses(&regions),
+            &Options {
+                leaf_max,
+                top: 8,
+                fine_cells: 0,
+            },
+        );
         let bytes = pack(&b, &b.region_body);
         let oracle = rings(&arcs, &regions);
         with_open(&bytes, |r, a| {
@@ -267,6 +275,7 @@ fn check_refuses_wrong_runs() {
         &Options {
             leaf_max: 8,
             top: 8,
+            fine_cells: 0,
         },
     );
     let cols = columns(&b.region_body);
