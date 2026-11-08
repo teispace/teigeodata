@@ -373,7 +373,9 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   and passes `check`, and every place keeps its ID, point, parent and canonical name, is found
   by an exact search of that name and is its own nearest place. Every zone holds its own
   point and links to its row. Every row has the registry's ID, and REDIRECTS passes `check`
-  and gives every retired ID the registry's fate.
+  and gives every retired ID the registry's fate. All of this runs on the bytes in memory:
+  only a pack that passes is written, and the pack and the registry each replace the old file
+  through a temporary file and a rename, so a failed or killed build leaves the last good pack.
 
 Measured on Nepal on 2026-11-07 (release build, Apple M2 Pro):
 

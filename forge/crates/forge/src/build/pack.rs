@@ -162,8 +162,8 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
     }
 
     let (bytes, key) = assemble(input, &sections)?;
-    fs::write(input.file, &bytes).map_err(|e| format!("{}: {e}", input.file.display()))?;
-
+    // Read back from memory first: a pack that fails its checks is never written, and the
+    // pack and its registry each replace the old file in one rename.
     let mut report = String::new();
     verify(
         &bytes,
@@ -173,8 +173,8 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
         key.as_ref(),
         &mut report,
     )?;
-    fs::write(input.ids_file, assigned.registry.render())
-        .map_err(|e| format!("{}: {e}", input.ids_file.display()))?;
+    crate::make::write_atomic(input.file, &bytes)?;
+    crate::make::write_atomic(input.ids_file, assigned.registry.render().as_bytes())?;
     ids_report(&assigned, input, &mut report);
     let _ = writeln!(report, "\n| Section | Bytes |\n|---|---:|");
     for s in &sections {
