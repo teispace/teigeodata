@@ -327,9 +327,11 @@ levels of detail and every unit into a polygon of arc references (B10, D-088, D-
    guard that adds nothing back fails here.
 
 Output in `data/build/topology/<source>/`: `arcs.bin` (the ARCS payload), `polygons.tsv`
-(level, P-code, label, hectares, parts as references) and `summary.md`. `build --topology`
-links each polygon to its place (the country for level 0, `admin:<pcode>` otherwise), writes
-POLYGONS grouped by level, and reads both sections back with their checks.
+(level, P-code, label, hectares, the box of every ring vertex, parts as references) and
+`summary.md`. `build --topology` links each polygon to its place (the country for level 0,
+`admin:<pcode>` otherwise), writes POLYGONS grouped by level and POLY_INDEX over the boxes
+(D-099), and reads all three sections back with their checks; POLY_INDEX's check recomputes
+every box from the arcs, so a wrong box in `polygons.tsv` stops the build.
 
 Measured on COD-AB Nepal on 2026-11-08:
 
@@ -342,8 +344,9 @@ Measured on COD-AB Nepal on 2026-11-08:
 | Guard | 1 crossing at 5 m, 4 at 500 m, 3 at pinned-only; all fixed, 29 vertices added |
 | ARCS | 2.66 MB, 4.48 B per vertex (model 4.47) |
 | POLYGONS | 21 KB |
+| POLY_INDEX | 8.2 KB, 9.5 B per polygon, 3 levels at node 16 |
 | Time, memory | 1.5 s, 346 MB |
-| Packs | main 7.05 → 9.73 MB, lite 4.48 → 7.17 MB |
+| Packs | main 7.05 → 9.74 MB, lite 4.48 → 7.18 MB |
 
 ## Build a pack (`build`)
 

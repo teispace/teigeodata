@@ -26,169 +26,21 @@
 //! Distances are on a sphere of the mean Earth radius ([`EARTH_RADIUS_M`]), by the haversine
 //! formula; with feature `spatial` (pure-Rust `libm`, the same result on every platform).
 
-use core::ops::{ControlFlow, Range};
+use core::ops::ControlFlow;
 
 use crate::places::Places;
-use crate::{Error, Kind, Section, columns};
-use teigeodata_core::bitpack::{Packed, unbias};
+use crate::rtree::{Leaves, Tree};
+use crate::{Error, Kind, Section};
 
-/// Column: the node size.
-pub const NODE_SIZE: u16 = 1;
-/// Column: the root box.
-pub const ROOT: u16 = 2;
-/// Column: every other box, relative to its parent.
-pub const BOXES: u16 = 3;
-
-/// The smallest node size.
-pub const MIN_NODE: usize = 4;
-/// The largest node size; it bounds the fixed query buffers.
-pub const MAX_NODE: usize = 32;
-/// The most levels: `MIN_NODE`¹⁶ = 2³² rows.
-const MAX_LEVELS: usize = 16;
-/// The steps of a child edge across its parent.
-pub const QUANTA: u32 = 65_535;
+pub use crate::rtree::{BOXES, MAX_NODE, MIN_NODE, NODE_SIZE, QUANTA, ROOT, Rect};
 
 /// The mean Earth radius (IUGG), in metres.
 pub const EARTH_RADIUS_M: f64 = 6_371_008.8;
 
-const DEG: i32 = 1_000_000;
-
-/// A box on the 1e-6° grid, edges included. A query box with `min_lon > max_lon` crosses the
-/// antimeridian.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Rect {
-    /// South edge.
-    pub min_lat: i32,
-    /// North edge.
-    pub max_lat: i32,
-    /// West edge.
-    pub min_lon: i32,
-    /// East edge.
-    pub max_lon: i32,
-}
-
-impl Rect {
-    const EMPTY: Self = Self {
-        min_lat: i32::MAX,
-        max_lat: i32::MIN,
-        min_lon: i32::MAX,
-        max_lon: i32::MIN,
-    };
-
-    const fn point(lat: i32, lon: i32) -> Self {
-        Self {
-            min_lat: lat,
-            max_lat: lat,
-            min_lon: lon,
-            max_lon: lon,
-        }
-    }
-
-    const fn intersects(&self, o: &Self) -> bool {
-        self.min_lat <= o.max_lat
-            && o.min_lat <= self.max_lat
-            && self.min_lon <= o.max_lon
-            && o.min_lon <= self.max_lon
-    }
-
-    const fn contains(&self, o: &Self) -> bool {
-        self.min_lat <= o.min_lat
-            && o.max_lat <= self.max_lat
-            && self.min_lon <= o.min_lon
-            && o.max_lon <= self.max_lon
-    }
-
-    const fn contains_point(&self, lat: i32, lon: i32) -> bool {
-        self.min_lat <= lat && lat <= self.max_lat && self.min_lon <= lon && lon <= self.max_lon
-    }
-
-    fn grow(&mut self, o: &Self) {
-        self.min_lat = self.min_lat.min(o.min_lat);
-        self.max_lat = self.max_lat.max(o.max_lat);
-        self.min_lon = self.min_lon.min(o.min_lon);
-        self.max_lon = self.max_lon.max(o.max_lon);
-    }
-}
-
-/// The offsets of `[lo, hi]` inside the parent edge range `[p_lo, p_hi]`: the low edge rounded
-/// down, the high edge up, so the decoded range contains `[lo, hi]`.
-fn quantize(lo: i32, hi: i32, p_lo: i32, p_hi: i32) -> [u32; 2] {
-    let span = i64::from(p_hi) - i64::from(p_lo);
-    if span <= 0 {
-        return [0, 0];
-    }
-    let q = i64::from(QUANTA);
-    let low = (i64::from(lo) - i64::from(p_lo)) * q / span;
-    let high = ((i64::from(hi) - i64::from(p_lo)) * q + span - 1) / span;
-    let fit = |v: i64| u32::try_from(v.clamp(0, q)).unwrap_or(0);
-    [fit(low), fit(high)]
-}
-
-/// The edge range of offsets `[q_lo, q_hi]` inside `[p_lo, p_hi]`, rounded outward. Defined for
-/// any input (a corrupt offset gives some range, never a panic).
-fn dequantize(q_lo: u32, q_hi: u32, p_lo: i32, p_hi: i32) -> [i32; 2] {
-    let span = i64::from(p_hi) - i64::from(p_lo);
-    if span <= 0 {
-        return [p_lo, p_lo];
-    }
-    let q = i64::from(QUANTA);
-    let lo = i64::from(p_lo) + i64::from(q_lo) * span / q;
-    let hi = i64::from(p_lo) + (i64::from(q_hi) * span + q - 1) / q;
-    let fit = |v: i64| i32::try_from(v).unwrap_or(p_hi);
-    [fit(lo), fit(hi)]
-}
-
-/// A child box from its four stored offsets and its parent's box.
-fn decode_box(q: &[u32], parent: &Rect) -> Rect {
-    let at = |k: usize| q.get(k).copied().unwrap_or(0);
-    let [min_lat, max_lat] = dequantize(at(0), at(1), parent.min_lat, parent.max_lat);
-    let [min_lon, max_lon] = dequantize(at(2), at(3), parent.min_lon, parent.max_lon);
-    Rect {
-        min_lat,
-        max_lat,
-        min_lon,
-        max_lon,
-    }
-}
-
-/// The four stored offsets of the exact box `exact` inside its parent's decoded box.
-fn encode_box(exact: &Rect, parent: &Rect) -> [u32; 4] {
-    let [a, b] = quantize(exact.min_lat, exact.max_lat, parent.min_lat, parent.max_lat);
-    let [c, d] = quantize(exact.min_lon, exact.max_lon, parent.min_lon, parent.max_lon);
-    [a, b, c, d]
-}
-
-fn fail(column: u16, problem: &'static str) -> Error {
-    Error::Payload {
-        kind: Kind::PLACE_INDEX.0,
-        column,
-        problem,
-    }
-}
-
-/// The level sizes for `rows` rows: `(first box, boxes)` per level, level 0 first, and the
-/// number of levels. `None` if the tree would be deeper than [`MAX_LEVELS`].
-fn levels(rows: usize, node: usize) -> Option<([(usize, usize); MAX_LEVELS], usize)> {
-    let mut out = [(0, 0); MAX_LEVELS];
-    let (mut depth, mut count, mut first) = (0, rows, 0);
-    while count > 1 || (depth == 0 && count == 1) {
-        count = count.div_ceil(node);
-        *out.get_mut(depth)? = (first, count);
-        first += count;
-        depth += 1;
-    }
-    Some((out, depth))
-}
-
 /// The `PLACE_INDEX` section of an open pack, with the PLACES rows it indexes.
 #[derive(Clone, Copy, Debug)]
 pub struct PlaceIndex<'a> {
-    places: Places<'a>,
-    node: usize,
-    levels: [(usize, usize); MAX_LEVELS],
-    depth: usize,
-    root: Rect,
-    boxes: Packed<'a>,
+    tree: Tree<'a>,
 }
 
 impl<'a> PlaceIndex<'a> {
@@ -200,178 +52,30 @@ impl<'a> PlaceIndex<'a> {
     /// not the number of places, the node size is out of range, or a column is malformed or of
     /// the wrong length.
     pub fn open(section: &Section<'a>, places: Places<'a>) -> Result<Self, Error> {
-        let table = columns::open(section, Kind::PLACE_INDEX)?;
-        if usize::try_from(section.item_count()).ok() != Some(places.len()) {
-            return Err(fail(0, "the item count is not the number of places"));
-        }
-        let node = columns::required(&table, Kind::PLACE_INDEX, NODE_SIZE, Some(1))?
-            .get(0)
-            .and_then(|v| usize::try_from(v).ok())
-            .filter(|n| (MIN_NODE..=MAX_NODE).contains(n))
-            .ok_or_else(|| fail(NODE_SIZE, "the node size is out of range"))?;
-        let (levels, depth) =
-            levels(places.len(), node).ok_or_else(|| fail(NODE_SIZE, "too many levels"))?;
-        // Every box but the root is stored: the first box of the root level is their count.
-        let stored = levels.get(depth.wrapping_sub(1)).map_or(0, |l| l.0);
-        let root_col = columns::required(
-            &table,
-            Kind::PLACE_INDEX,
-            ROOT,
-            Some(if depth == 0 { 0 } else { 4 }),
-        )?;
-        let boxes = columns::required(&table, Kind::PLACE_INDEX, BOXES, Some(4 * stored))?;
-        if table.ids().any(|id| id == 0 || id > BOXES) {
-            return Err(fail(0, "an unknown column"));
-        }
-        let mut edges = [0; 4];
-        root_col.run(0, &mut edges);
-        let [min_lat, max_lat, min_lon, max_lon] = edges.map(unbias);
-        Ok(Self {
-            places,
-            node,
-            levels,
-            depth,
-            root: Rect {
-                min_lat,
-                max_lat,
-                min_lon,
-                max_lon,
-            },
-            boxes,
-        })
+        Tree::open(section, Kind::PLACE_INDEX, &Leaves::Points(places)).map(|tree| Self { tree })
     }
 
     /// Children per box.
     #[must_use]
     pub const fn node_size(&self) -> usize {
-        self.node
+        self.tree.node()
     }
 
     /// The number of box levels above the rows.
     #[must_use]
     pub const fn depth(&self) -> usize {
-        self.depth
-    }
-
-    /// The children of box `i` of `level`, whose decoded box is `parent`, into `out`: rows as
-    /// point boxes below level 0, decoded boxes above. Returns the index of the first child
-    /// and how many there are.
-    fn children(
-        &self,
-        level: usize,
-        i: usize,
-        parent: &Rect,
-        out: &mut [Rect; MAX_NODE],
-    ) -> (usize, usize) {
-        let first = i.saturating_mul(self.node);
-        if level == 0 {
-            let mut lat = [0; MAX_NODE];
-            let mut lon = [0; MAX_NODE];
-            let take = self.node.min(MAX_NODE);
-            let n = match (lat.get_mut(..take), lon.get_mut(..take)) {
-                (Some(a), Some(o)) => self.places.run(first, a, o),
-                _ => 0,
-            };
-            for (slot, (a, o)) in out.iter_mut().zip(lat.iter().zip(&lon)).take(n) {
-                *slot = Rect::point(unbias(*a), unbias(*o));
-            }
-            return (first, n);
-        }
-        let (start, count) = self.levels.get(level - 1).copied().unwrap_or((0, 0));
-        let n = count.saturating_sub(first).min(self.node);
-        let mut q = [0; 4 * MAX_NODE];
-        let got = self
-            .boxes
-            .run(4 * (start + first), q.get_mut(..4 * n).unwrap_or_default());
-        let n = got / 4;
-        for (slot, quad) in out.iter_mut().zip(q.as_chunks::<4>().0).take(n) {
-            *slot = decode_box(quad, parent);
-        }
-        (first, n)
-    }
-
-    /// The rows below box `i` of `level`.
-    fn span(&self, level: usize, i: usize) -> Range<usize> {
-        let mut width = self.node;
-        for _ in 0..level {
-            width = width.saturating_mul(self.node);
-        }
-        let n = self.places.len();
-        i.saturating_mul(width).min(n)..i.saturating_add(1).saturating_mul(width).min(n)
+        self.tree.depth
     }
 
     /// Calls `visit` with every row whose point is in `query`, edges included, in an
     /// unspecified order; stops early when `visit` breaks. A query with `min_lon > max_lon`
     /// crosses the antimeridian. Allocation-free: depth-first with fixed buffers; a box wholly
     /// inside the query yields its rows without testing them.
-    pub fn within<F>(&self, query: Rect, mut visit: F) -> ControlFlow<()>
+    pub fn within<F>(&self, query: Rect, visit: F) -> ControlFlow<()>
     where
         F: FnMut(usize) -> ControlFlow<()>,
     {
-        if query.min_lat > query.max_lat {
-            return ControlFlow::Continue(());
-        }
-        if query.min_lon > query.max_lon {
-            let east = Rect {
-                max_lon: 180 * DEG,
-                ..query
-            };
-            self.within_one(&east, &mut visit)?;
-            let west = Rect {
-                min_lon: -180 * DEG,
-                ..query
-            };
-            return self.within_one(&west, &mut visit);
-        }
-        self.within_one(&query, &mut visit)
-    }
-
-    fn within_one<F>(&self, q: &Rect, visit: &mut F) -> ControlFlow<()>
-    where
-        F: FnMut(usize) -> ControlFlow<()>,
-    {
-        let Some(root) = self.depth.checked_sub(1) else {
-            return ControlFlow::Continue(());
-        };
-        if !q.intersects(&self.root) {
-            return ControlFlow::Continue(());
-        }
-        if q.contains(&self.root) {
-            for row in 0..self.places.len() {
-                visit(row)?;
-            }
-            return ControlFlow::Continue(());
-        }
-        let mut stack = [Frame::EMPTY; MAX_LEVELS];
-        let mut top = 0;
-        if let Some(f) = stack.get_mut(0) {
-            f.load(self, root, 0, &self.root);
-        }
-        while let Some(f) = stack.get_mut(top) {
-            let Some((i, b)) = f.take() else {
-                if top == 0 {
-                    break;
-                }
-                top -= 1;
-                continue;
-            };
-            let level = f.level;
-            if level == 0 {
-                if q.contains_point(b.min_lat, b.min_lon) {
-                    visit(i)?;
-                }
-            } else if q.contains(&b) {
-                for row in self.span(level - 1, i) {
-                    visit(row)?;
-                }
-            } else if q.intersects(&b)
-                && let Some(next) = stack.get_mut(top + 1)
-            {
-                next.load(self, level - 1, i, &b);
-                top += 1;
-            }
-        }
-        ControlFlow::Continue(())
+        self.tree.within(query, 0..self.tree.len(), visit)
     }
 
     /// Checks the whole tree against the rows: the root is exactly their bounds, and every
@@ -382,81 +86,8 @@ impl<'a> PlaceIndex<'a> {
     /// # Errors
     /// [`Error::Payload`] naming [`ROOT`] or [`BOXES`].
     pub fn check(&self) -> Result<(), Error> {
-        let Some(root) = self.depth.checked_sub(1) else {
-            return Ok(());
-        };
-        let exact = self.check_box(root, 0, &self.root)?;
-        if exact != self.root {
-            return Err(fail(ROOT, "the root is not the bounds of the rows"));
-        }
-        Ok(())
-    }
-
-    /// The exact bounds of the rows below box `i` of `level`, after checking the stored offsets
-    /// of its children against them. Offsets are compared, not decoded boxes: on a narrow
-    /// parent several offsets decode to the same edge, and only one is canonical. Recursion
-    /// depth is at most [`MAX_LEVELS`].
-    fn check_box(&self, level: usize, i: usize, decoded: &Rect) -> Result<Rect, Error> {
-        let mut kids = [Rect::EMPTY; MAX_NODE];
-        let (first, n) = self.children(level, i, decoded, &mut kids);
-        if n == 0 {
-            return Err(fail(BOXES, "a box has no children"));
-        }
-        let mut exact = Rect::EMPTY;
-        if level == 0 {
-            for kid in kids.iter().take(n) {
-                exact.grow(kid);
-            }
-            return Ok(exact);
-        }
-        let start = self.levels.get(level - 1).map_or(0, |l| l.0);
-        let mut q = [0; 4 * MAX_NODE];
-        self.boxes
-            .run(4 * (start + first), q.get_mut(..4 * n).unwrap_or_default());
-        for (k, (kid, quad)) in kids.iter().zip(q.as_chunks::<4>().0).take(n).enumerate() {
-            let e = self.check_box(level - 1, first + k, kid)?;
-            if encode_box(&e, decoded) != *quad {
-                return Err(fail(BOXES, "a box is not the bounds of its children"));
-            }
-            exact.grow(&e);
-        }
-        Ok(exact)
-    }
-}
-
-/// One level of a depth-first walk: the children of one box.
-#[derive(Clone, Copy)]
-struct Frame {
-    /// The level of the box whose children these are; 0: the children are rows.
-    level: usize,
-    first: usize,
-    len: usize,
-    next: usize,
-    kids: [Rect; MAX_NODE],
-}
-
-impl Frame {
-    const EMPTY: Self = Self {
-        level: 0,
-        first: 0,
-        len: 0,
-        next: 0,
-        kids: [Rect::EMPTY; MAX_NODE],
-    };
-
-    fn load(&mut self, ix: &PlaceIndex<'_>, level: usize, i: usize, parent: &Rect) {
-        let (first, len) = ix.children(level, i, parent, &mut self.kids);
-        (self.level, self.first, self.len, self.next) = (level, first, len, 0);
-    }
-
-    /// The next child and its index.
-    fn take(&mut self) -> Option<(usize, Rect)> {
-        if self.next >= self.len {
-            return None;
-        }
-        let b = *self.kids.get(self.next)?;
-        self.next += 1;
-        Some((self.first + self.next - 1, b))
+        self.tree
+            .check(|_| Err(Tree::fail(Kind::PLACE_INDEX, BOXES, "a stored leaf")))
     }
 }
 
@@ -480,7 +111,8 @@ impl Neighbour {
 
 #[cfg(feature = "spatial")]
 pub(crate) mod nearest {
-    use super::{MAX_LEVELS, MAX_NODE, Neighbour, PlaceIndex, Rect};
+    use super::{MAX_NODE, Neighbour, PlaceIndex, Rect};
+    use crate::rtree::MAX_LEVELS;
     use teigeodata_core::{E6, Point};
 
     const RAD_PER_UNIT: f64 = core::f64::consts::PI / 180.0 / 1_000_000.0;
@@ -806,7 +438,7 @@ pub(crate) mod nearest {
 
         fn load(&mut self, ix: &PlaceIndex<'_>, q: &Query, level: usize, i: usize, parent: &Rect) {
             let mut boxes = [Rect::EMPTY; MAX_NODE];
-            let (first, len) = ix.children(level, i, parent, &mut boxes);
+            let (first, len) = ix.tree.children(level, i, parent, &mut boxes);
             for (k, (slot, b)) in (0_u32..).zip(self.kids.iter_mut().zip(&boxes).take(len)) {
                 *slot = Kid {
                     bound: down(q.bound(b)),
@@ -836,7 +468,7 @@ pub(crate) mod nearest {
         /// level-0 box are ranked as it is expanded, and exact haversines are computed only for
         /// rows whose bound can still enter the result. Allocation-free.
         pub fn nearest(&self, at: Point<E6>, out: &mut [Neighbour]) -> usize {
-            let Some(root) = self.depth.checked_sub(1) else {
+            let Some(root) = self.tree.depth.checked_sub(1) else {
                 return 0;
             };
             if out.is_empty() {
@@ -852,7 +484,7 @@ pub(crate) mod nearest {
                 bound: 0.0,
                 level: u32::try_from(root).unwrap_or(0),
                 i: 0,
-                rect: self.root,
+                rect: self.tree.root,
             });
             let mut boxes = [Rect::EMPTY; MAX_NODE];
             while let Some(e) = heap.pop() {
@@ -860,7 +492,7 @@ pub(crate) mod nearest {
                     break;
                 }
                 let level = e.level as usize;
-                let (first, len) = self.children(level, e.i, &e.rect, &mut boxes);
+                let (first, len) = self.tree.children(level, e.i, &e.rect, &mut boxes);
                 for (k, b) in boxes.iter().take(len).enumerate() {
                     self.visit(&q, level, first + k, b, &mut best, &mut heap);
                 }
@@ -1187,7 +819,6 @@ pub(crate) mod nearest {
         }
     }
 }
-
 /// Encodes a `PLACE_INDEX` payload for `points`, the PLACES points in their row order, with
 /// `node` children per box (feature `write`). Its item count is the number of points.
 ///
@@ -1198,157 +829,9 @@ pub fn encode(
     points: &[teigeodata_core::Point<teigeodata_core::E6>],
     node: usize,
 ) -> Result<alloc::vec::Vec<u8>, Error> {
-    use alloc::vec::Vec;
-    use teigeodata_core::bitpack::{bias, encode_auto};
-
-    if !(MIN_NODE..=MAX_NODE).contains(&node) {
-        return Err(Error::Write("the node size is out of range"));
-    }
-    let (_, depth) = levels(points.len(), node).ok_or(Error::Write("too many levels"))?;
-    // The exact bounds of every level, bottom up.
-    let mut exact: Vec<Vec<Rect>> = Vec::with_capacity(depth);
-    let mut below: Vec<Rect> = points
+    let items: alloc::vec::Vec<Rect> = points
         .iter()
         .map(|p| Rect::point(p.lat(), p.lon()))
         .collect();
-    for _ in 0..depth {
-        let level: Vec<Rect> = below
-            .chunks(node)
-            .map(|c| {
-                let mut r = Rect::EMPTY;
-                for b in c {
-                    r.grow(b);
-                }
-                r
-            })
-            .collect();
-        exact.push(level.clone());
-        below = level;
-    }
-    // Offsets top down: each box against its parent's decoded box.
-    let mut offsets: Vec<Vec<[u32; 4]>> = alloc::vec![Vec::new(); depth];
-    let root = exact.last().and_then(|l| l.first()).copied();
-    let mut decoded_above: Vec<Rect> = root.into_iter().collect();
-    for level in (0..depth.saturating_sub(1)).rev() {
-        let boxes = exact.get(level).map_or(&[][..], Vec::as_slice);
-        let mut decoded = Vec::with_capacity(boxes.len());
-        let mut quads = Vec::with_capacity(boxes.len());
-        for (i, e) in boxes.iter().enumerate() {
-            let parent = decoded_above.get(i / node).copied().unwrap_or(Rect::EMPTY);
-            let q = encode_box(e, &parent);
-            decoded.push(decode_box(&q, &parent));
-            quads.push(q);
-        }
-        if let Some(slot) = offsets.get_mut(level) {
-            *slot = quads;
-        }
-        decoded_above = decoded;
-    }
-    let flat: Vec<u32> = offsets.iter().flatten().flatten().copied().collect();
-    let root_vals: Vec<u32> = root
-        .map(|r| {
-            [r.min_lat, r.max_lat, r.min_lon, r.max_lon]
-                .map(bias)
-                .to_vec()
-        })
-        .unwrap_or_default();
-    let node_col = encode_auto(&[u32::try_from(node).unwrap_or(0)]);
-    let (root_col, boxes_col) = (encode_auto(&root_vals), encode_auto(&flat));
-    teigeodata_core::table::encode(&[
-        (NODE_SIZE, &node_col[..]),
-        (ROOT, &root_col),
-        (BOXES, &boxes_col),
-    ])
-    .map_err(|_| Error::Write("the place index table"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{QUANTA, dequantize, levels, quantize};
-
-    #[test]
-    fn level_sizes() {
-        let sizes = |n, m| {
-            let (l, d) = levels(n, m).unwrap_or_default();
-            l.get(..d)
-                .unwrap_or_default()
-                .iter()
-                .map(|x| x.1)
-                .collect::<std::vec::Vec<_>>()
-        };
-        assert_eq!(sizes(0, 16), std::vec::Vec::<usize>::new());
-        assert_eq!(sizes(1, 16), [1]);
-        assert_eq!(sizes(16, 16), [1]);
-        assert_eq!(sizes(17, 16), [2, 1]);
-        assert_eq!(sizes(257, 16), [17, 2, 1]);
-        assert_eq!(
-            sizes(1 << 20, 4),
-            [
-                1 << 18,
-                1 << 16,
-                1 << 14,
-                1 << 12,
-                1 << 10,
-                256,
-                64,
-                16,
-                4,
-                1
-            ]
-        );
-        assert!(levels(usize::MAX, 4).is_none());
-    }
-
-    /// A decoded range always contains the range it was quantized from and stays inside the
-    /// parent, for parents of every width (0, 1, below and far above `QUANTA` units).
-    #[test]
-    fn quantization_rounds_outward() {
-        let mut s: u64 = 0x1234_5678_9abc_def1;
-        let mut next = || {
-            s ^= s << 13;
-            s ^= s >> 7;
-            s ^= s << 17;
-            s
-        };
-        for _ in 0..if cfg!(miri) { 500 } else { 500_000 } {
-            let widths = [0_i64, 1, 7, 65_534, 65_535, 65_536, 1_000_000, 360_000_000];
-            let w = widths[usize::try_from(next() % 8).unwrap_or(0)];
-            let p_lo =
-                i32::try_from(i64::from(i32::try_from(next() % 1000).unwrap_or(0)) - 180_000_000)
-                    .unwrap_or(0);
-            let p_hi = i32::try_from(i64::from(p_lo) + w).unwrap_or(p_lo);
-            let span = u64::try_from(w).unwrap_or(0) + 1;
-            let a = p_lo + i32::try_from(next() % span).unwrap_or(0);
-            let b = p_lo + i32::try_from(next() % span).unwrap_or(0);
-            let (lo, hi) = (a.min(b), a.max(b));
-            let [q0, q1] = quantize(lo, hi, p_lo, p_hi);
-            assert!(q0 <= q1 && q1 <= QUANTA);
-            // The format pins the rounding: the floor and the ceiling of the exact offset.
-            if w > 0 {
-                let off = |v: i32| u64::try_from(i64::from(v) - i64::from(p_lo)).unwrap_or(0);
-                let (quanta, wu) = (u64::from(QUANTA), u64::try_from(w).unwrap_or(1));
-                assert_eq!(
-                    u64::from(q0),
-                    off(lo) * quanta / wu,
-                    "low edge of {lo} in {p_lo}..{p_hi}"
-                );
-                assert_eq!(
-                    u64::from(q1),
-                    (off(hi) * quanta).div_ceil(wu),
-                    "high edge of {hi} in {p_lo}..{p_hi}"
-                );
-            }
-            let [d0, d1] = dequantize(q0, q1, p_lo, p_hi);
-            assert!(
-                p_lo <= d0 && d0 <= lo && hi <= d1 && d1 <= p_hi,
-                "{lo}..{hi} in {p_lo}..{p_hi}: {d0}..{d1}"
-            );
-            // And tight: each edge moves out by at most two quanta (one rounding each way).
-            let slack = 2 * (w / i64::from(QUANTA) + 1);
-            assert!(
-                i64::from(lo) - i64::from(d0) <= slack && i64::from(d1) - i64::from(hi) <= slack,
-                "{lo}..{hi} in {p_lo}..{p_hi}: {d0}..{d1} is loose"
-            );
-        }
-    }
+    crate::rtree::encode(&items, node, false)
 }

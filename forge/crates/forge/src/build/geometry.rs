@@ -1,5 +1,5 @@
 //! Admin geometry in the pack (B10): the `topology` stage's ARCS payload and its polygons,
-//! linked to their PLACES rows as POLYGONS, and read back and checked.
+//! linked to their PLACES rows as POLYGONS, indexed by `POLY_INDEX`, and read back and checked.
 
 #![allow(
     clippy::indexing_slicing,
@@ -12,6 +12,7 @@ use std::path::Path;
 
 use teigeodata_core::{E7, PlaceKind, Point};
 use teigeodata_format::arcs::{self, Arcs};
+use teigeodata_format::poly_index::{self, PolyIndex, Rect};
 use teigeodata_format::polygons::{self, PolygonInput, Polygons};
 use teigeodata_format::{Encoding, Kind, Pack};
 
@@ -25,6 +26,8 @@ struct Poly {
     pcode: String,
     label: (i32, i32),
     area_ha: u32,
+    /// West, south, east, north on the 1e-7° grid.
+    bbox: [i32; 4],
     parts: Parts,
 }
 
@@ -54,14 +57,16 @@ pub(crate) fn load(root: &Path, admin: &str) -> Result<Geometry, String> {
         .map(|(i, l)| {
             let f: Vec<&str> = l.split('\t').collect();
             let bad = || format!("polygons.tsv line {}: malformed", i + 2);
-            let [level, pcode, x, y, ha, parts] = f[..] else {
+            let [level, pcode, x, y, ha, west, south, east, north, parts] = f[..] else {
                 return Err(bad());
             };
+            let num = |v: &str| v.parse::<i32>().map_err(|_| bad());
             Ok(Poly {
                 level: level.parse().map_err(|_| bad())?,
                 pcode: pcode.to_string(),
                 label: (x.parse().map_err(|_| bad())?, y.parse().map_err(|_| bad())?),
                 area_ha: ha.parse().map_err(|_| bad())?,
+                bbox: [num(west)?, num(south)?, num(east)?, num(north)?],
                 parts: topo::parse_parts(parts)?,
             })
         })
@@ -142,13 +147,26 @@ pub(super) fn sections(
         })
         .collect::<Result<_, String>>()?;
     let body = polygons::encode(&input, &groups).map_err(|e| e.to_string())?;
+    // POLY_INDEX over the boxes in POLYGONS order; `verify` recomputes them from the arcs.
+    let boxes: Vec<Rect> = linked
+        .iter()
+        .map(|(_, _, p)| {
+            let [west, south, east, north] = p.bbox;
+            let mut b = Rect::around_e7(south, west);
+            b.grow(&Rect::around_e7(north, east));
+            b
+        })
+        .collect();
+    let index = poly_index::encode(&boxes, super::pack::NODE).map_err(|e| e.to_string())?;
+    let n = input.len() as u64;
     Ok(vec![
         (Kind::ARCS, Encoding::TABLE, g.arc_count, g.arcs.clone()),
-        (Kind::POLYGONS, Encoding::TABLE, input.len() as u64, body),
+        (Kind::POLYGONS, Encoding::TABLE, n, body),
+        (Kind::POLY_INDEX, Encoding::TABLE, n, index),
     ])
 }
 
-/// Reads ARCS and POLYGONS back: both checks, every polygon on an admin unit of its level (the
+/// Reads ARCS, POLYGONS and `POLY_INDEX` back: their checks, every polygon on an admin unit of its level (the
 /// country at level 0), and every admin unit with a polygon. Returns a line for the summary.
 pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<String, String> {
     let e = |e: teigeodata_format::Error| e.to_string();
@@ -156,6 +174,9 @@ pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<Stri
     a.check().map_err(e)?;
     let polys = Polygons::open(&p.section(Kind::POLYGONS).ok_or("no POLYGONS")?).map_err(e)?;
     polys.check(&a, rows.len()).map_err(e)?;
+    let index =
+        PolyIndex::open(&p.section(Kind::POLY_INDEX).ok_or("no POLY_INDEX")?, &polys).map_err(e)?;
+    index.check(&polys, &a).map_err(e)?;
     // Group k holds the k-th admin level present, coarse to fine.
     let mut levels: Vec<u8> = g.polys.iter().map(|q| q.level).collect();
     levels.sort_unstable();
@@ -193,10 +214,11 @@ pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<Stri
         return Err(format!("{missing} admin units without a polygon"));
     }
     Ok(format!(
-        "Geometry: {} polygons on {} arcs of {} vertices, levels of detail {}; every admin unit and the country has its polygon, every ring joins, closes and is oriented, every label is inside.",
+        "Geometry: {} polygons on {} arcs of {} vertices, levels of detail {}; every admin unit and the country has its polygon, every ring joins, closes and is oriented, every label is inside; the polygon index ({} levels) matches every box.",
         polys.len(),
         a.len(),
         a.vertices(),
-        if a.has_levels() { "0 to 7" } else { "0 only" }
+        if a.has_levels() { "0 to 7" } else { "0 only" },
+        index.depth()
     ))
 }

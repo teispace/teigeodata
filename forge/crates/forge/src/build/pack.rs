@@ -29,7 +29,7 @@ pub(super) fn fits(text: &str) -> bool {
 }
 
 /// Children per `PLACE_INDEX` box (D-082).
-const NODE: usize = 16;
+pub(super) const NODE: usize = 16;
 
 pub(super) struct Input<'a> {
     pub(super) root: &'a Path,

@@ -50,10 +50,12 @@ mod manifest;
 pub mod names;
 pub mod place_index;
 pub mod places;
+pub mod poly_index;
 pub mod polygons;
 mod read;
 pub mod redirects;
 pub mod region;
+mod rtree;
 pub mod search;
 #[cfg(feature = "signature")]
 mod signature;

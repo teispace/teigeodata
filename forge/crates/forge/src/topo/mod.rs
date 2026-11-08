@@ -49,7 +49,8 @@ const MAX_PARENT_M: f64 = 1.0;
 /// Metres per 1e-7° of latitude.
 const M_PER_UNIT: f64 = 111_195.08e-7;
 /// The header of `polygons.tsv`.
-pub(crate) const HEADER: &str = "level\tpcode\tlabel_lon_e7\tlabel_lat_e7\tarea_ha\tparts";
+/// The box is every ring's full-resolution bounds: west, south, east, north on the 1e-7° grid.
+pub(crate) const HEADER: &str = "level\tpcode\tlabel_lon_e7\tlabel_lat_e7\tarea_ha\twest_e7\tsouth_e7\teast_e7\tnorth_e7\tparts";
 
 /// One output polygon.
 struct Poly {
@@ -58,6 +59,7 @@ struct Poly {
     parts: Parts,
     label: V,
     area_ha: u32,
+    bbox: [i32; 4],
 }
 
 /// A source unit.
@@ -159,11 +161,21 @@ fn seg_m(p: V, a: V, b: V, kx: f64) -> f64 {
     (px - t * bx).hypot(py - t * by)
 }
 
-/// Area (hectares) and label of a polygon.
-fn measure_poly(arcs: &[Vec<V>], parts: &Parts) -> Result<(V, u32), String> {
+/// Label, area (hectares) and box (west, south, east, north) of a polygon.
+fn measure_poly(arcs: &[Vec<V>], parts: &Parts) -> Result<(V, u32, [i32; 4]), String> {
     let mut m2 = 0.0;
+    let mut bbox = [i32::MAX, i32::MAX, i32::MIN, i32::MIN];
     for ring in parts.iter().flatten() {
-        m2 += measure::ring_area_m2(&ring_points(arcs, ring));
+        let pts = ring_points(arcs, ring);
+        for &(x, y) in &pts {
+            bbox = [
+                bbox[0].min(x),
+                bbox[1].min(y),
+                bbox[2].max(x),
+                bbox[3].max(y),
+            ];
+        }
+        m2 += measure::ring_area_m2(&pts);
     }
     let first: Vec<Vec<V>> = parts
         .first()
@@ -183,7 +195,7 @@ fn measure_poly(arcs: &[Vec<V>], parts: &Parts) -> Result<(V, u32), String> {
         reason = "hectares of one unit fit a u32"
     )]
     let ha = (m2.abs() / 10_000.0).round() as u32;
-    Ok((label, ha))
+    Ok((label, ha, bbox))
 }
 
 /// `n` as an f64 for a share or a mean (counts far below 2^52).
@@ -259,19 +271,20 @@ pub(crate) fn run(root: &Path, source: &str) -> Result<String, String> {
         })
         .collect();
     let (levels, report) = simplify::levels(&arcs, &guard_rings);
-    let measured: Vec<(V, u32)> = polys
+    let measured: Vec<(V, u32, [i32; 4])> = polys
         .par_iter()
         .map(|(_, _, p)| measure_poly(&arcs, p))
         .collect::<Result<_, _>>()?;
     let out: Vec<Poly> = polys
         .into_iter()
         .zip(measured)
-        .map(|((level, pcode, parts), (label, area_ha))| Poly {
+        .map(|((level, pcode, parts), (label, area_ha, bbox))| Poly {
             level,
             pcode,
             parts,
             label,
             area_ha,
+            bbox,
         })
         .collect();
     let dir = root.join("data/build/topology").join(source);
@@ -478,12 +491,16 @@ fn write_polygons(dir: &Path, polys: &[Poly]) -> Result<(), String> {
     for p in polys {
         let _ = writeln!(
             t,
-            "{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             p.level,
             p.pcode,
             p.label.0,
             p.label.1,
             p.area_ha,
+            p.bbox[0],
+            p.bbox[1],
+            p.bbox[2],
+            p.bbox[3],
             parts_text(&p.parts)
         );
     }

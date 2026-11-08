@@ -123,7 +123,7 @@ parameters).
 | 6 | PLACE_INDEX | packed Hilbert R-tree whose leaves are the PLACES rows | `core`; nearest needs `spatial` | column table (D-082): u16 boxes inside the parent; 0.55 B per place at node size 16 |
 | 7 | ARCS | shared arcs, delta coordinates on 1e-7°, per-vertex LOD level | `geometry` | column table (D-088, D-097): zigzag deltas per arc in B1 FOR blocks, arc bases, block checkpoints, 3-bit LOD level per vertex, [below](#arcs) |
 | 8 | POLYGONS | polygons → parts → rings → signed arc refs; PLACES row, label point, area | `geometry` | column table (D-088, D-097; boxes live in POLY_INDEX), [below](#polygons) |
-| 9 | POLY_INDEX | packed R-tree over polygon boxes | `geometry` | as 6, with a stored leaf level (D-088) |
+| 9 | POLY_INDEX | packed Hilbert R-tree over the POLYGONS boxes | `geometry` | as 6, with a stored leaf level (D-088, D-099), [below](#poly_index) |
 | 10 | REGION | exact point → regions (timezones, later admin units): shared-arc borders, a dense top grid, quadtree leaves in Morton order with edge-ID runs, region sets | `region` | column table (D-083): [below](#region) |
 | 11 | POSTAL | scheme + code → postal records (place, kind, validity, redirect) | `postal` | column table on `search::fst` (D-090) |
 | 12 | COMPONENTS | per component: presence (none, a bitmap or sorted rows) + dense field columns | `components` | column table (D-076): a bitmap costs 0.129 B per row, sparse sorted rows far less |
@@ -258,6 +258,8 @@ A column ID of 0 or above 6 is refused.
 
 A packed Hilbert R-tree over the PLACES points (D-081, D-082,
 [indexes note](../02-research/notes/indexes.md#31-place_index-over-the-existing-row-order)).
+Code: `teigeodata_format::place_index`, on the tree code it shares with
+[POLY_INDEX](#poly_index).
 PLACES rows are already in Hilbert order, so they are the tree's leaves and only the boxes
 above them are stored. `item_count` equals PLACES'. Columns other than these three are refused.
 
@@ -360,6 +362,34 @@ Every polygon as parts, rings and signed references to ARCS (D-088, D-097). Code
   close; rings of at least 4 vertices and non-zero area, outer rings counter-clockwise and holes
   clockwise; each label inside its polygon. Not checked: that a hole lies inside its outer ring
   and that rings do not cross; the forge's topology stage guarantees both.
+
+### POLY_INDEX
+
+A packed Hilbert R-tree over the POLYGONS boxes (D-088, D-099). Code:
+`teigeodata_format::poly_index`, on the tree code it shares with [PLACE_INDEX](#place_index)
+(`rtree`). `item_count` equals POLYGONS'. The columns are PLACE_INDEX's three, with one change:
+the leaves are stored.
+
+- **Leaves:** each polygon's box as four offsets inside its level-0 box, rounded outward like
+  every other box, ahead of the level-0 boxes in the boxes column (four values per polygon,
+  then four per stored box). A polygon's box is the bounds of every vertex of every ring at full
+  resolution, rounded outward from the 1e-7° grid to the index's 1e-6°.
+- **Order:** the leaves are the polygons in POLYGONS order: grouped by admin level, coarse to
+  fine, each level by PLACES row. A query takes a range of polygons (usually one group) and
+  skips every subtree outside it, so a country's box never slows a query for districts; B10
+  measured 3 to 4.5 nodes per point per level against 5.7 for one Hilbert sort over all levels
+  ([B10](../02-research/benches/phase-3.md#b10-poly_index-and-ring-reads)). Node size 16, 9.5 B
+  per polygon on Nepal.
+- **Queries:** `intersecting(box, range)` yields every polygon in the range whose stored box
+  meets the box (a superset of the exact boxes, never a subset; a box with west above east
+  crosses the antimeridian); `containing(point, range)` yields exactly the polygons that hold
+  the point, by `Polygons::contains` on each candidate, reading longitude 180 as −180 as
+  `contains` does. `nodes_read` counts the nodes a query decodes, for benchmarks. No
+  allocation; queries stop when the caller breaks.
+- **The deep check** (`PolyIndex::check(polygons, arcs)`) recomputes every polygon's box from
+  the arcs, O(vertices), and compares every stored offset, leaves included, with the writer's,
+  so a checked index is canonical. Opening checks the structure as PLACE_INDEX does, with the
+  leaves counted in the boxes column's length.
 
 ### REGION
 

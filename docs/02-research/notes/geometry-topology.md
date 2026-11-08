@@ -562,8 +562,13 @@ Built in Rust and measured on COD-AB Nepal, all four levels: 2,315 arcs and 593,
 (33.8% of the ring vertices) as modelled; ARCS 4.48 B per vertex (model 3.98 + 0.44 level +
 0.05 checkpoints = 4.47); the dissolved parents lie within 1 cm of the source's; the guard
 found 8 crossings over all levels and fixed them with 29 vertices. Checkpoints became required
-and the label is our own polylabel (see D-097, D-098). Still to measure: ring decode speed,
-POLY_INDEX, the admin REGION on shared arcs, India.
+and the label is our own polylabel (see D-097, D-098). POLY_INDEX (D-099, [B10](../benches/phase-3.md#b10-poly_index-and-ring-reads)): 9.5 B per
+polygon (the estimate was 8.5); level-first order reads 3 to 4.5 nodes per point per level
+against 5.7 for one Hilbert sort; ring reads cost 6.6 ns per vertex at full resolution, and a
+coarse level costs as much as the full one because every vertex is still decoded (an open item
+for 3.3). `containing` through POLYGONS takes 9 µs (local level) to 354 µs (country), so
+point → admin stays on REGION as §3.7 recommends. Still to measure: the admin REGION on shared
+arcs, India.
 
 ## 7. Risks and open items
 

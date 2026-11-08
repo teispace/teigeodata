@@ -60,7 +60,11 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   [forge](../../04-architecture/forge.md#topology-topology)); `i_overlay` snap rounding joins
   with the first source that is not noded
 - [x] ARCS and POLYGONS sections, in the Nepal packs (D-097)
-- [ ] POLY_INDEX; the admin REGION on the shared arcs; the A/B and timing against D-083
+- [x] POLY_INDEX on the tree shared with PLACE_INDEX, in the Nepal packs; leaf order and node
+  size A/B (D-099, [B10](../../02-research/benches/phase-3.md#b10-poly_index-and-ring-reads))
+- [ ] The admin REGION on the shared arcs; the A/B and timing against D-083
+- [ ] Coarse levels of detail without decoding every vertex (per-block level bounds with the
+  checkpoints, or an overview arc set), measured on a whole-country and a whole-world render
 
 ### 3.4 B11 DEM
 - [ ] The DEM section (D-089): codec, tile directory, point and bilinear queries; measured
@@ -94,3 +98,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-07 | 3.1 done: `forge make` with keyed stages and stamped outputs (D-095) | the slice runs from one command |
 | 2026-11-08 | 3.2: readers, core and consensus built (D-096); DEM elevation moved to 3.4; labelling is a maintainer task | elevation needs the DEM section; labels must come from people, not the forge |
 | 2026-11-08 | 3.3: ARCS, POLYGONS and the topology stage built (D-097, D-098); noding by `i_overlay` waits for a source that needs it | COD-AB is noded; the stage refuses a source that is not |
+| 2026-11-08 | 3.3: POLY_INDEX built (D-099); a coarse-LOD read item added | B10 measured coarse reads costing as much as full ones |

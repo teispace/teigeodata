@@ -15,6 +15,8 @@
     reason = "harnesses: one model builder per section, grid units below 2^31, mode bits read as masks"
 )]
 
+use core::ops::ControlFlow;
+
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
 use alloc::vec;
@@ -26,6 +28,7 @@ use crate::hierarchy::{self, Hierarchy, MAX_DEPTH};
 use crate::idmap::{self, IdMap};
 use crate::place_index::{self, MAX_NODE, MIN_NODE, Neighbour, PlaceIndex, Rect};
 use crate::places::{self, PlaceColumns, Places};
+use crate::poly_index::{self, PolyIndex, polygon_box};
 use crate::polygons::{self, PolygonInput, Polygons, arc_ref};
 use crate::redirects::{self, Fate, Redirects, Resolved, resolve};
 use crate::region::{self, Region};
@@ -320,7 +323,7 @@ fn search_case(c: &mut Cursor<'_>, structured: bool) {
         if let Some(m) = Fuzzy::new(&query, edits) {
             ix.walk(tag, &m, None, 1 << 14, |o, d| {
                 walked.push((o, d));
-                core::ops::ControlFlow::Continue(())
+                ControlFlow::Continue(())
             });
         }
         let mut best = Vec::new();
@@ -330,7 +333,7 @@ fn search_case(c: &mut Cursor<'_>, structured: bool) {
             || i32::from(floor),
             |o| {
                 best.push(o);
-                core::ops::ControlFlow::Continue(())
+                ControlFlow::Continue(())
             },
         );
         assert!(read <= range.len(), "best_in reads past its range");
@@ -356,7 +359,7 @@ fn search_case(c: &mut Cursor<'_>, structured: bool) {
                         );
                     }
                     last = Some(here);
-                    core::ops::ControlFlow::Continue(())
+                    ControlFlow::Continue(())
                 });
                 assert!(last.is_some(), "an empty list");
             }
@@ -393,7 +396,7 @@ fn search_case(c: &mut Cursor<'_>, structured: bool) {
                 let mut got = Vec::new();
                 ix.rows_of(i as u32, |r| {
                     got.push(r);
-                    core::ops::ControlFlow::Continue(())
+                    ControlFlow::Continue(())
                 });
                 let mut want: Vec<u32> = list.iter().copied().collect();
                 want.sort_by_key(|&r| (core::cmp::Reverse(importance[r as usize]), r));
@@ -451,7 +454,7 @@ fn place_index_case(c: &mut Cursor<'_>, structured: bool) {
         let mut got = Vec::new();
         let _ = ix.within(q, |row| {
             got.push(row);
-            core::ops::ControlFlow::Continue(())
+            ControlFlow::Continue(())
         });
         assert!(got.iter().all(|&r| r < n), "a row past the end");
         let at = point(c);
@@ -1414,17 +1417,44 @@ fn polygons_case(c: &mut Cursor<'_>, structured: bool) {
     let mut body = polygons::encode(&input, &groups)
         .unwrap_or_else(|e| panic!("a valid polygon model is refused: {e}"));
     let mut items = input.len() as u64;
-    let model = if structured {
-        !edit(c, &mut body, &mut items)
-    } else {
-        items = u64::from(c.u8());
-        body = c.rest().to_vec();
-        false
-    };
+    // POLY_INDEX over the model's boxes, computed here from the model arcs.
+    let boxes: Vec<Rect> = topo
+        .polys
+        .iter()
+        .map(|p| {
+            let mut r = Rect::EMPTY;
+            for &x in p.1[0].iter().flatten() {
+                for v in &topo.arcs[(x >> 1) as usize] {
+                    r.grow(&Rect::around_e7(v.lat(), v.lon()));
+                }
+            }
+            r
+        })
+        .collect();
+    let node = MIN_NODE + c.below(MAX_NODE - MIN_NODE + 1);
+    let mut ix_body = poly_index::encode(&boxes, node)
+        .unwrap_or_else(|e| panic!("a valid polygon index is refused: {e}"));
+    let mut ix_items = boxes.len() as u64;
+    let (mut model, mut ix_model) = (true, true);
+    match (structured, c.u8() % 4) {
+        (true, 0) => ix_model = !edit(c, &mut ix_body, &mut ix_items),
+        (true, _) => model = !edit(c, &mut body, &mut items),
+        (false, 0) => {
+            ix_items = u64::from(c.u8());
+            ix_body = c.rest().to_vec();
+            ix_model = false;
+        }
+        (false, _) => {
+            items = u64::from(c.u8());
+            body = c.rest().to_vec();
+            model = false;
+        }
+    }
     let places = topo.polys.len() + 1;
     let Some(file) = pack(&[
         (Kind::ARCS, topo.arcs.len() as u64, &arcs_body),
         (Kind::POLYGONS, items, &body),
+        (Kind::POLY_INDEX, ix_items, &ix_body),
     ]) else {
         return;
     };
@@ -1527,5 +1557,91 @@ fn polygons_case(c: &mut Cursor<'_>, structured: bool) {
                 .collect();
             assert_eq!(got, want, "contains at {at}");
         }
+    }
+    poly_index_checks(c, &v, &a, &topo, checked, model && ix_model, &p, probe);
+}
+
+/// `POLY_INDEX` over the polygons case: queries never panic; a written index checks; on a
+/// checked index, `containing` is exactly the polygons that hold the point and `intersecting`
+/// never drops a polygon whose exact box meets the query.
+#[allow(clippy::too_many_arguments, reason = "the polygons case's state")]
+fn poly_index_checks(
+    c: &mut Cursor<'_>,
+    v: &Polygons<'_>,
+    a: &Arcs<'_>,
+    topo: &Topo,
+    checked: bool,
+    model: bool,
+    p: &Pack<'_>,
+    probe: impl Fn(&mut Cursor<'_>) -> Point<E7>,
+) {
+    let Ok(ix) = PolyIndex::open(&section(p, Kind::POLY_INDEX), v) else {
+        assert!(!model, "a written POLY_INDEX payload does not open");
+        return;
+    };
+    let n = v.len();
+    let random = c.below(n + 2)..c.below(n + 2);
+    let ranges = [
+        0..n,
+        v.group(0).unwrap_or(0..0),
+        v.group(1).unwrap_or(0..0),
+        1..n.saturating_sub(1),
+        random,
+    ];
+    let query = |c: &mut Cursor<'_>| {
+        let (s, t) = (probe(c), probe(c));
+        let (s, t) = (
+            Rect::around_e7(s.lat(), s.lon()),
+            Rect::around_e7(t.lat(), t.lon()),
+        );
+        let mut r = s;
+        r.grow(&t);
+        r
+    };
+    for range in ranges {
+        let q = query(c);
+        let mut got = Vec::new();
+        let _ = ix.intersecting(q, range.clone(), |i| {
+            got.push(i);
+            ControlFlow::Continue(())
+        });
+        assert!(
+            got.iter().all(|i| range.contains(i)),
+            "a polygon outside the range"
+        );
+        let at = probe(c);
+        let mut held = Vec::new();
+        let _ = ix.containing(v, a, at, range.clone(), |i| {
+            held.push(i);
+            ControlFlow::Continue(())
+        });
+        if !(checked && ix.check(v, a).is_ok()) {
+            continue;
+        }
+        got.sort_unstable();
+        let len = got.len();
+        got.dedup();
+        assert_eq!(got.len(), len, "a polygon reported twice");
+        let inside = range.start..range.end.min(n);
+        for i in inside.clone() {
+            if polygon_box(v, a, i).is_some_and(|b| b.intersects(&q)) {
+                assert!(
+                    got.binary_search(&i).is_ok(),
+                    "polygon {i} dropped from {q:?}"
+                );
+            }
+        }
+        held.sort_unstable();
+        let want: Vec<usize> = inside.filter(|&i| v.contains(a, i, at)).collect();
+        assert_eq!(held, want, "containing {at} in {range:?}");
+    }
+    if model {
+        assert!(checked, "the model polygons fail their check");
+        assert_eq!(
+            ix.check(v, a),
+            Ok(()),
+            "a written POLY_INDEX fails its check"
+        );
+        assert_eq!(ix.len(), topo.polys.len());
     }
 }

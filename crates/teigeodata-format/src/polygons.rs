@@ -283,7 +283,7 @@ impl<'a> Polygons<'a> {
     }
 
     /// Every ring of polygon `p`.
-    fn all_rings(&self, p: usize) -> Range<usize> {
+    pub(crate) fn all_rings(&self, p: usize) -> Range<usize> {
         let parts = self.parts(p).unwrap_or(0..0);
         let first = self.rings(parts.start).map_or(0, |r| r.start);
         let last = parts

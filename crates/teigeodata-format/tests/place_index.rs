@@ -284,7 +284,7 @@ fn refusals() {
     };
     assert_eq!(
         problem(&good, rows + 1).1,
-        "the item count is not the number of places"
+        "the item count is not the number of items"
     );
     let col = |v: &[u32]| encode_auto(v);
     // 300 rows at node 16: levels of 19, 2 and 1 boxes; 21 are stored, 4 offsets each.
