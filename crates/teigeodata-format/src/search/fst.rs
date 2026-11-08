@@ -985,7 +985,13 @@ mod tests {
     #[test]
     fn lookups_agree_with_the_sorted_keys() {
         let mut r = Rng(11);
-        for n in [0, 1, 2, 5, 40, 600] {
+        // Under Miri (about a million times slower), shapes up to 40 keys and fewer probes.
+        let sizes: &[usize] = if cfg!(miri) {
+            &[0, 1, 2, 5, 40]
+        } else {
+            &[0, 1, 2, 5, 40, 600]
+        };
+        for &n in sizes {
             let keys = words(&mut r, n);
             let bytes = build(&keys);
             let f = Fst::new(&bytes, keys.len() as u32).unwrap();
@@ -1001,7 +1007,7 @@ mod tests {
                 assert_eq!(f.get(k.as_bytes()), Some(i as u32), "{k}");
             }
             // Absent keys and every prefix range.
-            for probe in words(&mut r, 200) {
+            for probe in words(&mut r, if cfg!(miri) { 8 } else { 200 }) {
                 let at = keys.binary_search(&probe);
                 assert_eq!(f.get(probe.as_bytes()), at.ok().map(|i| i as u32));
                 for cut in 0..=probe.len() {
@@ -1017,7 +1023,7 @@ mod tests {
     #[test]
     fn walks_agree_with_brute_force() {
         let mut r = Rng(5);
-        let keys = words(&mut r, 3000);
+        let keys = words(&mut r, if cfg!(miri) { 200 } else { 3000 });
         // Tagged keys: a tag byte before every word, two tags.
         let mut tagged: Vec<String> = keys
             .iter()
@@ -1027,7 +1033,7 @@ mod tests {
         let bytes = build(&tagged);
         let f = Fst::new(&bytes, tagged.len() as u32).unwrap();
         f.check(|_, _| {}).unwrap();
-        for q in words(&mut r, 150) {
+        for q in words(&mut r, if cfg!(miri) { 3 } else { 150 }) {
             for edits in 0..=2_u8 {
                 let fz = Fuzzy::new(&q, edits).unwrap();
                 for anchor in [None, q.chars().next()] {
@@ -1073,7 +1079,8 @@ mod tests {
         assert!(b.insert(b"b").is_err());
         assert!(b.insert(&[b'c'; MAX_KEY + 1]).is_err());
         // Shared suffixes: many keys ending alike take far fewer bytes than their text.
-        let keys: Vec<String> = (0..2000).map(|i| std::format!("{i:05}nagar")).collect();
+        let n = if cfg!(miri) { 300 } else { 2000 };
+        let keys: Vec<String> = (0..n).map(|i| std::format!("{i:05}nagar")).collect();
         let bytes = build(&keys);
         assert!(
             bytes.len() * 4 < keys.iter().map(String::len).sum::<usize>(),

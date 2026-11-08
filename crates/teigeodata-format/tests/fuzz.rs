@@ -4,11 +4,14 @@
 
 use teigeodata_format::fuzz;
 
+/// `TG_FUZZ_ITERS`, else `default`, or 1 under Miri: its isolation hides the host's
+/// environment unless forwarded (`-Zmiri-env-forward`), and one input of each harness costs
+/// minutes there.
 fn iterations(default: u64) -> u64 {
     std::env::var("TG_FUZZ_ITERS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(default)
+        .unwrap_or(if cfg!(miri) { 1 } else { default })
 }
 
 /// Seeded inputs of 0 to 2,047 random bytes (255 under Miri, where one input per harness runs).

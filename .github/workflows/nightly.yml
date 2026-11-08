@@ -98,6 +98,8 @@ jobs:
     name: miri (${{ matrix.group }})
     env:
       TG_FUZZ_ITERS: "1"
+      # Miri's isolation hides the host environment; forward the iteration count.
+      MIRIFLAGS: -Zmiri-env-forward=TG_FUZZ_ITERS
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Nightly toolchain with Miri

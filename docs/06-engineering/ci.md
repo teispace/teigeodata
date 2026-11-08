@@ -57,8 +57,12 @@ fuzzing time per target as an input).
   tests take fewer lengths and smaller key sets, and the harnesses take smaller limits
   (`fuzz::limit`). On an Apple silicon Mac, run Miri with `RUSTFLAGS='--cfg sha2_backend="soft"'`:
   `sha2` calls an aarch64 crypto intrinsic that Miri does not support (cross-compiling to x86
-  Linux fails on the C `zstd` dev-dependency). Nightly results do not gate work: a failure is
-  fixed when it is found.
+  Linux fails on the C `zstd` dev-dependency). Miri's isolation hides the host environment,
+  so the job forwards `TG_FUZZ_ITERS` with `MIRIFLAGS=-Zmiri-env-forward=TG_FUZZ_ITERS`, and the
+  `fuzz` test defaults to one input under Miri anyway: unforwarded, every harness ran its
+  4,000 native inputs and the job hit its 5-hour budget (found 2026-11-08; one input takes
+  0.03 s for the bitmap harness, 4,000 took 21 minutes). Nightly results do not gate work: a
+  failure is fixed when it is found.
   The core property tests take their case counts from `crate::cases(n)`: `n` natively, a
   thousandth (at least 4) under Miri; libFuzzer covers the volume.
 
