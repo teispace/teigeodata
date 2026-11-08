@@ -3,13 +3,14 @@
 //!
 //! ```text
 //! forge topology <boundary-source>
+//! forge topology --geoboundaries <file> <name>   one geoBoundaries level, for measurement
 //! ```
 //!
 //! 1. The finest level's rings are cleaned (outer rings counter-clockwise, holes clockwise) and
 //!    cut into arcs at topology nodes ([`arcs`]). The source must be noded: any two edges that
 //!    cross or touch away from a shared vertex stop the stage (snap rounding is not built).
-//! 2. Every coarser level, the country included, is dissolved from the finest units by their
-//!    stated ancestor codes, so all levels share one arc set, and each is compared with the
+//! 2. Every coarser level the source names (the country at least) is dissolved from the finest
+//!    units by their stated ancestor codes, so all levels share one arc set, and each is compared with the
 //!    source's own polygon of that unit: the distance from each source vertex to the derived
 //!    border, and the area. A unit off by more than [`MAX_PARENT_M`] stops the stage.
 //! 3. Levels of detail and the guard ([`simplify`]); area and label point ([`measure`]).
@@ -26,6 +27,7 @@
 pub(crate) mod arcs;
 pub(crate) mod measure;
 pub(crate) mod simplify;
+pub(crate) mod snap;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
@@ -71,18 +73,24 @@ struct Src {
     area_km2: Option<f64>,
 }
 
+fn src(level: u8, u: boundaries::Unit) -> Src {
+    Src {
+        level,
+        pcode: u.pcode,
+        parents: u.parents,
+        rings: arcs::clean_rings(&u.polygon.rings),
+        area_km2: u.area_km2,
+    }
+}
+
 fn read_units(zip: &Path) -> Result<Vec<Src>, String> {
     let mut out = Vec::new();
     for level in boundaries::levels(zip)? {
-        for u in boundaries::read(zip, level)? {
-            out.push(Src {
-                level,
-                pcode: u.pcode,
-                parents: u.parents,
-                rings: arcs::clean_rings(&u.polygon.rings),
-                area_km2: u.area_km2,
-            });
-        }
+        out.extend(
+            boundaries::read(zip, level)?
+                .into_iter()
+                .map(|u| src(level, u)),
+        );
     }
     Ok(out)
 }
@@ -206,10 +214,24 @@ const fn f(n: usize) -> f64 {
 
 /// `forge topology <boundary-source>`.
 pub(crate) fn run(root: &Path, source: &str) -> Result<String, String> {
-    let t = Instant::now();
     let lock = Lock::read(&root.join("data/sources.lock"))?;
-    let zip = store_path(root, lock.get(source)?);
-    let units = read_units(&zip)?;
+    let units = read_units(&store_path(root, lock.get(source)?))?;
+    stage(root, source, &units)
+}
+
+/// `forge topology --geoboundaries <file> <name>`: one geoBoundaries level read from a local
+/// file, for measurement (it is not a pinned source and feeds no build).
+pub(crate) fn run_geoboundaries(root: &Path, file: &Path, name: &str) -> Result<String, String> {
+    let (level, units) = boundaries::read_geoboundaries(file)?;
+    let units: Vec<Src> = units.into_iter().map(|u| src(level, u)).collect();
+    let s = stage(root, name, &units)?;
+    let pack = crate::build::geometry::measure_pack(root, name)?;
+    Ok(format!("{s}\n{pack}\n"))
+}
+
+/// The stage on read units; `source` names the output directory.
+fn stage(root: &Path, source: &str, units: &[Src]) -> Result<String, String> {
+    let t = Instant::now();
     let finest = units.iter().map(|u| u.level).max().ok_or("no units")?;
     let fine: Vec<&Src> = units.iter().filter(|u| u.level == finest).collect();
     let rings: Vec<(u32, Vec<V>)> = fine
@@ -221,9 +243,11 @@ pub(crate) fn run(root: &Path, source: &str) -> Result<String, String> {
                 .map(move |r| (u32::try_from(i).unwrap_or(u32::MAX), r.clone()))
         })
         .collect();
+    let (rings, snapped) = snap::snap_round(&rings);
     let (built, mut refs) = arcs::build(&rings)?;
     let arcs = sort_arcs(built, &mut refs);
     let mut s = format!("# topology: {source}\n\n");
+    snap_line(&mut s, &snapped);
     let full: Vec<(V, V)> = arcs
         .iter()
         .flat_map(|a| a.windows(2).map(|w| (w[0], w[1])))
@@ -231,7 +255,7 @@ pub(crate) fn run(root: &Path, source: &str) -> Result<String, String> {
     let bad = simplify::crossings(&full);
     if !bad.is_empty() {
         return Err(format!(
-            "{source}: the finest level is not noded: {} edge pairs cross or touch away from a vertex, first {:?} (snap rounding is not built)",
+            "{source}: snap rounding left {} edge pairs that cross or touch away from a vertex, first {:?}",
             bad.len(),
             bad.first().map(|&(i, j)| (full[i], full[j]))
         ));
@@ -241,8 +265,18 @@ pub(crate) fn run(root: &Path, source: &str) -> Result<String, String> {
     for ((u, _), r) in rings.iter().zip(&refs) {
         by_unit[*u as usize].extend(r);
     }
+    // A coarser level is dissolved when the source names it for every unit, and skipped when it
+    // names it for none (a geoBoundaries file states only the country).
     let mut polys: Vec<(u8, String, Parts)> = Vec::new();
     for level in 0..=finest {
+        let named = |u: &&Src| {
+            !u.parents
+                .get(usize::from(level))
+                .is_none_or(String::is_empty)
+        };
+        if level < finest && !fine.iter().any(named) {
+            continue;
+        }
         let mut groups: BTreeMap<&str, Vec<Ref>> = BTreeMap::new();
         for (u, r) in fine.iter().zip(&by_unit) {
             let code = if level == finest {
@@ -260,7 +294,7 @@ pub(crate) fn run(root: &Path, source: &str) -> Result<String, String> {
             polys.push((level, code.to_string(), parts));
         }
     }
-    parents_report(&mut s, &arcs, &units, &polys, finest)?;
+    parents_report(&mut s, &arcs, units, &polys, finest)?;
     // Levels of detail, guarded on every ring of every polygon.
     let guard_rings: Vec<(Vec<Ref>, bool)> = polys
         .iter()
@@ -289,13 +323,28 @@ pub(crate) fn run(root: &Path, source: &str) -> Result<String, String> {
         .collect();
     let dir = root.join("data/build/topology").join(source);
     fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let bytes = write_arcs(&dir, &arcs, &levels)?;
+    let written = write_arcs(&dir, &arcs, &levels)?;
     verify(&dir.join("arcs.bin"), &out)?;
     write_polygons(&dir, &out)?;
-    summary(&mut s, &arcs, &levels, &report, &out, &units, bytes);
+    summary(&mut s, &arcs, &levels, &report, &out, units, &written);
     let _ = writeln!(s, "\nIn {:.1?}.", t.elapsed());
     fs::write(dir.join("summary.md"), &s).map_err(|e| e.to_string())?;
     Ok(s)
+}
+
+/// What snap rounding did, when the source was not noded.
+fn snap_line(s: &mut String, snapped: &snap::Snapped) {
+    if snapped.bad_pairs > 0 {
+        let _ = writeln!(
+            s,
+            "Snap rounding: {} edge pairs crossed or touched away from a vertex; {} crossing pixels, {} edges routed through hot pixels, {} vertices added, {} rings collapsed.\n",
+            snapped.bad_pairs,
+            snapped.new_pixels,
+            snapped.edges_moved,
+            snapped.vertices_added,
+            snapped.rings_dropped
+        );
+    }
 }
 
 /// Compares each dissolved parent with the source's own polygon; fails past [`MAX_PARENT_M`].
@@ -434,7 +483,15 @@ fn verify(file: &Path, polys: &[Poly]) -> Result<(), String> {
     Ok(())
 }
 
-fn write_arcs(dir: &Path, arcs: &[Vec<V>], levels: &[Vec<u8>]) -> Result<usize, String> {
+/// What was written: ARCS's bytes, and the arcs and vertices stored on a coarser decimal grid
+/// (scale above 0), counted by the format's reader.
+struct Written {
+    bytes: usize,
+    scaled_arcs: usize,
+    scaled_vertices: usize,
+}
+
+fn write_arcs(dir: &Path, arcs: &[Vec<V>], levels: &[Vec<u8>]) -> Result<Written, String> {
     let pts: Vec<Vec<Point<E7>>> = arcs
         .iter()
         .map(|a| {
@@ -454,7 +511,18 @@ fn write_arcs(dir: &Path, arcs: &[Vec<V>], levels: &[Vec<u8>]) -> Result<usize, 
     })
     .map_err(|e| e.to_string())?;
     fs::write(dir.join("arcs.bin"), &body).map_err(|e| e.to_string())?;
-    Ok(body.len())
+    let read = teigeodata_format::arcs::Arcs::open(&teigeodata_format::Section::unpacked(
+        teigeodata_format::Kind::ARCS,
+        arcs.len() as u64,
+        &body,
+    ))
+    .map_err(|e| e.to_string())?;
+    let scaled: Vec<usize> = (0..read.len()).filter(|&a| read.scale(a) > 0).collect();
+    Ok(Written {
+        bytes: body.len(),
+        scaled_arcs: scaled.len(),
+        scaled_vertices: scaled.iter().map(|&a| arcs[a].len()).sum(),
+    })
 }
 
 /// `parts` as text: parts split by `|`, rings by `;`, references by `,`.
@@ -514,8 +582,9 @@ fn summary(
     report: &[(u8, simplify::Guarded)],
     polys: &[Poly],
     units: &[Src],
-    bytes: usize,
+    written: &Written,
 ) {
+    let bytes = written.bytes;
     let v: usize = arcs.iter().map(Vec::len).sum();
     let ring_v: usize = units.iter().flat_map(|u| &u.rings).map(Vec::len).sum();
     let _ = writeln!(
@@ -526,6 +595,15 @@ fn summary(
         100.0 * f(v) / f(ring_v.max(1)),
         f(bytes) / f(v.max(1))
     );
+    if written.scaled_arcs > 0 {
+        let _ = writeln!(
+            s,
+            "On a coarser decimal grid (scale above 0): {} of {} arcs, {} of {v} vertices.\n",
+            written.scaled_arcs,
+            arcs.len(),
+            written.scaled_vertices
+        );
+    }
     let _ = writeln!(
         s,
         "| Level of detail | Tolerance | Vertices kept | Crossings found | Degenerate rings | Added back | Left |\n|---:|---:|---:|---:|---:|---:|---:|"

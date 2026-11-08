@@ -17,6 +17,7 @@
 //! forge core <points run> <buildings run>      consensus points with settlement cores
 //! forge labels sample|score …                   the hand-labelled truth set (Q-005)
 //! forge topology <boundary-source>                shared arcs, levels of detail, polygons (B10)
+//! forge topology --geoboundaries <file> <name>   the same on one geoBoundaries level (measurement)
 //! forge make <cc> --release <v> [--lite] …       every stage from data/countries/<cc>/build.yaml, cached
 //! forge path <source-id>                          print a fetched source's store path
 //! ```
@@ -117,9 +118,12 @@ fn stage(root: &Path, args: &[String]) -> Option<Result<String, String>> {
             (Some("score"), [cc, run, b]) => labels::score(root, cc, run, b),
             _ => Err("usage: forge labels sample <cc> <points-source> <count-per-stratum> <seed> | forge labels score <cc> <points run> <buildings run>".into()),
         },
-        "topology" => match args.get(1) {
-            Some(b) => topo::run(root, b),
-            None => Err("usage: forge topology <boundary-source>".into()),
+        "topology" => match args.get(1..).unwrap_or_default() {
+            [flag, file, name] if flag == "--geoboundaries" => {
+                topo::run_geoboundaries(root, Path::new(file), name)
+            }
+            [b] => topo::run(root, b),
+            _ => Err("usage: forge topology <boundary-source> | forge topology --geoboundaries <file> <name>".into()),
         },
         "core" => match (args.get(1), args.get(2)) {
             (Some(p), Some(b)) => core::run(root, p, b),

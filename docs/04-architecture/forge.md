@@ -304,13 +304,22 @@ consensus distance to the labels against the targets (P90 ≤ 500 m lowland, ≤
 levels of detail and every unit into a polygon of arc references (B10, D-088, D-098). Code:
 `forge/crates/forge/src/topo/`.
 
+`forge topology --geoboundaries <file> <name>` runs the same stage on one geoBoundaries level
+(`shapeID` as the code, `shapeGroup` as the only ancestor, so only the country is dissolved)
+and also writes a pack of the geometry sections alone, `data/build/topology/<name>/geometry.tgd`,
+each polygon its own row in Hilbert order of its label. It is for measurement: the file is not
+a pinned source and feeds no build.
+
 1. **Arcs.** The finest level's rings are cleaned (outer counter-clockwise, holes clockwise) and
    cut at topology nodes: a vertex whose degree is not 2, or where the units on its two edges
    change (REGION's arc rule). A ring without a node is one closed arc from its smallest vertex.
-   The source must be noded: two edges that cross or touch away from a shared vertex stop the
-   stage. Snap rounding with `i_overlay` (D-088) joins when a source needs it.
-2. **Dissolve.** Every coarser level, the country included, is rebuilt from the finest units by
-   their stated ancestor codes (`adm<l>_pcode`): arcs used in both directions cancel, the rest
+   A source that is not noded (two edges cross or touch away from a shared vertex) is snap
+   rounded first (D-103, [note](../02-research/notes/snap-rounding.md)): every edge that meets
+   a hot pixel (a vertex, or a crossing rounded) goes through its centre, so no input vertex
+   moves and edges move by at most 8 mm. A noded source is left unchanged. Any crossing left
+   after that stops the stage.
+2. **Dissolve.** Every coarser level the source names (the country at least) is rebuilt from
+   the finest units by their stated ancestor codes (`adm<l>_pcode`): arcs used in both directions cancel, the rest
    chain into rings (the sharpest left turn at a vertex where a ring touches itself), and holes
    go to the smallest outer ring holding them. Each derived unit is compared with the source's
    own polygon of it; a source vertex more than 1 m from the derived border stops the stage.

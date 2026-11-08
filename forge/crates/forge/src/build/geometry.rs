@@ -15,7 +15,7 @@ use teigeodata_format::arcs::{self, Arcs};
 use teigeodata_format::poly_index::{self, PolyIndex, Rect};
 use teigeodata_format::polygons::{self, PolygonInput, Polygons};
 use teigeodata_format::region::{self, Options, Region};
-use teigeodata_format::{Encoding, Kind, Pack, Section};
+use teigeodata_format::{Encoding, Kind, Pack, Section, Writer};
 
 use super::Place;
 use super::pack::Body;
@@ -113,6 +113,11 @@ pub(super) fn sections(
         })
         .collect::<Result<_, String>>()?;
     linked.sort_by_key(|&(level, row, _)| (level, row));
+    encode(g, &linked)
+}
+
+/// The sections of linked polygons, `(level, row, polygon)` in (level, row) order.
+fn encode(g: &Geometry, linked: &[(u8, u32, &Poly)]) -> Result<Vec<Body>, String> {
     let mut groups = Vec::new();
     for (i, w) in linked.iter().enumerate() {
         if i == 0 || linked[i - 1].0 != w.0 {
@@ -159,7 +164,7 @@ pub(super) fn sections(
         })
         .collect();
     let index = poly_index::encode(&boxes, super::pack::NODE).map_err(|e| e.to_string())?;
-    let admin = admin_region(g, &linked)?;
+    let admin = admin_region(g, linked)?;
     let n = input.len() as u64;
     let mut out = vec![
         (Kind::ARCS, Encoding::TABLE, g.arc_count, g.arcs.clone()),
@@ -209,31 +214,13 @@ fn admin_region(g: &Geometry, linked: &[(u8, u32, &Poly)]) -> Result<Vec<u8>, St
 /// country at level 0), and every admin unit with a polygon. Returns a line for the summary.
 pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<String, String> {
     let e = |e: teigeodata_format::Error| e.to_string();
-    let a = Arcs::open(&p.section(Kind::ARCS).ok_or("no ARCS")?).map_err(e)?;
-    a.check().map_err(e)?;
+    let places: Vec<Point<E7>> = rows
+        .iter()
+        .step_by(97)
+        .filter_map(|r| Point::<E7>::from_units(r.point.1, r.point.0))
+        .collect();
+    let line = check(p, rows.len(), &places)?;
     let polys = Polygons::open(&p.section(Kind::POLYGONS).ok_or("no POLYGONS")?).map_err(e)?;
-    polys.check(&a, rows.len()).map_err(e)?;
-    let index =
-        PolyIndex::open(&p.section(Kind::POLY_INDEX).ok_or("no POLY_INDEX")?, &polys).map_err(e)?;
-    index.check(&polys, &a).map_err(e)?;
-    let admin = Region::open_on_arcs(&p.section(Kind::ADMIN_REGION).ok_or("no ADMIN_REGION")?, &a)
-        .map_err(e)?;
-    admin.check().map_err(e)?;
-    let probes = cross_check(&admin, &index, &polys, &a, rows)?;
-    let overview = match p.section(Kind::ARCS_OVERVIEW) {
-        Some(section) => {
-            let ov = Arcs::open(&section).map_err(e)?;
-            ov.check().map_err(e)?;
-            ov.check_overview(&a).map_err(e)?;
-            format!(
-                "; the overview holds the {} vertices of levels {} to 7",
-                ov.vertices(),
-                ov.overview_from().unwrap_or(0)
-            )
-        }
-        None if a.has_levels() => return Err("no ARCS_OVERVIEW for arcs with levels".into()),
-        None => String::new(),
-    };
     // Group k holds the k-th admin level present, coarse to fine.
     let mut levels: Vec<u8> = g.polys.iter().map(|q| q.level).collect();
     levels.sort_unstable();
@@ -271,7 +258,42 @@ pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<Stri
         return Err(format!("{missing} admin units without a polygon"));
     }
     Ok(format!(
-        "Geometry: {} polygons on {} arcs of {} vertices, levels of detail {}{overview}; every admin unit and the country has its polygon, every ring joins, closes and is oriented, every label is inside; the polygon index ({} levels) matches every box; the admin region index ({} leaves, {} runs on the arcs) agrees with the polygons at {} points.",
+        "{line}; every admin unit and the country has its polygon."
+    ))
+}
+
+/// The geometry sections' own checks (POLYGONS against `rows` place rows), the overview
+/// against ARCS, and `ADMIN_REGION` against `POLY_INDEX` at every label point and at `probes`.
+/// Returns a line for the summary.
+fn check(p: &Pack<'_>, rows: usize, probes: &[Point<E7>]) -> Result<String, String> {
+    let e = |e: teigeodata_format::Error| e.to_string();
+    let a = Arcs::open(&p.section(Kind::ARCS).ok_or("no ARCS")?).map_err(e)?;
+    a.check().map_err(e)?;
+    let polys = Polygons::open(&p.section(Kind::POLYGONS).ok_or("no POLYGONS")?).map_err(e)?;
+    polys.check(&a, rows).map_err(e)?;
+    let index =
+        PolyIndex::open(&p.section(Kind::POLY_INDEX).ok_or("no POLY_INDEX")?, &polys).map_err(e)?;
+    index.check(&polys, &a).map_err(e)?;
+    let admin = Region::open_on_arcs(&p.section(Kind::ADMIN_REGION).ok_or("no ADMIN_REGION")?, &a)
+        .map_err(e)?;
+    admin.check().map_err(e)?;
+    let compared = cross_check(&admin, &index, &polys, &a, probes)?;
+    let overview = match p.section(Kind::ARCS_OVERVIEW) {
+        Some(section) => {
+            let ov = Arcs::open(&section).map_err(e)?;
+            ov.check().map_err(e)?;
+            ov.check_overview(&a).map_err(e)?;
+            format!(
+                "; the overview holds the {} vertices of levels {} to 7",
+                ov.vertices(),
+                ov.overview_from().unwrap_or(0)
+            )
+        }
+        None if a.has_levels() => return Err("no ARCS_OVERVIEW for arcs with levels".into()),
+        None => String::new(),
+    };
+    Ok(format!(
+        "Geometry: {} polygons on {} arcs of {} vertices, levels of detail {}{overview}; every ring joins, closes and is oriented, every label is inside; the polygon index ({} levels) matches every box; the admin region index ({} leaves, {} runs on the arcs) agrees with the polygons at {compared} points",
         polys.len(),
         a.len(),
         a.vertices(),
@@ -279,28 +301,23 @@ pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<Stri
         index.depth(),
         admin.leaves(),
         admin.runs(),
-        probes
     ))
 }
 
 /// `ADMIN_REGION` against `POLY_INDEX` and `Polygons::contains`, two independent structures, at
-/// every label point and at every 97th place: the same polygons, in the same order (region
-/// IDs are polygon numbers). Returns the number of points compared.
+/// every label point and at `probes`: the same polygons, in the same order (region IDs are
+/// polygon numbers). Returns the number of points compared.
 fn cross_check(
     admin: &Region<'_>,
     index: &PolyIndex<'_>,
     polys: &Polygons<'_>,
     arcs: &Arcs<'_>,
-    rows: &[&Place],
+    probes: &[Point<E7>],
 ) -> Result<usize, String> {
     let labels = (0..polys.len()).filter_map(|i| polys.label(i));
-    let places = rows
-        .iter()
-        .step_by(97)
-        .filter_map(|r| Point::<E7>::from_units(r.point.1, r.point.0));
     let mut n = 0;
     let mut got = [0_u32; region::MAX_SET];
-    for at in labels.chain(places) {
+    for at in labels.chain(probes.iter().copied()) {
         let k = admin.regions_at(at, &mut got);
         let mut want = Vec::new();
         let _ = index.containing(polys, arcs, at, 0..polys.len(), |i| {
@@ -317,4 +334,56 @@ fn cross_check(
         n += 1;
     }
     Ok(n)
+}
+
+/// `forge topology --geoboundaries`: a pack of the geometry sections alone, for measurement,
+/// at `data/build/topology/<name>/geometry.tgd`. There are no places, so each polygon is its
+/// own row, numbered as PLACES numbers rows: in Hilbert order of the point (here the label).
+/// Every section is read back and checked. Returns a line for the summary.
+pub(crate) fn measure_pack(root: &Path, name: &str) -> Result<String, String> {
+    let g = load(root, name)?;
+    let mut order: Vec<(u64, usize)> = g
+        .polys
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let at = Point::<E7>::from_units(p.label.1, p.label.0).ok_or("a label off the grid")?;
+            Ok((teigeodata_core::hilbert(at), i))
+        })
+        .collect::<Result<_, String>>()?;
+    order.sort_unstable();
+    let mut linked: Vec<(u8, u32, &Poly)> = order
+        .iter()
+        .enumerate()
+        .map(|(row, &(_, i))| {
+            let p = &g.polys[i];
+            Ok((p.level, u32::try_from(row).map_err(|e| e.to_string())?, p))
+        })
+        .collect::<Result<_, String>>()?;
+    linked.sort_by_key(|&(level, row, _)| (level, row));
+    let bodies = encode(&g, &linked)?;
+    let sections: Vec<(Kind, Encoding, u64, &[u8])> = bodies
+        .iter()
+        .map(|(kind, enc, n, b)| (*kind, *enc, *n, b.as_slice()))
+        .collect();
+    let mut w = Writer::new("zz", "geometry", "0.0.0").map_err(|e| e.to_string())?;
+    w.build_id(0).created_unix(0);
+    let bytes = w.pack(&sections, None).map_err(|e| e.to_string())?;
+    let p = Pack::open(&bytes).map_err(|e| e.to_string())?;
+    let line = check(&p, linked.len(), &[])?;
+    let file = root
+        .join("data/build/topology")
+        .join(name)
+        .join("geometry.tgd");
+    fs::write(&file, &bytes).map_err(|e| format!("{}: {e}", file.display()))?;
+    let sizes: Vec<String> = bodies
+        .iter()
+        .map(|(kind, _, _, b)| format!("{kind} {} B", b.len()))
+        .collect();
+    Ok(format!(
+        "{line}.\n\n{} ({} B): {}.",
+        file.display(),
+        bytes.len(),
+        sizes.join(", ")
+    ))
 }
