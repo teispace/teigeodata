@@ -25,6 +25,13 @@
 //! | 8 | [`LEVEL`] | per vertex: the coarsest level of detail that keeps it, 0 to [`PINNED`] | optional, absent = full resolution only |
 //! | 9 | [`TOLERANCE`] | 6 values: the Douglas–Peucker tolerance of levels 1 to 6, centimetres, increasing | with `LEVEL` |
 //! | 10 | [`SCALE`] | per arc: `k`, its deltas are stored ÷ 10^k (a source on a coarser grid) | optional, absent = all 0 |
+//! | 11 | [`FROM`] | one value: the overview's level `f`, 1 to 6 | `ARCS_OVERVIEW` only, required |
+//!
+//! An **overview** ([`Kind::ARCS_OVERVIEW`], D-102) has ARCS's layout and holds, for every arc
+//! of ARCS in the same order, only the vertices of level `f` and coarser with their levels. A
+//! read at level `f` or coarser decodes those alone: a coarse read of ARCS decodes every
+//! vertex, since deltas are cumulative. [`Arcs::check_overview`] checks it against ARCS;
+//! [`overview`] writes it.
 //!
 //! Level of detail `l` keeps the vertices whose level is at least `l`: level 0 is every vertex,
 //! level `l` in 1 to 6 keeps every vertex the simplifier needs to stay within the tolerance of
@@ -48,6 +55,8 @@ use crate::{Error, Kind, Section, columns};
 
 /// Column: each arc's first vertex.
 pub const START: u16 = 1;
+/// Column (overview only): the level the overview starts at.
+pub const FROM: u16 = 11;
 /// Column: each arc's first longitude.
 pub const BASE_X: u16 = 2;
 /// Column: each arc's first latitude.
@@ -104,6 +113,8 @@ pub struct Arcs<'a> {
     level: Option<Packed<'a>>,
     tolerance: Option<Packed<'a>>,
     scale: Option<Packed<'a>>,
+    /// An overview's level ([`FROM`]).
+    from: Option<u8>,
 }
 
 impl<'a> Arcs<'a> {
@@ -113,12 +124,18 @@ impl<'a> Arcs<'a> {
     /// # Errors
     /// [`Error::Payload`] naming the column.
     pub fn open(section: &Section<'a>) -> Result<Self, Error> {
-        let table: Table<'a> = columns::open(section, Kind::ARCS)?;
+        let overview = section.kind() == Kind::ARCS_OVERVIEW;
+        let kind = if overview {
+            Kind::ARCS_OVERVIEW
+        } else {
+            Kind::ARCS
+        };
+        let table: Table<'a> = columns::open(section, kind)?;
         let arcs = usize::try_from(section.item_count())
             .ok()
             .filter(|&n| n < u32::MAX as usize)
             .ok_or_else(|| fail(0, "the arc count does not fit"))?;
-        let k = Kind::ARCS;
+        let k = kind;
         let start = columns::required(&table, k, START, Some(arcs + 1))?;
         let base_x = columns::required(&table, k, BASE_X, Some(arcs))?;
         let base_y = columns::required(&table, k, BASE_Y, Some(arcs))?;
@@ -134,9 +151,25 @@ impl<'a> Arcs<'a> {
         if level.is_some() != tolerance.is_some() {
             return Err(fail(LEVEL, "LEVEL and TOLERANCE come together"));
         }
-        if table.ids().any(|id| id == 0 || id > SCALE) {
+        if table
+            .ids()
+            .any(|id| id == 0 || id > SCALE && !(overview && id == FROM))
+        {
             return Err(fail(0, "an unknown column"));
         }
+        let from = if overview {
+            let f = columns::required(&table, k, FROM, Some(1))?
+                .get(0)
+                .and_then(|f| u8::try_from(f).ok())
+                .filter(|f| (1..PINNED).contains(f))
+                .ok_or_else(|| fail(FROM, "an overview's level is 1 to 6"))?;
+            if level.is_none() {
+                return Err(fail(LEVEL, "an overview has levels"));
+            }
+            Some(f)
+        } else {
+            None
+        };
         if start.get(0) != Some(0) || start.get(arcs).map(|e| e as usize) != Some(v) {
             return Err(fail(
                 START,
@@ -154,7 +187,50 @@ impl<'a> Arcs<'a> {
             level,
             tolerance,
             scale,
+            from,
         })
+    }
+
+    /// An overview's level: it serves reads at this level of detail and coarser. `None` for
+    /// ARCS.
+    #[must_use]
+    pub const fn overview_from(&self) -> Option<u8> {
+        self.from
+    }
+
+    /// Checks that this overview holds, for every arc of `full` (an ARCS), exactly its vertices
+    /// of the overview's level and coarser, with their levels and the same tolerances. O(the
+    /// vertices of both); run [`Arcs::check`] on each first.
+    ///
+    /// # Errors
+    /// [`Error::Payload`] naming [`FROM`] if this is not an overview or `full` is one, or it
+    /// differs from `full` at its level.
+    pub fn check_overview(&self, full: &Arcs<'_>) -> Result<(), Error> {
+        let (Some(from), None) = (self.from, full.from) else {
+            return Err(fail(FROM, "not an overview of an ARCS"));
+        };
+        let differs = || fail(FROM, "the overview is not the arcs at its level");
+        if self.len() != full.len()
+            || (1..PINNED).any(|l| self.tolerance_cm(l) != full.tolerance_cm(l))
+        {
+            return Err(differs());
+        }
+        for a in 0..full.len() {
+            let (Some(fr), Some(or)) = (full.range(a), self.range(a)) else {
+                return Err(differs());
+            };
+            let kept = fr
+                .zip(full.points(a, false, 0))
+                .filter_map(|(v, p)| full.level(v).filter(|&l| l >= from).map(|l| (p, l)));
+            let mine = or
+                .clone()
+                .zip(self.points(a, false, 0))
+                .map(|(v, p)| (p, self.level(v).unwrap_or(0)));
+            if !kept.eq(mine) || or.len() != self.points(a, false, 0).count() {
+                return Err(differs());
+            }
+        }
+        Ok(())
     }
 
     /// The number of arcs.
@@ -173,6 +249,20 @@ impl<'a> Arcs<'a> {
     #[must_use]
     pub const fn vertices(&self) -> usize {
         self.dx.len()
+    }
+
+    /// The level of detail of vertex `v` (numbered across all arcs): the coarsest level that
+    /// keeps it, 0 when the section has no levels, `None` past the end.
+    #[must_use]
+    pub fn level(&self, v: usize) -> Option<u8> {
+        if v >= self.dx.len() {
+            return None;
+        }
+        Some(
+            self.level
+                .and_then(|l| l.get(v))
+                .map_or(0, |l| u8::try_from(l).unwrap_or(u8::MAX)),
+        )
     }
 
     /// Whether the arcs carry levels of detail above 0.
@@ -363,6 +453,9 @@ impl<'a> Arcs<'a> {
                 .unwrap_or(u32::from(PINNED));
             if lv > u32::from(PINNED) {
                 return Err(fail(LEVEL, "a level above 7"));
+            }
+            if self.from.is_some_and(|f| lv < u32::from(f)) {
+                return Err(fail(LEVEL, "an overview vertex finer than its level"));
             }
             if i == next {
                 if i > 0 {
@@ -713,6 +806,55 @@ impl Builder {
 /// 2³¹ − 1 grid units, or there are 2³² vertices or more.
 #[cfg(feature = "write")]
 pub fn encode(cols: &ArcColumns<'_>) -> Result<alloc::vec::Vec<u8>, Error> {
+    encode_with(cols, None)
+}
+
+/// Encodes the `ARCS_OVERVIEW` payload of `full` (an ARCS with levels) at level `from` (1 to 6):
+/// every arc with only its vertices of that level and coarser (D-102). Its item count is
+/// `full.len()`; the arcs' ends are pinned, so every arc keeps at least its two ends.
+///
+/// # Errors
+/// [`Error::Write`] if `full` has no levels or is an overview, `from` is out of range, or an
+/// arc of `full` does not decode.
+#[cfg(feature = "write")]
+pub fn overview(full: &Arcs<'_>, from: u8) -> Result<alloc::vec::Vec<u8>, Error> {
+    use alloc::vec::Vec;
+    if !full.has_levels() || full.from.is_some() || !(1..PINNED).contains(&from) {
+        return Err(Error::Write(
+            "an overview needs an ARCS with levels and a level of 1 to 6",
+        ));
+    }
+    let (mut pts, mut lvs): (Vec<Vec<Point<E7>>>, Vec<Vec<u8>>) = (Vec::new(), Vec::new());
+    for a in 0..full.len() {
+        let range = full.range(a).ok_or(Error::Write("an arc out of range"))?;
+        let (mut p, mut l) = (Vec::new(), Vec::new());
+        for (v, q) in range.zip(full.points(a, false, 0)) {
+            let lv = full.level(v).ok_or(Error::Write("an arc out of range"))?;
+            if lv >= from {
+                p.push(q);
+                l.push(lv);
+            }
+        }
+        pts.push(p);
+        lvs.push(l);
+    }
+    let tolerances: Vec<u32> = (1..PINNED)
+        .map(|l| full.tolerance_cm(l).unwrap_or(0))
+        .collect();
+    let pr: Vec<&[Point<E7>]> = pts.iter().map(Vec::as_slice).collect();
+    let lr: Vec<&[u8]> = lvs.iter().map(Vec::as_slice).collect();
+    encode_with(
+        &ArcColumns {
+            arcs: &pr,
+            levels: &lr,
+            tolerances_cm: &tolerances,
+        },
+        Some(from),
+    )
+}
+
+#[cfg(feature = "write")]
+fn encode_with(cols: &ArcColumns<'_>, from: Option<u8>) -> Result<alloc::vec::Vec<u8>, Error> {
     use alloc::vec::Vec;
     use teigeodata_core::bitpack::{Coding, encode as pack, encode_direct};
 
@@ -753,6 +895,9 @@ pub fn encode(cols: &ArcColumns<'_>) -> Result<alloc::vec::Vec<u8>, Error> {
     }
     if b.scale.iter().any(|&k| k != 0) {
         encoded.push((SCALE, pack(&b.scale, Coding::For)));
+    }
+    if let Some(f) = from {
+        encoded.push((FROM, encode_direct(&[u32::from(f)])));
     }
     let refs: Vec<(u16, &[u8])> = encoded.iter().map(|(id, b)| (*id, &b[..])).collect();
     teigeodata_core::table::encode(&refs).map_err(|_| Error::Write("the arc table"))

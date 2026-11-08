@@ -154,3 +154,36 @@ cost is that of level 0: about 4.9 ms for all of Nepal at any level. A level fil
 output, not work. Rendering a coarse world view needs a way to skip the fine vertices: an
 overview arc set (a second ARCS at the coarse levels), or per-block level bounds with the block
 checkpoints. That is planned in 3.3 with the whole-world render measurement.
+
+### Coarse reads from an overview
+
+An overview (D-102) is a second ARCS holding, for every arc, only the vertices of level `f` and
+coarser, written by `arcs::overview`. `B10_OVERVIEW=1` runs only this part. Every ring read from it equals the ring read
+from ARCS at each level from `f` to 6 (asserted). ARCS: 2,659,828 B, 593,610 vertices. Ring
+reads read shared arcs once per ring (8,251 ring vertices at level 6 from 2,315 arcs):
+
+| Overview from level | Vertices | Bytes | % of ARCS | ns per vertex read at its level | at level 6 |
+|---:|---:|---:|---:|---:|---:|
+| ARCS itself | 593,610 | 2,659,828 | 100% | — | 612 |
+| 1 | 302,929 | 1,446,976 | 54.4% | 7.97 | 388 |
+| 2 | 127,014 | 660,836 | 24.8% | 10.26 | 270 |
+| 3 | 43,404 | 255,488 | 9.6% | 19.48 | 223 |
+| **4** | **13,268** | **94,780** | **3.6%** | **49.40** | **175** |
+| 5 | 5,911 | 54,796 | 2.1% | 102.66 | 138 |
+
+ARCS read at each level for comparison: 7.3 (level 0), 15.0, 23.9, 52.5, 163.0, 451.3 and
+611.9 ns per vertex read (levels 1 to 6). A load average of 15–40 makes single rows noisy
+(±20%); the trend holds across three runs.
+
+- **From level 4:** levels 4 to 6 read 3.3 to 3.5 times faster (163 → 49 ns per vertex at
+  level 4; all of Nepal at level 6 in 1.4 ms instead of 5.0 ms) for 95 KB. From level 3
+  costs 2.7 times the bytes for a faster level 3 only; from level 5 saves 40 KB but slows
+  level 4 down to ARCS's speed. The forge writes the overview from level 4.
+- **What remains is per arc, not per vertex:** reading one overview arc at level 6 costs
+  110–150 ns for 2–3 vertices, about 55 ns of which is making its iterator (it copies the
+  section handle and clears a 1.2 KB block buffer). Reading short pieces value by value
+  instead of by whole-block decodes was tried and gained nothing measurable, so it was not
+  kept. A lighter iterator is the next step if a whole-world render needs it.
+- The note's estimate (an overview of the two coarsest levels at 3.8% of ARCS) holds: from
+  level 4, 3.6%.
+

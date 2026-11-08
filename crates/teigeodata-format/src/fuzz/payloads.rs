@@ -1098,6 +1098,44 @@ pub fn bits(data: &[u8]) {
     }
 }
 
+/// `ARCS_OVERVIEW` of `full` at a random level: written, it passes both checks and reads like
+/// `full` at its level and coarser; edited, if both checks still pass, it still reads the same.
+fn overview_checks(c: &mut Cursor<'_>, full: &Arcs<'_>) {
+    if !full.has_levels() || full.check().is_err() {
+        return;
+    }
+    let from = 1 + u8::try_from(c.below(6)).unwrap_or(0);
+    let mut body =
+        arcs::overview(full, from).unwrap_or_else(|e| panic!("a valid overview is refused: {e}"));
+    let mut items = full.len() as u64;
+    let edited = edit(c, &mut body, &mut items);
+    let checked = Arcs::open(&crate::Section::unpacked(Kind::ARCS_OVERVIEW, items, &body))
+        .and_then(|ov| {
+            ov.check()
+                .and_then(|()| ov.check_overview(full))
+                .map(|()| ov)
+        });
+    let ov = match checked {
+        Ok(ov) => ov,
+        Err(e) => {
+            assert!(edited, "a written overview fails its checks: {e}");
+            return;
+        }
+    };
+    assert_eq!(ov.overview_from(), Some(from));
+    for a in 0..full.len() {
+        for lod in from..PINNED {
+            for reversed in [false, true] {
+                assert!(
+                    full.points(a, reversed, lod)
+                        .eq(ov.points(a, reversed, lod)),
+                    "arc {a} at level {lod} reads differently from its overview"
+                );
+            }
+        }
+    }
+}
+
 /// One model arc: a random walk from the input's seed, sometimes on a coarse grid (a scale),
 /// sometimes closed, with levels when `levels` (ends and a closed arc's anchor pinned).
 fn model_arc(c: &mut Cursor<'_>, levels: bool) -> (Vec<Point<E7>>, Vec<u8>) {
@@ -1512,6 +1550,7 @@ fn polygons_case(c: &mut Cursor<'_>, structured: bool) {
     let p = open(&file);
     let a = Arcs::open(&section(&p, Kind::ARCS)).unwrap_or_else(|e| panic!("model arcs: {e}"));
     admin_region_checks(c, &a, &topo, rg_model, &p);
+    overview_checks(c, &a);
     let Ok(v) = Polygons::open(&section(&p, Kind::POLYGONS)) else {
         assert!(!model, "a written POLYGONS payload does not open");
         return;

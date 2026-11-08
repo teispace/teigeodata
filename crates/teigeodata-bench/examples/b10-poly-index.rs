@@ -74,6 +74,15 @@ fn main() {
     let stored = PolyIndex::open(&pack.section(Kind::POLY_INDEX).unwrap(), &polys).unwrap();
     stored.check(&polys, &arcs).unwrap();
     let n = polys.len();
+    // `B10_OVERVIEW=1`: only the overview A/B.
+    if std::env::var_os("B10_OVERVIEW").is_some() {
+        let rings: Vec<usize> = (0..n)
+            .flat_map(|p| polys.parts(p).unwrap())
+            .flat_map(|part| polys.rings(part).unwrap())
+            .collect();
+        overview(&pack, &arcs, &polys, &rings);
+        return;
+    }
     let groups: Vec<Range<usize>> = (0..polys.groups())
         .map(|g| polys.group(g).unwrap())
         .collect();
@@ -464,5 +473,77 @@ fn main() {
             black_box(s);
         }) / total as f64;
         println!("| {lod} | {total} | {ns:.2} |");
+    }
+    overview(&pack, &arcs, &polys, &rings);
+}
+
+/// An overview (`arcs::overview`, D-102): a second ARCS of the same arcs holding only the vertices kept at level `k` and
+/// coarser, so a coarse read decodes only those. Its bytes, and ring reads at each level from
+/// it against the full ARCS (the same points, asserted).
+fn overview(pack: &Pack<'_>, arcs: &Arcs<'_>, polys: &Polygons<'_>, rings: &[usize]) {
+    let full = pack.section(Kind::ARCS).unwrap().bytes().len();
+    println!("\nFull ARCS: {full} B for {} vertices.", arcs.vertices());
+    println!(
+        "\n| Overview from level | Vertices | Bytes | % of ARCS | ns per vertex read at its level | at level 6 |"
+    );
+    println!("|---:|---:|---:|---:|---:|---:|");
+    for k in 1..=5_u8 {
+        let body = teigeodata_format::arcs::overview(arcs, k).unwrap();
+        let ov = Arcs::open(&teigeodata_format::Section::unpacked(
+            Kind::ARCS_OVERVIEW,
+            arcs.len() as u64,
+            &body,
+        ))
+        .unwrap();
+        ov.check().unwrap();
+        ov.check_overview(arcs).unwrap();
+        let per = |src: &Arcs<'_>, lod: u8| {
+            let mut total = 0_usize;
+            for &r in rings {
+                total += polys.ring(src, r, lod).count();
+            }
+            time(1, |_| {
+                let mut s = 0_i64;
+                for &r in rings {
+                    for v in polys.ring(src, r, lod) {
+                        s += i64::from(v.lat());
+                    }
+                }
+                black_box(s);
+            }) / total as f64
+        };
+        for lod in k..=6 {
+            for &r in rings {
+                assert!(
+                    polys.ring(arcs, r, lod).eq(polys.ring(&ov, r, lod)),
+                    "ring {r} at level {lod} differs"
+                );
+            }
+        }
+        let arc_ns = time(1, |_| {
+            let mut s = 0_i64;
+            for a in 0..ov.len() {
+                for v in ov.points(a, false, 6) {
+                    s += i64::from(v.lat());
+                }
+            }
+            black_box(s);
+        }) / ov.len() as f64;
+        let new_ns = time(1, |_| {
+            for a in 0..ov.len() {
+                black_box(ov.points(a, false, 6));
+            }
+        }) / ov.len() as f64;
+        println!(
+            "overview {k}: {arc_ns:.0} ns per arc read at level 6, {new_ns:.0} ns per iterator made"
+        );
+        println!(
+            "| {k} | {} | {} | {:.1}% | {:.2} | {:.2} |",
+            ov.vertices(),
+            body.len(),
+            body.len() as f64 * 100.0 / full as f64,
+            per(&ov, k),
+            per(&ov, 6)
+        );
     }
 }

@@ -161,13 +161,25 @@ pub(super) fn sections(
     let index = poly_index::encode(&boxes, super::pack::NODE).map_err(|e| e.to_string())?;
     let admin = admin_region(g, &linked)?;
     let n = input.len() as u64;
-    Ok(vec![
+    let mut out = vec![
         (Kind::ARCS, Encoding::TABLE, g.arc_count, g.arcs.clone()),
         (Kind::POLYGONS, Encoding::TABLE, n, body),
         (Kind::POLY_INDEX, Encoding::TABLE, n, index),
         (Kind::ADMIN_REGION, Encoding::TABLE, n, admin),
-    ])
+    ];
+    // ARCS_OVERVIEW (D-102): the coarse levels alone, when the arcs have levels.
+    let arcs = Arcs::open(&Section::unpacked(Kind::ARCS, g.arc_count, &g.arcs))
+        .map_err(|e| e.to_string())?;
+    if arcs.has_levels() {
+        let body = arcs::overview(&arcs, OVERVIEW_FROM).map_err(|e| e.to_string())?;
+        out.push((Kind::ARCS_OVERVIEW, Encoding::TABLE, g.arc_count, body));
+    }
+    Ok(out)
 }
+
+/// The level `ARCS_OVERVIEW` starts at: 500 m and coarser (B10: 3.6% of ARCS's bytes, reads at
+/// levels 4 to 6 four times faster).
+const OVERVIEW_FROM: u8 = 4;
 
 /// `ADMIN_REGION` (D-100): REGION's index on the ARCS vertices, region `i` = polygon `i` of
 /// POLYGONS, with D-083's default shape.
@@ -208,6 +220,20 @@ pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<Stri
         .map_err(e)?;
     admin.check().map_err(e)?;
     let probes = cross_check(&admin, &index, &polys, &a, rows)?;
+    let overview = match p.section(Kind::ARCS_OVERVIEW) {
+        Some(section) => {
+            let ov = Arcs::open(&section).map_err(e)?;
+            ov.check().map_err(e)?;
+            ov.check_overview(&a).map_err(e)?;
+            format!(
+                "; the overview holds the {} vertices of levels {} to 7",
+                ov.vertices(),
+                ov.overview_from().unwrap_or(0)
+            )
+        }
+        None if a.has_levels() => return Err("no ARCS_OVERVIEW for arcs with levels".into()),
+        None => String::new(),
+    };
     // Group k holds the k-th admin level present, coarse to fine.
     let mut levels: Vec<u8> = g.polys.iter().map(|q| q.level).collect();
     levels.sort_unstable();
@@ -245,7 +271,7 @@ pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<Stri
         return Err(format!("{missing} admin units without a polygon"));
     }
     Ok(format!(
-        "Geometry: {} polygons on {} arcs of {} vertices, levels of detail {}; every admin unit and the country has its polygon, every ring joins, closes and is oriented, every label is inside; the polygon index ({} levels) matches every box; the admin region index ({} leaves, {} runs on the arcs) agrees with the polygons at {} points.",
+        "Geometry: {} polygons on {} arcs of {} vertices, levels of detail {}{overview}; every admin unit and the country has its polygon, every ring joins, closes and is oriented, every label is inside; the polygon index ({} levels) matches every box; the admin region index ({} leaves, {} runs on the arcs) agrees with the polygons at {} points.",
         polys.len(),
         a.len(),
         a.vertices(),

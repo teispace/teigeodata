@@ -68,8 +68,11 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 - [x] A fine grid over the regions' extent for REGION and ADMIN_REGION (D-101): Nepal admin
   queries on places 296 → 153 ns for 89 KB
   ([B10](../../02-research/benches/phase-3.md#a-fine-grid-over-the-packs-extent))
-- [ ] Coarse levels of detail without decoding every vertex (per-block level bounds with the
-  checkpoints, or an overview arc set), measured on a whole-country and a whole-world render
+- [x] Coarse levels of detail without decoding every vertex: ARCS_OVERVIEW from level 4
+  (D-102), 95 KB on Nepal, levels 4 to 6 read 3.3 to 3.5 times faster
+  ([B10](../../02-research/benches/phase-3.md#coarse-reads-from-an-overview)); the
+  whole-world render is measured with the world data release
+- [ ] The India measurement of ARCS, POLYGONS, the overview and ADMIN_REGION
 
 ### 3.4 B11 DEM
 - [ ] The DEM section (D-089): codec, tile directory, point and bilinear queries; measured
@@ -106,3 +109,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-08 | 3.3: POLY_INDEX built (D-099); a coarse-LOD read item added | B10 measured coarse reads costing as much as full ones |
 | 2026-11-08 | 3.3: ADMIN_REGION on ARCS built (D-100); a per-pack top grid item added | B10: dense admin borders make the world top grid the limit |
 | 2026-11-08 | 3.3: the per-pack top grid built as a fine grid beside the world one (D-101) | Keeping the world quadtree and directory makes the window an accelerator that cannot change answers |
+| 2026-11-08 | 3.3: coarse reads through ARCS_OVERVIEW (D-102); the India measurement made its own item | B10's A/B: per-block bounds cannot skip cumulative deltas |

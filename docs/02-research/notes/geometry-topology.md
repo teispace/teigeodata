@@ -176,7 +176,10 @@ Vertices kept, Nepal admin3 (593,610 arc vertices):
   (**estimate** from B1's block decode), a whole-world render at z0–z4 would decode 10⁸
   vertices, about 0.1–0.3 s. A separate **overview** arc set for the two coarsest levels holds
   about 1% of the vertices (0.81–0.99% on Nepal). It costs 91 KB on Nepal, 3.8% of ARCS, and
-  removes that cost. B10 decides it as an A/B.
+  removes that cost. B10 decides it as an A/B. **Measured (B10, 2026-11-08):** reading ARCS
+  at level 6 costs 612 ns per kept vertex, as much as all of level 0; an overview from level 4
+  holds 2.2% of the vertices in 95 KB (3.6%) and reads levels 4 to 6 3.3 to 3.5 times faster.
+  The rest is a per-arc cost of making the iterator, not decoding (D-102).
 - **The topology guard** (DP, Nepal admin3): kept segments are tested for crossings with exact
   integer orientation tests, using a segment grid. For each crossing segment, the forge adds
   back the most important removed vertex and tests again.

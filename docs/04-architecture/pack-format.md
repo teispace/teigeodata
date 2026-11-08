@@ -132,6 +132,7 @@ parameters).
 | 15 | BLOCK_HASHES | per-block BLAKE3 for large sections (lazy verification) | `verify` | raw (D-078): the BLAKE3 chaining value of each 16 KiB block of every section of 1 MiB or more |
 | 16 | REDIRECTS | retired IDs: each to its survivor, or to none for a tombstone ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)) | `core` | column table (D-075): sorted ID pairs |
 | 17 | ADMIN_REGION | exact point → admin units: REGION's layout on the ARCS vertices, region `i` = polygon `i` | `geometry` | column table (D-100), [below](#admin_region) |
+| 18 | ARCS_OVERVIEW | the coarse levels of ARCS alone, for fast coarse reads | `geometry` | column table (D-102), [below](#arcs_overview) |
 
 ### Column tables (encoding 1)
 
@@ -334,6 +335,29 @@ The item count is the number of arcs; vertices are numbered across all arcs.
   triangle; tolerances positive and increasing; scales up to 7. The checkpoints are required
   (the note had them optional): they cost about 0.05 B per vertex and make reversed reads and
   REGION's shared use one code path.
+
+### ARCS_OVERVIEW
+
+The vertices of ARCS's coarse levels alone, so a coarse read decodes only them (D-102). A
+read of ARCS at level `l` decodes every vertex of the arcs it touches, because deltas are
+cumulative; on Nepal that made level 6 cost as much as level 0. Code: `teigeodata_format::arcs`
+(`Arcs::open` opens both kinds).
+
+- **Layout:** ARCS's, with the same item count and arcs in the same order, plus column 11
+  FROM: one value `f`, 1 to 6. Each arc holds only ARCS's vertices of level `f` and coarser, in
+  order, with their levels, so arc ends (pinned) are kept and rings read from it join exactly
+  as from ARCS. TOLERANCE equals ARCS's. Deltas and checkpoints are its own, and so is SCALE
+  (the deltas between kept vertices may divide by a smaller power of ten).
+- **Reads:** at level `f` or coarser, read the overview instead of ARCS: the points are equal
+  (`Arcs::overview_from` gives `f`; POLYGONS's rings take either). Finer levels read ARCS.
+- **Opening** refuses FROM in ARCS, an overview without FROM, FROM outside 1 to 6, and an
+  overview without LEVEL. **The check** adds that no level is below FROM, and
+  `Arcs::check_overview` that each arc is exactly ARCS's arc at level `f` with the same levels
+  and tolerances (O(the vertices of both)).
+- **The writer** `arcs::overview(full, f)` (feature `write`) derives it from an ARCS with
+  levels. The forge writes it from level 4 (500 m): on Nepal 13,268 vertices in 95 KB (3.6% of
+  ARCS), and reads at levels 4 to 6 four times faster
+  ([B10](../02-research/benches/phase-3.md#coarse-reads-from-an-overview)).
 
 ### POLYGONS
 
