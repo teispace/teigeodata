@@ -31,6 +31,7 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | aliases | **built** (S5) | below |
 | dem | **built** (S5) | below |
 | dem-ref, geoid | **built** (S6) | below |
+| dem-section (the DEM section from a tileset) | **built** (3.4); not yet in `build` or `make` | below |
 | build (pack writer, sign, read back) | **built** (3.1) | below |
 | make (every stage, content-keyed cache) | **built** (3.1) | below |
 | buildings (OSM, Microsoft, Google) | **built** (3.2) | below |
@@ -203,6 +204,24 @@ and writes `data/build/dem/<tileset>/<source>.parquet` (`id`, `dem_m`, `slope_de
   shifted by half a pixel. Heights are bilinear and slope is Horn's method in metres.
 - Measured on Nepal: 179,470 points in 7.0 s, 278 MB. Results:
   [S5](../02-research/benches/s5-nepal.md#dem-disagreement-s56).
+
+## DEM section (`dem-section`)
+
+`forge dem-section <tileset> <west,south,east,north> [--step-mm 2000] [--no-refine]
+[--thresholds a,b,c,d,e,f,g]` codes the source tiles of a 1″ tileset over a box of whole
+degrees into a [DEM section](pack-format.md#dem) (D-104).
+
+- **Streaming:** strips of 3 source columns, in bands of 64 rows from north to south. Only the
+  source tiles the current band needs stay decoded, as quantised i32, so memory is bounded by
+  the strip, not the box (206 MB for two tiles). Tiles are coded in parallel.
+- **Coverage:** samples the source does not cover are filled by repeating the nearest row and
+  column, so every tile in the box is present; a country mask comes with the pack integration.
+- **Checks:** the writer decodes every tile back; the section is then checked whole
+  (`Dem::check`), read back from a pack, and 20,000 random points are compared with bilinear
+  sampling of the source: they must agree within half a step.
+- **Output:** `data/build/dem-section/<tileset>/dem.tgd` (a pack of the section alone, for
+  B11; not a pinned source) and `summary.md`. Results:
+  [B11](../02-research/benches/phase-3.md#b11-dem).
 
 ## DEM against a ground reference (`dem-ref`) and the geoid
 

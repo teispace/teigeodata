@@ -78,8 +78,13 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   (D-103) ([B10](../../02-research/benches/phase-3.md#india-adm2-geoboundaries))
 
 ### 3.4 B11 DEM
-- [ ] The DEM section (D-089): codec, tile directory, point and bilinear queries; measured
-  bytes and decode time against the note's model and against LERC and zstd
+- [x] The DEM section (D-089, D-104): codec, tile directory, point and bilinear queries, the
+  forge's `dem-section` stage, a fuzz case; on four tiles equal to the note's model (1.11 to
+  2.94 bits per sample), 13.6 ns per sample, 31 µs per cold query
+  ([B11](../../02-research/benches/phase-3.md#b11-dem))
+- [ ] B11 on all 45 Nepal tiles and 2–3 tiles elsewhere (download of 1.84 GB waiting for the
+  maintainer's approval), and against LERC and zstd
+- [ ] The DEM section in the Nepal packs: its own component, tiles masked to the country
 - [ ] Elevation at each place's consensus point from the DEM section; surveyed heights for
   summits (D-089; moved from 3.2)
 
@@ -114,3 +119,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-08 | 3.3: the per-pack top grid built as a fine grid beside the world one (D-101) | Keeping the world quadtree and directory makes the window an accelerator that cannot change answers |
 | 2026-11-08 | 3.3: coarse reads through ARCS_OVERVIEW (D-102); the India measurement made its own item | B10's A/B: per-block bounds cannot skip cumulative deltas |
 | 2026-11-08 | 3.3: snap rounding in the topology stage (D-103); India measured | India is the first source that is not noded (4 edge pairs) |
+| 2026-11-08 | 3.4: the DEM section built (D-104); the 45-tile measurement and the pack integration made their own items | the codec matches the model on four tiles; the full Nepal set needs a 1.84 GB download |

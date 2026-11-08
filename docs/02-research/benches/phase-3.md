@@ -1,14 +1,14 @@
 ---
-title: "Phase 3 benchmarks: geometry"
+title: "Phase 3 benchmarks: geometry and elevation"
 status: research
 updated: 2026-11-08
 ---
 
-# Phase 3 benchmarks: geometry
+# Phase 3 benchmarks: geometry and elevation
 
 Measured with `crates/teigeodata-bench`. IDs are from the
 [benchmark catalogue](../../06-engineering/benchmarks.md); the design is in the
-[geometry note](../notes/geometry-topology.md) and the
+[geometry note](../notes/geometry-topology.md), the [DEM note](../notes/dem-section.md) and the
 [phase file](../../07-planning/phases/phase-3.md).
 
 **Machine:** M2 Pro, 16 GB, macOS, release profile, single thread, 2026-11-08, load average
@@ -243,3 +243,72 @@ timings are ±20%; sizes and node counts are exact.
   coarse levels), and reads level 6 in 77 ns per vertex against 334 for ARCS (4.4 times
   faster). From level 3 it would be 19% of ARCS for 104 ns, and from level 5, 3.3% for 62 ns.
   Level 4 stays the default.
+
+## B11: DEM
+
+```
+forge dem-section copernicus-glo30-np <west,south,east,north> [--no-refine] [--thresholds a,…,g]
+cargo run --release -p teigeodata-bench --example b11-dem
+```
+
+The stage codes the 1° Copernicus GLO-30 tiles in a box into a DEM section on 64 × 64 tiles at
+±1 m (D-104, [layout](../../04-architecture/pack-format.md#dem)), checks it whole, compares
+20,000 random points with the source's bilinear heights, and writes a pack of the section alone
+(`data/build/dem-section/<tileset>/dem.tgd`; not a pinned source, it feeds no build). Inputs:
+the four research tiles of the [DEM note](../notes/dem-section.md) (§3.1). Measured 2026-11-08
+at a load average of 12–77: sizes are exact, timings are the fastest of 6 alternating runs
+(preemption only adds time) and still about ±15%.
+
+### Size against the model
+
+Bits per sample over the DEM tiles that lie wholly inside the source tile:
+
+| Source tile | Terrain | Rust (refined) | Rust (least squares only) | Note's model |
+|---|---|---:|---:|---:|
+| N26 E085 | Terai | 1.112 | 1.125 | 1.11–1.12 |
+| N27 E085 | mid-hills | 2.704 | 2.711 | 2.69–2.73 |
+| N27 E086 | mountains | 2.935 | 2.943 | 2.93–2.97 |
+| N28 E084 | high mountains | 2.755 | 2.766 | 2.74–2.78 |
+
+- The built codec lands inside the note's model on every tile. Over each whole 1° box (its
+  tiles at the edges included) the section is 1.83, 4.42, 4.83 and 4.52 MB.
+- Every probe is within 1.0000 m of the source: the bound holds by construction.
+- **Refinement** of the least-squares coefficients by integer descent on the coded cost gains
+  0.4–1.2% and makes encoding 4–6 times slower (about 4 s per 1° tile on this machine); it
+  stays on, since encoding is a forge cost paid once.
+- **Thresholds:** six sets (spread from `0,1,2,4,7,12,20` to `1,3,6,10,16,26,42`) are within
+  0.1% of each other, except when the first threshold is above 0: then flat ground loses its
+  own context and the Terai grows 6%. The default `0,1,3,6,11,20,36` stays.
+- **Forge:** the two-tile box (25.9 M samples) is coded in 5.9 s with refinement and read back
+  in 0.35 s, peak memory 206 MB.
+
+### Decode speed
+
+On the two-tile section (N27 E085 and E086, 9.21 MB, 6,441 tiles):
+
+| Tiles | Bytes | Whole tiles | Cold query | Warm query (path) |
+|---|---:|---:|---:|---:|
+| **64 × 64** | **9,210,288** | **13.6 ns per sample (56 µs per tile)** | **31 µs** | **0.43 µs** |
+| 32 × 32 | 9,707,408 (+5.0%)¹ | 13.8 ns per sample (14 µs per tile) | 8.9 µs | 0.57 µs |
+
+¹ Both sizes without refinement (64 × 64: 9,241,540 B); the timings do not depend on it.
+
+- **Cold** is 20,000 random points, almost every one in a new tile: it decodes about half a
+  tile. **Warm** is a path of points about 30 m apart, so the scratch goes on in the same tile.
+- The decoder went from 19.5 to 13.6 ns per sample (cold 46 to 31 µs) by two changes, both
+  measured A/B: inside a row the six neighbours roll in registers, so a new sample never waits
+  for the one just stored; and the symbol search starts from a 64-bucket table per context, so
+  it rarely loops. A branch-free count of the cumulative table (to replace the scan) was twice
+  as slow. Keeping the coder's state in locals changed nothing (the compiler already did).
+- The note's 3–6 ns per sample was an unverified estimate. The chain from one sample to the
+  next (prediction, context, symbol, state) is serial, so a second rANS state would not
+  shorten it.
+- **32 × 32 tiles** answer a cold query 3.3 times faster for 4–8% more bytes (Terai +7.7%,
+  hills +4.1–6.0%), mostly the 17-byte tile header. 64 × 64 stays the default (D-104); the
+  side is per grid, so a pack can change it without a format change.
+
+### Not yet measured
+
+- All 45 Nepal tiles, the Nepal total against the note's 58 MB, and 2–3 tiles outside Nepal (a
+  desert, a coast, above 50°): the download (1.84 GB) waits for approval.
+- LERC and zstd on the same tiles; wasm and a phone.

@@ -32,7 +32,12 @@ updated: 2026-11-08
   The stage snap rounds a source that is not noded (D-103); on geoBoundaries India ADM2
   (measurement only) ARCS is 3.39 B per vertex, the overview 7.7% of ARCS and ADMIN_REGION
   2.11 MB at 51–67 ns ([India](../02-research/benches/phase-3.md#india-adm2-geoboundaries)).
-  Next: 3.4 (DEM).
+- **3.4 in progress** (D-104): the DEM section is built and the `forge dem-section` stage codes
+  Copernicus tiles into it. On four research tiles it equals the note's model (Terai 1.11,
+  hills and mountains 2.70–2.94 bits per sample, every probe within 1 m). It decodes at
+  13.6 ns per sample: 31 µs for a cold point query, 0.4 µs warm
+  ([B11](../02-research/benches/phase-3.md#b11-dem)). Next: the 45 Nepal tiles (a 1.84 GB
+  download waiting for approval), the DEM in the Nepal packs, then elevation at each place.
 - **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,

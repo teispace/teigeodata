@@ -24,6 +24,9 @@ use alloc::vec::Vec;
 
 use crate::arcs::{self, ArcColumns, Arcs, PINNED};
 use crate::blobs::{self, Blobs};
+use crate::dem::{
+    self, DATUM_EGM2008, Dem, DemScratch, Family, Grid, GridInput, THRESHOLDS, TileOptions,
+};
 use crate::hierarchy::{self, Hierarchy, MAX_DEPTH};
 use crate::idmap::{self, IdMap};
 use crate::place_index::{self, MAX_NODE, MIN_NODE, Neighbour, PlaceIndex, Rect};
@@ -115,7 +118,8 @@ pub fn sections(data: &[u8]) {
     let mut c = Cursor(data);
     let mode = c.u8();
     let structured = mode & 0x80 != 0;
-    match mode % 10 {
+    match mode % 11 {
+        10 => dem_case(&mut c, structured),
         8 => arcs_case(&mut c, structured),
         9 => polygons_case(&mut c, structured),
         0 => places_case(&mut c, structured),
@@ -126,6 +130,120 @@ pub fn sections(data: &[u8]) {
         5 => region_case(&mut c, structured),
         6 => search_case(&mut c, structured),
         _ => blobs_case(&mut c, structured),
+    }
+}
+
+/// A DEM grid of 16 × 16 tiles somewhere on the globe: terrain as a random walk from the input
+/// (small steps mostly, sometimes a cliff that escapes), some tiles absent. Point queries over
+/// and around the grid never panic; a checked section decodes every present tile; a written one
+/// decodes to the model.
+fn dem_case(c: &mut Cursor<'_>, structured: bool) {
+    const LOG2: u32 = 4;
+    const SIDE: usize = 1 << LOG2;
+    let (rows, cols) = (1 + c.below(2), 1 + c.below(3));
+    let lon_step = 10 * (1 + u32::from(c.u8() % 3));
+    // Inside the globe: 648,000 rows of 1″ from 90° N, 12,960,000 / step columns.
+    let tile_cols_max = 12_960_000 / lon_step / SIDE as u32 - cols as u32;
+    let grid = Grid {
+        tile_row0: u32::from(c.u16()) % 40_000,
+        tile_col0: u32::from(c.u16()) % tile_cols_max,
+        tile_rows: rows as u32,
+        tile_cols: cols as u32,
+        lat_step: 10,
+        lon_step,
+        step_mm: 2_000,
+        datum: DATUM_EGM2008,
+        tile_log2: LOG2,
+        first_tile: 0,
+    };
+    let (mut body, mut model) = (Vec::new(), None);
+    let mut items = (rows * cols) as u64;
+    if structured {
+        let family = Family::standard();
+        let opts = TileOptions { refine: false };
+        let tiles: Vec<Option<Vec<i32>>> = (0..rows * cols)
+            .map(|_| {
+                if c.u8().is_multiple_of(5) {
+                    return None;
+                }
+                let mut v = i32::from(c.u16()) - 500;
+                Some(
+                    (0..SIDE * SIDE)
+                        .map(|_| {
+                            let b = c.u8();
+                            v += match b % 16 {
+                                0 => i32::from(c.u16()) - 32_768,
+                                k => i32::from(k % 5) - 2,
+                            };
+                            v
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
+        let codes: Vec<Option<Vec<u8>>> = tiles
+            .iter()
+            .map(|t| {
+                t.as_ref().map(|q| {
+                    dem::encode_tile(q, LOG2, &family, &THRESHOLDS, &opts)
+                        .unwrap_or_else(|e| panic!("a valid DEM tile is refused: {e}"))
+                })
+            })
+            .collect();
+        let refs: Vec<Option<&[u8]>> = codes.iter().map(Option::as_deref).collect();
+        body = dem::encode(&[GridInput { grid, tiles: &refs }], &family, &THRESHOLDS)
+            .unwrap_or_else(|e| panic!("a valid DEM grid is refused: {e}"));
+        if !edit(c, &mut body, &mut items) {
+            model = Some(tiles);
+        }
+    } else {
+        items = u64::from(c.u8());
+        body.extend_from_slice(c.rest());
+    }
+    let Some(file) = pack(&[(Kind::DEM, items, &body)]) else {
+        return;
+    };
+    let p = open(&file);
+    let Ok(d) = Dem::open(&section(&p, Kind::DEM)) else {
+        assert!(model.is_none(), "a written DEM payload does not open");
+        return;
+    };
+    let checked = d.check().is_ok();
+    let mut s = DemScratch::new();
+    // Queries over the grid and a margin around it, in 1e-7°: rows from 90° N, 0.1″ = 1e4 / 36.
+    let (r0, c0) = (
+        i64::from(grid.tile_row0) * SIDE as i64 - 3,
+        i64::from(grid.tile_col0) * SIDE as i64 - 3,
+    );
+    for _ in 0..limit(64, 8) {
+        let r = r0 + c.below(rows * SIDE + 6) as i64;
+        let col = c0 + c.below(cols * SIDE + 6) as i64;
+        let lat = 900_000_000 - (r * 10 * 10_000 + i64::from(c.u8()) * 100) / 36;
+        let lon = -1_800_000_000
+            + (col * i64::from(grid.lon_step) * 10_000 + i64::from(c.u8()) * 100) / 36;
+        if let Some(at) = Point::<E7>::from_units(lat.max(-900_000_000) as i32, lon as i32)
+            && let Some(h) = d.elevation(at, &mut s)
+        {
+            assert!(h.is_finite(), "a height that is not finite");
+        }
+    }
+    if checked {
+        for t in 0..d.tiles() {
+            if let Some(q) = d.decode_tile(t, &mut s) {
+                assert_eq!(q.len(), SIDE * SIDE, "a decoded tile of the wrong size");
+            }
+        }
+    }
+    if let Some(tiles) = &model {
+        assert!(checked, "a written DEM payload fails its check");
+        assert_eq!(d.grid(0), Some(grid));
+        for (t, want) in tiles.iter().enumerate() {
+            assert_eq!(
+                d.decode_tile(t, &mut s).map(<[i32]>::to_vec).as_ref(),
+                want.as_ref(),
+                "tile {t}"
+            );
+        }
     }
 }
 

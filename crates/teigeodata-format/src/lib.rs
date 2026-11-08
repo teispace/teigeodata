@@ -39,6 +39,7 @@ pub mod blobs;
 pub mod blocks;
 mod columns;
 pub mod components;
+pub mod dem;
 mod error;
 #[cfg(feature = "fuzz")]
 #[doc(hidden)]

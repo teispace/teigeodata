@@ -1,7 +1,7 @@
 ---
 title: "The DEM section: tiles, prediction and coding of elevation at a bounded error"
 status: research
-updated: 2026-11-07
+updated: 2026-11-08
 owner: maintainer's agents
 revisit: 2027-05-07
 ---
@@ -75,7 +75,14 @@ inside the country, 180.1 M in the 64×64 tiles that touch it (§3.6).
    sampling. No crate fits: `constriction` is `no_std` but uses `unsafe` internally and is a
    research library; `lerc` wraps C++; `lerc-rs` is pure Rust but LERC is 2.5× larger here.
 
-What B11 must still measure in Rust is in §6.2.
+**Built and measured in Rust, 2026-11-08 (D-104,
+[B11](../benches/phase-3.md#b11-dem)).** The codec lands inside this model on all four tiles
+(1.112, 2.704, 2.935 and 2.755 bits per sample). Decoding takes 13.6 ns per sample: 31 µs for a
+cold point query and 0.4 µs for a warm one. That is slower than the estimate of §5.3, because the
+chain from one sample to the next is serial. 32 × 32 tiles answer a cold query in 8.9 µs for
+4–8% more bytes, and stay an option per grid. The layout as built is the
+[pack-format page](../../04-architecture/pack-format.md#dem); §5.1 below is the draft it came
+from. What B11 still has to measure is in §6.2.
 
 ## 3. Findings
 
@@ -304,7 +311,7 @@ LS6 (entropy, no contexts), per 1″ of area.
 No crate does bounded-error, 2-D predicted, per-tile random-access coding of elevation in safe,
 `no_std`-friendly Rust. The parts are small; we build them.
 
-### 5.1 Draft layout (column table, encoding 1)
+### 5.1 Draft layout (column table, encoding 1; superseded by the built layout, D-104)
 
 `item_count` is the number of tiles. Rows of columns 1–11 are grids (usually one per section);
 heights are h = q × step.
@@ -357,6 +364,10 @@ heights are h = q × step.
   because each row is predicted from the rows above it.
 - **Cache (optional):** a caller-owned fixed array of N decoded tiles with their IDs, for
   batch and path queries; a batch API sorts points by tile.
+- **Speed, measured in B11:** 13.6 ns per sample, 56 µs per whole tile, 31 µs per cold
+  query (about half a tile), 0.43 µs warm. Two changes gave the last 30%: neighbours rolled in
+  registers inside a row, and a 64-bucket start for the symbol search. The original estimate
+  follows.
 - **Speed (estimate, unverified):** 3–6 ns per sample (rANS step plus 5 multiply-adds on a
   dependency chain) gives 6–12 µs per early-exit tile and 12–25 µs for a full one. LERC's C
   decoder takes 40–60 µs for a 128×128 tile (§3.4), which is 10–15 µs per 4,096 samples.
@@ -384,6 +395,12 @@ heights are h = q × step.
 
 ### 6.2 What B11 must measure in Rust
 
+Done in B11: the four tiles in Rust (item 1 in part), decode time on M2 Pro cold, warm and
+whole (item 2 in part), the symbol lookup (item 3: a bucket table, not a binary search; one
+state, because the chain is serial), writer determinism and read-back (item 5 in part), and
+the planted-bug proofs of the new tests (item 7). Thresholds and refinement were measured too
+([B11](../benches/phase-3.md#b11-dem)).
+
 1. All 45 Nepal tiles (and 2–3 non-Nepal tiles: a desert, a coast, a tile above 50° with
    1.5″ spacing): bits per sample and the Nepal total, against the 58 MB estimate.
 2. Decode time per point query (random points, cold and with a cache), per full tile and per
@@ -403,8 +420,8 @@ heights are h = q × step.
 
 - **Four tiles are a sample.** The Nepal size is an estimate weighted by an unverified terrain
   split. B11 measures all 45.
-- **Decode speed is unmeasured** for our coder. If early-exit decoding of 64×64 tiles is slow on
-  low-end phones, 32×32 tiles (about +4% bits, **estimate**) or a cache are the fallbacks.
+- **Decode speed** on M2 Pro is 31 µs per cold query (B11). Phones and wasm are not measured
+  yet. If 64×64 is too slow there, 32×32 tiles are measured: 8.9 µs for 4–8% more bytes.
 - **Laplace model mismatch** costs about 4% at ±4 m; harmless at ±1 m.
 - **Copernicus licence:** its notice must ship in every main pack (ADR-0030); the lite build uses
   NASADEM. Unchanged by this note.

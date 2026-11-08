@@ -18,6 +18,7 @@
 //! forge labels sample|score …                   the hand-labelled truth set (Q-005)
 //! forge topology <boundary-source>                shared arcs, levels of detail, polygons (B10)
 //! forge topology --geoboundaries <file> <name>   the same on one geoBoundaries level (measurement)
+//! forge dem-section <tileset> <w,s,e,n> [--step-mm N]   the DEM section over a box (B11)
 //! forge make <cc> --release <v> [--lite] …       every stage from data/countries/<cc>/build.yaml, cached
 //! forge path <source-id>                          print a fetched source's store path
 //! ```
@@ -166,6 +167,7 @@ fn stage(root: &Path, args: &[String]) -> Option<Result<String, String>> {
             (Some(t), Some(sources)) => dem::run(root, t, sources),
             _ => Err("usage: forge dem <tileset-source> <points-source> [...]".into()),
         },
+        "dem-section" => dem::section::run(root, args.get(1..).unwrap_or_default()),
         "dem-ref" => match (args.get(1), args.get(2), args.get(3)) {
             (Some(d), Some(r), Some(g)) => {
                 dem::reference::run(root, d, r, g, args.get(4).map(String::as_str))

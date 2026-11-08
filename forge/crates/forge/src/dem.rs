@@ -27,6 +27,7 @@ use tiff::decoder::{Decoder, DecodingResult};
 use tiff::tags::Tag;
 
 pub(crate) mod reference;
+pub(crate) mod section;
 
 use crate::lock::Lock;
 use crate::record::{self, column, f32s, strings, write_table};
@@ -40,18 +41,18 @@ const M_PER_DEG: f64 = 111_195.08;
 const SLOPE_BANDS: [f32; 4] = [5.0, 15.0, 30.0, 90.0];
 
 /// A decoded tile: pixel centres at `lon0 + i·dx`, `lat0 − j·dy`.
-struct Grid {
-    lon0: f64,
-    lat0: f64,
-    dx: f64,
-    dy: f64,
-    w: usize,
-    h: usize,
-    z: Vec<f32>,
+pub(crate) struct Grid {
+    pub(crate) lon0: f64,
+    pub(crate) lat0: f64,
+    pub(crate) dx: f64,
+    pub(crate) dy: f64,
+    pub(crate) w: usize,
+    pub(crate) h: usize,
+    pub(crate) z: Vec<f32>,
 }
 
 impl Grid {
-    fn open(path: &Path) -> Result<Self, String> {
+    pub(crate) fn open(path: &Path) -> Result<Self, String> {
         let err = |e: tiff::TiffError| format!("{}: {e}", path.display());
         let mut d = Decoder::new(BufReader::new(File::open(path).map_err(|e| e.to_string())?))
             .map_err(err)?;
@@ -107,7 +108,7 @@ impl Grid {
     }
 
     /// Bilinear height and Horn slope (degrees) at a point inside the tile.
-    fn sample(&self, lon: f64, lat: f64) -> Option<(f32, f32)> {
+    pub(crate) fn sample(&self, lon: f64, lat: f64) -> Option<(f32, f32)> {
         let (fx, fy) = ((lon - self.lon0) / self.dx, (self.lat0 - lat) / self.dy);
         if fx < -0.5 || fy < -0.5 {
             return None;

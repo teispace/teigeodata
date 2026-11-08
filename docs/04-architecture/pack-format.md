@@ -127,7 +127,7 @@ parameters).
 | 10 | REGION | exact point → regions (timezones, later admin units): shared-arc borders, a dense top grid, quadtree leaves in Morton order with edge-ID runs, region sets | `region` | column table (D-083): [below](#region) |
 | 11 | POSTAL | scheme + code → postal records (place, kind, validity, redirect) | `postal` | column table on `search::fst` (D-090) |
 | 12 | COMPONENTS | per component: presence (none, a bitmap or sorted rows) + dense field columns | `components` | column table (D-076): a bitmap costs 0.129 B per row, sparse sorted rows far less |
-| 13 | DEM | tile directory + coded tiles at ±1 m | `dem` | 64 × 64 tiles at ±1 m, per-tile least-squares predictor + static rANS (D-089, B11) |
+| 13 | DEM | elevation grids: tile offsets + coded tiles at ±1 m | `dem` | column table (D-089, D-104): 64 × 64 tiles, per-tile least-squares predictor, static rANS over a shared model family; 2.7–2.9 bits per sample in the hills, [below](#dem) |
 | 14 | BLOBS | cold data (attribution text, long strings) | `blobs` | column table (D-079): zstd frames of whole blobs, an optional dictionary, `ruzstd` decode; 22 B per 116 B row on Nepal, a random blob in 43 µs |
 | 15 | BLOCK_HASHES | per-block BLAKE3 for large sections (lazy verification) | `verify` | raw (D-078): the BLAKE3 chaining value of each 16 KiB block of every section of 1 MiB or more |
 | 16 | REDIRECTS | retired IDs: each to its survivor, or to none for a tombstone ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)) | `core` | column table (D-075): sorted ID pairs |
@@ -136,8 +136,8 @@ parameters).
 
 ### Column tables (encoding 1)
 
-Every section made of integer columns (PLACES, PLACE_INDEX, REGION, HIERARCHY, IDMAP, REDIRECTS
-and COMPONENTS) is one column table (D-074, `teigeodata_core::table`):
+Every section made of integer columns (PLACES, PLACE_INDEX, REGION, HIERARCHY, IDMAP, REDIRECTS,
+COMPONENTS and DEM) is one column table (D-074, `teigeodata_core::table`):
 
 ```text
 columns u16, reserved u16 (0)
@@ -574,6 +574,45 @@ district and local level in one pass, coarse to fine.
   and Y (which repeat ARCS's 2.66 MB of vertices), the same leaves and runs, and the same
   answers at 20,000 points; 153 ns against 155 ns per query on uniform points.
 
+### DEM
+
+Elevation on regular grids at a bounded error, in tiles a point query decodes alone (D-089,
+D-104, [DEM note](../02-research/notes/dem-section.md)). Code: `teigeodata_format::dem`. The
+item count is the number of tiles over all grids, absent ones included.
+
+| ID | Column | Values | |
+|---:|---|---|---|
+| 1, 2 | TILE_ROW0, TILE_COL0 | per grid: its first tile row and column on the global tile grid (from 90° N, 180° W) | required |
+| 3, 4 | TILE_ROWS, TILE_COLS | per grid: rows and columns of tiles | required |
+| 5, 6 | LAT_STEP, LON_STEP | per grid: sample spacing in 0.1″ (10 for 1″) | required |
+| 7 | STEP_MM | per grid: the height step in mm; heights are `q × step`, within `step / 2` of the source | required |
+| 8 | DATUM | per grid: 1 = EGM2008 orthometric (others reserved) | required |
+| 9 | TILE_LOG2 | per grid: log2 of the tile side, 4 to 6 | required |
+| 10 | TILE_START | per grid and one more: its first tile; the last is the item count | required |
+| 11 | OFFSETS | per tile and one more: its code's byte offset in PAYLOAD; equal neighbours mean an absent tile | required |
+| 12 | MODELS | bytes: 64 models × 64 symbols, u16 frequencies summing to 4,096 | required |
+| 13 | CONTEXTS | 7 activity thresholds, non-decreasing | required |
+| 14 | PAYLOAD | bytes: the tile codes back to back | required |
+
+- **Tile code:** the base `q` (zigzag LEB128), 5 i8 predictor coefficients, 8 model indices
+  (6 bits each), the rANS state (u32), then its renormalisation bytes. The predictor, edge
+  rules, contexts and escape are in the module comment of `dem.rs`. A flat tile is 17 bytes.
+- **Reads.** `Dem::elevation(point, &mut DemScratch)` is bilinear between the four samples
+  around the point, from the first grid that has any; samples in absent tiles are left out and
+  the weights renormalised. Decoding runs in raster order and stops after the sample it needs;
+  the scratch (18 KB, caller-owned) keeps the tile part-decoded, so the next query in the tile
+  goes on from there. No allocation, no `unsafe`. `decode_tile` decodes a whole tile.
+- **Rules** (`Dem::check`, O(samples)): tile sides 16 to 64, positive steps, a known datum,
+  grids inside the globe and in order; offsets non-decreasing within PAYLOAD; every model sums
+  to 4,096; thresholds non-decreasing; every present tile decodes whole, its rANS state back
+  at the start value and every byte used. A tile whose models do not sum to 4,096 is refused
+  when it starts, so decoding needs no other checks.
+- **The writer** (feature `write`): `encode_tile` fits the coefficients by least squares,
+  refines them on the coded cost, picks each context's model and decodes the code back before
+  returning it; `encode` builds the section from the grids' codes. Measured in
+  [B11](../02-research/benches/phase-3.md#b11-dem): 1.1 bits per sample on the plains,
+  2.7–2.9 in the hills, 13.6 ns per decoded sample, 31 µs per cold point query.
+
 ### HIERARCHY
 
 `item_count` equals PLACES'. Three required columns:
@@ -749,5 +788,5 @@ A new version always gets a new file. A file that may be mapped is never written
 
 - The 14 benchmarks B1–B14 (catalogue in [benchmarks](../06-engineering/benchmarks.md)).
 - Payloads that follow in later phases inside the frame fixed in Phase 1 (D-071): POSTAL in
-  Phase 3 (D-087); ARCS, POLYGONS and POLY_INDEX with B10 (D-083); DEM with B11.
+  Phase 3 (D-087). ARCS, POLYGONS and POLY_INDEX came with B10 (D-083), DEM with B11 (D-104).
 - Whether the reader crate keeps `#![forbid(unsafe_code)]` with mmap outside it (B13).
