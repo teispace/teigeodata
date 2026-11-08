@@ -572,12 +572,17 @@ coarse level costs as much as the full one because every vertex is still decoded
 for 3.3). `containing` through POLYGONS takes 9 µs (local level) to 354 µs (country), so
 point → admin stays on REGION as §3.7 recommends. The admin REGION on the shared arcs
 (D-100): 977 KB against 3.63 MB with its own vertices, the same answers, 155 against 153 ns, so
-the shared store wins as §3.7 expected. Still to measure: India.
+the shared store wins as §3.7 expected. India ADM2 ([B10](../benches/phase-3.md#india-adm2-geoboundaries)),
+after snap rounding its 4 crossing pairs (D-103): ARCS 3.39 B per vertex with 88% of the
+vertices on scaled arcs (the model's 2.68 B for x and y plus levels and checkpoints), the
+overview from level 4 at 7.7% of ARCS and 4.4 times faster at level 6, and ADMIN_REGION at
+2.11 MB answering in 67 ns (uniform) and 51 ns (label points) with the default fine grid.
 
 ## 7. Risks and open items
 
 - **The scale exponent breaks** wherever snapping or noding moves a vertex off the source grid.
-  Such arcs get `k = 0`, and B10 measures how many lose it after noding.
+  Such arcs get `k = 0`. On India, snap rounding routed 11 edges; 2,197 of 2,592 arcs keep a
+  scale.
 - **Pack downloads** may also be zstd-compressed in transport (India 2.78 against 4.34 B/v),
   so the B1 layout costs nothing extra on the wire. Whether transport compression is used is
   for the [offline-loading note](offline-loading-and-trust.md) to say; it is not checked here.

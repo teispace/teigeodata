@@ -57,8 +57,9 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 ### 3.3 B10 geometry
 - [x] Topology stage: shared arcs, parents dissolved from children, Douglas–Peucker levels with
   a crossing guard (G-topo), verified on the written arcs (D-098,
-  [forge](../../04-architecture/forge.md#topology-topology)); `i_overlay` snap rounding joins
-  with the first source that is not noded
+  [forge](../../04-architecture/forge.md#topology-topology)); a source that is not noded is
+  snap rounded first (D-103, [note](../../02-research/notes/snap-rounding.md)); sliver and gap
+  reassignment joins with the first source that needs it
 - [x] ARCS and POLYGONS sections, in the Nepal packs (D-097)
 - [x] POLY_INDEX on the tree shared with PLACE_INDEX, in the Nepal packs; leaf order and node
   size A/B (D-099, [B10](../../02-research/benches/phase-3.md#b10-poly_index-and-ring-reads))
@@ -72,7 +73,9 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   (D-102), 95 KB on Nepal, levels 4 to 6 read 3.3 to 3.5 times faster
   ([B10](../../02-research/benches/phase-3.md#coarse-reads-from-an-overview)); the
   whole-world render is measured with the world data release
-- [ ] The India measurement of ARCS, POLYGONS, the overview and ADMIN_REGION
+- [x] The India measurement of ARCS, POLYGONS, the overview and ADMIN_REGION: 3.39 B per
+  vertex, overview 7.7% of ARCS, ADMIN_REGION 2.11 MB at 51–67 ns, after snap rounding
+  (D-103) ([B10](../../02-research/benches/phase-3.md#india-adm2-geoboundaries))
 
 ### 3.4 B11 DEM
 - [ ] The DEM section (D-089): codec, tile directory, point and bilinear queries; measured
@@ -110,3 +113,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-08 | 3.3: ADMIN_REGION on ARCS built (D-100); a per-pack top grid item added | B10: dense admin borders make the world top grid the limit |
 | 2026-11-08 | 3.3: the per-pack top grid built as a fine grid beside the world one (D-101) | Keeping the world quadtree and directory makes the window an accelerator that cannot change answers |
 | 2026-11-08 | 3.3: coarse reads through ARCS_OVERVIEW (D-102); the India measurement made its own item | B10's A/B: per-block bounds cannot skip cumulative deltas |
+| 2026-11-08 | 3.3: snap rounding in the topology stage (D-103); India measured | India is the first source that is not noded (4 edge pairs) |

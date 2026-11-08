@@ -10,7 +10,9 @@
 //! Then point → admin unit through `PolyIndex::containing` per level, and the decode speed of
 //! every ring at each level of detail.
 //!
-//! Input: `data/build/pack/np/np-places-main.tgd` (`forge make np`). Run in release:
+//! Input: `data/build/pack/np/np-places-main.tgd` (`forge make np`), or the pack `B10_PACK`
+//! names, such as a geometry-only pack from `forge topology --geoboundaries`, where polygon
+//! label points stand in for places. Run in release:
 //! `cargo run --release -p teigeodata-bench --example b10-poly-index`.
 #![allow(
     clippy::print_stdout,
@@ -39,6 +41,11 @@ use teigeodata_format::{Encoding, Kind, Pack};
 
 const PACK: &str = "data/build/pack/np/np-places-main.tgd";
 
+/// The pack to read: `B10_PACK`, else Nepal's.
+fn pack_path() -> String {
+    std::env::var("B10_PACK").unwrap_or_else(|_| PACK.to_string())
+}
+
 fn centre_key(b: &Rect) -> u64 {
     let p = Point::<E7>::from_units(
         i32::midpoint(b.min_lat, b.max_lat) * 10,
@@ -64,8 +71,9 @@ fn time<F: FnMut(usize)>(n: usize, mut f: F) -> f64 {
 }
 
 fn main() {
-    let Ok(bytes) = std::fs::read(PACK) else {
-        println!("{PACK} is missing: run `forge make np --release 2026.11.0` first");
+    let path = pack_path();
+    let Ok(bytes) = std::fs::read(&path) else {
+        println!("{path} is missing: run `forge make np --release 2026.11.0` first");
         return;
     };
     let pack = Pack::open(&bytes).unwrap();
@@ -373,12 +381,18 @@ fn main() {
     );
 
     // Leaf size and top grid on ARCS, on uniform points and on the pack's place points.
-    let places =
-        teigeodata_format::places::Places::open(&pack.section(Kind::PLACES).unwrap()).unwrap();
-    let mut at_places: Vec<Point<E7>> = (0..places.len())
-        .filter_map(|r| places.point(r))
-        .map(|p| Point::<E7>::from_units(p.lat() * 10, p.lon() * 10).unwrap())
-        .collect();
+    // A geometry-only pack (`forge topology --geoboundaries`) has no places: its polygons'
+    // label points stand in.
+    let mut at_places: Vec<Point<E7>> = match pack.section(Kind::PLACES) {
+        Some(section) => {
+            let places = teigeodata_format::places::Places::open(&section).unwrap();
+            (0..places.len())
+                .filter_map(|r| places.point(r))
+                .map(|p| Point::<E7>::from_units(p.lat() * 10, p.lon() * 10).unwrap())
+                .collect()
+        }
+        None => (0..n).filter_map(|p| polys.label(p)).collect(),
+    };
     // A fixed shuffle so the cache sees places in no spatial order.
     let mut srng = Rng::new(12);
     for i in (1..at_places.len()).rev() {

@@ -187,3 +187,59 @@ ARCS read at each level for comparison: 7.3 (level 0), 15.0, 23.9, 52.5, 163.0, 
 - The note's estimate (an overview of the two coarsest levels at 3.8% of ARCS) holds: from
   level 4, 3.6%.
 
+
+### India ADM2 (geoBoundaries)
+
+```
+forge topology --geoboundaries data/cache/gb-ind-adm2/geoBoundaries-IND-ADM2.geojson gb-ind-adm2
+B10_PACK=data/build/topology/gb-ind-adm2/geometry.tgd cargo run --release -p teigeodata-bench --example b10-poly-index
+```
+
+Input: geoBoundaries gbOpen IND ADM2, commit `9469f09` (ODbL; measurement only, not ingested):
+735 districts, 1,995,009 ring vertices, mostly on a 1e-5° grid. It is the first source that is
+not noded: 4 edge pairs cross by a few millimetres, so the stage snap rounds it (D-103,
+[note](../notes/snap-rounding.md)): 3 crossing pixels, 11 edges routed, 27 vertices added, no
+ring lost. The stage runs in 4.3 s with 640 MB of RAM. The geometry-only pack has 736 polygons
+(the country dissolved from the districts, and the districts); each is its own row in Hilbert
+order of its label, as PLACES numbers rows. Measured 2026-11-08 at a load average of 15–21, so
+timings are ±20%; sizes and node counts are exact.
+
+| Section | Bytes | Per unit |
+|---|---:|---|
+| ARCS (2,592 arcs, 1,122,132 vertices, 56.2% of the ring vertices) | 3,804,472 | 3.39 B per vertex |
+| POLYGONS | 18,388 | 25 B per polygon |
+| POLY_INDEX (node 16, 3 levels) | 7,136 | 9.7 B per polygon |
+| ADMIN_REGION (127,522 leaves, 94,457 runs, fine grid level 12: 334 × 691) | 2,109,444 | 1.88 B per arc vertex |
+| ARCS_OVERVIEW from level 4 (60,672 vertices) | 291,720 | 7.7% of ARCS |
+
+- **ARCS at 3.39 B per vertex**, against 4.48 on Nepal: 2,197 of the 2,592 arcs (990,081
+  vertices) are stored on a coarser decimal grid (scale above 0). The note's model gave 2.68 B
+  for x and y on the 1e-5° grid; levels add 0.44 and checkpoints and bases the rest. Snapping
+  cost the scale of at most the 11 routed edges' arcs.
+- **Levels of detail:** 49% of the vertices are kept at 5 m, 31% at 20 m, 15% at 100 m, 5.4%
+  at 500 m and 0.9% at 5 km. The guard fixed 240 crossings and 2 degenerate rings over all
+  levels with 478 vertices; none was left.
+- **POLY_INDEX:** in row order, 5.2 nodes per point at node 16 (5.0 in box order, 5.2 for one
+  Hilbert sort): the stored order holds on India. Before the measurement pack numbered rows by
+  label Hilbert order, rows in `shapeID` order read 26.7 nodes per point: the index relies on
+  rows being in spatial order, which PLACES guarantees.
+- **ADMIN_REGION**, 20,000 points uniform over India's box (32% inside) and the 736 label points:
+
+  | Leaf max | Top | Fine cells | Fine grid | Bytes | Uniform ns | Labels ns | Check ms |
+  |---:|---:|---:|---|---:|---:|---:|---:|
+  | 32 | 10 | 0 | none | 1,853,452 | 101 | 142 | 65 |
+  | 32 | 8 | 0 | none | 1,732,188 | 131 | 212 | 48 |
+  | 32 | 8 | 65,536 | 11: 168 × 346 | 1,855,320 | 83 | 69 | 53 |
+  | **32** | **8** | **262,144** | **12: 334 × 691** | **2,110,020** | **67** | **51** | **64** |
+  | 32 | 8 | 1,048,576 | 13: 666 × 1,381 | 2,896,220 | 62 | 48 | 108 |
+  | 64 | 8 | 262,144 | 12: 334 × 691 | 1,306,516 | 78 | 52 | 49 |
+
+  The default (D-101) is again the knee: against no fine grid, 2 times faster on uniform
+  points and 4 times at label points, for 22% more bytes. Every one of 20,000 points gives the same regions as `Polygons::contains`. On the
+  arcs it is 2.11 MB against 7.30 MB with its own vertices (D-100 holds).
+- **Rings through POLYGONS** (`containing`) cost 21 µs per district and 1.8 ms for the
+  country's 1,072-ring outline, so point → admin stays on ADMIN_REGION.
+- **Overview:** from level 4 it is 7.7% of ARCS (3.6% on Nepal, whose borders are smoother at
+  coarse levels), and reads level 6 in 77 ns per vertex against 334 for ARCS (4.4 times
+  faster). From level 3 it would be 19% of ARCS for 104 ns, and from level 5, 3.3% for 62 ns.
+  Level 4 stays the default.

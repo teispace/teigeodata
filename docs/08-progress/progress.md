@@ -21,7 +21,7 @@ updated: 2026-11-08
   98,020 places with a core; Google-only against Microsoft-only P90 146 m, gate 180 m, fatal),
   the 301-place labelling sample (Q-017, maintainer). `forge make np` cold 30 s; main pack
   7.05 MB, lite 4.48 MB. DEM elevation at the consensus point moved to 3.4.
-- **3.3 in progress** (D-097 to D-102): ARCS, POLYGONS and POLY_INDEX sections and the
+- **3.3 done** (D-097 to D-103): ARCS, POLYGONS and POLY_INDEX sections and the
   forge's topology stage are built; the Nepal packs carry 860 admin polygons on 2,315 shared
   arcs (4.48 B per vertex, 8 levels of detail, parents within 1 cm of COD-AB's) and their index
   (9.5 B per polygon, one tree implementation with PLACE_INDEX) and ADMIN_REGION, REGION on the
@@ -29,7 +29,10 @@ updated: 2026-11-08
   grid over each pack's extent (D-101) halves admin queries on places (296 → 153 ns) for
   89 KB, and an overview of the coarse levels (D-102) reads levels 4 to 6 3.3 to 3.5 times
   faster for 95 KB; main 10.99 MB, lite 8.34 MB ([B10](../02-research/benches/phase-3.md#b10-poly_index-and-ring-reads)).
-  Next: the India measurement, then 3.4 (DEM).
+  The stage snap rounds a source that is not noded (D-103); on geoBoundaries India ADM2
+  (measurement only) ARCS is 3.39 B per vertex, the overview 7.7% of ARCS and ADMIN_REGION
+  2.11 MB at 51–67 ns ([India](../02-research/benches/phase-3.md#india-adm2-geoboundaries)).
+  Next: 3.4 (DEM).
 - **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
@@ -143,3 +146,5 @@ updated: 2026-11-08
 | 2026-11-08 | 3.3: ARCS (a518086), POLYGONS (07cbe5b), topology stage and pack geometry (faebfbc); D-097, D-098 | POLY_INDEX, admin REGION A/B |
 | 2026-11-08 | 3.3: POLY_INDEX on the shared tree, in the packs; B10 page (D-099) | admin REGION A/B, coarse LOD reads |
 | 2026-11-08 | 3.3: ADMIN_REGION on the shared arcs, cross-checked in the forge (D-100) | per-pack top grid, coarse LOD reads |
+| 2026-11-08 | 3.3: fine grid (D-101), ARCS_OVERVIEW (D-102) | the India measurement |
+| 2026-11-08 | 3.3 done: snap rounding in the topology stage (D-103), `forge topology --geoboundaries`, India measured | 3.4: B11 DEM |
