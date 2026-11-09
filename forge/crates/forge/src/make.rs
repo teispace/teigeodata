@@ -59,9 +59,10 @@ struct Recipe {
     extent: Option<String>,
     #[serde(default)]
     buildings: Vec<Buildings>,
-    /// The DEM tileset place elevations come from (D-111).
+    /// The DEM tilesets place elevations come from (D-111), in priority order: a build takes
+    /// the first its licence gate lets it read (D-132).
     #[serde(default)]
-    dem: Option<String>,
+    dem: Vec<String>,
     /// The population grid admin units' modelled population comes from (D-123).
     #[serde(default)]
     population: Option<String>,
@@ -493,16 +494,27 @@ fn tile_box(extent: &str) -> Result<String, String> {
 /// The build's arguments from the recipe: the admin source, and the timezone source, DEM and
 /// population grid when named. The DEM and grid are passed in the lite build too, whose
 /// licence gate then reports them as not read.
-fn recipe_args(recipe: &Recipe) -> Vec<String> {
+fn recipe_args(recipe: &Recipe, dem: Option<&str>) -> Vec<String> {
     let mut out = vec!["--admin".to_string(), recipe.admin.clone()];
+    let dem = dem.map(str::to_string);
     for (flag, id) in [
         ("--tz", &recipe.timezones),
-        ("--dem", &recipe.dem),
+        ("--dem", &dem),
         ("--population", &recipe.population),
     ] {
         out.extend(id.iter().flat_map(|d| [flag.to_string(), d.clone()]));
     }
     out
+}
+
+/// The recipe's DEM for this build: the first its licence gate lets it read.
+fn dem_of<'a>(recipe: &'a Recipe, lock: &Lock, lite: bool) -> Result<Option<&'a str>, String> {
+    for id in &recipe.dem {
+        if !lite || build::LITE.contains(&lock.get(id)?.licence_class.as_str()) {
+            return Ok(Some(id));
+        }
+    }
+    Ok(None)
 }
 
 /// The `dem` stage: the recipe's DEM tileset as a DEM section over the tiles of its extent,
@@ -514,21 +526,20 @@ fn dem_stage(
     lite: bool,
     r: &mut Runner,
 ) -> Result<Option<String>, String> {
-    let Some(id) = &recipe.dem else {
+    let Some(id) = dem_of(recipe, lock, lite)? else {
         return Ok(None);
     };
-    if lite && !build::LITE.contains(&lock.get(id)?.licence_class.as_str()) {
-        return Ok(None);
-    }
     let extent = recipe
         .extent
         .as_deref()
         .ok_or("a DEM needs an extent in build.yaml")?;
     let bx = tile_box(extent)?;
-    let k = key(&[b"dem", CODE_DEM, &pinned(lock, &[id])?, bx.as_bytes()]);
+    let mut ids = vec![id];
+    ids.extend(dem::section::geoids(lock, id)?);
+    let k = key(&[b"dem", CODE_DEM, &pinned(lock, &ids)?, bx.as_bytes()]);
     let dir = root.join("data/build/dem-section").join(id);
     r.step(&format!("dem {id}"), (&dir, ".key", None), &k, || {
-        dem::section::run(root, &[id.clone(), bx.clone()])
+        dem::section::run(root, &[id.to_string(), bx.clone()])
     })?;
     Ok(Some(k))
 }
@@ -551,6 +562,14 @@ fn fetch_inputs(
     for id in recipe.inputs(&postal) {
         if !lite || build::LITE.contains(&lock.get(id)?.licence_class.as_str()) {
             ids.push(id.to_string());
+        }
+    }
+    // The geoids a DEM on another datum is moved with (D-132).
+    if let Some(dem) = dem_of(recipe, lock, lite)? {
+        for g in dem::section::geoids(lock, dem)? {
+            if !ids.iter().any(|i| i == g) {
+                ids.push(g.to_string());
+            }
         }
     }
     crate::fetch::run(root, &ids, false, false)
@@ -626,7 +645,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     if let Some((run, _)) = &core_key {
         build_args.extend(["--core".to_string(), run.clone()]);
     }
-    build_args.extend(recipe_args(&recipe));
+    build_args.extend(recipe_args(&recipe, dem_of(&recipe, &lock, lite)?));
     build_args.extend(sources.iter().cloned());
     let mut inputs: Vec<&str> = vec![recipe.admin.as_str()];
     inputs.extend(
@@ -683,13 +702,13 @@ mod tests {
 
     #[test]
     fn a_recipe_names_every_input_once() {
-        let yaml = "schema: teigeodata/build/v1\nadmin: bounds\ntimezones: tz\npoints:\n  - { reader: osm, source: osm }\n  - { reader: geonames, source: gn, extra: [gn-alt, gn-hier] }\nbuildings:\n  - { reader: osm, source: osm }\n  - { reader: msbuildings, source: ms }\ndem: dem\npopulation: pop\n";
+        let yaml = "schema: teigeodata/build/v1\nadmin: bounds\ntimezones: tz\npoints:\n  - { reader: osm, source: osm }\n  - { reader: geonames, source: gn, extra: [gn-alt, gn-hier] }\nbuildings:\n  - { reader: osm, source: osm }\n  - { reader: msbuildings, source: ms }\ndem: [dem, dem2]\npopulation: pop\n";
         let recipe: Recipe = serde_saphyr::from_str(yaml).unwrap();
         let postal = ["gpo".to_string(), "bounds".to_string()];
         assert_eq!(
             recipe.inputs(&postal),
             [
-                "osm", "gn", "gn-alt", "gn-hier", "bounds", "tz", "ms", "dem", "pop", "gpo"
+                "osm", "gn", "gn-alt", "gn-hier", "bounds", "tz", "ms", "dem", "dem2", "pop", "gpo"
             ]
         );
         let bare: Recipe = serde_saphyr::from_str(

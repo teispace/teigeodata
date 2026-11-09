@@ -6,7 +6,12 @@
 //! ```
 //!
 //! - **Grid:** 1″ samples (`PixelIsPoint`; source tiles of 3600 × 3600 whose first row and
-//!   column lie on whole degrees), cut into 64 × 64 tiles on the global grid from 90° N, 180° W.
+//!   column lie on whole degrees, or 3601 × 3601 as SRTM and NASADEM, whose last row and
+//!   column repeat the next tile's first and are dropped), cut into 64 × 64 tiles on the
+//!   global grid from 90° N, 180° W.
+//! - **Datum:** the section is on EGM2008. A tileset on another geoid (`query_params.geoid`,
+//!   EGM96 for NASADEM) is moved sample by sample: `H = H_src + N_src − N_EGM2008`, both
+//!   undulations bilinear on their 5′ grids (D-132).
 //!   A source tile on any other grid stops the stage (Copernicus above 50° N widens its
 //!   longitude spacing; that needs a second grid and is not built yet).
 //! - **Coverage:** the source tiles inside the box. A DEM tile with no covered sample is absent;
@@ -52,8 +57,50 @@ use teigeodata_format::dem::{
 use teigeodata_format::{Encoding, Kind, Pack, Section, Writer};
 
 use super::Grid as Source;
+use crate::geoid::Geoid;
 use crate::lock::Lock;
 use crate::tiles::{self, Tile};
+
+/// The pinned geoid of the section's datum ([`DATUM_EGM2008`]).
+pub(crate) const EGM2008: &str = "egm2008-5";
+
+/// The move from a tileset's geoid to EGM2008: `N_src − N_EGM2008` at a point.
+pub(crate) struct Shift {
+    from: Geoid,
+    to: Geoid,
+}
+
+impl Shift {
+    /// The shift for a tileset whose `query_params.geoid` names another geoid, else `None`.
+    pub(crate) fn of(root: &Path, lock: &Lock, tileset: &str) -> Result<Option<Self>, String> {
+        let source = lock.get(tileset)?;
+        let Some(g) = source.query_params.get("geoid").filter(|g| *g != EGM2008) else {
+            return Ok(None);
+        };
+        let open = |id: &str| {
+            lock.get(id).and_then(|s| {
+                Geoid::open_zip(&root.join("data/cache/store/sha256").join(&s.sha256))
+            })
+        };
+        Ok(Some(Self {
+            from: open(g)?,
+            to: open(EGM2008)?,
+        }))
+    }
+
+    /// Metres to add to a height on the tileset's geoid at (`lat`, `lon`).
+    pub(crate) fn at(&self, lat: f64, lon: f64) -> f64 {
+        self.from.undulation(lat, lon) - self.to.undulation(lat, lon)
+    }
+}
+
+/// The pinned geoids a tileset's section reads: its own and EGM2008, when they differ.
+pub(crate) fn geoids<'a>(lock: &'a Lock, tileset: &str) -> Result<Vec<&'a str>, String> {
+    Ok(match lock.get(tileset)?.query_params.get("geoid") {
+        Some(g) if g != EGM2008 => vec![g.as_str(), EGM2008],
+        _ => Vec::new(),
+    })
+}
 
 /// Samples per source tile side (1° at 1″).
 const SRC: u64 = 3600;
@@ -107,22 +154,30 @@ fn quantise(h: f64, step_mm: u32) -> i32 {
     v.round() as i32
 }
 
-/// Reads one source tile and quantises it, after checking its grid.
-fn load(path: &Path, sr: u64, sc: u64, step_mm: u32) -> Result<Vec<i32>, String> {
+/// Reads one source tile, moves it to EGM2008 with `shift` and quantises it, after checking
+/// its grid.
+fn load(
+    path: &Path,
+    sr: u64,
+    sc: u64,
+    step_mm: u32,
+    shift: Option<&Shift>,
+) -> Result<Vec<i32>, String> {
     let g = Source::open(path)?;
     let name = path.display();
     let close = |a: f64, b: f64| (a - b).abs() < 1e-9;
     #[allow(clippy::cast_precision_loss, reason = "whole degrees")]
     let (lat0, lon0) = (90.0 - sr as f64 / 3600.0, sc as f64 / 3600.0 - 180.0);
-    if g.w != SRC as usize
-        || g.h != SRC as usize
+    let n = SRC as usize;
+    let side_ok = (g.w == n && g.h == n) || (g.w == n + 1 && g.h == n + 1);
+    if !side_ok
         || !close(g.dx * 3600.0, 1.0)
         || !close(g.dy * 3600.0, 1.0)
         || !close(g.lat0, lat0)
         || !close(g.lon0, lon0)
     {
         return Err(format!(
-            "{name}: not a 1″ 3600 × 3600 tile at {lat0}°, {lon0}° (grid {} × {}, step {}″ × {}″, origin {}°, {}°)",
+            "{name}: not a 1″ 3600 × 3600 (or 3601 × 3601) tile at {lat0}°, {lon0}° (grid {} × {}, step {}″ × {}″, origin {}°, {}°)",
             g.w,
             g.h,
             g.dx * 3600.0,
@@ -131,15 +186,20 @@ fn load(path: &Path, sr: u64, sc: u64, step_mm: u32) -> Result<Vec<i32>, String>
             g.lon0
         ));
     }
-    g.z.iter()
-        .map(|&h| {
-            if h.is_finite() && h > -1000.0 {
-                Ok(quantise(f64::from(h), step_mm))
-            } else {
-                Err(format!("{name}: a void ({h}); voids are not supported"))
+    let mut out = Vec::with_capacity(n * n);
+    for y in 0..n {
+        #[allow(clippy::cast_precision_loss, reason = "sample indices")]
+        let lat = lat0 - y as f64 / 3600.0;
+        for (x, &h) in g.z[y * g.w..y * g.w + n].iter().enumerate() {
+            if !(h.is_finite() && h > -1000.0) {
+                return Err(format!("{name}: a void ({h}); voids are not supported"));
             }
-        })
-        .collect()
+            #[allow(clippy::cast_precision_loss, reason = "sample indices")]
+            let moved = shift.map_or(0.0, |s| s.at(lat, lon0 + x as f64 / 3600.0));
+            out.push(quantise(f64::from(h) + moved, step_mm));
+        }
+    }
+    Ok(out)
 }
 
 /// One DEM tile's samples from the decoded source tiles, gaps filled; `None` if nothing covers
@@ -247,6 +307,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         .query_params
         .get("tile")
         .ok_or_else(|| format!("{id}: no tile name template"))?;
+    let shift = Shift::of(root, &lock, id)?;
     let manifest = tiles::manifest(root, source)?;
     let by_name: BTreeMap<&str, &Tile> = manifest.iter().map(|t| (t.name.as_str(), t)).collect();
     let (w, s, e, n) = parse_box(bx)?;
@@ -319,7 +380,13 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
                         Ok((
                             (sr, sc),
                             match path_of(sr, sc)? {
-                                Some(p) => Some(Arc::new(load(&p, sr * SRC, sc * SRC, step_mm)?)),
+                                Some(p) => Some(Arc::new(load(
+                                    &p,
+                                    sr * SRC,
+                                    sc * SRC,
+                                    step_mm,
+                                    shift.as_ref(),
+                                )?)),
                                 None => None,
                             },
                         ))
@@ -390,7 +457,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t1 = Instant::now();
     d.check().map_err(|e| e.to_string())?;
     let checked = t1.elapsed();
-    let worst = probe(root, &d, &ext, &path_of, step_mm)?;
+    let worst = probe(&d, &ext, &path_of, step_mm, shift.as_ref())?;
     let dir = root.join("data/build/dem-section").join(id);
     fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     // A pack of this section alone, for B11; not a pinned source, it feeds no build.
@@ -456,11 +523,11 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
 /// Heights at random points against bilinear sampling of the source tiles: the largest
 /// difference, which must be at most half a step.
 fn probe(
-    _root: &Path,
     d: &Dem<'_>,
     ext: &Extent,
     path_of: &dyn Fn(u64, u64) -> Result<Option<std::path::PathBuf>, String>,
     step_mm: u32,
+    shift: Option<&Shift>,
 ) -> Result<f64, String> {
     let mut x = 0x9E37_79B9_7F4A_7C15_u64;
     let mut next = move || {
@@ -503,9 +570,9 @@ fn probe(
             if rr + 1 >= SRC || cc + 1 >= SRC {
                 continue;
             }
-            let want = g
-                .sample(at.lon_degrees(), at.lat_degrees())
-                .map(|(h, _)| f64::from(h));
+            let want = g.sample(at.lon_degrees(), at.lat_degrees()).map(|(h, _)| {
+                f64::from(h) + shift.map_or(0.0, |s| s.at(at.lat_degrees(), at.lon_degrees()))
+            });
             let got = d.elevation(at, &mut s);
             match (want, got) {
                 (Some(w), Some(v)) => worst = worst.max((w - v).abs()),
@@ -520,4 +587,68 @@ fn probe(
         ));
     }
     Ok(worst)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SRC, load};
+    use tiff::encoder::{TiffEncoder, colortype::GrayI16};
+    use tiff::tags::Tag;
+
+    /// A 1″ `Int16` tile, `PixelIsPoint`, its first sample at 80° E, 27° N.
+    fn write(path: &std::path::Path, side: u32, at: impl Fn(u32, u32) -> i16) {
+        let file = std::fs::File::create(path).unwrap();
+        let mut enc = TiffEncoder::new(file).unwrap();
+        let mut img = enc.new_image::<GrayI16>(side, side).unwrap();
+        let dir = img.encoder();
+        let px = 1.0_f64 / 3600.0;
+        dir.write_tag(Tag::ModelPixelScaleTag, &[px, px, 0.0][..])
+            .unwrap();
+        dir.write_tag(
+            Tag::ModelTiepointTag,
+            &[0.0_f64, 0.0, 0.0, 80.0, 27.0, 0.0][..],
+        )
+        .unwrap();
+        // GeoKey directory: version 1.1.0, one key: 1025 (raster type) = 2, PixelIsPoint.
+        dir.write_tag(
+            Tag::GeoKeyDirectoryTag,
+            &[1_u16, 1, 0, 1, 1025, 0, 1, 2][..],
+        )
+        .unwrap();
+        let values: Vec<i16> = (0..side)
+            .flat_map(|y| (0..side).map(move |x| (y, x)))
+            .map(|(y, x)| at(y, x))
+            .collect();
+        img.write_data(&values).unwrap();
+    }
+
+    #[test]
+    fn a_3601_tile_drops_its_repeated_edge() {
+        let dir = std::env::temp_dir().join(format!("forge-dem-section-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (sr, sc) = ((90 - 27) * SRC, (80 + 180) * SRC);
+        #[allow(clippy::cast_possible_truncation, reason = "small test heights")]
+        let height = |y: u32, x: u32| ((y % 100) * 10 + x % 10) as i16;
+        for side in [3600, 3601] {
+            let path = dir.join(format!("t{side}.tif"));
+            write(&path, side, |y, x| {
+                if y == 3600 || x == 3600 {
+                    9999
+                } else {
+                    height(y, x)
+                }
+            });
+            let q = load(&path, sr, sc, 1000, None).unwrap();
+            assert_eq!(q.len(), 3600 * 3600, "{side}");
+            assert_eq!(q[0], 0);
+            assert_eq!(q[3599], 9);
+            assert_eq!(q[3600 * 3599 + 3599], 990 + 9);
+            assert!(!q.contains(&9999), "{side}: the repeated edge leaked");
+        }
+        // Any other side is refused.
+        let path = dir.join("t3599.tif");
+        write(&path, 3599, |_, _| 0);
+        assert!(load(&path, sr, sc, 1000, None).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

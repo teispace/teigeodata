@@ -48,9 +48,35 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     }
     let notices = m.attribution().map_or(0, |a| a.lines().count());
     Ok(format!(
-        "pack ok: {path} ({} build), {notices} notices, sections verified",
+        "{}pack ok: {path} ({} build), {notices} notices, sections verified",
+        sizes(&pack, bytes.len()),
         if lite { "lite" } else { "main" }
     ))
+}
+
+/// Each section's stored bytes, items and share of the file, largest first: what a component
+/// split would download.
+fn sizes(pack: &Pack<'_>, total: usize) -> String {
+    use std::fmt::Write as _;
+    let mut rows: Vec<(String, usize, u64)> = pack
+        .sections()
+        .map(|s| (s.kind().to_string(), s.bytes().len(), s.item_count()))
+        .collect();
+    rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    let mut out = String::from("| Section | Bytes | Items | Share |\n|---|--:|--:|--:|\n");
+    let mut sum = 0;
+    for (kind, n, items) in rows {
+        sum += n;
+        #[allow(clippy::cast_precision_loss, reason = "byte counts far below 2^52")]
+        let share = n as f64 * 100.0 / total.max(1) as f64;
+        let _ = writeln!(out, "| {kind} | {n} | {items} | {share:.1}% |");
+    }
+    let _ = writeln!(
+        out,
+        "| head and padding | {} | | |\n",
+        total.saturating_sub(sum)
+    );
+    out
 }
 
 /// The licence and notices of a pack against its build: the problems found.

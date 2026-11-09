@@ -93,8 +93,12 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   earlier 96,847; against GeoNames' SRTM3 field
   P90 130 m at the place's point, 26 m at the record's own point. Lite has none (Copernicus
   is main only, D-031)
-- [ ] Elevation in the lite build: a NASADEM section (CC0, EGM96 heights to EGM2008, 3601 ×
-  3601 tiles that `dem-section` does not take yet), or Copernicus once Q-008 clears it
+- [x] Elevation in the lite build (D-132): the recipe's `dem` is a priority list and each build
+  takes the first its licence gate allows; lite takes NASADEM (public domain), its 3601 × 3601
+  tiles cut to 3600 and its EGM96 heights moved to EGM2008 sample by sample. Nepal lite:
+  94,758 of 94,760 places with a height; against the heights sources state, P50 23 m (main 25 m);
+  section 156.3 MB, 2.14 bits per sample (Copernicus 1.91); 191 s. Copernicus for lite once
+  Q-008 clears it
 - [ ] Surveyed heights for summits (D-089; moved from 3.2)
 - [ ] Review the consensus point where it moves a hill settlement far from its records: the
   height there differs from GeoNames' SRTM3 by more than 100 m for 14,597 records (P90 130 m,
@@ -197,3 +201,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | 3.7: G-budget in `forge make` (D-129) | the data build had no resource gate |
 | 2026-11-09 | 3.7: G-topo and G-pip (D-130) | gaps between units went unseen; place assignment had no gate |
 | 2026-11-09 | 3.7: G-conf (D-131) | the silver-label scores had no gate |
+| 2026-11-09 | 3.4: lite elevation from NASADEM (D-132) | the lite build had no heights |

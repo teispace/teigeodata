@@ -215,6 +215,9 @@ kind = "tileset"
 url = "https://nasademeuwest.blob.core.windows.net/nasadem-cog/v001/{tile}.tif"
 tiles = "data/sources/nasadem-np.tiles"
 query_params = { bbox = "80,26,88,30", tile = "NASADEM_HGT_{ns}{LAT2}{ew}{LON3}", token_url = "https://planetarycomputer.microsoft.com/api/sas/v1/token/nasadem", geoid = "egm96-5" }
+# Upstream reads need a short-lived SAS token that refused 6 of 45 tiles with 403 on 2026-11-09:
+# builds read the mirror (D-127, D-132).
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
 version = "NASADEM_HGT v001 (Int16, DEFLATE, PixelIsPoint, EGM96 heights)"
 retrieved = "2026-11-06"
 sha256 = "330d7fde8ac7513ae361a25dc1e326f8bca75dca7c965b190720fdb87f277850"

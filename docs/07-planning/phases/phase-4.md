@@ -63,6 +63,19 @@ call (ADR-0012).
   measured 2026-11-09; Nepal at 1 and 3 layers measured the same day; 10 layers and 1 GB
   still to run)
 
+### 4.1b Components: download only the data asked for (ADR-0015)
+- [ ] The forge writes one pack per component instead of one combined pack: `places` (point,
+  elevation, kind, admin level, IDs and the spatial index), `hierarchy`, `names` (NAMES and
+  SEARCH), `boundary` (ARCS, POLYGONS, the indexes, ADMIN_REGION, the overview), `tz`, `postal`;
+  each signed, with the same IDs, and checked together by the read-back
+- [ ] The engine joins the components of one address as one layer; a query that needs a
+  missing component says which one (`missing_component`), never a wrong answer
+- [ ] The download manager fetches only the components the app asks for
+- [ ] Measured on Nepal lite 2026-11-09 (`cargo xtask check-pack`): 8.8 MB in all; points
+  0.72 MB (8%), hierarchy 0.37 MB (4%), names and search 3.86 MB (44%), boundary 3.85 MB
+  (44%). Gate: a points-only download of Nepal under 1 MB, the sum of the components within
+  2% of today's one pack
+
 ### 4.2 Baseline and locator
 - [ ] Forge: the baseline build (countries, admin1, cities above a threshold, simplified world
   timezones), same ID registry, thresholds and tolerances as data
@@ -138,3 +151,4 @@ call (ADR-0012).
 | 2026-11-09 | 4.1: the product's search scored and brought towards the spike; parity its own item | D-119: the golden gate measured the spike, not the engine |
 | 2026-11-09 | 4.1: parity done; the CI gate on the product its own item | D-121 |
 | 2026-11-09 | 4.1: the golden gate written against a checked-in baseline (D-128) | a CI gate needs a number to hold |
+| 2026-11-09 | 4.1b: components as their own item, sized on Nepal | the maintainer wants points-only downloads (lat, lon, altitude) |

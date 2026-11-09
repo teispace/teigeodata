@@ -26,9 +26,9 @@ A short status. The numbers and evidence live in each phase file and the
   golden on the product's search recall@1 0.859, pass 0.924; every pack carries its sources'
   notices (D-126); the `data-build` workflow runs G-det, G-lic and the golden gate per pack
   (D-128), `forge make` gates its budget (D-129), and the stages gate topology and place assignment
-  (D-130), and conflation precision and recall (D-131). Next: 3.7 (the lite build from clean-room sources
+  (D-130), and conflation precision and recall (D-131); lite has heights from NASADEM (D-132). Next: 3.7 (the lite build from clean-room sources
   only, `ACCURACY.md`). The CI data build needs the input mirror (D-127): the maintainer
-  approves publishing the `sources` release, then `cargo xtask mirror` uploads about 1.1 GB.
+  approves publishing the `sources` release, then `cargo xtask mirror` uploads about 1.45 GB (NASADEM added, D-132).
 - **In parallel (Phase 4):** the engine (4.1, D-113, D-114; Nepal timings in
   [phase-4 benches](../02-research/benches/phase-4.md#nepal-main-pack)) and the transport
   (4.4, D-112) are on `main`; the product's search is at parity with the spike (D-121:

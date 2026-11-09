@@ -23,9 +23,9 @@ struct Recipe {
     extent: Option<String>,
     #[serde(default)]
     buildings: Vec<Buildings>,
-    /// The DEM tileset of place elevations (D-111).
+    /// The DEM tilesets of place elevations (D-111), in priority order (D-132).
     #[serde(default)]
-    dem: Option<String>,
+    dem: Vec<String>,
     /// The population grid of admin units' modelled population (D-123).
     #[serde(default)]
     population: Option<String>,
@@ -124,7 +124,7 @@ pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
             ));
         }
     }
-    if r.extent.is_none() && r.dem.is_some() {
+    if r.extent.is_none() && !r.dem.is_empty() {
         out.push("a DEM needs an extent".into());
     }
     match (&r.extent, r.buildings.is_empty()) {
@@ -160,7 +160,7 @@ mod tests {
             .collect();
         let good = "schema: teigeodata/build/v1\nadmin: a\npoints:\n  - { reader: osm, source: b }\n  - { reader: geonames, source: c, extra: [x] }\n";
         assert_eq!(check_text(good, &pinned), Vec::<String>::new());
-        let with_dem = format!("{good}extent: \"80,26,88,30\"\ndem: x\n");
+        let with_dem = format!("{good}extent: \"80,26,88,30\"\ndem: [x]\n");
         assert_eq!(check_text(&with_dem, &pinned), Vec::<String>::new());
         let with_budget = format!("{good}budget: {{ rss_mb: 4000, disk_mb: 2000 }}\n");
         assert_eq!(check_text(&with_budget, &pinned), Vec::<String>::new());
@@ -213,11 +213,11 @@ mod tests {
                 "buildings reader",
             ),
             (
-                "schema: teigeodata/build/v1\nadmin: a\ndem: a\npoints:\n  - { reader: osm, source: b }\n  - { reader: osm, source: c }\n",
+                "schema: teigeodata/build/v1\nadmin: a\ndem: [a]\npoints:\n  - { reader: osm, source: b }\n  - { reader: osm, source: c }\n",
                 "a DEM without an extent",
             ),
             (
-                "schema: teigeodata/build/v1\nadmin: a\ndem: z\nextent: \"80,26,88,30\"\npoints:\n  - { reader: osm, source: b }\n  - { reader: osm, source: c }\n",
+                "schema: teigeodata/build/v1\nadmin: a\ndem: [z]\nextent: \"80,26,88,30\"\npoints:\n  - { reader: osm, source: b }\n  - { reader: osm, source: c }\n",
                 "an unpinned DEM",
             ),
         ] {

@@ -544,8 +544,9 @@ it in `sources.lock` comes with the catalog (step 3.7).
 country's stages from its recipe, `data/countries/<cc>/build.yaml` (checked by
 `cargo xtask check-data`): `read` for each points source, `conflate` over them, `buildings`
 for each building source the build may read, `core`, `topology` for the admin source, `dem`
-(the recipe's `dem` tileset as a `dem-section` over the tiles holding the corners of its
-`extent`, when the build may read it; D-111), then `build`
+(the first tileset of the recipe's `dem` list the build may read, as a `dem-section` over the
+tiles holding the corners of its `extent`; D-111, D-132: main Copernicus, lite NASADEM moved
+from EGM96 to EGM2008), then `build`
 (D-095, [ADR-0035](../03-decisions/adr/ADR-0035-forge-architecture.md)).
 - **Fetch.** `--fetch` first brings every input the recipe names (points sources and their
   extras, admin, timezones, buildings, DEM, population grid, postal sources), filtered by the
