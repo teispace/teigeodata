@@ -214,8 +214,17 @@ Name keys to places, for exact, prefix and fuzzy search (D-085, D-086,
 | 4 | IDS | every list in key order: rows by importance descending, then row ascending |
 | 5 | IMPORTANCE | per row: 0 to 255 |
 | 6 | BLOCK_MAX | per 128 keys in ordinal order: the highest importance in their lists |
+| 7 | RULES | bytes: the country's query rules, below (optional) |
+| 8 | UNIT | per row: its unit type as RULES names it, 0 = none (optional) |
 
-A column ID of 0 or above 6 is refused.
+A column ID of 0 or above 8 is refused.
+
+- **RULES** (D-120): entries of a kind byte and two `u8`-length UTF-8 fields, then a zero
+  byte, zero-padded to a multiple of 4. Kinds: 1 the phonetic key's name (at most one); 2 a
+  unit type's abbreviation and, as one byte from 1, its type; 3 a droppable suffix; 4 a generic
+  term in a native script and one Latin spelling. All text is folded. The reader holds no
+  country's rules (ADR-0032); `check` proves the layout and that every UNIT value is a type a
+  rule names.
 
 - **Keys** are a tag byte, then the folded name in UTF-8: 1 exact, 2 loose, 3 phonetic. The
   forge defines each fold. A key is at most 255 bytes. A key's ordinal is its position in

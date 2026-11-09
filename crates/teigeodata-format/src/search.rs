@@ -17,6 +17,8 @@
 //! | 4 | [`IDS`] | every list: rows by importance descending, then row ascending |
 //! | 5 | [`IMPORTANCE`] | per row: its importance, 0 to 255 |
 //! | 6 | [`BLOCK_MAX`] | per [`BLOCK`] keys: the highest importance in their lists |
+//! | 7 | [`RULES`] | bytes: the country's query [rules] (optional) |
+//! | 8 | [`UNIT`] | per row: its unit type as the rules name it, 0 = none (optional) |
 //!
 //! Its item count is the number of places (rows). [`Search::open`] checks the structure;
 //! [`Search::check`] every key, list, importance and block maximum. Queries never panic and never
@@ -24,6 +26,7 @@
 
 pub mod fst;
 pub mod fuzzy;
+pub mod rules;
 
 use core::ops::{ControlFlow, Range};
 
@@ -32,6 +35,7 @@ use teigeodata_core::table::Table;
 
 use crate::{Error, Kind, Section, columns};
 use fst::{Fst, Matcher, Walked};
+use rules::Rules;
 
 /// Column: the automaton's length.
 pub const LENGTH: u16 = 1;
@@ -45,6 +49,10 @@ pub const IDS: u16 = 4;
 pub const IMPORTANCE: u16 = 5;
 /// Column: the highest importance per block of keys.
 pub const BLOCK_MAX: u16 = 6;
+/// Column: the query rules.
+pub const RULES: u16 = 7;
+/// Column: each row's unit type.
+pub const UNIT: u16 = 8;
 
 /// Tag of the exact map: the search fold of each name.
 pub const EXACT: u8 = 1;
@@ -72,6 +80,8 @@ pub struct Search<'a> {
     ids: Packed<'a>,
     importance: Packed<'a>,
     block_max: Packed<'a>,
+    rules: Option<Rules<'a>>,
+    unit: Option<Packed<'a>>,
     rows: usize,
 }
 
@@ -86,7 +96,7 @@ impl<'a> Search<'a> {
         let t: Table<'a> = columns::open(section, Kind::SEARCH)?;
         let rows = usize::try_from(section.item_count())
             .map_err(|_| fail(0, "the row count does not fit this platform"))?;
-        if t.ids().any(|id| id == 0 || id > BLOCK_MAX) {
+        if t.ids().any(|id| id == 0 || id > UNIT) {
             return Err(fail(0, "an unknown column"));
         }
         let length = columns::required(&t, Kind::SEARCH, LENGTH, Some(1))?;
@@ -125,12 +135,22 @@ impl<'a> Search<'a> {
         let block_max = columns::required(&t, Kind::SEARCH, BLOCK_MAX, Some(keys.div_ceil(BLOCK)))?;
         let fst =
             Fst::new(bytes, keys32).ok_or(fail(AUTOMATON, "the automaton's root is malformed"))?;
+        let rules = if t.ids().any(|id| id == RULES) {
+            Some(Rules::new(
+                t.bytes(RULES).map_err(|e| columns::map(Kind::SEARCH, e))?,
+            ))
+        } else {
+            None
+        };
+        let unit = columns::optional(&t, Kind::SEARCH, UNIT, rows)?;
         Ok(Self {
             fst,
             starts,
             ids,
             importance,
             block_max,
+            rules,
+            unit,
             rows,
         })
     }
@@ -151,6 +171,21 @@ impl<'a> Search<'a> {
     #[must_use]
     pub const fn automaton(&self) -> Fst<'a> {
         self.fst
+    }
+
+    /// The country's query rules (none without the column).
+    #[must_use]
+    pub fn rules(&self) -> Rules<'a> {
+        self.rules.unwrap_or_default()
+    }
+
+    /// Row `row`'s unit type, 0 for none (and without the column).
+    #[must_use]
+    pub fn unit(&self, row: u32) -> u8 {
+        self.unit
+            .and_then(|u| u.get(row as usize))
+            .and_then(|v| u8::try_from(v).ok())
+            .unwrap_or(0)
     }
 
     /// The ordinal of `key` in map `tag`.
@@ -273,6 +308,17 @@ impl<'a> Search<'a> {
     /// names a row past the end, an importance is above 255, or a block maximum is wrong.
     pub fn check(&self) -> Result<(), Error> {
         self.fst.check(|_, _| {}).map_err(|p| fail(AUTOMATON, p))?;
+        let units = match &self.rules {
+            Some(r) => r.check()?,
+            None => 0,
+        };
+        if let Some(u) = self.unit {
+            for r in 0..self.rows {
+                if u.get(r).is_none_or(|v| v > u32::from(units)) {
+                    return Err(fail(UNIT, "a row names a unit type the rules do not"));
+                }
+            }
+        }
         let mut prev = 0_u32;
         for o in 0..self.starts.len() {
             let s = self
@@ -341,7 +387,7 @@ fn tagged<'b>(buf: &'b mut [u8; fst::MAX_KEY], tag: u8, key: &str) -> Option<&'b
 }
 
 #[cfg(feature = "write")]
-pub use write::{Maps, encode, encode_maps};
+pub use write::{Extra, Maps, encode, encode_maps, encode_maps_with, encode_with};
 
 #[cfg(feature = "write")]
 mod write {
@@ -353,7 +399,8 @@ mod write {
 
     use super::fst::Builder;
     use super::{
-        AUTOMATON, BLOCK, BLOCK_MAX, EXACT, IDS, IMPORTANCE, LENGTH, LOOSE, PHONETIC, STARTS,
+        AUTOMATON, BLOCK, BLOCK_MAX, EXACT, IDS, IMPORTANCE, LENGTH, LOOSE, PHONETIC, RULES,
+        STARTS, UNIT,
     };
     use crate::Error;
 
@@ -375,6 +422,27 @@ mod write {
     /// # Errors
     /// As [`encode`].
     pub fn encode_maps(maps: &Maps, importance: &[u8]) -> Result<Vec<u8>, Error> {
+        encode_maps_with(maps, importance, &Extra::default())
+    }
+
+    /// The optional columns: the country's query rules and each row's unit type.
+    #[derive(Clone, Debug, Default)]
+    pub struct Extra<'r> {
+        /// The rules; none leaves RULES out.
+        pub rules: Option<&'r [super::rules::Rule<'r>]>,
+        /// Each row's unit type (0 = none); empty leaves UNIT out.
+        pub units: &'r [u8],
+    }
+
+    /// As [`encode_maps`], with the optional columns.
+    ///
+    /// # Errors
+    /// As [`encode_with`].
+    pub fn encode_maps_with(
+        maps: &Maps,
+        importance: &[u8],
+        extra: &Extra<'_>,
+    ) -> Result<Vec<u8>, Error> {
         let mut keys: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
         for (tag, map) in [
             (EXACT, &maps.exact),
@@ -395,7 +463,7 @@ mod write {
                 keys.insert(key, rows);
             }
         }
-        encode(&keys, importance)
+        encode_with(&keys, importance, extra)
     }
 
     /// Encodes a SEARCH body: `keys` maps each tagged key (tag byte, then the folded text) to
@@ -408,6 +476,30 @@ mod write {
         keys: &BTreeMap<Vec<u8>, BTreeSet<u32>>,
         importance: &[u8],
     ) -> Result<Vec<u8>, Error> {
+        encode_with(keys, importance, &Extra::default())
+    }
+
+    /// As [`encode`], with the optional columns.
+    ///
+    /// # Errors
+    /// As [`encode`], and if `extra.units` is not one per row or names a unit type no rule
+    /// names, or a rule does not encode.
+    pub fn encode_with(
+        keys: &BTreeMap<Vec<u8>, BTreeSet<u32>>,
+        importance: &[u8],
+        extra: &Extra<'_>,
+    ) -> Result<Vec<u8>, Error> {
+        let rules = extra.rules.map(super::rules::encode).transpose()?;
+        let named = rules
+            .as_deref()
+            .map_or(Ok(0), |r| super::rules::Rules::new(r).check())?;
+        if !extra.units.is_empty()
+            && (extra.units.len() != importance.len() || extra.units.iter().any(|&u| u > named))
+        {
+            return Err(Error::Write(
+                "the unit types are not one per row, or name a type no rule names",
+            ));
+        }
         let mut b = Builder::new();
         let mut starts = Vec::with_capacity(keys.len() + 1);
         let mut ids = Vec::new();
@@ -449,11 +541,19 @@ mod write {
             (IMPORTANCE, encode_direct(&imp)),
             (BLOCK_MAX, encode_direct(&block_max)),
         ];
+        let units: Vec<u32> = extra.units.iter().map(|&u| u32::from(u)).collect();
+        let units = (!units.is_empty()).then(|| encode_direct(&units));
         let mut with: Vec<(u16, Codec, &[u8])> = cols
             .iter()
             .map(|(id, b)| (*id, Codec::Bitpack, b.as_slice()))
             .collect();
         with.push((AUTOMATON, Codec::Bytes, automaton.as_slice()));
+        if let Some(r) = &rules {
+            with.push((RULES, Codec::Bytes, r.as_slice()));
+        }
+        if let Some(u) = &units {
+            with.push((UNIT, Codec::Bitpack, u.as_slice()));
+        }
         with.sort_by_key(|c| c.0);
         table::encode_with(&with)
             .map_err(|_| Error::Write("the search table could not be laid out"))

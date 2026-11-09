@@ -547,8 +547,35 @@ fn search_case(c: &mut Cursor<'_>, structured: bool) {
     }
     let mut items = rows as u64;
     let (mut body, mut valid) = (Vec::new(), false);
+    // Half the cases carry query rules and unit types (columns RULES and UNIT).
+    let texts: Vec<String> = (0..4)
+        .map(|_| alloc::format!("x{}", search_text(c)))
+        .collect();
+    let rules = [
+        search::rules::Rule::Phonetic("indic-v0"),
+        search::rules::Rule::Unit {
+            abbreviation: &texts[0],
+            unit: 1,
+        },
+        search::rules::Rule::Unit {
+            abbreviation: &texts[1],
+            unit: 2,
+        },
+        search::rules::Rule::Drop(&texts[2]),
+        search::rules::Rule::Native {
+            native: &texts[3],
+            spelling: "gaun",
+        },
+    ];
+    let units: Vec<u8> = (0..rows).map(|_| c.u8() % 3).collect();
+    let with_rules = c.u8() & 1 == 0;
+    let extra = search::Extra {
+        rules: with_rules.then_some(&rules[..]),
+        units: if with_rules { &units } else { &[] },
+    };
     if structured {
-        body = search::encode(&model, &importance).unwrap_or_else(|e| panic!("a search: {e}"));
+        body = search::encode_with(&model, &importance, &extra)
+            .unwrap_or_else(|e| panic!("a search: {e}"));
         valid = !edit(c, &mut body, &mut items);
     } else {
         body.extend_from_slice(c.rest());
@@ -569,6 +596,23 @@ fn search_case(c: &mut Cursor<'_>, structured: bool) {
         checked || !valid,
         "a written search section fails its check"
     );
+    // Rules and unit types read back as written, and never panic otherwise.
+    let read: Vec<search::rules::Rule<'_>> = ix.rules().iter().collect();
+    let read_units: Vec<u8> = (0..rows as u32 + 2).map(|r| ix.unit(r)).collect();
+    if valid {
+        assert_eq!(
+            read,
+            if with_rules {
+                rules.to_vec()
+            } else {
+                Vec::new()
+            }
+        );
+        if with_rules {
+            assert_eq!(read_units[..rows], units[..], "unit types differ");
+        }
+        assert!(read_units[rows..].iter().all(|&u| u == 0));
+    }
     let keys: Vec<(&Vec<u8>, &BTreeSet<u32>)> = model.iter().collect();
     for _ in 0..4 {
         let tag = 1 + c.u8() % 3;
