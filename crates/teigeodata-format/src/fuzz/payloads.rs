@@ -861,7 +861,7 @@ fn places_case(c: &mut Cursor<'_>, structured: bool) {
                     kind,
                     level,
                     u32::from(c.u8() % 5),
-                    u32::from(c.u8() & 3),
+                    u32::from(kind == PlaceKind::Admin && c.u8() & 1 == 1),
                     elevation,
                 )
             })

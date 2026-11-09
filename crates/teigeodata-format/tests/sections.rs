@@ -127,6 +127,30 @@ fn cols(m: &Model) -> PlaceColumns<'_> {
     }
 }
 
+/// Flags: the former-unit flag only on admin units, and no undefined bit.
+#[test]
+fn places_flags() {
+    use teigeodata_format::places::FLAG_FORMER;
+    let m = model(300, 23);
+    let check = |flags: &[u32]| {
+        let body = places::encode(&PlaceColumns { flags, ..cols(&m) }).unwrap();
+        let p = pack_of(&[(Kind::PLACES, Encoding::TABLE, 300, &body)]);
+        let pack = Pack::open_verified(&p).unwrap();
+        let places = Places::open(&pack.section(Kind::PLACES).unwrap()).unwrap();
+        places.check().map(|()| places.flags(0))
+    };
+    let admin = m.kinds.iter().position(|&k| k == PlaceKind::Admin).unwrap();
+    let other = m.kinds.iter().position(|&k| k != PlaceKind::Admin).unwrap();
+    let mut flags = vec![0; 300];
+    flags[admin] = FLAG_FORMER;
+    assert!(check(&flags).is_ok());
+    flags[other] = FLAG_FORMER;
+    assert!(check(&flags).is_err(), "a former settlement");
+    flags[other] = 0;
+    flags[admin] = 2;
+    assert!(check(&flags).is_err(), "an undefined bit");
+}
+
 /// Elevations: sea level is not "unknown", the whole `i16` range but its minimum round-trips,
 /// and a column of unknowns is left out.
 #[test]

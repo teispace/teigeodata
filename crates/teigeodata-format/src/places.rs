@@ -10,7 +10,7 @@
 //! | 3 | [`KIND`] | [`PlaceKind`] code | required |
 //! | 4 | [`ADMIN_LEVEL`] | admin level, 0 = country or none | optional, absent = all 0 |
 //! | 5 | [`CLASS`] | class dictionary code, 0 = none | optional, absent = all 0 |
-//! | 6 | [`FLAGS`] | flag bits, none defined yet | optional, absent = all 0 |
+//! | 6 | [`FLAGS`] | flag bits: [`FLAG_FORMER`] | optional, absent = all 0 |
 //! | 7 | [`ELEVATION`] | metres above EGM2008, + 32768; 0 = unknown | optional, absent = all unknown |
 //!
 //! [`Places::open`] checks the frame and every column's structure; [`Places::check`] also checks
@@ -34,6 +34,11 @@ pub const ADMIN_LEVEL: u16 = 4;
 pub const CLASS: u16 = 5;
 /// Flags column.
 pub const FLAGS: u16 = 6;
+/// Flag: a former admin unit (dissolved or merged), kept so its name and code still resolve;
+/// its parent is the current unit that holds its point. Only on admin units.
+pub const FLAG_FORMER: u32 = 1;
+/// Every flag defined; [`Places::check`] refuses others.
+const FLAGS_KNOWN: u32 = FLAG_FORMER;
 /// Elevation column: orthometric metres (EGM2008) plus [`ELEVATION_BIAS`]; 0 is unknown.
 pub const ELEVATION: u16 = 7;
 /// What [`ELEVATION`] adds to a height so that every `i16` but `i16::MIN` is stored above 0.
@@ -176,6 +181,7 @@ impl<'a> Places<'a> {
             last = h;
         }
         let mut levels = self.optional[0].map(|c| c.values(0..n));
+        let mut flags = self.optional[2].map(|c| c.values(0..n));
         for code in self.kind.values(0..n) {
             let kind = PlaceKind::from_code(code).ok_or_else(|| fail(KIND, "an unknown kind"))?;
             let level = levels.as_mut().and_then(Iterator::next).unwrap_or(0);
@@ -183,6 +189,13 @@ impl<'a> Places<'a> {
                 return Err(fail(
                     ADMIN_LEVEL,
                     "an admin level that is too big or not on an admin unit",
+                ));
+            }
+            let f = flags.as_mut().and_then(Iterator::next).unwrap_or(0);
+            if f & !FLAGS_KNOWN != 0 || (f & FLAG_FORMER != 0 && kind != PlaceKind::Admin) {
+                return Err(fail(
+                    FLAGS,
+                    "an unknown flag, or a former unit that is not admin",
                 ));
             }
         }
