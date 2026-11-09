@@ -76,12 +76,14 @@ signed pack per address; a client holds any subset of its sections.
   `teigeodata_format::component` (D-135), checked against the spec (2026-11-09)
 - [x] Forge writes them; `check-pack` prints wire bytes per component from the real transport
   asset, and gates them (G-wire, D-135) (2026-11-09)
-- [ ] Storage: head plus the installed sections (sparse file, or offsets in a compact file),
-  a sidecar of present and verified sections
+- [x] The partial file: head, installed sections at their offsets, the footer rebuilt from the
+  head (`footer_of`), opened with `Pack::open_head` (D-136, 2026-11-09)
+- [ ] Storage on disk: the partial file as a sparse file (or offsets in a compact file where a
+  platform has no holes), a sidecar of present and verified sections; with 4.5 and 4.6
 - [x] Engine: a layer opens with any closed subset; a query that needs a missing component
   returns `MissingComponent`; `Engine::elevation` (D-136, 2026-11-09)
-- [ ] Sync: `components(&[...])` plans only those sections' frames; adding one later fetches
-  only its frames
+- [x] Sync: `Frames::plan_components(set)` plans only those sections' frames and the head
+  (D-136); the request API on it comes with the download manager (4.5)
 - [ ] Cargo features per component; a binary without one carries none of its readers
 - [x] Gates: points-only Nepal at most 0.55 MB on the wire (522,192 B main, 493,757 B lite,
   2026-11-09); components sum to the asset (G-wire)
@@ -168,3 +170,4 @@ signed pack per address; a client holds any subset of its sections.
 | 2026-11-09 | 4.1b: PLACE_TZ instead of a COMPONENTS field; no admin column | D-134 |
 | 2026-11-09 | 4.1b: the component table and G-wire; the per-component metamorphic gate its own line | D-135 |
 | 2026-11-09 | 4.1b: the engine on installed components, and its gate | D-136 |
+| 2026-11-09 | 4.1b: the partial file and the component plan; disk storage joins 4.5/4.6 | D-136: a points-only install lacks the footer and BLOCK_HASHES |

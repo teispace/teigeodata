@@ -391,3 +391,66 @@ fn the_bound_is_zstds() {
         );
     }
 }
+
+/// Installing by component (D-133, D-136): the plan fetches the head and the chosen sections
+/// (with what they need, and `BLOCK_HASHES` only for a section of 1 MiB or more); those frames
+/// decoded into a zeroed file, with the footer rebuilt from the head, open as the pack, the
+/// installed sections verify and the others do not.
+#[test]
+fn a_component_install_fetches_only_its_frames_and_opens() {
+    use teigeodata_format::component::{Component, Components};
+    let pack = pack();
+    let asset = encode(&pack, zstd(3)).unwrap();
+    let frames = frames_of(&asset, &pack).unwrap();
+    let mut decoder = Decoder::new();
+    let mut out = Vec::new();
+    let install = |set: Components, decoder: &mut Decoder, out: &mut Vec<u8>| {
+        let plan = frames.plan_components(set).unwrap();
+        let mut file = vec![0_u8; pack.len()];
+        let mut fetched = 0;
+        for fetch in &plan {
+            fetched += fetch.compressed.end - fetch.compressed.start;
+            for i in fetch.frames.clone() {
+                let f = frames.frame(i).unwrap();
+                let src = &asset[f.compressed.start as usize..f.compressed.end as usize];
+                decoder.frame(i, &f, src, out).unwrap();
+                file[f.decoded.start as usize..f.decoded.end as usize].copy_from_slice(out);
+            }
+        }
+        let footer = teigeodata_format::footer_of(&file).unwrap();
+        let at = file.len() - footer.len();
+        file[at..].copy_from_slice(&footer);
+        (plan, file, fetched)
+    };
+    let kinds = |file: &[u8]| -> Vec<(Kind, bool)> {
+        let p = Pack::open_head(file).unwrap();
+        p.sections()
+            .filter(|s| !s.bytes().is_empty())
+            .map(|s| (s.kind(), s.verify().is_ok()))
+            .collect()
+    };
+
+    // Points only: the head, IDMAP and PLACES, one request; no NAMES, no BLOCK_HASHES.
+    let (plan, file, points) = install(Components::of(&[Component::Point]), &mut decoder, &mut out);
+    assert_eq!(plan.len(), 1);
+    assert_eq!(plan[0].decoded.start, 0);
+    assert_eq!(
+        kinds(&file),
+        [
+            (Kind::IDMAP, true),
+            (Kind::PLACES, true),
+            (Kind::NAMES, false),
+            (Kind::BLOCK_HASHES, false),
+        ]
+    );
+    // Names: its 2.5 MiB section brings BLOCK_HASHES and, by its needs, the points.
+    let (_, file, names) = install(Components::of(&[Component::Names]), &mut decoder, &mut out);
+    assert!(kinds(&file).iter().all(|&(_, ok)| ok));
+    assert!(names > points);
+    // Everything: the whole asset but the seek table.
+    let (_, file, all) = install(Components::all(), &mut decoder, &mut out);
+    assert_eq!(file, pack);
+    assert_eq!(all, asset.len() as u64 - frames.table_len());
+    // A head that is not a pack has no footer.
+    assert!(teigeodata_format::footer_of(&[0; 200]).is_err());
+}

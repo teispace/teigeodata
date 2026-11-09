@@ -115,6 +115,32 @@ struct Head {
     end: u64,
 }
 
+/// The length of a pack's footer.
+pub const FOOTER_SIZE: usize = crate::layout::FOOTER_BYTES;
+
+/// The footer of the pack whose header starts `head`: the magic, the file length and the head
+/// hash, all copied from the header. A pack installed with only some sections (D-136) lacks
+/// the last frame that carries the footer, and writes this one instead; [`Pack::open`] then
+/// checks it against the head digest as for any pack, so a forged header gains nothing.
+///
+/// # Errors
+/// [`Error::Truncated`] if `head` is shorter than a header; [`Error::Magic`] if it is not one.
+pub fn footer_of(head: &[u8]) -> Result<[u8; FOOTER_SIZE], Error> {
+    use zerocopy::IntoBytes;
+    let (header, _) = Header::ref_from_prefix(head).map_err(|_| Error::Truncated)?;
+    if header.magic != MAGIC {
+        return Err(Error::Magic);
+    }
+    let footer = Footer {
+        magic: MAGIC,
+        file_len: header.file_len,
+        head_hash: header.head_hash,
+    };
+    let mut out = [0; FOOTER_SIZE];
+    out.copy_from_slice(footer.as_bytes());
+    Ok(out)
+}
+
 /// Checks the header against the footer and the real length, and the head's layout: table,
 /// manifest and signature contiguous, all within 16 KiB.
 fn check_header(header: &Header, footer: &Footer, len: u64) -> Result<Head, Error> {
@@ -234,6 +260,20 @@ impl<'a> Pack<'a> {
     /// # Errors
     /// The first problem found, as an [`Error`].
     pub fn open(bytes: &'a [u8]) -> Result<Self, Error> {
+        let pack = Self::open_head(bytes)?;
+        crate::blocks::check(pack.section(Kind::BLOCK_HASHES), pack.sections())?;
+        Ok(pack)
+    }
+
+    /// Opens a pack installed with only some of its sections (D-136): the checks of
+    /// [`Pack::open`] that need only the head and the footer. It reads no section's bytes, so
+    /// the sections not installed may be holes; the `BLOCK_HASHES` list is checked when a
+    /// section asks for its blocks ([`Pack::blocks`], which proves them against the signed
+    /// section hash). The footer may be rebuilt with [`footer_of`].
+    ///
+    /// # Errors
+    /// As [`Pack::open`], but for the block-hash list's structure.
+    pub fn open_head(bytes: &'a [u8]) -> Result<Self, Error> {
         let len = u64::try_from(bytes.len()).map_err(|_| Error::Length)?;
         if len < HEADER_LEN + FOOTER_LEN {
             return Err(Error::Truncated);
@@ -266,16 +306,14 @@ impl<'a> Pack<'a> {
             None => None,
         };
         check_sections(bytes, table, head.end, len - FOOTER_LEN)?;
-        let pack = Self {
+        Ok(Self {
             bytes,
             header,
             table,
             manifest,
             digest,
             signature,
-        };
-        crate::blocks::check(pack.section(Kind::BLOCK_HASHES), pack.sections())?;
-        Ok(pack)
+        })
     }
 
     /// Section `kind`'s block hashes, proven against its hash (B12): O(blocks) merges, no

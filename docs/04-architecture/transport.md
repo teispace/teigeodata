@@ -59,7 +59,9 @@ skippable frame     the seek table (magic 0x184D2A5E, Frame_Size)
    It returns `Frames`, every frame's byte range in the asset and in the pack.
 4. `frames.plan(wanted)` turns wanted byte ranges of the pack into fetches: runs of adjacent
    frames, one range request each, sorted and never touching (the GitHub asset host refuses
-   multi-range requests). `plan_sections(kinds)` does it for whole sections.
+   multi-range requests). `plan_sections(kinds)` does it for whole sections, and `plan_components(set)` for
+   an install by component (D-136): the head frame, the sections of the set and what it needs,
+   and `BLOCK_HASHES` when one of them is 1 MiB or more.
 5. `Decoder::frame` (feature `zstd`, `ruzstd`) decodes one frame with its output capped at the
    decoded size and its window at 1 MiB. A frame that decodes to more or fewer bytes, or leaves
    bytes over, is refused.

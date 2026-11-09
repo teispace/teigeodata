@@ -133,9 +133,23 @@ fn rebuild(p: &Pack<'_>) -> Vec<u8> {
     out
 }
 
-/// `Pack::open` never panics, and any pack it accepts is canonical.
+/// `Pack::open`, `Pack::open_head` and `footer_of` never panic; any pack `open` accepts is
+/// canonical, `open_head` accepts it too, and its footer is the one `footer_of` rebuilds.
 pub fn open(data: &[u8]) {
+    let footer = crate::footer_of(data);
+    if let Ok(h) = Pack::open_head(data) {
+        // A partial install's reads: block lists are checked when asked for, never panic.
+        for s in h.sections() {
+            let _ = h.blocks(s.kind());
+        }
+    }
     let Ok(p) = Pack::open(data) else { return };
+    assert!(
+        Pack::open_head(data).is_ok(),
+        "open accepts what open_head refuses"
+    );
+    let tail = data.len() - crate::FOOTER_SIZE;
+    assert_eq!(footer.ok().as_ref().map(|f| &f[..]), data.get(tail..));
     // Every accessor works on an accepted pack.
     for s in p.sections() {
         assert_eq!(p.section(s.kind()).map(|t| t.bytes()), Some(s.bytes()));

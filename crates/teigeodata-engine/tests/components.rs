@@ -18,15 +18,51 @@ use teigeodata_core::{E7, PlaceId, Point};
 use teigeodata_engine::{
     Component, Components, Engine, Error, Layer, LayerOptions, Place, Rect, Scratch, Verify,
 };
-use teigeodata_format::Pack;
+use teigeodata_format::blocks::MIN_COVERED;
+use teigeodata_format::{Encoding, Kind, Pack, Writer};
+
+/// `pack` with a 2 MiB BLOBS section (`extra`) added, so it has `BLOCK_HASHES`.
+fn with_blobs(pack: &[u8]) -> Vec<u8> {
+    let p = Pack::open(pack).unwrap();
+    let mut x = 0x2545_f491_u32;
+    let blob: Vec<u8> = (0..2 << 20)
+        .map(|_| {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            x.to_le_bytes()[0]
+        })
+        .collect();
+    let mut sections: Vec<(Kind, Encoding, u64, &[u8])> = p
+        .sections()
+        .filter(|s| s.kind() != Kind::BLOCK_HASHES)
+        .map(|s| (s.kind(), s.encoding(), s.item_count(), s.bytes()))
+        .collect();
+    sections.push((Kind::BLOBS, Encoding::RAW, 1, &blob));
+    let m = p.manifest();
+    let mut w = Writer::new(m.address(), m.component(), m.release()).unwrap();
+    if let Some(b) = m.get(teigeodata_format::Tag::BBOX) {
+        w.manifest(teigeodata_format::Tag::BBOX, b).unwrap();
+    }
+    w.pack(&sections, None).unwrap()
+}
 
 /// `bytes` with every section outside `installed` zeroed: a hole, as storage leaves it.
+/// `BLOCK_HASHES` too, unless an installed section is large enough to need it.
 fn holed(bytes: &[u8], installed: Components) -> Vec<u8> {
     let pack = Pack::open(bytes).unwrap();
     let mut out = bytes.to_vec();
     let base = bytes.as_ptr() as usize;
+    let inside = |k: Kind| Component::of(k).is_some_and(|c| installed.contains(c));
+    let blocked = pack
+        .sections()
+        .any(|s| inside(s.kind()) && s.bytes().len() as u64 >= MIN_COVERED);
     for s in pack.sections() {
-        if Component::of(s.kind()).is_some_and(|c| !installed.contains(c)) {
+        let hole = match Component::of(s.kind()) {
+            Some(c) => !installed.contains(c),
+            None => s.kind() == Kind::BLOCK_HASHES && !blocked,
+        };
+        if hole {
             let start = s.bytes().as_ptr() as usize - base;
             out[start..start + s.bytes().len()].fill(0);
         }
@@ -156,7 +192,7 @@ fn each_component_set_answers_as_the_whole_pack_or_names_what_is_missing() {
         Admin, AdminIndex, Elevation, Names, Point as P, Search, Timezone, TimezoneIndex,
     };
     let model = synthetic(800, 21);
-    let whole = model.encode();
+    let whole = with_blobs(&model.encode());
     let mut r = Rng(9);
     let probe: Vec<PlaceId> = (0..60)
         .map(|_| model.ids[r.below(model.ids.len() as u64) as usize])
@@ -183,7 +219,6 @@ fn each_component_set_answers_as_the_whole_pack_or_names_what_is_missing() {
             Component::Boundaries,
             Component::Postal,
             Component::Dem,
-            Component::Extra
         ]))
     );
     // The probes are not trivially empty.
@@ -200,7 +235,7 @@ fn each_component_set_answers_as_the_whole_pack_or_names_what_is_missing() {
             .all(|a| a.as_ref().is_ok_and(|v| !v.is_empty()))
     );
 
-    let sets: [&[Component]; 8] = [
+    let sets: [&[Component]; 9] = [
         &[P],
         &[P, Elevation],
         &[P, Timezone],
@@ -209,6 +244,7 @@ fn each_component_set_answers_as_the_whole_pack_or_names_what_is_missing() {
         &[P, Names, Search],
         &[P, Names, Search, Admin],
         &[P, AdminIndex, Component::Boundaries],
+        &[P, Component::Extra],
     ];
     for list in sets {
         let set = Components::of(list);

@@ -892,6 +892,14 @@ Then, on demand:
 A new version always gets a new file. A file that may be mapped is never written over. The reader crate keeps
 `#![forbid(unsafe_code)]`; mapping lives in the engine (B13, D-113, [engine](engine.md)).
 
+**Partial installs (D-136).** A pack may be installed with only some components: the head, the
+installed sections at their offsets, and the footer, with holes elsewhere. The last frame of the
+transport, which carries the footer, may not be among them, so the installer writes the footer
+from the head with `footer_of` (it is the header's magic, file length and head hash, and
+`Pack::open` checks it against the head digest as always). Such a file opens with
+`Pack::open_head`, which reads no section's bytes: the `BLOCK_HASHES` list is checked only when
+a section of 1 MiB or more asks for its blocks, against its signed hash.
+
 ## Open items
 
 - The 14 benchmarks B1–B14 (catalogue in [benchmarks](../06-engineering/benchmarks.md)).

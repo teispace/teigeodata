@@ -55,7 +55,9 @@ names them (`None`: the whole pack). The layer opens no view on, and never hashe
 a component outside the set, so those bytes may be holes in a sparse file; under
 `Verify::Eager` only the installed sections are checked. The set must hold what its components
 need (`Components::closed`) and `point` whenever the pack has it, or the layer is refused with
-`Error::MissingComponent`. `Layer::components()` says what is installed and present.
+`Error::MissingComponent`. `Layer::components()` says what is installed and present. A layer
+with `installed` set opens with `Pack::open_head`, which reads only the head, so the sections
+left out (`BLOCK_HASHES` among them, when no installed section needs it) may be holes.
 
 A query that needs a section the pack has but the layer was not installed with returns
 `Error::MissingComponent { address, component }`, never a wrong or empty answer: every query

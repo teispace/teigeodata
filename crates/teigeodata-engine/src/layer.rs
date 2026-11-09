@@ -118,7 +118,11 @@ impl<'a> Views<'a> {
     /// the structure of each view and the proof of every block-hash list. No section is hashed,
     /// and no section of a component outside `installed` is read.
     pub(crate) fn open(bytes: &'a [u8], installed: Option<Components>) -> Result<Self, Error> {
-        let pack = Pack::open(bytes)?;
+        // A partial install may have holes, BLOCK_HASHES among them: only the head is read.
+        let pack = match installed {
+            None => Pack::open(bytes)?,
+            Some(_) => Pack::open_head(bytes)?,
+        };
         let missing = missing(&pack, installed)?;
         let get = |k| {
             pack.section(k)

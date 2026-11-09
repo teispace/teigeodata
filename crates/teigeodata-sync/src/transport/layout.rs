@@ -3,6 +3,8 @@
 use alloc::vec::Vec;
 use core::ops::Range;
 
+use teigeodata_format::blocks::MIN_COVERED;
+use teigeodata_format::component::{Component, Components};
 use teigeodata_format::{Kind, Pack};
 
 use super::{MAX_FRAME, MAX_FRAMES, MAX_HEAD_FRAME};
@@ -285,6 +287,41 @@ impl Frames {
             .filter(|s| kinds.contains(&s.kind))
             .map(|s| s.offset..s.offset + s.len)
             .collect();
+        self.plan(&wanted)
+    }
+
+    /// The fetches that install `components` (D-133, D-136): the head frame, which every
+    /// install holds; the sections of `components` and everything they need
+    /// ([`Components::closed`]); and `BLOCK_HASHES` when one of those sections is
+    /// [`MIN_COVERED`] or more, whose blocks it verifies. Adding a component later is the plan
+    /// for the new set less the frames already held.
+    ///
+    /// # Errors
+    /// As [`Frames::plan`]; never for a checked layout.
+    pub fn plan_components(&self, components: Components) -> Result<Vec<Fetch>, Error> {
+        let set = components.closed();
+        let chosen = |k: Kind| Component::of(k).is_some_and(|c| set.contains(c));
+        let blocked = self
+            .layout
+            .sections
+            .iter()
+            .any(|s| chosen(s.kind) && s.len >= MIN_COVERED);
+        let mut wanted: Vec<Range<u64>> = Vec::with_capacity(self.layout.sections.len() + 1);
+        // The head: the first frame, up to the first section.
+        let head_end = self
+            .layout
+            .starts
+            .get(1)
+            .copied()
+            .unwrap_or(self.layout.file_len);
+        wanted.push(0..head_end);
+        wanted.extend(
+            self.layout
+                .sections
+                .iter()
+                .filter(|s| chosen(s.kind) || (blocked && s.kind == Kind::BLOCK_HASHES))
+                .map(|s| s.offset..s.offset + s.len),
+        );
         self.plan(&wanted)
     }
 
