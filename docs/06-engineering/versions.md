@@ -58,6 +58,7 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | GitHub actions/cache | v6.1.0 | 2026-11-07 | GitHub | 2026-12-07 |
 | GitHub actions/upload-artifact | v7.0.2 | 2026-11-07 | GitHub | 2026-12-07 |
 | cargo-fuzz | 0.13.2 | 2026-11-07 | crates.io | 2026-12-07 |
+| cargo-nextest (nightly Miri) | 0.9.151 | 2026-11-09 | GitHub releases | 2026-12-09 |
 | libfuzzer-sys | 0.4.13 | 2026-11-07 | crates.io | 2026-12-07 |
 | Rust nightly (cargo-fuzz, Miri; unpinned in CI, latest each night) | 1.101.0-nightly 2026-10-20 locally | 2026-11-07 | `rustc +nightly --version` | 2026-12-07 |
 | cargo-deny (action / local) | v2.1.1 / 0.20.2 | 2026-11-06 | GitHub / Homebrew | 2026-12-06 |

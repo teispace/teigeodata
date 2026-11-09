@@ -1,0 +1,8 @@
+# cargo-nextest profiles. Only the nightly Miri job uses nextest today (one process per test,
+# run in parallel, each with its own time limit, so a slow test is named instead of using up
+# the job's budget).
+
+[profile.miri]
+fail-fast = false
+# Report a test after 10 minutes; stop it after 4 periods (40 minutes).
+slow-timeout = { period = "10m", terminate-after = 4 }

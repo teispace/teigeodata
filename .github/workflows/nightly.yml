@@ -76,25 +76,37 @@ jobs:
           if-no-files-found: ignore
 
   # Miri: undefined behaviour, out-of-bounds and alignment errors in the zero-copy reader and
-  # the codecs. Miri is about a million times slower than native, so each test group is its own
-  # parallel job with its own budget, and the tests shrink under `cfg(miri)` (`crate::cases`,
-  # `fuzz::limit`): one seeded input per harness; libFuzzer covers volume. The determinism gate
-  # is byte equality of safe code and runs natively under `cargo test`.
+  # the codecs. Miri is about a million times slower than native, so tests shrink under
+  # `cfg(miri)` (`crate::cases`, `fuzz::limit`: one seeded input per harness; libFuzzer covers
+  # volume), and nextest runs each test in its own process, in parallel, with a 40-minute limit
+  # per test (`.config/nextest.toml`, profile `miri`): a slow test is named in the log instead of
+  # using up the job. The large groups are split across jobs by count. The determinism gate is
+  # byte equality of safe code and runs natively under `cargo test`.
   miri:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         include:
           - group: core
             args: -p teigeodata-core --lib
-          - group: format-lib
-            args: -p teigeodata-format --lib
+          - group: format-lib-1
+            args: -p teigeodata-format --lib --partition count:1/3
+          - group: format-lib-2
+            args: -p teigeodata-format --lib --partition count:2/3
+          - group: format-lib-3
+            args: -p teigeodata-format --lib --partition count:3/3
           - group: format-open
             args: -p teigeodata-format --test open
-          - group: format-fuzz
-            args: -p teigeodata-format --test fuzz
+          - group: format-fuzz-1
+            args: -p teigeodata-format --test fuzz --partition count:1/4
+          - group: format-fuzz-2
+            args: -p teigeodata-format --test fuzz --partition count:2/4
+          - group: format-fuzz-3
+            args: -p teigeodata-format --test fuzz --partition count:3/4
+          - group: format-fuzz-4
+            args: -p teigeodata-format --test fuzz --partition count:4/4
     name: miri (${{ matrix.group }})
     env:
       TG_FUZZ_ITERS: "1"
@@ -106,5 +118,8 @@ jobs:
         run: |
           rustup toolchain install nightly --profile minimal --component miri,rust-src
           cargo +nightly miri setup
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: cargo-nextest@0.9.151
       - name: Miri
-        run: cargo +nightly miri test --locked ${{ matrix.args }}
+        run: cargo +nightly miri nextest run --locked --profile miri --no-tests=pass ${{ matrix.args }}

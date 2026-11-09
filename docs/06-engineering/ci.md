@@ -51,8 +51,12 @@ fuzzing time per target as an input).
   `open`, `round_trip`, `mutate`, `manifest`, `sections`, `bitpack`, `table` and `bits`, all in
   `teigeodata_format::fuzz`. The corpus of each target is restored from the Actions cache, minimised
   with `cargo fuzz cmin` and saved again; a crash fails the job and uploads its input.
-- **miri**: four parallel jobs (core lib; format lib; format `open`; format `fuzz` with one
-  seeded input per harness, `TG_FUZZ_ITERS=1`), each with its own 5-hour budget. Miri runs 10³ to
+- **miri**: nine parallel jobs under `cargo miri nextest` (core lib; format lib in three
+  parts; format `open`; format `fuzz` in four parts, one seeded input per harness,
+  `TG_FUZZ_ITERS=1`), 90 minutes each. Nextest runs every test in its own process with a
+  40-minute limit (`.config/nextest.toml`, profile `miri`), so a slow test is named in the log;
+  with `cargo miri test` in one process, `format-lib` and `format-fuzz` ran into the old 5-hour
+  budget every night without saying which test was slow (2026-11-08). Miri runs 10³ to
   10⁶ times slower than native (most for hashing and signatures), so tests shrink under `cfg(miri)`: the hashing and search
   tests take fewer lengths and smaller key sets, and the harnesses take smaller limits
   (`fuzz::limit`). On an Apple silicon Mac, run Miri with `RUSTFLAGS='--cfg sha2_backend="soft"'`:
