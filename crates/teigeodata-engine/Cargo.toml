@@ -1,0 +1,52 @@
+[package]
+name = "teigeodata-engine"
+description = "The layered engine of teigeodata: open packs mapped, verify them lazily, and answer queries across every installed pack as one dataset."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[features]
+default = ["mmap"]
+# Map pack files with `memmap2` (native targets only; WASM reads packs into memory). The one
+# module that uses `unsafe` is `map.rs` (D-113).
+mmap = ["dep:memmap2"]
+
+[dependencies]
+teigeodata-core.workspace = true
+teigeodata-format = { workspace = true, features = ["spatial"] }
+teigeodata-names.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+memmap2 = { version = "0.9.12", optional = true }
+
+[dev-dependencies]
+teigeodata-format = { workspace = true, features = ["write", "spatial"] }
+
+# The workspace lints with `unsafe_code` lowered from forbid to deny, as for the boundary
+# crates (D-067): mapping a file is `unsafe` in Rust, and `map.rs` is the one module allowed to
+# do it, with a reason (D-113). `cargo xtask check-workspace` keeps this table equal to the
+# workspace's in every other entry.
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+unimplemented = "warn"
+todo = "warn"
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+indexing_slicing = "warn"
+allow_attributes_without_reason = "warn"

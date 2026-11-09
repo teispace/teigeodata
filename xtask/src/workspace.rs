@@ -2,8 +2,8 @@
 //!
 //! - The forge is a separate Cargo workspace (ADR-0001), so it cannot inherit the main table;
 //!   its `[workspace.lints]` must be identical.
-//! - Boundary crates (the C ABI crate and the `bindings/` workspace of language shims) need
-//!   `unsafe` in their audited, generated modules. Their table must be the main one with a
+//! - Boundary crates (the C ABI crate, the `bindings/` workspace of language shims, and the
+//!   engine, which maps pack files, D-113) need `unsafe` in their audited modules. Their table must be the main one with a
 //!   single change: `unsafe_code` lowered from `forbid` to `deny`, so a module can allow it
 //!   with a reason (and nothing else can).
 
@@ -15,6 +15,7 @@ const TABLES: &[(&str, &[&str], bool)] = &[
     ("forge/Cargo.toml", &["workspace", "lints"], false),
     ("bindings/Cargo.toml", &["workspace", "lints"], true),
     ("crates/teigeodata-ffi/Cargo.toml", &["lints"], true),
+    ("crates/teigeodata-engine/Cargo.toml", &["lints"], true),
 ];
 
 pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
