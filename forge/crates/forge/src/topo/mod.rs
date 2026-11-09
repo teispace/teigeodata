@@ -11,8 +11,9 @@
 //!    cross or touch away from a shared vertex stop the stage (snap rounding is not built).
 //! 2. Every coarser level the source names (the country at least) is dissolved from the finest
 //!    units by their stated ancestor codes, so all levels share one arc set, and each is compared with the
-//!    source's own polygon of that unit: the distance from each source vertex to the derived
-//!    border, and the area. A unit off by more than [`MAX_PARENT_M`] stops the stage.
+//!    source's own polygon of that unit both ways, by hole count and by area (G-topo). A unit
+//!    off by more than [`MAX_PARENT_M`] either way, or with a hole the other lacks, stops the
+//!    stage: a gap between children is a hole of the dissolved parent.
 //! 3. Levels of detail and the guard ([`simplify`]); area and label point ([`measure`]).
 //!
 //! Output, in `data/build/topology/<source>/`: `arcs.bin` (an ARCS payload, arcs in Hilbert
@@ -115,14 +116,82 @@ fn sort_arcs(arcs: Vec<Vec<V>>, refs: &mut [Vec<Ref>]) -> Vec<Vec<V>> {
     order.iter().filter_map(|&o| arcs[o].take()).collect()
 }
 
-/// The largest distance, metres, from a vertex of `src` to the border of `parts`, and the share
+/// A dissolved parent against the source's own polygon of it (G-topo).
+#[derive(Debug)]
+struct Compared {
+    /// The largest distance, metres, from a source vertex to the derived border.
+    to_derived: f64,
+    /// The largest distance, metres, from a derived vertex to the source's border: a gap
+    /// between children leaves derived rings, and their vertices, away from it.
+    to_source: f64,
+    /// The share of source vertices that are derived vertices.
+    same: f64,
+    /// Holes in the derived polygon and in the source's.
+    holes: (usize, usize),
+    /// `|derived − source| / source` area.
+    area_off: f64,
+}
+
+impl Compared {
+    /// What makes the parent wrong: a border apart by more than [`MAX_PARENT_M`] either way,
+    /// or a hole one side has and the other does not (a gap or an overlap between children).
+    fn problem(&self) -> Option<String> {
+        if self.to_derived > MAX_PARENT_M {
+            return Some(format!(
+                "a source vertex lies {:.2} m from the border dissolved from its children",
+                self.to_derived
+            ));
+        }
+        if self.to_source > MAX_PARENT_M {
+            return Some(format!(
+                "a vertex dissolved from its children lies {:.2} m from the source's border (a gap between them)",
+                self.to_source
+            ));
+        }
+        (self.holes.0 != self.holes.1).then(|| {
+            format!(
+                "{} holes dissolved from its children, {} in the source (a gap between them)",
+                self.holes.0, self.holes.1
+            )
+        })
+    }
+}
+
+fn compare(arcs: &[Vec<V>], parts: &Parts, src: &[Vec<V>]) -> Compared {
+    let mine: Vec<Vec<V>> = parts
+        .iter()
+        .flatten()
+        .map(|r| ring_points(arcs, r))
+        .collect();
+    let (to_derived, same) = distance(&mine, src);
+    let (to_source, _) = distance(src, &mine);
+    let area = |rings: &[Vec<V>]| {
+        rings
+            .iter()
+            .map(|r| measure::ring_area_m2(r))
+            .sum::<f64>()
+            .abs()
+    };
+    let theirs = area(src);
+    Compared {
+        to_derived,
+        to_source,
+        same,
+        holes: (
+            parts.iter().map(|p| p.len().saturating_sub(1)).sum(),
+            src.iter().filter(|r| arcs::area2(r) < 0).count(),
+        ),
+        area_off: (area(&mine) - theirs).abs() / theirs.max(1.0),
+    }
+}
+
+/// The largest distance, metres, from a vertex of `src` to the border `rings`, and the share
 /// of `src`'s vertices that are vertices of that border.
-fn distance(arcs: &[Vec<V>], parts: &Parts, src: &[Vec<V>]) -> (f64, f64) {
+fn distance(rings: &[Vec<V>], src: &[Vec<V>]) -> (f64, f64) {
     const CELL: i32 = 10_000; // 0.001°: about 100 m
     let mut grid: HashMap<(i32, i32), Vec<(V, V)>> = HashMap::new();
     let mut verts: std::collections::HashSet<V> = std::collections::HashSet::new();
-    for ring in parts.iter().flatten() {
-        let pts = ring_points(arcs, ring);
+    for pts in rings {
         let n = pts.len();
         for i in 0..n {
             let (a, b) = (pts[i], pts[(i + 1) % n]);
@@ -143,6 +212,8 @@ fn distance(arcs: &[Vec<V>], parts: &Parts, src: &[Vec<V>]) -> (f64, f64) {
         }
         let kx = M_PER_UNIT * crate::num::cos_deg(f64::from(p.1) * 1e-7);
         let (cx, cy) = (p.0.div_euclid(CELL), p.1.div_euclid(CELL));
+        // The 3 × 3 cells hold every segment within about 100 m; past that the point is far
+        // from the border whatever the exact distance, so a miss counts as infinitely far.
         let mut best = f64::INFINITY;
         for x in cx - 1..=cx + 1 {
             for y in cy - 1..=cy + 1 {
@@ -303,7 +374,7 @@ fn stage(root: &Path, source: &str, units: &[Src]) -> Result<String, String> {
                 .flat_map(|p| p.iter().enumerate().map(|(k, r)| (r.clone(), k == 0)))
         })
         .collect();
-    let (levels, report) = simplify::levels(&arcs, &guard_rings);
+    let (levels, report) = guarded_levels(source, &arcs, &guard_rings)?;
     let measured: Vec<(V, u32, [i32; 4])> = polys
         .par_iter()
         .map(|(_, _, p)| measure_poly(&arcs, p))
@@ -329,6 +400,23 @@ fn stage(root: &Path, source: &str, units: &[Src]) -> Result<String, String> {
     let _ = writeln!(s, "\nIn {:.1?}.", t.elapsed());
     fs::write(dir.join("summary.md"), &s).map_err(|e| e.to_string())?;
     Ok(s)
+}
+
+/// The levels of detail; G-topo fails when the guard leaves a crossing or degenerate ring.
+type Levels = (Vec<Vec<u8>>, Vec<(u8, simplify::Guarded)>);
+fn guarded_levels(
+    source: &str,
+    arcs: &[Vec<V>],
+    rings: &[(Vec<Ref>, bool)],
+) -> Result<Levels, String> {
+    let (levels, report) = simplify::levels(arcs, rings);
+    if let Some((lod, g)) = report.iter().find(|(_, g)| g.left > 0) {
+        return Err(format!(
+            "G-topo: {source}: level of detail {lod} keeps {} crossings or degenerate rings no removed vertex fixes",
+            g.left
+        ));
+    }
+    Ok((levels, report))
 }
 
 /// What snap rounding did, when the source was not noded.
@@ -360,51 +448,44 @@ fn parents_report(
         .collect();
     let _ = writeln!(
         s,
-        "| Level | Units | Source vertices on the derived border | Largest distance | Area off (P50 / max) |\n|---:|---:|---:|---:|---:|"
+        "| Level | Units | Source vertices on the derived border | Largest distance | Back (derived to source) | Holes | Area off (P50 / max) |\n|---:|---:|---:|---:|---:|---:|---:|"
     );
     for level in 0..finest {
         let src: Vec<&Src> = units.iter().filter(|u| u.level == level).collect();
         if src.is_empty() {
             continue;
         }
-        let rows: Vec<(f64, f64, f64)> = src
+        let rows: Vec<Compared> = src
             .par_iter()
             .map(|u| {
                 let parts = derived
                     .get(&(level, u.pcode.as_str()))
                     .ok_or_else(|| format!("adm{level} {}: no finest unit names it", u.pcode))?;
-                let (d, same) = distance(arcs, parts, &u.rings);
-                let a = |rings: Vec<Vec<V>>| {
-                    rings
-                        .iter()
-                        .map(|r| measure::ring_area_m2(r))
-                        .sum::<f64>()
-                        .abs()
-                };
-                let mine = a(parts
-                    .iter()
-                    .flatten()
-                    .map(|r| ring_points(arcs, r))
-                    .collect());
-                let theirs = a(u.rings.clone());
-                Ok((d, same, (mine - theirs).abs() / theirs.max(1.0)))
+                Ok(compare(arcs, parts, &u.rings))
             })
             .collect::<Result<_, String>>()?;
-        let worst = rows.iter().map(|r| r.0).fold(0.0, f64::max);
-        let same = rows.iter().map(|r| r.1).sum::<f64>() / f(rows.len());
-        let mut off: Vec<f64> = rows.iter().map(|r| r.2).collect();
+        let worst = rows.iter().map(|r| r.to_derived).fold(0.0, f64::max);
+        let back = rows.iter().map(|r| r.to_source).fold(0.0, f64::max);
+        let same = rows.iter().map(|r| r.same).sum::<f64>() / f(rows.len());
+        let holes = rows.iter().map(|r| r.holes.0).sum::<usize>();
+        let mut off: Vec<f64> = rows.iter().map(|r| r.area_off).collect();
         off.sort_by(f64::total_cmp);
         let _ = writeln!(
             s,
-            "| {level} | {} | {:.2}% | {worst:.3} m | {:.4}% / {:.4}% |",
+            "| {level} | {} | {:.2}% | {worst:.3} m | {back:.3} m | {holes} | {:.4}% / {:.4}% |",
             rows.len(),
             same * 100.0,
             off[off.len() / 2] * 100.0,
             off[off.len() - 1] * 100.0
         );
-        if worst > MAX_PARENT_M {
+        if let Some((u, why)) = src
+            .iter()
+            .zip(&rows)
+            .find_map(|(u, r)| r.problem().map(|w| (u, w)))
+        {
             return Err(format!(
-                "{s}\nadm{level}: a source unit lies {worst:.2} m from the border dissolved from its children (limit {MAX_PARENT_M} m)"
+                "{s}\nG-topo: adm{level} {}: {why} (limit {MAX_PARENT_M} m)",
+                u.pcode
             ));
         }
     }
@@ -639,5 +720,63 @@ fn summary(
             m * 100.0,
             x * 100.0
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{V, arcs, compare};
+
+    const S: i32 = 100_000; // about 1.1 km on the 1e-7° grid
+
+    /// Children around the middle square of a 3 × 3 parent, with or without the middle one.
+    fn dissolved(with_middle: bool) -> super::Compared {
+        let sq = |x: i32, y: i32| vec![(x, y), (x + S, y), (x + S, y + S), (x, y + S)];
+        let mut rings: Vec<(u32, Vec<V>)> = vec![
+            (
+                0,
+                vec![(0, 0), (3 * S, 0), (3 * S, S), (2 * S, S), (S, S), (0, S)],
+            ),
+            (
+                1,
+                vec![
+                    (0, 2 * S),
+                    (S, 2 * S),
+                    (2 * S, 2 * S),
+                    (3 * S, 2 * S),
+                    (3 * S, 3 * S),
+                    (0, 3 * S),
+                ],
+            ),
+            (2, sq(0, S)),
+            (3, sq(2 * S, S)),
+        ];
+        if with_middle {
+            rings.push((4, sq(S, S)));
+        }
+        let (arcs, refs) = arcs::build(&rings).unwrap();
+        let parts = arcs::polygon(&arcs, refs.into_iter().flatten()).unwrap();
+        compare(
+            &arcs,
+            &parts,
+            &[vec![(0, 0), (3 * S, 0), (3 * S, 3 * S), (0, 3 * S)]],
+        )
+    }
+
+    #[test]
+    fn a_gap_between_children_is_refused() {
+        let whole = dissolved(true);
+        assert_eq!(whole.problem(), None, "{whole:?}");
+        assert_eq!(whole.holes, (0, 0));
+        assert!(
+            whole.to_derived < 0.01 && whole.to_source < 0.01,
+            "{whole:?}"
+        );
+        let gap = dissolved(false);
+        assert_eq!(gap.holes, (1, 0), "{gap:?}");
+        assert!(gap.to_source > 1.0, "{gap:?}");
+        assert!(gap.problem().is_some_and(|p| p.contains("gap")), "{gap:?}");
+        // The area alone would have said 11%, with no limit on it.
+        assert!((gap.area_off - 1.0 / 9.0).abs() < 1e-3, "{gap:?}");
     }
 }

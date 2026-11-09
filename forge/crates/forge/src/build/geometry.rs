@@ -258,8 +258,96 @@ pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<Stri
     if missing > 0 {
         return Err(format!("{missing} admin units without a polygon"));
     }
+    let a = Arcs::open(&p.section(Kind::ARCS).ok_or("no ARCS")?).map_err(e)?;
+    let admin = Region::open_on_arcs(&p.section(Kind::ADMIN_REGION).ok_or("no ADMIN_REGION")?, &a)
+        .map_err(e)?;
+    let pip = pip(&admin, &polys, &levels, rows)?;
     Ok(format!(
-        "{line}; every current admin unit and the country has its polygon."
+        "{line}; every current admin unit and the country has its polygon.\n\n{pip}"
+    ))
+}
+
+/// The largest share of settlements and localities outside every admin unit (G-pip): the
+/// source extracts reach past the border (Nepal 2026.11.0: 180 of 96,805, 0.19%, median 536 m
+/// out, 170 within 5 km); more means a boundary or a point source has gone wrong.
+const MAX_OUTSIDE: f64 = 0.005;
+
+/// G-pip on the written pack: every settlement and locality inside the admin coverage lies
+/// in exactly one unit of each level, and its parent is the deepest of them; places outside
+/// every unit are counted, the first listed, and capped at [`MAX_OUTSIDE`]. Returns a line
+/// for the summary.
+fn pip(
+    admin: &Region<'_>,
+    polys: &Polygons<'_>,
+    levels: &[u8],
+    rows: &[&Place],
+) -> Result<String, String> {
+    let mut group_of = vec![0_usize; polys.len()];
+    for g in 0..polys.groups() {
+        for i in polys.group(g).unwrap_or_default() {
+            group_of[i] = g;
+        }
+    }
+    let key_of = |i: usize| {
+        polys
+            .row(i)
+            .and_then(|r| rows.get(r as usize))
+            .map(|p| p.key.as_str())
+    };
+    let mut got = [0_u32; region::MAX_SET];
+    let (mut checked, mut outside, mut wrong) = (0_usize, Vec::new(), Vec::new());
+    for r in rows
+        .iter()
+        .filter(|r| matches!(r.kind, PlaceKind::Settlement | PlaceKind::Locality))
+    {
+        let at = Point::<E7>::from_units(r.point.1, r.point.0).ok_or("a place off the grid")?;
+        let k = admin.regions_at(at, &mut got);
+        let held = got.get(..k).unwrap_or_default();
+        if held.is_empty() {
+            outside.push(r.key.as_str());
+            continue;
+        }
+        checked += 1;
+        let mut per = vec![0_u8; levels.len()];
+        for &i in held {
+            per[group_of[i as usize]] += 1;
+        }
+        if per.iter().any(|&n| n != 1) {
+            wrong.push(format!("{}: units per level {per:?}", r.key));
+            continue;
+        }
+        let deepest = held.iter().copied().max_by_key(|&i| group_of[i as usize]);
+        let want = deepest.and_then(|i| key_of(i as usize));
+        if r.parent.as_deref() != want {
+            wrong.push(format!(
+                "{}: parent {:?}, its point is in {want:?}",
+                r.key, r.parent
+            ));
+        }
+    }
+    if !wrong.is_empty() {
+        return Err(format!(
+            "G-pip: {} of {checked} places inside the admin coverage are not in one unit of every level with the deepest as parent, first {:?}",
+            wrong.len(),
+            wrong.iter().take(8).collect::<Vec<_>>()
+        ));
+    }
+    #[allow(clippy::cast_precision_loss, reason = "counts far below 2^52")]
+    let share = outside.len() as f64 / (checked + outside.len()).max(1) as f64;
+    if share > MAX_OUTSIDE {
+        return Err(format!(
+            "G-pip: {} places ({:.2}%) lie outside every admin unit, over {:.1}%; first {:?}",
+            outside.len(),
+            share * 100.0,
+            MAX_OUTSIDE * 100.0,
+            outside.iter().take(8).collect::<Vec<_>>()
+        ));
+    }
+    Ok(format!(
+        "G-pip: {checked} settlements and localities each lie in one unit of every level, the deepest their parent; {} ({:.2}%) outside every unit, first {:?}.",
+        outside.len(),
+        share * 100.0,
+        outside.iter().take(8).collect::<Vec<_>>()
     ))
 }
 

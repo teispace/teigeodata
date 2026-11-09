@@ -351,12 +351,15 @@ a pinned source and feeds no build.
    the finest units by their stated ancestor codes (`adm<l>_pcode`): arcs used in both directions cancel, the rest
    chain into rings (the sharpest left turn at a vertex where a ring touches itself), and holes
    go to the smallest outer ring holding them. Each derived unit is compared with the source's
-   own polygon of it; a source vertex more than 1 m from the derived border stops the stage.
+   own polygon of it both ways (G-topo, D-130): a source vertex more than 1 m from the derived
+   border, a derived vertex more than 1 m from the source's border, or a different number of
+   holes stops the stage. The second and third catch a gap between children, which leaves a
+   hole in the dissolved parent whose vertices the first never looks at.
 3. **Levels of detail.** Douglas–Peucker importance per vertex in metres, capped by the parent
    split; levels 1 to 6 at 5 m, 20 m, 100 m, 500 m, 2 km and 5 km; ends pinned, and a closed arc
    pins two more vertices. A guard, coarsest level first, gives back the most important removed
    vertex of every segment that crosses or touches another and of every ring that loses its area
-   or orientation.
+   or orientation. A level the guard cannot fix (the summary's "Left" above 0) stops the stage.
 4. **Measure.** Area on the WGS 84 authalic sphere; the label is the pole of inaccessibility
    (polylabel's method, our own code, to 1/1000 of the unit's size and at least 10 m), kept
    only if exactly inside.
@@ -371,7 +374,10 @@ Output in `data/build/topology/<source>/`: `arcs.bin` (the ARCS payload), `polyg
 (D-099) and ADMIN_REGION on the arcs (D-100), and reads them back with their checks;
 POLY_INDEX's check recomputes every box from the arcs, so a wrong box in `polygons.tsv` stops
 the build, and ADMIN_REGION must give the same polygons as POLY_INDEX with
-`Polygons::contains` at every label point and every 97th place.
+`Polygons::contains` at every label point and every 97th place. G-pip (D-130): through the
+written ADMIN_REGION, every settlement and locality inside the admin coverage lies in exactly
+one unit of each level, and its parent is the deepest; at most 0.5% lie outside every unit
+(Nepal main 180 of 96,805, 0.19%, median 536 m past the border; lite 28, 0.03%).
 
 Measured on COD-AB Nepal on 2026-11-08:
 

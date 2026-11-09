@@ -25,7 +25,8 @@ A short status. The numbers and evidence live in each phase file and the
   unit populations (D-123), settlement rank (D-124) and a source's duplicates joined (D-125);
   golden on the product's search recall@1 0.859, pass 0.924; every pack carries its sources'
   notices (D-126); the `data-build` workflow runs G-det, G-lic and the golden gate per pack
-  (D-128), and `forge make` gates its budget (D-129). Next: 3.7 (G-topo, G-pip, G-conf, the lite build from clean-room sources
+  (D-128), `forge make` gates its budget (D-129), and the stages gate topology and place assignment
+  (D-130). Next: 3.7 (G-conf, the lite build from clean-room sources
   only, `ACCURACY.md`). The CI data build needs the input mirror (D-127): the maintainer
   approves publishing the `sources` release, then `cargo xtask mirror` uploads about 1.1 GB.
 - **In parallel (Phase 4):** the engine (4.1, D-113, D-114; Nepal timings in
