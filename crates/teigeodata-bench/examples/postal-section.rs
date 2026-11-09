@@ -1,13 +1,13 @@
-//! B12: the POSTAL section (D-090, D-105) on real code sets: its size and each column's, and
+//! The POSTAL section (D-090, D-105) on real code sets: its size and each column's, and
 //! the latency of an exact lookup, a 10-result prefix query, code text by ordinal and place →
 //! codes.
 //!
-//! Sets: the Nepal pack's own section (`B12_PACK`, else the `forge make np` main pack), and,
-//! from the files in `B12_DIR`, GeoNames India (post offices), US ZCTA 2026, GeoNames GB full
+//! Sets: the Nepal pack's own section (`POSTAL_PACK`, else the `forge make np` main pack), and,
+//! from the files in `POSTAL_DIR`, GeoNames India (post offices), US ZCTA 2026, GeoNames GB full
 //! and the world (GeoNames `allCountries`, with the full GB, CA and NL files). As in the research
 //! model, a record's place is the Hilbert rank of its row's point among the set's rows, and each
 //! country is one scheme whose templates are its codes' shapes. Run in release:
-//! `B12_DIR=<dir> cargo run --release -p teigeodata-bench --example b12-postal`.
+//! `POSTAL_DIR=<dir> cargo run --release -p teigeodata-bench --example postal-section`.
 #![allow(
     clippy::print_stdout,
     clippy::cast_precision_loss,
@@ -287,7 +287,7 @@ fn external(name: &str, rows: &[Row]) {
 
 fn main() {
     // Nepal: the pack's own section.
-    let path = std::env::var("B12_PACK").unwrap_or_else(|_| PACK.to_string());
+    let path = std::env::var("POSTAL_PACK").unwrap_or_else(|_| PACK.to_string());
     if let Ok(bytes) = std::fs::read(&path) {
         let pack = Pack::open(&bytes).unwrap();
         let places = pack.section(Kind::PLACES).unwrap().item_count() as usize;
@@ -302,8 +302,8 @@ fn main() {
             .collect();
         measure(&format!("NP pack ({path})"), &section, places, &probes);
     }
-    let Ok(dir) = std::env::var("B12_DIR") else {
-        println!("B12_DIR not set: the external sets were skipped");
+    let Ok(dir) = std::env::var("POSTAL_DIR") else {
+        println!("POSTAL_DIR not set: the external sets were skipped");
         return;
     };
     let dir = Path::new(&dir);

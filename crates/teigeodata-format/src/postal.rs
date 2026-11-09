@@ -423,7 +423,7 @@ fn apply(
 }
 
 /// The first code point of each block of ten decimal digits that is not ASCII (Unicode
-/// general category Nd, the blocks of the BMP), so a code typed in any script's digits is found.
+/// general category `Nd`, the blocks of the BMP), so a code typed in any script's digits is found.
 const DIGIT_ZEROS: [u32; 36] = [
     0x0660, 0x06F0, 0x07C0, 0x0966, 0x09E6, 0x0A66, 0x0AE6, 0x0B66, 0x0BE6, 0x0C66, 0x0CE6, 0x0D66,
     0x0DE6, 0x0E50, 0x0ED0, 0x0F20, 0x1040, 0x1090, 0x17E0, 0x1810, 0x1946, 0x19D0, 0x1A80, 0x1A90,

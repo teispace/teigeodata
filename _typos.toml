@@ -2,6 +2,8 @@
 extend-ignore-re = [
   # Devanagari and transliterated place names are not English words.
   "[\\u0900-\\u097F]+",
+  # The Unicode general category Nd (decimal digit).
+  "general category `Nd`",
 ]
 
 [default.extend-words]
@@ -12,6 +14,8 @@ khola = "khola"
 danda = "danda"
 bhanjyang = "bhanjyang"
 palika = "palika"
+# Darma Rural Municipality, Salyan (COD-AB name, Nepal postal codes).
+darma = "darma"
 # Level of detail (boundary geometry).
 lod = "lod"
 # ISO 15924 script codes.
