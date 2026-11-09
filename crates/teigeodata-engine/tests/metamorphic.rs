@@ -59,6 +59,8 @@ fn engine(packs: &[Vec<u8>]) -> Engine {
 /// The probes every engine answers.
 struct Probes {
     ids: Vec<PlaceId>,
+    /// The admin units, whose children span the parts.
+    units: Vec<PlaceId>,
     points: Vec<Point<E7>>,
     queries: Vec<String>,
 }
@@ -115,8 +117,14 @@ fn probes(model: &Model, seed: u64, n: usize) -> Probes {
         }
     }
     queries.extend(["", "  ", "x", "zzzzzz", "ka"].map(String::from));
+    let units = model
+        .admin
+        .iter()
+        .flat_map(|z| z.rows.iter().map(|&r| model.ids[r as usize]))
+        .collect();
     Probes {
         ids,
+        units,
         points,
         queries,
     }
@@ -139,6 +147,8 @@ struct Answers {
     tz: Vec<Option<Key>>,
     search: Vec<Vec<(Key, i32)>>,
     boxes: Vec<Vec<Key>>,
+    /// Per probe ID and admin unit: its parent, its ancestors and its children's IDs (D-143).
+    family: Vec<(Option<Key>, Vec<Key>, Vec<u64>)>,
 }
 
 fn answers(e: &Engine, p: &Probes) -> Answers {
@@ -209,7 +219,22 @@ fn answers(e: &Engine, p: &Probes) -> Answers {
         e.search(q, k, &mut s, &mut hits).unwrap();
         search.push(hits.iter().map(|h| (key(e, &h.place), h.score)).collect());
     }
+    let (mut up, mut down) = (Vec::new(), Vec::new());
+    let mut family = Vec::new();
+    for &id in p.ids.iter().chain(&p.units) {
+        let Some(x) = e.get(id).unwrap() else {
+            continue;
+        };
+        e.ancestors(&x, &mut up).unwrap();
+        e.children(&x, &mut down).unwrap();
+        family.push((
+            e.parent(&x).unwrap().map(|q| key(e, &q)),
+            up.iter().map(|q| key(e, q)).collect(),
+            down.iter().map(|q| q.id.get()).collect(),
+        ));
+    }
     Answers {
+        family,
         get,
         tz_of,
         reverse,
@@ -235,6 +260,8 @@ fn gate(model: &Model, whole: &[u8], parts: usize, seed: u64, n: usize) {
     assert!(want.tz_of.iter().any(Option::is_some));
     assert!(want.boxes.iter().filter(|b| b.len() > 1).count() > n / 4);
     assert!(want.search.iter().filter(|h| !h.is_empty()).count() > n);
+    assert!(want.family.iter().any(|f| f.1.len() > 1));
+    assert!(want.family.iter().any(|f| f.2.len() > 1));
 
     let salt = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15);
     let split = model.split(parts, |_, id| {

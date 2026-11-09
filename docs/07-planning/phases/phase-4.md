@@ -56,9 +56,13 @@ call (ADR-0012).
 - [x] Radius queries (`within_radius`, `nearby`) and `parent`/`ancestors`/`children` in a
   place's own pack (D-140, 2026-11-09): Nepal `within_radius` 1 km 2.8 µs, 10 km 12.0 µs;
   `reverse` on 3 layers 23.3 → 16.0 µs
-- [ ] `children`/`ancestors` across packs: needs parents by ID in the format (a city pack's
-  places under a country pack's units); also makes a search context split-invariant (the
-  split gate leaves comma queries out)
+- [x] `children`/`ancestors` across packs (D-143, 2026-11-09): by ancestor stubs, no format
+  change; the metamorphic gate compares the hierarchy on synthetic and Nepal splits. Nepal,
+  1/3/10 layers: `ancestors` 307/967/2,396 ns, `children` 6.9/34.6/104.6 µs
+- [ ] A search context (`Lahachowk, Kaski`) split-invariant: it matches ancestors in the row's
+  own pack (D-119); with stubs every pack holds them, so the split gate can add comma queries
+- [ ] Forge: split builds (city packs, grid tiles) write their places' ancestor stubs (D-143),
+  gated by check-pack
 - [x] Snapshot swap: `arc-swap` against `RwLock` A/B in L5 (D-141, 2026-11-09): with 8
   readers and a writer, `arc-swap` 510–555 ns per `get` on 3 layers, a held `RwLock`
   1,665–1,864 ns (its writer waited up to 26 ms), a `Mutex` 4,990–5,283 ns; `Shared` built on

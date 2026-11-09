@@ -101,6 +101,7 @@ struct Answers {
     tz_of: Vec<Answer<Option<u64>>>,
     tz_at: Vec<Answer<Option<u64>>>,
     admin_at: Vec<Answer<Vec<u64>>>,
+    ancestors: Vec<Answer<Vec<u64>>>,
     search: Vec<Answer<Vec<u64>>>,
     context: Answer<Vec<u64>>,
 }
@@ -132,6 +133,10 @@ fn answers(e: &Engine, probe: &[PlaceId], points: &[Point<E7>], queries: &[Strin
             .collect(),
         tz_at: Vec::new(),
         admin_at: Vec::new(),
+        ancestors: places
+            .iter()
+            .map(|p| answer(e.ancestors(p, &mut out).map(|()| ids(&out))))
+            .collect(),
         search: Vec::new(),
         context: Ok(Vec::new()),
     };
@@ -215,7 +220,6 @@ fn each_component_set_answers_as_the_whole_pack_or_names_what_is_missing() {
     assert_eq!(
         has,
         Components::all().without(Components::of(&[
-            Admin,
             Component::Boundaries,
             Component::Postal,
             Component::Dem,
@@ -228,6 +232,11 @@ fn each_component_set_answers_as_the_whole_pack_or_names_what_is_missing() {
         full.admin_at
             .iter()
             .any(|a| a.as_ref().is_ok_and(|v| !v.is_empty()))
+    );
+    assert!(
+        full.ancestors
+            .iter()
+            .any(|a| a.as_ref().is_ok_and(|v| v.len() > 1))
     );
     assert!(
         full.search
@@ -263,6 +272,7 @@ fn each_component_set_answers_as_the_whole_pack_or_names_what_is_missing() {
                 tz_of: expect(&full.tz_of, set, &[Timezone, TimezoneIndex], Timezone),
                 tz_at: expect(&full.tz_at, set, &[TimezoneIndex], TimezoneIndex),
                 admin_at: expect(&full.admin_at, set, &[AdminIndex], AdminIndex),
+                ancestors: expect(&full.ancestors, set, &[Admin], Admin),
                 search: expect(&full.search, set, &[Search], Search),
                 // A context reads the hierarchy where the pack has one.
                 context: if !set.contains(Search) {

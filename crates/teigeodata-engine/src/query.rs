@@ -286,83 +286,117 @@ impl Engine {
         }
     }
 
-    /// The parent of `place` in its own pack's admin hierarchy (HIERARCHY), as the winning
-    /// layer answers for the parent's ID; `None` for a root or a layer without a hierarchy.
+    /// The parent of `place` (HIERARCHY), as the winning layer answers for the parent's ID:
+    /// from `place`'s own layer, else from the first layer by precedence that holds the same ID
+    /// with a parent, so a pack whose copy of a place is a root defers to one that knows its
+    /// parent (D-143). `None` for a root everywhere or with no hierarchy.
     ///
     /// # Errors
-    /// [`Error::MissingComponent`] (`admin`) if the layer has a hierarchy that is not
+    /// [`Error::MissingComponent`] (`admin`) if a layer it reads has a hierarchy that is not
     /// installed; [`Error::Integrity`] if a section it reads is corrupt.
     #[cfg(feature = "admin")]
     pub fn parent(&self, place: &Place) -> Result<Option<Place>, Error> {
-        let Some(i) = self.layers.iter().position(|l| l.id == place.layer) else {
+        let Some(own) = self.layers.iter().position(|l| l.id == place.layer) else {
             return Ok(None);
         };
-        let l = self.layers.get(i).ok_or(Error::Range)?;
-        l.ensure(Kind::HIERARCHY)?;
-        let Some(row) = l
-            .views()
-            .hierarchy
-            .as_ref()
-            .and_then(|h| h.parent(place.row as usize))
-        else {
-            return Ok(None);
-        };
-        match self.place(i, row)? {
-            Some(p) => self.winning(i, p),
-            None => Ok(None),
+        if let Some(row) = self.parent_row(own, place.row as usize)? {
+            return self.resolve(own, row);
         }
+        for j in (0..self.layers.len()).filter(|&j| j != own) {
+            if let Some(r) = self.row_in(j, place.id)?
+                && let Some(row) = self.parent_row(j, r)?
+            {
+                return self.resolve(j, row);
+            }
+        }
+        Ok(None)
     }
 
-    /// The ancestors of `place` in its own pack's admin hierarchy, parent first up to the root,
-    /// each as the winning layer answers for its ID, into `out`.
+    /// The ancestors of `place`, parent first up to the root, each as [`parent`](Self::parent)
+    /// answers for the one before (so the chain may cross packs, D-143), into `out`. At most
+    /// [`MAX_DEPTH`](teigeodata_format::hierarchy::MAX_DEPTH) of them, and never a place twice.
     ///
     /// # Errors
     /// As [`parent`](Self::parent).
     #[cfg(feature = "admin")]
     pub fn ancestors(&self, place: &Place, out: &mut Vec<Place>) -> Result<(), Error> {
         out.clear();
-        let Some(i) = self.layers.iter().position(|l| l.id == place.layer) else {
-            return Ok(());
-        };
-        let l = self.layers.get(i).ok_or(Error::Range)?;
-        l.ensure(Kind::HIERARCHY)?;
-        let Some(h) = l.views().hierarchy.as_ref() else {
-            return Ok(());
-        };
-        for row in h.ancestors(place.row as usize) {
-            if let Some(p) = self.place(i, row)?
-                && let Some(p) = self.winning(i, p)?
-            {
-                out.push(p);
+        let mut at = *place;
+        while out.len() < teigeodata_format::hierarchy::MAX_DEPTH {
+            match self.parent(&at)? {
+                Some(p) if p.id != place.id && out.iter().all(|q| q.id != p.id) => {
+                    out.push(p);
+                    at = p;
+                }
+                _ => break,
             }
         }
         Ok(())
     }
 
-    /// The children of `place` in its own pack's admin hierarchy, in row order, each as the
-    /// winning layer answers for its ID, into `out`.
+    /// The children of `place` across every layer that holds its ID, by ID, each as the winning
+    /// layer answers for it and only while that answer still has `place` as its parent (a newer
+    /// pack may have moved it), into `out` (D-143).
     ///
     /// # Errors
     /// As [`parent`](Self::parent).
     #[cfg(feature = "admin")]
     pub fn children(&self, place: &Place, out: &mut Vec<Place>) -> Result<(), Error> {
         out.clear();
-        let Some(i) = self.layers.iter().position(|l| l.id == place.layer) else {
-            return Ok(());
-        };
-        let l = self.layers.get(i).ok_or(Error::Range)?;
-        l.ensure(Kind::HIERARCHY)?;
-        let Some(h) = l.views().hierarchy.as_ref() else {
-            return Ok(());
-        };
-        for row in h.children(place.row as usize) {
-            if let Some(p) = self.place(i, row as usize)?
-                && let Some(p) = self.winning(i, p)?
-            {
-                out.push(p);
+        for j in 0..self.layers.len() {
+            let Some(r) = self.row_in(j, place.id)? else {
+                continue;
+            };
+            let l = self.layers.get(j).ok_or(Error::Range)?;
+            l.ensure(Kind::HIERARCHY)?;
+            let Some(h) = l.views().hierarchy.as_ref() else {
+                continue;
+            };
+            for row in h.children(r) {
+                let Some(c) = self.place(j, row as usize)? else {
+                    continue;
+                };
+                if !self.claimed_above(j, c.id)? {
+                    out.push(c);
+                } else if let Some(w) = self.get(c.id)?
+                    && self.parent(&w)?.is_some_and(|q| q.id == place.id)
+                {
+                    out.push(w);
+                }
             }
         }
+        out.sort_unstable_by_key(|p| p.id);
+        out.dedup_by_key(|p| p.id);
         Ok(())
+    }
+
+    /// The row of `id` itself in layer `i` (not a redirect).
+    #[cfg(feature = "admin")]
+    fn row_in(&self, i: usize, id: PlaceId) -> Result<Option<usize>, Error> {
+        let Some(l) = self.layers.get(i).filter(|l| l.may_hold(id)) else {
+            return Ok(None);
+        };
+        l.ensure(Kind::IDMAP)?;
+        Ok(l.views().ids.as_ref().and_then(|m| m.row(id)))
+    }
+
+    /// The parent row of `row` in layer `i`'s HIERARCHY.
+    #[cfg(feature = "admin")]
+    fn parent_row(&self, i: usize, row: usize) -> Result<Option<usize>, Error> {
+        let Some(l) = self.layers.get(i) else {
+            return Ok(None);
+        };
+        l.ensure(Kind::HIERARCHY)?;
+        Ok(l.views().hierarchy.as_ref().and_then(|h| h.parent(row)))
+    }
+
+    /// Row `row` of layer `i`, as the winning layer answers for its ID.
+    #[cfg(feature = "admin")]
+    fn resolve(&self, i: usize, row: usize) -> Result<Option<Place>, Error> {
+        match self.place(i, row)? {
+            Some(p) => self.winning(i, p),
+            None => Ok(None),
+        }
     }
 
     /// `p` from layer `i`, or the winning layer's answer for its ID when a layer above knows it.

@@ -172,6 +172,9 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 | `tz_at(at)` | The first layer whose REGION (timezones) holds the point | as `admin_at` |
 | `search(q, k)` | Every layer with SEARCH | Each layer scores its rows and keeps its best k visible; k-way merge by score, then ID. Fuzzy keys share the first letter unless no layer has a visible strong match; a context after a comma matches ancestors in the row's own pack (D-119); the layer's query rules add matches (D-121) |
 | `within_bbox(rect, limit)` | Layers whose box meets the rect | Smallest IDs first, k-way merge by ID |
+| `parent(place)` | The place's own layer, else the first layer by precedence holding the same ID with a parent | none; the parent is answered by the layer that wins its ID (D-143) |
+| `ancestors(place)` | As `parent`, step by step | parent first, at most `MAX_DEPTH`, never a place twice |
+| `children(place)` | Every layer holding the place's ID | union by ID; a child is kept only while its winning copy still names this parent |
 
 **Search scores** are the same in every layer, so the merge is exact. The query is folded with
 `teigeodata_names::fold`. A row's score is its importance plus the best bonus it earns: exact
@@ -188,12 +191,15 @@ droppable suffix removed, 50 (D-121). The unit bonus does not count towards a st
 - **Metamorphic** (`tests/metamorphic.rs`): a synthetic country (and, ignored, a real pack
   through `TGD_PACK`) is split by the format writer into 2, 3 or 5 packs, added in both orders
   and with an overlapping copy; every `get`, `reverse`, `admin_at`, `tz_at`, `search` and
-  `within_bbox` answer matches the unsplit pack. Also: a newer release wins with its tombstones
-  and redirects; priority and the baseline order the layers.
+  `within_bbox` answer, and `parent`, `ancestors` and `children` of the probes and of every
+  admin unit, matches the unsplit pack. Each part holds the ancestors of its rows (stubs,
+  D-143). Also: a newer release wins with its tombstones and redirects; priority and the
+  baseline order the layers.
 - **Differential:** a delta layer over a base matches the compacted pack built by the writer.
 - **Verification** (`tests/verify.rs`): a corrupt small section fails only its queries; a
-  corrupt block in a 2.5 MiB section is found by its block hash; a flipped block-hash list is
-  refused at open; truncated, empty, missing and replaced files.
+  corrupt block in a 2.5 MiB section is found by its block hash; a flipped block-hash list
+  fails every read of its section (and the open under `Verify::Eager`, D-142); truncated,
+  empty, missing and replaced files.
 - **Allocations** (`tests/alloc.rs`): a counting allocator on the warm path.
 - **Components** (`tests/components.rs`, D-136): the pack opened under eight component sets,
   its uninstalled sections zeroed, eager and lazy; every query answers as the whole pack does
@@ -203,7 +209,6 @@ Each gate was first shown to fail on a planted bug (D-114).
 
 ## Not yet
 
-- `children`, `ancestors` across packs (parents by ID in the format).
 - The baseline (step 4.2).
 - `teigeodata-api` still opens one pack; it moves onto the engine with the baseline.
 
@@ -218,3 +223,4 @@ Each gate was first shown to fail on a planted bug (D-114).
 | 2026-11-09 | `within_radius`, `nearby`, `ancestors`, `children` | D-140 |
 | 2026-11-09 | `Shared` snapshots on `arc-swap`; layers held in `Arc` | D-141 |
 | 2026-11-09 | Block-hash lists proved on a section's first read, not at open | D-142 |
+| 2026-11-09 | `parent`, `ancestors`, `children` across packs by ancestor stubs | D-143 |

@@ -205,3 +205,18 @@ Before D-142 the open proved every block-hash list (65,536 merges for 1 GiB), so
 the pack. Now open is O(head) and the proof moves to the first read of each covered section,
 once per layer; sections never read never pay it. The first open includes mapping a file that
 was just written.
+
+### Cross-pack hierarchy (D-143)
+
+Same `measure` run style, 2026-11-09, load about 22 to 42. Each probe is a `get` first; the
+second row asks the probe's parent for all its children (198 on average). The split parts hold
+their places' ancestors as stubs.
+
+| Query | engine, 1 layer (ns) | 3 layers (ns) | 10 layers (ns) |
+|---|---:|---:|---:|
+| get + ancestors | 307 | 967 | 2,396 |
+| get + parent + children | 6,897 | 34,603 | 104,624 |
+
+`children` across layers costs each child a check of the layers above its own (a hash split
+spreads the IDs of every layer over the same range, so no ID range skips a layer). Packs split
+by area are not measured yet.

@@ -24,6 +24,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use teigeodata_core::{E6, E7, Namespace, PlaceId, PlaceKind, Point, hilbert};
 use teigeodata_format::arcs::Arcs;
 use teigeodata_format::elevation::{self, Elevations};
+use teigeodata_format::hierarchy::{self, Hierarchy};
 use teigeodata_format::idmap::{self, IdMap};
 use teigeodata_format::names::{self, NameRecord, NameType, Names, Tag as NameTag};
 use teigeodata_format::place_index::{self, PlaceIndex};
@@ -80,6 +81,8 @@ pub struct Model {
     pub admin: Option<RegionModel>,
     /// ARCS (body, item count), when the admin index reads its vertices from it.
     pub arcs: Option<(Vec<u8>, u64)>,
+    /// Each row's parent row (HIERARCHY); empty for none.
+    pub parents: Vec<Option<u32>>,
 }
 
 impl Model {
@@ -205,6 +208,13 @@ impl Model {
             arcs: pack
                 .section(Kind::ARCS)
                 .map(|s| (s.bytes().to_vec(), s.item_count())),
+            parents: pack
+                .section(Kind::HIERARCHY)
+                .map(|s| {
+                    let h = Hierarchy::open(&s).unwrap();
+                    (0..n).map(|r| h.parent(r).map(|p| p as u32)).collect()
+                })
+                .unwrap_or_default(),
         }
     }
 
@@ -288,6 +298,18 @@ impl Model {
             zones: relink(&self.zones),
             admin: relink(&self.admin),
             arcs: self.arcs.clone(),
+            // A parent outside the kept rows leaves a root: the part holds no stub for it.
+            parents: if self.parents.is_empty() {
+                Vec::new()
+            } else {
+                keep.iter()
+                    .map(|&r| {
+                        self.parents[r as usize]
+                            .map(|q| new_of[q as usize])
+                            .filter(|&q| q != u32::MAX)
+                    })
+                    .collect()
+            },
         }
     }
 
@@ -367,6 +389,13 @@ impl Model {
             let body = region::link(&z.body, &z.rows).unwrap();
             bodies.push((Kind::ADMIN_REGION, z.rows.len() as u64, body));
         }
+        if !self.parents.is_empty() {
+            bodies.push((
+                Kind::HIERARCHY,
+                n,
+                hierarchy::encode(&self.parents).unwrap(),
+            ));
+        }
         if !self.redirects.is_empty() {
             bodies.push((
                 Kind::REDIRECTS,
@@ -386,16 +415,27 @@ impl Model {
     }
 
     /// Cuts the model into `parts` packs: row `r` goes to `part(r)`, every linked row to all
-    /// of them; redirects go with their survivor, tombstones by `part` of the retired ID.
+    /// of them, and every part holds the ancestors of its rows (stubs, D-143); redirects go
+    /// with their survivor, tombstones by `part` of the retired ID.
     pub fn split(&self, parts: usize, part: impl Fn(u32, PlaceId) -> usize) -> Vec<Vec<u8>> {
         let linked = self.linked_rows();
         let row_of: BTreeMap<PlaceId, u32> =
             (0_u32..).zip(&self.ids).map(|(r, &id)| (id, r)).collect();
         (0..parts)
             .map(|p| {
-                let keep: Vec<u32> = (0..self.ids.len() as u32)
+                let mut keep: BTreeSet<u32> = (0..self.ids.len() as u32)
                     .filter(|&r| linked.contains(&r) || part(r, self.ids[r as usize]) == p)
                     .collect();
+                for r in keep.clone() {
+                    let mut at = r;
+                    while let Some(q) = self.parents.get(at as usize).copied().flatten() {
+                        if !keep.insert(q) {
+                            break;
+                        }
+                        at = q;
+                    }
+                }
+                let keep: Vec<u32> = keep.into_iter().collect();
                 let owner = |id: PlaceId| {
                     row_of.get(&id).map_or(part(u32::MAX, id), |&r| {
                         if linked.contains(&r) { 0 } else { part(r, id) }
@@ -468,6 +508,8 @@ pub fn synthetic(n: usize, seed: u64) -> Model {
         level: u8,
         names: Vec<String>,
         importance: u8,
+        /// The parent, by index before the Hilbert sort.
+        parent: Option<usize>,
     }
     let mut serials = BTreeSet::new();
     let mut fresh = |r: &mut Rng| loop {
@@ -486,6 +528,7 @@ pub fn synthetic(n: usize, seed: u64) -> Model {
         level: 0,
         names: vec!["Synthland".into()],
         importance: 250,
+        parent: None,
     });
     let (cw, ch) = ((EAST - WEST) / 4, (NORTH - SOUTH) / 2);
     let mut districts = Vec::new();
@@ -500,6 +543,7 @@ pub fn synthetic(n: usize, seed: u64) -> Model {
                 level: 1,
                 names: vec![format!("{} District", name(&mut r))],
                 importance: 200,
+                parent: Some(0),
             });
         }
     }
@@ -516,6 +560,7 @@ pub fn synthetic(n: usize, seed: u64) -> Model {
             level: 0,
             names: vec![format!("Zone {z}")],
             importance: 0,
+            parent: None,
         });
     }
     let common: Vec<String> = (0..=n / 20).map(|_| name(&mut r)).collect();
@@ -538,6 +583,8 @@ pub fn synthetic(n: usize, seed: u64) -> Model {
             level: 0,
             names,
             importance: r.below(130) as u8,
+            // Its district: row 1 + 4 × band + column, as the districts were pushed.
+            parent: Some(1 + (4 * ((lat - SOUTH) / ch) + (lon - WEST) / cw) as usize),
         });
     }
     // Rows in Hilbert order, as PLACES requires; ties by ID.
@@ -639,5 +686,6 @@ pub fn synthetic(n: usize, seed: u64) -> Model {
             rows: admin_rows,
         }),
         arcs: None,
+        parents: rows.iter().map(|p| p.parent.map(|q| new_of[&q])).collect(),
     }
 }

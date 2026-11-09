@@ -268,13 +268,31 @@ fn main() {
     row("search, k = 10", None, queries.len(), &mut |e, i, s| {
         e.search(&queries[i], 10, s, &mut found).unwrap();
     });
+    // The hierarchy (D-143): each probe's ancestors, and its siblings (its parent's children).
+    let mut family = Vec::new();
+    row("get + ancestors", None, n, &mut |e, i, _| {
+        let p = e.get(ids[i]).unwrap().unwrap();
+        e.ancestors(&p, &mut family).unwrap();
+    });
+    let mut kids = 0_usize;
+    row("get + parent + children", None, n / 10, &mut |e, i, _| {
+        let p = e.get(ids[i]).unwrap().unwrap();
+        if let Some(q) = e.parent(&p).unwrap() {
+            e.children(&q, &mut family).unwrap();
+            kids += family.len();
+        }
+    });
+    println!(
+        "children per parent: {:.0} on average",
+        kids as f64 / (ROUNDS * 3 * (n / 10)) as f64
+    );
 
     open_by_size();
 }
 
-/// L1: opening a mapped pack of 1 MB to 1 GB. Opening reads the head and proves each large
-/// section's block hashes against its section hash, so the cost grows with the bytes covered
-/// by blocks: the packs here hold one raw section of that size (a cold-data BLOBS section).
+/// L1: opening a mapped pack of 1 MB to 1 GB. Opening reads the head only; a large section's
+/// block hashes are proved against its section hash on its first read (D-142), timed here as
+/// the first 16 KiB read. Each pack holds one raw section of that size (cold-data BLOBS).
 fn open_by_size() {
     println!();
     println!("| Pack | first open (µs) | warm open (µs) | first 16 KiB read (µs) |");

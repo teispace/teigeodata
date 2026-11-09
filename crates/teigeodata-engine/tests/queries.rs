@@ -1,41 +1,31 @@
 //! Radius queries and the admin hierarchy (step 4.1): `within_radius` is `reverse` cut at the
 //! radius, `nearby` is `reverse` without the place itself, and `parent`, `ancestors` and
-//! `children` follow the pack's HIERARCHY.
+//! `children` follow HIERARCHY, across packs by ID (D-143).
 
 #![allow(
     clippy::unwrap_used,
     clippy::cast_possible_truncation,
+    clippy::indexing_slicing,
     reason = "tests: failures panic with their message; rows fit u32"
 )]
 
 mod common;
 
-use common::{Rng, synthetic};
+use common::{Model, Rng, synthetic};
+use teigeodata_core::PlaceKind;
 use teigeodata_engine::{Engine, Layer, LayerOptions, Near, Place, Scratch};
-use teigeodata_format::{Encoding, Kind, Pack, Tag, Writer};
 
 /// Row `r`'s parent in the test tree: `(r - 1) / 4`, row 0 the root.
 fn parent_of(r: usize) -> Option<usize> {
     r.checked_sub(1).map(|r| r / 4)
 }
 
-/// `pack` with a HIERARCHY of the test tree added.
-fn with_hierarchy(pack: &[u8], n: usize) -> Vec<u8> {
-    let p = Pack::open(pack).unwrap();
-    let parents: Vec<Option<u32>> = (0..n).map(|r| parent_of(r).map(|x| x as u32)).collect();
-    let body = teigeodata_format::hierarchy::encode(&parents).unwrap();
-    let mut sections: Vec<(Kind, Encoding, u64, &[u8])> = p
-        .sections()
-        .filter(|s| s.kind() != Kind::BLOCK_HASHES && s.kind() != Kind::HIERARCHY)
-        .map(|s| (s.kind(), s.encoding(), s.item_count(), s.bytes()))
+/// `model` with the test tree as its HIERARCHY.
+fn with_tree(mut model: Model) -> Model {
+    model.parents = (0..model.ids.len())
+        .map(|r| parent_of(r).map(|x| x as u32))
         .collect();
-    sections.push((Kind::HIERARCHY, Encoding::TABLE, n as u64, &body));
-    let m = p.manifest();
-    let mut w = Writer::new(m.address(), m.component(), m.release()).unwrap();
-    if let Some(b) = m.get(Tag::BBOX) {
-        w.manifest(Tag::BBOX, b).unwrap();
-    }
-    w.pack(&sections, None).unwrap()
+    model
 }
 
 fn ids(near: &[Near]) -> Vec<(u64, u64)> {
@@ -104,9 +94,10 @@ fn a_radius_is_reverse_cut_at_the_radius() {
 #[test]
 fn ancestors_and_children_follow_the_hierarchy() {
     let n = 700;
-    let model = synthetic(n, 4);
+    let model = with_tree(synthetic(n, 4));
+    let n = model.ids.len();
     let mut e = Engine::new();
-    e.add(Layer::from_bytes(with_hierarchy(&model.encode(), n), LayerOptions::default()).unwrap());
+    e.add(Layer::from_bytes(model.encode(), LayerOptions::default()).unwrap());
     let place = |row: usize| -> Place { e.get(model.ids[row]).unwrap().unwrap() };
     let (mut up, mut down) = (Vec::new(), Vec::new());
     for row in (0..n).step_by(7) {
@@ -129,9 +120,10 @@ fn ancestors_and_children_follow_the_hierarchy() {
             chain.first().copied()
         );
         e.children(&p, &mut down).unwrap();
-        let kids: Vec<u64> = (row * 4 + 1..(row * 4 + 5).min(n))
+        let mut kids: Vec<u64> = (row * 4 + 1..(row * 4 + 5).min(n))
             .map(|c| model.ids[c].get())
             .collect();
+        kids.sort_unstable();
         assert_eq!(
             down.iter().map(|x| x.id.get()).collect::<Vec<_>>(),
             kids,
@@ -139,8 +131,10 @@ fn ancestors_and_children_follow_the_hierarchy() {
         );
     }
     // A pack without a hierarchy answers none.
+    let mut bare = model.clone();
+    bare.parents.clear();
     let mut flat = Engine::new();
-    flat.add(Layer::from_bytes(model.encode(), LayerOptions::default()).unwrap());
+    flat.add(Layer::from_bytes(bare.encode(), LayerOptions::default()).unwrap());
     let p = flat.get(model.ids[9]).unwrap().unwrap();
     flat.ancestors(&p, &mut up).unwrap();
     flat.children(&p, &mut down).unwrap();
@@ -148,4 +142,88 @@ fn ancestors_and_children_follow_the_hierarchy() {
         (up.len(), down.len(), flat.parent(&p).unwrap()),
         (0, 0, None)
     );
+}
+
+/// The rows whose parent is the country.
+fn districts(model: &Model) -> Vec<u32> {
+    let country = model
+        .kinds
+        .iter()
+        .position(|k| *k == PlaceKind::Country)
+        .unwrap() as u32;
+    (0..model.ids.len() as u32)
+        .filter(|&r| model.parents[r as usize] == Some(country))
+        .collect()
+}
+
+/// The IDs of `p`'s ancestors and children in `e`.
+fn family(e: &Engine, p: &Place) -> (Vec<u64>, Vec<u64>) {
+    let (mut up, mut down) = (Vec::new(), Vec::new());
+    e.ancestors(p, &mut up).unwrap();
+    e.children(p, &mut down).unwrap();
+    (
+        up.iter().map(|x| x.id.get()).collect(),
+        down.iter().map(|x| x.id.get()).collect(),
+    )
+}
+
+#[test]
+fn a_pack_without_the_whole_chain_defers_to_one_that_has_it() {
+    // A city pack: one district and its settlements, the district a root (no country stub),
+    // above the whole country (D-143).
+    let model = synthetic(2_000, 9);
+    let district = districts(&model)[3] as usize;
+    let keep: Vec<u32> = (0..model.ids.len() as u32)
+        .filter(|&r| r as usize == district || model.parents[r as usize] == Some(district as u32))
+        .collect();
+    assert!(keep.len() > 100);
+    // The city pack has no region indexes: they link rows it does not hold.
+    let mut points_only = model.clone();
+    (points_only.zones, points_only.admin) = (None, None);
+    points_only.release = "2026.12.0".into();
+    let city = points_only.subset("np-city", &keep, |_| false).encode();
+    let mut whole = Engine::new();
+    whole.add(Layer::from_bytes(model.encode(), LayerOptions::default()).unwrap());
+    let mut both = Engine::new();
+    let city_layer = both.add(Layer::from_bytes(city.clone(), LayerOptions::default()).unwrap());
+    both.add(Layer::from_bytes(model.encode(), LayerOptions::default()).unwrap());
+    let mut alone = Engine::new();
+    alone.add(Layer::from_bytes(city, LayerOptions::default()).unwrap());
+    for &r in &keep {
+        let id = model.ids[r as usize];
+        let (w, b) = (
+            whole.get(id).unwrap().unwrap(),
+            both.get(id).unwrap().unwrap(),
+        );
+        assert_eq!(b.layer, city_layer, "the newer city pack answers");
+        assert_eq!(family(&both, &b), family(&whole, &w));
+        // Alone, the city pack knows the chain only up to its district.
+        let (up, _) = family(&alone, &alone.get(id).unwrap().unwrap());
+        assert_eq!(up.len(), usize::from(r as usize != district));
+    }
+}
+
+#[test]
+fn a_child_moved_by_a_newer_pack_leaves_its_old_parent() {
+    let model = synthetic(1_500, 3);
+    let d = districts(&model);
+    let child = model
+        .parents
+        .iter()
+        .position(|p| p.is_some_and(|q| d.contains(&q)))
+        .unwrap();
+    let old = model.parents[child].unwrap();
+    let new = d.into_iter().find(|&q| q != old).unwrap();
+    let mut moved = model.clone();
+    moved.release = "2026.12.0".into();
+    moved.parents[child] = Some(new);
+    let mut e = Engine::new();
+    e.add(Layer::from_bytes(model.encode(), LayerOptions::default()).unwrap());
+    e.add(Layer::from_bytes(moved.encode(), LayerOptions::default()).unwrap());
+    let id = model.ids[child].get();
+    let kids = |row: u32| family(&e, &e.get(model.ids[row as usize]).unwrap().unwrap()).1;
+    assert!(!kids(old).contains(&id), "still under its old parent");
+    assert!(kids(new).contains(&id), "missing under its new parent");
+    let c = e.get(model.ids[child]).unwrap().unwrap();
+    assert_eq!(e.parent(&c).unwrap().unwrap().id, model.ids[new as usize]);
 }

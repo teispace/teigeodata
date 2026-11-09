@@ -181,7 +181,20 @@ override the baseline automatically".
 
 - **Cross-pack hierarchy:** a city pack's places have parents in the country pack, so
   `ancestors` crosses packs by ID. Packs declare these dependencies (ADR-0011), and the planner
-  installs them together.
+  installs them together. Two ways to carry the link were compared on 2026-11-09 (D-143):
+
+  | Option | Format | `ancestors` with only the city pack | `children` of a unit split over packs | Cost |
+  |---|---|---|---|---|
+  | **A. Ancestor stubs** | none: each pack holds its places' ancestors as rows (the split gate already did this for admin units) | the whole chain, offline | union of every layer holding the unit's ID | a few rows per pack (a chain is 3–6 deep) |
+  | B. Parent IDs | a new HIERARCHY column, the parent's ID where it lives in another pack | stops at the pack edge until the country pack is installed | a scan of every layer's parent-ID column, or a reverse index per pack | 8 B per root row, plus the reverse index |
+
+  **Chosen: A.** A city pack downloaded alone still answers its full chain (an end user picks
+  "Dubai", ADR-0012), the format does not change, and `children` needs no reverse index. The
+  engine also follows IDs across packs, so a pack whose stub chain is cut short defers to a
+  layer that knows the parent; a newer pack that moves a child removes it from its old parent.
+  Measured on the Nepal main pack split by ID into 1, 3 and 10 layers: `get` + `ancestors`
+  307, 967 and 2,396 ns; `get` + `parent` + `children` (198 children on average) 6.9, 34.6 and
+  104.6 µs ([phase-4 benchmarks](../benches/phase-4.md#cross-pack-hierarchy-d-143)).
 - **Duplicates:** the baseline's cities and a full pack's cities share IDs, so dedupe by ID
   removes them. Two country packs never share a namespace's IDs unless a place moved, which
   REDIRECTS handles.

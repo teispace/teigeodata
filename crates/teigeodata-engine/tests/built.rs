@@ -40,10 +40,11 @@ fn a_component_without_its_feature_is_not_installed() {
         };
         let layer = Layer::from_bytes(bytes.clone(), options).unwrap();
         let has = layer.components();
-        // The synthetic pack has every component the engine reads but `admin` and outlines.
+        // The synthetic pack has every component the engine reads but outlines.
         let pack = Components::of(&[
             Component::Point,
             Component::Elevation,
+            Component::Admin,
             Component::Names,
             Component::Search,
             Component::Timezone,
