@@ -85,6 +85,7 @@ gains WorldPop's credit. The pack does not store population yet: it feeds import
 - Patan: the municipality of Patan (Baitadi) now outranks Lalitpur city, whose record carries
   the name; the city and Lalitpur Metropolitan City are separate rows (the twin problem). A
   municipality base of 40 or 35 instead of 45 was measured and is worse (0.850, 0.838).
+  Fixed by settlement rank (D-124): Lalitpur's record is a city, so it ranks first again.
 - Census 2021 (Q-011) would replace modelled counts in Nepal when its terms allow.
 
 ## 8. Versions checked
