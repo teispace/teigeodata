@@ -107,12 +107,14 @@ signed pack per address; a client holds any subset of its sections.
 
 ### 4.2 Baseline and locator
 Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
-- [ ] Forge: the baseline build (countries, admin1, cities above a threshold, simplified world
-  timezones), same ID registry, thresholds and tolerances as data. A country with a pack
-  contributes a slice of that build; elsewhere the D-144 sources, keyed by GeoNames and
-  Wikidata IDs; a report of each country's admin-1 source
-- [ ] Pin the baseline sources (`ne-admin0-nep-5.1.1`, `ne-admin1-5.1.1`,
-  `geonames-cities15000`); the OSM boundary extract as a CI job
+- [x] Forge: a country with a pack contributes a slice of that build (`forge baseline`, a `make`
+  stage; `extract::rows`; G-base; level-1 units under the country, D-146) (D-145)
+- [ ] Forge: the world part of the baseline (countries, admin1, cities above a threshold,
+  simplified world timezones) from the D-144 sources, keyed by GeoNames and Wikidata IDs into
+  each country's registry; a report of each country's admin-1 source; the slices and the world
+  part merged into one baseline file
+- [x] Pin `geonames-cities15000` (D-145)
+- [ ] Pin `ne-admin0-nep-5.1.1` and `ne-admin1-5.1.1`; the OSM boundary extract as a CI job
 - [ ] The locator: a REGION over buffered coverage polygons; `missing_pack_for(point)`;
   border-probe gate (no missed pack; extra-candidate rate reported)
 - [ ] Size gate (proposed 8 MB, Z1); `baseline` feature; WASM loads it as a file (Z3)
@@ -191,3 +193,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-09 | 4.1b: the component table and G-wire; the per-component metamorphic gate its own line | D-135 |
 | 2026-11-09 | 4.1b: the engine on installed components, and its gate | D-136 |
 | 2026-11-09 | 4.1b: the partial file and the component plan; disk storage joins 4.5/4.6 | D-136: a points-only install lacks the footer and BLOCK_HASHES |
+| 2026-11-09 | 4.2: the forge item split into the pack slice (done) and the world part; pins split | D-145, D-146 |

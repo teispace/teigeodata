@@ -1,6 +1,6 @@
 ---
 title: "The embedded baseline: sources, IDs and size"
-status: proposed
+status: accepted
 updated: 2026-11-09
 owner: forge
 revisit: 2027-05-01
@@ -109,6 +109,14 @@ rows by GeoNames' readme). At Nepal's 55 B per place for PLACES, NAMES, SEARCH a
 plus more names per large city, 34,208 cities take about 2–4 MB; `cities5000` would push the
 baseline past 8 MB.
 
+### 3.7 The first slice, measured (D-145)
+
+Nepal's slice of its 2026.11.0 build at 500 m: the country, 7 provinces and the 45 places of
+the 46 `cities15000` rows (Panauti is listed twice), 53 rows. Main 158,784 B, lite 150,336 B,
+about 80 kB on the wire. The 4,096-cell region grid is the A/B winner
+([forge](../../04-architecture/forge.md#the-baseline-slice-baseline)). Building it showed that
+level-1 units were HIERARCHY roots, not children of the country (fixed, D-146).
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
@@ -136,7 +144,7 @@ baseline past 8 MB.
 
 ## 6. Impact on the plan
 
-- D-144 records the source choices and the slice rule.
+- D-144 records the source choices and the slice rule; D-145 the slice as built.
 - Phase 4.2 gains the slice rule and the per-country admin-1 source report.
 - New sources to pin when the build lands: `ne-admin0-nep-5.1.1`, `ne-admin1-5.1.1`,
   `geonames-cities15000`, and OSM admin 1 extracts for main.

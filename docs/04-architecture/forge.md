@@ -606,7 +606,45 @@ the 139 MB section in a fraction of a second. Sampling every place adds about a 
 Before the building stages (2026-11-07): cold 7.8 s, warm 19 ms; a changed profile reran 2
 stages in 3.4 s and a hand-changed GeoNames output 1 stage in 3.1 s.
 
-The stages after `build` join the recipe as they land.
+The stages after `build` join the recipe as they land. The first is `baseline`, when the
+recipe has a `baseline` entry (below).
+
+## The baseline slice (`baseline`)
+
+`forge baseline <cc> [--lite] [--tolerance-m <m>] [--cities <source>] [--key <seed-file>]`
+writes `data/build/baseline/<cc>/<cc>-baseline-<main|lite>.tgd`, the country's slice of the
+embedded baseline, and `summary-<build>.md` (D-144, D-145). `make` runs it after `build` when
+the recipe says `baseline: { cities: <pinned source>, tolerance_m: <50–5,000> }`; its key
+covers the pack's key, the pinned city list, the arguments and the signing seed.
+
+- **Rows.** The country, its current level-1 units, and every row of the city list
+  (GeoNames `cities15000`, column 9 = the country code) found by its `geonames:` key among the
+  live serials of the build's ID registry. Same IDs, names and outline as the pack, so the
+  pack overrides the slice row for row once installed.
+- **Re-encoding** (`teigeodata_format::extract::rows`). IDMAP, PLACES, PLACE_INDEX,
+  ELEVATION, NAMES, SEARCH and HIERARCHY for the kept rows, each row's parent being its
+  nearest kept ancestor; ARCS (the used arcs only, at the finest level of detail within the
+  tolerance, `extract::lod_within`), POLYGONS and POLY_INDEX remapped, ADMIN_REGION rebuilt.
+  REGION, PLACE_TZ, REDIRECTS, POSTAL, DEM, BLOBS and EXTRA are dropped: the world timezones
+  and the locator come from the world part of the baseline.
+- **Region index.** A 4,096-cell fine grid instead of the packs' 2^18. A/B on Nepal's slice at
+  500 m (2026-11-09):
+
+  | Fine cells | ADMIN_REGION | `admin_at` |
+  |---:|---:|---:|
+  | 2^18 (packs) | 135,832 B | 163 ns |
+  | none | 17,684 B | 418 ns |
+  | **4,096** | **20,516 B** | **281 ns** |
+  | 16,384 | 27,880 B | 206 ns |
+
+- **G-base.** Every listed city of the country must be a row, or the build fails and names
+  them. The slice is read back (`open_verified`) and its arcs, polygons and region checked
+  before it is written.
+- **Nepal (2026-11-09).** 46 listed cities give 45 places (Panauti is listed twice), plus the
+  country and 7 provinces. Main 158,784 B, lite 150,336 B; about 80 kB on the wire.
+  `tests/extract.rs` (`the_baseline_slice_under_its_pack`, with `TGD_PACK` and
+  `TGD_BASELINE`) checks that the pack wins every ID, and that the slice alone answers each
+  city with its province and country, by `ancestors` and by `admin_at`.
 
 **Clean-up.** `cargo xtask clean` removes build output from both workspaces and keeps the
 store: fetched sources are pinned inputs, not build output.
