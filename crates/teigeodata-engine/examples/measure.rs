@@ -1,6 +1,6 @@
 //! Measures the engine on a real pack: open time (mapped), the first query of each kind (which
-//! verifies the sections it reads), and warm latency through the engine with 1 and 3 layers
-//! against direct section calls.
+//! verifies the sections it reads), warm latency through the engine with 1, 3 and 10 layers
+//! against direct section calls, and the open cost of packs of 1 MiB to 1 GiB (L1).
 //!
 //! ```text
 //! cargo run --release -p teigeodata-engine --example measure -- data/build/pack/np/np-places-main.tgd
@@ -88,7 +88,7 @@ fn main() {
         black_box(Layer::open(&path, LayerOptions::default()).unwrap());
     });
     println!(
-        "open (mapped, head checks and block proofs): first {first_open:?}, warm {:.1} µs",
+        "open (mapped, head checks; block proofs wait for first use, D-142): first {first_open:?}, warm {:.1} µs",
         open_ns / 1e3
     );
 
@@ -144,14 +144,17 @@ fn main() {
         e.search(&queries[0], 10, &mut s, &mut hits).unwrap();
     });
 
-    // Warm: 1 layer, 3 layers (the pack split by ID), and direct section calls.
-    let parts = model.split(3, |_, id| {
-        (id.get().wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 40) as usize % 3
-    });
-    let mut e3 = Engine::new();
-    for p in parts {
-        e3.add(Layer::from_bytes(p, LayerOptions::default()).unwrap());
-    }
+    // Warm: 1, 3 and 10 layers (the pack split by a hash of the ID), and direct section calls.
+    let split = |parts: usize| {
+        let mut eng = Engine::new();
+        for p in model.split(parts, |_, id| {
+            (id.get().wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 40) as usize % parts
+        }) {
+            eng.add(Layer::from_bytes(p, LayerOptions::default()).unwrap());
+        }
+        eng
+    };
+    let engines = [e, split(3), split(10)];
     let ids_view = IdMap::open(&pack.section(Kind::IDMAP).unwrap()).unwrap();
     let places = Places::open(&pack.section(Kind::PLACES).unwrap()).unwrap();
     let heights = pack
@@ -166,7 +169,7 @@ fn main() {
     };
     let zones = Region::open(&pack.section(Kind::REGION).unwrap()).unwrap();
     // Warm every engine once.
-    for eng in [&e, &e3] {
+    for eng in &engines {
         for i in 0..n {
             black_box(eng.get(ids[i]).unwrap());
             eng.reverse(points[i], 10, &mut s, &mut near).unwrap();
@@ -180,11 +183,23 @@ fn main() {
     let mut nb = [Neighbour::default(); 10];
     let mut regions = [0_u32; 16];
     println!();
-    println!("| Query | direct (ns) | engine, 1 layer (ns) | engine, 3 layers (ns) |");
-    println!("|---|---:|---:|---:|");
-    let row = |label: &str, d: Option<f64>, one: f64, three: f64| {
+    println!("| Query | direct (ns) | engine, 1 layer (ns) | 3 layers (ns) | 10 layers (ns) |");
+    println!("|---|---:|---:|---:|---:|");
+    let mut s1 = Scratch::default();
+    // One query through every engine, `count` probes each: the row of the table.
+    let mut row = |label: &str,
+                   d: Option<f64>,
+                   count: usize,
+                   f: &mut dyn FnMut(&Engine, usize, &mut Scratch)| {
+        let t: Vec<f64> = engines
+            .iter()
+            .map(|eng| per_call(count, |i| f(eng, i, &mut s1)))
+            .collect();
         let d = d.map_or("n/a".to_owned(), |v| format!("{v:.0}"));
-        println!("| {label} | {d} | {one:.0} | {three:.0} |");
+        println!(
+            "| {label} | {d} | {:.0} | {:.0} | {:.0} |",
+            t[0], t[1], t[2]
+        );
     };
     let direct_get = per_call(n, |i| {
         let row = ids_view.row(ids[i]).unwrap();
@@ -197,13 +212,9 @@ fn main() {
             heights.and_then(|h| h.get(row)),
         ));
     });
-    let get1 = per_call(n, |i| {
+    row("get", Some(direct_get), n, &mut |e, i, _| {
         black_box(e.get(ids[i]).unwrap());
     });
-    let get3 = per_call(n, |i| {
-        black_box(e3.get(ids[i]).unwrap());
-    });
-    row("get", Some(direct_get), get1, get3);
     let direct_rev = per_call(n, |i| {
         let k = index.nearest(points[i], &mut nb);
         for x in &nb[..k] {
@@ -215,55 +226,93 @@ fn main() {
             ));
         }
     });
-    let mut s1 = Scratch::default();
-    let rev1 = per_call(n, |i| e.reverse(points[i], 10, &mut s1, &mut near).unwrap());
-    let rev3 = per_call(n, |i| {
-        e3.reverse(points[i], 10, &mut s1, &mut near).unwrap();
+    let mut out = Vec::new();
+    row("reverse, k = 10", Some(direct_rev), n, &mut |e, i, s| {
+        e.reverse(points[i], 10, s, &mut out).unwrap();
     });
-    row("reverse, k = 10", Some(direct_rev), rev1, rev3);
     for (meters, k) in [(1_000.0, 50), (10_000.0, 50)] {
-        let r1 = per_call(n, |i| {
-            e.within_radius(points[i], meters, k, &mut s1, &mut near)
-                .unwrap();
-        });
-        let r3 = per_call(n, |i| {
-            e3.within_radius(points[i], meters, k, &mut s1, &mut near)
-                .unwrap();
-        });
-        row(&format!("within_radius {meters} m, k = {k}"), None, r1, r3);
+        row(
+            &format!("within_radius {meters} m, k = {k}"),
+            None,
+            n,
+            &mut |e, i, s| {
+                e.within_radius(points[i], meters, k, s, &mut out).unwrap();
+            },
+        );
     }
     let direct_admin = per_call(n, |i| {
         let k = admin_ix.regions_at(points7[i], &mut regions);
         black_box(&regions[..k.min(16)]);
     });
-    let adm1 = per_call(n, |i| {
-        e.admin_at(points7[i], &mut s1, &mut admin).unwrap();
-    });
-    let adm3 = per_call(n, |i| {
-        e3.admin_at(points7[i], &mut s1, &mut admin).unwrap();
-    });
+    let mut units = Vec::new();
     row(
         "admin_at (direct: region IDs only)",
         Some(direct_admin),
-        adm1,
-        adm3,
+        n,
+        &mut |e, i, s| {
+            e.admin_at(points7[i], s, &mut units).unwrap();
+        },
     );
     let direct_tz = per_call(n, |i| {
         black_box(zones.region(points7[i]).and_then(|z| zones.place(z)));
     });
-    let tz1 = per_call(n, |i| {
-        black_box(e.tz_at(points7[i]).unwrap());
+    row(
+        "tz_at (direct: zone row only)",
+        Some(direct_tz),
+        n,
+        &mut |e, i, _| {
+            black_box(e.tz_at(points7[i]).unwrap());
+        },
+    );
+    let mut found = Vec::new();
+    row("search, k = 10", None, queries.len(), &mut |e, i, s| {
+        e.search(&queries[i], 10, s, &mut found).unwrap();
     });
-    let tz3 = per_call(n, |i| {
-        black_box(e3.tz_at(points7[i]).unwrap());
-    });
-    row("tz_at (direct: zone row only)", Some(direct_tz), tz1, tz3);
-    let m = queries.len();
-    let se1 = per_call(m, |i| {
-        e.search(&queries[i], 10, &mut s1, &mut hits).unwrap();
-    });
-    let se3 = per_call(m, |i| {
-        e3.search(&queries[i], 10, &mut s1, &mut hits).unwrap();
-    });
-    row("search, k = 10", None, se1, se3);
+
+    open_by_size();
+}
+
+/// L1: opening a mapped pack of 1 MB to 1 GB. Opening reads the head and proves each large
+/// section's block hashes against its section hash, so the cost grows with the bytes covered
+/// by blocks: the packs here hold one raw section of that size (a cold-data BLOBS section).
+fn open_by_size() {
+    println!();
+    println!("| Pack | first open (µs) | warm open (µs) | first 16 KiB read (µs) |");
+    println!("|---|---:|---:|---:|");
+    for mb in [1_usize, 10, 100, 1_000] {
+        let mut x = 0x9e37_79b9_u32;
+        let blob: Vec<u8> = (0..mb << 20)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 17;
+                x ^= x << 5;
+                x.to_le_bytes()[0]
+            })
+            .collect();
+        let bytes = teigeodata_format::Writer::new("zz", "blobs", "2026.11.0")
+            .unwrap()
+            .pack(
+                &[(Kind::BLOBS, teigeodata_format::Encoding::RAW, 1, &blob)],
+                None,
+            )
+            .unwrap();
+        drop(blob);
+        let file = std::env::temp_dir().join(format!("teigeodata-open-{mb}.tgd"));
+        std::fs::write(&file, &bytes).unwrap();
+        drop(bytes);
+        let t = Instant::now();
+        black_box(Layer::open(&file, LayerOptions::default()).unwrap());
+        let first = t.elapsed().as_secs_f64() * 1e6;
+        let warm = per_call(20, |_| {
+            black_box(Layer::open(&file, LayerOptions::default()).unwrap());
+        });
+        // The first read of the section proves its block-hash list (D-142) and checks a block.
+        let layer = Layer::open(&file, LayerOptions::default()).unwrap();
+        let t = Instant::now();
+        black_box(layer.section_bytes(Kind::BLOBS, 0..16_384).unwrap());
+        let read = t.elapsed().as_secs_f64() * 1e6;
+        drop(layer);
+        println!("| {mb} MiB | {first:.0} | {:.0} | {read:.0} |", warm / 1e3);
+        std::fs::remove_file(&file).unwrap();
+    }
 }

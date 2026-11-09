@@ -144,6 +144,16 @@ fn a_flipped_byte_is_found_by_its_block_only() {
     bad[list_start + 16 + 16 + 32 * 7 + 5] ^= 1;
     let p = Pack::open(&bad).unwrap();
     assert!(matches!(p.blocks(BIG), Err(Error::SectionHash { kind }) if kind == BIG.0));
+    // Located without the proof (D-142), the same list is found, and fails when proved.
+    let located = p.locate_blocks(BIG).unwrap().unwrap();
+    assert!(matches!(located.prove(), Err(Error::SectionHash { kind }) if kind == BIG.0));
+    let good_pack = Pack::open(&good).unwrap();
+    good_pack
+        .locate_blocks(BIG)
+        .unwrap()
+        .unwrap()
+        .prove()
+        .unwrap();
 }
 
 #[test]

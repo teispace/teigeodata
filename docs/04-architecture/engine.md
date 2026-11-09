@@ -23,9 +23,13 @@ page are decisions D-113 (opening and verification) and D-114 (queries) in the
 | `Layer::from_static` | Borrows `&'static [u8]` | The embedded baseline |
 
 Opening checks the head exactly as `Pack::open` does (lengths, offsets, the head digest, the
-section table) and opens every view the queries use. It does not hash section bytes, except the
-block-hash list: each section that BLOCK_HASHES covers has its list proved against the section's
-hash once, at open, so a later block check needs only the list.
+section table) and opens every view the queries use. It hashes no section bytes and proves no
+block-hash list: it only finds where each covered section's list is (D-142). The first read of
+a section that BLOCK_HASHES covers proves its list against the section hash, once per layer, so
+later block checks need only the list. A list that does not prove fails every read of that
+section with `Integrity` and nothing else; `Verify::Eager` proves every list at open. Open is
+O(head): 52 µs warm for a 1 GiB pack, where proving at open took 4.9 ms
+([phase-4 benchmarks](../02-research/benches/phase-4.md#open-by-pack-size-d-142)).
 
 **`unsafe`.** `teigeodata-format` and every other runtime crate keep `forbid(unsafe_code)`. The
 engine is the one boundary crate: its lint table is the workspace table with `unsafe_code =
@@ -213,3 +217,4 @@ Each gate was first shown to fail on a planted bug (D-114).
 | 2026-11-09 | A Cargo feature per component; `Engine::parent` | D-137 |
 | 2026-11-09 | `within_radius`, `nearby`, `ancestors`, `children` | D-140 |
 | 2026-11-09 | `Shared` snapshots on `arc-swap`; layers held in `Arc` | D-141 |
+| 2026-11-09 | Block-hash lists proved on a section's first read, not at open | D-142 |

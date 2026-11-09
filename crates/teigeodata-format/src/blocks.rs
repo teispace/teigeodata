@@ -200,9 +200,10 @@ pub struct Blocks<'a, 'm> {
 }
 
 impl<'a> Blocks<'a, '_> {
-    /// Finds and proves `section`'s block hashes in `list`: O(blocks) merges, no hashing of
-    /// the section. `None` if the section is not covered.
-    pub(crate) fn prove(
+    /// Finds `section`'s block hashes in `list`: O(entries), no merging and no hashing.
+    /// `None` if the section is not covered. The hashes are not yet bound to the section
+    /// hash: call [`Blocks::prove`] before trusting [`Blocks::verify`].
+    pub(crate) fn locate(
         section: Section<'a>,
         list: Option<Section<'a>>,
     ) -> Result<Option<Self>, Error> {
@@ -214,16 +215,26 @@ impl<'a> Blocks<'a, '_> {
         let cvs = list
             .cvs_of(section.kind(), len)
             .ok_or(fail("the section has no entry"))?;
-        if root(cvs, len).as_ref() != Some(section.hash()) {
-            return Err(Error::SectionHash {
-                kind: section.kind().0,
-            });
-        }
         Ok(Some(Self {
             section,
             cvs,
             memo: None,
         }))
+    }
+
+    /// Proves the block hashes against the section hash: O(blocks) merges, no hashing of the
+    /// section. Until it passes, [`Blocks::verify`] checks blocks against unproven hashes.
+    ///
+    /// # Errors
+    /// [`Error::SectionHash`] if the block hashes do not give the section hash.
+    pub fn prove(&self) -> Result<(), Error> {
+        if root(self.cvs, self.section.bytes().len() as u64).as_ref() == Some(self.section.hash()) {
+            Ok(())
+        } else {
+            Err(Error::SectionHash {
+                kind: self.section.kind().0,
+            })
+        }
     }
 
     /// Remembers verified blocks in `memo`, one bit per block ([`Blocks::memo_words`] words),

@@ -128,7 +128,8 @@ fn a_large_section_is_checked_a_block_at_a_time() {
         layer.section_bytes(Kind::NAMES, 0..1),
         Err(Error::Range)
     ));
-    // A flipped block hash is caught when the layer opens: the list no longer proves.
+    // A flipped block hash: the list no longer proves (D-142). Lazy opens in O(head) and fails
+    // every read of the section, even of a good block; Eager fails at open.
     let list = Pack::open(&good)
         .unwrap()
         .section(Kind::BLOCK_HASHES)
@@ -136,7 +137,22 @@ fn a_large_section_is_checked_a_block_at_a_time() {
         .bytes()
         .len();
     let bad_list = flipped(&good, Kind::BLOCK_HASHES, list - 1);
-    assert!(Layer::from_bytes(bad_list, opts(Verify::Lazy)).is_err());
+    let layer = Layer::from_bytes(bad_list.clone(), opts(Verify::Lazy)).unwrap();
+    for range in [0..1, 100 * block..100 * block + 7, 0..blob.len()] {
+        for _ in 0..2 {
+            assert!(matches!(
+                layer.section_bytes(Kind::BLOBS, range.clone()),
+                Err(Error::Integrity { .. })
+            ));
+        }
+    }
+    assert!(Layer::from_bytes(bad_list, opts(Verify::Eager)).is_err());
+    // The good pack proves on first use and reads every block.
+    let layer = Layer::from_bytes(good, opts(Verify::Lazy)).unwrap();
+    assert_eq!(
+        layer.section_bytes(Kind::BLOBS, 0..blob.len()).unwrap(),
+        &blob[..]
+    );
 }
 
 #[test]

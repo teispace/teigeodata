@@ -324,8 +324,25 @@ impl<'a> Pack<'a> {
     /// # Errors
     /// [`Error::SectionHash`] if the block hashes do not give the section hash.
     pub fn blocks(&self, kind: Kind) -> Result<Option<crate::blocks::Blocks<'a, 'static>>, Error> {
+        let blocks = self.locate_blocks(kind)?;
+        if let Some(b) = &blocks {
+            b.prove()?;
+        }
+        Ok(blocks)
+    }
+
+    /// Section `kind`'s block hashes, found but **not proven**: O(entries). For a reader that
+    /// defers the proof to the section's first use; call
+    /// [`Blocks::prove`](crate::blocks::Blocks::prove) before trusting a block.
+    ///
+    /// # Errors
+    /// [`Error::Payload`] if `BLOCK_HASHES` is missing or has no entry for a covered section.
+    pub fn locate_blocks(
+        &self,
+        kind: Kind,
+    ) -> Result<Option<crate::blocks::Blocks<'a, 'static>>, Error> {
         match self.section(kind) {
-            Some(s) => crate::blocks::Blocks::prove(s, self.section(Kind::BLOCK_HASHES)),
+            Some(s) => crate::blocks::Blocks::locate(s, self.section(Kind::BLOCK_HASHES)),
             None => Ok(None),
         }
     }

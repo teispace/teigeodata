@@ -66,9 +66,10 @@ call (ADR-0012).
 - [x] Metamorphic gate: splitting or reordering packs never changes an answer; differential
   against one compacted pack. Done 2026-11-09: synthetic in 2, 3 and 5 parts, the Nepal main
   pack in 2 and 3 (46.7 s, ignored test with `TGD_PACK`); planted bugs fail it (D-114)
-- [ ] L1 at 1 GB mapped, L4, L5 at 1, 3 and 10 layers (1 and 3 layers on a synthetic pack
-  measured 2026-11-09; Nepal at 1 and 3 layers measured the same day; 10 layers and 1 GB
-  still to run)
+- [x] L1 at 1 GB mapped, L4, L5 at 1, 3 and 10 layers. Done 2026-11-09
+  ([benchmarks](../../02-research/benches/phase-4.md#ten-layers-l5)): 10 layers cost 5.5× one
+  layer for `get` and 1.3× for `admin_at`; opening a 1 GiB pack was 4.9 ms, now 52 µs because
+  block-hash lists are proved on first read (D-142)
 
 ### 4.1b Components: download only the data asked for (ADR-0015, D-133)
 Research: [components](../../02-research/notes/components.md). The section is the unit; one

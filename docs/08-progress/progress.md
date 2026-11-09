@@ -32,7 +32,10 @@ A short status. The numbers and evidence live in each phase file and the
 - **In parallel (Phase 4):** the engine (4.1, D-113, D-114; Nepal timings in
   [phase-4 benches](../02-research/benches/phase-4.md#nepal-main-pack)) and the transport
   (4.4, D-112) are on `main`; the product's search is at parity with the spike (D-121:
-  recall@1 0.797, p50 6.7 µs). Next: radius and cross-pack hierarchy, snapshot swap, TUF trust.
+  recall@1 0.797, p50 6.7 µs); radius queries and the in-pack hierarchy (D-140), `Shared`
+  snapshots (D-141), L1/L4/L5 measured to 10 layers and 1 GiB, open O(head) with block-hash
+  lists proved on first read (D-142). Next: cross-pack hierarchy (parents by ID), 4.2 baseline
+  and locator, 4.3 TUF trust.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).
 - **Waiting on the maintainer:** review of `data/countries/np/corrections/` (unreviewed), the labelled sample (Q-005, needed for `ACCURACY.md` and M3),

@@ -149,8 +149,8 @@ pub(crate) struct Views<'a> {
     pub(crate) admin: Option<Region<'a>>,
     #[cfg(feature = "admin-index")]
     pub(crate) polygons: Option<Polygons<'a>>,
-    /// The block hashes of every installed section of 1 MiB or more, proved against its
-    /// section hash.
+    /// The block hashes of every installed section of 1 MiB or more, located but not proved:
+    /// each list is proved against its section hash on the section's first use (D-142).
     pub(crate) blocks: Vec<(Kind, Blocks<'a, 'static>)>,
     /// The components the pack has sections of but that were not installed.
     pub(crate) missing: Components,
@@ -158,8 +158,9 @@ pub(crate) struct Views<'a> {
 
 impl<'a> Views<'a> {
     /// Opens `bytes` as a pack and every installed section the engine reads: the head checks,
-    /// the structure of each view and the proof of every block-hash list. No section is hashed,
-    /// and no section of a component outside `installed` is read.
+    /// the structure of each view and where each block-hash list is. No section is hashed, no
+    /// block-hash list is proved (D-142), and no section of a component outside `installed` is
+    /// read.
     pub(crate) fn open(bytes: &'a [u8], installed: Option<Components>) -> Result<Self, Error> {
         // A partial install may have holes, BLOCK_HASHES among them: only the head is read.
         let pack = match installed {
@@ -221,7 +222,7 @@ impl<'a> Views<'a> {
         let mut blocks = Vec::new();
         for s in pack.sections() {
             if Component::of(s.kind()).is_some_and(|c| !missing.contains(c))
-                && let Some(b) = pack.blocks(s.kind())?
+                && let Some(b) = pack.locate_blocks(s.kind())?
             {
                 blocks.push((s.kind(), b));
             }
@@ -388,6 +389,9 @@ pub struct Layer {
     state: [AtomicU8; KINDS],
     /// One bit per verified block, per entry of `Views::blocks`.
     memo: Vec<Box<[AtomicUsize]>>,
+    /// Whether each entry of `Views::blocks` is proved against its section hash: `UNCHECKED`,
+    /// `GOOD` or `BAD` (D-142).
+    proved: Box<[AtomicU8]>,
     stamp: Option<FileStamp>,
     pub(crate) id: LayerId,
 }
@@ -439,6 +443,9 @@ impl Layer {
             for s in v.pack.sections().filter(|s| v.installed(s.kind())) {
                 s.verify()?;
             }
+            for (_, b) in &v.blocks {
+                b.prove()?;
+            }
         }
         let ranges = [
             v.ids.as_ref().and_then(IdMap::id_range),
@@ -461,6 +468,12 @@ impl Layer {
         } else {
             GOOD
         };
+        let proof = if options.verify == Verify::Eager {
+            GOOD
+        } else {
+            UNCHECKED
+        };
+        let proved = v.blocks.iter().map(|_| AtomicU8::new(proof)).collect();
         let bbox = v.pack.manifest().bbox();
         Ok(Self {
             options,
@@ -471,6 +484,7 @@ impl Layer {
                 AtomicU8::new(if v.installed(kind) { initial } else { MISSING })
             }),
             memo,
+            proved,
             stamp,
             owned,
             id: LayerId(0),
@@ -636,9 +650,24 @@ impl Layer {
     /// Checks blocks `blocks` of covered section `i`, skipping those already checked.
     fn verify_blocks(&self, i: usize, blocks: core::ops::Range<usize>) -> Result<(), Error> {
         let v = self.views();
-        let (Some((kind, b)), Some(memo)) = (v.blocks.get(i), self.memo.get(i)) else {
+        let (Some((kind, b)), Some(memo), Some(proof)) =
+            (v.blocks.get(i), self.memo.get(i), self.proved.get(i))
+        else {
             return Ok(());
         };
+        // The list is proved once, on the first read of its section (D-142); a list that does
+        // not prove fails every read of that section and nothing else.
+        match proof.load(Atomic::Acquire) {
+            GOOD => {}
+            BAD => return Err(self.integrity(*kind)),
+            _ => {
+                let ok = b.prove().is_ok();
+                proof.store(if ok { GOOD } else { BAD }, Atomic::Release);
+                if !ok {
+                    return Err(self.integrity(*kind));
+                }
+            }
+        }
         let bits = usize::BITS as usize;
         for block in blocks {
             let word = memo.get(block / bits);

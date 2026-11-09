@@ -167,3 +167,41 @@ for 1.5 s. Two rounds:
 On one thread all four cost the same as a bare query. Under contention `arc-swap` costs 1.4×
 a bare query; the others cost 4.6× to 14× because every reader writes the lock's (or the
 `Arc`'s) shared counter. A held `RwLock` also starves the writer.
+
+### Ten layers (L5)
+
+`measure` on the same pack, 2026-11-09, load about 110 (another project's build on the same
+machine, so absolute times run high). The 10-layer engine splits the places by a hash of the ID
+into ten packs, as the 3-layer one does.
+
+| Query | engine, 1 layer (ns) | 3 layers (ns) | 10 layers (ns) |
+|---|---:|---:|---:|
+| get | 119 | 289 | 655 |
+| reverse, k = 10 | 7,203 | 16,249 | 44,360 |
+| within_radius 1 km, k = 50 | 2,867 | 7,969 | 21,734 |
+| within_radius 10 km, k = 50 | 12,488 | 43,379 | 98,898 |
+| admin_at | 359 | 417 | 469 |
+| tz_at | 79 | 88 | 101 |
+| search, k = 10 | 11,537 | 29,784 | 83,122 |
+
+Point lookups by ID and the area lookups barely grow: `get` skips a layer by its ID range,
+`admin_at` and `tz_at` cost one more visibility check per layer. `reverse`, the radius queries
+and `search` grow about linearly in layers because a split by ID puts candidates in every
+layer; packs split by area prune by their bounding box instead.
+
+### Open by pack size (D-142)
+
+`measure` writes a pack holding one BLOBS section of each size, maps it and opens it
+(`Layer::open`, defaults), then deletes it. Same run as above.
+
+| Pack | first open (µs) | warm open (µs) | first 16 KiB read (µs) | warm open before D-142 (µs) |
+|---|---:|---:|---:|---:|
+| 1 MiB | 71 | 22 | 18 | 24 |
+| 10 MiB | 103 | 31 | 62 | 71 |
+| 100 MiB | 122 | 44 | 512 | 517 |
+| 1,000 MiB | 1,471 | 52 | 5,241 | 4,918 |
+
+Before D-142 the open proved every block-hash list (65,536 merges for 1 GiB), so open grew with
+the pack. Now open is O(head) and the proof moves to the first read of each covered section,
+once per layer; sections never read never pay it. The first open includes mapping a file that
+was just written.
