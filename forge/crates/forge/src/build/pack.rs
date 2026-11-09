@@ -16,6 +16,7 @@ use teigeodata_format::places::{self, PlaceColumns, Places};
 use teigeodata_format::postal::{self, Postal};
 use teigeodata_format::redirects::{self, Fate, Redirects};
 use teigeodata_format::region::{self, Options, Region};
+use teigeodata_format::search::rules::Rule;
 use teigeodata_format::search::{self, EXACT, Maps, Search};
 use teigeodata_format::{Bbox, Encoding, Kind, Pack, Tag, Writer};
 use teigeodata_names::{SearchMap, fold, search_keys};
@@ -156,7 +157,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
     let (ids, moved, assigned) = allocate(input, &rows)?;
     let idmap_body = idmap::encode(&ids).map_err(|e| e.to_string())?;
 
-    let (names_body, search_body) = name_sections(&rows, input.profile)?;
+    let (names_body, search_body) = name_sections(&rows, input.profile, &input.args.admin)?;
     let index_body = place_index::encode(&points, NODE).map_err(|e| e.to_string())?;
 
     let mut sections: Vec<Body> = vec![
@@ -358,7 +359,11 @@ fn assemble(
 }
 
 /// The NAMES and SEARCH bodies of the rows.
-fn name_sections(rows: &[&Place], profile: &Profile) -> Result<(Vec<u8>, Vec<u8>), String> {
+fn name_sections(
+    rows: &[&Place],
+    profile: &Profile,
+    admin_source: &str,
+) -> Result<(Vec<u8>, Vec<u8>), String> {
     let records: Vec<Vec<NameRecord<'_>>> = rows
         .iter()
         .map(|p| {
@@ -399,9 +404,57 @@ fn name_sections(rows: &[&Place], profile: &Profile) -> Result<(Vec<u8>, Vec<u8>
         }
     }
     let importance: Vec<u8> = rows.iter().map(|p| importance(p)).collect();
-    let search_body = search::encode_maps(&maps, &importance).map_err(|e| e.to_string())?;
+    let rules = query_rules(profile);
+    let units: Vec<u8> = rows
+        .iter()
+        .map(|p| profile.unit_of(admin_source, &p.key, p.admin_level))
+        // A type no abbreviation names cannot be asked for: no column value for it.
+        .map(|u| {
+            let named = usize::from(u)
+                .checked_sub(1)
+                .and_then(|i| profile.units.get(i))
+                .is_some_and(|t| !t.abbreviations.is_empty());
+            if named { u } else { 0 }
+        })
+        .collect();
+    let extra = search::Extra {
+        rules: (!rules.is_empty()).then_some(rules.as_slice()),
+        units: if units.iter().any(|&u| u > 0) {
+            &units
+        } else {
+            &[]
+        },
+    };
+    let search_body =
+        search::encode_maps_with(&maps, &importance, &extra).map_err(|e| e.to_string())?;
 
     Ok((names_body, search_body))
+}
+
+/// The country's query rules for SEARCH (D-120): its phonetic key, unit-type abbreviations,
+/// droppable suffixes and native generics with each Latin spelling.
+fn query_rules(profile: &Profile) -> Vec<Rule<'_>> {
+    let mut rules: Vec<Rule<'_>> = Vec::new();
+    if let Some(n) = &profile.phonetic_name {
+        rules.push(Rule::Phonetic(n));
+    }
+    for (i, u) in profile.units.iter().enumerate() {
+        let Ok(unit) = u8::try_from(i + 1) else { break };
+        for a in &u.abbreviations {
+            rules.push(Rule::Unit {
+                abbreviation: a.folded(),
+                unit,
+            });
+        }
+    }
+    rules.extend(profile.droppable.iter().map(|d| Rule::Drop(d)));
+    for (native, spellings) in &profile.native {
+        rules.extend(spellings.iter().map(|s| Rule::Native {
+            native,
+            spelling: s,
+        }));
+    }
+    rules
 }
 
 /// An Ed25519 signing key from a file of 64 hex digits (its 32-byte seed).

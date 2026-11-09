@@ -402,15 +402,41 @@ fn registry(root: &Path, path: Option<&str>) -> Result<ids::Registry, String> {
     ids::Registry::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-/// What the build reads from the country profile.
+/// What the build reads from the country profile (and, for search, its lexicon).
 #[derive(Debug, Default)]
 pub(crate) struct Profile {
     pub(crate) phonetic: Option<PhoneticKey>,
+    /// The phonetic key's profile name (`indic-v0`), for the pack's query rules.
+    pub(crate) phonetic_name: Option<String>,
     /// Folded.
     pub(crate) droppable: Vec<String>,
     pub(crate) wikidata: Option<String>,
     /// The romanisation profiles of its names (`ne-Deva`), in order.
     pub(crate) romanise: Vec<String>,
+    /// The unit types, in profile order: a row's unit type is its position plus 1 (D-120).
+    pub(crate) units: Vec<UnitType>,
+    /// Per source family (`codab`): where a unit's code holds its unit type.
+    pub(crate) unit_codes: BTreeMap<String, CodeSlice>,
+    /// Native-script generics, folded, each with its Latin spellings, folded.
+    pub(crate) native: Vec<(String, Vec<String>)>,
+}
+
+/// A unit type of the profile.
+#[derive(Debug, Default, serde::Deserialize)]
+pub(crate) struct UnitType {
+    pub(crate) level: u8,
+    #[serde(default)]
+    pub(crate) abbreviations: Vec<Term>,
+    /// Per source family, the code of this type.
+    #[serde(default)]
+    pub(crate) source_codes: BTreeMap<String, String>,
+}
+
+/// The part of a unit's code that holds its unit type.
+#[derive(Debug, Default, serde::Deserialize)]
+pub(crate) struct CodeSlice {
+    pub(crate) offset: usize,
+    pub(crate) length: usize,
 }
 
 #[derive(serde::Deserialize)]
@@ -423,11 +449,30 @@ struct ProfileFile {
     wikidata: Option<String>,
     #[serde(default)]
     romanise: Vec<String>,
+    #[serde(default)]
+    unit_types: Vec<UnitType>,
+    #[serde(default)]
+    sources: BTreeMap<String, SourceRules>,
 }
 
 #[derive(serde::Deserialize)]
-struct Term {
-    text: String,
+struct SourceRules {
+    #[serde(default)]
+    unit_type_code: Option<CodeSlice>,
+}
+
+#[derive(Debug, Default, serde::Deserialize)]
+pub(crate) struct Term {
+    pub(crate) text: String,
+    /// The fold of `text`, set when the profile is read.
+    #[serde(skip)]
+    pub(crate) folded: String,
+}
+
+impl Term {
+    pub(crate) fn folded(&self) -> &str {
+        &self.folded
+    }
 }
 
 impl Profile {
@@ -445,10 +490,53 @@ impl Profile {
         };
         Ok(Self {
             phonetic,
+            phonetic_name: p.phonetic_key,
             droppable: p.droppable_suffixes.iter().map(|t| fold(&t.text)).collect(),
             wikidata: p.wikidata,
             romanise: p.romanise,
+            units: p
+                .unit_types
+                .into_iter()
+                .map(|mut u| {
+                    for a in &mut u.abbreviations {
+                        a.folded = fold(&a.text);
+                    }
+                    u
+                })
+                .collect(),
+            unit_codes: p
+                .sources
+                .into_iter()
+                .filter_map(|(family, r)| r.unit_type_code.map(|c| (family, c)))
+                .collect(),
+            native: crate::names::native_generics(root, cc)?,
         })
+    }
+
+    /// The unit type of an admin unit (1 + its position in the profile), from the code in its
+    /// key (`admin:<code>`) and the rule of the boundary source's family (`codab` for
+    /// `codab-np-geojson`); 0 for none.
+    pub(crate) fn unit_of(&self, admin_source: &str, key: &str, level: u8) -> u8 {
+        let Some(code) = key.strip_prefix("admin:") else {
+            return 0;
+        };
+        let Some((family, slice)) = self.unit_codes.iter().find(|(f, _)| {
+            admin_source
+                .strip_prefix(f.as_str())
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with('-'))
+        }) else {
+            return 0;
+        };
+        let Some(digit) = code.get(slice.offset..slice.offset + slice.length) else {
+            return 0;
+        };
+        self.units
+            .iter()
+            .position(|u| {
+                u.level == level && u.source_codes.get(family).is_some_and(|c| c == digit)
+            })
+            .and_then(|i| u8::try_from(i + 1).ok())
+            .unwrap_or(0)
     }
 }
 
@@ -558,5 +646,37 @@ mod tests {
                 ("wikidata:Q1", "नेपाल", Dropped::Uncorroborated, ""),
             ]
         );
+    }
+
+    #[test]
+    fn a_unit_type_comes_from_the_code_by_the_source_family() {
+        use super::{CodeSlice, Profile, UnitType};
+        let unit = |level: u8, code: &str| UnitType {
+            level,
+            source_codes: [("codab".to_string(), code.to_string())].into(),
+            ..UnitType::default()
+        };
+        let p = Profile {
+            units: vec![unit(3, "1"), unit(3, "4"), unit(2, "4")],
+            unit_codes: [(
+                "codab".to_string(),
+                CodeSlice {
+                    offset: 6,
+                    length: 1,
+                },
+            )]
+            .into(),
+            ..Profile::default()
+        };
+        assert_eq!(p.unit_of("codab-np-geojson", "admin:NP0329401", 3), 2);
+        assert_eq!(p.unit_of("codab-np-geojson", "admin:NP0327101", 3), 1);
+        // The level must match; a district code is no local unit type.
+        assert_eq!(p.unit_of("codab-np-geojson", "admin:NP0329401", 2), 3);
+        assert_eq!(p.unit_of("codab-np-geojson", "admin:NP0329901", 3), 0);
+        // Another family, a longer family name, a short code, a non-admin key: none.
+        assert_eq!(p.unit_of("geoboundaries-np", "admin:NP0329401", 3), 0);
+        assert_eq!(p.unit_of("codabx-np", "admin:NP0329401", 3), 0);
+        assert_eq!(p.unit_of("codab-np-geojson", "admin:NP03", 3), 0);
+        assert_eq!(p.unit_of("codab-np-geojson", "geonames:1", 3), 0);
     }
 }

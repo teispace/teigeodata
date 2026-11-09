@@ -50,6 +50,34 @@ struct Native {
     text: String,
 }
 
+/// Country `cc`'s native-script generics, folded, each with its Latin spellings (canonical
+/// first, then the variants), folded: the query rules of mixed-script search (D-120). Longest
+/// native form first.
+pub(crate) fn native_generics(root: &Path, cc: &str) -> Result<Vec<(String, Vec<String>)>, String> {
+    let mut out: Vec<(String, Vec<String>)> = Vec::new();
+    for t in accepted_terms(root, cc)? {
+        let spellings: Vec<String> = std::iter::once(&t.canonical)
+            .chain(&t.variants)
+            .map(|s| teigeodata_names::fold(s))
+            .filter(|s| !s.is_empty())
+            .collect();
+        for n in &t.native {
+            let native = teigeodata_names::fold(&n.text);
+            if !native.is_empty() && !spellings.is_empty() {
+                out.push((native, spellings.clone()));
+            }
+        }
+    }
+    out.sort_by(|a, b| {
+        b.0.chars()
+            .count()
+            .cmp(&a.0.chars().count())
+            .then(a.0.cmp(&b.0))
+    });
+    out.dedup_by(|a, b| a.0 == b.0);
+    Ok(out)
+}
+
 /// Country `cc`'s accepted lexicon terms; none when it has no lexicon.
 fn accepted_terms(root: &Path, cc: &str) -> Result<Vec<Term>, String> {
     let lex = root
