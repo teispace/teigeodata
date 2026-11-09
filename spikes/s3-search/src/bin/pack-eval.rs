@@ -376,36 +376,20 @@ fn run(args: &[String]) -> Result<(), String> {
     // `S3_ENGINE=product` scores the product's search (`teigeodata-engine`) instead of the
     // spike's: the gate of what users get.
     let product = std::env::var_os("S3_ENGINE").is_some_and(|v| v == "product");
-    let layer = teigeodata_engine::Layer::open(
-        std::path::Path::new(pack_path),
-        teigeodata_engine::LayerOptions::default(),
-    )
-    .map_err(|e| format!("{pack_path}: {e}"))?;
-    let mut real = teigeodata_engine::Engine::new();
-    real.add(layer);
-    let scratch = std::cell::RefCell::new((
-        teigeodata_engine::Scratch::default(),
-        Vec::<teigeodata_engine::Hit>::new(),
-    ));
-    let search_with = |q: &str| -> Vec<usize> {
-        if !product {
-            return engine.search(q, 10);
-        }
-        let mut guard = scratch.borrow_mut();
-        let (s, hits) = &mut *guard;
-        if real.search(q, 10, s, hits).is_err() {
-            return Vec::new();
-        }
-        hits.iter().map(|h| h.place.row as usize).collect()
-    };
-    println!(
-        "search: {}",
+    let real = product_search(pack_path)?;
+    let search_with = |q: &str| {
         if product {
-            "teigeodata-engine (S3_ENGINE=product)"
+            real(q)
         } else {
-            "the spike's"
+            engine.search(q, 10)
         }
-    );
+    };
+    let which = if product {
+        "teigeodata-engine (S3_ENGINE=product)"
+    } else {
+        "the spike's"
+    };
+    println!("search: {which}");
     let t0 = Instant::now();
     let scores = golden::score(search_with, &golden, &x.key_group, |g| {
         recs.get(g).map_or(String::new(), |r| {
@@ -435,19 +419,47 @@ fn run(args: &[String]) -> Result<(), String> {
     println!("load {t_load:.2?}, score {t_score:.2?} (each query 22 times)");
     golden::print(&scores, std::env::var_os("S3_MISSES").is_some());
     if std::env::var_os("S3_MISSES").is_some() {
-        println!("\n## unresolved expected keys ({})", x.unresolved.len());
-        for (k, why) in &x.unresolved {
-            println!("  {k}: {why:?}");
-        }
-        println!(
-            "\n## queries with no answer in the pack ({})",
-            x.unanswerable.len()
-        );
-        for q in &x.unanswerable {
-            println!("  {} {} {:?} {:?}", q.id, q.class, q.query, q.expect);
-        }
+        print_gaps(&x);
     }
     Ok(())
+}
+
+/// The expected keys that did not resolve and the queries with no answer in the pack.
+fn print_gaps(x: &Expectations<'_>) {
+    println!("\n## unresolved expected keys ({})", x.unresolved.len());
+    for (k, why) in &x.unresolved {
+        println!("  {k}: {why:?}");
+    }
+    println!(
+        "\n## queries with no answer in the pack ({})",
+        x.unanswerable.len()
+    );
+    for q in &x.unanswerable {
+        println!("  {} {} {:?} {:?}", q.id, q.class, q.query, q.expect);
+    }
+}
+
+/// The product's search (`teigeodata-engine`) on the pack: the best 10 rows of a query.
+fn product_search(pack_path: &str) -> Result<impl Fn(&str) -> Vec<usize>, String> {
+    let layer = teigeodata_engine::Layer::open(
+        std::path::Path::new(pack_path),
+        teigeodata_engine::LayerOptions::default(),
+    )
+    .map_err(|e| format!("{pack_path}: {e}"))?;
+    let mut real = teigeodata_engine::Engine::new();
+    real.add(layer);
+    let scratch = std::cell::RefCell::new((
+        teigeodata_engine::Scratch::default(),
+        Vec::<teigeodata_engine::Hit>::new(),
+    ));
+    Ok(move |q: &str| -> Vec<usize> {
+        let mut guard = scratch.borrow_mut();
+        let (s, hits) = &mut *guard;
+        if real.search(q, 10, s, hits).is_err() {
+            return Vec::new();
+        }
+        hits.iter().map(|h| h.place.row as usize).collect()
+    })
 }
 
 fn main() -> ExitCode {
