@@ -19,7 +19,9 @@ use teigeodata_format::polygons::Polygons;
 use teigeodata_format::redirects::Redirects;
 use teigeodata_format::region::Region;
 use teigeodata_format::search::Search;
+use teigeodata_format::search::rules::Rule;
 use teigeodata_format::{Bbox, Kind, Pack};
+use teigeodata_names::PhoneticKey;
 
 use crate::Error;
 use crate::map::{Backing, Owned};
@@ -84,6 +86,8 @@ pub(crate) struct Views<'a> {
     pub(crate) redirects: Option<Redirects<'a>>,
     pub(crate) names: Option<Names<'a>>,
     pub(crate) search: Option<Search<'a>>,
+    /// SEARCH's query rules, read once here so a search decodes none of them (D-120).
+    pub(crate) rules: QueryRules<'a>,
     pub(crate) place_index: Option<PlaceIndex<'a>>,
     pub(crate) zones: Option<Region<'a>>,
     pub(crate) admin: Option<Region<'a>>,
@@ -108,6 +112,7 @@ impl<'a> Views<'a> {
             .transpose()?;
         let names = get(Kind::NAMES).map(|s| Names::open(&s)).transpose()?;
         let search = get(Kind::SEARCH).map(|s| Search::open(&s)).transpose()?;
+        let rules = search.as_ref().map(QueryRules::new).unwrap_or_default();
         let place_index = match (get(Kind::PLACE_INDEX), places) {
             (Some(s), Some(p)) => Some(PlaceIndex::open(&s, p)?),
             _ => None,
@@ -136,6 +141,7 @@ impl<'a> Views<'a> {
             redirects,
             names,
             search,
+            rules,
             place_index,
             zones,
             admin,
@@ -152,6 +158,42 @@ impl<'a> Views<'a> {
                 .flatten()
                 .and_then(|p| p.row(r as usize))
         })
+    }
+}
+
+/// A layer's query rules (D-120) as slices of its SEARCH section, by kind.
+#[derive(Debug, Default)]
+pub(crate) struct QueryRules<'a> {
+    /// The phonetic key the PHONETIC map was written with, if the reader knows it.
+    pub(crate) phonetic: Option<PhoneticKey>,
+    /// Unit-type abbreviations (folded) and their types.
+    pub(crate) units: Vec<(&'a str, u8)>,
+    /// Droppable suffixes, folded.
+    pub(crate) drops: Vec<&'a str>,
+    /// Native generics and one Latin spelling each, the longest native first; the spellings
+    /// of one native are adjacent.
+    pub(crate) natives: Vec<(&'a str, &'a str)>,
+}
+
+impl<'a> QueryRules<'a> {
+    pub(crate) fn new(search: &Search<'a>) -> Self {
+        let mut r = Self::default();
+        for rule in &search.rules() {
+            match rule {
+                Rule::Phonetic(n) => r.phonetic = r.phonetic.or(PhoneticKey::from_name(n)),
+                Rule::Unit { abbreviation, unit } => r.units.push((abbreviation, unit)),
+                Rule::Drop(d) => r.drops.push(d),
+                Rule::Native { native, spelling } => r.natives.push((native, spelling)),
+            }
+        }
+        // Stable: equal natives stay adjacent, in stored order.
+        r.natives.sort_by_key(|n| core::cmp::Reverse(n.0.len()));
+        r
+    }
+
+    /// The type of unit abbreviation `a`, if a rule names it.
+    pub(crate) fn unit(&self, a: &str) -> Option<u8> {
+        self.units.iter().find(|u| u.0 == a).map(|u| u.1)
     }
 }
 

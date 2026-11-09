@@ -105,3 +105,39 @@ fn warm_queries_do_not_allocate() {
         }
     }
 }
+
+/// The same budget on a real pack with query rules (D-120): unit suffixes, native generics,
+/// droppable suffixes, a context and the phonetic tier. `TGD_PACK=<.tgd> cargo test --release
+/// -p teigeodata-engine --test alloc -- --ignored`.
+#[test]
+#[ignore = "needs TGD_PACK, a real pack with query rules"]
+fn warm_search_on_a_real_pack_allocates_only_the_folds() {
+    let path = std::env::var("TGD_PACK").expect("set TGD_PACK to a .tgd file");
+    let mut e = Engine::new();
+    e.add(Layer::open(std::path::Path::new(&path), LayerOptions::default()).unwrap());
+    let mut s = Scratch::default();
+    let mut hits = Vec::with_capacity(64);
+    let queries = [
+        "Kathmandu",
+        "Janaki RM",
+        "Bhimsenगाउँ",
+        "Janakpurdham",
+        "piuthan",
+        "Athmandu",
+        "Rangapur, Rautahat",
+    ];
+    for q in queries {
+        e.search(q, 20, &mut s, &mut hits).unwrap();
+        assert!(!hits.is_empty(), "{q}: no answer");
+    }
+    for q in queries {
+        // The budget is what folding the name and the context allocates; search adds none.
+        let budget = count(|| {
+            for part in q.splitn(2, ',') {
+                drop(std::hint::black_box(teigeodata_names::fold(part)));
+            }
+        });
+        let n = count(|| e.search(q, 20, &mut s, &mut hits).unwrap());
+        assert!(n <= budget, "{q}: {n} allocations, the folds {budget}");
+    }
+}

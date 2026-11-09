@@ -17,8 +17,10 @@ use teigeodata_format::place_index::{Neighbour, PlaceIndex, Rect};
 use teigeodata_format::redirects::Fate;
 use teigeodata_format::region::Region;
 use teigeodata_format::search::fuzzy::{Fuzzy, MAX_CHARS};
-use teigeodata_format::search::{EXACT, LOOSE, Search};
+use teigeodata_format::search::{EXACT, LOOSE, PHONETIC, Search};
+use teigeodata_names::KeyBuf;
 
+use crate::layer::QueryRules;
 use crate::{Engine, Error, LayerId};
 
 /// A place in an answer, read from the layer that won its ID.
@@ -99,6 +101,11 @@ pub struct Scratch {
     loose: String,
     /// The rows a layer's names match the query's context with, sorted.
     context: Vec<u32>,
+    /// A query form with a native generic replaced by a Latin spelling.
+    form: String,
+    /// A phonetic key and its buffers.
+    pkey: String,
+    keybuf: KeyBuf,
 }
 
 /// Redirect hops [`Engine::get`] follows across layers (the forge flattens chains in a pack, so
@@ -118,6 +125,12 @@ const CONTEXT_BONUS: i32 = 1_000;
 const CONTEXT_MAX: usize = 4_096;
 /// Edits a context may differ by, as S3 (D-052).
 const CONTEXT_EDITS: u8 = 2;
+/// A phonetic match: a low-weight safety net that never decides alone (ADR-0032).
+const PHONETIC_BONUS: i32 = 5;
+/// A loose match once a droppable suffix is removed ("Janakpurdham").
+const DROP_BONUS: i32 = LOOSE_BONUS - 5;
+/// Added to a row of the unit type a query names by its abbreviation ("Janaki RM").
+const UNIT_BONUS: i32 = 20;
 /// A match this good (one edit or better) ends the search for any first letter.
 const STRONG: i32 = FUZZY_BONUS - FUZZY_PER_EDIT;
 /// The prefix tier takes the best rows by importance (D-086).
@@ -126,6 +139,18 @@ const PREFIX_K: usize = 16;
 const PREFIX_MIN: usize = 3;
 /// The fuzzy tier runs from this many characters (D-086).
 const FUZZY_MIN: usize = 4;
+
+/// A query as each layer reads it: the folded name, its loose key, the fuzzy automaton with
+/// its anchor, and a unit-type abbreviation it ended with.
+#[derive(Clone, Copy)]
+struct Query<'q> {
+    q: &'q str,
+    loose: &'q str,
+    fuzzy: Option<(&'q Fuzzy, Option<char>)>,
+    abbr: Option<&'q str>,
+    /// The layer's query rules.
+    rules: &'q QueryRules<'q>,
+}
 
 /// Distances below this are compared as `≤` when pruning, so float rounding of a lower bound
 /// never prunes a layer holding a place at the k-th distance.
@@ -650,7 +675,13 @@ impl Engine {
             Some((n, c)) => (n, teigeodata_names::fold(c)),
             None => (query, String::new()),
         };
-        let q = teigeodata_names::fold(name);
+        let folded = teigeodata_names::fold(name);
+        // A trailing unit-type abbreviation that a layer's rules name ("Janaki RM") is not part
+        // of the name: rows of that type gain UNIT_BONUS instead (D-120).
+        let (q, abbr) = match folded.rsplit_once(' ') {
+            Some((stem, last)) if !stem.is_empty() && self.names_unit(last) => (stem, Some(last)),
+            _ => (folded.as_str(), None),
+        };
         if q.is_empty() {
             return Ok(());
         }
@@ -659,7 +690,7 @@ impl Engine {
         loose.extend(q.chars().filter(|&c| c != ' '));
         let chars = q.chars().count();
         let fuzzy = if (FUZZY_MIN..=MAX_CHARS).contains(&chars) {
-            Fuzzy::new(&q, 1)
+            Fuzzy::new(q, 1)
         } else {
             None
         };
@@ -671,7 +702,7 @@ impl Engine {
                 };
                 l.ensure(Kind::SEARCH)?;
                 l.ensure(Kind::IDMAP)?;
-                self.prefix_best(i, search, ids, &q, &mut s.prefix)?;
+                self.prefix_best(i, search, ids, q, &mut s.prefix)?;
             }
             s.prefix
                 .sort_unstable_by(|a, b| b.importance.cmp(&a.importance).then(a.id.cmp(&b.id)));
@@ -696,7 +727,14 @@ impl Engine {
                 }
                 let start = s.hits.len();
                 let walk = fuzzy.as_ref().map(|f| (f, anchor));
-                strong |= self.layer_hits(i, search, ids, (&q, &loose, walk), k, s)?;
+                let query = Query {
+                    q,
+                    loose: &loose,
+                    fuzzy: walk,
+                    abbr,
+                    rules: &v.rules,
+                };
+                strong |= self.layer_hits(i, search, ids, query, k, s)?;
                 s.segs.push(start..s.hits.len());
             }
             if strong || fuzzy.is_none() || anchor.is_none() {
@@ -728,11 +766,24 @@ impl Engine {
         i: usize,
         search: &Search<'_>,
         ids: &IdMap<'_>,
-        (q, loose, fuzzy): (&str, &str, Option<(&Fuzzy, Option<char>)>),
+        Query {
+            q,
+            loose,
+            fuzzy,
+            abbr,
+            rules,
+        }: Query<'_>,
         k: usize,
         s: &mut Scratch,
     ) -> Result<bool, Error> {
         s.rows.clear();
+        rule_hits(
+            search,
+            rules,
+            q,
+            &mut s.rows,
+            (&mut s.form, &mut s.pkey, &mut s.keybuf),
+        );
         let rows = &mut s.rows;
         let add = |ordinal: Option<u32>, bonus: i32, rows: &mut Vec<(u32, i32)>| {
             if let Some(o) = ordinal {
@@ -762,9 +813,21 @@ impl Engine {
         );
         rows.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
         rows.dedup_by_key(|r| r.0);
-        // Strong only through a visible row, so a hidden row decides nothing (D-114).
+        let unit = abbr.and_then(|a| rules.unit(a));
+        if let Some(u) = unit {
+            for r in rows.iter_mut() {
+                if search.unit(r.0) == u {
+                    r.1 += UNIT_BONUS;
+                }
+            }
+        }
+        // Strong only through a visible row, so a hidden row decides nothing (D-114); the unit
+        // bonus does not count.
         let mut strong = false;
-        for &(row, bonus) in rows.iter() {
+        for &(row, mut bonus) in rows.iter() {
+            if unit.is_some_and(|u| search.unit(row) == u) {
+                bonus -= UNIT_BONUS;
+            }
             if bonus < STRONG {
                 continue;
             }
@@ -775,20 +838,7 @@ impl Engine {
                 break;
             }
         }
-        let hierarchy = self
-            .layers
-            .get(i)
-            .and_then(|l| l.views().hierarchy.as_ref());
-        if let (false, Some(h)) = (s.context.is_empty(), hierarchy) {
-            let named =
-                |r: usize| u32::try_from(r).is_ok_and(|r| s.context.binary_search(&r).is_ok());
-            for r in rows.iter_mut() {
-                let row = r.0 as usize;
-                if named(row) || h.ancestors(row).any(named) {
-                    r.1 += CONTEXT_BONUS;
-                }
-            }
-        }
+        self.context_bonus(i, &s.context, rows);
         // Score every row, then read IDs (and check visibility) only for the groups of equal
         // score that can still enter this layer's best k.
         for r in rows.iter_mut() {
@@ -908,6 +958,95 @@ const fn seg_len(start: usize, end: usize) -> usize {
     end.saturating_sub(start)
 }
 
+impl Engine {
+    /// Adds [`CONTEXT_BONUS`] to each of layer `i`'s `rows` whose ancestor (or itself) is one
+    /// of the `context` rows.
+    fn context_bonus(&self, i: usize, context: &[u32], rows: &mut [(u32, i32)]) {
+        let hierarchy = self
+            .layers
+            .get(i)
+            .and_then(|l| l.views().hierarchy.as_ref());
+        if let (false, Some(h)) = (context.is_empty(), hierarchy) {
+            let named =
+                |r: usize| u32::try_from(r).is_ok_and(|r| context.binary_search(&r).is_ok());
+            for r in rows.iter_mut() {
+                let row = r.0 as usize;
+                if named(row) || h.ancestors(row).any(named) {
+                    r.1 += CONTEXT_BONUS;
+                }
+            }
+        }
+    }
+
+    /// Whether some layer's rules name `abbreviation` as a unit type's.
+    fn names_unit(&self, abbreviation: &str) -> bool {
+        self.layers
+            .iter()
+            .any(|l| l.views().rules.unit(abbreviation).is_some())
+    }
+}
+
+/// The matches the layer's query rules add (D-120): the phonetic key of the query and of each
+/// form with its native generic replaced by a Latin spelling (also looked up loosely), and the
+/// query without a droppable suffix. The bonuses as in S3 (D-052).
+fn rule_hits(
+    search: &Search<'_>,
+    rules: &QueryRules<'_>,
+    q: &str,
+    rows: &mut Vec<(u32, i32)>,
+    (form, pkey, keybuf): (&mut String, &mut String, &mut KeyBuf),
+) {
+    let add = |ordinal: Option<u32>, bonus: i32, rows: &mut Vec<(u32, i32)>| {
+        if let Some(o) = ordinal {
+            search.rows_of(o, |r| {
+                rows.push((r, bonus));
+                ControlFlow::Continue(())
+            });
+        }
+    };
+    let phonetic = rules.phonetic;
+    let mut buf = [0_u8; 256];
+    let mut lookup = |f: &str, loosely: bool, rows: &mut Vec<(u32, i32)>| {
+        if loosely {
+            let l = despace(f, &mut buf);
+            add(search.get(LOOSE, l), LOOSE_BONUS, rows);
+            add(search.get(EXACT, l), LOOSE_BONUS, rows);
+        }
+        if let Some(p) = phonetic {
+            p.key_into(f, keybuf, pkey);
+            add(search.get(PHONETIC, pkey), PHONETIC_BONUS, rows);
+        }
+    };
+    lookup(q, false, rows);
+    // The longest native generic the query ends with (the natives are longest first): each of
+    // its Latin spellings in its place.
+    let mut natives = rules
+        .natives
+        .iter()
+        .skip_while(|n| !q.ends_with(n.0))
+        .peekable();
+    if let Some(&&(n, _)) = natives.peek()
+        && let Some(stem) = q.strip_suffix(n)
+    {
+        for &(_, spelling) in natives.take_while(|m| m.0 == n) {
+            form.clear();
+            form.push_str(stem);
+            form.push_str(spelling);
+            lookup(form, true, rows);
+        }
+    }
+    for d in &rules.drops {
+        if let Some(stem) = q.strip_suffix(d)
+            && !stem.trim().is_empty()
+        {
+            let mut b = [0_u8; 256];
+            let l = despace(stem, &mut b);
+            add(search.get(LOOSE, l), DROP_BONUS, rows);
+            add(search.get(EXACT, l), DROP_BONUS, rows);
+        }
+    }
+}
+
 /// The rows of `search` whose names match `context` (folded): exactly, loosely, within
 /// [`CONTEXT_EDITS`] edits with the same first letter, or as a prefix of 3 characters or more; sorted, at most
 /// [`CONTEXT_MAX`]. Empty for an empty context.
@@ -984,7 +1123,14 @@ mod tests {
     use teigeodata_format::search::{self, EXACT, LOOSE, Search};
     use teigeodata_format::{Kind, Section};
 
-    use super::{CONTEXT_MAX, context_rows, despace};
+    use teigeodata_format::search::PHONETIC;
+    use teigeodata_format::search::rules::Rule;
+    use teigeodata_names::{KeyBuf, PhoneticKey};
+
+    use super::{
+        CONTEXT_MAX, DROP_BONUS, LOOSE_BONUS, PHONETIC_BONUS, QueryRules, context_rows, despace,
+        rule_hits,
+    };
 
     fn body(names: &[(u8, &str, u32)], rows: usize) -> Vec<u8> {
         let mut keys: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
@@ -1022,6 +1168,70 @@ mod tests {
         assert_eq!(rows("lal"), [1]); // a prefix of 3
         assert_eq!(rows("la"), Vec::<u32>::new());
         assert_eq!(rows("  "), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn the_rules_add_native_drop_and_phonetic_matches() {
+        let key = PhoneticKey::from_name("indic-v0").unwrap().key("janakpur");
+        let mut keys: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
+        let mut put = |tag: u8, text: &str, row: u32| {
+            let mut k = vec![tag];
+            k.extend_from_slice(text.as_bytes());
+            keys.entry(k).or_default().insert(row);
+        };
+        put(EXACT, "janakpur", 0);
+        put(EXACT, "rampurzz", 1);
+        put(EXACT, "rampurayy", 2);
+        put(EXACT, "rampurww", 3);
+        put(PHONETIC, &key, 4);
+        // The shorter native first: the longest the query ends with still wins, and each of its
+        // spellings is tried.
+        let rules = [
+            Rule::Phonetic("indic-v0"),
+            Rule::Unit {
+                abbreviation: "rm",
+                unit: 3,
+            },
+            Rule::Drop("dham"),
+            Rule::Native {
+                native: "b",
+                spelling: "yy",
+            },
+            Rule::Native {
+                native: "ab",
+                spelling: "zz",
+            },
+            Rule::Native {
+                native: "ab",
+                spelling: "ww",
+            },
+        ];
+        let extra = search::Extra {
+            rules: Some(&rules),
+            units: &[0, 3, 0, 0, 0],
+        };
+        let b = search::encode_with(&keys, &[1; 5], &extra).unwrap();
+        let s = Search::open(&Section::unpacked(Kind::SEARCH, 5, &b)).unwrap();
+        let r = QueryRules::new(&s);
+        assert_eq!(r.unit("rm"), Some(3));
+        assert_eq!(r.unit("m"), None);
+        assert_eq!(s.unit(1), 3);
+        let (mut form, mut pkey, mut buf) = (String::new(), String::new(), KeyBuf::default());
+        let mut hits = |q: &str| {
+            let mut rows = Vec::new();
+            rule_hits(&s, &r, q, &mut rows, (&mut form, &mut pkey, &mut buf));
+            rows.sort_unstable();
+            rows
+        };
+        assert_eq!(hits("rampurab"), [(1, LOOSE_BONUS), (3, LOOSE_BONUS)]);
+        assert_eq!(hits("janakpurdham"), [(0, DROP_BONUS)]);
+        assert_eq!(hits("dham"), []);
+        assert_eq!(hits("janakpur"), [(4, PHONETIC_BONUS)]);
+        // A layer without RULES has none.
+        let empty = body(&[], 5);
+        let plain = Search::open(&Section::unpacked(Kind::SEARCH, 5, &empty)).unwrap();
+        let none = QueryRules::new(&plain);
+        assert!(none.phonetic.is_none() && none.natives.is_empty() && none.unit("rm").is_none());
     }
 
     #[test]

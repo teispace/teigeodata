@@ -69,6 +69,9 @@ pub struct Model {
     /// Tagged search keys and their rows; empty for no SEARCH.
     pub keys: BTreeMap<Vec<u8>, BTreeSet<u32>>,
     pub importance: Vec<u8>,
+    /// SEARCH's query rules, encoded, and each row's unit type (empty for none).
+    pub rules: Option<Vec<u8>>,
+    pub units: Vec<u8>,
     pub node: usize,
     pub redirects: Vec<(PlaceId, Option<PlaceId>)>,
     pub zones: Option<RegionModel>,
@@ -95,7 +98,16 @@ impl Model {
             .map_or(16, |s| PlaceIndex::open(&s, places).unwrap().node_size());
         let mut keys = BTreeMap::new();
         let mut importance = Vec::new();
+        let (mut rules, mut units) = (None, Vec::new());
         if let Some(s) = &search {
+            let read: Vec<_> = s.rules().iter().collect();
+            if !read.is_empty() {
+                rules = Some(search::rules::encode(&read).unwrap());
+            }
+            units = (0..n as u32).map(|r| s.unit(r)).collect();
+            if units.iter().all(|&u| u == 0) {
+                units.clear();
+            }
             let mut buf = [0_u8; search::fst::MAX_KEY];
             for o in 0..s.keys() {
                 let len = s.automaton().key(o, &mut buf).unwrap();
@@ -179,6 +191,8 @@ impl Model {
             }),
             keys,
             importance,
+            rules,
+            units,
             node,
             redirects,
             zones: region_of(Kind::REGION),
@@ -250,6 +264,12 @@ impl Model {
             } else {
                 pick(&self.importance)
             },
+            rules: self.rules.clone(),
+            units: if self.units.is_empty() {
+                Vec::new()
+            } else {
+                pick(&self.units)
+            },
             node: self.node,
             redirects: self
                 .redirects
@@ -312,11 +332,17 @@ impl Model {
             bodies.push((Kind::NAMES, n, names::encode(&refs).unwrap()));
         }
         if !self.importance.is_empty() {
-            bodies.push((
-                Kind::SEARCH,
-                n,
-                search::encode(&self.keys, &self.importance).unwrap(),
-            ));
+            bodies.push((Kind::SEARCH, n, {
+                let rules: Option<Vec<_>> = self
+                    .rules
+                    .as_deref()
+                    .map(|r| search::rules::Rules::new(r).iter().collect());
+                let extra = search::Extra {
+                    rules: rules.as_deref(),
+                    units: &self.units,
+                };
+                search::encode_with(&self.keys, &self.importance, &extra).unwrap()
+            }));
         }
         if let Some(z) = &self.zones {
             let body = region::link(&z.body, &z.rows).unwrap();
@@ -586,6 +612,8 @@ pub fn synthetic(n: usize, seed: u64) -> Model {
             })
             .collect(),
         importance: rows.iter().map(|p| p.importance).collect(),
+        rules: None,
+        units: Vec::new(),
         keys,
         ids,
         node: 8,
