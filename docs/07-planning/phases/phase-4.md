@@ -46,9 +46,10 @@ call (ADR-0012).
 - [x] Search on the measured pipeline, scored as the product (`pack-eval` with
   `S3_ENGINE=product`). Done 2026-11-09 (D-119): first-letter fuzzy with a visible-match
   fallback, parent context through HIERARCHY; Nepal recall@1 0.535 → 0.652, search 72.6 → 11.1 µs
-- [ ] Search parity with the spike (0.801 recall@1): the country's query rules in the pack
-  (unit-type suffixes, droppable suffixes, native generics, the phonetic key) and the
-  phonetic tier; then the golden gate on the product in CI
+- [x] Search parity with the spike: the country's query rules in the pack (D-120) and scored
+  by the engine. Done 2026-11-09 (D-121): Nepal recall@1 0.797 against the spike's 0.801,
+  recall@5 0.932 for both, p50 6.7 µs against 7.2 µs
+- [ ] The golden gate on the product's search in CI (with step 3.7)
 - [ ] Radius queries (`within_radius`, `nearby`) and `children`/`ancestors` across packs
   (also makes a search context split-invariant: the split gate leaves comma queries out)
 - [ ] Snapshot swap: `arc-swap` against `RwLock` A/B in L5
@@ -132,3 +133,4 @@ call (ADR-0012).
 | 2026-11-09 | 4.4 done: the transport asset in `teigeodata-sync::transport` (D-112); the planner lives there, not in a separate `sync::plan`; a head-only parser in `teigeodata-format` is added to 4.5 | building it: a ranged client holds only the head frame ([download and delta §3.5](../../02-research/notes/download-and-delta.md#35-the-transport-as-built-measured-2026-11-09)) |
 | 2026-11-09 | Step 4.1: engine, layers, queries and the metamorphic gate done; radius and cross-pack hierarchy split into their own item | D-113, D-114 |
 | 2026-11-09 | 4.1: the product's search scored and brought towards the spike; parity its own item | D-119: the golden gate measured the spike, not the engine |
+| 2026-11-09 | 4.1: parity done; the CI gate on the product its own item | D-121 |

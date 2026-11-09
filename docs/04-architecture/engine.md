@@ -91,14 +91,18 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 | `reverse(at, k)` | Every layer, skipped when a latitude bound proves it cannot beat the current k-th distance | Each layer gives its k nearest visible places (asking its index again for more while hidden places or ties could hide one); k-way merge by distance, then ID |
 | `admin_at(at)` | The first layer in precedence order whose ADMIN_REGION holds the point (coverage beats existence) | none; a unit whose ID a higher layer claims is answered from that layer |
 | `tz_at(at)` | The first layer whose REGION (timezones) holds the point | as `admin_at` |
-| `search(q, k)` | Every layer with SEARCH | Each layer scores its rows and keeps its best k visible; k-way merge by score, then ID. Fuzzy keys share the first letter unless no layer has a visible strong match; a context after a comma matches ancestors in the row's own pack (D-119) |
+| `search(q, k)` | Every layer with SEARCH | Each layer scores its rows and keeps its best k visible; k-way merge by score, then ID. Fuzzy keys share the first letter unless no layer has a visible strong match; a context after a comma matches ancestors in the row's own pack (D-119); the layer's query rules add matches (D-121) |
 | `within_bbox(rect, limit)` | Layers whose box meets the rect | Smallest IDs first, k-way merge by ID |
 
 **Search scores** are the same in every layer, so the merge is exact. The query is folded with
 `teigeodata_names::fold`. A row's score is its importance plus the best bonus it earns: exact
 60; loose (spaces removed, with its exact twin) 55; one fuzzy edit 25 (queries of 4 to 63
 characters); prefix 30 for the best 16 prefix matches by importance across all layers
-(queries of 3 characters or more). There is no phonetic tier yet.
+(queries of 3 characters or more). A layer's query rules (SEARCH column RULES, D-120), read
+once at open, add: a trailing unit-type abbreviation that some layer names is cut from the name,
+and the rows of that type (column UNIT) gain 20; the query's phonetic key 5; a native generic
+the query ends with, replaced by each of its Latin spellings and looked up loosely, 55; a
+droppable suffix removed, 50 (D-121). The unit bonus does not count towards a strong match.
 
 ## Gates
 
@@ -126,3 +130,4 @@ Each gate was first shown to fail on a planted bug (D-114).
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-09 | First version: opening, verification, precedence, queries, gates | Step 4.1, D-113, D-114 |
+| 2026-11-09 | Search: query rules (unit, phonetic, native, drop) | D-120, D-121 |

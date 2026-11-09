@@ -118,3 +118,19 @@ with 1 layer 11.1 µs (was 72.6 µs), 3 layers 24.8 µs (was 163.9 µs). The gol
 the engine (`S3_ENGINE=product`): recall@1 0.652, recall@5 0.766, pass 0.725, p50 6.7 µs, p99
 78 µs; the spike's search on the same pack: 0.801, 0.932, 0.887.
 
+### Search after D-120
+
+Same pack built with the query rules, 2026-11-09, load 16 to 58 (another project's builds).
+The golden set, run back to back:
+
+| Search | recall@1 | recall@5 | pass | MRR@10 | p50 | p99 |
+|---|---:|---:|---:|---:|---:|---:|
+| Product (`S3_ENGINE=product`) | 0.797 | 0.932 | 0.885 | 0.861 | 6.7 µs | 77 µs |
+| Spike | 0.801 | 0.932 | 0.887 | 0.863 | 7.2 µs | 77 µs |
+| Product, rules decoded per query (first build) | 0.797 | 0.932 | 0.885 | 0.861 | 11.7 µs | 91 µs |
+| Product before D-120 (D-119) | 0.652 | 0.766 | 0.725 | 0.707 | 6.6 µs | 80 µs |
+
+Per class against the spike: abbreviation 0.951 and 0.951, mixed script 0.857 and 0.886 (the
+product reads only accepted lexicon terms), with context 0.983 and 1.000. Turning the phonetic
+tier off saves 0.3 µs and costs 0.012 recall@1. `measure`: search k = 10 through the engine,
+1 layer 12.3 µs, 3 layers 28.1 µs (its own query mix, load 17).
