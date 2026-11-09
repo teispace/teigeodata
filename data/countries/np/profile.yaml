@@ -11,6 +11,8 @@ phonetic_key: indic-v0
 # Nepal Bhasa (new) is written in Devanagari and in Newa (Prachalit) script.
 languages: [ne, en, new]
 scripts: [Deva, Latn, Newa]
+# Romanisation of names with no Latin spelling (data/romanise/; names-canonical §5.1).
+romanise: [ne-Deva]
 admin_levels:
   - { level: 1, english: Province, native: [{ lang: ne, script: Deva, text: "प्रदेश" }] }
   - { level: 2, english: District, native: [{ lang: ne, script: Deva, text: "जिल्ला" }] }

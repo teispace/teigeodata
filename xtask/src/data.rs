@@ -26,6 +26,7 @@ use crate::golden;
 use crate::lexicon::{self, Evidence, EvidenceKind, Native, Status};
 use crate::postal;
 use crate::recipe;
+use crate::romanise;
 use crate::sources;
 
 const PROFILE_SCHEMA: &str = "teigeodata/profile/v1";
@@ -48,6 +49,9 @@ struct Profile {
     languages: Vec<String>,
     /// ISO 15924 scripts in use.
     scripts: Vec<String>,
+    /// Romanisation profiles (`data/romanise/<id>.yaml`) for its names, in order.
+    #[serde(default)]
+    romanise: Vec<String>,
     admin_levels: Vec<AdminLevel>,
     #[serde(default)]
     unit_types: Vec<UnitType>,
@@ -128,6 +132,8 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     let mut queries = 0usize;
     let mut postal_codes = 0usize;
     let mut scheme_ids = BTreeSet::new();
+    let mut lexicons = Vec::new();
+    let profiles = romanise::ids(root);
     let lock_text = fs::read_to_string(root.join("data/sources.lock")).unwrap_or_default();
     let pinned = sources::ids(&lock_text);
     for path in &countries {
@@ -144,7 +150,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
         }
         match fs::read_to_string(path.join("profile.yaml")) {
             Ok(text) => problems.extend(
-                check_profile(cc, &text)
+                check_profile(cc, &text, &profiles)
                     .into_iter()
                     .map(|p| format!("{at}/profile.yaml: {p}")),
             ),
@@ -157,23 +163,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
                     .map(|p| format!("{at}/build.yaml: {p}")),
             );
         }
-        let mut golden_queries = 0usize;
-        for file in [
-            path.join("golden-curated.yaml"),
-            root.join(format!("tests/golden/{cc}.yaml")),
-        ] {
-            if let Ok(text) = fs::read_to_string(&file) {
-                let shown = file
-                    .strip_prefix(root)
-                    .unwrap_or(&file)
-                    .display()
-                    .to_string();
-                let (counts, found) = golden::check_text(cc, &text);
-                golden_queries += counts.values().sum::<usize>();
-                problems.extend(found.into_iter().map(|p| format!("{shown}: {p}")));
-            }
-        }
-        queries += golden_queries;
+        queries += check_golden(root, path, cc, &mut problems);
         if let Ok(text) = fs::read_to_string(path.join("postal.yaml")) {
             let (n, found) = postal::check(path, &text, &pinned, &mut scheme_ids);
             postal_codes += n;
@@ -186,11 +176,14 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
                     let (n, found) = lexicon::check_text(cc, &text);
                     terms += n;
                     problems.extend(found.into_iter().map(|p| format!("{at}/lexicon.yaml: {p}")));
+                    lexicons.push((cc.to_string(), text));
                 }
                 Err(e) => problems.push(format!("{at}/lexicon.yaml: {e}")),
             }
         }
     }
+    let (profiles, found) = romanise::check(root, &lexicons);
+    problems.extend(found);
     let folders: BTreeSet<String> = countries
         .iter()
         .filter_map(|p| p.file_name()?.to_str().map(str::to_string))
@@ -207,7 +200,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     }
     if problems.is_empty() {
         Ok(format!(
-            "data ok: {} countries, {terms} lexicon terms, {queries} golden query entries, {postal_codes} postal codes, {pinned} pinned sources checked",
+            "data ok: {} countries, {terms} lexicon terms, {queries} golden query entries, {postal_codes} postal codes, {profiles} romanisation profiles, {pinned} pinned sources checked",
             countries.len()
         ))
     } else {
@@ -215,8 +208,31 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     }
 }
 
+/// Checks country `cc`'s golden query files (its curated file and `tests/golden/<cc>.yaml`);
+/// returns the number of query entries.
+fn check_golden(root: &Path, path: &Path, cc: &str, problems: &mut Vec<String>) -> usize {
+    let mut queries = 0usize;
+    for file in [
+        path.join("golden-curated.yaml"),
+        root.join(format!("tests/golden/{cc}.yaml")),
+    ] {
+        if let Ok(text) = fs::read_to_string(&file) {
+            let shown = file
+                .strip_prefix(root)
+                .unwrap_or(&file)
+                .display()
+                .to_string();
+            let (counts, found) = golden::check_text(cc, &text);
+            queries += counts.values().sum::<usize>();
+            problems.extend(found.into_iter().map(|p| format!("{shown}: {p}")));
+        }
+    }
+    queries
+}
+
 /// Validates one profile; `cc` is the folder name.
-fn check_profile(cc: &str, text: &str) -> Vec<String> {
+/// `profiles` are the IDs of `data/romanise/*.yaml`.
+fn check_profile(cc: &str, text: &str, profiles: &BTreeSet<String>) -> Vec<String> {
     let p: Profile = match serde_saphyr::from_str(text) {
         Ok(p) => p,
         Err(e) => return vec![format!("not a valid profile: {e}")],
@@ -227,6 +243,19 @@ fn check_profile(cc: &str, text: &str) -> Vec<String> {
             "schema is `{}`, expected `{PROFILE_SCHEMA}`",
             p.schema
         ));
+    }
+    for id in &p.romanise {
+        if !profiles.contains(id) {
+            out.push(format!("romanise: no profile data/romanise/{id}.yaml"));
+        } else if !id
+            .rsplit('-')
+            .next()
+            .is_some_and(|sc| p.scripts.iter().any(|x| x == sc))
+        {
+            out.push(format!(
+                "romanise: {id} is for a script the country does not list"
+            ));
+        }
     }
     if p.country != cc.to_ascii_uppercase() {
         out.push(format!(
@@ -412,6 +441,8 @@ fn is_language(s: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::check_profile;
 
     const GOOD: &str = r#"
@@ -442,9 +473,13 @@ sources:
   codab: { unit_type_code: { field: adm3_pcode, offset: 6, length: 1 } }
 "#;
 
+    fn profiles() -> BTreeSet<String> {
+        BTreeSet::from(["ne-Deva".to_string(), "hi-Deva".to_string()])
+    }
+
     #[test]
     fn accepts_a_valid_profile() {
-        let p = check_profile("np", GOOD);
+        let p = check_profile("np", GOOD, &profiles());
         assert!(p.is_empty(), "{p:?}");
     }
 
@@ -464,6 +499,16 @@ sources:
                 "phonetic_key `soundex`",
             ),
             ("languages: [ne, en]", "languages: [nepali, en]", "BCP 47"),
+            (
+                "scripts: [Deva, Latn]",
+                "scripts: [Deva, Latn]\nromanise: [ne-Beng]",
+                "no profile",
+            ),
+            (
+                "scripts: [Deva, Latn]",
+                "scripts: [Latn]\nromanise: [ne-Deva]",
+                "does not list",
+            ),
             (
                 "scripts: [Deva, Latn]",
                 "scripts: [Deva, Latin]",
@@ -510,7 +555,7 @@ sources:
         for (from, to, expect) in cases {
             assert!(GOOD.contains(from), "test setup: `{from}` not found");
             let bad = GOOD.replacen(from, to, 1);
-            let p = check_profile("np", &bad);
+            let p = check_profile("np", &bad, &profiles());
             assert!(
                 p.iter().any(|m| m.contains(expect)),
                 "expected `{expect}` for `{to}`, got {p:?}"

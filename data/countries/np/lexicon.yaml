@@ -3,7 +3,7 @@
 # Contributor rules: docs/02-research/notes/names-and-search.md §5.5.
 schema: teigeodata/lexicon/v1
 country: NP
-updated: 2026-11-06
+updated: 2026-11-09
 terms:
   - id: np.chowk
     canonical: "Chowk"
@@ -41,7 +41,9 @@ terms:
     canonical: "Tole"
     native:
       - { lang: ne, script: Deva, text: "टोल" }
-    variants: ["Tol", "Tola"]
+    variants: ["Tol"]
+    # टोला (Tola) is the Maithili and Bhojpuri word for a hamlet, not a spelling of टोल.
+    not_respelled: ["Tola"]
     kind: generic
     meaning: "neighbourhood"
     status: accepted
@@ -374,7 +376,9 @@ terms:
     canonical: "Pur"
     native:
       - { lang: ne, script: Deva, text: "पुर" }
-    variants: ["Poor", "Pore", "Pura"]
+    variants: ["Poor", "Pore"]
+    # -pura is its own morpheme (Rampura and Rampur are different places).
+    not_respelled: ["Pura"]
     kind: generic
     meaning: "town"
     status: accepted

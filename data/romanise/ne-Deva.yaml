@@ -1,0 +1,106 @@
+# Readable romanisation of Nepali in Devanagari (schema teigeodata/romanise/v1).
+# Design and measurement: docs/02-research/notes/names-canonical.md (§3.3, §5.1);
+# letters after names-and-search.md §5.4 (NSD consonants, no diacritics).
+# Every rule here was kept because it raised exact matches on 6,660 OSM Nepal name pairs.
+# व stays w: positional guesses (b initially, v elsewhere) lowered the score (§3.3).
+schema: teigeodata/romanise/v1
+language: ne
+script: Deva
+profile:
+  inherent: "a"
+  virama: "्"
+  nukta: "़"
+  anusvara: "ं"
+  chandrabindu: "ँ"
+  zero: "०"
+  # Sequences that render like one vowel sign but are typed as two (seen in OSM Nepal).
+  repairs:
+    - ["ाे", "ो"]
+    - ["ाै", "ौ"]
+  consonants:
+    - ["क", "k"]
+    - ["ख", "kh"]
+    - ["ग", "g"]
+    - ["घ", "gh"]
+    - ["ङ", "ng"]
+    - ["च", "ch"]
+    - ["छ", "chh"]
+    - ["ज", "j"]
+    - ["झ", "jh"]
+    - ["ञ", "n"]
+    - ["ट", "t"]
+    - ["ठ", "th"]
+    - ["ड", "d"]
+    - ["ढ", "dh"]
+    - ["ण", "n"]
+    - ["त", "t"]
+    - ["थ", "th"]
+    - ["द", "d"]
+    - ["ध", "dh"]
+    - ["न", "n"]
+    - ["प", "p"]
+    - ["फ", "ph"]
+    - ["ब", "b"]
+    - ["भ", "bh"]
+    - ["म", "m"]
+    - ["य", "y"]
+    - ["र", "r"]
+    - ["ल", "l"]
+    - ["व", "w"]
+    - ["श", "sh"]
+    - ["ष", "sh"]
+    - ["स", "s"]
+    - ["ह", "h"]
+    - ["ळ", "l"]
+    # Nukta letters (NFC keeps them as letter + nukta).
+    - ["क़", "k"]
+    - ["ख़", "kh"]
+    - ["ग़", "g"]
+    - ["ज़", "z"]
+    - ["ड़", "r"]
+    - ["ढ़", "rh"]
+    - ["फ़", "f"]
+  vowels:
+    - ["अ", "a"]
+    - ["आ", "a"]
+    - ["इ", "i"]
+    - ["ई", "i"]
+    - ["उ", "u"]
+    - ["ऊ", "u"]
+    - ["ऋ", "ri"]
+    - ["ए", "e"]
+    - ["ऐ", "ai"]
+    - ["ओ", "o"]
+    - ["औ", "au"]
+  signs:
+    - ["ा", "a"]
+    - ["ि", "i"]
+    - ["ी", "i"]
+    - ["ु", "u"]
+    - ["ू", "u"]
+    - ["ृ", "ri"]
+    - ["े", "e"]
+    - ["ै", "ai"]
+    - ["ो", "o"]
+    - ["ौ", "au"]
+  conjuncts:
+    - ["ज्ञ", "gy"]
+  labials: ["प", "फ", "ब", "भ", "म"]
+  geminate_once: ["ख", "घ", "छ", "झ", "ठ", "ढ", "थ", "ध", "फ", "भ"]
+  keep_before: ["ह"]
+  assimilate:
+    - { consonant: "ङ", before: ["क", "ख", "ग", "घ"], latin: "n" }
+  examples:
+    - ["ललितपुर", "Lalitpur"]
+    - ["बागलुङ", "Baglung"]
+    - ["हलबडे", "Halbade"]
+    - ["तल्ले", "Talle"]
+    - ["नख्खुडोल", "Nakhudol"]
+    - ["झाङ्गावा", "Jhangawa"]
+    - ["यज्ञपुरी", "Yagyapuri"]
+    - ["सपही", "Sapahi"]
+    - ["चम्पादेवी", "Champadewi"]
+    - ["कारिगाउँ", "Karigaun"]
+    - ["जस्तला", "Jastala"]
+    - ["गाेदाम", "Godam"]
+    - ["६ सय बिगाहा", "6 Say Bigaha"]

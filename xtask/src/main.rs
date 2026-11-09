@@ -16,6 +16,7 @@ mod golden;
 mod lexicon;
 mod postal;
 mod recipe;
+mod romanise;
 mod sizes;
 mod sources;
 mod workspace;

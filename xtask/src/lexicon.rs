@@ -32,6 +32,10 @@ struct Term {
     native: Vec<Native>,
     #[serde(default)]
     variants: Vec<String>,
+    /// Related spellings that are a different word in names (Pura is not a misspelling of
+    /// Pur): a display name keeps them as written.
+    #[serde(default)]
+    not_respelled: Vec<String>,
     kind: Kind,
     meaning: String,
     #[serde(default)]
@@ -85,6 +89,25 @@ pub(crate) enum EvidenceKind {
     Signage,
     /// A dictionary or published standard.
     Dictionary,
+}
+
+/// The accepted terms' native forms in `script` with their canonical spellings, the
+/// morphemes a romanisation profile takes; none when the text does not parse (its own check
+/// reports that).
+pub(crate) fn morphemes(text: &str, script: &str) -> Vec<(String, String)> {
+    let Ok(file) = serde_saphyr::from_str::<LexiconFile>(text) else {
+        return Vec::new();
+    };
+    file.terms
+        .iter()
+        .filter(|t| t.status == Status::Accepted)
+        .flat_map(|t| {
+            t.native
+                .iter()
+                .filter(|n| n.script == script)
+                .map(|n| (n.text.clone(), t.canonical.clone()))
+        })
+        .collect()
 }
 
 /// Validates one file's text; `stem` is the file name without `.yaml` (the country code).
@@ -150,6 +173,7 @@ pub(crate) fn check_text(stem: &str, text: &str) -> (usize, Vec<String>) {
         }
         for s in std::iter::once(&t.canonical)
             .chain(&t.variants)
+            .chain(&t.not_respelled)
             .chain(&t.english)
         {
             if !is_nfc(s) {
@@ -180,7 +204,7 @@ pub(crate) fn check_text(stem: &str, text: &str) -> (usize, Vec<String>) {
 }
 
 fn check_variants(at: &str, t: &Term, canon: &BTreeMap<String, &str>, p: &mut Vec<String>) {
-    for v in &t.variants {
+    for v in t.variants.iter().chain(&t.not_respelled) {
         if fold(v) == fold(&t.canonical) {
             p.push(format!("{at}: variant `{v}` equals the canonical spelling"));
         } else if let Some(owner) = canon.get(&fold(v)) {
@@ -190,7 +214,7 @@ fn check_variants(at: &str, t: &Term, canon: &BTreeMap<String, &str>, p: &mut Ve
         }
     }
     let mut seen = Vec::new();
-    for v in &t.variants {
+    for v in t.variants.iter().chain(&t.not_respelled) {
         let f = fold(v);
         if seen.contains(&f) {
             p.push(format!("{at}: variant `{v}` is listed twice"));
