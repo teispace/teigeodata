@@ -149,3 +149,21 @@ first table:
 `reverse` across layers is faster because each layer's index search now starts from the k-th
 distance of the layers before (`nearest_within`) instead of ranking its own k first: 31% on
 3 layers. A radius query opens no index box beyond its radius.
+
+### Snapshot swap A/B (D-141)
+
+`cargo run --release -p teigeodata-engine --example snapshot-ab`, 2026-11-09, load about 11.
+3 layers of 50,000 synthetic places; `get` with no holder 363 ns. Readers: 8 threads, each
+`get` through the holder; a writer clones the current engine and publishes it every 100 µs
+for 1.5 s. Two rounds:
+
+| Holder | 1 thread (ns/get) | 8 readers + writer (ns/get per reader) | Worst publish |
+|---|---:|---:|---:|
+| `arc-swap` `load()` | 367, 372 | 510, 555 | 0.45, 0.32 ms |
+| `RwLock`, held for the query | 410, 373 | 1,864, 1,665 | 9.9, 26.4 ms |
+| `RwLock`, `Arc` cloned | 365, 378 | 3,110, 2,913 | 13.7, 10.3 ms |
+| `Mutex`, `Arc` cloned | 369, 432 | 4,990, 5,283 | 0.25, 1.0 ms |
+
+On one thread all four cost the same as a bare query. Under contention `arc-swap` costs 1.4×
+a bare query; the others cost 4.6× to 14× because every reader writes the lock's (or the
+`Arc`'s) shared counter. A held `RwLock` also starves the writer.

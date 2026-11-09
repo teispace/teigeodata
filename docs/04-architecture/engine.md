@@ -104,6 +104,23 @@ library, against 387.8 KiB (212.0 KiB gzip) with every one. Before the features 
 points-only build was 145.8 KiB (85.9 KiB gzip). Gate: `tests/built.rs` runs under any feature
 set; CI runs it with none.
 
+## Shared snapshots (D-141)
+
+An `Engine` is a snapshot: cloning it shares its layers (`Arc<Layer>`). `Shared` (feature
+`shared`, default) holds the current one for every thread:
+
+- `load()` gives a query its snapshot, lock-free and allocation-free (`arc-swap`).
+- `update(|engine| …)` builds the next engine from a clone of the current one and publishes
+  it in one atomic store. `try_update` publishes only on `Ok`. Writers are serialised by a
+  mutex, so no update is lost.
+- A query never sees half an update and never waits for a writer.
+- A removed layer stays mapped until the last snapshot holding it drops, so a pack file is
+  never written over while mapped.
+
+Gate: `tests/shared.rs`. Readers on 4 threads check every snapshot while 2,000 updates swap
+one pack for another, and must see exactly one of them. A planted intermediate publish fails
+it.
+
 ## Lazy verification (D-078)
 
 `Verify::Lazy` (default) hashes a section the first time a query reads it, once per layer:
@@ -183,7 +200,7 @@ Each gate was first shown to fail on a planted bug (D-114).
 ## Not yet
 
 - `children`, `ancestors` across packs (parents by ID in the format).
-- The snapshot swap (`arc-swap` against `RwLock`, L5) and the baseline (step 4.2).
+- The baseline (step 4.2).
 - `teigeodata-api` still opens one pack; it moves onto the engine with the baseline.
 
 ## Changelog
@@ -195,3 +212,4 @@ Each gate was first shown to fail on a planted bug (D-114).
 | 2026-11-09 | Installed components, `MissingComponent`, `Engine::elevation`, `tz_of` | D-133 to D-136 |
 | 2026-11-09 | A Cargo feature per component; `Engine::parent` | D-137 |
 | 2026-11-09 | `within_radius`, `nearby`, `ancestors`, `children` | D-140 |
+| 2026-11-09 | `Shared` snapshots on `arc-swap`; layers held in `Arc` | D-141 |

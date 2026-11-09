@@ -12,6 +12,7 @@ publish.workspace = true
 [features]
 default = [
     "mmap",
+    "shared",
     "elevation",
     "admin",
     "names",
@@ -32,6 +33,9 @@ timezone = []
 timezone-index = []
 boundaries = []
 admin-index = ["boundaries"]
+# `Shared`: publish a new set of packs while queries run on the old one, lock-free for readers
+# (`arc-swap`, D-141).
+shared = ["dep:arc-swap"]
 # Map pack files with `memmap2` (native targets only; WASM reads packs into memory). The one
 # module that uses `unsafe` is `map.rs` (D-113).
 mmap = ["dep:memmap2"]
@@ -40,6 +44,7 @@ mmap = ["dep:memmap2"]
 teigeodata-core.workspace = true
 teigeodata-format = { workspace = true, features = ["spatial"] }
 teigeodata-names = { workspace = true, optional = true }
+arc-swap = { version = "1.9.4", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 memmap2 = { version = "0.9.12", optional = true }
@@ -47,6 +52,7 @@ memmap2 = { version = "0.9.12", optional = true }
 [dev-dependencies]
 teigeodata-format = { workspace = true, features = ["write", "spatial"] }
 teigeodata-names.workspace = true
+arc-swap = "1.9.4"
 
 # The tests and the example that use every query need every component's feature; `built`
 # runs under any set of features.
@@ -67,8 +73,16 @@ name = "queries"
 required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
 
 [[test]]
+name = "shared"
+required-features = ["shared"]
+
+[[test]]
 name = "verify"
 required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
+
+[[example]]
+name = "snapshot-ab"
+required-features = ["shared"]
 
 [[example]]
 name = "measure"

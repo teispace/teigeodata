@@ -347,7 +347,8 @@ JSON on the wire, a parsed binary cache on the device.
 - **Disputed areas:** the locator follows the Nepal perspective
   ([ADR-0006](../../03-decisions/adr/ADR-0006-perspective.md)), like every admin layer; a claimed
   area may map to two addresses, which `regions_at` already allows.
-- `arc-swap` on WASM without threads: **unverified**.
+- `arc-swap` on WASM without threads: the engine with `shared` builds for
+  `wasm32-unknown-unknown` (2026-11-09); running it there is checked with the bindings.
 - The catalog size and its gzip ratio are estimates until S1 runs on a generated world catalog.
 
 ## 8. Versions checked

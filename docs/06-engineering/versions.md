@@ -106,6 +106,6 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | QLever (Wikidata endpoint, moved to qlever.dev) | service | 2026-11-06 | qlever.dev | 2026-12-06 |
 | TUF specification | 1.0.37 | 2026-11-06 | theupdateframework.github.io | 2027-02-06 |
 | memmap2 (engine, mapped packs) | 0.9.12 | 2026-11-09 | crates.io | 2026-12-09 |
-| arc-swap (engine snapshots, planned) | 1.9.4 | 2026-11-09 | crates.io | 2026-12-09 |
+| arc-swap (engine `Shared`, D-141) | 1.9.4 | 2026-11-09 | crates.io | 2026-12-09 |
 
 Libraries chosen in Phase 0 research are added here when adopted.

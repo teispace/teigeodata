@@ -253,7 +253,7 @@ mod tests {
     use super::country_zones;
 
     #[test]
-    fn a_countrys_zones_are_its_rows_of_zone_tab() {
+    fn the_zones_of_a_country_are_its_rows_of_zone_tab() {
         let tab = "# comment NP\nNP\t+2743+08519\tAsia/Kathmandu\nIN\t+2232+08822\tAsia/Kolkata\n\
                    US\t+404251-0740023\tAmerica/New_York\tEastern (most areas)\n\
                    US\t+415100-0873900\tAmerica/Chicago\tCentral (most areas)\n";

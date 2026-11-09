@@ -97,6 +97,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-swap"
+version = "1.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db4c94f57a570fce5d381be3289b3f79aef6332d72948fe82ab5772e423ccf92"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "arraydeque"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1323,6 +1332,7 @@ dependencies = [
 name = "teigeodata-engine"
 version = "0.0.0"
 dependencies = [
+ "arc-swap",
  "memmap2",
  "teigeodata-core",
  "teigeodata-format",

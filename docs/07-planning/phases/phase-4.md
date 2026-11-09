@@ -59,7 +59,10 @@ call (ADR-0012).
 - [ ] `children`/`ancestors` across packs: needs parents by ID in the format (a city pack's
   places under a country pack's units); also makes a search context split-invariant (the
   split gate leaves comma queries out)
-- [ ] Snapshot swap: `arc-swap` against `RwLock` A/B in L5
+- [x] Snapshot swap: `arc-swap` against `RwLock` A/B in L5 (D-141, 2026-11-09): with 8
+  readers and a writer, `arc-swap` 510–555 ns per `get` on 3 layers, a held `RwLock`
+  1,665–1,864 ns (its writer waited up to 26 ms), a `Mutex` 4,990–5,283 ns; `Shared` built on
+  `arc-swap`
 - [x] Metamorphic gate: splitting or reordering packs never changes an answer; differential
   against one compacted pack. Done 2026-11-09: synthetic in 2, 3 and 5 parts, the Nepal main
   pack in 2 and 3 (46.7 s, ignored test with `TGD_PACK`); planted bugs fail it (D-114)

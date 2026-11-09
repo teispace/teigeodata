@@ -40,11 +40,16 @@ mod map;
 mod query;
 #[cfg(feature = "search")]
 mod search;
+#[cfg(feature = "shared")]
+mod shared;
 
 use core::fmt;
+use std::sync::Arc;
 
 pub use layer::{Layer, LayerId, LayerOptions, Load, Verify, release_cmp};
 pub use query::{Hit, Near, Place, Scratch};
+#[cfg(feature = "shared")]
+pub use shared::{Shared, Snapshot};
 pub use teigeodata_format::Kind;
 pub use teigeodata_format::component::{Component, Components};
 pub use teigeodata_format::place_index::Rect;
@@ -133,9 +138,13 @@ pub enum Tier<'e> {
 }
 
 /// A set of layers answering as one dataset. Layers are kept in precedence order.
-#[derive(Debug, Default)]
+///
+/// An engine is a snapshot: cloning it shares its layers (each an [`Arc`]), so a new set of
+/// packs is built beside the one queries are using and published at once
+/// (`Shared`). A layer's file stays mapped until the last snapshot holding it drops.
+#[derive(Clone, Debug, Default)]
 pub struct Engine {
-    layers: Vec<Layer>,
+    layers: Vec<Arc<Layer>>,
     next: u32,
 }
 
@@ -155,25 +164,26 @@ impl Engine {
         let at = self
             .layers
             .partition_point(|l| l.precedence(&layer).is_le());
-        self.layers.insert(at, layer);
+        self.layers.insert(at, Arc::new(layer));
         id
     }
 
-    /// Removes a layer and returns it; dropping it unmaps its bytes.
-    pub fn remove(&mut self, id: LayerId) -> Option<Layer> {
+    /// Removes a layer and returns it; its bytes are unmapped when the last snapshot holding
+    /// it drops.
+    pub fn remove(&mut self, id: LayerId) -> Option<Arc<Layer>> {
         let at = self.layers.iter().position(|l| l.id == id)?;
         Some(self.layers.remove(at))
     }
 
     /// The layers, highest precedence first.
     pub fn layers(&self) -> impl ExactSizeIterator<Item = &Layer> {
-        self.layers.iter()
+        self.layers.iter().map(|l| &**l)
     }
 
     /// The layer with this handle.
     #[must_use]
     pub fn layer(&self, id: LayerId) -> Option<&Layer> {
-        self.layers.iter().find(|l| l.id == id)
+        self.layers.iter().find(|l| l.id == id).map(|l| &**l)
     }
 
     /// The tier of an answer from layer `id`.
@@ -190,5 +200,16 @@ impl Engine {
                 }
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod thread_safety {
+    /// An engine and its layers are shared across threads (a snapshot per query).
+    #[test]
+    fn engines_and_layers_are_send_and_sync() {
+        fn shared<T: Send + Sync>() {}
+        shared::<super::Engine>();
+        shared::<super::Layer>();
     }
 }
