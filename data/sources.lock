@@ -42,6 +42,23 @@ used_by = "spikes S1, S2, S3, S5"
 attribution = "GeoNames (https://www.geonames.org), CC BY 4.0"
 
 [[source]]
+id = "geonames-cities15000"
+title = "GeoNames cities with more than 15,000 people, and capitals (cities15000.zip)"
+kind = "http"
+url = "https://download.geonames.org/export/dump/cities15000.zip"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "daily dump"
+retrieved = "2026-11-09"
+sha256 = "955ad298b67a60996a15b4c4c84c8ca6923bafed195622227f24fd22a31042f4"
+size = 3366548
+licence = "CC-BY-4.0"
+licence_class = "cc-by"
+countries = ["*"]
+used_by = "the embedded baseline's cities (D-144, D-145): a country pack's slice keeps the places these name"
+attribution = "GeoNames (https://www.geonames.org), CC BY 4.0"
+
+[[source]]
 id = "geonames-alternate-names"
 title = "GeoNames alternate names V2 (all countries; with language and colloquial, short and historic flags)"
 kind = "http"

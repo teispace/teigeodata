@@ -495,7 +495,7 @@ fn query_rules(profile: &Profile) -> Vec<Rule<'_>> {
 }
 
 /// An Ed25519 signing key from a file of 64 hex digits (its 32-byte seed).
-fn signing_key(path: &Path) -> Result<ed25519_dalek::SigningKey, String> {
+pub(super) fn signing_key(path: &Path) -> Result<ed25519_dalek::SigningKey, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let hex = text.trim();
     let mut seed = [0_u8; 32];

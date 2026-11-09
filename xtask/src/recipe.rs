@@ -41,6 +41,18 @@ struct Recipe {
     /// client downloads for it with what it needs.
     #[serde(default)]
     wire_kb: BTreeMap<String, u64>,
+    /// The country's slice of the embedded baseline (D-145).
+    #[serde(default)]
+    baseline: Option<Baseline>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Baseline {
+    /// The city list: every listed city of the country is in the slice (G-base).
+    cities: String,
+    /// The outline tolerance in metres: the slice takes the pack's finest level within it.
+    tolerance_m: u32,
 }
 
 #[derive(Deserialize)]
@@ -100,6 +112,11 @@ pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
     );
     named.extend(r.dem.iter().map(|d| ("DEM tileset", d.as_str())));
     named.extend(r.population.iter().map(|p| ("population grid", p.as_str())));
+    named.extend(
+        r.baseline
+            .iter()
+            .map(|b| ("baseline city list", b.cities.as_str())),
+    );
     for (what, id) in named {
         if !pinned.contains(id) {
             out.push(format!("{what} `{id}` is not pinned in data/sources.lock"));
@@ -157,6 +174,11 @@ pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
         && (b.rss_mb == 0 || b.disk_mb == 0)
     {
         out.push("a budget states rss_mb and disk_mb above zero".into());
+    }
+    if let Some(b) = &r.baseline
+        && !(50..=5_000).contains(&b.tolerance_m)
+    {
+        out.push("baseline: tolerance_m is 50 to 5,000 metres".into());
     }
     for (name, &kb) in &r.wire_kb {
         if teigeodata_format::component::Component::from_name(name).is_none() || kb == 0 {

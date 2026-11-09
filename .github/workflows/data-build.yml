@@ -66,7 +66,11 @@ jobs:
           forge/target/fast/forge make ${{ matrix.cc }} --release "$RELEASE" ${{ matrix.flag }}
           cmp first.tgd "$pack"
       - name: G-lic and notices
-        run: cargo xtask check-pack data/build/pack/${{ matrix.cc }}/${{ matrix.cc }}-places-${{ matrix.build }}.tgd ${{ matrix.flag }}
+        run: |
+          cargo xtask check-pack data/build/pack/${{ matrix.cc }}/${{ matrix.cc }}-places-${{ matrix.build }}.tgd ${{ matrix.flag }}
+          # The country's baseline slice, when its recipe builds one (D-145).
+          slice=data/build/baseline/${{ matrix.cc }}/${{ matrix.cc }}-baseline-${{ matrix.build }}.tgd
+          if [ -f "$slice" ]; then cargo xtask check-pack "$slice" ${{ matrix.flag }}; fi
       - name: Golden gate (product search)
         env:
           S3_ENGINE: product
@@ -83,4 +87,5 @@ jobs:
           path: |
             data/build/pack/${{ matrix.cc }}/*-${{ matrix.build }}.md
             data/build/pack/${{ matrix.cc }}/*-${{ matrix.build }}.tsv
+            data/build/baseline/${{ matrix.cc }}/*-${{ matrix.build }}.md
           if-no-files-found: ignore

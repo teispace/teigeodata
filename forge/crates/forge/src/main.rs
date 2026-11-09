@@ -114,6 +114,7 @@ fn main() -> ExitCode {
 fn stage(root: &Path, args: &[String]) -> Option<Result<String, String>> {
     Some(match args.first().map(String::as_str)? {
         "build" => build::run(root, args.get(1..).unwrap_or_default()),
+        "baseline" => build::baseline::run(root, args.get(1..).unwrap_or_default()),
         "make" => make::run(root, args.get(1..).unwrap_or_default()),
         "labels" => match (args.get(1).map(String::as_str), args.get(2..).unwrap_or_default()) {
             (Some("sample"), [cc, src, per, seed]) => match per.parse::<usize>() {

@@ -78,6 +78,16 @@ struct Recipe {
     #[serde(default)]
     #[expect(dead_code, reason = "checked by `cargo xtask check-pack`")]
     wire_kb: std::collections::BTreeMap<String, u64>,
+    /// The country's slice of the embedded baseline (D-145), made after the build.
+    #[serde(default)]
+    baseline: Option<Baseline>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Baseline {
+    cities: String,
+    tolerance_m: u32,
 }
 
 #[derive(Deserialize)]
@@ -701,12 +711,65 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     r.step("build", (&dir, &stamp, Some(&owns)), &bk, || {
         build::run(root, &build_args)
     })?;
+    // baseline: the country's slice of the embedded baseline, from the pack just built.
+    if let Some(b) = &recipe.baseline {
+        let seed = file("--key")?;
+        baseline_stage(
+            root,
+            cc,
+            b,
+            (lite, flag("--key"), &seed),
+            &lock,
+            &bk,
+            &mut r,
+        )?;
+    }
     r.finish(
         root,
         &dir.join(format!("summary-{build_name}.md")),
         t,
         recipe.budget.as_ref(),
     )
+}
+
+/// The baseline stage (D-145): the country's slice of the embedded baseline, keyed on the
+/// build's key `bk`, the pinned city list, the arguments and the signing seed.
+fn baseline_stage(
+    root: &Path,
+    cc: &str,
+    b: &Baseline,
+    (lite, key_file, seed): (bool, Option<&String>, &[u8]),
+    lock: &Lock,
+    bk: &str,
+    r: &mut Runner,
+) -> Result<(), String> {
+    let mut args = vec![
+        cc.to_string(),
+        "--tolerance-m".to_string(),
+        b.tolerance_m.to_string(),
+        "--cities".to_string(),
+        b.cities.clone(),
+    ];
+    if lite {
+        args.push("--lite".into());
+    }
+    if let Some(k) = key_file {
+        args.extend(["--key".to_string(), k.clone()]);
+    }
+    let sk = key(&[
+        b"baseline",
+        CODE_BUILD,
+        bk.as_bytes(),
+        &pinned(lock, &[b.cities.as_str()])?,
+        args.join("\0").as_bytes(),
+        blake3::hash(seed).as_bytes(),
+    ]);
+    let build_name = if lite { "lite" } else { "main" };
+    let dir = root.join("data/build/baseline").join(cc);
+    let (stamp, owns) = (format!(".key-{build_name}"), format!("-{build_name}."));
+    r.step("baseline", (&dir, &stamp, Some(&owns)), &sk, || {
+        build::baseline::run(root, &args)
+    })
 }
 
 /// The first line of a stage summary, for the stage table.
