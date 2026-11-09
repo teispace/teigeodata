@@ -22,8 +22,7 @@ The numbers show the shape, not a budget.
 
 **Input:** `synthetic:200000`, the generator of the engine tests: 200,000 places in a
 4° × 8° box, a country and 8 districts as ADMIN_REGION, 2 timezone zones, a 5.28 MB pack. The
-Nepal main pack was removed from `data/build/` by another job before the timings ran; only its
-metamorphic gate ran (below). Nepal timings are an open item for the L1/L4/L5 step.
+Nepal main pack (D-117 build, 11.7 MB) is measured in [its own section](#nepal-main-pack).
 
 ## L1, L4: open and first query
 
@@ -82,3 +81,32 @@ Planted bugs, each run and reverted (D-114):
 | `reverse` never asks a layer for more | differential test (the split test alone missed it, so the differential test was added) |
 | Lazy section check always passes | `a_corrupt_section_fails_only_the_queries_that_read_it` |
 | Block check skipped | `a_large_section_is_checked_a_block_at_a_time` |
+
+## Nepal main pack
+
+`data/build/pack/np/np-places-main.tgd`, built 2026-11-09 with corrections (D-117), 101,550
+places. Same machine and method, load average 5 (`uptime` at 10:18). The metamorphic gate on
+this pack (`TGD_PACK`, release) passed in 3.9 s.
+
+| Measure | Time |
+|---|---:|
+| Open, mapped (head checks, block-hash proofs), first | 296 µs |
+| Open, mapped, warm | 163 µs |
+| First `get` (IDMAP, REDIRECTS, PLACES) | 468 µs |
+| First `reverse` (PLACE_INDEX) | 45 µs |
+| First `admin_at` (ADMIN_REGION, ARCS, POLYGONS) | 2.21 ms |
+| First `tz_at` (REGION) | 1.19 ms |
+| First `search` (SEARCH) | 1.61 ms |
+
+| Query | direct (ns) | engine, 1 layer (ns) | engine, 3 layers (ns) |
+|---|---:|---:|---:|
+| get | 121 | 130 | 298 |
+| reverse, k = 10 | 6,153 | 6,578 | 23,329 |
+| admin_at (direct: region IDs only) | 151 | 368 | 428 |
+| tz_at (direct: zone row only) | 44 | 84 | 105 |
+| search, k = 10 | n/a | 72,598 | 163,948 |
+
+The first `admin_at` and `tz_at` pay for verifying ARCS (2.66 MB) and REGION (2.0 MB): the
+size ideas for those two sections ([ideas](../../01-product/ideas.md)) also shorten the first
+query. One layer costs at most 2.2× a direct call (admin_at, which also builds the hierarchy);
+three layers cost 2.3× to 3.8× one layer for get, reverse and search.
