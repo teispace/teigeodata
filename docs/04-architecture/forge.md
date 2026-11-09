@@ -407,6 +407,12 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   display name differs from its first source's, for review. `forge romanise <cc>
   <lang>-<Script>` romanises standard input line by line
   ([note](../02-research/notes/names-canonical.md)).
+- **Names of other records (D-060, D-107).** A place's anchor is its first record with a
+  name, in source priority. Another record lends its names only when one matches an anchor
+  name (fold, join or phonetic key, also of its romanisation); a lent name the anchor lacks by
+  fold is dropped when it is the primary name of an admin unit, or of another place within
+  30 km. `forge aliases` applies the same rules (`aliases::rules`).
+  `dropped-names-<build>.tsv` lists every dropped record or name and what it names.
 - **Postal codes (D-105). `data/countries/<cc>/postal.yaml` (schema `teigeodata/postal/v1`)
   gives each scheme's rule and the codes files. A codes file has one row per admin unit: the
   code, the unit's P-code on the build's boundary source and its number of parts (Nepal: wards).
@@ -482,11 +488,17 @@ country's stages from its recipe, `data/countries/<cc>/build.yaml` (checked by
 for each building source the build may read, `core`, `topology` for the admin source, then
 `build`
 (D-095, [ADR-0035](../03-decisions/adr/ADR-0035-forge-architecture.md)).
-- **Keys.** A stage's key is a BLAKE3 hash of the stage name, the forge binary, its pinned
+- **Keys.** A stage's key is a BLAKE3 hash of the stage name, the stage's code, its pinned
   inputs (ID, SHA-256 and size from `sources.lock`), its configuration (the profile, the
   arguments, the ID registry, the signing seed) and the keys of the stages it reads. The
   build stage's inputs also cover `postal.yaml`, each codes file and the pinned source each
-  is checked against. The whole binary is the code version: any forge change reruns everything, which is always correct.
+  is checked against. The stage's code is a hash `build.rs` computes over the modules the
+  stage reaches through `crate::` paths, `main.rs`, `make.rs`, the path dependencies and
+  `Cargo.lock` (D-108), so a names change reruns `topology` and `build` only (12 s).
+- **Fast builds.** `cargo build --profile fast` (no LTO, parallel incremental codegen)
+  rebuilds the forge in about 19 s after a one-file change, for iteration;
+  `forge/target/fast/forge` caches the same stages as the release binary. Benchmarks and
+  published numbers use `release`.
 - **Stamps.** A stage that succeeds writes `.key` (`.key-main`, `.key-lite` in the pack
   directory) into its output directory: the key, then the BLAKE3 and size of every file it
   owns. A stage is skipped only when both match, so an output changed by hand, or a stage

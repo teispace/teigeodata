@@ -50,8 +50,13 @@ updated: 2026-11-09
   lexicon's respelling, and 175 places with only Devanagari are romanised by rule tables as
   data (`data/romanise/ne-Deva.yaml`): 58.7% exact on 6,660 OSM name pairs, ICU 22.0%.
   `naming-main.tsv` lists the 19,108 changed display names for review; main pack 11.2 MB,
-  identical bytes on two builds ([note](../02-research/notes/names-canonical.md)). Next: D-060's
-  alias rules inside the build, then corrections and G-corr.
+  identical bytes on two builds ([note](../02-research/notes/names-canonical.md)). D-060's
+  alias rules now run inside the build (D-107): 40 records lend no names and 3,312 names are
+  not taken, each listed in `dropped-names-main.tsv` with what it names; main pack 11.1 MB.
+  They exposed duplicate clusters (1,872 collisions within 2 km). `forge make` now keys
+  stages by their own code and a `fast` profile exists (D-108): a names change is 19 s of
+  build and 12 s of make. All 45 Copernicus tiles are stored (approved 2026-11-09).
+  Next: the golden evaluator on the pack, duplicate clusters, corrections and G-corr.
 - **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
@@ -170,3 +175,4 @@ updated: 2026-11-09
 | 2026-11-08 | 3.4: the DEM section and `forge dem-section` (D-104) | the 45-tile download (approval) |
 | 2026-11-09 | 3.5: POSTAL on place runs, Nepal codes in the main pack (D-105); CI fixes for the `no_std` build and a debug overflow | 3.6 names and corrections |
 | 2026-11-09 | 3.6: display names, the romaniser and its Nepali profile (D-106) | D-060 alias rules in the build; corrections |
+| 2026-11-09 | 3.6: D-060's alias rules in the build (D-107); stage keys by code and a `fast` profile (D-108); DEM tiles fetched | pack evaluator; duplicate clusters; corrections |
