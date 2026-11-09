@@ -97,6 +97,7 @@ fn row(line: &str, c: &Cols, out: &mut Output) {
             .into_iter()
             .next()
             .map(str::to_string),
+        timezone: None,
     });
     for (col, kind) in [
         (c.labels, "label"),

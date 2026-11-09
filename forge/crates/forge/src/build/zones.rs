@@ -41,20 +41,23 @@ pub(super) enum ZoneGeometry {
     MultiPolygon(Vec<Vec<Vec<[f64; 2]>>>),
 }
 
-/// The zones of timezone `source`. A gzip file is a tzdb release: the country `cc`'s one zone
-/// over the admin-0 outline in boundary source `admin` ([`tzdb_zones`]). Anything else is a
+/// The zones of timezone `source` (none without one). A gzip file is a tzdb release: the country `cc`'s one zone
+/// over the admin-0 outline in the build's boundary source ([`tzdb_zones`]). Anything else is a
 /// timezone-boundary-builder archive: its zones whose box meets `coverage`, those named in
-/// `first` first (they win an overlap, D-084: the recipe's perspective), then in the source's
+/// `--tz-first` first (they win an overlap, D-084: the recipe's perspective), then in the source's
 /// order.
 pub(super) fn zone_places(
     root: &Path,
     lock: &Lock,
-    source: &str,
+    source: Option<&str>,
     coverage: (i32, i32, i32, i32),
-    first: &[String],
-    (cc, admin): (&str, &str),
+    a: &super::Args,
 ) -> Result<Zones, String> {
     use std::io::Read as _;
+    let Some(source) = source else {
+        return Ok(Zones::default());
+    };
+    let (first, cc, admin) = (&a.tz_first, a.cc.as_str(), a.admin.as_str());
     let zip_path = lock.path(root, source)?;
     let mut magic = [0_u8; 2];
     fs::File::open(&zip_path)
@@ -145,6 +148,27 @@ fn to_places(zones: Vec<(String, Vec<Vec<[i32; 2]>>)>) -> Result<Zones, String> 
             parent: None,
         });
         out.rings.push(rings);
+    }
+    Ok(out)
+}
+
+/// The timezone each record of the read `sources` states, by record key (D-138).
+pub(super) fn stated(
+    build: &Path,
+    sources: &[String],
+) -> Result<std::collections::BTreeMap<String, String>, String> {
+    use arrow_array::{Array, StringArray};
+    let mut out = std::collections::BTreeMap::new();
+    for s in sources {
+        let file = build.join("read").join(s).join("records.parquet");
+        crate::record::for_each_batch(&file, |b| {
+            let ids = crate::record::column::<StringArray>(b, "id")?;
+            let tz = crate::record::column::<StringArray>(b, "timezone")?;
+            for i in (0..b.num_rows()).filter(|&i| tz.is_valid(i)) {
+                out.insert(ids.value(i).to_string(), tz.value(i).to_string());
+            }
+            Ok(())
+        })?;
     }
     Ok(out)
 }

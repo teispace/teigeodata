@@ -134,6 +134,7 @@ fn push(
         dem_m: None,
         population: tag(tags, "population").and_then(|p| p.replace([',', ' '], "").parse().ok()),
         dissolved: None,
+        timezone: None,
     });
     for (k, v) in tags {
         let (base, lang) = k.split_once(':').unwrap_or((k, ""));

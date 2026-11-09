@@ -243,10 +243,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         a.lite,
     );
     let corrected = corrections::run(root, who, &g.sources, &mut places, &units.levels, &out_dir)?;
-    let zones = g.tz.as_deref().map_or_else(
-        || Ok(Zones::default()),
-        |id| zone_places(root, &lock, id, coverage, &a.tz_first, (&a.cc, &a.admin)),
-    )?;
+    let zones = zone_places(root, &lock, g.tz.as_deref(), coverage, &a)?;
     places.extend(zones.places.iter().cloned());
     let unnamed = keep_named(&mut places) + unnamed_clusters;
     let elevations = elevation::load(root, g.dem.as_deref(), &places)?;
@@ -271,6 +268,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         postal: g.postal.as_ref(),
         elevation: elevations.as_ref(),
         attribution: &g.attribution,
+        stated_tz: &zones::stated(&build, &g.sources)?,
     })?;
     let mut summary = header(&a, places.len(), &g.sources, g.tz.as_deref());
     notes(&mut summary, held, unnamed, &g);

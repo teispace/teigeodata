@@ -40,6 +40,9 @@ pub(crate) struct Record {
     pub(crate) population: Option<i64>,
     /// The date the entity ended, when the source records it.
     pub(crate) dissolved: Option<String>,
+    /// The tzdb zone the source states for it (`GeoNames` `timezone`): the independent check
+    /// of the pack's timezones (D-138).
+    pub(crate) timezone: Option<String>,
 }
 
 /// One name of a record.
@@ -115,6 +118,7 @@ impl Output {
                 Field::new("dem_m", DataType::Float32, true),
                 Field::new("population", DataType::Int64, true),
                 Field::new("dissolved", DataType::Utf8, true),
+                Field::new("timezone", DataType::Utf8, true),
                 utf8("licence_class"),
             ],
             &self.records,
@@ -131,6 +135,7 @@ impl Output {
                     f32s(r.iter().map(|x| x.dem_m)),
                     i64s(r.iter().map(|x| x.population)),
                     opt_strings(r.iter().map(|x| x.dissolved.as_deref())),
+                    opt_strings(r.iter().map(|x| x.timezone.as_deref())),
                     strings(r.iter().map(|_| licence_class)),
                 ]
             },

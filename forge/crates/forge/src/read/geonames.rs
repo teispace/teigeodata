@@ -72,7 +72,8 @@ fn main_row(line: &str, ids: &mut BTreeSet<u64>, out: &mut Output) {
         pop,
         ele,
         dem,
-    ] = fields::<17>(line);
+        tz,
+    ] = fields::<18>(line);
     let Ok(gid) = gid.parse::<u64>() else { return };
     ids.insert(gid);
     let id = format!("geonames:{gid}");
@@ -93,6 +94,7 @@ fn main_row(line: &str, ids: &mut BTreeSet<u64>, out: &mut Output) {
         dem_m: dem.parse::<f32>().ok().filter(|d| *d > -9000.0),
         population: pop.parse().ok().filter(|p| *p > 0),
         dissolved: None,
+        timezone: (!tz.is_empty()).then(|| tz.to_string()),
     });
     out.names.push(Name {
         id: id.clone(),

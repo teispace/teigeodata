@@ -165,7 +165,8 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 - [ ] The lite build from clean-room sources only. Every source passes the licence gate at
   ingest. Timezones from tzdb over the admin-0 outline (D-138, 2026-11-09); postal (Q-009)
   and population (ADR-0030) remain main only
-- [ ] Gate: GeoNames' per-place `timezone` agrees with the pack's `PLACE_TZ` (lite and main)
+- [x] G-tz: GeoNames' per-place `timezone` agrees with the pack's `PLACE_TZ`, at most 0.1%
+  differ (D-139; Nepal main 0.030%, lite 0.010%, 2026-11-09)
 - [ ] `ACCURACY.md` for Nepal against held-out truth
 
 ### 3.8 Exit review

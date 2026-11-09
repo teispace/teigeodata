@@ -381,6 +381,11 @@ the build, and ADMIN_REGION must give the same polygons as POLY_INDEX with
 written ADMIN_REGION, every settlement and locality inside the admin coverage lies in exactly
 one unit of each level, and its parent is the deepest; at most 0.5% lie outside every unit
 (Nepal main 180 of 96,805, 0.19%, median 536 m past the border; lite 28, 0.03%).
+G-tz (D-139): each source record that states a timezone (GeoNames `timezone`) is compared with
+its place's `PLACE_TZ`; at most 0.1% may differ. Nepal 2026-11-09: main 28 of 93,701 (0.030%:
+places just outside Nepal on timezone-boundary-builder's map, the G-pip set); lite 9 of 93,621
+(0.010%: far-western border records, Kalapani among them, that GeoNames puts in
+`Asia/Kolkata`).
 
 Measured on COD-AB Nepal on 2026-11-08:
 
@@ -400,12 +405,13 @@ Measured on COD-AB Nepal on 2026-11-08:
 
 ## Build a pack (`build`)
 
-`forge build <cc> --release <v> --admin <boundary> [--tz <tz>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--dem <tileset>] <sources…>`
+`forge build <cc> --release <v> --admin <boundary> [--tz <tz>] [--tz-first <zone,…>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--dem <tileset>] <sources…>`
 writes `data/build/pack/<cc>/<cc>-places-<main|lite>.tgd`, `summary-<main|lite>.md` and the
 ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same sources:
 - **Licence gate (G-lic).** `--lite` refuses any source whose licence class is not
-  public-domain, CC0, CC BY, CC BY-IGO, ODC-By or GODL. The timezone source (tbb, ODbL) is
-  main only, so a lite pack has no timezone REGION yet. The `--core` buildings run is gated
+  public-domain, CC0, CC BY, CC BY-IGO, ODC-By or GODL. The recipe's timezone sources are a
+  priority list (D-138): main takes timezone-boundary-builder (ODbL), lite takes tzdb. The
+  `--core` buildings run is gated
   too: a lite build refuses a run with a source it may not read.
 - **Attribution (D-126).** Every source the gate lets the build read gives its
   `sources.lock` `attribution` line; the pack's manifest carries them once each in reading order
@@ -416,7 +422,9 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   below it (a point inside each polygon, its parent the unit of the level above), one place
   per conflated cluster (a settlement when any record is a populated place, else a locality;
   the parent is the deepest admin unit holding it), and one `timezone_area` place per IANA
-  zone that meets the country's box (D-093). A place keeps the names that fit the search key
+  zone: each timezone-boundary-builder zone that meets the country's box, `--tz-first` zones
+  first (D-093, D-084); or, from tzdb, the country's one `zone.tab` zone over its admin-0
+  outline, refusing a country with several (D-138). A place keeps the names that fit the search key
   limit; a place with none is left out and counted.
 - **Sections.** Rows in Hilbert order (ties by key), so IDs follow rows (D-075): IDMAP,
   PLACES, HIERARCHY, NAMES, SEARCH, PLACE_INDEX, the timezone REGION linked to its places

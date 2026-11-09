@@ -55,6 +55,9 @@ pub(super) struct Input<'a> {
     pub(super) elevation: Option<&'a super::elevation::Elevations>,
     /// The sources' notices, one per line (D-126).
     pub(super) attribution: &'a str,
+    /// The timezone each source record states, by record key (D-138): the independent check
+    /// of `PLACE_TZ`.
+    pub(super) stated_tz: &'a BTreeMap<String, String>,
 }
 
 /// The search importance of a place, 0 to 130 as in spike S3 (D-052), from what every source
@@ -562,7 +565,7 @@ fn verify(
         None => None,
     };
     let zones_ok = verify_zones(&p, rows, input)?;
-    let tz_line = verify_place_tz(&p, &places)?;
+    let tz_line = verify_place_tz(&p, &places, rows, input.stated_tz)?;
     let by_kind: BTreeMap<String, usize> = rows.iter().fold(BTreeMap::new(), |mut m, r| {
         *m.entry(format!("{:?}", r.kind)).or_default() += 1;
         m
@@ -631,9 +634,20 @@ fn verify_zones(p: &Pack<'_>, rows: &[&Place], input: &Input<'_>) -> Result<usiz
     Ok(zones_ok)
 }
 
+/// The most source records whose stated timezone may differ from their place's (G-tz,
+/// D-138), as a share of the records compared.
+const TZ_DIFFER_MAX: f64 = 0.001;
+
 /// `PLACE_TZ` read back (D-134): `check`, one row per place, and every place's area is the
 /// area REGION holds at the place's point as read back from PLACES. No REGION, no `PLACE_TZ`.
-fn verify_place_tz(p: &Pack<'_>, places: &Places<'_>) -> Result<Option<String>, String> {
+/// G-tz (D-138): each source record that states a timezone is compared with its place's;
+/// at most [`TZ_DIFFER_MAX`] of them may differ.
+fn verify_place_tz(
+    p: &Pack<'_>,
+    places: &Places<'_>,
+    rows: &[&Place],
+    stated: &BTreeMap<String, String>,
+) -> Result<Option<String>, String> {
     let e = |e: teigeodata_format::Error| e.to_string();
     let (tz, zones) = match (p.section(Kind::PLACE_TZ), p.section(Kind::REGION)) {
         (None, _) => return Ok(None),
@@ -652,6 +666,8 @@ fn verify_place_tz(p: &Pack<'_>, places: &Places<'_>) -> Result<Option<String>, 
         ));
     }
     let mut with = 0_usize;
+    let (mut agree, mut none) = (0_usize, 0_usize);
+    let mut differ: Vec<String> = Vec::new();
     for row in 0..places.len() {
         let at = places.point(row).ok_or("a row without a point")?;
         let want = zones.region(at.to_e7()).and_then(|z| zones.place(z));
@@ -662,12 +678,47 @@ fn verify_place_tz(p: &Pack<'_>, places: &Places<'_>) -> Result<Option<String>, 
             ));
         }
         with += usize::from(got.is_some());
+        let zone = got
+            .and_then(|z| rows.get(z as usize))
+            .and_then(|z| z.names.first())
+            .map(|n| n.text.as_str());
+        let place = rows.get(row).ok_or("a row without its place")?;
+        for k in &place.sources {
+            let Some(s) = stated.get(k) else { continue };
+            match zone {
+                Some(z) if z == s => agree += 1,
+                Some(z) => differ.push(format!("{k} states {s}, its place {z}")),
+                None => none += 1,
+            }
+        }
     }
-    Ok(Some(format!(
-        "Timezones: all {} places agree with REGION at their stored point ({with} in one of {} areas).",
+    let compared = agree + differ.len();
+    #[expect(clippy::cast_precision_loss, reason = "counts far below 2^52")]
+    let share = differ.len() as f64 / compared.max(1) as f64;
+    let mut line = format!(
+        "Timezones: all {} places agree with REGION at their stored point ({with} in one of {} areas). G-tz: of {compared} source records that state a timezone and whose place has one, {agree} agree and {} differ ({:.3}%, at most {:.1}%); {none} records' places have none.",
         places.len(),
-        tz.zones()
-    )))
+        tz.zones(),
+        differ.len(),
+        share * 100.0,
+        TZ_DIFFER_MAX * 100.0,
+    );
+    if !differ.is_empty() {
+        let _ = write!(
+            line,
+            " First: {}.",
+            differ
+                .iter()
+                .take(5)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")
+        );
+    }
+    if share > TZ_DIFFER_MAX {
+        return Err(line);
+    }
+    Ok(Some(line))
 }
 
 /// POSTAL read back: `check`, then every input code is found in its own scheme at its unit's

@@ -36,9 +36,10 @@ The recipe's `timezones` becomes a priority list, as `dem` did (D-132):
 `[tbb-2026f, tzdb-2026f]`. Each build takes the first source its licence gate allows: main
 takes TBB, lite takes tzdb.
 
-**Independent check (follow-up):** GeoNames records carry a `timezone` column, and GeoNames is
-CC BY 4.0, so lite may read it. Agreement between that column and the pack's `PLACE_TZ` is a
-gate to add once the reader keeps the column.
+**Independent check (G-tz, D-139):** GeoNames records carry a `timezone` column, and GeoNames
+is CC BY 4.0, so lite may read it. The build compares that column with each place's `PLACE_TZ`
+and fails when more than 0.1% differ. Nepal lite: 9 of 93,621 differ, on the far-western
+border (Kalapani among them), where GeoNames says `Asia/Kolkata`.
 
 **Measured** (Nepal lite, 2026-11-09):
 
@@ -106,7 +107,8 @@ Gates:
   their tables come with their rollout. Admin lines are not always zone lines (parts of the
   US and Canada), so each table must state where it is approximate. Measuring it against TBB
   is a licence question (Q-012).
-- Checking the GeoNames `timezone` column: a follow-up item.
+- G-tz depends on GeoNames for the comparison; a country GeoNames covers thinly is checked
+  thinly. The summary reports how many records were compared.
 
 ## 8. Versions checked
 
