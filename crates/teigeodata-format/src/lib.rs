@@ -51,6 +51,7 @@ mod layout;
 mod manifest;
 pub mod names;
 pub mod place_index;
+pub mod place_tz;
 pub mod places;
 pub mod poly_index;
 pub mod polygons;
@@ -128,6 +129,8 @@ impl Kind {
     pub const ARCS_OVERVIEW: Self = Self(18);
     /// Each place's height, one row per PLACES row (D-133).
     pub const ELEVATION: Self = Self(19);
+    /// Each place's timezone area (D-134).
+    pub const PLACE_TZ: Self = Self(20);
 
     /// This reader's name for the kind, if it knows it.
     #[must_use]
@@ -157,6 +160,7 @@ pub(crate) const KINDS: &[(Kind, &str)] = &[
     (Kind::ADMIN_REGION, "ADMIN_REGION"),
     (Kind::ARCS_OVERVIEW, "ARCS_OVERVIEW"),
     (Kind::ELEVATION, "ELEVATION"),
+    (Kind::PLACE_TZ, "PLACE_TZ"),
 ];
 
 impl fmt::Display for Kind {

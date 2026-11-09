@@ -89,6 +89,11 @@ After step 1 (ELEVATION its own section, kind 19), Nepal main, 2026-11-09, same 
 Points with IDs and the spatial index: 520,219 B on the wire, under the 0.55 MB target; with
 heights 649,501 B. Heights cost 1.29 B per place on the wire.
 
+Step 2 (PLACE_TZ, kind 20, D-134): each place's timezone area costs 8,268 B raw and **444 B on
+the wire** for Nepal's 100,358 places (6 areas, long runs in Hilbert order), against REGION's
+1,606,237 B. 100,357 places have an area; the one without lies outside every zone, as REGION
+says at its point. The timezone of a place is now 0.03% of the cost of the timezone index.
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Verdict |

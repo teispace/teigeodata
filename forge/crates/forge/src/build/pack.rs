@@ -128,6 +128,21 @@ fn places_section(rows: &[&Place], points: &[Point<E6>]) -> Result<Vec<u8>, Stri
     places::encode(&cols).map_err(|e| e.to_string())
 }
 
+/// `PLACE_TZ` (D-134): each place's timezone area, the one the linked REGION `body` holds at
+/// the place's stored point, so the area of a place and the area at its point agree.
+fn place_tz_section(
+    body: &[u8],
+    zones: usize,
+    points: &[Point<E6>],
+) -> Result<Option<Body>, String> {
+    let e = |e: teigeodata_format::Error| e.to_string();
+    let s = teigeodata_format::Section::unpacked(Kind::REGION, zones as u64, body);
+    let r = Region::open(&s).map_err(e)?;
+    Ok(teigeodata_format::place_tz::encode_from(&r, points)
+        .map_err(e)?
+        .map(|b| (Kind::PLACE_TZ, Encoding::TABLE, points.len() as u64, b)))
+}
+
 pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
     let places = input.places;
     // Rows: Hilbert order of the stored (1e-6°) point, ties by key.
@@ -191,6 +206,9 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
             })
             .collect::<Result<_, _>>()?;
         let body = region::link(&body, &zone_rows).map_err(|e| e.to_string())?;
+        if let Some(tz) = place_tz_section(&body, zone_rows.len(), &points)? {
+            sections.push(tz);
+        }
         sections.push((Kind::REGION, Encoding::TABLE, zone_rows.len() as u64, body));
     }
     if let Some(g) = input.geometry {
@@ -543,26 +561,8 @@ fn verify(
         Some(g) => Some(super::geometry::verify(&p, rows, g)?),
         None => None,
     };
-    let mut zones_ok = 0;
-    if let Some(s) = p.section(Kind::REGION) {
-        let region = Region::open(&s).map_err(e)?;
-        region.check().map_err(e)?;
-        for (z, place) in input.zones.places.iter().enumerate() {
-            let at = Point::<E7>::from_units(place.point.1, place.point.0)
-                .ok_or("a zone point is off the grid")?;
-            let mut all = [0_u32; 8];
-            let k = region.regions_at(at, &mut all);
-            let z = u32::try_from(z).unwrap_or(u32::MAX);
-            if !all.get(..k).unwrap_or_default().contains(&z) {
-                return Err(format!("{}: its own point is not in the zone", place.key));
-            }
-            let row = region.place(z).ok_or("a zone is not linked to its place")?;
-            if rows.get(row as usize).map(|r| r.key.as_str()) != Some(place.key.as_str()) {
-                return Err(format!("{}: linked to the wrong row", place.key));
-            }
-            zones_ok += 1;
-        }
-    }
+    let zones_ok = verify_zones(&p, rows, input)?;
+    let tz_line = verify_place_tz(&p, &places)?;
     let by_kind: BTreeMap<String, usize> = rows.iter().fold(BTreeMap::new(), |mut m, r| {
         *m.entry(format!("{:?}", r.kind)).or_default() += 1;
         m
@@ -580,6 +580,9 @@ fn verify(
         rows.len(),
         distinct.len(),
     );
+    if let Some(line) = tz_line {
+        let _ = writeln!(report, "\n{line}");
+    }
     if let Some(line) = geometry_line {
         let _ = writeln!(report, "\n{line}");
     }
@@ -600,6 +603,71 @@ fn verify(
         let _ = writeln!(report, "\n{line}");
     }
     Ok(())
+}
+
+/// REGION read back: `check`, and every zone holds its own point and links to its row.
+fn verify_zones(p: &Pack<'_>, rows: &[&Place], input: &Input<'_>) -> Result<usize, String> {
+    let e = |e: teigeodata_format::Error| e.to_string();
+    let mut zones_ok = 0;
+    if let Some(s) = p.section(Kind::REGION) {
+        let region = Region::open(&s).map_err(e)?;
+        region.check().map_err(e)?;
+        for (z, place) in input.zones.places.iter().enumerate() {
+            let at = Point::<E7>::from_units(place.point.1, place.point.0)
+                .ok_or("a zone point is off the grid")?;
+            let mut all = [0_u32; 8];
+            let k = region.regions_at(at, &mut all);
+            let z = u32::try_from(z).unwrap_or(u32::MAX);
+            if !all.get(..k).unwrap_or_default().contains(&z) {
+                return Err(format!("{}: its own point is not in the zone", place.key));
+            }
+            let row = region.place(z).ok_or("a zone is not linked to its place")?;
+            if rows.get(row as usize).map(|r| r.key.as_str()) != Some(place.key.as_str()) {
+                return Err(format!("{}: linked to the wrong row", place.key));
+            }
+            zones_ok += 1;
+        }
+    }
+    Ok(zones_ok)
+}
+
+/// `PLACE_TZ` read back (D-134): `check`, one row per place, and every place's area is the
+/// area REGION holds at the place's point as read back from PLACES. No REGION, no `PLACE_TZ`.
+fn verify_place_tz(p: &Pack<'_>, places: &Places<'_>) -> Result<Option<String>, String> {
+    let e = |e: teigeodata_format::Error| e.to_string();
+    let (tz, zones) = match (p.section(Kind::PLACE_TZ), p.section(Kind::REGION)) {
+        (None, _) => return Ok(None),
+        (Some(_), None) => return Err("a PLACE_TZ section without REGION".into()),
+        (Some(t), Some(r)) => (
+            teigeodata_format::place_tz::PlaceTz::open(&t).map_err(e)?,
+            Region::open(&r).map_err(e)?,
+        ),
+    };
+    tz.check().map_err(e)?;
+    if tz.len() != places.len() {
+        return Err(format!(
+            "PLACE_TZ has {} rows, PLACES {}",
+            tz.len(),
+            places.len()
+        ));
+    }
+    let mut with = 0_usize;
+    for row in 0..places.len() {
+        let at = places.point(row).ok_or("a row without a point")?;
+        let want = zones.region(at.to_e7()).and_then(|z| zones.place(z));
+        let got = tz.get(row);
+        if got != want {
+            return Err(format!(
+                "row {row} at {at}: PLACE_TZ {got:?}, REGION {want:?}"
+            ));
+        }
+        with += usize::from(got.is_some());
+    }
+    Ok(Some(format!(
+        "Timezones: all {} places agree with REGION at their stored point ({with} in one of {} areas).",
+        places.len(),
+        tz.zones()
+    )))
 }
 
 /// POSTAL read back: `check`, then every input code is found in its own scheme at its unit's

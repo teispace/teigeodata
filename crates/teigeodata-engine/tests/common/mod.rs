@@ -27,12 +27,13 @@ use teigeodata_format::elevation::{self, Elevations};
 use teigeodata_format::idmap::{self, IdMap};
 use teigeodata_format::names::{self, NameRecord, NameType, Names, Tag as NameTag};
 use teigeodata_format::place_index::{self, PlaceIndex};
+use teigeodata_format::place_tz;
 use teigeodata_format::places::{self, PlaceColumns, Places};
 use teigeodata_format::polygons::Polygons;
 use teigeodata_format::redirects::{self, Fate, Redirects};
 use teigeodata_format::region::{self, Options, Region};
 use teigeodata_format::search::{self, EXACT, LOOSE, Search};
-use teigeodata_format::{Encoding, Kind, Pack, Tag, Writer};
+use teigeodata_format::{Encoding, Kind, Pack, Section, Tag, Writer};
 
 /// A name record, owned.
 #[derive(Clone, Debug)]
@@ -352,7 +353,12 @@ impl Model {
         }
         if let Some(z) = &self.zones {
             let body = region::link(&z.body, &z.rows).unwrap();
-            bodies.push((Kind::REGION, z.rows.len() as u64, body));
+            let items = z.rows.len() as u64;
+            let zones = Region::open(&Section::unpacked(Kind::REGION, items, &body)).unwrap();
+            if let Some(tz) = place_tz::encode_from(&zones, &self.points).unwrap() {
+                bodies.push((Kind::PLACE_TZ, n, tz));
+            }
+            bodies.push((Kind::REGION, items, body));
         }
         if let Some((body, items)) = &self.arcs {
             bodies.push((Kind::ARCS, *items, body.clone()));

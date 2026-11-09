@@ -135,6 +135,7 @@ parameters).
 | 17 | ADMIN_REGION | exact point → admin units: REGION's layout on the ARCS vertices, region `i` = polygon `i` | `geometry` | column table (D-100), [below](#admin_region) |
 | 18 | ARCS_OVERVIEW | the coarse levels of ARCS alone, for fast coarse reads | `geometry` | column table (D-102), [below](#arcs_overview) |
 | 19 | ELEVATION | each place's height, one row per PLACES row | `elevation` | column table (D-133): one bit-packed column; 1.3 B per place on Nepal, [below](#elevation) |
+| 20 | PLACE_TZ | each place's timezone area, one row per PLACES row | `timezone` | column table (D-134): the areas' rows and a per-place index into them, [below](#place_tz) |
 
 ### Column tables (encoding 1)
 
@@ -215,6 +216,22 @@ section's `item_count` equals PLACES' (the engine refuses a layer where it does 
 
 A pack where no place has a height has no ELEVATION section. Any other column is refused. The
 deep check refuses a value above `u16::MAX` and a section where every height is unknown.
+
+### PLACE_TZ
+
+Each place's timezone area, fixed at build time, so a client that wants the timezone of its
+places does not need REGION, which answers it for an arbitrary coordinate (D-134). The
+section's `item_count` equals PLACES' (the engine refuses a layer where it does not).
+
+| ID | Column | Values | |
+|---:|---|---|---|
+| 1 | zones | the PLACES rows of the timezone areas used, strictly increasing | required, at least one |
+| 2 | zone | per place: 1 + its area's index in `zones`, 0 = none | required |
+
+A place's area is the one the pack's REGION holds at the place's stored point, so the area of
+a place and the area at its point agree; the forge proves it on read-back. A pack where no place
+has an area has no PLACE_TZ section. Any other column is refused. The deep check refuses areas
+out of order or past the rows, a value past the areas, and a section where no place has one.
 
 ### SEARCH
 

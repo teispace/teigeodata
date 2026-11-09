@@ -645,6 +645,31 @@ impl Engine {
         Ok(None)
     }
 
+    /// The timezone area of `place`: the one its own layer recorded for it at build time
+    /// (`PLACE_TZ`, D-134), a few bits per place, so it needs no REGION; for a layer without
+    /// `PLACE_TZ`, [`tz_at`](Self::tz_at) its point. Both give the same area for a place of a
+    /// full pack.
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if a section it reads is corrupt.
+    pub fn tz_of(&self, place: &Place) -> Result<Option<Place>, Error> {
+        let Some(i) = self.layers.iter().position(|l| l.id == place.layer) else {
+            return Ok(None);
+        };
+        let l = self.layers.get(i).ok_or(Error::Range)?;
+        let Some(tz) = &l.views().place_tz else {
+            return self.tz_at(place.point.to_e7());
+        };
+        l.ensure(Kind::PLACE_TZ)?;
+        match tz.get(place.row as usize) {
+            Some(row) => match self.place(i, row as usize)? {
+                Some(p) => self.winning(i, p),
+                None => Ok(None),
+            },
+            None => Ok(None),
+        }
+    }
+
     /// Places matching `query`, best first (ties by ID), at most `k`, into `out`. The query is
     /// folded as the forge folds names; each layer scores its rows with the same formula
     /// (D-052): exact 60, loose 55, one edit 25 (queries of 4 to 63 characters, keys with the

@@ -131,6 +131,7 @@ fn model_box(model: &Model) -> Option<(i32, i32, i32, i32)> {
 #[derive(Debug, PartialEq)]
 struct Answers {
     get: Vec<Option<Key>>,
+    tz_of: Vec<Option<Key>>,
     reverse: Vec<Vec<(Key, u64)>>,
     admin: Vec<Vec<Key>>,
     tz: Vec<Option<Key>>,
@@ -145,6 +146,14 @@ fn answers(e: &Engine, p: &Probes) -> Answers {
         .ids
         .iter()
         .map(|&id| e.get(id).unwrap().map(|x| key(e, &x)))
+        .collect();
+    let tz_of = p
+        .ids
+        .iter()
+        .map(|&id| {
+            let x = e.get(id).unwrap()?;
+            e.tz_of(&x).unwrap().map(|z| key(e, &z))
+        })
         .collect();
     let mut reverse = Vec::new();
     let mut admins = Vec::new();
@@ -182,6 +191,7 @@ fn answers(e: &Engine, p: &Probes) -> Answers {
     }
     Answers {
         get,
+        tz_of,
         reverse,
         admin: admins,
         tz,
@@ -200,6 +210,7 @@ fn gate(model: &Model, whole: &[u8], parts: usize, seed: u64, n: usize) {
     assert!(want.reverse.iter().all(|r| !r.is_empty()));
     assert!(want.admin.iter().any(|a| a.len() > 1));
     assert!(want.tz.iter().any(Option::is_some));
+    assert!(want.tz_of.iter().any(Option::is_some));
     assert!(want.boxes.iter().filter(|b| b.len() > 1).count() > n / 4);
     assert!(want.search.iter().filter(|h| !h.is_empty()).count() > n);
 
@@ -394,6 +405,33 @@ fn priority_and_the_baseline_order_layers() {
     // The baseline answers a point only where nothing covers it: here it is the only layer.
     let at = Point::<E6>::from_degrees(28.0, 84.0).unwrap().to_e7();
     assert!(e.tz_at(at).unwrap().is_some());
+}
+
+/// A place's recorded timezone (`PLACE_TZ`, D-134) is the one at its point, for every place;
+/// without `PLACE_TZ` the engine falls back to the point and still agrees.
+#[test]
+fn the_timezone_of_a_place_is_the_one_at_its_point() {
+    let model = synthetic(1200, 17);
+    let whole = model.encode();
+    assert!(
+        teigeodata_format::Pack::open(&whole)
+            .unwrap()
+            .section(teigeodata_format::Kind::PLACE_TZ)
+            .is_some()
+    );
+    let e = engine(&[whole]);
+    let mut with = 0;
+    for &id in &model.ids {
+        let p = e.get(id).unwrap().unwrap();
+        let of = e.tz_of(&p).unwrap().map(|z| z.id);
+        assert_eq!(
+            of,
+            e.tz_at(p.point.to_e7()).unwrap().map(|z| z.id),
+            "{id:?}"
+        );
+        with += usize::from(of.is_some());
+    }
+    assert!(with > model.ids.len() / 2, "{with} places with a zone");
 }
 
 /// `within_bbox` against a scan of the model: every place in the box, by ID, the first `limit`.

@@ -69,8 +69,10 @@ signed pack per address; a client holds any subset of its sections.
 - [x] Format: ELEVATION (kind 19) out of PLACES into its own section; the forge writes it and
   checks it against the DEM on read-back; the engine refuses a layer whose ELEVATION row count
   differs from PLACES' (2026-11-09)
-- [ ] Format: per-place timezone and admin columns (measure COMPONENTS fields against own
-  sections); one table mapping each section kind to its component and dependencies, in
+- [x] Format: a place's timezone in its own section, PLACE_TZ (kind 20, D-134), proved equal to
+  REGION at the place's point; the engine's `tz_of(place)`. A place's admin units come from
+  HIERARCHY (G-pip), so no admin column (2026-11-09)
+- [ ] Format: one table mapping each section kind to its component and dependencies, in
   `teigeodata-format`
 - [ ] Forge writes them; `check-pack` prints wire bytes per component
 - [ ] Storage: head plus the installed sections (sparse file, or offsets in a compact file),
@@ -161,3 +163,4 @@ signed pack per address; a client holds any subset of its sections.
 | 2026-11-09 | 4.1: the golden gate written against a checked-in baseline (D-128) | a CI gate needs a number to hold |
 | 2026-11-09 | 4.1b: components as their own item, sized on Nepal | the maintainer wants points-only downloads (lat, lon, altitude) |
 | 2026-11-09 | 4.1b: ELEVATION is its own section; the format item split in two | D-133 step 1 done |
+| 2026-11-09 | 4.1b: PLACE_TZ instead of a COMPONENTS field; no admin column | D-134 |

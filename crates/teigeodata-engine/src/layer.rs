@@ -15,6 +15,7 @@ use teigeodata_format::hierarchy::Hierarchy;
 use teigeodata_format::idmap::IdMap;
 use teigeodata_format::names::Names;
 use teigeodata_format::place_index::PlaceIndex;
+use teigeodata_format::place_tz::PlaceTz;
 use teigeodata_format::places::Places;
 use teigeodata_format::polygons::Polygons;
 use teigeodata_format::redirects::Redirects;
@@ -85,6 +86,8 @@ pub(crate) struct Views<'a> {
     pub(crate) places: Option<Places<'a>>,
     /// Heights, one per PLACES row (D-133); absent in a pack without them.
     pub(crate) heights: Option<Elevations<'a>>,
+    /// Each place's timezone area (D-134); absent in a pack without them.
+    pub(crate) place_tz: Option<PlaceTz<'a>>,
     pub(crate) hierarchy: Option<Hierarchy<'a>>,
     pub(crate) redirects: Option<Redirects<'a>>,
     pub(crate) names: Option<Names<'a>>,
@@ -110,12 +113,20 @@ impl<'a> Views<'a> {
         let heights = get(Kind::ELEVATION)
             .map(|s| Elevations::open(&s))
             .transpose()?;
-        if heights.is_some() && heights.map(|h| h.len()) != places.map(|p| p.len()) {
-            return Err(Error::Format(teigeodata_format::Error::Payload {
-                kind: Kind::ELEVATION.0,
-                column: 0,
-                problem: "not one row per PLACES row",
-            }));
+        let place_tz = get(Kind::PLACE_TZ).map(|s| PlaceTz::open(&s)).transpose()?;
+        // Per-place sections are one row per PLACES row, or the layer is refused.
+        let rows = places.map(|p| p.len());
+        for (kind, len) in [
+            (Kind::ELEVATION, heights.map(|h| h.len())),
+            (Kind::PLACE_TZ, place_tz.map(|t| t.len())),
+        ] {
+            if len.is_some() && len != rows {
+                return Err(Error::Format(teigeodata_format::Error::Payload {
+                    kind: kind.0,
+                    column: 0,
+                    problem: "not one row per PLACES row",
+                }));
+            }
         }
         let hierarchy = get(Kind::HIERARCHY)
             .map(|s| Hierarchy::open(&s))
@@ -151,6 +162,7 @@ impl<'a> Views<'a> {
             ids,
             places,
             heights,
+            place_tz,
             hierarchy,
             redirects,
             names,
