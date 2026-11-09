@@ -69,7 +69,9 @@ country with no folder.
   kept). Use it for a first fetch, or for a deliberate update of a moving source.
 - A `sparql` source posts its query template (`forge/queries/*.rq`) with the parameters from
   the lock. Templates are world-general: a country's Wikidata item comes from its profile.
-- A fetch prefers `mirror_url`, our release asset, when one is set.
+- A pinned fetch prefers `mirror_url`, our content-addressed mirror (D-127): `{sha256}` in it
+  becomes the pinned hash of the file, or of each tile of a tileset; a mirrored file is a plain
+  GET whatever the source's kind. Pinning (`--pin`) always reads the upstream.
 - A `tileset` source (a DEM) pins a manifest, `data/sources/<id>.tiles`, with one line per
   tile: name, SHA-256 and size, or `absent` where upstream has no tile (the sea). The lock pins
   the manifest's hash. The tile names come from the `bbox` and `tile` parameters, and the url
@@ -87,10 +89,13 @@ country with no folder.
 
 `forge path <id>` prints where a fetched source is stored.
 
-**Moving sources.** GeoNames dumps and Wikidata snapshots change in place and have no dated
-archive. They carry `moving = true`, and a release build must read them from our mirror. The
-mirror is created in Phase 2 with the first data release. Until then, spikes read the local
-store and publish only statistics.
+**Moving sources.** GeoNames dumps, Wikidata snapshots, the Microsoft building index and
+SlideRule subsets change in place and have no dated archive. They carry `moving = true` and
+must have a `mirror_url` (`check-data`): the GitHub release `sources` of this repository, one
+asset per file named by its SHA-256 (`…/releases/download/sources/{sha256}`).
+`cargo xtask mirror [<id>…]` uploads the stored bytes of the named sources (every mirrored
+source by default), skipping assets already there, and lists the sources' notices in the
+release notes (D-127).
 
 ## Readers
 

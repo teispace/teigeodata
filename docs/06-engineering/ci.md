@@ -38,6 +38,8 @@ The criterion suites stay for wall-clock numbers on the results pages.
 - Actions are pinned by commit SHA; Renovate updates them.
 - Least-privilege `permissions:` per workflow; `pull_request_target` is not used with untrusted code.
 - Caches are keyed by lockfiles; large data intermediates go to release assets, not the Actions cache.
+- A data build fetches immutable upstreams directly and moving ones from the content-addressed
+  `sources` release (D-127), so a run never depends on today's upstream.
 - Pushes are batched; a PR body says which checks ran.
 
 ## Nightly
