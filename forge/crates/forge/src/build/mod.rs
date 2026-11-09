@@ -201,7 +201,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         places: mut clustered,
         unnamed: unnamed_clusters,
         held,
-        naming,
+        mut naming,
         mut admin,
     } = cluster_places(
         &build,
@@ -213,9 +213,11 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         (&fixes, a.lite),
     )?;
     let merged = dedupe::merge_near(&mut clustered);
+    let unit_count = units.places.len();
     let mut places: Vec<Place> = units.places;
     places.extend(clustered);
-    if let Some(country) = country_place(&build, &sources, &profile)? {
+    let current = places.get(..unit_count).unwrap_or_default();
+    if let Some(country) = country_place(&build, &sources, &profile, current, &mut naming)? {
         places.push(country);
     }
     admin.added = link_admins(&mut places, std::mem::take(&mut admin.links));

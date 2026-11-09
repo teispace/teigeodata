@@ -129,7 +129,11 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   below settlements (D-118): 2,856 twins merged, golden recall@1 0.801, pass 0.887
 - [ ] Rank a town over its same-name twins (Damak's two GeoNames records 0.8 km apart; a
   municipality and its seat town): the golden misses that rank the wanted place second.
-  Find the queries with `S3_MISSES=first` on `pack-eval`
+  Find the queries with `S3_MISSES=first` on `pack-eval`, their scores with `S3_EXPLAIN`.
+  2026-11-09: the country no longer takes Palpa (D-122). The rest: municipalities have no
+  population (score 45 + match), so a GeoNames point of the same name, or a fuzzy match on a
+  district, outranks them (Kamalamai, Damak, Kailari, Myagde, Bhimeshwor); a unit population
+  source is the fix
 - [x] Corrections as data with guards (D-117): five ops, retire/apply/stale per build,
   G-corr in the build, `forge correction-guard`, schema checked by `check-data`; Nepal's first
   4 (Newa-script names, Q20588832 same as Patan), unreviewed until the maintainer signs them;

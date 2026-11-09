@@ -193,6 +193,12 @@ pub(super) fn admin_cluster(
             Rules::fold_known(&known, &n.text) || rules.collides(owner, p.point, &n.text).is_none()
         });
         counts.collisions += before - all.len();
+    } else if unit.is_none() {
+        // The country: its records' primary names are its labels.
+        let labels = rules.anchor(recs.iter().map(|(r, _, _)| r.name.as_str()));
+        let before = all.len();
+        all.retain(|n| rules.country_keeps(&labels, &n.text).is_ok());
+        counts.collisions += before - all.len();
     }
     *counts
         .linked

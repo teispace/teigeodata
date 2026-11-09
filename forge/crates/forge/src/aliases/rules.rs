@@ -173,6 +173,32 @@ impl<'a> Rules<'a> {
         hit
     }
 
+    /// The admin unit (`admin:<name>`) whose primary name this name is, by fold or phonetic key.
+    pub(crate) fn names_unit(&self, t: &str) -> Option<String> {
+        let mut hit = None;
+        self.keys(t, false, |k| {
+            if hit.is_none() {
+                hit = self.admin.get(&k).map(|n| format!("admin:{n}"));
+            }
+        });
+        hit
+    }
+
+    /// Whether a country whose labels have `label_keys` ([`Rules::anchor`]) keeps name `t`:
+    /// a spelling of a label stays (a unit may share the country's name, as Luxembourg's), any
+    /// other name must not be a unit's primary name (Wikidata lists Palpa, a district and a
+    /// former kingdom, as an alias of Nepal). `Err` names the unit.
+    pub(crate) fn country_keeps(
+        &self,
+        label_keys: &HashSet<String>,
+        t: &str,
+    ) -> Result<(), String> {
+        match self.names_unit(t) {
+            Some(unit) if !self.known(label_keys, t) => Err(unit),
+            _ => Ok(()),
+        }
+    }
+
     fn near(&self, key: &str, owner: u32, (lon, lat): (i32, i32)) -> Option<String> {
         let v = self.places.get(key)?;
         let lo = v.partition_point(|&(la, _, _)| la < lat.saturating_sub(WINDOW_E7));
@@ -193,6 +219,31 @@ impl<'a> Rules<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_country_keeps_its_spellings_but_no_unit_name() {
+        let mut r = Rules::new(PhoneticKey::from_name("indic-v0"), None);
+        r.add_admin("Palpa");
+        r.add_admin("Nepal");
+        r.finish();
+        let labels = r.anchor(["Nepal"]);
+        assert_eq!(
+            r.country_keeps(&labels, "Palpa"),
+            Err("admin:Palpa".to_string())
+        );
+        assert_eq!(
+            r.country_keeps(&labels, "Pālpā"),
+            Err("admin:Palpa".to_string())
+        );
+        assert_eq!(r.country_keeps(&labels, "नेपाल"), Ok(()));
+        assert_eq!(r.country_keeps(&labels, "Nepāl"), Ok(()));
+        assert_eq!(
+            r.country_keeps(&labels, "Federal Democratic Republic of Nepal"),
+            Ok(())
+        );
+        assert_eq!(r.names_unit("palpa"), Some("admin:Palpa".to_string()));
+        assert_eq!(r.names_unit("Kathmandu"), None);
+    }
 
     fn rules() -> Rules<'static> {
         let mut r = Rules::new(PhoneticKey::from_name("indic-v0"), None);

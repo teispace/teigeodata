@@ -3,8 +3,10 @@
 use super::Place;
 use super::PlaceName;
 use super::Profile;
+use super::naming::Naming;
 use super::sources::read_names;
 use super::sources::read_records;
+use crate::aliases::rules::{Dropped, Rules};
 use crate::fetch::store_path;
 use crate::geom::GridIndex;
 use crate::geom::Polygon;
@@ -14,6 +16,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use teigeodata_core::PlaceKind;
 use teigeodata_format::names::NameType;
+use teigeodata_names::PhoneticKey;
 
 /// The admin places, their polygons level by level, and the box of the whole set.
 pub(super) struct Units {
@@ -112,11 +115,49 @@ pub(super) fn deepest(levels: &[Level], p: (i32, i32)) -> Option<String> {
     levels.iter().rev().find_map(|l| l.find(p)).cloned()
 }
 
+/// The country's names after its primary `label`: each distinct name of `own` the country
+/// keeps ([`Rules::country_keeps`] against `units`); `dropped` is told of the others, with the
+/// unit.
+fn country_names(
+    label: &str,
+    own: Vec<PlaceName>,
+    units: &[Place],
+    phonetic: Option<PhoneticKey>,
+    mut dropped: impl FnMut(&str, String),
+) -> Vec<PlaceName> {
+    let mut rules = Rules::new(phonetic, None);
+    for p in units {
+        if let Some(n) = p.names.first() {
+            rules.add_admin(&n.text);
+        }
+    }
+    rules.finish();
+    let label_keys = rules.anchor([label]);
+    let mut seen = BTreeSet::from([label.to_string()]);
+    let mut out = Vec::new();
+    for n in own {
+        if !seen.insert(n.text.clone()) {
+            continue;
+        }
+        match rules.country_keeps(&label_keys, &n.text) {
+            Ok(()) => out.push(n),
+            Err(unit) => dropped(&n.text, unit),
+        }
+    }
+    out
+}
+
 /// The country, from the record of its Wikidata item, when a source has it.
+///
+/// The country takes its record's names but, as a lent name (D-060), none that is the primary
+/// name of one of `units` by fold or phonetic key: Wikidata lists Palpa, a district and a
+/// former kingdom, as an alias of Nepal. Each one left out goes to `naming`.
 pub(super) fn country_place(
     build: &Path,
     read: &[String],
     profile: &Profile,
+    units: &[Place],
+    naming: &mut Naming,
 ) -> Result<Option<Place>, String> {
     let Some(q) = &profile.wikidata else {
         return Ok(None);
@@ -132,12 +173,22 @@ pub(super) fn country_place(
                 lang: None,
                 kind: Some(NameType::Official),
             }];
-            let mut seen = BTreeSet::from([r.name.clone()]);
-            for n in read_names(build, s)?.remove(&id).unwrap_or_default() {
-                if seen.insert(n.text.clone()) {
-                    names.push(n);
-                }
-            }
+            let own = read_names(build, s)?.remove(&id).unwrap_or_default();
+            names.extend(country_names(
+                &r.name,
+                own,
+                units,
+                profile.phonetic,
+                |t, with| {
+                    naming.dropped.insert((
+                        id.clone(),
+                        id.clone(),
+                        t.to_string(),
+                        Dropped::Collision,
+                        with,
+                    ));
+                },
+            ));
             return Ok(Some(Place {
                 sources: vec![id.clone()],
                 key: id,
@@ -152,4 +203,64 @@ pub(super) fn country_place(
         }
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Place, PlaceName, country_names};
+    use teigeodata_core::PlaceKind;
+    use teigeodata_names::PhoneticKey;
+
+    fn name(t: &str) -> PlaceName {
+        PlaceName {
+            text: t.to_string(),
+            lang: None,
+            kind: None,
+        }
+    }
+
+    #[test]
+    fn the_country_takes_no_unit_name_as_an_alias() {
+        let unit = |t: &str| Place {
+            key: format!("codab:{t}"),
+            kind: PlaceKind::Admin,
+            admin_level: 2,
+            flags: 0,
+            point: (0, 0),
+            names: vec![name(t)],
+            population: None,
+            parent: None,
+            sources: Vec::new(),
+        };
+        // A unit may share the country's name (Luxembourg, Djibouti): its spellings stay.
+        let units = [unit("Palpa"), unit("Nepalgunj"), unit("Nepal")];
+        let own = vec![
+            name("नेपाल"),
+            name("Palpa"),
+            name("palpā"), // the same by fold
+            name("Federal Democratic Republic of Nepal"),
+            name("Nepal"),
+            name("Nepāl"),
+        ];
+        let mut dropped = Vec::new();
+        let kept = country_names(
+            "Nepal",
+            own,
+            &units,
+            PhoneticKey::from_name("indic-v0"),
+            |t, with| dropped.push((t.to_string(), with)),
+        );
+        let kept: Vec<&str> = kept.iter().map(|n| n.text.as_str()).collect();
+        assert_eq!(
+            kept,
+            ["नेपाल", "Federal Democratic Republic of Nepal", "Nepāl"]
+        );
+        assert_eq!(
+            dropped,
+            [
+                ("Palpa".to_string(), "admin:Palpa".to_string()),
+                ("palpā".to_string(), "admin:Palpa".to_string())
+            ]
+        );
+    }
 }
