@@ -24,6 +24,7 @@ use unicode_script::Script;
 
 use crate::golden;
 use crate::lexicon::{self, Evidence, EvidenceKind, Native, Status};
+use crate::postal;
 use crate::recipe;
 use crate::sources;
 
@@ -125,6 +126,8 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     let mut problems = Vec::new();
     let mut terms = 0usize;
     let mut queries = 0usize;
+    let mut postal_codes = 0usize;
+    let mut scheme_ids = BTreeSet::new();
     let lock_text = fs::read_to_string(root.join("data/sources.lock")).unwrap_or_default();
     let pinned = sources::ids(&lock_text);
     for path in &countries {
@@ -171,6 +174,11 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
             }
         }
         queries += golden_queries;
+        if let Ok(text) = fs::read_to_string(path.join("postal.yaml")) {
+            let (n, found) = postal::check(path, &text, &pinned, &mut scheme_ids);
+            postal_codes += n;
+            problems.extend(found.into_iter().map(|p| format!("{at}/postal.yaml: {p}")));
+        }
         let lex = path.join("lexicon.yaml");
         if lex.exists() {
             match fs::read_to_string(&lex) {
@@ -199,7 +207,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     }
     if problems.is_empty() {
         Ok(format!(
-            "data ok: {} countries, {terms} lexicon terms, {queries} golden query entries, {pinned} pinned sources checked",
+            "data ok: {} countries, {terms} lexicon terms, {queries} golden query entries, {postal_codes} postal codes, {pinned} pinned sources checked",
             countries.len()
         ))
     } else {

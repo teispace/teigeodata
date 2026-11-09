@@ -1,0 +1,39 @@
+# Nepal's postal schemes and codes (D-090, D-105). Schema: teigeodata/postal/v1.
+#
+# A scheme's rule is compiled into the pack's POSTAL section, so the reader holds no country's
+# rules (pack-format.md, POSTAL). Templates: `9` a digit, `A` a letter, `?` either, `\x` the
+# literal x, any other character a literal; a literal in `ignore` is inserted, any other must be
+# typed. Dates are ISO days.
+schema: teigeodata/postal/v1
+schemes:
+  - id: np
+    authority: Department of Postal Services (General Post Office)
+    # Each local level has a 5-digit code (its CBS code), each ward a 7-digit code: the local
+    # code and the 2-digit ward number. Codes are areas, aligned with the admin units.
+    source: gpo-np-postal
+    # First seen published (the archived table of 2025-09-08); the legal date is unverified.
+    valid_from: 2025-09-08
+    admin_aligned: true
+    ignore: " -"
+    templates: ["99999", "9999999"]
+  - id: np-1991
+    authority: Department of Postal Services (General Post Office)
+    # The 1991 scheme: 2 digits of district and 3 of post office (44600). Retired; it shares 67
+    # strings with `np`, so the scheme is part of every key. No source in a build yet (Wikidata
+    # P281 is planned), so no pack carries it.
+    valid_to: 2025-09-07
+    ignore: " -"
+    templates: ["99999"]
+codes:
+  - scheme: np
+    file: postal-codes.tsv
+    # The codes' licence: the build reads them only if it may read this source.
+    source: gpo-np-postal
+    # The `pcode` column names units of this boundary source (place keys `admin:<pcode>`).
+    admin_source: codab-np-geojson
+    # Each row is an area of its unit; its parts (wards) are the code and a 2-digit number.
+    part_digits: 2
+    expect: { units: 753, parts: 6743 }
+    # The source table every build checks the file against: an HTML table whose cells (counted
+    # from 1) hold the code and the number of parts.
+    verify: { format: html-table, code_column: 7, parts_column: 5 }

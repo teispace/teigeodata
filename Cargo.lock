@@ -1626,6 +1626,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "syn 3.0.9",
+ "teigeodata-format",
  "teigeodata-names",
  "toml",
  "unicode-normalization",
