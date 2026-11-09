@@ -15,6 +15,7 @@ mod data;
 mod docs;
 mod golden;
 mod lexicon;
+mod mirror;
 mod postal;
 mod recipe;
 mod romanise;
@@ -42,6 +43,9 @@ Tasks:
                     (pins, licence classes, query templates).
   check-workspace   Check that the forge, bindings/ and the C ABI crate keep the main lint
                     table (boundary crates may only lower unsafe_code to deny).
+  mirror [<id>…]    Upload the stored bytes of pinned sources (every source with a
+                    mirror_url when none are named) to the content-addressed release
+                    `sources`, one asset per file named by its SHA-256 (D-127); needs `gh`.
   clean [--all]     Free disk: incremental caches and scratch of both workspaces; --all
                     also runs `cargo clean` in both. Fetched sources are kept.
   sizes [--native|--wasm]
@@ -68,6 +72,7 @@ fn main() -> ExitCode {
         }
         "check-data" => report(data::check(&root)),
         "check-workspace" => report(workspace::check(&root)),
+        "mirror" => report(mirror::run(&root, rest)),
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
         "sizes" => {
             let only = |f: &str| rest.iter().any(|a| a == f);

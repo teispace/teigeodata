@@ -134,6 +134,18 @@ pub(crate) fn check_text(
         {
             p.push(format!("{at}: mirror_url must be https"));
         }
+        // D-127: only our content-addressed mirror keeps a moving upstream's pinned bytes, and
+        // a tileset's tiles are found there by their own hashes.
+        match s.mirror_url.as_deref() {
+            None if s.moving => p.push(format!(
+                "{at}: a moving source needs a mirror_url (`cargo xtask mirror {}`)",
+                s.id
+            )),
+            Some(m) if s.kind == "tileset" && !m.contains("{sha256}") => p.push(format!(
+                "{at}: a tileset's mirror_url must name each tile by {{sha256}}"
+            )),
+            _ => {}
+        }
         if s.url.contains("latest") && !s.moving {
             p.push(format!(
                 "{at}: a `latest` URL moves; pin a dated file or set `moving = true`"
@@ -424,6 +436,11 @@ attribution = "© OpenStreetMap contributors, ODbL 1.0"
                 "attribution = \"© OpenStreetMap contributors, ODbL 1.0\"",
                 "attribution = \"\"",
                 "attribution is empty",
+            ),
+            (
+                "kind = \"http\"",
+                "kind = \"http\"\nmoving = true",
+                "needs a mirror_url",
             ),
             (
                 "attribution = \"© OpenStreetMap contributors, ODbL 1.0\"",

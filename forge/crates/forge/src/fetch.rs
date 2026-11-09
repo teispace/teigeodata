@@ -4,6 +4,10 @@
 //! snapshot is pinned like a file. `--pin` records new bytes in the lock instead (first fetch,
 //! or a deliberate update of a moving source). A `tileset` source is pinned by its manifest,
 //! which pins every tile ([`crate::tiles`]).
+//!
+//! A pinned fetch prefers our mirror (D-043, D-127): `mirror_url` names each file by its
+//! pinned SHA-256 (`{sha256}`), so one content-addressed store serves files and tiles, and a
+//! moving upstream (a daily dump, a query) still yields the pinned bytes.
 
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Read, Write};
@@ -21,6 +25,15 @@ const ATTEMPTS: u32 = 3;
 /// The content-store path of a source's pinned bytes.
 pub(crate) fn store_path(root: &Path, s: &Source) -> PathBuf {
     root.join("data/cache/store/sha256").join(&s.sha256)
+}
+
+/// Where our mirror serves the file pinned as `sha256`, when the source has a mirror: its
+/// `mirror_url` with `{sha256}` replaced. A mirror is read only for pinned bytes, never to pin.
+pub(crate) fn mirror(s: &Source, sha256: &str) -> Option<String> {
+    s.mirror_url
+        .as_deref()
+        .filter(|m| !m.is_empty())
+        .map(|m| m.replace("{sha256}", sha256))
 }
 
 /// Fetches the given sources (all when `ids` is empty). With `pin`, writes the new SHA-256,
@@ -131,11 +144,16 @@ fn download_once(
     pin: bool,
     partial: &Path,
 ) -> Result<(String, u64), String> {
-    // A pinned fetch prefers our mirror; pinning reads the upstream.
-    let url = match (&s.mirror_url, pin) {
-        (Some(m), false) if !m.is_empty() => m.clone(),
-        _ => s.url.clone(),
-    };
+    // A pinned fetch prefers our mirror, a plain GET of the stored bytes whatever the
+    // source's kind; pinning reads the upstream.
+    if let Some(url) = mirror(s, &s.sha256).filter(|_| !pin) {
+        let mut resp = ureq::get(&url)
+            .header("User-Agent", USER_AGENT)
+            .call()
+            .map_err(|e| e.to_string())?;
+        return stream_to(resp.body_mut().as_reader(), partial);
+    }
+    let url = s.url.clone();
     let mut resp = match s.kind.as_str() {
         "http" => ureq::get(&url)
             .header("User-Agent", USER_AGENT)
@@ -274,7 +292,29 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 
 #[cfg(test)]
 mod tests {
-    use super::{civil_from_days, hex};
+    use super::{civil_from_days, hex, mirror};
+
+    #[test]
+    fn a_mirror_names_each_file_by_its_hash() {
+        let source = |extra: &str| -> crate::lock::Source {
+            toml::from_str(&format!(
+                "id = \"g\"\nkind = \"http\"\nurl = \"https://up/x\"\nsha256 = \"ab12\"\nsize = 1\nlicence_class = \"cc-by\"\nattribution = \"G\"\n{extra}"
+            ))
+            .unwrap()
+        };
+        let m = source("mirror_url = \"https://m/sources/{sha256}\"");
+        assert_eq!(
+            mirror(&m, "ab12").as_deref(),
+            Some("https://m/sources/ab12")
+        );
+        // A tile is named by its own hash.
+        assert_eq!(
+            mirror(&m, "cd34").as_deref(),
+            Some("https://m/sources/cd34")
+        );
+        assert_eq!(mirror(&source(""), "ab12"), None);
+        assert_eq!(mirror(&source("mirror_url = \"\""), "ab12"), None);
+    }
 
     #[test]
     fn civil_dates() {

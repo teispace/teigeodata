@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
 
-use crate::fetch::{get_to, hash_file, render, say};
+use crate::fetch::{get_to, hash_file, mirror, render, say};
 use crate::lock::Source;
 use crate::sliderule;
 
@@ -189,8 +189,12 @@ pub(crate) fn fetch(
             .get(n)
             .is_none_or(|t| t.sha256.is_some() && tile_path(root, t).is_none_or(|p| !p.is_file()))
     };
+    // A mirrored tileset restores its pinned tiles from the mirror: no upstream token.
+    let upstream = pin || s.mirror_url.as_deref().is_none_or(str::is_empty);
     let token = match s.query_params.get("token_url") {
-        Some(u) if pin || names.iter().any(|(n, _, _)| missing(n)) => Some(read_token(u)?),
+        Some(u) if upstream && (pin || names.iter().any(|(n, _, _)| missing(n))) => {
+            Some(read_token(u)?)
+        }
         _ => None,
     };
     let pool = rayon::ThreadPoolBuilder::new()
@@ -353,14 +357,21 @@ fn fetch_tile(
             Some(_) => {}
         }
     }
+    // A pinned tile comes from the mirror when there is one, as a plain GET.
+    let mirrored = known
+        .and_then(|t| t.sha256.as_deref())
+        .filter(|_| !pin)
+        .and_then(|h| mirror(s, h));
     let base = want
         .url
         .map_or_else(|| s.url.replace("{tile}", name), str::to_string);
-    let url = match want.token {
-        None => base,
-        Some(t) => format!("{base}?{t}"),
+    let url = match (&mirrored, want.token) {
+        (Some(m), _) => m.clone(),
+        (None, None) => base,
+        (None, Some(t)) => format!("{base}?{t}"),
     };
     let body = match &s.query {
+        _ if mirrored.is_some() => None,
         None => None,
         Some(template) => {
             let corners = [
