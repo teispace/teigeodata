@@ -17,10 +17,17 @@
     clippy::expect_used,
     clippy::panic,
     clippy::too_many_lines,
+    clippy::cast_possible_wrap,
+    clippy::needless_range_loop,
+    clippy::many_single_char_names,
+    clippy::similar_names,
     missing_docs,
     missing_debug_implementations,
     reason = "a measurement spike over pinned local inputs"
 )]
+
+pub mod engine;
+pub mod golden;
 
 use std::collections::BTreeMap;
 
@@ -35,6 +42,9 @@ pub struct Profile {
     pub iso3: String,
     #[serde(default)]
     pub scripts: Vec<String>,
+    /// The phonetic key the forge writes the SEARCH section with (`indic-v0`).
+    #[serde(default)]
+    pub phonetic_key: Option<String>,
     #[serde(default)]
     pub unit_types: Vec<UnitType>,
     #[serde(default)]
@@ -212,11 +222,6 @@ pub fn load(profile: &Profile, geonames: &str, codab_xlsx: Option<&str>) -> Vec<
         col("adm2_name"),
     );
     let code_col = rules.map(|r| col(&r.field));
-    let by_code: BTreeMap<&str, &UnitType> = profile
-        .unit_types
-        .iter()
-        .filter_map(|u| u.source_codes.get("codab").map(|c| (c.as_str(), u)))
-        .collect();
     let base = recs.len();
     // Parents: COD-AB may spell them differently from GeoNames (Chitawan/Chitwan); match by
     // fold, else by the smallest edit distance ≤ 2.
@@ -244,13 +249,7 @@ pub fn load(profile: &Profile, geonames: &str, codab_xlsx: Option<&str>) -> Vec<
         let name = cell(&row[c_name]);
         let pcode = cell(&row[c_pcode]);
         let parent = cell(&row[c_parent]);
-        let unit = match (rules, code_col) {
-            (Some(r), Some(c)) => cell(&row[c])
-                .get(r.offset..r.offset + r.length)
-                .and_then(|code| by_code.get(code))
-                .map(|u| u.id.clone()),
-            _ => None,
-        };
+        let unit = code_col.and_then(|c| unit_type_of(profile, "codab", &cell(&row[c])));
         // Importance by the unit type's position in the profile (first = most important).
         let rank = unit
             .as_ref()
@@ -274,6 +273,19 @@ pub fn load(profile: &Profile, geonames: &str, codab_xlsx: Option<&str>) -> Vec<
         });
     }
     recs
+}
+
+/// The profile's unit type of a unit, from the code field its source rules name (for COD-AB,
+/// one digit of the P-code): `None` when the source has no rule or the code no unit type.
+#[must_use]
+pub fn unit_type_of(profile: &Profile, source: &str, code: &str) -> Option<String> {
+    let rule = profile.sources.get(source)?.unit_type_code.as_ref()?;
+    let digit = code.get(rule.offset..rule.offset + rule.length)?;
+    profile
+        .unit_types
+        .iter()
+        .find(|u| u.source_codes.get(source).is_some_and(|c| c == digit))
+        .map(|u| u.id.clone())
 }
 
 /// The cross-source join key: the fold without spaces, since sources split compound names

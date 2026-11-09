@@ -372,3 +372,76 @@ index the world section would be 16.3 MB. The first Rust layout, one place per r
   (0.35 MB in the world set); a constant-column form would remove it.
 - The 1991 Nepal codes (no source yet) and India Post's own directory (behind a form).
 
+
+## Golden recall on the built pack
+
+```
+cargo run --release -p spike-s3-search --bin pack-eval -- \
+  data/build/pack/np/np-places-main.tgd tests/golden/np.yaml data/build/pack/np/np-ids-main.tsv
+```
+
+`pack-eval` scores a pack the forge wrote on the golden set (`tests/golden/np.yaml`, SHA-256
+`c5d74101…`), so a names or search change in the forge is measured in one command of under a
+second (load 0.15 s, 512 queries × 22 runs 0.13 s). `S3_MISSES=1` lists every miss, every
+expected key that reaches no row and every query with no answer in the pack. It exits 2 on a
+missing or unreadable file, a corrupted section, a file that is not an ID registry, a pack
+serial missing from the registry, or a golden set for another country.
+
+**Method.** The query pipeline and the scoring are the spike's (`spikes/s3-search/src/engine.rs`
+and `golden.rs`), shared with `s3-eval`; `s3-eval` gives the same numbers as before the split
+in both its modes. Only the inputs differ:
+
+- The index is the pack's SEARCH section. The query's phonetic key is the profile's
+  (`indic-v0`), the one the forge keyed the names with.
+- A record is a pack row, and a row is one entity, so the group is the row. Its importance is
+  the SEARCH importance column. Its context parent is the ancestor at admin level 2 (S3 used
+  the GeoNames ADM2). Its unit type comes from the profile's COD-AB rule on the unit's P-code.
+- An expected key goes through the ID registry to serials, follows retirements, and reaches a
+  row through IDMAP. A key held by several serials reaches all their rows. The golden set's
+  `codab:<pcode>` is the forge's `admin:<pcode>`: the same COD-AB v02 P-code.
+
+**Planted bugs.** Each was run on the main pack and reverted.
+
+| Plant | pass@max_rank (all) |
+|---|---:|
+| none | 0.754 |
+| registry keys shifted by one serial | 0.014 |
+| no `codab` → `admin` alias | 0.395 (abbreviation 0.000) |
+| context parent at level 1, not 2 | with_context 0.433, not 1.000 |
+
+### Results, 2026-11-09
+
+Packs as built on 2026-11-09 (main SHA-256 `3a0d53f4…`, lite `55e2f2dc…`). For comparison,
+the spike's own index of the same queries (`S3_INDEX=pack s3-eval`) passes 0.980.
+
+| Class | n | Main r@1 | Main r@5 | Main pass | Lite r@1 | Lite r@5 | Lite pass |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| abbreviation | 41 | 0.951 | 0.976 | 0.976 | 0.951 | 0.976 | 0.976 |
+| ambiguous | 41 | 0.512 | 0.707 | 0.512 | 0.585 | 0.732 | 0.585 |
+| colloquial | 14 | 0.714 | 0.857 | 0.857 | 0.929 | 1.000 | 1.000 |
+| exact_latin | 70 | 0.743 | 0.786 | 0.743 | 0.743 | 0.786 | 0.743 |
+| exact_native | 42 | 0.786 | 0.857 | 0.786 | 0.881 | 0.905 | 0.881 |
+| historical | 44 | 0.068 | 0.068 | 0.068 | 0.068 | 0.068 | 0.068 |
+| mixed_script | 35 | 0.886 | 1.000 | 1.000 | 0.914 | 1.000 | 1.000 |
+| prefix | 40 | 0.200 | 0.675 | 0.675 | 0.250 | 0.675 | 0.675 |
+| typo | 80 | 0.675 | 0.738 | 0.738 | 0.662 | 0.750 | 0.750 |
+| variant | 45 | 0.933 | 0.978 | 0.978 | 0.956 | 0.978 | 0.978 |
+| with_context | 60 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
+| **all** | 512 | **0.689** | **0.781** | **0.754** | **0.715** | **0.793** | **0.773** |
+
+Query latency p50 7 µs, p99 50–64 µs (load average 8–20).
+
+**Why the pack scores lower than the spike.** Of the 654 distinct expected keys, 465 reach a row
+(151 through the `codab` alias) and 189 reach none. All 189 are GeoNames keys of feature class
+A: 122 ADM3, 40 ADM4H, 20 ADM2, 3 ADM1, 3 ADMD, 1 PCLI. None of GeoNames' A-class records is a
+source key of any pack place: the admin units are `admin:<pcode>` only, so a query whose answer
+is the GeoNames record of a district or former VDC cannot pass. That leaves 94 of 512 queries
+with no answer in either pack (historical 40, typo 18, exact_latin 15, ambiguous 11, prefix 8,
+exact_native 2), and the best possible pass is 0.816. On the 418 answerable queries, main passes
+0.923 and lite 0.947.
+
+Of the other misses (main 32, lite 22), 16 and 11 are split entities: the top result has the
+same name and district as the expected place but is another row, for example `Dang` returns the
+district `admin:NP0556` first and the GeoNames record `geonames:1283488` second. The rest are
+ranking and recall: the Newa-script and `KTM` curated queries find nothing, and short prefixes
+rank smaller places of the exact name first.
