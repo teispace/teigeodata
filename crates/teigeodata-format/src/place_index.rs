@@ -100,6 +100,16 @@ pub struct Neighbour {
     pub haversine: f64,
 }
 
+/// The haversine of the central angle of a great-circle distance of `meters`, as
+/// [`Neighbour::haversine`] holds it: the cap of a radius query. Clamped to a half turn.
+#[cfg(feature = "spatial")]
+#[must_use]
+pub fn haversine_of(meters: f64) -> f64 {
+    let half = (meters.max(0.0) / (2.0 * EARTH_RADIUS_M)).min(core::f64::consts::FRAC_PI_2);
+    let s = libm::sin(half);
+    s * s
+}
+
 #[cfg(feature = "spatial")]
 impl Neighbour {
     /// The great-circle distance in metres.
@@ -261,18 +271,23 @@ pub(crate) mod nearest {
     }
 
     impl<'o> Best<'o> {
-        fn new(out: &'o mut [Neighbour], q: &Query) -> Self {
-            Self {
+        fn new(out: &'o mut [Neighbour], q: &Query, cap: f64) -> Self {
+            let mut best = Self {
                 out,
                 found: 0,
                 kth: f64::INFINITY,
                 lat_gate: i64::MAX,
                 lon_gate: i64::MAX,
                 cos: q.cos,
+            };
+            if cap < f64::INFINITY {
+                best.tighten(cap);
             }
+            best
         }
 
-        /// The k-th haversine, infinite until `out` is full.
+        /// The k-th haversine, or the cap until `out` is full: every row offered is within it,
+        /// so a radius query's cap holds without a check of its own.
         const fn kth(&self) -> f64 {
             self.kth
         }
@@ -291,6 +306,11 @@ pub(crate) mod nearest {
             if kth.total_cmp(&self.kth).is_eq() {
                 return;
             }
+            self.tighten(kth);
+        }
+
+        /// Sets the k-th haversine and the integer gates it implies.
+        fn tighten(&mut self, kth: f64) {
             self.kth = kth;
             let r = 2.0 * libm::asin(libm::sqrt(kth.clamp(0.0, 1.0)));
             self.lat_gate = units_up(r);
@@ -468,6 +488,18 @@ pub(crate) mod nearest {
         /// level-0 box are ranked as it is expanded, and exact haversines are computed only for
         /// rows whose bound can still enter the result. Allocation-free.
         pub fn nearest(&self, at: Point<E6>, out: &mut [Neighbour]) -> usize {
+            self.nearest_within(at, f64::INFINITY, out)
+        }
+
+        /// As [`nearest`](Self::nearest), keeping only rows whose haversine is at most
+        /// `max_haversine` (see [`haversine_of`](super::haversine_of)): the search starts with
+        /// that cap as its k-th distance, so boxes beyond it are never opened.
+        pub fn nearest_within(
+            &self,
+            at: Point<E6>,
+            max_haversine: f64,
+            out: &mut [Neighbour],
+        ) -> usize {
             let Some(root) = self.tree.depth.checked_sub(1) else {
                 return 0;
             };
@@ -475,7 +507,10 @@ pub(crate) mod nearest {
                 return 0;
             }
             let q = Query::new(at);
-            let mut best = Best::new(out, &q);
+            if max_haversine.is_nan() || max_haversine < 0.0 {
+                return 0;
+            }
+            let mut best = Best::new(out, &q, max_haversine);
             let mut heap = Heap {
                 len: 0,
                 items: [EMPTY_ENTRY; HEAP],
@@ -592,6 +627,32 @@ pub(crate) mod nearest {
             *s
         }
 
+        /// A radius: exactly the rows of `brute` (sorted by haversine, then row) within it, up
+        /// to 12, whatever the cap's rank; none below the nearest; all 12 beyond the farthest.
+        fn radius_is_exact(ix: &PlaceIndex<'_>, at: Point<E6>, brute: &[(f64, usize)], t: usize) {
+            for cap in [
+                brute.get(t % 20).map_or(0.0, |b| b.0),
+                brute.first().map_or(0.0, |b| b.0 * 0.5),
+                f64::from(u32::try_from(t).unwrap_or(0)) * 1e-9,
+                1.0,
+            ] {
+                let want: Vec<(u64, usize)> = brute
+                    .iter()
+                    .filter(|b| b.0 <= cap)
+                    .take(12)
+                    .map(|b| (b.0.to_bits(), b.1))
+                    .collect();
+                let mut out = [Neighbour::default(); 12];
+                let n = ix.nearest_within(at, cap, &mut out);
+                let got: Vec<(u64, usize)> = out
+                    .iter()
+                    .take(n)
+                    .map(|g| (g.haversine.to_bits(), g.row))
+                    .collect();
+                assert_eq!(got, want, "query {t} cap {cap}");
+            }
+        }
+
         /// With the test heap of 8 entries most searches overflow into the depth-first path:
         /// both paths together must still give the exact nearest rows.
         #[test]
@@ -680,6 +741,7 @@ pub(crate) mod nearest {
                             "node {node} query {t}"
                         );
                     }
+                    radius_is_exact(&ix, at, &brute, t);
                 }
             }
         }
@@ -798,7 +860,7 @@ pub(crate) mod nearest {
                 let q = Query::new(at);
                 let h = q.haversine(pa, plon);
                 let mut out = [Neighbour::default(); 1];
-                let mut best = Best::new(&mut out, &q);
+                let mut best = Best::new(&mut out, &q, f64::INFINITY);
                 best.offer(Neighbour {
                     row: 0,
                     haversine: h,

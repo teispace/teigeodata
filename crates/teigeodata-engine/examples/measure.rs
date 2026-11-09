@@ -221,6 +221,17 @@ fn main() {
         e3.reverse(points[i], 10, &mut s1, &mut near).unwrap();
     });
     row("reverse, k = 10", Some(direct_rev), rev1, rev3);
+    for (meters, k) in [(1_000.0, 50), (10_000.0, 50)] {
+        let r1 = per_call(n, |i| {
+            e.within_radius(points[i], meters, k, &mut s1, &mut near)
+                .unwrap();
+        });
+        let r3 = per_call(n, |i| {
+            e3.within_radius(points[i], meters, k, &mut s1, &mut near)
+                .unwrap();
+        });
+        row(&format!("within_radius {meters} m, k = {k}"), None, r1, r3);
+    }
     let direct_admin = per_call(n, |i| {
         let k = admin_ix.regions_at(points7[i], &mut regions);
         black_box(&regions[..k.min(16)]);

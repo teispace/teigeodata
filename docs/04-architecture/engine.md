@@ -65,8 +65,9 @@ asks its layer for each section before reading it (`ensure`). Per query:
 
 | Query | Needs |
 |---|---|
-| `get`, `reverse`, `within_bbox` | `point` (always installed) |
+| `get`, `reverse`, `within_radius`, `nearby`, `within_bbox` | `point` (always installed) |
 | `elevation(place)` | `elevation` |
+| `parent`, `ancestors`, `children` | `admin` |
 | `name(place)` | `names` |
 | `search` | `search` (with `names`); a context that matches rows also `admin` |
 | `tz_of(place)` | `timezone`, else `timezone-index`; names `timezone` when neither is installed |
@@ -88,9 +89,9 @@ that needs it (a search context needs `admin`) returns `Error::MissingComponent`
 
 | Query | Feature |
 |---|---|
-| `get`, `reverse`, `within_bbox` | always |
+| `get`, `reverse`, `within_radius`, `nearby`, `within_bbox` | always |
 | `elevation` | `elevation` |
-| `parent` | `admin` |
+| `parent`, `ancestors`, `children` | `admin` |
 | `name` | `names` |
 | `search` | `search` |
 | `tz_of` | `timezone` or `timezone-index` |
@@ -143,7 +144,9 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 | Query | Routing | Merge |
 |---|---|---|
 | `get(id)` | Layers whose ID range holds the ID, in precedence order; the first that knows it decides | none |
-| `reverse(at, k)` | Every layer, skipped when a latitude bound proves it cannot beat the current k-th distance | Each layer gives its k nearest visible places (asking its index again for more while hidden places or ties could hide one); k-way merge by distance, then ID |
+| `reverse(at, k)` | Every layer, skipped when a latitude bound proves it cannot beat the current k-th distance | Each layer gives its k nearest visible places (asking its index again for more while hidden places or ties could hide one); k-way merge by distance, then ID. Each layer's index search starts from the k-th distance of the layers before (D-140) |
+| `within_radius(at, m, k)` | As `reverse` | `reverse` capped at the radius: no index box beyond it is opened |
+| `nearby(place, k)` | As `reverse` | `reverse` from the place's point, without the place |
 | `admin_at(at)` | The first layer in precedence order whose ADMIN_REGION holds the point (coverage beats existence) | none; a unit whose ID a higher layer claims is answered from that layer |
 | `tz_at(at)` | The first layer whose REGION (timezones) holds the point | as `admin_at` |
 | `search(q, k)` | Every layer with SEARCH | Each layer scores its rows and keeps its best k visible; k-way merge by score, then ID. Fuzzy keys share the first letter unless no layer has a visible strong match; a context after a comma matches ancestors in the row's own pack (D-119); the layer's query rules add matches (D-121) |
@@ -179,7 +182,7 @@ Each gate was first shown to fail on a planted bug (D-114).
 
 ## Not yet
 
-- `within_radius`, `nearby`, `children`, `ancestors` across packs.
+- `children`, `ancestors` across packs (parents by ID in the format).
 - The snapshot swap (`arc-swap` against `RwLock`, L5) and the baseline (step 4.2).
 - `teigeodata-api` still opens one pack; it moves onto the engine with the baseline.
 
@@ -191,3 +194,4 @@ Each gate was first shown to fail on a planted bug (D-114).
 | 2026-11-09 | Search: query rules (unit, phonetic, native, drop) | D-120, D-121 |
 | 2026-11-09 | Installed components, `MissingComponent`, `Engine::elevation`, `tz_of` | D-133 to D-136 |
 | 2026-11-09 | A Cargo feature per component; `Engine::parent` | D-137 |
+| 2026-11-09 | `within_radius`, `nearby`, `ancestors`, `children` | D-140 |

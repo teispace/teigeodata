@@ -12,7 +12,7 @@ use core::ops::{ControlFlow, Range};
 use teigeodata_core::{E6, E7, PlaceId, PlaceKind, Point};
 use teigeodata_format::Kind;
 use teigeodata_format::idmap::IdMap;
-use teigeodata_format::place_index::{Neighbour, PlaceIndex, Rect};
+use teigeodata_format::place_index::{Neighbour, PlaceIndex, Rect, haversine_of};
 use teigeodata_format::redirects::Fate;
 #[cfg(feature = "admin-index")]
 use teigeodata_format::region::Region;
@@ -313,6 +313,58 @@ impl Engine {
         }
     }
 
+    /// The ancestors of `place` in its own pack's admin hierarchy, parent first up to the root,
+    /// each as the winning layer answers for its ID, into `out`.
+    ///
+    /// # Errors
+    /// As [`parent`](Self::parent).
+    #[cfg(feature = "admin")]
+    pub fn ancestors(&self, place: &Place, out: &mut Vec<Place>) -> Result<(), Error> {
+        out.clear();
+        let Some(i) = self.layers.iter().position(|l| l.id == place.layer) else {
+            return Ok(());
+        };
+        let l = self.layers.get(i).ok_or(Error::Range)?;
+        l.ensure(Kind::HIERARCHY)?;
+        let Some(h) = l.views().hierarchy.as_ref() else {
+            return Ok(());
+        };
+        for row in h.ancestors(place.row as usize) {
+            if let Some(p) = self.place(i, row)?
+                && let Some(p) = self.winning(i, p)?
+            {
+                out.push(p);
+            }
+        }
+        Ok(())
+    }
+
+    /// The children of `place` in its own pack's admin hierarchy, in row order, each as the
+    /// winning layer answers for its ID, into `out`.
+    ///
+    /// # Errors
+    /// As [`parent`](Self::parent).
+    #[cfg(feature = "admin")]
+    pub fn children(&self, place: &Place, out: &mut Vec<Place>) -> Result<(), Error> {
+        out.clear();
+        let Some(i) = self.layers.iter().position(|l| l.id == place.layer) else {
+            return Ok(());
+        };
+        let l = self.layers.get(i).ok_or(Error::Range)?;
+        l.ensure(Kind::HIERARCHY)?;
+        let Some(h) = l.views().hierarchy.as_ref() else {
+            return Ok(());
+        };
+        for row in h.children(place.row as usize) {
+            if let Some(p) = self.place(i, row as usize)?
+                && let Some(p) = self.winning(i, p)?
+            {
+                out.push(p);
+            }
+        }
+        Ok(())
+    }
+
     /// `p` from layer `i`, or the winning layer's answer for its ID when a layer above knows it.
     #[cfg(any(
         feature = "admin",
@@ -375,6 +427,58 @@ impl Engine {
         s: &mut Scratch,
         out: &mut Vec<Near>,
     ) -> Result<(), Error> {
+        self.nearest(at, k, f64::INFINITY, s, out)
+    }
+
+    /// The places within `meters` of `at` (great-circle, to float rounding), nearest first
+    /// (ties by ID), at most `k`, into `out`: [`reverse`](Self::reverse) with a cap, which
+    /// prunes every index box and layer beyond it. Empty for a negative or NaN radius.
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if a section it reads is corrupt.
+    pub fn within_radius(
+        &self,
+        at: Point<E6>,
+        meters: f64,
+        k: usize,
+        s: &mut Scratch,
+        out: &mut Vec<Near>,
+    ) -> Result<(), Error> {
+        if meters.is_nan() || meters < 0.0 {
+            out.clear();
+            return Ok(());
+        }
+        self.nearest(at, k, haversine_of(meters), s, out)
+    }
+
+    /// The `k` places nearest to `place`, nearest first (ties by ID), not counting the place
+    /// itself, into `out`.
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if a section it reads is corrupt.
+    pub fn nearby(
+        &self,
+        place: &Place,
+        k: usize,
+        s: &mut Scratch,
+        out: &mut Vec<Near>,
+    ) -> Result<(), Error> {
+        self.nearest(place.point, k.saturating_add(1), f64::INFINITY, s, out)?;
+        out.retain(|n| n.place.id != place.id);
+        out.truncate(k);
+        Ok(())
+    }
+
+    /// `reverse` and `within_radius`: the `k` places nearest to `at` whose haversine is at
+    /// most `cap`.
+    fn nearest(
+        &self,
+        at: Point<E6>,
+        k: usize,
+        cap: f64,
+        s: &mut Scratch,
+        out: &mut Vec<Near>,
+    ) -> Result<(), Error> {
         out.clear();
         s.near.clear();
         s.segs.clear();
@@ -382,7 +486,8 @@ impl Engine {
             return Ok(());
         }
         let at7 = at.to_e7();
-        let mut bound = f64::INFINITY;
+        // The k-th distance so far (the cap until k are found) bounds every layer still to ask.
+        let mut bound = cap;
         for (i, l) in self.layers.iter().enumerate() {
             let v = l.views();
             let (Some(index_), Some(ids)) = (&v.place_index, &v.ids) else {
@@ -450,7 +555,7 @@ impl Engine {
                 s.neighbours.resize(want, Neighbour::default());
             }
             let buf = s.neighbours.get_mut(..want).unwrap_or_default();
-            let n = index_.nearest(at, buf);
+            let n = index_.nearest_within(at, bound, buf);
             let fetched = buf.get(..n).unwrap_or_default();
             let last = fetched.last().map_or(f64::NEG_INFINITY, |x| x.haversine);
             s.near.extend(fetched.iter().filter_map(|nb| {

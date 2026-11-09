@@ -1,5 +1,6 @@
 //! M1 for the engine: a warm query writes into caller-owned scratch and output buffers and does
-//! not allocate. `get`, `reverse`, `admin_at`, `tz_at` and `within_bbox` allocate nothing;
+//! not allocate. `get`, `reverse`, `within_radius`, `nearby`, `admin_at`, `tz_at` and `within_bbox` allocate
+//! nothing;
 //! `search` allocates only its folded query (`teigeodata_names::fold` returns a `String`).
 
 #![allow(
@@ -82,6 +83,10 @@ fn warm_queries_do_not_allocate() {
                 let id = model.ids[i * 7 % model.ids.len()];
                 assert!(e.get(id).unwrap().is_some());
                 e.reverse(at, 10, s, near).unwrap();
+                e.within_radius(at, 20_000.0, 10, s, near).unwrap();
+                if let Some(p) = near.first().map(|n| n.place) {
+                    e.nearby(&p, 5, s, near).unwrap();
+                }
                 e.admin_at(at.to_e7(), s, admin).unwrap();
                 e.tz_at(at.to_e7()).unwrap();
                 let rect = Rect {

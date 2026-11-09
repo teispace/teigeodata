@@ -133,6 +133,8 @@ struct Answers {
     get: Vec<Option<Key>>,
     tz_of: Vec<Option<Key>>,
     reverse: Vec<Vec<(Key, u64)>>,
+    radius: Vec<Vec<(Key, u64)>>,
+    nearby: Vec<Vec<Key>>,
     admin: Vec<Vec<Key>>,
     tz: Vec<Option<Key>>,
     search: Vec<Vec<(Key, i32)>>,
@@ -156,6 +158,7 @@ fn answers(e: &Engine, p: &Probes) -> Answers {
         })
         .collect();
     let mut reverse = Vec::new();
+    let (mut radius, mut nearby) = (Vec::new(), Vec::new());
     let mut admins = Vec::new();
     let mut tz = Vec::new();
     let mut boxes = Vec::new();
@@ -168,6 +171,23 @@ fn answers(e: &Engine, p: &Probes) -> Answers {
                 .map(|n| (key(e, &n.place), n.meters.to_bits()))
                 .collect(),
         );
+        let meters = [500.0, 5_000.0, 60_000.0][i % 3];
+        e.within_radius(at.to_e6(), meters, [3, 40, 400][i % 3], &mut s, &mut near)
+            .unwrap();
+        radius.push(
+            near.iter()
+                .map(|n| (key(e, &n.place), n.meters.to_bits()))
+                .collect(),
+        );
+        if let Some(first) = e
+            .reverse(at.to_e6(), 1, &mut s, &mut near)
+            .ok()
+            .and(near.first())
+        {
+            let place = first.place;
+            e.nearby(&place, k, &mut s, &mut near).unwrap();
+            nearby.push(near.iter().map(|n| key(e, &n.place)).collect());
+        }
         e.admin_at(at, &mut s, &mut admin).unwrap();
         admins.push(admin.iter().map(|x| key(e, x)).collect());
         tz.push(e.tz_at(at).unwrap().map(|x| key(e, &x)));
@@ -193,6 +213,8 @@ fn answers(e: &Engine, p: &Probes) -> Answers {
         get,
         tz_of,
         reverse,
+        radius,
+        nearby,
         admin: admins,
         tz,
         search,

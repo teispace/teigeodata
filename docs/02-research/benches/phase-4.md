@@ -134,3 +134,18 @@ Per class against the spike: abbreviation 0.951 and 0.951, mixed script 0.857 an
 product reads only accepted lexicon terms), with context 0.983 and 1.000. Turning the phonetic
 tier off saves 0.3 µs and costs 0.012 recall@1. `measure`: search k = 10 through the engine,
 1 layer 12.3 µs, 3 layers 28.1 µs (its own query mix, load 17).
+
+### Radius queries (D-140)
+
+Same pack rebuilt 2026-11-09 (D-139), same machine, load about 8 to 15. `measure` against the
+first table:
+
+| Query | engine, 1 layer (ns) | engine, 3 layers (ns) |
+|---|---:|---:|
+| reverse, k = 10 | 6,190 (was 6,578) | 15,990 (was 23,329) |
+| within_radius 1 km, k = 50 | 2,791 | 7,743 |
+| within_radius 10 km, k = 50 | 12,022 | 40,711 |
+
+`reverse` across layers is faster because each layer's index search now starts from the k-th
+distance of the layers before (`nearest_within`) instead of ranking its own k first: 31% on
+3 layers. A radius query opens no index box beyond its radius.

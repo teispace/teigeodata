@@ -53,8 +53,12 @@ call (ADR-0012).
   `pack-eval` with `S3_GATE` fails when any class loses a hit against
   `tests/golden/<cc>-baseline-<build>.tsv`; the `data-build` workflow runs it once the mirror
   exists
-- [ ] Radius queries (`within_radius`, `nearby`) and `children`/`ancestors` across packs
-  (also makes a search context split-invariant: the split gate leaves comma queries out)
+- [x] Radius queries (`within_radius`, `nearby`) and `parent`/`ancestors`/`children` in a
+  place's own pack (D-140, 2026-11-09): Nepal `within_radius` 1 km 2.8 µs, 10 km 12.0 µs;
+  `reverse` on 3 layers 23.3 → 16.0 µs
+- [ ] `children`/`ancestors` across packs: needs parents by ID in the format (a city pack's
+  places under a country pack's units); also makes a search context split-invariant (the
+  split gate leaves comma queries out)
 - [ ] Snapshot swap: `arc-swap` against `RwLock` A/B in L5
 - [x] Metamorphic gate: splitting or reordering packs never changes an answer; differential
   against one compacted pack. Done 2026-11-09: synthetic in 2, 3 and 5 parts, the Nepal main

@@ -63,6 +63,10 @@ name = "metamorphic"
 required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
 
 [[test]]
+name = "queries"
+required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
+
+[[test]]
 name = "verify"
 required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
 
