@@ -35,6 +35,7 @@
 
 mod admins;
 mod cluster;
+mod corrections;
 mod dedupe;
 mod elevation;
 pub(crate) mod geometry;
@@ -194,7 +195,9 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         None => BTreeMap::new(),
     };
     let namer = Namer::load(root, &a.cc, &profile.romanise)?;
+    let fixes = corrections::load(root, &a.cc)?;
     let Clustered {
+        linked,
         places: mut clustered,
         unnamed: unnamed_clusters,
         held,
@@ -207,6 +210,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         &units,
         &core,
         (&namer, profile.phonetic),
+        (&fixes, a.lite),
     )?;
     let merged = dedupe::merge_near(&mut clustered);
     let mut places: Vec<Place> = units.places;
@@ -215,17 +219,24 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         places.push(country);
     }
     admin.added = link_admins(&mut places, std::mem::take(&mut admin.links));
+    let out_dir = build.join("pack").join(&a.cc);
+    fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
+    let who = (
+        fixes.as_slice(),
+        linked.as_slice(),
+        a.release.as_str(),
+        a.lite,
+    );
+    let corrected = corrections::run(root, who, &sources, &mut places, &units.levels, &out_dir)?;
     let coverage = units.coverage.ok_or("the boundary source has no units")?;
-    let zones = match &tz {
-        Some(id) => zone_places(root, &lock, id, coverage)?,
-        None => Zones::default(),
-    };
+    let zones = tz.as_deref().map_or_else(
+        || Ok(Zones::default()),
+        |id| zone_places(root, &lock, id, coverage),
+    )?;
     places.extend(zones.places.iter().cloned());
     let unnamed = keep_named(&mut places) + unnamed_clusters;
     let elevations = elevation::load(root, dem.as_deref(), &places)?;
 
-    let out_dir = build.join("pack").join(&a.cc);
-    fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
     let file = out_dir.join(format!("{}-places-{}.tgd", a.cc, a.build_name()));
     let registry = registry(root, a.ids.as_deref())?;
     let geometry = a
@@ -246,36 +257,69 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         postal: postal.as_ref(),
         elevation: elevations.as_ref(),
     })?;
-    let mut summary = format!(
-        "## build: {} {}\n\n{} places from {}; boundaries {}; timezones {}.\n",
-        a.cc,
-        a.build_name(),
-        places.len(),
-        sources.join(", "),
-        a.admin,
-        tz.as_deref().unwrap_or("none"),
-    );
+    let mut summary = header(&a, places.len(), &sources, tz.as_deref());
     let postal_notes = postal.as_ref().map_or(&[][..], |p| p.notes.as_slice());
     notes(&mut summary, held, unnamed, &skipped, postal_notes);
     summary.push_str(&naming.line());
     summary.push_str(&admin.line());
     summary.push_str(&dedupe::report(&merged, &out_dir, a.build_name())?);
+    summary.push_str(&corrected);
     if let Some(e) = &elevations {
         summary.push_str(&e.summary(&build, &sources, &places)?);
     }
     naming.write(&out_dir, a.build_name())?;
+    finish(summary, &report, (root, &out_dir, &file), a.build_name(), t)
+}
+
+/// Writes `summary-<build>.md` (the build's lines, then the pack's report) and returns it with
+/// the pack's path and the time taken.
+fn finish(
+    mut summary: String,
+    report: &str,
+    (root, out_dir, file): (&Path, &Path, &Path),
+    build: &str,
+    t: Instant,
+) -> Result<String, String> {
     summary.push('\n');
-    summary.push_str(&report);
-    fs::write(
-        out_dir.join(format!("summary-{}.md", a.build_name())),
-        &summary,
-    )
-    .map_err(|e| e.to_string())?;
+    summary.push_str(report);
+    fs::write(out_dir.join(format!("summary-{build}.md")), &summary).map_err(|e| e.to_string())?;
     Ok(format!(
         "{summary}\n→ {} in {:.1?}",
-        file.strip_prefix(root).unwrap_or(&file).display(),
+        file.strip_prefix(root).unwrap_or(file).display(),
         t.elapsed()
     ))
+}
+
+/// `forge correction-guard`: the canonical value of a read record's field and the guard a
+/// correction file states for it (ADR-0036).
+pub(crate) fn correction_guard(
+    root: &Path,
+    source: &str,
+    record: &str,
+    field: &str,
+) -> Result<String, String> {
+    let records = sources::read_records(&root.join("data/build"), source)?;
+    let rec = records
+        .get(record)
+        .ok_or_else(|| format!("{record} is not a record of {source}"))?;
+    let value = corrections::canonical(rec, field)
+        .ok_or_else(|| format!("{field} is not name, point or population"))?;
+    Ok(format!(
+        "guard: {{ record: {record}, field: {field}, value_hash: {} }}  # {value:?}",
+        corrections::hash(&value)
+    ))
+}
+
+/// The summary's first lines: the build, its places and its inputs.
+fn header(a: &Args, places: usize, sources: &[String], tz: Option<&str>) -> String {
+    format!(
+        "## build: {} {}\n\n{places} places from {}; boundaries {}; timezones {}.\n",
+        a.cc,
+        a.build_name(),
+        sources.join(", "),
+        a.admin,
+        tz.unwrap_or("none"),
+    )
 }
 
 /// What the licence gate lets a build read.

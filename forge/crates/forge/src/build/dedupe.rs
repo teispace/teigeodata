@@ -130,7 +130,7 @@ fn better(places: &[Place], a: usize, b: usize) -> bool {
 }
 
 /// Gives `kept` the records, missing names and population of `dropped`.
-fn absorb(kept: &mut Place, dropped: Place) {
+pub(super) fn absorb(kept: &mut Place, dropped: Place) {
     for s in dropped.sources {
         if !kept.sources.contains(&s) {
             kept.sources.push(s);

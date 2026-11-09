@@ -10,6 +10,7 @@
 mod bindings;
 mod clean;
 mod commit;
+mod corrections;
 mod data;
 mod docs;
 mod golden;

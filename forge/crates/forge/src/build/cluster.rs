@@ -3,6 +3,7 @@
 use super::Place;
 use super::PlaceName;
 use super::admins;
+use super::corrections::{self, Correction, Outcome};
 use super::naming::Here;
 use super::naming::Naming;
 use super::naming::place_names;
@@ -25,6 +26,8 @@ use teigeodata_names::PhoneticKey;
 /// order.
 /// The settlements and localities of the conflated clusters.
 pub(super) struct Clustered {
+    /// What the `same-as` corrections did (ADR-0036).
+    pub(super) linked: Vec<(String, Outcome)>,
     pub(super) places: Vec<Place>,
     /// Clusters left out for want of a name that can be stored.
     pub(super) unnamed: usize,
@@ -210,6 +213,7 @@ pub(super) fn cluster_places(
     units: &Units,
     core: &BTreeMap<String, (i32, i32)>,
     (display, phonetic): (&Namer, Option<PhoneticKey>),
+    (fixes, lite): (&[Correction], bool),
 ) -> Result<Clustered, String> {
     let levels = &units.levels;
     let mut records: Vec<BTreeMap<String, Rec>> = Vec::new();
@@ -222,7 +226,8 @@ pub(super) fn cluster_places(
         .join("conflate")
         .join(run.join("+"))
         .join("clusters.parquet");
-    let clusters = read_clusters(&path, &records)?;
+    let mut clusters = read_clusters(&path, &records)?;
+    let linked = corrections::link_clusters(fixes, &mut clusters, &records, lite);
     // Every cluster with a point, its records in source priority; the primary names of all of
     // them and of the admin units feed the collision rule (D-060).
     let mut rules = Rules::new(phonetic, Some(display));
@@ -298,6 +303,7 @@ pub(super) fn cluster_places(
         });
     }
     Ok(Clustered {
+        linked,
         places: out,
         unnamed,
         held,

@@ -11,7 +11,7 @@ use serde::Deserialize;
 const SCHEMA: &str = "teigeodata/sources/v1";
 
 /// The licence classes of `CLEAN_ROOM.md` rule 1.
-const CLASSES: [&str; 11] = [
+pub(crate) const CLASSES: [&str; 11] = [
     "public-domain",
     "cc0",
     "cc-by",

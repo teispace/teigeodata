@@ -22,7 +22,7 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::io::{ErrorKind, Read as _};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use serde::Deserialize;
@@ -154,7 +154,7 @@ fn stage(
 pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
-    let tmp = std::path::PathBuf::from(tmp);
+    let tmp = PathBuf::from(tmp);
     fs::write(&tmp, bytes).map_err(|e| format!("{}: {e}", tmp.display()))?;
     fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
 }
@@ -194,6 +194,26 @@ fn postal_inputs(country: &Path, lock: &Lock) -> Result<Vec<u8>, String> {
         out.extend(pinned(lock, &[c.source.as_str()])?);
     }
     Ok(out)
+}
+
+/// The corrections of a build (ADR-0036): every file of `corrections/`, by name, so adding,
+/// editing or removing one rebuilds. Empty when the country has none.
+fn corrections_inputs(country: &Path) -> Result<Vec<u8>, String> {
+    let dir = country.join("corrections");
+    let Ok(rd) = fs::read_dir(&dir) else {
+        return Ok(Vec::new());
+    };
+    let mut files: Vec<PathBuf> = rd.filter_map(Result::ok).map(|e| e.path()).collect();
+    files.sort();
+    let mut h = blake3::Hasher::new();
+    for f in files {
+        let name = f.file_name().map(|n| n.to_string_lossy().into_owned());
+        h.update(name.unwrap_or_default().as_bytes());
+        h.update(&[0]);
+        h.update(&fs::read(&f).map_err(|e| format!("{}: {e}", f.display()))?);
+        h.update(&[0]);
+    }
+    Ok(h.finalize().as_bytes().to_vec())
 }
 
 /// The naming inputs of a build: the country's lexicon and each romanisation profile its
@@ -505,6 +525,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         &profile,
         &postal_inputs(&country, &lock)?,
         &names_inputs(root, &country)?,
+        &corrections_inputs(&country)?,
         build_args.join("\0").as_bytes(),
         &file("--ids")?,
         blake3::hash(&file("--key")?).as_bytes(),

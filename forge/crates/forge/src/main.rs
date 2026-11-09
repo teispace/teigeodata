@@ -9,6 +9,7 @@
 //! forge links <points> <points> [...]            stated same-as pairs and their distances
 //! forge conflate <cc> <points> <points> [...]     match records across sources
 //! forge aliases <cc> <anchor> <a+b+...>          carry cluster names to the anchor's records
+//! forge correction-guard <source> <record> <field>  a correction's guard for a record field
 //! forge dem <tileset> <points> [...]             DEM heights against stated elevations
 //! forge dem-ref <dem> <ref> <geoid> [<boundary>]  the DEM against a ground reference
 //! forge geoid <source> <lat> <lon> [...]          geoid undulation N at points
@@ -163,6 +164,12 @@ fn stage(root: &Path, args: &[String]) -> Option<Result<String, String>> {
         "romanise" => match (args.get(1), args.get(2)) {
             (Some(cc), Some(id)) => names::run(root, cc, id),
             _ => Err("usage: forge romanise <cc> <lang>-<Script> < names.txt".into()),
+        },
+        "correction-guard" => match (args.get(1), args.get(2), args.get(3)) {
+            (Some(source), Some(record), Some(field)) => {
+                build::correction_guard(root, source, record, field)
+            }
+            _ => Err("usage: forge correction-guard <source> <record> <name|point|population>".into()),
         },
         "aliases" => match (args.get(1), args.get(2), args.get(3)) {
             (Some(cc), Some(anchor), Some(run)) => aliases::run(root, cc, anchor, run),

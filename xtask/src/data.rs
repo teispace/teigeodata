@@ -9,6 +9,8 @@
 //!   ([`crate::lexicon`]).
 //! - `build.yaml` (optional, schema `teigeodata/build/v1`): how `forge make` builds the
 //!   country's packs ([`crate::recipe`]).
+//! - `corrections/<id>.yaml` (optional, schema `teigeodata/correction/v1`): reviewed, guarded
+//!   corrections ([`crate::corrections`], ADR-0036).
 //! - `golden-curated.yaml` (optional) and the generated `tests/golden/<cc>.yaml`: golden search
 //!   queries ([`crate::golden`]).
 //!
@@ -22,6 +24,7 @@ use std::path::Path;
 use serde::Deserialize;
 use unicode_script::Script;
 
+use crate::corrections;
 use crate::golden;
 use crate::lexicon::{self, Evidence, EvidenceKind, Native, Status};
 use crate::postal;
@@ -131,6 +134,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     let mut terms = 0usize;
     let mut queries = 0usize;
     let mut postal_codes = 0usize;
+    let mut fixes = 0usize;
     let mut scheme_ids = BTreeSet::new();
     let mut lexicons = Vec::new();
     let profiles = romanise::ids(root);
@@ -164,6 +168,9 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
             );
         }
         queries += check_golden(root, path, cc, &mut problems);
+        let (n, found) = corrections::check(path);
+        fixes += n;
+        problems.extend(found.into_iter().map(|p| format!("{at}/{p}")));
         if let Ok(text) = fs::read_to_string(path.join("postal.yaml")) {
             let (n, found) = postal::check(path, &text, &pinned, &mut scheme_ids);
             postal_codes += n;
@@ -200,7 +207,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     }
     if problems.is_empty() {
         Ok(format!(
-            "data ok: {} countries, {terms} lexicon terms, {queries} golden query entries, {postal_codes} postal codes, {profiles} romanisation profiles, {pinned} pinned sources checked",
+            "data ok: {} countries, {terms} lexicon terms, {queries} golden query entries, {postal_codes} postal codes, {fixes} corrections, {profiles} romanisation profiles, {pinned} pinned sources checked",
             countries.len()
         ))
     } else {
