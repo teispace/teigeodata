@@ -30,6 +30,7 @@
 //! `data/build/pack/<cc>/<cc>-places-<build>.tgd`, with `summary-<build>.md` and the updated
 //! registry `<cc>-ids-<build>.tsv` beside it.
 
+mod admins;
 pub(crate) mod geometry;
 mod ids;
 mod pack;
@@ -44,6 +45,7 @@ use std::time::Instant;
 use arrow_array::{Array, Int64Array, StringArray};
 use teigeodata_core::PlaceKind;
 use teigeodata_format::names::{NameType, Tag};
+use teigeodata_format::places;
 use teigeodata_names::{PhoneticKey, fold, script_of};
 
 use crate::fetch::store_path;
@@ -149,6 +151,8 @@ pub(crate) struct Place {
     pub(crate) key: String,
     pub(crate) kind: PlaceKind,
     pub(crate) admin_level: u8,
+    /// PLACES flag bits (`places::FLAG_FORMER`).
+    pub(crate) flags: u32,
     /// (lon, lat) on the 1e-7° grid.
     pub(crate) point: (i32, i32),
     /// Canonical first.
@@ -165,6 +169,8 @@ pub(crate) struct Place {
 #[derive(Clone, Debug)]
 struct Rec {
     kind: String,
+    /// The source's class (`A.ADM3`, `place=village`).
+    class: String,
     name: String,
     point: Option<(i32, i32)>,
     population: Option<i64>,
@@ -195,6 +201,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         unnamed: unnamed_clusters,
         held,
         naming,
+        mut admin,
     } = cluster_places(
         &build,
         &a.sources,
@@ -208,6 +215,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     if let Some(country) = country_place(&build, &sources, &profile)? {
         places.push(country);
     }
+    let admin_names = link_admins(&mut places, std::mem::take(&mut admin.links));
     let coverage = units.coverage.ok_or("the boundary source has no units")?;
     let zones = match &tz {
         Some(id) => zone_places(root, &lock, id, coverage)?,
@@ -256,6 +264,11 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let postal_notes = postal.as_ref().map_or(&[][..], |p| p.notes.as_slice());
     notes(&mut summary, held, unnamed, &skipped, postal_notes);
     summary.push_str(&naming.line());
+    summary.push_str(&admin.line());
+    let _ = writeln!(
+        summary,
+        "Names added to admin units by links: {admin_names}."
+    );
     naming.write(&out_dir, a.build_name())?;
     summary.push('\n');
     summary.push_str(&report);
@@ -430,6 +443,8 @@ struct Units {
 
 /// One admin level's polygons with a grid index over their boxes.
 struct Level {
+    /// The admin level.
+    number: u8,
     keys: Vec<String>,
     polys: Vec<Polygon>,
     index: GridIndex,
@@ -481,6 +496,7 @@ fn admin_places(root: &Path, lock: &Lock, source: &str) -> Result<Units, String>
                 key: key.clone(),
                 kind: PlaceKind::Admin,
                 admin_level: level,
+                flags: 0,
                 point,
                 names: vec![PlaceName {
                     text: u.name.clone(),
@@ -495,7 +511,12 @@ fn admin_places(root: &Path, lock: &Lock, source: &str) -> Result<Units, String>
             polys.push(u.polygon);
         }
         let index = GridIndex::new(&polys, CELL_E7);
-        levels.push(Level { keys, polys, index });
+        levels.push(Level {
+            number: level,
+            keys,
+            polys,
+            index,
+        });
     }
     Ok(Units {
         places,
@@ -516,6 +537,7 @@ fn read_records(build: &Path, source: &str) -> Result<BTreeMap<String, Rec>, Str
         |b| {
             let ids = column::<StringArray>(b, "id")?;
             let kinds = column::<StringArray>(b, "kind")?;
+            let classes = column::<StringArray>(b, "class")?;
             let names = column::<StringArray>(b, "name")?;
             let lat = column::<arrow_array::Int32Array>(b, "lat_e7")?;
             let lon = column::<arrow_array::Int32Array>(b, "lon_e7")?;
@@ -527,6 +549,11 @@ fn read_records(build: &Path, source: &str) -> Result<BTreeMap<String, Rec>, Str
                     ids.value(i).to_string(),
                     Rec {
                         kind: kinds.value(i).to_string(),
+                        class: if classes.is_valid(i) {
+                            classes.value(i).to_string()
+                        } else {
+                            String::new()
+                        },
                         name: names.value(i).to_string(),
                         point,
                         population: pop.is_valid(i).then(|| pop.value(i)),
@@ -587,6 +614,173 @@ struct Clustered {
     /// Places that kept their seed point because the core point lies outside every admin unit.
     held: usize,
     naming: Naming,
+    admin: AdminCounts,
+}
+
+/// What became of the clusters of admin records (D-110).
+#[derive(Default)]
+struct AdminCounts {
+    links: Vec<admins::Link>,
+    /// Linked clusters by the level of their unit (0: the country).
+    linked: BTreeMap<u8, usize>,
+    /// Former units kept as places.
+    former: usize,
+    /// Undifferentiated divisions kept as localities.
+    divisions: usize,
+    /// Former units deeper than `MAX_FORMER_LEVEL`, left out.
+    parts: usize,
+    /// Clusters naming no unit that are neither former nor divisions, left out.
+    unmatched: usize,
+    /// Names a link did not carry (D-060's collision rule).
+    collisions: usize,
+}
+
+impl AdminCounts {
+    fn line(&self) -> String {
+        let linked: Vec<String> = self
+            .linked
+            .iter()
+            .map(|(l, n)| format!("level {l}: {n}"))
+            .collect();
+        format!(
+            "Admin records (D-110): {} clusters linked to their unit ({}), {} names not carried; {} former units and {} divisions kept as places; {} deeper former parts and {} unmatched left out.\n",
+            self.linked.values().sum::<usize>(),
+            linked.join(", "),
+            self.collisions,
+            self.former,
+            self.divisions,
+            self.parts,
+            self.unmatched
+        )
+    }
+}
+
+/// Gives each linked unit (or the country) its records' keys and names; returns how many
+/// names were added. Unit indexes are into the admin places, which `places` starts with.
+fn link_admins(places: &mut [Place], links: Vec<admins::Link>) -> usize {
+    let country = places.iter().position(|p| p.kind == PlaceKind::Country);
+    let mut added = 0;
+    for link in links {
+        if let Some(p) = link.unit.or(country).and_then(|i| places.get_mut(i)) {
+            added += admins::apply(p, link);
+        }
+    }
+    added
+}
+
+/// A cluster's kind, admin level and flags; `None` for a cluster that is not a place of its
+/// own (an admin cluster linked to its unit, D-110, or a kind the build does not keep).
+fn place_kind(
+    recs: &[(&Rec, &str, usize)],
+    names: &[BTreeMap<String, Vec<PlaceName>>],
+    at: (u32, (i32, i32)),
+    units: (&admins::Units<'_>, &Rules<'_>),
+    admin: &mut AdminCounts,
+) -> Option<(PlaceKind, u8, u32)> {
+    if recs.iter().any(|(r, _, _)| r.kind == "populated_place") {
+        return Some((PlaceKind::Settlement, 0, 0));
+    }
+    if recs.iter().any(|(r, _, _)| r.kind == "locality") {
+        return Some((PlaceKind::Locality, 0, 0));
+    }
+    if !recs.iter().any(|(r, _, _)| r.kind == "admin") {
+        return None;
+    }
+    match admin_cluster(recs, names, at, units, admin) {
+        Admin::Linked(link) => {
+            admin.links.push(link);
+            None
+        }
+        Admin::Former(n) => Some((PlaceKind::Admin, n, places::FLAG_FORMER)),
+        Admin::Division => Some((PlaceKind::Locality, 0, 0)),
+        Admin::Left => None,
+    }
+}
+
+/// What an admin cluster becomes.
+enum Admin {
+    Linked(admins::Link),
+    Former(u8),
+    Division,
+    Left,
+}
+
+/// Classifies a cluster of admin records and, if it names a current unit, the link (D-110).
+fn admin_cluster(
+    recs: &[(&Rec, &str, usize)],
+    names: &[BTreeMap<String, Vec<PlaceName>>],
+    (owner, seed): (u32, (i32, i32)),
+    (units, rules): (&admins::Units<'_>, &Rules<'_>),
+    counts: &mut AdminCounts,
+) -> Admin {
+    use admins::Class;
+    let class = Class::of_cluster(recs.iter().map(|(r, _, _)| r.class.as_str()));
+    if let Class::Former(n) = class
+        && n > admins::MAX_FORMER_LEVEL
+    {
+        counts.parts += 1;
+        return Admin::Left;
+    }
+    let mut all: Vec<PlaceName> = Vec::new();
+    for &(r, id, s) in recs {
+        if !r.name.is_empty() {
+            all.push(PlaceName {
+                text: r.name.clone(),
+                lang: None,
+                kind: None,
+            });
+        }
+        all.extend(
+            names
+                .get(s)
+                .and_then(|m| m.get(id))
+                .into_iter()
+                .flatten()
+                .cloned(),
+        );
+    }
+    let texts: Vec<&str> = all.iter().map(|n| n.text.as_str()).collect();
+    let unit = if class == Class::Country {
+        Some(None)
+    } else {
+        units.find(class, seed, &texts, rules).map(Some)
+    };
+    let Some(unit) = unit else {
+        return match class {
+            Class::Former(n) => {
+                counts.former += 1;
+                Admin::Former(n)
+            }
+            Class::Division => {
+                counts.divisions += 1;
+                Admin::Division
+            }
+            _ => {
+                counts.unmatched += 1;
+                Admin::Left
+            }
+        };
+    };
+    // The unit's names are the anchor; a carried name it lacks must not name another place.
+    let target = unit.and_then(|i| units.place(i));
+    if let Some(p) = target {
+        let known = rules.anchor(p.names.iter().map(|n| n.text.as_str()));
+        let before = all.len();
+        all.retain(|n| {
+            Rules::fold_known(&known, &n.text) || rules.collides(owner, p.point, &n.text).is_none()
+        });
+        counts.collisions += before - all.len();
+    }
+    *counts
+        .linked
+        .entry(target.map_or(0, |p| p.admin_level))
+        .or_default() += 1;
+    Admin::Linked(admins::Link {
+        unit,
+        sources: recs.iter().map(|(_, id, _)| (*id).to_string()).collect(),
+        names: all,
+        population: recs.iter().filter_map(|(r, _, _)| r.population).max(),
+    })
 }
 
 /// How the clustered places got their display names (names-canonical §5.2).
@@ -699,32 +893,10 @@ fn cluster_places(
             rules.add_admin(&n.text);
         }
     }
-    let mut groups: Vec<Group> = Vec::new();
-    for (cluster, mut members) in clusters {
-        members.sort();
-        let recs = members
-            .iter()
-            .filter_map(|(s, id)| records.get(*s)?.get(id));
-        let (mut point, mut primary) = (None, None);
-        for r in recs {
-            point = point.or(r.point);
-            if primary.is_none() && !r.name.is_empty() {
-                primary = Some(r.name.as_str());
-            }
-        }
-        // The first source's record with a point gives the point.
-        let Some(point) = point else { continue };
-        let owner = u32::try_from(groups.len()).map_err(|_| "too many clusters")?;
-        if let Some(n) = primary {
-            rules.add_place(owner, point, n);
-        }
-        groups.push(Group {
-            cluster,
-            members,
-            seed: point,
-        });
-    }
+    let groups = groups(clusters, &records, &mut rules)?;
     rules.finish();
+    let unit_index = admins::Units::new(&units.places, levels, &rules);
+    let mut admin = AdminCounts::default();
     let (mut out, mut unnamed, mut held) = (Vec::new(), 0_usize, 0_usize);
     let mut naming = Naming::default();
     for (
@@ -740,11 +912,13 @@ fn cluster_places(
             .iter()
             .filter_map(|(s, id)| Some((records.get(*s)?.get(id)?, id.as_str(), *s)))
             .collect();
-        let kind = if recs.iter().any(|(r, _, _)| r.kind == "populated_place") {
-            PlaceKind::Settlement
-        } else if recs.iter().any(|(r, _, _)| r.kind == "locality") {
-            PlaceKind::Locality
-        } else {
+        let Some((kind, level, flags)) = place_kind(
+            &recs,
+            &names,
+            (owner, seed),
+            (&unit_index, &rules),
+            &mut admin,
+        ) else {
             continue;
         };
         // The consensus point of the `core` stage, when the build reads one. A core that would
@@ -767,14 +941,21 @@ fn cluster_places(
             unnamed += 1;
             continue;
         };
+        // A former unit's parent is its successor: the current unit one level up.
+        let parent = if flags & places::FLAG_FORMER == 0 {
+            deepest(levels, point)
+        } else {
+            unit_index.successor(level, point)
+        };
         out.push(Place {
             key: cluster,
             kind,
-            admin_level: 0,
+            admin_level: level,
+            flags,
             point,
             names: all,
             population: recs.iter().find_map(|(r, _, _)| r.population),
-            parent: deepest(levels, point),
+            parent,
             sources: members.into_iter().map(|(_, id)| id).collect(),
         });
     }
@@ -783,6 +964,7 @@ fn cluster_places(
         unnamed,
         held,
         naming,
+        admin,
     })
 }
 
@@ -808,6 +990,41 @@ fn read_clusters(
         Ok(())
     })?;
     Ok(clusters)
+}
+
+/// Every cluster with a point, its records in source priority; registers each one's primary
+/// name with the collision rule (D-060).
+fn groups(
+    clusters: BTreeMap<String, Vec<(usize, String)>>,
+    records: &[BTreeMap<String, Rec>],
+    rules: &mut Rules<'_>,
+) -> Result<Vec<Group>, String> {
+    let mut groups: Vec<Group> = Vec::new();
+    for (cluster, mut members) in clusters {
+        members.sort();
+        let recs = members
+            .iter()
+            .filter_map(|(s, id)| records.get(*s)?.get(id));
+        let (mut point, mut primary) = (None, None);
+        for r in recs {
+            point = point.or(r.point);
+            if primary.is_none() && !r.name.is_empty() {
+                primary = Some(r.name.as_str());
+            }
+        }
+        // The first source's record with a point gives the point.
+        let Some(point) = point else { continue };
+        let owner = u32::try_from(groups.len()).map_err(|_| "too many clusters")?;
+        if let Some(n) = primary {
+            rules.add_place(owner, point, n);
+        }
+        groups.push(Group {
+            cluster,
+            members,
+            seed: point,
+        });
+    }
+    Ok(groups)
 }
 
 /// A cluster with a point.
@@ -997,6 +1214,7 @@ fn country_place(
                 key: id,
                 kind: PlaceKind::Country,
                 admin_level: 0,
+                flags: 0,
                 point,
                 names,
                 population: r.population,
@@ -1112,6 +1330,7 @@ fn zone_places(
             sources: vec![format!("tz:{tzid}")],
             kind: PlaceKind::TimezoneArea,
             admin_level: 0,
+            flags: 0,
             point,
             names: vec![PlaceName {
                 text: tzid,
@@ -1150,6 +1369,7 @@ mod tests {
     fn rec(name: &str) -> Rec {
         Rec {
             kind: "populated_place".into(),
+            class: String::new(),
             name: name.into(),
             point: Some((863_000_000, 267_000_000)),
             population: None,

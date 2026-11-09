@@ -56,7 +56,10 @@ updated: 2026-11-09
   They exposed duplicate clusters (1,872 collisions within 2 km). `forge make` now keys
   stages by their own code and a `fast` profile exists (D-108): a names change is 19 s of
   build and 12 s of make. All 45 Copernicus tiles are stored (approved 2026-11-09).
-  Next: the golden evaluator on the pack, duplicate clusters, corrections and G-corr.
+  The golden evaluator now runs on the built pack (`pack-eval`, under 1 s). GeoNames admin
+  records link to their COD-AB units, and former units stay as flagged places (D-110):
+  pass 0.754 → 0.871, recall@1 0.689 → 0.787, historical 0.068 → 0.886. Elevation at each
+  place is in progress on a branch. Next: duplicate clusters, corrections and G-corr.
 - **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,

@@ -15,7 +15,7 @@ use teigeodata_format::arcs::{self, Arcs};
 use teigeodata_format::poly_index::{self, PolyIndex, Rect};
 use teigeodata_format::polygons::{self, PolygonInput, Polygons};
 use teigeodata_format::region::{self, Options, Region};
-use teigeodata_format::{Encoding, Kind, Pack, Section, Writer};
+use teigeodata_format::{Encoding, Kind, Pack, Section, Writer, places};
 
 use super::Place;
 use super::pack::Body;
@@ -211,7 +211,8 @@ fn admin_region(g: &Geometry, linked: &[(u8, u32, &Poly)]) -> Result<Vec<u8>, St
 }
 
 /// Reads ARCS, POLYGONS and `POLY_INDEX` back: their checks, every polygon on an admin unit of its level (the
-/// country at level 0), and every admin unit with a polygon. Returns a line for the summary.
+/// country at level 0), and every current admin unit with a polygon (a former unit has none,
+/// D-110). Returns a line for the summary.
 pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<String, String> {
     let e = |e: teigeodata_format::Error| e.to_string();
     let places: Vec<Point<E7>> = rows
@@ -252,13 +253,13 @@ pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<Stri
     let missing = rows
         .iter()
         .zip(&with)
-        .filter(|(r, w)| r.kind == PlaceKind::Admin && !**w)
+        .filter(|(r, w)| r.kind == PlaceKind::Admin && r.flags & places::FLAG_FORMER == 0 && !**w)
         .count();
     if missing > 0 {
         return Err(format!("{missing} admin units without a polygon"));
     }
     Ok(format!(
-        "{line}; every admin unit and the country has its polygon."
+        "{line}; every current admin unit and the country has its polygon."
     ))
 }
 

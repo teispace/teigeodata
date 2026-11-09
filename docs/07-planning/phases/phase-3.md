@@ -109,6 +109,9 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 - [x] The aliases rules in the build (D-060, D-107): a record's names only when corroborated,
   no name that names an admin unit or another place nearby; Nepal main 40 records and 3,312
   names not taken, each listed with what it names in `dropped-names-<build>.tsv`
+- [x] Admin records of the point sources (D-110): linked to their COD-AB unit, former units
+  kept flagged under their successor, divisions as localities; golden pass 0.754 → 0.871,
+  historical 0.068 → 0.886 (`pack-eval` on the built pack)
 - [ ] Duplicate clusters: 1,872 names collide with another place within 2 km, mostly one place
   split in two (Swayambhunath, 0.1 km); measure and fix in conflation, gated by G-conf
 - [ ] Corrections as data with guards (apply, retire, stale); G-corr
@@ -140,3 +143,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | 3.5: POSTAL built on place runs (D-105); the lite build's Nepal codes and the point query made their own items | runs cut Nepal from 39.6 to 10.1 KB; the GPO table states no licence |
 | 2026-11-09 | 3.6: display names and romanisation built (D-106); the aliases rules split into their own item | 6.4% of places showed Devanagari; the build carries every member's names without D-060's rules |
 | 2026-11-09 | 3.6: D-060's alias rules built into the build (D-107) | the build carried every member's names; S3 chose the fold exemption (recall@1 0.957 against 0.949) |
+| 2026-11-09 | 3.6: admin records linked, former units kept (D-110) | `pack-eval` showed 94 golden queries with no answer in the pack, all GeoNames admin records |

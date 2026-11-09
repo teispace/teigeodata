@@ -108,6 +108,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
     let points: Vec<Point<E6>> = rows.iter().map(|p| e6(p.point)).collect::<Result<_, _>>()?;
     let kinds: Vec<PlaceKind> = rows.iter().map(|p| p.kind).collect();
     let levels: Vec<u8> = rows.iter().map(|p| p.admin_level).collect();
+    let flags: Vec<u32> = rows.iter().map(|p| p.flags).collect();
     let cols = PlaceColumns {
         points: &points,
         kinds: &kinds,
@@ -116,6 +117,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
         } else {
             &[]
         },
+        flags: &flags,
         ..PlaceColumns::default()
     };
     let places_body = places::encode(&cols).map_err(|e| e.to_string())?;

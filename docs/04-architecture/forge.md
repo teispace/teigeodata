@@ -412,6 +412,12 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   name (fold, join or phonetic key, also of its romanisation); a lent name the anchor lacks by
   fold is dropped when it is the primary name of an admin unit, or of another place within
   30 km. `forge aliases` applies the same rules (`aliases::rules`).
+- **Admin records (D-110).** A cluster of admin records only (GeoNames `A.*`) links to the
+  current unit it names (name key and containment, the source's level first, else the nearest
+  unit of that level within 30 km) and gives it its keys and names; a former unit
+  (`ADM1H`–`ADM4H`) that links to none becomes an admin place flagged former, without a
+  polygon, under its successor one level up; an `ADMD` becomes a locality. The summary counts
+  each outcome.
   `dropped-names-<build>.tsv` lists every dropped record or name and what it names.
 - **Postal codes (D-105). `data/countries/<cc>/postal.yaml` (schema `teigeodata/postal/v1`)
   gives each scheme's rule and the codes files. A codes file has one row per admin unit: the

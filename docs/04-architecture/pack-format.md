@@ -191,7 +191,7 @@ Columns not listed are refused, so a new column comes with a format minor versio
 | 3 | kind | kind code: 1 country, 2 admin, 3 settlement, 4 locality, 5 natural, 6 postal area, 7 timezone area ([schema](../05-data/schema.md#kind)) | required |
 | 4 | admin level | 0 for a country or a place that is not an admin unit | optional |
 | 5 | class | class dictionary code, 0 = none | optional |
-| 6 | flags | none defined yet | optional |
+| 6 | flags | bit 0 `FLAG_FORMER`: a former admin unit (admin places only, D-110); other bits refused | optional |
 | 7 | elevation | metres above EGM2008 plus 32,768, 0 = unknown (D-109) | optional |
 
 An optional column is left out when every value is 0, and reads as 0. The deep check also
