@@ -21,9 +21,10 @@ A short status. The numbers and evidence live in each phase file and the
 | 5–8 | not started (bindings prototyped in S4, D-065 to D-068) | [roadmap](../07-planning/roadmap.md) |
 
 - **Now (Phase 3):** the Nepal main pack has 101,550 places with heights (D-111), admin
-  records linked (D-110), same-place merges (D-116) and the first corrections (D-117); golden
-  pass 0.879 on the built pack (`pack-eval`). Next: rank a town over its same-name twins, then
-  3.7 (gates in CI, attribution, lite, `ACCURACY.md`).
+  records linked (D-110), same-place merges (D-116), the first corrections (D-117) and modelled
+  unit populations (D-123); golden on the product's search recall@1 0.852, pass 0.918. Next:
+  twins of one place in separate rows, then 3.7 (gates in CI, attribution, lite,
+  `ACCURACY.md`).
 - **In parallel (Phase 4):** the engine (4.1, D-113, D-114; Nepal timings in
   [phase-4 benches](../02-research/benches/phase-4.md#nepal-main-pack)) and the transport
   (4.4, D-112) are on `main`; the product's search is at parity with the spike (D-121:

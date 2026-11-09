@@ -132,8 +132,9 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   Find the queries with `S3_MISSES=first` on `pack-eval`, their scores with `S3_EXPLAIN`.
   2026-11-09: the country no longer takes Palpa (D-122). The rest: municipalities have no
   population (score 45 + match), so a GeoNames point of the same name, or a fuzzy match on a
-  district, outranks them (Kamalamai, Damak, Kailari, Myagde, Bhimeshwor); a unit population
-  source is the fix
+  district, outranks them (Kamalamai, Damak, Kailari, Myagde, Bhimeshwor). Fixed by modelled
+  unit populations (D-123): recall@1 0.799 → 0.852, pass 0.918. Left: twins of one place in
+  separate rows (Lalitpur city and its metropolitan unit; Patan finds Patan of Baitadi first)
 - [x] Corrections as data with guards (D-117): five ops, retire/apply/stale per build,
   G-corr in the build, `forge correction-guard`, schema checked by `check-data`; Nepal's first
   4 (Newa-script names, Q20588832 same as Patan), unreviewed until the maintainer signs them;
@@ -145,7 +146,7 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 ### 3.7 Gates, lite and accuracy
 - [ ] G-det, G-lic, G-topo, G-pip, G-conf, G-corr, G-budget in CI
 - [ ] Attribution in every pack (D-031): the sources' notices, including Copernicus now that
-  main packs carry its heights
+  main packs carry its heights and WorldPop (CC BY 4.0) now that units carry its population
 - [ ] The lite build from clean-room sources only
 - [ ] `ACCURACY.md` for Nepal against held-out truth
 
@@ -177,3 +178,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | 3.6: duplicate clusters measured and merged within 100 m (D-116); ranking of same-name twins its own item | most collisions are different hamlets; the golden misses are ranking |
 | 2026-11-09 | 3.6: corrections built (D-117); review and `not-same-as` their own items | the ADR's design, measured on the golden misses |
 | 2026-11-09 | 3.6: former units in conflation and ranking (D-118) | found while ranking same-name twins |
+| 2026-11-09 | Ranking: the country takes no unit's name (D-122); modelled unit populations (D-123) | the twins item's misses, read with `S3_EXPLAIN` |

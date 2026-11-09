@@ -101,6 +101,9 @@ ADM0 is dated 2019, which predates the 2020 map, so it probably excludes the cla
 
 ### 3.3 Population: Census 2021
 
+Until the census tables are usable, units carry a modelled population from WorldPop (D-123,
+[population grids](population-grids.md)).
+
 - The 12th National Population and Housing Census 2021 has final results (2023). The NSO microdata catalogue (NPL-NSO-NPHC-2021-v01) says it gives information "up to the ward level", but microdata access is "not available".
 - The results portal `censusnepal.cbs.gov.np/results` has a **ward report** download section (`/results/downloads/ward`). Its formats (PDF vs XLSX/CSV) are **unverified**: the server refused connections from our network on 2026-11-06.
 - The NSO CKAN portal `data.nsonepal.gov.np` has a "Ward" dataset with 10 XLSX/CSV resources (household tables; last updated 28 Nov 2024, per the search snippet). Its licence field is **unverified** for the same reason.
