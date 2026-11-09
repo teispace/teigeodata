@@ -33,6 +33,7 @@ use crate::place_index::{self, MAX_NODE, MIN_NODE, Neighbour, PlaceIndex, Rect};
 use crate::places::{self, PlaceColumns, Places};
 use crate::poly_index::{self, PolyIndex, polygon_box};
 use crate::polygons::{self, PolygonInput, Polygons, arc_ref};
+use crate::postal::{self, Code, CodeKind, Postal, Rule};
 use crate::redirects::{self, Fate, Redirects, Resolved, resolve};
 use crate::region::{self, Region};
 use crate::search::fuzzy::Fuzzy;
@@ -118,7 +119,8 @@ pub fn sections(data: &[u8]) {
     let mut c = Cursor(data);
     let mode = c.u8();
     let structured = mode & 0x80 != 0;
-    match mode % 11 {
+    match mode % 12 {
+        11 => postal_case(&mut c, structured),
         10 => dem_case(&mut c, structured),
         8 => arcs_case(&mut c, structured),
         9 => polygons_case(&mut c, structured),
@@ -130,6 +132,139 @@ pub fn sections(data: &[u8]) {
         5 => region_case(&mut c, structured),
         6 => search_case(&mut c, structured),
         _ => blobs_case(&mut c, structured),
+    }
+}
+
+/// POSTAL with two schemes, digits (two lengths) and letters and digits with a separator,
+/// codes from the input on up to 64 places. Lookups, prefixes, code text and place → codes
+/// never panic and stay in range; a written section finds every code at its places.
+fn postal_case(c: &mut Cursor<'_>, structured: bool) {
+    let places = 1 + c.below(64) as u32;
+    let rules = [
+        Rule {
+            name: "aa".into(),
+            ignore: " -".into(),
+            templates: vec!["999".into(), "99999".into()],
+            ..Rule::default()
+        },
+        Rule {
+            name: "b-1".into(),
+            upper: true,
+            ignore: " ".into(),
+            prefixes: vec!["B-".into()],
+            templates: vec!["A9 9A".into(), "A99 9A".into()],
+            ..Rule::default()
+        },
+    ];
+    let (mut body, mut model) = (Vec::new(), None);
+    let mut items;
+    if structured {
+        let mut codes: Vec<Code> = Vec::new();
+        let mut seen = BTreeSet::new();
+        for _ in 0..c.below(48) {
+            let digit = |c: &mut Cursor<'_>| char::from(b'0' + c.u8() % 4);
+            let letter = |c: &mut Cursor<'_>| char::from(b'A' + c.u8() % 3);
+            let (scheme, text) = if c.u8() & 1 == 0 {
+                let n = if c.u8() & 1 == 0 { 3 } else { 5 };
+                ("aa", (0..n).map(|_| digit(c)).collect::<String>())
+            } else {
+                let mut t = String::new();
+                t.push(letter(c));
+                t.push(digit(c));
+                if c.u8() & 1 == 0 {
+                    t.push(digit(c));
+                }
+                t.push(' ');
+                t.push(digit(c));
+                t.push(letter(c));
+                ("b-1", t)
+            };
+            let place = c.below(places as usize) as u32;
+            if !seen.insert((scheme, text.clone(), place)) {
+                continue;
+            }
+            codes.push(Code {
+                scheme: scheme.into(),
+                code: text,
+                place,
+                kind: CodeKind::from_u32(u32::from(c.u8() % 4)).unwrap_or(CodeKind::Area),
+                valid_from: None,
+                valid_to: None,
+                redirect: None,
+            });
+        }
+        if codes.is_empty() {
+            return;
+        }
+        body = postal::encode(&rules, &codes, places, c.u8() & 1 == 0)
+            .unwrap_or_else(|e| panic!("valid postal codes are refused: {e}"));
+        items = codes.len() as u64;
+        if !edit(c, &mut body, &mut items) {
+            model = Some(codes);
+        }
+    } else {
+        items = u64::from(c.u8());
+        body.extend_from_slice(c.rest());
+    }
+    let Some(file) = pack(&[(Kind::POSTAL, items, &body)]) else {
+        return;
+    };
+    let p = open(&file);
+    let Ok(post) = Postal::open(&section(&p, Kind::POSTAL), places as usize) else {
+        assert!(model.is_none(), "a written POSTAL payload does not open");
+        return;
+    };
+    let checked = post.check().is_ok();
+    let mut buf = [0_u8; search::fst::MAX_KEY];
+    for probe in [
+        "0", "12", "012", "01230", "A1 2B", "a12 3c", "B-A1 2B", "A", "",
+    ] {
+        post.lookup(probe, None, |o| {
+            assert!(o < post.keys(), "a lookup past the keys");
+            ControlFlow::Continue(())
+        });
+        let mut n = 0;
+        post.prefix(probe, None, |o| {
+            assert!(o < post.keys(), "a prefix past the keys");
+            n += 1;
+            if n > 64 {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+    }
+    for place in 0..places.min(8) {
+        post.records_at(place, |r| {
+            assert!(r < post.records(), "a place index entry past the records");
+            ControlFlow::Continue(())
+        });
+    }
+    if checked {
+        for o in 0..post.keys() {
+            assert!(
+                post.code(o, &mut buf).is_some(),
+                "a checked key has no text"
+            );
+            for r in post.records_of(o) {
+                let rec = post.record(r);
+                assert!(rec.is_some_and(|x| x.place < places), "a checked record");
+            }
+        }
+    }
+    if let Some(codes) = &model {
+        assert!(checked, "a written POSTAL payload fails its check");
+        for code in codes {
+            let mut hit = false;
+            post.lookup(&code.code, Some(&code.scheme), |o| {
+                hit |= post.records_of(o).any(|r| {
+                    post.record(r)
+                        .is_some_and(|x| x.place == code.place && x.kind == code.kind)
+                });
+                ControlFlow::Continue(())
+            });
+            assert!(hit, "a written code is not found at its place");
+        }
     }
 }
 

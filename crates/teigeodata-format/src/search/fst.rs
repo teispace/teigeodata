@@ -329,6 +329,39 @@ impl<'a> Fst<'a> {
         (self.node(addr)?.is_final && ordinal < self.keys).then_some(ordinal)
     }
 
+    /// Key `ordinal`, written to the start of `out`: its length, or `None` past the end or on
+    /// a malformed automaton. Follows at each node the last transition whose output is not
+    /// above what is left of the ordinal: O(key length × log node width).
+    #[must_use]
+    pub fn key(&self, ordinal: u32, out: &mut [u8; MAX_KEY]) -> Option<usize> {
+        if ordinal >= self.keys {
+            return None;
+        }
+        let mut addr = self.root();
+        let mut left = ordinal;
+        for len in 0..=MAX_KEY {
+            let node = self.node(addr)?;
+            if node.is_final && left == 0 {
+                return Some(len);
+            }
+            // The outputs increase with the index: the last one not above `left`.
+            let (mut lo, mut hi) = (0_usize, node.n());
+            while hi - lo > 1 {
+                let mid = lo + (hi - lo) / 2;
+                if node.output(mid)? <= left {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
+            }
+            let (label, target, out_i) = node.transition(lo)?;
+            left = left.checked_sub(out_i)?;
+            *out.get_mut(len)? = label;
+            addr = target;
+        }
+        None
+    }
+
     /// The ordinals `[lo, hi)` of the keys starting with `prefix`.
     #[must_use]
     pub fn range(&self, prefix: &[u8]) -> (u32, u32) {
@@ -1003,9 +1036,13 @@ mod tests {
                 .map(|(i, k)| (i as u32, k.as_bytes().to_vec()))
                 .collect();
             assert_eq!(seen, want);
+            let mut buf = [0_u8; MAX_KEY];
             for (i, k) in keys.iter().enumerate() {
                 assert_eq!(f.get(k.as_bytes()), Some(i as u32), "{k}");
+                let len = f.key(i as u32, &mut buf).unwrap();
+                assert_eq!(&buf[..len], k.as_bytes(), "key {i}");
             }
+            assert_eq!(f.key(keys.len() as u32, &mut buf), None);
             // Absent keys and every prefix range.
             for probe in words(&mut r, if cfg!(miri) { 8 } else { 200 }) {
                 let at = keys.binary_search(&probe);
@@ -1147,6 +1184,7 @@ mod tests {
             refused += usize::from(!ok);
             let _ = f.get(b"kapur");
             let _ = f.range(b"ka");
+            let _ = f.key(r.below(n as usize) as u32, &mut [0; MAX_KEY]);
             let _ = f.walk(&[], &fz, None, 100_000, |_, _| ControlFlow::Continue(()));
         }
         assert!(refused > cases / 2, "{refused}");
