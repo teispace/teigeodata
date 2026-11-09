@@ -35,6 +35,7 @@
 
 mod admins;
 mod cluster;
+mod dedupe;
 mod elevation;
 pub(crate) mod geometry;
 mod ids;
@@ -194,7 +195,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     };
     let namer = Namer::load(root, &a.cc, &profile.romanise)?;
     let Clustered {
-        places: clustered,
+        places: mut clustered,
         unnamed: unnamed_clusters,
         held,
         naming,
@@ -207,6 +208,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         &core,
         (&namer, profile.phonetic),
     )?;
+    let merged = dedupe::merge_near(&mut clustered);
     let mut places: Vec<Place> = units.places;
     places.extend(clustered);
     if let Some(country) = country_place(&build, &sources, &profile)? {
@@ -257,6 +259,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     notes(&mut summary, held, unnamed, &skipped, postal_notes);
     summary.push_str(&naming.line());
     summary.push_str(&admin.line());
+    summary.push_str(&dedupe::report(&merged, &out_dir, a.build_name())?);
     if let Some(e) = &elevations {
         summary.push_str(&e.summary(&build, &sources, &places)?);
     }

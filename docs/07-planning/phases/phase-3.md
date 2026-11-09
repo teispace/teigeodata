@@ -120,8 +120,13 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 - [x] Admin records of the point sources (D-110): linked to their COD-AB unit, former units
   kept flagged under their successor, divisions as localities; golden pass 0.754 → 0.871,
   historical 0.068 → 0.886 (`pack-eval` on the built pack)
-- [ ] Duplicate clusters: 1,872 names collide with another place within 2 km, mostly one place
-  split in two (Swayambhunath, 0.1 km); measure and fix in conflation, gated by G-conf
+- [x] Duplicate clusters (D-116): measured; the 1,872 same-name collisions within 2 km are
+  mostly different hamlets with generic names (only 15 of 5,176 same-name pairs with building
+  cores come within 100 m). Same-name settlements within 100 m after the core are merged:
+  50 in Nepal main, listed in `merged-<build>.tsv`. G-conf (stated-link recall and precision)
+  moves to the CI gates in 3.7
+- [ ] Rank a town over its same-name twins (Damak's two GeoNames records 0.8 km apart; a
+  municipality and its seat town): about 20 golden misses rank the wanted place second
 - [ ] Corrections as data with guards (apply, retire, stale); G-corr
 
 ### 3.7 Gates, lite and accuracy
@@ -156,3 +161,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | 3.6: admin records linked, former units kept (D-110) | `pack-eval` showed 94 golden queries with no answer in the pack, all GeoNames admin records |
 | 2026-11-09 | 3.4: place elevations built (D-111); lite elevation and summit heights made their own items | Copernicus is main only; the lite DEM needs NASADEM in `dem-section` |
 | 2026-11-09 | 3.4/3.6/3.7: the admin-record item closed by D-110; consensus-height review and pack attribution added | elevations merged with D-110; main packs now carry Copernicus-derived heights |
+| 2026-11-09 | 3.6: duplicate clusters measured and merged within 100 m (D-116); ranking of same-name twins its own item | most collisions are different hamlets; the golden misses are ranking |
