@@ -23,6 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use teigeodata_core::{E6, E7, Namespace, PlaceId, PlaceKind, Point, hilbert};
 use teigeodata_format::arcs::Arcs;
+use teigeodata_format::elevation::{self, Elevations};
 use teigeodata_format::idmap::{self, IdMap};
 use teigeodata_format::names::{self, NameRecord, NameType, Names, Tag as NameTag};
 use teigeodata_format::place_index::{self, PlaceIndex};
@@ -138,6 +139,9 @@ impl Model {
                     .collect()
             })
             .unwrap_or_default();
+        let heights = pack
+            .section(Kind::ELEVATION)
+            .map(|s| Elevations::open(&s).unwrap());
         let arcs_view = pack.section(Kind::ARCS).map(|s| Arcs::open(&s).unwrap());
         let polygons = pack
             .section(Kind::POLYGONS)
@@ -172,7 +176,7 @@ impl Model {
             levels: (0..n).map(|r| places.admin_level(r).unwrap()).collect(),
             classes: (0..n).map(|r| places.class(r).unwrap()).collect(),
             flags: (0..n).map(|r| places.flags(r).unwrap()).collect(),
-            elevations: (0..n).map(|r| places.elevation(r)).collect(),
+            elevations: (0..n).map(|r| heights.and_then(|h| h.get(r))).collect(),
             names: names.map_or_else(Vec::new, |nm| {
                 (0..n)
                     .map(|r| {
@@ -300,7 +304,6 @@ impl Model {
                     admin_levels: &self.levels,
                     classes: &self.classes,
                     flags: &self.flags,
-                    elevations: &self.elevations,
                 })
                 .unwrap(),
             ),
@@ -310,6 +313,9 @@ impl Model {
                 place_index::encode(&self.points, self.node).unwrap(),
             ),
         ];
+        if let Some(h) = elevation::encode(&self.elevations).unwrap() {
+            bodies.push((Kind::ELEVATION, n, h));
+        }
         if !self.names.is_empty() {
             let recs: Vec<Vec<NameRecord<'_>>> = self
                 .names

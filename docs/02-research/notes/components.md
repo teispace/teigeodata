@@ -77,6 +77,18 @@ PLACES by column (main):
   per 16 KiB (D-078), and "a ranged client never downloads the whole target"
   ([download and delta](download-and-delta.md) §3).
 
+After step 1 (ELEVATION its own section, kind 19), Nepal main, 2026-11-09, same method:
+
+| Section | Raw | Wire |
+|---|---:|---:|
+| PLACES (lat, lon, kind, level, flags) | 539,536 | 463,575 |
+| ELEVATION | 134,352 | 129,282 |
+| IDMAP | 35,424 | 2,951 |
+| PLACE_INDEX | 56,160 | 53,693 |
+
+Points with IDs and the spatial index: 520,219 B on the wire, under the 0.55 MB target; with
+heights 649,501 B. Heights cost 1.29 B per place on the wire.
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Verdict |

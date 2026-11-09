@@ -40,6 +40,7 @@ pub mod blocks;
 mod columns;
 pub mod components;
 pub mod dem;
+pub mod elevation;
 mod error;
 #[cfg(feature = "fuzz")]
 #[doc(hidden)]
@@ -125,6 +126,8 @@ impl Kind {
     pub const ADMIN_REGION: Self = Self(17);
     /// The coarse levels of ARCS alone, for fast coarse reads: ARCS's layout.
     pub const ARCS_OVERVIEW: Self = Self(18);
+    /// Each place's height, one row per PLACES row (D-133).
+    pub const ELEVATION: Self = Self(19);
 
     /// This reader's name for the kind, if it knows it.
     #[must_use]
@@ -153,6 +156,7 @@ pub(crate) const KINDS: &[(Kind, &str)] = &[
     (Kind::REDIRECTS, "REDIRECTS"),
     (Kind::ADMIN_REGION, "ADMIN_REGION"),
     (Kind::ARCS_OVERVIEW, "ARCS_OVERVIEW"),
+    (Kind::ELEVATION, "ELEVATION"),
 ];
 
 impl fmt::Display for Kind {

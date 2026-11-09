@@ -134,6 +134,7 @@ parameters).
 | 16 | REDIRECTS | retired IDs: each to its survivor, or to none for a tombstone ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)) | `core` | column table (D-075): sorted ID pairs |
 | 17 | ADMIN_REGION | exact point → admin units: REGION's layout on the ARCS vertices, region `i` = polygon `i` | `geometry` | column table (D-100), [below](#admin_region) |
 | 18 | ARCS_OVERVIEW | the coarse levels of ARCS alone, for fast coarse reads | `geometry` | column table (D-102), [below](#arcs_overview) |
+| 19 | ELEVATION | each place's height, one row per PLACES row | `elevation` | column table (D-133): one bit-packed column; 1.3 B per place on Nepal, [below](#elevation) |
 
 ### Column tables (encoding 1)
 
@@ -193,11 +194,27 @@ Columns not listed are refused, so a new column comes with a format minor versio
 | 4 | admin level | 0 for a country or a place that is not an admin unit | optional |
 | 5 | class | class dictionary code, 0 = none | optional |
 | 6 | flags | bit 0 `FLAG_FORMER`: a former admin unit (admin places only, D-110); other bits refused | optional |
-| 7 | elevation | metres above EGM2008 plus 32,768, 0 = unknown (D-109) | optional |
+
+Column 7 (elevation) moved to its own section, [ELEVATION](#elevation), in D-133, so a client
+that wants coordinates only never downloads heights; a PLACES column 7 is refused.
 
 An optional column is left out when every value is 0, and reads as 0. The deep check also
 checks that rows are in Hilbert order of their points, that every point is on the grid and
 every kind known, and that only admin units have a level.
+
+### ELEVATION
+
+Each place's height at its final point (D-109, D-111), split out of PLACES so that heights are
+a component of their own (D-133, [components](../02-research/notes/components.md)). The
+section's `item_count` equals PLACES' (the engine refuses a layer where it does not), and row
+`r` is the height of PLACES row `r`.
+
+| ID | Column | Values | |
+|---:|---|---|---|
+| 1 | height | whole metres above EGM2008 plus 32,768, 0 = unknown | required |
+
+A pack where no place has a height has no ELEVATION section. Any other column is refused. The
+deep check refuses a value above `u16::MAX` and a section where every height is unknown.
 
 ### SEARCH
 

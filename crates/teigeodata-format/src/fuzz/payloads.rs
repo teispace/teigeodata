@@ -27,6 +27,7 @@ use crate::blobs::{self, Blobs};
 use crate::dem::{
     self, DATUM_EGM2008, Dem, DemScratch, Family, Grid, GridInput, THRESHOLDS, TileOptions,
 };
+use crate::elevation::{self, Elevations};
 use crate::hierarchy::{self, Hierarchy, MAX_DEPTH};
 use crate::idmap::{self, IdMap};
 use crate::place_index::{self, MAX_NODE, MIN_NODE, Neighbour, PlaceIndex, Rect};
@@ -867,8 +868,11 @@ fn blobs_case(c: &mut Cursor<'_>, structured: bool) {
 /// A model's rows, in Hilbert order: point, kind, admin level, class, flags, elevation.
 type PlaceRow = (Point<E6>, PlaceKind, u8, u32, u32, Option<i16>);
 
+/// PLACES, and beside it an ELEVATION section of the same rows (D-133) when the model has
+/// heights: each opens, checks and reads back as written, and fuzzed bytes never panic.
 fn places_case(c: &mut Cursor<'_>, structured: bool) {
     let (mut body, mut model) = (Vec::new(), None);
+    let mut heights: Option<(Vec<u8>, u64)> = None;
     let mut items;
     if structured {
         let n = c.below(MAX_ROWS + 1);
@@ -918,13 +922,15 @@ fn places_case(c: &mut Cursor<'_>, structured: bool) {
         let classes: Vec<u32> = rows.iter().filter(|_| on(2)).map(|r| r.3).collect();
         let flags: Vec<u32> = rows.iter().filter(|_| on(4)).map(|r| r.4).collect();
         let elevations: Vec<Option<i16>> = rows.iter().filter(|_| on(8)).map(|r| r.5).collect();
+        heights = elevation::encode(&elevations)
+            .unwrap_or_else(|e| panic!("valid heights are refused: {e}"))
+            .map(|h| (h, n as u64));
         let cols = PlaceColumns {
             points: &points,
             kinds: &kinds,
             admin_levels: &levels,
             classes: &classes,
             flags: &flags,
-            elevations: &elevations,
         };
         body = places::encode(&cols).unwrap_or_else(|e| panic!("a valid model is refused: {e}"));
         items = n as u64;
@@ -950,7 +956,11 @@ fn places_case(c: &mut Cursor<'_>, structured: bool) {
         items = u64::from(c.u16());
         body.extend_from_slice(c.rest());
     }
-    let Some(file) = pack(&[(Kind::PLACES, items, &body)]) else {
+    let mut parts: Vec<(Kind, u64, &[u8])> = vec![(Kind::PLACES, items, &body)];
+    if let Some((h, rows)) = &heights {
+        parts.push((Kind::ELEVATION, *rows, h));
+    }
+    let Some(file) = pack(&parts) else {
         return;
     };
     let p = open(&file);
@@ -958,6 +968,11 @@ fn places_case(c: &mut Cursor<'_>, structured: bool) {
         assert!(model.is_none(), "a written PLACES payload does not open");
         return;
     };
+    let e = p.section(Kind::ELEVATION).map(|s| {
+        let e = Elevations::open(&s).unwrap_or_else(|e| panic!("written heights do not open: {e}"));
+        assert!(e.check().is_ok(), "written heights fail their check");
+        e
+    });
     let read = |r| {
         (
             v.point(r),
@@ -965,7 +980,7 @@ fn places_case(c: &mut Cursor<'_>, structured: bool) {
             v.admin_level(r),
             v.class(r),
             v.flags(r),
-            v.elevation(r),
+            e.and_then(|e| e.get(r)),
         )
     };
     for r in rows(v.len()) {

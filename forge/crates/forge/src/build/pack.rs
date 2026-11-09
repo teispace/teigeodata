@@ -8,6 +8,7 @@ use std::ops::ControlFlow;
 use std::path::Path;
 
 use teigeodata_core::{E6, E7, Namespace, PlaceId, PlaceKind, Point, hilbert};
+use teigeodata_format::elevation::Elevations as Heights;
 use teigeodata_format::hierarchy::{self, Hierarchy};
 use teigeodata_format::idmap::{self, IdMap};
 use teigeodata_format::names::{self, NameRecord, Names, TEXT_BUFFER};
@@ -108,12 +109,8 @@ fn e6(p: (i32, i32)) -> Result<Point<E6>, String> {
         .ok_or_else(|| format!("point {p:?} is off the grid"))
 }
 
-/// The PLACES section of the rows, with their elevations (D-109) in row order.
-fn places_section(
-    rows: &[&Place],
-    points: &[Point<E6>],
-    elevations: &[Option<i16>],
-) -> Result<Vec<u8>, String> {
+/// The PLACES section of the rows.
+fn places_section(rows: &[&Place], points: &[Point<E6>]) -> Result<Vec<u8>, String> {
     let kinds: Vec<PlaceKind> = rows.iter().map(|p| p.kind).collect();
     let levels: Vec<u8> = rows.iter().map(|p| p.admin_level).collect();
     let flags: Vec<u32> = rows.iter().map(|p| p.flags).collect();
@@ -126,7 +123,6 @@ fn places_section(
             &[]
         },
         flags: &flags,
-        elevations,
         ..PlaceColumns::default()
     };
     places::encode(&cols).map_err(|e| e.to_string())
@@ -152,11 +148,10 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
     let n = rows.len();
 
     let points: Vec<Point<E6>> = rows.iter().map(|p| e6(p.point)).collect::<Result<_, _>>()?;
-    let places_body = places_section(
-        &rows,
-        &points,
-        &super::elevation::in_rows(input.elevation, order.iter().map(|o| o.2)),
-    )?;
+    let places_body = places_section(&rows, &points)?;
+    // Heights in their own section (D-109, D-133), absent when no place has one.
+    let heights = super::elevation::in_rows(input.elevation, order.iter().map(|o| o.2));
+    let heights_body = teigeodata_format::elevation::encode(&heights).map_err(|e| e.to_string())?;
 
     let parents: Vec<Option<u32>> = rows
         .iter()
@@ -178,6 +173,9 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
         (Kind::SEARCH, Encoding::TABLE, n as u64, search_body),
         (Kind::PLACE_INDEX, Encoding::TABLE, n as u64, index_body),
     ];
+    if let Some(body) = heights_body {
+        sections.push((Kind::ELEVATION, Encoding::TABLE, n as u64, body));
+    }
     if !input.zones.rings.is_empty() {
         let body =
             region::encode(&input.zones.rings, &Options::default()).map_err(|e| e.to_string())?;
@@ -585,8 +583,17 @@ fn verify(
     if let Some(line) = geometry_line {
         let _ = writeln!(report, "\n{line}");
     }
-    if let Some(e) = input.elevation {
-        let _ = writeln!(report, "\n{}", e.verify(&places)?);
+    let heights = p
+        .section(Kind::ELEVATION)
+        .map(|s| Heights::open(&s))
+        .transpose()
+        .map_err(e)?;
+    match (input.elevation, heights) {
+        (Some(d), h) => {
+            let _ = writeln!(report, "\n{}", d.verify(&places, h.as_ref())?);
+        }
+        (None, None) => {}
+        (None, Some(_)) => return Err("an ELEVATION section without a DEM".into()),
     }
     if let Some(s) = p.section(Kind::POSTAL) {
         let line = verify_postal(&s, rows, input)?;

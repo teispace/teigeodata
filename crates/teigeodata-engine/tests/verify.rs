@@ -193,3 +193,37 @@ fn mapped_files_truncated_or_replaced() {
     assert!(!e.layers().next().unwrap().unchanged());
     fs::remove_dir_all(&dir).unwrap();
 }
+
+/// ELEVATION is one height per PLACES row (D-133): a layer whose ELEVATION has another row
+/// count is refused at open, never answered with another row's height.
+#[test]
+fn heights_that_do_not_match_the_places_are_refused() {
+    let model = synthetic(300, 8);
+    let good = model.encode();
+    let pack = Pack::open(&good).unwrap();
+    let short = teigeodata_format::elevation::encode(&model.elevations[1..])
+        .unwrap()
+        .unwrap();
+    let rebuilt = |heights: &[u8], items: u64| {
+        let mut sections: Vec<(Kind, Encoding, u64, &[u8])> = pack
+            .sections()
+            .filter(|s| s.kind() != Kind::ELEVATION)
+            .map(|s| (s.kind(), Encoding::TABLE, s.item_count(), s.bytes()))
+            .collect();
+        sections.push((Kind::ELEVATION, Encoding::TABLE, items, heights));
+        let m = pack.manifest();
+        let w = Writer::new(m.address(), m.component(), m.release()).unwrap();
+        w.pack(&sections, None).unwrap()
+    };
+    let same = pack.section(Kind::ELEVATION).unwrap();
+    let ok = rebuilt(same.bytes(), same.item_count());
+    assert!(Layer::from_bytes(ok, opts(Verify::Eager)).is_ok());
+    let bad = rebuilt(&short, model.elevations.len() as u64 - 1);
+    assert!(matches!(
+        Layer::from_bytes(bad, opts(Verify::Eager)),
+        Err(Error::Format(teigeodata_format::Error::Payload {
+            kind: 19,
+            ..
+        }))
+    ));
+}

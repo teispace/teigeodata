@@ -154,6 +154,9 @@ fn main() {
     }
     let ids_view = IdMap::open(&pack.section(Kind::IDMAP).unwrap()).unwrap();
     let places = Places::open(&pack.section(Kind::PLACES).unwrap()).unwrap();
+    let heights = pack
+        .section(Kind::ELEVATION)
+        .map(|s| teigeodata_format::elevation::Elevations::open(&s).unwrap());
     let index = PlaceIndex::open(&pack.section(Kind::PLACE_INDEX).unwrap(), places).unwrap();
     let arcs = pack.section(Kind::ARCS).map(|a| Arcs::open(&a).unwrap());
     let admin_section = pack.section(Kind::ADMIN_REGION).unwrap();
@@ -191,7 +194,7 @@ fn main() {
             places.kind(row),
             places.admin_level(row),
             places.flags(row),
-            places.elevation(row),
+            heights.and_then(|h| h.get(row)),
         ));
     });
     let get1 = per_call(n, |i| {

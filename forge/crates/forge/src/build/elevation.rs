@@ -1,6 +1,6 @@
 //! Place elevations (D-109, D-111): the height of the DEM section at each place's final point
 //! (the consensus point of the `core` stage, or the point the build gave it), in whole metres
-//! above EGM2008, for PLACES column 7.
+//! above EGM2008, for the pack's ELEVATION section (D-133).
 //!
 //! - **Input:** the `dem-section` stage's pack, `data/build/dem-section/<tileset>/dem.tgd`,
 //!   read through the same reader an app uses (`teigeodata_format::dem`, bilinear).
@@ -9,7 +9,7 @@
 //! - **Rounding:** half away from zero, to whole metres.
 //! - **QA, not input (D-061):** the summary compares each height with what the place's own
 //!   source records state (`elevation_m`) and with the DEM height `GeoNames` states (`dem_m`).
-//! - **Check:** after the pack is written, every row's PLACES elevation is compared with the
+//! - **Check:** after the pack is written, every row's ELEVATION height is compared with the
 //!   section sampled afresh at the row's stored point, a path that shares no code with the
 //!   sampling here.
 
@@ -21,6 +21,7 @@ use std::path::Path;
 use arrow_array::{Array, Float32Array, Int32Array, StringArray};
 use teigeodata_core::{E6, E7, PlaceKind, Point, hilbert};
 use teigeodata_format::dem::{Dem, DemScratch};
+use teigeodata_format::elevation::Elevations as Heights;
 use teigeodata_format::places::Places;
 use teigeodata_format::{Kind, Pack};
 
@@ -248,21 +249,40 @@ impl Elevations {
         Ok(out)
     }
 
-    /// The read-back check: every row's stored elevation is the section's height at the row's
-    /// stored point (1e-6°, a few centimetres from the sampled one), within a metre; a row
-    /// with none is a timezone area or outside the section.
-    pub(crate) fn verify(&self, places: &Places<'_>) -> Result<String, String> {
-        verify(&open(&self.bytes)?, places)
+    /// The read-back check: the ELEVATION section (`heights`, absent when no place has one)
+    /// passes its check and has one row per place, and every row's height is the DEM's height
+    /// at the row's stored point (1e-6°, a few centimetres from the sampled one), within a
+    /// metre; a row with none is a timezone area or outside the DEM.
+    pub(crate) fn verify(
+        &self,
+        places: &Places<'_>,
+        heights: Option<&Heights<'_>>,
+    ) -> Result<String, String> {
+        verify(&open(&self.bytes)?, places, heights)
     }
 }
 
 /// See [`Elevations::verify`].
-pub(crate) fn verify(dem: &Dem<'_>, places: &Places<'_>) -> Result<String, String> {
+pub(crate) fn verify(
+    dem: &Dem<'_>,
+    places: &Places<'_>,
+    heights: Option<&Heights<'_>>,
+) -> Result<String, String> {
+    if let Some(h) = heights {
+        h.check().map_err(|e| e.to_string())?;
+        if h.len() != places.len() {
+            return Err(format!(
+                "ELEVATION has {} rows, PLACES {}",
+                h.len(),
+                places.len()
+            ));
+        }
+    }
     let mut s = Box::new(DemScratch::new());
     let (mut with, mut worst) = (0_usize, 0.0_f64);
     for row in 0..places.len() {
         let at: Point<E6> = places.point(row).ok_or("a row without a point")?;
-        let stored = places.elevation(row);
+        let stored = heights.and_then(|h| h.get(row));
         let want = if places.kind(row) == Some(PlaceKind::TimezoneArea) {
             None
         } else {
@@ -276,7 +296,7 @@ pub(crate) fn verify(dem: &Dem<'_>, places: &Places<'_>) -> Result<String, Strin
             }
             _ => {
                 return Err(format!(
-                    "row {row} at {at}: PLACES elevation {stored:?} m, the DEM {want:?} m"
+                    "row {row} at {at}: ELEVATION {stored:?} m, the DEM {want:?} m"
                 ));
             }
         }
@@ -297,6 +317,7 @@ mod tests {
     use teigeodata_format::dem::{
         self, DATUM_EGM2008, Dem, Family, Grid, GridInput, THRESHOLDS, TileOptions,
     };
+    use teigeodata_format::elevation::{self, Elevations as Heights};
     use teigeodata_format::places::{self, PlaceColumns, Places};
     use teigeodata_format::{Kind, Section};
 
@@ -403,12 +424,18 @@ mod tests {
             let cols = PlaceColumns {
                 points: &[point],
                 kinds: &[kind],
-                elevations: &[e],
                 ..PlaceColumns::default()
             };
             let bytes = places::encode(&cols).expect("encode");
             let section = Section::unpacked(Kind::PLACES, 1, &bytes);
-            verify(&dem, &Places::open(&section).expect("open"))
+            let h = elevation::encode(&[e]).expect("encode");
+            let hs = h.as_ref().map(|h| Section::unpacked(Kind::ELEVATION, 1, h));
+            let heights = hs.as_ref().map(|s| Heights::open(s).expect("open"));
+            verify(
+                &dem,
+                &Places::open(&section).expect("open"),
+                heights.as_ref(),
+            )
         };
         assert!(check(Some(222), PlaceKind::Settlement).is_ok());
         assert!(
@@ -424,5 +451,18 @@ mod tests {
             "a zone's height"
         );
         assert!(check(None, PlaceKind::TimezoneArea).is_ok());
+        // ELEVATION must have one row per place.
+        let cols = PlaceColumns {
+            points: &[point, point],
+            kinds: &[PlaceKind::Settlement; 2],
+            ..PlaceColumns::default()
+        };
+        let bytes = places::encode(&cols).expect("encode");
+        let two = Places::open(&Section::unpacked(Kind::PLACES, 2, &bytes)).expect("open");
+        let h = elevation::encode(&[Some(222)])
+            .expect("encode")
+            .expect("known");
+        let one = Heights::open(&Section::unpacked(Kind::ELEVATION, 1, &h)).expect("open");
+        assert!(verify(&dem, &two, Some(&one)).is_err(), "a short ELEVATION");
     }
 }

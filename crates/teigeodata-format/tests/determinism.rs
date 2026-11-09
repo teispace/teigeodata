@@ -17,7 +17,7 @@ use ed25519_dalek::SigningKey;
 use teigeodata_core::{E6, Namespace, PlaceId, PlaceKind, Point, hilbert};
 use teigeodata_format::places::PlaceColumns;
 use teigeodata_format::{
-    Encoding, Kind, Pack, Tag, Writer, hierarchy, idmap, places, redirects, signer,
+    Encoding, Kind, Pack, Tag, Writer, elevation, hierarchy, idmap, places, redirects, signer,
 };
 
 struct Rng(u64);
@@ -93,7 +93,10 @@ fn inputs(n: usize, seed: u64) -> Inputs {
         classes: (0..n).map(|_| r.below(5) as u32).collect(),
         flags: (0..n).map(|_| u32::from(r.below(4) == 0)).collect(),
         elevations: (0..n)
-            .map(|_| (r.below(4) != 0).then(|| i16::try_from(r.below(9_000)).unwrap() - 100))
+            // Row 0 always has a height, so every pack has an ELEVATION section.
+            .map(|k| {
+                (k == 0 || r.below(4) != 0).then(|| i16::try_from(r.below(9_000)).unwrap() - 100)
+            })
             .collect(),
         parents,
         ids,
@@ -111,11 +114,15 @@ fn payloads(i: &Inputs) -> Vec<(Kind, u64, Vec<u8>)> {
         admin_levels: &i.levels,
         classes: &i.classes,
         flags: &i.flags,
-        elevations: &i.elevations,
     };
     let n = i.points.len() as u64;
     let mut v = vec![
         (Kind::PLACES, n, places::encode(&cols).unwrap()),
+        (
+            Kind::ELEVATION,
+            n,
+            elevation::encode(&i.elevations).unwrap().unwrap(),
+        ),
         (Kind::HIERARCHY, n, hierarchy::encode(&i.parents).unwrap()),
         (Kind::IDMAP, n, idmap::encode(&i.ids).unwrap()),
         (
@@ -130,19 +137,32 @@ fn payloads(i: &Inputs) -> Vec<(Kind, u64, Vec<u8>)> {
 
 /// The packs under test: each payload alone, IDMAP with REDIRECTS, and every section in one
 /// signed pack with manifest entries.
-const PACKS: [(&str, &[Kind], bool); 6] = [
+const PACKS: [(&str, &[Kind], bool); 7] = [
     ("places", &[Kind::PLACES], false),
+    ("elevation", &[Kind::ELEVATION], false),
     ("hierarchy", &[Kind::HIERARCHY], false),
     ("idmap", &[Kind::IDMAP], false),
     ("redirects", &[Kind::IDMAP, Kind::REDIRECTS], false),
     (
         "all, signed",
-        &[Kind::PLACES, Kind::HIERARCHY, Kind::IDMAP, Kind::REDIRECTS],
+        &[
+            Kind::PLACES,
+            Kind::HIERARCHY,
+            Kind::IDMAP,
+            Kind::REDIRECTS,
+            Kind::ELEVATION,
+        ],
         true,
     ),
     (
         "all, unsigned",
-        &[Kind::PLACES, Kind::HIERARCHY, Kind::IDMAP, Kind::REDIRECTS],
+        &[
+            Kind::PLACES,
+            Kind::HIERARCHY,
+            Kind::IDMAP,
+            Kind::REDIRECTS,
+            Kind::ELEVATION,
+        ],
         false,
     ),
 ];
@@ -218,7 +238,7 @@ fn a_changed_input_changes_the_bytes() {
     later.created += 1;
     for (what, changed, affected) in [
         ("a flag", &other, &[Kind::PLACES][..]),
-        ("an elevation", &higher, &[Kind::PLACES]),
+        ("an elevation", &higher, &[Kind::ELEVATION]),
         ("a parent", &moved, &[Kind::HIERARCHY]),
         ("an ID", &renumbered, &[Kind::IDMAP]),
         ("the creation time", &later, &[]),

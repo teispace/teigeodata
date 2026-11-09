@@ -250,6 +250,8 @@ impl Engine {
         l.ensure(Kind::PLACES)?;
         l.ensure(Kind::IDMAP)?;
         let v = l.views();
+        // A no-op for a pack without heights.
+        l.ensure(Kind::ELEVATION)?;
         let (Some(ids), Some(places)) = (&v.ids, &v.places) else {
             return Ok(None);
         };
@@ -264,7 +266,7 @@ impl Engine {
             kind: places.kind(row),
             admin_level: places.admin_level(row).unwrap_or(0),
             flags: places.flags(row).unwrap_or(0),
-            elevation: places.elevation(row),
+            elevation: v.heights.as_ref().and_then(|h| h.get(row)),
         }))
     }
 

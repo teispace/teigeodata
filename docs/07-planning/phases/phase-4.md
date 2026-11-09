@@ -66,9 +66,12 @@ call (ADR-0012).
 ### 4.1b Components: download only the data asked for (ADR-0015, D-133)
 Research: [components](../../02-research/notes/components.md). The section is the unit; one
 signed pack per address; a client holds any subset of its sections.
-- [ ] Format: ELEVATION out of PLACES into its own section; per-place timezone and admin
-  columns (measure COMPONENTS fields against own sections); one table mapping each section
-  kind to its component and dependencies, in `teigeodata-format`
+- [x] Format: ELEVATION (kind 19) out of PLACES into its own section; the forge writes it and
+  checks it against the DEM on read-back; the engine refuses a layer whose ELEVATION row count
+  differs from PLACES' (2026-11-09)
+- [ ] Format: per-place timezone and admin columns (measure COMPONENTS fields against own
+  sections); one table mapping each section kind to its component and dependencies, in
+  `teigeodata-format`
 - [ ] Forge writes them; `check-pack` prints wire bytes per component
 - [ ] Storage: head plus the installed sections (sparse file, or offsets in a compact file),
   a sidecar of present and verified sections
@@ -157,3 +160,4 @@ signed pack per address; a client holds any subset of its sections.
 | 2026-11-09 | 4.1: parity done; the CI gate on the product its own item | D-121 |
 | 2026-11-09 | 4.1: the golden gate written against a checked-in baseline (D-128) | a CI gate needs a number to hold |
 | 2026-11-09 | 4.1b: components as their own item, sized on Nepal | the maintainer wants points-only downloads (lat, lon, altitude) |
+| 2026-11-09 | 4.1b: ELEVATION is its own section; the format item split in two | D-133 step 1 done |
