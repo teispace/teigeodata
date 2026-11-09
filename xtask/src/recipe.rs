@@ -23,6 +23,9 @@ struct Recipe {
     extent: Option<String>,
     #[serde(default)]
     buildings: Vec<Buildings>,
+    /// The DEM tileset of place elevations (D-111).
+    #[serde(default)]
+    dem: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -73,6 +76,7 @@ pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
             .iter()
             .map(|b| ("buildings source", b.source.as_str())),
     );
+    named.extend(r.dem.iter().map(|d| ("DEM tileset", d.as_str())));
     for (what, id) in named {
         if !pinned.contains(id) {
             out.push(format!("{what} `{id}` is not pinned in data/sources.lock"));
@@ -106,6 +110,9 @@ pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
             ));
         }
     }
+    if r.extent.is_none() && r.dem.is_some() {
+        out.push("a DEM needs an extent".into());
+    }
     match (&r.extent, r.buildings.is_empty()) {
         (None, false) => out.push("buildings need an extent".into()),
         (Some(e), _) if !extent_ok(e) => {
@@ -134,6 +141,8 @@ mod tests {
             .collect();
         let good = "schema: teigeodata/build/v1\nadmin: a\npoints:\n  - { reader: osm, source: b }\n  - { reader: geonames, source: c, extra: [x] }\n";
         assert_eq!(check_text(good, &pinned), Vec::<String>::new());
+        let with_dem = format!("{good}extent: \"80,26,88,30\"\ndem: x\n");
+        assert_eq!(check_text(&with_dem, &pinned), Vec::<String>::new());
         for (text, why) in [
             (
                 "schema: teigeodata/build/v2\nadmin: a\npoints:\n  - { reader: osm, source: b }\n  - { reader: osm, source: c }\n",
@@ -174,6 +183,14 @@ mod tests {
             (
                 "schema: teigeodata/build/v1\nadmin: a\nextent: \"80,26,88,30\"\npoints:\n  - { reader: osm, source: b }\n  - { reader: osm, source: c }\nbuildings:\n  - { reader: lidar, source: b }\n",
                 "buildings reader",
+            ),
+            (
+                "schema: teigeodata/build/v1\nadmin: a\ndem: a\npoints:\n  - { reader: osm, source: b }\n  - { reader: osm, source: c }\n",
+                "a DEM without an extent",
+            ),
+            (
+                "schema: teigeodata/build/v1\nadmin: a\ndem: z\nextent: \"80,26,88,30\"\npoints:\n  - { reader: osm, source: b }\n  - { reader: osm, source: c }\n",
+                "an unpinned DEM",
             ),
         ] {
             assert!(!check_text(text, &pinned).is_empty(), "{why}");

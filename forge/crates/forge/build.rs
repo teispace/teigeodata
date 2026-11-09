@@ -20,12 +20,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// (stage, its root module).
-const STAGES: [(&str, &str); 6] = [
+const STAGES: [(&str, &str); 7] = [
     ("READ", "read"),
     ("CONFLATE", "conflate"),
     ("BUILDINGS", "buildings"),
     ("CORE", "core"),
     ("TOPOLOGY", "topo"),
+    ("DEM", "dem"),
     ("BUILD", "build"),
 ];
 

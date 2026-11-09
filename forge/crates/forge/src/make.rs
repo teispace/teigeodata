@@ -6,9 +6,11 @@
 //! ```
 //!
 //! The recipe is `data/countries/<cc>/build.yaml`. The stages are `read` for each points
-//! source, `conflate` over them, then `build`. Each stage's key is a BLAKE3 hash of the stage
-//! name, the stage's code, the pinned inputs (their `sources.lock` entries), the configuration
-//! (the country profile, the arguments, the ID registry) and the keys of the stages it reads.
+//! source, `conflate` over them, `buildings` and `core`, `topology`, `dem` (the recipe's DEM
+//! tileset over its extent, for place elevations, D-111), then `build`. Each stage's key is
+//! a BLAKE3 hash of the stage name, the stage's code, the pinned inputs (their `sources.lock`
+//! entries), the configuration (the country profile, the arguments, the ID registry) and the
+//! keys of the stages it reads.
 //! A stage whose output directory holds a stamp with its key is skipped. A stamp is written
 //! only after the stage succeeds, and removed before it starts, so a killed run resumes from
 //! the first stage it did not finish. `--force` runs every stage.
@@ -29,6 +31,7 @@ use crate::build;
 use crate::buildings;
 use crate::conflate;
 use crate::core;
+use crate::dem;
 use crate::lock::Lock;
 use crate::read;
 use crate::topo;
@@ -39,6 +42,7 @@ const CODE_CONFLATE: &[u8] = env!("FORGE_CODE_CONFLATE").as_bytes();
 const CODE_BUILDINGS: &[u8] = env!("FORGE_CODE_BUILDINGS").as_bytes();
 const CODE_CORE: &[u8] = env!("FORGE_CODE_CORE").as_bytes();
 const CODE_TOPOLOGY: &[u8] = env!("FORGE_CODE_TOPOLOGY").as_bytes();
+const CODE_DEM: &[u8] = env!("FORGE_CODE_DEM").as_bytes();
 const CODE_BUILD: &[u8] = env!("FORGE_CODE_BUILD").as_bytes();
 
 #[derive(Deserialize)]
@@ -54,6 +58,9 @@ struct Recipe {
     extent: Option<String>,
     #[serde(default)]
     buildings: Vec<Buildings>,
+    /// The DEM tileset place elevations come from (D-111).
+    #[serde(default)]
+    dem: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -356,6 +363,56 @@ fn topology_stage(root: &Path, admin: &str, lock: &Lock, r: &mut Runner) -> Resu
     Ok(k)
 }
 
+/// The box of whole-degree tiles that covers an extent `west,south,east,north`: the tiles
+/// holding its corners, so an edge on a whole degree takes no tile beyond it.
+fn tile_box(extent: &str) -> Result<String, String> {
+    let v: Vec<f64> = extent
+        .split(',')
+        .map(|x| x.trim().parse::<f64>())
+        .collect::<Result<_, _>>()
+        .map_err(|e| format!("extent `{extent}`: {e}"))?;
+    let &[west, south, east, north] = v.as_slice() else {
+        return Err(format!("extent `{extent}`: expected west,south,east,north"));
+    };
+    #[allow(clippy::cast_possible_truncation, reason = "whole degrees")]
+    let deg = |x: f64| x as i32;
+    Ok(format!(
+        "{},{},{},{}",
+        deg(west.floor()),
+        deg(south.floor()),
+        deg(east.ceil()) - 1,
+        deg(north.ceil()) - 1
+    ))
+}
+
+/// The `dem` stage: the recipe's DEM tileset as a DEM section over the tiles of its extent,
+/// when the build may read it; its key.
+fn dem_stage(
+    root: &Path,
+    recipe: &Recipe,
+    lock: &Lock,
+    lite: bool,
+    r: &mut Runner,
+) -> Result<Option<String>, String> {
+    let Some(id) = &recipe.dem else {
+        return Ok(None);
+    };
+    if lite && !build::LITE.contains(&lock.get(id)?.licence_class.as_str()) {
+        return Ok(None);
+    }
+    let extent = recipe
+        .extent
+        .as_deref()
+        .ok_or("a DEM needs an extent in build.yaml")?;
+    let bx = tile_box(extent)?;
+    let k = key(&[b"dem", CODE_DEM, &pinned(lock, &[id])?, bx.as_bytes()]);
+    let dir = root.join("data/build/dem-section").join(id);
+    r.step(&format!("dem {id}"), (&dir, ".key", None), &k, || {
+        dem::section::run(root, &[id.clone(), bx.clone()])
+    })?;
+    Ok(Some(k))
+}
+
 /// `forge make <cc> …`.
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
@@ -416,6 +473,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let core_key = core_stages(root, &recipe, &lock, &ck, &sources, lite, &mut r)?;
 
     let tk = topology_stage(root, &recipe.admin, &lock, &mut r)?;
+    let dem_key = dem_stage(root, &recipe, &lock, lite, &mut r)?;
 
     // build: the conflation (and core), the topology, the admin and timezone sources, the
     // postal and naming inputs, the arguments, the ID registry and the signing seed.
@@ -428,6 +486,10 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     if let Some(tz) = &recipe.timezones {
         build_args.extend(["--tz".to_string(), tz.clone()]);
     }
+    // Passed in the lite build too, whose licence gate then reports it as not read.
+    if let Some(d) = &recipe.dem {
+        build_args.extend(["--dem".to_string(), d.clone()]);
+    }
     build_args.extend(sources.iter().cloned());
     let mut inputs: Vec<&str> = vec![recipe.admin.as_str()];
     inputs.extend(recipe.timezones.as_deref());
@@ -438,6 +500,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         ck.as_bytes(),
         core_key.as_ref().map_or(&b""[..], |k| k.1.as_bytes()),
         tk.as_bytes(),
+        dem_key.as_deref().unwrap_or_default().as_bytes(),
         &pinned(&lock, &inputs)?,
         &profile,
         &postal_inputs(&country, &lock)?,
@@ -472,9 +535,17 @@ fn first_line(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{key, stage};
+    use super::{key, stage, tile_box};
     use std::cell::Cell;
     use std::fs;
+
+    #[test]
+    fn a_dem_box_takes_the_tiles_of_the_extent_corners() {
+        assert_eq!(tile_box("80.0,26.3,88.25,30.5"), Ok("80,26,88,30".into()));
+        assert_eq!(tile_box("80,26,88,30"), Ok("80,26,87,29".into()));
+        assert_eq!(tile_box("-1.5,-0.5,0.5,1"), Ok("-2,-1,0,0".into()));
+        assert!(tile_box("80,26,88").is_err());
+    }
 
     #[test]
     fn stages_skip_on_their_key_and_resume_after_a_failure() {
