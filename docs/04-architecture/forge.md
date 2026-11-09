@@ -417,6 +417,8 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   the built places. Each is retired, applied or stale by its guard and listed in
   `corrections-<build>.tsv`; G-corr fails a build on an old stale one.
   `forge correction-guard <source> <record> <field>` prints a guard.
+- **Former units (D-118).** A stated link joins a settlement and a former admin unit after
+  the model (shared name key, within 10 km); former units rank below settlements in search.
 - **Same place (D-116).** Same-name settlements and localities within 100 m after the core
   are merged into the one with more records; `merged-<build>.tsv` lists each merge.
 - **Admin records (D-110).** A cluster of admin records only (GeoNames `A.*`) links to the

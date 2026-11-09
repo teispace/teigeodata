@@ -218,6 +218,18 @@ pub(crate) struct Point {
     pub(crate) kind: String,
     pub(crate) lon: i32,
     pub(crate) lat: i32,
+    /// An admin unit that no longer exists: a historical class (`GeoNames` `ADM<n>H`,
+    /// `ADMDH`) or a dissolution date (Wikidata P576).
+    pub(crate) former: bool,
+}
+
+/// Whether an admin record names a unit that no longer exists (see [`Point::former`]).
+pub(crate) fn is_former(kind: &str, class: &str, dissolved: bool) -> bool {
+    kind == "admin"
+        && (dissolved
+            || class
+                .strip_prefix("A.ADM")
+                .is_some_and(|c| c.ends_with('H')))
 }
 
 /// Reads a Parquet table batch by batch, calling `f` on each.
@@ -255,13 +267,22 @@ pub(crate) fn read_points(path: &Path) -> Result<Vec<Point>, String> {
         let kinds = column::<StringArray>(b, "kind")?;
         let lat = column::<Int32Array>(b, "lat_e7")?;
         let lon = column::<Int32Array>(b, "lon_e7")?;
+        let classes = column::<StringArray>(b, "class")?;
+        let dissolved = column::<StringArray>(b, "dissolved")?;
         for i in 0..b.num_rows() {
             if lat.is_valid(i) && lon.is_valid(i) {
+                let class = if classes.is_valid(i) {
+                    classes.value(i)
+                } else {
+                    ""
+                };
+                let kind = kinds.value(i);
                 out.push(Point {
                     id: ids.value(i).to_string(),
-                    kind: kinds.value(i).to_string(),
+                    kind: kind.to_string(),
                     lon: lon.value(i),
                     lat: lat.value(i),
+                    former: is_former(kind, class, dissolved.is_valid(i)),
                 });
             }
         }

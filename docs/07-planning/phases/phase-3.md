@@ -125,8 +125,11 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   cores come within 100 m). Same-name settlements within 100 m after the core are merged:
   50 in Nepal main, listed in `merged-<build>.tsv`. G-conf (stated-link recall and precision)
   moves to the CI gates in 3.7
+- [x] Former units: stated links join a settlement and its former unit; former units rank
+  below settlements (D-118): 2,856 twins merged, golden recall@1 0.801, pass 0.887
 - [ ] Rank a town over its same-name twins (Damak's two GeoNames records 0.8 km apart; a
-  municipality and its seat town): about 20 golden misses rank the wanted place second
+  municipality and its seat town): the golden misses that rank the wanted place second.
+  Find the queries with `S3_MISSES=first` on `pack-eval`
 - [x] Corrections as data with guards (D-117): five ops, retire/apply/stale per build,
   G-corr in the build, `forge correction-guard`, schema checked by `check-data`; Nepal's first
   4 (Newa-script names, Q20588832 same as Patan), unreviewed until the maintainer signs them;
@@ -169,3 +172,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | 3.4/3.6/3.7: the admin-record item closed by D-110; consensus-height review and pack attribution added | elevations merged with D-110; main packs now carry Copernicus-derived heights |
 | 2026-11-09 | 3.6: duplicate clusters measured and merged within 100 m (D-116); ranking of same-name twins its own item | most collisions are different hamlets; the golden misses are ranking |
 | 2026-11-09 | 3.6: corrections built (D-117); review and `not-same-as` their own items | the ADR's design, measured on the golden misses |
+| 2026-11-09 | 3.6: former units in conflation and ranking (D-118) | found while ranking same-name twins |

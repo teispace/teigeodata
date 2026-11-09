@@ -56,7 +56,13 @@ pub(super) struct Input<'a> {
 /// The search importance of a place, 0 to 130 as in spike S3 (D-052), from what every source
 /// has: kind, admin level and population. Provisional: ranking is calibrated on the golden set
 /// in step 3.6.
+///
+/// A former unit (D-110) ranks below every current place: a search for a name means today's
+/// place, and a former unit's population is that of a unit which no longer exists.
 fn importance(p: &Place) -> u8 {
+    if p.flags & places::FLAG_FORMER != 0 {
+        return FORMER;
+    }
     let base: u32 = match p.kind {
         PlaceKind::Country => 100,
         PlaceKind::Admin => match p.admin_level {
@@ -81,6 +87,9 @@ fn importance(p: &Place) -> u8 {
         .map_or(0, |n| ((n as f64).log10() * 5.0) as u32);
     u8::try_from((base + pop).min(255)).unwrap_or(u8::MAX)
 }
+
+/// The importance of every former unit: below a settlement with no population, above a locality.
+const FORMER: u8 = 25;
 
 fn e6(p: (i32, i32)) -> Result<Point<E6>, String> {
     Point::<E7>::from_units(p.1, p.0)

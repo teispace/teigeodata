@@ -132,8 +132,9 @@ pub(crate) fn run(root: &Path, cc: &str, sources: &[String]) -> Result<String, S
     all.dedup();
     let gammas: Vec<Gamma> = all.par_iter().map(gamma).collect();
     let kinds: Vec<&str> = pts.iter().map(|p| p.kind.as_str()).collect();
-    let full_roots = cluster(&all, &gammas, &full, &src, &kinds);
-    let eval_roots = cluster(&all, &gammas, &eval, &src, &kinds);
+    let bridges = bridges(&cross_stated, &pts, &keys);
+    let full_roots = cluster(&all, &gammas, &full, &src, &kinds, &bridges);
+    let eval_roots = cluster(&all, &gammas, &eval, &src, &kinds, &[]);
     let dir = root.join("data/build/conflate").join(sources.join("+"));
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     write_clusters(&dir, &pts, &full_roots)?;
@@ -147,6 +148,12 @@ pub(crate) fn run(root: &Path, cc: &str, sources: &[String]) -> Result<String, S
             cross_stated.len(),
             stated_ok.len(),
         ],
+    );
+    let _ = writeln!(
+        summary,
+        "Stated links between a populated place and a former admin unit with a shared name key, within {} km, joined after the model: {}.\n",
+        SILVER_MAX_M / 1000.0,
+        bridges.len()
     );
     write_model(&mut summary, &full);
     write_clusters_summary(&mut summary, sources, &src, &full_roots);
@@ -395,12 +402,36 @@ fn random_pairs(src: &[u8]) -> Vec<(u32, u32)> {
 /// Union-find over pairs at P(match) ≥ [`THRESHOLD`], by descending weight then by index (a
 /// total order, so the result is deterministic), refusing any union that would put two
 /// records of one source in a cluster. Returns each record's root.
+/// The stated links that may join a populated place (or locality) and a former admin unit:
+/// across sources, sharing a name key, within [`SILVER_MAX_M`]. Wikidata often has one item
+/// for a former unit and the settlement it was named after, typed as a settlement and linked
+/// to the `GeoNames` former unit, so the source itself states they are one entity. Without a
+/// stated link the two stay apart: a village and its former unit are different places.
+fn bridges(stated: &[(u32, u32)], pts: &[Point], keys: &[Keys]) -> Vec<(u32, u32)> {
+    let comparer = Comparer { pts, keys, stated };
+    stated
+        .iter()
+        .copied()
+        .filter(|&(a, b)| {
+            let (Some(x), Some(y)) = (pts.get(a as usize), pts.get(b as usize)) else {
+                return false;
+            };
+            let (fx, fy) = (model::family(&x.kind), model::family(&y.kind));
+            let settled_former = |s: u8, f: u8, former: bool| s == 0 && f == 1 && former;
+            (settled_former(fx, fy, y.former) || settled_former(fy, fx, x.former))
+                && haversine(x, y) <= SILVER_MAX_M
+                && comparer.gamma((a, b)).first().is_some_and(|&n| n < 3)
+        })
+        .collect()
+}
+
 fn cluster(
     pairs: &[(u32, u32)],
     gammas: &[Gamma],
     m: &Model,
     src: &[u8],
     kinds: &[&str],
+    bridges: &[(u32, u32)],
 ) -> Vec<u32> {
     let n = src.len();
     let mut edges: Vec<(f64, u32, u32)> = pairs
@@ -431,6 +462,23 @@ fn cluster(
             mask.get(rb as usize).copied().unwrap_or(0),
         );
         if ra == rb || conflict(ma, mb) {
+            continue;
+        }
+        sets.union(ra, rb);
+        let r = sets.find(ra);
+        if let Some(v) = mask.get_mut(r as usize) {
+            *v = ma | mb;
+        }
+    }
+    // A bridge may join a place and a former unit, never two records of one source. It runs
+    // after the model's edges, so no model edge crosses the kinds through it.
+    for &(a, b) in bridges {
+        let (ra, rb) = (sets.find(a), sets.find(b));
+        let (ma, mb) = (
+            mask.get(ra as usize).copied().unwrap_or(0),
+            mask.get(rb as usize).copied().unwrap_or(0),
+        );
+        if ra == rb || ma & mb & ((1u64 << 48) - 1) != 0 {
             continue;
         }
         sets.union(ra, rb);
@@ -605,5 +653,66 @@ fn evaluate(
             ratio(hit, n),
             ratio(agree, merged)
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Keys, Model, Point, bridges, cluster, hash};
+
+    fn point(id: &str, kind: &str, lat: i32, former: bool) -> Point {
+        Point {
+            id: id.into(),
+            kind: kind.into(),
+            lon: 856_000_000,
+            lat,
+            former,
+        }
+    }
+
+    fn keys(name: &str) -> Keys {
+        Keys {
+            fold: vec![hash(name)],
+            ..Keys::default()
+        }
+    }
+
+    /// No model edge passes: only bridges can join.
+    fn closed() -> Model {
+        Model {
+            m: [[1e-9; 5]; 4],
+            u: [[1.0; 5]; 4],
+            lambda: 1e-9,
+            skip: [false; 4],
+        }
+    }
+
+    #[test]
+    fn a_stated_link_joins_a_settlement_and_its_former_unit_only() {
+        // 1e-7° of latitude ≈ 1.11 cm: 22,000,000 ≈ 2.4 km, 99,000,000 ≈ 11 km.
+        let pts = vec![
+            point("wikidata:Q1", "populated_place", 271_000_000, false),
+            point("geonames:1", "admin", 271_216_000, true),
+            point("wikidata:Q2", "populated_place", 271_000_000, false),
+            point("geonames:2", "admin", 271_216_000, false), // current unit
+            point("wikidata:Q3", "populated_place", 271_000_000, false),
+            point("geonames:3", "admin", 271_990_000, true), // 11 km away
+            point("wikidata:Q4", "populated_place", 271_000_000, false),
+            point("geonames:4", "admin", 271_216_000, true), // another name
+        ];
+        let k = [
+            "atrouli", "atrouli", "bocha", "bocha", "masel", "masel", "gwadha", "hawangdi",
+        ];
+        let keys: Vec<Keys> = k.iter().map(|n| keys(n)).collect();
+        let stated = vec![(0, 1), (2, 3), (4, 5), (6, 7)];
+        assert_eq!(bridges(&stated, &pts, &keys), vec![(0, 1)]);
+        let src = [0, 1, 0, 1, 0, 1, 0, 1];
+        let kinds: Vec<&str> = pts.iter().map(|p| p.kind.as_str()).collect();
+        let roots = cluster(&[], &[], &closed(), &src, &kinds, &[(0, 1)]);
+        assert_eq!(roots[0], roots[1]);
+        assert!((2..8u32).all(|i| roots[i as usize] == i));
+        // Never two records of one source.
+        let roots = cluster(&[], &[], &closed(), &[0, 0], &kinds[..2], &[(0, 1)]);
+        assert_ne!(roots[0], roots[1]);
     }
 }
