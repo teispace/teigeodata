@@ -49,6 +49,7 @@ use teigeodata_names::{PhoneticKey, fold, script_of};
 use crate::fetch::store_path;
 use crate::geom::{GridIndex, Polygon};
 use crate::lock::Lock;
+use crate::names::{How, Namer};
 use crate::read::boundaries;
 use crate::record::{column, for_each_batch};
 
@@ -187,11 +188,13 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         Some(b) => core_points(&build, &a.sources, b)?,
         None => BTreeMap::new(),
     };
+    let namer = Namer::load(root, &a.cc, &profile.romanise)?;
     let Clustered {
         places: clustered,
         unnamed: unnamed_clusters,
         held,
-    } = cluster_places(&build, &a.sources, &sources, &units.levels, &core)?;
+        naming,
+    } = cluster_places(&build, &a.sources, &sources, &units.levels, &core, &namer)?;
     places.extend(clustered);
     if let Some(country) = country_place(&build, &sources, &profile)? {
         places.push(country);
@@ -243,6 +246,9 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     );
     let postal_notes = postal.as_ref().map_or(&[][..], |p| p.notes.as_slice());
     notes(&mut summary, held, unnamed, &skipped, postal_notes);
+    summary.push_str(&naming.line());
+    let review = out_dir.join(format!("naming-{}.tsv", a.build_name()));
+    fs::write(&review, naming.review()).map_err(|e| format!("{}: {e}", review.display()))?;
     summary.push('\n');
     summary.push_str(&report);
     fs::write(
@@ -363,6 +369,8 @@ pub(crate) struct Profile {
     /// Folded.
     pub(crate) droppable: Vec<String>,
     pub(crate) wikidata: Option<String>,
+    /// The romanisation profiles of its names (`ne-Deva`), in order.
+    pub(crate) romanise: Vec<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -373,6 +381,8 @@ struct ProfileFile {
     droppable_suffixes: Vec<Term>,
     #[serde(default)]
     wikidata: Option<String>,
+    #[serde(default)]
+    romanise: Vec<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -397,6 +407,7 @@ impl Profile {
             phonetic,
             droppable: p.droppable_suffixes.iter().map(|t| fold(&t.text)).collect(),
             wikidata: p.wikidata,
+            romanise: p.romanise,
         })
     }
 }
@@ -567,6 +578,49 @@ struct Clustered {
     unnamed: usize,
     /// Places that kept their seed point because the core point lies outside every admin unit.
     held: usize,
+    naming: Naming,
+}
+
+/// How the clustered places got their display names (names-canonical §5.2).
+#[derive(Default)]
+struct Naming {
+    /// By `names::How`: the only Latin name, a majority, a romanisation.
+    by: BTreeMap<How, usize>,
+    /// The first name that fits, for places with neither a Latin name nor a romaniser.
+    fallback: usize,
+    /// Display names the lexicon respelled.
+    rendered: usize,
+    /// Places whose display name is not their first record's name: (place key, that name,
+    /// the display name, how), for review.
+    changed: Vec<(String, String, String, &'static str)>,
+}
+
+impl Naming {
+    fn line(&self) -> String {
+        let get = |h| self.by.get(&h).copied().unwrap_or(0);
+        format!(
+            "Display names: {} the only Latin name, {} a majority of Latin names, {} romanised, {} the first name that fits; {} respelled by the lexicon.\n",
+            get(How::Latin),
+            get(How::Voted),
+            get(How::Romanised),
+            self.fallback,
+            self.rendered
+        )
+    }
+
+    /// The review file: one line per place whose display name differs from its first record's
+    /// name, sorted by place key.
+    fn review(&self) -> String {
+        let mut rows: Vec<&(String, String, String, &str)> = self.changed.iter().collect();
+        rows.sort();
+        let mut out = String::from(
+            "# Display names that differ from the first source's (names-canonical §5.2).\nplace\tsource\tdisplay\thow\n",
+        );
+        for (k, from, to, how) in rows {
+            let _ = writeln!(out, "{k}\t{from}\t{to}\t{how}");
+        }
+        out
+    }
 }
 
 fn cluster_places(
@@ -575,6 +629,7 @@ fn cluster_places(
     read: &[String],
     levels: &[Level],
     core: &BTreeMap<String, (i32, i32)>,
+    display: &Namer,
 ) -> Result<Clustered, String> {
     let mut records: Vec<BTreeMap<String, Rec>> = Vec::new();
     let mut names: Vec<BTreeMap<String, Vec<PlaceName>>> = Vec::new();
@@ -603,6 +658,7 @@ fn cluster_places(
         Ok(())
     })?;
     let (mut out, mut unnamed, mut held) = (Vec::new(), 0_usize, 0_usize);
+    let mut naming = Naming::default();
     for (cluster, mut members) in clusters {
         members.sort();
         let recs: Vec<(&Rec, &str, usize)> = members
@@ -632,35 +688,10 @@ fn cluster_places(
             }
             None => point,
         };
-        let mut rest: BTreeSet<PlaceName> = BTreeSet::new();
-        for (_, id, s) in &recs {
-            for n in names.get(*s).and_then(|m| m.get(*id)).into_iter().flatten() {
-                rest.insert(n.clone());
-            }
-        }
-        // The canonical name: the first record's name, in source priority, that can be
-        // stored; else the first of the other names that can.
-        let Some(canonical) = recs
-            .iter()
-            .map(|(r, _, _)| r.name.as_str())
-            .chain(rest.iter().map(|n| n.text.as_str()))
-            .find(|n| pack::fits(n))
-            .map(str::to_string)
-        else {
+        let Some(all) = place_names(&cluster, &recs, &names, display, &mut naming) else {
             unnamed += 1;
             continue;
         };
-        let mut all: Vec<PlaceName> = vec![PlaceName {
-            text: canonical.clone(),
-            lang: None,
-            kind: None,
-        }];
-        let mut seen: BTreeSet<String> = BTreeSet::from([canonical]);
-        for n in rest {
-            if seen.insert(n.text.clone()) {
-                all.push(n);
-            }
-        }
         out.push(Place {
             key: cluster,
             kind,
@@ -676,7 +707,89 @@ fn cluster_places(
         places: out,
         unnamed,
         held,
+        naming,
     })
+}
+
+/// A clustered place's names, its display name first (names-canonical §5.2); `None` when no
+/// name can be stored. `recs` are its records in source priority with their source index.
+fn place_names(
+    cluster: &str,
+    recs: &[(&Rec, &str, usize)],
+    names: &[BTreeMap<String, Vec<PlaceName>>],
+    display: &Namer,
+    naming: &mut Naming,
+) -> Option<Vec<PlaceName>> {
+    let mut rest: BTreeSet<PlaceName> = BTreeSet::new();
+    // Each record's candidates for the display name: its primary name, then its names
+    // with no language or in English that are not historical or alternates.
+    let mut candidates: Vec<Vec<&str>> = Vec::with_capacity(recs.len());
+    for (r, id, s) in recs {
+        let own = names.get(*s).and_then(|m| m.get(*id));
+        let mut c = vec![r.name.as_str()];
+        for n in own.into_iter().flatten() {
+            rest.insert(n.clone());
+            if n.lang.as_deref().is_none_or(|l| l == "en")
+                && matches!(n.kind, None | Some(NameType::Official))
+            {
+                c.push(n.text.as_str());
+            }
+        }
+        candidates.push(c);
+        // The source's own spelling stays a name of the place.
+        if !r.name.is_empty() {
+            rest.insert(PlaceName {
+                text: r.name.clone(),
+                lang: None,
+                kind: None,
+            });
+        }
+    }
+    // The display name (names-canonical §5.2); else the first record's name, in source
+    // priority, that can be stored; else the first of the other names that can.
+    let chosen = display.choose(&candidates, pack::fits);
+    let canonical = match &chosen {
+        Some(c) => {
+            *naming.by.entry(c.how).or_default() += 1;
+            naming.rendered += usize::from(c.rendered);
+            let first = recs.first().map_or("", |(r, _, _)| r.name.as_str());
+            if c.text != first {
+                let how = match (c.how, c.rendered) {
+                    (How::Romanised, _) => "romanised",
+                    (How::Voted, true) => "majority, respelled",
+                    (How::Voted, false) => "majority",
+                    (How::Latin, true) => "latin, respelled",
+                    (How::Latin, false) => "latin",
+                };
+                naming
+                    .changed
+                    .push((cluster.to_string(), first.to_string(), c.text.clone(), how));
+            }
+            Some(c.text.clone())
+        }
+        None => recs
+            .iter()
+            .map(|(r, _, _)| r.name.as_str())
+            .chain(rest.iter().map(|n| n.text.as_str()))
+            .find(|n| pack::fits(n))
+            .map(|n| {
+                naming.fallback += 1;
+                n.to_string()
+            }),
+    };
+    let canonical = canonical?;
+    let mut all: Vec<PlaceName> = vec![PlaceName {
+        text: canonical.clone(),
+        lang: None,
+        kind: None,
+    }];
+    let mut seen: BTreeSet<String> = BTreeSet::from([canonical]);
+    for n in rest {
+        if seen.insert(n.text.clone()) {
+            all.push(n);
+        }
+    }
+    Some(all)
 }
 
 /// The country, from the record of its Wikidata item, when a source has it.

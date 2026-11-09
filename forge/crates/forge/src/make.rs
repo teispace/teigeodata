@@ -181,6 +181,30 @@ fn postal_inputs(country: &Path, lock: &Lock) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+/// The naming inputs of a build: the country's lexicon and each romanisation profile its
+/// `profile.yaml` lists (names-canonical §5.2).
+fn names_inputs(root: &Path, country: &Path) -> Result<Vec<u8>, String> {
+    #[derive(Deserialize)]
+    struct File {
+        #[serde(default)]
+        romanise: Vec<String>,
+    }
+    let mut out = blake3::hash(&read_or_empty(&country.join("lexicon.yaml"))?)
+        .as_bytes()
+        .to_vec();
+    let text = String::from_utf8_lossy(&read_or_empty(&country.join("profile.yaml"))?).into_owned();
+    if text.is_empty() {
+        return Ok(out);
+    }
+    let file: File = serde_saphyr::from_str(&text).map_err(|e| format!("profile.yaml: {e}"))?;
+    for id in &file.romanise {
+        let p = root.join("data/romanise").join(format!("{id}.yaml"));
+        out.extend_from_slice(id.as_bytes());
+        out.extend_from_slice(blake3::hash(&read_or_empty(&p)?).as_bytes());
+    }
+    Ok(out)
+}
+
 fn read_or_empty(path: &Path) -> Result<Vec<u8>, String> {
     match fs::read(path) {
         Ok(b) => Ok(b),
@@ -391,7 +415,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let tk = topology_stage(root, &recipe.admin, &lock, code, &mut r)?;
 
     // build: the conflation (and core), the topology, the admin and timezone sources, the
-    // postal inputs, the arguments, the ID registry and the signing seed.
+    // postal and naming inputs, the arguments, the ID registry and the signing seed.
     let mut build_args: Vec<String> = vec![cc.clone(), "--topology".to_string()];
     build_args.extend(pass.iter().cloned());
     if let Some((run, _)) = &core_key {
@@ -414,6 +438,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         &pinned(&lock, &inputs)?,
         &profile,
         &postal_inputs(&country, &lock)?,
+        &names_inputs(root, &country)?,
         build_args.join("\0").as_bytes(),
         &file("--ids")?,
         blake3::hash(&file("--key")?).as_bytes(),

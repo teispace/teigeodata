@@ -44,6 +44,7 @@ mod labels;
 mod links;
 mod lock;
 mod make;
+mod names;
 mod num;
 mod pip;
 mod read;
@@ -159,6 +160,10 @@ fn stage(root: &Path, args: &[String]) -> Option<Result<String, String>> {
         "conflate" => {
             Err("usage: forge conflate <cc> <points-source> <points-source> [...]".into())
         }
+        "romanise" => match (args.get(1), args.get(2)) {
+            (Some(cc), Some(id)) => names::run(root, cc, id),
+            _ => Err("usage: forge romanise <cc> <lang>-<Script> < names.txt".into()),
+        },
         "aliases" => match (args.get(1), args.get(2), args.get(3)) {
             (Some(cc), Some(anchor), Some(run)) => aliases::run(root, cc, anchor, run),
             _ => Err("usage: forge aliases <cc> <anchor-source> <source+source+...>".into()),
