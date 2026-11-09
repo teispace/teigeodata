@@ -114,7 +114,12 @@ pub fn score(
         };
         if first.is_none_or(|r| r >= limit) {
             let got: Vec<String> = res.iter().take(3).map(|&g| label(g)).collect();
-            let want = grade.keys().next().map_or(String::new(), |&g| label(g));
+            // The best-graded expected row (the first of equals).
+            let best = grade
+                .iter()
+                .max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0)))
+                .map(|(&g, _)| g);
+            let want = best.map_or(String::new(), &label);
             s.misses.entry(q.class.clone()).or_default().push(format!(
                 "{} {:?} want {want} got {got:?} (rank {:?})",
                 q.id,

@@ -377,9 +377,13 @@ fn run(args: &[String]) -> Result<(), String> {
     // spike's: the gate of what users get.
     let product = std::env::var_os("S3_ENGINE").is_some_and(|v| v == "product");
     let real = product_search(pack_path)?;
+    if let Some(qs) = std::env::var_os("S3_EXPLAIN") {
+        explain(&qs.to_string_lossy(), &real, &recs);
+        return Ok(());
+    }
     let search_with = |q: &str| {
         if product {
-            real(q)
+            real(q).into_iter().map(|h| h.0).collect()
         } else {
             engine.search(q, 10)
         }
@@ -439,8 +443,22 @@ fn print_gaps(x: &Expectations<'_>) {
     }
 }
 
-/// The product's search (`teigeodata-engine`) on the pack: the best 10 rows of a query.
-fn product_search(pack_path: &str) -> Result<impl Fn(&str) -> Vec<usize>, String> {
+/// `S3_EXPLAIN="q1|q2"`: the product's hits for each query, with their scores.
+fn explain(queries: &str, real: impl Fn(&str) -> Vec<(usize, i32)>, recs: &[Rec]) {
+    for q in queries.split('|') {
+        println!("{q:?}");
+        for (row, score) in real(q) {
+            let l = recs.get(row).map_or(String::new(), |r| {
+                format!("{} [{}] ({})", r.name, r.district, r.key)
+            });
+            println!("  {score:>5} {l}");
+        }
+    }
+}
+
+/// The product's search (`teigeodata-engine`) on the pack: the best 10 rows of a query, with
+/// their scores.
+fn product_search(pack_path: &str) -> Result<impl Fn(&str) -> Vec<(usize, i32)>, String> {
     let layer = teigeodata_engine::Layer::open(
         std::path::Path::new(pack_path),
         teigeodata_engine::LayerOptions::default(),
@@ -452,13 +470,15 @@ fn product_search(pack_path: &str) -> Result<impl Fn(&str) -> Vec<usize>, String
         teigeodata_engine::Scratch::default(),
         Vec::<teigeodata_engine::Hit>::new(),
     ));
-    Ok(move |q: &str| -> Vec<usize> {
+    Ok(move |q: &str| -> Vec<(usize, i32)> {
         let mut guard = scratch.borrow_mut();
         let (s, hits) = &mut *guard;
         if real.search(q, 10, s, hits).is_err() {
             return Vec::new();
         }
-        hits.iter().map(|h| h.place.row as usize).collect()
+        hits.iter()
+            .map(|h| (h.place.row as usize, h.score))
+            .collect()
     })
 }
 
