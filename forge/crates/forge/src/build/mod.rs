@@ -42,6 +42,7 @@ pub(crate) mod geometry;
 mod ids;
 mod naming;
 mod pack;
+mod population;
 mod postal;
 mod sources;
 mod units;
@@ -93,17 +94,19 @@ pub(crate) struct Args {
     pub(crate) topology: bool,
     /// The DEM tileset whose `dem-section` gives place elevations (D-111).
     pub(crate) dem: Option<String>,
+    /// The population grid of admin units' modelled population (D-123).
+    pub(crate) population: Option<String>,
     pub(crate) sources: Vec<String>,
 }
 
 impl Args {
     pub(crate) fn parse(args: &[String]) -> Result<Self, String> {
-        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--topology] [--dem <tileset>] <points-source> <points-source> [...]";
+        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--topology] [--dem <tileset>] [--population <grid>] <points-source> <points-source> [...]";
         let mut it = args.iter();
         let cc = it.next().ok_or(usage)?.clone();
         let (mut release, mut admin, mut tz, mut key, mut ids, mut core, mut lite) =
             (None, None, None, None, None, None, false);
-        let (mut topology, mut dem) = (false, None);
+        let (mut topology, mut dem, mut population) = (false, None, None);
         let mut sources = Vec::new();
         while let Some(a) = it.next() {
             let mut value = || it.next().cloned().ok_or(usage);
@@ -115,6 +118,7 @@ impl Args {
                 "--ids" => ids = Some(value()?),
                 "--core" => core = Some(value()?),
                 "--dem" => dem = Some(value()?),
+                "--population" => population = Some(value()?),
                 "--lite" => lite = true,
                 "--topology" => topology = true,
                 s if s.starts_with("--") => return Err(format!("unknown flag `{s}`; {usage}")),
@@ -135,6 +139,7 @@ impl Args {
             core,
             topology,
             dem,
+            population,
             sources,
         })
     }
@@ -184,6 +189,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         tz,
         postal,
         dem,
+        population,
         skipped,
     } = gate(root, &a, &lock)?;
 
@@ -221,6 +227,9 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         places.push(country);
     }
     admin.added = link_admins(&mut places, std::mem::take(&mut admin.links));
+    let coverage = units.coverage.ok_or("the boundary source has no units")?;
+    let grid = population.map(|id| lock.path(root, &id)).transpose()?;
+    let modelled = population::run(grid.as_slice(), &units.levels, coverage, &mut places)?;
     let out_dir = build.join("pack").join(&a.cc);
     fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
     let who = (
@@ -230,7 +239,6 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         a.lite,
     );
     let corrected = corrections::run(root, who, &sources, &mut places, &units.levels, &out_dir)?;
-    let coverage = units.coverage.ok_or("the boundary source has no units")?;
     let zones = tz.as_deref().map_or_else(
         || Ok(Zones::default()),
         |id| zone_places(root, &lock, id, coverage),
@@ -263,6 +271,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let postal_notes = postal.as_ref().map_or(&[][..], |p| p.notes.as_slice());
     notes(&mut summary, held, unnamed, &skipped, postal_notes);
     summary.push_str(&naming.line());
+    summary.push_str(&modelled.report);
     summary.push_str(&admin.line());
     summary.push_str(&dedupe::report(&merged, &out_dir, a.build_name())?);
     summary.push_str(&corrected);
@@ -270,6 +279,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         summary.push_str(&e.summary(&build, &sources, &places)?);
     }
     naming.write(&out_dir, a.build_name())?;
+    modelled.write(&out_dir, a.build_name())?;
     finish(summary, &report, (root, &out_dir, &file), a.build_name(), t)
 }
 
@@ -330,6 +340,7 @@ struct Gated {
     tz: Option<String>,
     postal: Option<postal::Postal>,
     dem: Option<String>,
+    population: Option<String>,
     /// The sources not read, with their licence class.
     skipped: Vec<String>,
 }
@@ -365,11 +376,16 @@ fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
         Some(id) if allowed(id)? => Some(id.clone()),
         _ => None,
     };
+    let population = match &a.population {
+        Some(id) if allowed(id)? => Some(id.clone()),
+        _ => None,
+    };
     Ok(Gated {
         sources,
         tz,
         postal,
         dem,
+        population,
         skipped,
     })
 }

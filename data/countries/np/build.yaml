@@ -19,6 +19,10 @@ extent: "80.0,26.3,88.25,30.5"
 # at each place's final point. Copernicus terms are main build only (D-031); the lite build
 # reads none yet, so its places have no elevation.
 dem: copernicus-glo30-np
+# The population grid of admin units' modelled population (D-123): WorldPop Global2 2025,
+# summed over each unit; it replaces a linked record's count off by more than 1.5×. Main build
+# only until its inputs are confirmed free of ODbL data (ADR-0030).
+population: worldpop-np
 # Building sources for the settlement core (D-091); the lite build reads only those its gate
 # allows (Microsoft CDLA-Permissive 2.0, Google CC BY 4.0).
 buildings:

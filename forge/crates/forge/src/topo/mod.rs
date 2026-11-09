@@ -40,7 +40,6 @@ use teigeodata_core::{E7, Point, hilbert};
 use teigeodata_format::arcs::{self as arcs_section, ArcColumns};
 
 use self::arcs::{Parts, Ref, V, ring_points};
-use crate::fetch::store_path;
 use crate::lock::Lock;
 use crate::read::boundaries;
 
@@ -215,7 +214,7 @@ const fn f(n: usize) -> f64 {
 /// `forge topology <boundary-source>`.
 pub(crate) fn run(root: &Path, source: &str) -> Result<String, String> {
     let lock = Lock::read(&root.join("data/sources.lock"))?;
-    let units = read_units(&store_path(root, lock.get(source)?))?;
+    let units = read_units(&lock.path(root, source)?)?;
     stage(root, source, &units)
 }
 

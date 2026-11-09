@@ -26,6 +26,9 @@ struct Recipe {
     /// The DEM tileset of place elevations (D-111).
     #[serde(default)]
     dem: Option<String>,
+    /// The population grid of admin units' modelled population (D-123).
+    #[serde(default)]
+    population: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -77,6 +80,7 @@ pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
             .map(|b| ("buildings source", b.source.as_str())),
     );
     named.extend(r.dem.iter().map(|d| ("DEM tileset", d.as_str())));
+    named.extend(r.population.iter().map(|p| ("population grid", p.as_str())));
     for (what, id) in named {
         if !pinned.contains(id) {
             out.push(format!("{what} `{id}` is not pinned in data/sources.lock"));

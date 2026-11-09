@@ -254,3 +254,19 @@ licence = "CC-BY-4.0 (chosen of the CC BY 4.0 / ODbL dual licence); cite Sirko e
 licence_class = "cc-by"
 countries = ["NP"]
 used_by = "phase 3 step 3.2 (settlement core, D-091)"
+
+[[source]]
+id = "worldpop-np"
+title = "WorldPop Global2 constrained population 2025, 100 m (3 arc-seconds), Nepal"
+kind = "http"
+url = "https://data.worldpop.org/GIS/Population/Global_2015_2030/R2025A/2025/NPL/v1/100m/constrained/npl_pop_2025_CN_100m_R2025A_v1.tif"
+version = "R2025A v1 (alpha release, 2025-09), epoch 2025; Float32 BigTIFF, LZW, no-data -99999"
+retrieved = "2026-11-09"
+sha256 = "b7b581e181df5e2f84b2e20d3455429393829395619a9600e45c6907674a0639"
+size = 32003033
+licence = "CC-BY-4.0; cite WorldPop (www.worldpop.org), University of Southampton, Global2 R2025A, doi:10.5258/SOTON/WP00839"
+# CC BY itself, but its covariates may include OpenStreetMap (unconfirmed): main build only until
+# the inputs are confirmed free of ODbL data (ADR-0030).
+licence_class = "odbl"
+countries = ["NP"]
+used_by = "modelled population of admin units (D-123)"

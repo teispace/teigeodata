@@ -9,7 +9,6 @@ mod wikidata;
 use std::path::Path;
 use std::time::Instant;
 
-use crate::fetch::store_path;
 use crate::lock::Lock;
 use crate::record::Output;
 
@@ -20,7 +19,7 @@ pub(crate) fn run(root: &Path, reader: &str, ids: &[String]) -> Result<String, S
     let first = ids.first().ok_or("name at least one source")?;
     let main = lock.get(first)?;
     let path_of = |id: &str| -> Result<std::path::PathBuf, String> {
-        let p = store_path(root, lock.get(id)?);
+        let p = lock.path(root, id)?;
         if p.is_file() {
             Ok(p)
         } else {

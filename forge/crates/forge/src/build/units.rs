@@ -7,7 +7,6 @@ use super::naming::Naming;
 use super::sources::read_names;
 use super::sources::read_records;
 use crate::aliases::rules::{Dropped, Rules};
-use crate::fetch::store_path;
 use crate::geom::GridIndex;
 use crate::geom::Polygon;
 use crate::lock::Lock;
@@ -53,7 +52,7 @@ impl Level {
 pub(super) const CELL_E7: i32 = 1_000_000;
 
 pub(super) fn admin_places(root: &Path, lock: &Lock, source: &str) -> Result<Units, String> {
-    let zip = store_path(root, lock.get(source)?);
+    let zip = lock.path(root, source)?;
     let mut numbers = boundaries::levels(&zip)?;
     numbers.sort_unstable();
     let mut places = Vec::new();

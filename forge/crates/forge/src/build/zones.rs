@@ -2,7 +2,6 @@
 
 use super::Place;
 use super::PlaceName;
-use crate::fetch::store_path;
 use crate::geom::Polygon;
 use crate::lock::Lock;
 use std::fs;
@@ -52,7 +51,7 @@ pub(super) fn zone_places(
     coverage: (i32, i32, i32, i32),
 ) -> Result<Zones, String> {
     use std::io::Read as _;
-    let zip_path = store_path(root, lock.get(source)?);
+    let zip_path = lock.path(root, source)?;
     let file = fs::File::open(&zip_path).map_err(|e| format!("{}: {e}", zip_path.display()))?;
     let mut zip = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
     let name = zip

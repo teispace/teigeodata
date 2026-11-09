@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
@@ -47,6 +47,11 @@ impl Lock {
             .iter()
             .find(|s| s.id == id)
             .ok_or_else(|| format!("no source `{id}` in data/sources.lock"))
+    }
+
+    /// Where source `id`'s pinned file is stored.
+    pub(crate) fn path(&self, root: &Path, id: &str) -> Result<PathBuf, String> {
+        self.get(id).map(|s| crate::fetch::store_path(root, s))
     }
 }
 

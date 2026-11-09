@@ -48,6 +48,7 @@ mod make;
 mod names;
 mod num;
 mod pip;
+mod raster;
 mod read;
 mod record;
 mod sliderule;

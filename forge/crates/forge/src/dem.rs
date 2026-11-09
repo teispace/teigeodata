@@ -4,9 +4,7 @@
 //! disagreement alone costs: the error a wrong point puts into a DEM-sampled elevation.
 //!
 //! Tiles are decoded once each, [`PARALLEL`] at a time, so memory stays bounded at any extent.
-//! Sampling is bilinear between pixel centres. The grid comes from the `GeoTIFF` tags
-//! (`ModelPixelScale`, `ModelTiepoint` and the `GeoKey` raster type, so `PixelIsPoint` tiles
-//! such as Copernicus are not shifted by half a pixel). Slope uses Horn's 3×3 method in metres.
+//! Sampling is bilinear between pixel centres, on the grid of [`crate::raster`]. Slope uses Horn's 3×3 method in metres.
 //! Heights are compared as stated: geoid differences between sources (EGM96 and EGM2008) are
 //! not corrected here.
 //!
@@ -15,16 +13,14 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::fs::{self, File};
-use std::io::BufReader;
+use std::fs;
 use std::path::Path;
 use std::time::Instant;
 
 use arrow_array::{Array, Float32Array, Int32Array, StringArray};
 use arrow_schema::{DataType, Field};
 use rayon::prelude::*;
-use tiff::decoder::{Decoder, DecodingResult};
-use tiff::tags::Tag;
+use tiff::decoder::DecodingResult;
 
 pub(crate) mod reference;
 pub(crate) mod section;
@@ -54,31 +50,7 @@ pub(crate) struct Grid {
 impl Grid {
     pub(crate) fn open(path: &Path) -> Result<Self, String> {
         let err = |e: tiff::TiffError| format!("{}: {e}", path.display());
-        let mut d = Decoder::new(BufReader::new(File::open(path).map_err(|e| e.to_string())?))
-            .map_err(err)?;
-        let (w, h) = d.dimensions().map_err(err)?;
-        let scale = d.get_tag_f64_vec(Tag::ModelPixelScaleTag).map_err(err)?;
-        let tie = d.get_tag_f64_vec(Tag::ModelTiepointTag).map_err(err)?;
-        let keys = d
-            .get_tag_u16_vec(Tag::GeoKeyDirectoryTag)
-            .unwrap_or_default();
-        let (Some(&dx), Some(&dy), Some(&i0), Some(&j0), Some(&x0), Some(&y0)) = (
-            scale.first(),
-            scale.get(1),
-            tie.first(),
-            tie.get(1),
-            tie.get(3),
-            tie.get(4),
-        ) else {
-            return Err(format!("{}: missing georeferencing tags", path.display()));
-        };
-        // GeoKey 1025 (GTRasterTypeGeoKey): 1 = PixelIsArea (tie point at a pixel's corner), 2 =
-        // PixelIsPoint (at its centre). Keys are 4-tuples after a 4-short header.
-        let is_point = keys
-            .chunks(4)
-            .skip(1)
-            .any(|k| k.first() == Some(&1025) && k.get(3) == Some(&2));
-        let half = if is_point { 0.0 } else { 0.5 };
+        let (mut d, g) = crate::raster::open(path)?;
         let z = match d.read_image().map_err(err)? {
             DecodingResult::F32(v) => v,
             // Integer DEMs (SRTM, NASADEM): the no-data value is below the validity bound in `at`.
@@ -86,12 +58,12 @@ impl Grid {
             _ => return Err(format!("{}: not a Float32 or Int16 raster", path.display())),
         };
         Ok(Self {
-            lon0: x0 + (half - i0) * dx,
-            lat0: y0 - (half - j0) * dy,
-            dx,
-            dy,
-            w: usize::try_from(w).unwrap_or(0),
-            h: usize::try_from(h).unwrap_or(0),
+            lon0: g.lon0,
+            lat0: g.lat0,
+            dx: g.dx,
+            dy: g.dy,
+            w: g.w,
+            h: g.h,
             z,
         })
     }

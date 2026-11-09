@@ -61,6 +61,9 @@ struct Recipe {
     /// The DEM tileset place elevations come from (D-111).
     #[serde(default)]
     dem: Option<String>,
+    /// The population grid admin units' modelled population comes from (D-123).
+    #[serde(default)]
+    population: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -405,6 +408,21 @@ fn tile_box(extent: &str) -> Result<String, String> {
     ))
 }
 
+/// The build's arguments from the recipe: the admin source, and the timezone source, DEM and
+/// population grid when named. The DEM and grid are passed in the lite build too, whose
+/// licence gate then reports them as not read.
+fn recipe_args(recipe: &Recipe) -> Vec<String> {
+    let mut out = vec!["--admin".to_string(), recipe.admin.clone()];
+    for (flag, id) in [
+        ("--tz", &recipe.timezones),
+        ("--dem", &recipe.dem),
+        ("--population", &recipe.population),
+    ] {
+        out.extend(id.iter().flat_map(|d| [flag.to_string(), d.clone()]));
+    }
+    out
+}
+
 /// The `dem` stage: the recipe's DEM tileset as a DEM section over the tiles of its extent,
 /// when the build may read it; its key.
 fn dem_stage(
@@ -502,17 +520,16 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     if let Some((run, _)) = &core_key {
         build_args.extend(["--core".to_string(), run.clone()]);
     }
-    build_args.extend(["--admin".to_string(), recipe.admin.clone()]);
-    if let Some(tz) = &recipe.timezones {
-        build_args.extend(["--tz".to_string(), tz.clone()]);
-    }
-    // Passed in the lite build too, whose licence gate then reports it as not read.
-    if let Some(d) = &recipe.dem {
-        build_args.extend(["--dem".to_string(), d.clone()]);
-    }
+    build_args.extend(recipe_args(&recipe));
     build_args.extend(sources.iter().cloned());
     let mut inputs: Vec<&str> = vec![recipe.admin.as_str()];
-    inputs.extend(recipe.timezones.as_deref());
+    inputs.extend(
+        recipe
+            .timezones
+            .iter()
+            .chain(&recipe.population)
+            .map(String::as_str),
+    );
     let file = |name: &str| flag(name).map_or(Ok(Vec::new()), |p| read_or_empty(&root.join(p)));
     let bk = key(&[
         b"build",

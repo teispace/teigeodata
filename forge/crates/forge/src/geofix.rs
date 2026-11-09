@@ -24,7 +24,6 @@ use std::time::Instant;
 use arrow_schema::{DataType, Field};
 use rayon::prelude::*;
 
-use crate::fetch::store_path;
 use crate::lock::Lock;
 use crate::read::boundaries;
 use crate::record::{self, Point, bools, f32s, i32s, strings, write_table};
@@ -162,7 +161,7 @@ pub(crate) fn run(root: &Path, points: &str, boundary: Option<&str>) -> Result<S
     let centroids = match boundary {
         Some(b) => {
             let lock = Lock::read(&root.join("data/sources.lock"))?;
-            Some(Centroids::build(&store_path(root, lock.get(b)?))?)
+            Some(Centroids::build(&lock.path(root, b)?)?)
         }
         None => None,
     };

@@ -9,7 +9,6 @@ use std::time::Instant;
 use arrow_schema::{DataType, Field};
 use rayon::prelude::*;
 
-use crate::fetch::store_path;
 use crate::geom::GridIndex;
 use crate::lock::Lock;
 use crate::read::boundaries;
@@ -28,7 +27,7 @@ pub(crate) struct Region {
 impl Region {
     pub(crate) fn load(root: &Path, boundary: &str) -> Result<Self, String> {
         let lock = Lock::read(&root.join("data/sources.lock"))?;
-        let zip = store_path(root, lock.get(boundary)?);
+        let zip = lock.path(root, boundary)?;
         let level = boundaries::levels(&zip)?
             .into_iter()
             .max()
@@ -53,7 +52,7 @@ impl Region {
 pub(crate) fn run(root: &Path, boundary: &str, level: u8, points: &str) -> Result<String, String> {
     let t = Instant::now();
     let lock = Lock::read(&root.join("data/sources.lock"))?;
-    let units = boundaries::read(&store_path(root, lock.get(boundary)?), level)?;
+    let units = boundaries::read(&lock.path(root, boundary)?, level)?;
     let polys: Vec<_> = units.iter().map(|u| u.polygon.clone()).collect();
     let index = GridIndex::new(&polys, CELL_E7);
     let pts = record::read_points(
