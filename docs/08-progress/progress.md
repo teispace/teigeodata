@@ -45,6 +45,13 @@ updated: 2026-11-09
   world's 5.0 M GeoNames codes take 24.4 MB (+3.1% on the model), exact lookup 736 ns
   ([postal benchmark](../02-research/benches/phase-3.md#postal)). Main pack 11.0 MB. Next: 3.6
   names and corrections while the DEM download waits.
+- **3.6 in progress** (D-106): display names. 6,269 places (6.4%) showed a Devanagari name
+  although 6,026 of them had a Latin one. Now the majority Latin spelling wins after the
+  lexicon's respelling, and 175 places with only Devanagari are romanised by rule tables as
+  data (`data/romanise/ne-Deva.yaml`): 58.7% exact on 6,660 OSM name pairs, ICU 22.0%.
+  `naming-main.tsv` lists the 19,108 changed display names for review; main pack 11.2 MB,
+  identical bytes on two builds ([note](../02-research/notes/names-canonical.md)). Next: D-060's
+  alias rules inside the build, then corrections and G-corr.
 - **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
@@ -162,3 +169,4 @@ updated: 2026-11-09
 | 2026-11-08 | 3.3 done: snap rounding in the topology stage (D-103), `forge topology --geoboundaries`, India measured | 3.4: B11 DEM |
 | 2026-11-08 | 3.4: the DEM section and `forge dem-section` (D-104) | the 45-tile download (approval) |
 | 2026-11-09 | 3.5: POSTAL on place runs, Nepal codes in the main pack (D-105); CI fixes for the `no_std` build and a debug overflow | 3.6 names and corrections |
+| 2026-11-09 | 3.6: display names, the romaniser and its Nepali profile (D-106) | D-060 alias rules in the build; corrections |

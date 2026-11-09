@@ -19,12 +19,16 @@ data/countries/<cc>/        lower-case ISO 3166-1 alpha-2
                             abbreviations, droppable suffixes, source codes;
                             optional: wikidata (the country item, for per-country
                             queries), phonetic_key (an algorithm of teigeodata-names,
-                            such as indic-v0)
+                            such as indic-v0), romanise (the profiles in data/romanise/
+                            that write names with no Latin spelling, such as ne-Deva)
   build.yaml                how `forge make <cc>` builds the packs: the admin and timezone
                             sources, the points sources with their readers in priority
                             order, the extent (the country's box with a 5 km halo) and
                             the building sources of the settlement core (D-095, D-096)
-  lexicon.yaml              generic place-name terms and their canonical spellings
+  lexicon.yaml              generic place-name terms and their canonical spellings; the
+                            build respells variants in display names, but never the
+                            `not_respelled` forms (other words, such as Pura)
+  postal.yaml               postal schemes and their codes files (D-090, D-105)
   corrections/<id>.yaml     reviewed corrections (ADR-0036)
   golden-curated.yaml       hand-written search queries for the golden set
 ```
@@ -40,7 +44,11 @@ pre-commit hook.
 2. **Country page:** `docs/05-data/countries/<cc>.md`, like [Nepal](countries/np.md).
 3. **Profile:** every value needs a source. Unit-type counts and source codes are measured from
    the data, as for Nepal's COD-AB P-codes.
-4. **Lexicon:** start every term as `proposed`. Accept it only with evidence.
+4. **Lexicon:** start every term as `proposed`. Accept it only with evidence. A related form
+   that is a different word in names goes in `not_respelled`, not `variants`. If the
+   country's names are in a script with no profile in `data/romanise/`, write one
+   (schema `teigeodata/romanise/v1`) and measure it on the country's paired names
+   ([names-canonical](../02-research/notes/names-canonical.md)).
 5. **Sources:** add each source to `data/sources.lock` with its licence class
    ([ADR-0030](../03-decisions/adr/ADR-0030-source-admission.md)), then list them in
    `build.yaml`; `forge make <cc> --release <v>` builds the main pack and `--lite` the lite one

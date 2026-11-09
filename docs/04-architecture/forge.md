@@ -39,6 +39,7 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | labels (hand-labelled truth set) | **built** (3.2) | below |
 | topology (shared arcs, dissolve, levels of detail, polygons) | **built** (3.3) | below |
 | postal (codes from country data, checked against their source) | **built** (3.5), inside `build` | [below](#build-a-pack-build) |
+| names (display names, lexicon respelling, romanisation) | **built** (3.6), inside `build`; `forge romanise` for review | [below](#build-a-pack-build) |
 | the rest | Phase 3 | [phase 3](../07-planning/phases/phase-3.md) |
 
 **ID allocation (pack writer, D-075, D-094):** a country's first build allocates serials in
@@ -398,7 +399,15 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   PLACES, HIERARCHY, NAMES, SEARCH, PLACE_INDEX, the timezone REGION linked to its places
   (column 16), POSTAL when the country has a `postal.yaml`, and REDIRECTS when the registry
   has retired serials. Importance is provisional (kind, admin level, log population).
-- **Postal codes (D-105).** `data/countries/<cc>/postal.yaml` (schema `teigeodata/postal/v1`)
+- **Display names (D-106).** A settlement or locality shows the majority of its records'
+  Latin names after the lexicon's respelling (ties: no diacritics, then source order), else
+  the romanisation of its first name by a profile the country lists (`profile.yaml`
+  `romanise`), else the first name that fits. Accents and invisible format characters are
+  dropped; every source spelling stays a name. `naming-<build>.tsv` lists each place whose
+  display name differs from its first source's, for review. `forge romanise <cc>
+  <lang>-<Script>` romanises standard input line by line
+  ([note](../02-research/notes/names-canonical.md)).
+- **Postal codes (D-105). `data/countries/<cc>/postal.yaml` (schema `teigeodata/postal/v1`)
   gives each scheme's rule and the codes files. A codes file has one row per admin unit: the
   code, the unit's P-code on the build's boundary source and its number of parts (Nepal: wards).
   Each row becomes an area record of the unit's place and a part record per part (code + a
