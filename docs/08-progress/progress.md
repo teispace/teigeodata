@@ -36,8 +36,13 @@ updated: 2026-11-09
   Copernicus tiles into it. On four research tiles it equals the note's model (Terai 1.11,
   hills and mountains 2.70–2.94 bits per sample, every probe within 1 m). It decodes at
   13.6 ns per sample: 31 µs for a cold point query, 0.4 µs warm
-  ([B11](../02-research/benches/phase-3.md#b11-dem)). Next: the 45 Nepal tiles (a 1.84 GB
-  download waiting for approval), the DEM in the Nepal packs, then elevation at each place.
+  ([B11](../02-research/benches/phase-3.md#b11-dem)). All 45 Nepal tiles: 139.3 MB, 1.907
+  bits per sample (D-109). Place elevations are built (D-111): `forge make` runs the recipe's
+  DEM as a cached `dem` stage and `build` samples it at every place's consensus point into
+  PLACES column 7, checked row by row on read back. Nepal main: 96,839 of 96,847 places,
+  PLACES +129,872 B; against GeoNames' SRTM3 heights P90 130 m at the place's point, 26 m at
+  the record's own point (the consensus move, not the DEM). Lite has none (Copernicus is main
+  only). Next: the DEM section in the Nepal packs as its own component, lite elevation.
 - **3.5 built** (D-105): the POSTAL section, records in place runs with each scheme's rules
   as data. The Nepal main pack carries all 753 local-level and 6,743 ward codes (GPO table,
   main build only until Q-009), linked to their COD-AB units by a reviewed crosswalk and checked
@@ -58,8 +63,8 @@ updated: 2026-11-09
   build and 12 s of make. All 45 Copernicus tiles are stored (approved 2026-11-09).
   The golden evaluator now runs on the built pack (`pack-eval`, under 1 s). GeoNames admin
   records link to their COD-AB units, and former units stay as flagged places (D-110):
-  pass 0.754 → 0.871, recall@1 0.689 → 0.787, historical 0.068 → 0.886. Elevation at each
-  place is in progress on a branch. Next: duplicate clusters, corrections and G-corr.
+  pass 0.754 → 0.871, recall@1 0.689 → 0.787, historical 0.068 → 0.886. Place elevations are
+  built (D-111, 3.4). Next: duplicate clusters, corrections and G-corr.
 - **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
@@ -179,3 +184,4 @@ updated: 2026-11-09
 | 2026-11-09 | 3.5: POSTAL on place runs, Nepal codes in the main pack (D-105); CI fixes for the `no_std` build and a debug overflow | 3.6 names and corrections |
 | 2026-11-09 | 3.6: display names, the romaniser and its Nepali profile (D-106) | D-060 alias rules in the build; corrections |
 | 2026-11-09 | 3.6: D-060's alias rules in the build (D-107); stage keys by code and a `fast` profile (D-108); DEM tiles fetched | pack evaluator; duplicate clusters; corrections |
+| 2026-11-09 | 3.4: place elevations from the DEM at the consensus point, the `dem` stage in `forge make` (D-111) | the DEM component in the packs; lite elevation |

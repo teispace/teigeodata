@@ -86,8 +86,15 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   all probes within 1 m, 163 s
 - [ ] B11 on 2–3 tiles elsewhere, and against LERC and zstd
 - [ ] The DEM section in the Nepal packs: its own component, tiles masked to the country
-- [ ] Elevation at each place's consensus point from the DEM section into PLACES column 7
-  (D-109, the column is built); surveyed heights for summits (D-089; moved from 3.2)
+- [x] Elevation at each place's consensus point from the DEM section into PLACES column 7
+  (D-109, D-111): `forge make` runs the recipe's `dem` tileset as a stage, `build` samples it
+  at every place's final point and checks every row on read back. Nepal main: 96,839 of
+  96,847 places, PLACES +129,872 B (10.7 bits per place); against GeoNames' SRTM3 field
+  P90 130 m at the place's point, 26 m at the record's own point. Lite has none (Copernicus
+  is main only, D-031)
+- [ ] Elevation in the lite build: a NASADEM section (CC0, EGM96 heights to EGM2008, 3601 ×
+  3601 tiles that `dem-section` does not take yet), or Copernicus once Q-008 clears it
+- [ ] Surveyed heights for summits (D-089; moved from 3.2)
 - [ ] Every GeoNames admin record linked to its COD-AB unit, with its names: none reaches the
   pack today, so 94 of 512 golden queries cannot pass (pack evaluator: pass 0.754, 0.923 on
   the answerable ones)
@@ -144,3 +151,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | 3.6: display names and romanisation built (D-106); the aliases rules split into their own item | 6.4% of places showed Devanagari; the build carries every member's names without D-060's rules |
 | 2026-11-09 | 3.6: D-060's alias rules built into the build (D-107) | the build carried every member's names; S3 chose the fold exemption (recall@1 0.957 against 0.949) |
 | 2026-11-09 | 3.6: admin records linked, former units kept (D-110) | `pack-eval` showed 94 golden queries with no answer in the pack, all GeoNames admin records |
+| 2026-11-09 | 3.4: place elevations built (D-111); lite elevation and summit heights made their own items | Copernicus is main only; the lite DEM needs NASADEM in `dem-section` |

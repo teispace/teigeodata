@@ -31,7 +31,7 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | aliases | **built** (S5) | below |
 | dem | **built** (S5) | below |
 | dem-ref, geoid | **built** (S6) | below |
-| dem-section (the DEM section from a tileset) | **built** (3.4); not yet in `build` or `make` | below |
+| dem-section (the DEM section from a tileset) | **built** (3.4); run by `make` as `dem`, sampled by `build` for place elevations (D-111) | below |
 | build (pack writer, sign, read back) | **built** (3.1) | below |
 | make (every stage, content-keyed cache) | **built** (3.1) | below |
 | buildings (OSM, Microsoft, Google) | **built** (3.2) | below |
@@ -383,7 +383,7 @@ Measured on COD-AB Nepal on 2026-11-08:
 
 ## Build a pack (`build`)
 
-`forge build <cc> --release <v> --admin <boundary> [--tz <tz>] [--lite] [--key <seed-file>] [--ids <registry>] <sources…>`
+`forge build <cc> --release <v> --admin <boundary> [--tz <tz>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--dem <tileset>] <sources…>`
 writes `data/build/pack/<cc>/<cc>-places-<main|lite>.tgd`, `summary-<main|lite>.md` and the
 ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same sources:
 - **Licence gate (G-lic).** `--lite` refuses any source whose licence class is not
@@ -419,6 +419,26 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   polygon, under its successor one level up; an `ADMD` becomes a locality. The summary counts
   each outcome.
   `dropped-names-<build>.tsv` lists every dropped record or name and what it names.
+- **Elevation (D-111).** With `--dem <tileset>`, every place but a timezone area takes the
+  height of the tileset's `dem-section` (`data/build/dem-section/<tileset>/dem.tgd`) at its
+  final point (the `core` consensus point, else its first record's), bilinear through the
+  runtime reader, rounded half away from zero to whole metres above EGM2008, into PLACES
+  column 7 (D-109). A place outside the section has none. The tileset passes the licence gate
+  like any source: the Copernicus terms are main only (D-031), so the lite pack has no
+  elevations yet. The summary gives the count, min, median and max, and a QA table by place
+  kind: the absolute difference from what each of the place's source records states
+  (`elevation_m`) and from the DEM height `GeoNames` states (`dem_m`, SRTM3); stated heights
+  are never an input (D-061). The read back samples the section afresh at every row's stored
+  1e-6° point and requires the stored height within 1 m, and none for zones and points
+  outside it. Measured on Nepal main on 2026-11-09: 96,839 of 96,847 places have a height
+  (the 6 zones and 2 Wikidata items outside the box have none), 48 to 8,644 m, median
+  1,147 m; PLACES grows from 480,420 to 610,292 B (10.7 bits per place), the pack from
+  11,112,860 to 11,242,716 B; the read back finds every row within 0.55 m. Against
+  GeoNames' SRTM3 field (87,996 records) the height at the place's point is P50 27 m, P90
+  130 m off, but at the record's own point P50 7 m, P90 26 m: the gap is the move to the
+  consensus point, not the DEM. Stated `elevation_m` (446 records) is P50 21 m, P90 199 m off.
+  A lat/lon swap planted in the sampling fails the unit test (every height `None`) and the
+  read back on the real build (row 0: none stored, 4,880 m in the DEM).
 - **Postal codes (D-105). `data/countries/<cc>/postal.yaml` (schema `teigeodata/postal/v1`)
   gives each scheme's rule and the codes files. A codes file has one row per admin unit: the
   code, the unit's P-code on the build's boundary source and its number of parts (Nepal: wards).
@@ -491,8 +511,9 @@ it in `sources.lock` comes with the catalog (step 3.7).
 `forge make <cc> --release <v> [--lite] [--key <seed-file>] [--ids <registry>] [--force]` runs a
 country's stages from its recipe, `data/countries/<cc>/build.yaml` (checked by
 `cargo xtask check-data`): `read` for each points source, `conflate` over them, `buildings`
-for each building source the build may read, `core`, `topology` for the admin source, then
-`build`
+for each building source the build may read, `core`, `topology` for the admin source, `dem`
+(the recipe's `dem` tileset as a `dem-section` over the tiles holding the corners of its
+`extent`, when the build may read it; D-111), then `build`
 (D-095, [ADR-0035](../03-decisions/adr/ADR-0035-forge-architecture.md)).
 - **Keys.** A stage's key is a BLAKE3 hash of the stage name, the stage's code, its pinned
   inputs (ID, SHA-256 and size from `sources.lock`), its configuration (the profile, the
@@ -521,6 +542,11 @@ stages:
 | cold (or a new forge binary) | 10 | 32.5 s, 1.37 GB peak |
 | nothing changed | 0 | 270 ms (outputs hashed, 432 MB of building points) |
 | lite after main | 3 (its conflate, core and build; reads, buildings and topology are shared) | 15.1 s, 0.92 GB |
+
+The `dem` stage (D-111) codes the 45 Copernicus tiles once, in 210 s on a loaded machine; it
+reruns only when the tileset's pin, the extent or the DEM code changes, and its stamp hashes
+the 139 MB section in a fraction of a second. Sampling every place adds about a second to
+`build`.
 
 Before the building stages (2026-11-07): cold 7.8 s, warm 19 ms; a changed profile reran 2
 stages in 3.4 s and a hand-changed GeoNames output 1 stage in 3.1 s.
