@@ -1,0 +1,12 @@
+schema: teigeodata/correction/v1
+id: np-0003
+# Lalitpur's (Patan's) name in the Newa script (Yala); no source carries it.
+target: geonames:1282931
+op: add-name
+name: { text: "𑐫𑐮", lang: new, type: local }
+guard: { record: geonames:1282931, field: name, value_hash: a4f6969922ad16b06e5165ce866404b1dd98679273e94ecd298828fdaf642590 }
+evidence:
+  - { source: "Wikipedia, Lalitpur, Nepal, infobox native_name (accessed 2026-11-09)", url: "https://en.wikipedia.org/wiki/Lalitpur,_Nepal", licence_class: share-alike }
+created: 2026-11-09
+author: teigeodata maintainers
+review: { by: unreviewed, on: 2026-11-09 }

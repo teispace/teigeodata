@@ -1,0 +1,12 @@
+schema: teigeodata/correction/v1
+id: np-0001
+# Kathmandu's name in the Newa script (Nepal Bhasa); no source carries it.
+target: geonames:1283240
+op: add-name
+name: { text: "𑐫𑐾𑑃", lang: new, type: local }
+guard: { record: geonames:1283240, field: name, value_hash: 2d42f51b4753e9215421eb957b26a5fd1d777190dbdeb2c2a6c1b3752aa77da6 }
+evidence:
+  - { source: "Wikipedia, Kathmandu, infobox native_name (accessed 2026-11-09)", url: "https://en.wikipedia.org/wiki/Kathmandu", licence_class: share-alike }
+created: 2026-11-09
+author: teigeodata maintainers
+review: { by: unreviewed, on: 2026-11-09 }

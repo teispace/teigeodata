@@ -1,0 +1,15 @@
+schema: teigeodata/correction/v1
+id: np-0004
+# Wikidata Q20588832 (Nepal Bhasa "यल") is Patan itself: its only article describes the city
+# (second-largest of the valley; Patan Durbar Square, the Golden Temple, Mangal Bazar), with a
+# coordinate rounded to 1/60°. Apart, it takes the name Yala from Lalitpur (D-060 collision).
+target: geonames:1282931
+op: same-as
+other: wikidata:Q20588832
+guard: { record: geonames:1282931, field: name, value_hash: a4f6969922ad16b06e5165ce866404b1dd98679273e94ecd298828fdaf642590 }
+evidence:
+  - { source: "Nepal Bhasa Wikipedia, यल (accessed 2026-11-09)", url: "https://new.wikipedia.org/wiki/%E0%A4%AF%E0%A4%B2", licence_class: share-alike }
+  - { source: "Wikidata Q20588832 and Q6647 (accessed 2026-11-09)", url: "https://www.wikidata.org/wiki/Q20588832", licence_class: cc0 }
+created: 2026-11-09
+author: teigeodata maintainers
+review: { by: unreviewed, on: 2026-11-09 }

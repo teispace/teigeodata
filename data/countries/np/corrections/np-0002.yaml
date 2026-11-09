@@ -1,0 +1,12 @@
+schema: teigeodata/correction/v1
+id: np-0002
+# Bhaktapur's name in the Newa script (Khwopa); no source carries it.
+target: geonames:1283617
+op: add-name
+name: { text: "𑐏𑑂𑐰𑐥𑑅", lang: new, type: local }
+guard: { record: geonames:1283617, field: name, value_hash: bb0e3680005aef0e796e9e335a4fd8b387a624217b5a922a554e2a77ed51474c }
+evidence:
+  - { source: "Wikipedia, Bhaktapur, infobox native_name and lead (accessed 2026-11-09)", url: "https://en.wikipedia.org/wiki/Bhaktapur", licence_class: share-alike }
+created: 2026-11-09
+author: teigeodata maintainers
+review: { by: unreviewed, on: 2026-11-09 }
