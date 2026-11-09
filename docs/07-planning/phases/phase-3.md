@@ -86,7 +86,7 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   all probes within 1 m, 163 s
 - [ ] B11 on 2–3 tiles elsewhere, and against LERC and zstd
 - [ ] The DEM section in the Nepal packs: its own component, tiles masked to the country
-- [x] Elevation at each place's consensus point from the DEM section into PLACES column 7
+- [x] Elevation at each place's consensus point from the DEM section into PLACES column 7 (since D-133 its own ELEVATION section)
   (D-109, D-111): `forge make` runs the recipe's `dem` tileset as a stage, `build` samples it
   at every place's final point and checks every row on read back. Nepal main: 101,542 of
   101,550 places (with D-110's admin places), PLACES +129,872 B (10.7 bits per place) on the
