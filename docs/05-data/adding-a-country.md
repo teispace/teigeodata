@@ -29,7 +29,9 @@ data/countries/<cc>/        lower-case ISO 3166-1 alpha-2
                             build respells variants in display names, but never the
                             `not_respelled` forms (other words, such as Pura)
   postal.yaml               postal schemes and their codes files (D-090, D-105)
-  corrections/<id>.yaml     reviewed corrections (ADR-0036)
+  corrections/<id>.yaml     reviewed, guarded corrections (ADR-0036, D-117): add or
+                            remove a name, move a place, set a population, or merge
+                            two places (same-as)
   golden-curated.yaml       hand-written search queries for the golden set
 ```
 
@@ -55,4 +57,12 @@ pre-commit hook.
    ([forge](../04-architecture/forge.md#run-every-stage-make)).
 6. **Golden set:** generate the country's queries and add curated ones. A country ships only
    when its golden gate passes ([ADR-0032](../03-decisions/adr/ADR-0032-text-search.md)).
-7. **Owners:** add a CODEOWNERS line for `/data/countries/<cc>/`.
+7. **Corrections:** fix what every source gets wrong with one file per fix,
+   `corrections/<cc>-NNNN.yaml` (schema `teigeodata/correction/v1`). Target a source record
+   (`geonames:1283240`); the guard is the field the fix was written against, printed by
+   `forge correction-guard <source> <record> <name|point|population>`. Cite evidence with its
+   licence class (CLEAN_ROOM.md rule 1; the lite build skips a fix whose evidence is not
+   lite-clean). Each build writes `corrections-<build>.tsv`: applied, retired (the sources now
+   agree) or stale (the guarded value changed); a stale fix older than the previous release
+   fails the build (G-corr).
+8. **Owners:** add a CODEOWNERS line for `/data/countries/<cc>/`.

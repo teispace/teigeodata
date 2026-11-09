@@ -412,6 +412,11 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   name (fold, join or phonetic key, also of its romanisation); a lent name the anchor lacks by
   fold is dropped when it is the primary name of an admin unit, or of another place within
   30 km. `forge aliases` applies the same rules (`aliases::rules`).
+- **Corrections (ADR-0036, D-117).** `data/countries/<cc>/corrections/*.yaml`: `same-as` joins
+  clusters before naming; `add-name`, `remove-name`, `set-point` and `set-population` apply to
+  the built places. Each is retired, applied or stale by its guard and listed in
+  `corrections-<build>.tsv`; G-corr fails a build on an old stale one.
+  `forge correction-guard <source> <record> <field>` prints a guard.
 - **Same place (D-116).** Same-name settlements and localities within 100 m after the core
   are merged into the one with more records; `merged-<build>.tsv` lists each merge.
 - **Admin records (D-110).** A cluster of admin records only (GeoNames `A.*`) links to the
