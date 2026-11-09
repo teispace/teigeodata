@@ -21,14 +21,15 @@ A short status. The numbers and evidence live in each phase file and the
 | 5–8 | not started (bindings prototyped in S4, D-065 to D-068) | [roadmap](../07-planning/roadmap.md) |
 
 - **Now (Phase 3):** the Nepal main pack has 101,550 places with heights (D-111), admin
-  records linked and former units kept (D-110), golden pass 0.871 on the built pack
-  (`pack-eval`). Next: duplicate clusters with G-conf, corrections with G-corr, then 3.7
-  (gates in CI, attribution, lite, `ACCURACY.md`).
-- **In parallel (Phase 4):** the engine crate (4.1) and the seekable zstd transport (4.4) are
-  built on branches and merged when verified; they need only the format, not the Nepal data.
+  records linked (D-110), same-place merges (D-116) and the first corrections (D-117); golden
+  pass 0.879 on the built pack (`pack-eval`). Next: rank a town over its same-name twins, then
+  3.7 (gates in CI, attribution, lite, `ACCURACY.md`).
+- **In parallel (Phase 4):** the engine (4.1, D-113, D-114; Nepal timings in
+  [phase-4 benches](../02-research/benches/phase-4.md#nepal-main-pack)) and the transport
+  (4.4, D-112) are on `main`. Next: radius and cross-pack hierarchy, snapshot swap, TUF trust.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).
-- **Waiting on the maintainer:** the labelled sample (Q-005, needed for `ACCURACY.md` and M3),
+- **Waiting on the maintainer:** review of `data/countries/np/corrections/` (unreviewed), the labelled sample (Q-005, needed for `ACCURACY.md` and M3),
   the postal licence (Q-009), Copernicus for lite (Q-008).
 
 ## Session log
