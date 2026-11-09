@@ -68,7 +68,7 @@ mod write;
 use core::fmt;
 
 pub use error::Error;
-pub use manifest::{Bbox, Entries, Manifest, Tag};
+pub use manifest::{Bbox, Entries, MAX_TEXT, Manifest, Tag};
 pub use read::{Pack, Section};
 #[cfg(all(feature = "signature", feature = "write"))]
 pub use signature::signer;

@@ -329,6 +329,13 @@ impl Layer {
         self.owned.views().pack.manifest().release()
     }
 
+    /// The notices of the sources the pack was built from, one per line (D-126): show them
+    /// wherever the data is shown. `None` for a pack built before they were carried.
+    #[must_use]
+    pub fn attribution(&self) -> Option<&str> {
+        self.owned.views().pack.manifest().attribution()
+    }
+
     /// The options it was opened with.
     #[must_use]
     pub const fn options(&self) -> &LayerOptions {

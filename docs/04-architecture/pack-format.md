@@ -102,9 +102,10 @@ Tags known to format 0.1. A test fails if a tag in the code is missing here.
 | `0x0002` | `component` | as `address`: `places`, `boundary-lod1` | yes |
 | `0x0003` | `release` | as `address`, dots allowed: `2026.11.0` | yes |
 | `0x0004` | `schema` | u32: the data schema version | |
-| `0x0005` | `licence` | as `address`: `odbl` (main) or `cc-by-4.0` (lite) | |
+| `0x0005` | `licence` | as `release` (dots allowed): `odbl` (main) or `cc-by-4.0` (lite) | |
 | `0x0006` | `bbox` | 4 × i32 on the 1e-7° grid: min lat, min lon, max lat, max lon; min lon above max lon crosses the antimeridian | |
 | `0x0007` | `perspective` | as `address`: the default perspective, a country code ([ADR-0006](../03-decisions/adr/ADR-0006-perspective.md)) | |
+| `0x0008` | `attribution` | UTF-8, 1–8,192 bytes, no control character but the line feed: the notices of the sources the pack was built from, one per line (D-126), signed with the head | |
 
 Still to add, with the sections that need them: dependencies (other packs by address and hash),
 versions (tzdb, boundary and source releases), the perspectives present, the components and

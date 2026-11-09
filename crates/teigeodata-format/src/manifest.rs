@@ -26,6 +26,8 @@ pub(crate) enum Value {
     Release,
     /// A u32, little-endian.
     U32,
+    /// UTF-8 text of 1 to [`MAX_TEXT`] bytes with no control character but the line feed.
+    Text,
     /// Four i32 on the 1e-7° grid: min lat, min lon, max lat, max lon. `min lat ≤ max lat`; a
     /// min lon above the max lon means the box crosses the antimeridian.
     Bbox,
@@ -46,6 +48,9 @@ impl Tag {
     pub const BBOX: Self = Self(0x0006);
     /// The default perspective for disputed boundaries (ADR-0006): a country code.
     pub const PERSPECTIVE: Self = Self(0x0007);
+    /// The notices of the sources the pack was built from (D-031, D-126): UTF-8 lines, one
+    /// notice each, that an application shows wherever it shows the data.
+    pub const ATTRIBUTION: Self = Self(0x0008);
 
     /// The "must understand" bit.
     pub const CRITICAL: u16 = 0x8000;
@@ -78,10 +83,15 @@ pub(crate) const KNOWN: &[(Tag, &str, Value)] = &[
     (Tag::COMPONENT, "component", Value::Ident),
     (Tag::RELEASE, "release", Value::Release),
     (Tag::SCHEMA, "schema", Value::U32),
-    (Tag::LICENCE, "licence", Value::Ident),
+    (Tag::LICENCE, "licence", Value::Release),
     (Tag::BBOX, "bbox", Value::Bbox),
     (Tag::PERSPECTIVE, "perspective", Value::Ident),
+    (Tag::ATTRIBUTION, "attribution", Value::Text),
 ];
+
+/// The longest text value: half the head's 16 KiB, so the manifest keeps room for the table and
+/// the signature.
+pub const MAX_TEXT: usize = 8 * 1024;
 
 /// Tags every pack must have: they name it and derive its UUID.
 pub(crate) const REQUIRED: [Tag; 3] = [Tag::ADDRESS, Tag::COMPONENT, Tag::RELEASE];
@@ -120,6 +130,11 @@ pub(crate) fn check(tag: Tag, v: &[u8]) -> Result<(), &'static str> {
         Value::Ident => name_like(v, false),
         Value::Release => name_like(v, true),
         Value::U32 => v.len() == 4,
+        Value::Text => {
+            (1..=MAX_TEXT).contains(&v.len())
+                && core::str::from_utf8(v)
+                    .is_ok_and(|t| t.chars().all(|c| c == '\n' || !c.is_control()))
+        }
         Value::Bbox => {
             v.len() == 16 && {
                 let c = [0, 1, 2, 3].map(|i| i32_at(v, i));
@@ -141,6 +156,7 @@ pub(crate) fn check(tag: Tag, v: &[u8]) -> Result<(), &'static str> {
             Value::Ident => "the value is not 1-64 characters of a-z, 0-9 and -",
             Value::Release => "the value is not 1-64 characters of a-z, 0-9, . and -",
             Value::U32 => "the value is not 4 bytes",
+            Value::Text => "the text is not 1-8192 bytes of UTF-8 without control characters",
             Value::Bbox => "the bbox is not 16 bytes of an in-range box on the 1e-7 grid",
         })
     }
@@ -285,6 +301,12 @@ impl<'a> Manifest<'a> {
         self.text(Tag::RELEASE).unwrap_or_default()
     }
 
+    /// The sources' notices ([`Tag::ATTRIBUTION`]), if present.
+    #[must_use]
+    pub fn attribution(&self) -> Option<&'a str> {
+        self.text(Tag::ATTRIBUTION)
+    }
+
     /// A u32 value, for tags of that type.
     #[must_use]
     pub fn u32(&self, tag: Tag) -> Option<u32> {
@@ -361,8 +383,37 @@ mod tests {
                 Some(&bbox[..])
             );
             assert_eq!(m.get(Tag::PERSPECTIVE), None);
+            assert_eq!(m.attribution(), None);
             assert_eq!(m.entries().count(), 6);
         }
+        // A licence name has dots (D-126).
+        let lite = with(&[(5, b"cc-by-4.0")]);
+        assert_eq!(
+            Manifest::parse(&lite)
+                .ok()
+                .and_then(|m| m.text(Tag::LICENCE)),
+            Some("cc-by-4.0")
+        );
+        let notices = "© OpenStreetMap contributors (ODbL)\nGeoNames (CC BY 4.0)";
+        let b = with(&[(8, notices.as_bytes())]);
+        assert_eq!(
+            Manifest::parse(&b).ok().and_then(|m| m.attribution()),
+            Some(notices)
+        );
+    }
+
+    #[test]
+    fn attribution_is_bounded_text() {
+        let long = "a".repeat(super::MAX_TEXT + 1);
+        for bad in [&b""[..], b"\xff", b"tab\there", b"nul\0", long.as_bytes()] {
+            assert_eq!(
+                problem(&with(&[(8, bad)])),
+                Some("the text is not 1-8192 bytes of UTF-8 without control characters"),
+                "{bad:?}"
+            );
+        }
+        let longest = "é".repeat(super::MAX_TEXT / 2);
+        assert!(Manifest::parse(&with(&[(8, longest.as_bytes())])).is_ok());
     }
 
     #[test]
