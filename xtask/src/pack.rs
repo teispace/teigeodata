@@ -9,7 +9,8 @@ use std::fs;
 use std::path::Path;
 
 use serde::Deserialize;
-use teigeodata_format::{Pack, Tag};
+use teigeodata_core::table::Table;
+use teigeodata_format::{Encoding, Pack, Tag};
 
 use crate::sources::LITE;
 
@@ -29,10 +30,16 @@ struct Source {
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     let one = |e: String| vec![e];
     let lite = args.iter().any(|a| a == "--lite");
+    let usage = || one("usage: cargo xtask check-pack <pack.tgd> [--lite] [--dump <dir>]".into());
+    let dump = args
+        .iter()
+        .position(|a| a == "--dump")
+        .map(|i| args.get(i + 1).ok_or_else(usage))
+        .transpose()?;
     let path = args
         .iter()
-        .find(|a| !a.starts_with("--"))
-        .ok_or_else(|| one("usage: cargo xtask check-pack <pack.tgd> [--lite]".into()))?;
+        .find(|a| !a.starts_with("--") && Some(*a) != dump)
+        .ok_or_else(usage)?;
     let bytes = fs::read(path).map_err(|e| one(format!("{path}: {e}")))?;
     let pack = Pack::open_verified(&bytes).map_err(|e| one(format!("{path}: {e}")))?;
     let lock_text =
@@ -45,6 +52,27 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
             .into_iter()
             .map(|p| format!("{path}: {p}"))
             .collect());
+    }
+    if let Some(dir) = dump {
+        // Each section's stored bytes, for measuring compression and component sizes.
+        fs::create_dir_all(dir).map_err(|e| one(format!("{dir}: {e}")))?;
+        let put = |name: String, bytes: &[u8]| {
+            let file = Path::new(dir).join(name);
+            fs::write(&file, bytes).map_err(|e| one(format!("{}: {e}", file.display())))
+        };
+        for s in pack.sections() {
+            put(format!("{}.bin", s.kind()), s.bytes())?;
+            // A column table's columns too: what a field-level download would fetch.
+            if s.encoding() == Encoding::TABLE
+                && let Ok(t) = Table::parse(s.bytes())
+            {
+                for id in t.ids() {
+                    if let Some(b) = t.column_bytes(id) {
+                        put(format!("{}.col{id}.bin", s.kind()), b)?;
+                    }
+                }
+            }
+        }
     }
     let notices = m.attribution().map_or(0, |a| a.lines().count());
     Ok(format!(

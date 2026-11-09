@@ -63,18 +63,23 @@ call (ADR-0012).
   measured 2026-11-09; Nepal at 1 and 3 layers measured the same day; 10 layers and 1 GB
   still to run)
 
-### 4.1b Components: download only the data asked for (ADR-0015)
-- [ ] The forge writes one pack per component instead of one combined pack: `places` (point,
-  elevation, kind, admin level, IDs and the spatial index), `hierarchy`, `names` (NAMES and
-  SEARCH), `boundary` (ARCS, POLYGONS, the indexes, ADMIN_REGION, the overview), `tz`, `postal`;
-  each signed, with the same IDs, and checked together by the read-back
-- [ ] The engine joins the components of one address as one layer; a query that needs a
-  missing component says which one (`missing_component`), never a wrong answer
-- [ ] The download manager fetches only the components the app asks for
-- [ ] Measured on Nepal lite 2026-11-09 (`cargo xtask check-pack`): 8.8 MB in all; points
-  0.72 MB (8%), hierarchy 0.37 MB (4%), names and search 3.86 MB (44%), boundary 3.85 MB
-  (44%). Gate: a points-only download of Nepal under 1 MB, the sum of the components within
-  2% of today's one pack
+### 4.1b Components: download only the data asked for (ADR-0015, D-133)
+Research: [components](../../02-research/notes/components.md). The section is the unit; one
+signed pack per address; a client holds any subset of its sections.
+- [ ] Format: ELEVATION out of PLACES into its own section; per-place timezone and admin
+  columns (measure COMPONENTS fields against own sections); one table mapping each section
+  kind to its component and dependencies, in `teigeodata-format`
+- [ ] Forge writes them; `check-pack` prints wire bytes per component
+- [ ] Storage: head plus the installed sections (sparse file, or offsets in a compact file),
+  a sidecar of present and verified sections
+- [ ] Engine: a layer opens with any subset; a query that needs a missing component returns
+  `MissingComponent`; the metamorphic gate runs per component set
+- [ ] Sync: `components(&[...])` plans only those sections' frames; adding one later fetches
+  only its frames
+- [ ] Cargo features per component; a binary without one carries none of its readers
+- [ ] Gates: points-only Nepal at most 0.55 MB on the wire (today lat/long 447 KB, with IDs
+  and the spatial index 504 KB, with altitude 633 KB, whole pack 8.2 MB); components sum to
+  the pack
 
 ### 4.2 Baseline and locator
 - [ ] Forge: the baseline build (countries, admin1, cities above a threshold, simplified world

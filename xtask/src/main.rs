@@ -42,9 +42,10 @@ Tasks:
                     unit types, source codes), lexicon.yaml (IDs, NFC, scripts, variant
                     collisions, evidence) and golden query files; and data/sources.lock
                     (pins, licence classes, query templates).
-  check-pack <pack.tgd> [--lite]
+  check-pack <pack.tgd> [--lite] [--dump <dir>]
                     G-lic on a built pack: every section verified, the licence of its
-                    build, and in a lite pack only lite-class sources' notices (D-126).
+                    build, and in a lite pack only lite-class sources' notices (D-126);
+                    each section's size; --dump writes each section's bytes to <dir>.
   check-workspace   Check that the forge, bindings/ and the C ABI crate keep the main lint
                     table (boundary crates may only lower unsafe_code to deny).
   mirror [<id>…]    Upload the stored bytes of pinned sources (every source with a
