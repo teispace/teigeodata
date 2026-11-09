@@ -391,7 +391,13 @@ writes `data/build/pack/<cc>/<cc>-places-<main|lite>.tgd`, `summary-<main|lite>.
 ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same sources:
 - **Licence gate (G-lic).** `--lite` refuses any source whose licence class is not
   public-domain, CC0, CC BY, CC BY-IGO, ODC-By or GODL. The timezone source (tbb, ODbL) is
-  main only, so a lite pack has no timezone REGION yet.
+  main only, so a lite pack has no timezone REGION yet. The `--core` buildings run is gated
+  too: a lite build refuses a run with a source it may not read.
+- **Attribution (D-126).** Every source the gate lets the build read gives its
+  `sources.lock` `attribution` line; the pack's manifest carries them once each in reading order
+  (tag `attribution`, signed with the head) and `licence` `odbl` or `cc-by-4.0`;
+  `attribution-<build>.md` is a copy beside the pack
+  ([note](../02-research/notes/attribution.md)).
 - **Places.** The country (from its Wikidata item), the admin units of every COD-AB level
   below it (a point inside each polygon, its parent the unit of the level above), one place
   per conflated cluster (a settlement when any record is a populated place, else a locality;

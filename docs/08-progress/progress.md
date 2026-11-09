@@ -20,11 +20,11 @@ A short status. The numbers and evidence live in each phase file and the
 | 4 Engine, baseline and sync | started in parallel with Phase 3: 4.1 engine and 4.4 transport | [phase 4](../07-planning/phases/phase-4.md) |
 | 5–8 | not started (bindings prototyped in S4, D-065 to D-068) | [roadmap](../07-planning/roadmap.md) |
 
-- **Now (Phase 3):** the Nepal main pack has 101,550 places with heights (D-111), admin
-  records linked (D-110), same-place merges (D-116), the first corrections (D-117) and modelled
+- **Now (Phase 3):** the Nepal main pack has 100,358 places with heights (D-111), admin
+  records linked (D-110), same-place merges (D-116), the first corrections (D-117), modelled
   unit populations (D-123), settlement rank (D-124) and a source's duplicates joined (D-125);
-  golden on the product's search recall@1 0.859, pass 0.924. Next:
-  twins of one place in separate rows, then 3.7 (gates in CI, attribution, lite,
+  golden on the product's search recall@1 0.859, pass 0.924; every pack carries its sources'
+  notices (D-126). Next: 3.7 (gates in CI, the lite build from clean-room sources only,
   `ACCURACY.md`).
 - **In parallel (Phase 4):** the engine (4.1, D-113, D-114; Nepal timings in
   [phase-4 benches](../02-research/benches/phase-4.md#nepal-main-pack)) and the transport

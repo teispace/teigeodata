@@ -127,7 +127,7 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   moves to the CI gates in 3.7
 - [x] Former units: stated links join a settlement and its former unit; former units rank
   below settlements (D-118): 2,856 twins merged, golden recall@1 0.801, pass 0.887
-- [ ] Rank a town over its same-name twins (Damak's two GeoNames records 0.8 km apart; a
+- [x] Rank a town over its same-name twins (Damak's two GeoNames records 0.8 km apart; a
   municipality and its seat town): the golden misses that rank the wanted place second.
   Find the queries with `S3_MISSES=first` on `pack-eval`, their scores with `S3_EXPLAIN`.
   2026-11-09: the country no longer takes Palpa (D-122). The rest: municipalities have no
@@ -150,8 +150,9 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 
 ### 3.7 Gates, lite and accuracy
 - [ ] G-det, G-lic, G-topo, G-pip, G-conf, G-corr, G-budget in CI
-- [ ] Attribution in every pack (D-031): the sources' notices, including Copernicus now that
-  main packs carry its heights and WorldPop (CC BY 4.0) now that units carry its population
+- [x] Attribution in every pack (D-031, D-126): each source's notice from `sources.lock`,
+  carried in the signed manifest of every pack built from it (Copernicus and WorldPop in main);
+  `Layer::attribution()`; the API and bindings expose it with the layer's metadata (phases 5–6)
 - [ ] The lite build from clean-room sources only
 - [ ] `ACCURACY.md` for Nepal against held-out truth
 
@@ -186,3 +187,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | Ranking: the country takes no unit's name (D-122); modelled unit populations (D-123) | the twins item's misses, read with `S3_EXPLAIN` |
 | 2026-11-09 | Ranking: settlement rank from source classes (D-124) | Patan and Janakpur ranked the admin unit over the city |
 | 2026-11-09 | Conflation: a source's duplicates join (D-125) | Simikot split between a Wikidata item and its bot copy |
+| 2026-11-09 | 3.7: attribution in every pack (D-126); the ranking item closed with its leftovers recorded | the licence terms of the sources the packs now carry |
