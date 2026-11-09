@@ -88,6 +88,30 @@ fn e6(p: (i32, i32)) -> Result<Point<E6>, String> {
         .ok_or_else(|| format!("point {p:?} is off the grid"))
 }
 
+/// The PLACES section of the rows, with their elevations (D-109) in row order.
+fn places_section(
+    rows: &[&Place],
+    points: &[Point<E6>],
+    elevations: &[Option<i16>],
+) -> Result<Vec<u8>, String> {
+    let kinds: Vec<PlaceKind> = rows.iter().map(|p| p.kind).collect();
+    let levels: Vec<u8> = rows.iter().map(|p| p.admin_level).collect();
+    let flags: Vec<u32> = rows.iter().map(|p| p.flags).collect();
+    let cols = PlaceColumns {
+        points,
+        kinds: &kinds,
+        admin_levels: if levels.iter().any(|&l| l != 0) {
+            &levels
+        } else {
+            &[]
+        },
+        flags: &flags,
+        elevations,
+        ..PlaceColumns::default()
+    };
+    places::encode(&cols).map_err(|e| e.to_string())
+}
+
 pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
     let places = input.places;
     // Rows: Hilbert order of the stored (1e-6°) point, ties by key.
@@ -108,23 +132,11 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
     let n = rows.len();
 
     let points: Vec<Point<E6>> = rows.iter().map(|p| e6(p.point)).collect::<Result<_, _>>()?;
-    let kinds: Vec<PlaceKind> = rows.iter().map(|p| p.kind).collect();
-    let levels: Vec<u8> = rows.iter().map(|p| p.admin_level).collect();
-    let flags: Vec<u32> = rows.iter().map(|p| p.flags).collect();
-    let elevations = super::elevation::in_rows(input.elevation, order.iter().map(|o| o.2));
-    let cols = PlaceColumns {
-        points: &points,
-        kinds: &kinds,
-        admin_levels: if levels.iter().any(|&l| l != 0) {
-            &levels
-        } else {
-            &[]
-        },
-        flags: &flags,
-        elevations: &elevations,
-        ..PlaceColumns::default()
-    };
-    let places_body = places::encode(&cols).map_err(|e| e.to_string())?;
+    let places_body = places_section(
+        &rows,
+        &points,
+        &super::elevation::in_rows(input.elevation, order.iter().map(|o| o.2)),
+    )?;
 
     let parents: Vec<Option<u32>> = rows
         .iter()

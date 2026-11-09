@@ -357,6 +357,7 @@ mod tests {
             names: Vec::new(),
             population: None,
             parent: None,
+            flags: 0,
             sources: Vec::new(),
         }
     }

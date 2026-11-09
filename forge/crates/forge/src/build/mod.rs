@@ -224,21 +224,14 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     if let Some(country) = country_place(&build, &sources, &profile)? {
         places.push(country);
     }
-    let admin_names = link_admins(&mut places, std::mem::take(&mut admin.links));
+    admin.added = link_admins(&mut places, std::mem::take(&mut admin.links));
     let coverage = units.coverage.ok_or("the boundary source has no units")?;
     let zones = match &tz {
         Some(id) => zone_places(root, &lock, id, coverage)?,
         None => Zones::default(),
     };
     places.extend(zones.places.iter().cloned());
-    // A place is named: names that cannot be stored are dropped, then places left without a
-    // canonical name (a source record with an empty name).
-    for p in &mut places {
-        p.names.retain(|n| pack::fits(&n.text));
-    }
-    let before = places.len();
-    places.retain(|p| !p.names.is_empty());
-    let unnamed = before - places.len() + unnamed_clusters;
+    let unnamed = keep_named(&mut places) + unnamed_clusters;
     let elevations = elevation::load(root, dem.as_deref(), &places)?;
 
     let out_dir = build.join("pack").join(&a.cc);
@@ -276,10 +269,6 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     notes(&mut summary, held, unnamed, &skipped, postal_notes);
     summary.push_str(&naming.line());
     summary.push_str(&admin.line());
-    let _ = writeln!(
-        summary,
-        "Names added to admin units by links: {admin_names}."
-    );
     if let Some(e) = &elevations {
         summary.push_str(&e.summary(&build, &sources, &places)?);
     }
@@ -637,6 +626,17 @@ struct Clustered {
     admin: AdminCounts,
 }
 
+/// Drops the names that cannot be stored, then the places left without a canonical name (a
+/// source record with an empty name); returns how many places were dropped.
+fn keep_named(places: &mut Vec<Place>) -> usize {
+    for p in places.iter_mut() {
+        p.names.retain(|n| pack::fits(&n.text));
+    }
+    let before = places.len();
+    places.retain(|p| !p.names.is_empty());
+    before - places.len()
+}
+
 /// What became of the clusters of admin records (D-110).
 #[derive(Default)]
 struct AdminCounts {
@@ -653,6 +653,8 @@ struct AdminCounts {
     unmatched: usize,
     /// Names a link did not carry (D-060's collision rule).
     collisions: usize,
+    /// Names the links added to their units.
+    added: usize,
 }
 
 impl AdminCounts {
@@ -663,14 +665,15 @@ impl AdminCounts {
             .map(|(l, n)| format!("level {l}: {n}"))
             .collect();
         format!(
-            "Admin records (D-110): {} clusters linked to their unit ({}), {} names not carried; {} former units and {} divisions kept as places; {} deeper former parts and {} unmatched left out.\n",
+            "Admin records (D-110): {} clusters linked to their unit ({}), {} names not carried; {} former units and {} divisions kept as places; {} deeper former parts and {} unmatched left out.\nNames added to admin units by links: {}.\n",
             self.linked.values().sum::<usize>(),
             linked.join(", "),
             self.collisions,
             self.former,
             self.divisions,
             self.parts,
-            self.unmatched
+            self.unmatched,
+            self.added
         )
     }
 }
