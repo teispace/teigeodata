@@ -20,6 +20,8 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+pub mod romanise;
+
 use unicode_normalization::UnicodeNormalization;
 use unicode_script::{Script, UnicodeScript};
 
@@ -164,6 +166,65 @@ pub fn script_of(s: &str) -> Script {
         .map(|c| c.script())
         .find(|x| !matches!(x, Script::Common | Script::Inherited))
         .unwrap_or(Script::Common)
+}
+
+/// `s` with the optional accents of Latin, Greek and Cyrillic removed (NFD, the combining
+/// marks dropped, NFC), case and everything else kept: a display form without diacritics.
+///
+/// ```
+/// use teigeodata_names::strip_accents;
+///
+/// assert_eq!(strip_accents("Ghā̃sā"), "Ghasa");
+/// assert_eq!(strip_accents("São Paulo"), "Sao Paulo");
+/// assert_eq!(strip_accents("काठमाडौं"), "काठमाडौं");
+/// ```
+#[must_use]
+pub fn strip_accents(s: &str) -> String {
+    if s.is_ascii() {
+        return s.into();
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut base = Script::Common;
+    for c in s.nfd() {
+        let sc = c.script();
+        if sc == Script::Inherited {
+            if accents_optional(base) {
+                continue;
+            }
+        } else {
+            base = sc;
+        }
+        out.push(c);
+    }
+    out.nfc().collect()
+}
+
+/// The ISO 15924 code of the one script a text is written in (`Latn`, `Deva`), ignoring
+/// Common and Inherited characters; `None` when it has letters of two scripts or of none.
+///
+/// ```
+/// use teigeodata_names::script_code;
+///
+/// assert_eq!(script_code("Laha Chowk 2"), Some("Latn"));
+/// assert_eq!(script_code("लहाचोक"), Some("Deva"));
+/// assert_eq!(script_code("Laha चोक"), None);
+/// assert_eq!(script_code("(2)"), None);
+/// ```
+#[must_use]
+pub fn script_code(s: &str) -> Option<&'static str> {
+    let mut found = None;
+    for c in s.chars() {
+        let x = c.script();
+        if matches!(x, Script::Common | Script::Inherited) {
+            continue;
+        }
+        match found {
+            None => found = Some(x),
+            Some(f) if f != x => return None,
+            Some(_) => {}
+        }
+    }
+    found.map(Script::short_name)
 }
 
 /// True if the text is written in a script other than Latin (a native-script name).
