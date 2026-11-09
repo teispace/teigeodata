@@ -32,17 +32,24 @@ call (ADR-0012).
 - [ ] Decision-log rows for what the notes recommend, as each is confirmed by its step
 
 ### 4.1 Engine
-- [ ] `teigeodata-engine`: mapped packs (B13: where `unsafe` for mmap lives, SIGBUS on a
-  truncated file), lazy verification (small sections whole, large per block, D-078)
-- [ ] Layers, precedence and coverage rules
+- [x] `teigeodata-engine`: mapped packs (B13: where `unsafe` for mmap lives, SIGBUS on a
+  truncated file), lazy verification (small sections whole, large per block, D-078). Done
+  2026-11-09 (D-113, [engine](../../04-architecture/engine.md)): `unsafe` only in the engine's
+  `map.rs`; open 90 µs warm on a 5.3 MB pack; planted check bugs fail `tests/verify.rs`
+- [x] Layers, precedence and coverage rules
   ([engine and catalog](../../02-research/notes/engine-and-catalog.md) §3.4); tombstones and
-  redirects across layers
-- [ ] Routing and k-way merges for `get`, `reverse`, `admin_at`, `tz_at`, box and radius
-  queries, `search`; per-answer tier; caller-owned scratch (M1 zero allocations)
+  redirects across layers. Done 2026-11-09 (D-114)
+- [x] Routing and k-way merges for `get`, `reverse`, `admin_at`, `tz_at`, box queries,
+  `search`; per-answer tier; caller-owned scratch (M1: 0 warm allocations, search 1 for the
+  folded query). Done 2026-11-09 (D-114); 3 layers on 200k synthetic places: get 394 ns,
+  reverse k=10 20 µs, search 69 µs ([benchmarks](../../02-research/benches/phase-4.md))
+- [ ] Radius queries (`within_radius`, `nearby`) and `children`/`ancestors` across packs
 - [ ] Snapshot swap: `arc-swap` against `RwLock` A/B in L5
-- [ ] Metamorphic gate: splitting or reordering packs never changes an answer; differential
-  against one compacted pack
-- [ ] L1 at 1 GB mapped, L4, L5 at 1, 3 and 10 layers
+- [x] Metamorphic gate: splitting or reordering packs never changes an answer; differential
+  against one compacted pack. Done 2026-11-09: synthetic in 2, 3 and 5 parts, the Nepal main
+  pack in 2 and 3 (46.7 s, ignored test with `TGD_PACK`); planted bugs fail it (D-114)
+- [ ] L1 at 1 GB mapped, L4, L5 at 1, 3 and 10 layers (1 and 3 layers on a synthetic pack
+  measured 2026-11-09; Nepal figures and 10 layers still to run)
 
 ### 4.2 Baseline and locator
 - [ ] Forge: the baseline build (countries, admin1, cities above a threshold, simplified world
@@ -115,3 +122,4 @@ call (ADR-0012).
 |---|---|---|
 | 2026-11-09 | Phase 4 drafted from the research notes | [engine and catalog](../../02-research/notes/engine-and-catalog.md), [download and delta](../../02-research/notes/download-and-delta.md) |
 | 2026-11-09 | 4.4 done: the transport asset in `teigeodata-sync::transport` (D-112); the planner lives there, not in a separate `sync::plan`; a head-only parser in `teigeodata-format` is added to 4.5 | building it: a ranged client holds only the head frame ([download and delta §3.5](../../02-research/notes/download-and-delta.md#35-the-transport-as-built-measured-2026-11-09)) |
+| 2026-11-09 | Step 4.1: engine, layers, queries and the metamorphic gate done; radius and cross-pack hierarchy split into their own item | D-113, D-114 |

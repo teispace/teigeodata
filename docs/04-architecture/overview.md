@@ -1,7 +1,7 @@
 ---
 title: "Architecture overview"
 status: draft
-updated: 2026-11-07
+updated: 2026-11-09
 ---
 
 # Architecture overview
@@ -41,7 +41,7 @@ part; the ADR each part comes from is linked.
 | `teigeodata-names` | Normalisation, transliteration, phonetic key, lexicon | yes | [ADR-0014](../03-decisions/adr/ADR-0014-names-and-search.md) |
 | `teigeodata-tz` | Timezone lookup over the region index; optional tzdb rules | yes | [ADR-0022](../03-decisions/adr/ADR-0022-timezone-and-postal.md) |
 | `teigeodata-dem` | Elevation raster codec and `elevation_at` | yes | [ADR-0007](../03-decisions/adr/ADR-0007-accuracy-model.md) |
-| `teigeodata-engine` | Layered pack sets, federated queries, snapshots, baseline | partly | [ADR-0010](../03-decisions/adr/ADR-0010-addressing-and-baseline.md), [ADR-0011](../03-decisions/adr/ADR-0011-layered-engine.md) |
+| `teigeodata-engine` | Layered pack sets, federated queries, snapshots, baseline ([engine](engine.md)). Mapped packs with lazy verification; the one crate allowed `unsafe` (D-113) | partly | [ADR-0010](../03-decisions/adr/ADR-0010-addressing-and-baseline.md), [ADR-0011](../03-decisions/adr/ADR-0011-layered-engine.md) |
 | `teigeodata-sync` | Catalog, downloads, storage, trust metadata, deltas; the [transport asset](transport.md) | the transport reader | [ADR-0012](../03-decisions/adr/ADR-0012-offline-loading.md) |
 | `teigeodata-api` | The safe public API: the single source of every binding ([bindings](bindings.md)) | no | [ADR-0016](../03-decisions/adr/ADR-0016-bindings.md) |
 | `teigeodata-blob` | The columnar result blob, encoder and validating reader | yes | D-068 |
@@ -74,7 +74,7 @@ and its parameters are specified in `docs/01-product/api.md` (Phase 1).
 
 ## 5. Pages to come
 
-`pack-format.md`, `engine.md`, `region-index.md`, `search.md`, `timezone.md`,
+`region-index.md`, `search.md`, `timezone.md`,
 `offline-loading.md`, `mcp.md`, `security.md`, `performance.md`: each written when
 its research note lands.
 
@@ -86,3 +86,4 @@ its research note lands.
 | 2026-11-06 | First draft | Project start |
 | 2026-11-06 | `teigeodata-names` started early | One name code path for the forge and search (D-057) |
 | 2026-11-07 | `teigeodata-core` and `teigeodata-format` created (Phase 1) | [core and format](../02-research/notes/core-and-format.md) |
+| 2026-11-09 | `teigeodata-engine` created (step 4.1); [engine](engine.md) page | D-113, D-114 |

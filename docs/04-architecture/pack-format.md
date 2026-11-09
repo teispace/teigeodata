@@ -1,7 +1,7 @@
 ---
 title: "The .tgd pack format v1 (draft)"
 status: draft
-updated: 2026-11-08
+updated: 2026-11-09
 ---
 
 # The .tgd pack format v1 (draft)
@@ -837,11 +837,11 @@ Then, on demand:
 ## Physical file names and installs
 
 `address.component.release.hash8.tgd` ([ADR-0010](../03-decisions/adr/ADR-0010-addressing-and-baseline.md)).
-A new version always gets a new file. A file that may be mapped is never written over.
+A new version always gets a new file. A file that may be mapped is never written over. The reader crate keeps
+`#![forbid(unsafe_code)]`; mapping lives in the engine (B13, D-113, [engine](engine.md)).
 
 ## Open items
 
 - The 14 benchmarks B1–B14 (catalogue in [benchmarks](../06-engineering/benchmarks.md)).
 - Payloads added inside the frame fixed in Phase 1 (D-071): ARCS, POLYGONS and POLY_INDEX
   came with B10 (D-083), DEM with B11 (D-104) and POSTAL in 3.5 (D-105).
-- Whether the reader crate keeps `#![forbid(unsafe_code)]` with mmap outside it (B13).

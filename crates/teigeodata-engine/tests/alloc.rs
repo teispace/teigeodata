@@ -1,6 +1,6 @@
 //! M1 for the engine: a warm query writes into caller-owned scratch and output buffers and does
-//! not allocate. `get`, `reverse`, `admin_at`, `tz_at` and `within_bbox` allocate nothing; `search` allocates
-//! only its folded query (`teigeodata_names::fold` returns a `String`).
+//! not allocate. `get`, `reverse`, `admin_at`, `tz_at` and `within_bbox` allocate nothing;
+//! `search` allocates only its folded query (`teigeodata_names::fold` returns a `String`).
 
 #![allow(
     clippy::unwrap_used,
