@@ -115,6 +115,7 @@ const TURN: u64 = 12_960_000;
 /// Units of 0.1″ in 180°.
 const HALF_TURN: u64 = 6_480_000;
 /// The largest escaped value, `z − 63` in three bytes.
+#[cfg(feature = "write")]
 const MAX_ESCAPE: u64 = 1 << 24;
 
 fn fail(column: u16, problem: &'static str) -> Error {
@@ -278,6 +279,7 @@ fn neighbours(q: &[i32], log2: u32, i: usize) -> [i64; 6] {
 }
 
 /// The prediction and context of a sample from its neighbours.
+#[cfg(feature = "write")]
 #[inline]
 fn predict(nb: &[i64; 6], coef: &[i64; 5], thresholds: &[u32; 7]) -> (i64, usize) {
     let [a, b, c, d, aa, bb] = *nb;
@@ -290,6 +292,7 @@ fn predict(nb: &[i64; 6], coef: &[i64; 5], thresholds: &[u32; 7]) -> (i64, usize
     (a + ((sum + 32) >> 6), context(act, thresholds))
 }
 
+#[cfg(feature = "write")]
 const fn zigzag(r: i64) -> u64 {
     ((r << 1) ^ (r >> 63)).cast_unsigned()
 }
