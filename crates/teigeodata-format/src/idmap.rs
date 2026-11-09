@@ -103,6 +103,14 @@ impl<'a> IdMap<'a> {
         (self.id(row) == Some(id)).then_some(row)
     }
 
+    /// The smallest and the largest current ID, `None` for no rows: O(1). An engine routes a
+    /// lookup by them (a pack whose range misses an ID cannot hold it); exact on a checked map.
+    #[must_use]
+    pub fn id_range(&self) -> Option<(PlaceId, PlaceId)> {
+        let (lo, hi) = self.sorted.bounds()?;
+        Some((PlaceId::from_raw(lo)?, PlaceId::from_raw(hi)?))
+    }
+
     /// Checks every value: each ID valid, the sorted IDs strictly increasing, and each sorted
     /// ID at the row [`ORDER`] gives (which makes [`ORDER`] a permutation). O(rows).
     ///

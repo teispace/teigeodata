@@ -132,6 +132,20 @@ fn redirects_resolve() {
     );
     assert_eq!(resolve(&ids_view, None, gone), Resolved::Unknown);
 
+    // The ranges an engine routes by, and the iteration a pack rewriter reads.
+    let (lo, hi) = (live.iter().min().unwrap(), live.iter().max().unwrap());
+    assert_eq!(ids_view.id_range(), Some((*lo, *hi)));
+    let mut sorted = pairs.to_vec();
+    sorted.sort_by_key(|p| p.0);
+    assert_eq!(red_view.id_range(), Some((sorted[0].0, sorted[2].0)));
+    let fates: Vec<(PlaceId, Fate)> = sorted
+        .iter()
+        .map(|&(old, new)| (old, new.map_or(Fate::Tombstone, Fate::Redirect)))
+        .collect();
+    assert_eq!(red_view.iter().collect::<Vec<_>>(), fates);
+    let empty = idmap::encode(&[]).unwrap();
+    open_map(&empty, 0, |m| assert_eq!(m.id_range(), None));
+
     // check: a retired ID that is current; a survivor that is not.
     let bad = redirects::encode(&[(live[5], None)]).unwrap();
     let survivor_missing = redirects::encode(&[(gone, Some(id(*b"np", 9_999)))]).unwrap();

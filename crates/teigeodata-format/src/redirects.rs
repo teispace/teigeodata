@@ -99,6 +99,23 @@ impl<'a> Redirects<'a> {
         Some(self.fate(i))
     }
 
+    /// The smallest and the largest retired ID, `None` for none: O(1), as
+    /// [`IdMap::id_range`].
+    #[must_use]
+    pub fn id_range(&self) -> Option<(PlaceId, PlaceId)> {
+        let (lo, hi) = self.old.bounds()?;
+        Some((PlaceId::from_raw(lo)?, PlaceId::from_raw(hi)?))
+    }
+
+    /// Every retired ID and its fate, in increasing ID order: for tools that rewrite a pack
+    /// (compaction, splitting); O(retired).
+    pub fn iter(&self) -> impl Iterator<Item = (PlaceId, Fate)> + '_ {
+        self.old
+            .iter()
+            .enumerate()
+            .filter_map(|(i, old)| Some((PlaceId::from_raw(old)?, self.fate(i))))
+    }
+
     fn fate(&self, i: usize) -> Fate {
         let new = key(
             self.new_hi.get(i).unwrap_or(0),

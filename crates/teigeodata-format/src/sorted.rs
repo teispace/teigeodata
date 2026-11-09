@@ -29,6 +29,19 @@ impl Sorted<'_> {
         Some(key(hi, self.lo.block_first(b)?))
     }
 
+    /// The first and the last key, `None` when empty: O(1), two direct reads.
+    pub(crate) fn bounds(&self) -> Option<(u64, u64)> {
+        let last = self.lo.len().checked_sub(1)?;
+        let at = |i: usize| {
+            let hi = match self.hi {
+                Some(hi) => hi.get(i)?,
+                None => 0,
+            };
+            Some(key(hi, self.lo.get(i)?))
+        };
+        Some((at(0)?, at(last)?))
+    }
+
     /// The index of `k`, if present.
     pub(crate) fn find(&self, k: u64) -> Option<usize> {
         let b = self.block_of(k)?;
