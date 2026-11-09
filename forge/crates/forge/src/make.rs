@@ -613,23 +613,13 @@ fn fetch_inputs(
 /// `forge make <cc> …`.
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
-    let usage = "usage: forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--force] [--fetch]";
-    let cc = args.first().ok_or(usage)?;
-    let pass: Vec<String> = args
-        .iter()
-        .skip(1)
-        .filter(|a| *a != "--force" && *a != "--fetch")
-        .cloned()
-        .collect();
+    let (cc, pass) = make_args(args)?;
     let lite = pass.iter().any(|a| a == "--lite");
     let flag = |name: &str| {
         pass.iter()
             .position(|a| a == name)
             .and_then(|i| pass.get(i + 1))
     };
-    if flag("--release").is_none() {
-        return Err(usage.into());
-    }
     let country = root.join("data/countries").join(cc);
     let recipe = Recipe::read(&country)?;
     let lock = Lock::read(&root.join("data/sources.lock"))?;
@@ -730,6 +720,23 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         t,
         recipe.budget.as_ref(),
     )
+}
+
+/// The country code and the arguments `make` passes on to `build` (all but `--force` and
+/// `--fetch`); `--release` is required.
+fn make_args(args: &[String]) -> Result<(&String, Vec<String>), String> {
+    let usage = "usage: forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--force] [--fetch]";
+    let cc = args.first().ok_or(usage)?;
+    let pass: Vec<String> = args
+        .iter()
+        .skip(1)
+        .filter(|a| *a != "--force" && *a != "--fetch")
+        .cloned()
+        .collect();
+    if !pass.iter().any(|a| a == "--release") {
+        return Err(usage.into());
+    }
+    Ok((cc, pass))
 }
 
 /// The baseline stage (D-145): the country's slice of the embedded baseline, keyed on the
