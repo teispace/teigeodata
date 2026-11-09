@@ -63,12 +63,31 @@ fn hash(s: &str) -> u64 {
 struct Profile {
     #[serde(default)]
     phonetic_key: Option<String>,
+    #[serde(default)]
+    conflation: Conflation,
 }
+
+/// The profile's conflation settings (G-conf, D-131).
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct Conflation {
+    /// The least silver-label recall of every source pair with [`GATE_MIN_LINKS`] links or
+    /// more; recall is not gated without it.
+    #[serde(default)]
+    min_recall: Option<f64>,
+}
+
+/// G-conf: the least silver-label precision of a source pair (the quality bar's target).
+const MIN_PRECISION: f64 = 0.98;
+/// G-conf scores a source pair only with this many stated links or merged pairs: fewer is
+/// reported, not gated (one wrong link in 20 would be 5%).
+const GATE_MIN_LINKS: usize = 100;
 
 /// `forge conflate <cc> <points-source> <points-source> [...]`.
 pub(crate) fn run(root: &Path, cc: &str, sources: &[String]) -> Result<String, String> {
     let t = Instant::now();
-    let key_name = phonetic_key(root, cc)?;
+    let profile = profile(root, cc)?;
+    let key_name = profile.phonetic_key;
     let key = key_name.as_deref().and_then(PhoneticKey::from_name);
     let read = root.join("data/build/read");
     let (pts, src) = load_points(&read, sources)?;
@@ -153,7 +172,7 @@ pub(crate) fn run(root: &Path, cc: &str, sources: &[String]) -> Result<String, S
     write_joins(&mut summary, bridges.len(), twins.len());
     write_model(&mut summary, &full);
     write_clusters_summary(&mut summary, sources, &src, &full_roots);
-    evaluate(
+    let rows = evaluate(
         &mut summary,
         sources,
         &cross_stated,
@@ -161,7 +180,11 @@ pub(crate) fn run(root: &Path, cc: &str, sources: &[String]) -> Result<String, S
         &src,
         &eval_roots,
     );
+    let problems = gate_line(&mut summary, &rows, profile.conflation.min_recall);
     fs::write(dir.join("summary.md"), &summary).map_err(|e| e.to_string())?;
+    if !problems.is_empty() {
+        return Err(format!("{summary}\n{}", problems.join("\n")));
+    }
     Ok(format!("{summary}\n{:.1?}", t.elapsed()))
 }
 
@@ -226,12 +249,10 @@ fn header(sources: &[String], points: usize, key: Option<&str>, counts: [usize; 
 }
 
 /// The phonetic key a country's profile names.
-pub(crate) fn phonetic_key(root: &Path, cc: &str) -> Result<Option<String>, String> {
+fn profile(root: &Path, cc: &str) -> Result<Profile, String> {
     let path = root.join("data/countries").join(cc).join("profile.yaml");
     let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let profile: Profile =
-        serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
-    Ok(profile.phonetic_key)
+    serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// The number of record pairs from different sources.
@@ -657,7 +678,7 @@ fn evaluate(
     pts: &[Point],
     src: &[u8],
     roots: &[u32],
-) {
+) -> Vec<(String, [usize; 4])> {
     let root = |i: u32| roots.get(i as usize).copied();
     let source_of = |i: u32| src.get(i as usize).copied().unwrap_or(0);
     let name = |s: u8| sources.get(usize::from(s)).map_or("?", String::as_str);
@@ -726,21 +747,87 @@ fn evaluate(
             a as f64 / b as f64
         }
     };
+    let mut scored = Vec::new();
     for ((a, b), [n, hit, merged, agree]) in rows {
+        let pair = format!("{}–{}", name(a), name(b));
         let _ = writeln!(
             out,
-            "| {}–{} | {n} | {hit} | {:.3} | {merged} | {agree} | {:.3} |",
-            name(a),
-            name(b),
+            "| {pair} | {n} | {hit} | {:.3} | {merged} | {agree} | {:.3} |",
             ratio(hit, n),
             ratio(agree, merged)
         );
+        scored.push((pair, [n, hit, merged, agree]));
     }
+    scored
+}
+
+/// [`gate`], with its line in the summary.
+fn gate_line(
+    out: &mut String,
+    rows: &[(String, [usize; 4])],
+    min_recall: Option<f64>,
+) -> Vec<String> {
+    let problems = gate(rows, min_recall);
+    let _ = writeln!(
+        out,
+        "\nG-conf: precision at least {MIN_PRECISION} and recall at least {} for every source pair with {GATE_MIN_LINKS} links or more: {}.",
+        min_recall.map_or_else(|| "(not gated)".to_string(), |r| r.to_string()),
+        if problems.is_empty() { "ok" } else { "failed" }
+    );
+    problems
+}
+
+/// G-conf on the silver-label rows (pair, [links, recovered, merged, agreeing]): the pairs
+/// below [`MIN_PRECISION`] or `min_recall`, each scored only from [`GATE_MIN_LINKS`] up.
+#[allow(clippy::cast_precision_loss, reason = "counts")]
+fn gate(rows: &[(String, [usize; 4])], min_recall: Option<f64>) -> Vec<String> {
+    let mut out = Vec::new();
+    for (pair, [n, hit, merged, agree]) in rows {
+        if *merged >= GATE_MIN_LINKS && (*agree as f64) < MIN_PRECISION * *merged as f64 {
+            out.push(format!(
+                "G-conf: {pair}: precision {agree}/{merged} = {:.3}, under {MIN_PRECISION}",
+                *agree as f64 / *merged as f64
+            ));
+        }
+        if let Some(r) = min_recall
+            && *n >= GATE_MIN_LINKS
+            && (*hit as f64) < r * *n as f64
+        {
+            out.push(format!(
+                "G-conf: {pair}: recall {hit}/{n} = {:.3}, under the profile's {r}",
+                *hit as f64 / *n as f64
+            ));
+        }
+    }
+    out
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Keys, Model, Point, bridges, cluster, hash, twins};
+    use super::{Keys, Model, Point, bridges, cluster, gate, hash, twins};
+
+    #[test]
+    fn g_conf_gates_precision_and_the_profiles_recall() {
+        let rows = |n, hit, merged, agree| vec![("a–b".to_string(), [n, hit, merged, agree])];
+        // Nepal's GeoNames–Wikidata row passes at a 0.80 floor.
+        assert_eq!(
+            gate(&rows(3231, 2689, 2713, 2689), Some(0.80)),
+            Vec::<String>::new()
+        );
+        let p = gate(&rows(3231, 2689, 2713, 2650), Some(0.80));
+        assert!(
+            p.len() == 1 && p[0].contains("precision 2650/2713"),
+            "{p:?}"
+        );
+        let r = gate(&rows(3231, 2500, 2713, 2689), Some(0.80));
+        assert!(r.len() == 1 && r[0].contains("recall 2500/3231"), "{r:?}");
+        // No floor: recall is not gated; too few links: nothing is.
+        assert_eq!(
+            gate(&rows(3231, 100, 2713, 2689), None),
+            Vec::<String>::new()
+        );
+        assert_eq!(gate(&rows(99, 0, 99, 0), Some(0.80)), Vec::<String>::new());
+    }
 
     fn point(id: &str, kind: &str, lat: i32, former: bool) -> Point {
         Point {

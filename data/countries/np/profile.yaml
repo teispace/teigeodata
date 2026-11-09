@@ -8,6 +8,10 @@ name: Nepal
 wikidata: Q837
 # Phonetic key for matching and search (teigeodata-names): Latin and Devanagari names.
 phonetic_key: indic-v0
+# G-conf (D-131): the least recall of the model without IDs against the stated links, per
+# source pair with 100 links or more; measured 2026-11-09: GeoNames–Wikidata 0.832,
+# OSM–Wikidata 0.882. A floor against regression; the target 0.95 waits for labelled pairs.
+conflation: { min_recall: 0.80 }
 # Nepal Bhasa (new) is written in Devanagari and in Newa (Prachalit) script.
 languages: [ne, en, new]
 scripts: [Deva, Latn, Newa]

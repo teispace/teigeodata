@@ -63,6 +63,16 @@ struct Profile {
     /// Source adapter ID → how that source encodes things for this country.
     #[serde(default)]
     sources: BTreeMap<String, SourceRules>,
+    /// Conflation settings: the G-conf recall floor (D-131).
+    #[serde(default)]
+    conflation: Option<Conflation>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Conflation {
+    #[serde(default)]
+    min_recall: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -287,6 +297,11 @@ fn check_profile(cc: &str, text: &str, profiles: &BTreeSet<String>) -> Vec<Strin
             && !q[1..].starts_with('0'))
     {
         out.push(format!("wikidata `{q}` is not a Wikidata item ID (Q…)"));
+    }
+    if let Some(r) = p.conflation.as_ref().and_then(|c| c.min_recall)
+        && !(r > 0.0 && r <= 1.0)
+    {
+        out.push(format!("conflation.min_recall {r} is not in (0, 1]"));
     }
     if let Some(k) = &p.phonetic_key
         && teigeodata_names::PhoneticKey::from_name(k).is_none()

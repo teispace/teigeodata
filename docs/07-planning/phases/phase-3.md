@@ -153,7 +153,8 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   `.github/workflows/data-build.yml` runs G-det (the build stage twice, `cmp`), G-lic
   (`cargo xtask check-pack`), G-corr (inside the build) and the golden gate per pack; it runs
   once the mirror release `sources` is published (D-127). G-budget in `forge make` (D-129);
-  G-topo and G-pip in the topology and build stages (D-130). G-conf to add
+  G-topo and G-pip in the topology and build stages (D-130); G-conf in conflate (D-131).
+  Every gate is written; the item closes on the first green `data-build` run
 - [x] Attribution in every pack (D-031, D-126): each source's notice from `sources.lock`,
   carried in the signed manifest of every pack built from it (Copernicus and WorldPop in main);
   `Layer::attribution()`; the API and bindings expose it with the layer's metadata (phases 5–6)
@@ -195,3 +196,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | 3.7: the data-build workflow with G-det, G-lic and the golden gate (D-128) | the gates had no CI job |
 | 2026-11-09 | 3.7: G-budget in `forge make` (D-129) | the data build had no resource gate |
 | 2026-11-09 | 3.7: G-topo and G-pip (D-130) | gaps between units went unseen; place assignment had no gate |
+| 2026-11-09 | 3.7: G-conf (D-131) | the silver-label scores had no gate |

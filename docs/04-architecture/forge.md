@@ -187,7 +187,10 @@ method follows the forge note:
 
 It writes `data/build/conflate/<sources>/clusters.parquet` (`id`, `cluster`, named by the
 smallest member) and a `summary.md`. The summary holds the model's weights, the clusters by
-source composition and the silver-label evaluation. Names are compared with
+source composition and the silver-label evaluation. G-conf (D-131) gates that evaluation:
+every source pair with 100 links or more keeps precision at least 0.98, and recall at least
+the profile's `conflation.min_recall` (Nepal 0.80; measured 0.832 and 0.882), or the stage
+fails. Names are compared with
 `teigeodata-names`, the code path search uses. Results:
 [S5](../02-research/benches/s5-nepal.md#the-matcher-s55-second-part).
 
