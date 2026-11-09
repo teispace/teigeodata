@@ -97,6 +97,8 @@ pub struct Scratch {
     heads: Vec<usize>,
     regions: Vec<u32>,
     loose: String,
+    /// The rows a layer's names match the query's context with, sorted.
+    context: Vec<u32>,
 }
 
 /// Redirect hops [`Engine::get`] follows across layers (the forge flattens chains in a pack, so
@@ -109,6 +111,15 @@ const LOOSE_BONUS: i32 = 55;
 const FUZZY_BONUS: i32 = 35;
 const FUZZY_PER_EDIT: i32 = 10;
 const PREFIX_BONUS: i32 = 30;
+/// Added to a row whose parent (or the row itself) the query names after a comma: a named
+/// parent outranks every other match (ADR-0032).
+const CONTEXT_BONUS: i32 = 1_000;
+/// The most rows a context may name in one layer (a short prefix names many).
+const CONTEXT_MAX: usize = 4_096;
+/// Edits a context may differ by, as S3 (D-052).
+const CONTEXT_EDITS: u8 = 2;
+/// A match this good (one edit or better) ends the search for any first letter.
+const STRONG: i32 = FUZZY_BONUS - FUZZY_PER_EDIT;
 /// The prefix tier takes the best rows by importance (D-086).
 const PREFIX_K: usize = 16;
 /// The prefix tier runs from this many characters.
@@ -609,10 +620,14 @@ impl Engine {
 
     /// Places matching `query`, best first (ties by ID), at most `k`, into `out`. The query is
     /// folded as the forge folds names; each layer scores its rows with the same formula
-    /// (D-052): exact 60, loose 55, one edit 25 (queries of 4 to 63 characters), plus the best
-    /// 16 by importance over every layer for a prefix of 3 characters or more (30), each plus
-    /// the row's importance. Each layer keeps its best `k` visible rows; a k-way merge keeps
-    /// the best `k` overall.
+    /// (D-052): exact 60, loose 55, one edit 25 (queries of 4 to 63 characters, keys with the
+    /// query's first letter; any first letter only when no layer has a visible match of one
+    /// edit or better), plus the best 16 by importance over every layer for a prefix of 3
+    /// characters or more (30), each plus the row's importance. After a comma the query names a
+    /// context ("Name, Parent"): a row whose ancestor (or itself) has a name matching it,
+    /// exactly, loosely, within 2 edits or as a prefix, gains 1,000, so a named parent outranks
+    /// every other match (ADR-0032, D-119). Each layer keeps its best `k` visible rows; a k-way
+    /// merge keeps the best `k` overall.
     ///
     /// # Errors
     /// [`Error::Integrity`] if a section it reads is corrupt.
@@ -630,7 +645,12 @@ impl Engine {
         if k == 0 {
             return Ok(());
         }
-        let q = teigeodata_names::fold(query);
+        // "Name, Parent": the parent is a context, matched against each row's ancestors.
+        let (name, context) = match query.split_once(',') {
+            Some((n, c)) => (n, teigeodata_names::fold(c)),
+            None => (query, String::new()),
+        };
+        let q = teigeodata_names::fold(name);
         if q.is_empty() {
             return Ok(());
         }
@@ -657,16 +677,34 @@ impl Engine {
                 .sort_unstable_by(|a, b| b.importance.cmp(&a.importance).then(a.id.cmp(&b.id)));
             s.prefix.truncate(PREFIX_K);
         }
-        for (i, l) in self.layers.iter().enumerate() {
-            let v = l.views();
-            let (Some(search), Some(ids)) = (&v.search, &v.ids) else {
-                continue;
-            };
-            l.ensure(Kind::SEARCH)?;
-            l.ensure(Kind::IDMAP)?;
-            let start = s.hits.len();
-            self.layer_hits(i, search, ids, (&q, &loose, fuzzy.as_ref()), k, s)?;
-            s.segs.push(start..s.hits.len());
+        // Fuzzy keys start with the query's first letter; only when no layer has a strong match
+        // (exact, loose, within one edit or a prefix) does a second pass take any first letter
+        // (ADR-0032): first-letter typos are rare, and the anchored walk is several times faster.
+        let mut anchor = q.chars().next();
+        loop {
+            let mut strong = false;
+            for (i, l) in self.layers.iter().enumerate() {
+                let v = l.views();
+                let (Some(search), Some(ids)) = (&v.search, &v.ids) else {
+                    continue;
+                };
+                l.ensure(Kind::SEARCH)?;
+                l.ensure(Kind::IDMAP)?;
+                context_rows(search, &context, &mut s.context);
+                if !s.context.is_empty() {
+                    l.ensure(Kind::HIERARCHY)?;
+                }
+                let start = s.hits.len();
+                let walk = fuzzy.as_ref().map(|f| (f, anchor));
+                strong |= self.layer_hits(i, search, ids, (&q, &loose, walk), k, s)?;
+                s.segs.push(start..s.hits.len());
+            }
+            if strong || fuzzy.is_none() || anchor.is_none() {
+                break;
+            }
+            anchor = None;
+            s.hits.clear();
+            s.segs.clear();
         }
         // The loose key's buffer goes back to the scratch, to be reused.
         s.loose = loose;
@@ -683,16 +721,17 @@ impl Engine {
     }
 
     /// Appends layer `i`'s best `k` visible rows for the folded query `q` (its loose key and its
-    /// fuzzy automaton) to `s.hits`, best first (ties by ID).
+    /// fuzzy automaton, anchored on a first letter or not) to `s.hits`, best first (ties by
+    /// ID). Returns whether any row matched strongly: [`STRONG`] or better before importance.
     fn layer_hits(
         &self,
         i: usize,
         search: &Search<'_>,
         ids: &IdMap<'_>,
-        (q, loose, fuzzy): (&str, &str, Option<&Fuzzy>),
+        (q, loose, fuzzy): (&str, &str, Option<(&Fuzzy, Option<char>)>),
         k: usize,
         s: &mut Scratch,
-    ) -> Result<(), Error> {
+    ) -> Result<bool, Error> {
         s.rows.clear();
         let rows = &mut s.rows;
         let add = |ordinal: Option<u32>, bonus: i32, rows: &mut Vec<(u32, i32)>| {
@@ -707,8 +746,8 @@ impl Engine {
         // A loose lookup reads the loose list and its exact twin (D-086).
         add(search.get(LOOSE, loose), LOOSE_BONUS, rows);
         add(search.get(EXACT, loose), LOOSE_BONUS, rows);
-        if let Some(f) = fuzzy {
-            search.walk(EXACT, f, None, usize::MAX, |o, edits| {
+        if let Some((f, anchor)) = fuzzy {
+            search.walk(EXACT, f, anchor, usize::MAX, |o, edits| {
                 let bonus = FUZZY_BONUS - FUZZY_PER_EDIT * i32::from(edits);
                 add(Some(o), bonus, rows);
                 ControlFlow::Continue(())
@@ -723,6 +762,33 @@ impl Engine {
         );
         rows.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
         rows.dedup_by_key(|r| r.0);
+        // Strong only through a visible row, so a hidden row decides nothing (D-114).
+        let mut strong = false;
+        for &(row, bonus) in rows.iter() {
+            if bonus < STRONG {
+                continue;
+            }
+            if let Some(id) = ids.id(row as usize)
+                && !self.claimed_above(i, id)?
+            {
+                strong = true;
+                break;
+            }
+        }
+        let hierarchy = self
+            .layers
+            .get(i)
+            .and_then(|l| l.views().hierarchy.as_ref());
+        if let (false, Some(h)) = (s.context.is_empty(), hierarchy) {
+            let named =
+                |r: usize| u32::try_from(r).is_ok_and(|r| s.context.binary_search(&r).is_ok());
+            for r in rows.iter_mut() {
+                let row = r.0 as usize;
+                if named(row) || h.ancestors(row).any(named) {
+                    r.1 += CONTEXT_BONUS;
+                }
+            }
+        }
         // Score every row, then read IDs (and check visibility) only for the groups of equal
         // score that can still enter this layer's best k.
         for r in rows.iter_mut() {
@@ -752,7 +818,7 @@ impl Engine {
         let seg = s.hits.get_mut(start..).unwrap_or_default();
         seg.sort_unstable_by(|a, b| b.score.cmp(&a.score).then(a.id.cmp(&b.id)));
         s.hits.truncate(start + k.min(seg_len(start, s.hits.len())));
-        Ok(())
+        Ok(strong)
     }
 
     /// Appends layer `i`'s best [`PREFIX_K`] visible rows under a key starting with `q`, by
@@ -840,4 +906,142 @@ impl Engine {
 
 const fn seg_len(start: usize, end: usize) -> usize {
     end.saturating_sub(start)
+}
+
+/// The rows of `search` whose names match `context` (folded): exactly, loosely, within
+/// [`CONTEXT_EDITS`] edits with the same first letter, or as a prefix of 3 characters or more; sorted, at most
+/// [`CONTEXT_MAX`]. Empty for an empty context.
+fn context_rows(search: &Search<'_>, context: &str, out: &mut Vec<u32>) {
+    out.clear();
+    let context = context.trim();
+    if context.is_empty() {
+        return;
+    }
+    let take = |o: u32, out: &mut Vec<u32>| {
+        search.rows_of(o, |r| {
+            if out.len() >= CONTEXT_MAX {
+                return ControlFlow::Break(());
+            }
+            out.push(r);
+            ControlFlow::Continue(())
+        });
+    };
+    let mut buf = [0_u8; 256];
+    let loose = despace(context, &mut buf);
+    for o in [
+        search.get(EXACT, context),
+        search.get(LOOSE, loose),
+        search.get(EXACT, loose),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        take(o, out);
+    }
+    let chars = context.chars().count();
+    if (FUZZY_MIN..=MAX_CHARS).contains(&chars)
+        && let Some(f) = Fuzzy::new(context, CONTEXT_EDITS)
+    {
+        // Anchored on the first letter, as the name's first pass: a parent is typed with care.
+        search.walk(EXACT, &f, context.chars().next(), usize::MAX, |o, _| {
+            take(o, out);
+            if out.len() >= CONTEXT_MAX {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+    }
+    if chars >= PREFIX_MIN {
+        for o in search.range(EXACT, context) {
+            if out.len() >= CONTEXT_MAX {
+                break;
+            }
+            take(o, out);
+        }
+    }
+    out.sort_unstable();
+    out.dedup();
+}
+
+/// `s` without spaces, in `buf` (the loose key's fold, D-086); `s` itself if it does not fit.
+fn despace<'b>(s: &'b str, buf: &'b mut [u8; 256]) -> &'b str {
+    let mut n = 0;
+    for b in s.bytes().filter(|&b| b != b' ') {
+        let Some(slot) = buf.get_mut(n) else {
+            return s;
+        };
+        *slot = b;
+        n += 1;
+    }
+    core::str::from_utf8(buf.get(..n).unwrap_or_default()).unwrap_or(s)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use teigeodata_format::search::{self, EXACT, LOOSE, Search};
+    use teigeodata_format::{Kind, Section};
+
+    use super::{CONTEXT_MAX, context_rows, despace};
+
+    fn body(names: &[(u8, &str, u32)], rows: usize) -> Vec<u8> {
+        let mut keys: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
+        for &(tag, text, row) in names {
+            let mut k = vec![tag];
+            k.extend_from_slice(text.as_bytes());
+            keys.entry(k).or_default().insert(row);
+        }
+        search::encode(&keys, &vec![1; rows]).unwrap()
+    }
+
+    #[test]
+    fn a_context_names_rows_exactly_loosely_by_edits_and_prefix() {
+        let b = body(
+            &[
+                (EXACT, "kathmandu", 0),
+                (EXACT, "lalitpur", 1),
+                (LOOSE, "dolakha", 2), // "dola kha" folds loosely
+                (EXACT, "kailali", 3),
+                (EXACT, "jhapa", 4),
+            ],
+            5,
+        );
+        let s = Search::open(&Section::unpacked(Kind::SEARCH, 5, &b)).unwrap();
+        let mut out = Vec::new();
+        let mut rows = |c: &str| {
+            context_rows(&s, c, &mut out);
+            out.clone()
+        };
+        assert_eq!(rows("kathmandu"), [0]);
+        assert_eq!(rows("kathmanud"), [0]); // one transposition
+        assert_eq!(rows("katmando"), [0]); // two edits
+        assert_eq!(rows("athmandu"), Vec::<u32>::new()); // first letter differs
+        assert_eq!(rows("dola kha"), [2]);
+        assert_eq!(rows("lal"), [1]); // a prefix of 3
+        assert_eq!(rows("la"), Vec::<u32>::new());
+        assert_eq!(rows("  "), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn a_context_is_bounded() {
+        // Many keys under one prefix, and one key with more rows than the bound.
+        let n = u32::try_from(CONTEXT_MAX).unwrap() + 50;
+        let names: Vec<(u8, String, u32)> = (0..n)
+            .map(|i| (EXACT, format!("kar{i:05}"), i))
+            .chain((0..n).map(|i| (EXACT, "kar".to_string(), i)))
+            .collect();
+        let refs: Vec<(u8, &str, u32)> =
+            names.iter().map(|(t, n, r)| (*t, n.as_str(), *r)).collect();
+        let b = body(&refs, n as usize);
+        let s = Search::open(&Section::unpacked(Kind::SEARCH, u64::from(n), &b)).unwrap();
+        let mut out = Vec::new();
+        context_rows(&s, "kar", &mut out);
+        assert_eq!(out.len(), CONTEXT_MAX);
+        let mut buf = [0_u8; 256];
+        assert_eq!(despace("a b  c", &mut buf), "abc");
+        let long = "x".repeat(300);
+        assert_eq!(despace(&long, &mut buf), long);
+    }
 }

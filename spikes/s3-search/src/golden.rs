@@ -9,8 +9,6 @@ use std::time::Instant;
 
 use serde::Deserialize;
 
-use crate::engine::Engine;
-
 #[derive(Deserialize)]
 pub struct GoldenFile {
     #[serde(default)]
@@ -55,7 +53,7 @@ pub struct Scores {
 /// an expected key to its groups (one, unless a source key sits on several entities); `label`
 /// names a group in the misses list.
 pub fn score(
-    engine: &Engine<'_>,
+    search: impl Fn(&str) -> Vec<usize>,
     golden: &GoldenFile,
     key_group: &BTreeMap<&str, Vec<usize>>,
     label: impl Fn(usize) -> String,
@@ -70,12 +68,12 @@ pub fn score(
                 *e = (*e).max(*g);
             }
         }
-        let res = engine.search(&q.query, 10);
+        let res = search(&q.query);
         // Latency: median of repeated runs.
         let mut runs = Vec::with_capacity(21);
         for _ in 0..21 {
             let t = Instant::now();
-            std::hint::black_box(engine.search(std::hint::black_box(&q.query), 10));
+            std::hint::black_box(search(std::hint::black_box(&q.query)));
             runs.push(t.elapsed().as_nanos() as f64);
         }
         let med = pct(&mut runs, 0.5);

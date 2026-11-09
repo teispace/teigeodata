@@ -96,7 +96,11 @@ fn probes(model: &Model, seed: u64, n: usize) -> Probes {
         let Some(first) = model.names[row].first() else {
             continue;
         };
-        let t = first.text.clone();
+        // A comma starts a context ("Name, Parent"), matched against the row's ancestors in
+        // its own pack. Split packs do not carry a parent across packs yet (the cross-pack
+        // hierarchy item of phase 4.1), so a context answer may change with the split; the
+        // query keeps only the name until then.
+        let t = first.text.split(',').next().unwrap_or_default().to_string();
         let chars: Vec<char> = t.chars().collect();
         queries.push(t.clone());
         queries.push(t.to_uppercase());

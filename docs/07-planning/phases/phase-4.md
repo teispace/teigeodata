@@ -43,7 +43,14 @@ call (ADR-0012).
   `search`; per-answer tier; caller-owned scratch (M1: 0 warm allocations, search 1 for the
   folded query). Done 2026-11-09 (D-114); 3 layers on 200k synthetic places: get 394 ns,
   reverse k=10 20 µs, search 69 µs ([benchmarks](../../02-research/benches/phase-4.md))
+- [x] Search on the measured pipeline, scored as the product (`pack-eval` with
+  `S3_ENGINE=product`). Done 2026-11-09 (D-119): first-letter fuzzy with a visible-match
+  fallback, parent context through HIERARCHY; Nepal recall@1 0.535 → 0.652, search 72.6 → 11.1 µs
+- [ ] Search parity with the spike (0.801 recall@1): the country's query rules in the pack
+  (unit-type suffixes, droppable suffixes, native generics, the phonetic key) and the
+  phonetic tier; then the golden gate on the product in CI
 - [ ] Radius queries (`within_radius`, `nearby`) and `children`/`ancestors` across packs
+  (also makes a search context split-invariant: the split gate leaves comma queries out)
 - [ ] Snapshot swap: `arc-swap` against `RwLock` A/B in L5
 - [x] Metamorphic gate: splitting or reordering packs never changes an answer; differential
   against one compacted pack. Done 2026-11-09: synthetic in 2, 3 and 5 parts, the Nepal main
@@ -124,3 +131,4 @@ call (ADR-0012).
 | 2026-11-09 | Phase 4 drafted from the research notes | [engine and catalog](../../02-research/notes/engine-and-catalog.md), [download and delta](../../02-research/notes/download-and-delta.md) |
 | 2026-11-09 | 4.4 done: the transport asset in `teigeodata-sync::transport` (D-112); the planner lives there, not in a separate `sync::plan`; a head-only parser in `teigeodata-format` is added to 4.5 | building it: a ranged client holds only the head frame ([download and delta §3.5](../../02-research/notes/download-and-delta.md#35-the-transport-as-built-measured-2026-11-09)) |
 | 2026-11-09 | Step 4.1: engine, layers, queries and the metamorphic gate done; radius and cross-pack hierarchy split into their own item | D-113, D-114 |
+| 2026-11-09 | 4.1: the product's search scored and brought towards the spike; parity its own item | D-119: the golden gate measured the spike, not the engine |

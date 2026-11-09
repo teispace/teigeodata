@@ -110,3 +110,11 @@ The first `admin_at` and `tz_at` pay for verifying ARCS (2.66 MB) and REGION (2.
 size ideas for those two sections ([ideas](../../01-product/ideas.md)) also shorten the first
 query. One layer costs at most 2.2× a direct call (admin_at, which also builds the hierarchy);
 three layers cost 2.3× to 3.8× one layer for get, reverse and search.
+
+### Search after D-119
+
+Same pack, same machine, 2026-11-09 (load about 5). `measure`: search k = 10 through the engine
+with 1 layer 11.1 µs (was 72.6 µs), 3 layers 24.8 µs (was 163.9 µs). The golden set scored on
+the engine (`S3_ENGINE=product`): recall@1 0.652, recall@5 0.766, pass 0.725, p50 6.7 µs, p99
+78 µs; the spike's search on the same pack: 0.801, 0.932, 0.887.
+

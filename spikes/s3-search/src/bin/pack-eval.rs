@@ -373,8 +373,41 @@ fn run(args: &[String]) -> Result<(), String> {
     let t_load = t0.elapsed();
 
     let engine = Engine::on_pack(&recs, Packed::new(search, search_section.bytes()), &cc_dir);
+    // `S3_ENGINE=product` scores the product's search (`teigeodata-engine`) instead of the
+    // spike's: the gate of what users get.
+    let product = std::env::var_os("S3_ENGINE").is_some_and(|v| v == "product");
+    let layer = teigeodata_engine::Layer::open(
+        std::path::Path::new(pack_path),
+        teigeodata_engine::LayerOptions::default(),
+    )
+    .map_err(|e| format!("{pack_path}: {e}"))?;
+    let mut real = teigeodata_engine::Engine::new();
+    real.add(layer);
+    let scratch = std::cell::RefCell::new((
+        teigeodata_engine::Scratch::default(),
+        Vec::<teigeodata_engine::Hit>::new(),
+    ));
+    let search_with = |q: &str| -> Vec<usize> {
+        if !product {
+            return engine.search(q, 10);
+        }
+        let mut guard = scratch.borrow_mut();
+        let (s, hits) = &mut *guard;
+        if real.search(q, 10, s, hits).is_err() {
+            return Vec::new();
+        }
+        hits.iter().map(|h| h.place.row as usize).collect()
+    };
+    println!(
+        "search: {}",
+        if product {
+            "teigeodata-engine (S3_ENGINE=product)"
+        } else {
+            "the spike's"
+        }
+    );
     let t0 = Instant::now();
-    let scores = golden::score(&engine, &golden, &x.key_group, |g| {
+    let scores = golden::score(search_with, &golden, &x.key_group, |g| {
         recs.get(g).map_or(String::new(), |r| {
             format!("{} [{}] ({})", r.name, r.district, r.key)
         })

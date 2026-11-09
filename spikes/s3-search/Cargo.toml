@@ -11,6 +11,7 @@ publish = false
 teigeodata-format = { workspace = true, features = ["write"] }
 teigeodata-names.workspace = true
 teigeodata-core.workspace = true
+teigeodata-engine.workspace = true
 calamine = "0.38.0"
 fst = "0.4.7"
 serde = { version = "1.0.229", features = ["derive"] }

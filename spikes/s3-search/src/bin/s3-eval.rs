@@ -95,11 +95,16 @@ fn main() {
         .map(|r| (r.key.as_str(), vec![r.group]))
         .collect();
 
-    let scores = golden::score(&engine, &golden, &key_group, |g| {
-        recs.iter()
-            .find(|r| r.group == g)
-            .map_or(String::new(), |r| format!("{} [{}]", r.name, r.district))
-    });
+    let scores = golden::score(
+        |q| engine.search(q, 10),
+        &golden,
+        &key_group,
+        |g| {
+            recs.iter()
+                .find(|r| r.group == g)
+                .map_or(String::new(), |r| format!("{} [{}]", r.name, r.district))
+        },
+    );
 
     // Probe (not part of the golden set): a first-letter keyboard typo on every exact_latin
     // query, which the golden typo class never makes. Measures what fuzzy anchoring costs.

@@ -91,7 +91,7 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 | `reverse(at, k)` | Every layer, skipped when a latitude bound proves it cannot beat the current k-th distance | Each layer gives its k nearest visible places (asking its index again for more while hidden places or ties could hide one); k-way merge by distance, then ID |
 | `admin_at(at)` | The first layer in precedence order whose ADMIN_REGION holds the point (coverage beats existence) | none; a unit whose ID a higher layer claims is answered from that layer |
 | `tz_at(at)` | The first layer whose REGION (timezones) holds the point | as `admin_at` |
-| `search(q, k)` | Every layer with SEARCH | Each layer scores its rows and keeps its best k visible; k-way merge by score, then ID |
+| `search(q, k)` | Every layer with SEARCH | Each layer scores its rows and keeps its best k visible; k-way merge by score, then ID. Fuzzy keys share the first letter unless no layer has a visible strong match; a context after a comma matches ancestors in the row's own pack (D-119) |
 | `within_bbox(rect, limit)` | Layers whose box meets the rect | Smallest IDs first, k-way merge by ID |
 
 **Search scores** are the same in every layer, so the merge is exact. The query is folded with

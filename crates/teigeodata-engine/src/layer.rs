@@ -10,6 +10,7 @@ use std::time::SystemTime;
 use teigeodata_core::{E7, PlaceId, Point};
 use teigeodata_format::arcs::Arcs;
 use teigeodata_format::blocks::{BLOCK, Blocks};
+use teigeodata_format::hierarchy::Hierarchy;
 use teigeodata_format::idmap::IdMap;
 use teigeodata_format::names::Names;
 use teigeodata_format::place_index::PlaceIndex;
@@ -79,6 +80,7 @@ pub(crate) struct Views<'a> {
     pub(crate) pack: Pack<'a>,
     pub(crate) ids: Option<IdMap<'a>>,
     pub(crate) places: Option<Places<'a>>,
+    pub(crate) hierarchy: Option<Hierarchy<'a>>,
     pub(crate) redirects: Option<Redirects<'a>>,
     pub(crate) names: Option<Names<'a>>,
     pub(crate) search: Option<Search<'a>>,
@@ -98,6 +100,9 @@ impl<'a> Views<'a> {
         let get = |k| pack.section(k);
         let ids = get(Kind::IDMAP).map(|s| IdMap::open(&s)).transpose()?;
         let places = get(Kind::PLACES).map(|s| Places::open(&s)).transpose()?;
+        let hierarchy = get(Kind::HIERARCHY)
+            .map(|s| Hierarchy::open(&s))
+            .transpose()?;
         let redirects = get(Kind::REDIRECTS)
             .map(|s| Redirects::open(&s))
             .transpose()?;
@@ -127,6 +132,7 @@ impl<'a> Views<'a> {
             pack,
             ids,
             places,
+            hierarchy,
             redirects,
             names,
             search,
