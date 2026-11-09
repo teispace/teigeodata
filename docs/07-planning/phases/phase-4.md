@@ -106,8 +106,13 @@ signed pack per address; a client holds any subset of its sections.
   (`tests/components.rs`, D-136)
 
 ### 4.2 Baseline and locator
+Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [ ] Forge: the baseline build (countries, admin1, cities above a threshold, simplified world
-  timezones), same ID registry, thresholds and tolerances as data
+  timezones), same ID registry, thresholds and tolerances as data. A country with a pack
+  contributes a slice of that build; elsewhere the D-144 sources, keyed by GeoNames and
+  Wikidata IDs; a report of each country's admin-1 source
+- [ ] Pin the baseline sources (`ne-admin0-nep-5.1.1`, `ne-admin1-5.1.1`,
+  `geonames-cities15000`); the OSM boundary extract as a CI job
 - [ ] The locator: a REGION over buffered coverage polygons; `missing_pack_for(point)`;
   border-probe gate (no missed pack; extra-candidate rate reported)
 - [ ] Size gate (proposed 8 MB, Z1); `baseline` feature; WASM loads it as a file (Z3)

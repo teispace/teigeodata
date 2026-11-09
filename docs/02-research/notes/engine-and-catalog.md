@@ -212,7 +212,9 @@ What ADR-0010 lists, with sizes we can already estimate from Nepal and the world
 | World timezones, simplified | the full world REGION is 25.7 MB (B9); a simplified one at the baseline's precision is a fraction | 1–2 MB |
 | Locator | a REGION over buffered coverage polygons, roughly the admin1 vertex count | 0.5–1.5 MB |
 
-Total: **5–10 MB, all estimates.** The proposed budget is 8 MB, measured by Z1 on the built
+Total: **5–10 MB, all estimates.** The [baseline note](baseline.md) (2026-11-09) pins the
+sources and measures the boundaries: world admin 1 at 1 km is 372,470 vertices counted per ring,
+at most 1.3–1.7 MB. The proposed budget is 8 MB, measured by Z1 on the built
 baseline. It is a separate asset from the library's code, for two reasons:
 - **Native:** `include_bytes!` into a feature-gated module, read through the same unaligned
   reader as any pack.
