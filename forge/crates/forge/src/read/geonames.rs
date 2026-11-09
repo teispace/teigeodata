@@ -130,7 +130,18 @@ fn alternate_row(line: &str, ids: &BTreeSet<u64>, out: &mut Output) {
         // Not names: links and codes.
         "link" => return out.links.push(same_as(text.to_string())),
         "wkdt" => return out.links.push(same_as(format!("wikidata:{text}"))),
-        "post" | "iata" | "icao" | "faac" | "tcid" | "unlc" | "abbr" | "fr_1793" => return,
+        // A city's IATA code and a stated abbreviation are what people type (KTM for
+        // Kathmandu): short names with no language. Airports carry codes too, but never
+        // become places.
+        "iata" | "abbr" => {
+            return out.names.push(Name {
+                id,
+                text: text.to_string(),
+                lang: String::new(),
+                kind: "short".into(),
+            });
+        }
+        "post" | "icao" | "faac" | "tcid" | "unlc" | "fr_1793" => return,
         _ => {}
     }
     let kind = if historic == "1" {
@@ -218,6 +229,8 @@ mod tests {
         alternate_row("9\t1283240\ten\tYen\t\t\t1\t", &ids, &mut out);
         alternate_row("10\t1283240\twkdt\tQ3037\t\t\t\t", &ids, &mut out);
         alternate_row("11\t999\ten\tOther\t\t\t\t", &ids, &mut out);
+        alternate_row("12\t1283240\tiata\tKTM\t\t\t\t", &ids, &mut out);
+        alternate_row("13\t1283240\ticao\tVNKT\t\t\t\t", &ids, &mut out);
         assert!(
             out.names
                 .iter()
@@ -225,5 +238,11 @@ mod tests {
         );
         assert!(out.links.iter().any(|l| l.target == "wikidata:Q3037"));
         assert!(!out.names.iter().any(|n| n.text == "Other"));
+        assert!(
+            out.names
+                .iter()
+                .any(|n| n.text == "KTM" && n.kind == "short" && n.lang.is_empty())
+        );
+        assert!(!out.names.iter().any(|n| n.text == "VNKT"));
     }
 }
