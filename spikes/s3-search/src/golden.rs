@@ -108,7 +108,13 @@ pub fn score(
         m[3] += f64::from(u8::from(first.is_some_and(|r| r < usize::from(q.max_rank))));
         m[4] += first.map_or(0.0, |r| 1.0 / (r + 1) as f64);
         m[5] += if idcg > 0.0 { dcg / idcg } else { 0.0 };
-        if first.is_none_or(|r| r >= usize::from(q.max_rank)) {
+        // `S3_MISSES=first` lists every query whose first result is not a hit.
+        let limit = if std::env::var_os("S3_MISSES").is_some_and(|v| v == "first") {
+            1
+        } else {
+            usize::from(q.max_rank)
+        };
+        if first.is_none_or(|r| r >= limit) {
             let got: Vec<String> = res.iter().take(3).map(|&g| label(g)).collect();
             let want = grade.keys().next().map_or(String::new(), |&g| label(g));
             s.misses.entry(q.class.clone()).or_default().push(format!(
