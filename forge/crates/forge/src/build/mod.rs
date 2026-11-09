@@ -18,6 +18,9 @@
 //!   admin unit that holds its point;
 //! - every timezone zone whose box meets the country's (D-093), at a point inside it.
 //!
+//! The postal codes of `data/countries/<cc>/postal.yaml`, checked against their source table,
+//! link to the admin places (D-105).
+//!
 //! Rows are in Hilbert order, ties broken by the place's key. IDs come from the ID registry
 //! (`--ids`, the previous build's `<cc>-ids-<build>.tsv`): places keep their serials by shared
 //! source keys and new ones are allocated in row order (D-075, D-094). The same inputs give the
@@ -30,6 +33,7 @@
 pub(crate) mod geometry;
 mod ids;
 mod pack;
+mod postal;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -168,32 +172,12 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
     let a = Args::parse(args)?;
     let lock = Lock::read(&root.join("data/sources.lock"))?;
-    let licence = |id: &str| lock.get(id).map(|s| s.licence_class.clone());
-    let mut skipped = Vec::new();
-    let mut allowed = |id: &str| -> Result<bool, String> {
-        let class = licence(id)?;
-        let ok = !a.lite || LITE.contains(&class.as_str());
-        if !ok {
-            skipped.push(format!("{id} ({class})"));
-        }
-        Ok(ok)
-    };
-    // The schedule-time licence gate (G-lic): a source the build may not read is never opened.
-    let sources: Vec<String> = a
-        .sources
-        .iter()
-        .filter_map(|s| allowed(s).map(|ok| ok.then(|| s.clone())).transpose())
-        .collect::<Result<_, _>>()?;
-    if !allowed(&a.admin)? {
-        return Err(format!(
-            "the boundary source {} is not allowed in this build",
-            a.admin
-        ));
-    }
-    let tz = match &a.tz {
-        Some(id) if allowed(id)? => Some(id.clone()),
-        _ => None,
-    };
+    let Gated {
+        sources,
+        tz,
+        postal,
+        skipped,
+    } = gate(root, &a, &lock)?;
 
     let build = root.join("data/build");
     let profile = Profile::read(root, &a.cc)?;
@@ -231,11 +215,10 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
     let file = out_dir.join(format!("{}-places-{}.tgd", a.cc, a.build_name()));
     let registry = registry(root, a.ids.as_deref())?;
-    let geometry = if a.topology {
-        Some(geometry::load(root, &a.admin)?)
-    } else {
-        None
-    };
+    let geometry = a
+        .topology
+        .then(|| geometry::load(root, &a.admin))
+        .transpose()?;
     let report = pack::write(&pack::Input {
         root,
         args: &a,
@@ -247,6 +230,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         registry: &registry,
         ids_file: &out_dir.join(format!("{}-ids-{}.tsv", a.cc, a.build_name())),
         geometry: geometry.as_ref(),
+        postal: postal.as_ref(),
     })?;
     let mut summary = format!(
         "## build: {} {}\n\n{} places from {}; boundaries {}; timezones {}.\n",
@@ -257,7 +241,8 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         a.admin,
         tz.as_deref().unwrap_or("none"),
     );
-    notes(&mut summary, held, unnamed, &skipped);
+    let postal_notes = postal.as_ref().map_or(&[][..], |p| p.notes.as_slice());
+    notes(&mut summary, held, unnamed, &skipped, postal_notes);
     summary.push('\n');
     summary.push_str(&report);
     fs::write(
@@ -272,8 +257,56 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     ))
 }
 
-/// The summary's notes: places held at their seed point, left out, and sources not read.
-fn notes(summary: &mut String, held: usize, unnamed: usize, skipped: &[String]) {
+/// What the licence gate lets a build read.
+struct Gated {
+    sources: Vec<String>,
+    tz: Option<String>,
+    postal: Option<postal::Postal>,
+    /// The sources not read, with their licence class.
+    skipped: Vec<String>,
+}
+
+/// The schedule-time licence gate (G-lic): a source the build may not read is never opened.
+fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
+    let mut skipped = Vec::new();
+    let mut allowed = |id: &str| -> Result<bool, String> {
+        let class = lock.get(id)?.licence_class.clone();
+        let ok = !a.lite || LITE.contains(&class.as_str());
+        if !ok {
+            skipped.push(format!("{id} ({class})"));
+        }
+        Ok(ok)
+    };
+    let sources: Vec<String> = a
+        .sources
+        .iter()
+        .filter_map(|s| allowed(s).map(|ok| ok.then(|| s.clone())).transpose())
+        .collect::<Result<_, _>>()?;
+    if !allowed(&a.admin)? {
+        return Err(format!(
+            "the boundary source {} is not allowed in this build",
+            a.admin
+        ));
+    }
+    let tz = match &a.tz {
+        Some(id) if allowed(id)? => Some(id.clone()),
+        _ => None,
+    };
+    let postal = postal::load(root, &a.cc, lock, &a.admin, &mut allowed)?;
+    Ok(Gated {
+        sources,
+        tz,
+        postal,
+        skipped,
+    })
+}
+
+/// The summary's notes: postal codes left out, places held at their seed point, left out,
+/// and sources not read.
+fn notes(summary: &mut String, held: usize, unnamed: usize, skipped: &[String], postal: &[String]) {
+    for n in postal {
+        let _ = writeln!(*summary, "Postal: {n}.");
+    }
     if held > 0 {
         let _ = writeln!(
             *summary,

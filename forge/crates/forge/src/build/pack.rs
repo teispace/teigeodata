@@ -4,6 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::fs;
+use std::ops::ControlFlow;
 use std::path::Path;
 
 use teigeodata_core::{E6, E7, Namespace, PlaceId, PlaceKind, Point, hilbert};
@@ -12,6 +13,7 @@ use teigeodata_format::idmap::{self, IdMap};
 use teigeodata_format::names::{self, NameRecord, Names, TEXT_BUFFER};
 use teigeodata_format::place_index::{self, Neighbour, PlaceIndex};
 use teigeodata_format::places::{self, PlaceColumns, Places};
+use teigeodata_format::postal::{self, Postal};
 use teigeodata_format::redirects::{self, Fate, Redirects};
 use teigeodata_format::region::{self, Options, Region};
 use teigeodata_format::search::{self, EXACT, Maps, Search};
@@ -45,6 +47,8 @@ pub(super) struct Input<'a> {
     pub(super) ids_file: &'a Path,
     /// The admin geometry of the `topology` stage, when the build adds it.
     pub(super) geometry: Option<&'a super::geometry::Geometry>,
+    /// The postal codes, when the country has them and the build may read them.
+    pub(super) postal: Option<&'a super::postal::Postal>,
 }
 
 /// The search importance of a place, 0 to 130 as in spike S3 (D-052), from what every source
@@ -156,6 +160,9 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
     if let Some(g) = input.geometry {
         sections.extend(super::geometry::sections(g, &rows, &row_of)?);
     }
+    if let Some(p) = input.postal.filter(|p| !p.entries.is_empty()) {
+        sections.push(postal_section(p, &row_of, n)?);
+    }
     if !moved.is_empty() {
         let body = redirects::encode(&moved).map_err(|e| e.to_string())?;
         sections.push((Kind::REDIRECTS, Encoding::TABLE, moved.len() as u64, body));
@@ -187,6 +194,35 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
         blake3::hash(&bytes).to_hex()
     );
     Ok(report)
+}
+
+/// The POSTAL section: every code links to its unit's row (D-105), with the place index.
+fn postal_section(
+    p: &super::postal::Postal,
+    row_of: &BTreeMap<&str, u32>,
+    n: usize,
+) -> Result<Body, String> {
+    let codes: Vec<postal::Code> = p
+        .entries
+        .iter()
+        .map(|e| {
+            let place = row_of.get(e.unit.as_str()).copied().ok_or_else(|| {
+                format!("postal code {} names {}, which has no row", e.code, e.unit)
+            })?;
+            Ok(postal::Code {
+                scheme: e.scheme.clone(),
+                code: e.code.clone(),
+                place,
+                kind: e.kind,
+                valid_from: None,
+                valid_to: None,
+                redirect: None,
+            })
+        })
+        .collect::<Result<_, String>>()?;
+    let places = u32::try_from(n).map_err(|_| "too many places")?;
+    let body = postal::encode(&p.rules, &codes, places, true).map_err(|e| e.to_string())?;
+    Ok((Kind::POSTAL, Encoding::TABLE, codes.len() as u64, body))
 }
 
 /// IDs: kept through the registry, new ones in row order (D-075, D-094); and this pack's
@@ -451,7 +487,67 @@ fn verify(
     if let Some(line) = geometry_line {
         let _ = writeln!(report, "\n{line}");
     }
+    if let Some(s) = p.section(Kind::POSTAL) {
+        let line = verify_postal(&s, rows, input)?;
+        let _ = writeln!(report, "\n{line}");
+    }
     Ok(())
+}
+
+/// POSTAL read back: `check`, then every input code is found in its own scheme at its unit's
+/// row with its kind, and is among that row's codes in the place index.
+fn verify_postal(
+    s: &teigeodata_format::Section<'_>,
+    rows: &[&Place],
+    input: &Input<'_>,
+) -> Result<String, String> {
+    let e = |e: teigeodata_format::Error| e.to_string();
+    let post = Postal::open(s, rows.len()).map_err(e)?;
+    post.check().map_err(e)?;
+    let entries = input.postal.map_or(&[][..], |p| p.entries.as_slice());
+    let row_of: BTreeMap<&str, u32> = rows
+        .iter()
+        .enumerate()
+        .map(|(r, p)| (p.key.as_str(), u32::try_from(r).unwrap_or(u32::MAX)))
+        .collect();
+    for entry in entries {
+        let row = row_of
+            .get(entry.unit.as_str())
+            .copied()
+            .ok_or_else(|| format!("{}: no row", entry.unit))?;
+        let mut key = None;
+        post.lookup(&entry.code, Some(&entry.scheme), |o| {
+            key = Some(o);
+            ControlFlow::Break(())
+        });
+        let o = key.ok_or_else(|| format!("postal {}: not found", entry.code))?;
+        let found = post.records_of(o).find(|&r| {
+            post.record(r)
+                .is_some_and(|x| x.place == row && x.kind == entry.kind)
+        });
+        let rec = found.ok_or_else(|| format!("postal {}: not at {}", entry.code, entry.unit))?;
+        let mut indexed = false;
+        post.records_at(row, |r| {
+            indexed = r == rec;
+            if indexed {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+        if !indexed {
+            return Err(format!(
+                "postal {}: missing from the place index",
+                entry.code
+            ));
+        }
+    }
+    let schemes: Vec<&str> = post.schemes().into_iter().map(|s| s.name()).collect();
+    Ok(format!(
+        "POSTAL: {} codes in {} keys, schemes {schemes:?}; every code is found at its unit's row with its kind, and through the place index.",
+        post.records(),
+        post.keys()
+    ))
 }
 
 /// Every place keeps its ID, point, parent and canonical name, is found by an exact search of
@@ -504,9 +600,9 @@ fn verify_rows(
             search.rows_of(o, |r| {
                 hit |= r as usize == row;
                 if hit {
-                    core::ops::ControlFlow::Break(())
+                    ControlFlow::Break(())
                 } else {
-                    core::ops::ControlFlow::Continue(())
+                    ControlFlow::Continue(())
                 }
             });
         }
