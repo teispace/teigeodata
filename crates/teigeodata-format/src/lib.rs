@@ -43,6 +43,8 @@ pub mod components;
 pub mod dem;
 pub mod elevation;
 mod error;
+#[cfg(feature = "write")]
+pub mod extract;
 #[cfg(feature = "fuzz")]
 #[doc(hidden)]
 pub mod fuzz;
