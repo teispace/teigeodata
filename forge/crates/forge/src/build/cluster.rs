@@ -11,6 +11,7 @@ use super::sources::Rec;
 use super::sources::read_clusters;
 use super::sources::read_names;
 use super::sources::read_records;
+use super::sources::settlement_rank;
 use super::units::Units;
 use super::units::deepest;
 use crate::aliases::rules::Rules;
@@ -304,6 +305,11 @@ pub(super) fn cluster_places(
             point,
             names: all,
             population: recs.iter().find_map(|(r, _, _)| r.population),
+            rank: recs
+                .iter()
+                .map(|(r, _, _)| settlement_rank(&r.class))
+                .max()
+                .unwrap_or(0),
             parent,
             sources: members.into_iter().map(|(_, id)| id).collect(),
         });

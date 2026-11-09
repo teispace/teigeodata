@@ -125,6 +125,7 @@ pub(super) fn zone_places(
                 kind: Some(NameType::Official),
             }],
             population: None,
+            rank: 0,
             parent: None,
         });
         out.rings.push(rings);

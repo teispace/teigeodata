@@ -72,7 +72,9 @@ fn importance(p: &Place) -> u8 {
             3 => 45,
             _ => 40,
         },
-        PlaceKind::Settlement => 30,
+        PlaceKind::Settlement => {
+            30 + u32::from(RANK_BONUS.get(usize::from(p.rank)).copied().unwrap_or(0))
+        }
         PlaceKind::Locality => 10,
         _ => 1,
     };
@@ -88,6 +90,12 @@ fn importance(p: &Place) -> u8 {
         .map_or(0, |n| ((n as f64).log10() * 5.0) as u32);
     u8::try_from((base + pop).min(255)).unwrap_or(u8::MAX)
 }
+
+/// A settlement's importance over the base 30 by its rank (`sources::settlement_rank`): none,
+/// village, town, city, national capital (D-124). Calibrated on the golden set: a city's record
+/// (44) beats the municipality of its name (40 + population); a town or village earns nothing,
+/// since lifting them pushed prefix and ambiguous queries onto small places.
+const RANK_BONUS: [u8; 5] = [0, 0, 0, 14, 24];
 
 /// The importance of every former unit: below a settlement with no population, above a locality.
 const FORMER: u8 = 25;
@@ -711,4 +719,45 @@ fn verify_rows(
         return Err("a place's nearest place is not at its own point".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FORMER, importance};
+    use crate::build::Place;
+    use teigeodata_core::PlaceKind;
+    use teigeodata_format::places;
+
+    fn place(kind: PlaceKind, admin_level: u8, rank: u8, population: Option<i64>) -> Place {
+        Place {
+            key: String::new(),
+            kind,
+            admin_level,
+            flags: 0,
+            point: (0, 0),
+            names: Vec::new(),
+            population,
+            rank,
+            parent: None,
+            sources: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_city_outranks_a_municipality_and_a_village_does_not() {
+        let settlement = |rank| importance(&place(PlaceKind::Settlement, 0, rank, None));
+        let municipality = importance(&place(PlaceKind::Admin, 4, 0, None));
+        assert_eq!([0, 1, 2, 3, 4].map(settlement), [30, 30, 30, 44, 54]);
+        // A city's record beats the municipality of its name; a town's or village's does not.
+        assert!(settlement(3) > 40 && settlement(2) < municipality);
+        // An unknown rank adds nothing; population adds 5·log10.
+        assert_eq!(settlement(9), 30);
+        assert_eq!(
+            importance(&place(PlaceKind::Settlement, 0, 3, Some(100_000))),
+            44 + 25
+        );
+        let mut former = place(PlaceKind::Settlement, 0, 4, Some(1_000_000));
+        former.flags = places::FLAG_FORMER;
+        assert_eq!(importance(&former), FORMER);
+    }
 }

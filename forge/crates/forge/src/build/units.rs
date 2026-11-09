@@ -88,6 +88,7 @@ pub(super) fn admin_places(root: &Path, lock: &Lock, source: &str) -> Result<Uni
                     kind: Some(NameType::Official),
                 }],
                 population: None,
+                rank: 0,
                 parent,
                 sources: vec![key.clone()],
             });
@@ -197,6 +198,7 @@ pub(super) fn country_place(
                 point,
                 names,
                 population: r.population,
+                rank: 0,
                 parent: None,
             }));
         }
@@ -228,6 +230,7 @@ mod tests {
             point: (0, 0),
             names: vec![name(t)],
             population: None,
+            rank: 0,
             parent: None,
             sources: Vec::new(),
         };

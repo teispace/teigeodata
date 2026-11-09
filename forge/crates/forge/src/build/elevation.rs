@@ -356,6 +356,7 @@ mod tests {
             point,
             names: Vec::new(),
             population: None,
+            rank: 0,
             parent: None,
             flags: 0,
             sources: Vec::new(),

@@ -258,6 +258,7 @@ mod tests {
                 kind: None,
             }],
             population,
+            rank: 0,
             parent: parent.map(str::to_string),
             sources: Vec::new(),
         }

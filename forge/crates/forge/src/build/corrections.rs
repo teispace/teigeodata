@@ -654,6 +654,7 @@ review: { by: maintainer, on: 2026-11-09 }
                 })
                 .collect(),
             population: None,
+            rank: 0,
             parent: None,
             sources: sources.iter().map(|s| (*s).to_string()).collect(),
         }

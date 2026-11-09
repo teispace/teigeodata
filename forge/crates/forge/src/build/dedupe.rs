@@ -144,6 +144,7 @@ pub(super) fn absorb(kept: &mut Place, dropped: Place) {
     if kept.population.is_none() {
         kept.population = dropped.population;
     }
+    kept.rank = kept.rank.max(dropped.rank);
 }
 
 /// Writes `merged-<build>.tsv` beside the pack and returns the summary line.
@@ -188,6 +189,7 @@ mod tests {
                 kind: None,
             }],
             population: None,
+            rank: 0,
             parent: None,
             sources: (0..sources).map(|i| format!("{key}/{i}")).collect(),
         }

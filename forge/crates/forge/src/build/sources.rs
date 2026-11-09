@@ -10,6 +10,26 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use teigeodata_format::names::NameType;
 
+/// A settlement's rank from its source class: 4 a national capital, 3 a city or the seat of a
+/// first-level unit, 2 a town or the seat of a second- or third-level unit, 1 a village or the
+/// seat of a fourth-level unit, 0 anything else (hamlets, localities, plain `PPL`). Source
+/// vocabularies only (OSM `place=*`, `GeoNames` feature codes, Wikidata classes): no country's
+/// rule (P16).
+pub(super) fn settlement_rank(class: &str) -> u8 {
+    // A Wikidata class cell lists every P31 value, joined by `|`.
+    class
+        .split('|')
+        .map(|c| match c {
+            "P.PPLC" | "Q5119" => 4,
+            "place=city" | "P.PPLA" | "Q515" | "Q1637706" => 3,
+            "place=town" | "P.PPLA2" | "P.PPLA3" | "Q3957" => 2,
+            "place=village" | "P.PPLA4" | "Q532" => 1,
+            _ => 0,
+        })
+        .max()
+        .unwrap_or(0)
+}
+
 /// A record of a points source, as the build needs it.
 #[derive(Clone, Debug)]
 pub(super) struct Rec {
@@ -144,4 +164,31 @@ pub(super) fn read_clusters(
         Ok(())
     })?;
     Ok(clusters)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::settlement_rank;
+
+    #[test]
+    fn a_settlement_ranks_by_its_highest_class() {
+        let cases = [
+            ("place=city", 3),
+            ("place=town", 2),
+            ("place=village", 1),
+            ("place=hamlet", 0),
+            ("P.PPLC", 4),
+            ("P.PPLA", 3),
+            ("P.PPLA3", 2),
+            ("P.PPLA4", 1),
+            ("P.PPL", 0),
+            // A Wikidata cell lists every class; the highest counts.
+            ("Q532|Q1637706|Q486972", 3),
+            ("Q3957|Q5119", 4),
+            ("", 0),
+        ];
+        for (class, rank) in cases {
+            assert_eq!(settlement_rank(class), rank, "{class}");
+        }
+    }
 }

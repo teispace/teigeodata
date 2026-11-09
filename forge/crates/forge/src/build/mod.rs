@@ -172,6 +172,8 @@ pub(crate) struct Place {
     /// Canonical first.
     pub(crate) names: Vec<PlaceName>,
     pub(crate) population: Option<i64>,
+    /// The best settlement rank of its records (`sources::settlement_rank`), 0 for none.
+    pub(crate) rank: u8,
     /// The key of the parent place.
     pub(crate) parent: Option<String>,
     /// The source keys it was made of (`osm:node/1`, `geonames:2`, `admin:NP0101`): what the ID
