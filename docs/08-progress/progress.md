@@ -35,8 +35,9 @@ A short status. The numbers and evidence live in each phase file and the
   recall@1 0.797, p50 6.7 µs); radius queries and the in-pack hierarchy (D-140), `Shared`
   snapshots (D-141), L1/L4/L5 measured to 10 layers and 1 GiB, open O(head) with block-hash
   lists proved on first read (D-142); `parent`, `ancestors` and `children` across packs by
-  ancestor stubs (D-143). Next: a split-invariant search context, 4.2 baseline and locator,
-  4.3 TUF trust.
+  ancestor stubs (D-143), search contexts split-invariant; baseline sources researched
+  (D-144). Next: 4.2 the `forge baseline` build (pin sources, Nepal slice first), the locator,
+  then 4.3 TUF trust.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).
 - **Waiting on the maintainer:** review of `data/countries/np/corrections/` (unreviewed), the labelled sample (Q-005, needed for `ACCURACY.md` and M3),
