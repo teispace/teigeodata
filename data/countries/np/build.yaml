@@ -29,3 +29,6 @@ buildings:
   - { reader: osm, source: geofabrik-np }
   - { reader: msbuildings, source: msbuildings-np }
   - { reader: google, source: google-buildings-v3-np }
+# G-budget (D-129): any one stage's peak resident memory and the build output (`data/build`),
+# in MB, about 1.5× the measured run (2026-11-09: 964 MB peak, 609 MB of output).
+budget: { rss_mb: 1500, disk_mb: 1000 }

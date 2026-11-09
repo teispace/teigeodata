@@ -29,6 +29,16 @@ struct Recipe {
     /// The population grid of admin units' modelled population (D-123).
     #[serde(default)]
     population: Option<String>,
+    /// The resources one build may use (G-budget, enforced by `forge make`).
+    #[serde(default)]
+    budget: Option<Budget>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Budget {
+    rss_mb: u64,
+    disk_mb: u64,
 }
 
 #[derive(Deserialize)]
@@ -129,6 +139,11 @@ pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
     if r.points.len() < 2 {
         out.push("conflation needs at least two points sources".into());
     }
+    if let Some(b) = &r.budget
+        && (b.rss_mb == 0 || b.disk_mb == 0)
+    {
+        out.push("a budget states rss_mb and disk_mb above zero".into());
+    }
     out
 }
 
@@ -147,6 +162,15 @@ mod tests {
         assert_eq!(check_text(good, &pinned), Vec::<String>::new());
         let with_dem = format!("{good}extent: \"80,26,88,30\"\ndem: x\n");
         assert_eq!(check_text(&with_dem, &pinned), Vec::<String>::new());
+        let with_budget = format!("{good}budget: {{ rss_mb: 4000, disk_mb: 2000 }}\n");
+        assert_eq!(check_text(&with_budget, &pinned), Vec::<String>::new());
+        let zero = format!("{good}budget: {{ rss_mb: 0, disk_mb: 2000 }}\n");
+        assert!(!check_text(&zero, &pinned).is_empty(), "a zero budget");
+        let partial = format!("{good}budget: {{ rss_mb: 4000 }}\n");
+        assert!(
+            !check_text(&partial, &pinned).is_empty(),
+            "a partial budget"
+        );
         for (text, why) in [
             (
                 "schema: teigeodata/build/v2\nadmin: a\npoints:\n  - { reader: osm, source: b }\n  - { reader: osm, source: c }\n",

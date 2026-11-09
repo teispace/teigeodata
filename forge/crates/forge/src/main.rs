@@ -32,6 +32,7 @@
 )]
 
 mod aliases;
+mod budget;
 mod build;
 mod buildings;
 mod conflate;

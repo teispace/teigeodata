@@ -560,6 +560,12 @@ for each building source the build may read, `core`, `topology` for the admin so
   and written atomically after it ends, so a killed run resumes from the first unfinished
   stage.
 - **Licence gate.** `--lite` never schedules a reader for a source outside the lite classes.
+- **Budget (G-budget, D-129).** The stage table gives each stage's time and, on Linux, its
+  peak resident memory (`VmHWM`, reset per stage through `/proc/self/clear_refs`); the run
+  line gives the highest peak and the largest size of `data/build`. A recipe's
+  `budget: { rss_mb, disk_mb }` makes `make` fail when a stage or the output goes over it.
+  Nepal: 964 MB peak (the whole process, macOS `time -l`), 609 MB of output; budget 1,500
+  and 1,000 MB.
 
 Measured on Nepal on 2026-11-08 (release build, Apple M2 Pro), with the building and core
 stages:
@@ -578,8 +584,7 @@ the 139 MB section in a fraction of a second. Sampling every place adds about a 
 Before the building stages (2026-11-07): cold 7.8 s, warm 19 ms; a changed profile reran 2
 stages in 3.4 s and a hand-changed GeoNames output 1 stage in 3.1 s.
 
-Not yet: per-stage code versions, the disk budget check, and the stages after `build`
-(they join the recipe as they land).
+The stages after `build` join the recipe as they land.
 
 **Clean-up.** `cargo xtask clean` removes build output from both workspaces and keeps the
 store: fetched sources are pinned inputs, not build output.

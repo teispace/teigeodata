@@ -152,7 +152,8 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 - [ ] G-det, G-lic, G-topo, G-pip, G-conf, G-corr, G-budget in CI. Written (D-128):
   `.github/workflows/data-build.yml` runs G-det (the build stage twice, `cmp`), G-lic
   (`cargo xtask check-pack`), G-corr (inside the build) and the golden gate per pack; it runs
-  once the mirror release `sources` is published (D-127). G-topo, G-pip, G-conf, G-budget to add
+  once the mirror release `sources` is published (D-127). G-budget in `forge make` (D-129).
+  G-topo, G-pip, G-conf to add
 - [x] Attribution in every pack (D-031, D-126): each source's notice from `sources.lock`,
   carried in the signed manifest of every pack built from it (Copernicus and WorldPop in main);
   `Layer::attribution()`; the API and bindings expose it with the layer's metadata (phases 5–6)
@@ -192,3 +193,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | Conflation: a source's duplicates join (D-125) | Simikot split between a Wikidata item and its bot copy |
 | 2026-11-09 | 3.7: attribution in every pack (D-126); the ranking item closed with its leftovers recorded | the licence terms of the sources the packs now carry |
 | 2026-11-09 | 3.7: the data-build workflow with G-det, G-lic and the golden gate (D-128) | the gates had no CI job |
+| 2026-11-09 | 3.7: G-budget in `forge make` (D-129) | the data build had no resource gate |

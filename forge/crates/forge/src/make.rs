@@ -27,6 +27,7 @@ use std::time::Instant;
 
 use serde::Deserialize;
 
+use crate::budget::{self, Budget, Usage};
 use crate::build;
 use crate::buildings;
 use crate::conflate;
@@ -64,6 +65,9 @@ struct Recipe {
     /// The population grid admin units' modelled population comes from (D-123).
     #[serde(default)]
     population: Option<String>,
+    /// The resources one build may use (G-budget).
+    #[serde(default)]
+    budget: Option<Budget>,
 }
 
 #[derive(Deserialize)]
@@ -296,6 +300,9 @@ struct Runner {
     force: bool,
     log: String,
     ran: usize,
+    /// `data/build`, sized after every stage (G-budget).
+    out: PathBuf,
+    usage: Usage,
 }
 
 impl Runner {
@@ -306,17 +313,52 @@ impl Runner {
         key: &str,
         run: impl FnOnce() -> Result<String, String>,
     ) -> Result<(), String> {
+        budget::reset_peak();
+        let t = Instant::now();
         let out = stage(at, key, self.force, run)?;
-        let how = out.map_or_else(
-            || "cached".to_string(),
-            |s| {
-                self.ran += 1;
-                first_line(&s)
-            },
-        );
         let short = key.get(..12).unwrap_or(key);
-        let _ = writeln!(self.log, "| {name} | `{short}` | {how} |");
+        let Some(summary) = out else {
+            let _ = writeln!(self.log, "| {name} | `{short}` | cached | | |");
+            return Ok(());
+        };
+        self.ran += 1;
+        let rss = budget::peak_rss();
+        self.usage.stage(name, rss);
+        self.usage.disk = self.usage.disk.max(budget::tree_bytes(&self.out));
+        let mb = rss.map_or_else(|| "–".to_string(), |b| b.div_ceil(1_000_000).to_string());
+        let _ = writeln!(
+            self.log,
+            "| {name} | `{short}` | {} | {:.1} | {mb} |",
+            first_line(&summary),
+            t.elapsed().as_secs_f64()
+        );
         Ok(())
+    }
+
+    /// The stage table and the run's line, or the same with the overruns of `budget` (G-budget).
+    fn finish(
+        mut self,
+        root: &Path,
+        summary: &Path,
+        t: Instant,
+        budget: Option<&Budget>,
+    ) -> Result<String, String> {
+        // Cached stages leave their output too: size the tree once more.
+        self.usage.disk = self.usage.disk.max(budget::tree_bytes(&self.out));
+        let report = format!(
+            "{}\n{} in {:.1?}: {} of the stages ran; {}.",
+            self.log,
+            summary.strip_prefix(root).unwrap_or(summary).display(),
+            t.elapsed(),
+            self.ran,
+            self.usage.line(),
+        );
+        let over = budget.map(|b| self.usage.over(b)).unwrap_or_default();
+        if over.is_empty() {
+            Ok(report)
+        } else {
+            Err(format!("{report}\n{}", over.join("\n")))
+        }
     }
 }
 
@@ -543,8 +585,10 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let profile = fs::read(country.join("profile.yaml")).map_err(|e| e.to_string())?;
     let mut r = Runner {
         force: args.iter().any(|a| a == "--force"),
-        log: String::from("| Stage | Key | Run |\n|---|---|---|\n"),
+        log: String::from("| Stage | Key | Run | s | Peak MB |\n|---|---|---|--:|--:|\n"),
         ran: 0,
+        out: root.join("data/build"),
+        usage: Usage::default(),
     };
 
     let (sources, read_keys) = read_stages(root, &recipe, &lock, lite, &mut r)?;
@@ -617,14 +661,12 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     r.step("build", (&dir, &stamp, Some(&owns)), &bk, || {
         build::run(root, &build_args)
     })?;
-    let summary = dir.join(format!("summary-{build_name}.md"));
-    Ok(format!(
-        "{}\n{} in {:.1?}: {} of the stages ran.",
-        r.log,
-        summary.strip_prefix(root).unwrap_or(&summary).display(),
-        t.elapsed(),
-        r.ran,
-    ))
+    r.finish(
+        root,
+        &dir.join(format!("summary-{build_name}.md")),
+        t,
+        recipe.budget.as_ref(),
+    )
 }
 
 /// The first line of a stage summary, for the stage table.
