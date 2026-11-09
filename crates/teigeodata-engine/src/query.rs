@@ -8,13 +8,12 @@
 //! depend on how places are split into packs or in which order packs were added.
 
 use core::cell::Cell;
-use core::cmp::Ordering;
 use core::ops::{ControlFlow, Range};
 
 use teigeodata_core::{E6, E7, PlaceId, PlaceKind, Point};
 use teigeodata_format::Kind;
 use teigeodata_format::idmap::IdMap;
-use teigeodata_format::place_index::Neighbour;
+use teigeodata_format::place_index::{Neighbour, PlaceIndex};
 use teigeodata_format::redirects::Fate;
 use teigeodata_format::region::Region;
 use teigeodata_format::search::fuzzy::{Fuzzy, MAX_CHARS};
@@ -333,45 +332,7 @@ impl Engine {
             l.ensure(Kind::PLACES)?;
             l.ensure(Kind::IDMAP)?;
             let start = s.near.len();
-            let mut want = k;
-            loop {
-                s.near.truncate(start);
-                if s.neighbours.len() < want {
-                    s.neighbours.resize(want, Neighbour::default());
-                }
-                let buf = s.neighbours.get_mut(..want).unwrap_or_default();
-                let n = index_.nearest(at, buf);
-                let mut last = f64::NEG_INFINITY;
-                for nb in buf.get(..n).unwrap_or_default() {
-                    last = nb.haversine;
-                    let Some(id) = ids.id(nb.row) else { continue };
-                    if self.claimed_above(i, id)? {
-                        continue;
-                    }
-                    s.near.push(NearCand {
-                        haversine: nb.haversine,
-                        id: id.get(),
-                        layer: index(i),
-                        row: index(nb.row),
-                    });
-                }
-                let seg = s.near.get_mut(start..).unwrap_or_default();
-                seg.sort_unstable_by(|a, b| {
-                    if near_less(a, b) {
-                        Ordering::Less
-                    } else {
-                        Ordering::Greater
-                    }
-                });
-                // Complete when the layer ran out, or when every place up to its k-th visible
-                // distance was fetched (the last one fetched is strictly farther).
-                let complete = n < want || seg.get(k - 1).is_some_and(|kth| last > kth.haversine);
-                if complete {
-                    s.near.truncate(start + k.min(seg_len(start, s.near.len())));
-                    break;
-                }
-                want = want.saturating_mul(2);
-            }
+            self.layer_nearest(i, index_, ids, at, k, bound, s)?;
             s.segs.push(start..s.near.len());
             // The k-th distance over every layer so far bounds the layers still to ask.
             let mut seen = 0;
@@ -397,6 +358,86 @@ impl Engine {
             }
             Ok(())
         })
+    }
+
+    /// Appends layer `i`'s visible places nearest to `at` to `s.near`, nearest first (ties by
+    /// ID), at most `k` and none farther than `bound`; asks the index again for more while a
+    /// hidden place or a tie at the last distance fetched could hide one.
+    #[allow(
+        clippy::too_many_arguments,
+        clippy::many_single_char_names,
+        reason = "one layer's share of `reverse`, in its names"
+    )]
+    fn layer_nearest(
+        &self,
+        i: usize,
+        index_: &PlaceIndex<'_>,
+        ids: &IdMap<'_>,
+        at: Point<E6>,
+        k: usize,
+        bound: f64,
+        s: &mut Scratch,
+    ) -> Result<(), Error> {
+        let start = s.near.len();
+        // One more than k, so that a k-th place tied with an unfetched one is noticed.
+        let mut want = k.saturating_add(1);
+        loop {
+            s.near.truncate(start);
+            if s.neighbours.len() < want {
+                s.neighbours.resize(want, Neighbour::default());
+            }
+            let buf = s.neighbours.get_mut(..want).unwrap_or_default();
+            let n = index_.nearest(at, buf);
+            let fetched = buf.get(..n).unwrap_or_default();
+            let last = fetched.last().map_or(f64::NEG_INFINITY, |x| x.haversine);
+            s.near.extend(fetched.iter().filter_map(|nb| {
+                Some(NearCand {
+                    haversine: nb.haversine,
+                    id: ids.id(nb.row)?.get(),
+                    layer: index(i),
+                    row: index(nb.row),
+                })
+            }));
+            s.near
+                .get_mut(start..)
+                .unwrap_or_default()
+                .sort_unstable_by(|a, b| a.haversine.total_cmp(&b.haversine).then(a.id.cmp(&b.id)));
+            // Keep the visible places, nearest first, up to k and up to the k-th distance
+            // of the layers before; `stop` is the distance where the walk stopped.
+            let mut kept = start;
+            let mut stop = None;
+            for j in start..s.near.len() {
+                let Some(c) = s.near.get(j).copied() else {
+                    break;
+                };
+                if c.haversine > bound {
+                    stop = Some(bound);
+                    break;
+                }
+                let Some(id) = PlaceId::from_raw(c.id) else {
+                    continue;
+                };
+                if self.claimed_above(i, id)? {
+                    continue;
+                }
+                if let Some(slot) = s.near.get_mut(kept) {
+                    *slot = c;
+                }
+                kept += 1;
+                if kept - start == k {
+                    stop = Some(c.haversine);
+                    break;
+                }
+            }
+            s.near.truncate(kept);
+            // Complete when the layer ran out, or when every place up to where the walk
+            // stopped was fetched (the last one fetched is strictly farther).
+            if n < want || stop.is_some_and(|h| h < last) {
+                break;
+            }
+            want = want.saturating_mul(2);
+        }
+        Ok(())
     }
 
     /// The admin units holding `at`, every level, coarse to fine, into `out`, from the layer
@@ -494,8 +535,9 @@ impl Engine {
         if q.is_empty() {
             return Ok(());
         }
-        s.loose.clear();
-        s.loose.extend(q.chars().filter(|&c| c != ' '));
+        let mut loose = core::mem::take(&mut s.loose);
+        loose.clear();
+        loose.extend(q.chars().filter(|&c| c != ' '));
         let chars = q.chars().count();
         let fuzzy = if (FUZZY_MIN..=MAX_CHARS).contains(&chars) {
             Fuzzy::new(&q, 1)
@@ -523,56 +565,12 @@ impl Engine {
             };
             l.ensure(Kind::SEARCH)?;
             l.ensure(Kind::IDMAP)?;
-            s.rows.clear();
-            let rows = &mut s.rows;
-            let add = |ordinal: Option<u32>, bonus: i32, rows: &mut Vec<(u32, i32)>| {
-                if let Some(o) = ordinal {
-                    search.rows_of(o, |r| {
-                        rows.push((r, bonus));
-                        ControlFlow::Continue(())
-                    });
-                }
-            };
-            add(search.get(EXACT, &q), EXACT_BONUS, rows);
-            // A loose lookup reads the loose list and its exact twin (D-086).
-            add(search.get(LOOSE, &s.loose), LOOSE_BONUS, rows);
-            add(search.get(EXACT, &s.loose), LOOSE_BONUS, rows);
-            if let Some(f) = &fuzzy {
-                search.walk(EXACT, f, None, usize::MAX, |o, edits| {
-                    let bonus = FUZZY_BONUS - FUZZY_PER_EDIT * i32::from(edits);
-                    add(Some(o), bonus, rows);
-                    ControlFlow::Continue(())
-                });
-            }
-            let me = index(i);
-            rows.extend(
-                s.prefix
-                    .iter()
-                    .filter(|p| p.layer == me)
-                    .map(|p| (p.row, PREFIX_BONUS)),
-            );
-            rows.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
-            rows.dedup_by_key(|r| r.0);
             let start = s.hits.len();
-            for &(row, bonus) in rows.iter() {
-                let Some(id) = ids.id(row as usize) else {
-                    continue;
-                };
-                if self.claimed_above(i, id)? {
-                    continue;
-                }
-                s.hits.push(HitCand {
-                    score: bonus + i32::from(search.importance(row)),
-                    id: id.get(),
-                    layer: me,
-                    row,
-                });
-            }
-            let seg = s.hits.get_mut(start..).unwrap_or_default();
-            seg.sort_unstable_by(|a, b| b.score.cmp(&a.score).then(a.id.cmp(&b.id)));
-            s.hits.truncate(start + k.min(seg_len(start, s.hits.len())));
+            self.layer_hits(i, search, ids, (&q, &loose, fuzzy.as_ref()), k, s)?;
             s.segs.push(start..s.hits.len());
         }
+        // The loose key's buffer goes back to the scratch, to be reused.
+        s.loose = loose;
         let (hits, segs, heads) = (&s.hits, &s.segs, &mut s.heads);
         merge(hits, segs, heads, k, hit_less, |c| {
             if let Some(place) = self.place(c.layer as usize, c.row as usize)? {
@@ -583,6 +581,79 @@ impl Engine {
             }
             Ok(())
         })
+    }
+
+    /// Appends layer `i`'s best `k` visible rows for the folded query `q` (its loose key and its
+    /// fuzzy automaton) to `s.hits`, best first (ties by ID).
+    fn layer_hits(
+        &self,
+        i: usize,
+        search: &Search<'_>,
+        ids: &IdMap<'_>,
+        (q, loose, fuzzy): (&str, &str, Option<&Fuzzy>),
+        k: usize,
+        s: &mut Scratch,
+    ) -> Result<(), Error> {
+        s.rows.clear();
+        let rows = &mut s.rows;
+        let add = |ordinal: Option<u32>, bonus: i32, rows: &mut Vec<(u32, i32)>| {
+            if let Some(o) = ordinal {
+                search.rows_of(o, |r| {
+                    rows.push((r, bonus));
+                    ControlFlow::Continue(())
+                });
+            }
+        };
+        add(search.get(EXACT, q), EXACT_BONUS, rows);
+        // A loose lookup reads the loose list and its exact twin (D-086).
+        add(search.get(LOOSE, loose), LOOSE_BONUS, rows);
+        add(search.get(EXACT, loose), LOOSE_BONUS, rows);
+        if let Some(f) = fuzzy {
+            search.walk(EXACT, f, None, usize::MAX, |o, edits| {
+                let bonus = FUZZY_BONUS - FUZZY_PER_EDIT * i32::from(edits);
+                add(Some(o), bonus, rows);
+                ControlFlow::Continue(())
+            });
+        }
+        let me = index(i);
+        rows.extend(
+            s.prefix
+                .iter()
+                .filter(|p| p.layer == me)
+                .map(|p| (p.row, PREFIX_BONUS)),
+        );
+        rows.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
+        rows.dedup_by_key(|r| r.0);
+        // Score every row, then read IDs (and check visibility) only for the groups of equal
+        // score that can still enter this layer's best k.
+        for r in rows.iter_mut() {
+            r.1 += i32::from(search.importance(r.0));
+        }
+        rows.sort_unstable_by_key(|r| core::cmp::Reverse(r.1));
+        let start = s.hits.len();
+        for group in rows.chunk_by(|a, b| a.1 == b.1) {
+            if s.hits.len() - start >= k {
+                break;
+            }
+            for &(row, score) in group {
+                let Some(id) = ids.id(row as usize) else {
+                    continue;
+                };
+                if self.claimed_above(i, id)? {
+                    continue;
+                }
+                s.hits.push(HitCand {
+                    score,
+                    id: id.get(),
+                    layer: me,
+                    row,
+                });
+            }
+        }
+        let seg = s.hits.get_mut(start..).unwrap_or_default();
+        seg.sort_unstable_by(|a, b| b.score.cmp(&a.score).then(a.id.cmp(&b.id)));
+        s.hits.truncate(start + k.min(seg_len(start, s.hits.len())));
+        Ok(())
     }
 
     /// Appends layer `i`'s best [`PREFIX_K`] visible rows under a key starting with `q`, by
