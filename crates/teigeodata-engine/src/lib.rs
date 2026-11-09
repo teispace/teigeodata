@@ -44,6 +44,7 @@ use core::fmt;
 pub use layer::{Layer, LayerId, LayerOptions, Load, Verify, release_cmp};
 pub use query::{Hit, Near, Place, Scratch};
 pub use teigeodata_format::Kind;
+pub use teigeodata_format::component::{Component, Components};
 pub use teigeodata_format::place_index::Rect;
 
 /// Why the engine could not open a pack or answer a query.
@@ -63,6 +64,14 @@ pub enum Error {
     },
     /// A section is missing or a byte range is outside it.
     Range,
+    /// The query needs a component the layer has but was not installed with (D-133): install
+    /// it, or ask only what the installed components answer.
+    MissingComponent {
+        /// The layer's address.
+        address: Box<str>,
+        /// The component.
+        component: Component,
+    },
 }
 
 impl fmt::Display for Error {
@@ -74,6 +83,11 @@ impl fmt::Display for Error {
                 write!(f, "{address}: section {kind} does not match its hash")
             }
             Self::Range => f.write_str("no such section or byte range"),
+            Self::MissingComponent { address, component } => write!(
+                f,
+                "{address}: the `{}` component is not installed",
+                component.name()
+            ),
         }
     }
 }

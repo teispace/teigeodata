@@ -78,15 +78,15 @@ signed pack per address; a client holds any subset of its sections.
   asset, and gates them (G-wire, D-135) (2026-11-09)
 - [ ] Storage: head plus the installed sections (sparse file, or offsets in a compact file),
   a sidecar of present and verified sections
-- [ ] Engine: a layer opens with any subset; a query that needs a missing component returns
-  `MissingComponent`; the metamorphic gate runs per component set
+- [x] Engine: a layer opens with any closed subset; a query that needs a missing component
+  returns `MissingComponent`; `Engine::elevation` (D-136, 2026-11-09)
 - [ ] Sync: `components(&[...])` plans only those sections' frames; adding one later fetches
   only its frames
 - [ ] Cargo features per component; a binary without one carries none of its readers
 - [x] Gates: points-only Nepal at most 0.55 MB on the wire (522,192 B main, 493,757 B lite,
   2026-11-09); components sum to the asset (G-wire)
-- [ ] Gate: each component, alone and with others, answers its queries as the full pack does
-  (the metamorphic gate per component set, with the engine item above)
+- [x] Gate: each component set answers its queries as the full pack does, holes zeroed
+  (`tests/components.rs`, D-136)
 
 ### 4.2 Baseline and locator
 - [ ] Forge: the baseline build (countries, admin1, cities above a threshold, simplified world
@@ -167,3 +167,4 @@ signed pack per address; a client holds any subset of its sections.
 | 2026-11-09 | 4.1b: ELEVATION is its own section; the format item split in two | D-133 step 1 done |
 | 2026-11-09 | 4.1b: PLACE_TZ instead of a COMPONENTS field; no admin column | D-134 |
 | 2026-11-09 | 4.1b: the component table and G-wire; the per-component metamorphic gate its own line | D-135 |
+| 2026-11-09 | 4.1b: the engine on installed components, and its gate | D-136 |

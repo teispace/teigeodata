@@ -48,6 +48,32 @@ The engine does not catch the signal; it avoids it:
 
 The `mmap` feature (default, not on `wasm32`) gates `memmap2`; without it `Load::Map` reads.
 
+## Installed components (D-136)
+
+A pack may be installed with only some of its components (D-133). `LayerOptions::installed`
+names them (`None`: the whole pack). The layer opens no view on, and never hashes, a section of
+a component outside the set, so those bytes may be holes in a sparse file; under
+`Verify::Eager` only the installed sections are checked. The set must hold what its components
+need (`Components::closed`) and `point` whenever the pack has it, or the layer is refused with
+`Error::MissingComponent`. `Layer::components()` says what is installed and present.
+
+A query that needs a section the pack has but the layer was not installed with returns
+`Error::MissingComponent { address, component }`, never a wrong or empty answer: every query
+asks its layer for each section before reading it (`ensure`). Per query:
+
+| Query | Needs |
+|---|---|
+| `get`, `reverse`, `within_bbox` | `point` (always installed) |
+| `elevation(place)` | `elevation` |
+| `name(place)` | `names` |
+| `search` | `search` (with `names`); a context that matches rows also `admin` |
+| `tz_of(place)` | `timezone`, else `timezone-index`; names `timezone` when neither is installed |
+| `tz_at` | `timezone-index` |
+| `admin_at` | `admin-index` (with `boundaries`) |
+
+`Place` carries no elevation: `Engine::elevation(&place)` reads it, so a points-only `get`
+never touches heights.
+
 ## Lazy verification (D-078)
 
 `Verify::Lazy` (default) hashes a section the first time a query reads it, once per layer:
@@ -116,6 +142,9 @@ droppable suffix removed, 50 (D-121). The unit bonus does not count towards a st
   corrupt block in a 2.5 MiB section is found by its block hash; a flipped block-hash list is
   refused at open; truncated, empty, missing and replaced files.
 - **Allocations** (`tests/alloc.rs`): a counting allocator on the warm path.
+- **Components** (`tests/components.rs`, D-136): the pack opened under eight component sets,
+  its uninstalled sections zeroed, eager and lazy; every query answers as the whole pack does
+  or names the missing component; a set without what it needs is refused.
 
 Each gate was first shown to fail on a planted bug (D-114).
 
@@ -131,3 +160,4 @@ Each gate was first shown to fail on a planted bug (D-114).
 |---|---|---|
 | 2026-11-09 | First version: opening, verification, precedence, queries, gates | Step 4.1, D-113, D-114 |
 | 2026-11-09 | Search: query rules (unit, phonetic, native, drop) | D-120, D-121 |
+| 2026-11-09 | Installed components, `MissingComponent`, `Engine::elevation`, `tz_of` | D-133 to D-136 |

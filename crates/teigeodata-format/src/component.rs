@@ -179,6 +179,12 @@ impl Components {
         Self(self.0 | other.0)
     }
 
+    /// The components in `self` but not in `other`.
+    #[must_use]
+    pub const fn without(self, other: Self) -> Self {
+        Self(self.0 & !other.0)
+    }
+
     /// Whether `c` is in the set.
     #[must_use]
     pub const fn contains(self, c: Component) -> bool {
@@ -272,6 +278,9 @@ mod tests {
                 .eq([Component::Dem])
         );
         assert!(Components::NONE.is_empty() && Components::NONE.closed().is_empty());
+        let names = Components::of(&[Component::Names]);
+        assert_eq!(s.without(names).union(names), s);
+        assert!(!s.without(names).contains(Component::Names));
     }
 
     /// pack-format.md names each kind's component in its Sections table.

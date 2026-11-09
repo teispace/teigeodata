@@ -10,6 +10,7 @@ use std::time::SystemTime;
 use teigeodata_core::{E7, PlaceId, Point};
 use teigeodata_format::arcs::Arcs;
 use teigeodata_format::blocks::{BLOCK, Blocks};
+use teigeodata_format::component::{Component, Components};
 use teigeodata_format::elevation::Elevations;
 use teigeodata_format::hierarchy::Hierarchy;
 use teigeodata_format::idmap::IdMap;
@@ -65,6 +66,11 @@ pub struct LayerOptions {
     pub verify: Verify,
     /// How a file is loaded.
     pub load: Load,
+    /// The components installed (D-133): `None` for a whole pack. A section of a component not
+    /// in the set is never read or hashed (its bytes may be a hole), and a query that needs it
+    /// returns [`Error::MissingComponent`]. The set must hold what its components need, and
+    /// `point` whenever the pack has it.
+    pub installed: Option<Components>,
 }
 
 /// A layer's handle in an [`Engine`](crate::Engine): stable while the layer is in it.
@@ -75,6 +81,8 @@ pub struct LayerId(pub(crate) u32);
 const UNCHECKED: u8 = 0;
 const GOOD: u8 = 1;
 const BAD: u8 = 2;
+/// The section's component is not installed.
+const MISSING: u8 = 3;
 /// Kinds below this have a state slot; the engine reads no kind above 31.
 const KINDS: usize = 32;
 
@@ -98,16 +106,24 @@ pub(crate) struct Views<'a> {
     pub(crate) zones: Option<Region<'a>>,
     pub(crate) admin: Option<Region<'a>>,
     pub(crate) polygons: Option<Polygons<'a>>,
-    /// The block hashes of every section of 1 MiB or more, proved against its section hash.
+    /// The block hashes of every installed section of 1 MiB or more, proved against its
+    /// section hash.
     pub(crate) blocks: Vec<(Kind, Blocks<'a, 'static>)>,
+    /// The components the pack has sections of but that were not installed.
+    pub(crate) missing: Components,
 }
 
 impl<'a> Views<'a> {
-    /// Opens `bytes` as a pack and every section the engine reads: the head checks, the
-    /// structure of each view and the proof of every block-hash list. No section is hashed.
-    pub(crate) fn open(bytes: &'a [u8]) -> Result<Self, Error> {
+    /// Opens `bytes` as a pack and every installed section the engine reads: the head checks,
+    /// the structure of each view and the proof of every block-hash list. No section is hashed,
+    /// and no section of a component outside `installed` is read.
+    pub(crate) fn open(bytes: &'a [u8], installed: Option<Components>) -> Result<Self, Error> {
         let pack = Pack::open(bytes)?;
-        let get = |k| pack.section(k);
+        let missing = missing(&pack, installed)?;
+        let get = |k| {
+            pack.section(k)
+                .filter(|_| Component::of(k).is_none_or(|c| !missing.contains(c)))
+        };
         let ids = get(Kind::IDMAP).map(|s| IdMap::open(&s)).transpose()?;
         let places = get(Kind::PLACES).map(|s| Places::open(&s)).transpose()?;
         let heights = get(Kind::ELEVATION)
@@ -153,7 +169,9 @@ impl<'a> Views<'a> {
             .transpose()?;
         let mut blocks = Vec::new();
         for s in pack.sections() {
-            if let Some(b) = pack.blocks(s.kind())? {
+            if Component::of(s.kind()).is_some_and(|c| !missing.contains(c))
+                && let Some(b) = pack.blocks(s.kind())?
+            {
                 blocks.push((s.kind(), b));
             }
         }
@@ -173,7 +191,18 @@ impl<'a> Views<'a> {
             admin,
             polygons,
             blocks,
+            missing,
         })
+    }
+
+    /// Whether section `kind` is installed: its component is, or it is `BLOCK_HASHES` and an
+    /// installed section has blocks.
+    pub(crate) fn installed(&self, kind: Kind) -> bool {
+        match Component::of(kind) {
+            Some(c) => !self.missing.contains(c),
+            None if kind == Kind::BLOCK_HASHES => !self.blocks.is_empty(),
+            None => true,
+        }
     }
 
     /// The PLACES row of region `r` of an admin or zone index: its own link, else POLYGONS.
@@ -185,6 +214,36 @@ impl<'a> Views<'a> {
                 .and_then(|p| p.row(r as usize))
         })
     }
+}
+
+/// The components `pack` has sections of that are not in `installed` (none for `None`).
+/// Refuses a set that lacks what its components need, or lacks `point` when the pack has it:
+/// every other component answers through the places.
+fn missing(pack: &Pack<'_>, installed: Option<Components>) -> Result<Components, Error> {
+    let Some(set) = installed else {
+        return Ok(Components::NONE);
+    };
+    let has = present(pack);
+    let lacking = set.closed().without(set).iter().next().or_else(|| {
+        (has.contains(Component::Point) && !set.contains(Component::Point))
+            .then_some(Component::Point)
+    });
+    if let Some(component) = lacking {
+        return Err(Error::MissingComponent {
+            address: pack.manifest().address().into(),
+            component,
+        });
+    }
+    Ok(has.without(set))
+}
+
+/// The components `pack` has sections of.
+fn present(pack: &Pack<'_>) -> Components {
+    let list: Vec<Component> = pack
+        .sections()
+        .filter_map(|s| Component::of(s.kind()))
+        .collect();
+    Components::of(&list)
 }
 
 /// A layer's query rules (D-120) as slices of its SEARCH section, by kind.
@@ -298,10 +357,12 @@ impl Layer {
         options: LayerOptions,
         stamp: Option<FileStamp>,
     ) -> Result<Self, Error> {
-        let owned = Owned::new(backing)?;
+        let owned = Owned::new(backing, options.installed)?;
         let v = owned.views();
         if options.verify == Verify::Eager {
-            v.pack.verify_sections()?;
+            for s in v.pack.sections().filter(|s| v.installed(s.kind())) {
+                s.verify()?;
+            }
         }
         let ranges = [
             v.ids.as_ref().and_then(IdMap::id_range),
@@ -329,7 +390,10 @@ impl Layer {
             options,
             bbox,
             id_range,
-            state: core::array::from_fn(|_| AtomicU8::new(initial)),
+            state: core::array::from_fn(|k| {
+                let kind = Kind(u32::try_from(k).unwrap_or(u32::MAX));
+                AtomicU8::new(if v.installed(kind) { initial } else { MISSING })
+            }),
             memo,
             stamp,
             owned,
@@ -446,6 +510,7 @@ impl Layer {
         match slot.load(Atomic::Acquire) {
             GOOD => return Ok(()),
             BAD => return Err(self.integrity(kind)),
+            MISSING => return Err(self.missing(kind)),
             _ => {}
         }
         let v = self.views();
@@ -476,6 +541,9 @@ impl Layer {
         range: core::ops::Range<usize>,
     ) -> Result<&[u8], Error> {
         let v = self.views();
+        if !v.installed(kind) {
+            return Err(self.missing(kind));
+        }
         let section = v.pack.section(kind).ok_or(Error::Range)?;
         let out = section.bytes().get(range.clone()).ok_or(Error::Range)?;
         match v.blocks.iter().position(|(k, _)| *k == kind) {
@@ -507,6 +575,20 @@ impl Layer {
             }
         }
         Ok(())
+    }
+
+    fn missing(&self, kind: Kind) -> Error {
+        Error::MissingComponent {
+            address: self.address().into(),
+            component: Component::of(kind).unwrap_or(Component::Point),
+        }
+    }
+
+    /// The components installed and present in the pack.
+    #[must_use]
+    pub fn components(&self) -> Components {
+        let v = self.views();
+        present(&v.pack).without(v.missing)
     }
 
     fn integrity(&self, kind: Kind) -> Error {

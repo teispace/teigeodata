@@ -40,8 +40,6 @@ pub struct Place {
     pub admin_level: u8,
     /// Its flag bits (`places::FLAG_FORMER`).
     pub flags: u32,
-    /// Its elevation in metres above EGM2008, when known.
-    pub elevation: Option<i16>,
 }
 
 /// A place near a point, from [`Engine::reverse`].
@@ -250,8 +248,6 @@ impl Engine {
         l.ensure(Kind::PLACES)?;
         l.ensure(Kind::IDMAP)?;
         let v = l.views();
-        // A no-op for a pack without heights.
-        l.ensure(Kind::ELEVATION)?;
         let (Some(ids), Some(places)) = (&v.ids, &v.places) else {
             return Ok(None);
         };
@@ -266,7 +262,6 @@ impl Engine {
             kind: places.kind(row),
             admin_level: places.admin_level(row).unwrap_or(0),
             flags: places.flags(row).unwrap_or(0),
-            elevation: v.heights.as_ref().and_then(|h| h.get(row)),
         }))
     }
 
@@ -286,6 +281,23 @@ impl Engine {
             }
         }
         Ok(false)
+    }
+
+    /// The elevation of `place` in whole metres above EGM2008, from its layer's `elevation`
+    /// component (D-133); `None` where it is unknown or the layer has no heights.
+    ///
+    /// # Errors
+    /// [`Error::MissingComponent`] if the layer has heights but they are not installed;
+    /// [`Error::Integrity`] if they are corrupt.
+    pub fn elevation(&self, place: &Place) -> Result<Option<i16>, Error> {
+        let Some(l) = self.layer(place.layer) else {
+            return Ok(None);
+        };
+        l.ensure(Kind::ELEVATION)?;
+        Ok(l.views()
+            .heights
+            .as_ref()
+            .and_then(|h| h.get(place.row as usize)))
     }
 
     /// The canonical name of `place` (its first name record), decoded into `buf`.
@@ -591,12 +603,12 @@ impl Engine {
     ) -> Result<Option<LayerId>, Error> {
         out.clear();
         for (i, l) in self.layers.iter().enumerate() {
-            let v = l.views();
-            let Some(admin) = &v.admin else { continue };
             if !l.covers(at) {
                 continue;
             }
             l.ensure(Kind::ADMIN_REGION)?;
+            let v = l.views();
+            let Some(admin) = &v.admin else { continue };
             if admin.on_arcs() {
                 l.ensure(Kind::ARCS)?;
             }
@@ -627,12 +639,12 @@ impl Engine {
     /// [`Error::Integrity`] if a section it reads is corrupt.
     pub fn tz_at(&self, at: Point<E7>) -> Result<Option<Place>, Error> {
         for (i, l) in self.layers.iter().enumerate() {
-            let v = l.views();
-            let Some(zones) = &v.zones else { continue };
             if !l.covers(at) {
                 continue;
             }
             l.ensure(Kind::REGION)?;
+            let v = l.views();
+            let Some(zones) = &v.zones else { continue };
             let Some(r) = zones.region(at) else { continue };
             let Some(row) = v.region_row(zones, r, false) else {
                 continue;
@@ -647,18 +659,32 @@ impl Engine {
 
     /// The timezone area of `place`: the one its own layer recorded for it at build time
     /// (`PLACE_TZ`, D-134), a few bits per place, so it needs no REGION; for a layer without
-    /// `PLACE_TZ`, [`tz_at`](Self::tz_at) its point. Both give the same area for a place of a
-    /// full pack.
+    /// `PLACE_TZ` installed, [`tz_at`](Self::tz_at) its point. Both give the same area for a
+    /// place of a full pack.
     ///
     /// # Errors
-    /// [`Error::Integrity`] if a section it reads is corrupt.
+    /// [`Error::MissingComponent`] (`timezone`) if neither `timezone` nor `timezone-index` is
+    /// installed where the pack has them; [`Error::Integrity`] if a section it reads is
+    /// corrupt.
     pub fn tz_of(&self, place: &Place) -> Result<Option<Place>, Error> {
         let Some(i) = self.layers.iter().position(|l| l.id == place.layer) else {
             return Ok(None);
         };
         let l = self.layers.get(i).ok_or(Error::Range)?;
         let Some(tz) = &l.views().place_tz else {
-            return self.tz_at(place.point.to_e7());
+            // No PLACE_TZ, or not installed: the area at the point, which agrees. If that index
+            // is missing too, the component asked for is the one to name.
+            return match self.tz_at(place.point.to_e7()) {
+                Err(Error::MissingComponent { address, .. })
+                    if !l.views().installed(Kind::PLACE_TZ) =>
+                {
+                    Err(Error::MissingComponent {
+                        address,
+                        component: crate::Component::Timezone,
+                    })
+                }
+                r => r,
+            };
         };
         l.ensure(Kind::PLACE_TZ)?;
         match tz.get(place.row as usize) {
@@ -723,12 +749,12 @@ impl Engine {
         };
         if chars >= PREFIX_MIN {
             for (i, l) in self.layers.iter().enumerate() {
+                l.ensure(Kind::SEARCH)?;
+                l.ensure(Kind::IDMAP)?;
                 let v = l.views();
                 let (Some(search), Some(ids)) = (&v.search, &v.ids) else {
                     continue;
                 };
-                l.ensure(Kind::SEARCH)?;
-                l.ensure(Kind::IDMAP)?;
                 self.prefix_best(i, search, ids, q, &mut s.prefix)?;
             }
             s.prefix
@@ -742,12 +768,12 @@ impl Engine {
         loop {
             let mut strong = false;
             for (i, l) in self.layers.iter().enumerate() {
+                l.ensure(Kind::SEARCH)?;
+                l.ensure(Kind::IDMAP)?;
                 let v = l.views();
                 let (Some(search), Some(ids)) = (&v.search, &v.ids) else {
                     continue;
                 };
-                l.ensure(Kind::SEARCH)?;
-                l.ensure(Kind::IDMAP)?;
                 context_rows(search, &context, &mut s.context);
                 if !s.context.is_empty() {
                     l.ensure(Kind::HIERARCHY)?;

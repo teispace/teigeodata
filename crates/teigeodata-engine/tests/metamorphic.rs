@@ -43,7 +43,7 @@ fn key(e: &Engine, p: &Place) -> Key {
         p.kind,
         p.admin_level,
         p.flags,
-        p.elevation,
+        e.elevation(p).unwrap(),
         name,
     )
 }
@@ -297,7 +297,7 @@ fn a_newer_release_wins_with_its_tombstones_and_redirects() {
         assert_eq!((got.id, got.layer), (into_id, newer));
         // The moved place answers from v2 only.
         let m = e.get(v1.ids[moved]).unwrap().unwrap();
-        assert_eq!((m.elevation, m.layer), (Some(1234), newer));
+        assert_eq!((e.elevation(&m).unwrap(), m.layer), (Some(1234), newer));
         // Reverse at the dead and merged places never returns them from v1.
         let mut s = Scratch::default();
         let mut out = Vec::new();
