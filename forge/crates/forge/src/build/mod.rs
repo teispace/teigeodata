@@ -34,6 +34,7 @@
 //! registry `<cc>-ids-<build>.tsv` beside it.
 
 mod admins;
+pub(crate) mod baseline;
 mod cluster;
 mod corrections;
 mod dedupe;
@@ -224,7 +225,9 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     places.extend(clustered);
     let current = places.get(..unit_count).unwrap_or_default();
     if let Some(country) = country_place(&build, &g.sources, &profile, current, &mut naming)? {
+        let key = country.key.clone();
         places.push(country);
+        units::parent_to_country(&mut places, &key);
     }
     admin.added = link_admins(&mut places, std::mem::take(&mut admin.links));
     let coverage = units.coverage.ok_or("the boundary source has no units")?;

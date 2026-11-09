@@ -206,9 +206,24 @@ pub(super) fn country_place(
     Ok(None)
 }
 
+/// Parents every level-1 unit without a parent (current or former) to the country `key`: the
+/// boundary source's levels start at 1, so the country is the root above them (D-146).
+/// Returns how many it parented.
+pub(super) fn parent_to_country(places: &mut [Place], key: &str) -> usize {
+    let mut n = 0;
+    for p in places
+        .iter_mut()
+        .filter(|p| p.kind == PlaceKind::Admin && p.admin_level == 1 && p.parent.is_none())
+    {
+        p.parent = Some(key.to_string());
+        n += 1;
+    }
+    n
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Place, PlaceName, country_names};
+    use super::{Place, PlaceName, country_names, parent_to_country};
     use teigeodata_core::PlaceKind;
     use teigeodata_names::PhoneticKey;
 
@@ -218,6 +233,34 @@ mod tests {
             lang: None,
             kind: None,
         }
+    }
+
+    #[test]
+    fn level_one_units_hang_from_the_country() {
+        let place = |key: &str, kind, admin_level, parent: Option<&str>| Place {
+            key: key.into(),
+            kind,
+            admin_level,
+            flags: 0,
+            point: (0, 0),
+            names: Vec::new(),
+            population: None,
+            rank: 0,
+            parent: parent.map(str::to_string),
+            sources: Vec::new(),
+        };
+        let mut places = [
+            place("admin:A", PlaceKind::Admin, 1, None),
+            place("admin:A1", PlaceKind::Admin, 2, Some("admin:A")),
+            place("halo", PlaceKind::Settlement, 0, None),
+            place("admin:B", PlaceKind::Admin, 1, Some("elsewhere")),
+        ];
+        assert_eq!(parent_to_country(&mut places, "country"), 1);
+        let parents: Vec<_> = places.iter().map(|p| p.parent.as_deref()).collect();
+        assert_eq!(
+            parents,
+            [Some("country"), Some("admin:A"), None, Some("elsewhere")]
+        );
     }
 
     #[test]
