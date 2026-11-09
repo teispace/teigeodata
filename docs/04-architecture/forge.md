@@ -175,7 +175,10 @@ method follows the forge note:
   the country's profile.
 - **Model:** Fellegi–Sunter, with u from seeded random pairs and m by EM over pattern counts.
 - **Clustering:** union-find by descending weight; it never joins two records of one source,
-  or a populated place and an admin unit.
+  or a populated place and an admin unit. Two exceptions, both from stated links: a source's
+  duplicates (two records stating the same record of another source, of its kind, sharing a
+  name key within 10 km) join first (D-125); a populated place and a former unit stated as one
+  join after the model (D-118).
 
 It writes `data/build/conflate/<sources>/clusters.parquet` (`id`, `cluster`, named by the
 smallest member) and a `summary.md`. The summary holds the model's weights, the clusters by

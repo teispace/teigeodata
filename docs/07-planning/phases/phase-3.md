@@ -136,8 +136,10 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   unit populations (D-123): recall@1 0.799 → 0.852, pass 0.918. Left: twins of one place in
   separate rows (Lalitpur city and its metropolitan unit; Patan finds Patan of Baitadi first).
   Settlement rank from the sources' classes (D-124): a city's record beats the municipality of
-  its name; recall@1 0.857, pass 0.922; Patan and Janakpur fixed. Left: the district beats the
-  city for Kathmandu and Pyuthan; unmerged twins (Simikot, Langtang, Padagaun)
+  its name; recall@1 0.857, pass 0.922; Patan and Janakpur fixed. A source's duplicates join
+  in conflation (D-125): Simikot, recall@1 0.859, pass 0.924. Left: the district beats the city
+  for Kathmandu and Pyuthan; GeoNames copies whose names fold apart (Padagaun, Pāḍāgāũ);
+  Wikidata VDC items without a stated link to the GeoNames former unit (Duhagadhi)
 - [x] Corrections as data with guards (D-117): five ops, retire/apply/stale per build,
   G-corr in the build, `forge correction-guard`, schema checked by `check-data`; Nepal's first
   4 (Newa-script names, Q20588832 same as Patan), unreviewed until the maintainer signs them;
@@ -183,3 +185,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | 3.6: former units in conflation and ranking (D-118) | found while ranking same-name twins |
 | 2026-11-09 | Ranking: the country takes no unit's name (D-122); modelled unit populations (D-123) | the twins item's misses, read with `S3_EXPLAIN` |
 | 2026-11-09 | Ranking: settlement rank from source classes (D-124) | Patan and Janakpur ranked the admin unit over the city |
+| 2026-11-09 | Conflation: a source's duplicates join (D-125) | Simikot split between a Wikidata item and its bot copy |

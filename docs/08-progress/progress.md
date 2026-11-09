@@ -22,8 +22,8 @@ A short status. The numbers and evidence live in each phase file and the
 
 - **Now (Phase 3):** the Nepal main pack has 101,550 places with heights (D-111), admin
   records linked (D-110), same-place merges (D-116), the first corrections (D-117) and modelled
-  unit populations (D-123) and settlement rank (D-124); golden on the product's search recall@1
-  0.857, pass 0.922. Next:
+  unit populations (D-123), settlement rank (D-124) and a source's duplicates joined (D-125);
+  golden on the product's search recall@1 0.859, pass 0.924. Next:
   twins of one place in separate rows, then 3.7 (gates in CI, attribution, lite,
   `ACCURACY.md`).
 - **In parallel (Phase 4):** the engine (4.1, D-113, D-114; Nepal timings in
