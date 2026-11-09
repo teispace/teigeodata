@@ -144,7 +144,7 @@ mod tests {
     use tiff::encoder::{TiffEncoder, colortype::Gray32Float};
     use tiff::tags::Tag;
 
-    /// A 5 × 4 Float32 grid, PixelIsArea, 1° pixels from 80° E, 30° N, two rows per strip.
+    /// A 5 × 4 `Float32` grid, `PixelIsArea`, 1° pixels from 80° E, 30° N, two rows per strip.
     fn write(path: &std::path::Path, values: &[f32]) {
         let file = std::fs::File::create(path).unwrap();
         let mut enc = TiffEncoder::new(file).unwrap();
@@ -198,7 +198,7 @@ mod tests {
         let v: Vec<f64> = inner.iter().map(|x| x.2).collect();
         assert_eq!(v, [8.0, 9.0, 12.0, 13.0, 14.0]);
         // A box beside the grid reads nothing.
-        assert!(visit((90.0, 20.0, 95.0, 25.0)).is_empty());
+        assert_eq!(visit((90.0, 20.0, 95.0, 25.0)), []);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
