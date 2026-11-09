@@ -1341,6 +1341,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "teigeodata-sync"
+version = "0.0.0"
+dependencies = [
+ "ruzstd",
+ "teigeodata-format",
+ "teigeodata-sync",
+ "zeekstd",
+ "zstd",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1632,6 +1643,15 @@ dependencies = [
  "toml",
  "unicode-normalization",
  "unicode-script",
+]
+
+[[package]]
+name = "zeekstd"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8feb00c783a66abad34c225271e18b59ac7d09f6f294a90c8643262a2c49d2c1"
+dependencies = [
+ "zstd-safe",
 ]
 
 [[package]]

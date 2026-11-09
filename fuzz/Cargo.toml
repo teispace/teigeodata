@@ -1,4 +1,4 @@
-# libFuzzer targets for the pack reader and the core codecs (D-072, docs/06-engineering/ci.md).
+# libFuzzer targets for the pack reader, the core codecs and the sync transport (D-072, docs/06-engineering/ci.md).
 # Its own workspace, so cargo-fuzz's nightly-only flags and libfuzzer-sys never reach the main
 # one. The properties are plain `fn(&[u8])` in `teigeodata_format::fuzz`; the same functions run
 # under `cargo test` on seeded inputs (`crates/teigeodata-format/tests/fuzz.rs`) and here under
@@ -22,6 +22,7 @@ members = ["."]
 [dependencies]
 libfuzzer-sys = "0.4.13"
 teigeodata-format = { path = "../crates/teigeodata-format", features = ["fuzz"] }
+teigeodata-sync = { path = "../crates/teigeodata-sync", features = ["fuzz"] }
 
 [profile.release]
 debug = 1
@@ -78,6 +79,27 @@ bench = false
 [[bin]]
 name = "bits"
 path = "fuzz_targets/bits.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "transport_table"
+path = "fuzz_targets/transport_table.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "transport_asset"
+path = "fuzz_targets/transport_asset.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "transport_frame"
+path = "fuzz_targets/transport_frame.rs"
 test = false
 doc = false
 bench = false

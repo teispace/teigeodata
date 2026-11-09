@@ -194,6 +194,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "libm"
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -288,6 +294,7 @@ version = "0.0.0"
 dependencies = [
  "blake3",
  "ed25519-dalek",
+ "libm",
  "ruzstd",
  "teigeodata-core",
  "zerocopy",
@@ -298,6 +305,15 @@ name = "teigeodata-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
+ "teigeodata-format",
+ "teigeodata-sync",
+]
+
+[[package]]
+name = "teigeodata-sync"
+version = "0.0.0"
+dependencies = [
+ "ruzstd",
  "teigeodata-format",
 ]
 

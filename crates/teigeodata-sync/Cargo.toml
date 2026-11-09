@@ -1,0 +1,32 @@
+[package]
+name = "teigeodata-sync"
+description = "Downloads, updates and storage of teigeodata packs: the seekable zstd transport, its seek-table reader and frame planner."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[features]
+# Frame decoding with `ruzstd` (pure Rust, the decoder the reader already has, D-079).
+zstd = ["dep:ruzstd"]
+# The transport writer: release tooling and tests. The compressor is the caller's (the forge
+# uses C zstd); the self-check decodes with `ruzstd`, the client's decoder.
+write = ["zstd", "teigeodata-format/write"]
+# The fuzz and property harnesses, shared by `cargo test` and cargo-fuzz (D-072).
+fuzz = ["write"]
+
+[dependencies]
+ruzstd = { version = "0.9.1", default-features = false, optional = true }
+teigeodata-format.workspace = true
+
+[dev-dependencies]
+teigeodata-sync = { path = ".", features = ["fuzz"] }
+# C zstd at the levels the forge uses, and the seekable-format oracle over the same C library.
+zeekstd = { version = "0.6.3", default-features = false, features = ["std"] }
+zstd = { version = "0.14.3", default-features = false }
+
+[lints]
+workspace = true

@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [open, round_trip, mutate, manifest, sections, bitpack, table, bits]
+        target: [open, round_trip, mutate, manifest, sections, bitpack, table, bits, transport_table, transport_asset, transport_frame]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Nightly toolchain and cargo-fuzz
@@ -107,6 +107,8 @@ jobs:
             args: -p teigeodata-format --test fuzz --partition count:3/4
           - group: format-fuzz-4
             args: -p teigeodata-format --test fuzz --partition count:4/4
+          - group: sync-fuzz
+            args: -p teigeodata-sync --test fuzz
     name: miri (${{ matrix.group }})
     env:
       TG_FUZZ_ITERS: "1"
