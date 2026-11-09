@@ -26,7 +26,7 @@ A short status. The numbers and evidence live in each phase file and the
   golden on the product's search recall@1 0.859, pass 0.924; every pack carries its sources'
   notices (D-126); the `data-build` workflow runs G-det, G-lic and the golden gate per pack
   (D-128), `forge make` gates its budget (D-129), and the stages gate topology and place assignment
-  (D-130), and conflation precision and recall (D-131); lite has heights from NASADEM (D-132); heights are their own ELEVATION section (D-133) and a place's timezone its own 444-byte PLACE_TZ section (D-134); every section belongs to one component and `check-pack` gates wire bytes per component (G-wire, D-135: points-only Nepal 522 kB); the engine opens a pack installed with any component set and names a missing one (D-136), 4.1b. Next: 3.7 (the lite build from clean-room sources
+  (D-130), and conflation precision and recall (D-131); lite has heights from NASADEM (D-132); heights are their own ELEVATION section (D-133) and a place's timezone its own 444-byte PLACE_TZ section (D-134); every section belongs to one component and `check-pack` gates wire bytes per component (G-wire, D-135: points-only Nepal 522 kB); the engine opens a pack installed with any component set and names a missing one (D-136), 4.1b; a Cargo feature per component cuts the points-only engine to 60.9 KiB gzip (D-137). Next: 3.7 (the lite build from clean-room sources
   only, `ACCURACY.md`). The CI data build needs the input mirror (D-127): the maintainer
   approves publishing the `sources` release, then `cargo xtask mirror` uploads about 1.45 GB (NASADEM added, D-132).
 - **In parallel (Phase 4):** the engine (4.1, D-113, D-114; Nepal timings in

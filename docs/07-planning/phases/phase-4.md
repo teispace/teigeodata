@@ -84,7 +84,8 @@ signed pack per address; a client holds any subset of its sections.
   returns `MissingComponent`; `Engine::elevation` (D-136, 2026-11-09)
 - [x] Sync: `Frames::plan_components(set)` plans only those sections' frames and the head
   (D-136); the request API on it comes with the download manager (4.5)
-- [ ] Cargo features per component; a binary without one carries none of its readers
+- [x] Cargo features per component; a binary without one carries none of its readers
+  (D-137: points-only engine 97.3 KiB native, 60.9 KiB gzip, 2026-11-09)
 - [x] Gates: points-only Nepal at most 0.55 MB on the wire (522,192 B main, 493,757 B lite,
   2026-11-09); components sum to the asset (G-wire)
 - [x] Gate: each component set answers its queries as the full pack does, holes zeroed

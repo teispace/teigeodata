@@ -76,6 +76,33 @@ asks its layer for each section before reading it (`ensure`). Per query:
 `Place` carries no elevation: `Engine::elevation(&place)` reads it, so a points-only `get`
 never touches heights.
 
+## Cargo features per component (D-137)
+
+Each component the engine reads has a Cargo feature, all on by default: `elevation`, `admin`,
+`names`, `search` (with `names`), `timezone`, `timezone-index`, `boundaries` and
+`admin-index` (with `boundaries`). `point` is always built; `postal`, `dem` and `extra` are
+read raw through `Layer::section_bytes`. A build without a feature has neither the query nor
+the section reader, and treats the component as not installed: a pack's sections of it are
+never read or hashed, `Layer::components()` leaves it out, and a query of a built component
+that needs it (a search context needs `admin`) returns `Error::MissingComponent`.
+
+| Query | Feature |
+|---|---|
+| `get`, `reverse`, `within_bbox` | always |
+| `elevation` | `elevation` |
+| `parent` | `admin` |
+| `name` | `names` |
+| `search` | `search` |
+| `tz_of` | `timezone` or `timezone-index` |
+| `tz_at` | `timezone-index` |
+| `admin_at` | `admin-index` |
+
+Measured by `cargo xtask sizes --native` (macOS arm64, release, LTO, 2026-11-09): the engine
+with no component features (open, `get`, `reverse`) adds 97.3 KiB (60.9 KiB gzip) to a
+library, against 387.8 KiB (212.0 KiB gzip) with every one. Before the features the
+points-only build was 145.8 KiB (85.9 KiB gzip). Gate: `tests/built.rs` runs under any feature
+set; CI runs it with none.
+
 ## Lazy verification (D-078)
 
 `Verify::Lazy` (default) hashes a section the first time a query reads it, once per layer:
@@ -163,3 +190,4 @@ Each gate was first shown to fail on a planted bug (D-114).
 | 2026-11-09 | First version: opening, verification, precedence, queries, gates | Step 4.1, D-113, D-114 |
 | 2026-11-09 | Search: query rules (unit, phonetic, native, drop) | D-120, D-121 |
 | 2026-11-09 | Installed components, `MissingComponent`, `Engine::elevation`, `tz_of` | D-133 to D-136 |
+| 2026-11-09 | A Cargo feature per component; `Engine::parent` | D-137 |

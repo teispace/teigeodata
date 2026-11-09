@@ -38,6 +38,10 @@ jobs:
         run: cargo xtask check-data
       - name: Workspace lint tables
         run: cargo xtask check-workspace
+      - name: The engine with no component features (D-137)
+        run: |
+          cargo clippy --locked -p teigeodata-engine --all-targets --no-default-features --features mmap
+          cargo test --locked -p teigeodata-engine --no-default-features --features mmap
       - name: no_std crates build without std
         run: |
           rustup target add thumbv7em-none-eabihf

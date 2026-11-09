@@ -17,7 +17,7 @@ pub extern "C" fn tg_base(n: usize) -> usize {
     s.len() + v[n % 9]
 }
 
-#[cfg(feature = "open")]
+#[cfg(any(feature = "open", feature = "engine-points"))]
 unsafe fn bytes<'a>(p: *const u8, n: usize) -> &'a [u8] {
     if p.is_null() {
         &[]
@@ -139,4 +139,84 @@ pub unsafe extern "C" fn tg_write(p: *const u8, n: usize) -> usize {
     w.layout(false)
         .and_then(|l| l.assemble(&[body]))
         .map_or(0, |v| v.len())
+}
+
+/// An engine over a pack installed with `point` only: `get` and `reverse`.
+#[cfg(feature = "engine-points")]
+fn engine(p: *const u8, n: usize, all: bool) -> Option<teigeodata_engine::Engine> {
+    use teigeodata_engine::{Component, Components, Engine, Layer, LayerOptions};
+    let installed = (!all).then(|| Components::of(&[Component::Point]));
+    let options = LayerOptions {
+        installed,
+        ..LayerOptions::default()
+    };
+    let layer = Layer::from_bytes(unsafe { bytes(p, n) }.to_vec(), options).ok()?;
+    let mut e = Engine::new();
+    e.add(layer);
+    Some(e)
+}
+
+#[cfg(feature = "engine-points")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_points(
+    p: *const u8,
+    n: usize,
+    id: u64,
+    lat: i32,
+    lon: i32,
+) -> usize {
+    use teigeodata_core::{E6, PlaceId, Point};
+    let Some(e) = engine(p, n, false) else {
+        return 0;
+    };
+    let mut s = teigeodata_engine::Scratch::default();
+    let mut near = Vec::new();
+    let got = PlaceId::from_raw(id)
+        .and_then(|id| e.get(id).ok().flatten())
+        .map_or(0, |p| p.row as usize);
+    let at = Point::<E6>::from_units(lat, lon);
+    let k = at.map_or(0, |at| {
+        e.reverse(at, 3, &mut s, &mut near)
+            .map_or(0, |()| near.len())
+    });
+    got + k
+}
+
+#[cfg(feature = "engine-all")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_all(
+    p: *const u8,
+    n: usize,
+    id: u64,
+    lat: i32,
+    lon: i32,
+) -> usize {
+    use teigeodata_core::{E6, PlaceId, Point};
+    let Some(e) = engine(p, n, true) else {
+        return 0;
+    };
+    let mut s = teigeodata_engine::Scratch::default();
+    let (mut near, mut out, mut hits) = (Vec::new(), Vec::new(), Vec::new());
+    let mut buf = [0_u8; 256];
+    let mut sum = 0;
+    if let Some(place) = PlaceId::from_raw(id).and_then(|id| e.get(id).ok().flatten()) {
+        sum += e.elevation(&place).ok().flatten().map_or(0, |h| h as usize);
+        sum += e.name(&place, &mut buf).ok().flatten().map_or(0, str::len);
+        sum += e.tz_of(&place).ok().flatten().map_or(0, |z| z.row as usize);
+    }
+    if let Some(at) = Point::<E6>::from_units(lat, lon) {
+        sum += e
+            .reverse(at, 3, &mut s, &mut near)
+            .map_or(0, |()| near.len());
+        sum += e
+            .tz_at(at.to_e7())
+            .ok()
+            .flatten()
+            .map_or(0, |z| z.row as usize);
+        sum += e
+            .admin_at(at.to_e7(), &mut s, &mut out)
+            .map_or(0, |_| out.len());
+    }
+    let q = core::str::from_utf8(unsafe { bytes(p, n.min(8)) }).unwrap_or("kathmandu");
+    sum + e.search(q, 5, &mut s, &mut hits).map_or(0, |()| hits.len())
 }

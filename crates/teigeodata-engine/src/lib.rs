@@ -38,6 +38,8 @@
 mod layer;
 mod map;
 mod query;
+#[cfg(feature = "search")]
+mod search;
 
 use core::fmt;
 

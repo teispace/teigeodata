@@ -10,7 +10,28 @@ rust-version.workspace = true
 publish.workspace = true
 
 [features]
-default = ["mmap"]
+default = [
+    "mmap",
+    "elevation",
+    "admin",
+    "names",
+    "search",
+    "timezone",
+    "timezone-index",
+    "boundaries",
+    "admin-index",
+]
+# One feature per component (D-133, D-135, D-136): a build without one carries none of its
+# readers or queries, and a pack's sections of it are treated as not installed. `point` (IDs,
+# places, the spatial index) is always built.
+elevation = []
+admin = []
+names = []
+search = ["names", "dep:teigeodata-names"]
+timezone = []
+timezone-index = []
+boundaries = []
+admin-index = ["boundaries"]
 # Map pack files with `memmap2` (native targets only; WASM reads packs into memory). The one
 # module that uses `unsafe` is `map.rs` (D-113).
 mmap = ["dep:memmap2"]
@@ -18,13 +39,36 @@ mmap = ["dep:memmap2"]
 [dependencies]
 teigeodata-core.workspace = true
 teigeodata-format = { workspace = true, features = ["spatial"] }
-teigeodata-names.workspace = true
+teigeodata-names = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 memmap2 = { version = "0.9.12", optional = true }
 
 [dev-dependencies]
 teigeodata-format = { workspace = true, features = ["write", "spatial"] }
+teigeodata-names.workspace = true
+
+# The tests and the example that use every query need every component's feature; `built`
+# runs under any set of features.
+[[test]]
+name = "alloc"
+required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
+
+[[test]]
+name = "components"
+required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
+
+[[test]]
+name = "metamorphic"
+required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
+
+[[test]]
+name = "verify"
+required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
+
+[[example]]
+name = "measure"
+required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
 
 # The workspace lints with `unsafe_code` lowered from forbid to deny, as for the boundary
 # crates (D-067): mapping a file is `unsafe` in Rust, and `map.rs` is the one module allowed to

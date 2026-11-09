@@ -31,11 +31,16 @@ blobs = ["open", "teigeodata-format/zstd"]
 write = ["teigeodata-format/write"]
 # Everything a runtime reader uses.
 reader = ["verify", "signature", "sections", "blobs"]
+# The engine over a points-only install: open a layer, `get` and `reverse` (D-136).
+engine-points = ["dep:teigeodata-engine"]
+# The engine with every query.
+engine-all = ["engine-points", "teigeodata-engine/default"]
 
 [dependencies]
 ed25519-dalek = { version = "3.0.0", default-features = false, optional = true }
 teigeodata-core = { path = "../../crates/teigeodata-core" }
 teigeodata-format = { path = "../../crates/teigeodata-format" }
+teigeodata-engine = { path = "../../crates/teigeodata-engine", default-features = false, optional = true }
 
 # Measured as shipped: the workspace's dist profile for native, wasm for wasm32.
 [profile.release]

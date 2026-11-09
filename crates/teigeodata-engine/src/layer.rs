@@ -7,23 +7,35 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use teigeodata_core::{E7, PlaceId, Point};
+use teigeodata_core::PlaceId;
+#[cfg(any(feature = "timezone-index", feature = "admin-index"))]
+use teigeodata_core::{E7, Point};
+#[cfg(feature = "admin-index")]
 use teigeodata_format::arcs::Arcs;
 use teigeodata_format::blocks::{BLOCK, Blocks};
 use teigeodata_format::component::{Component, Components};
+#[cfg(feature = "elevation")]
 use teigeodata_format::elevation::Elevations;
+#[cfg(feature = "admin")]
 use teigeodata_format::hierarchy::Hierarchy;
 use teigeodata_format::idmap::IdMap;
+#[cfg(feature = "names")]
 use teigeodata_format::names::Names;
 use teigeodata_format::place_index::PlaceIndex;
+#[cfg(feature = "timezone")]
 use teigeodata_format::place_tz::PlaceTz;
 use teigeodata_format::places::Places;
+#[cfg(feature = "admin-index")]
 use teigeodata_format::polygons::Polygons;
 use teigeodata_format::redirects::Redirects;
+#[cfg(any(feature = "timezone-index", feature = "admin-index"))]
 use teigeodata_format::region::Region;
+#[cfg(feature = "search")]
 use teigeodata_format::search::Search;
+#[cfg(feature = "search")]
 use teigeodata_format::search::rules::Rule;
 use teigeodata_format::{Bbox, Kind, Pack};
+#[cfg(feature = "search")]
 use teigeodata_names::PhoneticKey;
 
 use crate::Error;
@@ -86,6 +98,28 @@ const MISSING: u8 = 3;
 /// Kinds below this have a state slot; the engine reads no kind above 31.
 const KINDS: usize = 32;
 
+/// The components whose Cargo feature is off: this build has no reader for them, so their
+/// sections are never read and their queries do not exist (D-137). `point` is always built;
+/// `postal`, `dem` and `extra` are read raw through [`Layer::section_bytes`].
+const NOT_BUILT: &[Component] = &[
+    #[cfg(not(feature = "elevation"))]
+    Component::Elevation,
+    #[cfg(not(feature = "admin"))]
+    Component::Admin,
+    #[cfg(not(feature = "names"))]
+    Component::Names,
+    #[cfg(not(feature = "search"))]
+    Component::Search,
+    #[cfg(not(feature = "timezone"))]
+    Component::Timezone,
+    #[cfg(not(feature = "timezone-index"))]
+    Component::TimezoneIndex,
+    #[cfg(not(feature = "boundaries"))]
+    Component::Boundaries,
+    #[cfg(not(feature = "admin-index"))]
+    Component::AdminIndex,
+];
+
 /// The zero-copy views of one pack, opened once (structure checks only).
 #[derive(Debug)]
 pub(crate) struct Views<'a> {
@@ -93,18 +127,27 @@ pub(crate) struct Views<'a> {
     pub(crate) ids: Option<IdMap<'a>>,
     pub(crate) places: Option<Places<'a>>,
     /// Heights, one per PLACES row (D-133); absent in a pack without them.
+    #[cfg(feature = "elevation")]
     pub(crate) heights: Option<Elevations<'a>>,
     /// Each place's timezone area (D-134); absent in a pack without them.
+    #[cfg(feature = "timezone")]
     pub(crate) place_tz: Option<PlaceTz<'a>>,
+    #[cfg(feature = "admin")]
     pub(crate) hierarchy: Option<Hierarchy<'a>>,
     pub(crate) redirects: Option<Redirects<'a>>,
+    #[cfg(feature = "names")]
     pub(crate) names: Option<Names<'a>>,
+    #[cfg(feature = "search")]
     pub(crate) search: Option<Search<'a>>,
     /// SEARCH's query rules, read once here so a search decodes none of them (D-120).
+    #[cfg(feature = "search")]
     pub(crate) rules: QueryRules<'a>,
     pub(crate) place_index: Option<PlaceIndex<'a>>,
+    #[cfg(feature = "timezone-index")]
     pub(crate) zones: Option<Region<'a>>,
+    #[cfg(feature = "admin-index")]
     pub(crate) admin: Option<Region<'a>>,
+    #[cfg(feature = "admin-index")]
     pub(crate) polygons: Option<Polygons<'a>>,
     /// The block hashes of every installed section of 1 MiB or more, proved against its
     /// section hash.
@@ -130,44 +173,48 @@ impl<'a> Views<'a> {
         };
         let ids = get(Kind::IDMAP).map(|s| IdMap::open(&s)).transpose()?;
         let places = get(Kind::PLACES).map(|s| Places::open(&s)).transpose()?;
+        #[cfg(feature = "elevation")]
         let heights = get(Kind::ELEVATION)
             .map(|s| Elevations::open(&s))
             .transpose()?;
+        #[cfg(feature = "timezone")]
         let place_tz = get(Kind::PLACE_TZ).map(|s| PlaceTz::open(&s)).transpose()?;
         // Per-place sections are one row per PLACES row, or the layer is refused.
+        #[cfg(any(feature = "elevation", feature = "timezone"))]
         let rows = places.map(|p| p.len());
-        for (kind, len) in [
-            (Kind::ELEVATION, heights.map(|h| h.len())),
-            (Kind::PLACE_TZ, place_tz.map(|t| t.len())),
-        ] {
-            if len.is_some() && len != rows {
-                return Err(Error::Format(teigeodata_format::Error::Payload {
-                    kind: kind.0,
-                    column: 0,
-                    problem: "not one row per PLACES row",
-                }));
-            }
-        }
+        #[cfg(feature = "elevation")]
+        one_per_place(Kind::ELEVATION, heights.map(|h| h.len()), rows)?;
+        #[cfg(feature = "timezone")]
+        one_per_place(Kind::PLACE_TZ, place_tz.map(|t| t.len()), rows)?;
+        #[cfg(feature = "admin")]
         let hierarchy = get(Kind::HIERARCHY)
             .map(|s| Hierarchy::open(&s))
             .transpose()?;
         let redirects = get(Kind::REDIRECTS)
             .map(|s| Redirects::open(&s))
             .transpose()?;
+        #[cfg(feature = "names")]
         let names = get(Kind::NAMES).map(|s| Names::open(&s)).transpose()?;
+        #[cfg(feature = "search")]
         let search = get(Kind::SEARCH).map(|s| Search::open(&s)).transpose()?;
+        #[cfg(feature = "search")]
         let rules = search.as_ref().map(QueryRules::new).unwrap_or_default();
         let place_index = match (get(Kind::PLACE_INDEX), places) {
             (Some(s), Some(p)) => Some(PlaceIndex::open(&s, p)?),
             _ => None,
         };
+        #[cfg(feature = "timezone-index")]
         let zones = get(Kind::REGION).map(|s| Region::open(&s)).transpose()?;
-        let arcs = get(Kind::ARCS).map(|s| Arcs::open(&s)).transpose()?;
-        let admin = match (get(Kind::ADMIN_REGION), &arcs) {
-            (Some(s), Some(a)) => Some(Region::open_on_arcs(&s, a)?),
-            (Some(s), None) => Some(Region::open(&s)?),
-            (None, _) => None,
+        #[cfg(feature = "admin-index")]
+        let admin = {
+            let arcs = get(Kind::ARCS).map(|s| Arcs::open(&s)).transpose()?;
+            match (get(Kind::ADMIN_REGION), &arcs) {
+                (Some(s), Some(a)) => Some(Region::open_on_arcs(&s, a)?),
+                (Some(s), None) => Some(Region::open(&s)?),
+                (None, _) => None,
+            }
         };
+        #[cfg(feature = "admin-index")]
         let polygons = get(Kind::POLYGONS)
             .map(|s| Polygons::open(&s))
             .transpose()?;
@@ -183,16 +230,25 @@ impl<'a> Views<'a> {
             pack,
             ids,
             places,
+            #[cfg(feature = "elevation")]
             heights,
+            #[cfg(feature = "timezone")]
             place_tz,
+            #[cfg(feature = "admin")]
             hierarchy,
             redirects,
+            #[cfg(feature = "names")]
             names,
+            #[cfg(feature = "search")]
             search,
+            #[cfg(feature = "search")]
             rules,
             place_index,
+            #[cfg(feature = "timezone-index")]
             zones,
+            #[cfg(feature = "admin-index")]
             admin,
+            #[cfg(feature = "admin-index")]
             polygons,
             blocks,
             missing,
@@ -209,14 +265,12 @@ impl<'a> Views<'a> {
         }
     }
 
-    /// The PLACES row of region `r` of an admin or zone index: its own link, else POLYGONS.
-    pub(crate) fn region_row(&self, region: &Region<'_>, r: u32, admin: bool) -> Option<u32> {
-        region.place(r).or_else(|| {
-            admin
-                .then_some(self.polygons.as_ref())
-                .flatten()
-                .and_then(|p| p.row(r as usize))
-        })
+    /// The PLACES row of region `r` of the admin index: its own link, else POLYGONS'.
+    #[cfg(feature = "admin-index")]
+    pub(crate) fn admin_row(&self, region: &Region<'_>, r: u32) -> Option<u32> {
+        region
+            .place(r)
+            .or_else(|| self.polygons.as_ref().and_then(|p| p.row(r as usize)))
     }
 }
 
@@ -224,10 +278,12 @@ impl<'a> Views<'a> {
 /// Refuses a set that lacks what its components need, or lacks `point` when the pack has it:
 /// every other component answers through the places.
 fn missing(pack: &Pack<'_>, installed: Option<Components>) -> Result<Components, Error> {
-    let Some(set) = installed else {
-        return Ok(Components::NONE);
-    };
+    let off = Components::of(NOT_BUILT);
     let has = present(pack);
+    let Some(set) = installed else {
+        // A whole pack: what this build has no reader for is missing.
+        return Ok(has.without(Components::all().without(off)));
+    };
     let lacking = set.closed().without(set).iter().next().or_else(|| {
         (has.contains(Component::Point) && !set.contains(Component::Point))
             .then_some(Component::Point)
@@ -238,7 +294,21 @@ fn missing(pack: &Pack<'_>, installed: Option<Components>) -> Result<Components,
             component,
         });
     }
-    Ok(has.without(set))
+    // Installed but not built: as good as missing.
+    Ok(has.without(set.without(off)))
+}
+
+/// Refuses a per-place section (`len` rows) that is not one row per PLACES row (`rows`).
+#[cfg(any(feature = "elevation", feature = "timezone"))]
+fn one_per_place(kind: Kind, len: Option<usize>, rows: Option<usize>) -> Result<(), Error> {
+    if len.is_some() && len != rows {
+        return Err(Error::Format(teigeodata_format::Error::Payload {
+            kind: kind.0,
+            column: 0,
+            problem: "not one row per PLACES row",
+        }));
+    }
+    Ok(())
 }
 
 /// The components `pack` has sections of.
@@ -251,6 +321,7 @@ fn present(pack: &Pack<'_>) -> Components {
 }
 
 /// A layer's query rules (D-120) as slices of its SEARCH section, by kind.
+#[cfg(feature = "search")]
 #[derive(Debug, Default)]
 pub(crate) struct QueryRules<'a> {
     /// The phonetic key the PHONETIC map was written with, if the reader knows it.
@@ -264,6 +335,7 @@ pub(crate) struct QueryRules<'a> {
     pub(crate) natives: Vec<(&'a str, &'a str)>,
 }
 
+#[cfg(feature = "search")]
 impl<'a> QueryRules<'a> {
     pub(crate) fn new(search: &Search<'a>) -> Self {
         let mut r = Self::default();
@@ -489,6 +561,7 @@ impl Layer {
     }
 
     /// Whether the coverage box holds `at` (true without a box).
+    #[cfg(any(feature = "timezone-index", feature = "admin-index"))]
     pub(crate) fn covers(&self, at: Point<E7>) -> bool {
         self.bbox.is_none_or(|b| {
             let (lat, lon) = (at.lat(), at.lon());

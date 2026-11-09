@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// The feature sets measured, in the order shown.
-const SETS: [(&str, &str); 8] = [
+const SETS: [(&str, &str); 10] = [
     (
         "",
         "baseline: std formatting, panics, allocator (subtracted)",
@@ -28,6 +28,11 @@ const SETS: [(&str, &str); 8] = [
     ("blobs", "open + BLOBS (`ruzstd`)"),
     ("reader", "the whole reader: all of the above"),
     ("write", "the writer alone (forge side)"),
+    (
+        "engine-points",
+        "the engine, points only: open, `get`, `reverse`",
+    ),
+    ("engine-all", "the engine, every query"),
 ];
 
 /// One build: its bytes raw and gzipped.
