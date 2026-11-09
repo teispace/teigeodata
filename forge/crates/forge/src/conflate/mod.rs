@@ -133,8 +133,9 @@ pub(crate) fn run(root: &Path, cc: &str, sources: &[String]) -> Result<String, S
     let gammas: Vec<Gamma> = all.par_iter().map(gamma).collect();
     let kinds: Vec<&str> = pts.iter().map(|p| p.kind.as_str()).collect();
     let bridges = bridges(&cross_stated, &pts, &keys);
-    let full_roots = cluster(&all, &gammas, &full, &src, &kinds, &bridges);
-    let eval_roots = cluster(&all, &gammas, &eval, &src, &kinds, &[]);
+    let twins = twins(&cross_stated, &pts, &src, &keys);
+    let full_roots = cluster(&all, &gammas, &full, &src, &kinds, &twins, &bridges);
+    let eval_roots = cluster(&all, &gammas, &eval, &src, &kinds, &[], &[]);
     let dir = root.join("data/build/conflate").join(sources.join("+"));
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     write_clusters(&dir, &pts, &full_roots)?;
@@ -149,12 +150,7 @@ pub(crate) fn run(root: &Path, cc: &str, sources: &[String]) -> Result<String, S
             stated_ok.len(),
         ],
     );
-    let _ = writeln!(
-        summary,
-        "Stated links between a populated place and a former admin unit with a shared name key, within {} km, joined after the model: {}.\n",
-        SILVER_MAX_M / 1000.0,
-        bridges.len()
-    );
+    write_joins(&mut summary, bridges.len(), twins.len());
     write_model(&mut summary, &full);
     write_clusters_summary(&mut summary, sources, &src, &full_roots);
     evaluate(
@@ -167,6 +163,22 @@ pub(crate) fn run(root: &Path, cc: &str, sources: &[String]) -> Result<String, S
     );
     fs::write(dir.join("summary.md"), &summary).map_err(|e| e.to_string())?;
     Ok(format!("{summary}\n{:.1?}", t.elapsed()))
+}
+
+/// The summary's lines on the joins outside the model: bridges and a source's duplicates.
+fn write_joins(out: &mut String, bridges: usize, twins: usize) {
+    let _ = writeln!(
+        out,
+        "Stated links between a populated place and a former admin unit with a shared name key, within {} km, joined after the model: {}.\n",
+        SILVER_MAX_M / 1000.0,
+        bridges
+    );
+    let _ = writeln!(
+        out,
+        "Records of one source that state the same record of another, with a shared name key, within {} km, joined first as duplicates: {}.\n",
+        SILVER_MAX_M / 1000.0,
+        twins
+    );
 }
 
 /// Builds the comparison vector of a pair.
@@ -425,12 +437,65 @@ fn bridges(stated: &[(u32, u32)], pts: &[Point], keys: &[Keys]) -> Vec<(u32, u32
         .collect()
 }
 
+/// Records of one source that state the same record of another source: duplicates within the
+/// source (Wikidata has bot-made items copied from `GeoNames` beside the main item, both
+/// stating one `GeoNames` ID, which P1566's distinct-values constraint forbids). Without this,
+/// one source per cluster splits the place: the main item joins one record, the copy another.
+/// Kept when the two share a name key, are within [`SILVER_MAX_M`] and are not a populated place
+/// and an admin unit, nor of another kind than the record they state (a settlement item stating
+/// a former unit is a bridge's case, and its bot copy is the former unit's); a wrong ID
+/// (another place's) fails the name or the distance.
+fn twins(stated: &[(u32, u32)], pts: &[Point], src: &[u8], keys: &[Keys]) -> Vec<(u32, u32)> {
+    let comparer = Comparer { pts, keys, stated };
+    // Each record's stated partners, by the partner's source.
+    let mut by_target: HashMap<u32, Vec<(u8, u32)>> = HashMap::new();
+    for &(a, b) in stated {
+        for (t, o) in [(a, b), (b, a)] {
+            if let Some(&s) = src.get(o as usize) {
+                by_target.entry(t).or_default().push((s, o));
+            }
+        }
+    }
+    let mut out: Vec<(u32, u32)> = Vec::new();
+    for (&t, partners) in &mut by_target {
+        let Some(pt) = pts.get(t as usize) else {
+            continue;
+        };
+        partners.sort_unstable();
+        partners.dedup();
+        for (i, &(sx, x)) in partners.iter().enumerate() {
+            for &(_, y) in partners.iter().skip(i + 1).take_while(|(s, _)| *s == sx) {
+                let (Some(px), Some(py)) = (pts.get(x as usize), pts.get(y as usize)) else {
+                    continue;
+                };
+                if [px, py]
+                    .iter()
+                    .all(|p| model::kind_level(&p.kind, &pt.kind) < 2)
+                    && model::kind_level(&px.kind, &py.kind) < 2
+                    && haversine(px, py) <= SILVER_MAX_M
+                    && comparer.gamma((x, y)).first().is_some_and(|&n| n < 3)
+                {
+                    out.push((x.min(y), x.max(y)));
+                }
+            }
+        }
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the clustering's inputs; each is a distinct list"
+)]
 fn cluster(
     pairs: &[(u32, u32)],
     gammas: &[Gamma],
     m: &Model,
     src: &[u8],
     kinds: &[&str],
+    twins: &[(u32, u32)],
     bridges: &[(u32, u32)],
 ) -> Vec<u32> {
     let n = src.len();
@@ -455,6 +520,23 @@ fn cluster(
         let both = a | b;
         a & b & sources != 0 || (both & (1 << 48) != 0 && both & (1 << 49) != 0)
     };
+    // A source's duplicates join first: their union holds the source once, so the model's
+    // edges then treat them as one record.
+    for &(a, b) in twins {
+        let (ra, rb) = (sets.find(a), sets.find(b));
+        let (ma, mb) = (
+            mask.get(ra as usize).copied().unwrap_or(0),
+            mask.get(rb as usize).copied().unwrap_or(0),
+        );
+        if ra == rb || conflict(ma & !((1u64 << 48) - 1), mb) {
+            continue;
+        }
+        sets.union(ra, rb);
+        let r = sets.find(ra);
+        if let Some(v) = mask.get_mut(r as usize) {
+            *v = ma | mb;
+        }
+    }
     for (_, a, b) in edges {
         let (ra, rb) = (sets.find(a), sets.find(b));
         let (ma, mb) = (
@@ -658,7 +740,7 @@ fn evaluate(
 
 #[cfg(test)]
 mod tests {
-    use super::{Keys, Model, Point, bridges, cluster, hash};
+    use super::{Keys, Model, Point, bridges, cluster, hash, twins};
 
     fn point(id: &str, kind: &str, lat: i32, former: bool) -> Point {
         Point {
@@ -708,11 +790,74 @@ mod tests {
         assert_eq!(bridges(&stated, &pts, &keys), vec![(0, 1)]);
         let src = [0, 1, 0, 1, 0, 1, 0, 1];
         let kinds: Vec<&str> = pts.iter().map(|p| p.kind.as_str()).collect();
-        let roots = cluster(&[], &[], &closed(), &src, &kinds, &[(0, 1)]);
+        let roots = cluster(&[], &[], &closed(), &src, &kinds, &[], &[(0, 1)]);
         assert_eq!(roots[0], roots[1]);
         assert!((2..8u32).all(|i| roots[i as usize] == i));
         // Never two records of one source.
-        let roots = cluster(&[], &[], &closed(), &[0, 0], &kinds[..2], &[(0, 1)]);
+        let roots = cluster(&[], &[], &closed(), &[0, 0], &kinds[..2], &[], &[(0, 1)]);
         assert_ne!(roots[0], roots[1]);
+    }
+
+    #[test]
+    fn duplicates_of_one_source_join_and_carry_the_place() {
+        // Two Wikidata items state geonames:1 (a main item and a bot copy); the OSM node states
+        // the main item. geonames:2 is stated by an item of another name, and geonames:3 by two
+        // items 11 km apart.
+        let pts = vec![
+            point("wikidata:Q1", "populated_place", 271_000_000, false),
+            point("wikidata:Q2", "populated_place", 271_010_000, false),
+            point("geonames:1", "populated_place", 271_005_000, false),
+            point("osm:node/1", "populated_place", 271_002_000, false),
+            point("wikidata:Q3", "populated_place", 272_000_000, false),
+            point("wikidata:Q4", "populated_place", 272_000_000, false),
+            point("geonames:2", "populated_place", 272_000_000, false),
+            point("wikidata:Q5", "populated_place", 273_000_000, false),
+            point("wikidata:Q6", "populated_place", 273_990_000, false),
+            point("geonames:3", "populated_place", 273_000_000, false),
+        ];
+        let k = [
+            "simikot", "simikot", "simikot", "simikot", "kodari", "kothari", "kodari", "waling",
+            "waling", "waling",
+        ];
+        let keys: Vec<Keys> = k.iter().map(|n| keys(n)).collect();
+        let src = [0, 0, 1, 2, 0, 0, 1, 0, 0, 1];
+        let stated = vec![(0, 2), (0, 3), (1, 2), (4, 6), (5, 6), (7, 9), (8, 9)];
+        assert_eq!(twins(&stated, &pts, &src, &keys), vec![(0, 1)]);
+        // A settlement item and its bot copy (no class) both stating a former unit: no twins.
+        let vdc = vec![
+            point("wikidata:Q7", "populated_place", 274_000_000, false),
+            point("wikidata:Q8", "other", 274_000_000, false),
+            point("geonames:4", "admin", 274_000_000, true),
+        ];
+        let vk: Vec<Keys> = ["bocha"; 3].iter().map(|n| self::keys(n)).collect();
+        assert_eq!(twins(&[(0, 2), (1, 2)], &vdc, &[0, 0, 1], &vk), vec![]);
+        // Without the twins, the stated links split the place; with them, one cluster.
+        let kinds: Vec<&str> = pts.iter().map(|p| p.kind.as_str()).collect();
+        let open = Model {
+            m: [[1.0; 5]; 4],
+            u: [[1e-9; 5]; 4],
+            lambda: 0.5,
+            skip: [false; 4],
+        };
+        let gammas = vec![[0, 0, 0, 0]; 3];
+        let pairs = [(0, 3), (1, 2), (2, 3)];
+        let split = cluster(&pairs, &gammas, &open, &src, &kinds, &[], &[]);
+        assert_ne!(split[0], split[1]);
+        let one = cluster(&pairs, &gammas, &open, &src, &kinds, &[(0, 1)], &[]);
+        assert!([1, 2, 3].iter().all(|&i| one[i] == one[0]));
+        // A third record of the source still may not join.
+        let three = cluster(&[(0, 4)], &gammas[..1], &open, &src, &kinds, &[(0, 1)], &[]);
+        assert_ne!(three[0], three[4]);
+        // Never a populated place and an admin unit, even as duplicates.
+        let mixed = cluster(
+            &[],
+            &[],
+            &open,
+            &[0, 0],
+            &["populated_place", "admin"],
+            &[(0, 1)],
+            &[],
+        );
+        assert_ne!(mixed[0], mixed[1]);
     }
 }
