@@ -33,3 +33,6 @@ buildings:
 # G-budget (D-129): any one stage's peak resident memory and the build output (`data/build`),
 # in MB, about 1.5× the measured run (2026-11-09: 964 MB peak, 609 MB of output).
 budget: { rss_mb: 1500, disk_mb: 1000 }
+# G-wire (D-135): what a client downloads for a component with what it needs, in kB, checked
+# by `cargo xtask check-pack`. Points only (IDs, lat/lon, the spatial index): 0.55 MB (D-133).
+wire_kb: { point: 550 }

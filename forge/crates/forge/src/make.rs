@@ -69,6 +69,10 @@ struct Recipe {
     /// The resources one build may use (G-budget).
     #[serde(default)]
     budget: Option<Budget>,
+    /// Wire budgets per component (G-wire, D-135).
+    #[serde(default)]
+    #[expect(dead_code, reason = "checked by `cargo xtask check-pack`")]
+    wire_kb: std::collections::BTreeMap<String, u64>,
 }
 
 #[derive(Deserialize)]

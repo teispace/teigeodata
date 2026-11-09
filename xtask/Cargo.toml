@@ -12,6 +12,7 @@ publish = false
 teigeodata-core.workspace = true
 teigeodata-format = { workspace = true, features = ["write"] }
 teigeodata-names = { workspace = true, features = ["serde"] }
+teigeodata-sync = { workspace = true, features = ["write"] }
 minijinja = { version = "3.0.5", default-features = false, features = ["builtins", "macros", "serde"] }
 proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
 serde = { version = "1.0.229", features = ["derive"] }
@@ -22,6 +23,8 @@ syn = { version = "3.0.9", default-features = false, features = ["full", "parsin
 toml = "1.2.1"
 unicode-normalization = "0.1.26"
 unicode-script = "0.5.9"
+# C zstd at level 19, as releases compress the transport asset (check-pack's wire sizes).
+zstd = { version = "0.14.3", default-features = false }
 
 [lints]
 workspace = true

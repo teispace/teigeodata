@@ -114,28 +114,36 @@ parameters).
 
 ## Sections
 
-| # | Kind | Content | Feature | Codec (candidate until benchmarked) |
+| # | Kind | Content | Component ([table](#components-of-a-pack)) | Codec (candidate until benchmarked) |
 |---:|---|---|---|---|
-| 1 | IDMAP | each row's stable ID; ID → row | `core` | column table (D-075): sorted IDs and the row permutation; 0.35 B per place |
-| 2 | PLACES | point (1e-6° grid), kind, admin level, class code, flags; rows in Hilbert order | `core` | column table (D-074): 5.2 B per place on Nepal |
-| 3 | HIERARCHY | parent row; children lists (CSR) | `core` | column table (D-074): 3.0 B per place; below Elias–Fano |
+| 1 | IDMAP | each row's stable ID; ID → row | `point` | column table (D-075): sorted IDs and the row permutation; 0.35 B per place |
+| 2 | PLACES | point (1e-6° grid), kind, admin level, class code, flags; rows in Hilbert order | `point` | column table (D-074): 5.2 B per place on Nepal |
+| 3 | HIERARCHY | parent row; children lists (CSR) | `admin` | column table (D-074): 3.0 B per place; below Elias–Fano |
 | 4 | NAMES | name records (lang, script, type, validity, rule), text | `names` | column table (D-077): records + FSST text with per-script tables; 10.6 B per place on Nepal, a canonical name in 65 ns |
 | 5 | SEARCH | tagged name keys (exact, loose, phonetic) → lists of rows by importance; fuzzy and top-k prefix | `search` | column table (D-085): own FST + FOR lists + block maxima; 1.50 MB on Nepal, [below](#search) |
-| 6 | PLACE_INDEX | packed Hilbert R-tree whose leaves are the PLACES rows | `core`; nearest needs `spatial` | column table (D-082): u16 boxes inside the parent; 0.55 B per place at node size 16 |
-| 7 | ARCS | shared arcs, delta coordinates on 1e-7°, per-vertex LOD level | `geometry` | column table (D-088, D-097): zigzag deltas per arc in B1 FOR blocks, arc bases, block checkpoints, 3-bit LOD level per vertex, [below](#arcs) |
-| 8 | POLYGONS | polygons → parts → rings → signed arc refs; PLACES row, label point, area | `geometry` | column table (D-088, D-097; boxes live in POLY_INDEX), [below](#polygons) |
-| 9 | POLY_INDEX | packed Hilbert R-tree over the POLYGONS boxes | `geometry` | as 6, with a stored leaf level (D-088, D-099), [below](#poly_index) |
-| 10 | REGION | exact point → regions (timezones, later admin units): shared-arc borders, a dense top grid, quadtree leaves in Morton order with edge-ID runs, region sets | `region` | column table (D-083): [below](#region) |
+| 6 | PLACE_INDEX | packed Hilbert R-tree whose leaves are the PLACES rows; nearest needs the `spatial` feature | `point` | column table (D-082): u16 boxes inside the parent; 0.55 B per place at node size 16 |
+| 7 | ARCS | shared arcs, delta coordinates on 1e-7°, per-vertex LOD level | `boundaries` | column table (D-088, D-097): zigzag deltas per arc in B1 FOR blocks, arc bases, block checkpoints, 3-bit LOD level per vertex, [below](#arcs) |
+| 8 | POLYGONS | polygons → parts → rings → signed arc refs; PLACES row, label point, area | `boundaries` | column table (D-088, D-097; boxes live in POLY_INDEX), [below](#polygons) |
+| 9 | POLY_INDEX | packed Hilbert R-tree over the POLYGONS boxes | `boundaries` | as 6, with a stored leaf level (D-088, D-099), [below](#poly_index) |
+| 10 | REGION | exact point → regions (timezones, later admin units): shared-arc borders, a dense top grid, quadtree leaves in Morton order with edge-ID runs, region sets | `timezone-index` | column table (D-083): [below](#region) |
 | 11 | POSTAL | scheme + code → postal records (place, kind, validity, redirect) | `postal` | column table on `search::fst` (D-090, D-105): records in place runs, schemes and their rules as data, [below](#postal) |
-| 12 | COMPONENTS | per component: presence (none, a bitmap or sorted rows) + dense field columns | `components` | column table (D-076): a bitmap costs 0.129 B per row, sparse sorted rows far less |
+| 12 | COMPONENTS | per component: presence (none, a bitmap or sorted rows) + dense field columns | `extra` | column table (D-076): a bitmap costs 0.129 B per row, sparse sorted rows far less |
 | 13 | DEM | elevation grids: tile offsets + coded tiles at ±1 m | `dem` | column table (D-089, D-104): 64 × 64 tiles, per-tile least-squares predictor, static rANS over a shared model family; 2.7–2.9 bits per sample in the hills, [below](#dem) |
-| 14 | BLOBS | cold data (attribution text, long strings) | `blobs` | column table (D-079): zstd frames of whole blobs, an optional dictionary, `ruzstd` decode; 22 B per 116 B row on Nepal, a random blob in 43 µs |
-| 15 | BLOCK_HASHES | per-block BLAKE3 for large sections (lazy verification) | `verify` | raw (D-078): the BLAKE3 chaining value of each 16 KiB block of every section of 1 MiB or more |
-| 16 | REDIRECTS | retired IDs: each to its survivor, or to none for a tombstone ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)) | `core` | column table (D-075): sorted ID pairs |
-| 17 | ADMIN_REGION | exact point → admin units: REGION's layout on the ARCS vertices, region `i` = polygon `i` | `geometry` | column table (D-100), [below](#admin_region) |
-| 18 | ARCS_OVERVIEW | the coarse levels of ARCS alone, for fast coarse reads | `geometry` | column table (D-102), [below](#arcs_overview) |
+| 14 | BLOBS | cold data (attribution text, long strings) | `extra` | column table (D-079): zstd frames of whole blobs, an optional dictionary, `ruzstd` decode; 22 B per 116 B row on Nepal, a random blob in 43 µs |
+| 15 | BLOCK_HASHES | per-block BLAKE3 for large sections (lazy verification) | – | raw (D-078): the BLAKE3 chaining value of each 16 KiB block of every section of 1 MiB or more |
+| 16 | REDIRECTS | retired IDs: each to its survivor, or to none for a tombstone ([ADR-0008](../03-decisions/adr/ADR-0008-stable-ids.md)) | `point` | column table (D-075): sorted ID pairs |
+| 17 | ADMIN_REGION | exact point → admin units: REGION's layout on the ARCS vertices, region `i` = polygon `i` | `admin-index` | column table (D-100), [below](#admin_region) |
+| 18 | ARCS_OVERVIEW | the coarse levels of ARCS alone, for fast coarse reads | `boundaries` | column table (D-102), [below](#arcs_overview) |
 | 19 | ELEVATION | each place's height, one row per PLACES row | `elevation` | column table (D-133): one bit-packed column; 1.3 B per place on Nepal, [below](#elevation) |
 | 20 | PLACE_TZ | each place's timezone area, one row per PLACES row | `timezone` | column table (D-134): the areas' rows and a per-place index into them, [below](#place_tz) |
+
+### Components of a pack
+
+Each section belongs to one component (D-133, D-135), and a client chooses components, not
+sections. `teigeodata_format::component` holds the table: each component's sections, and the
+components it needs (`search` needs `names`, `admin-index` needs `boundaries`, every other one
+but `dem` needs `point`). BLOCK_HASHES belongs to none; a client fetches it with any section of
+1 MiB or more. A test checks this table's Component column against that module.
 
 ### Column tables (encoding 1)
 

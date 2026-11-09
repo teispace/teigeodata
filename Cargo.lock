@@ -1661,9 +1661,11 @@ dependencies = [
  "teigeodata-core",
  "teigeodata-format",
  "teigeodata-names",
+ "teigeodata-sync",
  "toml",
  "unicode-normalization",
  "unicode-script",
+ "zstd",
 ]
 
 [[package]]

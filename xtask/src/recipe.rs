@@ -1,7 +1,8 @@
 //! `build.yaml` (schema `teigeodata/build/v1`): how `forge make <cc>` builds a country's packs
 //! (D-095). Checked by `check-data`.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 use serde::Deserialize;
 
@@ -32,6 +33,10 @@ struct Recipe {
     /// The resources one build may use (G-budget, enforced by `forge make`).
     #[serde(default)]
     budget: Option<Budget>,
+    /// Wire budgets (G-wire, enforced by `check-pack`): component → the most kB (1,000 B) a
+    /// client downloads for it with what it needs.
+    #[serde(default)]
+    wire_kb: BTreeMap<String, u64>,
 }
 
 #[derive(Deserialize)]
@@ -144,7 +149,27 @@ pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
     {
         out.push("a budget states rss_mb and disk_mb above zero".into());
     }
+    for (name, &kb) in &r.wire_kb {
+        if teigeodata_format::component::Component::from_name(name).is_none() || kb == 0 {
+            out.push(format!(
+                "wire_kb: `{name}` is not a component, or its budget is 0"
+            ));
+        }
+    }
     out
+}
+
+/// The wire budgets of the country at `address` (`data/countries/<address>/build.yaml`); none
+/// for an address without a recipe.
+pub(crate) fn wire_kb(root: &Path, address: &str) -> Result<BTreeMap<String, u64>, String> {
+    let path = root.join("data/countries").join(address).join("build.yaml");
+    if !path.is_file() {
+        return Ok(BTreeMap::new());
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let r: Recipe =
+        serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(r.wire_kb)
 }
 
 #[cfg(test)]
@@ -164,6 +189,12 @@ mod tests {
         assert_eq!(check_text(&with_dem, &pinned), Vec::<String>::new());
         let with_budget = format!("{good}budget: {{ rss_mb: 4000, disk_mb: 2000 }}\n");
         assert_eq!(check_text(&with_budget, &pinned), Vec::<String>::new());
+        let wire = format!("{good}wire_kb: {{ point: 550, timezone: 600 }}\n");
+        assert_eq!(check_text(&wire, &pinned), Vec::<String>::new());
+        for bad in ["points: 550", "point: 0"] {
+            let text = format!("{good}wire_kb: {{ {bad} }}\n");
+            assert!(!check_text(&text, &pinned).is_empty(), "{bad}");
+        }
         let zero = format!("{good}budget: {{ rss_mb: 0, disk_mb: 2000 }}\n");
         assert!(!check_text(&zero, &pinned).is_empty(), "a zero budget");
         let partial = format!("{good}budget: {{ rss_mb: 4000 }}\n");

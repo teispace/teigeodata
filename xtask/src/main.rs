@@ -22,6 +22,7 @@ mod recipe;
 mod romanise;
 mod sizes;
 mod sources;
+mod wire;
 mod workspace;
 
 use std::path::{Path, PathBuf};
@@ -45,7 +46,9 @@ Tasks:
   check-pack <pack.tgd> [--lite] [--dump <dir>]
                     G-lic on a built pack: every section verified, the licence of its
                     build, and in a lite pack only lite-class sources' notices (D-126);
-                    each section's size; --dump writes each section's bytes to <dir>.
+                    each section's size; G-wire: the transport asset's bytes per
+                    component add up, and each fits the country's wire_kb (D-135);
+                    --dump writes each section's bytes to <dir>.
   check-workspace   Check that the forge, bindings/ and the C ABI crate keep the main lint
                     table (boundary crates may only lower unsafe_code to deny).
   mirror [<id>…]    Upload the stored bytes of pinned sources (every source with a

@@ -4,6 +4,9 @@
 //! lite pack every notice belongs only to sources whose licence class the lite build may read
 //! (`CLEAN_ROOM.md` rule 2). A notice no pinned source states is refused: the pack cannot say
 //! where it came from.
+//!
+//! G-wire (D-135): the pack's wire bytes per component ([`crate::wire`]) add up to its
+//! transport asset, and each component the country budgets (`wire_kb`) fits.
 
 use std::fs;
 use std::path::Path;
@@ -74,11 +77,22 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
             }
         }
     }
+    let wire = crate::wire::Wire::measure(&bytes).map_err(|e| one(format!("{path}: {e}")))?;
+    let budget = crate::recipe::wire_kb(root, m.address()).map_err(one)?;
+    let problems = wire.gate(&budget);
+    if !problems.is_empty() {
+        return Err(problems
+            .into_iter()
+            .map(|p| format!("{path}: G-wire: {p}"))
+            .collect());
+    }
     let notices = m.attribution().map_or(0, |a| a.lines().count());
     Ok(format!(
-        "{}pack ok: {path} ({} build), {notices} notices, sections verified",
+        "{}{}pack ok: {path} ({} build), {notices} notices, sections verified, wire within {} budgets",
         sizes(&pack, bytes.len()),
-        if lite { "lite" } else { "main" }
+        wire.report(),
+        if lite { "lite" } else { "main" },
+        budget.len()
     ))
 }
 

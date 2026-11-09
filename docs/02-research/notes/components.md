@@ -94,6 +94,21 @@ the wire** for Nepal's 100,358 places (6 areas, long runs in Hilbert order), aga
 1,606,237 B. 100,357 places have an area; the one without lies outside every zone, as REGION
 says at its point. The timezone of a place is now 0.03% of the cost of the timezone index.
 
+Step 3 (D-135): `check-pack` measures the real transport asset (zstd 19, the release's frames)
+per component. What a client downloads for one component with what it needs, head and seek
+table included, Nepal 2026-11-09:
+
+| Choice | Main | Lite |
+|---|---:|---:|
+| `point` | 522,192 | 493,757 |
+| `point` + `timezone` | 522,672 | |
+| `point` + `elevation` | 651,478 | 616,205 |
+| `point` + `elevation` + `timezone` | 651,958 | |
+| `point` + `admin` | 639,755 | 607,043 |
+| `search` (with `names`, `point`) | 3,045,064 | 2,547,929 |
+| `admin-index` (with `boundaries`, `point`) | 3,835,634 | 3,801,616 |
+| the whole asset | 8,198,400 | 6,076,549 |
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Verdict |

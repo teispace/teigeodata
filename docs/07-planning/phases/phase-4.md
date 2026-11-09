@@ -72,9 +72,10 @@ signed pack per address; a client holds any subset of its sections.
 - [x] Format: a place's timezone in its own section, PLACE_TZ (kind 20, D-134), proved equal to
   REGION at the place's point; the engine's `tz_of(place)`. A place's admin units come from
   HIERARCHY (G-pip), so no admin column (2026-11-09)
-- [ ] Format: one table mapping each section kind to its component and dependencies, in
-  `teigeodata-format`
-- [ ] Forge writes them; `check-pack` prints wire bytes per component
+- [x] Format: one table mapping each section kind to its component and dependencies,
+  `teigeodata_format::component` (D-135), checked against the spec (2026-11-09)
+- [x] Forge writes them; `check-pack` prints wire bytes per component from the real transport
+  asset, and gates them (G-wire, D-135) (2026-11-09)
 - [ ] Storage: head plus the installed sections (sparse file, or offsets in a compact file),
   a sidecar of present and verified sections
 - [ ] Engine: a layer opens with any subset; a query that needs a missing component returns
@@ -82,9 +83,10 @@ signed pack per address; a client holds any subset of its sections.
 - [ ] Sync: `components(&[...])` plans only those sections' frames; adding one later fetches
   only its frames
 - [ ] Cargo features per component; a binary without one carries none of its readers
-- [ ] Gates: points-only Nepal at most 0.55 MB on the wire (today lat/long 447 KB, with IDs
-  and the spatial index 504 KB, with altitude 633 KB, whole pack 8.2 MB); components sum to
-  the pack
+- [x] Gates: points-only Nepal at most 0.55 MB on the wire (522,192 B main, 493,757 B lite,
+  2026-11-09); components sum to the asset (G-wire)
+- [ ] Gate: each component, alone and with others, answers its queries as the full pack does
+  (the metamorphic gate per component set, with the engine item above)
 
 ### 4.2 Baseline and locator
 - [ ] Forge: the baseline build (countries, admin1, cities above a threshold, simplified world
@@ -164,3 +166,4 @@ signed pack per address; a client holds any subset of its sections.
 | 2026-11-09 | 4.1b: components as their own item, sized on Nepal | the maintainer wants points-only downloads (lat, lon, altitude) |
 | 2026-11-09 | 4.1b: ELEVATION is its own section; the format item split in two | D-133 step 1 done |
 | 2026-11-09 | 4.1b: PLACE_TZ instead of a COMPONENTS field; no admin column | D-134 |
+| 2026-11-09 | 4.1b: the component table and G-wire; the per-component metamorphic gate its own line | D-135 |

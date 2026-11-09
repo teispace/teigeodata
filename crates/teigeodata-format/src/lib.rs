@@ -38,6 +38,7 @@ pub mod arcs;
 pub mod blobs;
 pub mod blocks;
 mod columns;
+pub mod component;
 pub mod components;
 pub mod dem;
 pub mod elevation;

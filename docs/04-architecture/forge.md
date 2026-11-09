@@ -570,6 +570,10 @@ from EGM96 to EGM2008), then `build`
   and written atomically after it ends, so a killed run resumes from the first unfinished
   stage.
 - **Licence gate.** `--lite` never schedules a reader for a source outside the lite classes.
+- **Wire (G-wire, D-135).** `cargo xtask check-pack` writes the pack as its transport asset
+  (zstd 19, as a release does) and counts each frame for its section's component
+  (`teigeodata_format::component`). The parts must add up to the asset, and each component the
+  recipe budgets in `wire_kb` must fit, with what it needs. Nepal budgets `point: 550`.
 - **Budget (G-budget, D-129).** The stage table gives each stage's time and, on Linux, its
   peak resident memory (`VmHWM`, reset per stage through `/proc/self/clear_refs`); the run
   line gives the highest peak and the largest size of `data/build`. A recipe's
