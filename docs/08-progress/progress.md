@@ -8,146 +8,28 @@ updated: 2026-11-09
 
 ## Where we are
 
-- **Phase:** 3, forge and Nepal data ([phase file](../07-planning/phases/phase-3.md)); research done in four notes (D-088 to D-091), order in D-092.
-- **M2 met** on 2026-11-07 (D-087), evidence in [phase 2 §2.4](../07-planning/phases/phase-2.md#24-exit-review); POSTAL moved to Phase 3.
-- **Now:** step 3.1, the vertical slice. `forge build np` writes, signs and reads back the Nepal
-  pack: 96,844 places in 7.05 MB in 3.0 s, identical bytes on two builds; lite 91,266 places in
-  4.26 MB ([forge build](../04-architecture/forge.md#build-a-pack-build)). The ID registry
-  keeps IDs across releases and shares them between main and lite (D-094). `forge make np`
-  runs every stage from `build.yaml` with a content-keyed cache: cold 7.8 s, warm 19 ms
-  (D-095). **3.1 done.**
-- **3.2 built** (D-096): building readers for OSM, Microsoft and Google v3 (47 M Nepal
-  buildings in under 10 s), the settlement core and weighted Weiszfeld consensus (88,649 of
-  98,020 places with a core; Google-only against Microsoft-only P90 146 m, gate 180 m, fatal),
-  the 301-place labelling sample (Q-017, maintainer). `forge make np` cold 30 s; main pack
-  7.05 MB, lite 4.48 MB. DEM elevation at the consensus point moved to 3.4.
-- **3.3 done** (D-097 to D-103): ARCS, POLYGONS and POLY_INDEX sections and the
-  forge's topology stage are built; the Nepal packs carry 860 admin polygons on 2,315 shared
-  arcs (4.48 B per vertex, 8 levels of detail, parents within 1 cm of COD-AB's) and their index
-  (9.5 B per polygon, one tree implementation with PLACE_INDEX) and ADMIN_REGION, REGION on the
-  ARCS vertices (D-100: 977 KB against 3.63 MB with its own, same answers and speed). A fine
-  grid over each pack's extent (D-101) halves admin queries on places (296 → 153 ns) for
-  89 KB, and an overview of the coarse levels (D-102) reads levels 4 to 6 3.3 to 3.5 times
-  faster for 95 KB; main 10.99 MB, lite 8.34 MB ([B10](../02-research/benches/phase-3.md#b10-poly_index-and-ring-reads)).
-  The stage snap rounds a source that is not noded (D-103); on geoBoundaries India ADM2
-  (measurement only) ARCS is 3.39 B per vertex, the overview 7.7% of ARCS and ADMIN_REGION
-  2.11 MB at 51–67 ns ([India](../02-research/benches/phase-3.md#india-adm2-geoboundaries)).
-- **3.4 in progress** (D-104): the DEM section is built and the `forge dem-section` stage codes
-  Copernicus tiles into it. On four research tiles it equals the note's model (Terai 1.11,
-  hills and mountains 2.70–2.94 bits per sample, every probe within 1 m). It decodes at
-  13.6 ns per sample: 31 µs for a cold point query, 0.4 µs warm
-  ([B11](../02-research/benches/phase-3.md#b11-dem)). All 45 Nepal tiles: 139.3 MB, 1.907
-  bits per sample (D-109). Place elevations are built (D-111): `forge make` runs the recipe's
-  DEM as a cached `dem` stage and `build` samples it at every place's consensus point into
-  PLACES column 7, checked row by row on read back. Nepal main: 96,839 of 96,847 places,
-  PLACES +129,872 B; against GeoNames' SRTM3 heights P90 130 m at the place's point, 26 m at
-  the record's own point (the consensus move, not the DEM). Lite has none (Copernicus is main
-  only). Next: the DEM section in the Nepal packs as its own component, lite elevation.
-- **3.5 built** (D-105): the POSTAL section, records in place runs with each scheme's rules
-  as data. The Nepal main pack carries all 753 local-level and 6,743 ward codes (GPO table,
-  main build only until Q-009), linked to their COD-AB units by a reviewed crosswalk and checked
-  against the source on every build: 10.1 KB, exact lookup 155 ns, place → codes 179 ns. The
-  world's 5.0 M GeoNames codes take 24.4 MB (+3.1% on the model), exact lookup 736 ns
-  ([postal benchmark](../02-research/benches/phase-3.md#postal)). Main pack 11.0 MB. Next: 3.6
-  names and corrections while the DEM download waits.
-- **3.6 in progress** (D-106): display names. 6,269 places (6.4%) showed a Devanagari name
-  although 6,026 of them had a Latin one. Now the majority Latin spelling wins after the
-  lexicon's respelling, and 175 places with only Devanagari are romanised by rule tables as
-  data (`data/romanise/ne-Deva.yaml`): 58.7% exact on 6,660 OSM name pairs, ICU 22.0%.
-  `naming-main.tsv` lists the 19,108 changed display names for review; main pack 11.2 MB,
-  identical bytes on two builds ([note](../02-research/notes/names-canonical.md)). D-060's
-  alias rules now run inside the build (D-107): 40 records lend no names and 3,312 names are
-  not taken, each listed in `dropped-names-main.tsv` with what it names; main pack 11.1 MB.
-  They exposed duplicate clusters (1,872 collisions within 2 km). `forge make` now keys
-  stages by their own code and a `fast` profile exists (D-108): a names change is 19 s of
-  build and 12 s of make. All 45 Copernicus tiles are stored (approved 2026-11-09).
-  The golden evaluator now runs on the built pack (`pack-eval`, under 1 s). GeoNames admin
-  records link to their COD-AB units, and former units stay as flagged places (D-110):
-  pass 0.754 → 0.871, recall@1 0.689 → 0.787, historical 0.068 → 0.886. Place elevations are
-  built (D-111, 3.4). Next: duplicate clusters, corrections and G-corr.
-- **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
-  boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
-  great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
-  [results](../02-research/benches/phase-2.md#b8-place_index)).
-  2.2 B9 REGION, an exact point-in-region index on a top grid and Morton-sorted leaves with
-  shared arcs: the world timezones with oceans in 25.7 MB, 50 ns uniform and 41 ns on Nepal
-  places, twice as fast as `tzf-rs` with full data, zero mismatches against even–odd (D-083);
-  Q-013 answered by ID order (D-084)
-  ([results](../02-research/benches/phase-2.md#b9-region)).
-  2.3 B7 SEARCH, one section for the exact, loose and phonetic maps on our own checked FST with
-  a bit-parallel fuzzy NFA over code points: 1.50 MB on Nepal against S3's 3.63 MB, one-edit
-  walks 6× faster than `fst`, golden recall unchanged, p99 41.2 µs unanchored against S3's
-  71.2 µs, native one-letter typos 0.659 → 0.976 (D-085, D-086)
-  ([results](../02-research/benches/phase-2.md#b7-search)).
-- **M1 met** on 2026-11-07 (D-080), evidence in [phase 1 §1.6](../07-planning/phases/phase-1.md#16-exit-review). Done in Phase 1:
-  - 1.1 `teigeodata-core`: the stable ID and its text form, grid points, and a Hilbert index
-    4–5× faster than the classic loop and proven equal to it;
-  - 1.2 `teigeodata-format`: format 0.1. A canonical, validating zero-copy reader (`no_std`, no
-    allocation), a streaming-friendly deterministic writer, Ed25519 signatures, and four fuzz
-    properties under `cargo test`, each proven on planted bugs (D-072). The research is in
-    [core and format](../02-research/notes/core-and-format.md) (D-070, D-071).
-  - 1.3 `teigeodata-bench`: open costs 0.71 µs at any size (head only), eager hashing
-    1.76 GiB/s, a signature check 34 µs ([results](../02-research/benches/phase-1.md)).
-  - 1.4 so far, B1 and B13: the integer codec decodes 8.5–11 G/s in safe code, 22–44% faster
-    than the `unsafe` `bitpacking` crate; delta halves sorted IDs; 128-value blocks chosen (D-073).
-    PLACES and HIERARCHY on one shared column table: 5.2 and 3.0 B per place on Nepal, reads
-    3–10 ns, CSR children below the Elias–Fano bound (D-074).
-    B5: IDMAP and REDIRECTS, sorted IDs with a new ramp coding: 0.35 B per place, 82–91 ns per
-    hit; PtrHash is 12× bigger for 3–27 ns and stays the upgrade path (D-075).
-    B6: COMPONENTS, presence as a poppy rank bitmap or sorted rows, the smaller per component
-    (crossover near 10%); rank 6.9 ns, a field read 7–20 ns (D-076).
-    B3: NAMES with FSST, our own decoder and deterministic trainer, per-script tables:
-    10.6 B per place on Nepal, a canonical name in 65 ns (D-077).
-    B12: BLOCK_HASHES, 16 KiB BLAKE3 chaining values per section of 1 MiB or more, merged into
-    the table hash; at 100 MB a proof takes 237 µs and a first read 8.8 µs, against 55.6 ms
-    eager (D-078).
-    B4: BLOBS, zstd frames of whole blobs (C zstd 19 in the forge, `ruzstd` behind the `zstd`
-    feature): 0.19 of raw on Nepal rows, a random blob in 43 µs; the dependency-`unsafe` policy
-    is in the quality bar (D-079).
-  - 1.5: nightly libFuzzer (8 targets, green) and Miri (four parallel jobs, tests bounded under
-    `cfg(miri)`); the `counts` gate fails a PR above +1% instructions, proven on a planted +26%; all eight harnesses run on every PR from `teigeodata_format::fuzz`;
-    a determinism gate. Z2 (`cargo xtask sizes`): the whole reader adds 171 KiB to a wasm32
-    module, 53 KiB gzipped ([results](../02-research/benches/phase-1.md#z2-library-sizes-per-feature-set)).
-- **M0 met** on 2026-11-07 (D-069): each criterion with its evidence in
-  [phase 0 §0.5](../07-planning/phases/phase-0.md#05-exit-review). The maintainer's review is
-  asynchronous. Phase 0 in short:
-  - **Done:** 0.1 to 0.4: foundation, ten research notes applied, schema and pack-format
-    drafts, spikes S1 to S6.
-  - **World-general (P16):** every country lives in its own folder,
-    `data/countries/<cc>/` (profile, lexicon, curated golden queries), validated by
-    `cargo xtask check-data`.
-  - **Golden set:** Nepal v0 has 512 queries (gap: `colloquial` has 14 of a target 30).
-  - **Search (S3):** the recall gates are met on Nepal: recall@1 0.953, recall@5 0.986,
-    3.6 MB; p99 78–116 µs, depending on load ([results](../02-research/benches/s3-search.md), D-052). The misses left are aliases
-    and conflation, which are S5 and forge work.
-- **S5 done:** sources pinned in `data/sources.lock`; the forge fetches them and reads
-  OSM, GeoNames and Wikidata into Parquet (S5.1, S5.2); `forge pip` assigns points to COD-AB units
-  exactly, and Q-010 is answered: COD-AB excludes the 2020 claim (S5.3, D-054). `forge geofix`
-  measures rounding, stacking and snap against measured nulls (S5.4, D-055;
-  [results](../02-research/benches/s5-nepal.md)). `forge links` measures disagreement on the
-  sources' own links: villages disagree by P50 360–1,100 m; 31% of `GeoNames`–Wikidata pairs
-  are copies (D-056). `forge conflate` (Fellegi–Sunter) recovers 83–88% of those links at
-  precision 0.991–1.000 without using them (D-059); `teigeodata-names` now exists (D-057).
-  `forge aliases` carries cluster names into search: S3 recall@1 0.959, recall@5 0.994
-  (D-060). `forge dem` samples Copernicus GLO-30, pinned as a tileset: stated elevations are P90
-  100–430 m off, so elevation comes from the DEM at the conflated point (S5.6, D-061). S5 is done:
-  Q-005 is answered by the S5.7 summary, with horizontal targets set by terrain slope (D-062).
-- **S6 done:** ICESat-2 ATL08 through SlideRule (no account), pinned as a POST tileset with
-  response checks; EGM2008 and EGM96 geoids; `forge dem-ref`. Inside Nepal (497,717 segments):
-  Copernicus LE90 18.7 m, NASADEM 17.7 m. Copernicus is better except under forest; both meet
-  the vertical target alone (D-063, D-064; [results](../02-research/benches/s6-elevation.md)).
-  GEDTM30 waits for an independent reference (Q-016).
-- **S4 done:** `crates/teigeodata-api` is the single source of every binding; `cargo xtask
-  bindings` extracts the IDL with `syn` and generates the C ABI and header, Swift, Dart, PyO3,
-  napi-rs and JNI layers. All six languages pass one parity suite; the C ABI adds 0.3 ns per
-  call; a new function takes one regeneration. Gates: drift, the header against cbindgen,
-  boundary lint tables (D-065 to D-068; [results](../02-research/benches/s4-bindings.md)). The
-  name fold got a 10× ASCII fast path on the way.
-- **Next:** Phase 3 (M3): the forge builds Nepal's packs end to end with every section,
-  carrying the S5 and S6 follow-ups (the settlement core, geofix consensus, land-cover-aware DEM
-  fusion, the colloquial class) and POSTAL (D-087). The result-format spike decides blob v0's
-  successor and zero-copy blobs for Python, the JVM and Dart.
-- **Blocked:** nothing.
+A short status. The numbers and evidence live in each phase file and the
+[decision log](../03-decisions/log.md); this page links to them instead of repeating them.
+
+| Phase | State | Evidence |
+|---|---|---|
+| 0 Foundations and research | **M0 met** 2026-11-07 (D-069) | [phase 0 §0.5](../07-planning/phases/phase-0.md#05-exit-review) |
+| 1 Core and format | **M1 met** 2026-11-07 (D-080) | [phase 1 §1.6](../07-planning/phases/phase-1.md#16-exit-review) |
+| 2 Indexes | **M2 met** 2026-11-07 (D-087) | [phase 2 §2.4](../07-planning/phases/phase-2.md#24-exit-review) |
+| 3 Forge and Nepal data | in progress: 3.1–3.3 and 3.5 done; 3.4 DEM and 3.6 names in progress; 3.7–3.8 open | [phase 3](../07-planning/phases/phase-3.md) |
+| 4 Engine, baseline and sync | started in parallel with Phase 3: 4.1 engine and 4.4 transport | [phase 4](../07-planning/phases/phase-4.md) |
+| 5–8 | not started (bindings prototyped in S4, D-065 to D-068) | [roadmap](../07-planning/roadmap.md) |
+
+- **Now (Phase 3):** the Nepal main pack has 101,550 places with heights (D-111), admin
+  records linked and former units kept (D-110), golden pass 0.871 on the built pack
+  (`pack-eval`). Next: duplicate clusters with G-conf, corrections with G-corr, then 3.7
+  (gates in CI, attribution, lite, `ACCURACY.md`).
+- **In parallel (Phase 4):** the engine crate (4.1) and the seekable zstd transport (4.4) are
+  built on branches and merged when verified; they need only the format, not the Nepal data.
+- **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
+  arcs ([ideas](../01-product/ideas.md)).
+- **Waiting on the maintainer:** the labelled sample (Q-005, needed for `ACCURACY.md` and M3),
+  the postal licence (Q-009), Copernicus for lite (Q-008).
 
 ## Session log
 
@@ -185,3 +67,4 @@ updated: 2026-11-09
 | 2026-11-09 | 3.6: display names, the romaniser and its Nepali profile (D-106) | D-060 alias rules in the build; corrections |
 | 2026-11-09 | 3.6: D-060's alias rules in the build (D-107); stage keys by code and a `fast` profile (D-108); DEM tiles fetched | pack evaluator; duplicate clusters; corrections |
 | 2026-11-09 | 3.4: place elevations from the DEM at the consensus point, the `dem` stage in `forge make` (D-111) | the DEM component in the packs; lite elevation |
+| 2026-11-09 | D-110 admin records, D-111 place elevations merged; development speed-ups (D-115): Phase 4 started in parallel (engine, transport), build split into modules, Miri under nextest, this page shortened | Duplicate clusters and G-conf; merge the Phase 4 branches |
