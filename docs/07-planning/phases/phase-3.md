@@ -82,11 +82,15 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   forge's `dem-section` stage, a fuzz case; on four tiles equal to the note's model (1.11 to
   2.94 bits per sample), 13.6 ns per sample, 31 µs per cold query
   ([B11](../../02-research/benches/phase-3.md#b11-dem))
-- [ ] B11 on all 45 Nepal tiles and 2–3 tiles elsewhere (download of 1.84 GB waiting for the
-  maintainer's approval), and against LERC and zstd
+- [x] B11 on all 45 Nepal tiles (D-109): 139.3 MB for the 9° × 5° box, 1.907 bits per sample,
+  all probes within 1 m, 163 s
+- [ ] B11 on 2–3 tiles elsewhere, and against LERC and zstd
 - [ ] The DEM section in the Nepal packs: its own component, tiles masked to the country
-- [ ] Elevation at each place's consensus point from the DEM section; surveyed heights for
-  summits (D-089; moved from 3.2)
+- [ ] Elevation at each place's consensus point from the DEM section into PLACES column 7
+  (D-109, the column is built); surveyed heights for summits (D-089; moved from 3.2)
+- [ ] Every GeoNames admin record linked to its COD-AB unit, with its names: none reaches the
+  pack today, so 94 of 512 golden queries cannot pass (pack evaluator: pass 0.754, 0.923 on
+  the answerable ones)
 
 ### 3.5 Postal
 - [x] `data/countries/np/postal.yaml`, the POSTAL section (D-090, D-105), its queries and the

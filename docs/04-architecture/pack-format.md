@@ -192,6 +192,7 @@ Columns not listed are refused, so a new column comes with a format minor versio
 | 4 | admin level | 0 for a country or a place that is not an admin unit | optional |
 | 5 | class | class dictionary code, 0 = none | optional |
 | 6 | flags | none defined yet | optional |
+| 7 | elevation | metres above EGM2008 plus 32,768, 0 = unknown (D-109) | optional |
 
 An optional column is left out when every value is 0, and reads as 0. The deep check also
 checks that rows are in Hilbert order of their points, that every point is on the grid and

@@ -1,7 +1,7 @@
 ---
 title: "Open questions"
 status: living
-updated: 2026-11-08
+updated: 2026-11-09
 ---
 
 # Open questions
@@ -23,3 +23,8 @@ move it to the [decision log](../03-decisions/log.md) and delete it here.
 | Q-011 | Census 2021 ward-level tables: format and licence (NSO sites refused automated access) | Manual check by the maintainer or a later fetch | Maintainer |
 | Q-014 | Which CORS mirror serves packs to browser apps (ADR-0037)? | An object store with free egress and a custom domain; needs an account | Maintainer (account) |
 | Q-012 | Can the CC-BY lite build be *tested* against ODbL boundaries without contaminating it? | Treat tests as non-ingest only if the result never feeds back; get a legal opinion | Maintainer (legal) |
+| Q-018 | Baseline pack contents and budget: population threshold, simplification tolerance, an 8 MB budget, a smaller variant (countries, timezones, locator)? | Build it, measure with Z1, set the budget from the measurement ([note](../02-research/notes/engine-and-catalog.md)) | Research (4.2) |
+| Q-019 | Delta packs (changed records as an extra layer) or section re-download only? | Decide on two consecutive real Nepal releases (sync gate 11); zstd patches save only 3.4% and are dropped ([note](../02-research/notes/download-and-delta.md)) | Two real releases |
+| Q-020 | Sync gate 14 (iOS, Android, web downloads) is in M4 but bindings are Phase 5 | Prototype the transports in Phase 4 only to pass gate 14; packaging stays in Phase 5 | Research (4.x) |
+| Q-021 | Which `tgd` commands make M4's "CLI complete"? | inspect, verify, diff, extract, merge, export and sync; building packs stays in the forge | Research (4.x) |
+| Q-022 | Must importance stay on one world-wide scale so search merges across packs? | Yes, with a check when the second country is built | Research (W1) |
