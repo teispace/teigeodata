@@ -24,7 +24,9 @@ rules: [ADR-0030](../../03-decisions/adr/ADR-0030-source-admission.md).
 
 - **Perspective:** Nepal's official map (2020), including Kalapani, Lipulekh and Limpiyadhura
   ([ADR-0006](../../03-decisions/adr/ADR-0006-perspective.md)).
-- **Timezone:** `Asia/Kathmandu`: +05:30 from 1920, +05:45 from 1986 (tzdb).
+- **Timezone:** `Asia/Kathmandu`: +05:30 from 1920, +05:45 from 1986 (tzdb). Main takes the
+  zone areas from timezone-boundary-builder; lite takes tzdb's one `zone.tab` row over the
+  COD-AB admin-0 outline (D-138).
 - **Names:** Nepali (Devanagari) official names come with the CBS codes; canonical Latin
   spelling follows [ADR-0031](../../03-decisions/adr/ADR-0031-canonical-spelling.md) and
   [the lexicon](../../../data/countries/np/lexicon.yaml) and the [country profile](../../../data/countries/np/profile.yaml). Endonyms in other local languages are sparse in

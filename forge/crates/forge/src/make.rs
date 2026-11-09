@@ -52,8 +52,13 @@ struct Recipe {
     #[expect(dead_code, reason = "checked by `cargo xtask check-data`")]
     schema: String,
     admin: String,
+    /// The timezone sources, in priority order: a build takes the first its licence gate lets
+    /// it read (D-138; main timezone-boundary-builder, lite tzdb).
     #[serde(default)]
-    timezones: Option<String>,
+    timezones: Vec<String>,
+    /// The zones that win where a timezone source's zones overlap (D-084): the perspective.
+    #[serde(default)]
+    timezone_first: Vec<String>,
     points: Vec<Points>,
     #[serde(default)]
     extent: Option<String>,
@@ -498,11 +503,13 @@ fn tile_box(extent: &str) -> Result<String, String> {
 /// The build's arguments from the recipe: the admin source, and the timezone source, DEM and
 /// population grid when named. The DEM and grid are passed in the lite build too, whose
 /// licence gate then reports them as not read.
-fn recipe_args(recipe: &Recipe, dem: Option<&str>) -> Vec<String> {
+fn recipe_args(recipe: &Recipe, tz: Option<&str>, dem: Option<&str>) -> Vec<String> {
     let mut out = vec!["--admin".to_string(), recipe.admin.clone()];
-    let dem = dem.map(str::to_string);
+    let (tz, dem) = (tz.map(str::to_string), dem.map(str::to_string));
+    let first = (!recipe.timezone_first.is_empty()).then(|| recipe.timezone_first.join(","));
     for (flag, id) in [
-        ("--tz", &recipe.timezones),
+        ("--tz", &tz),
+        ("--tz-first", &first),
         ("--dem", &dem),
         ("--population", &recipe.population),
     ] {
@@ -513,7 +520,21 @@ fn recipe_args(recipe: &Recipe, dem: Option<&str>) -> Vec<String> {
 
 /// The recipe's DEM for this build: the first its licence gate lets it read.
 fn dem_of<'a>(recipe: &'a Recipe, lock: &Lock, lite: bool) -> Result<Option<&'a str>, String> {
-    for id in &recipe.dem {
+    first_allowed(&recipe.dem, lock, lite)
+}
+
+/// The recipe's timezone source for this build: the first its licence gate lets it read.
+fn tz_of<'a>(recipe: &'a Recipe, lock: &Lock, lite: bool) -> Result<Option<&'a str>, String> {
+    first_allowed(&recipe.timezones, lock, lite)
+}
+
+/// The first of `ids` (a priority list) the build may read.
+fn first_allowed<'a>(
+    ids: &'a [String],
+    lock: &Lock,
+    lite: bool,
+) -> Result<Option<&'a str>, String> {
+    for id in ids {
         if !lite || build::LITE.contains(&lock.get(id)?.licence_class.as_str()) {
             return Ok(Some(id));
         }
@@ -649,16 +670,12 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     if let Some((run, _)) = &core_key {
         build_args.extend(["--core".to_string(), run.clone()]);
     }
-    build_args.extend(recipe_args(&recipe, dem_of(&recipe, &lock, lite)?));
+    let tz = tz_of(&recipe, &lock, lite)?;
+    build_args.extend(recipe_args(&recipe, tz, dem_of(&recipe, &lock, lite)?));
     build_args.extend(sources.iter().cloned());
     let mut inputs: Vec<&str> = vec![recipe.admin.as_str()];
-    inputs.extend(
-        recipe
-            .timezones
-            .iter()
-            .chain(&recipe.population)
-            .map(String::as_str),
-    );
+    inputs.extend(tz);
+    inputs.extend(recipe.population.iter().map(String::as_str));
     let file = |name: &str| flag(name).map_or(Ok(Vec::new()), |p| read_or_empty(&root.join(p)));
     let bk = key(&[
         b"build",
@@ -706,13 +723,14 @@ mod tests {
 
     #[test]
     fn a_recipe_names_every_input_once() {
-        let yaml = "schema: teigeodata/build/v1\nadmin: bounds\ntimezones: tz\npoints:\n  - { reader: osm, source: osm }\n  - { reader: geonames, source: gn, extra: [gn-alt, gn-hier] }\nbuildings:\n  - { reader: osm, source: osm }\n  - { reader: msbuildings, source: ms }\ndem: [dem, dem2]\npopulation: pop\n";
+        let yaml = "schema: teigeodata/build/v1\nadmin: bounds\ntimezones: [tz, tz2]\ntimezone_first: [Asia/Kathmandu]\npoints:\n  - { reader: osm, source: osm }\n  - { reader: geonames, source: gn, extra: [gn-alt, gn-hier] }\nbuildings:\n  - { reader: osm, source: osm }\n  - { reader: msbuildings, source: ms }\ndem: [dem, dem2]\npopulation: pop\n";
         let recipe: Recipe = serde_saphyr::from_str(yaml).unwrap();
         let postal = ["gpo".to_string(), "bounds".to_string()];
         assert_eq!(
             recipe.inputs(&postal),
             [
-                "osm", "gn", "gn-alt", "gn-hier", "bounds", "tz", "ms", "dem", "dem2", "pop", "gpo"
+                "osm", "gn", "gn-alt", "gn-hier", "bounds", "tz", "tz2", "ms", "dem", "dem2",
+                "pop", "gpo"
             ]
         );
         let bare: Recipe = serde_saphyr::from_str(

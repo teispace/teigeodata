@@ -4,8 +4,12 @@
 schema: teigeodata/build/v1
 # Admin units: OCHA COD-AB (levels 1 to 4).
 admin: codab-np-geojson
-# IANA zones (timezone-boundary-builder, ODbL: main build only).
-timezones: tbb-2026f
+# Timezone sources in priority order (D-138): a build takes the first its licence gate allows.
+# Main: timezone-boundary-builder (ODbL). Lite: tzdb (public domain), whose zone.tab gives Nepal
+# one zone, Asia/Kathmandu, over the admin-0 outline of `admin`.
+timezones: [tbb-2026f, tzdb-2026f]
+# Where zones overlap, these win (D-084: the Nepal perspective).
+timezone_first: [Asia/Kathmandu]
 # Points sources, in priority order: the first source's record gives a place its point and
 # canonical name until the consensus stage (phase 3 step 3.2).
 points:

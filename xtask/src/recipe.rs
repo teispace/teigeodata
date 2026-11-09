@@ -17,8 +17,12 @@ const BUILDING_READERS: [&str; 3] = ["google", "msbuildings", "osm"];
 struct Recipe {
     schema: String,
     admin: String,
+    /// The timezone sources, in priority order (D-138).
     #[serde(default)]
-    timezones: Option<String>,
+    timezones: Vec<String>,
+    /// The zones that win an overlap (D-084), as tzdb IDs.
+    #[serde(default)]
+    timezone_first: Vec<String>,
     points: Vec<Points>,
     #[serde(default)]
     extent: Option<String>,
@@ -127,6 +131,11 @@ pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
                 "`{}`: unknown buildings reader `{}`",
                 b.source, b.reader
             ));
+        }
+    }
+    for z in &r.timezone_first {
+        if !z.contains('/') || z.contains(char::is_whitespace) {
+            out.push(format!("timezone_first: `{z}` is not a tzdb zone ID"));
         }
     }
     if r.extent.is_none() && !r.dem.is_empty() {

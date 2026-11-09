@@ -156,6 +156,21 @@ used_by = "spike S2 (main build only)"
 attribution = "Time zones: timezone-boundary-builder 2026f by Evan Siroky, from © OpenStreetMap contributors, ODbL 1.0"
 
 [[source]]
+id = "tzdb-2026f"
+title = "IANA Time Zone Database 2026f, data (tzdata2026f.tar.gz)"
+kind = "http"
+url = "https://data.iana.org/time-zones/releases/tzdata2026f.tar.gz"
+version = "2026f"
+retrieved = "2026-11-09"
+sha256 = "01b4a91cec5167ed48c11e8ab78f2048cead78ce94b0cafcad0ae8c5a3044d3d"
+size = 483310
+licence = "Public domain (tzdb's LICENSE: \"Unless specified below, all files in the tz code and data are in the public domain\")"
+licence_class = "public-domain"
+countries = ["*"]
+used_by = "the lite build's timezones (D-138): zone1970.tab gives a single-zone country its zone over its admin-0 outline"
+attribution = "Time zones: IANA Time Zone Database 2026f (public domain)"
+
+[[source]]
 id = "copernicus-glo30-np"
 title = "Copernicus DEM GLO-30 Public (DGED), Cloud Optimized GeoTIFF tiles over Nepal (AWS open data)"
 kind = "tileset"

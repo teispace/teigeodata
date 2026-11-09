@@ -162,7 +162,10 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 - [x] Attribution in every pack (D-031, D-126): each source's notice from `sources.lock`,
   carried in the signed manifest of every pack built from it (Copernicus and WorldPop in main);
   `Layer::attribution()`; the API and bindings expose it with the layer's metadata (phases 5–6)
-- [ ] The lite build from clean-room sources only
+- [ ] The lite build from clean-room sources only. Every source passes the licence gate at
+  ingest. Timezones from tzdb over the admin-0 outline (D-138, 2026-11-09); postal (Q-009)
+  and population (ADR-0030) remain main only
+- [ ] Gate: GeoNames' per-place `timezone` agrees with the pack's `PLACE_TZ` (lite and main)
 - [ ] `ACCURACY.md` for Nepal against held-out truth
 
 ### 3.8 Exit review
@@ -202,3 +205,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | 3.7: G-topo and G-pip (D-130) | gaps between units went unseen; place assignment had no gate |
 | 2026-11-09 | 3.7: G-conf (D-131) | the silver-label scores had no gate |
 | 2026-11-09 | 3.4: lite elevation from NASADEM (D-132) | the lite build had no heights |
+| 2026-11-09 | 3.7: lite timezones from tzdb (D-138); a GeoNames timezone check its own item | the lite build had no timezones |

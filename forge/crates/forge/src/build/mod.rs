@@ -84,6 +84,8 @@ pub(crate) struct Args {
     pub(crate) release: String,
     pub(crate) admin: String,
     pub(crate) tz: Option<String>,
+    /// The zones that win an overlap (`--tz-first`, comma-separated; D-084, D-138).
+    pub(crate) tz_first: Vec<String>,
     pub(crate) lite: bool,
     pub(crate) key: Option<String>,
     /// The ID registry of the previous build or release; none for a country's first build.
@@ -101,12 +103,13 @@ pub(crate) struct Args {
 
 impl Args {
     pub(crate) fn parse(args: &[String]) -> Result<Self, String> {
-        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--topology] [--dem <tileset>] [--population <grid>] <points-source> <points-source> [...]";
+        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--tz-first <zone,...>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--topology] [--dem <tileset>] [--population <grid>] <points-source> <points-source> [...]";
         let mut it = args.iter();
         let cc = it.next().ok_or(usage)?.clone();
         let (mut release, mut admin, mut tz, mut key, mut ids, mut core, mut lite) =
             (None, None, None, None, None, None, false);
         let (mut topology, mut dem, mut population) = (false, None, None);
+        let mut tz_first = Vec::new();
         let mut sources = Vec::new();
         while let Some(a) = it.next() {
             let mut value = || it.next().cloned().ok_or(usage);
@@ -114,6 +117,7 @@ impl Args {
                 "--release" => release = Some(value()?),
                 "--admin" => admin = Some(value()?),
                 "--tz" => tz = Some(value()?),
+                "--tz-first" => tz_first = value()?.split(',').map(str::to_string).collect(),
                 "--key" => key = Some(value()?),
                 "--ids" => ids = Some(value()?),
                 "--core" => core = Some(value()?),
@@ -133,6 +137,7 @@ impl Args {
             release: release.ok_or(usage)?,
             admin: admin.ok_or(usage)?,
             tz,
+            tz_first,
             lite,
             key,
             ids,
@@ -240,7 +245,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let corrected = corrections::run(root, who, &g.sources, &mut places, &units.levels, &out_dir)?;
     let zones = g.tz.as_deref().map_or_else(
         || Ok(Zones::default()),
-        |id| zone_places(root, &lock, id, coverage),
+        |id| zone_places(root, &lock, id, coverage, &a.tz_first, (&a.cc, &a.admin)),
     )?;
     places.extend(zones.places.iter().cloned());
     let unnamed = keep_named(&mut places) + unnamed_clusters;
