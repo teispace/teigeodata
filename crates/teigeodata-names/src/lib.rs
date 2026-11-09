@@ -262,29 +262,54 @@ impl PhoneticKey {
     /// The key of a name.
     #[must_use]
     pub fn key(self, s: &str) -> String {
-        match self {
-            Self::IndicV0 => indic(s, false),
-            Self::IndicV1 => indic(s, true),
-        }
+        let mut buf = KeyBuf::default();
+        let mut out = String::new();
+        self.key_into(&fold(s), &mut buf, &mut out);
+        out
+    }
+
+    /// The key of `folded`, a name already folded ([`fold`]), into `out` (cleared first).
+    /// Reuses `buf`, so a warm call allocates nothing; the same key as [`PhoneticKey::key`].
+    pub fn key_into(self, folded: &str, buf: &mut KeyBuf, out: &mut String) {
+        indic(folded, matches!(self, Self::IndicV1), buf, out);
     }
 }
 
-fn indic(s: &str, drop_final_vowel: bool) -> String {
-    let folded = fold(s);
-    let mut classes: Vec<char> = Vec::new();
+/// Reusable buffers of [`PhoneticKey::key_into`].
+#[derive(Debug, Default)]
+pub struct KeyBuf {
+    classes: Vec<char>,
+    run: String,
+    word: Vec<char>,
+    nasals: Vec<char>,
+    kept: Vec<char>,
+    letters: Vec<char>,
+}
+
+fn indic(folded: &str, drop_final_vowel: bool, buf: &mut KeyBuf, key: &mut String) {
+    key.clear();
+    let KeyBuf {
+        classes,
+        run,
+        word: w,
+        nasals,
+        kept: out,
+        letters,
+    } = buf;
+    classes.clear();
     for word in folded.split(' ') {
         // A word may mix scripts ("Anantaपुर"): classify each script run with its own rules.
         let is_deva = |c: char| ('\u{0900}'..='\u{097F}').contains(&c);
-        let mut w = Vec::new();
-        let mut run = String::new();
+        w.clear();
+        run.clear();
         let mut run_deva = false;
         for c in word.chars().chain(core::iter::once('\0')) {
             if c == '\0' || (!run.is_empty() && is_deva(c) != run_deva) {
-                w.extend(if run_deva {
-                    deva_classes(&run)
+                if run_deva {
+                    deva_classes(run, letters, w);
                 } else {
-                    latin_classes(&run)
-                });
+                    latin_classes(run, letters, w);
+                }
                 run.clear();
             }
             if c != '\0' {
@@ -292,10 +317,10 @@ fn indic(s: &str, drop_final_vowel: bool) -> String {
                 run.push(c);
             }
         }
-        w = resolve_nasals(&w);
+        resolve_nasals(w, nasals);
         // Drop every A that is not word-initial.
-        let mut out: Vec<char> = Vec::with_capacity(w.len());
-        for (i, c) in w.iter().enumerate() {
+        out.clear();
+        for (i, c) in nasals.iter().enumerate() {
             if *c == 'A' && i > 0 {
                 continue;
             }
@@ -312,13 +337,14 @@ fn indic(s: &str, drop_final_vowel: bool) -> String {
         {
             out.pop();
         }
-        classes.extend(out);
+        classes.extend_from_slice(out);
     }
     classes.dedup();
     if classes.is_empty() {
-        return folded;
+        key.push_str(folded);
+    } else {
+        key.extend(classes.iter());
     }
-    classes.into_iter().collect()
 }
 
 fn is_vowel_class(c: char) -> bool {
@@ -328,8 +354,8 @@ fn is_vowel_class(c: char) -> bool {
 /// `Ŋ` (a written velar nasal) stays as N unless a consonant follows. Other nasals (N, M) before a consonant class
 /// are dropped; a word-final nasal after a vowel is dropped; otherwise M → N except before B or
 /// P.
-fn resolve_nasals(w: &[char]) -> Vec<char> {
-    let mut out = Vec::with_capacity(w.len());
+fn resolve_nasals(w: &[char], out: &mut Vec<char>) {
+    out.clear();
     for (i, &c) in w.iter().enumerate() {
         if c == 'Ŋ' && w.get(i + 1).is_none_or(|n| is_vowel_class(*n)) {
             // A velar nasal written as a full consonant (ङ, final "ng") stays, unless a
@@ -351,20 +377,24 @@ fn resolve_nasals(w: &[char]) -> Vec<char> {
             out.push(c);
         }
     }
-    out
 }
 
-fn latin_classes(word: &str) -> Vec<char> {
-    let b: Vec<char> = word.chars().filter(char::is_ascii_lowercase).collect();
+/// Appends the classes of a Latin run to `all`; `b` is a scratch buffer.
+fn latin_classes(word: &str, b: &mut Vec<char>, all: &mut Vec<char>) {
+    b.clear();
+    b.extend(word.chars().filter(char::is_ascii_lowercase));
+    let b = &*b;
     let n = b.len();
     let at = |i: usize| b.get(i).copied();
     let is_v = |c: Option<char>| matches!(c, Some('a' | 'e' | 'i' | 'o' | 'u'));
     let starts = |i: usize, p: &str| p.chars().enumerate().all(|(k, c)| at(i + k) == Some(c));
-    let mut out = Vec::new();
+    // The run's own classes start here: a letter looks back only within its run.
+    let base = all.len();
     let mut i = 0;
     while i < n {
-        let prev_vowel = out.last().is_some_and(|c| is_vowel_class(*c));
-        let prev_consonant = out.last().is_some_and(|c| !is_vowel_class(*c));
+        let last = all.get(base..).and_then(<[char]>::last);
+        let prev_vowel = last.is_some_and(|c| is_vowel_class(*c));
+        let prev_consonant = last.is_some_and(|c| !is_vowel_class(*c));
         let (class, len): (Option<char>, usize) = if starts(i, "kchh") {
             (Some('C'), 4)
         } else if starts(i, "ksh") || starts(i, "chh") {
@@ -435,11 +465,10 @@ fn latin_classes(word: &str) -> Vec<char> {
             )
         };
         if let Some(c) = class {
-            out.push(c);
+            all.push(c);
         }
         i += len;
     }
-    out
 }
 
 /// The class of one Latin letter; `h` and `y` after a consonant mark aspiration or a glide.
@@ -469,9 +498,11 @@ fn latin_letter(c: char, prev_vowel: bool, prev_consonant: bool) -> Option<char>
     }
 }
 
-fn deva_classes(word: &str) -> Vec<char> {
-    let chars: Vec<char> = word.chars().collect();
-    let mut out = Vec::new();
+/// Appends the classes of a Devanagari run to `out`; `chars` is a scratch buffer.
+fn deva_classes(word: &str, chars: &mut Vec<char>, out: &mut Vec<char>) {
+    chars.clear();
+    chars.extend(word.chars());
+    let chars = &*chars;
     let mut i = 0;
     while let Some(&c) = chars.get(i) {
         // क्ष → C, ज्ञ → G
@@ -481,7 +512,7 @@ fn deva_classes(word: &str) -> Vec<char> {
         {
             out.push(if c == 'क' { 'C' } else { 'G' });
             i += 3;
-            out.extend(inherent(&chars, i));
+            out.extend(inherent(chars, i));
             continue;
         }
         let consonant = match c {
@@ -511,7 +542,7 @@ fn deva_classes(word: &str) -> Vec<char> {
                 out.push(k);
             }
             i += 1;
-            out.extend(inherent(&chars, i));
+            out.extend(inherent(chars, i));
             continue;
         }
         let v = match c {
@@ -527,7 +558,6 @@ fn deva_classes(word: &str) -> Vec<char> {
         }
         i += 1;
     }
-    out
 }
 
 /// The inherent vowel A after a consonant at `i - 1`, unless a virama or a vowel sign follows,
@@ -687,5 +717,44 @@ mod search_key_tests {
                 s(SearchMap::Loose, "pokhara")
             ]
         );
+    }
+}
+
+#[cfg(test)]
+mod key_buf_tests {
+    use super::{KeyBuf, PhoneticKey, fold};
+    use alloc::string::String;
+
+    /// One buffer reused across names of both scripts, mixed runs and empty keys gives the key
+    /// of a fresh call every time: nothing leaks from one name into the next.
+    #[test]
+    fn a_reused_buffer_gives_the_fresh_key() {
+        let names = [
+            "Kathmandu",
+            "काठमाडौं",
+            "Anantaपुर",
+            "Bhimsenगाउँ",
+            "",
+            "123",
+            "Laxmipur Kodraha",
+            "ङ",
+            "Chhimkeshwori",
+            "क्षेत्रपाटी",
+            "Gyanodaya",
+            "Ama",
+            "a",
+            "Mahendranagar Bazaar",
+            "!!",
+        ];
+        for key in [PhoneticKey::IndicV0, PhoneticKey::IndicV1] {
+            let mut buf = KeyBuf::default();
+            let mut out = String::from("stale");
+            for round in 0..2 {
+                for n in names.iter().chain(names.iter().rev()) {
+                    key.key_into(&fold(n), &mut buf, &mut out);
+                    assert_eq!(out, key.key(n), "{key:?} {n:?} round {round}");
+                }
+            }
+        }
     }
 }
