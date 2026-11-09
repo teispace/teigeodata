@@ -1,8 +1,14 @@
 #!/bin/sh
 # Fast checks before every commit; CI runs the full set.
+#
+# Formatting is checked on the Rust files being committed only, so unfinished work elsewhere
+# in the tree (a parallel agent's, say) never blocks a commit; CI checks every file.
 set -e
-cargo fmt --all --check
-cargo fmt --manifest-path forge/Cargo.toml --all --check
+files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')
+if [ -n "$files" ]; then
+    # shellcheck disable=SC2086 # one argument per path; paths have no spaces
+    rustfmt --check --config-path rustfmt.toml $files
+fi
 cargo xtask check-docs
 cargo xtask check-data
 cargo xtask check-workspace
