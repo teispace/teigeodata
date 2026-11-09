@@ -38,3 +38,12 @@ allow_attributes_without_reason = "warn"
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+# Iteration builds (D-108): optimised like release, but without LTO and with parallel,
+# incremental codegen, so a one-file change relinks in seconds. Published numbers come from
+# `release`; `forge make` caches the same with either, since stage keys hash sources.
+[profile.fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true

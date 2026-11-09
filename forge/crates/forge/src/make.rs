@@ -7,15 +7,15 @@
 //!
 //! The recipe is `data/countries/<cc>/build.yaml`. The stages are `read` for each points
 //! source, `conflate` over them, then `build`. Each stage's key is a BLAKE3 hash of the stage
-//! name, the forge binary, the pinned inputs (their `sources.lock` entries), the configuration
+//! name, the stage's code, the pinned inputs (their `sources.lock` entries), the configuration
 //! (the country profile, the arguments, the ID registry) and the keys of the stages it reads.
 //! A stage whose output directory holds a stamp with its key is skipped. A stamp is written
 //! only after the stage succeeds, and removed before it starts, so a killed run resumes from
 //! the first stage it did not finish. `--force` runs every stage.
 //!
-//! The code version is the whole binary: any change to the forge reruns every stage, which is
-//! always correct and costs seconds on a country. Per-stage versions are a refinement for the
-//! planet build.
+//! A stage's code is the hash `build.rs` computes over the modules it reaches and the path
+//! dependencies (D-108): a change to the names code reruns `build` only, not the 40–120 s of
+//! stages before it.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -32,6 +32,14 @@ use crate::core;
 use crate::lock::Lock;
 use crate::read;
 use crate::topo;
+
+/// Each stage's code version, from `build.rs`.
+const CODE_READ: &[u8] = env!("FORGE_CODE_READ").as_bytes();
+const CODE_CONFLATE: &[u8] = env!("FORGE_CODE_CONFLATE").as_bytes();
+const CODE_BUILDINGS: &[u8] = env!("FORGE_CODE_BUILDINGS").as_bytes();
+const CODE_CORE: &[u8] = env!("FORGE_CODE_CORE").as_bytes();
+const CODE_TOPOLOGY: &[u8] = env!("FORGE_CODE_TOPOLOGY").as_bytes();
+const CODE_BUILD: &[u8] = env!("FORGE_CODE_BUILD").as_bytes();
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -248,7 +256,6 @@ fn read_stages(
     root: &Path,
     recipe: &Recipe,
     lock: &Lock,
-    code: &[u8],
     lite: bool,
     r: &mut Runner,
 ) -> Result<(Vec<String>, Vec<String>), String> {
@@ -267,7 +274,12 @@ fn read_stages(
             }
         }
         let id_refs: Vec<&str> = ids.iter().map(String::as_str).collect();
-        let k = key(&[b"read", code, p.reader.as_bytes(), &pinned(lock, &id_refs)?]);
+        let k = key(&[
+            b"read",
+            CODE_READ,
+            p.reader.as_bytes(),
+            &pinned(lock, &id_refs)?,
+        ]);
         let dir = root.join("data/build/read").join(&p.source);
         r.step(
             &format!("read {}", p.source),
@@ -288,7 +300,7 @@ fn core_stages(
     root: &Path,
     recipe: &Recipe,
     lock: &Lock,
-    (code, ck): (&[u8], &str),
+    ck: &str,
     sources: &[String],
     lite: bool,
     r: &mut Runner,
@@ -304,7 +316,7 @@ fn core_stages(
             .ok_or("buildings need an extent in build.yaml")?;
         let k = key(&[
             b"buildings",
-            code,
+            CODE_BUILDINGS,
             b.reader.as_bytes(),
             &pinned(lock, &[&b.source])?,
             extent.as_bytes(),
@@ -323,7 +335,7 @@ fn core_stages(
         return Ok(None);
     }
     let (points_run, run) = (sources.join("+"), names.join("+"));
-    let k = key(&[b"core", code, ck.as_bytes(), keys.join(",").as_bytes()]);
+    let k = key(&[b"core", CODE_CORE, ck.as_bytes(), keys.join(",").as_bytes()]);
     let dir = root.join("data/build/core").join(&points_run).join(&run);
     r.step("core", (&dir, ".key", None), &k, || {
         core::run(root, &points_run, &run)
@@ -332,14 +344,8 @@ fn core_stages(
 }
 
 /// The admin source's shared arcs and polygons (B10), the same for main and lite; its key.
-fn topology_stage(
-    root: &Path,
-    admin: &str,
-    lock: &Lock,
-    code: &[u8],
-    r: &mut Runner,
-) -> Result<String, String> {
-    let k = key(&[b"topology", code, &pinned(lock, &[admin])?]);
+fn topology_stage(root: &Path, admin: &str, lock: &Lock, r: &mut Runner) -> Result<String, String> {
+    let k = key(&[b"topology", CODE_TOPOLOGY, &pinned(lock, &[admin])?]);
     let dir = root.join("data/build/topology").join(admin);
     r.step(
         &format!("topology {admin}"),
@@ -378,16 +384,13 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", recipe_path.display()))?;
     let lock = Lock::read(&root.join("data/sources.lock"))?;
     let profile = fs::read(country.join("profile.yaml")).map_err(|e| e.to_string())?;
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let code = blake3::hash(&fs::read(&exe).map_err(|e| format!("{}: {e}", exe.display()))?);
-    let code = code.as_bytes().as_slice();
     let mut r = Runner {
         force: args.iter().any(|a| a == "--force"),
         log: String::from("| Stage | Key | Run |\n|---|---|---|\n"),
         ran: 0,
     };
 
-    let (sources, read_keys) = read_stages(root, &recipe, &lock, code, lite, &mut r)?;
+    let (sources, read_keys) = read_stages(root, &recipe, &lock, lite, &mut r)?;
     if sources.len() < 2 {
         return Err(format!(
             "{cc}: this build may read {} points source(s); conflation needs two",
@@ -399,7 +402,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let joined_keys = read_keys.join(",");
     let ck = key(&[
         b"conflate",
-        code,
+        CODE_CONFLATE,
         cc.as_bytes(),
         &profile,
         joined_keys.as_bytes(),
@@ -410,9 +413,9 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     })?;
 
     // buildings and core: the consensus points with the settlement core (D-091).
-    let core_key = core_stages(root, &recipe, &lock, (code, &ck), &sources, lite, &mut r)?;
+    let core_key = core_stages(root, &recipe, &lock, &ck, &sources, lite, &mut r)?;
 
-    let tk = topology_stage(root, &recipe.admin, &lock, code, &mut r)?;
+    let tk = topology_stage(root, &recipe.admin, &lock, &mut r)?;
 
     // build: the conflation (and core), the topology, the admin and timezone sources, the
     // postal and naming inputs, the arguments, the ID registry and the signing seed.
@@ -431,7 +434,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let file = |name: &str| flag(name).map_or(Ok(Vec::new()), |p| read_or_empty(&root.join(p)));
     let bk = key(&[
         b"build",
-        code,
+        CODE_BUILD,
         ck.as_bytes(),
         core_key.as_ref().map_or(&b""[..], |k| k.1.as_bytes()),
         tk.as_bytes(),
