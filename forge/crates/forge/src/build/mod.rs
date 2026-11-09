@@ -3,7 +3,7 @@
 //! ```text
 //! forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>]
 //!       [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>]
-//!       <points-source> <points-source> […]
+//!       [--dem <tileset>] <points-source> <points-source> […]
 //! ```
 //!
 //! The points sources are the conflated run (`forge conflate <cc> <the same sources>`), in
@@ -18,6 +18,9 @@
 //!   admin unit that holds its point;
 //! - every timezone zone whose box meets the country's (D-093), at a point inside it.
 //!
+//! With `--dem`, every place but a timezone area takes its elevation from the tileset's
+//! `dem-section` at its final point (D-111, [`elevation`]).
+//!
 //! The postal codes of `data/countries/<cc>/postal.yaml`, checked against their source table,
 //! link to the admin places (D-105).
 //!
@@ -31,6 +34,7 @@
 //! registry `<cc>-ids-<build>.tsv` beside it.
 
 mod admins;
+mod elevation;
 pub(crate) mod geometry;
 mod ids;
 mod pack;
@@ -86,17 +90,19 @@ pub(crate) struct Args {
     pub(crate) core: Option<String>,
     /// Whether the pack carries the admin geometry of the `topology` stage (ARCS, POLYGONS).
     pub(crate) topology: bool,
+    /// The DEM tileset whose `dem-section` gives place elevations (D-111).
+    pub(crate) dem: Option<String>,
     pub(crate) sources: Vec<String>,
 }
 
 impl Args {
     pub(crate) fn parse(args: &[String]) -> Result<Self, String> {
-        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--topology] <points-source> <points-source> [...]";
+        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--topology] [--dem <tileset>] <points-source> <points-source> [...]";
         let mut it = args.iter();
         let cc = it.next().ok_or(usage)?.clone();
         let (mut release, mut admin, mut tz, mut key, mut ids, mut core, mut lite) =
             (None, None, None, None, None, None, false);
-        let mut topology = false;
+        let (mut topology, mut dem) = (false, None);
         let mut sources = Vec::new();
         while let Some(a) = it.next() {
             let mut value = || it.next().cloned().ok_or(usage);
@@ -107,6 +113,7 @@ impl Args {
                 "--key" => key = Some(value()?),
                 "--ids" => ids = Some(value()?),
                 "--core" => core = Some(value()?),
+                "--dem" => dem = Some(value()?),
                 "--lite" => lite = true,
                 "--topology" => topology = true,
                 s if s.starts_with("--") => return Err(format!("unknown flag `{s}`; {usage}")),
@@ -126,6 +133,7 @@ impl Args {
             ids,
             core,
             topology,
+            dem,
             sources,
         })
     }
@@ -185,6 +193,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         sources,
         tz,
         postal,
+        dem,
         skipped,
     } = gate(root, &a, &lock)?;
 
@@ -230,6 +239,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let before = places.len();
     places.retain(|p| !p.names.is_empty());
     let unnamed = before - places.len() + unnamed_clusters;
+    let elevations = elevation::load(root, dem.as_deref(), &places)?;
 
     let out_dir = build.join("pack").join(&a.cc);
     fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
@@ -251,6 +261,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         ids_file: &out_dir.join(format!("{}-ids-{}.tsv", a.cc, a.build_name())),
         geometry: geometry.as_ref(),
         postal: postal.as_ref(),
+        elevation: elevations.as_ref(),
     })?;
     let mut summary = format!(
         "## build: {} {}\n\n{} places from {}; boundaries {}; timezones {}.\n",
@@ -269,6 +280,9 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         summary,
         "Names added to admin units by links: {admin_names}."
     );
+    if let Some(e) = &elevations {
+        summary.push_str(&e.summary(&build, &sources, &places)?);
+    }
     naming.write(&out_dir, a.build_name())?;
     summary.push('\n');
     summary.push_str(&report);
@@ -289,6 +303,7 @@ struct Gated {
     sources: Vec<String>,
     tz: Option<String>,
     postal: Option<postal::Postal>,
+    dem: Option<String>,
     /// The sources not read, with their licence class.
     skipped: Vec<String>,
 }
@@ -320,10 +335,15 @@ fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
         _ => None,
     };
     let postal = postal::load(root, &a.cc, lock, &a.admin, &mut allowed)?;
+    let dem = match &a.dem {
+        Some(id) if allowed(id)? => Some(id.clone()),
+        _ => None,
+    };
     Ok(Gated {
         sources,
         tz,
         postal,
+        dem,
         skipped,
     })
 }

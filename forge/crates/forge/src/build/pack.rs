@@ -49,6 +49,8 @@ pub(super) struct Input<'a> {
     pub(super) geometry: Option<&'a super::geometry::Geometry>,
     /// The postal codes, when the country has them and the build may read them.
     pub(super) postal: Option<&'a super::postal::Postal>,
+    /// Place elevations, one per place in `places`, when the build samples a DEM.
+    pub(super) elevation: Option<&'a super::elevation::Elevations>,
 }
 
 /// The search importance of a place, 0 to 130 as in spike S3 (D-052), from what every source
@@ -109,6 +111,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
     let kinds: Vec<PlaceKind> = rows.iter().map(|p| p.kind).collect();
     let levels: Vec<u8> = rows.iter().map(|p| p.admin_level).collect();
     let flags: Vec<u32> = rows.iter().map(|p| p.flags).collect();
+    let elevations = super::elevation::in_rows(input.elevation, order.iter().map(|o| o.2));
     let cols = PlaceColumns {
         points: &points,
         kinds: &kinds,
@@ -118,6 +121,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
             &[]
         },
         flags: &flags,
+        elevations: &elevations,
         ..PlaceColumns::default()
     };
     let places_body = places::encode(&cols).map_err(|e| e.to_string())?;
@@ -488,6 +492,9 @@ fn verify(
     );
     if let Some(line) = geometry_line {
         let _ = writeln!(report, "\n{line}");
+    }
+    if let Some(e) = input.elevation {
+        let _ = writeln!(report, "\n{}", e.verify(&places)?);
     }
     if let Some(s) = p.section(Kind::POSTAL) {
         let line = verify_postal(&s, rows, input)?;
