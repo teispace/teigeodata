@@ -42,7 +42,7 @@ part; the ADR each part comes from is linked.
 | `teigeodata-tz` | Timezone lookup over the region index; optional tzdb rules | yes | [ADR-0022](../03-decisions/adr/ADR-0022-timezone-and-postal.md) |
 | `teigeodata-dem` | Elevation raster codec and `elevation_at` | yes | [ADR-0007](../03-decisions/adr/ADR-0007-accuracy-model.md) |
 | `teigeodata-engine` | Layered pack sets, federated queries, snapshots, baseline | partly | [ADR-0010](../03-decisions/adr/ADR-0010-addressing-and-baseline.md), [ADR-0011](../03-decisions/adr/ADR-0011-layered-engine.md) |
-| `teigeodata-sync` | Catalog, downloads, storage, trust metadata, deltas | no | [ADR-0012](../03-decisions/adr/ADR-0012-offline-loading.md) |
+| `teigeodata-sync` | Catalog, downloads, storage, trust metadata, deltas; the [transport asset](transport.md) | the transport reader | [ADR-0012](../03-decisions/adr/ADR-0012-offline-loading.md) |
 | `teigeodata-api` | The safe public API: the single source of every binding ([bindings](bindings.md)) | no | [ADR-0016](../03-decisions/adr/ADR-0016-bindings.md) |
 | `teigeodata-blob` | The columnar result blob, encoder and validating reader | yes | D-068 |
 | `teigeodata-ffi` | The C ABI, generated from the API ([C ABI](abi.md)) | no | [ADR-0016](../03-decisions/adr/ADR-0016-bindings.md) |

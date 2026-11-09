@@ -1,7 +1,7 @@
 ---
 title: "Versions register"
 status: living
-updated: 2026-11-07
+updated: 2026-11-09
 ---
 
 # Versions register
@@ -36,6 +36,9 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | ruzstd (BLOBS decoding, feature `zstd`, no default features) | 0.9.1 | 2026-11-07 | crates.io | 2026-12-07 |
 | libm (PLACE_INDEX haversine, feature `spatial`, no default features) | 0.2.16 | 2026-11-07 | crates.io | 2026-12-07 |
 | zstd (C zstd 1.5.7 via `zstd-sys` 2.1.2; BLOBS compression in tests, benches and the forge) | 0.14.3 | 2026-11-07 | crates.io | 2026-12-07 |
+| ruzstd (transport frame decoding in `teigeodata-sync`, feature `zstd`) | 0.9.1 | 2026-11-09 | crates.io | 2026-12-09 |
+| zeekstd (seekable-format oracle, dev-dependency of `teigeodata-sync` only; over `zstd-safe` 8.2.0) | 0.6.3 | 2026-11-09 | crates.io | 2026-12-09 |
+| zstd seekable format (`contrib/seekable_format`, facebook/zstd) | 0.1.0 | 2026-11-09 | the spec on GitHub | 2027-02-09 |
 | criterion (wall-clock benchmarks, `cargo_bench_support` only) | 0.8.2 | 2026-11-07 | crates.io | 2026-12-07 |
 | bitpacking (B1 rival, dev-dependency of `teigeodata-bench` only) | 0.9.3 | 2026-11-07 | crates.io | 2026-12-07 |
 | geo-index (B8 rival, flatbush with f64 boxes; dev-dependency of `teigeodata-bench` only) | 0.4.0 | 2026-11-07 | crates.io | 2026-12-07 |

@@ -62,14 +62,23 @@ call (ADR-0012).
   then the locator, then the catalog; `Resolver` trait
 
 ### 4.4 Transport assets
-- [ ] Seekable zstd writer (frames on the head and sections, ≤ 1 MiB at 16 KiB boundaries) with
-  a byte-for-byte self-check; read by `zeekstd` and the `zstd` CLI
-- [ ] Seek-table reader and frame planner, fuzzed (lying tables, oversized frames, frames across
-  sections)
+- [x] Seekable zstd writer (frames on the head and sections, ≤ 1 MiB at 16 KiB boundaries) with
+  a byte-for-byte self-check; read by `zeekstd` and the `zstd` CLI (2026-11-09, D-112,
+  [transport](../../04-architecture/transport.md)). Nepal main, 11,748,636 B: 8,227,234 B at
+  level 19 in 23 frames, +0.99 % over whole-file zstd (8,146,743 B); level 9 +0.85 %, level 3
+  +0.39 %. `zstd -d` and `zeekstd` 0.6.3 give the pack back byte for byte; `ruzstd` decodes it
+  at 258–320 MB/s. Each section is one request: NAMES 917,602 B in 3 frames, PLACES 602,351 B,
+  the head 785 B ([§3.5](../../02-research/notes/download-and-delta.md#35-the-transport-as-built-measured-2026-11-09)).
+  Planted faults in the writer (a frame one byte short, a changed byte) fail its self-check
+- [x] Seek-table reader and frame planner, fuzzed (lying tables, oversized frames, frames across
+  sections) (2026-11-09, D-112): `teigeodata-sync::transport`, `no_std` + `alloc`; harnesses
+  `transport_table`, `transport_asset`, `transport_frame` in `cargo test` and nightly libFuzzer.
+  With the decoded-size check or the asset-length check removed, the harnesses fail
 
 ### 4.5 Download manager
-- [ ] Sans-I/O planner and installer; `Transport` trait with a `ureq` default (binary size gate
-  against `reqwest`)
+- [ ] Sans-I/O planner and installer on `transport::Frames`; `Transport` trait with a `ureq`
+  default (binary size gate against `reqwest`); a head-only parser in `teigeodata-format`, so
+  the layout comes from the head frame alone
 - [ ] Verify-then-write per block; resume by frame with ETag and length checks (the host ignores
   `If-Range`); mirrors with demotion
 - [ ] Staging, fsync, rename, journal commit, crash recovery; snapshot swap on install
@@ -105,3 +114,4 @@ call (ADR-0012).
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-09 | Phase 4 drafted from the research notes | [engine and catalog](../../02-research/notes/engine-and-catalog.md), [download and delta](../../02-research/notes/download-and-delta.md) |
+| 2026-11-09 | 4.4 done: the transport asset in `teigeodata-sync::transport` (D-112); the planner lives there, not in a separate `sync::plan`; a head-only parser in `teigeodata-format` is added to 4.5 | building it: a ranged client holds only the head frame ([download and delta §3.5](../../02-research/notes/download-and-delta.md#35-the-transport-as-built-measured-2026-11-09)) |

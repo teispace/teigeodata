@@ -48,6 +48,9 @@ before it builds the download manager and delta updates:
   requests give us: section updates, resume, repair, and fetching only some sections.
 - The decoder is `ruzstd`, already in the reader behind the `zstd` feature (D-079: 105 KiB raw
   wasm, 26 KiB gzipped), so `sync` adds no compression dependency.
+- **Built and measured on 2026-11-09** (D-112, §3.5) on the newer pack of 11,748,636 B:
+  +0.99 % over whole-file zstd at level 19 (8,227,234 B in 23 frames), +0.39 % at level 3;
+  `zstd -d` and `zeekstd` read it back byte for byte.
 - xz is 2.5 % smaller, but it would add a decoder, decodes several times slower, and is no
   better at seeking. Rejected.
 
@@ -281,6 +284,68 @@ a background first install. Eviction (LRU with pinning and dependency protection
 the download. An install that still does not fit fails with `InsufficientStorage { needed,
 available }`.
 
+### 3.5 The transport as built (measured 2026-11-09)
+
+Built in `crates/teigeodata-sync`, module `transport` (step 4.4, D-112,
+[transport](../../04-architecture/transport.md)). The pack was rebuilt with place elevations
+(D-111) since §3.1, so the numbers are on the newer Nepal main pack: 11,748,636 B, 14 sections,
+SHA-256 `c037e178…e292347`, read in place. Compressed with C zstd 1.5.7 through the `zstd`
+crate, decoded with `ruzstd` 0.9.1; `cargo run --release -p teigeodata-sync --example
+transport_measure -- <pack> 3 9 19`, on this Mac at load average 17–18.
+
+| Level | Whole-file zstd B | Asset B | Over whole-file | Frames | Write with self-check | `ruzstd` decode | C zstd decode |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 3 | 8,620,266 | 8,653,556 | +0.39 % | 23 | 0.14 s | 284 MB/s | 1,225 MB/s |
+| 9 | 8,446,881 | 8,518,810 | +0.85 % | 23 | 0.25 s | 320 MB/s | 1,330 MB/s |
+| 19 | 8,146,743 | 8,227,234 | +0.99 % | 23 | 1.6–2.8 s | 258–277 MB/s | 1,040–1,059 MB/s |
+
+- The `zstd -19` CLI gives 8,144,897 B for the whole file (it adds a checksum but tunes
+  slightly differently), so the asset costs +1.0 % against it as well.
+- **The cost is the two effects of §3.1 together:** sections as frames (+0.2 %) and 1 MiB
+  pieces of the six large sections (NAMES, SEARCH, ARCS in 3; REGION, ADMIN_REGION in 2). It
+  stays within the 1 % the summary allowed, just. Larger pieces would save a few tenths of a
+  percent (fixed 4 MiB frames: +0.7 % in §3.1) at four times the loss per interruption and the
+  decoder's memory, so 1 MiB stays.
+- **The seek table** is 201 B: 8 B per frame plus 17 B.
+- **Decode:** the whole pack in about 40 ms with `ruzstd`, four times slower than C zstd and
+  still far faster than any download.
+- **Round trip:** `zstd -d -c` of the level-19 asset equals the pack byte for byte (`cmp`), and
+  `zstd -l` lists 24 frames (23 data frames and the skippable seek table).
+
+Bytes to fetch one section at level 19 (each is one range request):
+
+| Section | Raw B | Frames | Fetch B |
+|---|---:|---:|---:|
+| head | 1,344 | 1 | 785 |
+| IDMAP | 35,784 | 1 | 2,647 |
+| PLACES | 683,020 | 1 | 602,351 |
+| HIERARCHY | 388,948 | 1 | 118,901 |
+| NAMES | 2,227,168 | 3 | 917,602 |
+| SEARCH | 2,466,500 | 3 | 1,603,881 |
+| PLACE_INDEX | 56,688 | 1 | 54,263 |
+| ARCS | 2,659,828 | 3 | 2,462,395 |
+| POLYGONS | 21,400 | 1 | 20,335 |
+| POLY_INDEX | 8,180 | 1 | 7,509 |
+| REGION | 2,007,656 | 2 | 1,605,839 |
+| POSTAL | 10,144 | 1 | 7,284 |
+| BLOCK_HASHES | 20,544 | 1 | 20,554 |
+| ADMIN_REGION | 1,066,180 | 2 | 719,289 |
+| ARCS_OVERVIEW | 94,780 | 1 | 83,398 |
+
+A section's fetch includes its trailing padding (under 64 B), and BLOCK_HASHES's the 32-byte
+footer.
+
+**What the building taught.**
+- The planner lives in `sync::transport` beside the seek table, not in a separate `sync::plan`:
+  the install planner of step 4.5 (which sections to fetch, copy or verify) builds on it.
+- `Layout` takes the file length and section spans rather than a whole `Pack`, because a ranged
+  client holds only the head frame. A head-only parser in `teigeodata-format` is needed for 4.5.
+- The writer takes the compressor as a closure (as BLOBS does), so C zstd never reaches the
+  runtime crate, and checks each frame with `ruzstd`, the decoder clients run.
+- A lying table that keeps the total but shifts compressed sizes between frames passes the
+  table check by construction. It is caught when its frame fails to decode, never by luck: the
+  fuzz harness asserts that any accepted output under a table lie is the pack itself.
+
 ## 4. Options compared
 
 **Transport form.**
@@ -312,8 +377,8 @@ available }`.
    - the seek table without checksums;
    - a self-check that decompresses the whole file and compares it with the pack, byte for byte.
 
-   Proof: `zeekstd` and the reference `zstd` CLI both read our files.
-2. **Seek-table reader and frame planner** in `sync::plan` (sans-I/O).
+   Proof: `zeekstd` and the reference `zstd` CLI both read our files (built, §3.5).
+2. **Seek-table reader and frame planner** in `sync::transport` (sans-I/O; built, §3.5).
    Proof: fuzzing of the seek table and of frame-to-section mapping; a lying seek table, a frame
    that decodes past its size, and a frame across a section boundary are all rejected.
 3. **Streaming verify-then-write** using `Pack::blocks` (D-078) on decoded frames.
@@ -364,6 +429,7 @@ available }`.
 | zstd seekable format | v0.1.0 | 2026-11-09 | facebook/zstd `contrib/seekable_format` |
 | xz | 5.8.4 (local) | 2026-11-09 | `xz --version` |
 | zstd crate / ruzstd | 0.14.3 / 0.9.1 | 2026-11-09 | crates.io API |
+| zeekstd (dev-dependency of `teigeodata-sync`, the oracle) | 0.6.3 (2026-10-19), over `zstd-safe` 8.2.0 | 2026-11-09 | crates.io API |
 | zeekstd / zstd-seekable | 0.6.3 (2026-10-19, BSD-2-Clause, over `zstd-safe`) / 0.1.23 (2023-06-12) | 2026-11-09 | crates.io API |
 | qbsdiff | 1.4.4 (2025-08-24) | 2026-11-09 | crates.io API |
 | zchunk | tag 1.5.5 | 2026-11-09 | GitHub tags API |
