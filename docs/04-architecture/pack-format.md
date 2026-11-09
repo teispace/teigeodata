@@ -125,7 +125,7 @@ parameters).
 | 8 | POLYGONS | polygons → parts → rings → signed arc refs; PLACES row, label point, area | `geometry` | column table (D-088, D-097; boxes live in POLY_INDEX), [below](#polygons) |
 | 9 | POLY_INDEX | packed Hilbert R-tree over the POLYGONS boxes | `geometry` | as 6, with a stored leaf level (D-088, D-099), [below](#poly_index) |
 | 10 | REGION | exact point → regions (timezones, later admin units): shared-arc borders, a dense top grid, quadtree leaves in Morton order with edge-ID runs, region sets | `region` | column table (D-083): [below](#region) |
-| 11 | POSTAL | scheme + code → postal records (place, kind, validity, redirect) | `postal` | column table on `search::fst` (D-090) |
+| 11 | POSTAL | scheme + code → postal records (place, kind, validity, redirect) | `postal` | column table on `search::fst` (D-090, D-105): records in place runs, schemes and their rules as data, [below](#postal) |
 | 12 | COMPONENTS | per component: presence (none, a bitmap or sorted rows) + dense field columns | `components` | column table (D-076): a bitmap costs 0.129 B per row, sparse sorted rows far less |
 | 13 | DEM | elevation grids: tile offsets + coded tiles at ±1 m | `dem` | column table (D-089, D-104): 64 × 64 tiles, per-tile least-squares predictor, static rANS over a shared model family; 2.7–2.9 bits per sample in the hills, [below](#dem) |
 | 14 | BLOBS | cold data (attribution text, long strings) | `blobs` | column table (D-079): zstd frames of whole blobs, an optional dictionary, `ruzstd` decode; 22 B per 116 B row on Nepal, a random blob in 43 µs |
@@ -613,6 +613,60 @@ item count is the number of tiles over all grids, absent ones included.
   [B11](../02-research/benches/phase-3.md#b11-dem): 1.1 bits per sample on the plains,
   2.7–2.9 in the hills, 13.6 ns per decoded sample, 31 µs per cold point query.
 
+### POSTAL
+
+Postal codes to places, for exact lookup, prefix search and place → codes (D-090, D-105,
+[postal note](../02-research/notes/postal.md)). Code: `teigeodata_format::postal`. The item
+count is the number of records.
+
+Keys are a scheme name (`np`, `np-1991`, `gb`: ASCII `[a-z0-9-]`, 1 to 32 bytes), a 0x00 byte,
+then the canonical code, all in one `search::fst` automaton, so a key's ordinal indexes its
+records and a code prefix is one ordinal range. Records are in key order. Consecutive records
+with the same place form a **run** that stores its place once: a Nepal local level's code and
+its wards are one run, and a set with one record per place pays nothing for runs (their starts
+ramp-code to zero bits).
+
+| ID | Column | Values | |
+|---:|---|---|---|
+| 1 | LENGTH | one value: the automaton's length in bytes | required |
+| 2 | AUTOMATON | bytes: the automaton, zero-padded to a multiple of 4 | required |
+| 3 | STARTS | per key and one more: its first record, strictly increasing from 0 | required |
+| 4 | RUN_START | per run: its first record, strictly increasing from 0 | required |
+| 5 | RUN_PLACE | per run: its PLACES row; two consecutive runs differ (runs are maximal) | required |
+| 6 | KIND | per record: 0 area, 1 part (a ward), 2 post office, 3 point | optional (all areas) |
+| 7 | VALID_FROM | per record: days since 1970-01-01 plus 1; 0 = the scheme's | optional |
+| 8 | VALID_TO | per record: the same; 0 = the scheme's | optional |
+| 9 | REDIRECT | per record: the ordinal of the key that replaces it, plus 1; 0 = none | optional |
+| 10 | BY_PLACE | per run: the runs sorted by (place, run), for place → codes | optional |
+| 11 | SCHEMES | bytes: the schemes and their rules, below | required |
+
+- **SCHEMES:** a u16 count, a u16 zero, then a u32 offset per scheme, then the entries,
+  zero-padded to a multiple of 4. The entries are in name order, so a scheme is found by
+  binary search. An entry holds its name, `valid_from` and `valid_to` (days plus 1, 0 =
+  open), flags (1 upper-case input, 2 aligned with admin units), the ignored characters, the
+  optional prefixes, the display template and 1 to 255 templates.
+- **Normalisation is data.** Input is mapped to ASCII (full-width forms, the decimal digits of
+  every script, Unicode spaces and dashes), trimmed, upper-cased if the scheme says so,
+  stripped of ignored characters and of an optional prefix, then matched against the
+  templates: `9` a digit, `A` a letter, `?` either, `\x` the literal `x`, any other character
+  a literal. An ignored literal is inserted, any other must be typed. Input that matches no
+  template is not found; it is never an error. The reader holds no country's rules.
+- **Reads** (no allocation, no panic): `lookup(input, scheme or none, visit)`, `prefix` for
+  autocomplete (partial template matches, merged into ordinal ranges), `code(ordinal)` for the
+  scheme and code text (`Fst::key`), `records_of`, `record`, and `records_at(place, visit)`
+  through BY_PLACE. Point → code is ADMIN_REGION's unit, then `records_at` for a scheme
+  aligned with admin units.
+- **Rules** (`Postal::check`, O(automaton + records)): every key is a known scheme, a 0x00 and
+  a code that is its own canonical form under that scheme; STARTS and RUN_START strictly
+  increase and end at the item count; runs are maximal; places increase within a key; rows,
+  kinds, dates and redirect ordinals are in range; BY_PLACE is the sorted permutation of the
+  runs. `Postal::open` checks only the structure, in O(columns + schemes).
+- **The writer** (feature `write`): `encode(rules, codes, places, by_place)` canonicalises every
+  code under its scheme's rule and refuses one that does not match. Its memory is one byte arena
+  of keys and a fixed-size entry per code. Measured in
+  [the postal benchmark](../02-research/benches/phase-3.md#postal): 10.1 KB for Nepal's 7,496 codes, 24.4 MB
+  for 5.0 million codes in 123 schemes, exact lookups of 155–736 ns.
+
 ### HIERARCHY
 
 `item_count` equals PLACES'. Three required columns:
@@ -787,6 +841,6 @@ A new version always gets a new file. A file that may be mapped is never written
 ## Open items
 
 - The 14 benchmarks B1–B14 (catalogue in [benchmarks](../06-engineering/benchmarks.md)).
-- Payloads that follow in later phases inside the frame fixed in Phase 1 (D-071): POSTAL in
-  Phase 3 (D-087). ARCS, POLYGONS and POLY_INDEX came with B10 (D-083), DEM with B11 (D-104).
+- Payloads added inside the frame fixed in Phase 1 (D-071): ARCS, POLYGONS and POLY_INDEX
+  came with B10 (D-083), DEM with B11 (D-104) and POSTAL in 3.5 (D-105).
 - Whether the reader crate keeps `#![forbid(unsafe_code)]` with mmap outside it (B13).

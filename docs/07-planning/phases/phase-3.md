@@ -89,8 +89,13 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   summits (D-089; moved from 3.2)
 
 ### 3.5 Postal
-- [ ] `data/countries/np/postal.yaml`, the POSTAL section (D-090), its queries and the link to
-  PLACES
+- [x] `data/countries/np/postal.yaml`, the POSTAL section (D-090, D-105), its queries and the
+  link to PLACES: 753 local-level and 6,743 ward codes in the Nepal main pack, checked against
+  the GPO table on every build; 10.1 KB, exact lookup 155 ns, place → codes 179 ns; the world's
+  5.0 M codes within 3.1% of the model ([benchmark](../../02-research/benches/phase-3.md#postal))
+- [ ] Nepal's codes in the lite build: wait for a stated licence (Q-009) or derive them from
+  the CBS codes
+- [ ] Point → postal code in the SDK: ADMIN_REGION's unit, then its records (with the engine)
 
 ### 3.6 Names and corrections
 - [ ] Canonical spellings from the lexicon, transliteration, the aliases stage (D-060)
@@ -120,3 +125,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-08 | 3.3: coarse reads through ARCS_OVERVIEW (D-102); the India measurement made its own item | B10's A/B: per-block bounds cannot skip cumulative deltas |
 | 2026-11-08 | 3.3: snap rounding in the topology stage (D-103); India measured | India is the first source that is not noded (4 edge pairs) |
 | 2026-11-08 | 3.4: the DEM section built (D-104); the 45-tile measurement and the pack integration made their own items | the codec matches the model on four tiles; the full Nepal set needs a 1.84 GB download |
+| 2026-11-09 | 3.5: POSTAL built on place runs (D-105); the lite build's Nepal codes and the point query made their own items | runs cut Nepal from 39.6 to 10.1 KB; the GPO table states no licence |

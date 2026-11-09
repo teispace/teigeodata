@@ -1,7 +1,7 @@
 ---
 title: "Postal codes: sources, model and the POSTAL section"
 status: research
-updated: 2026-11-07
+updated: 2026-11-09
 owner: maintainer's agents
 revisit: 2027-05-07
 ---
@@ -137,6 +137,33 @@ fact and the scheme is a rule: 5-digit = CBS local code, 7-digit = that code + a
 number. So the codes can be **derived** from the CBS codes (CC BY, Open Data Nepal) and the
 ward counts, then checked against the GPO table, without copying the list. This is a
 recommendation, not legal advice; Q-009 already asks the department for a statement.
+
+### 3.9 Nepal: GPO rows to COD-AB units (built 2026-11-09)
+
+The forge links each postal record to the PLACES row of an admin unit, and the Nepal packs'
+units come from OCHA COD-AB v02 (`codab-np-geojson`). COD-AB has its own P-codes
+(`NP0101401`), not the CBS codes, and its district numbering is not the CBS order, so the GPO
+code cannot be turned into a P-code by rule. The crosswalk was made once by name and is
+checked into `data/countries/np/postal-codes.tsv` (code, P-code, ward count, COD-AB name):
+
+1. **Districts.** Each GPO three-digit prefix (77) was paired with the COD-AB district of the
+   same province whose English name is most similar to the romanised Nepali district name. The
+   pairing is a bijection (77 ↔ 77).
+2. **Local levels, per district.** The romanisation is a plain Devanagari-to-Latin table; both
+   names are then folded (case, `aa → a`, `ph → f`, aspirates dropped, letters only) and
+   compared with a sequence-similarity ratio, also for any bracketed alternate name. A match of
+   the level type (metropolitan, sub-metropolitan, municipality, rural municipality: the
+   suffix of the Nepali name against P-code digit 7) adds 0.05. Assignment was greedy by score,
+   then improved by pairwise swaps until no swap raised the total.
+3. **Review.** Every pair scoring under 0.75, within 0.1 of its runner-up or with a type
+   mismatch was flagged: 11 of 753. Each was checked by hand against both names; all 11 were
+   right. Every district had the same number of units in both sources.
+
+Result: 753 ↔ 753, one GPO code per COD-AB local level. Every build checks the file against the
+pinned GPO table: the same 753 codes, each with the same ward count (6,743 wards). Ward
+records link to their local level's place, because the packs have no ward units yet. The
+matching scripts were research tools and are not kept. The TSV is the reviewed result, and a
+change to it is reviewed as data.
 
 ### 3.2 India
 
@@ -348,6 +375,13 @@ alternative, to measure.
 
 ## 5. What we build ourselves, and why
 
+**As built (2026-11-09, D-105).** The section differs from the draft below: records are
+stored as runs of consecutive records with the same place (RUN_START, RUN_PLACE), the reverse
+index lists runs instead of records, and SCHEMES has an offset table so a scheme is found by
+binary search. The layout is in [the pack format](../../04-architecture/pack-format.md#postal)
+and the measurements are in [the postal benchmark](../benches/phase-3.md#postal). The draft is kept as the
+design record.
+
 **The POSTAL section** (kind 11): one column table (encoding 1), like SEARCH. Draft column IDs:
 
 | ID | Column | Values | |
@@ -446,7 +480,8 @@ world set, PLACE is 6.68 MB, BY_PLACE 1.55 MB and BY_PLACE_REC 8.05 MB.
 - GeoNames postal points are often inferred (accuracy 1 or blank on 23% of rows), so
   nearest-postal answers must be flagged approximate.
 - India PIN boundary licence and availability: **unverified**.
-- Size estimates come from a Python model of the format, not the Rust writer.
+- Size estimates come from a Python model of the format. The Rust writer was measured in
+  [the postal benchmark](../benches/phase-3.md#postal): within 3.3% of the model, and Nepal 64% below it.
 
 ## 8. Versions checked
 

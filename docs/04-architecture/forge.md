@@ -38,6 +38,7 @@ sources.lock ─► fetch ─► read/<source> ─► normalise ─► geofix-de
 | core (settlement core, weighted Weiszfeld consensus) | **built** (3.2) | below |
 | labels (hand-labelled truth set) | **built** (3.2) | below |
 | topology (shared arcs, dissolve, levels of detail, polygons) | **built** (3.3) | below |
+| postal (codes from country data, checked against their source) | **built** (3.5), inside `build` | [below](#build-a-pack-build) |
 | the rest | Phase 3 | [phase 3](../07-planning/phases/phase-3.md) |
 
 **ID allocation (pack writer, D-075, D-094):** a country's first build allocates serials in
@@ -395,7 +396,18 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   limit; a place with none is left out and counted.
 - **Sections.** Rows in Hilbert order (ties by key), so IDs follow rows (D-075): IDMAP,
   PLACES, HIERARCHY, NAMES, SEARCH, PLACE_INDEX, the timezone REGION linked to its places
-  (column 16), and REDIRECTS when the registry has retired serials. Importance is provisional (kind, admin level, log population).
+  (column 16), POSTAL when the country has a `postal.yaml`, and REDIRECTS when the registry
+  has retired serials. Importance is provisional (kind, admin level, log population).
+- **Postal codes (D-105).** `data/countries/<cc>/postal.yaml` (schema `teigeodata/postal/v1`)
+  gives each scheme's rule and the codes files. A codes file has one row per admin unit: the
+  code, the unit's P-code on the build's boundary source and its number of parts (Nepal: wards).
+  Each row becomes an area record of the unit's place and a part record per part (code + a
+  2-digit number). Before use the file is checked against its pinned source (`verify`: the
+  same codes, each with the same part count, read from the archived GPO table); a P-code that
+  is not a unit of the build stops it. A source the build may not read (the lite build and a
+  source with no stated licence) leaves its codes out, with a note in the summary. The read
+  back looks up every code, finds its record at the unit's place and finds that record again
+  through the place index.
 - **Determinism (G-det).** The build ID is BLAKE3 of the forge version, `sources.lock` and
   the arguments; the creation time is `SOURCE_DATE_EPOCH` or 0. Two builds give identical
   bytes.
@@ -463,8 +475,9 @@ for each building source the build may read, `core`, `topology` for the admin so
 (D-095, [ADR-0035](../03-decisions/adr/ADR-0035-forge-architecture.md)).
 - **Keys.** A stage's key is a BLAKE3 hash of the stage name, the forge binary, its pinned
   inputs (ID, SHA-256 and size from `sources.lock`), its configuration (the profile, the
-  arguments, the ID registry, the signing seed) and the keys of the stages it reads. The whole
-  binary is the code version: any forge change reruns everything, which is always correct.
+  arguments, the ID registry, the signing seed) and the keys of the stages it reads. The
+  build stage's inputs also cover `postal.yaml`, each codes file and the pinned source each
+  is checked against. The whole binary is the code version: any forge change reruns everything, which is always correct.
 - **Stamps.** A stage that succeeds writes `.key` (`.key-main`, `.key-lite` in the pack
   directory) into its output directory: the key, then the BLAKE3 and size of every file it
   owns. A stage is skipped only when both match, so an output changed by hand, or a stage

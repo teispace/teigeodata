@@ -90,7 +90,7 @@ Every losing spelling is kept as an `alt` name, so search still finds it.
 | Field | Type | Notes |
 |---|---|---|
 | `timezone` | IANA zone ID | Exact point lookup from the region index. Where source zones overlap, the precedence rule applies (Q-013) |
-| `postal` | list of postal records | Each record has `code`, `scheme` (for example `np`, `np-1991`, `in-pin`; D-090), `kind` (`area`, `post_office`, `point`), `valid_from`, `valid_to` and `redirect_to`. Current and former codes coexist |
+| `postal` | list of postal records | Each record has `code`, `scheme` (for example `np`, `np-1991`, `in-pin`; D-090), `kind` (`area`, `part` (a ward of an area code), `post_office`, `point`), `valid_from`, `valid_to` and `redirect_to`. Current and former codes coexist |
 | `digipin` | string | India only: computed from the point, never stored as a source fact |
 
 ## Population and other optional data

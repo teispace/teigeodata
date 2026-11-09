@@ -1,14 +1,14 @@
 ---
-title: "Phase 3 benchmarks: geometry and elevation"
+title: "Phase 3 benchmarks: geometry, elevation and postal codes"
 status: research
-updated: 2026-11-08
+updated: 2026-11-09
 ---
 
-# Phase 3 benchmarks: geometry and elevation
+# Phase 3 benchmarks: geometry, elevation and postal codes
 
 Measured with `crates/teigeodata-bench`. IDs are from the
 [benchmark catalogue](../../06-engineering/benchmarks.md); the design is in the
-[geometry note](../notes/geometry-topology.md), the [DEM note](../notes/dem-section.md) and the
+[geometry note](../notes/geometry-topology.md), the [DEM note](../notes/dem-section.md), the [postal note](../notes/postal.md) and the
 [phase file](../../07-planning/phases/phase-3.md).
 
 **Machine:** M2 Pro, 16 GB, macOS, release profile, single thread, 2026-11-08, load average
@@ -312,3 +312,63 @@ On the two-tile section (N27 E085 and E086, 9.21 MB, 6,441 tiles):
 - All 45 Nepal tiles, the Nepal total against the note's 58 MB, and 2–3 tiles outside Nepal (a
   desert, a coast, above 50°): the download (1.84 GB) waits for approval.
 - LERC and zstd on the same tiles; wasm and a phone.
+
+## POSTAL
+
+```
+POSTAL_DIR=<dir> cargo run --release -p teigeodata-bench --example postal-section
+```
+
+No A/B number: the B1–B14 list predates POSTAL's layout. The POSTAL section (D-105, [layout](../../04-architecture/pack-format.md#postal)) on five
+code sets. Nepal is the section of the `forge make np` main pack (7,496 codes on 96,844
+places). The others are written by the Rust writer from the inputs of the postal note's
+model (§5): GeoNames India, the 2026 ZCTA gazetteer, GeoNames GB full, and the world
+(GeoNames `allCountries` with the full GB, CA and NL files). As in the model, each external row
+is its own place, ranked by the Hilbert order of its point, and each country is one scheme
+whose templates are its codes' shapes. Measured 2026-11-09 at a load average of 40–90:
+sizes are exact, timings are the fastest of 7 runs over 20,000 random codes (all of Nepal's).
+
+### Size against the model
+
+| Set | Keys | Records | Section | B / record | Model | Writer against model |
+|---|---:|---:|---:|---:|---:|---:|
+| Nepal pack (753 + 6,743) | 7,496 | 7,496 | 10,144 B | 1.35 | 27,804 B | −64% |
+| India (GeoNames) | 19,238 | 155,570 | 588,636 B | 3.78 | 574,804 B | +2.4% |
+| US ZCTA 2026 | 33,791 | 33,791 | 158,252 B | 4.68 | 157,868 B | +0.2% |
+| GB full | 1,839,678 | 1,839,678 | 9,507,272 B | 5.17 | 9.20 MB | +3.3% |
+| World (123 schemes) | 4,283,671 | 5,012,086 | 24,391,248 B | 4.87 | 23.66 MB | +3.1% |
+
+All five are within the 10% gate. In Nepal a local level's code and its wards are one run with
+one place, so RUN_PLACE holds 753 values, not 7,496. The model stored a place per record. On
+sets with one record per place the run columns cost what the model's PLACE column did, plus
+the place index over runs. World columns: automaton 6.71 MB, RUN_PLACE 8.35 MB, BY_PLACE
+8.08 MB, STARTS 0.55 MB, RUN_START and KIND 0.35 MB each, SCHEMES 3.7 KB. Without the place
+index the world section would be 16.3 MB. The first Rust layout, one place per record, was
+39,648 B on Nepal, so runs cut it by 74%.
+
+### Query speed
+
+| Set | Exact | Any scheme | Prefix of 3 → 10 | Code text | Place → codes | `check` |
+|---|---:|---:|---:|---:|---:|---:|
+| Nepal pack | 155 ns | 155 ns | 174 ns | 159 ns | 179 ns | 0.6 ms |
+| India | 383 ns | 240 ns | 173 ns | 233 ns | 769 ns | 31 ms |
+| US ZCTA | 235 ns | 196 ns | 218 ns | 171 ns | 420 ns | 4.4 ms |
+| GB full | 561 ns | 457 ns | 612 ns | 577 ns | 2.0 µs | 823 ms |
+| World | 736 ns | 6.9 µs | 397 ns | 301 ns | 1.2 µs | 1.57 s |
+
+- **Exact** normalises the input under the named scheme and reads the first record. **Any
+  scheme** tries every scheme: 123 in the world set, so 6.9 µs. An app that knows the country
+  passes its scheme.
+- Before the SCHEMES offset table, a world lookup took 1.1 µs (a linear scan for the scheme)
+  and `check` took 4 s. The table and a cached last scheme in `check` gave 736 ns and 1.57 s.
+- **Code text** is `Fst::key`, the key of an ordinal: per node, a binary search for the last
+  output not above what is left of the ordinal.
+- **Writing** the world set takes 22 s at a peak of 1.33 GB, including parsing 5 million
+  text rows; the writer itself holds one byte arena of keys and one fixed-size entry per code.
+
+### Not yet measured
+
+- KIND is a constant column in every set here and still costs a block header per 128 values
+  (0.35 MB in the world set); a constant-column form would remove it.
+- The 1991 Nepal codes (no source yet) and India Post's own directory (behind a form).
+

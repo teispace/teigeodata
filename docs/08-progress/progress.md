@@ -1,7 +1,7 @@
 ---
 title: "Progress"
 status: living
-updated: 2026-11-08
+updated: 2026-11-09
 ---
 
 # Progress
@@ -38,6 +38,13 @@ updated: 2026-11-08
   13.6 ns per sample: 31 µs for a cold point query, 0.4 µs warm
   ([B11](../02-research/benches/phase-3.md#b11-dem)). Next: the 45 Nepal tiles (a 1.84 GB
   download waiting for approval), the DEM in the Nepal packs, then elevation at each place.
+- **3.5 built** (D-105): the POSTAL section, records in place runs with each scheme's rules
+  as data. The Nepal main pack carries all 753 local-level and 6,743 ward codes (GPO table,
+  main build only until Q-009), linked to their COD-AB units by a reviewed crosswalk and checked
+  against the source on every build: 10.1 KB, exact lookup 155 ns, place → codes 179 ns. The
+  world's 5.0 M GeoNames codes take 24.4 MB (+3.1% on the model), exact lookup 736 ns
+  ([postal benchmark](../02-research/benches/phase-3.md#postal)). Main pack 11.0 MB. Next: 3.6
+  names and corrections while the DEM download waits.
 - **Phase 2 done:** 2.1 B8 PLACE_INDEX, a packed Hilbert R-tree over the PLACES rows with u16
   boxes inside the parent: 0.55 B per place, a city box in 1.2–1.8 µs, the nearest place by
   great-circle distance in 3.5–17 µs up to 10⁷ places, exact against brute force (D-082,
@@ -153,3 +160,5 @@ updated: 2026-11-08
 | 2026-11-08 | 3.3: ADMIN_REGION on the shared arcs, cross-checked in the forge (D-100) | per-pack top grid, coarse LOD reads |
 | 2026-11-08 | 3.3: fine grid (D-101), ARCS_OVERVIEW (D-102) | the India measurement |
 | 2026-11-08 | 3.3 done: snap rounding in the topology stage (D-103), `forge topology --geoboundaries`, India measured | 3.4: B11 DEM |
+| 2026-11-08 | 3.4: the DEM section and `forge dem-section` (D-104) | the 45-tile download (approval) |
+| 2026-11-09 | 3.5: POSTAL on place runs, Nepal codes in the main pack (D-105); CI fixes for the `no_std` build and a debug overflow | 3.6 names and corrections |
