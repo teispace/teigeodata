@@ -50,6 +50,8 @@ use crate::fetch::store_path;
 use crate::geom::{GridIndex, Polygon};
 use crate::lock::Lock;
 use crate::names::{How, Namer};
+
+use crate::aliases::rules::{COLLISION_M, Dropped, Rules};
 use crate::read::boundaries;
 use crate::record::{column, for_each_batch};
 
@@ -183,7 +185,6 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let build = root.join("data/build");
     let profile = Profile::read(root, &a.cc)?;
     let units = admin_places(root, &lock, &a.admin)?;
-    let mut places: Vec<Place> = units.places;
     let core = match &a.core {
         Some(b) => core_points(&build, &a.sources, b)?,
         None => BTreeMap::new(),
@@ -194,7 +195,15 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         unnamed: unnamed_clusters,
         held,
         naming,
-    } = cluster_places(&build, &a.sources, &sources, &units.levels, &core, &namer)?;
+    } = cluster_places(
+        &build,
+        &a.sources,
+        &sources,
+        &units,
+        &core,
+        (&namer, profile.phonetic),
+    )?;
+    let mut places: Vec<Place> = units.places;
     places.extend(clustered);
     if let Some(country) = country_place(&build, &sources, &profile)? {
         places.push(country);
@@ -247,8 +256,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let postal_notes = postal.as_ref().map_or(&[][..], |p| p.notes.as_slice());
     notes(&mut summary, held, unnamed, &skipped, postal_notes);
     summary.push_str(&naming.line());
-    let review = out_dir.join(format!("naming-{}.tsv", a.build_name()));
-    fs::write(&review, naming.review()).map_err(|e| format!("{}: {e}", review.display()))?;
+    naming.write(&out_dir, a.build_name())?;
     summary.push('\n');
     summary.push_str(&report);
     fs::write(
@@ -391,7 +399,7 @@ struct Term {
 }
 
 impl Profile {
-    fn read(root: &Path, cc: &str) -> Result<Self, String> {
+    pub(crate) fn read(root: &Path, cc: &str) -> Result<Self, String> {
         let path = root.join("data/countries").join(cc).join("profile.yaml");
         let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         let p: ProfileFile =
@@ -593,6 +601,8 @@ struct Naming {
     /// Places whose display name is not their first record's name: (place key, that name,
     /// the display name, how), for review.
     changed: Vec<(String, String, String, &'static str)>,
+    /// Names not taken by the D-060 rules: (place key, record, name, why, what it names).
+    dropped: BTreeSet<(String, String, String, Dropped, String)>,
 }
 
 impl Naming {
@@ -605,7 +615,45 @@ impl Naming {
             get(How::Romanised),
             self.fallback,
             self.rendered
+        ) + &format!(
+            "Names of other records (D-060): {} records lent none (no name in common with the place's first), {} names not taken (the primary name of an admin unit, or of another place within {} km).\n",
+            self.count(Dropped::Uncorroborated),
+            self.count(Dropped::Collision),
+            COLLISION_M / 1000.0
         )
+    }
+
+    /// Writes the two review files, `naming-<build>.tsv` and `dropped-names-<build>.tsv`.
+    fn write(&self, dir: &Path, build: &str) -> Result<(), String> {
+        for (file, text) in [
+            (format!("naming-{build}.tsv"), self.review()),
+            (format!("dropped-names-{build}.tsv"), self.dropped()),
+        ] {
+            let path = dir.join(file);
+            fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+        }
+        Ok(())
+    }
+
+    fn count(&self, why: Dropped) -> usize {
+        self.dropped.iter().filter(|d| d.3 == why).count()
+    }
+
+    /// The review file of names not taken, sorted.
+    fn dropped(&self) -> String {
+        let mut out = String::from(
+            "# Names of other records a place did not take (D-060).\nplace\trecord\tname\twhy\tnames\n",
+        );
+        for (k, rec, name, why, with) in &self.dropped {
+            let _ = writeln!(
+                out,
+                "{k}\t{rec}\t{}\t{}\t{}",
+                name.replace(['\t', '\n', '\r'], " "),
+                why.as_str(),
+                with.replace(['\t', '\n', '\r'], " ")
+            );
+        }
+        out
     }
 
     /// The review file: one line per place whose display name differs from its first record's
@@ -627,40 +675,67 @@ fn cluster_places(
     build: &Path,
     run: &[String],
     read: &[String],
-    levels: &[Level],
+    units: &Units,
     core: &BTreeMap<String, (i32, i32)>,
-    display: &Namer,
+    (display, phonetic): (&Namer, Option<PhoneticKey>),
 ) -> Result<Clustered, String> {
+    let levels = &units.levels;
     let mut records: Vec<BTreeMap<String, Rec>> = Vec::new();
     let mut names: Vec<BTreeMap<String, Vec<PlaceName>>> = Vec::new();
     for s in read {
         records.push(read_records(build, s)?);
         names.push(read_names(build, s)?);
     }
-    // Members by cluster; a source the build may not read contributes nothing.
-    let mut clusters: BTreeMap<String, Vec<(usize, String)>> = BTreeMap::new();
     let path = build
         .join("conflate")
         .join(run.join("+"))
         .join("clusters.parquet");
-    for_each_batch(&path, |b| {
-        let ids = column::<StringArray>(b, "id")?;
-        let cl = column::<StringArray>(b, "cluster")?;
-        for i in 0..b.num_rows() {
-            let id = ids.value(i);
-            if let Some(src) = records.iter().position(|r| r.contains_key(id)) {
-                clusters
-                    .entry(cl.value(i).to_string())
-                    .or_default()
-                    .push((src, id.to_string()));
-            }
+    let clusters = read_clusters(&path, &records)?;
+    // Every cluster with a point, its records in source priority; the primary names of all of
+    // them and of the admin units feed the collision rule (D-060).
+    let mut rules = Rules::new(phonetic, Some(display));
+    for p in &units.places {
+        if let Some(n) = p.names.first() {
+            rules.add_admin(&n.text);
         }
-        Ok(())
-    })?;
-    let (mut out, mut unnamed, mut held) = (Vec::new(), 0_usize, 0_usize);
-    let mut naming = Naming::default();
+    }
+    let mut groups: Vec<Group> = Vec::new();
     for (cluster, mut members) in clusters {
         members.sort();
+        let recs = members
+            .iter()
+            .filter_map(|(s, id)| records.get(*s)?.get(id));
+        let (mut point, mut primary) = (None, None);
+        for r in recs {
+            point = point.or(r.point);
+            if primary.is_none() && !r.name.is_empty() {
+                primary = Some(r.name.as_str());
+            }
+        }
+        // The first source's record with a point gives the point.
+        let Some(point) = point else { continue };
+        let owner = u32::try_from(groups.len()).map_err(|_| "too many clusters")?;
+        if let Some(n) = primary {
+            rules.add_place(owner, point, n);
+        }
+        groups.push(Group {
+            cluster,
+            members,
+            seed: point,
+        });
+    }
+    rules.finish();
+    let (mut out, mut unnamed, mut held) = (Vec::new(), 0_usize, 0_usize);
+    let mut naming = Naming::default();
+    for (
+        owner,
+        Group {
+            cluster,
+            members,
+            seed,
+        },
+    ) in (0_u32..).zip(groups)
+    {
         let recs: Vec<(&Rec, &str, usize)> = members
             .iter()
             .filter_map(|(s, id)| Some((records.get(*s)?.get(id)?, id.as_str(), *s)))
@@ -672,23 +747,23 @@ fn cluster_places(
         } else {
             continue;
         };
-        // The first source's record with a point gives the point and the canonical name.
-        let Some(&(first, _, _)) = recs.iter().find(|(r, _, _)| r.point.is_some()) else {
-            continue;
-        };
-        let Some(point) = first.point else { continue };
         // The consensus point of the `core` stage, when the build reads one. A core that would
         // take the place out of every admin unit its seed point is in (across the border, as
         // buildings on the far side pull it) is refused: the place keeps its seed point.
         let point = match core.get(&cluster) {
-            Some(&c) if deepest(levels, c).is_some() || deepest(levels, point).is_none() => c,
+            Some(&c) if deepest(levels, c).is_some() || deepest(levels, seed).is_none() => c,
             Some(_) => {
                 held += 1;
-                point
+                seed
             }
-            None => point,
+            None => seed,
         };
-        let Some(all) = place_names(&cluster, &recs, &names, display, &mut naming) else {
+        let here = Here {
+            cluster: &cluster,
+            owner,
+            seed,
+        };
+        let Some(all) = place_names(&here, &recs, &names, (display, &rules), &mut naming) else {
             unnamed += 1;
             continue;
         };
@@ -711,23 +786,117 @@ fn cluster_places(
     })
 }
 
+/// A cluster's members, (source index, record ID), by cluster; a source the build may not read
+/// contributes nothing.
+fn read_clusters(
+    path: &Path,
+    records: &[BTreeMap<String, Rec>],
+) -> Result<BTreeMap<String, Vec<(usize, String)>>, String> {
+    let mut clusters: BTreeMap<String, Vec<(usize, String)>> = BTreeMap::new();
+    for_each_batch(path, |b| {
+        let ids = column::<StringArray>(b, "id")?;
+        let cl = column::<StringArray>(b, "cluster")?;
+        for i in 0..b.num_rows() {
+            let id = ids.value(i);
+            if let Some(src) = records.iter().position(|r| r.contains_key(id)) {
+                clusters
+                    .entry(cl.value(i).to_string())
+                    .or_default()
+                    .push((src, id.to_string()));
+            }
+        }
+        Ok(())
+    })?;
+    Ok(clusters)
+}
+
+/// A cluster with a point.
+struct Group {
+    cluster: String,
+    /// (source index, record ID), in source priority.
+    members: Vec<(usize, String)>,
+    /// The first source's point.
+    seed: (i32, i32),
+}
+
+/// A clustered place, as the collision rule knows it.
+struct Here<'a> {
+    cluster: &'a str,
+    owner: u32,
+    /// Its seed point: the one its primary name was registered at.
+    seed: (i32, i32),
+}
+
 /// A clustered place's names, its display name first (names-canonical §5.2); `None` when no
 /// name can be stored. `recs` are its records in source priority with their source index.
-fn place_names(
-    cluster: &str,
-    recs: &[(&Rec, &str, usize)],
-    names: &[BTreeMap<String, Vec<PlaceName>>],
-    display: &Namer,
+fn place_names<'a>(
+    here: &Here<'_>,
+    recs: &[(&'a Rec, &'a str, usize)],
+    names: &'a [BTreeMap<String, Vec<PlaceName>>],
+    (display, rules): (&Namer, &Rules<'_>),
     naming: &mut Naming,
 ) -> Option<Vec<PlaceName>> {
+    let own_names = |&(r, id, s): &(&'a Rec, &'a str, usize)| {
+        let own = names.get(s).and_then(|m| m.get(id));
+        std::iter::once(r.name.as_str()).chain(own.into_iter().flatten().map(|n| n.text.as_str()))
+    };
+    // The anchor: the first record with a name. Others lend their names only when one of
+    // them is the anchor's too (D-060).
+    let anchor = recs
+        .iter()
+        .position(|(r, _, _)| !r.name.is_empty())
+        .unwrap_or(0);
+    let known = recs
+        .get(anchor)
+        .map(|r| rules.anchor(own_names(r)))
+        .unwrap_or_default();
     let mut rest: BTreeSet<PlaceName> = BTreeSet::new();
     // Each record's candidates for the display name: its primary name, then its names
     // with no language or in English that are not historical or alternates.
     let mut candidates: Vec<Vec<&str>> = Vec::with_capacity(recs.len());
-    for (r, id, s) in recs {
-        let own = names.get(*s).and_then(|m| m.get(*id));
-        let mut c = vec![r.name.as_str()];
-        for n in own.into_iter().flatten() {
+    for (i, rec) in recs.iter().enumerate() {
+        let &(r, id, s) = rec;
+        if i != anchor && !rules.corroborates(&known, own_names(rec)) {
+            naming.dropped.insert((
+                here.cluster.to_string(),
+                id.to_string(),
+                r.name.clone(),
+                Dropped::Uncorroborated,
+                String::new(),
+            ));
+            continue;
+        }
+        // A lent name the anchor lacks must not be another place's name.
+        let mut take = |t: &str| {
+            if i == anchor || Rules::fold_known(&known, t) {
+                return true;
+            }
+            let Some(with) = rules.collides(here.owner, here.seed, t) else {
+                return true;
+            };
+            naming.dropped.insert((
+                here.cluster.to_string(),
+                id.to_string(),
+                t.to_string(),
+                Dropped::Collision,
+                with,
+            ));
+            false
+        };
+        let mut c = Vec::new();
+        // The source's own spelling stays a name of the place.
+        if !r.name.is_empty() && take(&r.name) {
+            c.push(r.name.as_str());
+            rest.insert(PlaceName {
+                text: r.name.clone(),
+                lang: None,
+                kind: None,
+            });
+        }
+        for n in names.get(s).and_then(|m| m.get(id)).into_iter().flatten() {
+            if n.text == r.name || !take(&n.text) {
+                continue;
+            }
             rest.insert(n.clone());
             if n.lang.as_deref().is_none_or(|l| l == "en")
                 && matches!(n.kind, None | Some(NameType::Official))
@@ -736,48 +905,8 @@ fn place_names(
             }
         }
         candidates.push(c);
-        // The source's own spelling stays a name of the place.
-        if !r.name.is_empty() {
-            rest.insert(PlaceName {
-                text: r.name.clone(),
-                lang: None,
-                kind: None,
-            });
-        }
     }
-    // The display name (names-canonical §5.2); else the first record's name, in source
-    // priority, that can be stored; else the first of the other names that can.
-    let chosen = display.choose(&candidates, pack::fits);
-    let canonical = match &chosen {
-        Some(c) => {
-            *naming.by.entry(c.how).or_default() += 1;
-            naming.rendered += usize::from(c.rendered);
-            let first = recs.first().map_or("", |(r, _, _)| r.name.as_str());
-            if c.text != first {
-                let how = match (c.how, c.rendered) {
-                    (How::Romanised, _) => "romanised",
-                    (How::Voted, true) => "majority, respelled",
-                    (How::Voted, false) => "majority",
-                    (How::Latin, true) => "latin, respelled",
-                    (How::Latin, false) => "latin",
-                };
-                naming
-                    .changed
-                    .push((cluster.to_string(), first.to_string(), c.text.clone(), how));
-            }
-            Some(c.text.clone())
-        }
-        None => recs
-            .iter()
-            .map(|(r, _, _)| r.name.as_str())
-            .chain(rest.iter().map(|n| n.text.as_str()))
-            .find(|n| pack::fits(n))
-            .map(|n| {
-                naming.fallback += 1;
-                n.to_string()
-            }),
-    };
-    let canonical = canonical?;
+    let canonical = display_name(here, recs, &candidates, &rest, display, naming)?;
     let mut all: Vec<PlaceName> = vec![PlaceName {
         text: canonical.clone(),
         lang: None,
@@ -790,6 +919,51 @@ fn place_names(
         }
     }
     Some(all)
+}
+
+/// The display name (names-canonical §5.2); else the first record's name, in source priority,
+/// that can be stored; else the first of the other names that can.
+fn display_name(
+    here: &Here<'_>,
+    recs: &[(&Rec, &str, usize)],
+    candidates: &[Vec<&str>],
+    rest: &BTreeSet<PlaceName>,
+    display: &Namer,
+    naming: &mut Naming,
+) -> Option<String> {
+    let chosen = display.choose(candidates, pack::fits);
+    match &chosen {
+        Some(c) => {
+            *naming.by.entry(c.how).or_default() += 1;
+            naming.rendered += usize::from(c.rendered);
+            let first = recs.first().map_or("", |(r, _, _)| r.name.as_str());
+            if c.text != first {
+                let how = match (c.how, c.rendered) {
+                    (How::Romanised, _) => "romanised",
+                    (How::Voted, true) => "majority, respelled",
+                    (How::Voted, false) => "majority",
+                    (How::Latin, true) => "latin, respelled",
+                    (How::Latin, false) => "latin",
+                };
+                naming.changed.push((
+                    here.cluster.to_string(),
+                    first.to_string(),
+                    c.text.clone(),
+                    how,
+                ));
+            }
+            Some(c.text.clone())
+        }
+        None => candidates
+            .iter()
+            .filter_map(|c| c.first().copied())
+            .chain(rest.iter().map(|n| n.text.as_str()))
+            .find(|n| pack::fits(n))
+            .map(|n| {
+                naming.fallback += 1;
+                n.to_string()
+            }),
+    }
 }
 
 /// The country, from the record of its Wikidata item, when a source has it.
@@ -961,4 +1135,88 @@ pub(crate) fn tags(n: &PlaceName) -> (Option<Tag>, Option<Tag>) {
         .and_then(Tag::new);
     let script = Tag::new(script_of(&n.text).short_name());
     (lang, script)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::path::Path;
+
+    use super::{Here, Naming, PlaceName, Rec, place_names};
+    use crate::aliases::rules::{Dropped, Rules};
+    use crate::names::Namer;
+    use teigeodata_names::PhoneticKey;
+
+    fn rec(name: &str) -> Rec {
+        Rec {
+            kind: "populated_place".into(),
+            name: name.into(),
+            point: Some((863_000_000, 267_000_000)),
+            population: None,
+        }
+    }
+
+    fn alias(text: &str) -> PlaceName {
+        PlaceName {
+            text: text.into(),
+            lang: None,
+            kind: Some(teigeodata_format::names::NameType::Alt),
+        }
+    }
+
+    /// D-060 in the build: the anchor keeps every name; another record lends its names only
+    /// when corroborated, and never one that names an admin unit or a nearby place, unless the
+    /// anchor has that name too (a town and the municipality named after it).
+    #[test]
+    fn names_follow_the_alias_rules() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let namer = Namer::load(&root, "np", &["ne-Deva".into()]).expect("np loads");
+        let seed = (863_000_000, 267_000_000);
+        let mut rules = Rules::new(PhoneticKey::from_name("indic-v0"), Some(&namer));
+        rules.add_admin("Lahan");
+        rules.add_admin("Siraha");
+        rules.add_place(0, seed, "लहान");
+        rules.add_place(1, (863_000_000, 267_450_000), "Golbazar");
+        rules.finish();
+        let (osm, gn, wd) = (rec("लहान"), rec("Lahan"), rec("नेपाल"));
+        let by_source: Vec<BTreeMap<String, Vec<PlaceName>>> = vec![
+            BTreeMap::from([("osm:1".into(), vec![alias("Golbazar")])]),
+            BTreeMap::from([(
+                "geonames:1".into(),
+                vec![alias("Siraha"), alias("Golbazar")],
+            )]),
+            BTreeMap::from([("wikidata:Q1".into(), vec![alias("Nepal")])]),
+        ];
+        let recs = [
+            (&osm, "osm:1", 0),
+            (&gn, "geonames:1", 1),
+            (&wd, "wikidata:Q1", 2),
+        ];
+        let here = Here {
+            cluster: "c",
+            owner: 0,
+            seed,
+        };
+        let mut naming = Naming::default();
+        let all = place_names(&here, &recs, &by_source, (&namer, &rules), &mut naming)
+            .expect("a name fits");
+        let texts: Vec<&str> = all.iter().map(|n| n.text.as_str()).collect();
+        assert_eq!(texts.first(), Some(&"Lahan"), "the display name");
+        let set: BTreeSet<&str> = texts.into_iter().collect();
+        // Golbazar is a place 5 km away, but the anchor names it, so it stays; Lahan names a
+        // municipality, but it is the anchor's own name romanised.
+        assert_eq!(set, BTreeSet::from(["Golbazar", "Lahan", "लहान"]));
+        let dropped: Vec<(&str, &str, Dropped, &str)> = naming
+            .dropped
+            .iter()
+            .map(|(_, r, t, w, with)| (r.as_str(), t.as_str(), *w, with.as_str()))
+            .collect();
+        assert_eq!(
+            dropped,
+            [
+                ("geonames:1", "Siraha", Dropped::Collision, "admin:Siraha"),
+                ("wikidata:Q1", "नेपाल", Dropped::Uncorroborated, ""),
+            ]
+        );
+    }
 }

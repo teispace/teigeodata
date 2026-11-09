@@ -27,9 +27,14 @@ const R_M: f64 = 6_371_008.8;
 
 /// Great-circle distance in metres between two grid points.
 pub(crate) fn haversine(a: &Point, b: &Point) -> f64 {
+    haversine_e7((a.lon, a.lat), (b.lon, b.lat))
+}
+
+/// Great-circle distance in metres between two (lon, lat) points on the 1e-7° grid.
+pub(crate) fn haversine_e7(a: (i32, i32), b: (i32, i32)) -> f64 {
     let rad = |v: i32| (f64::from(v) * 1e-7).to_radians();
-    let (la, lb) = (rad(a.lat), rad(b.lat));
-    let (dlat, dlon) = (lb - la, rad(b.lon) - rad(a.lon));
+    let (la, lb) = (rad(a.1), rad(b.1));
+    let (dlat, dlon) = (lb - la, rad(b.0) - rad(a.0));
     let h = (dlat / 2.0).sin().powi(2) + la.cos() * lb.cos() * (dlon / 2.0).sin().powi(2);
     2.0 * R_M * h.sqrt().min(1.0).asin()
 }

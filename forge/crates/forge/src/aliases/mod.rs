@@ -4,33 +4,29 @@
 //! anchor already has it after folding. This is how a Wikidata nickname or an OSM `short_name`
 //! reaches search.
 //!
-//! Two rules keep source errors out, world-general:
-//! - **Corroboration:** a member's names are carried only if at least one of them matches a
-//!   name of the anchor (fold, join key or the profile's phonetic key). A member with no
-//!   matching name (OSM node 303021945 at Lukla is named "नेपाल") is listed, not carried.
-//! - **Collision:** an alias that is, by fold or phonetic key, the primary name of another
-//!   anchor record within [`COLLISION_M`], or of an admin unit anywhere, names that record
-//!   (Wikidata lists हेटौंडा, Hetauda, as an alias of Makwanpur District, whose seat it is; an
-//!   OSM node at Lukla is named नेपाल), so it is not carried.
+//! The rules of [`rules`] keep source errors out (D-060), the same ones the build applies:
+//! a member lends names only when corroborated, and an alias that names an admin unit or
+//! another anchor record nearby is not carried. A member with no matching name (OSM node
+//! 303021945 at Lukla is named "नेपाल") is listed, not carried.
 //!
 //! Output, in `data/build/aliases/<conflate run>/`: `<anchor>.tsv`, sorted, one line per alias
 //! (anchor ID, text, language, kind, the member it came from), and
 //! `<anchor>-uncorroborated.txt`. TSV so that any tool, including the S3 spike, reads it
 //! without a Parquet stack.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
 use arrow_array::StringArray;
-use teigeodata_names::{PhoneticKey, fold, join_key};
+use teigeodata_names::fold;
 
-use crate::links::haversine;
-use crate::record::{self, Point, column};
+use crate::names::Namer;
+use crate::record::{self, column};
+use rules::{COLLISION_M, Rules};
 
-/// An alias equal to the primary name of another anchor record this close names that record.
-const COLLISION_M: f64 = 30_000.0;
+pub(crate) mod rules;
 
 /// (anchor record, member record).
 type Member = (String, String);
@@ -39,49 +35,13 @@ type NameRow = (String, String, String);
 /// (anchor record, text, language, kind, member).
 type Alias = (String, String, String, String, String);
 
-/// The anchor source's records: their name keys, primary names and points.
-struct Anchor {
-    keys: HashMap<String, BTreeSet<String>>,
-    primary: HashMap<String, Vec<String>>,
-    points: HashMap<String, Point>,
-    phonetic: Option<PhoneticKey>,
-}
-
-impl Anchor {
-    /// The fold, join and phonetic keys of a name, tagged so they never collide.
-    fn keys_of(&self, t: &str) -> [String; 3] {
-        [
-            format!("f:{}", fold(t)),
-            format!("j:{}", join_key(t)),
-            format!("p:{}", self.phonetic.map(|k| k.key(t)).unwrap_or_default()),
-        ]
-    }
-
-    fn corroborates(&self, target: &str, names: &[NameRow]) -> bool {
-        let Some(known) = self.keys.get(target) else {
-            return false;
-        };
-        names.iter().any(|(t, _, _)| {
-            self.keys_of(t)
-                .iter()
-                .any(|k| k.len() > 2 && known.contains(k))
-        })
-    }
-
-    fn collides(&self, target: &str, text: &str) -> bool {
-        let here = self.points.get(target);
-        let [f, _, p] = self.keys_of(text);
-        [f, p].iter().filter(|k| k.len() > 2).any(|k| {
-            self.primary.get(k).is_some_and(|others| {
-                others.iter().any(|o| {
-                    o != target
-                        && self.points.get(o).is_some_and(|b| {
-                            b.kind == "admin" || here.is_some_and(|a| haversine(a, b) < COLLISION_M)
-                        })
-                })
-            })
-        })
-    }
+/// The anchor source's records: their names, and the rules over their primary names.
+struct Anchor<'a> {
+    rules: Rules<'a>,
+    /// Every name of a record.
+    names: HashMap<String, Vec<String>>,
+    /// A record's owner number in `rules` and its point.
+    at: HashMap<String, (u32, (i32, i32))>,
 }
 
 /// `forge aliases <cc> <anchor-source> <conflated sources joined by +>`.
@@ -93,28 +53,37 @@ pub(crate) fn run(root: &Path, cc: &str, anchor: &str, run_name: &str) -> Result
             "{anchor} is not one of the conflated sources {run_name}"
         ));
     }
-    let phonetic = crate::conflate::phonetic_key(root, cc)?
-        .as_deref()
-        .and_then(PhoneticKey::from_name);
-    let a = load_anchor(&build, anchor, phonetic)?;
+    let profile = crate::build::Profile::read(root, cc)?;
+    let namer = Namer::load(root, cc, &profile.romanise)?;
+    let a = load_anchor(&build, anchor, Rules::new(profile.phonetic, Some(&namer)))?;
     let members = load_members(&build, anchor, run_name, &sources)?;
     let mut rows: BTreeSet<Alias> = BTreeSet::new();
     let (mut uncorroborated, mut collisions) = (Vec::new(), 0usize);
+    let mut known: (String, HashSet<String>) = (String::new(), HashSet::new());
     for ((target, member), names) in &members {
-        if !a.corroborates(target, names) {
+        if known.0 != *target {
+            let own = a
+                .names
+                .get(target)
+                .into_iter()
+                .flatten()
+                .map(String::as_str);
+            known = (target.clone(), a.rules.anchor(own));
+        }
+        let texts = names.iter().map(|(t, _, _)| t.as_str());
+        if !a.rules.corroborates(&known.1, texts) {
             uncorroborated.push(format!("{member} → {target}"));
             continue;
         }
+        let Some(&(owner, point)) = a.at.get(target) else {
+            continue;
+        };
         for (text, lang, kind) in names {
-            let folded = fold(text);
-            let known = a
-                .keys
-                .get(target)
-                .is_some_and(|k| k.contains(&format!("f:{folded}")));
-            if folded.is_empty() || known {
+            // The anchor has it already.
+            if fold(text).is_empty() || Rules::fold_known(&known.1, text) {
                 continue;
             }
-            if a.collides(target, text) {
+            if a.rules.collides(owner, point, text).is_some() {
                 collisions += 1;
                 continue;
             }
@@ -145,39 +114,32 @@ pub(crate) fn run(root: &Path, cc: &str, anchor: &str, run_name: &str) -> Result
     ))
 }
 
-fn load_anchor(
-    build: &Path,
-    anchor: &str,
-    phonetic: Option<PhoneticKey>,
-) -> Result<Anchor, String> {
-    let points = record::read_points(&build.join("read").join(anchor).join("records.parquet"))?
-        .into_iter()
-        .map(|p| (p.id.clone(), p))
-        .collect();
-    let mut a = Anchor {
-        keys: HashMap::new(),
-        primary: HashMap::new(),
-        points,
-        phonetic,
-    };
-    let mut rows: Vec<(String, String, bool)> = Vec::new();
+fn load_anchor<'a>(build: &Path, anchor: &str, mut rules: Rules<'a>) -> Result<Anchor<'a>, String> {
+    let mut at = HashMap::new();
+    let mut admin = HashSet::new();
+    let records = record::read_points(&build.join("read").join(anchor).join("records.parquet"))?;
+    for (owner, p) in (0_u32..).zip(records) {
+        if p.kind == "admin" {
+            admin.insert(p.id.clone());
+        }
+        at.insert(p.id, (owner, (p.lon, p.lat)));
+    }
+    let mut names: HashMap<String, Vec<String>> = HashMap::new();
     for_each_name(build, anchor, |id, text, _, kind| {
-        rows.push((id.to_string(), text.to_string(), kind == "name"));
-    })?;
-    for (id, text, is_primary) in rows {
-        let keys = a.keys_of(&text);
-        a.keys
-            .entry(id.clone())
-            .or_default()
-            .extend(keys.into_iter().filter(|k| k.len() > 2));
-        if is_primary {
-            let [f, _, p] = a.keys_of(&text);
-            for k in [f, p].into_iter().filter(|k| k.len() > 2) {
-                a.primary.entry(k).or_default().push(id.clone());
+        if kind == "name" {
+            if admin.contains(id) {
+                rules.add_admin(text);
+            } else if let Some(&(owner, point)) = at.get(id) {
+                rules.add_place(owner, point, text);
             }
         }
-    }
-    Ok(a)
+        names
+            .entry(id.to_string())
+            .or_default()
+            .push(text.to_string());
+    })?;
+    rules.finish();
+    Ok(Anchor { rules, names, at })
 }
 
 /// Every non-anchor member's names, grouped by (anchor record, member).

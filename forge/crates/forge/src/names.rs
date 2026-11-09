@@ -261,22 +261,24 @@ impl Namer {
         }
         for names in records {
             for &n in names {
-                let Some(script) = script_code(n) else {
-                    continue;
-                };
-                if let Some((_, p)) = self.romanisers.iter().find(|(s, _)| s == script) {
-                    let r = p.romanise(n);
-                    if !r.is_empty() && fits(&r) {
-                        return Some(Choice {
-                            text: r,
-                            how: How::Romanised,
-                            rendered: false,
-                        });
-                    }
+                if let Some(r) = self.romanise(n).filter(|r| fits(r)) {
+                    return Some(Choice {
+                        text: r,
+                        how: How::Romanised,
+                        rendered: false,
+                    });
                 }
             }
         }
         None
+    }
+
+    /// A name in Latin letters by the country's romaniser for its script; `None` when it has
+    /// none for that script or the result is empty.
+    pub(crate) fn romanise(&self, n: &str) -> Option<String> {
+        let script = script_code(n)?;
+        let (_, p) = self.romanisers.iter().find(|(s, _)| s == script)?;
+        Some(p.romanise(n)).filter(|r| !r.is_empty())
     }
 }
 
