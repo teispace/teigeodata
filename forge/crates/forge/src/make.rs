@@ -2,7 +2,7 @@
 //! D-095).
 //!
 //! ```text
-//! forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--force]
+//! forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--force] [--fetch]
 //! ```
 //!
 //! The recipe is `data/countries/<cc>/build.yaml`. The stages are `read` for each points
@@ -80,6 +80,38 @@ struct Points {
     source: String,
     #[serde(default)]
     extra: Vec<String>,
+}
+
+impl Recipe {
+    /// The country's `build.yaml`.
+    fn read(country: &Path) -> Result<Self, String> {
+        let path = country.join("build.yaml");
+        let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
+    }
+
+    /// Every pinned source the recipe names, once each in recipe order, with the postal
+    /// sources `postal`: what `--fetch` brings into the store.
+    fn inputs<'a>(&'a self, postal: &'a [String]) -> Vec<&'a str> {
+        let mut out: Vec<&str> = Vec::new();
+        let points = self
+            .points
+            .iter()
+            .flat_map(|p| std::iter::once(&p.source).chain(&p.extra));
+        let all = points
+            .chain(std::iter::once(&self.admin))
+            .chain(&self.timezones)
+            .chain(self.buildings.iter().map(|b| &b.source))
+            .chain(&self.dem)
+            .chain(&self.population)
+            .chain(postal);
+        for id in all {
+            if !out.contains(&id.as_str()) {
+                out.push(id);
+            }
+        }
+        out
+    }
 }
 
 /// A stage key: BLAKE3 over length-prefixed parts, so no two part lists collide.
@@ -175,28 +207,36 @@ fn pinned(lock: &Lock, ids: &[&str]) -> Result<Vec<u8>, String> {
 /// The postal inputs of a build: `postal.yaml`, each codes file it names, and the pinned
 /// source each is checked against (D-105). Empty when the country has no postal file.
 fn postal_inputs(country: &Path, lock: &Lock) -> Result<Vec<u8>, String> {
+    let (yaml, codes) = postal_codes(country)?;
+    let mut out = yaml;
+    for c in &codes {
+        out.extend_from_slice(blake3::hash(&read_or_empty(&country.join(&c.file))?).as_bytes());
+        out.extend(pinned(lock, &[c.source.as_str()])?);
+    }
+    Ok(out)
+}
+
+/// One codes file of `postal.yaml` and the pinned source it is checked against.
+#[derive(Deserialize)]
+struct Codes {
+    file: String,
+    source: String,
+}
+
+/// `postal.yaml`'s bytes and its codes files (both empty when the country has none).
+fn postal_codes(country: &Path) -> Result<(Vec<u8>, Vec<Codes>), String> {
     #[derive(Deserialize)]
     struct File {
         #[serde(default)]
         codes: Vec<Codes>,
     }
-    #[derive(Deserialize)]
-    struct Codes {
-        file: String,
-        source: String,
-    }
     let yaml = read_or_empty(&country.join("postal.yaml"))?;
     if yaml.is_empty() {
-        return Ok(yaml);
+        return Ok((yaml, Vec::new()));
     }
     let text = String::from_utf8_lossy(&yaml);
     let file: File = serde_saphyr::from_str(&text).map_err(|e| format!("postal.yaml: {e}"))?;
-    let mut out = yaml.clone();
-    for c in &file.codes {
-        out.extend_from_slice(blake3::hash(&read_or_empty(&country.join(&c.file))?).as_bytes());
-        out.extend(pinned(lock, &[c.source.as_str()])?);
-    }
-    Ok(out)
+    Ok((yaml, file.codes))
 }
 
 /// The corrections of a build (ADR-0036): every file of `corrections/`, by name, so adding,
@@ -451,15 +491,38 @@ fn dem_stage(
     Ok(Some(k))
 }
 
+/// `--fetch`: brings every input the build may read into the store (pinned bytes only; the
+/// mirror first, D-127), so a fresh machine or CI runner builds from one command.
+fn fetch_inputs(
+    root: &Path,
+    recipe: &Recipe,
+    country: &Path,
+    lock: &Lock,
+    lite: bool,
+) -> Result<(), String> {
+    let postal: Vec<String> = postal_codes(country)?
+        .1
+        .into_iter()
+        .map(|c| c.source)
+        .collect();
+    let mut ids = Vec::new();
+    for id in recipe.inputs(&postal) {
+        if !lite || build::LITE.contains(&lock.get(id)?.licence_class.as_str()) {
+            ids.push(id.to_string());
+        }
+    }
+    crate::fetch::run(root, &ids, false, false)
+}
+
 /// `forge make <cc> …`.
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
-    let usage = "usage: forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--force]";
+    let usage = "usage: forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--force] [--fetch]";
     let cc = args.first().ok_or(usage)?;
     let pass: Vec<String> = args
         .iter()
         .skip(1)
-        .filter(|a| *a != "--force")
+        .filter(|a| *a != "--force" && *a != "--fetch")
         .cloned()
         .collect();
     let lite = pass.iter().any(|a| a == "--lite");
@@ -472,12 +535,11 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         return Err(usage.into());
     }
     let country = root.join("data/countries").join(cc);
-    let recipe_path = country.join("build.yaml");
-    let text =
-        fs::read_to_string(&recipe_path).map_err(|e| format!("{}: {e}", recipe_path.display()))?;
-    let recipe: Recipe =
-        serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", recipe_path.display()))?;
+    let recipe = Recipe::read(&country)?;
     let lock = Lock::read(&root.join("data/sources.lock"))?;
+    if args.iter().any(|a| a == "--fetch") {
+        fetch_inputs(root, &recipe, &country, &lock, lite)?;
+    }
     let profile = fs::read(country.join("profile.yaml")).map_err(|e| e.to_string())?;
     let mut r = Runner {
         force: args.iter().any(|a| a == "--force"),
@@ -573,9 +635,27 @@ fn first_line(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{key, stage, tile_box};
+    use super::{Recipe, key, stage, tile_box};
     use std::cell::Cell;
     use std::fs;
+
+    #[test]
+    fn a_recipe_names_every_input_once() {
+        let yaml = "schema: teigeodata/build/v1\nadmin: bounds\ntimezones: tz\npoints:\n  - { reader: osm, source: osm }\n  - { reader: geonames, source: gn, extra: [gn-alt, gn-hier] }\nbuildings:\n  - { reader: osm, source: osm }\n  - { reader: msbuildings, source: ms }\ndem: dem\npopulation: pop\n";
+        let recipe: Recipe = serde_saphyr::from_str(yaml).unwrap();
+        let postal = ["gpo".to_string(), "bounds".to_string()];
+        assert_eq!(
+            recipe.inputs(&postal),
+            [
+                "osm", "gn", "gn-alt", "gn-hier", "bounds", "tz", "ms", "dem", "pop", "gpo"
+            ]
+        );
+        let bare: Recipe = serde_saphyr::from_str(
+            "schema: teigeodata/build/v1\nadmin: bounds\npoints:\n  - { reader: osm, source: osm }\n",
+        )
+        .unwrap();
+        assert_eq!(bare.inputs(&[]), ["osm", "bounds"]);
+    }
 
     #[test]
     fn a_dem_box_takes_the_tiles_of_the_extent_corners() {

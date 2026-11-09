@@ -531,13 +531,17 @@ it in `sources.lock` comes with the catalog (step 3.7).
 
 ## Run every stage (`make`)
 
-`forge make <cc> --release <v> [--lite] [--key <seed-file>] [--ids <registry>] [--force]` runs a
+`forge make <cc> --release <v> [--lite] [--key <seed-file>] [--ids <registry>] [--force] [--fetch]` runs a
 country's stages from its recipe, `data/countries/<cc>/build.yaml` (checked by
 `cargo xtask check-data`): `read` for each points source, `conflate` over them, `buildings`
 for each building source the build may read, `core`, `topology` for the admin source, `dem`
 (the recipe's `dem` tileset as a `dem-section` over the tiles holding the corners of its
 `extent`, when the build may read it; D-111), then `build`
 (D-095, [ADR-0035](../03-decisions/adr/ADR-0035-forge-architecture.md)).
+- **Fetch.** `--fetch` first brings every input the recipe names (points sources and their
+  extras, admin, timezones, buildings, DEM, population grid, postal sources), filtered by the
+  lite gate, into the store: pinned bytes only, from the mirror where there is one (D-127). It
+  is not part of any key.
 - **Keys.** A stage's key is a BLAKE3 hash of the stage name, the stage's code, its pinned
   inputs (ID, SHA-256 and size from `sources.lock`), its configuration (the profile, the
   arguments, the ID registry, the signing seed) and the keys of the stages it reads. The
