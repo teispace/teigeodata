@@ -25,7 +25,8 @@ A short status. The numbers and evidence live in each phase file and the
   unit populations (D-123), settlement rank (D-124) and a source's duplicates joined (D-125);
   golden on the product's search recall@1 0.859, pass 0.924; every pack carries its sources'
   notices (D-126). Next: 3.7 (gates in CI, the lite build from clean-room sources only,
-  `ACCURACY.md`).
+  `ACCURACY.md`). The CI data build needs the input mirror (D-127): the maintainer approves
+  publishing the `sources` release, then `cargo xtask mirror` uploads about 1.1 GB.
 - **In parallel (Phase 4):** the engine (4.1, D-113, D-114; Nepal timings in
   [phase-4 benches](../02-research/benches/phase-4.md#nepal-main-pack)) and the transport
   (4.4, D-112) are on `main`; the product's search is at parity with the spike (D-121:
