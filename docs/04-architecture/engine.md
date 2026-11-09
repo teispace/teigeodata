@@ -191,8 +191,8 @@ droppable suffix removed, 50 (D-121). The unit bonus does not count towards a st
 - **Metamorphic** (`tests/metamorphic.rs`): a synthetic country (and, ignored, a real pack
   through `TGD_PACK`) is split by the format writer into 2, 3 or 5 packs, added in both orders
   and with an overlapping copy; every `get`, `reverse`, `admin_at`, `tz_at`, `search` and
-  `within_bbox` answer, and `parent`, `ancestors` and `children` of the probes and of every
-  admin unit, matches the unsplit pack. Each part holds the ancestors of its rows (stubs,
+  `within_bbox` answer (searches include "Name, Parent" contexts), and `parent`, `ancestors`
+  and `children` of the probes and of every admin unit, matches the unsplit pack. Each part holds the ancestors of its rows (stubs,
   D-143). Also: a newer release wins with its tombstones and redirects; priority and the
   baseline order the layers.
 - **Differential:** a delta layer over a base matches the compacted pack built by the writer.

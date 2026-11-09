@@ -98,13 +98,19 @@ fn probes(model: &Model, seed: u64, n: usize) -> Probes {
         let Some(first) = model.names[row].first() else {
             continue;
         };
-        // A comma starts a context ("Name, Parent"), matched against the row's ancestors in
-        // its own pack. Split packs do not carry a parent across packs yet (the cross-pack
-        // hierarchy item of phase 4.1), so a context answer may change with the split; the
-        // query keeps only the name until then.
+        // A name's own commas would start a context: the plain probes keep the name before one.
         let t = first.text.split(',').next().unwrap_or_default().to_string();
         let chars: Vec<char> = t.chars().collect();
         queries.push(t.clone());
+        // "Name, Parent": the context matches the row's ancestors in its own pack, which every
+        // part holds as stubs (D-143), so the answer does not depend on the split.
+        let parent = model.parents.get(row).copied().flatten();
+        if let Some(parent_name) = parent.and_then(|q| model.names[q as usize].first()) {
+            let pt = parent_name.text.split(',').next().unwrap_or_default();
+            queries.push(format!("{t}, {pt}"));
+            let cut: String = pt.chars().take(4).collect();
+            queries.push(format!("{t}, {cut}"));
+        }
         queries.push(t.to_uppercase());
         queries.push(t.replace(' ', ""));
         let cut = 3 + r.below(3) as usize;
@@ -260,6 +266,28 @@ fn gate(model: &Model, whole: &[u8], parts: usize, seed: u64, n: usize) {
     assert!(want.tz_of.iter().any(Option::is_some));
     assert!(want.boxes.iter().filter(|b| b.len() > 1).count() > n / 4);
     assert!(want.search.iter().filter(|h| !h.is_empty()).count() > n);
+    // Context queries are among the probes, and some put another place first than the name
+    // alone does.
+    let by_query: std::collections::HashMap<&str, &Vec<(Key, i32)>> = p
+        .queries
+        .iter()
+        .map(String::as_str)
+        .zip(&want.search)
+        .collect();
+    let changed = p
+        .queries
+        .iter()
+        .filter_map(|q| q.split_once(", ").map(|(name, _)| (q, name)))
+        .filter(|(q, name)| {
+            // The top hit: the probes ask for different k.
+            let top = |a: &&Vec<(Key, i32)>| a.first().map(|h| h.0.0);
+            by_query.get(name).map(top) != by_query.get(q.as_str()).map(top)
+        })
+        .count();
+    assert!(
+        changed > n / 20,
+        "{changed} context queries change the answer"
+    );
     assert!(want.family.iter().any(|f| f.1.len() > 1));
     assert!(want.family.iter().any(|f| f.2.len() > 1));
 

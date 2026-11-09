@@ -59,8 +59,10 @@ call (ADR-0012).
 - [x] `children`/`ancestors` across packs (D-143, 2026-11-09): by ancestor stubs, no format
   change; the metamorphic gate compares the hierarchy on synthetic and Nepal splits. Nepal,
   1/3/10 layers: `ancestors` 307/967/2,396 ns, `children` 6.9/34.6/104.6 µs
-- [ ] A search context (`Lahachowk, Kaski`) split-invariant: it matches ancestors in the row's
-  own pack (D-119); with stubs every pack holds them, so the split gate can add comma queries
+- [x] A search context (`Lahachowk, Kaski`) split-invariant (2026-11-09): it matches ancestors
+  in the row's own pack (D-119), which every pack holds as stubs (D-143); the metamorphic gate
+  now asks "Name, Parent" and "Name, Pare" queries on synthetic and Nepal splits, and a context
+  bonus planted to apply in one layer only fails it
 - [ ] Forge: split builds (city packs, grid tiles) write their places' ancestor stubs (D-143),
   gated by check-pack
 - [x] Snapshot swap: `arc-swap` against `RwLock` A/B in L5 (D-141, 2026-11-09): with 8
