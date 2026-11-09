@@ -13,7 +13,7 @@ use core::ops::{ControlFlow, Range};
 use teigeodata_core::{E6, E7, PlaceId, PlaceKind, Point};
 use teigeodata_format::Kind;
 use teigeodata_format::idmap::IdMap;
-use teigeodata_format::place_index::{Neighbour, PlaceIndex};
+use teigeodata_format::place_index::{Neighbour, PlaceIndex, Rect};
 use teigeodata_format::redirects::Fate;
 use teigeodata_format::region::Region;
 use teigeodata_format::search::fuzzy::{Fuzzy, MAX_CHARS};
@@ -177,6 +177,18 @@ fn regions_into(region: &Region<'_>, at: Point<E7>, buf: &mut Vec<u32>) -> usize
         }
         buf.resize(n, 0);
     }
+}
+
+/// Whether a layer's coverage box (1e-7°) can meet the query box (1e-6°); true without a box
+/// and for boxes across the antimeridian, which are not pruned.
+fn meets(bbox: Option<teigeodata_format::Bbox>, rect: &Rect) -> bool {
+    let Some(b) = bbox else { return true };
+    if b.min.lon() > b.max.lon() || rect.min_lon > rect.max_lon {
+        return true;
+    }
+    let mut cover = Rect::around_e7(b.min.lat(), b.min.lon());
+    cover.grow(&Rect::around_e7(b.max.lat(), b.max.lon()));
+    cover.intersects(rect)
 }
 
 /// A lower bound on the haversine between `at` and any point of the box: from the latitude
@@ -438,6 +450,93 @@ impl Engine {
             want = want.saturating_mul(2);
         }
         Ok(())
+    }
+
+    /// The places whose point is in `rect` (edges included; `min_lon > max_lon` crosses the
+    /// antimeridian), in ID order, at most `limit`, into `out`. Asks the layers whose box meets
+    /// `rect`; each gives its visible places with the smallest IDs, and a k-way merge by ID
+    /// keeps the first `limit`.
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if a section it reads is corrupt.
+    pub fn within_bbox(
+        &self,
+        rect: Rect,
+        limit: usize,
+        s: &mut Scratch,
+        out: &mut Vec<Place>,
+    ) -> Result<(), Error> {
+        out.clear();
+        s.near.clear();
+        s.segs.clear();
+        if limit == 0 {
+            return Ok(());
+        }
+        for (i, l) in self.layers.iter().enumerate() {
+            let v = l.views();
+            let (Some(index_), Some(ids)) = (&v.place_index, &v.ids) else {
+                continue;
+            };
+            if !meets(l.bbox(), &rect) {
+                continue;
+            }
+            l.ensure(Kind::PLACE_INDEX)?;
+            l.ensure(Kind::PLACES)?;
+            l.ensure(Kind::IDMAP)?;
+            let start = s.near.len();
+            let me = index(i);
+            let near = &mut s.near;
+            let _ = index_.within(rect, |row| {
+                if let Some(id) = ids.id(row) {
+                    near.push(NearCand {
+                        haversine: 0.0,
+                        id: id.get(),
+                        layer: me,
+                        row: index(row),
+                    });
+                }
+                ControlFlow::Continue(())
+            });
+            s.near
+                .get_mut(start..)
+                .unwrap_or_default()
+                .sort_unstable_by_key(|c| c.id);
+            let mut kept = start;
+            for j in start..s.near.len() {
+                if kept - start == limit {
+                    break;
+                }
+                let Some(c) = s.near.get(j).copied() else {
+                    break;
+                };
+                let Some(id) = PlaceId::from_raw(c.id) else {
+                    continue;
+                };
+                if self.claimed_above(i, id)? {
+                    continue;
+                }
+                if let Some(slot) = s.near.get_mut(kept) {
+                    *slot = c;
+                }
+                kept += 1;
+            }
+            s.near.truncate(kept);
+            s.segs.push(start..kept);
+        }
+        let (near, segs, heads) = (&s.near, &s.segs, &mut s.heads);
+        merge(
+            near,
+            segs,
+            heads,
+            limit,
+            |a, b| a.id < b.id,
+            |c| {
+                if let Some(place) = self.place(c.layer as usize, c.row as usize)? {
+                    out.push(place);
+                }
+                Ok(())
+            },
+        )
     }
 
     /// The admin units holding `at`, every level, coarse to fine, into `out`, from the layer

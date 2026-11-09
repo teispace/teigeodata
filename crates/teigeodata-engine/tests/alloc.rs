@@ -1,5 +1,5 @@
 //! M1 for the engine: a warm query writes into caller-owned scratch and output buffers and does
-//! not allocate. `get`, `reverse`, `admin_at` and `tz_at` allocate nothing; `search` allocates
+//! not allocate. `get`, `reverse`, `admin_at`, `tz_at` and `within_bbox` allocate nothing; `search` allocates
 //! only its folded query (`teigeodata_names::fold` returns a `String`).
 
 #![allow(
@@ -15,7 +15,7 @@ use std::cell::Cell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use common::synthetic;
-use teigeodata_engine::{Engine, Layer, LayerOptions, Scratch};
+use teigeodata_engine::{Engine, Layer, LayerOptions, Rect, Scratch};
 
 struct Counting;
 
@@ -84,6 +84,13 @@ fn warm_queries_do_not_allocate() {
                 e.reverse(at, 10, s, near).unwrap();
                 e.admin_at(at.to_e7(), s, admin).unwrap();
                 e.tz_at(at.to_e7()).unwrap();
+                let rect = Rect {
+                    min_lat: at.lat() - 50_000,
+                    max_lat: at.lat() + 50_000,
+                    min_lon: at.lon() - 50_000,
+                    max_lon: at.lon() + 50_000,
+                };
+                e.within_bbox(rect, 20, s, admin).unwrap();
             }
         };
         // Warm: first use verifies sections and grows the scratch.

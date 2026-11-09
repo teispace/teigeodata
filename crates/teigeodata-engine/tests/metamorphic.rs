@@ -19,7 +19,7 @@ mod common;
 
 use common::{EAST, Model, NORTH, Rng, SOUTH, WEST, synthetic};
 use teigeodata_core::{E6, E7, Namespace, PlaceId, PlaceKind, Point};
-use teigeodata_engine::{Engine, Layer, LayerOptions, Place, Scratch};
+use teigeodata_engine::{Engine, Layer, LayerOptions, Place, Rect, Scratch};
 
 /// Everything about a place that does not depend on which pack holds it.
 type Key = (
@@ -131,6 +131,7 @@ struct Answers {
     admin: Vec<Vec<Key>>,
     tz: Vec<Option<Key>>,
     search: Vec<Vec<(Key, i32)>>,
+    boxes: Vec<Vec<Key>>,
 }
 
 fn answers(e: &Engine, p: &Probes) -> Answers {
@@ -144,6 +145,8 @@ fn answers(e: &Engine, p: &Probes) -> Answers {
     let mut reverse = Vec::new();
     let mut admins = Vec::new();
     let mut tz = Vec::new();
+    let mut boxes = Vec::new();
+    let mut inside = Vec::new();
     for (i, &at) in p.points.iter().enumerate() {
         let k = [1, 7, 30][i % 3];
         e.reverse(at.to_e6(), k, &mut s, &mut near).unwrap();
@@ -155,6 +158,17 @@ fn answers(e: &Engine, p: &Probes) -> Answers {
         e.admin_at(at, &mut s, &mut admin).unwrap();
         admins.push(admin.iter().map(|x| key(e, x)).collect());
         tz.push(e.tz_at(at).unwrap().map(|x| key(e, &x)));
+        let half = [2_000, 30_000, 400_000][i % 3];
+        let c = at.to_e6();
+        let rect = Rect {
+            min_lat: c.lat() - half,
+            max_lat: c.lat() + half,
+            min_lon: c.lon() - half,
+            max_lon: c.lon() + half,
+        };
+        e.within_bbox(rect, [3, 50, 400][i % 3], &mut s, &mut inside)
+            .unwrap();
+        boxes.push(inside.iter().map(|x| key(e, x)).collect());
     }
     let mut search = Vec::new();
     for (i, q) in p.queries.iter().enumerate() {
@@ -168,6 +182,7 @@ fn answers(e: &Engine, p: &Probes) -> Answers {
         admin: admins,
         tz,
         search,
+        boxes,
     }
 }
 
@@ -181,6 +196,7 @@ fn gate(model: &Model, whole: &[u8], parts: usize, seed: u64, n: usize) {
     assert!(want.reverse.iter().all(|r| !r.is_empty()));
     assert!(want.admin.iter().any(|a| a.len() > 1));
     assert!(want.tz.iter().any(Option::is_some));
+    assert!(want.boxes.iter().filter(|b| b.len() > 1).count() > n / 4);
     assert!(want.search.iter().filter(|h| !h.is_empty()).count() > n);
 
     let salt = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15);
@@ -374,6 +390,42 @@ fn priority_and_the_baseline_order_layers() {
     // The baseline answers a point only where nothing covers it: here it is the only layer.
     let at = Point::<E6>::from_degrees(28.0, 84.0).unwrap().to_e7();
     assert!(e.tz_at(at).unwrap().is_some());
+}
+
+/// `within_bbox` against a scan of the model: every place in the box, by ID, the first `limit`.
+#[test]
+fn within_bbox_matches_a_scan() {
+    let model = synthetic(1500, 13);
+    let packs = model.split(3, |r, _| r as usize % 3);
+    let e = engine(&packs);
+    let (mut s, mut out) = (Scratch::default(), Vec::new());
+    let mut r = Rng(5);
+    for i in 0..200 {
+        let c = model.points[r.below(model.points.len() as u64) as usize];
+        let half = 1_000 + r.below(500_000) as i32;
+        let rect = Rect {
+            min_lat: c.lat() - half,
+            max_lat: c.lat() + half,
+            min_lon: c.lon() - half,
+            max_lon: c.lon() + half,
+        };
+        let limit = [1, 10, 1000][i % 3];
+        e.within_bbox(rect, limit, &mut s, &mut out).unwrap();
+        let mut want: Vec<u64> = model
+            .points
+            .iter()
+            .zip(&model.ids)
+            .filter(|(p, _)| {
+                (rect.min_lat..=rect.max_lat).contains(&p.lat())
+                    && (rect.min_lon..=rect.max_lon).contains(&p.lon())
+            })
+            .map(|(_, id)| id.get())
+            .collect();
+        want.sort_unstable();
+        want.truncate(limit);
+        let got: Vec<u64> = out.iter().map(|p| p.id.get()).collect();
+        assert_eq!(got, want, "box {i}");
+    }
 }
 
 /// The gate on a real pack: `TGD_PACK=data/build/pack/np/np-places-main.tgd cargo test

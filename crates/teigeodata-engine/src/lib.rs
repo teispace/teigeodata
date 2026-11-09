@@ -44,6 +44,7 @@ use core::fmt;
 pub use layer::{Layer, LayerId, LayerOptions, Load, Verify, release_cmp};
 pub use query::{Hit, Near, Place, Scratch};
 pub use teigeodata_format::Kind;
+pub use teigeodata_format::place_index::Rect;
 
 /// Why the engine could not open a pack or answer a query.
 #[derive(Debug)]
