@@ -88,16 +88,17 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 - [ ] The DEM section in the Nepal packs: its own component, tiles masked to the country
 - [x] Elevation at each place's consensus point from the DEM section into PLACES column 7
   (D-109, D-111): `forge make` runs the recipe's `dem` tileset as a stage, `build` samples it
-  at every place's final point and checks every row on read back. Nepal main: 96,839 of
-  96,847 places, PLACES +129,872 B (10.7 bits per place); against GeoNames' SRTM3 field
+  at every place's final point and checks every row on read back. Nepal main: 101,542 of
+  101,550 places (with D-110's admin places), PLACES +129,872 B (10.7 bits per place) on the
+  earlier 96,847; against GeoNames' SRTM3 field
   P90 130 m at the place's point, 26 m at the record's own point. Lite has none (Copernicus
   is main only, D-031)
 - [ ] Elevation in the lite build: a NASADEM section (CC0, EGM96 heights to EGM2008, 3601 ×
   3601 tiles that `dem-section` does not take yet), or Copernicus once Q-008 clears it
 - [ ] Surveyed heights for summits (D-089; moved from 3.2)
-- [ ] Every GeoNames admin record linked to its COD-AB unit, with its names: none reaches the
-  pack today, so 94 of 512 golden queries cannot pass (pack evaluator: pass 0.754, 0.923 on
-  the answerable ones)
+- [ ] Review the consensus point where it moves a hill settlement far from its records: the
+  height there differs from GeoNames' SRTM3 by more than 100 m for 14,597 records (P90 130 m,
+  26 m at the records' own points); review with the consensus gate
 
 ### 3.5 Postal
 - [x] `data/countries/np/postal.yaml`, the POSTAL section (D-090, D-105), its queries and the
@@ -125,6 +126,8 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 
 ### 3.7 Gates, lite and accuracy
 - [ ] G-det, G-lic, G-topo, G-pip, G-conf, G-corr, G-budget in CI
+- [ ] Attribution in every pack (D-031): the sources' notices, including Copernicus now that
+  main packs carry its heights
 - [ ] The lite build from clean-room sources only
 - [ ] `ACCURACY.md` for Nepal against held-out truth
 
@@ -152,3 +155,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | 3.6: D-060's alias rules built into the build (D-107) | the build carried every member's names; S3 chose the fold exemption (recall@1 0.957 against 0.949) |
 | 2026-11-09 | 3.6: admin records linked, former units kept (D-110) | `pack-eval` showed 94 golden queries with no answer in the pack, all GeoNames admin records |
 | 2026-11-09 | 3.4: place elevations built (D-111); lite elevation and summit heights made their own items | Copernicus is main only; the lite DEM needs NASADEM in `dem-section` |
+| 2026-11-09 | 3.4/3.6/3.7: the admin-record item closed by D-110; consensus-height review and pack attribution added | elevations merged with D-110; main packs now carry Copernicus-derived heights |
