@@ -57,6 +57,9 @@ struct Source {
     countries: Vec<String>,
     /// What reads it (a spike, a forge stage).
     used_by: String,
+    /// The notice every pack built from it carries (D-126): one line, at most
+    /// [`ATTRIBUTION_MAX`] bytes, no control characters.
+    attribution: String,
     /// `sparql` only: the query template and its parameters.
     #[serde(default)]
     query: Option<String>,
@@ -69,6 +72,9 @@ struct Source {
 }
 
 /// The source IDs of a lock text; empty when it does not parse (`check_text` reports that).
+/// The longest notice of one source: a pack's notices share 8 KiB of its manifest.
+const ATTRIBUTION_MAX: usize = 512;
+
 pub(crate) fn ids(text: &str) -> BTreeSet<String> {
     toml::from_str::<Lock>(text)
         .map(|l| l.sources.into_iter().map(|s| s.id).collect())
@@ -108,10 +114,16 @@ pub(crate) fn check_text(
             ("version", &s.version),
             ("licence", &s.licence),
             ("used_by", &s.used_by),
+            ("attribution", &s.attribution),
         ] {
             if v.trim().is_empty() {
                 p.push(format!("{at}: {field} is empty"));
             }
+        }
+        if s.attribution.len() > ATTRIBUTION_MAX || s.attribution.chars().any(char::is_control) {
+            p.push(format!(
+                "{at}: attribution must be one line of at most {ATTRIBUTION_MAX} bytes"
+            ));
         }
         if !s.url.starts_with("https://") {
             p.push(format!("{at}: url must be https"));
@@ -297,6 +309,7 @@ licence = "ODbL-1.0"
 licence_class = "odbl"
 countries = ["NP"]
 used_by = "spike S5"
+attribution = "© OpenStreetMap contributors, ODbL 1.0"
 "#;
 
     #[test]
@@ -405,6 +418,21 @@ used_by = "spike S5"
             (
                 "used_by = \"spike S5\"",
                 "used_by = \"spike S5\"\nnotes = \"x\"",
+                "not a valid lock",
+            ),
+            (
+                "attribution = \"© OpenStreetMap contributors, ODbL 1.0\"",
+                "attribution = \"\"",
+                "attribution is empty",
+            ),
+            (
+                "attribution = \"© OpenStreetMap contributors, ODbL 1.0\"",
+                "attribution = \"a\\nb\"",
+                "one line",
+            ),
+            (
+                "\nattribution = \"© OpenStreetMap contributors, ODbL 1.0\"",
+                "",
                 "not a valid lock",
             ),
         ];

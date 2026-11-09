@@ -27,6 +27,8 @@ pub(crate) struct Source {
     pub(crate) sha256: String,
     pub(crate) size: u64,
     pub(crate) licence_class: String,
+    /// The notice a pack built from it carries (D-126).
+    pub(crate) attribution: String,
     #[serde(default)]
     pub(crate) query: Option<String>,
     #[serde(default)]

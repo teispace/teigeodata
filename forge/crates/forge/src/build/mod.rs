@@ -186,14 +186,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
     let a = Args::parse(args)?;
     let lock = Lock::read(&root.join("data/sources.lock"))?;
-    let Gated {
-        sources,
-        tz,
-        postal,
-        dem,
-        population,
-        skipped,
-    } = gate(root, &a, &lock)?;
+    let g = gate(root, &a, &lock)?;
 
     let build = root.join("data/build");
     let profile = Profile::read(root, &a.cc)?;
@@ -214,7 +207,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     } = cluster_places(
         &build,
         &a.sources,
-        &sources,
+        &g.sources,
         &units,
         &core,
         (&namer, profile.phonetic),
@@ -225,12 +218,16 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let mut places: Vec<Place> = units.places;
     places.extend(clustered);
     let current = places.get(..unit_count).unwrap_or_default();
-    if let Some(country) = country_place(&build, &sources, &profile, current, &mut naming)? {
+    if let Some(country) = country_place(&build, &g.sources, &profile, current, &mut naming)? {
         places.push(country);
     }
     admin.added = link_admins(&mut places, std::mem::take(&mut admin.links));
     let coverage = units.coverage.ok_or("the boundary source has no units")?;
-    let grid = population.map(|id| lock.path(root, &id)).transpose()?;
+    let grid = g
+        .population
+        .as_deref()
+        .map(|id| lock.path(root, id))
+        .transpose()?;
     let modelled = population::run(grid.as_slice(), &units.levels, coverage, &mut places)?;
     let out_dir = build.join("pack").join(&a.cc);
     fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
@@ -240,14 +237,14 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         a.release.as_str(),
         a.lite,
     );
-    let corrected = corrections::run(root, who, &sources, &mut places, &units.levels, &out_dir)?;
-    let zones = tz.as_deref().map_or_else(
+    let corrected = corrections::run(root, who, &g.sources, &mut places, &units.levels, &out_dir)?;
+    let zones = g.tz.as_deref().map_or_else(
         || Ok(Zones::default()),
         |id| zone_places(root, &lock, id, coverage),
     )?;
     places.extend(zones.places.iter().cloned());
     let unnamed = keep_named(&mut places) + unnamed_clusters;
-    let elevations = elevation::load(root, dem.as_deref(), &places)?;
+    let elevations = elevation::load(root, g.dem.as_deref(), &places)?;
 
     let file = out_dir.join(format!("{}-places-{}.tgd", a.cc, a.build_name()));
     let registry = registry(root, a.ids.as_deref())?;
@@ -266,30 +263,35 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         registry: &registry,
         ids_file: &out_dir.join(format!("{}-ids-{}.tsv", a.cc, a.build_name())),
         geometry: geometry.as_ref(),
-        postal: postal.as_ref(),
+        postal: g.postal.as_ref(),
         elevation: elevations.as_ref(),
+        attribution: &g.attribution,
     })?;
-    let mut summary = header(&a, places.len(), &sources, tz.as_deref());
-    let postal_notes = postal.as_ref().map_or(&[][..], |p| p.notes.as_slice());
-    notes(&mut summary, held, unnamed, &skipped, postal_notes);
+    let mut summary = header(&a, places.len(), &g.sources, g.tz.as_deref());
+    notes(&mut summary, held, unnamed, &g);
     summary.push_str(&naming.line());
     summary.push_str(&modelled.report);
     summary.push_str(&admin.line());
     summary.push_str(&dedupe::report(&merged, &out_dir, a.build_name())?);
     summary.push_str(&corrected);
     if let Some(e) = &elevations {
-        summary.push_str(&e.summary(&build, &sources, &places)?);
+        summary.push_str(&e.summary(&build, &g.sources, &places)?);
     }
     naming.write(&out_dir, a.build_name())?;
     modelled.write(&out_dir, a.build_name())?;
-    finish(summary, &report, (root, &out_dir, &file), a.build_name(), t)
+    finish(
+        (summary, &report, &g.attribution),
+        (root, &out_dir, &file),
+        a.build_name(),
+        t,
+    )
 }
 
-/// Writes `summary-<build>.md` (the build's lines, then the pack's report) and returns it with
-/// the pack's path and the time taken.
+/// Writes `summary-<build>.md` (the build's lines, then the pack's report) and
+/// `attribution-<build>.md` (the pack's notices, D-126), and returns the summary with the
+/// pack's path and the time taken.
 fn finish(
-    mut summary: String,
-    report: &str,
+    (mut summary, report, attribution): (String, &str, &str),
     (root, out_dir, file): (&Path, &Path, &Path),
     build: &str,
     t: Instant,
@@ -297,6 +299,12 @@ fn finish(
     summary.push('\n');
     summary.push_str(report);
     fs::write(out_dir.join(format!("summary-{build}.md")), &summary).map_err(|e| e.to_string())?;
+    let name = file.file_name().unwrap_or_default().to_string_lossy();
+    fs::write(
+        out_dir.join(format!("attribution-{build}.md")),
+        format!("# Attribution: {name}\n\n{attribution}\n"),
+    )
+    .map_err(|e| e.to_string())?;
     Ok(format!(
         "{summary}\n→ {} in {:.1?}",
         file.strip_prefix(root).unwrap_or(file).display(),
@@ -345,15 +353,21 @@ struct Gated {
     population: Option<String>,
     /// The sources not read, with their licence class.
     skipped: Vec<String>,
+    /// The notices of every source the build reads, one per line, in reading order (D-126).
+    attribution: String,
 }
 
 /// The schedule-time licence gate (G-lic): a source the build may not read is never opened.
 fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
     let mut skipped = Vec::new();
+    let mut read: Vec<&str> = Vec::new();
     let mut allowed = |id: &str| -> Result<bool, String> {
-        let class = lock.get(id)?.licence_class.clone();
+        let source = lock.get(id)?;
+        let class = &source.licence_class;
         let ok = !a.lite || LITE.contains(&class.as_str());
-        if !ok {
+        if ok {
+            read.push(source.id.as_str());
+        } else {
             skipped.push(format!("{id} ({class})"));
         }
         Ok(ok)
@@ -382,6 +396,16 @@ fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
         Some(id) if allowed(id)? => Some(id.clone()),
         _ => None,
     };
+    // The core run's buildings shape every place's point: each must be allowed.
+    for id in a.core.iter().flat_map(|run| run.split('+')) {
+        if !allowed(id)? {
+            return Err(format!(
+                "the core run {} reads {id}, which this build may not read",
+                a.core.as_deref().unwrap_or_default()
+            ));
+        }
+    }
+    let attribution = notices(lock, &read)?;
     Ok(Gated {
         sources,
         tz,
@@ -389,13 +413,39 @@ fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
         dem,
         population,
         skipped,
+        attribution,
     })
+}
+
+/// The notices of the sources `read`, once each in order, one per line: the pack's
+/// `attribution` (D-126). Refuses a set over the manifest's text limit.
+fn notices(lock: &Lock, read: &[&str]) -> Result<String, String> {
+    let mut lines: Vec<&str> = Vec::new();
+    for id in read {
+        let n = lock.get(id)?.attribution.trim();
+        if n.is_empty() || n.contains('\n') {
+            return Err(format!("{id}: its attribution must be one non-empty line"));
+        }
+        if !lines.contains(&n) {
+            lines.push(n);
+        }
+    }
+    let text = lines.join("\n");
+    if text.len() > teigeodata_format::MAX_TEXT {
+        return Err(format!(
+            "the sources' notices are {} bytes, over the manifest's {}",
+            text.len(),
+            teigeodata_format::MAX_TEXT
+        ));
+    }
+    Ok(text)
 }
 
 /// The summary's notes: postal codes left out, places held at their seed point, left out,
 /// and sources not read.
-fn notes(summary: &mut String, held: usize, unnamed: usize, skipped: &[String], postal: &[String]) {
-    for n in postal {
+fn notes(summary: &mut String, held: usize, unnamed: usize, g: &Gated) {
+    let skipped = &g.skipped;
+    for n in g.postal.iter().flat_map(|p| &p.notes) {
         let _ = writeln!(*summary, "Postal: {n}.");
     }
     if held > 0 {
@@ -698,5 +748,55 @@ mod tests {
         assert_eq!(p.unit_of("codabx-np", "admin:NP0329401", 3), 0);
         assert_eq!(p.unit_of("codab-np-geojson", "admin:NP03", 3), 0);
         assert_eq!(p.unit_of("codab-np-geojson", "geonames:1", 3), 0);
+    }
+
+    #[test]
+    fn a_pack_carries_the_notices_of_what_it_reads() {
+        let source = |id: &str, class: &str, notice: &str| {
+            format!(
+                "[[source]]\nid = \"{id}\"\nkind = \"http\"\nurl = \"https://x/{id}\"\nsha256 = \"00\"\nsize = 1\nlicence_class = \"{class}\"\nattribution = \"{notice}\"\n\n"
+            )
+        };
+        let text = [
+            source("osm", "odbl", "© OpenStreetMap contributors, ODbL"),
+            source("gn", "cc-by", "GeoNames, CC BY 4.0"),
+            source("gn-alt", "cc-by", "GeoNames, CC BY 4.0"),
+            source("bounds", "cc-by", "Boundaries, CC BY-IGO"),
+            source("ms", "cc-by", "Microsoft buildings, CDLA"),
+        ]
+        .concat();
+        let lock: crate::lock::Lock = toml::from_str(&text).unwrap();
+        let root = Path::new("/nonexistent-forge-root");
+        let args = |extra: &[&str]| {
+            let mut v: Vec<String> = ["xx", "--release", "1.0.0", "--admin", "bounds"]
+                .iter()
+                .chain(extra)
+                .map(ToString::to_string)
+                .collect();
+            v.extend(["osm", "gn", "gn-alt"].map(String::from));
+            super::Args::parse(&v).unwrap()
+        };
+        // Main: every source read, a shared notice once, in reading order (the core run last).
+        let main = super::gate(root, &args(&["--core", "osm+ms"]), &lock).unwrap();
+        assert_eq!(
+            main.attribution,
+            "© OpenStreetMap contributors, ODbL\nGeoNames, CC BY 4.0\nBoundaries, CC BY-IGO\nMicrosoft buildings, CDLA"
+        );
+        // Lite: the ODbL source is not read, so its notice is not carried.
+        let lite = super::gate(root, &args(&["--lite", "--core", "ms"]), &lock).unwrap();
+        assert_eq!(
+            lite.attribution,
+            "GeoNames, CC BY 4.0\nBoundaries, CC BY-IGO\nMicrosoft buildings, CDLA"
+        );
+        // Lite refuses a core run with a source it may not read.
+        let refused = super::gate(root, &args(&["--lite", "--core", "osm+ms"]), &lock);
+        assert!(refused.is_err_and(|e| e.contains("core run osm+ms reads osm")));
+        // Notices over the manifest's limit are refused.
+        let long = "n".repeat(teigeodata_format::MAX_TEXT);
+        let big: crate::lock::Lock =
+            toml::from_str(&[source("a", "cc-by", &long), source("b", "cc-by", "b")].concat())
+                .unwrap();
+        assert!(super::notices(&big, &["a", "b"]).is_err());
+        assert!(super::notices(&big, &["a"]).is_ok());
     }
 }

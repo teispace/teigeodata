@@ -22,6 +22,7 @@ licence = "ODbL-1.0"
 licence_class = "odbl"
 countries = ["NP"]
 used_by = "spike S5 (main build only)"
+attribution = "© OpenStreetMap contributors, under the Open Database License 1.0 (https://www.openstreetmap.org/copyright)"
 
 [[source]]
 id = "geonames-np"
@@ -37,6 +38,7 @@ licence = "CC-BY-4.0"
 licence_class = "cc-by"
 countries = ["NP"]
 used_by = "spikes S1, S2, S3, S5"
+attribution = "GeoNames (https://www.geonames.org), CC BY 4.0"
 
 [[source]]
 id = "geonames-alternate-names"
@@ -52,6 +54,7 @@ licence = "CC-BY-4.0"
 licence_class = "cc-by"
 countries = ["*"]
 used_by = "spike S5"
+attribution = "GeoNames (https://www.geonames.org), CC BY 4.0"
 
 [[source]]
 id = "geonames-hierarchy"
@@ -67,6 +70,7 @@ licence = "CC-BY-4.0"
 licence_class = "cc-by"
 countries = ["*"]
 used_by = "spike S5"
+attribution = "GeoNames (https://www.geonames.org), CC BY 4.0"
 
 [[source]]
 id = "codab-np-xlsx"
@@ -81,6 +85,7 @@ licence = "CC-BY-IGO-3.0"
 licence_class = "cc-by-igo"
 countries = ["NP"]
 used_by = "spikes S3, S5"
+attribution = "Administrative boundaries: Survey Department of Nepal and UN Resident Coordinator's Office in Nepal, via OCHA HDX (cod-ab-npl), CC BY-IGO 3.0"
 
 [[source]]
 id = "codab-np-geojson"
@@ -95,6 +100,7 @@ licence = "CC-BY-IGO-3.0"
 licence_class = "cc-by-igo"
 countries = ["NP"]
 used_by = "spike S5 (Q-010, point in polygon)"
+attribution = "Administrative boundaries: Survey Department of Nepal and UN Resident Coordinator's Office in Nepal, via OCHA HDX (cod-ab-npl), CC BY-IGO 3.0"
 
 
 [[source]]
@@ -111,6 +117,7 @@ licence = "none stated on the page (Q-009 asks the department)"
 licence_class = "proprietary"
 countries = ["NP"]
 used_by = "postal codes of Nepal (step 3.5): the check of data/countries/np/postal-codes.tsv"
+attribution = "Postal codes: General Post Office, Department of Postal Services, Government of Nepal (https://gpo.gov.np)"
 [[source]]
 id = "wikidata-np"
 title = "Wikidata places in Nepal with a coordinate (QLever snapshot)"
@@ -125,6 +132,7 @@ licence = "CC0-1.0"
 licence_class = "cc0"
 countries = ["NP"]
 used_by = "spike S5"
+attribution = "Wikidata (https://www.wikidata.org), CC0 1.0"
 query = "forge/queries/wikidata-places.rq"
 query_params = { COUNTRY = "wd:Q837" }
 
@@ -141,6 +149,7 @@ licence = "ODbL-1.0"
 licence_class = "odbl"
 countries = ["*"]
 used_by = "spike S2 (main build only)"
+attribution = "Time zones: timezone-boundary-builder 2026f by Evan Siroky, from © OpenStreetMap contributors, ODbL 1.0"
 
 [[source]]
 id = "copernicus-glo30-np"
@@ -158,6 +167,7 @@ licence = "Copernicus DEM licence (fixed notice: © DLR e.V. 2010-2014 and © Ai
 licence_class = "proprietary"
 countries = ["NP"]
 used_by = "spike S5.6 (DEM disagreement)"
+attribution = "Elevation: © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved"
 
 [[source]]
 id = "sliderule-atl08-np-2023"
@@ -176,6 +186,7 @@ licence = "NASA Earth science data, no restriction on use (NASA ESDIS data polic
 licence_class = "public-domain"
 countries = ["NP"]
 used_by = "spike S6 (elevation reference)"
+attribution = "ICESat-2 ATL08 land segments: NASA NSIDC DAAC, subset by SlideRule (University of Washington, NASA GSFC)"
 
 [[source]]
 id = "egm2008-5"
@@ -190,6 +201,7 @@ licence = "Computed from NGA EGM2008, released for public use (exact wording unv
 licence_class = "public-domain"
 countries = ["*"]
 used_by = "spike S6 (ellipsoidal to EGM2008 heights)"
+attribution = "Geoid: EGM2008 by the US National Geospatial-Intelligence Agency, gridded by GeographicLib"
 
 [[source]]
 id = "nasadem-np"
@@ -206,6 +218,7 @@ licence = "NASA data, no restriction on use (public domain); credit NASA JPL / L
 licence_class = "public-domain"
 countries = ["NP"]
 used_by = "spike S6.3 (the lite-build DEM against ATL08)"
+attribution = "Elevation: NASADEM, NASA JPL and LP DAAC"
 
 [[source]]
 id = "egm96-5"
@@ -220,6 +233,7 @@ licence = "Computed from NGA/NASA EGM96, released for public use (exact wording 
 licence_class = "public-domain"
 countries = ["*"]
 used_by = "spike S6.3 (EGM96 DEMs to EGM2008)"
+attribution = "Geoid: EGM96 by NGA and NASA, gridded by GeographicLib"
 
 [[source]]
 id = "msbuildings-np"
@@ -238,6 +252,7 @@ licence = "CDLA-Permissive-2.0 (repository README and LICENSE, read 2026-11-07);
 licence_class = "cdla-permissive"
 countries = ["NP"]
 used_by = "phase 3 step 3.2 (settlement core, D-091)"
+attribution = "Buildings: Microsoft Global ML Building Footprints, CDLA-Permissive-2.0 (https://cdla.dev/permissive-2-0/)"
 
 [[source]]
 id = "google-buildings-v3-np"
@@ -254,6 +269,7 @@ licence = "CC-BY-4.0 (chosen of the CC BY 4.0 / ODbL dual licence); cite Sirko e
 licence_class = "cc-by"
 countries = ["NP"]
 used_by = "phase 3 step 3.2 (settlement core, D-091)"
+attribution = "Buildings: Google Open Buildings v3 (Sirko et al. 2021, arXiv:2107.12283), CC BY 4.0"
 
 [[source]]
 id = "worldpop-np"
@@ -270,3 +286,4 @@ licence = "CC-BY-4.0; cite WorldPop (www.worldpop.org), University of Southampto
 licence_class = "odbl"
 countries = ["NP"]
 used_by = "modelled population of admin units (D-123)"
+attribution = "Population: WorldPop (https://www.worldpop.org), University of Southampton, Global2 R2025A, doi:10.5258/SOTON/WP00839, CC BY 4.0"

@@ -464,6 +464,8 @@ fn product_search(pack_path: &str) -> Result<impl Fn(&str) -> Vec<(usize, i32)>,
         teigeodata_engine::LayerOptions::default(),
     )
     .map_err(|e| format!("{pack_path}: {e}"))?;
+    let notices = layer.attribution().map_or(0, |a| a.lines().count());
+    println!("attribution (D-126): {notices} notices");
     let mut real = teigeodata_engine::Engine::new();
     real.add(layer);
     let scratch = std::cell::RefCell::new((

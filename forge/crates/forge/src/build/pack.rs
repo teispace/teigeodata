@@ -52,6 +52,8 @@ pub(super) struct Input<'a> {
     pub(super) postal: Option<&'a super::postal::Postal>,
     /// Place elevations, one per place in `places`, when the build samples a DEM.
     pub(super) elevation: Option<&'a super::elevation::Elevations>,
+    /// The sources' notices, one per line (D-126).
+    pub(super) attribution: &'a str,
 }
 
 /// The search importance of a place, 0 to 130 as in spike S3 (D-052), from what every source
@@ -334,6 +336,14 @@ fn assemble(
     };
     w.manifest(Tag::BBOX, &bbox.to_bytes())
         .map_err(|e| e.to_string())?;
+    // ADR-0002: the main build is ODbL, the lite build CC BY 4.0.
+    let licence = if input.args.lite { "cc-by-4.0" } else { "odbl" };
+    w.manifest(Tag::LICENCE, licence.as_bytes())
+        .map_err(|e| e.to_string())?;
+    if !input.attribution.is_empty() {
+        w.manifest(Tag::ATTRIBUTION, input.attribution.as_bytes())
+            .map_err(|e| e.to_string())?;
+    }
     // The build ID: a hash of the forge version, the pinned sources and the command line.
     let mut h = blake3::Hasher::new();
     h.update(env!("CARGO_PKG_VERSION").as_bytes());
