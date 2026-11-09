@@ -1,7 +1,7 @@
 ---
 title: "Roadmap"
 status: living
-updated: 2026-11-07
+updated: 2026-11-09
 ---
 
 # Roadmap
@@ -19,7 +19,7 @@ After v1.0, coverage grows by data waves.
 | [1](phases/phase-1.md) | Core and format | 0 | **M1**: `core` types and codecs, `.tgd` reader/writer with every section kind, fuzzed, benchmarked, specified |
 | [2](phases/phase-2.md) | Indexes | 1 | **M2**: spatial index, exact region index (world timezone pack proven exact), search index with the phonetic key; all A/B-benchmarked (ID maps were done in B5, D-075) |
 | [3](phases/phase-3.md) | Forge and Nepal data | 1, 2 | **M3**: Nepal main and lite builds reproducible; geo-fix, conflation, hierarchy, names lexicon, postal, timezone; every QA gate; `ACCURACY.md` for Nepal |
-| 4 | Engine, baseline and sync | 2, 3 | **M4**: layered engine, embedded baseline, catalog, download and storage managers, delta updates (section re-download first), the 15 sync gates of ADR-0037, CLI `tgd` complete |
+| [4](phases/phase-4.md) | Engine, baseline and sync | 2, 3 | **M4**: layered engine, embedded baseline, catalog, download and storage managers, delta updates (section re-download first), the 15 sync gates of ADR-0037, CLI `tgd` complete |
 | 5 | Boundary and bindings | 4 | **M5**: C ABI, IDL, generators, every binding with packaging (Swift privacy manifest, Android `noCompress` for bundled packs), the parity gate and the X benchmarks green across all |
 | 6 | Servers | 4 | **M6**: MCP server (latest revision) and HTTP server, hosted-ready seams |
 | 7 | Docs site | 5, 6 | **M7**: Fumadocs site, generated reference, guides per language, per-country pages, playground |
@@ -51,3 +51,4 @@ parallel lanes: research notes, docs, one heavy build lane, one test or benchmar
 | 2026-11-07 | M0 met; phase 1 file | D-069 |
 | 2026-11-07 | M1 met; Phase 2 next, research first | D-080 |
 | 2026-11-07 | Phase 2 file; M2 no longer lists ID maps | D-081; done in B5 (D-075) |
+| 2026-11-09 | Phase 4 file drafted with its research notes | research first ([AGENTS.md](../../AGENTS.md) §4) |
