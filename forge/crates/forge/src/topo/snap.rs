@@ -383,7 +383,7 @@ mod tests {
     fn rounded_rings_never_cross() {
         for (size, spread) in [(40, 200), (2, 8)] {
             for seed in 1..2_000_u64 {
-                let mut r = Rng(seed * 0x9E37_79B9_7F4A_7C15);
+                let mut r = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15));
                 let rings: Vec<(u32, Vec<V>)> = (0..6)
                     .map(|u| {
                         let (cx, cy) = (r.below(spread), r.below(spread));
