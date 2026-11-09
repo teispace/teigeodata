@@ -5,6 +5,7 @@
 //! its keys. A hit is the first result whose group has grade ≥ 2; it passes within `max_rank`.
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::time::Instant;
 
 use serde::Deserialize;
@@ -174,5 +175,126 @@ pub fn print(s: &Scores, misses: bool) {
                 println!("  {m}");
             }
         }
+    }
+}
+
+/// Per class (and `all`): queries, hits at 1, hits at 5 and passes, as exact counts.
+fn counts(s: &Scores) -> BTreeMap<String, [u32; 4]> {
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "counts of queries"
+    )]
+    let int = |v: f64| v.round() as u32;
+    let mut out: BTreeMap<String, [u32; 4]> = BTreeMap::new();
+    let mut all = [0_u32; 4];
+    for (c, m) in &s.per {
+        let row = [int(m[0]), int(m[1]), int(m[2]), int(m[3])];
+        for (a, v) in all.iter_mut().zip(row) {
+            *a += v;
+        }
+        out.insert(c.clone(), row);
+    }
+    out.insert("all".to_string(), all);
+    out
+}
+
+/// The golden baseline of a pack (TSV: class, queries, hits@1, hits@5, passes): what
+/// [`gate`] holds a later build to. Written deliberately (`S3_GATE_WRITE`), checked in.
+#[must_use]
+pub fn baseline(s: &Scores) -> String {
+    let mut out = String::from("# golden baseline: class\tqueries\thits@1\thits@5\tpasses\n");
+    for (c, r) in counts(s) {
+        let _ = writeln!(out, "{c}\t{}\t{}\t{}\t{}", r[0], r[1], r[2], r[3]);
+    }
+    out
+}
+
+/// The golden gate: every class (and `all`) of the baseline must keep its query count and
+/// reach at least its hits@1, hits@5 and passes. Counts are exact, so there is no tolerance;
+/// latency is not gated (counts, not wall clock, gate CI). Returns the regressions.
+#[must_use]
+pub fn gate(s: &Scores, baseline: &str) -> Vec<String> {
+    let now = counts(s);
+    let mut problems = Vec::new();
+    for (i, line) in baseline.lines().enumerate() {
+        if line.starts_with('#') || line.trim().is_empty() {
+            continue;
+        }
+        let cells: Vec<&str> = line.split('\t').collect();
+        let nums: Option<Vec<u32>> = cells
+            .get(1..5)
+            .map(|c| c.iter().filter_map(|v| v.parse().ok()).collect());
+        let (Some(class), Some(want)) = (cells.first(), nums.filter(|n| n.len() == 4)) else {
+            problems.push(format!(
+                "baseline line {}: expected class and four counts",
+                i + 1
+            ));
+            continue;
+        };
+        let Some(got) = now.get(*class) else {
+            problems.push(format!("{class}: in the baseline, not in the golden set"));
+            continue;
+        };
+        if got[0] != want[0] {
+            problems.push(format!(
+                "{class}: {} queries, the baseline has {}: update the baseline with the golden set",
+                got[0], want[0]
+            ));
+        }
+        for (k, name) in [(1, "hits@1"), (2, "hits@5"), (3, "passes")] {
+            if got[k] < want[k] {
+                problems.push(format!("{class}: {name} {} < baseline {}", got[k], want[k]));
+            }
+        }
+    }
+    problems
+}
+
+#[cfg(test)]
+mod gate_tests {
+    use super::{Scores, baseline, gate};
+
+    fn scores(rows: &[(&str, [f64; 6])]) -> Scores {
+        Scores {
+            per: rows.iter().map(|(c, m)| ((*c).to_string(), *m)).collect(),
+            ..Scores::default()
+        }
+    }
+
+    #[test]
+    fn a_build_may_not_lose_a_golden_hit() {
+        let base = scores(&[
+            ("prefix", [40.0, 29.0, 39.0, 39.0, 0.8, 0.8]),
+            ("typo", [80.0, 62.0, 66.0, 66.0, 0.8, 0.8]),
+        ]);
+        let text = baseline(&base);
+        assert!(text.contains("all\t120\t91\t105\t105\n"), "{text}");
+        assert_eq!(gate(&base, &text), Vec::<String>::new());
+        // Better is fine.
+        let better = scores(&[
+            ("prefix", [40.0, 30.0, 39.0, 39.0, 0.8, 0.8]),
+            ("typo", [80.0, 62.0, 66.0, 66.0, 0.8, 0.8]),
+        ]);
+        assert_eq!(gate(&better, &text), Vec::<String>::new());
+        // One hit@1 lost in one class fails that class and all.
+        let worse = scores(&[
+            ("prefix", [40.0, 28.0, 39.0, 39.0, 0.8, 0.8]),
+            ("typo", [80.0, 62.0, 66.0, 66.0, 0.8, 0.8]),
+        ]);
+        let p = gate(&worse, &text);
+        assert_eq!(
+            p,
+            [
+                "all: hits@1 90 < baseline 91",
+                "prefix: hits@1 28 < baseline 29"
+            ]
+        );
+        // A changed golden set, a missing class and a bad line are reported.
+        let fewer = scores(&[("prefix", [39.0, 29.0, 39.0, 39.0, 0.8, 0.8])]);
+        let p = gate(&fewer, &text);
+        assert!(p.iter().any(|m| m.contains("prefix: 39 queries")));
+        assert!(p.iter().any(|m| m.starts_with("typo: in the baseline")));
+        assert_eq!(gate(&base, "prefix\t40\tx\n").len(), 1);
     }
 }

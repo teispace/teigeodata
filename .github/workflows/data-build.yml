@@ -1,0 +1,86 @@
+# The data build and its gates (docs/06-engineering/ci.md, phase 3 step 3.7): one job per pack
+# fetches the recipe's inputs (moving sources from the content-addressed mirror, D-127), builds
+# it, and gates it: G-det (the build stage run twice gives identical bytes), G-lic and the
+# notices (`cargo xtask check-pack`, D-126), G-corr (inside the build), and the golden gate on
+# the product's search against the checked-in baseline (no class may lose a hit).
+#
+# Manual until the mirror release `sources` is published; then add the weekly schedule:
+#   schedule:
+#     - cron: "41 3 * * 1"
+name: data-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Release version the packs are built as
+        default: 2026.11.0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-build-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RELEASE: ${{ inputs.release || '2026.11.0' }}
+
+jobs:
+  pack:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { cc: np, build: main, flag: "" }
+          - { cc: np, build: lite, flag: "--lite" }
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Free disk (inputs and build need about 15 GB)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            .
+            forge
+      - name: Build the forge and the evaluator
+        run: |
+          cargo build --manifest-path forge/Cargo.toml --profile fast --bin forge --locked
+          cargo build --release -p spike-s3-search --bin pack-eval --locked
+      - name: Fetch and build
+        run: forge/target/fast/forge make ${{ matrix.cc }} --release "$RELEASE" ${{ matrix.flag }} --fetch
+      - name: G-det (the build stage again, byte for byte)
+        run: |
+          dir=data/build/pack/${{ matrix.cc }}
+          pack=$dir/${{ matrix.cc }}-places-${{ matrix.build }}.tgd
+          cp "$pack" first.tgd
+          rm "$dir/.key-${{ matrix.build }}"
+          forge/target/fast/forge make ${{ matrix.cc }} --release "$RELEASE" ${{ matrix.flag }}
+          cmp first.tgd "$pack"
+      - name: G-lic and notices
+        run: cargo xtask check-pack data/build/pack/${{ matrix.cc }}/${{ matrix.cc }}-places-${{ matrix.build }}.tgd ${{ matrix.flag }}
+      - name: Golden gate (product search)
+        env:
+          S3_ENGINE: product
+          S3_GATE: tests/golden/${{ matrix.cc }}-baseline-${{ matrix.build }}.tsv
+        run: |
+          dir=data/build/pack/${{ matrix.cc }}
+          target/release/pack-eval "$dir/${{ matrix.cc }}-places-${{ matrix.build }}.tgd" \
+            tests/golden/${{ matrix.cc }}.yaml "$dir/${{ matrix.cc }}-ids-${{ matrix.build }}.tsv"
+      - name: Reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.cc }}-${{ matrix.build }}-reports
+          path: |
+            data/build/pack/${{ matrix.cc }}/*-${{ matrix.build }}.md
+            data/build/pack/${{ matrix.cc }}/*-${{ matrix.build }}.tsv
+          if-no-files-found: ignore

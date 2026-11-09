@@ -49,7 +49,10 @@ call (ADR-0012).
 - [x] Search parity with the spike: the country's query rules in the pack (D-120) and scored
   by the engine. Done 2026-11-09 (D-121): Nepal recall@1 0.797 against the spike's 0.801,
   recall@5 0.932 for both, p50 6.7 µs against 7.2 µs
-- [ ] The golden gate on the product's search in CI (with step 3.7)
+- [ ] The golden gate on the product's search in CI (with step 3.7). Written (D-128):
+  `pack-eval` with `S3_GATE` fails when any class loses a hit against
+  `tests/golden/<cc>-baseline-<build>.tsv`; the `data-build` workflow runs it once the mirror
+  exists
 - [ ] Radius queries (`within_radius`, `nearby`) and `children`/`ancestors` across packs
   (also makes a search context split-invariant: the split gate leaves comma queries out)
 - [ ] Snapshot swap: `arc-swap` against `RwLock` A/B in L5
@@ -134,3 +137,4 @@ call (ADR-0012).
 | 2026-11-09 | Step 4.1: engine, layers, queries and the metamorphic gate done; radius and cross-pack hierarchy split into their own item | D-113, D-114 |
 | 2026-11-09 | 4.1: the product's search scored and brought towards the spike; parity its own item | D-119: the golden gate measured the spike, not the engine |
 | 2026-11-09 | 4.1: parity done; the CI gate on the product its own item | D-121 |
+| 2026-11-09 | 4.1: the golden gate written against a checked-in baseline (D-128) | a CI gate needs a number to hold |

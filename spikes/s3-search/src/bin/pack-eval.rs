@@ -4,6 +4,7 @@
 //!
 //! Usage: `pack-eval <pack.tgd> <golden.yaml> <ids.tsv>`; `S3_MISSES=1` lists every miss and
 //! every expected key that does not resolve. The S3 A/B switches (`S3_NO_FUZZY`, …) apply.
+//! `S3_GATE=<baseline.tsv>` fails when a class loses a hit; `S3_GATE_WRITE=<file>` writes one.
 //!
 //! Golden expectations name source keys (`geonames:<id>`, `codab:<pcode>`); the ID registry
 //! the build wrote maps them to serials, and IDMAP serials to rows. A row is one entity (the
@@ -425,7 +426,31 @@ fn run(args: &[String]) -> Result<(), String> {
     if std::env::var_os("S3_MISSES").is_some() {
         print_gaps(&x);
     }
-    Ok(())
+    gate_or_write(&scores)
+}
+
+/// `S3_GATE_WRITE=<file>` writes the golden baseline; `S3_GATE=<file>` fails the run when a
+/// class loses a hit against it (the golden gate, phase 3.7).
+fn gate_or_write(scores: &golden::Scores) -> Result<(), String> {
+    if let Some(path) = std::env::var_os("S3_GATE_WRITE") {
+        std::fs::write(&path, golden::baseline(scores))
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        println!("baseline written: {}", path.display());
+    }
+    let Some(path) = std::env::var_os("S3_GATE") else {
+        return Ok(());
+    };
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let problems = golden::gate(scores, &text);
+    if problems.is_empty() {
+        println!("golden gate: ok against {}", path.display());
+        return Ok(());
+    }
+    Err(format!(
+        "golden gate failed against {}:\n  {}",
+        path.display(),
+        problems.join("\n  ")
+    ))
 }
 
 /// The expected keys that did not resolve and the queries with no answer in the pack.

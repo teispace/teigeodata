@@ -1,0 +1,13 @@
+# golden baseline: class	queries	hits@1	hits@5	passes
+abbreviation	41	39	41	41
+all	512	423	480	461
+ambiguous	41	34	41	34
+colloquial	14	11	14	14
+exact_latin	70	55	62	55
+exact_native	42	36	40	36
+historical	44	40	43	43
+mixed_script	35	31	35	35
+prefix	40	16	33	33
+typo	80	59	67	67
+variant	45	43	44	44
+with_context	60	59	60	59

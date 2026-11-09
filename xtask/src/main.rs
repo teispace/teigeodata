@@ -16,6 +16,7 @@ mod docs;
 mod golden;
 mod lexicon;
 mod mirror;
+mod pack;
 mod postal;
 mod recipe;
 mod romanise;
@@ -41,6 +42,9 @@ Tasks:
                     unit types, source codes), lexicon.yaml (IDs, NFC, scripts, variant
                     collisions, evidence) and golden query files; and data/sources.lock
                     (pins, licence classes, query templates).
+  check-pack <pack.tgd> [--lite]
+                    G-lic on a built pack: every section verified, the licence of its
+                    build, and in a lite pack only lite-class sources' notices (D-126).
   check-workspace   Check that the forge, bindings/ and the C ABI crate keep the main lint
                     table (boundary crates may only lower unsafe_code to deny).
   mirror [<id>…]    Upload the stored bytes of pinned sources (every source with a
@@ -71,6 +75,7 @@ fn main() -> ExitCode {
             }
         }
         "check-data" => report(data::check(&root)),
+        "check-pack" => report(pack::run(&root, rest)),
         "check-workspace" => report(workspace::check(&root)),
         "mirror" => report(mirror::run(&root, rest)),
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
