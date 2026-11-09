@@ -4,7 +4,11 @@
 //! Keys are a **scheme name** (`np`, `np-1991`, `gb`: ASCII `[a-z0-9-]`), a `0x00` byte, then
 //! the **canonical code**. One [automaton](crate::search::fst) holds every key, so a key's
 //! ordinal indexes its records and a prefix of a code is one ordinal range. Every record links
-//! to a PLACES row: the admin unit of an area code, a settlement for a post office.
+//! to a PLACES row: the admin unit of an area code, a settlement for a post office. Records are
+//! in key order, and consecutive records with the same place form a **run** that stores its
+//! place once: a Nepal local level's code and its wards are one run (30608, 3060801 …
+//! 3060832), and a set with one record per place costs nothing extra (the run starts ramp-code
+//! to zero bits).
 //!
 //! A [column table](teigeodata_core::table) with these columns:
 //!
@@ -13,14 +17,16 @@
 //! | 1 | [`LENGTH`] | one value: the automaton's length in bytes | required |
 //! | 2 | [`AUTOMATON`] | bytes: the automaton, zero-padded to a multiple of 4 | required |
 //! | 3 | [`STARTS`] | per key and one more: its first record, strictly increasing from 0 | required |
-//! | 4 | [`PLACE`] | per record: its PLACES row; within a key, strictly increasing | required |
-//! | 5 | [`KIND`] | per record: a [`CodeKind`] | optional (all areas) |
-//! | 6 | [`VALID_FROM`] | per record: days since 1970-01-01 plus 1; 0 = the scheme's | optional |
-//! | 7 | [`VALID_TO`] | per record: the same; 0 = the scheme's | optional |
-//! | 8 | [`REDIRECT`] | per record: the ordinal of the key that replaces it, plus 1; 0 = none | optional |
-//! | 9 | [`BY_PLACE`] | per record, sorted: the rows of the records, for place → codes | optional, with 10 |
-//! | 10 | [`BY_PLACE_REC`] | per [`BY_PLACE`] entry: its record, ascending within a row | optional, with 9 |
+//! | 4 | [`RUN_START`] | per run: its first record, strictly increasing from 0 | required |
+//! | 5 | [`RUN_PLACE`] | per run: its PLACES row; two runs in a row differ | required |
+//! | 6 | [`KIND`] | per record: a [`CodeKind`] | optional (all areas) |
+//! | 7 | [`VALID_FROM`] | per record: days since 1970-01-01 plus 1; 0 = the scheme's | optional |
+//! | 8 | [`VALID_TO`] | per record: the same; 0 = the scheme's | optional |
+//! | 9 | [`REDIRECT`] | per record: the ordinal of the key that replaces it, plus 1; 0 = none | optional |
+//! | 10 | [`BY_PLACE`] | per run: the runs sorted by (place, run), for place → codes | optional |
 //! | 11 | [`SCHEMES`] | bytes: the schemes and their [normalisation rules](Scheme) | required |
+//!
+//! Within a key, the records' places strictly increase.
 //!
 //! Its item count is the number of records. [`Postal::open`] checks the structure in
 //! O(columns + schemes); [`Postal::check`] every key, record and link, and that every code is
@@ -37,7 +43,7 @@
 
 use core::ops::{ControlFlow, Range};
 
-use teigeodata_core::bitpack::{BLOCK_LEN, Packed};
+use teigeodata_core::bitpack::Packed;
 use teigeodata_core::table::Table;
 
 use crate::search::fst::{self, Fst};
@@ -49,20 +55,20 @@ pub const LENGTH: u16 = 1;
 pub const AUTOMATON: u16 = 2;
 /// Column: each key's first record.
 pub const STARTS: u16 = 3;
-/// Column: each record's place.
-pub const PLACE: u16 = 4;
+/// Column: each run's first record.
+pub const RUN_START: u16 = 4;
+/// Column: each run's place.
+pub const RUN_PLACE: u16 = 5;
 /// Column: each record's kind.
-pub const KIND: u16 = 5;
+pub const KIND: u16 = 6;
 /// Column: each record's first valid day.
-pub const VALID_FROM: u16 = 6;
+pub const VALID_FROM: u16 = 7;
 /// Column: each record's last valid day.
-pub const VALID_TO: u16 = 7;
+pub const VALID_TO: u16 = 8;
 /// Column: each record's replacement key.
-pub const REDIRECT: u16 = 8;
-/// Column: the records' rows, sorted.
-pub const BY_PLACE: u16 = 9;
-/// Column: the record of each sorted row.
-pub const BY_PLACE_REC: u16 = 10;
+pub const REDIRECT: u16 = 9;
+/// Column: the runs in place order.
+pub const BY_PLACE: u16 = 10;
 /// Column: the schemes.
 pub const SCHEMES: u16 = 11;
 
@@ -426,7 +432,8 @@ const DIGIT_ZEROS: [u32; 36] = [
 
 /// The ASCII form of `c`: itself if printable ASCII; a full-width form's ASCII; a decimal
 /// digit of any script; a Unicode space or dash. `None` for anything else.
-fn ascii(c: char) -> Option<u8> {
+#[must_use]
+pub fn ascii(c: char) -> Option<u8> {
     let u = u32::from(c);
     let digit = |d: u32| u8::try_from(d).ok().map(|d| b'0' + d);
     match u {
@@ -443,11 +450,38 @@ fn ascii(c: char) -> Option<u8> {
     }
 }
 
-/// The schemes of a pack, in name order.
+/// The schemes of a pack, in name order. In SCHEMES: a `u16` count, a zero `u16`, a `u32`
+/// offset per scheme (from the first scheme), then the schemes, zero-padded to 4 bytes; the
+/// offsets make finding a scheme by name a binary search.
 #[derive(Clone, Copy, Debug)]
 pub struct Schemes<'a> {
     bytes: &'a [u8],
+    offsets: &'a [u8],
     left: u16,
+}
+
+impl<'a> Schemes<'a> {
+    /// Scheme `i`.
+    fn get(&self, i: usize) -> Option<Scheme<'a>> {
+        let at = self.offsets.get(i * 4..i * 4 + 4)?;
+        let at = u32::from_le_bytes(at.try_into().ok()?) as usize;
+        Scheme::parse(self.bytes.get(at..)?).map(|s| s.0)
+    }
+
+    /// The scheme named `name`: a binary search of the names.
+    fn find(&self, name: &str) -> Option<Scheme<'a>> {
+        let (mut lo, mut hi) = (0_usize, usize::from(self.left));
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            let s = self.get(mid)?;
+            match s.name.cmp(name) {
+                core::cmp::Ordering::Less => lo = mid + 1,
+                core::cmp::Ordering::Greater => hi = mid,
+                core::cmp::Ordering::Equal => return Some(s),
+            }
+        }
+        None
+    }
 }
 
 impl<'a> IntoIterator for Schemes<'a> {
@@ -484,13 +518,15 @@ pub struct Postal<'a> {
     fst: Fst<'a>,
     schemes: Schemes<'a>,
     starts: Packed<'a>,
-    place: Packed<'a>,
+    run_start: Packed<'a>,
+    run_place: Packed<'a>,
     kind: Option<Packed<'a>>,
     valid_from: Option<Packed<'a>>,
     valid_to: Option<Packed<'a>>,
     redirect: Option<Packed<'a>>,
-    by_place: Option<(Packed<'a>, Packed<'a>)>,
+    by_place: Option<Packed<'a>>,
     records: usize,
+    runs: usize,
     places: usize,
 }
 
@@ -536,15 +572,16 @@ impl<'a> Postal<'a> {
         if starts.get(keys).and_then(|v| usize::try_from(v).ok()) != Some(records) {
             return Err(fail(STARTS, "the last start is not the record count"));
         }
-        let place = columns::required(&t, k, PLACE, Some(records))?;
+        let run_start = columns::required(&t, k, RUN_START, None)?;
+        let runs = run_start.len();
+        if (runs == 0) != (records == 0) || runs > records {
+            return Err(fail(RUN_START, "the runs do not fit the records"));
+        }
+        let run_place = columns::required(&t, k, RUN_PLACE, Some(runs))?;
         let opt = |id| columns::optional(&t, k, id, records);
         let (kind, valid_from, valid_to, redirect) =
             (opt(KIND)?, opt(VALID_FROM)?, opt(VALID_TO)?, opt(REDIRECT)?);
-        let by_place = match (opt(BY_PLACE)?, opt(BY_PLACE_REC)?) {
-            (Some(a), Some(b)) => Some((a, b)),
-            (None, None) => None,
-            _ => return Err(fail(BY_PLACE, "the place index has one of its two columns")),
-        };
+        let by_place = columns::optional(&t, k, BY_PLACE, runs)?;
         let fst =
             Fst::new(bytes, keys32).ok_or(fail(AUTOMATON, "the automaton's root is malformed"))?;
         let schemes = open_schemes(t.bytes(SCHEMES).map_err(|e| columns::map(k, e))?)?;
@@ -552,13 +589,15 @@ impl<'a> Postal<'a> {
             fst,
             schemes,
             starts,
-            place,
+            run_start,
+            run_place,
             kind,
             valid_from,
             valid_to,
             redirect,
             by_place,
             records,
+            runs,
             places,
         })
     }
@@ -584,7 +623,14 @@ impl<'a> Postal<'a> {
     /// The scheme named `name`.
     #[must_use]
     pub fn scheme(&self, name: &str) -> Option<Scheme<'a>> {
-        self.schemes.into_iter().find(|s| s.name == name)
+        self.schemes.find(name)
+    }
+
+    /// The scheme named `scheme`, or with `None` every scheme.
+    fn chosen(&self, scheme: Option<&str>) -> impl Iterator<Item = Scheme<'a>> {
+        let one = scheme.and_then(|n| self.scheme(n));
+        let all = scheme.is_none().then(|| self.schemes.into_iter());
+        one.into_iter().chain(all.into_iter().flatten())
     }
 
     /// Whether the pack can answer place → codes.
@@ -604,11 +650,7 @@ impl<'a> Postal<'a> {
         mut visit: impl FnMut(u32) -> ControlFlow<()>,
     ) {
         let mut key = [0_u8; fst::MAX_KEY];
-        for s in self
-            .schemes
-            .into_iter()
-            .filter(|s| scheme.is_none_or(|n| n == s.name))
-        {
+        for s in self.chosen(scheme) {
             // A code matching two templates gives one key once.
             let mut last = None;
             let mut stop = false;
@@ -642,11 +684,7 @@ impl<'a> Postal<'a> {
             return;
         }
         let mut key = [0_u8; fst::MAX_KEY];
-        for s in self
-            .schemes
-            .into_iter()
-            .filter(|s| scheme.is_none_or(|n| n == s.name))
-        {
+        for s in self.chosen(scheme) {
             // The ranges of the scheme's partial forms, merged in order.
             let mut ranges = [(0_u32, 0_u32); 16];
             let mut n = 0;
@@ -723,13 +761,47 @@ impl<'a> Postal<'a> {
         u32::try_from(lo).ok()
     }
 
+    /// The run holding record `record`: a binary search of the run starts.
+    fn run_of(&self, record: usize) -> Option<usize> {
+        if record >= self.records {
+            return None;
+        }
+        let r = u32::try_from(record).ok()?;
+        let (mut lo, mut hi) = (0_usize, self.runs);
+        while hi - lo > 1 {
+            let mid = lo + (hi - lo) / 2;
+            if self.run_start.get(mid)? <= r {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        Some(lo)
+    }
+
+    /// The records of run `run`.
+    fn run_records(&self, run: usize) -> Range<usize> {
+        let end = if run + 1 < self.runs {
+            self.run_start.get(run + 1).map_or(0, |v| v as usize)
+        } else {
+            self.records
+        };
+        self.run_start
+            .get(run)
+            .map_or(0..0, |s| s as usize..end.min(self.records))
+    }
+
+    /// Record `record`'s place, if below the place count.
+    #[must_use]
+    pub fn place_of(&self, record: usize) -> Option<u32> {
+        let p = self.run_place.get(self.run_of(record)?)?;
+        ((p as usize) < self.places).then_some(p)
+    }
+
     /// Record `record`, with its scheme's validity where it has none of its own.
     #[must_use]
     pub fn record(&self, record: usize) -> Option<Record> {
-        let place = self.place.get(record)?;
-        if place as usize >= self.places {
-            return None;
-        }
+        let place = self.place_of(record)?;
         let read = |c: &Option<Packed<'_>>| c.as_ref().map_or(Some(0), |c| c.get(record));
         let kind = CodeKind::from_u32(read(&self.kind)?)?;
         let (mut from, mut to) = (read(&self.valid_from)?, read(&self.valid_to)?);
@@ -761,35 +833,33 @@ impl<'a> Postal<'a> {
     /// Calls `visit` with the records of place row `place`, in record order (so in code order),
     /// until it breaks. Nothing without the place index.
     pub fn records_at(&self, place: u32, mut visit: impl FnMut(usize) -> ControlFlow<()>) {
-        let Some((rows, recs)) = &self.by_place else {
+        let Some(order) = &self.by_place else {
             return;
         };
-        // The first block that can hold `place`, by block firsts, then a scan from there.
-        let blocks = rows.len().div_ceil(BLOCK_LEN);
-        let (mut lo, mut hi) = (0_usize, blocks);
-        while hi - lo > 1 {
+        let place_at = |i: usize| {
+            order
+                .get(i)
+                .and_then(|run| self.run_place.get(run as usize))
+        };
+        // The first entry whose run's place is not below `place`.
+        let (mut lo, mut hi) = (0_usize, self.runs);
+        while lo < hi {
             let mid = lo + (hi - lo) / 2;
-            match rows.block_first(mid) {
-                Some(f) if f < place => lo = mid,
+            match place_at(mid) {
+                Some(p) if p < place => lo = mid + 1,
                 _ => hi = mid,
             }
         }
-        let mut buf = [0_u32; BLOCK_LEN];
-        let mut b = lo;
-        while b < blocks {
-            let got = rows.decode_block(b, &mut buf);
-            for (j, &r) in buf.iter().take(got).enumerate() {
-                if r > place {
-                    return;
-                }
-                if r == place
-                    && let Some(rec) = recs.get(b * BLOCK_LEN + j)
-                    && visit(rec as usize).is_break()
-                {
-                    return;
+        let mut i = lo;
+        while place_at(i) == Some(place) {
+            if let Some(run) = order.get(i) {
+                for r in self.run_records(run as usize) {
+                    if visit(r).is_break() {
+                        return;
+                    }
                 }
             }
-            b += 1;
+            i += 1;
         }
     }
 
@@ -802,7 +872,8 @@ impl<'a> Postal<'a> {
     /// redirect names no key or its own, or the place index differs from the records.
     pub fn check(&self) -> Result<(), Error> {
         let mut bad = None;
-        let schemes = self.schemes;
+        // Keys of one scheme are consecutive: the last scheme found is tried first.
+        let mut last: Option<Scheme<'_>> = None;
         self.fst
             .check(|_, key| {
                 if bad.is_some() {
@@ -810,13 +881,13 @@ impl<'a> Postal<'a> {
                 }
                 let ok = key.iter().position(|&b| b == 0).is_some_and(|cut| {
                     let (name, code) = (key.get(..cut), key.get(cut + 1..));
-                    match (name, code) {
-                        (Some(n), Some(c)) if !c.is_empty() => schemes
-                            .into_iter()
-                            .find(|s| s.name.as_bytes() == n)
-                            .is_some_and(|s| s.canonical(c)),
-                        _ => false,
+                    let (Some(n), Some(c)) = (name, code) else {
+                        return false;
+                    };
+                    if last.is_none_or(|s| s.name.as_bytes() != n) {
+                        last = core::str::from_utf8(n).ok().and_then(|n| self.scheme(n));
                     }
+                    !c.is_empty() && last.is_some_and(|s| s.canonical(c))
                 });
                 if !ok {
                     bad = Some("a key names no scheme or is not a canonical code");
@@ -837,22 +908,7 @@ impl<'a> Postal<'a> {
             }
             prev = s;
         }
-        for o in 0..self.keys() {
-            let mut last = None;
-            for r in self.records_of(o) {
-                let p = self
-                    .place
-                    .get(r)
-                    .ok_or(fail(PLACE, "a record's place is missing"))?;
-                if p as usize >= self.places {
-                    return Err(fail(PLACE, "a record names a row past the end"));
-                }
-                if last.is_some_and(|l| p <= l) {
-                    return Err(fail(PLACE, "a key's records are not in place order"));
-                }
-                last = Some(p);
-            }
-        }
+        self.check_runs()?;
         for r in 0..self.records {
             let get = |c: &Option<Packed<'_>>| c.as_ref().map_or(Some(0), |c| c.get(r));
             if get(&self.kind).and_then(CodeKind::from_u32).is_none() {
@@ -874,19 +930,66 @@ impl<'a> Postal<'a> {
                 }
             }
         }
-        if let Some((rows, recs)) = &self.by_place {
+        if let Some(order) = &self.by_place {
             let mut last: Option<(u32, u32)> = None;
-            for e in 0..rows.len() {
-                let (row, rec) = (rows.get(e), recs.get(e));
-                let (Some(row), Some(rec)) = (row, rec) else {
-                    return Err(fail(BY_PLACE, "a place index entry is missing"));
-                };
-                if self.place.get(rec as usize) != Some(row)
-                    || last.is_some_and(|l| (row, rec) <= l)
-                {
-                    return Err(fail(BY_PLACE, "the place index differs from the records"));
+            for e in 0..self.runs {
+                let run = order
+                    .get(e)
+                    .ok_or(fail(BY_PLACE, "a place index entry is missing"))?;
+                let p = self
+                    .run_place
+                    .get(run as usize)
+                    .ok_or(fail(BY_PLACE, "a place index entry names no run"))?;
+                // Strictly increasing (place, run) over `runs` entries below `runs`: a
+                // permutation of the runs in place order.
+                if last.is_some_and(|l| (p, run) <= l) {
+                    return Err(fail(BY_PLACE, "the place index is not in place order"));
                 }
-                last = Some((row, rec));
+                last = Some((p, run));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Postal<'_> {
+    /// The runs: starts strictly increasing from 0 below the record count, places below the
+    /// place count and differing from the run before; and within each key, places strictly
+    /// increasing.
+    fn check_runs(&self) -> Result<(), Error> {
+        let mut prev: Option<(u32, u32)> = None;
+        for run in 0..self.runs {
+            let (s, p) = (self.run_start.get(run), self.run_place.get(run));
+            let (Some(s), Some(p)) = (s, p) else {
+                return Err(fail(RUN_START, "a run is missing"));
+            };
+            let start_ok = match prev {
+                None => s == 0,
+                Some((ps, pp)) => s > ps && p != pp,
+            };
+            if !start_ok || s as usize >= self.records {
+                return Err(fail(RUN_START, "the runs are not in order or not maximal"));
+            }
+            if p as usize >= self.places {
+                return Err(fail(RUN_PLACE, "a run names a row past the end"));
+            }
+            prev = Some((s, p));
+        }
+        // One pass over the records, the run advancing with them.
+        let mut run = 0_usize;
+        let mut next = self.run_records(0).end;
+        for o in 0..self.keys() {
+            let mut last = None;
+            for r in self.records_of(o) {
+                while r >= next && run + 1 < self.runs {
+                    run += 1;
+                    next = self.run_records(run).end;
+                }
+                let p = self.run_place.get(run).unwrap_or(u32::MAX);
+                if last.is_some_and(|l| p <= l) {
+                    return Err(fail(RUN_PLACE, "a key's records are not in place order"));
+                }
+                last = Some(p);
             }
         }
         Ok(())
@@ -897,26 +1000,35 @@ impl<'a> Postal<'a> {
 /// and only zero padding (fewer than 4 bytes) after the last.
 fn open_schemes(bytes: &[u8]) -> Result<Schemes<'_>, Error> {
     let bad = || fail(SCHEMES, "a scheme is malformed or out of order");
-    let (count, mut rest) = bytes.split_first_chunk::<2>().ok_or_else(bad)?;
-    let count = u16::from_le_bytes(*count);
-    if count == 0 {
+    let (head, rest) = bytes.split_first_chunk::<4>().ok_or_else(bad)?;
+    let count = u16::from_le_bytes([head[0], head[1]]);
+    if count == 0 || head[2] != 0 || head[3] != 0 {
         return Err(bad());
     }
-    let all = rest;
+    let (offsets, all) = rest
+        .split_at_checked(usize::from(count) * 4)
+        .ok_or_else(bad)?;
+    let mut at = all;
     let mut last: Option<&str> = None;
-    for _ in 0..count {
-        let (s, r) = Scheme::parse(rest).ok_or_else(bad)?;
+    for i in 0..usize::from(count) {
+        let want = offsets.get(i * 4..i * 4 + 4).ok_or_else(bad)?;
+        if u32::from_le_bytes(want.try_into().map_err(|_| bad())?) as usize != all.len() - at.len()
+        {
+            return Err(bad());
+        }
+        let (s, r) = Scheme::parse(at).ok_or_else(bad)?;
         if !s.valid() || last.is_some_and(|l| s.name <= l) {
             return Err(bad());
         }
         last = Some(s.name);
-        rest = r;
+        at = r;
     }
-    if rest.len() >= 4 || rest.iter().any(|&b| b != 0) {
+    if at.len() >= 4 || at.iter().any(|&b| b != 0) {
         return Err(fail(SCHEMES, "the schemes are followed by bytes"));
     }
     Ok(Schemes {
         bytes: all,
+        offsets,
         left: count,
     })
 }
@@ -940,12 +1052,12 @@ mod write {
     use alloc::string::String;
     use alloc::vec::Vec;
 
-    use teigeodata_core::bitpack::{encode_auto, encode_direct};
+    use teigeodata_core::bitpack::encode_direct;
     use teigeodata_core::table::{self, Codec};
 
     use super::{
-        AUTOMATON, BY_PLACE, BY_PLACE_REC, CodeKind, KIND, LENGTH, PLACE, REDIRECT, SCHEMES,
-        STARTS, Scheme, Schemes, VALID_FROM, VALID_TO, open_schemes,
+        AUTOMATON, BY_PLACE, CodeKind, KIND, LENGTH, REDIRECT, RUN_PLACE, RUN_START, SCHEMES,
+        STARTS, Scheme, VALID_FROM, VALID_TO, open_schemes,
     };
     use crate::Error;
     use crate::search::fst::Builder;
@@ -992,9 +1104,6 @@ mod write {
         pub redirect: Option<(String, String)>,
     }
 
-    /// A record before its key's ordinal is known: kind, days, the redirect's key.
-    type Rec = (CodeKind, u32, u32, Option<Vec<u8>>);
-
     fn fail(problem: &'static str) -> Error {
         Error::Write(problem)
     }
@@ -1024,13 +1133,12 @@ mod write {
     fn schemes(rules: &[Rule]) -> Result<Vec<u8>, Error> {
         let mut sorted: Vec<&Rule> = rules.iter().collect();
         sorted.sort_by(|a, b| a.name.cmp(&b.name));
-        let mut out = Vec::new();
-        out.extend_from_slice(
-            &u16::try_from(sorted.len())
-                .map_err(|_| fail("too many postal schemes"))?
-                .to_le_bytes(),
-        );
-        for r in sorted {
+        let mut body = Vec::new();
+        let mut offsets = Vec::with_capacity(sorted.len() * 4);
+        for r in &sorted {
+            let at =
+                u32::try_from(body.len()).map_err(|_| fail("the postal schemes are too large"))?;
+            offsets.extend_from_slice(&at.to_le_bytes());
             // The rule without prefixes cleans the prefixes.
             let mut bare = Vec::new();
             encode_one(&mut bare, r, &[])?;
@@ -1043,8 +1151,17 @@ mod write {
                     .ok_or(fail("a scheme prefix is not ASCII"))?;
                 prefixes.push(buf.get(..n).unwrap_or(&[]).to_vec());
             }
-            encode_one(&mut out, r, &prefixes)?;
+            encode_one(&mut body, r, &prefixes)?;
         }
+        let mut out = Vec::with_capacity(4 + offsets.len() + body.len() + 3);
+        out.extend_from_slice(
+            &u16::try_from(sorted.len())
+                .map_err(|_| fail("too many postal schemes"))?
+                .to_le_bytes(),
+        );
+        out.extend_from_slice(&[0, 0]);
+        out.extend_from_slice(&offsets);
+        out.extend_from_slice(&body);
         out.resize(out.len().next_multiple_of(4), 0);
         Ok(out)
     }
@@ -1068,42 +1185,45 @@ mod write {
         list(out, &t)
     }
 
-    /// The place → codes columns: (row, record) pairs in order.
-    fn place_index(place: &[u32]) -> [(u16, Vec<u8>); 2] {
-        let mut pairs: Vec<(u32, u32)> = place
-            .iter()
-            .enumerate()
-            .map(|(r, &p)| (p, u32::try_from(r).unwrap_or(u32::MAX)))
-            .collect();
-        pairs.sort_unstable();
-        let rows: Vec<u32> = pairs.iter().map(|p| p.0).collect();
-        let recs: Vec<u32> = pairs.iter().map(|p| p.1).collect();
-        [
-            (BY_PLACE, encode_auto(&rows)),
-            (BY_PLACE_REC, encode_direct(&recs)),
-        ]
+    /// The runs of the records' places: (starts, places, the runs in (place, run) order).
+    fn runs(place: &[u32]) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
+        let (mut starts, mut places) = (Vec::new(), Vec::new());
+        for (r, &p) in place.iter().enumerate() {
+            if places.last() != Some(&p) {
+                starts.push(u32::try_from(r).unwrap_or(u32::MAX));
+                places.push(p);
+            }
+        }
+        let mut order: Vec<u32> = (0..u32::try_from(places.len()).unwrap_or(u32::MAX)).collect();
+        order.sort_by_key(|&run| (places.get(run as usize).copied(), run));
+        (starts, places, order)
     }
 
-    /// The key of `code` in `scheme`: the scheme's name, 0x00, the first canonical form.
-    fn key(schemes: Schemes<'_>, scheme: &str, code: &str) -> Result<Vec<u8>, Error> {
+    /// Appends the key of `code` in `scheme` to `arena`: the scheme's name, 0x00, the first
+    /// canonical form. Its length.
+    fn key_into(
+        schemes: &BTreeMap<&str, Scheme<'_>>,
+        scheme: &str,
+        code: &str,
+        arena: &mut Vec<u8>,
+    ) -> Result<u8, Error> {
         let s = schemes
-            .into_iter()
-            .find(|s| s.name == scheme)
+            .get(scheme)
             .ok_or(fail("a postal code names no scheme"))?;
-        let mut first = None;
+        let start = arena.len();
+        arena.extend_from_slice(scheme.as_bytes());
+        arena.push(0);
+        let mut found = false;
         s.forms(code, false, |f| {
-            first = Some(f.to_vec());
+            arena.extend_from_slice(f);
+            found = true;
             core::ops::ControlFlow::Break(())
         });
-        let form = first.ok_or(fail("a postal code matches none of its templates"))?;
-        let mut key = Vec::with_capacity(scheme.len() + 1 + form.len());
-        key.extend_from_slice(scheme.as_bytes());
-        key.push(0);
-        key.extend_from_slice(&form);
-        if key.len() > super::fst::MAX_KEY {
-            return Err(fail("a postal key is too long"));
+        if !found {
+            arena.truncate(start);
+            return Err(fail("a postal code matches none of its templates"));
         }
-        Ok(key)
+        u8::try_from(arena.len() - start).map_err(|_| fail("a postal key is too long"))
     }
 
     /// Encodes a POSTAL body for a pack of `places` rows: `rules` give the schemes, `codes`
@@ -1124,79 +1244,137 @@ mod write {
         let scheme_bytes = schemes(rules)?;
         let parsed = open_schemes(&scheme_bytes)
             .map_err(|_| fail("a postal scheme is malformed or two share a name"))?;
-        let canonical = |scheme: &str, code: &str| key(parsed, scheme, code);
-        // Key → its records, by place.
-        let mut keys: BTreeMap<Vec<u8>, BTreeMap<u32, Rec>> = BTreeMap::new();
-        for c in codes {
+        let by_name: BTreeMap<&str, Scheme<'_>> = parsed.into_iter().map(|s| (s.name, s)).collect();
+        // Every key in one arena; an entry is (key start, key length, place, code index), so
+        // memory stays near the key text for millions of codes.
+        let mut arena = Vec::new();
+        let mut entries: Vec<(u32, u8, u32, u32)> = Vec::with_capacity(codes.len());
+        for (i, c) in codes.iter().enumerate() {
             if c.place >= places {
                 return Err(fail("a postal code names a row past the end"));
             }
-            let key = canonical(&c.scheme, &c.code)?;
-            let redirect = match &c.redirect {
-                Some((s, code)) => Some(canonical(s, code)?),
-                None => None,
-            };
-            let rec = (c.kind, day(c.valid_from)?, day(c.valid_to)?, redirect);
-            if keys.entry(key).or_default().insert(c.place, rec).is_some() {
-                return Err(fail("a postal key has the same place twice"));
+            let start = u32::try_from(arena.len()).map_err(|_| fail("too much postal key text"))?;
+            let len = key_into(&by_name, &c.scheme, &c.code, &mut arena)?;
+            let i = u32::try_from(i).map_err(|_| fail("too many postal records"))?;
+            entries.push((start, len, c.place, i));
+        }
+        let text = |e: &(u32, u8, u32, u32)| {
+            arena
+                .get(e.0 as usize..e.0 as usize + usize::from(e.1))
+                .unwrap_or(&[])
+        };
+        entries.sort_unstable_by(|a, b| text(a).cmp(text(b)).then(a.2.cmp(&b.2)));
+        // The first entry of each key, in key order.
+        let mut firsts: Vec<usize> = Vec::new();
+        for (j, e) in entries.iter().enumerate() {
+            match j.checked_sub(1).and_then(|p| entries.get(p)) {
+                Some(prev) if text(prev) == text(e) => {
+                    if prev.2 == e.2 {
+                        return Err(fail("a postal key has the same place twice"));
+                    }
+                }
+                _ => firsts.push(j),
             }
         }
-        let ordinal: BTreeMap<&[u8], u32> = keys
-            .keys()
-            .enumerate()
-            .map(|(i, k)| (k.as_slice(), u32::try_from(i).unwrap_or(u32::MAX)))
-            .collect();
+        let ordinal = |key: &[u8]| -> Option<u32> {
+            let at = firsts
+                .binary_search_by(|&j| entries.get(j).map_or(&[][..], text).cmp(key))
+                .ok()?;
+            u32::try_from(at).ok()
+        };
         let mut b = Builder::new();
-        let mut starts = Vec::with_capacity(keys.len() + 1);
-        let (mut place, mut kind, mut from, mut to, mut redirect) =
-            (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
-        for (key, recs) in &keys {
-            b.insert(key)?;
-            starts.push(u32::try_from(place.len()).map_err(|_| fail("too many postal records"))?);
-            for (&p, (k, f, t, r)) in recs {
-                place.push(p);
-                kind.push(*k as u32);
-                from.push(*f);
-                to.push(*t);
-                redirect.push(match r {
-                    Some(r) => ordinal
-                        .get(r.as_slice())
-                        .map(|o| o + 1)
-                        .ok_or(fail("a redirect names a code that is not in the pack"))?,
-                    None => 0,
-                });
-            }
+        let mut starts = Vec::with_capacity(firsts.len() + 1);
+        for &j in &firsts {
+            b.insert(entries.get(j).map_or(&[][..], text))?;
+            starts.push(u32::try_from(j).map_err(|_| fail("too many postal records"))?);
         }
-        starts.push(u32::try_from(place.len()).map_err(|_| fail("too many postal records"))?);
+        let n = entries.len();
+        starts.push(u32::try_from(n).map_err(|_| fail("too many postal records"))?);
+        let (mut place, mut kind, mut from, mut to, mut redirect) = (
+            Vec::with_capacity(n),
+            Vec::with_capacity(n),
+            Vec::with_capacity(n),
+            Vec::with_capacity(n),
+            Vec::with_capacity(n),
+        );
+        let mut scratch = Vec::new();
+        for e in &entries {
+            let c = codes
+                .get(e.3 as usize)
+                .ok_or(fail("a postal entry lost its code"))?;
+            place.push(e.2);
+            kind.push(c.kind as u32);
+            from.push(day(c.valid_from)?);
+            to.push(day(c.valid_to)?);
+            redirect.push(match &c.redirect {
+                Some((s, code)) => {
+                    scratch.clear();
+                    key_into(&by_name, s, code, &mut scratch)?;
+                    ordinal(&scratch)
+                        .map(|o| o + 1)
+                        .ok_or(fail("a redirect names a code that is not in the pack"))?
+                }
+                None => 0,
+            });
+        }
+        let records = Records {
+            place,
+            kind,
+            from,
+            to,
+            redirect,
+        };
+        layout(b, &starts, &records, by_place, &scheme_bytes)
+    }
+
+    /// The per-record columns, in key order.
+    struct Records {
+        place: Vec<u32>,
+        kind: Vec<u32>,
+        from: Vec<u32>,
+        to: Vec<u32>,
+        redirect: Vec<u32>,
+    }
+
+    /// The column table of a POSTAL body.
+    fn layout(
+        b: Builder,
+        starts: &[u32],
+        r: &Records,
+        by_place: bool,
+        scheme_bytes: &[u8],
+    ) -> Result<Vec<u8>, Error> {
         let (mut automaton, _) = b.finish()?;
         let len = u32::try_from(automaton.len())
             .map_err(|_| fail("the postal automaton is too large"))?;
         automaton.resize(automaton.len().next_multiple_of(4), 0);
         let mut cols: Vec<(u16, Vec<u8>)> = alloc::vec![
             (LENGTH, encode_direct(&[len])),
-            (STARTS, encode_direct(&starts)),
-            (PLACE, encode_direct(&place)),
+            (STARTS, encode_direct(starts)),
         ];
+        let (run_start, run_place, order) = runs(&r.place);
+        cols.push((RUN_START, encode_direct(&run_start)));
+        cols.push((RUN_PLACE, encode_direct(&run_place)));
         // Optional columns only when a value differs from the default.
         for (id, values) in [
-            (KIND, &kind),
-            (VALID_FROM, &from),
-            (VALID_TO, &to),
-            (REDIRECT, &redirect),
+            (KIND, &r.kind),
+            (VALID_FROM, &r.from),
+            (VALID_TO, &r.to),
+            (REDIRECT, &r.redirect),
         ] {
             if values.iter().any(|&v| v != 0) {
                 cols.push((id, encode_direct(values)));
             }
         }
         if by_place {
-            cols.extend(place_index(&place));
+            cols.push((BY_PLACE, encode_direct(&order)));
         }
         let mut with: Vec<(u16, Codec, &[u8])> = cols
             .iter()
             .map(|(id, b)| (*id, Codec::Bitpack, b.as_slice()))
             .collect();
         with.push((AUTOMATON, Codec::Bytes, automaton.as_slice()));
-        with.push((SCHEMES, Codec::Bytes, scheme_bytes.as_slice()));
+        with.push((SCHEMES, Codec::Bytes, scheme_bytes));
         with.sort_by_key(|c| c.0);
         table::encode_with(&with).map_err(|_| fail("the postal table could not be laid out"))
     }

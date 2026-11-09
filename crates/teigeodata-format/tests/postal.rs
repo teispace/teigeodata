@@ -510,3 +510,56 @@ fn check_refuses_a_key_that_is_not_canonical() {
     let p = open(&bytes, 1).unwrap();
     assert!(p.check().is_err());
 }
+
+/// Units with wards, as in Nepal: long runs of one place, codes of a unit split across runs
+/// by other schemes' keys. Places, place → codes and runs against brute force.
+#[test]
+fn ward_runs_agree_with_brute_force() {
+    let mut r = Rng(23);
+    let places = 900_u32;
+    let mut codes = Vec::new();
+    for unit in 0..if cfg!(miri) { 20 } else { 700 } {
+        let place = r.below(places as usize) as u32;
+        let local = format!("{}", 10_000 + unit * 7);
+        codes.push(code("np", &local, place));
+        for w in 1..=1 + r.below(30) {
+            codes.push(Code {
+                kind: CodeKind::Part,
+                ..code("np", &format!("{local}{w:02}"), place)
+            });
+        }
+        if r.below(4) == 0 {
+            codes.push(code("np-1991", &format!("{}", 40_000 + unit), place));
+        }
+    }
+    let body = postal::encode(&rules(), &codes, places, true).unwrap();
+    let bytes = with_body(&body, codes.len() as u64);
+    let p = open(&bytes, places as usize).unwrap();
+    p.check().unwrap();
+    let mut buf = [0_u8; MAX_KEY];
+    let mut want: BTreeMap<u32, BTreeSet<String>> = BTreeMap::new();
+    for c in &codes {
+        want.entry(c.place)
+            .or_default()
+            .insert(format!("{}:{}", c.scheme, c.code));
+        let o = found_one(&p, &c.code, &c.scheme);
+        let rec = p.records_of(o).find(|&x| p.place_of(x) == Some(c.place));
+        assert_eq!(p.record(rec.unwrap()).unwrap().kind, c.kind, "{}", c.code);
+    }
+    for place in 0..places {
+        let mut got = BTreeSet::new();
+        let mut last = None;
+        p.records_at(place, |rec| {
+            assert!(last.is_none_or(|l| rec > l), "records out of order");
+            last = Some(rec);
+            let (s, c) = p.code(p.key_of(rec).unwrap(), &mut buf).unwrap();
+            got.insert(format!("{s}:{c}"));
+            ControlFlow::Continue(())
+        });
+        assert_eq!(
+            got,
+            want.get(&place).cloned().unwrap_or_default(),
+            "place {place}"
+        );
+    }
+}
