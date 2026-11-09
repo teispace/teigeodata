@@ -57,7 +57,9 @@ fuzzing time per target as an input).
   `TG_FUZZ_ITERS=1`), 90 minutes each. Nextest runs every test in its own process with a
   40-minute limit (`.config/nextest.toml`, profile `miri`), so a slow test is named in the log;
   with `cargo miri test` in one process, `format-lib` and `format-fuzz` ran into the old 5-hour
-  budget every night without saying which test was slow (2026-11-08). Miri runs 10³ to
+  budget every night without saying which test was slow (2026-11-08). Under nextest the whole
+  Miri set ran in at most 6 minutes per job (run 42559100430, 2026-11-09): one process per
+  test avoids Miri interleaving every test's threads in one interpreter. Miri runs 10³ to
   10⁶ times slower than native (most for hashing and signatures), so tests shrink under `cfg(miri)`: the hashing and search
   tests take fewer lengths and smaller key sets, and the harnesses take smaller limits
   (`fuzz::limit`). On an Apple silicon Mac, run Miri with `RUSTFLAGS='--cfg sha2_backend="soft"'`:
