@@ -123,7 +123,62 @@ fn cols(m: &Model) -> PlaceColumns<'_> {
         admin_levels: &m.levels,
         classes: &m.classes,
         flags: &[],
+        elevations: &[],
     }
+}
+
+/// Elevations: sea level is not "unknown", the whole `i16` range but its minimum round-trips,
+/// and a column of unknowns is left out.
+#[test]
+fn places_elevations() {
+    let m = model(300, 21);
+    let heights = [
+        None,
+        Some(0),
+        Some(-430),
+        Some(8_849),
+        Some(i16::MAX),
+        Some(i16::MIN + 1),
+    ];
+    let elevations: Vec<Option<i16>> = (0..300).map(|i| heights[i % heights.len()]).collect();
+    let read = |e: &[Option<i16>]| {
+        let body = places::encode(&PlaceColumns {
+            elevations: e,
+            ..cols(&m)
+        })
+        .unwrap();
+        let p = pack_of(&[(Kind::PLACES, Encoding::TABLE, 300, &body)]);
+        let pack = Pack::open_verified(&p).unwrap();
+        let places = Places::open(&pack.section(Kind::PLACES).unwrap()).unwrap();
+        places.check().unwrap();
+        (
+            (0..=300).map(|r| places.elevation(r)).collect::<Vec<_>>(),
+            body.len(),
+        )
+    };
+    let (got, with) = read(&elevations);
+    assert_eq!(got[..300], elevations[..]);
+    assert_eq!(got[300], None, "past the end");
+    let (none, without) = read(&[None; 300]);
+    assert!(none.iter().all(Option::is_none));
+    assert_eq!(
+        without,
+        places::encode(&cols(&m)).unwrap().len(),
+        "unknowns are left out"
+    );
+    assert!(with > without);
+    let mut low = elevations.clone();
+    low[7] = Some(i16::MIN);
+    let bad = PlaceColumns {
+        elevations: &low,
+        ..cols(&m)
+    };
+    assert!(matches!(places::encode(&bad), Err(Error::Write(_))));
+    let short = PlaceColumns {
+        elevations: &elevations[1..],
+        ..cols(&m)
+    };
+    assert!(matches!(places::encode(&short), Err(Error::Write(_))));
 }
 
 #[test]

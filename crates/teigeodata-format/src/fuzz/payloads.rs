@@ -820,8 +820,8 @@ fn blobs_case(c: &mut Cursor<'_>, structured: bool) {
     }
 }
 
-/// A model's rows, in Hilbert order: point, kind, admin level, class, flags.
-type PlaceRow = (Point<E6>, PlaceKind, u8, u32, u32);
+/// A model's rows, in Hilbert order: point, kind, admin level, class, flags, elevation.
+type PlaceRow = (Point<E6>, PlaceKind, u8, u32, u32, Option<i16>);
 
 fn places_case(c: &mut Cursor<'_>, structured: bool) {
     let (mut body, mut model) = (Vec::new(), None);
@@ -850,7 +850,20 @@ fn places_case(c: &mut Cursor<'_>, structured: bool) {
                 } else {
                     0
                 };
-                (p, kind, level, u32::from(c.u8() % 5), u32::from(c.u8() & 3))
+                // Heights across the whole i16 range sometimes; unknown sometimes.
+                let elevation = match c.u8() % 4 {
+                    0 => None,
+                    1 => Some(c.u16().cast_signed().max(i16::MIN + 1)),
+                    _ => Some(i16::from(c.u8()) * 8 - 200),
+                };
+                (
+                    p,
+                    kind,
+                    level,
+                    u32::from(c.u8() % 5),
+                    u32::from(c.u8() & 3),
+                    elevation,
+                )
             })
             .collect();
         rows.sort_by_key(|r| hilbert(r.0));
@@ -860,12 +873,14 @@ fn places_case(c: &mut Cursor<'_>, structured: bool) {
         let levels: Vec<u8> = rows.iter().filter(|_| on(1)).map(|r| r.2).collect();
         let classes: Vec<u32> = rows.iter().filter(|_| on(2)).map(|r| r.3).collect();
         let flags: Vec<u32> = rows.iter().filter(|_| on(4)).map(|r| r.4).collect();
+        let elevations: Vec<Option<i16>> = rows.iter().filter(|_| on(8)).map(|r| r.5).collect();
         let cols = PlaceColumns {
             points: &points,
             kinds: &kinds,
             admin_levels: &levels,
             classes: &classes,
             flags: &flags,
+            elevations: &elevations,
         };
         body = places::encode(&cols).unwrap_or_else(|e| panic!("a valid model is refused: {e}"));
         items = n as u64;
@@ -880,6 +895,7 @@ fn places_case(c: &mut Cursor<'_>, structured: bool) {
                     or0(1, u32::from(r.2)) as u8,
                     or0(2, r.3),
                     or0(4, r.4),
+                    r.5.filter(|_| optional & 8 != 0),
                 )
             })
             .collect();
@@ -905,6 +921,7 @@ fn places_case(c: &mut Cursor<'_>, structured: bool) {
             v.admin_level(r),
             v.class(r),
             v.flags(r),
+            v.elevation(r),
         )
     };
     for r in rows(v.len()) {
@@ -914,8 +931,15 @@ fn places_case(c: &mut Cursor<'_>, structured: bool) {
     if let Some(m) = &model {
         assert!(checked, "a written PLACES payload fails its check");
         assert_eq!(v.len(), m.len());
-        for (r, &(pt, kind, level, class, flags)) in m.iter().enumerate() {
-            let want = (Some(pt), Some(kind), Some(level), Some(class), Some(flags));
+        for (r, &(pt, kind, level, class, flags, elevation)) in m.iter().enumerate() {
+            let want = (
+                Some(pt),
+                Some(kind),
+                Some(level),
+                Some(class),
+                Some(flags),
+                elevation,
+            );
             assert_eq!(read(r), want, "PLACES row {r}");
         }
     }
@@ -929,7 +953,7 @@ fn places_case(c: &mut Cursor<'_>, structured: bool) {
             last = hilbert(pt);
             assert!(v.kind(r).is_some(), "a checked kind is unknown");
         }
-        assert_eq!(read(v.len()), (None, None, None, None, None));
+        assert_eq!(read(v.len()), (None, None, None, None, None, None));
     }
 }
 

@@ -43,6 +43,7 @@ struct Inputs {
     levels: Vec<u8>,
     classes: Vec<u32>,
     flags: Vec<u32>,
+    elevations: Vec<Option<i16>>,
     parents: Vec<Option<u32>>,
     ids: Vec<PlaceId>,
     redirects: Vec<(PlaceId, Option<PlaceId>)>,
@@ -91,6 +92,9 @@ fn inputs(n: usize, seed: u64) -> Inputs {
         levels: rows.iter().map(|row| row.2).collect(),
         classes: (0..n).map(|_| r.below(5) as u32).collect(),
         flags: (0..n).map(|_| u32::from(r.below(4) == 0)).collect(),
+        elevations: (0..n)
+            .map(|_| (r.below(4) != 0).then(|| i16::try_from(r.below(9_000)).unwrap() - 100))
+            .collect(),
         parents,
         ids,
         redirects,
@@ -107,6 +111,7 @@ fn payloads(i: &Inputs) -> Vec<(Kind, u64, Vec<u8>)> {
         admin_levels: &i.levels,
         classes: &i.classes,
         flags: &i.flags,
+        elevations: &i.elevations,
     };
     let n = i.points.len() as u64;
     let mut v = vec![
@@ -203,6 +208,8 @@ fn a_changed_input_changes_the_bytes() {
     let mut other = i.clone();
     // One field of one row at a time: the bytes of every pack holding it change.
     other.flags[17] ^= 1;
+    let mut higher = i.clone();
+    higher.elevations[42] = Some(higher.elevations[42].map_or(1, |e| e + 1));
     let mut moved = i.clone();
     moved.parents[200] = Some(0);
     let mut renumbered = i.clone();
@@ -211,6 +218,7 @@ fn a_changed_input_changes_the_bytes() {
     later.created += 1;
     for (what, changed, affected) in [
         ("a flag", &other, &[Kind::PLACES][..]),
+        ("an elevation", &higher, &[Kind::PLACES]),
         ("a parent", &moved, &[Kind::HIERARCHY]),
         ("an ID", &renumbered, &[Kind::IDMAP]),
         ("the creation time", &later, &[]),

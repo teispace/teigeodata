@@ -11,6 +11,7 @@
 //! | 4 | [`ADMIN_LEVEL`] | admin level, 0 = country or none | optional, absent = all 0 |
 //! | 5 | [`CLASS`] | class dictionary code, 0 = none | optional, absent = all 0 |
 //! | 6 | [`FLAGS`] | flag bits, none defined yet | optional, absent = all 0 |
+//! | 7 | [`ELEVATION`] | metres above EGM2008, + 32768; 0 = unknown | optional, absent = all unknown |
 //!
 //! [`Places::open`] checks the frame and every column's structure; [`Places::check`] also checks
 //! every value (the forge and the tests run it). Reads never panic either way.
@@ -33,8 +34,12 @@ pub const ADMIN_LEVEL: u16 = 4;
 pub const CLASS: u16 = 5;
 /// Flags column.
 pub const FLAGS: u16 = 6;
+/// Elevation column: orthometric metres (EGM2008) plus [`ELEVATION_BIAS`]; 0 is unknown.
+pub const ELEVATION: u16 = 7;
+/// What [`ELEVATION`] adds to a height so that every `i16` but `i16::MIN` is stored above 0.
+pub const ELEVATION_BIAS: i32 = 32_768;
 
-const OPTIONAL: [u16; 3] = [ADMIN_LEVEL, CLASS, FLAGS];
+const OPTIONAL: [u16; 4] = [ADMIN_LEVEL, CLASS, FLAGS, ELEVATION];
 
 /// The PLACES section of an open pack.
 #[derive(Clone, Copy, Debug)]
@@ -42,7 +47,7 @@ pub struct Places<'a> {
     lat: Packed<'a>,
     lon: Packed<'a>,
     kind: Packed<'a>,
-    optional: [Option<Packed<'a>>; 3],
+    optional: [Option<Packed<'a>>; 4],
 }
 
 fn fail(column: u16, problem: &'static str) -> Error {
@@ -65,11 +70,11 @@ impl<'a> Places<'a> {
             .map_err(|_| fail(0, "the row count does not fit this platform"))?;
         let req = |id| columns::required(&table, Kind::PLACES, id, Some(rows));
         let (lat, lon, kind) = (req(LAT)?, req(LON)?, req(KIND)?);
-        let mut optional = [None; 3];
+        let mut optional = [None; 4];
         for (slot, id) in optional.iter_mut().zip(OPTIONAL) {
             *slot = columns::optional(&table, Kind::PLACES, id, rows)?;
         }
-        if table.ids().any(|id| id == 0 || id > FLAGS) {
+        if table.ids().any(|id| id == 0 || id > ELEVATION) {
             return Err(fail(0, "an unknown column"));
         }
         Ok(Self {
@@ -139,6 +144,19 @@ impl<'a> Places<'a> {
         self.optional(2, row)
     }
 
+    /// The elevation of `row` in whole metres above EGM2008; `None` past the end or where it
+    /// is unknown.
+    #[must_use]
+    pub fn elevation(&self, row: usize) -> Option<i16> {
+        let v = self.optional(3, row)?;
+        if v == 0 {
+            return None;
+        }
+        i32::try_from(v)
+            .ok()
+            .and_then(|v| i16::try_from(v - ELEVATION_BIAS).ok())
+    }
+
     /// Checks every value: points on the grid and in Hilbert order, known kinds, admin levels
     /// that fit a byte and are set only on admin units, and no optional column that is all 0
     /// (the writer leaves those out). Streams the columns a block at a time; O(rows).
@@ -168,6 +186,11 @@ impl<'a> Places<'a> {
                 ));
             }
         }
+        if let Some(c) = self.optional[3]
+            && c.values(0..n).any(|v| v > u32::from(u16::MAX))
+        {
+            return Err(fail(ELEVATION, "an elevation outside i16"));
+        }
         for (col, id) in self.optional.iter().zip(OPTIONAL) {
             if let Some(c) = col
                 && c.values(0..n).all(|v| v == 0)
@@ -194,6 +217,9 @@ pub struct PlaceColumns<'c> {
     pub classes: &'c [u32],
     /// Flags, or empty.
     pub flags: &'c [u32],
+    /// Elevations in metres, `None` where unknown; or empty. `i16::MIN` is refused: it is the
+    /// stored "unknown".
+    pub elevations: &'c [Option<i16>],
 }
 
 /// Encodes a PLACES payload ([`Encoding::TABLE`](crate::Encoding::TABLE)); its item count is
@@ -212,6 +238,7 @@ pub fn encode(cols: &PlaceColumns<'_>) -> Result<alloc::vec::Vec<u8>, Error> {
         || !optional_ok(cols.admin_levels.len())
         || !optional_ok(cols.classes.len())
         || !optional_ok(cols.flags.len())
+        || !optional_ok(cols.elevations.len())
     {
         return Err(Error::Write("the place columns differ in length"));
     }
@@ -225,7 +252,15 @@ pub fn encode(cols: &PlaceColumns<'_>) -> Result<alloc::vec::Vec<u8>, Error> {
     let lon: Vec<u32> = cols.points.iter().map(|p| bias(p.lon())).collect();
     let kind: Vec<u32> = cols.kinds.iter().map(|k| u32::from(k.code())).collect();
     let level: Vec<u32> = cols.admin_levels.iter().map(|&v| u32::from(v)).collect();
-    let mut encoded: Vec<(u16, Vec<u8>)> = Vec::with_capacity(6);
+    if cols.elevations.contains(&Some(i16::MIN)) {
+        return Err(Error::Write("an elevation of i16::MIN"));
+    }
+    let elevation: Vec<u32> = cols
+        .elevations
+        .iter()
+        .map(|e| e.map_or(0, |m| (i32::from(m) + ELEVATION_BIAS).unsigned_abs()))
+        .collect();
+    let mut encoded: Vec<(u16, Vec<u8>)> = Vec::with_capacity(7);
     for (id, values) in [
         (LAT, &lat[..]),
         (LON, &lon),
@@ -233,6 +268,7 @@ pub fn encode(cols: &PlaceColumns<'_>) -> Result<alloc::vec::Vec<u8>, Error> {
         (ADMIN_LEVEL, &level),
         (CLASS, cols.classes),
         (FLAGS, cols.flags),
+        (ELEVATION, &elevation),
     ] {
         // An optional column that is empty or all 0 is left out: it reads as 0.
         if id <= KIND || values.iter().any(|&v| v != 0) {
