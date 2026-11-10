@@ -170,7 +170,10 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   [§3.7](../../02-research/notes/offline-loading-and-trust.md#37-the-client-as-built-2026-11-10)):
   `no_std` + `alloc`, 17 tests on a generated repository; nine planted faults each fail a test;
   builds for `thumbv7em-none-eabihf` in fast-check
-- [ ] Catalog `custom` schema v1 with a checked-in JSON schema
+- [x] Catalog `custom` schema v1 with a checked-in JSON schema (2026-11-10, D-160,
+  [§3.10](../../02-research/notes/engine-and-catalog.md#310-the-catalog-schema-as-built-2026-11-10)):
+  `sync::catalog::Entry`, `schema/catalog-custom-v1.json`; 466 B of `custom` an entry; eight planted
+  faults each fail a test
 - [ ] Differential gate against `tough` and python-tuf
 - [ ] Repository tooling in `xtask`: sign, publish metadata to Pages, upload to sharded immutable
   releases, the scheduled timestamp job; key ceremony and rotation drill documented
@@ -253,3 +256,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | Main's world part: ownership by the Nepal view at 15 km instead of the `ne-admin0` delta; 2 km and islets left out to fit Z1; locator radius 3 km; regions below their city | [world admin 1 §3.6–3.7](../../02-research/notes/world-admin1-osm.md#36-ownership-by-the-nepal-view-measured-2026-11-10), D-156 to D-158 |
 | 2026-11-10 | 4.2: thinning on sorted records, banded crossings | the measured 3.9 GB peak and 132 s in `crossings` |
 | 2026-11-10 | 4.3: the root cap is python-tuf's 512,000 B, not 64 KiB | D-159 |
+| 2026-11-10 | 4.3: the catalog gives sizes per component and the head hash, not one target per component | D-160 |

@@ -100,7 +100,11 @@ fn known(tag: Tag) -> Option<&'static (Tag, &'static str, Value)> {
     KNOWN.iter().find(|(t, _, _)| *t == tag)
 }
 
-fn name_like(v: &[u8], dots: bool) -> bool {
+/// Whether `v` is a name as the manifest holds an address or component (`dots` false) or a
+/// release (`dots` true): 1–64 bytes of `a-z`, `0-9` and `-` (and `.`), starting with a letter
+/// or digit.
+#[must_use]
+pub fn name_like(v: &[u8], dots: bool) -> bool {
     (1..=64).contains(&v.len())
         && v.first().is_some_and(u8::is_ascii_alphanumeric)
         && v.iter().all(|&c| {

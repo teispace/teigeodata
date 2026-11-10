@@ -284,6 +284,33 @@ times under gzip (**unverified** on our catalog; S1 measures it).
   An update whose `sections` hash equals the installed one costs nothing. One whose head
   differs runs the section plan of [download and delta](download-and-delta.md).
 
+### 3.10 The catalog schema as built (2026-11-10)
+
+D-160 settles §3.8 with four changes found while building it:
+
+- **`pack.head` instead of `sections`.** The pack's head hash covers the header, the section
+  table (every section's BLAKE3) and the manifest, so equal heads mean equal packs; a table-only
+  hash would call two packs equal whose manifests differ. Section-level comparison uses the new
+  head frame itself, at most 16 KiB.
+- **`sizes` per component, not one target per component.** Since D-135 and D-136 a pack is one
+  signed file whose sections a client installs by component, so the catalog gives
+  `[wire, disk]` bytes for each component and a plan sums the set it asks for, closed by what
+  each component needs.
+- **`bbox` in integers.** Canonical JSON (and so TUF's signatures) has no floats: the box is
+  `[west, south, east, north]` in 1e-7 degree, the manifest's own grid.
+- **`file` checked.** The asset's name carries the first 8 hex digits of the target's BLAKE3,
+  and the client refuses an entry whose name disagrees with its path or hash.
+
+Measured: 466 B of `custom` per entry in canonical JSON with four components, one dependency
+and a box; with TUF's `length` and two hashes (BLAKE3 for the client, SHA-256 for the
+python-tuf oracle) about 650 B, above the 300–400 B estimate. About 5,000 targets would be about
+3.2 MB of JSON, and the hashes (80 random bytes a target) do not compress, so gzip leaves at
+least about 400 KB: gate 12's 512 KiB is tight. Levers, if the measurement on a generated world
+catalog fails it: drop SHA-256 once the differential no longer needs it, write only the
+components a pack has, and split the targets into delegated bins (§2). The JSON Schema (`crates/teigeodata-sync/schema/catalog-custom-v1.json`)
+cannot express the cross-field rules (path, hash, seek table below the asset length, a box's
+south below its north, no self-dependency); `Entry::from_target` checks them.
+
 ## 4. Options compared
 
 **Snapshot swap.**

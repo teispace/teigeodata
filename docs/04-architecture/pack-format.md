@@ -77,8 +77,8 @@ FOOTER (32 B), right after the last section: magic, file_len u64, head_hash[16]
   sees the pack.
 - **Section encodings:** 0 RAW (stored as is) and 1 TABLE (a column table, below). Both have
   `decoded_length = length`.
-- The section table's hash goes in the catalog entry (`custom.sections`), so a client can
-  compare installed and new packs section by section.
+- The head hash goes in the catalog entry (`custom.pack.head`, D-160): equal heads mean equal
+  packs, and a client compares installed and new packs section by section from the new head.
 
 ## Manifest
 
