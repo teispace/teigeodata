@@ -1,0 +1,5 @@
+# Oracles for teigeodata-sync: python-tuf for the trust client (D-161), python-jsonschema for
+# the catalog's schema (D-160). CI: the tuf-oracle job in fast-check.
+tuf==7.0.1
+securesystemslib[crypto]==1.6.0
+jsonschema==4.26.0

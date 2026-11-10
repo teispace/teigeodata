@@ -1,0 +1,30 @@
+{
+ "steps": [
+  {
+   "file": "01-root.json",
+   "op": "root",
+   "python": "ok"
+  },
+  {
+   "file": "02-root.json",
+   "op": "root",
+   "python": "ok"
+  },
+  {
+   "file": "03-timestamp.json",
+   "op": "timestamp",
+   "python": "ok"
+  },
+  {
+   "file": "04-snapshot.json",
+   "op": "snapshot",
+   "python": "ok"
+  },
+  {
+   "file": "05-targets.json",
+   "op": "targets",
+   "python": "ok"
+  }
+ ],
+ "why": "two rotations, then the chain"
+}

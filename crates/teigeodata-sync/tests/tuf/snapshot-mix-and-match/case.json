@@ -1,0 +1,15 @@
+{
+ "steps": [
+  {
+   "file": "01-timestamp.json",
+   "op": "timestamp",
+   "python": "ok"
+  },
+  {
+   "file": "02-snapshot.json",
+   "op": "snapshot",
+   "python": "reject"
+  }
+ ],
+ "why": "a validly signed snapshot of another hash"
+}

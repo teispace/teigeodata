@@ -1,0 +1,20 @@
+{
+ "steps": [
+  {
+   "file": "01-root.json",
+   "op": "root",
+   "python": "ok"
+  },
+  {
+   "file": "02-root.json",
+   "op": "root",
+   "python": "ok"
+  },
+  {
+   "file": "03-timestamp.json",
+   "op": "timestamp",
+   "python": "ok"
+  }
+ ],
+ "why": "an expired root may be walked through"
+}

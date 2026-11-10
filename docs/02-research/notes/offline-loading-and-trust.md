@@ -583,7 +583,15 @@ Tests: 17 in `trust::tests` on a generated repository (rotation, expiry, rollbac
 mix-and-match, freeze, a duplicate key, endless data, malformed metadata, call order). Each of
 nine checks (distinct keys, root version step, root expiry, timestamp and snapshot rollback,
 targets version in the snapshot, current snapshot, snapshot and targets version) was removed
-in turn and a test failed. The differential against `tough` and python-tuf is the next item.
+in turn and a test failed.
+
+**Differential against python-tuf (D-161).** 27 repositories built and judged by python-tuf
+7.0.1, 66 steps, replayed by `crates/teigeodata-sync/tests/tuf_differential.rs`. Every verdict
+agrees but one: python-tuf counts a threshold by key IDs, so one key listed under two IDs meets
+a threshold of 2; we count distinct public keys and refuse it, so one key can never stand for
+two signers. python-tuf's own serialization verifies under our canonical JSON,
+including control characters, non-ASCII keys and `u64::MAX`. `tough` is still to be added as a
+second oracle.
 
 ## 4. Options compared
 

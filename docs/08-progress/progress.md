@@ -52,8 +52,8 @@ A short status. The numbers and evidence live in each phase file and the
   (D-156), islets under the tolerance's square left out at 2 km (D-157: 5.60 MB merged, 3,877
   units, locator radius 3 km, 0 probes missed), and a region ranked below the city of its name
   (D-158); thinning on sorted, banded records (122 s, 2.46 GB peak); the TUF client
-  `sync::trust` (D-159) and the catalog's `custom` schema v1 (D-160). Next: 4.3 the
-  differential against `tough` and python-tuf, repository tooling; the world byte-identity check after the thinning change
+  `sync::trust` (D-159), the catalog's `custom` schema v1 (D-160) and the differential against
+  python-tuf (D-161). Next: 4.3 repository tooling in `xtask`, then discovery, then `tough`; the world byte-identity check after the thinning change
   waits for the inputs to be fetched again.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).

@@ -1,0 +1,15 @@
+{
+ "steps": [
+  {
+   "file": "01-timestamp.json",
+   "op": "timestamp",
+   "python": "ok"
+  },
+  {
+   "file": "02-timestamp.json",
+   "op": "timestamp",
+   "python": "reject"
+  }
+ ],
+ "why": "a newer timestamp naming an older snapshot"
+}

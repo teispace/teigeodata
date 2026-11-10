@@ -50,6 +50,8 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | Java (JVM binding, CI) | 25 (Temurin) | 2026-11-07 | `java --version` | 2026-12-07 |
 | Swift (SwiftPM, local) | 6.4.2 | 2026-11-07 | `swift --version` | 2026-12-07 |
 | Python (local) | 3.15.2 | 2026-11-07 | `python3 --version` | 2026-12-07 |
+| python-tuf, securesystemslib (`tools/tuf-oracle`, the TUF differential, D-161) | 7.0.1, 1.6.0 | 2026-11-10 | PyPI | 2026-12-10 |
+| python-jsonschema (`tools/tuf-oracle`, the catalog schema, D-160) | 4.26.0 | 2026-11-10 | PyPI | 2026-12-10 |
 | taiki-e/install-action / setup-java / setup-dart | v2.90.2 / v6.2.0 / v1.8.1 | 2026-11-07 | GitHub | 2026-12-07 |
 | Flutter / Dart | 3.47.9 / 3.13.7 | 2026-11-06 | flutter.dev | 2026-12-06 |
 | native_toolchain_rust | 1.0.7 | 2026-11-06 | pub.dev | 2026-12-06 |

@@ -1,0 +1,33 @@
+{
+ "cases": [
+  "chain",
+  "target-tampered",
+  "root-rotation",
+  "root-new-keys-only",
+  "root-old-keys-only",
+  "root-skip",
+  "root-same-version",
+  "root-below-threshold",
+  "root-expired-in-the-walk",
+  "root-expired-final",
+  "timestamp-rollback",
+  "timestamp-equal",
+  "timestamp-snapshot-rollback",
+  "timestamp-expired",
+  "timestamp-wrong-key",
+  "snapshot-mix-and-match",
+  "snapshot-version",
+  "snapshot-stored-replaced",
+  "snapshot-drops-a-file",
+  "snapshot-targets-rollback",
+  "snapshot-expired",
+  "targets-mix-and-match",
+  "targets-version",
+  "targets-expired",
+  "targets-wrong-key",
+  "canonical-json",
+  "one-key-two-ids"
+ ],
+ "now": 1794268800,
+ "oracle": "python-tuf 7.0.1"
+}

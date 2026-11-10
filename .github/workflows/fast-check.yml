@@ -151,6 +151,21 @@ jobs:
         with:
           manifest-path: bindings/Cargo.toml
 
+  tuf-oracle:
+    # python-tuf rebuilds and judges the differential corpus; any change to it fails (D-161).
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Oracles
+        run: |
+          python3 -m venv "$RUNNER_TEMP/oracle"
+          "$RUNNER_TEMP/oracle/bin/pip" install --quiet -r tools/tuf-oracle/requirements.txt
+          "$RUNNER_TEMP/oracle/bin/python" -I tools/tuf-oracle/generate.py crates/teigeodata-sync/tests/tuf
+          git status --porcelain crates/teigeodata-sync/tests/tuf
+          test -z "$(git status --porcelain crates/teigeodata-sync/tests/tuf)"
+          "$RUNNER_TEMP/oracle/bin/python" -I tools/tuf-oracle/check_schema.py crates/teigeodata-sync/schema/catalog-custom-v1.json
+
   typos:
     runs-on: ubuntu-latest
     timeout-minutes: 5

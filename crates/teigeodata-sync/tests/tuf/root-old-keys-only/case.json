@@ -1,0 +1,10 @@
+{
+ "steps": [
+  {
+   "file": "01-root.json",
+   "op": "root",
+   "python": "reject"
+  }
+ ],
+ "why": "v2 signed by the old keys alone"
+}

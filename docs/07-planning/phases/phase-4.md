@@ -174,7 +174,10 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   [§3.10](../../02-research/notes/engine-and-catalog.md#310-the-catalog-schema-as-built-2026-11-10)):
   `sync::catalog::Entry`, `schema/catalog-custom-v1.json`; 466 B of `custom` an entry; eight planted
   faults each fail a test
-- [ ] Differential gate against `tough` and python-tuf
+- [x] Differential gate against python-tuf (2026-11-10, D-161): 27 cases, 66 steps, one
+  recorded difference (key IDs against keys); the corpus is checked in and the `tuf-oracle` job
+  regenerates it; five planted faults and a falsified verdict each fail
+- [ ] The same corpus against `tough`, in its own crate outside the workspace
 - [ ] Repository tooling in `xtask`: sign, publish metadata to Pages, upload to sharded immutable
   releases, the scheduled timestamp job; key ceremony and rotation drill documented
 - [ ] Discovery: `catalog.find(name)` over the baseline (and the gazetteer pack when present),
@@ -257,3 +260,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.2: thinning on sorted records, banded crossings | the measured 3.9 GB peak and 132 s in `crossings` |
 | 2026-11-10 | 4.3: the root cap is python-tuf's 512,000 B, not 64 KiB | D-159 |
 | 2026-11-10 | 4.3: the catalog gives sizes per component and the head hash, not one target per component | D-160 |
+| 2026-11-10 | 4.3: the differential split: python-tuf done, `tough` its own item | D-161 |

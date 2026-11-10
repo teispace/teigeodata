@@ -1,0 +1,10 @@
+{
+ "steps": [
+  {
+   "file": "01-timestamp.json",
+   "op": "timestamp",
+   "python": "reject"
+  }
+ ],
+ "why": "signed by the snapshot key"
+}

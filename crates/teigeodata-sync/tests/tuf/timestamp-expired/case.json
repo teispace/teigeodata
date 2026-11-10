@@ -1,0 +1,15 @@
+{
+ "steps": [
+  {
+   "file": "01-timestamp.json",
+   "op": "timestamp",
+   "python": "expired"
+  },
+  {
+   "file": "02-snapshot.json",
+   "op": "snapshot",
+   "python": "expired"
+  }
+ ],
+ "why": "an expired timestamp blocks the snapshot"
+}

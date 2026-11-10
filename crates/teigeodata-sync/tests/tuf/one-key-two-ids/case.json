@@ -1,0 +1,19 @@
+{
+ "steps": [
+  {
+   "file": "01-root.json",
+   "op": "root",
+   "ours": "reject",
+   "ours_why": "a threshold counts distinct keys, not key IDs (D-159); python-tuf counts IDs",
+   "python": "ok"
+  },
+  {
+   "file": "02-root.json",
+   "op": "root",
+   "ours": "reject",
+   "ours_why": "v2 was refused, so v3 skips a version",
+   "python": "ok"
+  }
+ ],
+ "why": "v2 lists one key under two IDs for a threshold of 2"
+}

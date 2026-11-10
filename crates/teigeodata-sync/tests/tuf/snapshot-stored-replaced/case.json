@@ -1,0 +1,20 @@
+{
+ "steps": [
+  {
+   "file": "01-timestamp.json",
+   "op": "timestamp",
+   "python": "ok"
+  },
+  {
+   "file": "02-snapshot_stored.json",
+   "op": "snapshot_stored",
+   "python": "reject"
+  },
+  {
+   "file": "03-targets.json",
+   "op": "targets",
+   "python": "reject"
+  }
+ ],
+ "why": "a stored snapshot a newer timestamp replaced"
+}
