@@ -3,6 +3,12 @@
 //! `ISO_A2_EH` the ISO 3166-1 code where one applies (`-99` where none does), `WIKIDATAID` the
 //! Wikidata item, `NAME` the short English name, `NAME_<XX>` the name in language `xx`,
 //! `LABEL_X`/`LABEL_Y` the cartographers' label point and `POP_EST` the population estimate.
+//!
+//! Natural Earth admin 1 (`ne_10m_admin_1_states_provinces.geojson`, D-150) is read by
+//! [`read_admin1`]: the same layout in lower case (`adm1_code` unique, `adm0_a3` the country it
+//! is drawn under in the default point of view, `name_<xx>`, `wikidataid`, `gn_id`,
+//! `longitude`/`latitude`), and `FCLASS_NP`, Nepal's point of view's class for the unit
+//! (`Unrecognized` for a unit that view does not recognise).
 
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -13,7 +19,7 @@ use serde::Deserialize;
 use crate::geom::Polygon;
 use crate::record::e7;
 
-/// The `NAME_<XX>` columns and their BCP 47 tags, in column order.
+/// The `NAME_<XX>` columns (lower case in admin 1) and their BCP 47 tags, in column order.
 const LANGS: [(&str, &str); 26] = [
     ("NAME_AR", "ar"),
     ("NAME_BN", "bn"),
@@ -61,6 +67,25 @@ pub(crate) struct Country {
     pub(crate) polygon: Polygon,
 }
 
+/// One admin-1 feature.
+#[derive(Debug)]
+pub(crate) struct Unit {
+    /// `adm1_code`, unique in the file.
+    pub(crate) code: String,
+    /// `adm0_a3`: the country it is drawn under in the default point of view.
+    pub(crate) adm0: String,
+    pub(crate) wikidata: Option<String>,
+    /// `gn_id`, the `GeoNames` ID of the unit, when positive.
+    pub(crate) geonames: Option<u64>,
+    /// `name` first, then each `name_<xx>` with its language; empty for a placeholder.
+    pub(crate) names: Vec<(Option<&'static str>, String)>,
+    /// (lon, lat) on the 1e-7° grid, from `longitude`/`latitude`.
+    pub(crate) label: Option<(i32, i32)>,
+    /// `FCLASS_NP` is `Unrecognized`: Nepal's point of view does not recognise the unit.
+    pub(crate) unrecognized: bool,
+    pub(crate) polygon: Polygon,
+}
+
 #[derive(Deserialize)]
 struct Collection {
     features: Vec<Feature>,
@@ -92,36 +117,63 @@ pub(crate) fn is_plain(path: &Path) -> Result<bool, String> {
     Ok(&magic != b"PK")
 }
 
+fn collection(path: &Path) -> Result<Collection, String> {
+    let file = File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    serde_json::from_reader(BufReader::with_capacity(1 << 20, file))
+        .map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// A trimmed, non-empty text property.
+fn text(f: &Feature, k: &str) -> Option<String> {
+    f.properties
+        .get(k)
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+fn num(f: &Feature, k: &str) -> Option<f64> {
+    f.properties.get(k).and_then(serde_json::Value::as_f64)
+}
+
+/// The names: `name` first (untagged), then each language's column; the column names in upper
+/// case (admin 0) or lower case (admin 1).
+fn names(f: &Feature, upper: bool) -> Vec<(Option<&'static str>, String)> {
+    let col = |c: &str| {
+        if upper {
+            c.to_string()
+        } else {
+            c.to_ascii_lowercase()
+        }
+    };
+    let mut names = Vec::with_capacity(LANGS.len() + 1);
+    names.extend(text(f, &col("NAME")).map(|n| (None, n)));
+    for (c, lang) in LANGS {
+        names.extend(text(f, &col(c)).map(|n| (Some(lang), n)));
+    }
+    names
+}
+
+/// A point from two degree columns.
+fn point(f: &Feature, x: &str, y: &str) -> Option<(i32, i32)> {
+    Some((num(f, x).and_then(e7)?, num(f, y).and_then(e7)?))
+}
+
 /// Every feature of the file, sorted by `ADM0_A3`.
 pub(crate) fn read(path: &Path) -> Result<Vec<Country>, String> {
-    let file = File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let c: Collection = serde_json::from_reader(BufReader::with_capacity(1 << 20, file))
-        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let c = collection(path)?;
     let mut out = Vec::with_capacity(c.features.len());
     for f in &c.features {
-        let text = |k: &str| {
-            f.properties
-                .get(k)
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-        };
-        let num = |k: &str| f.properties.get(k).and_then(serde_json::Value::as_f64);
+        let text = |k: &str| text(f, k);
+        let num = |k: &str| num(f, k);
         let code = text("ADM0_A3")
             .ok_or_else(|| format!("{}: a feature without ADM0_A3", path.display()))?;
-        let mut names = Vec::with_capacity(LANGS.len() + 1);
-        names.extend(text("NAME").map(|n| (None, n)));
-        for (col, lang) in LANGS {
-            names.extend(text(col).map(|n| (Some(lang), n)));
-        }
+        let names = names(f, true);
         if names.is_empty() {
             return Err(format!("{code}: no name"));
         }
-        let label = match (num("LABEL_X").and_then(e7), num("LABEL_Y").and_then(e7)) {
-            (Some(x), Some(y)) => Some((x, y)),
-            _ => None,
-        };
+        let label = point(f, "LABEL_X", "LABEL_Y");
         #[allow(
             clippy::cast_possible_truncation,
             reason = "a population estimate is a whole number far below 2^53"
@@ -145,6 +197,43 @@ pub(crate) fn read(path: &Path) -> Result<Vec<Country>, String> {
         _ => None,
     }) {
         return Err(format!("{}: ADM0_A3 {code} twice", path.display()));
+    }
+    Ok(out)
+}
+
+/// Every admin-1 feature of the file, sorted by `adm1_code`.
+pub(crate) fn read_admin1(path: &Path) -> Result<Vec<Unit>, String> {
+    let c = collection(path)?;
+    let mut out = Vec::with_capacity(c.features.len());
+    for f in &c.features {
+        let code = text(f, "adm1_code")
+            .ok_or_else(|| format!("{}: a feature without adm1_code", path.display()))?;
+        let adm0 = text(f, "adm0_a3").ok_or_else(|| format!("{code}: no adm0_a3"))?;
+        // Empty for Natural Earth's unnamed placeholders (`+99?` codes, "minor island").
+        let names = names(f, false);
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a GeoNames ID is a positive whole number far below 2^53"
+        )]
+        let geonames = num(f, "gn_id").filter(|g| *g >= 1.0).map(|g| g as u64);
+        out.push(Unit {
+            adm0,
+            wikidata: text(f, "wikidataid").filter(|q| q.starts_with('Q')),
+            geonames,
+            names,
+            label: point(f, "longitude", "latitude"),
+            unrecognized: text(f, "FCLASS_NP").as_deref() == Some("Unrecognized"),
+            polygon: Polygon { rings: rings(f) },
+            code,
+        });
+    }
+    out.sort_by(|a, b| a.code.cmp(&b.code));
+    if let Some(code) = out.windows(2).find_map(|w| match w {
+        [a, b] if a.code == b.code => Some(a.code.clone()),
+        _ => None,
+    }) {
+        return Err(format!("{}: adm1_code {code} twice", path.display()));
     }
     Ok(out)
 }
@@ -209,6 +298,57 @@ mod tests {
         );
         let b = &c[1];
         assert_eq!((b.iso2.as_deref(), b.wikidata.as_deref()), (None, None));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn an_admin1_unit_with_its_country_ids_and_class() {
+        let dir = std::env::temp_dir().join(format!("forge-ne1-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("ne1.geojson");
+        std::fs::write(
+            &p,
+            r#"{"type":"FeatureCollection","features":[
+              {"type":"Feature","properties":{"adm1_code":"ZZA-2","adm0_a3":"ZZA","name":"North","name_fr":"Nord",
+                "wikidataid":"Q9","gn_id":123.0,"longitude":0.5,"latitude":0.25,"FCLASS_NP":"Unrecognized"},
+               "geometry":{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}},
+              {"type":"Feature","properties":{"adm1_code":"ZZA-1","adm0_a3":"ZZA","name":"South","gn_id":-1.0,"FCLASS_NP":null},
+               "geometry":{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,-1],[0,0]]]}}]}"#,
+        )
+        .unwrap();
+        let u = read_admin1(&p).unwrap();
+        assert_eq!(
+            u.iter().map(|u| u.code.as_str()).collect::<Vec<_>>(),
+            ["ZZA-1", "ZZA-2"]
+        );
+        let n = &u[1];
+        assert_eq!(
+            (
+                n.adm0.as_str(),
+                n.wikidata.as_deref(),
+                n.geonames,
+                n.label,
+                n.unrecognized
+            ),
+            (
+                "ZZA",
+                Some("Q9"),
+                Some(123),
+                Some((5_000_000, 2_500_000)),
+                true
+            )
+        );
+        assert_eq!(
+            n.names,
+            [
+                (None, "North".to_string()),
+                (Some("fr"), "Nord".to_string())
+            ]
+        );
+        assert_eq!(
+            (u[0].geonames, u[0].label, u[0].unrecognized),
+            (None, None, false)
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

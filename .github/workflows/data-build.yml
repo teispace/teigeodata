@@ -71,14 +71,15 @@ jobs:
           # The country's baseline slice, when its recipe builds one (D-145).
           slice=data/build/baseline/${{ matrix.cc }}/${{ matrix.cc }}-baseline-${{ matrix.build }}.tgd
           if [ -f "$slice" ]; then cargo xtask check-pack "$slice" ${{ matrix.flag }}; fi
-      - name: World part of the baseline (D-147)
+      - name: World part of the baseline (D-147, D-150)
         # Every country with a pack must be built first (the ID gate reads its registry); with
         # one pack country this job holds them all. A second one moves this into its own job.
         run: |
           forge/target/fast/forge fetch ne-admin0-nep
+          forge/target/fast/forge fetch ne-admin1
           forge/target/fast/forge world --release "$RELEASE" ${{ matrix.flag }}
           cargo xtask check-pack data/build/baseline/world/world-baseline-${{ matrix.build }}.tgd ${{ matrix.flag }}
-      - name: World and locator gates (tests/world.rs, D-147, D-149)
+      - name: World and locator gates (tests/world.rs, D-147, D-149, D-150)
         run: |
           b=${{ matrix.build }}
           export TGD_WORLD=$PWD/data/build/baseline/world/world-baseline-$b.tgd

@@ -34,59 +34,109 @@ fn baseline(priority: i32) -> LayerOptions {
     }
 }
 
-/// Alone: each city hangs from one country, and `admin_at` at the city finds that country (the
+/// Alone: each first-level unit hangs from its country, each city from the unit around it or,
+/// off every unit, from its country (D-150), and `admin_at` at the city finds them (the
 /// containment the forge computed on the source polygons, measured at the stored outlines).
+/// Every `admin_at` answer is one chain: each unit it gives has the country it gives as parent.
 #[test]
 #[ignore = "needs TGD_WORLD"]
-fn every_city_hangs_from_the_country_around_it() {
+fn every_city_hangs_from_the_unit_and_country_around_it() {
     let world = read("TGD_WORLD").expect("TGD_WORLD");
     let ids = IdMap::open(&Pack::open(&world).unwrap().section(Kind::IDMAP).unwrap()).unwrap();
     let mut e = Engine::new();
     e.add(Layer::from_bytes(world.clone(), baseline(0)).unwrap());
-    let (mut up, mut units) = (Vec::new(), Vec::new());
+    let (mut up, mut found, mut unit_up) = (Vec::new(), Vec::new(), Vec::new());
     let mut s = Scratch::default();
-    let (mut cities, mut countries, mut orphans, mut agree) = (0_usize, 0_usize, 0_usize, 0_usize);
+    let (mut countries, mut units, mut cities, mut under_unit) = (0_usize, 0_usize, 0_usize, 0);
+    let (mut orphans, mut agree, mut unit_agree) = (0_usize, 0_usize, 0_usize);
     let mut off = Vec::new();
     let mut buf = [0_u8; 512];
     for r in 0..ids.len() {
         let p = e.get(ids.id(r).unwrap()).unwrap().unwrap();
         e.ancestors(&p, &mut up).unwrap();
+        let kinds: Vec<_> = up.iter().map(|a| a.kind).collect();
         match p.kind {
             Some(PlaceKind::Country) => {
                 countries += 1;
                 assert!(up.is_empty(), "a country has no parent");
                 continue;
             }
+            Some(PlaceKind::Admin) => {
+                units += 1;
+                assert_eq!(
+                    kinds,
+                    [Some(PlaceKind::Country)],
+                    "{:?}: a unit's parent",
+                    p.id
+                );
+                continue;
+            }
             Some(PlaceKind::Settlement) => cities += 1,
             k => panic!("unexpected kind {k:?}"),
         }
-        let Some(country) = up.first() else {
+        let Some(country) = up.last() else {
             orphans += 1;
             continue;
         };
-        assert_eq!((up.len(), country.kind), (1, Some(PlaceKind::Country)));
-        e.admin_at(p.point.to_e7(), &mut s, &mut units).unwrap();
-        if units.iter().any(|u| u.id == country.id) {
+        let unit = match kinds.as_slice() {
+            [Some(PlaceKind::Country)] => None,
+            [Some(PlaceKind::Admin), Some(PlaceKind::Country)] => up.first().map(|u| u.id),
+            k => panic!("{:?}: ancestors {k:?}", p.id),
+        };
+        under_unit += usize::from(unit.is_some());
+        e.admin_at(p.point.to_e7(), &mut s, &mut found).unwrap();
+        // One chain: every unit found hangs from the country found.
+        let here: Vec<PlaceId> = found
+            .iter()
+            .filter(|u| u.kind == Some(PlaceKind::Country))
+            .map(|u| u.id)
+            .collect();
+        assert!(here.len() <= 1, "{:?}: countries {here:?}", p.id);
+        for u in found.iter().filter(|u| u.kind == Some(PlaceKind::Admin)) {
+            e.ancestors(u, &mut unit_up).unwrap();
+            assert_eq!(
+                unit_up.last().map(|c| c.id),
+                here.first().copied(),
+                "{:?}: admin_at gives unit {:?} and another country",
+                p.id,
+                u.id
+            );
+        }
+        if here.first() == Some(&country.id) {
             agree += 1;
         } else if off.len() < 8 {
             let name = e.name(&p, &mut buf).unwrap().unwrap_or_default().to_owned();
             off.push(name);
         }
+        if unit.is_some_and(|id| found.iter().any(|u| u.id == id)) {
+            unit_agree += 1;
+        }
     }
     let rate = agree as f64 / (cities - orphans) as f64;
+    let unit_rate = unit_agree as f64 / under_unit.max(1) as f64;
     println!(
-        "{countries} countries, {cities} cities ({orphans} without a country); admin_at agrees \
-         with the parent for {agree} ({:.2}%); first others: {off:?}",
-        rate * 100.0
+        "{countries} countries, {units} units, {cities} cities ({orphans} without a country, \
+         {under_unit} under a unit); admin_at agrees with the country for {agree} ({:.2}%), with \
+         the unit for {unit_agree} ({:.2}%); first others: {off:?}",
+        rate * 100.0,
+        unit_rate * 100.0
     );
-    assert!(countries > 200 && cities > 30_000);
+    assert!(countries > 200 && units > 4_000 && cities > 30_000);
     assert!(
         orphans * 1000 < cities,
         "{orphans} cities without a country"
     );
     assert!(
+        under_unit * 100 >= cities * 95,
+        "{under_unit} cities under a unit"
+    );
+    assert!(
         rate >= 0.98,
         "admin_at agrees with the parent for {rate:.4}"
+    );
+    assert!(
+        unit_rate >= 0.95,
+        "admin_at agrees with the unit for {unit_rate:.4}"
     );
 }
 
@@ -142,7 +192,7 @@ fn the_slice_and_the_pack_answer_for_their_country() {
         }
         assert_eq!(p.layer, w);
         base.ancestors(&p, &mut up).unwrap();
-        assert!(up.len() <= 1);
+        assert!(up.len() <= 2, "a city's unit and country at most");
         checked += 1;
     }
     assert!(checked > 100);

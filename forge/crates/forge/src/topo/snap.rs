@@ -123,14 +123,14 @@ fn meets(a: V, b: V, h: V) -> bool {
 }
 
 /// A uniform grid of cell `cell` from origin `(x0, y0)`.
-struct Grid {
-    x0: i64,
-    y0: i64,
-    cell: i64,
+pub(super) struct Grid {
+    pub(super) x0: i64,
+    pub(super) y0: i64,
+    pub(super) cell: i64,
 }
 
 impl Grid {
-    fn cell_of(&self, p: V) -> (i64, i64) {
+    pub(super) fn cell_of(&self, p: V) -> (i64, i64) {
         (
             (i64::from(p.0) - self.x0).div_euclid(self.cell),
             (i64::from(p.1) - self.y0).div_euclid(self.cell),
@@ -145,7 +145,7 @@ impl Grid {
         clippy::cast_precision_loss,
         reason = "grid coordinates are far below 2^52; the margin covers the f64 rounding"
     )]
-    fn cells(&self, a: V, b: V, out: &mut Vec<(i64, i64)>) {
+    pub(super) fn cells(&self, a: V, b: V, out: &mut Vec<(i64, i64)>) {
         out.clear();
         let (ax, ay, bx, by) = (
             i64::from(a.0),

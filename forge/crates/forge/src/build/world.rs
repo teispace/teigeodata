@@ -1,25 +1,29 @@
 //! `forge world`: the world part of the embedded baseline (D-144, D-147).
 //!
 //! ```text
-//! forge world --release <v> [--lite] [--admin <source>] [--cities <source>]
-//!             [--tolerance-m <m>] [--ids <dir>] [--key <seed-file>]
+//! forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>]
+//!             [--cities <source>] [--tolerance-m <m>] [--ids <dir>] [--key <seed-file>]
 //! ```
 //!
-//! Rows: one country place per Natural Earth admin-0 feature (Nepal's point of view), and every
-//! city of the city list (`GeoNames` `cities15000`) outside the countries that build a slice
-//! of their own pack (a recipe with `baseline:`, D-145). A city's parent is the feature that
-//! contains it on the source polygons, so the point of view decides, not the city's stated
-//! country code; a city outside every feature (a coastal point off a coarse coast) takes the
-//! feature of its code.
+//! Rows: one country place per Natural Earth admin-0 feature (Nepal's point of view), one
+//! first-level unit per Natural Earth admin-1 feature cut to the country that holds most of it
+//! (D-150, [`crate::topo::pov`]), and every city of the city list (`GeoNames` `cities15000`),
+//! all outside the countries that build a slice of their own pack (a recipe with `baseline:`,
+//! D-145). A city's parent is the unit that contains it, else the feature, on the cut and
+//! source polygons, so the point of view decides, not the city's stated country code; a city
+//! outside every feature (a coastal point off a coarse coast) takes the feature of its code.
 //!
 //! IDs: every place is keyed in the namespace of its country code (a feature without an ISO
 //! code, a disputed area, in `world`), by `ne:<ADM0_A3>` and `wikidata:` for countries and
-//! `geonames:` for cities, through one ID registry per namespace
+//! `ne1:<adm1_code>`, `wikidata:` and `geonames:` for units, `geonames:` for cities (a key two
+//! rows share stays with the first of country, city, unit), through one ID registry per namespace
 //! (`world-ids-<build>/<ns>.tsv`, the next build's `--ids`). A country that builds its own
 //! pack is matched in that pack's registry instead, by its Wikidata ID, so the world's row for
 //! it carries the pack's ID and the pack's slice answers for it (the ID gate: no match fails).
 //!
-//! Geometry: the `topology` stage's arcs and polygons of the admin source, re-encoded at the
+//! Geometry: the `topology` stage's arcs and polygons of the countries and units together
+//! (`topo::run_world`: one arc set, each country dissolved from its units and remainders),
+//! re-encoded at the
 //! finest level within the tolerance with the baseline's region index
 //! (`teigeodata_format::extract`). Output: `data/build/baseline/world/`.
 
@@ -43,7 +47,8 @@ use super::pack::{NODE, e6, name_sections, places_section};
 use super::{Place, PlaceName, Profile};
 use crate::geom::{GridIndex, Polygon};
 use crate::lock::Lock;
-use crate::read::natural_earth::{self, Country};
+use crate::read::natural_earth::{self, Country, Unit};
+use crate::topo::pov;
 
 /// One row of the city list (`GeoNames`' dump columns).
 #[derive(Debug)]
@@ -130,6 +135,7 @@ struct Args {
     release: String,
     lite: bool,
     admin: String,
+    admin1: String,
     cities: String,
     tolerance_m: u32,
     ids: Option<String>,
@@ -137,11 +143,12 @@ struct Args {
 }
 
 fn parse(args: &[String]) -> Result<Args, String> {
-    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--cities <source>] [--tolerance-m <m>] [--ids <dir>] [--key <seed-file>]";
+    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tolerance-m <m>] [--ids <dir>] [--key <seed-file>]";
     let mut a = Args {
         release: String::new(),
         lite: false,
         admin: "ne-admin0-nep".into(),
+        admin1: "ne-admin1".into(),
         cities: "geonames-cities15000".into(),
         tolerance_m: TOLERANCE_M,
         ids: None,
@@ -154,6 +161,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
             "--release" => a.release = value()?,
             "--lite" => a.lite = true,
             "--admin" => a.admin = value()?,
+            "--admin1" => a.admin1 = value()?,
             "--cities" => a.cities = value()?,
             "--tolerance-m" => {
                 a.tolerance_m = value()?.parse().map_err(|_| "--tolerance-m: metres")?;
@@ -200,12 +208,26 @@ fn namespace(cc: Option<&str>) -> Namespace {
         .unwrap_or(Namespace::WORLD)
 }
 
-/// A country's names: `NAME` first (the canonical name), then each language's, without
+/// The languages a first-level unit keeps besides its source name (D-150): English, the
+/// API's fallback. All 26 of Natural Earth's would be 3.5 MB of the 8 MB budget (NAMES and
+/// SEARCH, measured 2026-11-10); a country's pack carries its units' full names.
+const UNIT_LANGS: [&str; 1] = ["en"];
+
+/// A unit's untagged source name and its [`UNIT_LANGS`] names.
+fn unit_names(names: &[(Option<&'static str>, String)]) -> Vec<(Option<&'static str>, String)> {
+    names
+        .iter()
+        .filter(|(lang, _)| lang.is_none_or(|l| UNIT_LANGS.contains(&l)))
+        .cloned()
+        .collect()
+}
+
+/// A feature's names: `NAME` first (the canonical name), then each language's, without
 /// repeating a text already listed in the same language or untagged.
-fn country_names(c: &Country) -> Vec<PlaceName> {
+fn names_of(names: &[(Option<&'static str>, String)]) -> Vec<PlaceName> {
     let mut seen: BTreeSet<(Option<&str>, &str)> = BTreeSet::new();
     let mut out = Vec::new();
-    for (i, (lang, text)) in c.names.iter().enumerate() {
+    for (i, (lang, text)) in names.iter().enumerate() {
         if !seen.insert((*lang, text)) || (lang.is_some() && seen.contains(&(None, text.as_str())))
         {
             continue;
@@ -242,7 +264,7 @@ fn country_rows(
                     admin_level: 0,
                     flags: 0,
                     point,
-                    names: country_names(c),
+                    names: names_of(&c.names),
                     population: c.population,
                     rank: 0,
                     parent: None,
@@ -255,15 +277,106 @@ fn country_rows(
         .collect()
 }
 
-/// The city rows outside `skip`, each under the feature that contains it. Returns them and how
+/// The unit rows: each cut unit under its country, at the source's label point when it is
+/// inside the cut polygon, else the topology's.
+fn unit_rows(
+    units: &[Unit],
+    countries: &[Country],
+    cut: &pov::Cut,
+    labels: &BTreeMap<&str, (i32, i32)>,
+) -> Result<Vec<Row>, String> {
+    cut.pieces
+        .iter()
+        .map(|p| {
+            let (Some(u), Some(c)) = (units.get(p.unit), countries.get(p.country)) else {
+                return Err("a piece out of range".to_string());
+            };
+            let inside = Polygon {
+                rings: p.rings.clone(),
+            };
+            let point = u
+                .label
+                .filter(|&(x, y)| inside.contains(x, y))
+                .or_else(|| labels.get(u.code.as_str()).copied())
+                .ok_or_else(|| format!("{}: no label point", u.code))?;
+            let key = format!("ne1:{}", u.code);
+            let mut sources = vec![key.clone()];
+            sources.extend(u.wikidata.as_ref().map(|q| format!("wikidata:{q}")));
+            sources.extend(u.geonames.map(|g| format!("geonames:{g}")));
+            Ok(Row {
+                place: Place {
+                    key,
+                    kind: PlaceKind::Admin,
+                    admin_level: 1,
+                    flags: 0,
+                    point,
+                    names: names_of(&unit_names(&u.names)),
+                    population: None,
+                    rank: 0,
+                    parent: Some(format!("ne:{}", c.code)),
+                    sources,
+                },
+                ns: namespace(c.iso2.as_deref()),
+                elevation: None,
+            })
+        })
+        .collect()
+}
+
+/// Drops every source key a row of higher priority (country, then city, then unit) already
+/// holds, so keys are unique across rows as the registries need; a row's own key (its first)
+/// is never dropped. Returns how many were dropped.
+fn dedup_keys(rows: &mut [Row]) -> usize {
+    let rank = |k: PlaceKind| match k {
+        PlaceKind::Country => 0,
+        PlaceKind::Settlement => 1,
+        _ => 2,
+    };
+    let mut order: Vec<usize> = (0..rows.len()).collect();
+    order.sort_by_key(|&i| {
+        rows.get(i)
+            .map(|r| (rank(r.place.kind), r.place.key.clone()))
+    });
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut dropped = 0;
+    for i in order {
+        let Some(r) = rows.get_mut(i) else { continue };
+        let own = r.place.key.clone();
+        let before = r.place.sources.len();
+        r.place.sources.retain(|k| *k == own || !seen.contains(k));
+        dropped += before - r.place.sources.len();
+        seen.extend(r.place.sources.iter().cloned());
+    }
+    dropped
+}
+
+/// The city rows outside `skip`, each under the unit that contains it, else the feature. Returns them and how
 /// many fell back to the feature of their code, and how many have no parent at all.
 fn city_rows(
     cities: Vec<City>,
     countries: &[Country],
+    units: (&[Unit], &pov::Cut),
     skip: &BTreeSet<String>,
 ) -> (Vec<Row>, usize, usize) {
     let polys: Vec<Polygon> = countries.iter().map(|c| c.polygon.clone()).collect();
     let index = GridIndex::new(&polys, CELL_E7);
+    let pieces: Vec<Polygon> = units
+        .1
+        .pieces
+        .iter()
+        .map(|p| Polygon {
+            rings: p.rings.clone(),
+        })
+        .collect();
+    let piece_index = GridIndex::new(&pieces, CELL_E7);
+    let unit_of = |x: i32, y: i32| {
+        piece_index
+            .candidates(x, y)
+            .find(|&i| pieces.get(i).is_some_and(|p| p.contains(x, y)))
+            .and_then(|i| units.1.pieces.get(i))
+            .and_then(|p| units.0.get(p.unit))
+            .map(|u| format!("ne1:{}", u.code))
+    };
     // The feature of each code: the largest by box, for codes held by several (France and its
     // overseas parts).
     let mut by_code: BTreeMap<&str, (i64, usize)> = BTreeMap::new();
@@ -321,9 +434,11 @@ fn city_rows(
                     names,
                     population: c.population,
                     rank: 0,
-                    parent: parent
-                        .and_then(|i| countries.get(i))
-                        .map(|p| format!("ne:{}", p.code)),
+                    parent: unit_of(c.point.0, c.point.1).or_else(|| {
+                        parent
+                            .and_then(|i| countries.get(i))
+                            .map(|p| format!("ne:{}", p.code))
+                    }),
                 },
                 ns: namespace(Some(&c.cc)),
                 elevation: c.elevation,
@@ -425,7 +540,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let a = parse(args)?;
     let build = if a.lite { "lite" } else { "main" };
     let lock = Lock::read(&root.join("data/sources.lock"))?;
-    for id in [&a.admin, &a.cities] {
+    for id in [&a.admin, &a.admin1, &a.cities] {
         let s = lock.get(id)?;
         if a.lite && !super::LITE.contains(&s.licence_class.as_str()) {
             return Err(format!(
@@ -436,20 +551,8 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     }
     let packs = pack_countries(root)?;
     let countries = natural_earth::read(&lock.path(root, &a.admin)?)?;
-    // The outlines' topology, always from the pinned source (7 s for the world, so it is
-    // never stale).
-    crate::topo::run(root, &a.admin)?;
-    let geometry = super::geometry::load(root, &a.admin)?;
-    let labels = geometry.labels();
-    let mut rows = country_rows(&countries, &labels)?;
-    let skip: BTreeSet<String> = packs.iter().cloned().collect();
-    let (cities, fallback, orphans) = city_rows(
-        read_cities(&lock.path(root, &a.cities)?)?,
-        &countries,
-        &skip,
-    );
-    let n_cities = cities.len();
-    rows.extend(cities);
+    let units = natural_earth::read_admin1(&lock.path(root, &a.admin1)?)?;
+    let (rows, geometry, counts) = world_rows(root, &a, &packs, &lock, &countries, &units)?;
 
     // Rows: Hilbert order of the stored point, ties by key (as a country pack).
     let mut order: Vec<(u64, &str, usize)> = rows
@@ -470,7 +573,10 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     }
     let (ids, registries) = allocate(root, &rows, &a, &packs)?;
     let sections = sections(&places, &rows, &ids, &row_of, &geometry, a.tolerance_m)?;
-    let notices = super::notices(&lock, &[a.admin.as_str(), a.cities.as_str()])?;
+    let notices = super::notices(
+        &lock,
+        &[a.admin.as_str(), a.admin1.as_str(), a.cities.as_str()],
+    )?;
     let out = write(&sections, &a, &notices, root)?;
     super::baseline::check(&out, places.len())?;
     verify(&out, &places)?;
@@ -492,15 +598,11 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         probes.as_bytes(),
     )?;
     let mut r = format!(
-        "# World baseline ({build})\n\n{} rows: {} countries and disputed areas ({}), {n_cities} \
-         cities ({}) outside {} ({fallback} under the feature of their code, {orphans} with \
-         no country); {} namespaces.\n\n| Section | Bytes |\n|---|---:|\n",
+        "# World baseline ({build})\n\n{} rows outside {}; {} namespaces.\n\n{counts}\n\n\
+         | Section | Bytes |\n|---|---:|\n",
         places.len(),
-        countries.len(),
-        a.admin,
-        a.cities,
         if packs.is_empty() {
-            "no pack country".to_string()
+            "the pack countries (none)".to_string()
         } else {
             packs.join(", ")
         },
@@ -521,6 +623,99 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         file.strip_prefix(root).unwrap_or(&file).display(),
         t.elapsed()
     ))
+}
+
+/// The rows (countries, units, cities, keys unique) and the outlines' geometry, with a report.
+/// The topology runs every time from the pinned sources (countries and units together), so it
+/// is never stale.
+fn world_rows(
+    root: &Path,
+    a: &Args,
+    packs: &[String],
+    lock: &Lock,
+    countries: &[Country],
+    units: &[Unit],
+) -> Result<(Vec<Row>, super::geometry::Geometry, String), String> {
+    let c_in: Vec<pov::Input<'_>> = countries
+        .iter()
+        .map(|c| pov::Input {
+            code: &c.code,
+            rings: &c.polygon.rings,
+        })
+        .collect();
+    let u_in: Vec<pov::Input<'_>> = units
+        .iter()
+        .map(|u| pov::Input {
+            code: &u.adm0,
+            rings: &u.polygon.rings,
+        })
+        .collect();
+    // Units the view does not recognise, and unnamed placeholders, are not places: their area
+    // falls to their country's remainder.
+    let unrecognized: Vec<bool> = units
+        .iter()
+        .map(|u| u.unrecognized || u.names.is_empty())
+        .collect();
+    let unnamed = units.iter().filter(|u| u.names.is_empty()).count();
+    // A pack country's units come from its slice.
+    let cut = pov::cut(&c_in, &u_in, &unrecognized, |c| {
+        countries
+            .get(c)
+            .and_then(|c| c.iso2.as_ref())
+            .is_none_or(|cc| !packs.contains(cc))
+    });
+    let name = format!("{}+{}", a.admin, a.admin1);
+    crate::topo::run_world(root, &name, countries, units, &cut)?;
+    let geometry = super::geometry::load(root, &name)?;
+    let labels = geometry.labels();
+    let mut rows = country_rows(countries, &labels)?;
+    rows.extend(unit_rows(units, countries, &cut, &labels)?);
+    let skip: BTreeSet<String> = packs.iter().cloned().collect();
+    let (cities, fallback, orphans) = city_rows(
+        read_cities(&lock.path(root, &a.cities)?)?,
+        countries,
+        (units, &cut),
+        &skip,
+    );
+    let n_cities = cities.len();
+    let under_unit = cities
+        .iter()
+        .filter(|c| {
+            c.place
+                .parent
+                .as_deref()
+                .is_some_and(|p| p.starts_with("ne1:"))
+        })
+        .count();
+    rows.extend(cities);
+    let dropped = dedup_keys(&mut rows);
+    let moved: Vec<&str> = cut
+        .moved
+        .iter()
+        .filter_map(|&i| units.get(i).map(|u| u.code.as_str()))
+        .collect();
+    let counts = format!(
+        "- {} countries and disputed areas ({}).\n- {} first-level units ({}): {} cut to the \
+         country that holds most of them, {} in a country other than their code's ({}), {} \
+         not recognised in this point of view or unnamed placeholders ({unnamed} of them), {} \
+         off every coast, {} of pack countries left to \
+         their slice; {} remainder pieces.\n- {n_cities} cities ({}): {under_unit} under a \
+         unit, {fallback} under the feature of their code, {orphans} with no country.\n- {dropped} \
+         source keys another row already holds dropped.",
+        countries.len(),
+        a.admin,
+        cut.pieces.len(),
+        a.admin1,
+        cut.clipped,
+        moved.len(),
+        moved.join(", "),
+        cut.unrecognized,
+        cut.outside,
+        cut.skipped,
+        cut.fills.len(),
+        a.cities,
+    );
+    Ok((rows, geometry, counts))
 }
 
 /// About this many border probes are written (D-149).
@@ -612,7 +807,11 @@ fn sections(
     }
     let by_code: BTreeMap<String, u32> = row_of
         .iter()
-        .filter_map(|(k, &r)| k.strip_prefix("ne:").map(|c| (c.to_string(), r)))
+        .filter_map(|(k, &r)| {
+            k.strip_prefix("ne:")
+                .or_else(|| k.strip_prefix("ne1:"))
+                .map(|c| (c.to_string(), r))
+        })
         .collect();
     full.extend(super::geometry::sections_by_code(geometry, &by_code)?);
     // The whole pack in memory, then its rows at the outlines' level (one re-encoding path).

@@ -117,7 +117,8 @@ pub(super) fn sections(
 }
 
 /// The sections of polygons coded by `pcode` (one level), each linked to the row `row_of`
-/// gives it; a polygon without a row is an error (D-147).
+/// gives it; a polygon without a row is an error (D-147). Filler pieces (D-150) only complete
+/// their country's dissolve: no place, no polygon.
 pub(super) fn sections_by_code(
     g: &Geometry,
     row_of: &BTreeMap<String, u32>,
@@ -125,6 +126,7 @@ pub(super) fn sections_by_code(
     let mut linked: Vec<(u8, u32, &Poly)> = g
         .polys
         .iter()
+        .filter(|p| !p.pcode.starts_with(topo::pov::FILLER))
         .map(|p| {
             row_of
                 .get(&p.pcode)
