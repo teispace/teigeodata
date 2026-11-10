@@ -1,7 +1,7 @@
 ---
 title: "The engine: layered packs"
 status: draft
-updated: 2026-11-09
+updated: 2026-11-10
 ---
 
 # The engine: layered packs
@@ -77,6 +77,7 @@ asks its layer for each section before reading it (`ensure`). Per query:
 | `tz_of(place)` | `timezone`, else `timezone-index`; names `timezone` when neither is installed |
 | `tz_at` | `timezone-index` |
 | `admin_at` | `admin-index` (with `boundaries`) |
+| `countries_near`, `missing_packs` | `admin-index`; a layer without `boundaries` installed is skipped |
 
 `Place` carries no elevation: `Engine::elevation(&place)` reads it, so a points-only `get`
 never touches heights.
@@ -101,6 +102,7 @@ that needs it (a search context needs `admin`) returns `Error::MissingComponent`
 | `tz_of` | `timezone` or `timezone-index` |
 | `tz_at` | `timezone-index` |
 | `admin_at` | `admin-index` |
+| `countries_near`, `missing_packs` | `admin-index` |
 
 Measured by `cargo xtask sizes --native` (macOS arm64, release, LTO, 2026-11-09): the engine
 with no component features (open, `get`, `reverse`) adds 97.3 KiB (60.9 KiB gzip) to a
@@ -170,6 +172,8 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 | `nearby(place, k)` | As `reverse` | `reverse` from the place's point, without the place |
 | `admin_at(at)` | The first layer in precedence order whose ADMIN_REGION holds the point (coverage beats existence) | none; a unit whose ID a higher layer claims is answered from that layer |
 | `tz_at(at)` | The first layer whose REGION (timezones) holds the point | as `admin_at` |
+| `countries_near(at, r)` | Every layer with outlines: POLY_INDEX boxes that meet the circle's box, then `Polygons::within` (holds the point or a border within `r`) on the country polygons (the locator, D-149) | union by ID, each answered by the layer that wins it |
+| `missing_packs(at, r)` | As `countries_near` | its countries whose pack (the ID's namespace, `np`) is not installed; a partial pack (`ae-du`) counts where its box holds the point |
 | `search(q, k)` | Every layer with SEARCH | Each layer scores its rows and keeps its best k visible; k-way merge by score, then ID. Fuzzy keys share the first letter unless no layer has a visible strong match; a context after a comma matches ancestors in the row's own pack (D-119); the layer's query rules add matches (D-121) |
 | `within_bbox(rect, limit)` | Layers whose box meets the rect | Smallest IDs first, k-way merge by ID |
 | `parent(place)` | The place's own layer, else the first layer by precedence holding the same ID with a parent | none; the parent is answered by the layer that wins its ID (D-143) |

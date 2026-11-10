@@ -1,7 +1,7 @@
 ---
 title: "Engine and catalog: layered packs, the baseline, discovery by name"
 status: research
-updated: 2026-11-09
+updated: 2026-11-10
 owner: research-agent
 revisit: 2027-02-09
 ---
@@ -225,7 +225,8 @@ The baseline is a pack, so it is signed and verified like any other, and an app 
 with a bigger or smaller one built by the forge. The release that the library embeds is
 recorded in its version.
 
-**Locator design.**
+**Locator design** (superseded by the [locator note](locator.md), D-149: a distance query on
+the outlines every layer already has, no buffered REGION).
 - Each address's coverage polygon (its admin unit, or its grid tile) is simplified with
   tolerance `t` and buffered by `t`.
 - A point within `t` of a border is inside two regions, so `regions_at` returns both addresses,

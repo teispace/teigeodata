@@ -113,6 +113,11 @@ This machine is shared with other projects (16 GB RAM, 10 cores, limited disk).
   incremental caches, benchmark scratch, data scratch); at least `cargo clean` for crates not
   being worked on. Keep free disk above 30 GB; below that, clean before anything else.
 - Kill stray processes you started (servers, watchers) before ending a step.
+- **Check and release resources time and again**, not only when something fails: at the start
+  and end of every step, and before ending a session, run `uptime` and `df -h /`, list this
+  project's processes, and remove what is not in use (`forge/target` when the forge is not
+  being run, `target/debug` during release-only work, scratch outputs, finished background
+  jobs). Never touch other projects' processes or files; report what was freed.
 - Data builds are streaming and tiled with a disk budget; they refuse to start if it won't fit.
 
 ## 8. Git, commits, PRs, releases

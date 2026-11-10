@@ -118,8 +118,10 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   world) or one file; decide by the size gate and the engine's layer cost
 - [x] Pin `geonames-cities15000` (D-145) and `ne-admin0-nep` (D-147)
 - [ ] Pin `ne-admin1`; the OSM boundary extract as a CI job
-- [ ] The locator: a REGION over buffered coverage polygons; `missing_pack_for(point)`;
-  border-probe gate (no missed pack; extra-candidate rate reported)
+- [x] The locator: `countries_near` and `missing_packs` by distance on the stored outlines
+  (no buffered REGION, so no bytes), `LOCATOR_RADIUS_M` = the world part's 1 km tolerance;
+  border-probe gate: no missed country over about 110,000 source vertices (D-149,
+  [locator](../../02-research/notes/locator.md))
 - [ ] Size gate (proposed 8 MB, Z1); `baseline` feature; WASM loads it as a file (Z3)
 
 ### 4.3 Catalog and trust
@@ -198,3 +200,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-09 | 4.1b: the partial file and the component plan; disk storage joins 4.5/4.6 | D-136: a points-only install lacks the footer and BLOCK_HASHES |
 | 2026-11-09 | 4.2: the forge item split into the pack slice (done) and the world part; pins split | D-145, D-146 |
 | 2026-11-10 | 4.2: the world part split into countries and cities (done), admin 1, timezones, and the shipped form | D-147 |
+| 2026-11-10 | 4.2: the locator is a distance query on the outlines, not a buffered REGION | D-149 |

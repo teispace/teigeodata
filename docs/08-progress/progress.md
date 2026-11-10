@@ -1,7 +1,7 @@
 ---
 title: "Progress"
 status: living
-updated: 2026-11-09
+updated: 2026-11-10
 ---
 
 # Progress
@@ -39,8 +39,10 @@ A short status. The numbers and evidence live in each phase file and the
   (D-144); Nepal's baseline slice built by `forge baseline` (D-145: 53 rows, 159 kB main),
   level-1 units now under their country (D-146); the world part's countries and cities by
   `forge world` (D-147: 3.77 MB, 98.46% of cities answered by `admin_at`), the topology stage
-  at world scale (D-148). Next: 4.2 world admin 1 and timezones, the shipped baseline, the
-  locator, the 8 MB gate; then 4.3 TUF trust.
+  at world scale (D-148); the locator (`countries_near`, `missing_packs`) by distance on the
+  stored outlines, no country missed over 109,659 border probes at 1 km, 11.9 µs a query
+  (D-149). Next: 4.2 world admin 1 and timezones, the shipped baseline, the 8 MB gate; then
+  4.3 TUF trust.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).
 - **Waiting on the maintainer:** review of `data/countries/np/corrections/` (unreviewed), the labelled sample (Q-005, needed for `ACCURACY.md` and M3),

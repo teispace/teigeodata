@@ -147,8 +147,8 @@ A/B is in D-147. Codes the list uses that Natural Earth's view folds into anothe
   places above the threshold. For the others it reads the sources above, keys each place by
   its GeoNames and Wikidata IDs into that country's registry, and simplifies with the same
   ARCS code at a tolerance from the recipe.
-- **The locator:** a REGION over each address's coverage polygon, simplified and buffered by
-  the same tolerance (engine and catalog §3.6).
+- **The locator:** a distance query on the stored outlines with a radius equal to their
+  tolerance, no separate REGION ([locator note](locator.md), D-149).
 - **Gates:** Z1 size (8 MB), the ID gate (a country's baseline IDs equal its pack's IDs), the
   border probe for the locator, G-lic per source and build.
 

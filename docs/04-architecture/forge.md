@@ -618,8 +618,10 @@ recipe has a `baseline` entry (below).
 
 `forge world --release <v> [--lite] [--admin <source>] [--cities <source>] [--tolerance-m <m>]
 [--ids <dir>] [--key <seed-file>]` writes `data/build/baseline/world/world-baseline-<build>.tgd`,
-its ID registries `world-ids-<build>/<namespace>.tsv` (the next build's `--ids`) and
-`summary-<build>.md` (D-147). Defaults: `ne-admin0-nep`, `geonames-cities15000`, 1 km.
+its ID registries `world-ids-<build>/<namespace>.tsv` (the next build's `--ids`),
+`summary-<build>.md` (D-147) and `world-probes-<build>.tsv`, the locator's border probes: about
+100,000 source vertices at full resolution, every k-th of every feature, each with its
+feature's ID (D-149). Defaults: `ne-admin0-nep`, `geonames-cities15000`, 1 km.
 
 - **Rows.** One country place per admin-0 feature (names from `NAME` and its 26 `NAME_<XX>`
   columns, population, the cartographers' label point when it is inside the feature, else the
