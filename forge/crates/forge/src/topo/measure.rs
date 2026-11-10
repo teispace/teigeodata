@@ -101,7 +101,16 @@ struct Plane {
 impl Plane {
     fn new(rings: &[Vec<V>]) -> Option<Self> {
         let o = *rings.first()?.first()?;
-        let kx = M_PER_UNIT * cos_deg(f64::from(o.1) * 1e-7);
+        // The scale at the outer ring's middle latitude, never below cos 89°: a ring that
+        // starts at a pole (Antarctica's) would otherwise have no width at all.
+        let (lo, hi) = rings
+            .first()?
+            .iter()
+            .fold((i32::MAX, i32::MIN), |(lo, hi), p| {
+                (lo.min(p.1), hi.max(p.1))
+            });
+        let mid = (f64::from(lo) + f64::from(hi)) * 0.5e-7;
+        let kx = M_PER_UNIT * cos_deg(mid).max(cos_deg(89.0));
         let rings = rings
             .iter()
             .map(|r| {
@@ -142,6 +151,20 @@ impl Plane {
         if inside { d } else { -d }
     }
 
+    /// The plane with every ring thinned by Douglas–Peucker at `eps` metres; a ring that would
+    /// fall below 4 vertices is kept whole.
+    fn thinned(self, eps: f64) -> Self {
+        let rings = self
+            .rings
+            .into_iter()
+            .map(|r| {
+                let t = thin_ring(&r, eps);
+                if t.len() >= 4 { t } else { r }
+            })
+            .collect();
+        Self { rings, ..self }
+    }
+
     fn cell(&self, x: f64, y: f64, h: f64) -> Cell {
         let d = self.dist(x, y);
         Cell {
@@ -166,6 +189,62 @@ impl Plane {
     }
 }
 
+/// The label search's work budget in edge distances (4 per step and edge): about a second.
+const LABEL_BUDGET: usize = 50_000_000;
+
+/// Douglas–Peucker on an open ring (the last vertex joins the first): split at the vertex
+/// farthest from the first, then each chain keeps the vertices more than `eps` from its chord.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a chain a..b, its ends p and q, vertex v: the algorithm's own names"
+)]
+fn thin_ring(r: &[(f64, f64)], eps: f64) -> Vec<(f64, f64)> {
+    let n = r.len();
+    if n < 8 {
+        return r.to_vec();
+    }
+    let d2 = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).powi(2) + (a.1 - b.1).powi(2);
+    let far = (1..n)
+        .max_by(|&i, &j| d2(r[0], r[i]).total_cmp(&d2(r[0], r[j])))
+        .unwrap_or(n / 2);
+    let mut keep = vec![false; n];
+    keep[0] = true;
+    keep[far] = true;
+    // Chains as (start, end) indices into the ring closed by index n ≡ 0.
+    let mut stack = vec![(0, far), (far, n)];
+    let at = |i: usize| r[i % n];
+    while let Some((a, b)) = stack.pop() {
+        if b <= a + 1 {
+            continue;
+        }
+        let (p, q) = (at(a), at(b));
+        let (dx, dy) = (q.0 - p.0, q.1 - p.1);
+        let len2 = dx * dx + dy * dy;
+        let (mut best, mut worst) = (a, 0.0_f64);
+        for i in a + 1..b {
+            let v = at(i);
+            let d = if len2 > 0.0 {
+                let t = (((v.0 - p.0) * dx + (v.1 - p.1) * dy) / len2).clamp(0.0, 1.0);
+                d2(v, (p.0 + t * dx, p.1 + t * dy))
+            } else {
+                d2(v, p)
+            };
+            if d > worst {
+                (best, worst) = (i, d);
+            }
+        }
+        if worst > eps * eps {
+            keep[best % n] = true;
+            stack.push((a, best));
+            stack.push((best, b));
+        }
+    }
+    r.iter()
+        .zip(&keep)
+        .filter_map(|(&v, &k)| k.then_some(v))
+        .collect()
+}
+
 /// The label point of a part (its outer ring first, then holes): the pole of inaccessibility,
 /// or `None` if it cannot be placed exactly inside.
 pub(crate) fn label(rings: &[Vec<V>]) -> Option<V> {
@@ -180,11 +259,20 @@ pub(crate) fn label(rings: &[Vec<V>]) -> Option<V> {
     for &(x, y) in outer {
         (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
     }
-    let size = (x1 - x0).min(y1 - y0);
+    // The first cells are squares of the shorter side, at most 1,000 along the longer one.
+    let size = (x1 - x0).min(y1 - y0).max((x1 - x0).max(y1 - y0) / 1000.0);
     if size <= 0.0 {
         return None;
     }
     let precision = (size / 1000.0).max(10.0);
+    // The search measures every edge per cell: on rings thinned to a quarter of the precision
+    // each distance moves by at most that, so the answer keeps its precision, and a country's
+    // ring of 10^5 vertices shrinks by orders of magnitude. The result is checked on `rings`.
+    let plane = plane.thinned(precision / 4.0);
+    // A budget of edge distances, not of steps: a ring the search cannot settle (Antarctica's,
+    // along the pole and the antimeridian) ends in bounded time like any other.
+    let edges: usize = plane.rings.iter().map(Vec::len).sum();
+    let max_steps = (LABEL_BUDGET / edges.max(1)).clamp(1_000, 200_000);
     let h = size / 2.0;
     let mut heap = BinaryHeap::new();
     let mut x = x0;
@@ -197,13 +285,13 @@ pub(crate) fn label(rings: &[Vec<V>]) -> Option<V> {
         x += size;
     }
     let mut best = plane.cell(f64::midpoint(x0, x1), f64::midpoint(y0, y1), 0.0);
-    let mut steps = 0_u32;
+    let mut steps = 0_usize;
     while let Some(c) = heap.pop() {
         steps += 1;
         if c.d > best.d {
             best = Cell { max: c.d, ..c };
         }
-        if c.max - best.d <= precision || steps > 200_000 {
+        if c.max - best.d <= precision || steps > max_steps {
             continue;
         }
         let h = c.h / 2.0;
@@ -219,7 +307,32 @@ pub(crate) fn label(rings: &[Vec<V>]) -> Option<V> {
 
 #[cfg(test)]
 mod tests {
-    use super::{label, ring_area_m2};
+    use super::{label, ring_area_m2, thin_ring};
+
+    #[test]
+    fn thinning_keeps_corners_and_drops_collinear_vertices() {
+        // A 100 × 100 square with 99 extra vertices on each side, 1 cm off the line.
+        let mut r = Vec::new();
+        for (a, b) in [
+            ((0.0, 0.0), (100.0, 0.0)),
+            ((100.0, 0.0), (100.0, 100.0)),
+            ((100.0, 100.0), (0.0, 100.0)),
+            ((0.0, 100.0), (0.0, 0.0)),
+        ] {
+            for i in 0..100 {
+                let t = f64::from(i) / 100.0;
+                let off = if i % 2 == 1 { 0.01 } else { 0.0 };
+                r.push((a.0 + t * (b.0 - a.0) + off, a.1 + t * (b.1 - a.1) + off));
+            }
+        }
+        let t = thin_ring(&r, 1.0);
+        assert_eq!(t.len(), 4, "{t:?}");
+        for c in [(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)] {
+            assert!(t.contains(&c), "{c:?} in {t:?}");
+        }
+        // Below the offset, everything stays.
+        assert_eq!(thin_ring(&r, 0.001).len(), r.len());
+    }
 
     #[test]
     fn area_of_a_degree_square_and_a_label_inside() {
