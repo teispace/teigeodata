@@ -608,4 +608,6 @@ pub(crate) fn verify(
 }
 
 #[cfg(test)]
+mod install_tests;
+#[cfg(test)]
 mod tests;

@@ -56,8 +56,9 @@ A short status. The numbers and evidence live in each phase file and the
   python-tuf (D-161), sizes that match G-wire and SHA-256 targets (D-162), and the repository
   tooling `xtask tuf` with the timestamp workflow, off until the first ceremony (D-163), and
   discovery: the engine as the catalog's `Resolver`, `Catalog::find` (D-164), and the
-  differential against `tough` (D-165); 4.5 started: the layout from the head frame alone
-  (D-166). Next: the sans-I/O planner and installer, then the transport; the release upload and the first
+  differential against `tough` (D-165); 4.5: the layout from the head frame alone (D-166) and
+  the sans-I/O installer that checks every block before writing it (D-167). Next: the
+  `Transport` trait and its `ureq` default, then resume, staging and the journal; the release upload and the first
   ceremony wait for the maintainer; the world byte-identity check after the thinning change
   waits for the inputs to be fetched again.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin

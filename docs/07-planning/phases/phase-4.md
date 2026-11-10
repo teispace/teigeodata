@@ -208,10 +208,11 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 ### 4.5 Download manager
 - [x] A head-only parser in `teigeodata-format`, so the layout comes from the head frame alone:
   `PackHead`, `SeekTable::frames_from_head` (2026-11-10, D-166)
-- [ ] Sans-I/O planner and installer on `transport::Frames`
+- [x] Sans-I/O planner and installer on `transport::Frames`: `sync::install` (2026-11-10, D-167)
 - [ ] `Transport` trait with a `ureq` default (binary size gate against `reqwest`)
-- [ ] Verify-then-write per block; resume by frame with ETag and length checks (the host ignores
-  `If-Range`); mirrors with demotion
+- [x] Verify-then-write per block (2026-11-10, D-167)
+- [ ] Resume by frame with ETag and length checks (the host ignores `If-Range`); mirrors with
+  demotion
 - [ ] Staging, fsync, rename, journal commit, crash recovery; snapshot swap on install
 - [ ] Platform transport prototypes for gate 14 (iOS background `URLSession`, Android UIDT,
   web `fetch` + OPFS); packaging stays in Phase 5
@@ -275,3 +276,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.3: discovery done; the engine is the catalog's `Resolver` behind its feature `catalog` | D-164 |
 | 2026-11-10 | 4.3: the `tough` differential runs on repositories written at run time, not python-tuf's fixed-time corpus | D-165 |
 | 2026-11-10 | 4.5: the first item split into the head-only parser (done), the planner and installer, and the transport | D-166 |
+| 2026-11-10 | 4.5: the installer and verify-then-write done; resume and mirrors their own item | D-167 |

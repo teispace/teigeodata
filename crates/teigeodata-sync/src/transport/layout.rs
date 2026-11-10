@@ -300,14 +300,8 @@ impl Frames {
     /// # Errors
     /// As [`Frames::plan`]; never for a checked layout.
     pub fn plan_components(&self, components: Components) -> Result<Vec<Fetch>, Error> {
-        let set = components.closed();
-        let chosen = |k: Kind| Component::of(k).is_some_and(|c| set.contains(c));
-        let blocked = self
-            .layout
-            .sections
-            .iter()
-            .any(|s| chosen(s.kind) && s.len >= MIN_COVERED);
-        let mut wanted: Vec<Range<u64>> = Vec::with_capacity(self.layout.sections.len() + 1);
+        let (mut wanted, block_hashes) = self.wanted(components);
+        wanted.extend(block_hashes);
         // The head: the first frame, up to the first section.
         let head_end = self
             .layout
@@ -316,14 +310,45 @@ impl Frames {
             .copied()
             .unwrap_or(self.layout.file_len);
         wanted.push(0..head_end);
-        wanted.extend(
-            self.layout
-                .sections
-                .iter()
-                .filter(|s| chosen(s.kind) || (blocked && s.kind == Kind::BLOCK_HASHES))
-                .map(|s| s.offset..s.offset + s.len),
-        );
         self.plan(&wanted)
+    }
+
+    /// The fetches that install `components` once the head frame is held (D-167): those of
+    /// [`Frames::plan_components`] without the head frame, `BLOCK_HASHES`'s frames first and in
+    /// a fetch of their own, so each block of a large section is checked as it arrives.
+    ///
+    /// # Errors
+    /// As [`Frames::plan`]; never for a checked layout.
+    pub fn plan_install(&self, components: Components) -> Result<Vec<Fetch>, Error> {
+        let (wanted, block_hashes) = self.wanted(components);
+        let mut out = match block_hashes {
+            Some(r) => self.plan(&[r])?,
+            None => Vec::new(),
+        };
+        out.extend(self.plan(&wanted)?);
+        Ok(out)
+    }
+
+    /// The sections of `components` and what they need, and `BLOCK_HASHES` apart when one of
+    /// them is [`MIN_COVERED`] or more.
+    fn wanted(&self, components: Components) -> (Vec<Range<u64>>, Option<Range<u64>>) {
+        let set = components.closed();
+        let chosen = |k: Kind| Component::of(k).is_some_and(|c| set.contains(c));
+        let span = |s: &SectionSpan| s.offset..s.offset + s.len;
+        let sections = &self.layout.sections;
+        let blocked = sections
+            .iter()
+            .any(|s| chosen(s.kind) && s.len >= MIN_COVERED);
+        let block_hashes = sections
+            .iter()
+            .find(|s| blocked && s.kind == Kind::BLOCK_HASHES)
+            .map(span);
+        let wanted = sections
+            .iter()
+            .filter(|s| chosen(s.kind))
+            .map(span)
+            .collect();
+        (wanted, block_hashes)
     }
 
     fn fetch(&self, frames: Range<usize>) -> Option<Fetch> {

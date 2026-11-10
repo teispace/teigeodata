@@ -344,6 +344,11 @@ footer.
   `SeekTable::{head_frame, frames_from_head}`, so the table and the head frame (two requests)
   give the plan. The file length comes from the table's decoded sizes and must equal the
   head's own.
+- The ranged install flow of §3.4 is built as a sans-I/O state machine (D-167,
+  `sync::install`). Two refinements: with the catalog entry the table's and the head frame's
+  lengths are known, so the two first requests run at once; and `BLOCK_HASHES` is planned as
+  its own first fetch, because a run of adjacent frames can hold covered frames before it in
+  file order, which could not be checked on arrival.
 - The writer takes the compressor as a closure (as BLOBS does), so C zstd never reaches the
   runtime crate, and checks each frame with `ruzstd`, the decoder clients run.
 - A lying table that keeps the total but shifts compressed sizes between frames passes the

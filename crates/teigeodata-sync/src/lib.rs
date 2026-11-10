@@ -51,6 +51,8 @@ mod error;
 #[cfg(feature = "fuzz")]
 #[doc(hidden)]
 pub mod fuzz;
+#[cfg(feature = "install")]
+pub mod install;
 #[cfg(feature = "repo")]
 pub mod repo;
 pub mod transport;

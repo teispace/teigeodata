@@ -72,6 +72,34 @@ skippable frame     the seek table (magic 0x184D2A5E, Frame_Size)
    decoded size and its window at 1 MiB. A frame that decodes to more or fewer bytes, or leaves
    bytes over, is refused.
 
+## Installing it (sans-I/O, feature `install`, D-167)
+
+`sync::install::Install` installs a pack, or some of its components, from the asset by range
+requests. The caller does all I/O: it fetches the ranges asked for and writes the bytes handed
+back into a staging file of the pack's length.
+
+1. `Install::new(entry, asset_len, set)` from the verified catalog entry and the TUF target's
+   length; `first()` gives two requests that may run at once: the seek table (its length is in
+   the entry) and the head frame (`transport.head`).
+2. `start(table, head_frame, write)` checks the head against the signed entry (head hash,
+   length, address, component, release) and itself, the table against the head, writes the
+   head frame (and the footer when the last section is not installed), and returns the fetches:
+   `BLOCK_HASHES` alone first when a section of 1 MiB or more is wanted, then the sections in
+   file order (`Frames::plan_install`).
+3. `feed(i, bytes, write)` decodes each frame of fetch `i` with its output capped, then checks
+   it before writing: a section under 1 MiB whole against its BLAKE3, a larger one block by
+   block against its block hashes (`blocks::proven_cvs`, proven against the section hash when
+   `BLOCK_HASHES` arrives), padding as zeros, the footer as the head's. A covered section fed
+   before its block hashes is refused.
+4. `finish()` once every fetch is fed: bytes fetched (equal to the catalog's `size_of(set).wire`)
+   and written.
+
+Nothing is written before it is bound to the signed chain (catalog entry → head hash → section
+hashes → block hashes). Tests in `xtask` (`tuf::install_tests`) install every component set
+from the entry and asset `entry_of` publishes and compare with the pack, and forge each frame,
+each padding byte and the footer (validly recompressed, so only the hashes can tell): every
+forgery fails and no forged byte reaches the staging file.
+
 **Trust.** The seek table is not signed and does not need to be. A lying table either fails
 `check`, or (sizes shifted between frames, total kept) makes a frame fail to decode. In every
 case a frame's output is bounded by what the signed head implies, and the bytes are then checked

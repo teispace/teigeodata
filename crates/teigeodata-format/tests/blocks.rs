@@ -328,3 +328,50 @@ fn the_reader_refuses_forged_lists() {
     assert!(matches!(p.blocks(OTHER), Err(Error::SectionHash { kind }) if kind == OTHER.0));
     assert!(p.blocks(BIG).unwrap().is_some());
 }
+
+/// `proven_cvs` (D-167): from the head's entries and the list's bytes alone, each covered
+/// section's block hashes, proven, equal the leaves of its blocks; a changed list, a wrong
+/// entry and a forged list are refused.
+#[test]
+fn block_hashes_from_the_head_alone() {
+    let big = data(2 * (1 << 20) + 5, 3);
+    let other = data(1 << 20, 4);
+    let small = data(900, 5);
+    let bytes = pack(&[(BIG, &big), (OTHER, &other), (Kind::NAMES, &small)]);
+    let p = Pack::open(&bytes).unwrap();
+    let head = p.head();
+    let list_entry = head.section(Kind::BLOCK_HASHES).unwrap();
+    let list = p.section(Kind::BLOCK_HASHES).unwrap().bytes();
+    for (kind, body) in [(BIG, &big), (OTHER, &other)] {
+        let e = head.section(kind).unwrap();
+        let cvs = blocks::proven_cvs(&list_entry, list, &e).unwrap().unwrap();
+        assert_eq!(cvs.len(), body.len().div_ceil(BLOCK));
+        for (i, chunk) in body.chunks(BLOCK).enumerate() {
+            assert_eq!(cvs[i], blocks::leaf(i as u64, chunk));
+        }
+    }
+    let small_entry = head.section(Kind::NAMES).unwrap();
+    assert_eq!(
+        blocks::proven_cvs(&list_entry, list, &small_entry),
+        Ok(None)
+    );
+    // The list changed in one byte: its own hash fails.
+    let e = head.section(BIG).unwrap();
+    let mut changed = list.to_vec();
+    let end = changed.len() - 1;
+    changed[end] ^= 1;
+    assert!(matches!(
+        blocks::proven_cvs(&list_entry, &changed, &e),
+        Err(Error::SectionHash { .. })
+    ));
+    // Another section's entry given as the list.
+    assert!(blocks::proven_cvs(&e, list, &e).is_err());
+    // A section entry whose hash is not what the list proves.
+    let mut wrong = e;
+    let other_hash = *head.section(OTHER).unwrap().hash;
+    wrong.hash = &other_hash;
+    assert!(matches!(
+        blocks::proven_cvs(&list_entry, list, &wrong),
+        Err(Error::SectionHash { kind }) if kind == BIG.0
+    ));
+}

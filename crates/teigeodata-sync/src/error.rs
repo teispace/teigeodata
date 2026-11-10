@@ -24,6 +24,9 @@ pub enum Error {
     Pack(teigeodata_format::Error),
     /// The writer was given something it cannot write, or its output failed the self-check.
     Write(&'static str),
+    /// An install was refused: the asset disagrees with its signed catalog entry, or the caller
+    /// fed it out of order.
+    Install(&'static str),
 }
 
 impl fmt::Display for Error {
@@ -35,6 +38,7 @@ impl fmt::Display for Error {
             Self::Range => f.write_str("a wanted byte range is outside the pack"),
             Self::Pack(e) => write!(f, "the pack was refused: {e}"),
             Self::Write(p) => write!(f, "cannot write the transport asset: {p}"),
+            Self::Install(p) => write!(f, "the install was refused: {p}"),
         }
     }
 }

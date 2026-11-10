@@ -22,7 +22,7 @@ use blake3::hazmat::{
     ChainingValue, HasherExt, Mode, left_subtree_len, merge_subtrees_non_root, merge_subtrees_root,
 };
 
-use crate::{Encoding, Error, Kind, Section};
+use crate::{Encoding, Error, Kind, Section, SectionEntry};
 
 /// log₂ of the block length.
 pub const BLOCK_LOG2: u8 = 14;
@@ -111,11 +111,14 @@ fn entry(e: [u8; ENTRY]) -> (u32, u32, u64) {
 
 impl<'a> List<'a> {
     fn parse(section: &Section<'a>) -> Result<Self, Error> {
-        if section.encoding() != Encoding::RAW {
+        Self::parse_body(section.bytes(), section.encoding(), section.item_count())
+    }
+
+    fn parse_body(bytes: &'a [u8], encoding: Encoding, item_count: u64) -> Result<Self, Error> {
+        if encoding != Encoding::RAW {
             return Err(fail("not a raw section"));
         }
-        let (&[log2, r0, r1, r2, e0, e1, e2, e3, c @ ..], rest) = section
-            .bytes()
+        let (&[log2, r0, r1, r2, e0, e1, e2, e3, c @ ..], rest) = bytes
             .split_first_chunk::<HEADER>()
             .ok_or(fail("truncated"))?;
         if log2 != BLOCK_LOG2 || [r0, r1, r2] != [0; 3] {
@@ -124,7 +127,7 @@ impl<'a> List<'a> {
         let entries =
             usize::try_from(u32::from_le_bytes([e0, e1, e2, e3])).map_err(|_| fail("too long"))?;
         let cvs = u64::from_le_bytes(c);
-        if section.item_count() != cvs {
+        if item_count != cvs {
             return Err(fail("the item count is not the number of block hashes"));
         }
         let (dir, cv_bytes) = rest
@@ -189,6 +192,43 @@ pub(crate) fn check<'a>(
         ));
     }
     Ok(())
+}
+
+/// The block hashes of a section known only by its table entry (`section`), from the
+/// `BLOCK_HASHES` body `list` (whose own entry is `list_entry`): the list is checked against
+/// its hash, then the section's hashes are proven against the section's (D-167). What a ranged
+/// installer checks each arriving block against, with [`leaf`], before any of the section is
+/// written. `None` if the section is under [`MIN_COVERED`].
+///
+/// # Errors
+/// [`Error::SectionHash`] if the list or the proof fails; [`Error::Payload`] if the list is
+/// malformed or has no entry for a covered section.
+pub fn proven_cvs<'a>(
+    list_entry: &SectionEntry<'_>,
+    list: &'a [u8],
+    section: &SectionEntry<'_>,
+) -> Result<Option<&'a [[u8; 32]]>, Error> {
+    if !covered(section.kind, section.length) {
+        return Ok(None);
+    }
+    if list_entry.kind != Kind::BLOCK_HASHES || list.len() as u64 != list_entry.length {
+        return Err(fail("not the block-hash list"));
+    }
+    if blake3::hash(list).as_bytes() != list_entry.hash {
+        return Err(Error::SectionHash {
+            kind: Kind::BLOCK_HASHES.0,
+        });
+    }
+    let parsed = List::parse_body(list, list_entry.encoding, list_entry.item_count)?;
+    let cvs = parsed
+        .cvs_of(section.kind, section.length)
+        .ok_or(fail("the section has no entry"))?;
+    if root(cvs, section.length).as_ref() != Some(section.hash) {
+        return Err(Error::SectionHash {
+            kind: section.kind.0,
+        });
+    }
+    Ok(Some(cvs))
 }
 
 /// One covered section, its block hashes proven against its section hash.
