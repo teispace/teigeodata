@@ -2,7 +2,7 @@
 //! a set of rings, thinned to one level of detail before the world's overlay, so a border two
 //! units share stays one line.
 //!
-//! The rings are cleaned and cut into arcs ([`super::arcs::build`]); every arc gets its
+//! The rings are cleaned, snap rounded when not noded ([`super::snap`]) and cut into arcs ([`super::arcs::build`]); every arc gets its
 //! Douglas–Peucker importance and the guard keeps the level free of crossings and degenerate
 //! rings ([`super::simplify::levels_to`]); each unit's rings are rebuilt from the vertices kept
 //! at that level. Arc ends (topology nodes) are always kept, so a junction of three units stays
@@ -23,6 +23,73 @@ pub(crate) struct Thinned {
     pub(crate) arcs: usize,
     /// The guard at the kept level.
     pub(crate) guard: Guarded,
+    /// Snap rounding of the input, when it was not noded.
+    pub(crate) snapped: super::snap::Snapped,
+    /// Units cut to undo a fold rounding made (see [`unfold`]).
+    pub(crate) folds: usize,
+}
+
+/// The most rounds of [`unfold`]; a fold left after them stops the stage in `arcs::build`.
+const UNFOLD_ROUNDS: usize = 4;
+
+/// Undoes folds: snap rounding can turn two units that touch, or overlap by less than a pixel,
+/// into two rings that run one edge the same way, and a narrow neck of one unit into a
+/// zero-width bridge it runs both ways. Snapped rings are noded (every crossing is a
+/// vertex), so the later unit cut by the earlier one, or a bridged unit normalised, by an
+/// exact overlay adds no rounding.
+/// Returns how many units were cut.
+///
+/// # Errors
+/// Two units that overlap in a part at least [`super::pov::MIN_WIDTH`] wide: that is the
+/// data, not rounding.
+fn unfold(rings: &mut Vec<(u32, Vec<V>)>) -> Result<usize, String> {
+    let mut cut = 0;
+    for _ in 0..UNFOLD_ROUNDS {
+        let pairs = arcs::same_way(rings);
+        if pairs.is_empty() {
+            break;
+        }
+        let mut late: std::collections::BTreeMap<u32, Vec<u32>> = std::collections::BTreeMap::new();
+        for (a, b) in pairs {
+            late.entry(b).or_default().push(a);
+        }
+        let of = |u: u32, rings: &[(u32, Vec<V>)]| -> Vec<Vec<V>> {
+            rings
+                .iter()
+                .filter(|(x, _)| *x == u)
+                .map(|(_, r)| r.clone())
+                .collect()
+        };
+        let mut replaced: Vec<(u32, Vec<Vec<V>>)> = Vec::new();
+        for (&b, earlier) in &late {
+            let subject = of(b, rings);
+            let clips: Vec<Vec<Vec<V>>> = earlier
+                .iter()
+                .filter(|&&a| a != b)
+                .map(|&a| of(a, rings))
+                .collect();
+            let clip_refs: Vec<&[Vec<V>]> = clips.iter().map(Vec::as_slice).collect();
+            for (c, &a) in clip_refs.iter().zip(earlier.iter().filter(|&&a| a != b)) {
+                if !super::pov::common(&subject, c, super::pov::MIN_WIDTH).is_empty() {
+                    return Err(format!("units {a} and {b} overlap"));
+                }
+            }
+            // With no other unit, this normalises the unit: its bridges go.
+            let parts = super::pov::minus(&subject, &clip_refs, 0)
+                .unwrap_or_else(|| super::pov::normal(&subject));
+            replaced.push((b, parts.into_iter().flatten().collect()));
+            cut += 1;
+        }
+        if replaced.is_empty() {
+            break;
+        }
+        let gone: std::collections::BTreeSet<u32> = replaced.iter().map(|(u, _)| *u).collect();
+        rings.retain(|(u, _)| !gone.contains(u));
+        for (u, rs) in replaced {
+            rings.extend(arcs::clean_rings(&rs).into_iter().map(|r| (u, r)));
+        }
+    }
+    Ok(cut)
 }
 
 /// Each unit's rings thinned to level `lod` ([`simplify::TOLERANCE_CM`]), in input order.
@@ -36,6 +103,10 @@ pub(crate) fn partition(units: &[&[Vec<V>]], lod: u8) -> Result<(Vec<Rings>, Thi
         rings.extend(arcs::clean_rings(r).into_iter().map(|r| (u, r)));
     }
     let before = rings.iter().map(|(_, r)| r.len()).sum();
+    // A cut leaves vertices on one side of a border only (T-junctions): snap rounding nodes
+    // the input as the topology stage does (D-103); a noded input comes back unchanged.
+    let (mut rings, snapped) = super::snap::snap_round(&rings);
+    let folds = unfold(&mut rings)?;
     let (all, refs) = arcs::build(&rings)?;
     let shape: Vec<(Vec<arcs::Ref>, bool)> = refs
         .iter()
@@ -74,6 +145,8 @@ pub(crate) fn partition(units: &[&[Vec<V>]], lod: u8) -> Result<(Vec<Rings>, Thi
             vertices: (before, after),
             arcs: all.len(),
             guard,
+            snapped,
+            folds,
         },
     ))
 }
@@ -117,7 +190,8 @@ mod tests {
 
     #[test]
     fn overlapping_units_are_refused() {
-        let sq: Vec<V> = vec![(0, 0), (10, 0), (10, 10), (0, 10)];
+        // About 110 m across: an overlap that is data, not rounding.
+        let sq: Vec<V> = vec![(0, 0), (10_000, 0), (10_000, 10_000), (0, 10_000)];
         let a = vec![sq.clone()];
         let b = vec![sq];
         assert!(partition(&[&a, &b], 3).is_err());

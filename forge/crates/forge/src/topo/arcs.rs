@@ -182,7 +182,10 @@ fn check_edges(rings: &[(u32, Vec<V>)]) -> Result<(), String> {
     for g in edges.chunk_by(|x, y| x.0 == y.0) {
         let ((a, b), _, _) = g[0];
         if g.len() > 2 {
-            return Err(format!("the edge {a:?}–{b:?} borders more than two units"));
+            let units: Vec<u32> = g.iter().map(|x| x.2).collect();
+            return Err(format!(
+                "the edge {a:?}–{b:?} borders more than two units (rings of units {units:?})"
+            ));
         }
         if let [x, y] = g
             && x.1 == y.1
@@ -195,6 +198,50 @@ fn check_edges(rings: &[(u32, Vec<V>)]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// The pairs of units (smaller first, sorted, each once) that run an edge the same way: they
+/// overlap there. After snap rounding these are folds, sub-pixel overlaps that rounding turned
+/// into a shared edge (D-155). A unit that runs an edge twice itself (a zero-width bridge)
+/// comes as the pair `(u, u)`.
+pub(crate) fn same_way(rings: &[(u32, Vec<V>)]) -> Vec<(u32, u32)> {
+    use rayon::slice::ParallelSliceMut;
+    let mut edges: Vec<((V, V), bool, u32)> =
+        Vec::with_capacity(rings.iter().map(|(_, r)| r.len()).sum());
+    for (unit, r) in rings {
+        let n = r.len();
+        for i in 0..n {
+            let (a, b) = (r[i], r[(i + 1) % n]);
+            edges.push((key(a, b), a > b, *unit));
+        }
+    }
+    edges.par_sort_unstable();
+    let mut out: Vec<(u32, u32)> = edges
+        .chunk_by(|x, y| x.0 == y.0 && x.1 == y.1)
+        .filter(|g| g.len() > 1)
+        .flat_map(|g| {
+            g.iter()
+                .flat_map(move |x| g.iter().map(move |y| (x.2, y.2)))
+                .filter(|(a, b)| a < b)
+        })
+        .collect();
+    // A unit on both sides of an edge.
+    out.extend(
+        edges
+            .chunk_by(|x, y| x.0 == y.0)
+            .filter(|g| g.len() > 1)
+            .flat_map(|g| {
+                g.iter().enumerate().flat_map(move |(i, x)| {
+                    g.iter()
+                        .skip(i + 1)
+                        .filter(move |y| y.2 == x.2)
+                        .map(move |_| (x.2, x.2))
+                })
+            }),
+    );
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 /// The topology nodes, sorted: a vertex met three or more times, or twice with different

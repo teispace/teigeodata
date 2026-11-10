@@ -32,7 +32,7 @@ pub(crate) const FILLER: &str = "~";
 
 /// A part narrower than this on average, in 1e-7° (about 1.1 m of latitude), is a difference
 /// in how two sources drew one line, not a part of either.
-const MIN_WIDTH: i128 = 100;
+pub(crate) const MIN_WIDTH: i128 = 100;
 
 /// How far, metres, a country dissolved from its cut units may lie from the source's own line
 /// (G-topo's parent check for this stage). The noise [`MIN_WIDTH`] leaves in place is narrow
@@ -137,8 +137,9 @@ fn perimeter(shapes: &[Shape]) -> f64 {
         .sum()
 }
 
-/// Whether `s` (one outer contour and its holes) is narrower than [`MIN_WIDTH`] on average.
-fn thin(s: &Shape) -> bool {
+/// Whether `s` (one outer contour and its holes) is narrower than `width` grid units on
+/// average (mean width `2 · area / perimeter`).
+fn narrower(s: &Shape, width: i128) -> bool {
     let area = area2(std::slice::from_ref(s)).abs();
     let perimeter = perimeter(std::slice::from_ref(s));
     // Twice the area over the perimeter, compared without dividing: 2A/P < w ⇔ 2A < w·P.
@@ -147,13 +148,96 @@ fn thin(s: &Shape) -> bool {
         clippy::cast_possible_truncation,
         reason = "a perimeter far below 2^60 grid units"
     )]
-    let wp = (MIN_WIDTH as f64 * perimeter) as i128;
+    let wp = (width as f64 * perimeter) as i128;
     area < wp
 }
 
 /// The parts of `shapes` at least [`MIN_WIDTH`] wide.
 fn wide(shapes: Vec<Shape>) -> Vec<Shape> {
-    shapes.into_iter().filter(|s| !thin(s)).collect()
+    shapes
+        .into_iter()
+        .filter(|s| !narrower(s, MIN_WIDTH))
+        .collect()
+}
+
+/// `subject` without `clips`, in connected parts at least `min_width` grid units wide on
+/// average; `None` when the clips take nothing from it, so the caller keeps its own vertices
+/// (D-155). Clips may overlap each other: every operand is first normalised (each read
+/// even–odd, outer contours counter-clockwise and holes clockwise), and the difference is
+/// taken non-zero, so the clips act as their union.
+pub(crate) fn minus(
+    subject: &[Vec<V>],
+    clips: &[&[Vec<V>]],
+    min_width: i128,
+) -> Option<Vec<Vec<Vec<V>>>> {
+    let normal = |rings: &[Vec<V>]| -> Shape {
+        overlay(&shape(rings), &Shape::new(), OverlayRule::Subject)
+            .into_iter()
+            .flatten()
+            .collect()
+    };
+    let whole = normal(subject);
+    let clip: Shape = clips.iter().flat_map(|c| normal(c)).collect();
+    let parts = Overlay::<i64>::from_subj_and_clip_custom(
+        &whole,
+        &clip,
+        IntOverlayOptions::keep_all_points(),
+        Solver::default(),
+    )
+    .overlay(OverlayRule::Difference, FillRule::NonZero);
+    if area2(&parts) == area2(std::slice::from_ref(&whole)) {
+        return None;
+    }
+    Some(
+        parts
+            .into_iter()
+            .filter(|s| !narrower(s, min_width))
+            .map(|s| rings_of(std::slice::from_ref(&s)))
+            .collect(),
+    )
+}
+
+/// `rings` read even–odd as normalised parts: outer contours counter-clockwise, holes
+/// clockwise, a zero-width bridge or a ring touching itself split (D-155).
+pub(crate) fn normal(rings: &[Vec<V>]) -> Vec<Vec<Vec<V>>> {
+    overlay(&shape(rings), &Shape::new(), OverlayRule::Subject)
+        .iter()
+        .map(|s| rings_of(std::slice::from_ref(s)))
+        .collect()
+}
+
+/// Whether `sets` overlap anywhere by more than rounding: the area of their union is less than
+/// the sum of their areas (each read even–odd, the union non-zero). One overlay.
+pub(crate) fn overlapping(sets: &[&[Vec<V>]]) -> bool {
+    let normal: Vec<Shape> = sets
+        .iter()
+        .map(|r| {
+            overlay(&shape(r), &Shape::new(), OverlayRule::Subject)
+                .into_iter()
+                .flatten()
+                .collect()
+        })
+        .collect();
+    let sum: i128 = normal.iter().map(|s| area2(std::slice::from_ref(s))).sum();
+    let all: Shape = normal.into_iter().flatten().collect();
+    let union = Overlay::<i64>::from_subj_and_clip_custom(
+        &all,
+        &Shape::new(),
+        IntOverlayOptions::keep_all_points(),
+        Solver::default(),
+    )
+    .overlay(OverlayRule::Subject, FillRule::NonZero);
+    area2(&union) < sum
+}
+
+/// The parts of `a` and `b` in common at least `min_width` grid units wide on average, as one
+/// set of rings (empty when they only touch).
+pub(crate) fn common(a: &[Vec<V>], b: &[Vec<V>], min_width: i128) -> Vec<Vec<V>> {
+    let parts: Vec<Shape> = overlay(&shape(a), &shape(b), OverlayRule::Intersect)
+        .into_iter()
+        .filter(|s| !narrower(s, min_width))
+        .collect();
+    rings_of(&parts)
 }
 
 /// Back to rings of `(lon, lat)`; the overlay's points are on the input grid.

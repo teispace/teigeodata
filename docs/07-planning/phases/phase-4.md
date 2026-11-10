@@ -136,11 +136,16 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] `read::overture`: streamed row groups, land countries, dependencies and regions, WKB on
   the 1e-7° grid, Wikidata and OSM relation from `division` (3.2 s, 1.19 GB; equal to
   `DuckDB`'s counts)
-- [ ] Pre-simplification of the world as one partition, shared arcs within 100 m
-  (`topo::thin`; `arcs::build` on sorted records, world part byte-identical); gate on the
-  world's units: noded, shared borders one arc
-- [ ] `forge world` main on Overture: units owned by the Nepal view, countries dissolved from
-  units, the ownership width measured on known disputes; Z1, ID and locator gates
+- [x] Pre-simplification of the world as one partition, shared arcs within 100 m
+  (`topo::thin`; `arcs::build` on sorted records, world part byte-identical): claims to the
+  earlier code, snap rounding, folds undone; 31.47 M → 3.58 M vertices, guard left 0, 250 s,
+  4.1 GB ([§3.5](../../02-research/notes/world-admin1-osm.md#35-the-worlds-land-as-one-partition-measured-2026-11-10))
+- [ ] Snap rounding on sorted records (its hash maps hold the 4.1 GB peak)
+- [ ] Pin `ne-admin0` (Natural Earth's default view): the Nepal view's delta against it is
+  where a unit's ownership splits
+- [ ] `forge world` main on Overture: units owned by the Nepal view (majority, then the delta
+  in parts wider than the sources' disagreement), countries dissolved from units; Z1, ID and
+  locator gates
 - [ ] The data-build job fetches the pinned Overture tilesets for main's world part
 - [x] The locator: `countries_near` and `missing_packs` by distance on the stored outlines
   (no buffered REGION, so no bytes), `LOCATOR_RADIUS_M` = the world part's 1 km tolerance;

@@ -111,6 +111,35 @@ India's figure includes Natural Earth's Nepal-view lines in Kashmir and Kalapani
 probably its overseas parts (**unverified**). With D-150's 1 m cut rule, nearly every border
 unit would be cut and gain filler slivers.
 
+### 3.5 The world's land as one partition (measured 2026-11-10)
+
+Overture's land areas are not a partition as given, and making them one is most of the work:
+
+- **Regions do not tile their country.** A country's land and its regions' land are clipped
+  to slightly different coasts: 99,743 parts of countries' land outside every region are at
+  least 1 m wide (Spain 7,160, Ireland 6,976). Kept at 100 m mean width (the thinning
+  tolerance), 20,938 remain, mostly islets no region holds; the large ones are lakes no
+  region holds (Lake Malawi 20,516 km², Lake Victoria's Tanzanian part 37,069 km²) and
+  Greenland's national park (863,043 km²).
+- **Claims overlap.** A country's land includes its claims: Morocco's holds Western Sahara,
+  India's and China's each other's claims, both Argentina's and Chile's regions the Southern
+  Patagonian Ice Field, both Canada's and the United States' land Machias Seal Island. Every
+  overlapping area goes to the earlier country code (zones, `read::overture::land_units`);
+  the Nepal view reassigns ownership later.
+- **One country's regions can overlap.** Morocco has Dakhla-Oued Ed-Dahab (MA-12) and a
+  code-less "Western Sahara" region over it. Checked per country with one overlay (union
+  area against summed areas); a coded region keeps the overlap.
+- **Overlays round.** The cut pieces' new vertices are rounded to the grid, so they meet the
+  regions they border away from those regions' vertices. Snap rounding (D-103) nodes the
+  world (17,108 bad pairs, 47,326 vertices added); it can then turn a sub-pixel overlap into
+  two units running one edge the same way, or a narrow neck into a zero-width bridge. Such
+  folds are undone by exact overlays on the snapped, noded rings (1,177 units); an overlap at
+  least 1 m wide is refused as data.
+
+Result: 31,039 land units, 31,470,017 vertices thinned to 3,578,426 at 100 m in 191,202
+shared arcs, the guard leaving nothing; 250 s, peak 4.1 GB (snap rounding's maps dominate:
+the next thing to make lean).
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
@@ -145,9 +174,14 @@ unit would be cut and gain filler slivers.
    neighbours, or whose two edges have different owners), so it replaces it, one code path;
    the gate is the world part byte-identical before and after (BLAKE3 `fcb1f666…`).
 4. **Point of view:** each unit goes to the Nepal-view country holding most of its area, as in
-   D-150. It is cut only by overhang wider than the sources' disagreement, a width to set from
-   the measured offsets. Countries dissolve from their units. Natural Earth supplies the
-   country set, codes, names in 26 languages and the Nepal-view ownership.
+   D-150. Where Nepal's view splits a unit, the split comes from Natural Earth alone, so both
+   of its lines are drawn by one hand: the **delta** is where Natural Earth's Nepal-view
+   admin 0 and its default-view admin 0 (to pin: `ne-admin0`) give the land to different
+   countries. A unit is cut by a delta only in parts wider on average than the sources'
+   disagreement (a width measured on the known disputes), so no border gains slivers. A pack
+   country's own claims are already exact: its slice's outline cuts its neighbours (D-154),
+   Kalapani included. Countries dissolve from their units; Natural Earth supplies the country
+   set, codes, names in 26 languages, Wikidata and population, and the ownership.
 5. **Gates:** the world gates as they are (ID gate, `admin_at` chains, the locator's border
    probe, Z1), plus G-topo against Overture's own country outline, and a count of slivers and
    fillers in the summary, so a rise is seen.

@@ -20,7 +20,7 @@ use parquet::arrow::ProjectionMask;
 use parquet::arrow::arrow_reader::{ArrowPredicateFn, ParquetRecordBatchReaderBuilder, RowFilter};
 use rayon::prelude::*;
 
-use crate::geom::Polygon;
+use crate::geom::{Bbox, Polygon};
 use crate::record::e7;
 
 /// What a division is, of the subtypes the baseline reads.
@@ -125,6 +125,293 @@ pub(crate) fn read_divisions(files: &[PathBuf]) -> Result<HashMap<String, Divisi
         .map_err(|e| format!("{}: {e}", f.display()))?;
     }
     Ok(out)
+}
+
+/// A unit of the world's land partition: a region, or land of a country or dependency that no
+/// region of it covers (all of it when it has none).
+#[derive(Debug)]
+pub(crate) struct LandUnit {
+    /// The index of its area in the input: the region, or the country or dependency.
+    pub(crate) area: usize,
+    pub(crate) rings: Vec<Vec<(i32, i32)>>,
+}
+
+/// A country's land outside every region narrower than this on average, in 1e-7° (about
+/// 100 m, the tolerance the world's land is thinned to, D-155), is two drawings of one coast,
+/// not land: Overture clips a country's land and its regions' to slightly different coasts
+/// (99,743 such parts at least 1 m wide in 2026-10-21.0, Spain alone 7,160).
+pub(crate) const MIN_LAND_WIDTH: i128 = 9_000;
+
+/// The world's land as a partition of units, deterministic in country-code order:
+///
+/// 0. **Zones:** where two countries' land overlaps (claims: the Southern Patagonian Ice
+///    Field in Argentina's and Chile's, Machias Seal Island in Canada's and the United
+///    States'), the overlap at least 1 m wide is the later code's zone.
+/// 1. **Regions,** each without the zones of its own country: the earlier code keeps the claim.
+///    A region no zone meets keeps its own vertices, with no overlay.
+/// 2. **Land no region covers:** each country's or dependency's land without the final regions
+///    and its own zones, in parts at least [`MIN_LAND_WIDTH`] wide: lakes no region holds, a
+///    claim no region holds (Western Sahara in Morocco's land), all of a country with no
+///    region. The regions are disjoint by then, so their union is one even–odd shape.
+///
+/// Which country owns what is decided later, by the point of view; this only makes the units
+/// disjoint, so they share arcs.
+///
+/// # Errors
+/// A region whose `country` names no country or dependency, or a code held twice.
+pub(crate) fn land_units(areas: &[Area]) -> Result<Vec<LandUnit>, String> {
+    use crate::topo::pov::{MIN_WIDTH, common, minus};
+    let mut tops: Vec<(&str, usize)> = Vec::new();
+    let mut regions: Vec<(&str, usize)> = Vec::new();
+    for (i, a) in areas.iter().enumerate() {
+        match a.subtype {
+            Subtype::Region => regions.push((&a.country, i)),
+            Subtype::Country | Subtype::Dependency => tops.push((&a.country, i)),
+        }
+    }
+    tops.sort_unstable();
+    let division = |i: usize| areas.get(i).map_or("", |a| a.division.as_str());
+    regions.sort_unstable_by(|x, y| x.0.cmp(y.0).then(division(x.1).cmp(division(y.1))));
+    if let Some(cc) = tops.windows(2).find_map(|w| match w {
+        [x, y] if x.0 == y.0 => Some(x.0),
+        _ => None,
+    }) {
+        return Err(format!("{cc}: two countries or dependencies"));
+    }
+    if let Some((cc, _)) = regions
+        .iter()
+        .find(|(cc, _)| tops.binary_search_by(|t| t.0.cmp(cc)).is_err())
+    {
+        return Err(format!(
+            "regions of {cc}, which is no country or dependency"
+        ));
+    }
+    let boxes: Vec<Boxes> = areas.iter().map(|a| Boxes::of(&a.polygon.rings)).collect();
+    let no_box = Boxes::default();
+    let bx = |i: usize| boxes.get(i).unwrap_or(&no_box);
+    let rings = |i: usize| areas.get(i).map_or(&[][..], |a| a.polygon.rings.as_slice());
+    // 0. Zones: (the later country's code, the overlap).
+    let pairs: Vec<(usize, usize)> = tops
+        .iter()
+        .enumerate()
+        .flat_map(|(x, &(_, i))| {
+            tops.iter()
+                .skip(x + 1)
+                .filter(move |&&(_, j)| bx(i).meets(bx(j)))
+                .map(move |&(_, j)| (i, j))
+        })
+        .collect();
+    let zones: Vec<Zone<'_>> = pairs
+        .par_iter()
+        .filter_map(|&(i, j)| {
+            let near_i = bx(i).near(rings(i), bx(j));
+            let near_j = bx(j).near(rings(j), bx(i));
+            let z = common(&near_i, &near_j, MIN_WIDTH);
+            let cc = areas.get(j).map(|a| a.country.as_str())?;
+            (!z.is_empty()).then(|| (cc, Boxes::of(&z), z))
+        })
+        .collect();
+    let zones_of = |cc: &str, b: &Boxes| -> Vec<&[Vec<(i32, i32)>]> {
+        zones
+            .iter()
+            .filter(|(z, zb, _)| *z == cc && zb.meets(b))
+            .map(|(_, _, r)| r.as_slice())
+            .collect()
+    };
+    // 1. Regions without their country's zones.
+    let cut: Vec<Parts> = regions
+        .par_iter()
+        .map(|&(cc, i)| {
+            let z = zones_of(cc, bx(i));
+            if z.is_empty() {
+                return vec![rings(i).to_vec()];
+            }
+            minus(rings(i), &z, MIN_WIDTH).unwrap_or_else(|| vec![rings(i).to_vec()])
+        })
+        .collect();
+    let mut out: Vec<LandUnit> = regions
+        .iter()
+        .zip(cut)
+        .flat_map(|(&(_, i), parts)| {
+            parts
+                .into_iter()
+                .map(move |r| LandUnit { area: i, rings: r })
+        })
+        .collect();
+    disjoint_within_countries(areas, &mut out);
+    // 2. Each country's land without the regions near it and its own zones.
+    let unit_boxes: Vec<Boxes> = out.iter().map(|u| Boxes::of(&u.rings)).collect();
+    let rest: Vec<Parts> = tops
+        .par_iter()
+        .map(|&(cc, top)| {
+            let mut clips: Vec<&[Vec<(i32, i32)>]> = out
+                .iter()
+                .zip(&unit_boxes)
+                .filter(|(_, b)| b.meets(bx(top)))
+                .map(|(u, _)| u.rings.as_slice())
+                .collect();
+            clips.extend(zones_of(cc, bx(top)));
+            if clips.is_empty() {
+                return vec![rings(top).to_vec()];
+            }
+            minus(rings(top), &clips, MIN_LAND_WIDTH).unwrap_or_else(|| vec![rings(top).to_vec()])
+        })
+        .collect();
+    for (&(_, top), parts) in tops.iter().zip(rest) {
+        out.extend(parts.into_iter().map(|rings| LandUnit { area: top, rings }));
+    }
+    Ok(out)
+}
+
+/// Makes the regions of each country disjoint (D-155): Overture can hold one area twice in a
+/// country, as Morocco's Dakhla-Oued Ed-Dahab (MA-12) and a region "Western Sahara" without a
+/// code over it. A country is checked with one overlay (union area against summed areas); only
+/// a country that overlaps is resolved pairwise: a region with an ISO 3166-2 code keeps the
+/// overlap ahead of one without, then the lower division ID.
+fn disjoint_within_countries(areas: &[Area], units: &mut Vec<LandUnit>) {
+    use crate::topo::pov::{MIN_WIDTH, common, minus, overlapping};
+    let country = |u: &LandUnit| areas.get(u.area).map_or("", |a| a.country.as_str());
+    let rank = |u: &LandUnit| {
+        areas
+            .get(u.area)
+            .map_or((true, ""), |a| (a.region.is_none(), a.division.as_str()))
+    };
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    for (k, u) in units.iter().enumerate() {
+        match groups.last_mut() {
+            Some(g)
+                if g.first()
+                    .is_some_and(|&f| units.get(f).map(country) == Some(country(u))) =>
+            {
+                g.push(k);
+            }
+            _ => groups.push(vec![k]),
+        }
+    }
+    let fixes: Vec<Vec<(usize, Parts)>> = groups
+        .par_iter()
+        .map(|g| {
+            let sets: Vec<&[Vec<(i32, i32)>]> = g
+                .iter()
+                .filter_map(|&k| units.get(k))
+                .map(|u| u.rings.as_slice())
+                .collect();
+            if g.len() < 2 || !overlapping(&sets) {
+                return Vec::new();
+            }
+            let mut order = g.clone();
+            order.sort_by_key(|&k| units.get(k).map(rank));
+            let boxes: Vec<Boxes> = order
+                .iter()
+                .map(|&k| Boxes::of(units.get(k).map_or(&[][..], |u| u.rings.as_slice())))
+                .collect();
+            let mut fixed = Vec::new();
+            for (x, &k) in order.iter().enumerate() {
+                let Some(u) = units.get(k) else { continue };
+                let clips: Vec<&[Vec<(i32, i32)>]> = order
+                    .iter()
+                    .zip(&boxes)
+                    .take(x)
+                    .filter(|&(_, b)| boxes.get(x).is_some_and(|own| b.meets(own)))
+                    .filter_map(|(&j, _)| units.get(j))
+                    .map(|v| v.rings.as_slice())
+                    .filter(|r| !common(&u.rings, r, MIN_WIDTH).is_empty())
+                    .collect();
+                if let Some(parts) = minus(&u.rings, &clips, MIN_WIDTH) {
+                    fixed.push((k, parts));
+                }
+            }
+            fixed
+        })
+        .collect();
+    let mut drop = vec![false; units.len()];
+    let mut extra = Vec::new();
+    for (k, parts) in fixes.into_iter().flatten() {
+        let area = units.get(k).map_or(0, |u| u.area);
+        if let Some(d) = drop.get_mut(k) {
+            *d = true;
+        }
+        extra.extend(parts.into_iter().map(|rings| LandUnit { area, rings }));
+    }
+    let mut k = 0;
+    units.retain(|_| {
+        k += 1;
+        !drop.get(k - 1).copied().unwrap_or(false)
+    });
+    units.extend(extra);
+}
+
+/// Polygons as parts, each a list of rings.
+type Parts = Vec<Vec<Vec<(i32, i32)>>>;
+
+/// A zone: the later country's code, its boxes and its rings.
+type Zone<'a> = (&'a str, Boxes, Vec<Vec<(i32, i32)>>);
+
+/// The boxes of a set of rings: the whole and each ring's. Two sets meet where their wholes
+/// meet and, when either spans the antimeridian (wider than 180°), where two rings' boxes do.
+#[derive(Debug, Default)]
+struct Boxes {
+    whole: Option<Bbox>,
+    rings: Vec<Option<Bbox>>,
+}
+
+impl Boxes {
+    fn of(rings: &[Vec<(i32, i32)>]) -> Self {
+        Self {
+            whole: bbox_of(rings),
+            rings: rings
+                .iter()
+                .map(|r| bbox_of(std::slice::from_ref(r)))
+                .collect(),
+        }
+    }
+
+    fn spans(&self) -> bool {
+        self.whole
+            .is_some_and(|b| i64::from(b.2) - i64::from(b.0) > 1_800_000_000)
+    }
+
+    fn meets(&self, other: &Self) -> bool {
+        if !meets(self.whole, other.whole) {
+            return false;
+        }
+        if !self.spans() && !other.spans() {
+            return true;
+        }
+        self.rings
+            .iter()
+            .any(|&a| meets(a, other.whole) && other.rings.iter().any(|&b| meets(a, b)))
+    }
+
+    /// The rings of `rings` (whose boxes these are) that meet `other`.
+    fn near(&self, rings: &[Vec<(i32, i32)>], other: &Self) -> Vec<Vec<(i32, i32)>> {
+        rings
+            .iter()
+            .zip(&self.rings)
+            .filter(|&(_, &b)| {
+                meets(b, other.whole)
+                    && (!other.spans() || other.rings.iter().any(|&o| meets(b, o)))
+            })
+            .map(|(r, _)| r.clone())
+            .collect()
+    }
+}
+
+/// Whether two boxes meet.
+fn meets(a: Option<Bbox>, b: Option<Bbox>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => a.0 <= b.2 && b.0 <= a.2 && a.1 <= b.3 && b.1 <= a.3,
+        _ => false,
+    }
+}
+
+/// The bounding box of rings.
+fn bbox_of(rings: &[Vec<(i32, i32)>]) -> Option<Bbox> {
+    let mut it = rings.iter().flatten();
+    let &(x, y) = it.next()?;
+    Some(it.fold((x, y, x, y), |(a, b, c, d), &(x, y)| {
+        (a.min(x), b.min(y), c.max(x), d.max(y))
+    }))
 }
 
 /// The OSM relation among a row's sources (`dataset` `OpenStreetMap`, `record_id` `r<id>@<v>`).
@@ -496,28 +783,102 @@ mod tests {
 /// `forge fetch overture-divisions` has stored the tiles.
 #[cfg(test)]
 mod real {
-    #![allow(clippy::unwrap_used, reason = "test code")]
+    #![allow(
+        clippy::unwrap_used,
+        clippy::indexing_slicing,
+        clippy::print_stderr,
+        reason = "test code: a measurement that reports what it found"
+    )]
 
+    use std::collections::HashMap;
     use std::path::Path;
 
     use super::{Subtype, read_areas, read_divisions};
     use crate::lock::Lock;
     use crate::tiles;
 
+    /// The world's land as one partition, thinned at level 3 (100 m) as shared arcs (D-155):
+    /// it must be a partition (no overlap) and the guard must leave nothing. Run with
+    /// `cargo test --profile fast -- --ignored --nocapture overture_land` under a memory cap.
     #[test]
     #[ignore = "needs the overture-divisions tiles (5 GB)"]
-    fn overture_reads_as_duckdb_does() {
+    fn overture_land_thins_as_one_partition() {
+        let t = std::time::Instant::now();
+        let areas = read_areas(&files("area-")).unwrap();
+        let units = super::land_units(&areas).unwrap();
+        let fills = units
+            .iter()
+            .filter(|u| areas[u.area].subtype != Subtype::Region)
+            .count();
+        eprintln!(
+            "{} land units ({fills} country land outside regions) in {:.1?}",
+            units.len(),
+            t.elapsed()
+        );
+        let mut sizes: Vec<(f64, String)> = units
+            .iter()
+            .filter(|u| areas[u.area].subtype != Subtype::Region)
+            .filter(|u| {
+                areas
+                    .iter()
+                    .any(|a| a.subtype == Subtype::Region && a.country == areas[u.area].country)
+            })
+            .map(|u| {
+                let m2: f64 = u
+                    .rings
+                    .iter()
+                    .map(|r| crate::topo::measure::ring_area_m2(r).abs())
+                    .sum();
+                (m2, areas[u.area].country.clone())
+            })
+            .collect();
+        sizes.sort_by(|a, b| b.0.total_cmp(&a.0));
+        let total: f64 = sizes.iter().map(|s| s.0).sum();
+        let over = |t: f64| sizes.iter().filter(|s| s.0 > t).count();
+        eprintln!(
+            "remainders in countries with regions: {} total {:.0} km2; >1 km2 {}, >10 km2 {}, >100 km2 {}; largest {:?}",
+            sizes.len(),
+            total / 1e6,
+            over(1e6),
+            over(1e7),
+            over(1e8),
+            sizes
+                .iter()
+                .take(25)
+                .map(|(a, c)| format!("{c} {:.0}", a / 1e6))
+                .collect::<Vec<_>>()
+        );
+        let mut by_cc: HashMap<&str, usize> = HashMap::new();
+        for s in &sizes {
+            *by_cc.entry(s.1.as_str()).or_default() += 1;
+        }
+        let mut by_cc: Vec<_> = by_cc.into_iter().collect();
+        by_cc.sort_by_key(|x| std::cmp::Reverse(x.1));
+        eprintln!("pieces per country: {:?}", &by_cc[..by_cc.len().min(15)]);
+        drop(areas);
+        let rings: Vec<&[Vec<(i32, i32)>]> = units.iter().map(|u| u.rings.as_slice()).collect();
+        let (out, thinned) = crate::topo::thin::partition(&rings, 3).unwrap();
+        eprintln!("{thinned:?} in {:.1?}", t.elapsed());
+        assert_eq!(out.len(), units.len());
+        assert_eq!(thinned.guard.left, 0, "{thinned:?}");
+        assert!(thinned.vertices.1 * 4 < thinned.vertices.0, "{thinned:?}");
+    }
+
+    fn files(prefix: &str) -> Vec<std::path::PathBuf> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
         let lock = Lock::read(&root.join("data/sources.lock")).unwrap();
         let s = lock.get("overture-divisions").unwrap();
-        let files = |prefix: &str| -> Vec<_> {
-            tiles::manifest(&root, s)
-                .unwrap()
-                .iter()
-                .filter(|t| t.name.starts_with(prefix))
-                .map(|t| tiles::tile_path(&root, t).unwrap())
-                .collect()
-        };
+        tiles::manifest(&root, s)
+            .unwrap()
+            .iter()
+            .filter(|t| t.name.starts_with(prefix))
+            .map(|t| tiles::tile_path(&root, t).unwrap())
+            .collect()
+    }
+
+    #[test]
+    #[ignore = "needs the overture-divisions tiles (5 GB)"]
+    fn overture_reads_as_duckdb_does() {
         let areas = read_areas(&files("area-")).unwrap();
         let count = |k: Subtype| areas.iter().filter(|a| a.subtype == k).count();
         assert_eq!(
