@@ -29,13 +29,16 @@ does it change in the world part?
   OSM's in most of the 20 countries sampled (§3.4). Cutting OSM units to Natural Earth's
   countries would leave slivers about a kilometre wide along every border. Main's countries are
   therefore dissolved from Overture's units. Natural Earth's Nepal-view admin 0 only decides
-  which country owns a disputed unit: majority area, then a cut only where the overhang is
-  wider than the two sources' disagreement.
-- **Pre-simplify per country, keeping the topology.** Land regions are 29.5 M vertices,
-  against about 1 M in Natural Earth admin 1. Each country's units become shared arcs
-  (`topo::arcs::build`), and each arc is simplified within 100 m (a tenth of the world
-  part's 1 km tolerance) before the overlay. A shared border stays one line and the overlay's
-  input shrinks by about an order of magnitude (**unverified**: measure it).
+  ownership where it disagrees with Overture by more than the two sources' disagreement: a
+  unit keeps its own code's country, and the view takes its parts at least 15 km wide (§3.6).
+- **Pre-simplify the world as one partition, keeping the topology.** Land regions are
+  29.5 M vertices, against about 1 M in Natural Earth admin 1. All units become shared arcs
+  (`topo::arcs::build`), each simplified within 100 m before the world stage: 31.2 M
+  vertices become 3.6 M, and a shared border stays one line (§3.5).
+- **Ship 2 km and leave out islets under the tolerance's square.** OSM has 79,949 land parts
+  to Natural Earth's 4,253, and they, not the vertices, broke Z1 (17.0 MB at 1 km). An islet
+  that is its area's largest part or holds a city stays. Main's world part is 5.55 MB, merged
+  5.60 MB; the locator's radius becomes 3 km (§3.7).
 - **Lite is unchanged.** Overture divisions are ODbL, so lite keeps Natural Earth (public
   domain).
 
@@ -140,6 +143,102 @@ Result: 31,039 land units, 31,470,017 vertices thinned to 3,578,426 at 100 m in 
 shared arcs, the guard leaving nothing; 250 s, peak 4.1 GB (snap rounding's maps dominate:
 the next thing to make lean).
 
+### 3.6 Ownership by the Nepal view (measured 2026-11-10)
+
+Natural Earth's lines are too far from OSM's to own units by area alone. Giving each unit to
+the Nepal-view country holding most of it would move Liechtenstein's municipalities to Austria
+(Planken 72%), San Marino's to Italy and Slovenia's Hodoš to Hungary (62%). A difference
+against Natural Earth's default view is no reference either: both of its views give Western
+Sahara's Free Zone, east of the berm, to Western Sahara, while Overture puts all of it in
+Morocco's regions, so a default-to-Nepal delta never touches it.
+
+The rule (`topo::pov::own`): a unit keeps the country its own code names (several Natural
+Earth features with one code: the one holding most of it, else the nearest). A code no
+Nepal-view feature holds (Overture's disputed areas `X…`, Taiwan, Kosovo, a dependency drawn
+inside its sovereign) goes to the feature holding most of it; one no feature holds at all (an
+islet off Natural Earth's coarser coast) goes where most of its code's other units went. Then
+the view takes every part of a unit at least `WIDTH` wide on average that another of its
+countries holds, with the unit's narrower leftovers.
+
+The width is measured. With it at 2 km, 482 parts move; their mean widths run continuously
+from 2 km to 11 km (desert and mountain lines: Tibesti, Arunachal, Bhutan, Kyrgyzstan), then
+jump to 22 km. Every part from 22 km up is a real dispute:
+
+| Unit (Overture) | To (Nepal view) | Area | Mean width |
+|---|---|---:|---:|
+| Laâyoune-Sakia El Hamra, Dakhla-Oued Ed-Dahab (MA) | Western Sahara | 264,716 km² | 137–152 km |
+| Gilgit-Baltistan (PK) | India | 66,760 km² | 85 km |
+| Western Bahr el Ghazal (SS: Kafia Kingi) | Sudan | 13,074 km² | 44 km |
+| Guelmim-Oued Noun (MA) | Western Sahara | 3,706 km² | 24 km |
+| Azad Kashmir (PK) | India | 11,891 km² | 23 km |
+
+`WIDTH` is 15 km, in that gap. Kalapani (3.3 km) falls under it; Nepal's pack outline draws it
+(D-154). Five disputed islets no Nepal-view feature holds stay unowned (Liancourt's claim
+extent, Senkaku, the Tunbs, the Paracels); Kingman Reef's Overture land (2,481 km² of lagoon)
+and a 1,786 km² strip of Greenland's coast lie mostly outside Natural Earth's land and are
+reported. Seven Natural Earth features own no land and have no row: Ashmore and Cartier, the
+Brazilian Island, the Coral Sea Islands, Dhekelia, Scarborough Reef, Guantanamo, Akrotiri
+(each narrower than `WIDTH` against Overture's units, or off its coast).
+
+Building main's world part this way (`forge world`, 2026-11-10): 3,877 units and 21,911
+fillers; 34,023 of 34,162 cities under a unit (Natural Earth: 33,623), 56 falling back to
+their code's feature (517), 2 in no country (15); 0.400% of cities' people state a zone other
+than their unit's (0.645%); 417 s, peak 3.9 GB. Thinning left three kinds of degenerate piece,
+each now handled: an islet whose lake collapsed under 100 m (cut out of the piece around it), a
+sliver between a pack's outline and its neighbour pressed under 1 m (dropped), and holes
+touching at a vertex (G-topo counts holes in one normal form).
+
+### 3.7 Size: islets and the tolerance (measured 2026-11-10)
+
+Built at the world part's 1 km default, main from Overture was 17,011,088 B against Z1's
+8,000,000 B for the whole merged baseline (Natural Earth: 5,839,988 B): ARCS 8.86 MB and
+ADMIN_REGION 4.90 MB. A coarser tolerance alone barely helps (2 km: 12.9 MB, ARCS 5.95 MB),
+because the cost is in the number of rings, not their vertices. OSM maps every islet; Natural
+Earth's cartographers keep a few:
+
+| Land parts (countries and dependencies) | Overture | Natural Earth (Nepal view) |
+|---|---:|---:|
+| under 0.1 km² | 32,709 | 83 |
+| 0.1–1 km² | 29,543 | 217 |
+| 1–4 km² | 8,554 | 189 |
+| 4–25 km² | 5,703 | 873 |
+| 25–100 km² | 1,861 | 1,250 |
+| 100 km² and more | 1,579 | 1,641 |
+| **all** | **79,949** | **4,253** |
+
+So the world part leaves out an islet: a part of a piece smaller than the tolerance's square,
+unless it is its area's largest part (no unit and no island country vanishes: Tokelau, Nauru)
+or holds a listed city (`world_overture::Islets`). Pack countries are untouched: their slice
+is drawn by their own pack. Measured (main, Nepal's slice merged):
+
+| Tolerance | Islets under | Arcs | ARCS | ADMIN_REGION | World part | Islets left out |
+|---|---|---:|---:|---:|---:|---|
+| 1 km (500 m level) | none | 194,117 | 8,859,932 | 4,896,564 | 17,011,088 | – |
+| 2 km | none | 194,117 | 5,948,732 | 3,694,328 | 12,889,616 | – |
+| 1 km | 1 km² | 38,973 | 5,262,396 | 2,574,204 | 10,512,400 | 102,632 parts, 17,332 km²; 3 kept for a city |
+| 1 km | 4 km² | 25,640 | 4,853,852 | 2,283,524 | 9,762,320 | 112,758 parts, 37,255 km²; 13 kept |
+| **2 km** | **4 km²** | **25,640** | **1,818,148** | **1,110,520** | **5,545,296** | the same |
+
+Main ships 2 km with islets under 4 km² left out: 5,601,192 B merged, smaller than Natural
+Earth's. OSM's border within 2 km is still nearer the ground than Natural Earth's within 1 km
+(0.6–10 km off, §3.4). Every city, unit and zone result is unchanged by the islets (34,023 of
+34,162 cities under a unit; 0.400% of people in another zone); `admin_at` agrees with the
+city's country for 98.91% (Natural Earth 98.46%) and its unit for 98.72%.
+
+The locator's radius follows (D-149): at 2 km, 16 of 100,104 border probes are missed, all
+found by 2.5 km. A level's tolerance bounds each vertex's own Douglas–Peucker importance, but
+importances are capped by their parent split's so that levels nest, so a border can stray past
+it. `LOCATOR_RADIUS_M` is 3 km: 0 missed, 1.41 countries per probe, 98.55% of cities get
+exactly one country.
+
+Overture's units carry English names, which exposed a ranking gap: a first-level unit's base
+importance (90) is above a national capital's (54 plus 5·log10 of its population), so
+"Tokyo" found the prefecture 東京都 before the city, as "Berlin" or "Seoul" would. World cities
+also had no settlement rank; they now take it from the city list's feature code (`P.PPLC`,
+`P.PPLA`). A first-level unit ranks just below a city of its own name inside it (D-158).
+Applied to every level, it cost Nepal's golden set 8 hits at 1 ("Damak" and "Kamalamai" want
+the municipality, which is the city); at level 1 the golden set is unchanged (recall@1 0.859).
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
@@ -173,22 +272,20 @@ the next thing to make lean).
    the same way. For a valid partition this is the old rule (a vertex with other than two
    neighbours, or whose two edges have different owners), so it replaces it, one code path;
    the gate is the world part byte-identical before and after (BLAKE3 `fcb1f666…`).
-4. **Point of view:** each unit goes to the Nepal-view country holding most of its area, as in
-   D-150. Where Nepal's view splits a unit, the split comes from Natural Earth alone, so both
-   of its lines are drawn by one hand: the **delta** is where Natural Earth's Nepal-view
-   admin 0 and its default-view admin 0 (to pin: `ne-admin0`) give the land to different
-   countries. A unit is cut by a delta only in parts wider on average than the sources'
-   disagreement (a width measured on the known disputes), so no border gains slivers. A pack
-   country's own claims are already exact: its slice's outline cuts its neighbours (D-154),
-   Kalapani included. Countries dissolve from their units; Natural Earth supplies the country
-   set, codes, names in 26 languages, Wikidata and population, and the ownership.
+4. **Point of view (§3.6):** a unit keeps its own code's country; the Nepal view takes its
+   parts at least 15 km wide that another country holds. Countries dissolve from their units;
+   Natural Earth supplies the country set, codes, names in 26 languages, Wikidata and
+   population. A pack country takes its slice's outline: its neighbours are cut by it and
+   its own pieces outside it go to the neighbour sharing the most border (D-154).
 5. **Gates:** the world gates as they are (ID gate, `admin_at` chains, the locator's border
    probe, Z1), plus G-topo against Overture's own country outline, and a count of slivers and
    fillers in the summary, so a rise is seen.
 
 ## 6. Impact on the plan
 
-- D-155 records the source and the admin 0 change for main.
+- D-155 records the source and the admin 0 change for main; D-156 the ownership rule; D-157
+  the tolerance, the islets and the locator radius; D-158 the ranking of a region below its
+  city.
 - Phase 4.2's open item becomes: pin, reader, pre-simplification, `forge world --admin1
   overture-…` for main, the data-build job.
 - D-150 stays the lite rule. D-147's admin 0 for main changes from Natural Earth's geometry
@@ -206,9 +303,9 @@ the next thing to make lean).
   previous build stops it (to build).
 - Cyprus's 6 districts come from geoBoundaries; its licence per country is **unverified**.
   Check before shipping, or take Cyprus's units from Natural Earth.
-- The ownership width (step 4 of §5) is a new tuned constant. It must be measured on the known
-  disputes (Kalapani, Kashmir, Crimea, Western Sahara, Kosovo, Taiwan) and proven by planting
-  a wrong owner.
+- The ownership width (step 4 of §5) is a tuned constant, measured in §3.6: noise reaches
+  11 km, the narrowest real dispute 22 km. A new Overture release or Natural Earth version is
+  re-measured; the summary lists every moved part, so a new one is seen.
 
 ## 8. Versions checked
 

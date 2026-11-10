@@ -34,9 +34,12 @@ REGION:
   for. A pack's address is its country's ID namespace (`np`); a pack of part of a country
   (`ae-du`) counts only where its coverage box holds the point. Features without an ISO code
   (Natural Earth's disputed areas, namespace `world`) have no pack and are left out.
-- `LOCATOR_RADIUS_M = 1000`: the world part's outlines are within 1 km of the source (D-147).
-  An outline simplified within `t` of the true border has every true border point within `t`
-  of it, so `r ≥ t` never misses the country.
+- `LOCATOR_RADIUS_M = 3000`: main's world part ships the 2 km level (D-157), lite's the
+  500 m level. An outline simplified within `t` of the true border has every true border point
+  within `t` of it, so `r ≥ t` never misses the country; the level's nested importances let a
+  border stray to 2.5 km (16 of 100,104 probes missed at 2 km, none at 2.5 km;
+  [world admin 1 §3.7](world-admin1-osm.md#37-size-islets-and-the-tolerance-measured-2026-11-10)).
+  It was 1 km for Natural Earth's world part (below).
 
 Measured on the world part (main, 2026-11-10): no country missed over 109,659 border probes at
 1 km (173 missed at 500 m), 1.25 countries per probe, 99.28% of cities get exactly one, 11.9 µs

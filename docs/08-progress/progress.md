@@ -47,8 +47,11 @@ A short status. The numbers and evidence live in each phase file and the
   their world row would (D-152: Nepal's slice 73 kB, −54%); the baseline ships as one merged
   file (D-153: `forge embed`, 5.90 MB, the engine's `baseline` feature), and the world meets each
   pack country on its slice's line (D-154: every place answers as the layers do); main's
-  world admin 0 and 1 to come from Overture's OSM-derived divisions (D-155, researched). Next:
-  the five D-155 steps in phase 4.2, then 4.3 TUF trust.
+  world admin 0 and 1 come from Overture's OSM-derived divisions (D-155): the world's land
+  thinned as one partition, units owned by the Nepal view where it differs by at least 15 km
+  (D-156), islets under the tolerance's square left out at 2 km (D-157: 5.60 MB merged, 3,877
+  units, locator radius 3 km, 0 probes missed), and a region ranked below the city of its name
+  (D-158). Next: snap rounding on sorted records (the 3.9 GB peak), then 4.3 TUF trust.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).
 - **Waiting on the maintainer:** review of `data/countries/np/corrections/` (unreviewed), the labelled sample (Q-005, needed for `ACCURACY.md` and M3),
@@ -98,3 +101,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-10 | 4.2: slice names cut to the country's languages and English, SEARCH rebuilt from them (D-152): Nepal's slice 157,532 → 72,988 B | the shipped baseline (layers, `baseline` feature) and the 8 MB gate |
 | 2026-11-10 | 4.2: the baseline as one file (D-153): `extract::merge`, `forge embed` with Z1, the engine's `baseline` feature; layers measured and rejected (search 34×, reverse 98× at 200 slices) | cut the world's neighbours to pack outlines; 4.3 TUF trust |
 | 2026-11-10 | 4.2: the world part meets each pack country on its slice's line (D-154): neighbours cut, gaps given, arcs pinned; the shipped-baseline gate strict (0 of 39,395 differ) | 4.3 TUF trust |
+| 2026-11-10 | 4.2: main's world part built from Overture (D-155 to D-158): ownership by the view, islets and 2 km to fit Z1, locator radius 3 km, region below its city; every world, locator, Z1 and golden gate green | snap rounding on sorted records; 4.3 TUF trust |

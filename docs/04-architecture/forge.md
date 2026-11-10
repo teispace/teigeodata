@@ -1,7 +1,7 @@
 ---
 title: "The forge (data pipeline)"
 status: draft
-updated: 2026-11-08
+updated: 2026-11-10
 ---
 
 # The forge (data pipeline)
@@ -627,18 +627,31 @@ recipe has a `baseline` entry (below).
 ## The world part (`world`)
 
 `forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>]
-[--tz <source>] [--tolerance-m <m>] [--ids <dir>] [--key <seed-file>]` writes `data/build/baseline/world/world-baseline-<build>.tgd`,
+[--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--ids <dir>] [--key <seed-file>]` writes `data/build/baseline/world/world-baseline-<build>.tgd`,
 its ID registries `world-ids-<build>/<namespace>.tsv` (the next build's `--ids`),
 `summary-<build>.md` (D-147) and `world-probes-<build>.tsv`, the locator's border probes: about
 100,000 source vertices at full resolution, every k-th of every feature, each with its
-feature's ID (D-149). Defaults: `ne-admin0-nep`, `ne-admin1`, `geonames-cities15000`,
-`tzdb-2026f`, 1 km.
+feature's ID (D-149). Defaults: `ne-admin0-nep`, `geonames-cities15000`, `tzdb-2026f`;
+admin 1 `overture-divisions` for main (D-155) and `ne-admin1` for lite; tolerance 2 km from
+Overture (D-157), else 1 km; islets the tolerance's square.
 
 - **Rows.** One country place per admin-0 feature (names from `NAME` and its 26 `NAME_<XX>`
   columns, population, the cartographers' label point when it is inside the feature, else the
   topology's), one level-1 unit per admin-1 piece (its source name and English, D-150), and
   every city of the list outside the countries whose recipe builds a slice.
-- **Admin 1 cut to the point of view** (`topo::pov`, D-150). The admin-1 source is drawn in
+- **Main: units and countries from Overture** (`build::world_overture`, D-155 to D-157).
+  Overture's land areas of every country, dependency and region; a dependency no Nepal-view
+  feature has the code of is one unit of its sovereign. The land is cut into disjoint units
+  and owned by the Nepal view (`topo::pov::own`: a unit keeps its code's country, the view
+  takes its parts at least 15 km wide, D-156). Islets smaller than `--islet-km2` go, unless
+  they are their area's largest part or hold a city. Pack countries take their slice's
+  outline (as below). The whole partition is thinned to 100 m as shared arcs (`topo::thin`),
+  the outlines pinned; each country is then its pieces dissolved, and a feature with no land
+  has no row. A region is a unit row (`gers:<division>`, Wikidata and OSM relation) in the
+  country holding most of it; its other parts and every country's land no region holds are
+  fillers.
+- **Lite (and main with `--admin1 ne-admin1`): admin 1 cut to the point of view**
+  (`topo::pov`, D-150). The admin-1 source is drawn in
   another point of view. So each unit goes to the country holding most of its area and is cut
   only by the parts of its overhang at least about 1 m wide on average (narrower parts are the
   two sources drawing one line differently). Each country's uncovered rest becomes filler
@@ -679,7 +692,9 @@ feature's ID (D-149). Defaults: `ne-admin0-nep`, `ne-admin1`, `geonames-cities15
 - **Checks.** Read back verified, the geometry's checks, every place's ID, point, parent and
   canonical name, and its search by name.
 
-Measured 2026-11-10 (main, with admin 1, D-150): 38,981 rows, 5,732,704 B (4.39 MB wire), in
+Measured 2026-11-10 (main from Overture, D-157): 38,639 rows, 5,545,360 B, in 320 s at a
+3.9 GB peak; ARCS 1,818,148 B, ADMIN_REGION 1,110,520 B, SEARCH 888,384 B, NAMES 743,060 B;
+merged with Nepal's slice 5,601,192 B. From Natural Earth (D-150): 38,981 rows, 5,732,704 B (4.39 MB wire), in
 18 s at a 0.97 GB peak; ARCS 2,101,428 B, ADMIN_REGION 1,242,236 B, SEARCH 797,664 B, NAMES
 674,124 B, IDMAP 223,824 B. Without admin 1 it was 3,773,468 B (D-147, with the tolerance
 A/B).
@@ -690,8 +705,9 @@ country. It checks:
 - every unit hangs from a country;
 - every city hangs from a unit and its country, or from its country;
 - each `admin_at` answer is one chain: every unit found hangs from the country found;
-- `admin_at` at the city finds its country for 98.46% (the rest are mostly coastal points
-  outside Natural Earth's coast at any resolution) and its unit for 99.76%;
+- `admin_at` at the city finds its country for at least 98% and its unit for at least 95%
+  (main from Overture: 98.91% and 98.72%; Natural Earth: 98.46% and 99.76%, the rest mostly
+  coastal points outside the stored coast);
 - the slice answers for its country, and the pack above both.
 
 **Memory.** The world stage once passed 12 GB: G-topo's parent check indexed each segment in

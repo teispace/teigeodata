@@ -1,7 +1,7 @@
 ---
 title: "Phase 4: engine, baseline and sync"
 status: draft
-updated: 2026-11-09
+updated: 2026-11-10
 ---
 
 # Phase 4: engine, baseline and sync
@@ -141,14 +141,20 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   earlier code, snap rounding, folds undone; 31.47 M → 3.58 M vertices, guard left 0, 250 s,
   4.1 GB ([§3.5](../../02-research/notes/world-admin1-osm.md#35-the-worlds-land-as-one-partition-measured-2026-11-10))
 - [ ] Snap rounding on sorted records (its hash maps hold the 4.1 GB peak)
-- [ ] Pin `ne-admin0` (Natural Earth's default view): the Nepal view's delta against it is
-  where a unit's ownership splits
-- [ ] `forge world` main on Overture: units owned by the Nepal view (majority, then the delta
-  in parts wider than the sources' disagreement), countries dissolved from units; Z1, ID and
-  locator gates
-- [ ] The data-build job fetches the pinned Overture tilesets for main's world part
+- [x] ~~Pin `ne-admin0`~~ dropped: Natural Earth's default view also gives Western Sahara's
+  Free Zone to Western Sahara, so a delta against it misses that dispute (D-156)
+- [x] Ownership by the Nepal view (`topo::pov::own`, D-156): a unit keeps its code's country;
+  the view takes its parts at least 15 km wide (noise reaches 11 km, the narrowest dispute
+  22 km; [§3.6](../../02-research/notes/world-admin1-osm.md#36-ownership-by-the-nepal-view-measured-2026-11-10))
+- [x] `forge world` main on Overture: countries dissolved from units, pack outlines pinned;
+  islets under the tolerance's square left out, 2 km (D-157); 5,601,192 B merged (Z1), world,
+  locator (3 km, 0 of 100,104 probes missed), ID and baseline gates green
+  ([§3.7](../../02-research/notes/world-admin1-osm.md#37-size-islets-and-the-tolerance-measured-2026-11-10))
+- [x] A first-level unit ranks below a city of its name inside it; world cities ranked by
+  feature code (D-158; Nepal's golden set unchanged)
+- [x] The data-build job fetches the pinned Overture tilesets for main's world part
 - [x] The locator: `countries_near` and `missing_packs` by distance on the stored outlines
-  (no buffered REGION, so no bytes), `LOCATOR_RADIUS_M` = the world part's 1 km tolerance;
+  (no buffered REGION, so no bytes), `LOCATOR_RADIUS_M` = 1 km then, 3 km since D-157;
   border-probe gate: no missed country over about 110,000 source vertices (D-149,
   [locator](../../02-research/notes/locator.md))
 - [x] Size gate Z1 (8 MB) in `forge embed` and `tests/baseline.rs`; the engine's `baseline`
@@ -238,3 +244,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.2: the baseline ships as one merged file; neighbours cut to pack outlines added | D-153 |
 | 2026-11-10 | 4.2: neighbours cut to pack outlines done | D-154 |
 | 2026-11-10 | 4.2: the OSM extract item becomes Overture divisions for main's admin 0 and 1, in five steps | D-155 |
+| 2026-11-10 | Main's world part: ownership by the Nepal view at 15 km instead of the `ne-admin0` delta; 2 km and islets left out to fit Z1; locator radius 3 km; regions below their city | [world admin 1 §3.6–3.7](../../02-research/notes/world-admin1-osm.md#36-ownership-by-the-nepal-view-measured-2026-11-10), D-156 to D-158 |
