@@ -1,0 +1,27 @@
+# The TUF differential against `tough` (D-165): our client and tough judge the same
+# repositories, written at run time by our writer against the real clock (tough has no
+# injectable clock). Its own workspace and lock: tough's async and aws-lc-rs stack never enters
+# the product's dependency graph. Run: `cargo run --release --manifest-path tools/tough-oracle/Cargo.toml`.
+[package]
+name = "tough-oracle"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[workspace]
+
+[dependencies]
+ed25519-dalek = { version = "3.0.0", default-features = false }
+serde_json = "1.0.154"
+teigeodata-sync = { path = "../../crates/teigeodata-sync", features = ["repo"] }
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
+tough = { version = "=0.24.0", default-features = false }
+url = "2"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"

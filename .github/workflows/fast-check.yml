@@ -173,6 +173,23 @@ jobs:
           "$RUNNER_TEMP/oracle/bin/python" -I tools/tuf-oracle/check_schema.py crates/teigeodata-sync/schema/catalog-custom-v1.json
           "$RUNNER_TEMP/oracle/bin/python" -I tools/tuf-oracle/read_written.py crates/teigeodata-sync/tests/tuf-written
 
+  tough-oracle:
+    # tough judges the repositories our writer writes at run time, against the real clock,
+    # case by case with our client (D-165). Its own workspace: tough never enters the product.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: tools/tough-oracle
+      - name: Lints
+        run: cargo clippy --locked --release --manifest-path tools/tough-oracle/Cargo.toml -- -D warnings
+      - name: Differential
+        run: cargo run --locked --release --manifest-path tools/tough-oracle/Cargo.toml
+
   typos:
     runs-on: ubuntu-latest
     timeout-minutes: 5

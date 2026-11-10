@@ -590,8 +590,32 @@ in turn and a test failed.
 agrees but one: python-tuf counts a threshold by key IDs, so one key listed under two IDs meets
 a threshold of 2; we count distinct public keys and refuse it, so one key can never stand for
 two signers. python-tuf's own serialization verifies under our canonical JSON,
-including control characters, non-ASCII keys and `u64::MAX`. `tough` is still to be added as a
-second oracle.
+including control characters, non-ASCII keys and `u64::MAX`.
+
+**Differential against `tough` 0.24.0 (D-165).** tough reads the system clock and has no way to
+set it, so python-tuf's fixed-time corpus cannot be replayed through it. Instead
+`tools/tough-oracle` (its own Cargo workspace, so tough's tokio and aws-lc-rs stack never enters
+the product) writes 17 repositories at run time with our writer against the real clock, and our
+client and tough's `RepositoryLoader` each judge them from root 1, a rollback across two
+sessions included (tough's datastore, our stored timestamp). Both must reach the case's verdict,
+and read the same bytes for every target. All 18 judgements agree, each refusal for the same
+reason (signatures, expiry of each role, rotation, version, hashes, length, rollback).
+Findings:
+
+- **Length is an upper bound in both.** A timestamp that gives the snapshot a length above the
+  real one is accepted by both clients; the hashes bind the bytes, and the spec (5.5.2) requires
+  hashes and version to match. python-tuf's `verify_length_and_hashes` demands the exact
+  length, so it would refuse that file. Our writer always writes the exact length, so no
+  published state depends on the difference; it is recorded, not changed.
+- **A key listed twice in a role:** tough refuses the whole root as malformed ("Duplicate key
+  ID"); we refuse it because the threshold is not met. Same verdict.
+- **Targets under consistent snapshots** are fetched by a spec client as `<sha256>.<path>`
+  (tough, python-tuf by default). The catalog names its assets by `custom.file` (D-160), so a
+  third-party TUF client reads our metadata but must be told where the assets are (python-tuf:
+  `prefix_targets_with_hash=False` and a target base per file). Our client has both
+  (`target_name` and `Entry::file`); the oracle lays its targets out the spec's way.
+- A planted fault in our client (no root expiry check; no timestamp rollback check) makes the
+  oracle fail on exactly those cases.
 
 ## 4. Options compared
 

@@ -1,6 +1,7 @@
 /target/
 /forge/target/
 /tools/size-probe/target/
+/tools/tough-oracle/target/
 /scratch/
 /data/cache/
 /data/build/

@@ -177,7 +177,7 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] Differential gate against python-tuf (2026-11-10, D-161): 27 cases, 66 steps, one
   recorded difference (key IDs against keys); the corpus is checked in and the `tuf-oracle` job
   regenerates it; five planted faults and a falsified verdict each fail
-- [ ] The same corpus against `tough`, in its own crate outside the workspace
+- [x] The differential against `tough`, in its own crate outside the workspace: repositories written at run time, since tough reads the system clock (2026-11-10, D-165)
 - [x] Repository tooling ([research](../../02-research/notes/catalog-repository-tooling.md),
   2026-11-10, D-162, D-163): `sync::repo` writes and signs the roles with the client's canonical
   JSON; `xtask tuf` keygen, pubkey, root, sign, release (assets and catalog entries from packs),
@@ -272,3 +272,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.3: repository tooling split into the writer and `xtask tuf`, and the workflow and ceremony | [catalog repository tooling](../../02-research/notes/catalog-repository-tooling.md) |
 | 2026-11-10 | 4.3: catalog sizes count the head, seek table and BLOCK_HASHES; targets SHA-256 only; tooling and workflow done, upload and the ceremony their own item | D-162, D-163 |
 | 2026-11-10 | 4.3: discovery done; the engine is the catalog's `Resolver` behind its feature `catalog` | D-164 |
+| 2026-11-10 | 4.3: the `tough` differential runs on repositories written at run time, not python-tuf's fixed-time corpus | D-165 |
