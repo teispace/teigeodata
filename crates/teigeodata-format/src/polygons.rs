@@ -35,7 +35,7 @@ use teigeodata_core::bitpack::{Packed, unbias};
 use teigeodata_core::table::Table;
 use teigeodata_core::{E7, Point};
 
-use crate::arcs::{ArcPoints, Arcs};
+use crate::arcs::{ArcChunks, ArcPoints, Arcs, Chunk};
 use crate::{Error, Kind, Section, columns};
 
 /// Column: each polygon's PLACES row.
@@ -282,6 +282,142 @@ impl<'a> Polygons<'a> {
         inside
     }
 
+    /// Whether polygon `p` holds `at` or has a border within `r_cm` centimetres of it, on a
+    /// plane local to `at` (longitudes scaled by the cosine of its latitude, the antimeridian
+    /// wrapped). For a locator over simplified outlines: an outline simplified within `t` of
+    /// the true border never misses the true polygon at `r_cm ≥ t` (D-149). O(vertices of `p`);
+    /// no allocation.
+    #[must_use]
+    pub fn within(&self, arcs: &Arcs<'a>, p: usize, at: Point<E7>, r_cm: u32) -> bool {
+        // 1e-7° of latitude is 1.11195 cm on the mean sphere.
+        let r = f64::from(r_cm) / 1.111_95;
+        let kx = cos_deg(f64::from(at.lat()) * 1e-7);
+        let (ax, ay) = (at.lon(), at.lat());
+        // A vertex's offset from `at`, in 1e-7° of latitude, the longitude wrapped to ±180°.
+        let local = |v: (i32, i32)| {
+            let dx = wrap(i64::from(v.0) - i64::from(ax));
+            #[allow(clippy::cast_precision_loss, reason = "below 2^33")]
+            let x = dx as f64 * kx;
+            (x, f64::from(v.1 - ay))
+        };
+        let q = (
+            if ax == 1_800_000_000 {
+                -1_800_000_000
+            } else {
+                ax
+            },
+            ay.min(899_999_999),
+        );
+        let mut inside = false;
+        for ring in self.all_rings(p) {
+            let mut prev: Option<((i32, i32), (f64, f64))> = None;
+            for v in self.ring(arcs, ring, 0) {
+                let b = (v.lon(), v.lat());
+                let lb = local(b);
+                if let Some((a, la)) = prev {
+                    if crosses(q, a, b) {
+                        inside = !inside;
+                    }
+                    if seg_near(a, la, b, lb.1, (kx, r)) {
+                        return true;
+                    }
+                }
+                prev = Some((b, lb));
+            }
+        }
+        inside
+    }
+
+    /// [`within`](Self::within), the same answer, reading only the arc chunks that can
+    /// matter: a chunk wholly north or south of `at` adds no crossing, one wholly west none, one
+    /// wholly east the crossing parity of its two ends; only a chunk at `at`'s latitude and
+    /// longitude, or whose box is within `r_cm`, is decoded. `chunks` is
+    /// [`ArcChunks::build`] of `arcs`. O(chunks of `p`) plus the decoded ones; no allocation.
+    #[must_use]
+    pub fn within_chunked(
+        &self,
+        arcs: &Arcs<'a>,
+        chunks: &ArcChunks,
+        p: usize,
+        at: Point<E7>,
+        r_cm: u32,
+    ) -> bool {
+        let r = f64::from(r_cm) / 1.111_95;
+        let r2 = r * r;
+        let kx = cos_deg(f64::from(at.lat()) * 1e-7);
+        let (ax, ay) = (at.lon(), at.lat());
+        let local = |v: (i32, i32)| {
+            let dx = wrap(i64::from(v.0) - i64::from(ax));
+            #[allow(clippy::cast_precision_loss, reason = "below 2^33")]
+            let x = dx as f64 * kx;
+            (x, f64::from(v.1 - ay))
+        };
+        // The box's distance from `at` on the same plane, the nearest of its three copies
+        // across the antimeridian: never more than any of its points'.
+        let far = |c: &Chunk| {
+            let gap = |lo: i64, hi: i64, v: i64| (lo - v).max(v - hi).max(0);
+            let dy = gap(i64::from(c.min.1), i64::from(c.max.1), i64::from(ay));
+            let dx = [-3_600_000_000_i64, 0, 3_600_000_000]
+                .iter()
+                .map(|s| {
+                    gap(
+                        i64::from(c.min.0) + s,
+                        i64::from(c.max.0) + s,
+                        i64::from(ax),
+                    )
+                })
+                .min()
+                .unwrap_or(0);
+            #[allow(clippy::cast_precision_loss, reason = "below 2^33")]
+            let (dx, dy) = (dx as f64 * kx, dy as f64);
+            // With slack: only a box surely beyond `r` is skipped, so rounding at a distance of
+            // exactly `r` never changes the answer.
+            dx * dx + dy * dy > r2 * (1.0 + 1e-9) + 1.0
+        };
+        let q = (
+            if ax == 1_800_000_000 {
+                -1_800_000_000
+            } else {
+                ax
+            },
+            ay.min(899_999_999),
+        );
+        let mut inside = false;
+        for ring in self.all_rings(p) {
+            for (a, _) in self.refs(ring) {
+                for c in chunks.of(a) {
+                    let far = far(c);
+                    if far {
+                        if c.min.1 > q.1 || c.max.1 <= q.1 || c.max.0 <= q.0 {
+                            continue;
+                        }
+                        if c.min.0 > q.0 {
+                            if (c.first.1 > q.1) != (c.last.1 > q.1) {
+                                inside = !inside;
+                            }
+                            continue;
+                        }
+                    }
+                    let mut prev: Option<((i32, i32), (f64, f64))> = None;
+                    for v in arcs.points_in(a, c.start as usize..c.end as usize) {
+                        let b = (v.lon(), v.lat());
+                        let lb = local(b);
+                        if let Some((pa, la)) = prev {
+                            if crosses(q, pa, b) {
+                                inside = !inside;
+                            }
+                            if !far && seg_near(pa, la, b, lb.1, (kx, r)) {
+                                return true;
+                            }
+                        }
+                        prev = Some((b, lb));
+                    }
+                }
+            }
+        }
+        inside
+    }
+
     /// Every ring of polygon `p`, all parts (empty past the end).
     #[must_use]
     pub fn all_rings(&self, p: usize) -> Range<usize> {
@@ -416,6 +552,66 @@ impl<'a> Polygons<'a> {
         }
         Ok(area2)
     }
+}
+
+/// A longitude difference in 1e-7°, wrapped to ±180°.
+const fn wrap(dx: i64) -> i64 {
+    if dx > 1_800_000_000 {
+        dx - 3_600_000_000
+    } else if dx < -1_800_000_000 {
+        dx + 3_600_000_000
+    } else {
+        dx
+    }
+}
+
+/// Whether segment `a`–`b` passes within `r` of the origin of the local plane (`kx` scales
+/// longitude): `la` is `a` on the plane, `by` the latitude offset of `b`. `b` is placed from
+/// `a` by their raw difference, as the format's segments run (planar in longitude, split at
+/// the antimeridian), so a segment across the meridian opposite the origin stays where it is
+/// instead of jumping across the plane (each end wrapped alone would put one at +180° and the
+/// other at −180°, a segment through the origin).
+fn seg_near(a: (i32, i32), la: (f64, f64), b: (i32, i32), by: f64, (kx, r): (f64, f64)) -> bool {
+    let lb = (la.0 + f64::from(b.0 - a.0) * kx, by);
+    // Both ends beyond r on one side: the segment is too.
+    let far = (la.1 > r && lb.1 > r)
+        || (la.1 < -r && lb.1 < -r)
+        || (la.0 > r && lb.0 > r)
+        || (la.0 < -r && lb.0 < -r);
+    !far && seg_dist2(la, lb) <= r * r
+}
+
+/// The squared distance from the origin to segment `from`–`to`.
+fn seg_dist2(from: (f64, f64), to: (f64, f64)) -> f64 {
+    let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+    let len2 = dx * dx + dy * dy;
+    let t = if len2 > 0.0 {
+        (-(from.0 * dx + from.1 * dy) / len2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let (px, py) = (from.0 + t * dx, from.1 + t * dy);
+    px * px + py * py
+}
+
+/// The cosine of `deg` degrees (|deg| ≤ 90), by its Taylor series to x^12 around 0: error
+/// below 1e-6 at 90°, with no `std` maths (the crate is `no_std`).
+fn cos_deg(deg: f64) -> f64 {
+    let x = deg.clamp(-90.0, 90.0) * (core::f64::consts::PI / 180.0);
+    let x2 = x * x;
+    // 1 - x²/2! + x⁴/4! - … - x¹⁰/10! + x¹²/12!, by Horner.
+    let mut c = 1.0 / 479_001_600.0;
+    for k in [
+        -1.0 / 3_628_800.0,
+        1.0 / 40_320.0,
+        -1.0 / 720.0,
+        1.0 / 24.0,
+        -0.5,
+        1.0,
+    ] {
+        c = c * x2 + k;
+    }
+    c.max(0.0)
 }
 
 /// Whether edge `a`–`b` toggles the even–odd count of `q`: its ends lie on opposite sides of

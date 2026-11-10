@@ -9,6 +9,9 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::many_single_char_names,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::type_complexity,
     reason = "test code: model values are small, indices come from the same vectors, and w, s, e, n name edges"
 )]
 
@@ -17,7 +20,7 @@ use std::ops::{ControlFlow, Range};
 use teigeodata_core::bitpack::{Packed, encode_auto};
 use teigeodata_core::table::{Table, encode as table};
 use teigeodata_core::{E7, Point, hilbert};
-use teigeodata_format::arcs::{self, ArcColumns, Arcs};
+use teigeodata_format::arcs::{self, ArcChunks, ArcColumns, Arcs};
 use teigeodata_format::poly_index::{
     self, BOXES, NODE_SIZE, PolyIndex, QUANTA, ROOT, Rect, polygon_box,
 };
@@ -451,4 +454,236 @@ fn edge_cases() {
     let empty = poly_index::encode(&[], 16).unwrap();
     let cols = columns(&empty);
     assert!(cols[1].is_empty() && cols[2].is_empty());
+}
+
+/// `Polygons::within` (D-149) against the exact distance to each rectangle on the same local
+/// plane: inside at any radius, near when within it, never when beyond; rectangles on the
+/// antimeridian are compared by wrapped longitude.
+#[test]
+fn within_matches_the_distance_to_each_rectangle() {
+    let (m, groups) = model(11, true);
+    let bytes = pack(&m, &groups, 9, None);
+    let p = Pack::open(&bytes).unwrap();
+    let o = open(&p);
+    let mut r = Rng(99);
+    let (mut near, mut far, mut inside) = (0, 0, 0);
+    for _ in 0..4_000 {
+        let k = (r.next() % m.len() as u64) as usize;
+        let [w, s, e, n] = m[k];
+        // A point around the rectangle: inside, near an edge or well outside.
+        let span = (e - w).max(n - s).max(1_000);
+        let lat = r.range((s - span).max(-850_000_000), (n + span).min(850_000_000));
+        let lon = r.range((w - span).max(-W), (e + span).min(W - 1));
+        let at = at(lat, lon);
+        let kx = (f64::from(lat) * 1e-7).to_radians().cos();
+        let wrap = |d: i64| {
+            if d > 1_800_000_000 {
+                d - 3_600_000_000
+            } else if d < -1_800_000_000 {
+                d + 3_600_000_000
+            } else {
+                d
+            }
+        };
+        let dx = if lon < w {
+            wrap(i64::from(w) - i64::from(lon))
+        } else if lon > e {
+            wrap(i64::from(lon) - i64::from(e))
+        } else {
+            0
+        };
+        let dy = if lat < s {
+            s - lat
+        } else if lat > n {
+            lat - n
+        } else {
+            0
+        };
+        let d = ((dx as f64 * kx).powi(2) + f64::from(dy).powi(2)).sqrt() * 1.111_95;
+        for r_cm in [0_u32, 1_000, 100_000, 10_000_000] {
+            let got = o.v.within(&o.a, k, at, r_cm);
+            if d == 0.0 && (lon > w && lon < e && lat > s && lat < n) {
+                assert!(got, "inside {k} at {at:?}");
+                inside += 1;
+            } else if d < f64::from(r_cm) * 0.999 {
+                assert!(got, "{d} cm within {r_cm} cm of {k} at {at:?}");
+                near += 1;
+            } else if d > f64::from(r_cm) * 1.001 + 2.0 {
+                assert!(!got, "{d} cm beyond {r_cm} cm of {k} at {at:?}");
+                far += 1;
+            }
+        }
+    }
+    assert!(
+        inside > 100 && near > 100 && far > 100,
+        "{inside} {near} {far}"
+    );
+}
+
+/// `within_chunked` gives `within`'s answer: star-shaped rings of 40 to 900 vertices (many
+/// chunks per arc, every chunk boundary inside some ring), half with a hole, some touching the
+/// antimeridian with points on its other side, two arcs per outer ring; points around each, at radii from 0 to 1,000 km.
+#[test]
+fn within_chunked_matches_within() {
+    let mut r = Rng(7);
+    let mut arc_pts: Vec<Vec<Point<E7>>> = Vec::new();
+    let mut polys: Vec<(Vec<u32>, Option<u32>, (i32, i32), i32)> = Vec::new();
+    for k in 0..120 {
+        let n = r.range(40, 900) as usize;
+        let rad = r.range(10_000, 30_000_000);
+        let lat0 = r.range(-800_000_000 + rad, 800_000_000 - rad);
+        let lon0 = if k % 9 == 0 {
+            W - rad / 2 * 3 - 10
+        } else {
+            r.range(-W + rad * 2, W - rad * 2)
+        };
+        let ring = |rad: i32, n: usize, r: &mut Rng, rev: bool| -> Vec<Point<E7>> {
+            let mut v: Vec<Point<E7>> = (0..n)
+                .map(|i| {
+                    let t = i as f64 / n as f64 * std::f64::consts::TAU;
+                    let rr = f64::from(rad) * (0.05 + 0.95 * (r.next() % 1000) as f64 / 1000.0);
+                    let lat = (f64::from(lat0) + rr * t.sin()) as i32;
+                    at(lat, lon0 + (rr * t.cos() * 1.5) as i32)
+                })
+                .collect();
+            v.dedup();
+            if rev {
+                v.reverse();
+            }
+            v.push(v[0]);
+            v
+        };
+        let outer = ring(rad, n, &mut r, false);
+        // Two arcs: split the closed ring at a middle vertex.
+        let mid = outer.len() / 2;
+        let a0 = arc_pts.len() as u32;
+        arc_pts.push(outer[..=mid].to_vec());
+        arc_pts.push(outer[mid..].to_vec());
+        let hole = (k % 2 == 0).then(|| {
+            arc_pts.push(ring(rad / 40, 60, &mut r, true));
+            arc_pts.len() as u32 - 1
+        });
+        // The label between the hole (at most rad / 40) and the outer ring (about 0.05 rad at least).
+        polys.push((
+            vec![arc_ref(a0, false), arc_ref(a0 + 1, false)],
+            hole,
+            (lat0 + rad / 1000 * 35, lon0),
+            rad,
+        ));
+    }
+    let pts: Vec<&[Point<E7>]> = arc_pts.iter().map(Vec::as_slice).collect();
+    let arcs_body = arcs::encode(&ArcColumns {
+        arcs: &pts,
+        ..ArcColumns::default()
+    })
+    .unwrap();
+    let holes: Vec<Option<[u32; 1]>> = polys
+        .iter()
+        .map(|p| p.1.map(|h| [arc_ref(h, false)]))
+        .collect();
+    let ring_lists: Vec<Vec<&[u32]>> = polys
+        .iter()
+        .zip(&holes)
+        .map(|(p, h)| {
+            let mut v: Vec<&[u32]> = vec![&p.0[..]];
+            v.extend(h.as_ref().map(|h| &h[..]));
+            v
+        })
+        .collect();
+    let parts: Vec<[&[&[u32]]; 1]> = ring_lists.iter().map(|r| [&r[..]]).collect();
+    let input: Vec<PolygonInput<'_>> = polys
+        .iter()
+        .zip(&parts)
+        .enumerate()
+        .map(|(i, (p, parts))| PolygonInput {
+            row: i as u32,
+            parts: &parts[..],
+            label: at(p.2.0, p.2.1),
+            area_ha: 1,
+        })
+        .collect();
+    let poly_body = polygons::encode(&input, &[]).unwrap();
+    let mut wr = Writer::new("np", "places", "2026.11.0").unwrap();
+    wr.section_bytes(Kind::ARCS, Encoding::TABLE, pts.len() as u64, &arcs_body)
+        .unwrap();
+    wr.section_bytes(
+        Kind::POLYGONS,
+        Encoding::TABLE,
+        polys.len() as u64,
+        &poly_body,
+    )
+    .unwrap();
+    let bytes = wr
+        .layout(false)
+        .unwrap()
+        .assemble(&[&arcs_body, &poly_body])
+        .unwrap();
+    let p = Pack::open(&bytes).unwrap();
+    let a = Arcs::open(&p.section(Kind::ARCS).unwrap()).unwrap();
+    let v = Polygons::open(&p.section(Kind::POLYGONS).unwrap()).unwrap();
+    v.check(&a, polys.len()).unwrap();
+    let chunks = ArcChunks::build(&a);
+    // Every segment once: the chunks of an arc cover its vertices, sharing ends.
+    for k in 0..a.len() {
+        let c = chunks.of(k);
+        let range = a.range(k).unwrap();
+        assert_eq!(c.first().unwrap().start as usize, range.start);
+        assert_eq!(c.last().unwrap().end as usize, range.end);
+        assert!(c.windows(2).all(|w| w[0].end == w[1].start + 1));
+    }
+    let (mut yes, mut no) = (0, 0);
+    for _ in 0..30_000 {
+        let k = (r.next() % polys.len() as u64) as usize;
+        let (lat0, lon0) = polys[k].2;
+        // Mostly around the star (its spikes make chunks that span the point with crossings on
+        // both sides), some far, wrapped across the antimeridian.
+        let rad = polys[k].3;
+        let (dlat, dlon) = if r.next().is_multiple_of(10) {
+            (40_000_000, 60_000_000)
+        } else {
+            (rad / 5 * 6, rad / 5 * 9)
+        };
+        let lat = (lat0 + r.range(-dlat, dlat)).clamp(-899_999_999, 899_999_999);
+        let mut lon = i64::from(lon0) + i64::from(r.range(-dlon, dlon));
+        if lon > i64::from(W) {
+            lon -= 3_600_000_000;
+        }
+        let lon = lon.max(-i64::from(W)) as i32;
+        let q = at(lat, lon);
+        for r_cm in [0_u32, 100_000, 3_000_000, 100_000_000] {
+            let want = v.within(&a, k, q, r_cm);
+            assert_eq!(
+                v.within_chunked(&a, &chunks, k, q, r_cm),
+                want,
+                "{k} at {q:?}, {r_cm} cm"
+            );
+            if want { yes += 1 } else { no += 1 }
+        }
+    }
+    assert!(yes > 10_000 && no > 10_000, "{yes} {no}");
+}
+
+/// An edge across the meridian opposite the point is far from it: a rectangle 200° wide
+/// (longitudes −100° to 100°, latitudes 10° to 20°) and a point at longitude −170°, 10 m north
+/// of its southern edge's latitude. Each end wrapped alone around the point puts the edge's
+/// ends at +70° and −90°, a segment through the point; the answer is 70° away.
+#[test]
+fn an_edge_across_the_opposite_meridian_is_far() {
+    let m = [[-1_000_000_000, 100_000_000, 1_000_000_000, 200_000_000]];
+    let bytes = pack(&m, &[], 4, None);
+    let p = Pack::open(&bytes).unwrap();
+    let o = open(&p);
+    let chunks = ArcChunks::build(&o.a);
+    let q = at(100_000_900, -1_700_000_000);
+    for r_cm in [0, 10_000, 100_000] {
+        assert!(!o.v.within(&o.a, 0, q, r_cm), "{r_cm} cm");
+        assert!(
+            !o.v.within_chunked(&o.a, &chunks, 0, q, r_cm),
+            "{r_cm} cm, chunked"
+        );
+    }
+    // A point 10 m south of the edge, 100° east of the first: within 100 m, not within 1 m.
+    let q = at(99_999_100, -700_000_000);
+    assert!(o.v.within(&o.a, 0, q, 10_000) && o.v.within_chunked(&o.a, &chunks, 0, q, 10_000));
+    assert!(!o.v.within(&o.a, 0, q, 100) && !o.v.within_chunked(&o.a, &chunks, 0, q, 100));
 }

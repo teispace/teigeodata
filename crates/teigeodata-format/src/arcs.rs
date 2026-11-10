@@ -391,6 +391,29 @@ impl<'a> Arcs<'a> {
         }
     }
 
+    /// The vertices `range` of arc `a`, forwards, every level. `range.start` must be the arc's
+    /// first vertex or a block's first (a checkpoint); otherwise empty.
+    pub(crate) fn points_in(&self, a: usize, range: Range<usize>) -> ArcPoints<'a> {
+        let arc = self.range(a).unwrap_or(0..0);
+        let ok = range.start >= arc.start
+            && range.end <= arc.end
+            && (range.start == arc.start || range.start.is_multiple_of(BLOCK_LEN));
+        ArcPoints {
+            arcs: *self,
+            arc: a,
+            first: arc.start,
+            todo: if ok { range } else { 0..0 },
+            reversed: false,
+            lod: 0,
+            mul: pow10(self.scale(a)),
+            xs: [0; BLOCK_LEN],
+            ys: [0; BLOCK_LEN],
+            lv: [PINNED; BLOCK_LEN],
+            at: 0,
+            end: 0,
+        }
+    }
+
     /// How many vertices of arc `a` level of detail `lod` keeps (0 past the end). Reads only the
     /// level column.
     #[must_use]
@@ -691,6 +714,92 @@ impl Iterator for ArcPoints<'_> {
                 return None;
             }
         }
+    }
+}
+
+/// One chunk of an arc ([`ArcChunks`]): the arc's vertices inside one 128-vertex block, plus
+/// the first vertex of the next block when the arc goes on, so consecutive chunks share an end
+/// and together hold every segment of the arc once.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Chunk {
+    /// The smallest longitude and latitude of its vertices, 1e-7°.
+    pub min: (i32, i32),
+    /// The largest.
+    pub max: (i32, i32),
+    /// Its first vertex `(lon, lat)`.
+    pub first: (i32, i32),
+    /// Its last vertex.
+    pub last: (i32, i32),
+    /// Its vertex numbers (across all arcs), the last one included: `start..end`.
+    pub start: u32,
+    /// One past its last vertex.
+    pub end: u32,
+}
+
+/// A box and the two ends of every [`Chunk`] of every arc, in arc order: built once per ARCS
+/// (O(vertices), 40 B per chunk, about one chunk per 128 vertices plus one per arc) for
+/// readers that skip the arcs far from a point (D-149, `Polygons::within_chunked`). Reads
+/// never allocate.
+#[derive(Clone, Debug, Default)]
+pub struct ArcChunks {
+    /// Per arc: its first chunk, then the chunk count.
+    start: alloc::vec::Vec<u32>,
+    chunks: alloc::vec::Vec<Chunk>,
+}
+
+impl ArcChunks {
+    /// The chunks of every arc of `arcs`, decoded at full resolution.
+    #[must_use]
+    pub fn build(arcs: &Arcs<'_>) -> Self {
+        let mut start = alloc::vec::Vec::with_capacity(arcs.len() + 1);
+        let mut chunks = alloc::vec::Vec::with_capacity(arcs.len() + arcs.vertices() / BLOCK_LEN);
+        for a in 0..arcs.len() {
+            start.push(u32::try_from(chunks.len()).unwrap_or(u32::MAX));
+            let Some(range) = arcs.range(a) else { continue };
+            let mut cur: Option<Chunk> = None;
+            for (v, p) in range.clone().zip(arcs.points(a, false, 0)) {
+                let xy = (p.lon(), p.lat());
+                let n = u32::try_from(v).unwrap_or(u32::MAX);
+                if let Some(c) = &mut cur {
+                    c.min = (c.min.0.min(xy.0), c.min.1.min(xy.1));
+                    c.max = (c.max.0.max(xy.0), c.max.1.max(xy.1));
+                    c.last = xy;
+                    c.end = n + 1;
+                    if v.is_multiple_of(BLOCK_LEN) && v + 1 < range.end {
+                        chunks.push(*c);
+                        cur = None;
+                    }
+                }
+                if cur.is_none() && v + 1 < range.end {
+                    cur = Some(Chunk {
+                        min: xy,
+                        max: xy,
+                        first: xy,
+                        last: xy,
+                        start: n,
+                        end: n + 1,
+                    });
+                }
+            }
+            chunks.extend(cur);
+        }
+        start.push(u32::try_from(chunks.len()).unwrap_or(u32::MAX));
+        Self { start, chunks }
+    }
+
+    /// The chunks of arc `a` (empty past the end).
+    #[must_use]
+    pub fn of(&self, a: usize) -> &[Chunk] {
+        match (self.start.get(a), self.start.get(a + 1)) {
+            (Some(&s), Some(&e)) => self.chunks.get(s as usize..e as usize).unwrap_or_default(),
+            _ => &[],
+        }
+    }
+
+    /// The bytes it holds on the heap.
+    #[must_use]
+    pub fn heap_bytes(&self) -> usize {
+        self.start.capacity() * 4 + self.chunks.capacity() * size_of::<Chunk>()
     }
 }
 
