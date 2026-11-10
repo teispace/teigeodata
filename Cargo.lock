@@ -1337,6 +1337,7 @@ dependencies = [
  "teigeodata-core",
  "teigeodata-format",
  "teigeodata-names",
+ "teigeodata-sync",
 ]
 
 [[package]]

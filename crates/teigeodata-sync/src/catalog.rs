@@ -54,6 +54,9 @@ use teigeodata_format::{Bbox, FOOTER_SIZE, name_like};
 
 use crate::trust::{Target, lower_hex};
 
+mod find;
+pub use find::{Candidate, Catalog, Found, Resolver};
+
 /// The schema this reader knows.
 pub const SCHEMA: u64 = 1;
 

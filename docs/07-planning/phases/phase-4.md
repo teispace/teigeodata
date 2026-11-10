@@ -188,8 +188,8 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   document](../../06-engineering/catalog-keys.md) (2026-11-10, D-163)
 - [ ] Upload to sharded immutable releases (at most 1,000 assets each) and the first ceremony
   (the maintainer: keys, the `catalog` branch and Pages, the environment secret)
-- [ ] Discovery: `catalog.find(name)` over the baseline (and the gazetteer pack when present),
-  then the locator, then the catalog; `Resolver` trait
+- [x] Discovery: `catalog.find(name)` over the baseline (and the gazetteer pack when present),
+  then the locator, then the catalog; `Resolver` trait (2026-11-10, D-164)
 
 ### 4.4 Transport assets
 - [x] Seekable zstd writer (frames on the head and sections, ≤ 1 MiB at 16 KiB boundaries) with
@@ -271,3 +271,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.3: the differential split: python-tuf done, `tough` its own item | D-161 |
 | 2026-11-10 | 4.3: repository tooling split into the writer and `xtask tuf`, and the workflow and ceremony | [catalog repository tooling](../../02-research/notes/catalog-repository-tooling.md) |
 | 2026-11-10 | 4.3: catalog sizes count the head, seek table and BLOCK_HASHES; targets SHA-256 only; tooling and workflow done, upload and the ceremony their own item | D-162, D-163 |
+| 2026-11-10 | 4.3: discovery done; the engine is the catalog's `Resolver` behind its feature `catalog` | D-164 |

@@ -311,6 +311,31 @@ components a pack has, and split the targets into delegated bins (§2). The JSON
 cannot express the cross-field rules (path, hash, seek table below the asset length, a box's
 south below its north, no self-dependency); `Entry::from_target` checks them.
 
+**Update (D-162).** Targets now carry SHA-256 alone (python-tuf refuses a `blake3` hash) and the
+entry gains `transport.head` and `block_hashes`, so a plan's download bytes equal G-wire's:
+536 B of `custom` per entry, measured; the test bound is 550 B.
+
+### 3.11 Discovery as built (2026-11-10, D-164)
+
+- **A `Resolver` trait in `teigeodata-sync::catalog`**, the seam of §3.7: a name to
+  `Candidate { id, point, score, countries }`, best first. The catalog does not depend on the
+  engine; the engine implements the trait behind its feature `catalog`, so an app without the
+  catalog never compiles it, and a hosted resolver can implement it later.
+- **The engine's resolver** is its search over every loaded layer (the baseline, and the
+  gazetteer pack when installed), then for each hit its own country (its ID's namespace) and
+  every country the locator finds within `LOCATOR_RADIUS_M`, so a border town names both sides.
+- **`Catalog::find`** gives each candidate its packs, offline: each named country's own pack
+  (`np`) and each part pack (`ae-du`) whose box holds the point or that has no box. A box across
+  the antimeridian (west above east) holds both sides. An entry the reader refuses (a newer
+  schema) is reported by `Catalog::new` and left out, so one bad entry never hides the others.
+- **Countries by address, not a lookup table.** A pack's address starts with its country code
+  (P16): `ae-du` belongs to `ae` with no per-country rule in code.
+- Proof: a synthetic pack (each candidate is the search hit with its own country; a stale
+  candidate is cleared), the catalog's tests (Dubai's packs, a border town, the antimeridian,
+  a refused entry), planted faults in each, and the world gate
+  `discovery_names_the_country_of_every_city` (every city found by its name names the country it
+  hangs from), run by the data build.
+
 ## 4. Options compared
 
 **Snapshot swap.**

@@ -54,8 +54,10 @@ A short status. The numbers and evidence live in each phase file and the
   (D-158); thinning on sorted, banded records (122 s, 2.46 GB peak); the TUF client
   `sync::trust` (D-159), the catalog's `custom` schema v1 (D-160) and the differential against
   python-tuf (D-161), sizes that match G-wire and SHA-256 targets (D-162), and the repository
-  tooling `xtask tuf` with the timestamp workflow, off until the first ceremony (D-163). Next:
-  4.3 discovery (`catalog.find`), the release upload, then `tough`; the world byte-identity check after the thinning change
+  tooling `xtask tuf` with the timestamp workflow, off until the first ceremony (D-163), and
+  discovery: the engine as the catalog's `Resolver`, `Catalog::find` (D-164). Next: the
+  `tough` differential, then 4.5 the download manager; the release upload and the first
+  ceremony wait for the maintainer; the world byte-identity check after the thinning change
   waits for the inputs to be fetched again.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).

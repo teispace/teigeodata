@@ -600,3 +600,68 @@ fn the_shipped_baseline_answers_as_its_parts() {
         c1.0, c1.1, c2.0, c2.1
     );
 }
+
+/// Discovery (D-164): the engine as the catalog's `Resolver` over the world part. Each city,
+/// asked by its name, comes back with the country it hangs from among its candidate countries,
+/// so the catalog offers that country's packs; a city near a border also names the neighbour.
+#[test]
+#[ignore = "needs TGD_WORLD"]
+fn discovery_names_the_country_of_every_city() {
+    use teigeodata_sync::catalog::Resolver;
+    let world = read("TGD_WORLD").expect("TGD_WORLD");
+    let ids = IdMap::open(&Pack::open(&world).unwrap().section(Kind::IDMAP).unwrap()).unwrap();
+    let mut e = Engine::new();
+    e.add(Layer::from_bytes(world.clone(), baseline(0)).unwrap());
+    let (mut up, mut out) = (Vec::new(), Vec::new());
+    let mut buf = [0_u8; 512];
+    let (mut cities, mut found, mut border) = (0_usize, 0_usize, 0_usize);
+    let mut wrong = Vec::new();
+    let t = Instant::now();
+    for r in 0..ids.len() {
+        let p = e.get(ids.id(r).unwrap()).unwrap().unwrap();
+        if p.kind != Some(PlaceKind::Settlement) {
+            continue;
+        }
+        e.ancestors(&p, &mut up).unwrap();
+        let Some(country) = up
+            .iter()
+            .find(|a| a.kind == Some(PlaceKind::Country))
+            .and_then(|c| c.id.namespace().country())
+        else {
+            continue;
+        };
+        let Some(name) = e.name(&p, &mut buf).unwrap().map(str::to_owned) else {
+            continue;
+        };
+        cities += 1;
+        e.resolve(&name, 50, &mut out).unwrap();
+        let Some(c) = out.iter().find(|c| c.id == p.id.get()) else {
+            continue;
+        };
+        found += 1;
+        border += usize::from(c.countries.len() > 1);
+        if !c.countries.contains(&country) {
+            wrong.push((name, country, c.countries.clone()));
+        }
+    }
+    let us = t.elapsed().as_secs_f64() * 1e6 / cities.max(1) as f64;
+    println!(
+        "discovery: {cities} cities, {found} found by their name in the top 50, {border} with a \
+         neighbour, {us:.0} µs per query"
+    );
+    assert!(
+        wrong.is_empty(),
+        "{} without their country: {:?}",
+        wrong.len(),
+        &wrong[..wrong.len().min(20)]
+    );
+    // Almost every city is found by its own name (the rest share it with 50 bigger places).
+    assert!(found * 100 >= cities * 99, "{found} of {cities}");
+    for (city, cc) in [("Dubai", *b"ae"), ("Kathmandu", *b"np"), ("Paris", *b"fr")] {
+        e.resolve(city, 1, &mut out).unwrap();
+        assert!(
+            out.first().is_some_and(|c| c.countries.contains(&cc)),
+            "{city}: {out:?}"
+        );
+    }
+}

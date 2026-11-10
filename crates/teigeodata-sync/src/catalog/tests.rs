@@ -350,3 +350,145 @@ fn names_are_built_one_way() {
         "ae-du.dem.2026.12.1.00ff1001.tgd.zst"
     );
 }
+
+mod find {
+    use alloc::collections::BTreeMap;
+    use alloc::string::ToString;
+    use alloc::vec::Vec;
+
+    use teigeodata_core::{E7, Point};
+    use teigeodata_format::Bbox;
+
+    use super::{SHA256, entry, target};
+    use crate::catalog::{Candidate, Catalog, Error, Resolver, file_name};
+    use crate::trust::{Common, Target, Targets};
+
+    fn pt(lat: f64, lon: f64) -> Point<E7> {
+        Point::from_degrees(lat, lon).unwrap()
+    }
+
+    fn pack(address: &str, bbox: Option<Bbox>) -> (alloc::string::String, Target) {
+        let mut e = entry();
+        e.address = address.to_string();
+        e.file = file_name(address, "places", "2026.11.0", &SHA256);
+        e.bbox = bbox;
+        (e.path(), target(e.to_custom()))
+    }
+
+    fn catalog() -> (Catalog, Vec<(alloc::string::String, Error)>) {
+        let dubai = Bbox {
+            min: pt(24.6, 54.8),
+            max: pt(25.4, 56.0),
+        };
+        let abu_dhabi = Bbox {
+            min: pt(22.6, 51.5),
+            max: pt(24.9, 56.0),
+        };
+        let mut targets = BTreeMap::new();
+        for (a, b) in [
+            ("np", None),
+            ("in", None),
+            ("ae", None),
+            ("ae-du", Some(dubai)),
+            ("ae-az", Some(abu_dhabi)),
+            ("ae-sh", None),
+        ] {
+            let (p, t) = pack(a, b);
+            targets.insert(p, t);
+        }
+        // An entry this reader refuses (a newer schema) is reported, not fatal.
+        let (p, mut t) = pack("om", None);
+        t.custom.as_mut().unwrap()["schema"] = serde_json::json!(2);
+        targets.insert(p, t);
+        Catalog::new(&Targets {
+            common: Common {
+                version: 1,
+                expires: 0,
+            },
+            targets,
+        })
+    }
+
+    /// A resolver that knows two names.
+    struct Fixed;
+
+    impl Resolver for Fixed {
+        type Error = ();
+
+        fn resolve(&self, query: &str, k: usize, out: &mut Vec<Candidate>) -> Result<(), ()> {
+            out.clear();
+            let c = |id, p, cc: &[[u8; 2]]| Candidate {
+                id,
+                point: p,
+                score: 1,
+                countries: cc.to_vec(),
+            };
+            match query {
+                "Dubai" => out.extend([c(1, pt(25.2, 55.3), &[*b"ae", *b"om"])]),
+                "Birgunj" => out.extend([
+                    c(2, pt(27.0, 84.87), &[*b"np", *b"in"]),
+                    c(3, pt(1.0, 1.0), &[]),
+                ]),
+                "error" => return Err(()),
+                _ => {}
+            }
+            out.truncate(k);
+            Ok(())
+        }
+    }
+
+    fn paths(c: &Catalog, q: &str, k: usize) -> Vec<Vec<alloc::string::String>> {
+        c.find(&Fixed, q, k)
+            .unwrap()
+            .iter()
+            .map(|f| f.packs.iter().map(|e| e.path()).collect())
+            .collect()
+    }
+
+    #[test]
+    fn a_name_finds_its_country_and_the_parts_whose_box_holds_it() {
+        let (c, refused) = catalog();
+        assert_eq!(refused.len(), 1);
+        assert_eq!(refused[0].1, Error::Schema(2));
+        assert_eq!(c.entries().len(), 6);
+        // Dubai: the country, Dubai's own pack and a part without a box; not Abu Dhabi,
+        // whose box ends south of it; Oman has no accepted pack.
+        assert_eq!(
+            paths(&c, "Dubai", 5),
+            [["ae-du.places.tgd", "ae-sh.places.tgd", "ae.places.tgd"]]
+        );
+        // A border town: both countries' packs; a candidate without countries: none.
+        assert_eq!(
+            paths(&c, "Birgunj", 5),
+            [alloc::vec!["np.places.tgd", "in.places.tgd"], alloc::vec![]]
+        );
+        assert_eq!(paths(&c, "Birgunj", 1).len(), 1);
+        assert_eq!(
+            paths(&c, "Nowhere", 5),
+            Vec::<Vec<alloc::string::String>>::new()
+        );
+        assert_eq!(c.find(&Fixed, "error", 5), Err(()));
+    }
+
+    #[test]
+    fn boxes_across_the_antimeridian_hold_both_sides() {
+        let fiji = Bbox {
+            min: pt(-21.0, 176.0),
+            max: pt(-12.0, -178.0),
+        };
+        let mut targets = BTreeMap::new();
+        let (p, t) = pack("fj-w", Some(fiji));
+        targets.insert(p, t);
+        let (c, _) = Catalog::new(&Targets {
+            common: Common {
+                version: 1,
+                expires: 0,
+            },
+            targets,
+        });
+        assert_eq!(c.packs_at(*b"fj", pt(-17.0, 178.0)).count(), 1);
+        assert_eq!(c.packs_at(*b"fj", pt(-17.0, -179.0)).count(), 1);
+        assert_eq!(c.packs_at(*b"fj", pt(-17.0, 170.0)).count(), 0);
+        assert_eq!(c.packs_at(*b"fj", pt(-25.0, 178.0)).count(), 0);
+    }
+}
