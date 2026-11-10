@@ -14,7 +14,7 @@ use teigeodata_sync::catalog::{Entry, Size, file_name};
 use teigeodata_sync::repo::{
     RoleKeys, TargetFile, root, sign, snapshot, target_hashes, targets, timestamp,
 };
-use teigeodata_sync::trust::{RoleName, Trusted};
+use teigeodata_sync::trust::Trusted;
 
 const NOW: i64 = 1_794_268_800; // 2026-11-10
 const YEAR: i64 = 365 * 86_400;
@@ -24,7 +24,8 @@ fn key(seed: u8) -> SigningKey {
     SigningKey::from_bytes(&[seed; 32])
 }
 
-fn written() -> BTreeMap<&'static str, Vec<u8>> {
+/// The repository's files by name; the asset under its catalog file name, as releases store it.
+fn written() -> BTreeMap<String, Vec<u8>> {
     let public = |s: u8| key(s).verifying_key().to_bytes();
     let one = |s: u8| RoleKeys {
         keys: vec![public(s)],
@@ -61,6 +62,7 @@ fn written() -> BTreeMap<&'static str, Vec<u8>> {
         bbox: None,
         licence: "ODbL-1.0".into(),
     };
+    let asset_name = entry.file.clone();
     let mut files = BTreeMap::new();
     files.insert(
         entry.path(),
@@ -79,11 +81,11 @@ fn written() -> BTreeMap<&'static str, Vec<u8>> {
     )
     .unwrap();
     BTreeMap::from([
-        ("1.root.json", root1),
-        ("1.targets.json", tg),
-        ("1.snapshot.json", sn),
-        ("timestamp.json", ts),
-        ("np.places.tgd", ASSET.to_vec()),
+        ("1.root.json".to_string(), root1),
+        ("1.targets.json".to_string(), tg),
+        ("1.snapshot.json".to_string(), sn),
+        ("timestamp.json".to_string(), ts),
+        (asset_name, ASSET.to_vec()),
     ])
 }
 
@@ -91,6 +93,7 @@ fn written() -> BTreeMap<&'static str, Vec<u8>> {
 fn the_written_repository_is_the_checked_in_one_and_verifies() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/tuf-written");
     let files = written();
+    assert_eq!(files.len(), 5);
     if std::env::var_os("TEIGEODATA_BLESS").is_some() {
         std::fs::create_dir_all(&dir).unwrap();
         for (name, bytes) in &files {
@@ -108,10 +111,9 @@ fn the_written_repository_is_the_checked_in_one_and_verifies() {
     t.update_timestamp(&files["timestamp.json"]).unwrap();
     t.update_snapshot(&files["1.snapshot.json"], false).unwrap();
     t.update_targets(&files["1.targets.json"]).unwrap();
-    t.verify_target("np.places.tgd", &files["np.places.tgd"])
-        .unwrap();
     let target = t.target("np.places.tgd").unwrap();
-    Entry::from_target("np.places.tgd", target).unwrap();
+    let entry = Entry::from_target("np.places.tgd", target).unwrap();
+    t.verify_target("np.places.tgd", &files[&entry.file])
+        .unwrap();
     assert_eq!(t.target_name("np.places.tgd").unwrap().len(), 64 + 1 + 13);
-    let _ = RoleName::Root;
 }

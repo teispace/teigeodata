@@ -20,6 +20,7 @@ trusted.update_timestamp((d / "timestamp.json").read_bytes())
 trusted.update_snapshot((d / "1.snapshot.json").read_bytes())
 trusted.update_targets((d / "1.targets.json").read_bytes())
 for path, target in trusted.targets.targets.items():
-    target.verify_length_and_hashes((d / path).read_bytes())
-    assert target.unrecognized_fields["custom"]["schema"] == 1
+    custom = target.unrecognized_fields["custom"]
+    assert custom["schema"] == 1
+    target.verify_length_and_hashes((d / custom["file"]).read_bytes())
 print(f"python-tuf read the written repository: {len(trusted.targets.targets)} target(s)")
