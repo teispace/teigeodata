@@ -571,6 +571,19 @@ and never overwritten in place on disk.
   keeps ADR-0025's "a deployment, not a fork". A tier may add its own targets (private packs)
   only through a key the root delegates to it; that needs delegations, so it is a later step.
 
+**Mirrors as built (D-170, 2026-11-10).** Two common shapes were compared. apt's `mirror`
+method tries mirrors by priority (lowest first, random within a priority) and falls back to the
+next one when a file fails ([apt-transport-mirror(1)](https://manpages.debian.org/testing/apt/apt-transport-mirror.1.en.html)).
+Metalink ([RFC 5854](https://www.rfc-editor.org/rfc/rfc5854)) lists URLs with priorities and
+hashes so a client can switch sources and repair pieces; multi-source segmented download
+(aria2) splits one file across mirrors. We take the ordered failover, per attempt: an attempt
+fetches the seek table, head and frames from one mirror, so an unsigned but lying table can
+only spoil its own mirror's frames, and the next mirror resumes from staging (D-169), so a
+switch costs the table, the head and the block hashes, never a checked frame. A mirror whose
+bytes are refused goes behind every mirror that has not been; network failures order the rest.
+Segmented multi-mirror download is not taken: one mirror saturates a phone's link, and mixing
+tables across mirrors would reopen the lying-table case.
+
 ### 3.7 The client as built (2026-11-10)
 
 `teigeodata-sync::trust` (feature `trust`, `no_std` + `alloc`, sans-I/O) follows python-tuf's

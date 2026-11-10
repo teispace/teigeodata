@@ -215,7 +215,8 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] Resume by frame with ETag and length checks (the host ignores `If-Range`): every frame
   left in staging is checked against the signed hashes and kept, only the rest fetched
   (2026-11-10, D-169)
-- [ ] Mirrors with demotion
+- [x] Mirrors with demotion: `fetch::Mirrors`, `install_from`; each attempt on one mirror,
+  resumed by the next (2026-11-10, D-170)
 - [ ] Staging, fsync, rename, journal commit, crash recovery; snapshot swap on install
 - [ ] Platform transport prototypes for gate 14 (iOS background `URLSession`, Android UIDT,
   web `fetch` + OPFS); packaging stays in Phase 5
@@ -235,6 +236,8 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [ ] Each gate of ADR-0037 (listed in [offline loading and
   trust](../../02-research/notes/offline-loading-and-trust.md) §6) built, first shown to fail on
   a deliberate violation, then green in CI
+- [ ] A world-size install in the data build: a section over 512 MiB, so `BLOCK_HASHES` spans
+  frames and its one-fetch rule (D-170) is exercised; a planted split list must fail there
 
 ### 4.9 CLI `tgd`
 - [ ] `inspect`, `verify`, `diff` (sections and records), `extract`, `merge` (compaction),
@@ -282,3 +285,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.5: the installer and verify-then-write done; resume and mirrors their own item | D-167 |
 | 2026-11-10 | 4.5: the transport and its driver done, with the size measurement | D-168 |
 | 2026-11-10 | 4.5: resume done, the staging file its own record; mirrors split into their own item | D-169 |
+| 2026-11-10 | 4.5: mirrors done; 4.8 gains a world-size install for multi-frame block-hash lists, which no unit-size pack reaches | D-170 |

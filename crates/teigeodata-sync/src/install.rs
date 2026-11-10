@@ -85,7 +85,10 @@ struct Planned {
     /// Per frame: whether the plan wants it, and whether it is checked and staged.
     wanted: Vec<bool>,
     done: Vec<bool>,
-    /// `BLOCK_HASHES`, gathered until whole when it spans several frames.
+    /// `BLOCK_HASHES`'s frames (empty when the plan has none). They are fed in one fetch and
+    /// count as done only once the list is proven, so a refused list leaves no state behind.
+    list_frames: Range<usize>,
+    /// `BLOCK_HASHES`, gathered within that one fetch when it spans several frames.
     list: Vec<u8>,
     /// Whether the block hashes the plan needs are proven.
     proven: bool,
@@ -248,6 +251,22 @@ impl Install {
                 .any(|s| s.length >= MIN_COVERED && s.kind != Kind::BLOCK_HASHES && overlaps(f, s))
         });
         sections.sort_unstable_by_key(|s| (s.offset, s.length));
+        let list_frames = match sections
+            .iter()
+            .find(|s| s.kind == Kind::BLOCK_HASHES && s.length > 0)
+        {
+            Some(s) if needs_list => {
+                let span = s.offset..s.end();
+                let mut idx = (0..frames.len()).filter(|&i| {
+                    frames
+                        .frame(i)
+                        .is_some_and(|f| span.contains(&f.decoded.start))
+                });
+                let a = idx.next().unwrap_or(0);
+                a..idx.next_back().map_or(a + 1, |b| b + 1)
+            }
+            _ => 0..0,
+        };
         let mut wanted = alloc::vec![false; frames.len()];
         for f in &fetches {
             for w in wanted.get_mut(f.frames.clone()).into_iter().flatten() {
@@ -265,6 +284,7 @@ impl Install {
             frames,
             sections,
             fetches,
+            list_frames,
             list: Vec::new(),
             proven: !needs_list,
         })
@@ -304,6 +324,12 @@ impl Install {
         if !fetch.frames.clone().all(todo) {
             return Err(fail("a frame not wanted, or fed twice").into());
         }
+        let lf = &p.list_frames;
+        let touches = fetch.frames.start < lf.end && lf.start < fetch.frames.end;
+        if touches && !(fetch.frames.start <= lf.start && lf.end <= fetch.frames.end) {
+            return Err(fail("the block hashes are fed in one fetch").into());
+        }
+        p.list.clear();
         if len_of(bytes) != fetch.compressed.end - fetch.compressed.start {
             return Err(fail("a fetch did not return its length").into());
         }
@@ -338,13 +364,9 @@ impl Install {
             return Err(fail("a frame not wanted, or already done"));
         }
         let frame = p.frames.frame(index).ok_or(fail("no such frame"))?;
-        let in_list = p.sections.iter().any(|s| {
-            s.kind == Kind::BLOCK_HASHES
-                && s.length > 0
-                && s.offset <= frame.decoded.start
-                && frame.decoded.start < s.end()
-        });
-        if in_list || len_of(decoded) != frame.decoded.end - frame.decoded.start {
+        if p.list_frames.contains(&index)
+            || len_of(decoded) != frame.decoded.end - frame.decoded.start
+        {
             return Ok(false);
         }
         let mut none = |_: u64, _: &[u8]| Ok::<(), Error>(());
@@ -384,17 +406,7 @@ impl Install {
         let Some(p) = self.planned.as_ref() else {
             return Vec::new();
         };
-        let list = p
-            .sections
-            .iter()
-            .find(|s| s.kind == Kind::BLOCK_HASHES)
-            .map(|s| s.offset..s.end());
-        let in_list = |i: usize| {
-            p.frames
-                .frame(i)
-                .zip(list.clone())
-                .is_some_and(|(f, l)| l.contains(&f.decoded.start))
-        };
+        let in_list = |i: usize| p.list_frames.contains(&i);
         let todo = |i: &usize| p.wanted.get(*i) == Some(&true) && p.done.get(*i) == Some(&false);
         let mut runs: Vec<(bool, Range<usize>)> = Vec::new();
         for i in (0..p.done.len()).filter(todo) {
@@ -461,8 +473,14 @@ fn check_frame<E: From<Error>>(
     write: &mut impl FnMut(u64, &[u8]) -> Result<(), E>,
 ) -> Result<(), E> {
     check_and_write(p, at, bytes, write)?;
-    if let Some(d) = p.done.get_mut(index) {
-        *d = true;
+    if !p.list_frames.contains(&index) {
+        if let Some(d) = p.done.get_mut(index) {
+            *d = true;
+        }
+    } else if p.proven {
+        for d in p.done.get_mut(p.list_frames.clone()).into_iter().flatten() {
+            *d = true;
+        }
     }
     Ok(())
 }

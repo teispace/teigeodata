@@ -196,6 +196,105 @@ pub fn install<T: Transport, F: Read + Write + Seek>(
     Ok(inst.finish()?)
 }
 
+/// One mirror: a base URL, and how it has done.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Mirror {
+    /// The base URL; an asset's URL is the base followed by its path.
+    pub base: String,
+    /// Attempts that failed on the network or the protocol (a request, a status, a response
+    /// that is not its range).
+    pub failures: u32,
+    /// Attempts whose bytes the install refused: the mirror served something other than the
+    /// signed file.
+    pub refused: u32,
+}
+
+/// Mirrors in the caller's order (D-170). Every mirror serves the same files at the same paths;
+/// since every byte is checked against the signed hashes, a mirror can deny service but never
+/// change data. [`install_from`] tries them best first and demotes the ones that fail: a mirror
+/// that served refused bytes goes after every mirror that has not, then fewer failures first,
+/// then the caller's order. Keep one `Mirrors` across installs so the demotion lasts.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Mirrors {
+    list: Vec<Mirror>,
+}
+
+impl Mirrors {
+    /// Mirrors from base URLs, best first.
+    pub fn new<S: Into<String>>(bases: impl IntoIterator<Item = S>) -> Self {
+        Self {
+            list: bases
+                .into_iter()
+                .map(|b| Mirror {
+                    base: b.into(),
+                    failures: 0,
+                    refused: 0,
+                })
+                .collect(),
+        }
+    }
+
+    /// The mirrors, in the caller's order, with their counts.
+    #[must_use]
+    pub fn mirrors(&self) -> &[Mirror] {
+        &self.list
+    }
+
+    /// Indexes into [`Mirrors::mirrors`], best first.
+    #[must_use]
+    pub fn order(&self) -> Vec<usize> {
+        let mut o: Vec<(u32, u32, usize)> = self
+            .list
+            .iter()
+            .enumerate()
+            .map(|(i, m)| (m.refused, m.failures, i))
+            .collect();
+        o.sort_unstable();
+        o.into_iter().map(|(_, _, i)| i).collect()
+    }
+}
+
+/// [`install`] from the first mirror in [`Mirrors::order`] that completes: `path` is the
+/// asset's path under each base. When an attempt fails, the mirror is demoted and the next one
+/// resumes from what is staged, so a switch costs the seek table, the head and the block hashes
+/// again, never a checked frame. Each attempt fetches its seek table and frames from one
+/// mirror, so a lying table cannot make an honest mirror's frames look bad. Every mirror is
+/// tried once; retrying later (with backoff) is the caller's, and resumes as well.
+///
+/// # Errors
+/// [`FetchError::Io`] at once (the staging file is not a mirror's fault), or the last mirror's
+/// error when every one failed; [`FetchError::Response`] when there is no mirror.
+pub fn install_from<T: Transport, F: Read + Write + Seek>(
+    transport: &mut T,
+    mirrors: &mut Mirrors,
+    path: &str,
+    entry: &Entry,
+    asset_len: u64,
+    set: Components,
+    staging: &mut F,
+) -> Result<Installed, FetchError> {
+    let mut last = FetchError::Response("no mirror");
+    for i in mirrors.order() {
+        let Some(m) = mirrors.list.get_mut(i) else {
+            continue;
+        };
+        let url = alloc::format!("{}{path}", m.base);
+        match install(transport, &url, entry, asset_len, set, staging) {
+            Ok(done) => return Ok(done),
+            Err(e @ FetchError::Io(_)) => return Err(e),
+            Err(e @ FetchError::Install(_)) => {
+                m.refused += 1;
+                last = e;
+            }
+            Err(e) => {
+                m.failures += 1;
+                last = e;
+            }
+        }
+    }
+    Err(last)
+}
+
 /// Offers each of `frames` still to do that an earlier attempt could have written (it ends within
 /// `old_len`) to [`Install::staged`], read back from `staging`.
 fn keep<F: Read + Seek>(

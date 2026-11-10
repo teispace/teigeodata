@@ -59,8 +59,8 @@ A short status. The numbers and evidence live in each phase file and the
   differential against `tough` (D-165); 4.5: the layout from the head frame alone (D-166) and
   the sans-I/O installer that checks every block before writing it (D-167), and the
   `Transport` trait with its `ureq` default (D-168), and resume by frame with the staging file
-  as its own record (D-169). Next: mirrors with demotion, then staging, the journal and crash
-  recovery; the release upload and the first
+  as its own record (D-169), and mirrors with demotion (D-170). Next: staging, the journal and
+  crash recovery; the release upload and the first
   ceremony wait for the maintainer; the world byte-identity check after the thinning change
   waits for the inputs to be fetched again.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin

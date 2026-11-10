@@ -108,6 +108,16 @@ before the rename. Tests cut an install at every request and resume it (the pack
 never more fetched than fresh), flip a byte inside NAMES (only its frame is fetched again), stale
 the list, and resume over a foreign, longer file.
 
+**Mirrors (D-170).** `fetch::Mirrors` holds base URLs in the caller's order with each one's
+failures and refusals; `fetch::install_from` runs `install` on the best mirror and, when an
+attempt fails, demotes it and lets the next resume. Order: mirrors never refused first, then
+fewer failures, then the caller's order. A staging-file error stops at once and blames no
+mirror. `BLOCK_HASHES` is fed in one fetch and counts as done only once proven, so a refused
+list leaves nothing behind for the next mirror. Tests: a mirror flipping a byte inside NAMES is
+refused, demoted and skipped on the next install while the honest one resumes; a mirror that is
+down and one that drops midway are passed over; every mirror bad returns the last error with no
+wrong byte written; four planted faults fail.
+
 Nothing is written before it is bound to the signed chain (catalog entry → head hash → section
 hashes → block hashes). Tests in `xtask` (`tuf::install_tests`) install every component set
 from the entry and asset `entry_of` publishes and compare with the pack, and forge each frame,

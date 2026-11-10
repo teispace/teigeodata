@@ -622,3 +622,179 @@ fn resume_keeps_what_checks_and_fetches_the_rest() {
     s.section(Kind::IDMAP).unwrap().verify().unwrap();
     s.section(Kind::PLACES).unwrap().verify().unwrap();
 }
+
+/// How a test mirror behaves.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Behaves {
+    Honest,
+    /// Unreachable.
+    Down,
+    /// Serves the asset with one byte flipped at this offset.
+    Flips(usize),
+    /// Drops every request after this many.
+    Cuts(usize),
+}
+
+/// Test mirrors at `m0/`, `m1/`, ...: the asset at each, as each behaves; bytes served by each.
+struct Hosts<'a> {
+    asset: &'a [u8],
+    behave: Vec<Behaves>,
+    served: Vec<u64>,
+    calls: Vec<usize>,
+}
+
+impl teigeodata_sync::fetch::Transport for Hosts<'_> {
+    fn get(
+        &mut self,
+        url: &str,
+        range: Range<u64>,
+        out: &mut Vec<u8>,
+    ) -> Result<teigeodata_sync::fetch::Got, teigeodata_sync::fetch::FetchError> {
+        use teigeodata_sync::fetch::FetchError;
+        let m: usize = url[1..url.find('/').unwrap()].parse().unwrap();
+        self.calls[m] += 1;
+        let cut = matches!(self.behave[m], Behaves::Cuts(n) if self.calls[m] > n);
+        if self.behave[m] == Behaves::Down || cut {
+            return Err(FetchError::Transport("unreachable".into()));
+        }
+        out.clear();
+        out.extend_from_slice(&self.asset[at(&range)]);
+        if let Behaves::Flips(o) = self.behave[m]
+            && range.contains(&(o as u64))
+        {
+            out[o - range.start as usize] ^= 0x40;
+        }
+        self.served[m] += range.end - range.start;
+        Ok(teigeodata_sync::fetch::Got {
+            etag: Some(format!("\"m{m}\"")),
+            total: self.asset.len() as u64,
+        })
+    }
+}
+
+/// A staging file whose writes fail.
+struct Full;
+impl std::io::Read for Full {
+    fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+        Ok(0)
+    }
+}
+impl std::io::Write for Full {
+    fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+        Err(std::io::Error::other("disk full"))
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+impl std::io::Seek for Full {
+    fn seek(&mut self, _: std::io::SeekFrom) -> std::io::Result<u64> {
+        Ok(0)
+    }
+}
+
+/// Mirrors (D-170): a mirror that serves a changed byte is refused and demoted, one that is
+/// down or drops midway is passed over, the next resumes from what is staged, and the pack
+/// is installed byte for byte; a failing staging file stops at once.
+#[test]
+fn mirrors_fail_over_and_demote() {
+    use std::io::Cursor;
+    use teigeodata_sync::fetch::{FetchError, Mirrors, install_from};
+    let pack = pack();
+    let (entry, asset, _) = super::entry_of(&pack).unwrap();
+    let asset_len = asset.len() as u64;
+    let all = Components::all();
+    let frames = frames_of(&pack, &asset);
+    // A byte inside the compressed NAMES frames.
+    let opened = Pack::open(&pack).unwrap();
+    let names = opened.section(Kind::NAMES).unwrap().bytes();
+    let mid = (names.as_ptr() as usize - pack.as_ptr() as usize + names.len() / 2) as u64;
+    let frame = frames.iter().find(|f| f.decoded.contains(&mid)).unwrap();
+    let flip = usize::try_from(
+        frame.compressed.start + (frame.compressed.end - frame.compressed.start) / 2,
+    )
+    .unwrap();
+    let run = |behave: Vec<Behaves>, mirrors: &mut Mirrors| {
+        let k = behave.len();
+        let mut hosts = Hosts {
+            asset: &asset,
+            behave,
+            served: vec![0; k],
+            calls: vec![0; k],
+        };
+        let mut file = Cursor::new(Vec::new());
+        let r = install_from(
+            &mut hosts,
+            mirrors,
+            "/a.tgd.zst",
+            &entry,
+            asset_len,
+            all,
+            &mut file,
+        );
+        (r, file.into_inner(), hosts.served)
+    };
+    let bases = |k: usize| Mirrors::new((0..k).map(|i| format!("m{i}")));
+
+    // A flipped byte: refused, demoted behind the honest mirror, which installs the pack.
+    let mut m = bases(2);
+    let (r, file, served) = run(vec![Behaves::Flips(flip), Behaves::Honest], &mut m);
+    r.unwrap();
+    assert!(file == pack, "the pack, byte for byte");
+    assert_eq!((m.mirrors()[0].refused, m.mirrors()[1].refused), (1, 0));
+    assert_eq!(m.order(), [1, 0], "demoted");
+    // The honest mirror resumed: it did not serve what the bad one served and was kept.
+    let full = entry.size_of(all).wire;
+    assert!(served[1] < full, "{} of {full}", served[1]);
+    // With the demotion kept, the next install goes to the honest mirror alone.
+    let (r, _, served) = run(vec![Behaves::Flips(flip), Behaves::Honest], &mut m);
+    r.unwrap();
+    assert_eq!(served, [0, full]);
+
+    // Down, then dropping midway: both passed over; the third resumes.
+    let mut m = bases(3);
+    let (r, file, served) = run(
+        vec![Behaves::Down, Behaves::Cuts(4), Behaves::Honest],
+        &mut m,
+    );
+    r.unwrap();
+    assert!(file == pack, "the pack, byte for byte");
+    assert_eq!(
+        m.mirrors().iter().map(|x| x.failures).collect::<Vec<_>>(),
+        [1, 1, 0]
+    );
+    assert_eq!(m.order(), [2, 0, 1]);
+    assert!(served[2] < full);
+
+    // Every mirror bad: the last error, nothing wrong written where anything was written.
+    let mut m = bases(2);
+    let (r, file, _) = run(vec![Behaves::Flips(flip), Behaves::Down], &mut m);
+    assert!(matches!(r, Err(FetchError::Transport(_))), "{r:?}");
+    for (i, (&a, &b)) in file.iter().zip(&pack).enumerate() {
+        assert!(a == 0 || a == b, "byte {i} written wrong");
+    }
+    assert!(matches!(
+        run(vec![], &mut Mirrors::default()).0,
+        Err(FetchError::Response("no mirror"))
+    ));
+
+    // A staging file that cannot be written: stops at the first mirror, which is not blamed.
+    let mut m = bases(2);
+    let mut hosts = Hosts {
+        asset: &asset,
+        behave: vec![Behaves::Honest, Behaves::Honest],
+        served: vec![0; 2],
+        calls: vec![0; 2],
+    };
+    let r = install_from(&mut hosts, &mut m, "/a", &entry, asset_len, all, &mut Full);
+    assert!(matches!(r, Err(FetchError::Io(_))), "{r:?}");
+    assert_eq!(hosts.calls[1], 0, "no second mirror for a local failure");
+    assert_eq!(
+        m.mirrors()[0],
+        teigeodata_sync::fetch::Mirror {
+            base: "m0".into(),
+            failures: 0,
+            refused: 0,
+        }
+    );
+}
