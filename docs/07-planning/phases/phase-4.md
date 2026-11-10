@@ -140,7 +140,10 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   (`topo::thin`; `arcs::build` on sorted records, world part byte-identical): claims to the
   earlier code, snap rounding, folds undone; 31.47 M → 3.58 M vertices, guard left 0, 250 s,
   4.1 GB ([§3.5](../../02-research/notes/world-admin1-osm.md#35-the-worlds-land-as-one-partition-measured-2026-11-10))
-- [ ] Snap rounding on sorted records (its hash maps hold the 4.1 GB peak)
+- [x] Crossings, snap rounding and unfolding on sorted records, banded and parallel: the
+  world's thinning 286 s → 122 s, peak 4.05 → 2.46 GB, the same result (2026-11-10;
+  the cells of a 4,096-wide grid made dense coasts quadratic). World byte identity re-checked
+  when disk allows (the Overture tiles were removed to free space)
 - [x] ~~Pin `ne-admin0`~~ dropped: Natural Earth's default view also gives Western Sahara's
   Free Zone to Western Sahara, so a delta against it misses that dispute (D-156)
 - [x] Ownership by the Nepal view (`topo::pov::own`, D-156): a unit keeps its code's country;
@@ -245,3 +248,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.2: neighbours cut to pack outlines done | D-154 |
 | 2026-11-10 | 4.2: the OSM extract item becomes Overture divisions for main's admin 0 and 1, in five steps | D-155 |
 | 2026-11-10 | Main's world part: ownership by the Nepal view at 15 km instead of the `ne-admin0` delta; 2 km and islets left out to fit Z1; locator radius 3 km; regions below their city | [world admin 1 §3.6–3.7](../../02-research/notes/world-admin1-osm.md#36-ownership-by-the-nepal-view-measured-2026-11-10), D-156 to D-158 |
+| 2026-11-10 | 4.2: thinning on sorted records, banded crossings | the measured 3.9 GB peak and 132 s in `crossings` |

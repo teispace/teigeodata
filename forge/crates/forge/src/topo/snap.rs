@@ -20,8 +20,6 @@
     reason = "indices come from the same vectors (edge ids, ring positions): an out-of-range index is a forge bug and must stop the build, not be skipped"
 )]
 
-use std::collections::HashMap;
-
 use super::arcs::{V, area2};
 use super::simplify::crossings;
 
@@ -184,18 +182,17 @@ impl Grid {
 
 /// Snap-rounds `rings` (`(unit, ring)`, open rings). Returns them unchanged when no two edges
 /// cross or touch away from a shared vertex.
+///
+/// Sorted records, no hash maps: the distinct edges sorted, the hot pixels sorted by grid cell,
+/// and a route kept only for an edge that moves; routes and rings are built in parallel.
 pub(crate) fn snap_round(rings: &[(u32, Vec<V>)]) -> (Vec<(u32, Vec<V>)>, Snapped) {
-    let mut ids: HashMap<(V, V), usize> = HashMap::new();
-    let mut edges: Vec<(V, V)> = Vec::new();
-    for (_, r) in rings {
-        for i in 0..r.len() {
-            let k = key(r[i], r[(i + 1) % r.len()]);
-            ids.entry(k).or_insert_with(|| {
-                edges.push(k);
-                edges.len() - 1
-            });
-        }
-    }
+    use rayon::prelude::*;
+    let mut edges: Vec<(V, V)> = rings
+        .par_iter()
+        .flat_map_iter(|(_, r)| (0..r.len()).map(move |i| key(r[i], r[(i + 1) % r.len()])))
+        .collect();
+    edges.par_sort_unstable();
+    edges.dedup();
     let bad = crossings(&edges);
     let mut rep = Snapped {
         bad_pairs: bad.len(),
@@ -206,74 +203,89 @@ pub(crate) fn snap_round(rings: &[(u32, Vec<V>)]) -> (Vec<(u32, Vec<V>)>, Snappe
     }
     // Hot pixels: every vertex, and every proper crossing rounded.
     let mut pixels: Vec<V> = edges.iter().flat_map(|&(a, b)| [a, b]).collect();
-    pixels.sort_unstable();
+    pixels.par_sort_unstable();
     pixels.dedup();
     let vertices = pixels.len();
     pixels.extend(bad.iter().filter_map(|&(i, j)| {
         let ((a, b), (c, d)) = (edges[i], edges[j]);
         crossing(a, b, c, d)
     }));
-    pixels.sort_unstable();
+    pixels.par_sort_unstable();
     pixels.dedup();
     rep.new_pixels = pixels.len() - vertices;
-    // One grid for the pixels; each edge looks up the cells along it.
+    // One grid for the pixels, sorted by cell; each edge looks up the cells along it.
     let mut lens: Vec<i64> = edges
         .iter()
         .map(|&(a, b)| i64::from((a.0 - b.0).abs().max((a.1 - b.1).abs())))
         .collect();
-    lens.sort_unstable();
+    let mid = lens.len() / 2;
+    let cell = (*lens.select_nth_unstable(mid).1).max(16);
+    drop(lens);
     let x0 = pixels.iter().map(|p| i64::from(p.0)).min().unwrap_or(0) - 2;
     let y0 = pixels.iter().map(|p| i64::from(p.1)).min().unwrap_or(0) - 2;
-    let grid = Grid {
-        x0,
-        y0,
-        cell: lens[lens.len() / 2].max(16),
-    };
-    let mut cells: HashMap<(i64, i64), Vec<V>> = HashMap::new();
-    for &p in &pixels {
-        cells.entry(grid.cell_of(p)).or_default().push(p);
-    }
-    // Each edge's route: its pixels in order along it (by projection; ties by coordinates).
-    let mut routes: Vec<Vec<V>> = Vec::with_capacity(edges.len());
-    let mut scratch = Vec::new();
-    for &(a, b) in &edges {
-        grid.cells(a, b, &mut scratch);
-        let mut on: Vec<(i128, V)> = Vec::new();
-        for c in &scratch {
-            for &h in cells.get(c).map_or(&[][..], Vec::as_slice) {
-                if h != a && h != b && meets(a, b, h) {
-                    let t = (i128::from(h.0) - i128::from(a.0))
-                        * (i128::from(b.0) - i128::from(a.0))
-                        + (i128::from(h.1) - i128::from(a.1)) * (i128::from(b.1) - i128::from(a.1));
-                    on.push((t, h));
+    let grid = Grid { x0, y0, cell };
+    pixels.par_sort_unstable_by_key(|&p| (grid.cell_of(p), p));
+    // Each moving edge's route: its pixels in order along it (by projection; ties by
+    // coordinates).
+    let mut routes: Vec<((V, V), Vec<V>)> = edges
+        .par_iter()
+        .map_init(Vec::new, |scratch, &(a, b)| {
+            grid.cells(a, b, scratch);
+            let mut on: Vec<(i128, V)> = Vec::new();
+            for &c in scratch.iter() {
+                let from = pixels.partition_point(|&p| grid.cell_of(p) < c);
+                for &h in pixels[from..].iter().take_while(|&&p| grid.cell_of(p) == c) {
+                    if h != a && h != b && meets(a, b, h) {
+                        let t = (i128::from(h.0) - i128::from(a.0))
+                            * (i128::from(b.0) - i128::from(a.0))
+                            + (i128::from(h.1) - i128::from(a.1))
+                                * (i128::from(b.1) - i128::from(a.1));
+                        on.push((t, h));
+                    }
                 }
             }
-        }
-        on.sort_unstable();
-        on.dedup();
-        if !on.is_empty() {
-            rep.edges_moved += 1;
-        }
-        routes.push(on.into_iter().map(|(_, h)| h).collect());
-    }
+            on.sort_unstable();
+            on.dedup();
+            ((a, b), on.into_iter().map(|(_, h)| h).collect::<Vec<V>>())
+        })
+        .filter(|(_, r)| !r.is_empty())
+        .collect();
+    drop(pixels);
+    drop(edges);
+    routes.sort_unstable_by_key(|r| r.0);
+    rep.edges_moved = routes.len();
+    let route = |a: V, b: V| {
+        let k = key(a, b);
+        routes
+            .binary_search_by_key(&k, |r| r.0)
+            .ok()
+            .map(|i| routes[i].1.as_slice())
+    };
     // Rings through the routes, then cleaned.
-    let mut out = Vec::with_capacity(rings.len());
-    for (unit, r) in rings {
-        let mut v: Vec<V> = Vec::with_capacity(r.len());
-        for i in 0..r.len() {
-            let (a, b) = (r[i], r[(i + 1) % r.len()]);
-            v.push(a);
-            let route = &routes[ids[&key(a, b)]];
-            if a < b {
-                v.extend(route);
-            } else {
-                v.extend(route.iter().rev());
+    let rounded: Vec<(u32, usize, Vec<V>)> = rings
+        .par_iter()
+        .map(|(unit, r)| {
+            let mut v: Vec<V> = Vec::with_capacity(r.len());
+            for i in 0..r.len() {
+                let (a, b) = (r[i], r[(i + 1) % r.len()]);
+                v.push(a);
+                if let Some(route) = route(a, b) {
+                    if a < b {
+                        v.extend(route);
+                    } else {
+                        v.extend(route.iter().rev());
+                    }
+                }
             }
-        }
-        rep.vertices_added += v.len() - r.len();
-        let v = despike(v);
+            let added = v.len() - r.len();
+            (*unit, added, despike(v))
+        })
+        .collect();
+    let mut out = Vec::with_capacity(rings.len());
+    for (unit, added, v) in rounded {
+        rep.vertices_added += added;
         if v.len() >= 3 && area2(&v) != 0 {
-            out.push((*unit, v));
+            out.push((unit, v));
         } else {
             rep.rings_dropped += 1;
         }

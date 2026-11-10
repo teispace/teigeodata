@@ -9,6 +9,8 @@
 //! where it is. A pinned unit (a pack country's outline, D-154) keeps every vertex, and a fold
 //! is cut from its neighbour, never from it.
 
+use rayon::prelude::*;
+
 use super::arcs::{self, V, area2};
 use super::simplify::{self, Guarded};
 
@@ -61,33 +63,44 @@ fn unfold(rings: &mut Vec<(u32, Vec<V>)>, pinned: &[bool]) -> Result<usize, Stri
             };
             late.entry(cut).or_default().push(by);
         }
-        let of = |u: u32, rings: &[(u32, Vec<V>)]| -> Vec<Vec<V>> {
-            rings
-                .iter()
-                .filter(|(x, _)| *x == u)
-                .map(|(_, r)| r.clone())
-                .collect()
-        };
-        let mut replaced: Vec<(u32, Vec<Vec<V>>)> = Vec::new();
-        for (&b, earlier) in &late {
-            let subject = of(b, rings);
-            let clips: Vec<Vec<Vec<V>>> = earlier
-                .iter()
-                .filter(|&&a| a != b)
-                .map(|&a| of(a, rings))
-                .collect();
-            let clip_refs: Vec<&[Vec<V>]> = clips.iter().map(Vec::as_slice).collect();
-            for (c, &a) in clip_refs.iter().zip(earlier.iter().filter(|&&a| a != b)) {
-                if !super::pov::common(&subject, c, super::pov::MIN_WIDTH).is_empty() {
-                    return Err(format!("units {a} and {b} overlap"));
-                }
-            }
-            // With no other unit, this normalises the unit: its bridges go.
-            let parts = super::pov::minus(&subject, &clip_refs, 0)
-                .unwrap_or_else(|| super::pov::normal(&subject));
-            replaced.push((b, parts.into_iter().flatten().collect()));
-            cut += 1;
+        // Each unit's rings, by an index built once; the units are cut in parallel.
+        let mut by_unit: std::collections::BTreeMap<u32, Vec<usize>> =
+            std::collections::BTreeMap::new();
+        for (i, (u, _)) in rings.iter().enumerate() {
+            by_unit.entry(*u).or_default().push(i);
         }
+        let of = |u: u32| -> Vec<Vec<V>> {
+            by_unit
+                .get(&u)
+                .map(|ix| {
+                    ix.iter()
+                        .filter_map(|&i| rings.get(i))
+                        .map(|(_, r)| r.clone())
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let late: Vec<(u32, Vec<u32>)> = late.into_iter().collect();
+        let replaced: Vec<(u32, Vec<Vec<V>>)> = late
+            .par_iter()
+            .map(|(b, earlier)| {
+                let b = *b;
+                let subject = of(b);
+                let others: Vec<u32> = earlier.iter().copied().filter(|&a| a != b).collect();
+                let clips: Vec<Vec<Vec<V>>> = others.iter().map(|&a| of(a)).collect();
+                let clip_refs: Vec<&[Vec<V>]> = clips.iter().map(Vec::as_slice).collect();
+                for (c, a) in clip_refs.iter().zip(&others) {
+                    if !super::pov::common(&subject, c, super::pov::MIN_WIDTH).is_empty() {
+                        return Err(format!("units {a} and {b} overlap"));
+                    }
+                }
+                // With no other unit, this normalises the unit: its bridges go.
+                let parts = super::pov::minus(&subject, &clip_refs, 0)
+                    .unwrap_or_else(|| super::pov::normal(&subject));
+                Ok((b, parts.into_iter().flatten().collect()))
+            })
+            .collect::<Result<_, String>>()?;
+        cut += replaced.len();
         if replaced.is_empty() {
             break;
         }

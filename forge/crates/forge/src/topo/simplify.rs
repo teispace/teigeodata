@@ -20,9 +20,10 @@
     reason = "indices come from the same vectors (ring positions, arc vertices, segment ids): an out-of-range index is a forge bug and must stop the build, not be skipped"
 )]
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 use super::arcs::{Ref, V, area2, orient};
+use super::snap::Grid;
 use crate::num::cos_deg;
 
 /// Tolerances of levels 1 to 6, centimetres: 5 m, 20 m, 100 m, 500 m, 2 km, 5 km (the
@@ -181,56 +182,161 @@ pub(crate) fn bad_pair(s: (V, V), t: (V, V)) -> bool {
         || (o4 == 0 && in_box(c, d, b))
 }
 
-/// Every pair of segments that is [`bad_pair`], each pair once, through a uniform grid.
+/// Every pair of segments that is [`bad_pair`], each pair once, sorted.
+///
+/// A uniform grid of the median segment length: each segment is recorded in the cells along
+/// it ([`Grid::cells`], so a long border visits a line of cells, not its box), the records
+/// are sorted, and the segments sharing a cell are tested pairwise, cells in parallel. Two
+/// segments that meet share the cell of their common point. A coarser grid made dense
+/// coastlines quadratic: 132 s of the world's 286 s thinning (2026-11-10).
 pub(crate) fn crossings(segs: &[(V, V)]) -> Vec<(usize, usize)> {
+    crossings_in_bands(segs, 1 << 24)
+}
+
+/// The cells of the crossing grid as one `u64` (column high, row low).
+#[allow(
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    reason = "cell indexes are non-negative and below 2^32: the extent is under 2^33 grid units and a cell at least 16"
+)]
+const fn cell_key((cx, cy): (i64, i64)) -> u64 {
+    ((cx as u64) << 32) | (cy as u64 & 0xffff_ffff)
+}
+
+/// The grid columns segment `s`'s cells span (as [`Grid::cells`]: one unit around it).
+fn columns(grid: &Grid, (a, b): (V, V)) -> (i64, i64) {
+    let col = |x: i64| (x - grid.x0).div_euclid(grid.cell);
+    (
+        col(i64::from(a.0.min(b.0)) - 1),
+        col(i64::from(a.0.max(b.0)) + 1),
+    )
+}
+
+/// Column ranges `[lo, hi)` holding about `band` cell records each: a histogram of the records
+/// by column, cut greedily, so memory stays bounded however large the input.
+fn column_bands(segs: &[(V, V)], grid: &Grid, band: u64) -> Vec<(i64, i64)> {
+    use rayon::prelude::*;
+    const BUCKETS: i64 = 1 << 16;
+    let last = segs.iter().map(|&s| columns(grid, s).1).max().unwrap_or(0);
+    let per = (last / BUCKETS + 1).max(1);
+    let bucket = |c: i64| usize::try_from(c / per).unwrap_or(0);
+    let empty = || vec![0_u64; 1 << 16];
+    let hist: Vec<u64> = segs
+        .par_chunks(1 << 16)
+        .map(|chunk| {
+            let mut h = empty();
+            for &s in chunk {
+                let (c0, c1) = columns(grid, s);
+                h[bucket(c0)] += u64::try_from(c1 - c0 + 1).unwrap_or(0) * 2;
+            }
+            h
+        })
+        .reduce(empty, |mut x, y| {
+            for (a, b) in x.iter_mut().zip(y) {
+                *a += b;
+            }
+            x
+        });
+    let mut bands = Vec::new();
+    let (mut from, mut sum) = (0_i64, 0_u64);
+    for (i, &n) in hist.iter().enumerate() {
+        sum += n;
+        let end = (i64::try_from(i).unwrap_or(i64::MAX) + 1) * per;
+        if sum >= band || i + 1 == hist.len() {
+            bands.push((from, end));
+            (from, sum) = (end, 0);
+        }
+    }
+    bands
+}
+
+/// The [`bad_pair`]s of segments sharing a cell in columns `lo..hi`.
+fn band_pairs(segs: &[(V, V)], grid: &Grid, (lo, hi): (i64, i64)) -> Vec<(usize, usize)> {
+    use rayon::prelude::*;
+    let mut recs: Vec<(u64, u32)> = segs
+        .par_iter()
+        .enumerate()
+        .filter(|&(_, &s)| {
+            let (c0, c1) = columns(grid, s);
+            c1 >= lo && c0 < hi
+        })
+        .fold(
+            || (Vec::new(), Vec::new()),
+            |(mut acc, mut cells), (i, &(a, b))| {
+                grid.cells(a, b, &mut cells);
+                let i = u32::try_from(i).unwrap_or(u32::MAX);
+                acc.extend(
+                    cells
+                        .iter()
+                        .filter(|c| c.0 >= lo && c.0 < hi)
+                        .map(|&c| (cell_key(c), i)),
+                );
+                (acc, cells)
+            },
+        )
+        .map(|(acc, _)| acc)
+        .flatten_iter()
+        .collect();
+    recs.par_sort_unstable();
+    recs.dedup();
+    // Runs of one cell holding two segments or more.
+    let mut runs: Vec<(usize, usize)> = Vec::new();
+    let mut start = 0;
+    for i in 1..=recs.len() {
+        if i == recs.len() || recs[i].0 != recs[start].0 {
+            if i - start > 1 {
+                runs.push((start, i));
+            }
+            start = i;
+        }
+    }
+    runs.par_iter()
+        .flat_map_iter(|&(s, e)| {
+            let run = &recs[s..e];
+            let mut found = Vec::new();
+            for (x, &(_, i)) in run.iter().enumerate() {
+                for &(_, j) in &run[x + 1..] {
+                    let (i, j) = (i as usize, j as usize);
+                    if bad_pair(segs[i], segs[j]) {
+                        found.push((i.min(j), i.max(j)));
+                    }
+                }
+            }
+            found
+        })
+        .collect()
+}
+
+/// [`crossings`] with about `band` cell records held at once.
+fn crossings_in_bands(segs: &[(V, V)], band: u64) -> Vec<(usize, usize)> {
+    use rayon::prelude::*;
     if segs.len() < 2 {
         return Vec::new();
     }
-    let (mut x0, mut y0, mut x1, mut y1) = (i64::MAX, i64::MAX, i64::MIN, i64::MIN);
+    assert!(u32::try_from(segs.len()).is_ok(), "over 2^32 segments");
+    let (mut x0, mut y0) = (i64::MAX, i64::MAX);
     let mut lens: Vec<i64> = Vec::with_capacity(segs.len());
     for &(a, b) in segs {
         x0 = x0.min(i64::from(a.0.min(b.0)));
         y0 = y0.min(i64::from(a.1.min(b.1)));
-        x1 = x1.max(i64::from(a.0.max(b.0)));
-        y1 = y1.max(i64::from(a.1.max(b.1)));
         lens.push(i64::from((a.0 - b.0).abs().max((a.1 - b.1).abs())));
     }
-    lens.sort_unstable();
-    let cell = lens[lens.len() / 2].max(((x1 - x0).max(y1 - y0) / 4096).max(1));
-    let cells = |a: V, b: V| {
-        let c = |v: i32, o: i64| (i64::from(v) - o) / cell;
-        (
-            c(a.0.min(b.0), x0),
-            c(a.1.min(b.1), y0),
-            c(a.0.max(b.0), x0),
-            c(a.1.max(b.1), y0),
-        )
+    let mid = lens.len() / 2;
+    let cell = (*lens.select_nth_unstable(mid).1).max(16);
+    drop(lens);
+    // The margin keeps every cell index of `Grid::cells` (one unit and its f64 slack around
+    // each segment) non-negative.
+    let grid = Grid {
+        x0: x0 - 4,
+        y0: y0 - 4,
+        cell,
     };
-    let mut grid: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
-    for (i, &(a, b)) in segs.iter().enumerate() {
-        let (cx0, cy0, cx1, cy1) = cells(a, b);
-        for cx in cx0..=cx1 {
-            for cy in cy0..=cy1 {
-                grid.entry((cx, cy)).or_default().push(i);
-            }
-        }
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    for b in column_bands(segs, &grid, band) {
+        out.extend(band_pairs(segs, &grid, b));
     }
-    let mut out = Vec::new();
-    let mut keys: Vec<&(i64, i64)> = grid.keys().collect();
-    keys.sort_unstable();
-    for k in keys {
-        let v = &grid[k];
-        for (x, &i) in v.iter().enumerate() {
-            for &j in &v[x + 1..] {
-                let (ci, cj) = (cells(segs[i].0, segs[i].1), cells(segs[j].0, segs[j].1));
-                // Test a pair only in the first cell both cover.
-                if (ci.0.max(cj.0), ci.1.max(cj.1)) == *k && bad_pair(segs[i], segs[j]) {
-                    out.push((i.min(j), i.max(j)));
-                }
-            }
-        }
-    }
-    out.sort_unstable();
+    out.par_sort_unstable();
+    out.dedup();
     out
 }
 
@@ -414,7 +520,7 @@ pub(crate) fn levels_to(
 
 #[cfg(test)]
 mod tests {
-    use super::{PINNED, bad_pair, crossings, importance, level};
+    use super::{PINNED, V, bad_pair, crossings, crossings_in_bands, importance, level};
 
     #[test]
     fn importance_nests_and_pins() {
@@ -459,5 +565,48 @@ mod tests {
         assert!(!bad_pair(s, ((20, 20), (30, 30))), "collinear, apart");
         let segs = [s, ((0, 10), (10, 0)), ((100, 100), (110, 100))];
         assert_eq!(crossings(&segs), vec![(0, 1)]);
+    }
+
+    /// The grid finds exactly the pairs a brute force does, on random short segments with
+    /// shared ends, touches, overlaps and a few long ones across everything.
+    #[test]
+    fn crossings_equal_the_brute_force() {
+        let mut seed = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = |m: i32| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            i32::try_from(seed % u64::try_from(m).unwrap()).unwrap()
+        };
+        for round in 0..40 {
+            let n = 50 + round * 10;
+            let mut pts: Vec<V> = (0..n / 2).map(|_| (next(400), next(400))).collect();
+            let mut segs: Vec<(V, V)> = Vec::new();
+            for _ in 0..n {
+                let a = if next(3) == 0 {
+                    pts[usize::try_from(next(i32::try_from(pts.len()).unwrap())).unwrap()]
+                } else {
+                    (next(400), next(400))
+                };
+                let len = if next(20) == 0 { 400 } else { 12 };
+                let b = (a.0 + next(2 * len) - len, a.1 + next(2 * len) - len);
+                pts.push(b);
+                segs.push((a, b));
+            }
+            let mut brute = Vec::new();
+            for i in 0..segs.len() {
+                for j in i + 1..segs.len() {
+                    if bad_pair(segs[i], segs[j]) {
+                        brute.push((i, j));
+                    }
+                }
+            }
+            assert_eq!(crossings(&segs), brute, "round {round}");
+            assert_eq!(
+                crossings_in_bands(&segs, 64),
+                brute,
+                "round {round}, small bands"
+            );
+        }
     }
 }
