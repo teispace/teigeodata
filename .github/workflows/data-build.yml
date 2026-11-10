@@ -78,6 +78,14 @@ jobs:
           forge/target/fast/forge fetch ne-admin0-nep
           forge/target/fast/forge world --release "$RELEASE" ${{ matrix.flag }}
           cargo xtask check-pack data/build/baseline/world/world-baseline-${{ matrix.build }}.tgd ${{ matrix.flag }}
+      - name: World and locator gates (tests/world.rs, D-147, D-149)
+        run: |
+          b=${{ matrix.build }}
+          export TGD_WORLD=$PWD/data/build/baseline/world/world-baseline-$b.tgd
+          export TGD_PROBES=$PWD/data/build/baseline/world/world-probes-$b.tsv
+          export TGD_BASELINE=$PWD/data/build/baseline/${{ matrix.cc }}/${{ matrix.cc }}-baseline-$b.tgd
+          export TGD_PACK=$PWD/data/build/pack/${{ matrix.cc }}/${{ matrix.cc }}-places-$b.tgd
+          cargo test --release -p teigeodata-engine --all-features --test world -- --ignored --nocapture
       - name: Golden gate (product search)
         env:
           S3_ENGINE: product

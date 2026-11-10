@@ -486,6 +486,11 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     }
     let file = dir.join(format!("world-baseline-{build}.tgd"));
     crate::make::write_atomic(&file, &out)?;
+    let probes = probes(&countries, &ids, &row_of);
+    crate::make::write_atomic(
+        &dir.join(format!("world-probes-{build}.tsv")),
+        probes.as_bytes(),
+    )?;
     let mut r = format!(
         "# World baseline ({build})\n\n{} rows: {} countries and disputed areas ({}), {n_cities} \
          cities ({}) outside {} ({fallback} under the feature of their code, {orphans} with \
@@ -516,6 +521,40 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         file.strip_prefix(root).unwrap_or(&file).display(),
         t.elapsed()
     ))
+}
+
+/// About this many border probes are written (D-149).
+const PROBES: usize = 100_000;
+
+/// The locator's border probes (D-149): every k-th vertex of every feature's source outline,
+/// at full resolution, with the ID of its feature, k chosen for about [`PROBES`] in all.
+/// `lat lon id` per line, the coordinates on the 1e-7° grid and the ID raw: the engine's
+/// locator gate asks the stored, simplified outlines for the countries near each probe and
+/// expects its feature among them.
+fn probes(countries: &[Country], ids: &[PlaceId], row_of: &BTreeMap<&str, u32>) -> String {
+    let total: usize = countries
+        .iter()
+        .flat_map(|c| &c.polygon.rings)
+        .map(Vec::len)
+        .sum();
+    let stride = (total / PROBES).max(1);
+    let mut out = format!("# lat_e7\tlon_e7\tid: every {stride}th of {total} source vertices\n");
+    let mut n = 0_usize;
+    for c in countries {
+        let Some(id) = row_of
+            .get(format!("ne:{}", c.code).as_str())
+            .and_then(|&r| ids.get(r as usize))
+        else {
+            continue;
+        };
+        for &(lon, lat) in c.polygon.rings.iter().flatten() {
+            if n.is_multiple_of(stride) {
+                let _ = writeln!(out, "{lat}\t{lon}\t{}", id.get());
+            }
+            n += 1;
+        }
+    }
+    out
 }
 
 /// Every section of the world part: the rows' sections as a country pack's, the polygons
