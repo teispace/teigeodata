@@ -340,6 +340,10 @@ footer.
   the install planner of step 4.5 (which sections to fetch, copy or verify) builds on it.
 - `Layout` takes the file length and section spans rather than a whole `Pack`, because a ranged
   client holds only the head frame. A head-only parser in `teigeodata-format` is needed for 4.5.
+  Built (D-166): `PackHead::parse(head, file_len)`, which `Pack::open_head` now runs, and
+  `SeekTable::{head_frame, frames_from_head}`, so the table and the head frame (two requests)
+  give the plan. The file length comes from the table's decoded sizes and must equal the
+  head's own.
 - The writer takes the compressor as a closure (as BLOBS does), so C zstd never reaches the
   runtime crate, and checks each frame with `ruzstd`, the decoder clients run.
 - A lying table that keeps the total but shifts compressed sizes between frames passes the

@@ -454,3 +454,67 @@ fn a_component_install_fetches_only_its_frames_and_opens() {
     // A head that is not a pack has no footer.
     assert!(teigeodata_format::footer_of(&[0; 200]).is_err());
 }
+
+/// What a ranged client does first (D-166): the table, then the head frame alone, decoded, gives
+/// the same frames as the whole pack; a table or head that lies is refused before any section
+/// is fetched.
+#[test]
+fn the_head_frame_alone_gives_the_frames() {
+    let pack = pack();
+    let asset = encode(&pack, zstd(19)).unwrap();
+    let ranged = |asset: &[u8]| -> Result<Frames, Error> {
+        let tail = SeekTable::tail_len(asset)?;
+        let table = SeekTable::parse(&asset[asset.len() - tail..])?;
+        let (range, n) = table.head_frame()?;
+        let mut head = Vec::new();
+        Decoder::new()
+            .decode(
+                &asset[range.start as usize..range.end as usize],
+                n as usize,
+                &mut head,
+            )
+            .map_err(|problem| Error::Frame { index: 0, problem })?;
+        table.frames_from_head(asset.len() as u64, &head)
+    };
+    assert_eq!(ranged(&asset).unwrap(), frames_of(&asset, &pack).unwrap());
+    // The table claims a longer pack: the head's own length disagrees.
+    let longer = with_table(&asset, |e| {
+        let last = e.len() - 1;
+        e[last].1 += 64;
+    });
+    assert!(matches!(
+        ranged(&longer),
+        Err(Error::Pack(teigeodata_format::Error::Length))
+    ));
+    // A head frame claimed larger than any head: refused before its request.
+    let huge = with_table(&asset, |e| e[0].1 = 17 << 10);
+    let tail = SeekTable::tail_len(&huge).unwrap();
+    let table = SeekTable::parse(&huge[huge.len() - tail..]).unwrap();
+    assert!(matches!(
+        table.head_frame(),
+        Err(Error::Frame { index: 0, .. })
+    ));
+    // A head frame that decodes, but to a head whose manifest was changed: the head hash.
+    let tail = SeekTable::tail_len(&asset).unwrap();
+    let c0 = SeekTable::parse(&asset[asset.len() - tail..])
+        .unwrap()
+        .entry(0)
+        .unwrap()
+        .compressed as usize;
+    let first = Layout::of(&Pack::open(&pack).unwrap()).unwrap().sections()[0].offset as usize;
+    let mut head = pack[..first].to_vec();
+    let manifest_byte = Pack::open(&pack).unwrap().head().len() as usize - 3;
+    head[manifest_byte] ^= 1;
+    let frame = zstd::bulk::compress(&head, 19).unwrap();
+    let mut forged = frame.clone();
+    forged.extend_from_slice(&asset[c0..]);
+    let forged = with_table(&forged, |e| e[0].0 = frame.len() as u32);
+    assert!(matches!(
+        ranged(&forged),
+        Err(Error::Pack(teigeodata_format::Error::HeadHash))
+    ));
+    // A table with no frames.
+    let mut empty = Vec::new();
+    encode_table(std::iter::empty(), &mut empty).unwrap();
+    assert!(matches!(ranged(&empty), Err(Error::Frame { index: 0, .. })));
+}

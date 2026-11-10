@@ -900,6 +900,14 @@ from the head with `footer_of` (it is the header's magic, file length and head h
 `Pack::open_head`, which reads no section's bytes: the `BLOCK_HASHES` list is checked only when
 a section of 1 MiB or more asks for its blocks, against its signed hash.
 
+**The head alone (D-166).** `PackHead::parse(bytes, file_len)` runs every head check on the head
+or any prefix of the file that holds it (the transport's head frame), given the file's length:
+header, section table, manifest, head hash, pack UUID, and the padding the bytes reach.
+`Pack::open_head` is `PackHead::parse` plus the footer's checks, so there is one code path. A
+flipped byte of the head frame is refused as the whole file refuses it, except that a length
+field moved past the frame gives `Truncated` (the whole file fails the head hash instead); the
+signature block is the one part not covered, and `verify_signature` checks it.
+
 ## Open items
 
 - The 14 benchmarks B1–B14 (catalogue in [benchmarks](../06-engineering/benchmarks.md)).

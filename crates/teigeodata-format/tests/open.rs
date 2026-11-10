@@ -3,12 +3,14 @@
 #![allow(
     clippy::panic,
     clippy::indexing_slicing,
+    clippy::cast_possible_truncation,
     reason = "tests: a panic reports a failure, and indexes are into packs built here"
 )]
 
 use ed25519_dalek::SigningKey;
 use teigeodata_format::{
-    Encoding, Error, FORMAT_MAJOR, FORMAT_MINOR, Kind, Layout, Pack, Tag, Writer, key_id, signer,
+    Encoding, Error, FORMAT_MAJOR, FORMAT_MINOR, Kind, Layout, Pack, PackHead, Tag, Writer, key_id,
+    signer,
 };
 
 const PLACES: &[u8] = b"place rows";
@@ -232,4 +234,60 @@ fn unknown_kinds_are_kept() {
     );
     assert_eq!(Kind(4000).to_string(), "kind 4000");
     assert_eq!(Kind::REDIRECTS.to_string(), "REDIRECTS");
+}
+
+/// The head alone (D-166): any prefix holding it, with the file's length, gives the pack's own
+/// layout and identity, and every byte of the head frame flipped is refused exactly as the
+/// whole pack refuses it.
+#[test]
+fn the_head_alone_gives_the_layout() {
+    for good in [unsigned(), build(true, &key(1))] {
+        let p = Pack::open(&good).unwrap_or_else(|e| panic!("{e}"));
+        let len = good.len() as u64;
+        let end = p.head().len();
+        let first = p.head().sections().next().map_or(len, |s| s.offset);
+        assert!(end < first, "the head frame holds padding");
+        // The head, the head frame (to the first section), the whole file.
+        for cut in [end, first, len] {
+            let h = PackHead::parse(&good[..cut as usize], len).unwrap_or_else(|e| panic!("{e}"));
+            assert!(h.sections().eq(p.head().sections()));
+            assert_eq!(h.digest(), p.head_digest());
+            assert_eq!(h.signature(), p.signature());
+            assert_eq!(h.uuid(), p.uuid());
+            assert_eq!(h.manifest().address(), "np");
+            assert_eq!(h.file_len(), len);
+            assert_eq!(&h.footer()[..], &good[good.len() - 32..]);
+        }
+        for s in p.head().sections() {
+            let bytes = p.section(s.kind).map(|x| x.bytes());
+            assert_eq!(
+                bytes,
+                Some(&good[s.offset as usize..(s.offset + s.length) as usize])
+            );
+        }
+        assert_eq!(
+            PackHead::parse(&good[..end as usize - 1], len).err(),
+            Some(Error::Truncated)
+        );
+        assert_eq!(PackHead::parse(&good, len + 64).err(), Some(Error::Length));
+        for i in 0..first as usize {
+            let mut b = good.clone();
+            b[i] ^= 1;
+            let whole = Pack::open(&b).err();
+            // The signature block is not covered by the head hash: `verify_signature` checks it.
+            let in_signature = p.signature().is_some() && (end - 72..end).contains(&(i as u64));
+            assert_eq!(
+                whole.is_some(),
+                !in_signature,
+                "byte {i}: every other head byte is checked"
+            );
+            // The same refusal, or `Truncated` when the flip moves the head's claimed end
+            // past the frame (the whole file reads on and fails the head hash instead).
+            let head = PackHead::parse(&b[..first as usize], len).err();
+            assert!(
+                head == whole || head == Some(Error::Truncated),
+                "byte {i}: {head:?} against {whole:?}"
+            );
+        }
+    }
 }

@@ -57,6 +57,12 @@ skippable frame     the seek table (magic 0x184D2A5E, Frame_Size)
    - the frames and the table fill the asset exactly.
 
    It returns `Frames`, every frame's byte range in the asset and in the pack.
+
+   A ranged client has no pack yet (D-166): `table.head_frame()` gives frame 0's byte range
+   and decoded size, capped at `MAX_HEAD_FRAME` before any request; it decodes that frame, and
+   `table.frames_from_head(asset_len, head)` checks the head with `PackHead::parse` against
+   the table's decoded length, derives the layout (`Layout::of_head`) and runs `check`. Two
+   requests (table, head frame) give the whole plan.
 4. `frames.plan(wanted)` turns wanted byte ranges of the pack into fetches: runs of adjacent
    frames, one range request each, sorted and never touching (the GitHub asset host refuses
    multi-range requests). `plan_sections(kinds)` does it for whole sections, and `plan_components(set)` for

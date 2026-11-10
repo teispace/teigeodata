@@ -5,7 +5,7 @@ use core::ops::Range;
 
 use teigeodata_format::blocks::MIN_COVERED;
 use teigeodata_format::component::{Component, Components};
-use teigeodata_format::{Kind, Pack};
+use teigeodata_format::{Kind, Pack, PackHead};
 
 use super::{MAX_FRAME, MAX_FRAMES, MAX_HEAD_FRAME};
 use crate::Error;
@@ -41,23 +41,24 @@ impl Layout {
     /// # Errors
     /// As [`Layout::new`].
     pub fn of(pack: &Pack<'_>) -> Result<Self, Error> {
-        let base = pack.as_bytes().as_ptr().addr();
-        let mut spans = Vec::with_capacity(pack.sections().len());
-        for s in pack.sections() {
-            let at = s.bytes().as_ptr().addr().checked_sub(base);
-            let offset = at
-                .and_then(|a| u64::try_from(a).ok())
-                .ok_or(Error::Layout("a section is outside its pack"))?;
-            let len = u64::try_from(s.bytes().len()).map_err(|_| Error::Layout("too long"))?;
-            spans.push(SectionSpan {
-                kind: s.kind(),
-                offset,
-                len,
-            });
-        }
-        let file_len =
-            u64::try_from(pack.as_bytes().len()).map_err(|_| Error::Layout("too long"))?;
-        Self::new(file_len, spans)
+        Self::of_head(pack.head())
+    }
+
+    /// The layout from a pack's head alone (the head frame and the file length): what a ranged
+    /// client knows before it fetches any section.
+    ///
+    /// # Errors
+    /// As [`Layout::new`].
+    pub fn of_head(head: &PackHead<'_>) -> Result<Self, Error> {
+        let spans = head
+            .sections()
+            .map(|s| SectionSpan {
+                kind: s.kind,
+                offset: s.offset,
+                len: s.length,
+            })
+            .collect();
+        Self::new(head.file_len(), spans)
     }
 
     /// A layout from the file length and the section table, in file order.

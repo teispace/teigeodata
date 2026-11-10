@@ -13,9 +13,12 @@
 
 use alloc::vec::Vec;
 
+use teigeodata_format::PackHead;
+
 use super::layout::{Frames, Layout};
 use super::{
-    FOOTER_LEN, MAX_FRAMES, MIN_FRAME_LEN, SEEKABLE_MAGIC, SKIPPABLE_MAGIC, compress_bound,
+    FOOTER_LEN, MAX_FRAMES, MAX_HEAD_FRAME, MIN_FRAME_LEN, SEEKABLE_MAGIC, SKIPPABLE_MAGIC,
+    compress_bound,
 };
 use crate::Error;
 
@@ -173,6 +176,46 @@ impl<'a> SeekTable<'a> {
             decompressed: u32_at(e, 4).unwrap_or(0),
             checksum: if checksums { u32_at(e, 8) } else { None },
         })
+    }
+
+    /// The pack's length the table claims: the sum of its decoded sizes. Untrusted until
+    /// [`SeekTable::frames_from_head`] checks it against the head's own length.
+    ///
+    /// # Errors
+    /// [`Error::SeekTable`] if the sum passes 2^64.
+    pub fn decoded_len(&self) -> Result<u64, Error> {
+        self.entries()
+            .try_fold(0_u64, |n, e| n.checked_add(u64::from(e.decompressed)))
+            .ok_or(Error::SeekTable("the decoded sizes pass 2^64 bytes"))
+    }
+
+    /// The first thing a ranged client fetches after the table: frame 0, the head. Its
+    /// compressed byte range in the asset and its decoded size, which is capped at
+    /// [`MAX_HEAD_FRAME`] before any request, so a lying table costs at most that.
+    ///
+    /// # Errors
+    /// [`Error::Frame`] if the table has no frames, or its first frame is too large.
+    pub fn head_frame(&self) -> Result<(core::ops::Range<u64>, u64), Error> {
+        let fail = |problem| Error::Frame { index: 0, problem };
+        let e = self.entry(0).ok_or(fail("the table has no frames"))?;
+        let (c, d) = (u64::from(e.compressed), u64::from(e.decompressed));
+        if d > MAX_HEAD_FRAME || c < MIN_FRAME_LEN || c > compress_bound(d) {
+            return Err(fail("its sizes are impossible for a head frame"));
+        }
+        Ok((0..c, d))
+    }
+
+    /// The frames of an asset known only by its length, this table and its decoded head frame
+    /// (`head`): the head is checked ([`PackHead::parse`] against the table's
+    /// [`decoded_len`](SeekTable::decoded_len)), gives the layout, and the table is checked
+    /// against it ([`SeekTable::check`]). What a ranged client knows before any section.
+    ///
+    /// # Errors
+    /// [`Error::Pack`] for a head the format refuses (including a length that is not the
+    /// table's); otherwise as [`SeekTable::check`].
+    pub fn frames_from_head(&self, asset_len: u64, head: &[u8]) -> Result<Frames, Error> {
+        let head = PackHead::parse(head, self.decoded_len()?)?;
+        self.check(asset_len, Layout::of_head(&head)?)
     }
 
     /// Checks the table against the asset's length and the pack's `layout` (from its signed

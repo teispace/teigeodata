@@ -13,11 +13,40 @@ use crate::{Encoding, Error, Kind, Manifest, READER_MAJOR};
 #[derive(Debug)]
 pub struct Pack<'a> {
     bytes: &'a [u8],
+    head: PackHead<'a>,
+}
+
+/// A pack's head, checked without the rest of the file: the header, the section table, the
+/// manifest and the signature block, against the file's length. A ranged client holds only
+/// the head frame and the length (from the seek table), and learns the whole layout from it.
+/// [`Pack::open_head`] runs these same checks.
+#[derive(Clone, Copy, Debug)]
+pub struct PackHead<'a> {
     header: &'a Header,
     table: &'a [Entry],
     manifest: Manifest<'a>,
     digest: [u8; 32],
     signature: Option<&'a [u8]>,
+    end: u64,
+}
+
+/// One entry of the section table: where a section lies and what it holds, without its bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SectionEntry<'a> {
+    /// The section's kind.
+    pub kind: Kind,
+    /// How its bytes are encoded.
+    pub encoding: Encoding,
+    /// The number of items it holds.
+    pub item_count: u64,
+    /// Its length after decoding.
+    pub decoded_length: u64,
+    /// The BLAKE3 hash of its stored bytes.
+    pub hash: &'a [u8; 32],
+    /// Its first byte in the file.
+    pub offset: u64,
+    /// Its stored length.
+    pub length: u64,
 }
 
 /// One section of an open pack.
@@ -107,7 +136,7 @@ fn slice(bytes: &[u8], from: u64, to: u64) -> Result<&[u8], Error> {
 }
 
 /// Where the head's parts are, once the header is checked.
-struct Head {
+struct Parts {
     manifest_off: u64,
     manifest_end: u64,
     signature_off: Option<u64>,
@@ -126,11 +155,16 @@ pub const FOOTER_SIZE: usize = crate::layout::FOOTER_BYTES;
 /// # Errors
 /// [`Error::Truncated`] if `head` is shorter than a header; [`Error::Magic`] if it is not one.
 pub fn footer_of(head: &[u8]) -> Result<[u8; FOOTER_SIZE], Error> {
-    use zerocopy::IntoBytes;
     let (header, _) = Header::ref_from_prefix(head).map_err(|_| Error::Truncated)?;
     if header.magic != MAGIC {
         return Err(Error::Magic);
     }
+    Ok(footer_bytes(header))
+}
+
+/// The footer a header implies.
+fn footer_bytes(header: &Header) -> [u8; FOOTER_SIZE] {
+    use zerocopy::IntoBytes;
     let footer = Footer {
         magic: MAGIC,
         file_len: header.file_len,
@@ -138,13 +172,13 @@ pub fn footer_of(head: &[u8]) -> Result<[u8; FOOTER_SIZE], Error> {
     };
     let mut out = [0; FOOTER_SIZE];
     out.copy_from_slice(footer.as_bytes());
-    Ok(out)
+    out
 }
 
-/// Checks the header against the footer and the real length, and the head's layout: table,
-/// manifest and signature contiguous, all within 16 KiB.
-fn check_header(header: &Header, footer: &Footer, len: u64) -> Result<Head, Error> {
-    if header.magic != MAGIC || footer.magic != MAGIC {
+/// Checks the header against the file's length, and the head's layout: table, manifest and
+/// signature contiguous, all within 16 KiB.
+fn check_header(header: &Header, len: u64) -> Result<Parts, Error> {
+    if header.magic != MAGIC {
         return Err(Error::Magic);
     }
     let min_reader = header.min_reader_major.get();
@@ -161,7 +195,7 @@ fn check_header(header: &Header, footer: &Footer, len: u64) -> Result<Head, Erro
     if header.flags.get() != 0 || header.reserved != [0; 20] {
         return Err(Error::Header("reserved flags or bytes are not zero"));
     }
-    if header.file_len.get() != len || footer.file_len.get() != len {
+    if header.file_len.get() != len {
         return Err(Error::Length);
     }
     if header.table_off.get() != HEADER_LEN {
@@ -193,7 +227,7 @@ fn check_header(header: &Header, footer: &Footer, len: u64) -> Result<Head, Erro
             "the head is longer than 16 KiB or than the file",
         ));
     }
-    Ok(Head {
+    Ok(Parts {
         manifest_off,
         manifest_end,
         signature_off,
@@ -203,6 +237,7 @@ fn check_header(header: &Header, footer: &Footer, len: u64) -> Result<Head, Erro
 
 /// Checks every table entry: kinds strictly increasing, each section at the next 64-byte
 /// boundary after the previous one with zero padding, and the footer right after the last.
+/// `bytes` is the file or a prefix of it (the head frame); padding is checked where it reaches.
 fn check_sections(
     bytes: &[u8],
     table: &[Entry],
@@ -231,7 +266,12 @@ fn check_sections(
             .checked_add(e.length.get())
             .filter(|&end| end <= footer_start)
             .ok_or_else(|| err("runs past the footer"))?;
-        if slice(bytes, pos, off)?.iter().any(|&b| b != 0) {
+        let seen = slice(
+            bytes,
+            pos.min(bytes.len() as u64),
+            off.min(bytes.len() as u64),
+        )?;
+        if seen.iter().any(|&b| b != 0) {
             return Err(err("the padding before it is not zero"));
         }
         if e.encoding.get() == Encoding::RAW.0 && e.decoded_length.get() != e.length.get() {
@@ -278,42 +318,25 @@ impl<'a> Pack<'a> {
         if len < HEADER_LEN + FOOTER_LEN {
             return Err(Error::Truncated);
         }
-        let (header, _) = Header::ref_from_prefix(bytes).map_err(|_| Error::Truncated)?;
+        // The footer's magic first: a file cut or grown at the end fails as not a pack.
         let (_, footer) = Footer::ref_from_suffix(bytes).map_err(|_| Error::Truncated)?;
-        let head = check_header(header, footer, len)?;
-
-        let rest = slice(bytes, HEADER_LEN, len)?;
-        let count = usize_of(u64::from(header.section_count.get())).ok_or(Error::Length)?;
-        let (table, _) = <[Entry]>::ref_from_prefix_with_elems(rest, count)
-            .map_err(|_| Error::Header("the section table is truncated"))?;
-        let manifest_bytes = slice(bytes, head.manifest_off, head.manifest_end)?;
-        let digest = head_digest(
-            slice(bytes, 0, HEADER_HASHED as u64)?,
-            slice(bytes, HEADER_LEN, head.manifest_off)?,
-            manifest_bytes,
-        );
-        if digest.get(..16) != Some(&header.head_hash[..]) || footer.head_hash != header.head_hash {
+        if footer.magic != MAGIC {
+            return Err(Error::Magic);
+        }
+        let head = PackHead::parse(bytes, len)?;
+        if footer.file_len.get() != len {
+            return Err(Error::Length);
+        }
+        if footer.head_hash != head.header.head_hash {
             return Err(Error::HeadHash);
         }
-        let manifest = Manifest::parse(manifest_bytes)?;
-        if pack_uuid(manifest.address(), manifest.component(), manifest.release())
-            != header.pack_uuid
-        {
-            return Err(Error::Header("the pack UUID does not match its identity"));
-        }
-        let signature = match head.signature_off {
-            Some(off) => Some(slice(bytes, off, off + u64::from(SIGNATURE_LEN))?),
-            None => None,
-        };
-        check_sections(bytes, table, head.end, len - FOOTER_LEN)?;
-        Ok(Self {
-            bytes,
-            header,
-            table,
-            manifest,
-            digest,
-            signature,
-        })
+        Ok(Self { bytes, head })
+    }
+
+    /// The head: section table, manifest and signature.
+    #[must_use]
+    pub const fn head(&self) -> &PackHead<'a> {
+        &self.head
     }
 
     /// Section `kind`'s block hashes, proven against its hash (B12): O(blocks) merges, no
@@ -365,33 +388,166 @@ impl<'a> Pack<'a> {
         self.sections().try_for_each(|s| s.verify())
     }
 
-    fn section_at(&self, e: &'a Entry) -> Section<'a> {
+    fn section_at(&self, e: SectionEntry<'a>) -> Section<'a> {
         // `open` checked that every section lies inside the file.
-        let start = usize_of(e.offset.get()).unwrap_or(usize::MAX);
-        let end = usize_of(e.offset.get().saturating_add(e.length.get())).unwrap_or(usize::MAX);
+        let start = usize_of(e.offset).unwrap_or(usize::MAX);
+        let end = usize_of(e.offset.saturating_add(e.length)).unwrap_or(usize::MAX);
         Section {
-            kind: Kind(e.kind.get()),
-            encoding: Encoding(e.encoding.get()),
-            item_count: e.item_count.get(),
-            decoded_length: e.decoded_length.get(),
-            hash: &e.blake3,
+            kind: e.kind,
+            encoding: e.encoding,
+            item_count: e.item_count,
+            decoded_length: e.decoded_length,
+            hash: e.hash,
             bytes: self.bytes.get(start..end).unwrap_or_default(),
         }
     }
 
     /// Every section, in kind order.
     pub fn sections(&self) -> impl ExactSizeIterator<Item = Section<'a>> + '_ {
-        self.table.iter().map(|e| self.section_at(e))
+        self.head.sections().map(|e| self.section_at(e))
     }
 
     /// The section of this kind, if the pack has one.
     #[must_use]
     pub fn section(&self, kind: Kind) -> Option<Section<'a>> {
+        self.head.section(kind).map(|e| self.section_at(e))
+    }
+
+    /// The manifest.
+    #[must_use]
+    pub const fn manifest(&self) -> &Manifest<'a> {
+        &self.head.manifest
+    }
+
+    /// `(major, minor)` of the format the pack was written in.
+    #[must_use]
+    pub fn format_version(&self) -> (u16, u16) {
+        (
+            self.head.header.format_major.get(),
+            self.head.header.format_minor.get(),
+        )
+    }
+
+    /// The oldest reader major version that can read the pack.
+    #[must_use]
+    pub fn min_reader_major(&self) -> u16 {
+        self.head.header.min_reader_major.get()
+    }
+
+    /// The pack UUID, derived from its address, component and release.
+    #[must_use]
+    pub fn uuid(&self) -> [u8; 16] {
+        self.head.header.pack_uuid
+    }
+
+    /// The build ID: a hash of the builder version and the pinned sources.
+    #[must_use]
+    pub fn build_id(&self) -> u64 {
+        self.head.header.build_id.get()
+    }
+
+    /// When the pack says it was built (`SOURCE_DATE_EPOCH`), in Unix seconds.
+    #[must_use]
+    pub fn created_unix(&self) -> u64 {
+        self.head.header.created_unix.get()
+    }
+
+    /// The head digest: BLAKE3 over the header, the section table and the manifest. Covers every
+    /// section through the table's hashes; this is what a signature signs.
+    #[must_use]
+    pub const fn head_digest(&self) -> &[u8; 32] {
+        &self.head.digest
+    }
+
+    /// The signature block (key ID and signature), if the pack is signed.
+    #[must_use]
+    pub fn signature(&self) -> Option<([u8; 8], [u8; 64])> {
+        let s = self.head.signature?;
+        Some((s.get(..8)?.try_into().ok()?, s.get(8..72)?.try_into().ok()?))
+    }
+
+    /// The pack's bytes.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &'a [u8] {
+        self.bytes
+    }
+}
+
+impl<'a> PackHead<'a> {
+    /// Checks a pack's head: `bytes` is the file or any prefix of it that holds the whole head
+    /// (the head frame), and `file_len` the file's length. Every check of [`Pack::open_head`]
+    /// but the footer's (whose fields copy the header's) and the padding past `bytes`.
+    ///
+    /// # Errors
+    /// [`Error::Truncated`] if `bytes` ends inside the head; otherwise as [`Pack::open`].
+    pub fn parse(bytes: &'a [u8], file_len: u64) -> Result<Self, Error> {
+        if file_len < HEADER_LEN + FOOTER_LEN {
+            return Err(Error::Truncated);
+        }
+        let (header, _) = Header::ref_from_prefix(bytes).map_err(|_| Error::Truncated)?;
+        let parts = check_header(header, file_len)?;
+        if (bytes.len() as u64) < parts.end {
+            return Err(Error::Truncated);
+        }
+        let rest = slice(bytes, HEADER_LEN, parts.end)?;
+        let count = usize_of(u64::from(header.section_count.get())).ok_or(Error::Length)?;
+        let (table, _) = <[Entry]>::ref_from_prefix_with_elems(rest, count)
+            .map_err(|_| Error::Header("the section table is truncated"))?;
+        let manifest_bytes = slice(bytes, parts.manifest_off, parts.manifest_end)?;
+        let digest = head_digest(
+            slice(bytes, 0, HEADER_HASHED as u64)?,
+            slice(bytes, HEADER_LEN, parts.manifest_off)?,
+            manifest_bytes,
+        );
+        if digest.get(..16) != Some(&header.head_hash[..]) {
+            return Err(Error::HeadHash);
+        }
+        let manifest = Manifest::parse(manifest_bytes)?;
+        if pack_uuid(manifest.address(), manifest.component(), manifest.release())
+            != header.pack_uuid
+        {
+            return Err(Error::Header("the pack UUID does not match its identity"));
+        }
+        let signature = match parts.signature_off {
+            Some(off) => Some(slice(bytes, off, off + u64::from(SIGNATURE_LEN))?),
+            None => None,
+        };
+        check_sections(bytes, table, parts.end, file_len - FOOTER_LEN)?;
+        Ok(Self {
+            header,
+            table,
+            manifest,
+            digest,
+            signature,
+            end: parts.end,
+        })
+    }
+
+    fn entry(e: &'a Entry) -> SectionEntry<'a> {
+        SectionEntry {
+            kind: Kind(e.kind.get()),
+            encoding: Encoding(e.encoding.get()),
+            item_count: e.item_count.get(),
+            decoded_length: e.decoded_length.get(),
+            hash: &e.blake3,
+            offset: e.offset.get(),
+            length: e.length.get(),
+        }
+    }
+
+    /// Every section's entry, in kind order (which is file order).
+    pub fn sections(&self) -> impl ExactSizeIterator<Item = SectionEntry<'a>> + '_ {
+        self.table.iter().map(Self::entry)
+    }
+
+    /// The entry of the section of this kind, if the pack has one.
+    #[must_use]
+    pub fn section(&self, kind: Kind) -> Option<SectionEntry<'a>> {
         self.table
             .binary_search_by_key(&kind.0, |e| e.kind.get())
             .ok()
             .and_then(|i| self.table.get(i))
-            .map(|e| self.section_at(e))
+            .map(Self::entry)
     }
 
     /// The manifest.
@@ -400,19 +556,22 @@ impl<'a> Pack<'a> {
         &self.manifest
     }
 
-    /// `(major, minor)` of the format the pack was written in.
+    /// The file's length, as the header gives it (checked against the length given to parse).
     #[must_use]
-    pub fn format_version(&self) -> (u16, u16) {
-        (
-            self.header.format_major.get(),
-            self.header.format_minor.get(),
-        )
+    pub fn file_len(&self) -> u64 {
+        self.header.file_len.get()
     }
 
-    /// The oldest reader major version that can read the pack.
+    /// The head's length: the header, table, manifest and signature, before any padding.
     #[must_use]
-    pub fn min_reader_major(&self) -> u16 {
-        self.header.min_reader_major.get()
+    pub const fn len(&self) -> u64 {
+        self.end
+    }
+
+    /// Whether the head is empty: never, a head holds at least its header.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        false
     }
 
     /// The pack UUID, derived from its address, component and release.
@@ -421,22 +580,9 @@ impl<'a> Pack<'a> {
         self.header.pack_uuid
     }
 
-    /// The build ID: a hash of the builder version and the pinned sources.
+    /// The head digest, which a signature signs (see [`Pack::head_digest`]).
     #[must_use]
-    pub fn build_id(&self) -> u64 {
-        self.header.build_id.get()
-    }
-
-    /// When the pack says it was built (`SOURCE_DATE_EPOCH`), in Unix seconds.
-    #[must_use]
-    pub fn created_unix(&self) -> u64 {
-        self.header.created_unix.get()
-    }
-
-    /// The head digest: BLAKE3 over the header, the section table and the manifest. Covers every
-    /// section through the table's hashes; this is what a signature signs.
-    #[must_use]
-    pub const fn head_digest(&self) -> &[u8; 32] {
+    pub const fn digest(&self) -> &[u8; 32] {
         &self.digest
     }
 
@@ -447,9 +593,9 @@ impl<'a> Pack<'a> {
         Some((s.get(..8)?.try_into().ok()?, s.get(8..72)?.try_into().ok()?))
     }
 
-    /// The pack's bytes.
+    /// The footer the pack ends with: magic, file length and head hash, copied from the header.
     #[must_use]
-    pub const fn as_bytes(&self) -> &'a [u8] {
-        self.bytes
+    pub fn footer(&self) -> [u8; FOOTER_SIZE] {
+        footer_bytes(self.header)
     }
 }
