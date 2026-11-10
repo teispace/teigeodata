@@ -108,6 +108,55 @@ fn a_slice_answers_for_its_rows_as_the_whole_pack() {
     assert!(districts(0) > 0 && districts(1) > 0);
 }
 
+/// `PLACE_TZ` (D-151): a slice that keeps its places' timezone areas gives every kept place the
+/// whole pack's zone; one that drops them has no zones, rather than wrong ones.
+#[test]
+fn a_slice_keeps_the_zones_of_its_places() {
+    let model = synthetic(3_000, 23);
+    let whole_bytes = model.encode();
+    let pack = Pack::open(&whole_bytes).unwrap();
+    let whole = engine(whole_bytes.clone());
+    let rows_for = |zones: bool| -> Vec<u32> {
+        (0..model.ids.len() as u32)
+            .filter(|&r| match model.kinds[r as usize] {
+                PlaceKind::TimezoneArea => zones,
+                PlaceKind::Country | PlaceKind::Admin => true,
+                PlaceKind::Settlement => r % 5 == 0,
+                _ => false,
+            })
+            .collect()
+    };
+    for zones in [true, false] {
+        let keep = rows_for(zones);
+        let sections = extract::rows(&pack, &keep, 0, &Options::default()).unwrap();
+        assert_eq!(
+            sections.iter().any(|s| s.0 == Kind::PLACE_TZ),
+            zones,
+            "PLACE_TZ only with the zone rows"
+        );
+        let part = engine(write(&sections, "np-slice"));
+        let mut with_zone = 0;
+        for &r in &keep {
+            let id = model.ids[r as usize];
+            let (w, p) = (
+                whole.get(id).unwrap().unwrap(),
+                part.get(id).unwrap().unwrap(),
+            );
+            if p.kind == Some(PlaceKind::TimezoneArea) {
+                continue;
+            }
+            let got = part.tz_of(&p).unwrap().map(|z| z.id);
+            if zones {
+                assert_eq!(got, whole.tz_of(&w).unwrap().map(|z| z.id), "row {r}");
+                with_zone += usize::from(got.is_some());
+            } else {
+                assert_eq!(got, None, "row {r}: no zone rows, no zone");
+            }
+        }
+        assert!(!zones || with_zone > 100, "{with_zone}");
+    }
+}
+
 /// The real pack (`TGD_PACK`): its country and level-1 units at a 500 m level, plus a sample of
 /// places.
 #[test]

@@ -103,6 +103,8 @@ fn geonames_serials(reg: &Registry, build: &str) -> BTreeMap<u64, u64> {
 /// The rows a slice keeps, and what they are.
 struct Selection {
     keep: Vec<u32>,
+    /// Timezone areas kept for the kept places' zones.
+    zones: usize,
     countries: usize,
     units: usize,
     listed: usize,
@@ -165,8 +167,17 @@ fn select(
         }
         keep.insert(row32(r)?);
     }
+    // The timezone areas of the kept places, so the slice keeps their zones (D-151).
+    let mut zones = 0;
+    if let Some(s) = pack.section(Kind::PLACE_TZ) {
+        let tz = teigeodata_format::place_tz::PlaceTz::open(&s).map_err(e)?;
+        let used: BTreeSet<u32> = keep.iter().filter_map(|&r| tz.get(r as usize)).collect();
+        zones = used.len();
+        keep.extend(used);
+    }
     Ok(Selection {
         keep: keep.into_iter().collect(),
+        zones,
         countries,
         units,
         listed: listed.len(),
@@ -251,7 +262,8 @@ fn report(
     let build = if a.lite { "lite" } else { "main" };
     let mut r = format!(
         "# Baseline slice: {} ({build})\n\n{} rows: {} country, {} level-1 units, {} listed \
-         cities as {} places ({}); outlines at level {lod} ({} m, asked {} m).\n\n\
+         cities as {} places ({}), {} timezone areas of theirs; outlines at level {lod} ({} m, \
+         asked {} m).\n\n\
          | Section | Bytes |\n|---|---:|\n",
         a.cc,
         sel.keep.len(),
@@ -260,6 +272,7 @@ fn report(
         sel.listed,
         sel.cities,
         a.cities,
+        sel.zones,
         tolerance_cm / 100,
         a.tolerance_m
     );

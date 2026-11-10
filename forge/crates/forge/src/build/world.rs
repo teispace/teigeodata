@@ -63,6 +63,8 @@ pub(super) struct City {
     pub(super) population: Option<i64>,
     /// `elevation`, else the `dem` column (SRTM3 or GTOPO30), in metres.
     pub(super) elevation: Option<i16>,
+    /// The IANA zone the list states (`timezone`), empty when it states none.
+    pub(super) timezone: String,
 }
 
 /// Every row of the city list: the `.txt` table inside its zip.
@@ -103,6 +105,7 @@ pub(super) fn read_cities(zip: &Path) -> Result<Vec<City>, String> {
             pop,
             elev,
             dem,
+            timezone,
             ..,
         ] = f[..]
         else {
@@ -118,6 +121,7 @@ pub(super) fn read_cities(zip: &Path) -> Result<Vec<City>, String> {
             cc: cc.to_ascii_lowercase(),
             population: pop.parse().ok().filter(|&p: &i64| p > 0),
             elevation: metres(elev).or_else(|| metres(dem)),
+            timezone: timezone.to_string(),
         });
     }
     Ok(out)
@@ -137,19 +141,21 @@ struct Args {
     admin: String,
     admin1: String,
     cities: String,
+    tz: String,
     tolerance_m: u32,
     ids: Option<String>,
     key: Option<String>,
 }
 
 fn parse(args: &[String]) -> Result<Args, String> {
-    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tolerance-m <m>] [--ids <dir>] [--key <seed-file>]";
+    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tz <source>] [--tolerance-m <m>] [--ids <dir>] [--key <seed-file>]";
     let mut a = Args {
         release: String::new(),
         lite: false,
         admin: "ne-admin0-nep".into(),
         admin1: "ne-admin1".into(),
         cities: "geonames-cities15000".into(),
+        tz: "tzdb-2026f".into(),
         tolerance_m: TOLERANCE_M,
         ids: None,
         key: None,
@@ -163,6 +169,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
             "--admin" => a.admin = value()?,
             "--admin1" => a.admin1 = value()?,
             "--cities" => a.cities = value()?,
+            "--tz" => a.tz = value()?,
             "--tolerance-m" => {
                 a.tolerance_m = value()?.parse().map_err(|_| "--tolerance-m: metres")?;
             }
@@ -200,6 +207,9 @@ struct Row {
     place: Place,
     ns: Namespace,
     elevation: Option<i16>,
+    /// The zone the source states (a city's), and the key of the zone row assigned (D-151).
+    stated_tz: Option<String>,
+    zone: Option<String>,
 }
 
 fn namespace(cc: Option<&str>) -> Namespace {
@@ -272,6 +282,8 @@ fn country_rows(
                 },
                 ns: namespace(c.iso2.as_deref()),
                 elevation: None,
+                stated_tz: None,
+                zone: None,
             })
         })
         .collect()
@@ -318,6 +330,8 @@ fn unit_rows(
                 },
                 ns: namespace(c.iso2.as_deref()),
                 elevation: None,
+                stated_tz: None,
+                zone: None,
             })
         })
         .collect()
@@ -442,6 +456,8 @@ fn city_rows(
                 },
                 ns: namespace(Some(&c.cc)),
                 elevation: c.elevation,
+                stated_tz: Some(c.timezone),
+                zone: None,
             }
         })
         .collect();
@@ -540,7 +556,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let a = parse(args)?;
     let build = if a.lite { "lite" } else { "main" };
     let lock = Lock::read(&root.join("data/sources.lock"))?;
-    for id in [&a.admin, &a.admin1, &a.cities] {
+    for id in [&a.admin, &a.admin1, &a.cities, &a.tz] {
         let s = lock.get(id)?;
         if a.lite && !super::LITE.contains(&s.licence_class.as_str()) {
             return Err(format!(
@@ -575,7 +591,12 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let sections = sections(&places, &rows, &ids, &row_of, &geometry, a.tolerance_m)?;
     let notices = super::notices(
         &lock,
-        &[a.admin.as_str(), a.admin1.as_str(), a.cities.as_str()],
+        &[
+            a.admin.as_str(),
+            a.admin1.as_str(),
+            a.cities.as_str(),
+            a.tz.as_str(),
+        ],
     )?;
     let out = write(&sections, &a, &notices, root)?;
     super::baseline::check(&out, places.len())?;
@@ -689,6 +710,7 @@ fn world_rows(
         .count();
     rows.extend(cities);
     let dropped = dedup_keys(&mut rows);
+    let tz_report = zone_rows(root, a, lock, countries, &mut rows)?;
     let moved: Vec<&str> = cut
         .moved
         .iter()
@@ -701,7 +723,7 @@ fn world_rows(
          off every coast, {} of pack countries left to \
          their slice; {} remainder pieces.\n- {n_cities} cities ({}): {under_unit} under a \
          unit, {fallback} under the feature of their code, {orphans} with no country.\n- {dropped} \
-         source keys another row already holds dropped.",
+         source keys another row already holds dropped.\n{tz_report}",
         countries.len(),
         a.admin,
         cut.pieces.len(),
@@ -827,7 +849,105 @@ fn sections(
     let arcs = Arcs::open(&pack.section(Kind::ARCS).ok_or("no ARCS")?).map_err(e)?;
     let lod = extract::lod_within(&arcs, tolerance_m.saturating_mul(100));
     let all: Vec<u32> = (0..u32::try_from(n).map_err(|_| "too many rows")?).collect();
-    extract::rows(&pack, &all, lod, &super::baseline::region_options()).map_err(e)
+    let mut out = extract::rows(&pack, &all, lod, &super::baseline::region_options()).map_err(e)?;
+    // Each place's zone row (D-151); `extract` keeps every row in order.
+    let zone_of = zone_rows_of(rows, row_of)?;
+    if let Some(body) = teigeodata_format::place_tz::encode(&zone_of).map_err(e)? {
+        out.push((Kind::PLACE_TZ, Encoding::TABLE, n, body));
+    }
+    Ok(out)
+}
+
+/// Each row's zone as the PLACES row of its zone place.
+fn zone_rows_of(rows: &[&Row], row_of: &BTreeMap<&str, u32>) -> Result<Vec<Option<u32>>, String> {
+    rows.iter()
+        .map(|r| {
+            r.zone
+                .as_deref()
+                .map(|z| row_of.get(z).copied().ok_or(format!("{z}: no row")))
+                .transpose()
+        })
+        .collect()
+}
+
+/// The largest share of cities' people whose own zone differs from the zone of the unit or
+/// country they hang from, so where `tz_at` differs from it (G-tz for the world part, D-151;
+/// measured 2026-11-10 in the decision).
+const MAX_TZ_OFF: f64 = 0.02;
+
+/// Assigns every row its zone ([`super::world_tz`]) and adds a row per zone used: a timezone
+/// area keyed `tz:<ID>` in the `world` namespace, at its `zone.tab` point. G-tz fails past
+/// [`MAX_TZ_OFF`].
+fn zone_rows(
+    root: &Path,
+    a: &Args,
+    lock: &Lock,
+    countries: &[Country],
+    rows: &mut Vec<Row>,
+) -> Result<String, String> {
+    use super::world_tz::{Item, Tzdb, assign};
+    let tarball = lock.path(root, &a.tz)?;
+    let tz = Tzdb::parse(
+        &super::zones::tar_file(&tarball, "zone.tab")?,
+        &super::zones::tar_file(&tarball, "backward")?,
+    )?;
+    let iso2: BTreeMap<String, &str> = countries
+        .iter()
+        .filter_map(|c| Some((format!("ne:{}", c.code), c.iso2.as_deref()?)))
+        .collect();
+    let items: Vec<Item<'_>> = rows
+        .iter()
+        .map(|r| Item {
+            key: &r.place.key,
+            kind: r.place.kind,
+            parent: r.place.parent.as_deref(),
+            iso2: iso2.get(&r.place.key).copied(),
+            point: r.place.point,
+            population: r.place.population,
+            stated: r.stated_tz.as_deref(),
+        })
+        .collect();
+    let assigned = assign(&items, &tz)?;
+    drop(items);
+    if assigned.off_share > MAX_TZ_OFF {
+        return Err(format!(
+            "G-tz: {:.3}% of cities' people state a zone other than their unit's (limit {:.1}%)\n{}",
+            assigned.off_share * 100.0,
+            MAX_TZ_OFF * 100.0,
+            assigned.report
+        ));
+    }
+    for (r, z) in rows.iter_mut().zip(&assigned.of) {
+        r.zone = z
+            .and_then(|z| assigned.zones.get(z))
+            .map(|(id, _)| format!("tz:{id}"));
+    }
+    for (id, point) in &assigned.zones {
+        let key = format!("tz:{id}");
+        rows.push(Row {
+            place: Place {
+                sources: vec![key.clone()],
+                key,
+                kind: PlaceKind::TimezoneArea,
+                admin_level: 0,
+                flags: 0,
+                point: *point,
+                names: vec![PlaceName {
+                    text: id.clone(),
+                    lang: None,
+                    kind: Some(NameType::Official),
+                }],
+                population: None,
+                rank: 0,
+                parent: None,
+            },
+            ns: Namespace::WORLD,
+            elevation: None,
+            stated_tz: None,
+            zone: None,
+        });
+    }
+    Ok(assigned.report)
 }
 
 /// The world part as a pack: address `world`, component `baseline`, the sources' notices,

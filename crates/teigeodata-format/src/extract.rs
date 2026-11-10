@@ -8,10 +8,12 @@
 //! keeps its places' ancestors keeps their chain (D-143). The admin geometry of the kept rows
 //! (ARCS, POLYGONS, `POLY_INDEX`, `ADMIN_REGION`) is re-encoded with only the arcs they use, at
 //! level of detail `lod` of the pack's ARCS (0 = full resolution): the levels are the forge's
-//! topology-safe simplification, so no new simplifier runs here.
+//! topology-safe simplification, so no new simplifier runs here. `PLACE_TZ` keeps each kept
+//! row's zone when the zone's row is kept too, and none otherwise (D-151): keep the zone rows
+//! of the kept places to keep their zones.
 //!
-//! Left out, for the caller to add if it needs them: REGION and `PLACE_TZ` (timezones are their
-//! own part of a baseline), REDIRECTS, POSTAL, DEM, BLOBS and EXTRA. The manifest is the
+//! Left out, for the caller to add if it needs them: REGION (a slice answers `tz_at` from its
+//! units and `PLACE_TZ`), REDIRECTS, POSTAL, DEM, BLOBS and EXTRA. The manifest is the
 //! caller's too: it names the new pack, and must carry the source pack's attribution.
 
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -26,6 +28,7 @@ use crate::hierarchy::{self, Hierarchy};
 use crate::idmap::{self, IdMap};
 use crate::names::{self, NameRecord, Names};
 use crate::place_index::{self, PlaceIndex};
+use crate::place_tz::{self, PlaceTz};
 use crate::places::{self, PlaceColumns, Places};
 use crate::poly_index::{self, PolyIndex, Rect};
 use crate::polygons::{self, PolygonInput, Polygons};
@@ -101,6 +104,20 @@ pub fn rows(pack: &Pack<'_>, keep: &[u32], lod: u8, region: &Options) -> Result<
         let heights: Vec<Option<i16>> = keep.iter().map(|&r| h.get(row(r))).collect();
         if let Some(body) = elevation::encode(&heights)? {
             out.push((Kind::ELEVATION, Encoding::TABLE, k, body));
+        }
+    }
+    if let Some(s) = pack.section(Kind::PLACE_TZ) {
+        let tz = PlaceTz::open(&s)?;
+        let zone_of: Vec<Option<u32>> = keep
+            .iter()
+            .map(|&r| {
+                tz.get(row(r))
+                    .and_then(|z| new_of.get(z as usize).copied())
+                    .filter(|&z| z != u32::MAX)
+            })
+            .collect();
+        if let Some(body) = place_tz::encode(&zone_of)? {
+            out.push((Kind::PLACE_TZ, Encoding::TABLE, k, body));
         }
     }
     if let Some(s) = pack.section(Kind::NAMES) {

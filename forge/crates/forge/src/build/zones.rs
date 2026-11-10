@@ -214,7 +214,7 @@ fn country_zones<'a>(zone_tab: &'a str, cc: &str) -> Vec<&'a str> {
 }
 
 /// The text of file `name` in the gzipped ustar archive at `path`.
-fn tar_file(path: &Path, name: &str) -> Result<String, String> {
+pub(super) fn tar_file(path: &Path, name: &str) -> Result<String, String> {
     use std::io::Read as _;
     let file = fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut tar = Vec::new();

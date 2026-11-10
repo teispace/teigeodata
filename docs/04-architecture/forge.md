@@ -617,11 +617,12 @@ recipe has a `baseline` entry (below).
 ## The world part (`world`)
 
 `forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>]
-[--tolerance-m <m>] [--ids <dir>] [--key <seed-file>]` writes `data/build/baseline/world/world-baseline-<build>.tgd`,
+[--tz <source>] [--tolerance-m <m>] [--ids <dir>] [--key <seed-file>]` writes `data/build/baseline/world/world-baseline-<build>.tgd`,
 its ID registries `world-ids-<build>/<namespace>.tsv` (the next build's `--ids`),
 `summary-<build>.md` (D-147) and `world-probes-<build>.tsv`, the locator's border probes: about
 100,000 source vertices at full resolution, every k-th of every feature, each with its
-feature's ID (D-149). Defaults: `ne-admin0-nep`, `ne-admin1`, `geonames-cities15000`, 1 km.
+feature's ID (D-149). Defaults: `ne-admin0-nep`, `ne-admin1`, `geonames-cities15000`,
+`tzdb-2026f`, 1 km.
 
 - **Rows.** One country place per admin-0 feature (names from `NAME` and its 26 `NAME_<XX>`
   columns, population, the cartographers' label point when it is inside the feature, else the
@@ -635,6 +636,16 @@ feature's ID (D-149). Defaults: `ne-admin0-nep`, `ne-admin1`, `geonames-cities15
   pieces and fillers, so both levels share one arc set, with G-topo's parent limit at
   `pov::MAX_SHIFT_M` (10 m) instead of 1 m. Unrecognised units, unnamed placeholders and pack
   countries' units are dropped; their area falls to the filler.
+- **Timezones** (`build::world_tz`, D-151). Every place gets a zone, written as PLACE_TZ, and
+  every zone used is a timezone-area row (`tz:<ID>`, namespace `world`, at its `zone.tab`
+  point):
+  - a city its own (`cities15000`'s `timezone`, through tzdb's links);
+  - a unit the zone of most of its cities' people, else its country's one zone, else the
+    nearest city's of its country;
+  - a country its one `zone.tab` row, else its cities'.
+
+  G-tz stops the build when more than 2% of the cities' people state a zone other than their
+  unit's (0.647% measured).
 - **Parents.** A unit hangs from its piece's country. A city hangs from the piece that contains
   it on the cut polygons, else from the feature that contains it (a 1° grid index, exact
   test); outside every feature, from the largest feature of its code.

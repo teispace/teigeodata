@@ -115,7 +115,9 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] Forge: world admin 1: Natural Earth admin 1 cut to the Nepal-view countries (overlay,
   fillers, one arc set), units under their country and cities under their unit; 5.73 MB main
   with admin 1 (D-150). Per-country admin-1 sources (OSM extract, gbOpen) replace it later
-- [ ] Forge: world timezones in the baseline (main TBB simplified, lite tzdb over admin 0)
+- [x] Forge: world timezones in the baseline: a zone per country, unit and city from tzdb and
+  the cities' own zones, `tz_at` by the deepest unit, no geometry (30 kB); slices keep their
+  pack's zones (D-151)
 - [ ] The baseline as shipped: the world part and every slice, as layers (slices above the
   world) or one file; decide by the size gate and the engine's layer cost
 - [x] Pin `geonames-cities15000` (D-145) and `ne-admin0-nep` (D-147)
@@ -205,3 +207,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.2: the world part split into countries and cities (done), admin 1, timezones, and the shipped form | D-147 |
 | 2026-11-10 | 4.2: the locator is a distance query on the outlines, not a buffered REGION | D-149 |
 | 2026-11-10 | 4.2: world admin 1 from Natural Earth cut to the Nepal view for both builds; the pin split from the OSM extract job | D-150 |
+| 2026-11-10 | 4.2: world timezones from the units and the cities' zones, not simplified TBB | D-151 |

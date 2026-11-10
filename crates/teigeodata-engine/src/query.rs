@@ -938,8 +938,11 @@ impl Engine {
         self.winning(i, place)
     }
 
-    /// The timezone area holding `at`, from the layer with the highest precedence whose
-    /// timezone index holds the point; `None` where none does.
+    /// The timezone area holding `at`, from the layer with the highest precedence that answers
+    /// for the point; `None` where none does. A layer answers by its timezone index (REGION);
+    /// a layer without one but with each place's zone and admin outlines (the baseline's world
+    /// part, D-151) answers by the zone of its deepest admin unit holding the point, exact where
+    /// a unit lies in one zone.
     ///
     /// # Errors
     /// [`Error::Integrity`] if a section it reads is corrupt.
@@ -951,9 +954,14 @@ impl Engine {
             }
             l.ensure(Kind::REGION)?;
             let v = l.views();
-            let Some(zones) = &v.zones else { continue };
-            let Some(r) = zones.region(at) else { continue };
-            let Some(row) = zones.place(r) else {
+            let row = match &v.zones {
+                Some(zones) => zones.region(at).and_then(|r| zones.place(r)),
+                #[cfg(all(feature = "timezone", feature = "admin-index"))]
+                None => self.tz_by_admin(i, at)?,
+                #[cfg(not(all(feature = "timezone", feature = "admin-index")))]
+                None => None,
+            };
+            let Some(row) = row else {
                 continue;
             };
             return match self.place(i, row as usize)? {
@@ -962,6 +970,41 @@ impl Engine {
             };
         }
         Ok(None)
+    }
+
+    /// Layer `i`'s zone row at `at` from its admin units (D-151): the `PLACE_TZ` of the
+    /// deepest unit holding the point that has a zone. `None` without `PLACE_TZ` or outlines.
+    #[cfg(all(
+        feature = "timezone",
+        feature = "admin-index",
+        feature = "timezone-index"
+    ))]
+    fn tz_by_admin(&self, i: usize, at: Point<E7>) -> Result<Option<u32>, Error> {
+        let l = self.layers.get(i).ok_or(Error::Range)?;
+        let v = l.views();
+        let (Some(tz), Some(admin), Some(places)) = (&v.place_tz, &v.admin, &v.places) else {
+            return Ok(None);
+        };
+        l.ensure(Kind::PLACE_TZ)?;
+        l.ensure(Kind::ADMIN_REGION)?;
+        if admin.on_arcs() {
+            l.ensure(Kind::ARCS)?;
+        }
+        l.ensure(Kind::POLYGONS)?;
+        // A point lies in a few units (a country and its unit); 16 is far above that, and a
+        // point in more is answered from the first 16, coarse to fine.
+        let mut buf = [0_u32; 16];
+        let n = admin.regions_at(at, &mut buf).min(buf.len());
+        Ok(buf
+            .get(..n)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|&r| {
+                let row = v.admin_row(admin, r)? as usize;
+                Some((places.admin_level(row)?, tz.get(row)?))
+            })
+            .max_by_key(|&(level, _)| level)
+            .map(|(_, zone)| zone))
     }
 
     /// The timezone area of `place`: the one its own layer recorded for it at build time

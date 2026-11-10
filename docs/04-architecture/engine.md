@@ -171,7 +171,7 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 | `within_radius(at, m, k)` | As `reverse` | `reverse` capped at the radius: no index box beyond it is opened |
 | `nearby(place, k)` | As `reverse` | `reverse` from the place's point, without the place |
 | `admin_at(at)` | The first layer in precedence order whose ADMIN_REGION holds the point (coverage beats existence) | none; a unit whose ID a higher layer claims is answered from that layer |
-| `tz_at(at)` | The first layer whose REGION (timezones) holds the point | as `admin_at` |
+| `tz_at(at)` | The first layer whose REGION (timezones) holds the point; a layer without REGION but with PLACE_TZ and admin outlines (the baseline) answers with the zone of its deepest unit holding the point (D-151) | as `admin_at` |
 | `countries_near(at, r)` | Every layer with outlines: POLY_INDEX boxes that meet the circle's box, then `Polygons::within` (holds the point or a border within `r`) on the country polygons (the locator, D-149) | union by ID, each answered by the layer that wins it |
 | `missing_packs(at, r)` | As `countries_near` | its countries whose pack (the ID's namespace, `np`) is not installed; a partial pack (`ae-du`) counts where its box holds the point |
 | `search(q, k)` | Every layer with SEARCH | Each layer scores its rows and keeps its best k visible; k-way merge by score, then ID. Fuzzy keys share the first letter unless no layer has a visible strong match; a context after a comma matches ancestors in the row's own pack (D-119); the layer's query rules add matches (D-121) |
@@ -228,3 +228,5 @@ Each gate was first shown to fail on a planted bug (D-114).
 | 2026-11-09 | `Shared` snapshots on `arc-swap`; layers held in `Arc` | D-141 |
 | 2026-11-09 | Block-hash lists proved on a section's first read, not at open | D-142 |
 | 2026-11-09 | `parent`, `ancestors`, `children` across packs by ancestor stubs | D-143 |
+| 2026-11-10 | `countries_near`, `missing_packs` (the locator) | D-149 |
+| 2026-11-10 | `tz_at` from a layer's units and PLACE_TZ when it has no timezone REGION | D-151 |

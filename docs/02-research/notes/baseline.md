@@ -35,15 +35,18 @@ design and the first estimates; this note pins the sources.
     CI) and geoBoundaries gbOpen for lite where its licence passes the gate (**unverified** per
     country), each reported by the build.
   - Cities from **GeoNames `cities15000`** (CC BY 4.0, 34,208 rows on 2026-11-09), both builds.
-- **Timezones:** main simplifies TBB (as the country packs do, D-134). Lite uses tzdb over the
-  admin-0 outline for the 216 one-zone countries (D-138); the 31 countries with several zones
-  get no lite zone until their table exists. Natural Earth's time zones are rejected (below).
+- **Timezones** (§3.10, D-151). The baseline stores no timezone geometry: each country, unit and
+  city carries a zone (PLACE_TZ), and `tz_at` reads the zone of the deepest unit at the
+  point. The zones come from tzdb's `zone.tab` (a country with one row) and from the cities'
+  own GeoNames zones (a unit takes the zone of most of its cities' people). Both sources are
+  allowed in both builds. A country's slice keeps its pack's exact zones. Natural Earth's time
+  zones are rejected (below).
 - **IDs:** each place is keyed into its country's registry (`forge/.../build/ids.rs`) by its
   GeoNames ID and Wikidata ID, which Natural Earth carries (`gn_id`, `wikidataid`) and
   which the country packs' admin and city records carry too (D-110). When a country's pack is
   built later, it matches the same serials, so the baseline's IDs survive.
-- **Size:** about 1–2 MB of boundaries and 2–4 MB of cities: within 8 MB (measurements below).
-  The timezone and locator shares remain estimates until the first build.
+- **Size:** the world part is 5.82 MB with admin 1 and timezones (4.44 MB on the wire), and
+  Nepal's slice 0.16 MB (§3.9, §3.10). The locator adds no bytes (D-149).
 
 ## 3. Findings
 
@@ -186,6 +189,40 @@ not wholly inside their country (about 80), and the fillers for each country wit
   unit for 99.76% of them; the locator gate misses no probe at 1 km (95 at 500 m, against 173
   before).
 
+### 3.10 World timezones from the units (2026-11-10, D-151)
+
+A timezone REGION for the world costs geometry the budget does not have: Nepal's TBB REGION
+alone is 2.0 MB for six areas (D-138), and TBB's world is about 8.3 M vertices. But the
+baseline already answers `admin_at` with every country and unit, and 216 of 247 countries
+have one zone. So each place gets a zone, and the engine's `tz_at` on a layer without a
+timezone REGION returns the zone of the deepest unit holding the point.
+
+- **Sources.** tzdb 2026f `zone.tab`, with `backward` resolving links (public domain), and the
+  `timezone` column of `cities15000` (CC BY 4.0). Both builds may read both, so main and lite
+  build the same zones. Every ID is a `zone.tab` ID; an ID tzdb does not know fails the build.
+- **Rules.** A unit takes the zone of most of its cities' people; a unit without a city takes
+  its country's one zone, else the nearest city of its country's. A country takes its one
+  `zone.tab` row, else its cities' zone. A city keeps its own zone.
+- **Measured (main).**
+  - 361 zones.
+  - Units: 3,406 by their cities, 1,101 by their country's one zone, 46 by the nearest city,
+    18 by their country's zone.
+  - Countries: 206 by their one row, 29 by their cities, 6 by their first row, 7 (no code, no
+    city) by the nearest city.
+  - PLACE_TZ is 30,292 B, and the world part grows by 92 kB in all, to 5.82 MB.
+- **Accuracy.** 377 cities, 0.647% of the cities' people, state a zone other than their unit's:
+  units that a zone line crosses (US states, Russian and Brazilian regions). G-tz fails the
+  build above 2%; a planted 0.5% limit fails it.
+  - At the stored outlines, `tz_at` at a unit's label equals its own zone for 99.89% of units,
+    and at a city equals the city's own zone for 97.57% of cities (the rest are those units,
+    plus points the 1 km outline puts in a neighbour). About 0.9 µs a query.
+- **Slices.** `extract` now keeps PLACE_TZ, and `forge baseline` keeps the zone rows its places
+  use, so Nepal's slice answers its pack's exact zone (60 B). Without them, Nepal's border
+  cities answered `Asia/Kolkata` from the world's simplified outline.
+- **Not done.** Comparing against TBB over the whole world (main only, ODbL) needs an indexed
+  point-in-polygon over 8.3 M vertices. It is the next measurement for the units that a zone
+  line crosses.
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
@@ -199,6 +236,8 @@ not wholly inside their country (about 80), and the fillers for each country wit
 | GeoNames `cities15000` | IDs shared with the packs' records; CC BY | Population thresholds vary in quality | CC BY 4.0 | daily | **cities** |
 | GeoNames `cities5000` | Twice the towns | Over budget | CC BY 4.0 | daily | rejected (size) |
 | Natural Earth time zones | Public domain | Offsets, 2012, few IANA names | Public domain | 5.0.0 | rejected |
+| TBB simplified into the baseline (REGION) | Exact borders at the tolerance | 8.3 M vertices; a 1 km REGION estimated at MBs; ODbL, so lite needs another source | ODbL | 2026f | rejected (size, licence) |
+| Zones per admin unit and city (§3.10) | No geometry (30 kB); both builds; exact for one-zone countries and units | Approximate in units a zone line crosses (0.65% of people) | Public domain + CC BY 4.0 | tzdb 2026f | **chosen** (D-151) |
 
 ## 5. What we build ourselves, and why
 
@@ -217,6 +256,7 @@ not wholly inside their country (about 80), and the fillers for each country wit
 - D-144 records the source choices and the slice rule; D-145 the slice as built; D-147 the
   world part as built.
 - Phase 4.2 gains the slice rule and the per-country admin-1 source report.
+- D-151: world timezones from the units; `extract` keeps PLACE_TZ.
 - Pinned: `ne-admin0-nep` (2026-11-10), `ne-admin1` (2026-11-10, D-150) and
   `geonames-cities15000` (2026-11-09). Still to come: OSM admin 1 extracts for main.
 

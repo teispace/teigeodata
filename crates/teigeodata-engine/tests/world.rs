@@ -72,6 +72,11 @@ fn every_city_hangs_from_the_unit_and_country_around_it() {
                 continue;
             }
             Some(PlaceKind::Settlement) => cities += 1,
+            // Timezone areas (D-151) are roots; `the_world_part_answers_timezones` checks them.
+            Some(PlaceKind::TimezoneArea) => {
+                assert!(up.is_empty(), "a timezone area has no parent");
+                continue;
+            }
             k => panic!("unexpected kind {k:?}"),
         }
         let Some(country) = up.last() else {
@@ -201,6 +206,85 @@ fn the_slice_and_the_pack_answer_for_their_country() {
     let pk = full.add(Layer::from_bytes(pack, LayerOptions::default()).unwrap());
     assert_eq!(full.get(country.id).unwrap().unwrap().layer, pk);
     println!("country {:?}; {checked} world cities checked", country.id);
+}
+
+/// World timezones (D-151): every country and unit has a zone; `tz_at` at a unit's label
+/// point (inside it) is the unit's own zone; at a city it is the city's own zone except where
+/// the city's unit spans two zones; a pack country's slice is answered by the world's row.
+#[test]
+#[ignore = "needs TGD_WORLD, TGD_BASELINE"]
+fn the_world_part_answers_timezones() {
+    let world = read("TGD_WORLD").expect("TGD_WORLD");
+    let ids = IdMap::open(&Pack::open(&world).unwrap().section(Kind::IDMAP).unwrap()).unwrap();
+    let mut e = Engine::new();
+    e.add(Layer::from_bytes(world.clone(), baseline(0)).unwrap());
+    let (mut countries, mut units, mut unit_agree) = (0_usize, 0_usize, 0_usize);
+    let (mut cities, mut city_agree, mut zones) = (0_usize, 0_usize, 0_usize);
+    let t = Instant::now();
+    for r in 0..ids.len() {
+        let p = e.get(ids.id(r).unwrap()).unwrap().unwrap();
+        let own = e.tz_of(&p).unwrap().map(|z| z.id);
+        match p.kind {
+            Some(PlaceKind::TimezoneArea) => {
+                zones += 1;
+                continue;
+            }
+            Some(PlaceKind::Country) => {
+                countries += 1;
+                assert!(own.is_some(), "{:?}: a country without a zone", p.id);
+                continue;
+            }
+            Some(PlaceKind::Admin) => units += 1,
+            Some(PlaceKind::Settlement) => cities += 1,
+            k => panic!("unexpected kind {k:?}"),
+        }
+        assert!(own.is_some(), "{:?}: no zone", p.id);
+        let at = e.tz_at(p.point.to_e7()).unwrap().map(|z| z.id);
+        match p.kind {
+            Some(PlaceKind::Admin) => unit_agree += usize::from(at == own),
+            _ => city_agree += usize::from(at == own),
+        }
+    }
+    let per = t.elapsed() / u32::try_from(units + cities).unwrap();
+    let (ur, cr) = (
+        unit_agree as f64 / units as f64,
+        city_agree as f64 / cities as f64,
+    );
+    println!(
+        "{zones} zones, {countries} countries; tz_at agrees with tz_of for {unit_agree} of \
+         {units} units ({:.2}%) and {city_agree} of {cities} cities ({:.2}%); {per:?} per pair",
+        ur * 100.0,
+        cr * 100.0
+    );
+    assert!(zones > 300 && countries > 200);
+    assert!(ur >= 0.99, "units {ur:.4}");
+    assert!(cr >= 0.97, "cities {cr:.4}");
+    // Under a pack country's slice (no zones of its own), the world answers for it.
+    if let Some(slice) = read("TGD_BASELINE") {
+        let mut both = e.clone();
+        let sl = both.add(Layer::from_bytes(slice.clone(), baseline(1)).unwrap());
+        let slice_ids =
+            IdMap::open(&Pack::open(&slice).unwrap().section(Kind::IDMAP).unwrap()).unwrap();
+        let mut buf = [0_u8; 64];
+        let mut names = std::collections::BTreeSet::new();
+        for r in 0..slice_ids.len() {
+            let p = both.get(slice_ids.id(r).unwrap()).unwrap().unwrap();
+            assert_eq!(p.layer, sl);
+            let z = both.tz_of(&p).unwrap().expect("a slice place's zone");
+            assert_eq!(
+                both.tz_at(p.point.to_e7()).unwrap().map(|z| z.id),
+                Some(z.id)
+            );
+            names.insert(
+                both.name(&z, &mut buf)
+                    .unwrap()
+                    .unwrap_or_default()
+                    .to_owned(),
+            );
+        }
+        println!("the slice's places are in {names:?}");
+        assert_eq!(names.len(), 1, "a one-zone country: {names:?}");
+    }
 }
 
 /// The locator gate (D-149): each border probe (a full-resolution source vertex, written by
