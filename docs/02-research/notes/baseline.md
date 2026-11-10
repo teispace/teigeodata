@@ -1,7 +1,7 @@
 ---
 title: "The embedded baseline: sources, IDs and size"
 status: accepted
-updated: 2026-11-09
+updated: 2026-11-10
 owner: forge
 revisit: 2027-05-01
 ---
@@ -117,6 +117,16 @@ about 80 kB on the wire. The 4,096-cell region grid is the A/B winner
 ([forge](../../04-architecture/forge.md#the-baseline-slice-baseline)). Building it showed that
 level-1 units were HIERARCHY roots, not children of the country (fixed, D-146).
 
+### 3.8 The world part, measured (D-147)
+
+Natural Earth admin 0 (Nepal view) as the tagged GitHub GeoJSON (`v5.1.2`, 13,242,878 B) is
+noded: the topology stage needs no snapping, and keeps 480,114 vertices on 4,624 arcs, 239,502
+at the 500 m level and 100,814 at 2 km. With `cities15000` outside Nepal (34,162 cities, 244
+codes), the main build is 3.77 MB, 2.76 MB on the wire; with Nepal's slice (0.16 MB) the
+baseline is about 3.9 MB, half the 8 MB budget, before admin 1 and timezones. The tolerance
+A/B is in D-147. Codes the list uses that Natural Earth's view folds into another feature
+(TW, XK, and France's overseas departments) take the feature that contains them.
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
@@ -144,10 +154,11 @@ level-1 units were HIERARCHY roots, not children of the country (fixed, D-146).
 
 ## 6. Impact on the plan
 
-- D-144 records the source choices and the slice rule; D-145 the slice as built.
+- D-144 records the source choices and the slice rule; D-145 the slice as built; D-147 the
+  world part as built.
 - Phase 4.2 gains the slice rule and the per-country admin-1 source report.
-- New sources to pin when the build lands: `ne-admin0-nep-5.1.1`, `ne-admin1-5.1.1`,
-  `geonames-cities15000`, and OSM admin 1 extracts for main.
+- Pinned: `ne-admin0-nep` (2026-11-10) and `geonames-cities15000` (2026-11-09). Still to pin
+  with the admin-1 step: `ne-admin1`, and OSM admin 1 extracts for main.
 
 ## 7. Risks and open items
 

@@ -342,6 +342,11 @@ and also writes a pack of the geometry sections alone, `data/build/topology/<nam
 each polygon its own row in Hilbert order of its label. It is for measurement: the file is not
 a pinned source and feeds no build.
 
+A plain (unzipped) Natural Earth admin-0 file is read as one level coded by `ADM0_A3` (D-147).
+Label points are poles of inaccessibility on a local plane scaled at the ring's middle latitude,
+on rings thinned to a quarter of the search's precision, within a budget of edge distances
+(D-148): world admin 0 takes 6.9 s for the whole stage.
+
 1. **Arcs.** The finest level's rings are cleaned (outer counter-clockwise, holes clockwise) and
    cut at topology nodes: a vertex whose degree is not 2, or where the units on its two edges
    change (REGION's arc rule). A ring without a node is one closed arc from its smallest vertex.
@@ -608,6 +613,36 @@ stages in 3.4 s and a hand-changed GeoNames output 1 stage in 3.1 s.
 
 The stages after `build` join the recipe as they land. The first is `baseline`, when the
 recipe has a `baseline` entry (below).
+
+## The world part (`world`)
+
+`forge world --release <v> [--lite] [--admin <source>] [--cities <source>] [--tolerance-m <m>]
+[--ids <dir>] [--key <seed-file>]` writes `data/build/baseline/world/world-baseline-<build>.tgd`,
+its ID registries `world-ids-<build>/<namespace>.tsv` (the next build's `--ids`) and
+`summary-<build>.md` (D-147). Defaults: `ne-admin0-nep`, `geonames-cities15000`, 1 km.
+
+- **Rows.** One country place per admin-0 feature (names from `NAME` and its 26 `NAME_<XX>`
+  columns, population, the cartographers' label point when it is inside the feature, else the
+  topology's) and every city of the list outside the countries whose recipe builds a slice.
+- **Parents.** A city hangs from the feature that contains it on the source polygons (a 1°
+  grid index, exact test); outside every feature, from the largest feature of its code.
+- **IDs.** A registry per namespace (the ISO code, `world` without one). A pack country's row
+  takes the serial its pack's registry gives its Wikidata ID: the ID gate fails the build
+  otherwise, so run `forge make <cc>` for each pack country first.
+- **Sections.** As a country pack's (PLACES, NAMES, SEARCH with no country rules, ELEVATION
+  from the list's `elevation` or `dem` column, HIERARCHY), the polygons linked by `ADM0_A3`;
+  then the whole set through `extract` at the finest level within the tolerance, with the
+  slice's region index. The topology stage runs first every time (7 s), so it is never stale.
+- **Checks.** Read back verified, the geometry's checks, every place's ID, point, parent and
+  canonical name, and its search by name.
+
+Measured 2026-11-10 (main): 34,410 rows, 3,773,468 B (2.76 MB zstd 19), in 8 s; ARCS
+1,231,364 B, ADMIN_REGION 665,228 B, SEARCH 712,624 B, NAMES 581,280 B, IDMAP 187,404 B
+(248 namespaces interleave in row order). The tolerance A/B is in D-147.
+`tests/world.rs` (with `TGD_WORLD`, and `TGD_BASELINE`, `TGD_PACK` for a pack country): every
+city has one country and `admin_at` at 98.46% of them finds it (the rest are mostly coastal
+points outside Natural Earth's coast at any resolution); the slice answers for its country
+and the pack above both.
 
 ## The baseline slice (`baseline`)
 

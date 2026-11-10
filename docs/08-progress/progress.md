@@ -37,9 +37,10 @@ A short status. The numbers and evidence live in each phase file and the
   lists proved on first read (D-142); `parent`, `ancestors` and `children` across packs by
   ancestor stubs (D-143), search contexts split-invariant; baseline sources researched
   (D-144); Nepal's baseline slice built by `forge baseline` (D-145: 53 rows, 159 kB main),
-  level-1 units now under their country (D-146). Next: 4.2 the world part of the baseline
-  (pin Natural Earth, cities for countries without a pack, world timezones), merging slices,
-  the locator, the 8 MB gate; then 4.3 TUF trust.
+  level-1 units now under their country (D-146); the world part's countries and cities by
+  `forge world` (D-147: 3.77 MB, 98.46% of cities answered by `admin_at`), the topology stage
+  at world scale (D-148). Next: 4.2 world admin 1 and timezones, the shipped baseline, the
+  locator, the 8 MB gate; then 4.3 TUF trust.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).
 - **Waiting on the maintainer:** review of `data/countries/np/corrections/` (unreviewed), the labelled sample (Q-005, needed for `ACCURACY.md` and M3),
@@ -83,3 +84,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-09 | 3.4: place elevations from the DEM at the consensus point, the `dem` stage in `forge make` (D-111) | the DEM component in the packs; lite elevation |
 | 2026-11-09 | D-110 admin records, D-111 place elevations merged; development speed-ups (D-115): Phase 4 started in parallel (engine, transport), build split into modules, Miri under nextest, this page shortened | Duplicate clusters and G-conf; merge the Phase 4 branches |
 | 2026-11-09 | 4.2: the baseline slice of a pack (`extract`, `forge baseline`, G-base, D-145); level-1 units under the country (D-146) | the world part of the baseline; the locator |
+| 2026-11-10 | 4.2: the world part of the baseline (`forge world`, Natural Earth admin 0 and `cities15000`, D-147); world-scale label search (D-148) | world admin 1 and timezones; the locator |

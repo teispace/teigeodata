@@ -109,12 +109,15 @@ signed pack per address; a client holds any subset of its sections.
 Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] Forge: a country with a pack contributes a slice of that build (`forge baseline`, a `make`
   stage; `extract::rows`; G-base; level-1 units under the country, D-146) (D-145)
-- [ ] Forge: the world part of the baseline (countries, admin1, cities above a threshold,
-  simplified world timezones) from the D-144 sources, keyed by GeoNames and Wikidata IDs into
-  each country's registry; a report of each country's admin-1 source; the slices and the world
-  part merged into one baseline file
-- [x] Pin `geonames-cities15000` (D-145)
-- [ ] Pin `ne-admin0-nep-5.1.1` and `ne-admin1-5.1.1`; the OSM boundary extract as a CI job
+- [x] Forge: the world part's countries and cities (`forge world`): Natural Earth admin 0 in
+  Nepal's view, `cities15000` under the feature that contains each, IDs per namespace and a
+  pack country's from its pack (ID gate); 3.77 MB main (D-147)
+- [ ] Forge: world admin 1 (D-144 sources) with a report of each country's admin-1 source
+- [ ] Forge: world timezones in the baseline (main TBB simplified, lite tzdb over admin 0)
+- [ ] The baseline as shipped: the world part and every slice, as layers (slices above the
+  world) or one file; decide by the size gate and the engine's layer cost
+- [x] Pin `geonames-cities15000` (D-145) and `ne-admin0-nep` (D-147)
+- [ ] Pin `ne-admin1`; the OSM boundary extract as a CI job
 - [ ] The locator: a REGION over buffered coverage polygons; `missing_pack_for(point)`;
   border-probe gate (no missed pack; extra-candidate rate reported)
 - [ ] Size gate (proposed 8 MB, Z1); `baseline` feature; WASM loads it as a file (Z3)
@@ -194,3 +197,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-09 | 4.1b: the engine on installed components, and its gate | D-136 |
 | 2026-11-09 | 4.1b: the partial file and the component plan; disk storage joins 4.5/4.6 | D-136: a points-only install lacks the footer and BLOCK_HASHES |
 | 2026-11-09 | 4.2: the forge item split into the pack slice (done) and the world part; pins split | D-145, D-146 |
+| 2026-11-10 | 4.2: the world part split into countries and cities (done), admin 1, timezones, and the shipped form | D-147 |
