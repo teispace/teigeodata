@@ -349,6 +349,17 @@ pub(crate) fn levels(
     rings: &[(Vec<Ref>, bool)],
     pinned: &[bool],
 ) -> (Vec<Vec<u8>>, Vec<(u8, Guarded)>) {
+    levels_to(arcs, rings, pinned, 1)
+}
+
+/// [`levels`] guarded from the coarsest level down to `finest` only: a level finer than
+/// `finest` is left unguarded (D-155's pre-simplification keeps one level).
+pub(crate) fn levels_to(
+    arcs: &[Vec<V>],
+    rings: &[(Vec<Ref>, bool)],
+    pinned: &[bool],
+    finest: u8,
+) -> (Vec<Vec<u8>>, Vec<(u8, Guarded)>) {
     use rayon::prelude::*;
     let imp: Vec<Vec<f64>> = arcs
         .par_iter()
@@ -366,7 +377,7 @@ pub(crate) fn levels(
         .map(|v| v.iter().map(|&i| level(i)).collect())
         .collect();
     let mut report = Vec::new();
-    for lod in (1..=PINNED).rev() {
+    for lod in (finest.max(1)..=PINNED).rev() {
         let mut g = Guarded::default();
         for round in 0..ROUNDS {
             let (pts, ids) = segments(arcs, &levels, lod);

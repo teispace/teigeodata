@@ -1,0 +1,11 @@
+# Overture Maps divisions, release 2026-10-21.0: tile, url. From
+# https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/?list-type=2&prefix=release/2026-10-21.0/theme=divisions/ (read 2026-11-10).
+division-00000	https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/2026-10-21.0/theme=divisions/type=division/part-00000-fc5242dc-0596-5fd7-b815-8ff9633b67f3-c000.zstd.parquet
+area-00000	https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/2026-10-21.0/theme=divisions/type=division_area/part-00000-d97cde63-9be2-55c6-8b16-c60d627c9ab7-c000.zstd.parquet
+area-00001	https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/2026-10-21.0/theme=divisions/type=division_area/part-00001-749d4f52-020c-56d1-a7b6-b52cc598af16-c000.zstd.parquet
+area-00002	https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/2026-10-21.0/theme=divisions/type=division_area/part-00002-78492e75-1dd3-5fab-a54d-395730d5c814-c000.zstd.parquet
+area-00003	https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/2026-10-21.0/theme=divisions/type=division_area/part-00003-76e6c7db-a24c-5a40-90b3-3aa57a8ac9e6-c000.zstd.parquet
+area-00004	https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/2026-10-21.0/theme=divisions/type=division_area/part-00004-737927c7-855e-5cea-81d9-d3a6f04d609f-c000.zstd.parquet
+area-00005	https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/2026-10-21.0/theme=divisions/type=division_area/part-00005-25fd3ec7-a1c8-5e7c-be12-ad40c12b72c8-c000.zstd.parquet
+area-00006	https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/2026-10-21.0/theme=divisions/type=division_area/part-00006-40e7b5b5-ea5a-50b5-92fa-af0ec90581dd-c000.zstd.parquet
+area-00007	https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/2026-10-21.0/theme=divisions/type=division_area/part-00007-d6e7a745-606f-5e85-9ffb-393dbdae0728-c000.zstd.parquet

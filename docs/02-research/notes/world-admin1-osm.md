@@ -132,9 +132,18 @@ unit would be cut and gain filler slivers.
    class, country, admin_level, names, geometry), keep `class = land` and subtype country,
    dependency or region, decode WKB into the 1e-7° grid. Join `division` for Wikidata and the
    OSM relation. Memory stays bounded by one row group plus the kept rows.
-3. **Pre-simplify per country:** arcs from that country's units and its country area, each arc
-   simplified with pinned ends within 100 m, rings rebuilt. Proven by a gate that the result
-   is noded and that every shared border is still one arc.
+3. **Pre-simplify the world as one partition:** every unit worldwide (regions, and each
+   country's land not covered by its regions) becomes shared arcs, each arc simplified with
+   pinned ends within 100 m under the existing guard, rings rebuilt (`topo::thin`). Per country
+   would not do: two neighbours would thin their shared border differently and leave gaps and
+   overlaps up to 100 m. The world is about 36 M vertices, and `arcs::build` kept three hash
+   maps (edge owners, directed edges, vertex neighbours) at about 200 B a vertex, about 7 GB.
+   It now finds topology nodes by sorting flat records instead: one record per ring vertex
+   (the vertex and its two neighbours, 24 B), where a vertex is a node if it occurs three or
+   more times, or twice with different neighbours; the overlap checks sort one record per edge
+   the same way. For a valid partition this is the old rule (a vertex with other than two
+   neighbours, or whose two edges have different owners), so it replaces it, one code path;
+   the gate is the world part byte-identical before and after (BLAKE3 `fcb1f666…`).
 4. **Point of view:** each unit goes to the Nepal-view country holding most of its area, as in
    D-150. It is cut only by overhang wider than the sources' disagreement, a width to set from
    the measured offsets. Countries dissolve from their units. Natural Earth supplies the

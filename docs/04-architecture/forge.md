@@ -125,6 +125,12 @@ Measured on Nepal, 2026-11-06 (M2 Pro):
 | geonames | NP dump plus a stream through all 205 MB of world alternate names, and the hierarchy | 148,210 records, 182,406 names | 3.4 s | 201 MB |
 | wikidata | QLever snapshot | 9,586 records, 69,451 names | 0.07 s | 49 MB |
 
+`read::overture` (D-155) is not a `forge read` stage: `forge world` calls it on the pinned
+`overture-divisions` tiles. It streams each `GeoParquet` file with a row filter on `subtype` and
+`class`, so only land areas of countries, dependencies and regions are decoded (WKB, checked
+counts), and joins `division` for Wikidata and the OSM relation. The world's 4,201 land areas
+and 4,201 divisions: 3.2 s, peak 1.19 GB (2026-11-10), counts equal to `DuckDB`'s.
+
 ## Point in polygon (`pip`)
 
 `forge pip <boundary-source> <level> <points-source>` reads one level of a zipped GeoJSON
@@ -350,6 +356,10 @@ on rings thinned to a quarter of the search's precision, within a budget of edge
 1. **Arcs.** The finest level's rings are cleaned (outer counter-clockwise, holes clockwise) and
    cut at topology nodes: a vertex whose degree is not 2, or where the units on its two edges
    change (REGION's arc rule). A ring without a node is one closed arc from its smallest vertex.
+   Nodes come from sorted flat records, not hash maps (D-155): one record per ring vertex (the
+   vertex and its two neighbours), a node being a vertex met three or more times or twice with
+   different neighbours, and one record per edge for the overlap checks; about 24 B a vertex,
+   so the world's 36 M fit. The world part is byte-identical to the hash-map build's.
    A source that is not noded (two edges cross or touch away from a shared vertex) is snap
    rounded first (D-103, [note](../02-research/notes/snap-rounding.md)): every edge that meets
    a hot pixel (a vertex, or a crossing rounded) goes through its centre, so no input vertex

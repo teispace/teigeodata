@@ -131,12 +131,14 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] Research main's OSM admin 1: Overture `divisions`, not a planet extract; main's admin 0
   from the same lines, Natural Earth's Nepal view as the owner of disputed units (D-155,
   [world admin 1 from OSM](../../02-research/notes/world-admin1-osm.md))
-- [ ] Pin `overture-division-area` and `overture-division` (tilesets of the release's part
-  files)
-- [ ] `read::overture`: streamed row groups, land countries, dependencies and regions, WKB on
-  the 1e-7° grid, Wikidata and OSM relation from `division`
-- [ ] Pre-simplification per country as shared arcs within 100 m; gate: noded, shared borders
-  one arc
+- [x] Pin `overture-divisions` (a tileset of the release's nine part files, 5.04 GB,
+  2026-10-21.0)
+- [x] `read::overture`: streamed row groups, land countries, dependencies and regions, WKB on
+  the 1e-7° grid, Wikidata and OSM relation from `division` (3.2 s, 1.19 GB; equal to
+  `DuckDB`'s counts)
+- [ ] Pre-simplification of the world as one partition, shared arcs within 100 m
+  (`topo::thin`; `arcs::build` on sorted records, world part byte-identical); gate on the
+  world's units: noded, shared borders one arc
 - [ ] `forge world` main on Overture: units owned by the Nepal view, countries dissolved from
   units, the ownership width measured on known disputes; Z1, ID and locator gates
 - [ ] The data-build job fetches the pinned Overture tilesets for main's world part

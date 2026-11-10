@@ -121,6 +121,9 @@ fn key(a: V, b: V) -> (V, V) {
 
 /// Arcs and each ring's references, from the rings of a partition: `rings[i] = (unit, ring)`.
 ///
+/// Memory is flat records, sorted, not hash maps (D-155): about 24 B per ring vertex, freed
+/// before the arcs are cut, so the world's 36 M vertices fit where maps took about 7 GB.
+///
 /// # Errors
 /// An edge used by more than two rings, or twice in one direction (overlapping units).
 #[allow(
@@ -128,56 +131,25 @@ fn key(a: V, b: V) -> (V, V) {
     reason = "ring r of n vertices, edge a, b, index i"
 )]
 pub(crate) fn build(rings: &[(u32, Vec<V>)]) -> Result<Built, String> {
-    // Units on each edge, and each vertex's neighbours.
-    let mut owners: HashMap<(V, V), Vec<u32>> = HashMap::new();
-    let mut directed: HashMap<(V, V), u32> = HashMap::new();
-    let mut nbrs: HashMap<V, Vec<V>> = HashMap::new();
-    for (unit, r) in rings {
-        let n = r.len();
-        for i in 0..n {
-            let (a, b) = (r[i], r[(i + 1) % n]);
-            let o = owners.entry(key(a, b)).or_default();
-            o.push(*unit);
-            o.sort_unstable();
-            if o.len() > 2 {
-                return Err(format!("the edge {a:?}–{b:?} borders more than two units"));
-            }
-            if let Some(u) = directed.insert((a, b), *unit) {
-                return Err(format!(
-                    "units {u} and {unit} both run {a:?}→{b:?}: they overlap"
-                ));
-            }
-            for (p, q) in [(a, b), (b, a)] {
-                let v = nbrs.entry(p).or_default();
-                if !v.contains(&q) {
-                    v.push(q);
-                }
-            }
-        }
-    }
-    let is_node = |prev: V, v: V, next: V| {
-        nbrs.get(&v).map_or(0, Vec::len) != 2
-            || owners.get(&key(prev, v)) != owners.get(&key(v, next))
-    };
+    check_edges(rings)?;
+    let nodes = nodes(rings);
+    let is_node = |v: &V| nodes.binary_search(v).is_ok();
     let mut arcs: Vec<Vec<V>> = Vec::new();
     // The directed first edge of every arc, and of every arc walked backwards.
     let mut start: HashMap<(V, V), Ref> = HashMap::new();
     let mut refs = Vec::with_capacity(rings.len());
     for (_, r) in rings {
         let n = r.len();
-        let nodes: Vec<usize> = (0..n)
-            .filter(|&i| is_node(r[(i + n - 1) % n], r[i], r[(i + 1) % n]))
-            .collect();
-        let chains: Vec<Vec<V>> = if nodes.is_empty() {
+        let at: Vec<usize> = (0..n).filter(|&i| is_node(&r[i])).collect();
+        let chains: Vec<Vec<V>> = if at.is_empty() {
             // One closed arc, from the smallest vertex (both sides find the same one).
             let m = (0..n).min_by_key(|&i| r[i]).unwrap_or(0);
             vec![(0..=n).map(|k| r[(m + k) % n]).collect()]
         } else {
-            nodes
-                .iter()
+            at.iter()
                 .enumerate()
                 .map(|(k, &s)| {
-                    let e = nodes[(k + 1) % nodes.len()];
+                    let e = at[(k + 1) % at.len()];
                     let len = (e + n - s) % n;
                     let len = if len == 0 { n } else { len };
                     (0..=len).map(|j| r[(s + j) % n]).collect()
@@ -186,11 +158,71 @@ pub(crate) fn build(rings: &[(u32, Vec<V>)]) -> Result<Built, String> {
         };
         let mut ring_refs = Vec::with_capacity(chains.len());
         for c in chains {
-            ring_refs.push(arc_ref(&mut arcs, &mut start, c, nodes.is_empty(), r));
+            ring_refs.push(arc_ref(&mut arcs, &mut start, c, at.is_empty(), r));
         }
         refs.push(ring_refs);
     }
     Ok((arcs, refs))
+}
+
+/// Every edge borders at most two rings, and no two rings run it the same way.
+fn check_edges(rings: &[(u32, Vec<V>)]) -> Result<(), String> {
+    use rayon::slice::ParallelSliceMut;
+    // (undirected edge, runs from its larger end, unit)
+    let mut edges: Vec<((V, V), bool, u32)> =
+        Vec::with_capacity(rings.iter().map(|(_, r)| r.len()).sum());
+    for (unit, r) in rings {
+        let n = r.len();
+        for i in 0..n {
+            let (a, b) = (r[i], r[(i + 1) % n]);
+            edges.push((key(a, b), a > b, *unit));
+        }
+    }
+    edges.par_sort_unstable();
+    for g in edges.chunk_by(|x, y| x.0 == y.0) {
+        let ((a, b), _, _) = g[0];
+        if g.len() > 2 {
+            return Err(format!("the edge {a:?}–{b:?} borders more than two units"));
+        }
+        if let [x, y] = g
+            && x.1 == y.1
+        {
+            let (a, b) = if x.1 { (b, a) } else { (a, b) };
+            return Err(format!(
+                "units {} and {} both run {a:?}→{b:?}: they overlap",
+                x.2, y.2
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The topology nodes, sorted: a vertex met three or more times, or twice with different
+/// neighbours, or once between two copies of one neighbour (a spike). On a partition whose
+/// edges pass [`check_edges`], this is the rule of the module docs: a vertex met once has two
+/// neighbours and one owner set; met twice with the same neighbours, two neighbours and both
+/// edges owned by the same two rings; anything else has other than two neighbours or owners
+/// that change.
+fn nodes(rings: &[(u32, Vec<V>)]) -> Vec<V> {
+    use rayon::slice::ParallelSliceMut;
+    // (vertex, smaller neighbour, larger neighbour)
+    let mut seen: Vec<(V, V, V)> = Vec::with_capacity(rings.iter().map(|(_, r)| r.len()).sum());
+    for (_, r) in rings {
+        let n = r.len();
+        for i in 0..n {
+            let (p, q) = (r[(i + n - 1) % n], r[(i + 1) % n]);
+            seen.push((r[i], p.min(q), p.max(q)));
+        }
+    }
+    seen.par_sort_unstable();
+    seen.chunk_by(|x, y| x.0 == y.0)
+        .filter(|g| match g {
+            [one] => one.1 == one.2,
+            [x, y] => (x.1, x.2) != (y.1, y.2) || x.1 == x.2,
+            _ => true,
+        })
+        .map(|g| g[0].0)
+        .collect()
 }
 
 /// The reference to the arc of chain `c`, adding the arc if it is new. A closed arc is stored
@@ -364,4 +396,189 @@ pub(crate) fn polygon(
                 .collect()
         })
         .collect())
+}
+
+#[cfg(test)]
+/// The hash-map form of [`build`] that it replaced (D-155): the differential test's oracle.
+///
+/// # Errors
+/// An edge used by more than two rings, or twice in one direction (overlapping units).
+#[allow(
+    clippy::many_single_char_names,
+    reason = "ring r of n vertices, edge a, b, index i"
+)]
+fn build_reference(rings: &[(u32, Vec<V>)]) -> Result<Built, String> {
+    // Units on each edge, and each vertex's neighbours.
+    let mut owners: HashMap<(V, V), Vec<u32>> = HashMap::new();
+    let mut directed: HashMap<(V, V), u32> = HashMap::new();
+    let mut nbrs: HashMap<V, Vec<V>> = HashMap::new();
+    for (unit, r) in rings {
+        let n = r.len();
+        for i in 0..n {
+            let (a, b) = (r[i], r[(i + 1) % n]);
+            let o = owners.entry(key(a, b)).or_default();
+            o.push(*unit);
+            o.sort_unstable();
+            if o.len() > 2 {
+                return Err(format!("the edge {a:?}–{b:?} borders more than two units"));
+            }
+            if let Some(u) = directed.insert((a, b), *unit) {
+                return Err(format!(
+                    "units {u} and {unit} both run {a:?}→{b:?}: they overlap"
+                ));
+            }
+            for (p, q) in [(a, b), (b, a)] {
+                let v = nbrs.entry(p).or_default();
+                if !v.contains(&q) {
+                    v.push(q);
+                }
+            }
+        }
+    }
+    let is_node = |prev: V, v: V, next: V| {
+        nbrs.get(&v).map_or(0, Vec::len) != 2
+            || owners.get(&key(prev, v)) != owners.get(&key(v, next))
+    };
+    let mut arcs: Vec<Vec<V>> = Vec::new();
+    // The directed first edge of every arc, and of every arc walked backwards.
+    let mut start: HashMap<(V, V), Ref> = HashMap::new();
+    let mut refs = Vec::with_capacity(rings.len());
+    for (_, r) in rings {
+        let n = r.len();
+        let nodes: Vec<usize> = (0..n)
+            .filter(|&i| is_node(r[(i + n - 1) % n], r[i], r[(i + 1) % n]))
+            .collect();
+        let chains: Vec<Vec<V>> = if nodes.is_empty() {
+            // One closed arc, from the smallest vertex (both sides find the same one).
+            let m = (0..n).min_by_key(|&i| r[i]).unwrap_or(0);
+            vec![(0..=n).map(|k| r[(m + k) % n]).collect()]
+        } else {
+            nodes
+                .iter()
+                .enumerate()
+                .map(|(k, &s)| {
+                    let e = nodes[(k + 1) % nodes.len()];
+                    let len = (e + n - s) % n;
+                    let len = if len == 0 { n } else { len };
+                    (0..=len).map(|j| r[(s + j) % n]).collect()
+                })
+                .collect()
+        };
+        let mut ring_refs = Vec::with_capacity(chains.len());
+        for c in chains {
+            ring_refs.push(arc_ref(&mut arcs, &mut start, c, nodes.is_empty(), r));
+        }
+        refs.push(ring_refs);
+    }
+    Ok((arcs, refs))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::unwrap_used,
+        clippy::many_single_char_names,
+        reason = "test code: grid sizes and corners"
+    )]
+
+    use super::{V, build, build_reference};
+
+    /// A small deterministic generator (an LCG): the cases are the same on every run.
+    struct Lcg(u64);
+
+    impl Lcg {
+        fn next(&mut self, n: u64) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (self.0 >> 33) % n
+        }
+    }
+
+    /// The points strictly inside the grid edge `a`–`b`: the same for both cells that share it,
+    /// whichever way they walk it.
+    fn inner(a: V, b: V, seed: u64) -> Vec<V> {
+        let (lo, hi) = if a < b { (a, b) } else { (b, a) };
+        let h = seed
+            ^ (u64::from(lo.0.unsigned_abs()) * 31 + u64::from(lo.1.unsigned_abs()) * 17)
+            ^ (u64::from(hi.0.unsigned_abs()) * 7 + u64::from(hi.1.unsigned_abs()));
+        let k = i32::try_from(h % 4).unwrap();
+        let mut v: Vec<V> = (1..=k)
+            .map(|j| {
+                let t = |x: i32, y: i32| x + (y - x) * j / (k + 1);
+                // A nudge off the line, so the points are real vertices.
+                let wob = i32::try_from((h >> j) % 3).unwrap() - 1;
+                (t(lo.0, hi.0) + wob, t(lo.1, hi.1))
+            })
+            .collect();
+        if a > b {
+            v.reverse();
+        }
+        v
+    }
+
+    /// A grid of cells, some missing, each a ring with its edges subdivided; units drawn from a
+    /// few IDs, so some units have several rings.
+    fn grid(seed: u64) -> Vec<(u32, Vec<V>)> {
+        let mut g = Lcg(seed);
+        let (w, h) = (1 + g.next(5), 1 + g.next(5));
+        let s = 1_000;
+        let mut out = Vec::new();
+        for i in 0..w {
+            for j in 0..h {
+                if g.next(5) == 0 {
+                    continue;
+                }
+                let (x, y) = (i32::try_from(i).unwrap() * s, i32::try_from(j).unwrap() * s);
+                let corners = [(x, y), (x + s, y), (x + s, y + s), (x, y + s)];
+                let mut ring = Vec::new();
+                for c in 0..4 {
+                    let (a, b) = (corners[c], corners[(c + 1) % 4]);
+                    ring.push(a);
+                    ring.extend(inner(a, b, seed));
+                }
+                out.push((u32::try_from(g.next(4)).unwrap(), ring));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn the_sorted_build_matches_the_hash_map_build() {
+        let mut nodes = 0;
+        for seed in 0..300 {
+            let rings = grid(seed);
+            let (want, got) = (build_reference(&rings), build(&rings));
+            assert_eq!(want, got, "seed {seed}");
+            nodes += got.unwrap().0.len();
+        }
+        assert!(nodes > 1_000, "the cases have arcs: {nodes}");
+    }
+
+    #[test]
+    fn overlaps_fail_as_before() {
+        for seed in 0..50 {
+            let mut rings = grid(seed);
+            let Some(first) = rings.first().cloned() else {
+                continue;
+            };
+            // The same ring twice: an overlap.
+            rings.push((99, first.1.clone()));
+            assert!(
+                build_reference(&rings).is_err() && build(&rings).is_err(),
+                "seed {seed}"
+            );
+            // A third ring on an edge.
+            let mut rev = first.1;
+            rev.reverse();
+            rings.pop();
+            rings.push((98, rev.clone()));
+            rings.push((97, rev));
+            assert!(
+                build_reference(&rings).is_err() && build(&rings).is_err(),
+                "seed {seed}"
+            );
+        }
+    }
 }

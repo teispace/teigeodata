@@ -358,3 +358,20 @@ licence_class = "odbl"
 countries = ["NP"]
 used_by = "modelled population of admin units (D-123)"
 attribution = "Population: WorldPop (https://www.worldpop.org), University of Southampton, Global2 R2025A, doi:10.5258/SOTON/WP00839, CC BY 4.0"
+
+[[source]]
+id = "overture-divisions"
+title = "Overture Maps divisions: division_area and division (world, GeoParquet part files)"
+kind = "tileset"
+url = "https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/2026-10-21.0/theme=divisions/"
+tiles = "data/sources/overture-divisions.tiles"
+query_params = { list = "data/sources/overture-divisions.list", parallel = "3" }
+version = "Overture release 2026-10-21.0 (divisions theme; OSM-derived, Cyprus's districts from geoBoundaries)"
+retrieved = "2026-11-10"
+sha256 = "48d911f42f915bd85f90f701345754f5a2fa71ac347b739b51ed01ab400c906e"
+size = 861
+licence = "ODbL-1.0 (Overture divisions, derived from OpenStreetMap); Cyprus's 6 districts come from geoBoundaries, whose licence for them is unverified (D-155)"
+licence_class = "odbl"
+countries = ["*"]
+used_by = "the main build's world admin 0 and 1 (D-155)"
+attribution = "© OpenStreetMap contributors, under the Open Database License 1.0 (https://www.openstreetmap.org/copyright); Overture Maps Foundation (https://overturemaps.org)"

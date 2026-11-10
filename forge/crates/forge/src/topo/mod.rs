@@ -30,6 +30,8 @@ pub(crate) mod measure;
 pub(crate) mod pov;
 pub(crate) mod simplify;
 pub(crate) mod snap;
+#[allow(dead_code, reason = "`forge world` thins with it from D-155 step 4")]
+pub(crate) mod thin;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
