@@ -27,6 +27,8 @@ use rayon::prelude::*;
 
 use super::arcs::V;
 
+pub(crate) mod own;
+
 /// The code prefix of a filler piece: it has no place and links to none.
 pub(crate) const FILLER: &str = "~";
 
@@ -206,6 +208,15 @@ pub(crate) fn normal(rings: &[Vec<V>]) -> Vec<Vec<Vec<V>>> {
         .collect()
 }
 
+/// [`normal`]'s parts at least `min_width` grid units wide on average.
+pub(crate) fn normal_wide(rings: &[Vec<V>], min_width: i128) -> Vec<Vec<Vec<V>>> {
+    overlay(&shape(rings), &Shape::new(), OverlayRule::Subject)
+        .iter()
+        .filter(|s| !narrower(s, min_width))
+        .map(|s| rings_of(std::slice::from_ref(s)))
+        .collect()
+}
+
 /// Whether `sets` overlap anywhere by more than rounding: the area of their union is less than
 /// the sum of their areas (each read even–odd, the union non-zero). One overlay.
 pub(crate) fn overlapping(sets: &[&[Vec<V>]]) -> bool {
@@ -240,6 +251,55 @@ pub(crate) fn common(a: &[Vec<V>], b: &[Vec<V>], min_width: i128) -> Vec<Vec<V>>
     rings_of(&parts)
 }
 
+/// The neighbour sharing the most border with `gap` (more than noise, [`MIN_SHARED`]); ties
+/// to the lower index.
+pub(crate) fn best_neighbour<'a>(
+    gap: &[Vec<V>],
+    near: impl Iterator<Item = (usize, &'a [Vec<V>])>,
+) -> Option<usize> {
+    let g = vec![shape(gap)];
+    let pg = perimeter(&g);
+    near.map(|(i, n)| {
+        let s = vec![shape(n)];
+        let joined = union(vec![s[0].clone(), g[0].clone()]);
+        // Twice the border they share: what their union loses of their perimeters.
+        (perimeter(&s) + pg - perimeter(&joined), i)
+    })
+    .filter(|b| b.0 > MIN_SHARED)
+    .max_by(|a, b| a.0.total_cmp(&b.0).then(b.1.cmp(&a.1)))
+    .map(|b| b.1)
+}
+
+/// The union of sets of rings (each read even–odd) that are disjoint or touch, as rings
+/// (outer counter-clockwise, holes clockwise): a country dissolved from its pieces.
+pub(crate) fn dissolve(sets: &[&[Vec<V>]]) -> Vec<Vec<V>> {
+    rings_of(&union(
+        sets.iter()
+            .map(|r| {
+                overlay(&shape(r), &Shape::new(), OverlayRule::Subject)
+                    .into_iter()
+                    .flatten()
+                    .collect()
+            })
+            .collect(),
+    ))
+}
+
+/// The union of normalised shapes (non-zero).
+fn union(shapes: Vec<Shape>) -> Vec<Shape> {
+    let all: Shape = shapes.into_iter().flatten().collect();
+    if all.is_empty() {
+        return Vec::new();
+    }
+    Overlay::<i64>::from_subj_and_clip_custom(
+        &all,
+        &Shape::new(),
+        IntOverlayOptions::keep_all_points(),
+        Solver::default(),
+    )
+    .overlay(OverlayRule::Subject, FillRule::NonZero)
+}
+
 /// Back to rings of `(lon, lat)`; the overlay's points are on the input grid.
 fn rings_of(shapes: &[Shape]) -> Vec<Vec<V>> {
     shapes
@@ -254,7 +314,7 @@ fn rings_of(shapes: &[Shape]) -> Vec<Vec<V>> {
 }
 
 /// West, south, east, north of the rings.
-fn bbox(rings: &[Vec<V>]) -> [i32; 4] {
+pub(crate) fn bbox(rings: &[Vec<V>]) -> [i32; 4] {
     rings
         .iter()
         .flatten()
@@ -263,7 +323,8 @@ fn bbox(rings: &[Vec<V>]) -> [i32; 4] {
         })
 }
 
-const fn meets(a: &[i32; 4], b: &[i32; 4]) -> bool {
+/// Whether two boxes meet.
+pub(crate) const fn meets(a: &[i32; 4], b: &[i32; 4]) -> bool {
     a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3]
 }
 
@@ -286,7 +347,25 @@ struct Countries<'a> {
     exact: Vec<usize>,
 }
 
-impl Countries<'_> {
+impl<'a> Countries<'a> {
+    fn new(countries: &[Input<'a>], exact: &[usize]) -> Self {
+        let shapes: Vec<Shape> = countries.par_iter().map(|c| shape(c.rings)).collect();
+        Self {
+            boxes: countries.iter().map(|c| bbox(c.rings)).collect(),
+            contours: shapes
+                .iter()
+                .map(|s| s.iter().map(|k| contour_box(k)).collect())
+                .collect(),
+            shapes,
+            by_code: countries
+                .iter()
+                .enumerate()
+                .map(|(i, c)| (c.code, i))
+                .collect(),
+            exact: exact.to_vec(),
+        }
+    }
+
     /// Country `k` as far as it can matter inside `bounds`: the contours whose box meets it.
     /// Under even–odd a contour encloses only points inside its own box, so the others change
     /// nothing there. This bounds each overlay by the unit's neighbourhood, not by the whole
@@ -451,25 +530,7 @@ pub(crate) fn cut(
     keep: impl Fn(usize) -> bool + Sync,
     exact: &[usize],
 ) -> Cut {
-    let c = Countries {
-        shapes: countries.iter().map(|c| shape(c.rings)).collect(),
-        boxes: countries.iter().map(|c| bbox(c.rings)).collect(),
-        contours: Vec::new(),
-        by_code: countries
-            .iter()
-            .enumerate()
-            .map(|(i, c)| (c.code, i))
-            .collect(),
-        exact: exact.to_vec(),
-    };
-    let c = Countries {
-        contours: c
-            .shapes
-            .iter()
-            .map(|s| s.iter().map(|k| contour_box(k)).collect())
-            .collect(),
-        ..c
-    };
+    let c = Countries::new(countries, exact);
     let fates: Vec<Fate> = units
         .par_iter()
         .enumerate()
@@ -594,21 +655,16 @@ pub(crate) fn redraw(countries: &mut [Vec<Vec<V>>], outlines: &[Outline]) -> Red
         }
         for gap in wide(overlay(&old, &new, OverlayRule::Difference)) {
             let gap = vec![gap];
-            // Twice the border a neighbour shares with the gap: what their union loses.
-            let best = near
-                .iter()
-                .filter_map(|&i| {
-                    let s = vec![shape(countries.get(i)?)];
-                    let joined = overlay(s.first()?, gap.first()?, OverlayRule::Union);
-                    let shared = perimeter(&s) + perimeter(&gap) - perimeter(&joined);
-                    Some((shared, i, joined))
-                })
-                .filter(|b| b.0 > MIN_SHARED)
-                .max_by(|a, b| a.0.total_cmp(&b.0).then(b.1.cmp(&a.1)));
+            let gap = rings_of(&gap);
+            let best = best_neighbour(
+                &gap,
+                near.iter()
+                    .filter_map(|&i| Some((i, countries.get(i)?.as_slice()))),
+            );
             match best {
-                Some((_, i, joined)) => {
+                Some(i) => {
                     if let Some(c) = countries.get_mut(i) {
-                        *c = rings_of(&joined);
+                        *c = dissolve(&[c, &gap]);
                     }
                     r.given += 1;
                 }

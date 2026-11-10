@@ -129,7 +129,7 @@ fn every_city_hangs_from_the_unit_and_country_around_it() {
         rate * 100.0,
         unit_rate * 100.0
     );
-    assert!(countries > 200 && units > 4_000 && cities > 30_000);
+    assert!(countries > 200 && units > 3_500 && cities > 30_000);
     assert!(
         orphans * 1000 < cities,
         "{orphans} cities without a country"
@@ -315,7 +315,7 @@ fn the_locator_finds_the_country_of_every_border_probe() {
     e.add(Layer::from_bytes(world.clone(), baseline(0)).unwrap());
     let mut near = Vec::new();
     println!("| radius m | probes missed | countries per probe | µs per query |");
-    for radius in [0, 250, 500, LOCATOR_RADIUS_M, 2_000] {
+    for radius in [0, 500, 1_000, 2_000, 2_500, LOCATOR_RADIUS_M, 5_000] {
         let (mut missed, mut found) = (Vec::new(), 0_usize);
         let t = Instant::now();
         for &(at, id) in &probes {
@@ -332,11 +332,23 @@ fn the_locator_finds_the_country_of_every_border_probe() {
             missed.len() as f64 * 100.0 / probes.len() as f64,
             found as f64 / probes.len() as f64
         );
-        if radius >= LOCATOR_RADIUS_M {
-            assert!(
-                missed.is_empty(),
-                "at {radius} m: first misses {:?}",
-                &missed[..missed.len().min(5)]
+        if radius >= LOCATOR_RADIUS_M && !missed.is_empty() {
+            // Each miss with the radius that finds it, to tell a rounding margin from a lost
+            // island.
+            let far: Vec<_> = missed
+                .iter()
+                .map(|&(lat, lon, id)| {
+                    let at = Point::from_units(lat, lon).unwrap();
+                    let r = [5_000, 10_000, 20_000, 50_000].into_iter().find(|&r| {
+                        e.countries_near(at, r, &mut near).unwrap();
+                        near.iter().any(|c| c.id == id)
+                    });
+                    (f64::from(lat) * 1e-7, f64::from(lon) * 1e-7, id, r)
+                })
+                .collect();
+            panic!(
+                "at {radius} m: {} misses (lat, lon, ID, found at m): {far:?}",
+                far.len()
             );
         }
     }

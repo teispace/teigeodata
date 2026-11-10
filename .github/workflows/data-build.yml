@@ -40,7 +40,7 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Free disk (inputs and build need about 15 GB)
+      - name: Free disk (inputs and build need about 20 GB; Overture's divisions are 5 GB)
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
@@ -71,13 +71,18 @@ jobs:
           # The country's baseline slice, when its recipe builds one (D-145).
           slice=data/build/baseline/${{ matrix.cc }}/${{ matrix.cc }}-baseline-${{ matrix.build }}.tgd
           if [ -f "$slice" ]; then cargo xtask check-pack "$slice" ${{ matrix.flag }}; fi
-      - name: World part of the baseline (D-147, D-150, D-151)
+      - name: World part of the baseline (D-147, D-150, D-151, D-155, D-157)
         # Every country with a pack must be built first (the ID gate reads its registry); with
         # one pack country this job holds them all. A second one moves this into its own job.
         run: |
           forge/target/fast/forge fetch ne-admin0-nep
           forge/target/fast/forge fetch ne-admin1
           forge/target/fast/forge fetch tzdb-2026f
+          # Main's admin 0 and 1 come from Overture's divisions (D-155); lite keeps Natural
+          # Earth's (ODbL is not allowed there).
+          if [ "${{ matrix.build }}" = main ]; then
+            forge/target/fast/forge fetch overture-divisions
+          fi
           forge/target/fast/forge world --release "$RELEASE" ${{ matrix.flag }}
           cargo xtask check-pack data/build/baseline/world/world-baseline-${{ matrix.build }}.tgd ${{ matrix.flag }}
       - name: The shipped baseline, one file (D-153; Z1 fails the stage past 8 MB)

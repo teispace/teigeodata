@@ -30,7 +30,6 @@ pub(crate) mod measure;
 pub(crate) mod pov;
 pub(crate) mod simplify;
 pub(crate) mod snap;
-#[allow(dead_code, reason = "`forge world` thins with it from D-155 step 4")]
 pub(crate) mod thin;
 
 use std::collections::{BTreeMap, HashMap};
@@ -141,11 +140,11 @@ fn sort_arcs(arcs: Vec<Vec<V>>, refs: &mut [Vec<Ref>]) -> Vec<Vec<V>> {
 /// A dissolved parent against the source's own polygon of it (G-topo).
 #[derive(Debug)]
 struct Compared {
-    /// The largest distance, metres, from a source vertex to the derived border.
-    to_derived: f64,
+    /// The largest distance, metres, from a source vertex to the derived border, and where.
+    to_derived: (f64, V),
     /// The largest distance, metres, from a derived vertex to the source's border: a gap
-    /// between children leaves derived rings, and their vertices, away from it.
-    to_source: f64,
+    /// between children leaves derived rings, and their vertices, away from it. And where.
+    to_source: (f64, V),
     /// The share of source vertices that are derived vertices.
     same: f64,
     /// Holes in the derived polygon and in the source's.
@@ -158,16 +157,25 @@ impl Compared {
     /// What makes the parent wrong: a border apart by more than `limit` metres either way, or
     /// a hole one side has and the other does not (a gap or an overlap between children).
     fn problem(&self, limit: f64) -> Option<String> {
-        if self.to_derived > limit {
+        let at = |p: V| {
+            format!(
+                "({:.5}, {:.5})",
+                f64::from(p.1) * 1e-7,
+                f64::from(p.0) * 1e-7
+            )
+        };
+        if self.to_derived.0 > limit {
             return Some(format!(
-                "a source vertex lies {:.2} m from the border dissolved from its children",
-                self.to_derived
+                "a source vertex at {} lies {:.2} m from the border dissolved from its children",
+                at(self.to_derived.1),
+                self.to_derived.0
             ));
         }
-        if self.to_source > limit {
+        if self.to_source.0 > limit {
             return Some(format!(
-                "a vertex dissolved from its children lies {:.2} m from the source's border (a gap between them)",
-                self.to_source
+                "a vertex dissolved from its children at {} lies {:.2} m from the source's border (a gap between them)",
+                at(self.to_source.1),
+                self.to_source.0
             ));
         }
         (self.holes.0 != self.holes.1).then(|| {
@@ -199,10 +207,9 @@ fn compare(arcs: &[Vec<V>], parts: &Parts, src: &[Vec<V>]) -> Compared {
         to_derived,
         to_source,
         same,
-        holes: (
-            parts.iter().map(|p| p.len().saturating_sub(1)).sum(),
-            src.iter().filter(|r| arcs::area2(r) < 0).count(),
-        ),
+        // Counted on both sides as one overlay normalises them: two holes touching at a vertex
+        // are one ring to the arcs and two to an overlay, the same land (D-155).
+        holes: (holes(&mine), holes(src)),
         area_off: (area(&mine) - theirs).abs() / theirs.max(1.0),
     }
 }
@@ -213,7 +220,15 @@ fn compare(arcs: &[Vec<V>], parts: &Parts, src: &[Vec<V>]) -> Compared {
 /// The border's segments are indexed by the 0.001° cells they pass through (not every cell of
 /// their box: a Natural Earth border runs straight for thousands of kilometres), as a sorted
 /// array, so memory is proportional to the border's length.
-fn distance(rings: &[Vec<V>], src: &[Vec<V>]) -> (f64, f64) {
+/// The holes of rings read even–odd, each a ring of their normal form ([`pov::normal`]).
+fn holes(rings: &[Vec<V>]) -> usize {
+    pov::normal(rings)
+        .iter()
+        .map(|p| p.len().saturating_sub(1))
+        .sum()
+}
+
+fn distance(rings: &[Vec<V>], src: &[Vec<V>]) -> ((f64, V), f64) {
     const CELL: i64 = 10_000; // 0.001°: about 100 m
     let grid = snap::Grid {
         x0: 0,
@@ -238,7 +253,7 @@ fn distance(rings: &[Vec<V>], src: &[Vec<V>]) -> (f64, f64) {
     index.sort_unstable();
     index.dedup();
     verts.sort_unstable();
-    let (mut worst, mut same, mut all) = (0.0_f64, 0_u32, 0_u32);
+    let (mut worst, mut same, mut all) = ((0.0_f64, (0, 0)), 0_u32, 0_u32);
     for &p in src.iter().flatten() {
         all += 1;
         if verts.binary_search(&p).is_ok() {
@@ -264,7 +279,9 @@ fn distance(rings: &[Vec<V>], src: &[Vec<V>]) -> (f64, f64) {
                 }
             }
         }
-        worst = worst.max(best);
+        if best > worst.0 {
+            worst = (best, p);
+        }
     }
     (worst, f64::from(same) / f64::from(all.max(1)))
 }
@@ -297,18 +314,15 @@ fn measure_poly(arcs: &[Vec<V>], parts: &Parts) -> Result<(V, u32, [i32; 4]), St
         }
         m2 += measure::ring_area_m2(&pts);
     }
-    let first: Vec<Vec<V>> = parts
-        .first()
-        .ok_or("a polygon without parts")?
+    // The first part's label; a part too thin for an interior point on the grid (a sliver
+    // the thinning left, D-155) gives way to the next.
+    let label = parts
         .iter()
-        .map(|r| ring_points(arcs, r))
-        .collect();
-    let label = match measure::label(&first) {
-        Some(p) => p,
-        None => crate::geom::Polygon { rings: first }
-            .interior_point()
-            .ok_or("no point inside the polygon")?,
-    };
+        .find_map(|part| {
+            let rings: Vec<Vec<V>> = part.iter().map(|r| ring_points(arcs, r)).collect();
+            measure::label(&rings).or_else(|| crate::geom::Polygon { rings }.interior_point())
+        })
+        .ok_or("no point inside the polygon")?;
     #[allow(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
@@ -331,18 +345,21 @@ pub(crate) fn run(root: &Path, source: &str) -> Result<String, String> {
     stage(root, source, &units, MAX_PARENT_M)
 }
 
-/// The world's countries (level 0) and their first-level units cut to them (level 1, D-150)
-/// as one source: the units and the remainders ([`pov::cut`]) are the finest level, so each
-/// country is dissolved from them and checked against its own outline (G-topo), and countries
-/// and units share one arc set. `name` names the output directory. The fillers of the
-/// countries in `pinned` (the pack countries, whose outline is their slice's, D-154) keep every
-/// vertex at every level.
+/// A world unit for [`run_world`]: its code, its country's index and its rings.
+pub(crate) type UnitRef<'a> = (&'a str, usize, &'a [Vec<V>]);
+
+/// The world's countries (level 0) and their first-level units (level 1) as one source: the
+/// units and the fillers (a country's land no unit holds) are the finest level, so each
+/// country is dissolved from them and checked against its own outline (G-topo), and
+/// countries and units share one arc set. `units` are `(code, country, rings)`; `name` names
+/// the output directory. The fillers of the countries in `pinned` (the pack countries, whose
+/// outline is their slice's, D-154) keep every vertex at every level.
 pub(crate) fn run_world(
     root: &Path,
     name: &str,
     countries: &[natural_earth::Country],
-    units: &[natural_earth::Unit],
-    cut: &pov::Cut,
+    units: &[UnitRef<'_>],
+    fills: &[(usize, Vec<Vec<V>>)],
     pinned: &[usize],
 ) -> Result<String, String> {
     let mut src: Vec<Src> = countries
@@ -362,18 +379,17 @@ pub(crate) fn run_world(
             .map(|c| c.code.clone())
             .ok_or("a country out of range")
     };
-    for p in &cut.pieces {
-        let u = units.get(p.unit).ok_or("a unit out of range")?;
+    for &(pcode, c, rings) in units {
         src.push(Src {
             level: 1,
-            pcode: u.code.clone(),
-            parents: vec![code(p.country)?],
-            rings: arcs::clean_rings(&p.rings),
+            pcode: pcode.to_string(),
+            parents: vec![code(c)?],
+            rings: arcs::clean_rings(rings),
             area_km2: None,
             pinned: false,
         });
     }
-    for (k, (c, rings)) in cut.fills.iter().enumerate() {
+    for (k, (c, rings)) in fills.iter().enumerate() {
         let pin = pinned.contains(c);
         let c = code(*c)?;
         src.push(Src {
@@ -387,8 +403,8 @@ pub(crate) fn run_world(
     }
     // A sliver the cleaning emptied (no area on the grid) has nothing to give its country.
     src.retain(|u| !u.rings.is_empty());
-    // The two sources draw one border a few metres apart, and a unit is cut only by the parts
-    // of its overhang wider than noise, so the countries dissolve within that, not 1 m.
+    // Natural Earth's units are cut only by the parts of their overhang wider than noise, so
+    // the countries dissolve within that, not 1 m; Overture's dissolve exactly.
     stage(root, name, &src, pov::MAX_SHIFT_M)
 }
 
@@ -482,7 +498,9 @@ fn stage(root: &Path, source: &str, units: &[Src], max_parent_m: f64) -> Result<
     let (levels, report) = guarded_levels(source, &arcs, &guard_rings, &pinned)?;
     let measured: Vec<(V, u32, [i32; 4])> = polys
         .par_iter()
-        .map(|(_, _, p)| measure_poly(&arcs, p))
+        .map(|(level, pcode, p)| {
+            measure_poly(&arcs, p).map_err(|e| format!("adm{level} {pcode}: {e}"))
+        })
         .collect::<Result<_, _>>()?;
     let out: Vec<Poly> = polys
         .into_iter()
@@ -592,8 +610,8 @@ fn parents_report(
                 Ok(compare(arcs, parts, &u.rings))
             })
             .collect::<Result<_, String>>()?;
-        let worst = rows.iter().map(|r| r.to_derived).fold(0.0, f64::max);
-        let back = rows.iter().map(|r| r.to_source).fold(0.0, f64::max);
+        let worst = rows.iter().map(|r| r.to_derived.0).fold(0.0, f64::max);
+        let back = rows.iter().map(|r| r.to_source.0).fold(0.0, f64::max);
         let same = rows.iter().map(|r| r.same).sum::<f64>() / f(rows.len());
         let holes = rows.iter().map(|r| r.holes.0).sum::<usize>();
         let mut off: Vec<f64> = rows.iter().map(|r| r.area_off).collect();
@@ -897,12 +915,12 @@ mod tests {
         assert_eq!(whole.problem(MAX_PARENT_M), None, "{whole:?}");
         assert_eq!(whole.holes, (0, 0));
         assert!(
-            whole.to_derived < 0.01 && whole.to_source < 0.01,
+            whole.to_derived.0 < 0.01 && whole.to_source.0 < 0.01,
             "{whole:?}"
         );
         let gap = dissolved(false);
         assert_eq!(gap.holes, (1, 0), "{gap:?}");
-        assert!(gap.to_source > 1.0, "{gap:?}");
+        assert!(gap.to_source.0 > 1.0, "{gap:?}");
         assert!(
             gap.problem(MAX_PARENT_M).is_some_and(|p| p.contains("gap")),
             "{gap:?}"
@@ -923,10 +941,10 @@ mod tests {
         // About 50 m off the diagonal, perpendicular: 3,180 units (1.1 cm each) along each axis.
         let off = 3_180;
         let border = std::slice::from_ref(&ring);
-        let (far, same) = distance(border, &[vec![(mid + off, mid - off)]]);
+        let ((far, _), same) = distance(border, &[vec![(mid + off, mid - off)]]);
         assert!((far - 50.0).abs() < 2.0, "{far}");
         assert!(same.abs() < f64::EPSILON);
-        let (near, same) = distance(border, border);
+        let ((near, _), same) = distance(border, border);
         assert!(
             near < 1e-9 && (same - 1.0).abs() < f64::EPSILON,
             "{near} {same}"

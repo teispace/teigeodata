@@ -50,10 +50,12 @@ pub use layer::{Layer, LayerId, LayerOptions, Load, Verify, release_cmp};
 pub use query::{Hit, Near, Place, Scratch};
 
 /// The radius in metres for [`Engine::countries_near`] over the embedded baseline: its
-/// outlines are simplified within 1 km of the source borders (D-147), so at this radius no
-/// country whose border is near is missed (D-149).
+/// outlines are simplified at the 2 km level (main, D-157; lite at 500 m, D-147), whose
+/// nested Douglas–Peucker importances let a border stray up to 2.5 km from the source
+/// (measured, the locator gate), so at this radius no country whose border is near is
+/// missed (D-149).
 #[cfg(feature = "admin-index")]
-pub const LOCATOR_RADIUS_M: u32 = 1_000;
+pub const LOCATOR_RADIUS_M: u32 = 3_000;
 #[cfg(feature = "shared")]
 pub use shared::{Shared, Snapshot};
 pub use teigeodata_format::Kind;

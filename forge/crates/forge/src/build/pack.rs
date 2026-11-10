@@ -97,6 +97,59 @@ fn importance(p: &Place) -> u8 {
     u8::try_from((base + pop).min(255)).unwrap_or(u8::MAX)
 }
 
+/// A first-level unit ranks just below a city of its own name that it holds (D-158): a search
+/// for "Tokyo", "Berlin" or "Seoul" means the city first, then the region (the order of the
+/// major geocoders); a region's base importance (90) is above a capital's (54 plus population).
+/// A lower unit is left alone: a municipality or district is often the city itself, its
+/// point source a duplicate (Nepal's golden set wants the municipality for "Damak" and
+/// "Kamalamai"). A city is a settlement of rank [`CITY_RANK`] or more; "its own name" is a
+/// shared exact search key; "holds" is the parent chain.
+fn below_their_city(
+    rows: &[&Place],
+    exact: &BTreeMap<String, BTreeSet<u32>>,
+    importance: &mut [u8],
+) {
+    let row_of: BTreeMap<&str, usize> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p.key.as_str(), i))
+        .collect();
+    for set in exact.values().filter(|s| s.len() > 1) {
+        for &s in set {
+            let s = usize::try_from(s).unwrap_or(usize::MAX);
+            let Some(city) = rows.get(s).filter(|p| {
+                p.kind == PlaceKind::Settlement
+                    && p.rank >= CITY_RANK
+                    && p.flags & places::FLAG_FORMER == 0
+            }) else {
+                continue;
+            };
+            let below = importance.get(s).map_or(0, |i| i.saturating_sub(1));
+            let mut up = city.parent.as_deref();
+            // A parent chain is short; the bound only guards a cycle.
+            for _ in 0..rows.len().min(64) {
+                let Some(&a) = up.and_then(|k| row_of.get(k)) else {
+                    break;
+                };
+                let unit = rows
+                    .get(a)
+                    .filter(|p| p.kind == PlaceKind::Admin && p.admin_level == 1);
+                if unit.is_some()
+                    && set.contains(&u32::try_from(a).unwrap_or(u32::MAX))
+                    && let Some(i) = importance.get_mut(a)
+                {
+                    *i = (*i).min(below);
+                }
+                up = rows.get(a).and_then(|p| p.parent.as_deref());
+            }
+        }
+    }
+}
+
+/// The settlement rank of a city (`sources::settlement_rank`: 3 a city or first-level seat, 4
+/// a national capital).
+const CITY_RANK: u8 = 3;
+
 /// A settlement's importance over the base 30 by its rank (`sources::settlement_rank`): none,
 /// village, town, city, national capital (D-124). Calibrated on the golden set: a city's record
 /// (44) beats the municipality of its name (40 + population); a town or village earns nothing,
@@ -446,7 +499,8 @@ pub(super) fn name_sections(
             add_keys(&mut maps, &nm.text, row, profile);
         }
     }
-    let importance: Vec<u8> = rows.iter().map(|p| importance(p)).collect();
+    let mut importance: Vec<u8> = rows.iter().map(|p| importance(p)).collect();
+    below_their_city(rows, &maps.exact, &mut importance);
     let rules = query_rules(profile);
     let units: Vec<u8> = rows
         .iter()
@@ -865,8 +919,9 @@ pub(super) fn verify_rows(
 
 #[cfg(test)]
 mod tests {
-    use super::{FORMER, importance};
+    use super::{FORMER, below_their_city, importance};
     use crate::build::Place;
+    use std::collections::{BTreeMap, BTreeSet};
     use teigeodata_core::PlaceKind;
     use teigeodata_format::places;
 
@@ -883,6 +938,78 @@ mod tests {
             parent: None,
             sources: Vec::new(),
         }
+    }
+
+    #[test]
+    fn a_unit_ranks_below_the_city_of_its_name_inside_it() {
+        // Region "Tokyo" holds district "Shinjuku", which holds the capital "Tokyo"; region
+        // "Kyoto" holds a town "Kyoto"; region "Osaka" does not hold the city "Osaka";
+        // municipality "Damak" holds the city "Damak" (a lower unit is left alone).
+        let keyed = |key: &str, mut p: Place, parent: Option<&str>| {
+            p.key = key.into();
+            p.parent = parent.map(Into::into);
+            p
+        };
+        let rows = [
+            keyed("r:tokyo", place(PlaceKind::Admin, 1, 0, None), None),
+            keyed(
+                "d:shinjuku",
+                place(PlaceKind::Admin, 2, 0, None),
+                Some("r:tokyo"),
+            ),
+            keyed(
+                "c:tokyo",
+                place(PlaceKind::Settlement, 0, 4, Some(8_000_000)),
+                Some("d:shinjuku"),
+            ),
+            keyed("r:kyoto", place(PlaceKind::Admin, 1, 0, None), None),
+            keyed(
+                "c:kyoto",
+                place(PlaceKind::Settlement, 0, 2, Some(1_400_000)),
+                Some("r:kyoto"),
+            ),
+            keyed("r:osaka", place(PlaceKind::Admin, 1, 0, None), None),
+            keyed(
+                "m:damak",
+                place(PlaceKind::Admin, 3, 0, Some(1_000_000)),
+                None,
+            ),
+            keyed(
+                "c:damak",
+                place(PlaceKind::Settlement, 0, 3, Some(75_000)),
+                Some("m:damak"),
+            ),
+            keyed(
+                "c:osaka",
+                place(PlaceKind::Settlement, 0, 3, Some(2_700_000)),
+                None,
+            ),
+        ];
+        let refs: Vec<&Place> = rows.iter().collect();
+        let exact: BTreeMap<String, BTreeSet<u32>> = [
+            ("tokyo", vec![0, 2]),
+            ("shinjuku", vec![1]),
+            ("kyoto", vec![3, 4]),
+            ("damak", vec![6, 7]),
+            ("osaka", vec![5, 8]),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.into_iter().collect()))
+        .collect();
+        let before: Vec<u8> = refs.iter().map(|p| importance(p)).collect();
+        assert!(before[0] > before[2], "the region first without the rule");
+        assert!(
+            before[6] > before[7],
+            "the municipality first without the rule"
+        );
+        let mut after = before.clone();
+        below_their_city(&refs, &exact, &mut after);
+        assert_eq!(after[0], before[2] - 1, "the region just below its capital");
+        assert_eq!(
+            after[1..],
+            before[1..],
+            "the rest unchanged (a town, a city outside, a municipality)"
+        );
     }
 
     #[test]

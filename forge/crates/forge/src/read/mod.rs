@@ -5,7 +5,6 @@ pub(crate) mod boundaries;
 mod geonames;
 pub(crate) mod natural_earth;
 mod osm;
-#[allow(dead_code, reason = "`forge world` reads it from D-155 step 4")]
 pub(crate) mod overture;
 mod wikidata;
 

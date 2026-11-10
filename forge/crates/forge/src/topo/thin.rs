@@ -6,7 +6,8 @@
 //! Douglas–Peucker importance and the guard keeps the level free of crossings and degenerate
 //! rings ([`super::simplify::levels_to`]); each unit's rings are rebuilt from the vertices kept
 //! at that level. Arc ends (topology nodes) are always kept, so a junction of three units stays
-//! where it is.
+//! where it is. A pinned unit (a pack country's outline, D-154) keeps every vertex, and a fold
+//! is cut from its neighbour, never from it.
 
 use super::arcs::{self, V, area2};
 use super::simplify::{self, Guarded};
@@ -37,12 +38,14 @@ const UNFOLD_ROUNDS: usize = 4;
 /// zero-width bridge it runs both ways. Snapped rings are noded (every crossing is a
 /// vertex), so the later unit cut by the earlier one, or a bridged unit normalised, by an
 /// exact overlay adds no rounding.
+/// The later unit of a pair is cut, unless only the earlier one may be (`pinned`).
 /// Returns how many units were cut.
 ///
 /// # Errors
 /// Two units that overlap in a part at least [`super::pov::MIN_WIDTH`] wide: that is the
 /// data, not rounding.
-fn unfold(rings: &mut Vec<(u32, Vec<V>)>) -> Result<usize, String> {
+fn unfold(rings: &mut Vec<(u32, Vec<V>)>, pinned: &[bool]) -> Result<usize, String> {
+    let is_pinned = |u: u32| pinned.get(u as usize).copied().unwrap_or(false);
     let mut cut = 0;
     for _ in 0..UNFOLD_ROUNDS {
         let pairs = arcs::same_way(rings);
@@ -51,7 +54,12 @@ fn unfold(rings: &mut Vec<(u32, Vec<V>)>) -> Result<usize, String> {
         }
         let mut late: std::collections::BTreeMap<u32, Vec<u32>> = std::collections::BTreeMap::new();
         for (a, b) in pairs {
-            late.entry(b).or_default().push(a);
+            let (cut, by) = if is_pinned(b) && !is_pinned(a) {
+                (a, b)
+            } else {
+                (b, a)
+            };
+            late.entry(cut).or_default().push(by);
         }
         let of = |u: u32, rings: &[(u32, Vec<V>)]| -> Vec<Vec<V>> {
             rings
@@ -92,11 +100,16 @@ fn unfold(rings: &mut Vec<(u32, Vec<V>)>) -> Result<usize, String> {
     Ok(cut)
 }
 
-/// Each unit's rings thinned to level `lod` ([`simplify::TOLERANCE_CM`]), in input order.
+/// Each unit's rings thinned to level `lod` ([`simplify::TOLERANCE_CM`]), in input order; a
+/// unit marked in `pinned` keeps every vertex.
 ///
 /// # Errors
 /// Overlapping units: an edge two units run the same way, or an edge of three units.
-pub(crate) fn partition(units: &[&[Vec<V>]], lod: u8) -> Result<(Vec<Rings>, Thinned), String> {
+pub(crate) fn partition(
+    units: &[&[Vec<V>]],
+    pinned: &[bool],
+    lod: u8,
+) -> Result<(Vec<Rings>, Thinned), String> {
     let mut rings: Vec<(u32, Vec<V>)> = Vec::new();
     for (u, r) in units.iter().enumerate() {
         let u = u32::try_from(u).map_err(|_| "too many units")?;
@@ -106,14 +119,24 @@ pub(crate) fn partition(units: &[&[Vec<V>]], lod: u8) -> Result<(Vec<Rings>, Thi
     // A cut leaves vertices on one side of a border only (T-junctions): snap rounding nodes
     // the input as the topology stage does (D-103); a noded input comes back unchanged.
     let (mut rings, snapped) = super::snap::snap_round(&rings);
-    let folds = unfold(&mut rings)?;
+    let folds = unfold(&mut rings, pinned)?;
     let (all, refs) = arcs::build(&rings)?;
+    let mut pins = vec![false; all.len()];
+    for ((u, _), refs) in rings.iter().zip(&refs) {
+        if pinned.get(*u as usize).copied().unwrap_or(false) {
+            for &r in refs {
+                if let Some(p) = pins.get_mut((r >> 1) as usize) {
+                    *p = true;
+                }
+            }
+        }
+    }
     let shape: Vec<(Vec<arcs::Ref>, bool)> = refs
         .iter()
         .zip(&rings)
         .map(|(refs, (_, r))| (refs.clone(), area2(r) > 0))
         .collect();
-    let (levels, report) = simplify::levels_to(&all, &shape, &[], lod);
+    let (levels, report) = simplify::levels_to(&all, &shape, &pins, lod);
     let kept: Vec<Vec<V>> = all
         .iter()
         .zip(&levels)
@@ -172,7 +195,7 @@ mod tests {
         let mut right: Vec<V> = teeth.iter().rev().copied().collect();
         right.extend([(2_000_000, 0), (2_000_000, 1_000_000)]);
         let (l, r) = (vec![left], vec![right]);
-        let (out, t) = partition(&[&l, &r], 3).unwrap();
+        let (out, t) = partition(&[&l, &r], &[], 3).unwrap();
         assert!(t.vertices.1 < t.vertices.0 / 5, "{t:?}");
         assert_eq!(t.guard.left, 0);
         let on_border = |rings: &[Vec<V>]| -> Vec<V> {
@@ -188,12 +211,31 @@ mod tests {
         assert!(on_border(&out[0]).len() <= 3, "{:?}", on_border(&out[0]));
     }
 
+    /// The same border with the right unit pinned: both keep every tooth.
+    #[test]
+    fn a_pinned_unit_keeps_every_vertex() {
+        let teeth: Vec<V> = (0..=100)
+            .map(|k| (1_000_000 + if k % 2 == 1 { 90 } else { 0 }, k * 10_000))
+            .collect();
+        let mut left: Vec<V> = vec![(0, 0)];
+        left.extend(teeth.iter().copied());
+        left.push((0, 1_000_000));
+        let mut right: Vec<V> = teeth.iter().rev().copied().collect();
+        right.extend([(2_000_000, 0), (2_000_000, 1_000_000)]);
+        let (l, r) = (vec![left], vec![right.clone()]);
+        let (out, _) = partition(&[&l, &r], &[false, true], 3).unwrap();
+        let mut kept = out[1][0].clone();
+        kept.sort_unstable();
+        right.sort_unstable();
+        assert_eq!(kept, right);
+    }
+
     #[test]
     fn overlapping_units_are_refused() {
         // About 110 m across: an overlap that is data, not rounding.
         let sq: Vec<V> = vec![(0, 0), (10_000, 0), (10_000, 10_000), (0, 10_000)];
         let a = vec![sq.clone()];
         let b = vec![sq];
-        assert!(partition(&[&a, &b], 3).is_err());
+        assert!(partition(&[&a, &b], &[], 3).is_err());
     }
 }

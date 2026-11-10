@@ -13,8 +13,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use arrow_array::{
-    Array, BinaryArray, BooleanArray, Int32Array, ListArray, MapArray, RecordBatch, StringArray,
-    StructArray,
+    Array, BinaryArray, BooleanArray, ListArray, MapArray, RecordBatch, StringArray, StructArray,
 };
 use parquet::arrow::ProjectionMask;
 use parquet::arrow::arrow_reader::{ArrowPredicateFn, ParquetRecordBatchReaderBuilder, RowFilter};
@@ -50,8 +49,6 @@ pub(crate) struct Area {
     pub(crate) subtype: Subtype,
     /// ISO 3166-1 alpha-2 (or Overture's synthetic code) of the country or dependency it is in.
     pub(crate) country: String,
-    /// Its place in its own country's hierarchy (1 for a region under a country).
-    pub(crate) admin_level: Option<i32>,
     /// ISO 3166-2 code, when it has one.
     pub(crate) region: Option<String>,
     /// The primary name first (untagged), then English when it differs.
@@ -442,7 +439,6 @@ fn read_area_file(path: &Path) -> Result<Vec<Area>, String> {
         "subtype",
         "class",
         "country",
-        "admin_level",
         "region",
         "names",
         "geometry",
@@ -452,10 +448,6 @@ fn read_area_file(path: &Path) -> Result<Vec<Area>, String> {
         let subtype = strings(b, "subtype")?;
         let country = strings(b, "country")?;
         let region = strings(b, "region")?;
-        let level = b
-            .column_by_name("admin_level")
-            .and_then(|c| c.as_any().downcast_ref::<Int32Array>())
-            .ok_or("no int column admin_level")?;
         let geometry = b
             .column_by_name("geometry")
             .and_then(|c| c.as_any().downcast_ref::<BinaryArray>())
@@ -475,7 +467,6 @@ fn read_area_file(path: &Path) -> Result<Vec<Area>, String> {
                 division: id.to_owned(),
                 subtype: sub,
                 country: country.value(i).to_owned(),
-                admin_level: level.is_valid(i).then(|| level.value(i)),
                 region: region.is_valid(i).then(|| region.value(i).to_owned()),
                 names: area_names(names, i)?,
                 polygon: Polygon {
@@ -857,11 +848,100 @@ mod real {
         eprintln!("pieces per country: {:?}", &by_cc[..by_cc.len().min(15)]);
         drop(areas);
         let rings: Vec<&[Vec<(i32, i32)>]> = units.iter().map(|u| u.rings.as_slice()).collect();
-        let (out, thinned) = crate::topo::thin::partition(&rings, 3).unwrap();
+        let (out, thinned) = crate::topo::thin::partition(&rings, &[], 3).unwrap();
         eprintln!("{thinned:?} in {:.1?}", t.elapsed());
         assert_eq!(out.len(), units.len());
         assert_eq!(thinned.guard.left, 0, "{thinned:?}");
         assert!(thinned.vertices.1 * 4 < thinned.vertices.0, "{thinned:?}");
+    }
+
+    /// The land owned by Natural Earth's Nepal view (D-155 step 4): prints every moved piece
+    /// with its mean width (run with `WIDTH` at `MIN_WIDTH` to see the noise the width is
+    /// chosen above), the unowned units and the offshore ones.
+    #[test]
+    #[ignore = "needs the overture-divisions tiles (5 GB)"]
+    fn overture_owned_by_the_nepal_view() {
+        use crate::read::natural_earth;
+        use crate::topo::pov::{Input, own};
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let lock = Lock::read(&root.join("data/sources.lock")).unwrap();
+        let nep = natural_earth::read(&lock.path(&root, "ne-admin0-nep").unwrap()).unwrap();
+        let t = std::time::Instant::now();
+        let areas = read_areas(&files("area-")).unwrap();
+        let units = super::land_units(&areas).unwrap();
+        eprintln!("{} units in {:.1?}", units.len(), t.elapsed());
+        let view: Vec<Input<'_>> = nep
+            .iter()
+            .map(|c| Input {
+                code: &c.code,
+                rings: &c.polygon.rings,
+            })
+            .collect();
+        let codes: Vec<String> = units
+            .iter()
+            .map(|u| areas[u.area].country.to_ascii_lowercase())
+            .collect();
+        let u_in: Vec<Input<'_>> = units
+            .iter()
+            .zip(&codes)
+            .map(|(u, c)| Input {
+                code: c,
+                rings: &u.rings,
+            })
+            .collect();
+        let iso2: Vec<Option<&str>> = nep.iter().map(|c| c.iso2.as_deref()).collect();
+        let width = std::env::var("TGD_OWN_WIDTH")
+            .ok()
+            .and_then(|w| w.parse().ok())
+            .unwrap_or(own::WIDTH);
+        let o = own::own(&view, &iso2, &u_in, width);
+        eprintln!("owned in {:.1?}", t.elapsed());
+        let name = |u: usize| {
+            let a = &areas[units[u].area];
+            format!(
+                "{} {:?} {}",
+                a.country,
+                a.subtype,
+                a.names.first().map_or("", |n| n.1.as_str())
+            )
+        };
+        let km = |r: &[Vec<(i32, i32)>]| {
+            r.iter()
+                .map(|r| crate::topo::measure::ring_area_m2(r))
+                .sum::<f64>()
+                .abs()
+                / 1e6
+        };
+        let mut moved: Vec<_> = o.pieces.iter().filter(|p| p.moved).collect();
+        moved.sort_by(|a, b| own::mean_width(&b.rings).total_cmp(&own::mean_width(&a.rings)));
+        for p in &moved {
+            eprintln!(
+                "moved to {}: {} | {:.1} km2, mean width {:.0} m",
+                nep[p.country].code,
+                name(p.unit),
+                km(&p.rings),
+                own::mean_width(&p.rings) * 0.0111
+            );
+        }
+        let by_area = o.pieces.iter().filter(|p| p.by == own::By::Area).count();
+        eprintln!("by area: {by_area}; unowned {}:", o.unowned.len());
+        for &u in &o.unowned {
+            eprintln!("  {} | {:.1} km2", name(u), km(&units[u].rings));
+        }
+        for &(u, k, s) in &o.offshore {
+            eprintln!(
+                "offshore: {} in {} share {s:.2} | {:.0} km2",
+                name(u),
+                nep[k].code,
+                km(&units[u].rings)
+            );
+        }
+        let mut per: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+        for p in o.pieces.iter().filter(|p| p.by == own::By::Area) {
+            *per.entry(areas[units[p.unit].area].country.as_str())
+                .or_default() += 1;
+        }
+        eprintln!("by area per code: {per:?}");
     }
 
     fn files(prefix: &str) -> Vec<std::path::PathBuf> {
