@@ -113,6 +113,10 @@ This machine is shared with other projects (16 GB RAM, 10 cores, limited disk).
   incremental caches, benchmark scratch, data scratch); at least `cargo clean` for crates not
   being worked on. Keep free disk above 30 GB; below that, clean before anything else.
 - Kill stray processes you started (servers, watchers) before ending a step.
+- **Watch memory by physical footprint** (`footprint -p <pid>`), not `ps` RSS: macOS
+  compresses and swaps, so RSS showed 0.4 GB while a run held over 12 GB and froze the machine.
+  Run a new or grown heavy stage under a memory cap first (a watchdog that kills it past a few
+  GB), and fix what grows before running it uncapped.
 - **Check and release resources time and again**, not only when something fails: at the start
   and end of every step, and before ending a session, run `uptime` and `df -h /`, list this
   project's processes, and remove what is not in use (`forge/target` when the forge is not

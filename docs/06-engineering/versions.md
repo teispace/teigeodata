@@ -83,7 +83,7 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | osmpbf | 0.3.8 | 2026-11-06 | crates.io | 2026-12-06 |
 | parquet / arrow | 60.1 | 2026-11-06 | crates.io | 2026-12-06 |
 | geoarrow / geoparquet | 0.10 | 2026-11-06 | crates.io | 2026-12-06 |
-| i_overlay | 9.1 | 2026-11-06 | crates.io | 2026-12-06 |
+| i_overlay (forge: `topo::pov`, `i64` engine, D-150) | 9.1.0 | 2026-11-10 | crates.io | 2026-12-10 |
 | geo | 0.33 | 2026-11-06 | crates.io | 2026-12-06 |
 | tiff | 0.11.3 | 2026-11-06 | crates.io | 2026-12-06 |
 | duckdb (QA only) | 1.20000.1 (DuckDB 2.0) | 2026-11-06 | crates.io | 2026-12-06 |

@@ -41,8 +41,9 @@ A short status. The numbers and evidence live in each phase file and the
   `forge world` (D-147: 3.77 MB, 98.46% of cities answered by `admin_at`), the topology stage
   at world scale (D-148); the locator (`countries_near`, `missing_packs`) by distance on the
   stored outlines, no country missed over 109,659 border probes at 1 km, 11.9 µs a query
-  (D-149). Next: 4.2 world admin 1 and timezones, the shipped baseline, the 8 MB gate; then
-  4.3 TUF trust.
+  (D-149); world admin 1 cut to the Nepal view (D-150: 4,571 units, world part 5.73 MB,
+  cities under their unit). Next: 4.2 world timezones, the shipped baseline, the 8 MB gate;
+  then 4.3 TUF trust.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).
 - **Waiting on the maintainer:** review of `data/countries/np/corrections/` (unreviewed), the labelled sample (Q-005, needed for `ACCURACY.md` and M3),
@@ -87,3 +88,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-09 | D-110 admin records, D-111 place elevations merged; development speed-ups (D-115): Phase 4 started in parallel (engine, transport), build split into modules, Miri under nextest, this page shortened | Duplicate clusters and G-conf; merge the Phase 4 branches |
 | 2026-11-09 | 4.2: the baseline slice of a pack (`extract`, `forge baseline`, G-base, D-145); level-1 units under the country (D-146) | the world part of the baseline; the locator |
 | 2026-11-10 | 4.2: the world part of the baseline (`forge world`, Natural Earth admin 0 and `cities15000`, D-147); world-scale label search (D-148) | world admin 1 and timezones; the locator |
+| 2026-11-10 | 4.2: the locator by distance on the stored outlines (D-149); world admin 1 cut to the Nepal view (D-150); a 12 GB memory blow-up in G-topo's parent check found and fixed, memory now watched by footprint (AGENTS.md §7) | world timezones; the shipped baseline and the 8 MB gate |

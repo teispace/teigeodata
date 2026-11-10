@@ -616,35 +616,60 @@ recipe has a `baseline` entry (below).
 
 ## The world part (`world`)
 
-`forge world --release <v> [--lite] [--admin <source>] [--cities <source>] [--tolerance-m <m>]
-[--ids <dir>] [--key <seed-file>]` writes `data/build/baseline/world/world-baseline-<build>.tgd`,
+`forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>]
+[--tolerance-m <m>] [--ids <dir>] [--key <seed-file>]` writes `data/build/baseline/world/world-baseline-<build>.tgd`,
 its ID registries `world-ids-<build>/<namespace>.tsv` (the next build's `--ids`),
 `summary-<build>.md` (D-147) and `world-probes-<build>.tsv`, the locator's border probes: about
 100,000 source vertices at full resolution, every k-th of every feature, each with its
-feature's ID (D-149). Defaults: `ne-admin0-nep`, `geonames-cities15000`, 1 km.
+feature's ID (D-149). Defaults: `ne-admin0-nep`, `ne-admin1`, `geonames-cities15000`, 1 km.
 
 - **Rows.** One country place per admin-0 feature (names from `NAME` and its 26 `NAME_<XX>`
   columns, population, the cartographers' label point when it is inside the feature, else the
-  topology's) and every city of the list outside the countries whose recipe builds a slice.
-- **Parents.** A city hangs from the feature that contains it on the source polygons (a 1°
-  grid index, exact test); outside every feature, from the largest feature of its code.
+  topology's), one level-1 unit per admin-1 piece (its source name and English, D-150), and
+  every city of the list outside the countries whose recipe builds a slice.
+- **Admin 1 cut to the point of view** (`topo::pov`, D-150). The admin-1 source is drawn in
+  another point of view. So each unit goes to the country holding most of its area and is cut
+  only by the parts of its overhang at least about 1 m wide on average (narrower parts are the
+  two sources drawing one line differently). Each country's uncovered rest becomes filler
+  pieces (`~` codes) that link to no place. The topology stage dissolves the countries from
+  pieces and fillers, so both levels share one arc set, with G-topo's parent limit at
+  `pov::MAX_SHIFT_M` (10 m) instead of 1 m. Unrecognised units, unnamed placeholders and pack
+  countries' units are dropped; their area falls to the filler.
+- **Parents.** A unit hangs from its piece's country. A city hangs from the piece that contains
+  it on the cut polygons, else from the feature that contains it (a 1° grid index, exact
+  test); outside every feature, from the largest feature of its code.
 - **IDs.** A registry per namespace (the ISO code, `world` without one). A pack country's row
   takes the serial its pack's registry gives its Wikidata ID: the ID gate fails the build
   otherwise, so run `forge make <cc>` for each pack country first.
 - **Sections.** As a country pack's (PLACES, NAMES, SEARCH with no country rules, ELEVATION
   from the list's `elevation` or `dem` column, HIERARCHY), the polygons linked by `ADM0_A3`;
   then the whole set through `extract` at the finest level within the tolerance, with the
-  slice's region index. The topology stage runs first every time (7 s), so it is never stale.
+  slice's region index. The topology stage runs first every time (10 s with admin 1), so it is
+  never stale.
 - **Checks.** Read back verified, the geometry's checks, every place's ID, point, parent and
   canonical name, and its search by name.
 
-Measured 2026-11-10 (main): 34,410 rows, 3,773,468 B (2.76 MB zstd 19), in 8 s; ARCS
-1,231,364 B, ADMIN_REGION 665,228 B, SEARCH 712,624 B, NAMES 581,280 B, IDMAP 187,404 B
-(248 namespaces interleave in row order). The tolerance A/B is in D-147.
-`tests/world.rs` (with `TGD_WORLD`, and `TGD_BASELINE`, `TGD_PACK` for a pack country): every
-city has one country and `admin_at` at 98.46% of them finds it (the rest are mostly coastal
-points outside Natural Earth's coast at any resolution); the slice answers for its country
-and the pack above both.
+Measured 2026-11-10 (main, with admin 1, D-150): 38,981 rows, 5,732,704 B (4.39 MB wire), in
+18 s at a 0.97 GB peak; ARCS 2,101,428 B, ADMIN_REGION 1,242,236 B, SEARCH 797,664 B, NAMES
+674,124 B, IDMAP 223,824 B. Without admin 1 it was 3,773,468 B (D-147, with the tolerance
+A/B).
+
+`tests/world.rs` runs with `TGD_WORLD`, and with `TGD_BASELINE` and `TGD_PACK` for a pack
+country. It checks:
+
+- every unit hangs from a country;
+- every city hangs from a unit and its country, or from its country;
+- each `admin_at` answer is one chain: every unit found hangs from the country found;
+- `admin_at` at the city finds its country for 98.46% (the rest are mostly coastal points
+  outside Natural Earth's coast at any resolution) and its unit for 99.76%;
+- the slice answers for its country, and the pack above both.
+
+**Memory.** The world stage once passed 12 GB: G-topo's parent check indexed each segment in
+every 100 m cell of its box, and Natural Earth's straight borders run for thousands of
+kilometres. It now indexes the cells along each segment (`snap::Grid::cells`) in a sorted
+array, and `a_long_diagonal_border_is_indexed_along_itself` guards it. Run a new or grown
+heavy stage under a memory cap first, reading the physical footprint (`footprint -p <pid>`):
+on macOS, `ps` RSS leaves out compressed and swapped memory.
 
 ## The baseline slice (`baseline`)
 

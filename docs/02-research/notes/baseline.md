@@ -29,10 +29,11 @@ design and the first estimates; this note pins the sources.
   - Admin 0 from **Natural Earth 5.1.1, the Nepal point of view** (`ne_10m_admin_0_countries_nep`).
     It is public domain, so both builds may read it. Its other disputes follow Nepal's view as
     Natural Earth records it.
-  - Admin 1 from **OpenStreetMap** for main (current, the source the main build already reads).
-    Lite needs a clean-room source: Natural Earth admin 1 is stale in places (below), so lite
-    takes geoBoundaries gbOpen per country where its licence passes the gate (**unverified**
-    per country), else Natural Earth, and the build reports which.
+  - Admin 1 from **Natural Earth 5.1.2, cut to the Nepal view** (§3.9, D-150), both builds: it
+    is public domain, and one overlay settles each unit's country by containment. Per-country
+    sources replace it as they land: OpenStreetMap for main (needs a boundary extract made in
+    CI) and geoBoundaries gbOpen for lite where its licence passes the gate (**unverified** per
+    country), each reported by the build.
   - Cities from **GeoNames `cities15000`** (CC BY 4.0, 34,208 rows on 2026-11-09), both builds.
 - **Timezones:** main simplifies TBB (as the country packs do, D-134). Lite uses tzdb over the
   admin-0 outline for the 216 one-zone countries (D-138); the 31 countries with several zones
@@ -127,13 +128,72 @@ baseline is about 3.9 MB, half the 8 MB budget, before admin 1 and timezones. Th
 A/B is in D-147. Codes the list uses that Natural Earth's view folds into another feature
 (TW, XK, and France's overseas departments) take the feature that contains them.
 
+### 3.9 World admin 1 under Nepal's point of view (2026-11-10)
+
+Natural Earth admin 1 (`ne_10m_admin_1_states_provinces.geojson`, tag v5.1.2, 40,726,851 B,
+SHA-256 `22d0e3ad…62fb5`) is drawn in the default point of view, while the world part's
+countries are Nepal's. A stdlib check sampled 40 points inside each of the 4,596 units and
+asked which Nepal-view country holds them (12 units too small to sample):
+
+| Units | Count |
+|---|---:|
+| wholly inside the country of their own `adm0_a3` | 4,515 |
+| wholly inside **another** country | 60 |
+| split between countries, or partly in no country | 9 |
+
+- The 60 are disputes the Nepal view settles the other way: Kosovo's 30 municipalities lie in
+  Serbia, Taiwan's 22 counties in China, Crimea and Sevastopol in Ukraine, Azad Kashmir and the
+  Northern Areas in India, Northern Cyprus in Cyprus, Somaliland in Somalia, the Baikonur lease
+  in Kazakhstan, Oued ed-Dahab in Western Sahara. **A unit's country must come from
+  containment, not from its code**, exactly as for cities (D-147).
+- Two units are really split: Guelmim–Es-Semara (30% in Western Sahara) and HaZafon (20% in the
+  Golan Heights, Syria in this view). Laâyoune–Boujdour–Sakia El Hamra is 97% in Western Sahara.
+- The other split ones are coastline differences between the two files (sample points in a
+  unit but in no country): Wallis's Alo, Tonga's Niuas, Pohnpei, South Kordufan's edge, two
+  Philippine provinces.
+
+So a unit drawn as the source draws it can overhang its country, and `admin_at` at such a point
+would name country A and a unit whose parent is B. The fix is an overlay: each unit is cut to
+the country that holds most of it, and each country's remainder (what no unit covers: the
+disputed slivers, coastline differences, countries without units) becomes an unnamed filler
+piece. Countries are then exactly the union of their pieces, so the topology stage dissolves
+them from level 1 as it does for a pack (G-topo), and admin 0 and admin 1 share one arc set:
+no border is stored twice.
+
+Overlay engines: `i_overlay` 9.1.0 (2026-10-14, MIT or Apache-2.0, the engine behind `geo`'s
+boolean operations) works on integer coordinates exactly; its `i64` engine covers our 1e-7°
+grid (the `i32` engine stops at ±2^30, below ±1.8 × 10^9). Clipping is needed only for units
+not wholly inside their country (about 80), and the fillers for each country with units.
+
+**As built (D-150, main, 2026-11-10).**
+
+- **Noise.** An exact overlay failed first: Albania's filler was a sliver 3.8 km long and under
+  one grid unit wide, where admin 0 and admin 1 draw the same border with different vertices,
+  and snap rounding folded it into an edge between three units. So a part whose mean width
+  (2 · area / perimeter) is under 100 grid units (about 1 m) is noise. A unit is cut only by
+  the wider parts of its overhang and otherwise keeps its own lines; a remainder that narrow is
+  dropped.
+- **What happened to the units.** 4,571 kept: 113 cut, 58 moved to another country, 256
+  remainder pieces; 10 dropped as unrecognised or unnamed; 14 left to their pack's slice.
+- **G-topo.** The countries dissolved from the pieces lie up to 3.9 m from Natural Earth's own
+  line, and 5.2 m the other way, so the stage's parent limit is 10 m (`pov::MAX_SHIFT_M`).
+  Packs keep 1 m.
+- **Topology.** 5,075 polygons on 17,187 arcs of 863,444 vertices, from 1,828,723 source ring
+  vertices. 42 edge pairs needed snapping (60 vertices added).
+- **Size.** 5.73 MB (4.39 MB wire), against 3.77 MB without admin 1. All 26 languages per unit
+  would make 9.16 MB, so units keep their name and English. Built in 18 s, peak 0.97 GB.
+- **Hierarchy.** 33,623 of 34,162 cities hang from a unit. `admin_at` at the city finds its
+  unit for 99.76% of them; the locator gate misses no probe at 1 km (95 at 500 m, against 173
+  before).
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
 |---|---|---|---|---|---|
 | Natural Earth admin 0, Nepal view | Public domain; a POV build per country; simple | Not Nepal's 2020 map (§3.1) | Public domain | 5.1.1 (2022) | **admin 0 where no pack exists** |
-| Natural Earth admin 1 | Public domain; Wikidata and GeoNames IDs on every unit | Stale for Nepal (2015 reform missing) | Public domain | 5.1.1 | lite fallback only |
+| Natural Earth admin 1 as drawn | Public domain; Wikidata and GeoNames IDs on every unit | Stale for Nepal (2015 reform missing); default point of view, so 60 units lie in another Nepal-view country (§3.9) | Public domain | 5.1.2 | rejected as drawn; used cut (next row) |
 | OSM admin level 4 | Current; the main build's source already | A world input is planet scale (the planet file is tens of GB, **unverified** today): needs a boundary-only extract made in CI, not on this machine | ODbL | live | **main admin 1** |
+| Natural Earth admin 1, units cut to the Nepal view (overlay) and remainders filled (§3.9) | Public domain, so both builds; one arc set with admin 0; disputes follow Nepal's view | Stale where units changed after about 2020 (Nepal's own units come from its pack) | Public domain | 5.1.2 | **Both builds** (D-150); per-country sources replace it as they land |
 | geoBoundaries gbOpen ADM1 | Per country, more current than NE | Licence per country; quality varies | mixed (**unverified**) | 6.0.0 | **lite admin 1 where licence allows** |
 | geoBoundaries CGAZ | One file | US State Department lines for disputes | CC BY 4.0 | 6.0.0 | rejected (ADR-0006) |
 | GeoNames `cities15000` | IDs shared with the packs' records; CC BY | Population thresholds vary in quality | CC BY 4.0 | daily | **cities** |
@@ -157,14 +217,17 @@ A/B is in D-147. Codes the list uses that Natural Earth's view folds into anothe
 - D-144 records the source choices and the slice rule; D-145 the slice as built; D-147 the
   world part as built.
 - Phase 4.2 gains the slice rule and the per-country admin-1 source report.
-- Pinned: `ne-admin0-nep` (2026-11-10) and `geonames-cities15000` (2026-11-09). Still to pin
-  with the admin-1 step: `ne-admin1`, and OSM admin 1 extracts for main.
+- Pinned: `ne-admin0-nep` (2026-11-10), `ne-admin1` (2026-11-10, D-150) and
+  `geonames-cities15000` (2026-11-09). Still to come: OSM admin 1 extracts for main.
 
 ## 7. Risks and open items
 
 - Main's OSM admin 1 for the world needs a boundary-only extract (`osmium tags-filter` on the
-  planet) in a CI job with the disk for it; until that job exists, main uses the lite admin-1
-  sources too and says so in its report.
+  planet) in a CI job with the disk for it; until that job exists, main uses Natural Earth's
+  cut admin 1 as lite does (D-150).
+- Natural Earth's admin 1 is drawn independently of its admin 0: the two disagree by a few
+  metres along shared borders (§3.9), which the 10 m parent limit allows. A new release that
+  disagrees more fails G-topo and is measured again before the limit moves.
 - Natural Earth is updated rarely (last release 2022). Countries without a pack inherit its
   age until their pack exists; the baseline states its precision tier on every answer.
 - Natural Earth's Nepal view encodes other disputes as Natural Earth reads Nepal's position.
@@ -178,6 +241,8 @@ A/B is in D-147. Codes the list uses that Natural Earth's view folds into anothe
 |---|---|---|---|
 | Natural Earth vector | 5.1.2 release, files 5.1.1 (time zones 5.0.0) | 2026-11-09 | GitHub `nvkelso/natural-earth-vector`, naciscdn.org |
 | geoBoundaries CGAZ | 6.0.0 (2023-09-13) | 2026-11-09 | Earth Engine catalog |
+| Natural Earth admin 1 | 5.1.2 tag, `ne_10m_admin_1_states_provinces.geojson` | 2026-11-10 | `data/sources.lock` (`ne-admin1`) |
+| i_overlay | 9.1.0 (2026-10-14) | 2026-11-10 | crates.io |
 | GeoNames `cities15000` | dump of 2026-11-09 | 2026-11-09 | download.geonames.org |
 
 ## 9. Sources

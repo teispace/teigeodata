@@ -112,12 +112,15 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] Forge: the world part's countries and cities (`forge world`): Natural Earth admin 0 in
   Nepal's view, `cities15000` under the feature that contains each, IDs per namespace and a
   pack country's from its pack (ID gate); 3.77 MB main (D-147)
-- [ ] Forge: world admin 1 (D-144 sources) with a report of each country's admin-1 source
+- [x] Forge: world admin 1: Natural Earth admin 1 cut to the Nepal-view countries (overlay,
+  fillers, one arc set), units under their country and cities under their unit; 5.73 MB main
+  with admin 1 (D-150). Per-country admin-1 sources (OSM extract, gbOpen) replace it later
 - [ ] Forge: world timezones in the baseline (main TBB simplified, lite tzdb over admin 0)
 - [ ] The baseline as shipped: the world part and every slice, as layers (slices above the
   world) or one file; decide by the size gate and the engine's layer cost
 - [x] Pin `geonames-cities15000` (D-145) and `ne-admin0-nep` (D-147)
-- [ ] Pin `ne-admin1`; the OSM boundary extract as a CI job
+- [x] Pin `ne-admin1` (D-150)
+- [ ] The OSM boundary extract as a CI job (main's per-country admin 1)
 - [x] The locator: `countries_near` and `missing_packs` by distance on the stored outlines
   (no buffered REGION, so no bytes), `LOCATOR_RADIUS_M` = the world part's 1 km tolerance;
   border-probe gate: no missed country over about 110,000 source vertices (D-149,
@@ -201,3 +204,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-09 | 4.2: the forge item split into the pack slice (done) and the world part; pins split | D-145, D-146 |
 | 2026-11-10 | 4.2: the world part split into countries and cities (done), admin 1, timezones, and the shipped form | D-147 |
 | 2026-11-10 | 4.2: the locator is a distance query on the outlines, not a buffered REGION | D-149 |
+| 2026-11-10 | 4.2: world admin 1 from Natural Earth cut to the Nepal view for both builds; the pin split from the OSM extract job | D-150 |

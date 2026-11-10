@@ -7,6 +7,8 @@ extend-ignore-re = [
 ]
 
 [default.extend-words]
+# Alo, a kingdom of Wallis and Futuna (Natural Earth admin 1).
+alo = "alo"
 # Nepali and Indian place-name terms.
 tole = "tole"
 chowk = "chowk"
