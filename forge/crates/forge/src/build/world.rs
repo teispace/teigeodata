@@ -21,6 +21,9 @@
 //! pack is matched in that pack's registry instead, by its Wikidata ID, so the world's row for
 //! it carries the pack's ID and the pack's slice answers for it (the ID gate: no match fails).
 //!
+//! A pack country is drawn by its slice's own outline, its neighbours cut to meet it there and
+//! its arcs pinned, so the shipped baseline's borders are one line (D-154, [`pov::redraw`]).
+//!
 //! Geometry: the `topology` stage's arcs and polygons of the countries and units together
 //! (`topo::run_world`: one arc set, each country dissolved from its units and remainders),
 //! re-encoded at the
@@ -186,6 +189,86 @@ fn parse(args: &[String]) -> Result<Args, String> {
 
 /// The countries whose recipe builds a baseline slice (D-145): their places come from their
 /// pack, and their registry names the world's row for them.
+/// A pack country's outline is its slice's, and its neighbours meet it there (D-154): the pack
+/// countries' indices (their arcs are pinned) and the report line.
+fn redraw_packs(
+    root: &Path,
+    packs: &[String],
+    build: &str,
+    countries: &mut [Country],
+) -> Result<(Vec<usize>, String), String> {
+    let outlines = pack_outlines(root, packs, build, countries)?;
+    let mut shapes: Vec<Vec<Vec<(i32, i32)>>> =
+        countries.iter().map(|c| c.polygon.rings.clone()).collect();
+    let r = pov::redraw(&mut shapes, &outlines);
+    for (c, rings) in countries.iter_mut().zip(shapes) {
+        c.polygon.rings = rings;
+    }
+    let report = format!(
+        "- Pack outlines (D-154): {} pack countries drawn by their slice, {} neighbours cut by \
+         them, {} pieces of Natural Earth's outline given to the neighbour sharing the most \
+         border, {} touching none.",
+        outlines.len(),
+        r.cut,
+        r.given,
+        r.left
+    );
+    Ok((outlines.iter().map(|o| o.0).collect(), report))
+}
+
+/// Each pack country's index in `countries` and its outline as its baseline slice ships it
+/// (the vertices at the slice's level of detail), so the world's neighbours meet it on the
+/// slice's own line (D-154).
+fn pack_outlines(
+    root: &Path,
+    packs: &[String],
+    build: &str,
+    countries: &[Country],
+) -> Result<Vec<pov::Outline>, String> {
+    let e = |e: teigeodata_format::Error| e.to_string();
+    let mut out = Vec::new();
+    for cc in packs {
+        let file = root.join(format!(
+            "data/build/baseline/{cc}/{cc}-baseline-{build}.tgd"
+        ));
+        let bytes = fs::read(&file).map_err(|e| {
+            format!(
+                "{}: {e} (run `forge make {cc}` first: its slice draws the country)",
+                file.display()
+            )
+        })?;
+        let pack = Pack::open_verified(&bytes).map_err(e)?;
+        let sec = |k: Kind| pack.section(k).ok_or(format!("{cc}: the slice has no {k}"));
+        let places = teigeodata_format::places::Places::open(&sec(Kind::PLACES)?).map_err(e)?;
+        let arcs = Arcs::open(&sec(Kind::ARCS)?).map_err(e)?;
+        let polys =
+            teigeodata_format::polygons::Polygons::open(&sec(Kind::POLYGONS)?).map_err(e)?;
+        let row = (0..places.len())
+            .find(|&r| places.kind(r) == Some(PlaceKind::Country))
+            .ok_or(format!("{cc}: the slice has no country"))?;
+        let p = polys
+            .polygon_of(u32::try_from(row).map_err(|_| "too many rows")?)
+            .ok_or(format!("{cc}: the slice's country has no outline"))?;
+        let mut rings = Vec::new();
+        for part in polys.parts(p).ok_or(format!("{cc}: an outline's parts"))? {
+            for ring in polys.rings(part).ok_or(format!("{cc}: a part's rings"))? {
+                rings.push(
+                    polys
+                        .ring(&arcs, ring, 0)
+                        .map(|v| (v.lon(), v.lat()))
+                        .collect(),
+                );
+            }
+        }
+        let i = countries
+            .iter()
+            .position(|c| c.iso2.as_deref() == Some(cc.as_str()))
+            .ok_or(format!("{cc}: no Natural Earth country has this code"))?;
+        out.push((i, rings));
+    }
+    Ok(out)
+}
+
 fn pack_countries(root: &Path) -> Result<Vec<String>, String> {
     let dir = root.join("data/countries");
     let mut out = Vec::new();
@@ -566,9 +649,12 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         }
     }
     let packs = pack_countries(root)?;
-    let countries = natural_earth::read(&lock.path(root, &a.admin)?)?;
+    let mut countries = natural_earth::read(&lock.path(root, &a.admin)?)?;
     let units = natural_earth::read_admin1(&lock.path(root, &a.admin1)?)?;
-    let (rows, geometry, counts) = world_rows(root, &a, &packs, &lock, &countries, &units)?;
+    let (pinned, redrawn) = redraw_packs(root, &packs, build, &mut countries)?;
+    let (rows, geometry, counts) =
+        world_rows(root, &a, &packs, &lock, &countries, &units, &pinned)?;
+    let counts = format!("{counts}\n{redrawn}");
 
     // Rows: Hilbert order of the stored point, ties by key (as a country pack).
     let mut order: Vec<(u64, &str, usize)> = rows
@@ -656,6 +742,7 @@ fn world_rows(
     lock: &Lock,
     countries: &[Country],
     units: &[Unit],
+    pinned: &[usize],
 ) -> Result<(Vec<Row>, super::geometry::Geometry, String), String> {
     let c_in: Vec<pov::Input<'_>> = countries
         .iter()
@@ -679,14 +766,20 @@ fn world_rows(
         .collect();
     let unnamed = units.iter().filter(|u| u.names.is_empty()).count();
     // A pack country's units come from its slice.
-    let cut = pov::cut(&c_in, &u_in, &unrecognized, |c| {
-        countries
-            .get(c)
-            .and_then(|c| c.iso2.as_ref())
-            .is_none_or(|cc| !packs.contains(cc))
-    });
+    let cut = pov::cut(
+        &c_in,
+        &u_in,
+        &unrecognized,
+        |c| {
+            countries
+                .get(c)
+                .and_then(|c| c.iso2.as_ref())
+                .is_none_or(|cc| !packs.contains(cc))
+        },
+        pinned,
+    );
     let name = format!("{}+{}", a.admin, a.admin1);
-    crate::topo::run_world(root, &name, countries, units, &cut)?;
+    crate::topo::run_world(root, &name, countries, units, &cut, pinned)?;
     let geometry = super::geometry::load(root, &name)?;
     let labels = geometry.labels();
     let mut rows = country_rows(countries, &labels)?;

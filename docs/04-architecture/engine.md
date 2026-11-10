@@ -222,9 +222,8 @@ droppable suffix removed, 50 (D-121). The unit bonus does not count towards a st
 - **Allocations** (`tests/alloc.rs`): a counting allocator on the warm path.
 - **The shipped baseline** (`tests/world.rs`, `the_shipped_baseline_answers_as_its_parts`,
   D-153): the one file answers every ID (place, name, chain, zone) and every sampled search as
-  the world part and the slice do as two layers; `admin_at` and `tz_at` may differ only where
-  the slice's outline and the world's neighbours disagree, naming the replaced country, at
-  most 0.1% of places. `tests/baseline.rs` (feature `baseline`): Z1 and a few world answers.
+  the world part and the slice do as two layers, and every place's `admin_at` and `tz_at` too
+  (D-154: the world meets each pack country on its slice's line). `tests/baseline.rs` (feature `baseline`): Z1 and a few world answers.
 - **Components** (`tests/components.rs`, D-136): the pack opened under eight component sets,
   its uninstalled sections zeroed, eager and lazy; every query answers as the whole pack does
   or names the missing component; a set without what it needs is refused.

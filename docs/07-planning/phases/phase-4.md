@@ -123,8 +123,9 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] The baseline as shipped: one file (`forge embed`, `extract::merge`), not layers: layers
   cost search 34× and reverse 98× at 200 slices; world + Nepal 5.88 MB, answers equal to the
   layers' for every ID (D-153)
-- [ ] The world part's neighbours cut to each pack country's outline, so a pack border and
-  its neighbours share arcs (3 border places differ today, D-153)
+- [x] The world part's neighbours cut to each pack country's outline (the slice's own
+  vertices, pinned), so a pack border and its neighbours share one line: 0 places differ
+  (D-154)
 - [x] Pin `geonames-cities15000` (D-145) and `ne-admin0-nep` (D-147)
 - [x] Pin `ne-admin1` (D-150)
 - [ ] The OSM boundary extract as a CI job (main's per-country admin 1)
@@ -217,3 +218,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.2: world timezones from the units and the cities' zones, not simplified TBB | D-151 |
 | 2026-11-10 | 4.2: slice names cut to the world part's languages, so slices fit the budget | D-152 |
 | 2026-11-10 | 4.2: the baseline ships as one merged file; neighbours cut to pack outlines added | D-153 |
+| 2026-11-10 | 4.2: neighbours cut to pack outlines done | D-154 |

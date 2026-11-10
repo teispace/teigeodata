@@ -275,8 +275,18 @@ index).
   file the world's Nepal outline is gone: two Indian border towns that Natural Earth's Nepal
   held now fall in no country (neither the pack's Nepal nor Natural Earth's India holds
   them), and one place that both the pack's Nepal and Natural Earth's India hold answers both.
-  The fix is to cut the world part's neighbours to each pack country's outline before the
-  topology stage, so the borders share arcs (planned, phase 4.2).
+  Fixed by D-154 (below): 0 places differ.
+- **Shared borders (D-154).** `forge world` now draws each pack country with its slice's own
+  outline vertices, cuts the neighbours (and their units, exactly) by it, gives the pieces of
+  Natural Earth's outline it leaves out to the neighbour sharing the most border, and pins
+  those arcs in the topology stage so no level simplifies them. Options weighed: cutting at the
+  pack's full resolution (rejected: the two parts then simplify one line differently, 500 m
+  against 1 km, leaving slivers up to the tolerance wide); clipping in `merge` (rejected: the
+  format crate has no polygon overlay, and gaps would remain); a precedence rule inside a
+  layer (rejected: fixes overlaps, not gaps). The overlay rounds a crossing to the grid, so the
+  pack country's filler is cut last by its neighbours' pieces: its line moves at most 1e-7°
+  (about 1 cm) there. Nepal: the world part +16 kB, and every place answers as the layers do
+  (a planted run without the redraw gives back the 3 differences).
 - **Embedding.** The engine's `baseline` feature compiles the file in (`include_bytes!`, the
   path in `TEIGEODATA_BASELINE`); WASM loads the same bytes. Raw rather than compressed: the
   engine reads it in place (`from_static`, no copy), and app stores and HTTP compress the

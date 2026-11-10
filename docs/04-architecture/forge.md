@@ -636,6 +636,15 @@ feature's ID (D-149). Defaults: `ne-admin0-nep`, `ne-admin1`, `geonames-cities15
   pieces and fillers, so both levels share one arc set, with G-topo's parent limit at
   `pov::MAX_SHIFT_M` (10 m) instead of 1 m. Unrecognised units, unnamed placeholders and pack
   countries' units are dropped; their area falls to the filler.
+- **Pack countries' outlines** (`topo::pov::redraw`, D-154). A pack country's outline is the
+  one its slice ships (read from `data/build/baseline/<cc>/`, so `forge make <cc>` runs
+  first), not Natural Earth's. Each neighbour is cut by it; each piece of Natural Earth's
+  outline that the pack's leaves out goes to the neighbour sharing the most border with it;
+  neighbours' units are cut by it exactly, whatever the width; and the pack country's filler is
+  cut last by everything near it, so the overlay's grid rounding never leaves two pieces
+  overlapping. The topology stage pins its arcs (every vertex at every level), so the world's
+  neighbours meet the slice on the slice's own line. Nepal: 2 neighbours cut, 83 pieces
+  given, 170 arcs pinned, +16 kB.
 - **Timezones** (`build::world_tz`, D-151). Every place gets a zone, written as PLACE_TZ, and
   every zone used is a timezone-area row (`tz:<ID>`, namespace `world`, at its `zone.tab`
   point):
@@ -698,12 +707,14 @@ on macOS, `ps` RSS leaves out compressed and swapped memory.
   moved past the earlier parts' (two phonetic keys, or more than 255 unit types, fail).
 - **Manifest.** The world part's address, release and licence; every part's notices, each line
   once.
+- **Borders.** The world part meets each pack country on its slice's line (D-154), so the one
+  file answers every place exactly as the parts do as layers.
 - **Gates.** Z1: over 8,000,000 B fails the stage. Every ID of every part is one row, at the
   last part's point (a planted "earlier part wins" fails it). Read back verified, geometry
   checked.
 
-Measured 2026-11-10 (main, world + Nepal): 39,395 rows, 5,876,132 B (4,475,825 B on the wire),
-in 0.4 s at a 26 MB peak; 21 kB less than the two parts apart.
+Measured 2026-11-10 (main, world + Nepal, with D-154): 39,395 rows, 5,895,268 B, in 0.5 s at
+a 26 MB peak; about 18 kB less than the two parts apart.
 
 ## The baseline slice (`baseline`)
 

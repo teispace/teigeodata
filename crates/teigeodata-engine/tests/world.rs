@@ -466,10 +466,10 @@ fn the_cost_of_slices_as_layers() {
 
 /// The shipped baseline (`forge embed`, `TGD_EMBED`) is one layer that answers as its parts do
 /// as layers, the slice (`TGD_BASELINE`) above the world part (`TGD_WORLD`): for every ID, the
-/// same place, name, chain and zone; for every sampled name, the same hits. At every place, the
-/// same units and zone, except where the slice's outline and the world's neighbours disagree
-/// (D-153): there the one file follows the slice's outline, so a difference must name a country
-/// the slice replaced, and stay rare. Then the cost of each.
+/// same place, name, chain and zone; for every sampled name, the same hits; at every place, the
+/// same units and zone. The last holds because the world's neighbours meet each pack country on
+/// its slice's own line (D-154); before that, 3 border places differed (D-153). Then the cost
+/// of each.
 #[test]
 #[ignore = "needs TGD_EMBED, TGD_WORLD and TGD_BASELINE"]
 fn the_shipped_baseline_answers_as_its_parts() {
@@ -487,11 +487,6 @@ fn the_shipped_baseline_answers_as_its_parts() {
         ids.extend((0..map.len()).map(|r| map.id(r).unwrap()));
     }
     ids.sort_unstable();
-    let replaced: Vec<PlaceId> = ids
-        .windows(2)
-        .filter(|w| w[0] == w[1])
-        .map(|w| w[0])
-        .collect();
     ids.dedup();
     let (mut s, mut up_one, mut up_two, mut units_one, mut units_two) = (
         Scratch::default(),
@@ -539,11 +534,6 @@ fn the_shipped_baseline_answers_as_its_parts() {
                 .map(|z| e.name(&z, &mut [0; 512]).unwrap().map(str::to_owned))
         };
         if set_one != set_two || tz(&one) != tz(&two) {
-            let border = set_one.iter().chain(&set_two).any(|u| replaced.contains(u));
-            assert!(
-                border,
-                "{id:?}: {set_one:?} vs {set_two:?} away from a replaced country"
-            );
             off.push((id, set_one, set_two));
         }
         if i % 50 == 0 {
@@ -551,11 +541,11 @@ fn the_shipped_baseline_answers_as_its_parts() {
             points.push(x.point);
         }
     }
-    for o in &off {
-        println!("at a replaced country's border: {o:?}");
+    for o in off.iter().take(10) {
+        println!("units or zone differ: {o:?}");
     }
     assert!(
-        off.len() * 1000 <= ids.len(),
+        off.is_empty(),
         "{} of {} places differ",
         off.len(),
         ids.len()

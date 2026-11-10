@@ -72,6 +72,9 @@ struct Src {
     parents: Vec<String>,
     rings: Vec<Vec<V>>,
     area_km2: Option<f64>,
+    /// Its arcs keep every vertex at every level: a pack country's outline in the world part
+    /// (D-154), so the world's neighbours share the slice's line exactly.
+    pinned: bool,
 }
 
 fn src(level: u8, u: boundaries::Unit) -> Src {
@@ -81,6 +84,7 @@ fn src(level: u8, u: boundaries::Unit) -> Src {
         parents: u.parents,
         rings: arcs::clean_rings(&u.polygon.rings),
         area_km2: u.area_km2,
+        pinned: false,
     }
 }
 
@@ -96,6 +100,7 @@ fn read_units(zip: &Path) -> Result<Vec<Src>, String> {
                 parents: Vec::new(),
                 rings: arcs::clean_rings(&c.polygon.rings),
                 area_km2: None,
+                pinned: false,
             })
             .collect());
     }
@@ -327,13 +332,16 @@ pub(crate) fn run(root: &Path, source: &str) -> Result<String, String> {
 /// The world's countries (level 0) and their first-level units cut to them (level 1, D-150)
 /// as one source: the units and the remainders ([`pov::cut`]) are the finest level, so each
 /// country is dissolved from them and checked against its own outline (G-topo), and countries
-/// and units share one arc set. `name` names the output directory.
+/// and units share one arc set. `name` names the output directory. The fillers of the
+/// countries in `pinned` (the pack countries, whose outline is their slice's, D-154) keep every
+/// vertex at every level.
 pub(crate) fn run_world(
     root: &Path,
     name: &str,
     countries: &[natural_earth::Country],
     units: &[natural_earth::Unit],
     cut: &pov::Cut,
+    pinned: &[usize],
 ) -> Result<String, String> {
     let mut src: Vec<Src> = countries
         .iter()
@@ -343,6 +351,7 @@ pub(crate) fn run_world(
             parents: Vec::new(),
             rings: arcs::clean_rings(&c.polygon.rings),
             area_km2: None,
+            pinned: false,
         })
         .collect();
     let code = |c: usize| {
@@ -359,9 +368,11 @@ pub(crate) fn run_world(
             parents: vec![code(p.country)?],
             rings: arcs::clean_rings(&p.rings),
             area_km2: None,
+            pinned: false,
         });
     }
     for (k, (c, rings)) in cut.fills.iter().enumerate() {
+        let pin = pinned.contains(c);
         let c = code(*c)?;
         src.push(Src {
             level: 1,
@@ -369,6 +380,7 @@ pub(crate) fn run_world(
             parents: vec![c],
             rings: arcs::clean_rings(rings),
             area_km2: None,
+            pinned: pin,
         });
     }
     // A sliver the cleaning emptied (no area on the grid) has nothing to give its country.
@@ -425,6 +437,7 @@ fn stage(root: &Path, source: &str, units: &[Src], max_parent_m: f64) -> Result<
     for ((u, _), r) in rings.iter().zip(&refs) {
         by_unit[*u as usize].extend(r);
     }
+    let pinned = pinned_arcs(&fine, &by_unit, arcs.len(), &mut s);
     // A coarser level is dissolved when the source names it for every unit, and skipped when it
     // names it for none (a geoBoundaries file states only the country).
     let mut polys: Vec<(u8, String, Parts)> = Vec::new();
@@ -464,7 +477,7 @@ fn stage(root: &Path, source: &str, units: &[Src], max_parent_m: f64) -> Result<
                 .flat_map(|p| p.iter().enumerate().map(|(k, r)| (r.clone(), k == 0)))
         })
         .collect();
-    let (levels, report) = guarded_levels(source, &arcs, &guard_rings)?;
+    let (levels, report) = guarded_levels(source, &arcs, &guard_rings, &pinned)?;
     let measured: Vec<(V, u32, [i32; 4])> = polys
         .par_iter()
         .map(|(_, _, p)| measure_poly(&arcs, p))
@@ -492,14 +505,37 @@ fn stage(root: &Path, source: &str, units: &[Src], max_parent_m: f64) -> Result<
     Ok(s)
 }
 
+/// Which arcs a pinned unit uses (D-154), noted in the summary when there are any.
+fn pinned_arcs(fine: &[&Src], by_unit: &[Vec<Ref>], n: usize, s: &mut String) -> Vec<bool> {
+    let mut pinned = vec![false; n];
+    for (u, refs) in fine.iter().zip(by_unit) {
+        if u.pinned {
+            for &r in refs {
+                if let Some(p) = pinned.get_mut((r >> 1) as usize) {
+                    *p = true;
+                }
+            }
+        }
+    }
+    let pins = pinned.iter().filter(|&&p| p).count();
+    if pins > 0 {
+        let _ = writeln!(
+            s,
+            "{pins} arcs pinned: every vertex at every level (a pack country's outline, D-154).\n"
+        );
+    }
+    pinned
+}
+
 /// The levels of detail; G-topo fails when the guard leaves a crossing or degenerate ring.
 type Levels = (Vec<Vec<u8>>, Vec<(u8, simplify::Guarded)>);
 fn guarded_levels(
     source: &str,
     arcs: &[Vec<V>],
     rings: &[(Vec<Ref>, bool)],
+    pinned: &[bool],
 ) -> Result<Levels, String> {
-    let (levels, report) = simplify::levels(arcs, rings);
+    let (levels, report) = simplify::levels(arcs, rings, pinned);
     if let Some((lod, g)) = report.iter().find(|(_, g)| g.left > 0) {
         return Err(format!(
             "G-topo: {source}: level of detail {lod} keeps {} crossings or degenerate rings no removed vertex fixes",

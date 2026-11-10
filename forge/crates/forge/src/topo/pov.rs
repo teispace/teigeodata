@@ -123,18 +123,24 @@ fn area2(shapes: &[Shape]) -> i128 {
         .sum()
 }
 
-/// Whether `s` (one outer contour and its holes) is narrower than [`MIN_WIDTH`] on average.
-fn thin(s: &Shape) -> bool {
-    let area = area2(std::slice::from_ref(s)).abs();
-    let perimeter: f64 = s
+/// The length of every contour of `shapes`, in grid units.
+fn perimeter(shapes: &[Shape]) -> f64 {
+    shapes
         .iter()
+        .flatten()
         .flat_map(|c| c.iter().zip(c.iter().cycle().skip(1)))
         .map(|(a, b)| {
             #[allow(clippy::cast_precision_loss, reason = "differences below 2^33")]
             let (dx, dy) = ((b.x - a.x) as f64, (b.y - a.y) as f64);
             dx.hypot(dy)
         })
-        .sum();
+        .sum()
+}
+
+/// Whether `s` (one outer contour and its holes) is narrower than [`MIN_WIDTH`] on average.
+fn thin(s: &Shape) -> bool {
+    let area = area2(std::slice::from_ref(s)).abs();
+    let perimeter = perimeter(std::slice::from_ref(s));
     // Twice the area over the perimeter, compared without dividing: 2A/P < w ⇔ 2A < w·P.
     #[allow(
         clippy::cast_precision_loss,
@@ -192,6 +198,8 @@ struct Countries<'a> {
     /// Per country, the box of each of its contours, in the order of its shape.
     contours: Vec<Vec<[i32; 4]>>,
     by_code: BTreeMap<&'a str, usize>,
+    /// Countries whose outline no other piece may overlap at all (a pack country's, D-154).
+    exact: Vec<usize>,
 }
 
 impl Countries<'_> {
@@ -223,8 +231,45 @@ fn contour_box(c: &[IntPoint<i64>]) -> [i32; 4] {
 
 /// Unit `unit` in the country that holds most of it (its own code's when that holds all of it
 /// but noise; ties to the lower index), minus the wide parts of its overhang: as drawn when
-/// there are none, so its vertices stay the source's.
+/// there are none, so its vertices stay the source's. Then minus every exact country's outline,
+/// whatever the width ([`Countries::exact`]).
 fn place(countries: &Countries<'_>, unit: usize, u: &Input<'_>) -> Fate {
+    match place_loose(countries, unit, u) {
+        Fate::Piece(p, was_cut, moved) => match off_exact(countries, &p) {
+            Some(rings) if rings.is_empty() => Fate::Outside,
+            Some(rings) => Fate::Piece(Piece { rings, ..p }, true, moved),
+            None => Fate::Piece(p, was_cut, moved),
+        },
+        f => f,
+    }
+}
+
+/// Piece `p` minus the exact countries other than its own that overlap it; `None` when none do.
+fn off_exact(countries: &Countries<'_>, p: &Piece) -> Option<Vec<Vec<V>>> {
+    let bounds = bbox(&p.rings);
+    let clip: Shape = countries
+        .exact
+        .iter()
+        .filter(|&&k| k != p.country)
+        .filter(|&&k| countries.boxes.get(k).is_some_and(|b| meets(b, &bounds)))
+        .filter_map(|&k| countries.near(k, &bounds))
+        .flatten()
+        .collect();
+    if clip.is_empty() {
+        return None;
+    }
+    let drawn = shape(&p.rings);
+    if area2(&overlay(&drawn, &clip, OverlayRule::Intersect)) == 0 {
+        return None;
+    }
+    Some(rings_of(&wide(overlay(
+        &drawn,
+        &clip,
+        OverlayRule::Difference,
+    ))))
+}
+
+fn place_loose(countries: &Countries<'_>, unit: usize, u: &Input<'_>) -> Fate {
     let drawn = shape(u.rings);
     let bounds = bbox(u.rings);
     let own = countries.by_code.get(u.code).copied();
@@ -320,6 +365,7 @@ pub(crate) fn cut(
     units: &[Input<'_>],
     unrecognized: &[bool],
     keep: impl Fn(usize) -> bool + Sync,
+    exact: &[usize],
 ) -> Cut {
     let c = Countries {
         shapes: countries.iter().map(|c| shape(c.rings)).collect(),
@@ -330,6 +376,7 @@ pub(crate) fn cut(
             .enumerate()
             .map(|(i, c)| (c.code, i))
             .collect(),
+        exact: exact.to_vec(),
     };
     let c = Countries {
         contours: c
@@ -369,7 +416,126 @@ pub(crate) fn cut(
         }
     }
     out.fills = remainders(&c, &out.pieces);
+    yield_exact(&c, &mut out);
     out
+}
+
+/// An exact country's fillers give way to every other piece and filler near them: the overlay
+/// rounds a crossing to the grid, so a neighbour cut by the exact outline can still reach a
+/// grid unit (about 1 cm) into it. Cut last, the exact country takes its neighbours' vertices
+/// where they meet, so no two pieces overlap, and its line moves at most that unit.
+fn yield_exact(c: &Countries<'_>, out: &mut Cut) {
+    let others: Vec<(usize, [i32; 4], Shape)> = out
+        .pieces
+        .iter()
+        .map(|p| (p.country, &p.rings))
+        .chain(out.fills.iter().map(|(k, r)| (*k, r)))
+        .map(|(k, r)| (k, bbox(r), shape(r)))
+        .collect();
+    let mut fills = Vec::with_capacity(out.fills.len());
+    for (k, rings) in std::mem::take(&mut out.fills) {
+        if !c.exact.contains(&k) {
+            fills.push((k, rings));
+            continue;
+        }
+        let bounds = bbox(&rings);
+        let clip: Shape = others
+            .iter()
+            .filter(|(o, b, _)| *o != k && meets(b, &bounds))
+            .flat_map(|(_, _, s)| s.iter().cloned())
+            .collect();
+        if clip.is_empty() {
+            fills.push((k, rings));
+            continue;
+        }
+        let rest = wide(overlay(&shape(&rings), &clip, OverlayRule::Difference));
+        fills.extend(rest.iter().map(|s| (k, rings_of(std::slice::from_ref(s)))));
+    }
+    out.fills = fills;
+}
+
+/// A country's index and the outline its pack draws.
+pub(crate) type Outline = (usize, Vec<Vec<V>>);
+
+/// Twice the border, in grid units, a neighbour must share with a gap to take it: more than
+/// noise ([`MIN_WIDTH`] each way).
+const MIN_SHARED: f64 = 200.0;
+
+/// What [`redraw`] did.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct Redrawn {
+    /// Neighbours cut by a pack country's outline.
+    pub(crate) cut: usize,
+    /// Pieces of a pack country's source outline outside its own outline, each given to the
+    /// neighbour sharing the most border with it.
+    pub(crate) given: usize,
+    /// Such pieces no neighbour touches, left to no country.
+    pub(crate) left: usize,
+}
+
+/// Redraws the countries around each pack country's own outline (D-154): `outlines` holds a
+/// country index and the outline its pack draws (the vertices its baseline slice ships). The
+/// pack country takes that outline; every other country is cut by it, keeping its parts at
+/// least [`MIN_WIDTH`] wide; and each part of the pack country's source outline that its own
+/// outline leaves out goes to the neighbour sharing the most border with it. Pack countries
+/// never cut each other: each keeps its pack's line.
+pub(crate) fn redraw(countries: &mut [Vec<Vec<V>>], outlines: &[Outline]) -> Redrawn {
+    let mut r = Redrawn::default();
+    let packs: Vec<usize> = outlines.iter().map(|o| o.0).collect();
+    for (p, outline) in outlines {
+        let new = shape(outline);
+        let Some(source) = countries.get(*p) else {
+            continue;
+        };
+        let old = shape(source);
+        let area = [bbox(outline), bbox(source)];
+        let near: Vec<usize> = (0..countries.len())
+            .filter(|i| !packs.contains(i))
+            .filter(|&i| {
+                countries
+                    .get(i)
+                    .is_some_and(|c| area.iter().any(|b| meets(&bbox(c), b)))
+            })
+            .collect();
+        for &i in &near {
+            let Some(c) = countries.get_mut(i) else {
+                continue;
+            };
+            let s = shape(c);
+            if area2(&overlay(&s, &new, OverlayRule::Intersect)) == 0 {
+                continue;
+            }
+            *c = rings_of(&wide(overlay(&s, &new, OverlayRule::Difference)));
+            r.cut += 1;
+        }
+        for gap in wide(overlay(&old, &new, OverlayRule::Difference)) {
+            let gap = vec![gap];
+            // Twice the border a neighbour shares with the gap: what their union loses.
+            let best = near
+                .iter()
+                .filter_map(|&i| {
+                    let s = vec![shape(countries.get(i)?)];
+                    let joined = overlay(s.first()?, gap.first()?, OverlayRule::Union);
+                    let shared = perimeter(&s) + perimeter(&gap) - perimeter(&joined);
+                    Some((shared, i, joined))
+                })
+                .filter(|b| b.0 > MIN_SHARED)
+                .max_by(|a, b| a.0.total_cmp(&b.0).then(b.1.cmp(&a.1)));
+            match best {
+                Some((_, i, joined)) => {
+                    if let Some(c) = countries.get_mut(i) {
+                        *c = rings_of(&joined);
+                    }
+                    r.given += 1;
+                }
+                None => r.left += 1,
+            }
+        }
+        if let Some(c) = countries.get_mut(*p) {
+            c.clone_from(outline);
+        }
+    }
+    r
 }
 
 #[cfg(test)]
@@ -446,6 +612,7 @@ mod tests {
             &units,
             &[false, false, false, false, true],
             |_| true,
+            &[],
         );
         assert_eq!((c.unrecognized, c.outside, c.skipped), (1, 1, 0));
         assert_eq!(c.moved, [2]);
@@ -473,7 +640,7 @@ mod tests {
             assert_eq!(total, area(country), "country {k}");
         }
         // `keep` false: B's units dropped and B is one remainder.
-        let c = cut(&countries, &units, &[false; 5], |k| k == 0);
+        let c = cut(&countries, &units, &[false; 5], |k| k == 0, &[]);
         assert_eq!(c.skipped, 2);
         assert_eq!(c.fills.iter().filter(|f| f.0 == 1).count(), 1);
     }
@@ -495,7 +662,7 @@ mod tests {
             code: "A",
             rings: &u,
         }];
-        let c = cut(&countries, &units, &[false], |_| true);
+        let c = cut(&countries, &units, &[false], |_| true, &[]);
         assert_eq!((c.clipped, c.pieces.len()), (0, 1));
         assert_eq!(c.pieces[0].rings, u, "kept as drawn");
         assert!(
@@ -508,7 +675,87 @@ mod tests {
             code: "A",
             rings: &v,
         }];
-        let c = cut(&countries, &units, &[false], |_| true);
+        let c = cut(&countries, &units, &[false], |_| true, &[]);
         assert_eq!((c.clipped, area(&c.pieces[0].rings)), (1, 100));
+    }
+
+    /// A pack country's own outline (D-154): A is [0,10]², B east of it, C north of it. A's
+    /// pack draws it as [0,12]×[0,9]: B loses the overlap, and the strip [0,10]×[9,10] that A's
+    /// pack leaves out goes to C, which shares 10 of its border against B's 1. The total area
+    /// stays.
+    #[test]
+    fn a_pack_outline_cuts_its_neighbours_and_gives_away_its_gaps() {
+        let mut countries = vec![rect(0, 0, 10, 10), rect(10, 0, 20, 10), rect(0, 10, 10, 20)];
+        let own = rect(0, 0, 12, 9);
+        let r = redraw(&mut countries, &[(0, own.clone())]);
+        assert_eq!(
+            r,
+            Redrawn {
+                cut: 1,
+                given: 1,
+                left: 0
+            }
+        );
+        assert_eq!(countries[0], own);
+        let areas: Vec<i128> = countries.iter().map(|c| area(c)).collect();
+        assert_eq!(areas, [108, 82, 110]);
+        // B and C no longer overlap A.
+        for c in &countries[1..] {
+            assert_eq!(
+                area2(&overlay(&shape(c), &shape(&own), OverlayRule::Intersect)),
+                0
+            );
+        }
+        // A second pack country is never cut by the first.
+        let mut two = vec![rect(0, 0, 10, 10), rect(10, 0, 20, 10)];
+        let r = redraw(
+            &mut two,
+            &[(0, rect(0, 0, 12, 10)), (1, rect(10, 0, 20, 10))],
+        );
+        assert_eq!(r.cut, 0);
+        assert_eq!(two[1], rect(10, 0, 20, 10));
+    }
+
+    /// An exact country (a pack's outline, D-154): a neighbour's unit that overhangs it by less
+    /// than [`MIN_WIDTH`] keeps that sliver as noise against an ordinary country, but loses it
+    /// against an exact one, so no piece overlaps the pack's line at all.
+    #[test]
+    fn no_piece_overlaps_an_exact_country() {
+        let (a, b) = (rect(0, 0, 10, 10), rect(10, 0, 20, 10));
+        let countries = [
+            Input {
+                code: "A",
+                rings: &a,
+            },
+            Input {
+                code: "B",
+                rings: &b,
+            },
+        ];
+        // B's unit reaches 50 grid units (about 55 cm) into A.
+        let thin = vec![vec![
+            (10 * K - 50, 0),
+            (20 * K, 0),
+            (20 * K, 10 * K),
+            (10 * K - 50, 10 * K),
+            (10 * K - 50, 0),
+        ]];
+        let units = [Input {
+            code: "B",
+            rings: &thin,
+        }];
+        let inside_a = |c: &Cut| {
+            let p = c.pieces.first().unwrap();
+            area2(&overlay(
+                &shape(&p.rings),
+                &shape(&a),
+                OverlayRule::Intersect,
+            ))
+        };
+        let loose = cut(&countries, &units, &[false], |_| true, &[]);
+        assert!(inside_a(&loose) > 0, "noise against an ordinary country");
+        let exact = cut(&countries, &units, &[false], |_| true, &[0]);
+        assert_eq!(inside_a(&exact), 0);
+        assert_eq!(exact.clipped, 1);
     }
 }

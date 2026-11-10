@@ -342,13 +342,25 @@ fn fix_rings(
 }
 
 /// Levels for every arc, guarded against crossings and degenerate `rings` (each with whether it
-/// is an outer ring) at every level; the report per level, coarsest first.
+/// is an outer ring) at every level; the report per level, coarsest first. An arc marked in
+/// `pinned` keeps every vertex at every level (D-154): it is a line another pack draws.
 pub(crate) fn levels(
     arcs: &[Vec<V>],
     rings: &[(Vec<Ref>, bool)],
+    pinned: &[bool],
 ) -> (Vec<Vec<u8>>, Vec<(u8, Guarded)>) {
     use rayon::prelude::*;
-    let imp: Vec<Vec<f64>> = arcs.par_iter().map(|a| importance(a)).collect();
+    let imp: Vec<Vec<f64>> = arcs
+        .par_iter()
+        .enumerate()
+        .map(|(i, a)| {
+            if pinned.get(i).copied().unwrap_or(false) {
+                vec![f64::INFINITY; a.len()]
+            } else {
+                importance(a)
+            }
+        })
+        .collect();
     let mut levels: Vec<Vec<u8>> = imp
         .iter()
         .map(|v| v.iter().map(|&i| level(i)).collect())
