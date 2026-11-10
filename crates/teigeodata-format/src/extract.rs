@@ -263,6 +263,83 @@ struct Renumbered {
     arcs_per_polygon: Vec<Vec<u32>>,
 }
 
+/// POLYGONS of `input`, after moving each label the coarser outline no longer holds (a small
+/// island's) to a point inside it.
+fn labels_inside(
+    input: &mut [PolygonInput<'_>],
+    groups: &[u32],
+    arcs: &Arcs<'_>,
+) -> Result<Vec<u8>, Error> {
+    let first = polygons::encode(input, groups)?;
+    let check = Polygons::open(&crate::Section::unpacked(
+        Kind::POLYGONS,
+        input.len() as u64,
+        &first,
+    ))?;
+    let mut moved = 0;
+    for (i, poly) in input.iter_mut().enumerate() {
+        if check.contains(arcs, i, poly.label) {
+            continue;
+        }
+        poly.label = check
+            .parts(i)
+            .into_iter()
+            .flatten()
+            .find_map(|part| {
+                let rings: Vec<Vec<Point<E7>>> = check
+                    .rings(part)?
+                    .map(|r| check.ring(arcs, r, 0).collect())
+                    .collect();
+                interior(&rings).filter(|&at| check.contains(arcs, i, at))
+            })
+            .ok_or(fail("no point inside a coarse polygon"))?;
+        moved += 1;
+    }
+    if moved == 0 {
+        Ok(first)
+    } else {
+        polygons::encode(input, groups)
+    }
+}
+
+/// A point inside a part (its outer ring first, then holes): on a horizontal line through the
+/// outer ring's box at 1/2, 1/4, 3/4, … of its height, the middle of the widest span between
+/// crossings. `None` if no line finds one.
+fn interior(rings: &[Vec<Point<E7>>]) -> Option<Point<E7>> {
+    let outer = rings.first()?;
+    let (lo, hi) = outer.iter().fold((i32::MAX, i32::MIN), |(lo, hi), v| {
+        (lo.min(v.lat()), hi.max(v.lat()))
+    });
+    let h = i64::from(hi) - i64::from(lo);
+    let mut xs: Vec<f64> = Vec::new();
+    for k in [4_i64, 2, 6, 1, 3, 5, 7] {
+        let y = i32::try_from(i64::from(lo) + h * k / 8).ok()?;
+        xs.clear();
+        for ring in rings {
+            for (a, b) in ring.iter().zip(ring.iter().cycle().skip(1)) {
+                if (a.lat() > y) != (b.lat() > y) {
+                    let t = f64::from(y - a.lat()) / f64::from(b.lat() - a.lat());
+                    xs.push(f64::from(a.lon()) + t * f64::from(b.lon() - a.lon()));
+                }
+            }
+        }
+        xs.sort_by(f64::total_cmp);
+        let best = xs
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&[a, b]| (b - a, a.midpoint(b)))
+            .max_by(|a, b| a.0.total_cmp(&b.0));
+        if let Some((width, mid)) = best
+            && width >= 2.0
+        {
+            #[allow(clippy::cast_possible_truncation, reason = "between two longitudes")]
+            return Point::<E7>::from_units(y, mid as i32);
+        }
+    }
+    None
+}
+
 /// A pack's admin geometry.
 struct Geometry<'g, 'a> {
     arcs: &'g Arcs<'a>,
@@ -378,7 +455,7 @@ impl Geometry<'_, '_> {
             .iter()
             .map(|p| p.iter().map(Vec::as_slice).collect())
             .collect();
-        let input = kept
+        let mut input = kept
             .iter()
             .zip(&part_refs)
             .map(|(&(p, row), parts)| {
@@ -410,16 +487,24 @@ impl Geometry<'_, '_> {
             .iter()
             .map(|a| a.iter().map(|v| [v.lon(), v.lat()]).collect())
             .collect();
-        let admin = region::encode_on_arcs(&lon_lat, &[], &arcs_per_polygon, opts)?;
+        // The region's run scales are the new arcs' own (a source on a coarse decimal grid has
+        // them), so read them back from the encoded ARCS.
+        let new_arcs = Arcs::open(&crate::Section::unpacked(
+            Kind::ARCS,
+            used.len() as u64,
+            &arcs_body,
+        ))?;
+        let scales: Vec<u32> = if new_arcs.has_scale() {
+            (0..new_arcs.len()).map(|a| new_arcs.scale(a)).collect()
+        } else {
+            Vec::new()
+        };
+        let admin = region::encode_on_arcs(&lon_lat, &scales, &arcs_per_polygon, opts)?;
+        let polygons_body = labels_inside(&mut input, &groups, &new_arcs)?;
         let n = kept.len() as u64;
         Ok(vec![
             (Kind::ARCS, Encoding::TABLE, used.len() as u64, arcs_body),
-            (
-                Kind::POLYGONS,
-                Encoding::TABLE,
-                n,
-                polygons::encode(&input, &groups)?,
-            ),
+            (Kind::POLYGONS, Encoding::TABLE, n, polygons_body),
             (
                 Kind::POLY_INDEX,
                 Encoding::TABLE,
@@ -428,5 +513,38 @@ impl Geometry<'_, '_> {
             ),
             (Kind::ADMIN_REGION, Encoding::TABLE, n, admin),
         ])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "test code")]
+
+    use super::{E7, Point, interior};
+    use alloc::vec::Vec;
+
+    fn ring(v: &[(i32, i32)]) -> Vec<Point<E7>> {
+        v.iter()
+            .map(|&(x, y)| Point::<E7>::from_units(y, x).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn an_interior_point_avoids_the_hole() {
+        // A 100 × 100 square with a hole over its middle band, x 10 to 90.
+        let outer = ring(&[(0, 0), (100, 0), (100, 100), (0, 100)]);
+        let hole = ring(&[(10, 40), (10, 60), (90, 60), (90, 40)]);
+        let p = interior(&[outer.clone(), hole]).unwrap();
+        // Half-way up is in the hole's band: the widest span there is outside the hole.
+        assert!(
+            p.lon() < 10 || p.lon() > 90 || !(40..=60).contains(&p.lat()),
+            "{p:?}"
+        );
+        assert!((0..=100).contains(&p.lon()) && (0..=100).contains(&p.lat()));
+        // Without the hole: the middle.
+        let q = interior(&[outer]).unwrap();
+        assert_eq!((q.lon(), q.lat()), (50, 50));
+        // A degenerate ring has none.
+        assert!(interior(&[ring(&[(0, 0), (5, 0), (9, 0)])]).is_none());
     }
 }
