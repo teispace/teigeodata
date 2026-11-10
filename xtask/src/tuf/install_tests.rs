@@ -16,13 +16,18 @@ use teigeodata_sync::transport::{Fetch, Frames, Layout, SeekTable, encode_table}
 /// A pack with a 2.5 MiB NAMES (three frames, covered by `BLOCK_HASHES`), small sections of
 /// other components, and an empty one.
 fn pack() -> Vec<u8> {
+    pack_of("2026.11.0")
+}
+
+/// The same pack under another release.
+pub(super) fn pack_of(release: &str) -> Vec<u8> {
     let ids: Vec<u8> = (0..40_000_u32).map(|i| (i * 7 % 251) as u8).collect();
     let places: Vec<u8> = (0..30_000_u32).map(|i| (i % 13) as u8).collect();
     let names: Vec<u8> = (0..(5_u32 << 19))
         .map(|i| b"Lahachowk Kathmandu Pokhara "[(i % 28) as usize] ^ (i >> 16) as u8)
         .collect();
     let tz = vec![9_u8; 3_000];
-    let mut w = Writer::new("zz", "places", "2026.11.0").unwrap();
+    let mut w = Writer::new("zz", "places", release).unwrap();
     w.manifest(Tag::LICENCE, b"odbl").unwrap();
     w.pack(
         &[
@@ -37,7 +42,7 @@ fn pack() -> Vec<u8> {
     .unwrap()
 }
 
-fn at(r: &Range<u64>) -> Range<usize> {
+pub(super) fn at(r: &Range<u64>) -> Range<usize> {
     usize::try_from(r.start).unwrap()..usize::try_from(r.end).unwrap()
 }
 
@@ -455,15 +460,15 @@ fn the_default_transport_installs_and_refuses_bad_hosts() {
 }
 
 /// An in-memory host that counts the bytes it serves and can drop the connection at request `cut`.
-struct Mem<'a> {
+pub(super) struct Mem<'a> {
     asset: &'a [u8],
-    served: u64,
+    pub(super) served: u64,
     calls: usize,
     cut: Option<usize>,
 }
 
 impl<'a> Mem<'a> {
-    fn new(asset: &'a [u8], cut: Option<usize>) -> Self {
+    pub(super) fn new(asset: &'a [u8], cut: Option<usize>) -> Self {
         Self {
             asset,
             served: 0,

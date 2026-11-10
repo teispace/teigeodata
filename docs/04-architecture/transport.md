@@ -141,6 +141,37 @@ case a frame's output is bounded by what the signed head implies, and the bytes 
 against BLAKE3. A lying table can waste a request; it cannot install wrong bytes. The fuzz
 harness `transport_asset` checks exactly that property on writer-made packs.
 
+## Storing it (feature `store`, D-171)
+
+`sync::store::Store` keeps the installed packs under one root:
+
+```text
+<root>/journal           the installed packs (JSON, version 1): the commit point
+<root>/packs/<name>.tgd  immutable; <name> is the asset's name with the component set
+<root>/staging/<name>.tgd.part
+```
+
+`Store::install` runs `install_from` into the staging file (resumed if one is left), cuts it to
+`pack_len` and syncs it, renames it into `packs/` and syncs `packs/` and `staging/`, then writes
+the new journal to `journal.tmp`, syncs it, renames it over `journal` and syncs the root. That
+rename is the commit. A pack's name is never reused for other bytes, so a mapped file is never
+written over; the replaced version is removed after the commit, or by the next recovery when it
+cannot be yet (a mapped file on Windows). `Store::open` recovers: it drops `journal.tmp`,
+removes files in `packs/` the journal does not list, keeps staging for resume, and reports
+listed packs whose file is missing or the wrong length as damaged. A journal that does not
+parse is an error and nothing is removed. Names are checked to be plain lowercase ASCII before
+they reach the disk.
+
+Every file system call goes through the `store::Fs` trait (`store::Dir` is the real one; a
+directory is synced through a handle on Unix, and on Windows the file system's journal is relied
+on, **unverified**). The crash gate (sync gate 8) runs the install of a new release over an old
+one on an in-memory disk with POSIX durability (file data durable at `sync`, a directory's
+entries at its `sync_dir`), crashes it before every step, with unsynced data lost and with it
+kept, reboots and recovers: every time exactly one release is installed, whole, with no other
+file in `packs/`, both outcomes occur, and the install then completes. Leaving out any of the
+four syncs, the orphan sweep or the journal's parse check fails it. A test on a real directory
+installs, replaces, sweeps leftovers and reports a truncated pack.
+
 ## Writing it (feature `write`)
 
 `transport::write(pack, compress, sink)` streams the asset frame by frame with bounded memory.

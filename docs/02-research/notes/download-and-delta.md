@@ -249,7 +249,9 @@ of one more layer.
    fsync, rename, update the journal and swap the snapshot ([offline loading and
    trust](offline-loading-and-trust.md)).
 
-**Resume.** The resume record holds the asset name, ETag, total length and the set of finished
+**Resume.** *As built (D-169), there is no resume record: the staging file is checked frame by
+frame against the signed hashes on the next attempt, so the paragraph below is the original
+plan.* The resume record holds the asset name, ETag, total length and the set of finished
 frames. The GitHub asset host ignores `If-Range` (measured 2026-11-06), so every resumed request
 re-checks the ETag and the `Content-Range` total. A frame is either finished and verified, or
 fetched again, so at most 1 MiB is lost. A whole-file download that gets interrupted resumes

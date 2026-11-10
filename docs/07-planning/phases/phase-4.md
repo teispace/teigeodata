@@ -217,7 +217,10 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   (2026-11-10, D-169)
 - [x] Mirrors with demotion: `fetch::Mirrors`, `install_from`; each attempt on one mirror,
   resumed by the next (2026-11-10, D-170)
-- [ ] Staging, fsync, rename, journal commit, crash recovery; snapshot swap on install
+- [x] Staging, fsync, rename, journal commit, crash recovery: `sync::store`, the crash gate at
+  every step (2026-11-10, D-171)
+- [ ] Snapshot swap on install: the engine reopens from the journal while readers keep the old
+  mapping (with 4.6)
 - [ ] Platform transport prototypes for gate 14 (iOS background `URLSession`, Android UIDT,
   web `fetch` + OPFS); packaging stays in Phase 5
 
@@ -285,4 +288,5 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.5: the installer and verify-then-write done; resume and mirrors their own item | D-167 |
 | 2026-11-10 | 4.5: the transport and its driver done, with the size measurement | D-168 |
 | 2026-11-10 | 4.5: resume done, the staging file its own record; mirrors split into their own item | D-169 |
+| 2026-11-10 | 4.5: the store done with sync gate 8 (crash at every step); the snapshot swap split into its own item, built with 4.6 | D-171 |
 | 2026-11-10 | 4.5: mirrors done; 4.8 gains a world-size install for multi-frame block-hash lists, which no unit-size pack reaches | D-170 |

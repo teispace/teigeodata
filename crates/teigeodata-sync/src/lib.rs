@@ -57,6 +57,8 @@ pub mod fuzz;
 pub mod install;
 #[cfg(feature = "repo")]
 pub mod repo;
+#[cfg(feature = "store")]
+pub mod store;
 pub mod transport;
 #[cfg(feature = "trust")]
 pub mod trust;

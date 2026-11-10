@@ -29,6 +29,8 @@ std = []
 fetch = ["install", "std"]
 # The default transport: `ureq` with rustls and the platform's trust store (D-168).
 http = ["fetch", "dep:ureq"]
+# The installed packs on disk: staging, the atomic install, the journal and recovery (D-171).
+store = ["fetch"]
 # The fuzz and property harnesses, shared by `cargo test` and cargo-fuzz (D-072).
 fuzz = ["write"]
 
