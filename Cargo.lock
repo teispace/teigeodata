@@ -1374,7 +1374,11 @@ dependencies = [
 name = "teigeodata-sync"
 version = "0.0.0"
 dependencies = [
+ "blake3",
+ "ed25519-dalek",
  "ruzstd",
+ "serde_json",
+ "sha2",
  "teigeodata-format",
  "teigeodata-sync",
  "zeekstd",

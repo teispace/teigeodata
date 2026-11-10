@@ -165,8 +165,11 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   `LayerOptions::baseline()` (D-153)
 
 ### 4.3 Catalog and trust
-- [ ] TUF subset client (`sync::trust`): root chain, timestamp, snapshot, targets, canonical
-  JSON, persisted versions, length caps, the offline-first expiry rule
+- [x] TUF subset client (`sync::trust`): root chain, timestamp, snapshot, targets, canonical
+  JSON, persisted versions, length caps, the offline-first expiry rule (2026-11-10, D-159,
+  [§3.7](../../02-research/notes/offline-loading-and-trust.md#37-the-client-as-built-2026-11-10)):
+  `no_std` + `alloc`, 17 tests on a generated repository; nine planted faults each fail a test;
+  builds for `thumbv7em-none-eabihf` in fast-check
 - [ ] Catalog `custom` schema v1 with a checked-in JSON schema
 - [ ] Differential gate against `tough` and python-tuf
 - [ ] Repository tooling in `xtask`: sign, publish metadata to Pages, upload to sharded immutable
@@ -249,3 +252,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.2: the OSM extract item becomes Overture divisions for main's admin 0 and 1, in five steps | D-155 |
 | 2026-11-10 | Main's world part: ownership by the Nepal view at 15 km instead of the `ne-admin0` delta; 2 km and islets left out to fit Z1; locator radius 3 km; regions below their city | [world admin 1 §3.6–3.7](../../02-research/notes/world-admin1-osm.md#36-ownership-by-the-nepal-view-measured-2026-11-10), D-156 to D-158 |
 | 2026-11-10 | 4.2: thinning on sorted records, banded crossings | the measured 3.9 GB peak and 132 s in `crossings` |
+| 2026-11-10 | 4.3: the root cap is python-tuf's 512,000 B, not 64 KiB | D-159 |

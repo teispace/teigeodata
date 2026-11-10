@@ -10,6 +10,9 @@
 //!   frame's stated size;
 //! - [`transport::write`] (feature `write`) writes the asset and checks it byte for byte.
 //!
+//! Step 4.3: `trust` (feature `trust`) verifies the signed catalog, a subset of TUF: the root
+//! chain, timestamp, snapshot and targets, with length caps and the offline-first expiry rule.
+//!
 //! The reader side is `no_std` with `alloc` and sans-I/O: it never touches a file or a socket.
 //!
 //! ```
@@ -45,5 +48,7 @@ mod error;
 #[doc(hidden)]
 pub mod fuzz;
 pub mod transport;
+#[cfg(feature = "trust")]
+pub mod trust;
 
 pub use error::Error;

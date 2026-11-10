@@ -51,7 +51,10 @@ A short status. The numbers and evidence live in each phase file and the
   thinned as one partition, units owned by the Nepal view where it differs by at least 15 km
   (D-156), islets under the tolerance's square left out at 2 km (D-157: 5.60 MB merged, 3,877
   units, locator radius 3 km, 0 probes missed), and a region ranked below the city of its name
-  (D-158). Next: snap rounding on sorted records (the 3.9 GB peak), then 4.3 TUF trust.
+  (D-158); thinning on sorted, banded records (122 s, 2.46 GB peak); the TUF client
+  `sync::trust` (D-159). Next: 4.3 catalog `custom` schema, the differential against `tough`
+  and python-tuf, repository tooling; the world byte-identity check after the thinning change
+  waits for the inputs to be fetched again.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).
 - **Waiting on the maintainer:** review of `data/countries/np/corrections/` (unreviewed), the labelled sample (Q-005, needed for `ACCURACY.md` and M3),

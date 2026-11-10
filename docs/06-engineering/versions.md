@@ -45,7 +45,7 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | rstar (B8 rival, R*-tree; dev-dependency of `teigeodata-bench` only) | 0.14.0 | 2026-11-07 | crates.io | 2026-12-07 |
 | tzf-rs (B9 rival, `default-features = false`; dev-dependency of `teigeodata-bench` only) | 2.3.0 | 2026-11-07 | crates.io | 2026-12-07 |
 | tzf-dist `full.tzb` (B9 rival data, release asset `v0.0.2026-f`, SHA-256 `75513a16…35d8a3`) | 2026f | 2026-11-07 | GitHub release of ringsaturn/tzf-dist | 2026-12-07 |
-| serde, serde_json (B9 example reads the tbb GeoJSON; dev-dependencies of `teigeodata-bench` only) | 1.0.229, 1.0.154 | 2026-11-07 | crates.io | 2026-12-07 |
+| serde, serde_json (B9 example reads the tbb GeoJSON in `teigeodata-bench`; `serde_json` with `alloc` only in `teigeodata-sync`'s `trust` feature) | 1.0.229, 1.0.154 | 2026-11-07 | crates.io | 2026-12-07 |
 | Dart `ffi` package | 2.2.0 | 2026-11-07 | pub.dev | 2026-12-07 |
 | Java (JVM binding, CI) | 25 (Temurin) | 2026-11-07 | `java --version` | 2026-12-07 |
 | Swift (SwiftPM, local) | 6.4.2 | 2026-11-07 | `swift --version` | 2026-12-07 |
@@ -96,7 +96,7 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | calamine (COD-AB workbooks, spikes) | 0.38.0 | 2026-11-06 | crates.io | 2026-12-06 |
 | unicode-script | 0.5.9 | 2026-11-06 | crates.io | 2026-12-06 |
 | unicode-normalization | 0.1.26 | 2026-11-06 | crates.io | 2026-12-06 |
-| sha2 (forge fetch) | 0.11.1 | 2026-11-06 | crates.io | 2026-12-06 |
+| sha2 (forge fetch; TUF hashes in `teigeodata-sync`'s `trust` feature, no default features) | 0.11.1 | 2026-11-06 | crates.io | 2026-12-06 |
 | bytes (forge: in-memory Parquet) | 1.12.1 | 2026-11-07 | crates.io | 2026-12-07 |
 | SlideRule server (ATL08 reference, S6) | v5.8.0 | 2026-11-07 | `/source/version` | 2026-12-07 |
 | GeographicLib geoid grid egm2008-5 | 2009-08-29 | 2026-11-07 | SourceForge `geoids-distrib` | 2027-11-07 |

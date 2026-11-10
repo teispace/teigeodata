@@ -1,7 +1,7 @@
 ---
 title: "Offline loading and trust: catalog, downloads, storage, updates"
 status: research
-updated: 2026-11-06
+updated: 2026-11-10
 owner: research-agent
 revisit: 2027-02-06
 ---
@@ -553,6 +553,37 @@ and never overwritten in place on disk.
   signed data and never change what is trusted; a hosted tier serves the same signed bytes, which
   keeps ADR-0025's "a deployment, not a fork". A tier may add its own targets (private packs)
   only through a key the root delegates to it; that needs delegations, so it is a later step.
+
+### 3.7 The client as built (2026-11-10)
+
+`teigeodata-sync::trust` (feature `trust`, `no_std` + `alloc`, sans-I/O) follows python-tuf's
+`TrustedMetadataSet`: the caller hands it bytes in order (root chain, timestamp, snapshot,
+targets) and it keeps only what verified. What the build settled:
+
+- **Canonical JSON** is written as `securesystemslib` writes it: keys sorted by UTF-8 bytes, no
+  whitespace, only `\` and `"` escaped (a newline or `é` stays raw), integers only. Unknown
+  fields stay in the signed bytes, so a changed unknown field breaks the signature.
+- **Signatures** are Ed25519 `verify_strict` and counted by distinct public key, not by key ID:
+  one key listed under two IDs counts once (spec 5.3.4).
+- **Hashes:** `sha256`, `sha512` and `blake3`; an unknown algorithm is skipped, and a target
+  needs at least one known one.
+- **Length caps** before parsing: root 512,000 B (python-tuf's default; the 64 KiB in §3.1 would
+  refuse a root with many keys), timestamp 16,384 B, snapshot 2,000,000 B, targets 5,000,000 B
+  or the length the parent signed; at most 256 root rotations in one walk.
+- **Offline-first expiry:** expired metadata that verified is still kept and the call returns
+  `Expired`, so an app can show what it has; updating stops there.
+- **Stored copies:** a stored snapshot skips the length and hash the current timestamp names
+  (a newer timestamp may name another), is kept, and returns `Version` when it is not current;
+  no targets load over it.
+- **Key rotation:** when a new root changes the timestamp or snapshot keys, the stored timestamp
+  and snapshot are dropped (fast-forward recovery).
+- **Delegations** are refused: the catalog has none (D-159).
+
+Tests: 17 in `trust::tests` on a generated repository (rotation, expiry, rollback of each role,
+mix-and-match, freeze, a duplicate key, endless data, malformed metadata, call order). Each of
+nine checks (distinct keys, root version step, root expiry, timestamp and snapshot rollback,
+targets version in the snapshot, current snapshot, snapshot and targets version) was removed
+in turn and a test failed. The differential against `tough` and python-tuf is the next item.
 
 ## 4. Options compared
 

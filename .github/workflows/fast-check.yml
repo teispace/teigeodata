@@ -46,6 +46,7 @@ jobs:
         run: |
           rustup target add thumbv7em-none-eabihf
           cargo build --locked -p teigeodata-core -p teigeodata-format -p teigeodata-names -p teigeodata-blob --target thumbv7em-none-eabihf
+          cargo build --locked -p teigeodata-sync --no-default-features --features trust --target thumbv7em-none-eabihf
 
   forge:
     runs-on: ubuntu-latest
