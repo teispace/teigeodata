@@ -20,7 +20,7 @@ use crate::geom::Polygon;
 use crate::record::e7;
 
 /// The `NAME_<XX>` columns (lower case in admin 1) and their BCP 47 tags, in column order.
-const LANGS: [(&str, &str); 26] = [
+pub(crate) const LANGS: [(&str, &str); 26] = [
     ("NAME_AR", "ar"),
     ("NAME_BN", "bn"),
     ("NAME_DE", "de"),

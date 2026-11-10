@@ -17,6 +17,7 @@
 //! caller's too: it names the new pack, and must carry the source pack's attribution.
 
 use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -64,6 +65,38 @@ pub fn lod_within(arcs: &Arcs<'_>, max_cm: u32) -> u8 {
 /// [`Error::Write`] if `keep` is not increasing or names a row past the end, the pack has no
 /// IDMAP or PLACES, or a section does not re-encode; a reader's error for a malformed section.
 pub fn rows(pack: &Pack<'_>, keep: &[u32], lod: u8, region: &Options) -> Result<Vec<Body>, Error> {
+    rows_with(pack, keep, lod, region, None)
+}
+
+/// Which names kept rows keep, and how SEARCH keys a name (D-152): a slice that keeps fewer
+/// names than its pack rebuilds its search keys from the names it keeps, so it finds a place
+/// only by a name it can show. The rows' importance, unit types and query rules stay the
+/// pack's.
+pub struct NameRule<'a> {
+    /// Whether name `i` (0 is the canonical, always kept) of pack row `row` stays.
+    pub keep: &'a dyn Fn(u32, usize, &NameRecord<'_>) -> bool,
+    /// Adds the SEARCH keys of `text`, a name of new row `row`, to the maps, exactly as the
+    /// pack's build keyed it.
+    pub keys: &'a dyn Fn(&str, u32, &mut search::Maps),
+}
+
+impl core::fmt::Debug for NameRule<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("NameRule").finish_non_exhaustive()
+    }
+}
+
+/// [`rows`], keeping only the names `names` keeps (all of them for `None`).
+///
+/// # Errors
+/// As [`rows`].
+pub fn rows_with(
+    pack: &Pack<'_>,
+    keep: &[u32],
+    lod: u8,
+    region: &Options,
+    names: Option<&NameRule<'_>>,
+) -> Result<Vec<Body>, Error> {
     let ids = IdMap::open(&pack.section(Kind::IDMAP).ok_or(fail("no IDMAP"))?)?;
     let places = Places::open(&pack.section(Kind::PLACES).ok_or(fail("no PLACES"))?)?;
     let n = places.len();
@@ -120,18 +153,7 @@ pub fn rows(pack: &Pack<'_>, keep: &[u32], lod: u8, region: &Options) -> Result<
             out.push((Kind::PLACE_TZ, Encoding::TABLE, k, body));
         }
     }
-    if let Some(s) = pack.section(Kind::NAMES) {
-        out.push((
-            Kind::NAMES,
-            Encoding::TABLE,
-            k,
-            names_of(&Names::open(&s)?, keep)?,
-        ));
-    }
-    if let Some(s) = pack.section(Kind::SEARCH) {
-        let body = search_of(&Search::open(&s)?, keep, &new_of)?;
-        out.push((Kind::SEARCH, Encoding::TABLE, k, body));
-    }
+    out.extend(names_and_search(pack, keep, &new_of, names)?);
     if let Some(s) = pack.section(Kind::HIERARCHY) {
         let h = Hierarchy::open(&s)?;
         // The nearest kept ancestor: the chain of a kept row through dropped rows.
@@ -159,6 +181,46 @@ pub fn rows(pack: &Pack<'_>, keep: &[u32], lod: u8, region: &Options) -> Result<
             count: p.item_count(),
         };
         out.extend(geometry.slice(&new_of, lod, node, region)?);
+    }
+    Ok(out)
+}
+
+/// NAMES and SEARCH of rows `keep`: SEARCH copied from the pack, or with `names`, rebuilt from
+/// the names kept.
+fn names_and_search(
+    pack: &Pack<'_>,
+    keep: &[u32],
+    new_of: &[u32],
+    names: Option<&NameRule<'_>>,
+) -> Result<Vec<Body>, Error> {
+    let k = keep.len() as u64;
+    let mut out: Vec<Body> = Vec::new();
+    let mut kept_names: Vec<Vec<String>> = Vec::new();
+    if let Some(s) = pack.section(Kind::NAMES) {
+        let (body, texts) = names_of(&Names::open(&s)?, keep, names.map(|n| n.keep))?;
+        out.push((Kind::NAMES, Encoding::TABLE, k, body));
+        kept_names = texts;
+    }
+    if let Some(s) = pack.section(Kind::SEARCH) {
+        let search = Search::open(&s)?;
+        let body = match names {
+            None => search_of(&search, keep, new_of)?,
+            Some(rule) => {
+                let mut maps = search::Maps::default();
+                for (new, texts) in (0_u32..).zip(&kept_names) {
+                    for t in texts {
+                        (rule.keys)(t, new, &mut maps);
+                    }
+                }
+                let (importance, units, rules) = search_extra(&search, keep);
+                let extra = search::Extra {
+                    rules: (!rules.is_empty()).then_some(rules.as_slice()),
+                    units: &units,
+                };
+                search::encode_maps_with(&maps, &importance, &extra)?
+            }
+        };
+        out.push((Kind::SEARCH, Encoding::TABLE, k, body));
     }
     Ok(out)
 }
@@ -203,15 +265,37 @@ fn places_of(places: &Places<'_>, keep: &[u32]) -> Result<(Vec<Point<E6>>, Vec<u
 }
 
 /// NAMES of rows `keep`, every record as it was.
-fn names_of(names: &Names<'_>, keep: &[u32]) -> Result<Vec<u8>, Error> {
+/// The NAMES body of rows `keep` with the names `filter` keeps (all for `None`; the canonical
+/// always), and each kept row's kept texts.
+#[allow(clippy::type_complexity, reason = "the body and the texts, row by row")]
+fn names_of(
+    names: &Names<'_>,
+    keep: &[u32],
+    filter: Option<&dyn Fn(u32, usize, &NameRecord<'_>) -> bool>,
+) -> Result<(Vec<u8>, Vec<Vec<String>>), Error> {
     let mut buf = vec![0_u8; 1 << 16];
     let mut texts: Vec<Vec<Vec<u8>>> = Vec::with_capacity(keep.len());
     let mut meta = Vec::with_capacity(keep.len());
     for &r in keep {
         let (mut t, mut m) = (Vec::new(), Vec::new());
-        for x in names.names(r as usize) {
-            t.push(x.text(&mut buf)?.as_bytes().to_vec());
-            m.push((x.lang(), x.script(), x.kind(), x.valid(), x.rule()));
+        for (i, x) in names.names(r as usize).enumerate() {
+            let text = x.text(&mut buf)?;
+            let (lang, script, kind, valid, rule) =
+                (x.lang(), x.script(), x.kind(), x.valid(), x.rule());
+            let rec = NameRecord {
+                text,
+                lang,
+                script,
+                kind,
+                valid_from: valid.0,
+                valid_to: valid.1,
+                rule,
+            };
+            if i > 0 && filter.is_some_and(|f| !f(r, i, &rec)) {
+                continue;
+            }
+            t.push(text.as_bytes().to_vec());
+            m.push((lang, script, kind, valid, rule));
         }
         texts.push(t);
         meta.push(m);
@@ -238,7 +322,25 @@ fn names_of(names: &Names<'_>, keep: &[u32]) -> Result<Vec<u8>, Error> {
         })
         .collect::<Result<_, _>>()?;
     let per_row: Vec<&[NameRecord<'_>]> = recs.iter().map(Vec::as_slice).collect();
-    names::encode(&per_row)
+    let kept = recs
+        .iter()
+        .map(|r| r.iter().map(|n| String::from(n.text)).collect())
+        .collect();
+    Ok((names::encode(&per_row)?, kept))
+}
+
+/// The pack's importance and unit type of rows `keep`, and its query rules.
+#[allow(clippy::type_complexity, reason = "three columns of one section")]
+fn search_extra<'s>(
+    s: &'s Search<'_>,
+    keep: &[u32],
+) -> (Vec<u8>, Vec<u8>, Vec<search::rules::Rule<'s>>) {
+    let importance: Vec<u8> = keep.iter().map(|&r| s.importance(r)).collect();
+    let mut units: Vec<u8> = keep.iter().map(|&r| s.unit(r)).collect();
+    if units.iter().all(|&u| u == 0) {
+        units.clear();
+    }
+    (importance, units, s.rules().iter().collect())
 }
 
 /// SEARCH of rows `keep`: each key with its kept rows (a key left with none is dropped), each
@@ -259,12 +361,7 @@ fn search_of(s: &Search<'_>, keep: &[u32], new_of: &[u32]) -> Result<Vec<u8>, Er
             keys.insert(buf.get(..len).ok_or(fail("a SEARCH key"))?.to_vec(), rows);
         }
     }
-    let importance: Vec<u8> = keep.iter().map(|&r| s.importance(r)).collect();
-    let mut units: Vec<u8> = keep.iter().map(|&r| s.unit(r)).collect();
-    if units.iter().all(|&u| u == 0) {
-        units.clear();
-    }
-    let rules: Vec<_> = s.rules().iter().collect();
+    let (importance, units, rules) = search_extra(s, keep);
     let extra = search::Extra {
         rules: (!rules.is_empty()).then_some(rules.as_slice()),
         units: &units,

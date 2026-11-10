@@ -19,6 +19,7 @@ use std::time::Instant;
 use teigeodata_core::{Namespace, PlaceId, PlaceKind};
 use teigeodata_format::arcs::Arcs;
 use teigeodata_format::idmap::IdMap;
+use teigeodata_format::names::{NameRecord, Tag as Lang};
 use teigeodata_format::places::{self, Places};
 use teigeodata_format::polygons::Polygons;
 use teigeodata_format::region::Region;
@@ -233,8 +234,31 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         }
         None => (0, 0),
     };
-    let sections =
-        extract::rows(&pack, &sel.keep, lod, &region_options()).map_err(|e| e.to_string())?;
+    // Names (D-152): the canonical, the country's languages and English, and for the country
+    // also the world part's languages, so it names the country as the world's row did.
+    let profile = super::Profile::read(root, &a.cc)?;
+    let tags = |codes: &mut dyn Iterator<Item = &str>| -> Vec<Lang> {
+        codes.filter_map(Lang::new).collect()
+    };
+    let own = tags(&mut profile.languages.iter().map(String::as_str).chain(["en"]));
+    let world = tags(&mut crate::read::natural_earth::LANGS.iter().map(|l| l.1));
+    let places =
+        Places::open(&pack.section(Kind::PLACES).ok_or("no PLACES")?).map_err(|e| e.to_string())?;
+    let keep_name = |row: u32, _: usize, n: &NameRecord<'_>| {
+        n.lang.is_none_or(|l| {
+            own.contains(&l)
+                || (places.kind(row as usize) == Some(PlaceKind::Country) && world.contains(&l))
+        })
+    };
+    let keys = |text: &str, row: u32, maps: &mut teigeodata_format::search::Maps| {
+        super::pack::add_keys(maps, text, row, &profile);
+    };
+    let rule = extract::NameRule {
+        keep: &keep_name,
+        keys: &keys,
+    };
+    let sections = extract::rows_with(&pack, &sel.keep, lod, &region_options(), Some(&rule))
+        .map_err(|e| e.to_string())?;
     let out = write(&pack, &sections, &a, root)?;
     check(&out, sel.keep.len())?;
     // Its own directory: the pack directory's stamps own every `-<build>.` file there.

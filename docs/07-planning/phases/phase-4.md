@@ -118,6 +118,8 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] Forge: world timezones in the baseline: a zone per country, unit and city from tzdb and
   the cities' own zones, `tz_at` by the deepest unit, no geometry (30 kB); slices keep their
   pack's zones (D-151)
+- [x] Forge: a slice keeps the names its world row would (the country's languages and
+  English) and rebuilds SEARCH from them: Nepal's slice 157,532 → 72,988 B (D-152)
 - [ ] The baseline as shipped: the world part and every slice, as layers (slices above the
   world) or one file; decide by the size gate and the engine's layer cost
 - [x] Pin `geonames-cities15000` (D-145) and `ne-admin0-nep` (D-147)
@@ -208,3 +210,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.2: the locator is a distance query on the outlines, not a buffered REGION | D-149 |
 | 2026-11-10 | 4.2: world admin 1 from Natural Earth cut to the Nepal view for both builds; the pin split from the OSM extract job | D-150 |
 | 2026-11-10 | 4.2: world timezones from the units and the cities' zones, not simplified TBB | D-151 |
+| 2026-11-10 | 4.2: slice names cut to the world part's languages, so slices fit the budget | D-152 |

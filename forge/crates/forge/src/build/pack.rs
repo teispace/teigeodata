@@ -395,6 +395,22 @@ fn assemble(
     Ok((bytes, key))
 }
 
+/// Adds the SEARCH keys of name `text` of row `row`: the one way every build keys a name
+/// (packs, and a baseline slice rebuilding its keys from the names it keeps, D-152).
+pub(super) fn add_keys(maps: &mut Maps, text: &str, row: u32, profile: &Profile) {
+    search_keys(text, &profile.droppable, profile.phonetic, |m, k| {
+        let map = match m {
+            SearchMap::Exact => &mut maps.exact,
+            SearchMap::Loose => &mut maps.loose,
+            SearchMap::Phonetic => &mut maps.phonetic,
+        };
+        // Keys longer than the automaton allows are left out of search only.
+        if k.len() < 255 {
+            map.entry(k).or_default().insert(row);
+        }
+    });
+}
+
 /// The NAMES and SEARCH bodies of the rows.
 pub(super) fn name_sections(
     rows: &[&Place],
@@ -427,17 +443,7 @@ pub(super) fn name_sections(
     for (row, p) in rows.iter().enumerate() {
         let row = u32::try_from(row).unwrap_or(u32::MAX);
         for nm in &p.names {
-            search_keys(&nm.text, &profile.droppable, profile.phonetic, |m, k| {
-                let map = match m {
-                    SearchMap::Exact => &mut maps.exact,
-                    SearchMap::Loose => &mut maps.loose,
-                    SearchMap::Phonetic => &mut maps.phonetic,
-                };
-                // Keys longer than the automaton allows are left out of search only.
-                if k.len() < 255 {
-                    map.entry(k).or_default().insert(row);
-                }
-            });
+            add_keys(&mut maps, &nm.text, row, profile);
         }
     }
     let importance: Vec<u8> = rows.iter().map(|p| importance(p)).collect();

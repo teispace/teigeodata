@@ -46,7 +46,7 @@ design and the first estimates; this note pins the sources.
   which the country packs' admin and city records carry too (D-110). When a country's pack is
   built later, it matches the same serials, so the baseline's IDs survive.
 - **Size:** the world part is 5.82 MB with admin 1 and timezones (4.44 MB on the wire), and
-  Nepal's slice 0.16 MB (§3.9, §3.10). The locator adds no bytes (D-149).
+  Nepal's slice 0.07 MB once it keeps only the names its world row would (§3.9 to §3.11). The locator adds no bytes (D-149).
 
 ## 3. Findings
 
@@ -223,6 +223,26 @@ timezone REGION returns the zone of the deepest unit holding the point.
   point-in-polygon over 8.3 M vertices. It is the next measurement for the units that a zone
   line crosses.
 
+### 3.11 Slice names (2026-11-10, D-152)
+
+A slice copied all of its pack's names. Nepal's 54 rows carried 1,716 names (Admin 472,
+Country 198, Settlement 1,045, the zone 1), so NAMES (41,468 B) and SEARCH (70,188 B) were
+71% of its 157,532 B: about 2.9 kB a row, where the world part spends about 1 kB a row
+(`UNIT_LANGS`, D-150). At about 200 countries with packs, slices at that rate would add about
+26 MB, past the 8 MB budget alone.
+
+- **Rule.** A kept row keeps its canonical name, untagged names, names in the country's
+  languages (`profile.yaml` `languages`) and English; the country row also keeps Natural
+  Earth's 26 languages, as the world part does. SEARCH is rebuilt from the kept names with the
+  pack's keying, importance, unit types and query rules, so search answers exactly the names
+  the slice holds.
+- **Measured (Nepal main, 500 m).** 421 names; NAMES 10,340 B, SEARCH 16,712 B; the slice
+  72,988 B (−54%), 38,000 B with zstd −19. Every kept name finds its row in the slice alone.
+- **Options.** Copying every name (rejected: size); the canonical only (rejected: a Nepali
+  speaker could not find a place by its Devanagari name until the pack is installed); the
+  country's languages and English (**chosen**). Untagged names are kept: they are the
+  sources' local forms, and dropping them would lose spellings the lexicon expects.
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
@@ -237,6 +257,8 @@ timezone REGION returns the zone of the deepest unit holding the point.
 | GeoNames `cities5000` | Twice the towns | Over budget | CC BY 4.0 | daily | rejected (size) |
 | Natural Earth time zones | Public domain | Offsets, 2012, few IANA names | Public domain | 5.0.0 | rejected |
 | TBB simplified into the baseline (REGION) | Exact borders at the tolerance | 8.3 M vertices; a 1 km REGION estimated at MBs; ODbL, so lite needs another source | ODbL | 2026f | rejected (size, licence) |
+| Slice: every name of the pack | Search by any name before the pack is installed | 2.9 kB a row; slices pass the budget | as the pack | D-145 | rejected (§3.11) |
+| Slice: canonical, untagged, the country's languages and English (§3.11) | 54% smaller for Nepal; the world part's language set | Other languages wait for the pack | as the pack | D-152 | **chosen** |
 | Zones per admin unit and city (§3.10) | No geometry (30 kB); both builds; exact for one-zone countries and units | Approximate in units a zone line crosses (0.65% of people) | Public domain + CC BY 4.0 | tzdb 2026f | **chosen** (D-151) |
 
 ## 5. What we build ourselves, and why
@@ -257,6 +279,7 @@ timezone REGION returns the zone of the deepest unit holding the point.
   world part as built.
 - Phase 4.2 gains the slice rule and the per-country admin-1 source report.
 - D-151: world timezones from the units; `extract` keeps PLACE_TZ.
+- D-152: a slice keeps the names its world row would, and rebuilds SEARCH from them.
 - Pinned: `ne-admin0-nep` (2026-11-10), `ne-admin1` (2026-11-10, D-150) and
   `geonames-cities15000` (2026-11-09). Still to come: OSM admin 1 extracts for main.
 

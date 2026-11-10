@@ -43,7 +43,8 @@ A short status. The numbers and evidence live in each phase file and the
   stored outlines, no country missed over 109,659 border probes at 1 km, 11.9 µs a query
   (D-149); world admin 1 cut to the Nepal view (D-150: 4,571 units, world part 5.73 MB,
   cities under their unit); world timezones from the units, no geometry (D-151: 361 zones,
-  30 kB, `tz_at` agrees with a city's own zone at 97.57% of cities). Next: 4.2 the shipped
+  30 kB, `tz_at` agrees with a city's own zone at 97.57% of cities); slices keep the names
+  their world row would (D-152: Nepal's slice 73 kB, −54%). Next: 4.2 the shipped
   baseline and the 8 MB gate; then 4.3 TUF trust.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).
@@ -91,3 +92,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-10 | 4.2: the world part of the baseline (`forge world`, Natural Earth admin 0 and `cities15000`, D-147); world-scale label search (D-148) | world admin 1 and timezones; the locator |
 | 2026-11-10 | 4.2: the locator by distance on the stored outlines (D-149); world admin 1 cut to the Nepal view (D-150); a 12 GB memory blow-up in G-topo's parent check found and fixed, memory now watched by footprint (AGENTS.md §7) | world timezones; the shipped baseline and the 8 MB gate |
 | 2026-11-10 | 4.2: world timezones from the units and the cities' zones (D-151); `extract` keeps PLACE_TZ; the locator's chunk index behind an `alloc` feature (the no_std build) | the shipped baseline and the 8 MB gate |
+| 2026-11-10 | 4.2: slice names cut to the country's languages and English, SEARCH rebuilt from them (D-152): Nepal's slice 157,532 → 72,988 B | the shipped baseline (layers, `baseline` feature) and the 8 MB gate |

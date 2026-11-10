@@ -698,8 +698,12 @@ covers the pack's key, the pinned city list, the arguments and the signing seed.
   ELEVATION, NAMES, SEARCH and HIERARCHY for the kept rows, each row's parent being its
   nearest kept ancestor; ARCS (the used arcs only, at the finest level of detail within the
   tolerance, `extract::lod_within`), POLYGONS and POLY_INDEX remapped, ADMIN_REGION rebuilt.
-  REGION, PLACE_TZ, REDIRECTS, POSTAL, DEM, BLOBS and EXTRA are dropped: the world timezones
-  and the locator come from the world part of the baseline.
+  PLACE_TZ is kept with the zone rows its places use (D-151). REGION, REDIRECTS, POSTAL, DEM,
+  BLOBS and EXTRA are dropped: the locator comes from the world part of the baseline.
+- **Names** (D-152, `extract::rows_with` with a `NameRule`). A row keeps its canonical name,
+  untagged names, names in the country's `languages` (`profile.yaml`) and English; the
+  country row also Natural Earth's 26 languages, as in the world part. SEARCH is rebuilt from
+  the kept names by the pack's own keying (`pack::add_keys`).
 - **Region index.** A 4,096-cell fine grid instead of the packs' 2^18. A/B on Nepal's slice at
   500 m (2026-11-09):
 
@@ -714,10 +718,12 @@ covers the pack's key, the pinned city list, the arguments and the signing seed.
   them. The slice is read back (`open_verified`) and its arcs, polygons and region checked
   before it is written.
 - **Nepal (2026-11-09).** 46 listed cities give 45 places (Panauti is listed twice), plus the
-  country and 7 provinces. Main 158,784 B, lite 150,336 B; about 80 kB on the wire.
+  country and 7 provinces. Main 158,784 B, lite 150,336 B; about 80 kB on the wire. With
+  D-152's names (2026-11-10): main 72,988 B, 38,000 B with zstd −19.
   `tests/extract.rs` (`the_baseline_slice_under_its_pack`, with `TGD_PACK` and
   `TGD_BASELINE`) checks that the pack wins every ID, and that the slice alone answers each
-  city with its province and country, by `ancestors` and by `admin_at`.
+  city with its province and country, by `ancestors` and by `admin_at`, and that every name
+  the slice keeps finds its row.
 
 **Clean-up.** `cargo xtask clean` removes build output from both workspaces and keeps the
 store: fetched sources are pinned inputs, not build output.

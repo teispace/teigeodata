@@ -497,6 +497,9 @@ pub(crate) struct Profile {
     pub(crate) unit_codes: BTreeMap<String, CodeSlice>,
     /// Native-script generics, folded, each with its Latin spellings, folded.
     pub(crate) native: Vec<(String, Vec<String>)>,
+    /// The country's languages (ISO 639 codes), in profile order: a baseline slice keeps names
+    /// in them and English (D-152).
+    pub(crate) languages: Vec<String>,
 }
 
 /// A unit type of the profile.
@@ -531,6 +534,8 @@ struct ProfileFile {
     unit_types: Vec<UnitType>,
     #[serde(default)]
     sources: BTreeMap<String, SourceRules>,
+    #[serde(default)]
+    languages: Vec<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -588,6 +593,7 @@ impl Profile {
                 .filter_map(|(family, r)| r.unit_type_code.map(|c| (family, c)))
                 .collect(),
             native: crate::names::native_generics(root, cc)?,
+            languages: p.languages,
         })
     }
 

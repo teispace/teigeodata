@@ -157,6 +157,92 @@ fn a_slice_keeps_the_zones_of_its_places() {
     }
 }
 
+/// A name rule (D-152): the slice keeps the canonical and the names the rule keeps, and its
+/// SEARCH is rebuilt from them, so a kept alias finds its place and a dropped one does not.
+#[test]
+fn a_name_rule_keeps_names_and_their_keys_only() {
+    use teigeodata_format::names::{NameRecord, Tag as Lang};
+    let mut model = synthetic(2_000, 29);
+    let (fr, de) = (Lang::new("fr").unwrap(), Lang::new("de").unwrap());
+    // Each settlement gains a French and a German alias, keyed like its other names.
+    for r in 0..model.ids.len() {
+        if model.kinds[r] != PlaceKind::Settlement {
+            continue;
+        }
+        for (lang, text) in [(fr, format!("Ville {r}")), (de, format!("Stadt {r}"))] {
+            let f = teigeodata_names::fold(&text);
+            let mut k = vec![teigeodata_format::search::EXACT];
+            k.extend_from_slice(f.as_bytes());
+            model.keys.entry(k).or_default().insert(r as u32);
+            let mut name = model.names[r][0].clone();
+            (name.text, name.lang) = (text, Some(lang));
+            model.names[r].push(name);
+        }
+    }
+    let whole_bytes = model.encode();
+    let pack = Pack::open(&whole_bytes).unwrap();
+    let keep: Vec<u32> = (0..model.ids.len() as u32)
+        .filter(|&r| model.kinds[r as usize] != PlaceKind::TimezoneArea && r % 3 == 0)
+        .collect();
+    let keep_name = |_: u32, _: usize, n: &NameRecord<'_>| n.lang != Some(de);
+    let keys = |text: &str, row: u32, maps: &mut teigeodata_format::search::Maps| {
+        let f = teigeodata_names::fold(text);
+        maps.loose
+            .entry(f.replace(' ', ""))
+            .or_default()
+            .insert(row);
+        maps.exact.entry(f).or_default().insert(row);
+    };
+    let rule = extract::NameRule {
+        keep: &keep_name,
+        keys: &keys,
+    };
+    let sections = extract::rows_with(&pack, &keep, 0, &Options::default(), Some(&rule)).unwrap();
+    let part = engine(write(&sections, "np-slice"));
+    let (mut s, mut hits, mut buf) = (Scratch::default(), Vec::new(), [0_u8; 512]);
+    let mut finds = |q: &str, id| {
+        part.search(q, 50, &mut s, &mut hits).unwrap();
+        hits.iter().any(|h| h.place.id == id)
+    };
+    let mut aliases = 0;
+    for &r in &keep {
+        let id = model.ids[r as usize];
+        let p = part.get(id).unwrap().unwrap();
+        let canonical = part.name(&p, &mut buf).unwrap().unwrap().to_owned();
+        assert_eq!(canonical, model.names[r as usize][0].text, "row {r}");
+        assert!(finds(&canonical, id), "{canonical}");
+        if model.kinds[r as usize] == PlaceKind::Settlement {
+            assert!(
+                finds(&format!("Ville {r}"), id),
+                "the kept alias of row {r}"
+            );
+            assert!(
+                !finds(&format!("Stadt {r}"), id),
+                "the dropped alias of row {r}"
+            );
+            aliases += 1;
+        }
+    }
+    assert!(aliases > 100, "{aliases}");
+    // A rule that keeps nothing still keeps each canonical name.
+    let none = |_: u32, _: usize, _: &NameRecord<'_>| false;
+    let rule = extract::NameRule {
+        keep: &none,
+        keys: &keys,
+    };
+    let part = engine(write(
+        &extract::rows_with(&pack, &keep, 0, &Options::default(), Some(&rule)).unwrap(),
+        "np-slice",
+    ));
+    for &r in &keep {
+        let p = part.get(model.ids[r as usize]).unwrap().unwrap();
+        assert_eq!(
+            part.name(&p, &mut buf).unwrap(),
+            Some(model.names[r as usize][0].text.as_str())
+        );
+    }
+}
+
 /// The real pack (`TGD_PACK`): its country and level-1 units at a 500 m level, plus a sample of
 /// places.
 #[test]
@@ -326,5 +412,23 @@ fn the_baseline_slice_under_its_pack() {
         assert_eq!(got, want, "admin_at at {id:?}");
     }
     assert!(cities > 10);
-    println!("{cities} cities checked");
+    // Search keys come from the names the slice keeps (D-152): each kept name finds its row.
+    let names = teigeodata_format::names::Names::open(
+        &Pack::open(&base).unwrap().section(Kind::NAMES).unwrap(),
+    )
+    .unwrap();
+    let (mut buf, mut hits, mut checked) = (vec![0_u8; 1 << 16], Vec::new(), 0);
+    for r in 0..ids.len() {
+        let id = ids.id(r).unwrap();
+        for n in names.names(r) {
+            let text = n.text(&mut buf).unwrap().to_owned();
+            alone.search(&text, 50, &mut s, &mut hits).unwrap();
+            assert!(
+                hits.iter().any(|h| h.place.id == id),
+                "{text:?} does not find {id:?}"
+            );
+            checked += 1;
+        }
+    }
+    println!("{cities} cities checked; {checked} names find their row");
 }
