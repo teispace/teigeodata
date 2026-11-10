@@ -21,6 +21,21 @@ page are decisions D-113 (opening and verification) and D-114 (queries) in the
 | `Layer::open` with `Load::Read` | Reads the file into memory | Files the engine does not own |
 | `Layer::from_bytes` | Owns the bytes | Downloads, WASM, tests |
 | `Layer::from_static` | Borrows `&'static [u8]` | The embedded baseline |
+| `Engine::with_baseline()` | An engine holding `BASELINE` (feature `baseline`) | Apps that embed the baseline |
+
+## The embedded baseline (D-153)
+
+The baseline is **one pack and one layer** (`LayerOptions::baseline()`, always last in
+precedence), built by `forge embed` from the world part and every country's slice. Feature
+`baseline` (off by default) compiles it in as `BASELINE`, read from the absolute path in
+`TEIGEODATA_BASELINE` (`baseline-main.tgd` or `baseline-lite.tgd`); a build without that
+variable fails with a message that says so. WASM, or any app that would rather not grow its
+binary, loads the same file with `Layer::from_bytes(bytes, LayerOptions::baseline())`.
+
+Why one file: layers cost each query a per-layer pass, and slices cannot be pruned for search.
+Under 200 copies of Nepal's slice as layers, `search` took 34× and `reverse` 98× the world
+part's time (`tests/world.rs`, `the_cost_of_slices_as_layers`); the one file answers as fast as
+the world part alone (search about 8 to 10 µs, `admin_at` under 1 µs).
 
 Opening checks the head exactly as `Pack::open` does (lengths, offsets, the head digest, the
 section table) and opens every view the queries use. It hashes no section bytes and proves no
@@ -205,6 +220,11 @@ droppable suffix removed, 50 (D-121). The unit bonus does not count towards a st
   fails every read of its section (and the open under `Verify::Eager`, D-142); truncated,
   empty, missing and replaced files.
 - **Allocations** (`tests/alloc.rs`): a counting allocator on the warm path.
+- **The shipped baseline** (`tests/world.rs`, `the_shipped_baseline_answers_as_its_parts`,
+  D-153): the one file answers every ID (place, name, chain, zone) and every sampled search as
+  the world part and the slice do as two layers; `admin_at` and `tz_at` may differ only where
+  the slice's outline and the world's neighbours disagree, naming the replaced country, at
+  most 0.1% of places. `tests/baseline.rs` (feature `baseline`): Z1 and a few world answers.
 - **Components** (`tests/components.rs`, D-136): the pack opened under eight component sets,
   its uninstalled sections zeroed, eager and lazy; every query answers as the whole pack does
   or names the missing component; a set without what it needs is refused.
@@ -213,7 +233,6 @@ Each gate was first shown to fail on a planted bug (D-114).
 
 ## Not yet
 
-- The baseline (step 4.2).
 - `teigeodata-api` still opens one pack; it moves onto the engine with the baseline.
 
 ## Changelog
@@ -230,3 +249,4 @@ Each gate was first shown to fail on a planted bug (D-114).
 | 2026-11-09 | `parent`, `ancestors`, `children` across packs by ancestor stubs | D-143 |
 | 2026-11-10 | `countries_near`, `missing_packs` (the locator) | D-149 |
 | 2026-11-10 | `tz_at` from a layer's units and PLACE_TZ when it has no timezone REGION | D-151 |
+| 2026-11-10 | The embedded baseline: feature `baseline`, `BASELINE`, `Engine::with_baseline`, `LayerOptions::baseline()` | D-153 |

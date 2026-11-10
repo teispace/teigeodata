@@ -87,6 +87,17 @@ pub struct LayerOptions {
     pub installed: Option<Components>,
 }
 
+impl LayerOptions {
+    /// The options of a baseline layer: last in precedence, whatever its priority.
+    #[must_use]
+    pub fn baseline() -> Self {
+        Self {
+            baseline: true,
+            ..Self::default()
+        }
+    }
+}
+
 /// A layer's handle in an [`Engine`](crate::Engine): stable while the layer is in it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LayerId(pub(crate) u32);

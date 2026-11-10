@@ -1,5 +1,6 @@
 //! Rows of a pack as a new pack's sections (D-145): the embedded baseline's slice of a country
-//! pack, and the CLI's `extract`.
+//! pack, and the CLI's `extract`; and rows of several packs as one ([`merge`], D-153: the
+//! shipped baseline).
 //!
 //! [`rows`] keeps rows `keep` of a pack, in their order (PLACES stays in Hilbert order), and
 //! re-encodes every per-row section the engine reads: IDMAP, PLACES, `PLACE_INDEX`, ELEVATION,
@@ -21,7 +22,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use teigeodata_core::{E6, E7, Point};
+use teigeodata_core::{E6, E7, PlaceId, Point, hilbert};
 
 use crate::arcs::{self, ArcColumns, Arcs};
 use crate::elevation::{self, Elevations};
@@ -97,284 +98,668 @@ pub fn rows_with(
     region: &Options,
     names: Option<&NameRule<'_>>,
 ) -> Result<Vec<Body>, Error> {
-    let ids = IdMap::open(&pack.section(Kind::IDMAP).ok_or(fail("no IDMAP"))?)?;
-    let places = Places::open(&pack.section(Kind::PLACES).ok_or(fail("no PLACES"))?)?;
-    let n = places.len();
-    if keep.windows(2).any(|w| matches!(w, [a, b] if a >= b))
-        || keep.iter().any(|&r| r as usize >= n)
-    {
-        return Err(fail("the kept rows are not increasing rows of the pack"));
-    }
-    let mut new_of = vec![u32::MAX; n];
-    for (new, &old) in (0_u32..).zip(keep) {
-        if let Some(slot) = new_of.get_mut(old as usize) {
-            *slot = new;
-        }
-    }
-    let row = |r: u32| r as usize;
-    let k = keep.len() as u64;
-    let mut out: Vec<Body> = Vec::new();
+    merge(
+        &[Part {
+            pack,
+            keep,
+            lod,
+            names,
+        }],
+        region,
+    )
+}
 
-    let id_list = keep
-        .iter()
-        .map(|&r| ids.id(row(r)).ok_or(fail("a row without an ID")))
-        .collect::<Result<Vec<_>, _>>()?;
-    out.push((Kind::IDMAP, Encoding::TABLE, k, idmap::encode(&id_list)?));
-    let (points, body) = places_of(&places, keep)?;
-    out.push((Kind::PLACES, Encoding::TABLE, k, body));
-    let node = match pack.section(Kind::PLACE_INDEX) {
-        Some(s) => PlaceIndex::open(&s, places)?.node_size(),
-        None => NODE,
+/// One pack's share of a [`merge`].
+#[derive(Clone, Copy, Debug)]
+pub struct Part<'p, 'a> {
+    /// The pack.
+    pub pack: &'p Pack<'a>,
+    /// Its rows to keep, increasing.
+    pub keep: &'p [u32],
+    /// The level of detail of its admin geometry (0 = full resolution).
+    pub lod: u8,
+    /// Its name rule; `None` keeps every name and its SEARCH keys as they are.
+    pub names: Option<&'p NameRule<'p>>,
+}
+
+/// The rows of several packs as one pack (the shipped baseline: the world part and each
+/// country's slice, one layer). Rows are in Hilbert order (ties by part, then row). A row
+/// whose ID a later part keeps too is left out: the later part's row replaces it, and every
+/// reference to it (a parent, a zone) goes to the replacement. Admin geometry is each part's
+/// at its own level of detail; polygons are grouped by admin level, coarse to fine. SEARCH
+/// takes every part's keys, importance and unit types; the query rules are the union, each
+/// part's unit types moved past the earlier parts'. A part without a section gives its rows
+/// none of it.
+///
+/// # Errors
+/// As [`rows`], and [`Error::Write`] if the parts name two phonetic keys or more than 255 unit
+/// types between them.
+pub fn merge(parts: &[Part<'_, '_>], region: &Options) -> Result<Vec<Body>, Error> {
+    let mut open = Vec::with_capacity(parts.len());
+    for (at, &part) in parts.iter().enumerate() {
+        let ids = IdMap::open(&part.pack.section(Kind::IDMAP).ok_or(fail("no IDMAP"))?)?;
+        let places = Places::open(&part.pack.section(Kind::PLACES).ok_or(fail("no PLACES"))?)?;
+        let n = places.len();
+        if part.keep.windows(2).any(|w| matches!(w, [a, b] if a >= b))
+            || part.keep.iter().any(|&r| r as usize >= n)
+        {
+            return Err(fail("the kept rows are not increasing rows of the pack"));
+        }
+        open.push(Opened {
+            at,
+            part,
+            ids,
+            places,
+            own: Vec::new(),
+            own_of: vec![u32::MAX; n],
+        });
+    }
+    // The last part holding an ID owns its row.
+    let mut seen = BTreeSet::new();
+    for o in open.iter_mut().rev() {
+        for &r in o.part.keep {
+            if seen.insert(o.ids.id(r as usize).ok_or(fail("a row without an ID"))?) {
+                o.own.push(r);
+            }
+        }
+    }
+    // PLACES is in Hilbert order: number the rows by it.
+    let mut order = Vec::new();
+    for (i, o) in open.iter().enumerate() {
+        for &r in &o.own {
+            let at = o
+                .places
+                .point(r as usize)
+                .ok_or(fail("a row without a point"))?;
+            order.push((hilbert(at), i, r));
+        }
+    }
+    order.sort_unstable();
+    let mut by_id = BTreeMap::new();
+    for (new, &(_, i, r)) in (0_u32..).zip(&order) {
+        let o = open.get_mut(i).ok_or(fail("a part"))?;
+        *o.own_of.get_mut(r as usize).ok_or(fail("a kept row"))? = new;
+        by_id.insert(
+            o.ids.id(r as usize).ok_or(fail("a row without an ID"))?,
+            new,
+        );
+    }
+    let m = Merged {
+        open,
+        by_id,
+        total: u32::try_from(order.len()).map_err(|_| fail("too many rows"))?,
     };
-    out.push((
-        Kind::PLACE_INDEX,
-        Encoding::TABLE,
-        k,
-        place_index::encode(&points, node)?,
-    ));
-    if let Some(s) = pack.section(Kind::ELEVATION) {
-        let h = Elevations::open(&s)?;
-        let heights: Vec<Option<i16>> = keep.iter().map(|&r| h.get(row(r))).collect();
-        if let Some(body) = elevation::encode(&heights)? {
-            out.push((Kind::ELEVATION, Encoding::TABLE, k, body));
-        }
-    }
-    if let Some(s) = pack.section(Kind::PLACE_TZ) {
-        let tz = PlaceTz::open(&s)?;
-        let zone_of: Vec<Option<u32>> = keep
-            .iter()
-            .map(|&r| {
-                tz.get(row(r))
-                    .and_then(|z| new_of.get(z as usize).copied())
-                    .filter(|&z| z != u32::MAX)
-            })
-            .collect();
-        if let Some(body) = place_tz::encode(&zone_of)? {
-            out.push((Kind::PLACE_TZ, Encoding::TABLE, k, body));
-        }
-    }
-    out.extend(names_and_search(pack, keep, &new_of, names)?);
-    if let Some(s) = pack.section(Kind::HIERARCHY) {
-        let h = Hierarchy::open(&s)?;
-        // The nearest kept ancestor: the chain of a kept row through dropped rows.
-        let parents: Vec<Option<u32>> = keep
-            .iter()
-            .map(|&r| {
-                h.ancestors(row(r))
-                    .map(|a| new_of.get(a).copied().unwrap_or(u32::MAX))
-                    .find(|&a| a != u32::MAX)
-            })
-            .collect();
-        if parents.iter().any(Option::is_some) {
-            let body = hierarchy::encode(&parents)?;
-            out.push((Kind::HIERARCHY, Encoding::TABLE, k, body));
-        }
-    }
-    if let (Some(a), Some(p)) = (pack.section(Kind::ARCS), pack.section(Kind::POLYGONS)) {
-        let node = match pack.section(Kind::POLY_INDEX) {
-            Some(s) => PolyIndex::open(&s, &Polygons::open(&p)?)?.node_size(),
-            None => NODE,
-        };
-        let geometry = Geometry {
-            arcs: &Arcs::open(&a)?,
-            polys: &Polygons::open(&p)?,
-            count: p.item_count(),
-        };
-        out.extend(geometry.slice(&new_of, lod, node, region)?);
-    }
+    let mut out = m.places()?;
+    out.extend(m.zones()?);
+    out.extend(m.names_and_search()?);
+    out.extend(m.hierarchy()?);
+    out.extend(m.geometry(region)?);
     Ok(out)
 }
 
-/// NAMES and SEARCH of rows `keep`: SEARCH copied from the pack, or with `names`, rebuilt from
-/// the names kept.
-fn names_and_search(
-    pack: &Pack<'_>,
-    keep: &[u32],
-    new_of: &[u32],
-    names: Option<&NameRule<'_>>,
-) -> Result<Vec<Body>, Error> {
-    let k = keep.len() as u64;
-    let mut out: Vec<Body> = Vec::new();
-    let mut kept_names: Vec<Vec<String>> = Vec::new();
-    if let Some(s) = pack.section(Kind::NAMES) {
-        let (body, texts) = names_of(&Names::open(&s)?, keep, names.map(|n| n.keep))?;
-        out.push((Kind::NAMES, Encoding::TABLE, k, body));
-        kept_names = texts;
+/// A part with its rows opened and numbered.
+struct Opened<'p, 'a> {
+    /// Its place among the parts.
+    at: usize,
+    part: Part<'p, 'a>,
+    ids: IdMap<'a>,
+    places: Places<'a>,
+    /// Its kept rows no later part replaces, increasing.
+    own: Vec<u32>,
+    /// Each of its rows' new row, `u32::MAX` if not its own.
+    own_of: Vec<u32>,
+}
+
+impl<'a> Opened<'_, 'a> {
+    fn section(&self, kind: Kind) -> Option<crate::Section<'a>> {
+        self.part.pack.section(kind)
     }
-    if let Some(s) = pack.section(Kind::SEARCH) {
-        let search = Search::open(&s)?;
-        let body = match names {
-            None => search_of(&search, keep, new_of)?,
-            Some(rule) => {
-                let mut maps = search::Maps::default();
-                for (new, texts) in (0_u32..).zip(&kept_names) {
-                    for t in texts {
-                        (rule.keys)(t, new, &mut maps);
+}
+
+/// The parts of a merge, numbered.
+struct Merged<'p, 'a> {
+    open: Vec<Opened<'p, 'a>>,
+    /// The new row of each kept ID.
+    by_id: BTreeMap<PlaceId, u32>,
+    total: u32,
+}
+
+/// A name record, owned.
+type OwnedName = (String, NameMeta);
+type NameMeta = (
+    Option<names::Tag>,
+    Option<names::Tag>,
+    Option<names::NameType>,
+    (Option<i32>, Option<i32>),
+    u32,
+);
+
+impl<'a> Merged<'_, 'a> {
+    /// The new row of row `r` of part `o`: its own, else the row that replaced its ID.
+    fn resolve(&self, o: &Opened<'_, '_>, r: usize) -> Option<u32> {
+        match o.own_of.get(r) {
+            Some(&n) if n != u32::MAX => Some(n),
+            _ => o.ids.id(r).and_then(|id| self.by_id.get(&id).copied()),
+        }
+    }
+
+    fn any(&self, kind: Kind) -> bool {
+        self.open.iter().any(|o| o.section(kind).is_some())
+    }
+
+    /// One value per new row: `f` of each part's own rows, `empty` where no row is.
+    fn scatter<T: Clone>(
+        &self,
+        empty: T,
+        mut f: impl FnMut(&Opened<'_, '_>, u32) -> Result<T, Error>,
+    ) -> Result<Vec<T>, Error> {
+        let mut out = vec![empty; self.total as usize];
+        for o in &self.open {
+            for &r in &o.own {
+                let new = o.own_of.get(r as usize).copied().unwrap_or(u32::MAX);
+                *out.get_mut(new as usize).ok_or(fail("a kept row"))? = f(o, r)?;
+            }
+        }
+        Ok(out)
+    }
+
+    /// As [`Merged::scatter`], with each part's section `kind` opened by `open` once.
+    fn scatter_in<S, T: Clone>(
+        &self,
+        kind: Kind,
+        empty: T,
+        open: impl Fn(&crate::Section<'a>) -> Result<S, Error>,
+        mut f: impl FnMut(&S, &Opened<'_, '_>, u32) -> Result<T, Error>,
+    ) -> Result<Vec<T>, Error> {
+        let opened: Vec<Option<S>> = self
+            .open
+            .iter()
+            .map(|o| o.section(kind).as_ref().map(&open).transpose())
+            .collect::<Result<_, _>>()?;
+        let mut out = vec![empty; self.total as usize];
+        for (o, s) in self.open.iter().zip(&opened) {
+            let Some(s) = s else { continue };
+            for &r in &o.own {
+                let new = o.own_of.get(r as usize).copied().unwrap_or(u32::MAX);
+                *out.get_mut(new as usize).ok_or(fail("a kept row"))? = f(s, o, r)?;
+            }
+        }
+        Ok(out)
+    }
+
+    /// IDMAP, PLACES, `PLACE_INDEX` and ELEVATION.
+    fn places(&self) -> Result<Vec<Body>, Error> {
+        let k = u64::from(self.total);
+        let short = || fail("a PLACES row is short");
+        let id_list = self.scatter(None, |o, r| {
+            o.ids
+                .id(r as usize)
+                .map(Some)
+                .ok_or(fail("a row without an ID"))
+        })?;
+        let id_list: Vec<PlaceId> = id_list.into_iter().collect::<Option<_>>().ok_or(short())?;
+        let rows = self.scatter(None, |o, r| {
+            let (p, r) = (&o.places, r as usize);
+            Ok(Some((
+                p.point(r).ok_or(short())?,
+                p.kind(r).ok_or(short())?,
+                p.admin_level(r).ok_or(short())?,
+                p.class(r).ok_or(short())?,
+                p.flags(r).ok_or(short())?,
+            )))
+        })?;
+        let rows: Vec<_> = rows.into_iter().collect::<Option<_>>().ok_or(short())?;
+        let points: Vec<Point<E6>> = rows.iter().map(|x| x.0).collect();
+        let kinds: Vec<_> = rows.iter().map(|x| x.1).collect();
+        let levels: Vec<_> = rows.iter().map(|x| x.2).collect();
+        let classes: Vec<_> = rows.iter().map(|x| x.3).collect();
+        let flags: Vec<_> = rows.iter().map(|x| x.4).collect();
+        let mut out: Vec<Body> = vec![
+            (Kind::IDMAP, Encoding::TABLE, k, idmap::encode(&id_list)?),
+            (
+                Kind::PLACES,
+                Encoding::TABLE,
+                k,
+                places::encode(&PlaceColumns {
+                    points: &points,
+                    kinds: &kinds,
+                    admin_levels: &levels,
+                    classes: &classes,
+                    flags: &flags,
+                })?,
+            ),
+        ];
+        let mut node = NODE;
+        for o in &self.open {
+            if let Some(s) = o.section(Kind::PLACE_INDEX) {
+                node = PlaceIndex::open(&s, o.places)?.node_size();
+                break;
+            }
+        }
+        out.push((
+            Kind::PLACE_INDEX,
+            Encoding::TABLE,
+            k,
+            place_index::encode(&points, node)?,
+        ));
+        if self.any(Kind::ELEVATION) {
+            let heights = self.scatter_in(Kind::ELEVATION, None, Elevations::open, |h, _, r| {
+                Ok(h.get(r as usize))
+            })?;
+            if let Some(body) = elevation::encode(&heights)? {
+                out.push((Kind::ELEVATION, Encoding::TABLE, k, body));
+            }
+        }
+        Ok(out)
+    }
+
+    /// `PLACE_TZ`: each row's zone when the zone's row is kept.
+    fn zones(&self) -> Result<Option<Body>, Error> {
+        if !self.any(Kind::PLACE_TZ) {
+            return Ok(None);
+        }
+        let zone_of = self.scatter_in(Kind::PLACE_TZ, None, PlaceTz::open, |t, o, r| {
+            Ok(t.get(r as usize).and_then(|z| self.resolve(o, z as usize)))
+        })?;
+        let k = u64::from(self.total);
+        Ok(place_tz::encode(&zone_of)?.map(|b| (Kind::PLACE_TZ, Encoding::TABLE, k, b)))
+    }
+
+    /// HIERARCHY: each row's nearest kept ancestor, through rows dropped or replaced.
+    fn hierarchy(&self) -> Result<Option<Body>, Error> {
+        if !self.any(Kind::HIERARCHY) {
+            return Ok(None);
+        }
+        // The nearest kept ancestor: the chain of a kept row through dropped rows.
+        let parents = self.scatter_in(Kind::HIERARCHY, None, Hierarchy::open, |h, o, r| {
+            Ok(h.ancestors(r as usize).find_map(|a| self.resolve(o, a)))
+        })?;
+        if parents.iter().all(Option::is_none) {
+            return Ok(None);
+        }
+        Ok(Some((
+            Kind::HIERARCHY,
+            Encoding::TABLE,
+            u64::from(self.total),
+            hierarchy::encode(&parents)?,
+        )))
+    }
+
+    /// NAMES and SEARCH: a part's SEARCH keys copied, or with its name rule, rebuilt from the
+    /// names it keeps.
+    fn names_and_search(&self) -> Result<Vec<Body>, Error> {
+        let k = u64::from(self.total);
+        let mut out: Vec<Body> = Vec::new();
+        let mut buf = vec![0_u8; 1 << 16];
+        let rows: Vec<Vec<OwnedName>> =
+            self.scatter_in(Kind::NAMES, Vec::new(), Names::open, |n, o, r| {
+                names_of(n, o, r, &mut buf)
+            })?;
+        if self.any(Kind::NAMES) {
+            let recs: Vec<Vec<NameRecord<'_>>> = rows
+                .iter()
+                .map(|r| r.iter().map(record).collect())
+                .collect();
+            let per_row: Vec<&[NameRecord<'_>]> = recs.iter().map(Vec::as_slice).collect();
+            out.push((Kind::NAMES, Encoding::TABLE, k, names::encode(&per_row)?));
+        }
+        if !self.any(Kind::SEARCH) {
+            return Ok(out);
+        }
+        let mut keys: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
+        let mut rules = RuleSet::default();
+        // Each part's unit types move past the earlier parts'.
+        let mut shift = Vec::with_capacity(self.open.len());
+        for o in &self.open {
+            let Some(s) = o.section(Kind::SEARCH) else {
+                shift.push(0);
+                continue;
+            };
+            let s = Search::open(&s)?;
+            shift.push(rules.add(s.rules())?);
+            match o.part.names {
+                None => copy_keys(&s, &o.own_of, &mut keys)?,
+                Some(rule) => {
+                    let mut maps = search::Maps::default();
+                    for &r in &o.own {
+                        let new = o.own_of.get(r as usize).copied().unwrap_or(u32::MAX);
+                        for (t, _) in rows.get(new as usize).into_iter().flatten() {
+                            (rule.keys)(t, new, &mut maps);
+                        }
+                    }
+                    for (key, list) in search::tagged_keys(&maps) {
+                        keys.entry(key).or_default().extend(list);
                     }
                 }
-                let (importance, units, rules) = search_extra(&search, keep);
-                let extra = search::Extra {
-                    rules: (!rules.is_empty()).then_some(rules.as_slice()),
-                    units: &units,
-                };
-                search::encode_maps_with(&maps, &importance, &extra)?
             }
+        }
+        let importance =
+            self.scatter_in(Kind::SEARCH, 0, Search::open, |s, _, r| Ok(s.importance(r)))?;
+        let mut units = self.scatter_in(Kind::SEARCH, 0, Search::open, |s, o, r| {
+            Ok(match s.unit(r) {
+                0 => 0,
+                u => u.saturating_add(shift.get(o.at).copied().unwrap_or(0)),
+            })
+        })?;
+        if units.iter().all(|&u| u == 0) {
+            units.clear();
+        }
+        let extra = search::Extra {
+            rules: (!rules.list.is_empty()).then_some(rules.list.as_slice()),
+            units: &units,
         };
-        out.push((Kind::SEARCH, Encoding::TABLE, k, body));
+        out.push((
+            Kind::SEARCH,
+            Encoding::TABLE,
+            k,
+            search::encode_with(&keys, &importance, &extra)?,
+        ));
+        Ok(out)
     }
-    Ok(out)
+
+    /// ARCS, POLYGONS, `POLY_INDEX` and `ADMIN_REGION` of the polygons on kept rows.
+    fn geometry(&self, opts: &Options) -> Result<Vec<Body>, Error> {
+        let mut shapes = Shapes::default();
+        let mut node = None;
+        for o in &self.open {
+            let (Some(a), Some(p)) = (o.section(Kind::ARCS), o.section(Kind::POLYGONS)) else {
+                continue;
+            };
+            let polys = Polygons::open(&p)?;
+            if node.is_none() {
+                node = o
+                    .section(Kind::POLY_INDEX)
+                    .map(|s| PolyIndex::open(&s, &polys).map(|i| i.node_size()))
+                    .transpose()?;
+            }
+            let g = Geometry {
+                arcs: &Arcs::open(&a)?,
+                polys: &polys,
+                count: p.item_count(),
+            };
+            g.collect(o, &mut shapes)?;
+        }
+        shapes.encode(node.unwrap_or(NODE), opts)
+    }
 }
 
-/// The points and the PLACES body of rows `keep`.
-fn places_of(places: &Places<'_>, keep: &[u32]) -> Result<(Vec<Point<E6>>, Vec<u8>), Error> {
-    let col = |f: &dyn Fn(usize) -> Option<u32>| {
-        keep.iter()
-            .map(|&r| f(r as usize).ok_or(fail("a PLACES row is short")))
-            .collect::<Result<Vec<u32>, Error>>()
-    };
-    let points: Vec<Point<E6>> = keep
-        .iter()
-        .map(|&r| {
-            places
-                .point(r as usize)
-                .ok_or(fail("a row without a point"))
-        })
-        .collect::<Result<_, _>>()?;
-    let kinds = keep
-        .iter()
-        .map(|&r| places.kind(r as usize).ok_or(fail("a row without a kind")))
-        .collect::<Result<Vec<_>, _>>()?;
-    let levels = keep
-        .iter()
-        .map(|&r| {
-            places
-                .admin_level(r as usize)
-                .ok_or(fail("a row without a level"))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let classes = col(&|r| places.class(r))?;
-    let flags = col(&|r| places.flags(r))?;
-    let body = places::encode(&PlaceColumns {
-        points: &points,
-        kinds: &kinds,
-        admin_levels: &levels,
-        classes: &classes,
-        flags: &flags,
-    })?;
-    Ok((points, body))
-}
-
-/// NAMES of rows `keep`, every record as it was.
-/// The NAMES body of rows `keep` with the names `filter` keeps (all for `None`; the canonical
-/// always), and each kept row's kept texts.
-#[allow(clippy::type_complexity, reason = "the body and the texts, row by row")]
+/// The names of row `r` of part `o` that its rule keeps (the canonical always).
 fn names_of(
     names: &Names<'_>,
-    keep: &[u32],
-    filter: Option<&dyn Fn(u32, usize, &NameRecord<'_>) -> bool>,
-) -> Result<(Vec<u8>, Vec<Vec<String>>), Error> {
-    let mut buf = vec![0_u8; 1 << 16];
-    let mut texts: Vec<Vec<Vec<u8>>> = Vec::with_capacity(keep.len());
-    let mut meta = Vec::with_capacity(keep.len());
-    for &r in keep {
-        let (mut t, mut m) = (Vec::new(), Vec::new());
-        for (i, x) in names.names(r as usize).enumerate() {
-            let text = x.text(&mut buf)?;
-            let (lang, script, kind, valid, rule) =
-                (x.lang(), x.script(), x.kind(), x.valid(), x.rule());
-            let rec = NameRecord {
-                text,
-                lang,
-                script,
-                kind,
-                valid_from: valid.0,
-                valid_to: valid.1,
-                rule,
-            };
-            if i > 0 && filter.is_some_and(|f| !f(r, i, &rec)) {
-                continue;
-            }
-            t.push(text.as_bytes().to_vec());
-            m.push((lang, script, kind, valid, rule));
+    o: &Opened<'_, '_>,
+    r: u32,
+    buf: &mut [u8],
+) -> Result<Vec<OwnedName>, Error> {
+    let mut kept = Vec::new();
+    for (i, x) in names.names(r as usize).enumerate() {
+        let text = x.text(buf)?;
+        let meta: NameMeta = (x.lang(), x.script(), x.kind(), x.valid(), x.rule());
+        if i > 0
+            && o.part
+                .names
+                .is_some_and(|rule| !(rule.keep)(r, i, &record_of(text, &meta)))
+        {
+            continue;
         }
-        texts.push(t);
-        meta.push(m);
+        kept.push((String::from(text), meta));
     }
-    let recs: Vec<Vec<NameRecord<'_>>> = texts
-        .iter()
-        .zip(&meta)
-        .map(|(t, m)| {
-            t.iter()
-                .zip(m)
-                .map(|(text, &(lang, script, kind, valid, rule))| {
-                    Ok(NameRecord {
-                        text: core::str::from_utf8(text)
-                            .map_err(|_| fail("a name is not UTF-8"))?,
-                        lang,
-                        script,
-                        kind,
-                        valid_from: valid.0,
-                        valid_to: valid.1,
-                        rule,
-                    })
-                })
-                .collect::<Result<Vec<_>, Error>>()
-        })
-        .collect::<Result<_, _>>()?;
-    let per_row: Vec<&[NameRecord<'_>]> = recs.iter().map(Vec::as_slice).collect();
-    let kept = recs
-        .iter()
-        .map(|r| r.iter().map(|n| String::from(n.text)).collect())
-        .collect();
-    Ok((names::encode(&per_row)?, kept))
+    Ok(kept)
 }
 
-/// The pack's importance and unit type of rows `keep`, and its query rules.
-#[allow(clippy::type_complexity, reason = "three columns of one section")]
-fn search_extra<'s>(
-    s: &'s Search<'_>,
-    keep: &[u32],
-) -> (Vec<u8>, Vec<u8>, Vec<search::rules::Rule<'s>>) {
-    let importance: Vec<u8> = keep.iter().map(|&r| s.importance(r)).collect();
-    let mut units: Vec<u8> = keep.iter().map(|&r| s.unit(r)).collect();
-    if units.iter().all(|&u| u == 0) {
-        units.clear();
-    }
-    (importance, units, s.rules().iter().collect())
+/// The record of an owned name.
+fn record((text, meta): &OwnedName) -> NameRecord<'_> {
+    record_of(text, meta)
 }
 
-/// SEARCH of rows `keep`: each key with its kept rows (a key left with none is dropped), each
-/// row's importance and unit type, and the query rules.
-fn search_of(s: &Search<'_>, keep: &[u32], new_of: &[u32]) -> Result<Vec<u8>, Error> {
-    let mut keys: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
+/// The record of name `text` with `meta`.
+fn record_of<'t>(text: &'t str, meta: &NameMeta) -> NameRecord<'t> {
+    let &(lang, script, kind, valid, rule) = meta;
+    NameRecord {
+        text,
+        lang,
+        script,
+        kind,
+        valid_from: valid.0,
+        valid_to: valid.1,
+        rule,
+    }
+}
+
+/// Adds SEARCH `s`'s keys to `keys`, each with its rows renumbered by `own_of` (a key left with
+/// none is dropped).
+fn copy_keys(
+    s: &Search<'_>,
+    own_of: &[u32],
+    keys: &mut BTreeMap<Vec<u8>, BTreeSet<u32>>,
+) -> Result<(), Error> {
     let mut buf = [0_u8; search::fst::MAX_KEY];
     for o in 0..s.keys() {
         let len = s.automaton().key(o, &mut buf).ok_or(fail("a SEARCH key"))?;
         let mut rows = BTreeSet::new();
         s.rows_of(o, |r| {
-            if let Some(&n) = new_of.get(r as usize).filter(|&&n| n != u32::MAX) {
+            if let Some(&n) = own_of.get(r as usize).filter(|&&n| n != u32::MAX) {
                 rows.insert(n);
             }
             core::ops::ControlFlow::Continue(())
         });
         if !rows.is_empty() {
-            keys.insert(buf.get(..len).ok_or(fail("a SEARCH key"))?.to_vec(), rows);
+            let key = buf.get(..len).ok_or(fail("a SEARCH key"))?;
+            keys.entry(key.to_vec()).or_default().extend(rows);
         }
     }
-    let (importance, units, rules) = search_extra(s, keep);
-    let extra = search::Extra {
-        rules: (!rules.is_empty()).then_some(rules.as_slice()),
-        units: &units,
-    };
-    search::encode_with(&keys, &importance, &extra)
+    Ok(())
 }
 
-/// Kept polygons renumbered onto the kept arcs: per polygon its parts' rings of arc references
-/// (`arc << 1 | reversed`), its box, and the arcs it uses.
-struct Renumbered {
-    refs: Vec<Vec<Vec<Vec<u32>>>>,
-    boxes: Vec<Rect>,
-    arcs_per_polygon: Vec<Vec<u32>>,
+/// The union of the parts' query rules.
+#[derive(Default)]
+struct RuleSet<'a> {
+    list: Vec<search::rules::Rule<'a>>,
+    /// The unit types taken so far.
+    units: u8,
+}
+
+impl<'a> RuleSet<'a> {
+    /// Adds a part's rules; returns how far its unit types move.
+    fn add(&mut self, rules: search::rules::Rules<'a>) -> Result<u8, Error> {
+        use search::rules::Rule;
+        let shift = self.units;
+        for r in &rules {
+            match r {
+                Rule::Unit { abbreviation, unit } => {
+                    let unit = unit
+                        .checked_add(shift)
+                        .ok_or(fail("the parts name more than 255 unit types"))?;
+                    self.units = self.units.max(unit);
+                    self.list.push(Rule::Unit { abbreviation, unit });
+                }
+                Rule::Phonetic(name) => match self.list.iter().find_map(|x| match x {
+                    Rule::Phonetic(n) => Some(*n),
+                    _ => None,
+                }) {
+                    Some(n) if n != name => return Err(fail("the parts name two phonetic keys")),
+                    Some(_) => {}
+                    None => self.list.push(r),
+                },
+                _ if self.list.contains(&r) => {}
+                _ => self.list.push(r),
+            }
+        }
+        Ok(shift)
+    }
+}
+
+/// The kept polygons of every part, on their arcs.
+#[derive(Default)]
+struct Shapes {
+    /// Each new arc's points.
+    points: Vec<Vec<Point<E7>>>,
+    polys: Vec<Shape>,
+}
+
+/// A kept polygon: its row's admin level and new row, its parts' rings of new arc references
+/// (`arc << 1 | reversed`), its box, the arcs it uses, its label and area.
+struct Shape {
+    level: u8,
+    row: u32,
+    refs: Vec<Vec<Vec<u32>>>,
+    rect: Rect,
+    arcs: Vec<u32>,
+    label: Point<E7>,
+    area_ha: u32,
+}
+
+/// A pack's admin geometry.
+struct Geometry<'g, 'a> {
+    arcs: &'g Arcs<'a>,
+    polys: &'g Polygons<'a>,
+    count: u64,
+}
+
+impl Geometry<'_, '_> {
+    /// Adds the polygons on part `o`'s own rows to `shapes`, with the arcs they use at the
+    /// part's level of detail.
+    fn collect(&self, o: &Opened<'_, '_>, shapes: &mut Shapes) -> Result<(), Error> {
+        let mut kept = Vec::new();
+        let mut used = BTreeSet::new();
+        for p in 0..usize::try_from(self.count).map_err(|_| fail("too many polygons"))? {
+            let Some(row) = self.polys.row(p) else {
+                continue;
+            };
+            let Some(&new) = o.own_of.get(row as usize).filter(|&&n| n != u32::MAX) else {
+                continue;
+            };
+            for ring in self.polys.all_rings(p) {
+                used.extend(self.polys.refs(ring).map(|(a, _)| a));
+            }
+            let level = o
+                .places
+                .admin_level(row as usize)
+                .ok_or(fail("a row without a level"))?;
+            kept.push((p, new, level));
+        }
+        let first = u32::try_from(shapes.points.len()).map_err(|_| fail("too many arcs"))?;
+        let arc_new: BTreeMap<usize, u32> = used.iter().copied().zip(first..).collect();
+        shapes.points.extend(
+            used.iter()
+                .map(|&a| self.arcs.points(a, false, o.part.lod).collect::<Vec<_>>()),
+        );
+        for (p, row, level) in kept {
+            let mut refs = Vec::new();
+            let mut rect: Option<Rect> = None;
+            let mut arcs_of = Vec::new();
+            for part in self.polys.parts(p).ok_or(fail("a polygon's parts"))? {
+                let mut rings = Vec::new();
+                for ring in self.polys.rings(part).ok_or(fail("a part's rings"))? {
+                    let mut list = Vec::new();
+                    for (a, rev) in self.polys.refs(ring) {
+                        let na = *arc_new.get(&a).ok_or(fail("an arc not collected"))?;
+                        list.push(na << 1 | u32::from(rev));
+                        arcs_of.push(na);
+                        for v in shapes.points.get(na as usize).into_iter().flatten() {
+                            let r = Rect::around_e7(v.lat(), v.lon());
+                            match &mut rect {
+                                Some(b) => b.grow(&r),
+                                None => rect = Some(r),
+                            }
+                        }
+                    }
+                    rings.push(list);
+                }
+                refs.push(rings);
+            }
+            shapes.polys.push(Shape {
+                level,
+                row,
+                refs,
+                rect: rect.ok_or(fail("a polygon without vertices"))?,
+                arcs: arcs_of,
+                label: self
+                    .polys
+                    .label(p)
+                    .ok_or(fail("a polygon without a label"))?,
+                area_ha: self.polys.area_ha(p).unwrap_or(0),
+            });
+        }
+        Ok(())
+    }
+}
+
+impl Shapes {
+    /// ARCS, POLYGONS (grouped by admin level, rows increasing in each), `POLY_INDEX` and
+    /// `ADMIN_REGION`.
+    fn encode(mut self, node: usize, opts: &Options) -> Result<Vec<Body>, Error> {
+        if self.polys.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.polys.sort_by_key(|s| (s.level, s.row));
+        let ring_refs: Vec<Vec<Vec<&[u32]>>> = self
+            .polys
+            .iter()
+            .map(|p| {
+                p.refs
+                    .iter()
+                    .map(|r| r.iter().map(Vec::as_slice).collect())
+                    .collect()
+            })
+            .collect();
+        let part_refs: Vec<Vec<&[&[u32]]>> = ring_refs
+            .iter()
+            .map(|p| p.iter().map(Vec::as_slice).collect())
+            .collect();
+        let mut input: Vec<PolygonInput<'_>> = self
+            .polys
+            .iter()
+            .zip(&part_refs)
+            .map(|(s, parts)| PolygonInput {
+                row: s.row,
+                parts,
+                label: s.label,
+                area_ha: s.area_ha,
+            })
+            .collect();
+        let mut groups = Vec::new();
+        for (i, s) in self.polys.iter().enumerate() {
+            if i == 0 || self.polys.get(i - 1).map(|q| q.level) != Some(s.level) {
+                groups.push(u32::try_from(i).map_err(|_| fail("too many polygons"))?);
+            }
+        }
+        let arc_slices: Vec<&[Point<E7>]> = self.points.iter().map(Vec::as_slice).collect();
+        let arcs_body = arcs::encode(&ArcColumns {
+            arcs: &arc_slices,
+            levels: &[],
+            tolerances_cm: &[],
+        })?;
+        let lon_lat: Vec<Vec<[i32; 2]>> = self
+            .points
+            .iter()
+            .map(|a| a.iter().map(|v| [v.lon(), v.lat()]).collect())
+            .collect();
+        // The region's run scales are the new arcs' own (a source on a coarse decimal grid has
+        // them), so read them back from the encoded ARCS.
+        let arc_count = self.points.len() as u64;
+        let new_arcs = Arcs::open(&crate::Section::unpacked(Kind::ARCS, arc_count, &arcs_body))?;
+        let scales: Vec<u32> = if new_arcs.has_scale() {
+            (0..new_arcs.len()).map(|a| new_arcs.scale(a)).collect()
+        } else {
+            Vec::new()
+        };
+        let arcs_per_polygon: Vec<Vec<u32>> = self.polys.iter().map(|s| s.arcs.clone()).collect();
+        let admin = region::encode_on_arcs(&lon_lat, &scales, &arcs_per_polygon, opts)?;
+        let polygons_body = labels_inside(&mut input, &groups, &new_arcs)?;
+        let boxes: Vec<Rect> = self.polys.iter().map(|s| s.rect).collect();
+        let n = self.polys.len() as u64;
+        Ok(vec![
+            (Kind::ARCS, Encoding::TABLE, arc_count, arcs_body),
+            (Kind::POLYGONS, Encoding::TABLE, n, polygons_body),
+            (
+                Kind::POLY_INDEX,
+                Encoding::TABLE,
+                n,
+                poly_index::encode(&boxes, node)?,
+            ),
+            (Kind::ADMIN_REGION, Encoding::TABLE, n, admin),
+        ])
+    }
 }
 
 /// POLYGONS of `input`, after moving each label the coarser outline no longer holds (a small
@@ -454,188 +839,70 @@ fn interior(rings: &[Vec<Point<E7>>]) -> Option<Point<E7>> {
     None
 }
 
-/// A pack's admin geometry.
-struct Geometry<'g, 'a> {
-    arcs: &'g Arcs<'a>,
-    polys: &'g Polygons<'a>,
-    count: u64,
-}
-
-impl Geometry<'_, '_> {
-    /// The group of each polygon (one group per level, in order).
-    fn groups(&self) -> Vec<usize> {
-        let mut of = Vec::new();
-        let mut g = 0;
-        while let Some(range) = self.polys.group(g) {
-            of.resize(of.len().max(range.end), g);
-            for slot in of.get_mut(range).into_iter().flatten() {
-                *slot = g;
-            }
-            g += 1;
-        }
-        of
-    }
-
-    /// Each kept polygon's parts, rings and arc references renumbered to `arc_new`, its box
-    /// over the arcs' `points`, and the arcs it uses.
-    fn renumber(
-        &self,
-        kept: &[(usize, u32)],
-        arc_new: &BTreeMap<usize, u32>,
-        points: &[Vec<Point<E7>>],
-    ) -> Result<Renumbered, Error> {
-        let mut out = Renumbered {
-            refs: Vec::with_capacity(kept.len()),
-            boxes: Vec::with_capacity(kept.len()),
-            arcs_per_polygon: Vec::with_capacity(kept.len()),
-        };
-        for &(p, _) in kept {
-            let mut parts = Vec::new();
-            let mut b: Option<Rect> = None;
-            let mut arcs_of = Vec::new();
-            for part in self.polys.parts(p).ok_or(fail("a polygon's parts"))? {
-                let mut rings = Vec::new();
-                for ring in self.polys.rings(part).ok_or(fail("a part's rings"))? {
-                    let mut list = Vec::new();
-                    for (a, rev) in self.polys.refs(ring) {
-                        let na = *arc_new.get(&a).ok_or(fail("an arc not collected"))?;
-                        list.push(na << 1 | u32::from(rev));
-                        arcs_of.push(na);
-                        for v in points.get(na as usize).into_iter().flatten() {
-                            let r = Rect::around_e7(v.lat(), v.lon());
-                            match &mut b {
-                                Some(b) => b.grow(&r),
-                                None => b = Some(r),
-                            }
-                        }
-                    }
-                    rings.push(list);
-                }
-                parts.push(rings);
-            }
-            out.refs.push(parts);
-            out.boxes.push(b.ok_or(fail("a polygon without vertices"))?);
-            out.arcs_per_polygon.push(arcs_of);
-        }
-        Ok(out)
-    }
-
-    /// ARCS, POLYGONS, `POLY_INDEX` and `ADMIN_REGION` of the polygons on kept rows.
-    fn slice(
-        &self,
-        new_of: &[u32],
-        lod: u8,
-        node: usize,
-        opts: &Options,
-    ) -> Result<Vec<Body>, Error> {
-        let group_of = self.groups();
-        // The kept polygons, in their order, and the arcs they use.
-        let mut kept = Vec::new();
-        let mut used = BTreeSet::new();
-        for p in 0..usize::try_from(self.count).map_err(|_| fail("too many polygons"))? {
-            let Some(row) = self.polys.row(p) else {
-                continue;
-            };
-            let Some(&new) = new_of.get(row as usize).filter(|&&n| n != u32::MAX) else {
-                continue;
-            };
-            for ring in self.polys.all_rings(p) {
-                used.extend(self.polys.refs(ring).map(|(a, _)| a));
-            }
-            kept.push((p, new));
-        }
-        if kept.is_empty() {
-            return Ok(Vec::new());
-        }
-        let arc_new: BTreeMap<usize, u32> = used.iter().copied().zip(0_u32..).collect();
-        let points: Vec<Vec<Point<E7>>> = used
-            .iter()
-            .map(|&a| self.arcs.points(a, false, lod).collect())
-            .collect();
-        let Renumbered {
-            refs,
-            boxes,
-            arcs_per_polygon,
-        } = self.renumber(&kept, &arc_new, &points)?;
-        let ring_refs: Vec<Vec<Vec<&[u32]>>> = refs
-            .iter()
-            .map(|p| {
-                p.iter()
-                    .map(|r| r.iter().map(Vec::as_slice).collect())
-                    .collect()
-            })
-            .collect();
-        let part_refs: Vec<Vec<&[&[u32]]>> = ring_refs
-            .iter()
-            .map(|p| p.iter().map(Vec::as_slice).collect())
-            .collect();
-        let mut input = kept
-            .iter()
-            .zip(&part_refs)
-            .map(|(&(p, row), parts)| {
-                Ok(PolygonInput {
-                    row,
-                    parts,
-                    label: self
-                        .polys
-                        .label(p)
-                        .ok_or(fail("a polygon without a label"))?,
-                    area_ha: self.polys.area_ha(p).unwrap_or(0),
-                })
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
-        let mut groups = Vec::new();
-        for (i, &(p, _)) in kept.iter().enumerate() {
-            let g = group_of.get(p).copied();
-            if i == 0 || kept.get(i - 1).map(|&(q, _)| group_of.get(q).copied()) != Some(g) {
-                groups.push(u32::try_from(i).map_err(|_| fail("too many polygons"))?);
-            }
-        }
-        let arc_slices: Vec<&[Point<E7>]> = points.iter().map(Vec::as_slice).collect();
-        let arcs_body = arcs::encode(&ArcColumns {
-            arcs: &arc_slices,
-            levels: &[],
-            tolerances_cm: &[],
-        })?;
-        let lon_lat: Vec<Vec<[i32; 2]>> = points
-            .iter()
-            .map(|a| a.iter().map(|v| [v.lon(), v.lat()]).collect())
-            .collect();
-        // The region's run scales are the new arcs' own (a source on a coarse decimal grid has
-        // them), so read them back from the encoded ARCS.
-        let new_arcs = Arcs::open(&crate::Section::unpacked(
-            Kind::ARCS,
-            used.len() as u64,
-            &arcs_body,
-        ))?;
-        let scales: Vec<u32> = if new_arcs.has_scale() {
-            (0..new_arcs.len()).map(|a| new_arcs.scale(a)).collect()
-        } else {
-            Vec::new()
-        };
-        let admin = region::encode_on_arcs(&lon_lat, &scales, &arcs_per_polygon, opts)?;
-        let polygons_body = labels_inside(&mut input, &groups, &new_arcs)?;
-        let n = kept.len() as u64;
-        Ok(vec![
-            (Kind::ARCS, Encoding::TABLE, used.len() as u64, arcs_body),
-            (Kind::POLYGONS, Encoding::TABLE, n, polygons_body),
-            (
-                Kind::POLY_INDEX,
-                Encoding::TABLE,
-                n,
-                poly_index::encode(&boxes, node)?,
-            ),
-            (Kind::ADMIN_REGION, Encoding::TABLE, n, admin),
-        ])
-    }
-}
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "test code")]
 
-    use super::{E7, Point, interior};
+    use super::{E7, Point, RuleSet, interior};
+    use crate::search::rules::{self, Rule, Rules};
     use alloc::vec::Vec;
+
+    #[test]
+    fn the_parts_rules_join_and_their_unit_types_move() {
+        let a = rules::encode(&[
+            Rule::Phonetic("indic-v0"),
+            Rule::Unit {
+                abbreviation: "rm",
+                unit: 3,
+            },
+            Rule::Drop("dham"),
+        ])
+        .unwrap();
+        let b = rules::encode(&[
+            Rule::Unit {
+                abbreviation: "tsl",
+                unit: 2,
+            },
+            Rule::Drop("dham"),
+            Rule::Phonetic("indic-v0"),
+        ])
+        .unwrap();
+        let mut set = RuleSet::default();
+        assert_eq!(set.add(Rules::new(&a)).unwrap(), 0);
+        assert_eq!(
+            set.add(Rules::new(&b)).unwrap(),
+            3,
+            "b's types move past a's"
+        );
+        assert_eq!(
+            set.list,
+            [
+                Rule::Phonetic("indic-v0"),
+                Rule::Unit {
+                    abbreviation: "rm",
+                    unit: 3
+                },
+                Rule::Drop("dham"),
+                Rule::Unit {
+                    abbreviation: "tsl",
+                    unit: 5
+                },
+            ]
+        );
+        // Two phonetic keys cannot share one map.
+        let c = rules::encode(&[Rule::Phonetic("other-v0")]).unwrap();
+        assert!(set.add(Rules::new(&c)).is_err());
+        // More than 255 unit types between the parts.
+        let d = rules::encode(&[Rule::Unit {
+            abbreviation: "x",
+            unit: 255,
+        }])
+        .unwrap();
+        assert!(RuleSet::default().add(Rules::new(&d)).is_ok());
+        let mut full = RuleSet::default();
+        full.add(Rules::new(&a)).unwrap();
+        assert!(full.add(Rules::new(&d)).is_err());
+    }
 
     fn ring(v: &[(i32, i32)]) -> Vec<Point<E7>> {
         v.iter()

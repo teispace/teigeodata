@@ -387,7 +387,7 @@ fn tagged<'b>(buf: &'b mut [u8; fst::MAX_KEY], tag: u8, key: &str) -> Option<&'b
 }
 
 #[cfg(feature = "write")]
-pub use write::{Extra, Maps, encode, encode_maps, encode_maps_with, encode_with};
+pub use write::{Extra, Maps, encode, encode_maps, encode_maps_with, encode_with, tagged_keys};
 
 #[cfg(feature = "write")]
 mod write {
@@ -443,6 +443,13 @@ mod write {
         importance: &[u8],
         extra: &Extra<'_>,
     ) -> Result<Vec<u8>, Error> {
+        encode_with(&tagged_keys(maps), importance, extra)
+    }
+
+    /// The tagged keys of the three maps, as [`encode_maps`] writes them: a loose key keeps
+    /// only the rows its exact twin lacks, and empty keys are skipped.
+    #[must_use]
+    pub fn tagged_keys(maps: &Maps) -> BTreeMap<Vec<u8>, BTreeSet<u32>> {
         let mut keys: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
         for (tag, map) in [
             (EXACT, &maps.exact),
@@ -463,7 +470,7 @@ mod write {
                 keys.insert(key, rows);
             }
         }
-        encode_with(&keys, importance, extra)
+        keys
     }
 
     /// Encodes a SEARCH body: `keys` maps each tagged key (tag byte, then the folded text) to

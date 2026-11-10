@@ -44,8 +44,9 @@ A short status. The numbers and evidence live in each phase file and the
   (D-149); world admin 1 cut to the Nepal view (D-150: 4,571 units, world part 5.73 MB,
   cities under their unit); world timezones from the units, no geometry (D-151: 361 zones,
   30 kB, `tz_at` agrees with a city's own zone at 97.57% of cities); slices keep the names
-  their world row would (D-152: Nepal's slice 73 kB, −54%). Next: 4.2 the shipped
-  baseline and the 8 MB gate; then 4.3 TUF trust.
+  their world row would (D-152: Nepal's slice 73 kB, −54%); the baseline ships as one merged
+  file (D-153: `forge embed`, 5.88 MB, the engine's `baseline` feature). Next: 4.2 the world's
+  neighbours cut to each pack outline, discovery over the baseline; then 4.3 TUF trust.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).
 - **Waiting on the maintainer:** review of `data/countries/np/corrections/` (unreviewed), the labelled sample (Q-005, needed for `ACCURACY.md` and M3),
@@ -93,3 +94,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-10 | 4.2: the locator by distance on the stored outlines (D-149); world admin 1 cut to the Nepal view (D-150); a 12 GB memory blow-up in G-topo's parent check found and fixed, memory now watched by footprint (AGENTS.md §7) | world timezones; the shipped baseline and the 8 MB gate |
 | 2026-11-10 | 4.2: world timezones from the units and the cities' zones (D-151); `extract` keeps PLACE_TZ; the locator's chunk index behind an `alloc` feature (the no_std build) | the shipped baseline and the 8 MB gate |
 | 2026-11-10 | 4.2: slice names cut to the country's languages and English, SEARCH rebuilt from them (D-152): Nepal's slice 157,532 → 72,988 B | the shipped baseline (layers, `baseline` feature) and the 8 MB gate |
+| 2026-11-10 | 4.2: the baseline as one file (D-153): `extract::merge`, `forge embed` with Z1, the engine's `baseline` feature; layers measured and rejected (search 34×, reverse 98× at 200 slices) | cut the world's neighbours to pack outlines; 4.3 TUF trust |

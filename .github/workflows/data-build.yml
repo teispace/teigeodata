@@ -80,9 +80,18 @@ jobs:
           forge/target/fast/forge fetch tzdb-2026f
           forge/target/fast/forge world --release "$RELEASE" ${{ matrix.flag }}
           cargo xtask check-pack data/build/baseline/world/world-baseline-${{ matrix.build }}.tgd ${{ matrix.flag }}
-      - name: World and locator gates (tests/world.rs, D-147, D-149, D-150)
+      - name: The shipped baseline, one file (D-153; Z1 fails the stage past 8 MB)
+        run: |
+          forge/target/fast/forge embed ${{ matrix.flag }}
+          cargo xtask check-pack data/build/baseline/baseline-${{ matrix.build }}.tgd ${{ matrix.flag }}
+          TEIGEODATA_BASELINE=$PWD/data/build/baseline/baseline-${{ matrix.build }}.tgd \
+            cargo test --release -p teigeodata-engine --features baseline --test baseline
+      - name: World, locator and shipped-baseline gates (tests/world.rs, D-147, D-149, D-150, D-153)
         run: |
           b=${{ matrix.build }}
+          export TGD_EMBED=$PWD/data/build/baseline/baseline-$b.tgd
+          # `--all-features` takes `baseline`, which embeds this file.
+          export TEIGEODATA_BASELINE=$TGD_EMBED
           export TGD_WORLD=$PWD/data/build/baseline/world/world-baseline-$b.tgd
           export TGD_PROBES=$PWD/data/build/baseline/world/world-probes-$b.tsv
           export TGD_BASELINE=$PWD/data/build/baseline/${{ matrix.cc }}/${{ matrix.cc }}-baseline-$b.tgd
@@ -106,4 +115,5 @@ jobs:
             data/build/pack/${{ matrix.cc }}/*-${{ matrix.build }}.tsv
             data/build/baseline/${{ matrix.cc }}/*-${{ matrix.build }}.md
             data/build/baseline/world/*-${{ matrix.build }}.md
+            data/build/baseline/summary-${{ matrix.build }}.md
           if-no-files-found: ignore

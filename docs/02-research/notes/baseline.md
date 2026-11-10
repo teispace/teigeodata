@@ -46,7 +46,10 @@ design and the first estimates; this note pins the sources.
   which the country packs' admin and city records carry too (D-110). When a country's pack is
   built later, it matches the same serials, so the baseline's IDs survive.
 - **Size:** the world part is 5.82 MB with admin 1 and timezones (4.44 MB on the wire), and
-  Nepal's slice 0.07 MB once it keeps only the names its world row would (§3.9 to §3.11). The locator adds no bytes (D-149).
+  Nepal's slice 0.07 MB once it keeps only the names its world row would (§3.9 to §3.11).
+- **Shipping:** one file, merged by `forge embed`: 5.88 MB for the world and Nepal (4.48 MB on
+  the wire), within the 8 MB budget (Z1); compiled in by the engine's `baseline` feature, or
+  loaded as a file (§3.12, D-153). The locator adds no bytes (D-149).
 
 ## 3. Findings
 
@@ -243,6 +246,42 @@ Country 198, Settlement 1,045, the zone 1), so NAMES (41,468 B) and SEARCH (70,1
   country's languages and English (**chosen**). Untagged names are kept: they are the
   sources' local forms, and dropping them would lose spellings the lexicon expects.
 
+### 3.12 Shipping: one file, not layers (2026-11-10, D-153)
+
+The world part and the slices could ship as layers (a slice above the world) or merged into
+one pack. Measured on the world part with N copies of Nepal's slice as baseline layers (505
+names and points from the world part, load 18 to 80 on a shared machine):
+
+| Slices | search k=10 (ns) | reverse k=10 (ns) | admin_at (ns) | tz_at (ns) |
+|---:|---:|---:|---:|---:|
+| 0 | 7,729 to 8,497 | 6,761 to 8,374 | 5,726 to 10,482 | 587 to 866 |
+| 1 | 10,579 to 16,518 | 9,426 to 16,026 | 4,374 to 9,338 | 582 to 1,547 |
+| 8 | 15,723 to 33,866 | 27,452 to 39,222 | 4,799 to 6,186 | 602 to 1,150 |
+| 64 | 65,395 to 80,960 | 180,099 to 307,957 | 9,336 to 12,644 | 921 to 956 |
+| 200 | 176,005 to 286,746 | 594,507 to 819,931 | 18,627 to 30,116 | 1,982 to 2,757 |
+
+Search cannot prune a layer by area, and every layer's index is asked for `reverse`, so about
+200 pack countries as layers would make the baseline's queries 20 to 100 times slower. One
+merged file answers as fast as the world part alone, and is smaller (shared tables, one
+index).
+
+- **Merged** (`forge embed`, `extract::merge`): world + Nepal is 5,876,132 B (4.48 MB on the
+  wire), 21 kB less than the parts apart.
+- **Same answers.** For all 39,395 IDs the one file gives the same place, name, chain and zone
+  as world + slice as layers, and the same hits for 788 of 788 sampled names.
+- **Borders.** 3 places answer `admin_at` differently, all on Nepal's border, where the pack's
+  outline and Natural Earth's neighbours disagree. With layers the slice decides where it holds
+  the point, and the world's own Nepal outline still answers where it does not. In the one
+  file the world's Nepal outline is gone: two Indian border towns that Natural Earth's Nepal
+  held now fall in no country (neither the pack's Nepal nor Natural Earth's India holds
+  them), and one place that both the pack's Nepal and Natural Earth's India hold answers both.
+  The fix is to cut the world part's neighbours to each pack country's outline before the
+  topology stage, so the borders share arcs (planned, phase 4.2).
+- **Embedding.** The engine's `baseline` feature compiles the file in (`include_bytes!`, the
+  path in `TEIGEODATA_BASELINE`); WASM loads the same bytes. Raw rather than compressed: the
+  engine reads it in place (`from_static`, no copy), and app stores and HTTP compress the
+  download anyway (wire 4.48 MB).
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
@@ -257,6 +296,8 @@ Country 198, Settlement 1,045, the zone 1), so NAMES (41,468 B) and SEARCH (70,1
 | GeoNames `cities5000` | Twice the towns | Over budget | CC BY 4.0 | daily | rejected (size) |
 | Natural Earth time zones | Public domain | Offsets, 2012, few IANA names | Public domain | 5.0.0 | rejected |
 | TBB simplified into the baseline (REGION) | Exact borders at the tolerance | 8.3 M vertices; a 1 km REGION estimated at MBs; ODbL, so lite needs another source | ODbL | 2026f | rejected (size, licence) |
+| Ship the world part and each slice as layers | No merge step; a slice updates alone | `search` 34× and `reverse` 98× slower at 200 slices (§3.12) | as the parts | D-153 | rejected |
+| One merged file (`forge embed`, §3.12) | One layer: the world part's speed; 21 kB smaller | A merge step; at a pack country's border the pack's outline and the world's neighbours can disagree | as the parts | D-153 | **chosen** |
 | Slice: every name of the pack | Search by any name before the pack is installed | 2.9 kB a row; slices pass the budget | as the pack | D-145 | rejected (§3.11) |
 | Slice: canonical, untagged, the country's languages and English (§3.11) | 54% smaller for Nepal; the world part's language set | Other languages wait for the pack | as the pack | D-152 | **chosen** |
 | Zones per admin unit and city (§3.10) | No geometry (30 kB); both builds; exact for one-zone countries and units | Approximate in units a zone line crosses (0.65% of people) | Public domain + CC BY 4.0 | tzdb 2026f | **chosen** (D-151) |
@@ -280,6 +321,7 @@ Country 198, Settlement 1,045, the zone 1), so NAMES (41,468 B) and SEARCH (70,1
 - Phase 4.2 gains the slice rule and the per-country admin-1 source report.
 - D-151: world timezones from the units; `extract` keeps PLACE_TZ.
 - D-152: a slice keeps the names its world row would, and rebuilds SEARCH from them.
+- D-153: the baseline ships as one merged file, not layers; Z1 gates it in `forge embed`.
 - Pinned: `ne-admin0-nep` (2026-11-10), `ne-admin1` (2026-11-10, D-150) and
   `geonames-cities15000` (2026-11-09). Still to come: OSM admin 1 extracts for main.
 

@@ -682,6 +682,29 @@ array, and `a_long_diagonal_border_is_indexed_along_itself` guards it. Run a new
 heavy stage under a memory cap first, reading the physical footprint (`footprint -p <pid>`):
 on macOS, `ps` RSS leaves out compressed and swapped memory.
 
+## The shipped baseline (`embed`)
+
+`forge embed [--lite] [--key <seed-file>]` merges the world part and every slice of the build
+(`data/build/baseline/<cc>/<cc>-baseline-<build>.tgd`, by country code) into
+`data/build/baseline/baseline-<build>.tgd` and `summary-<build>.md`, with
+`teigeodata_format::extract::merge` (D-153):
+
+- **Rows** in Hilbert order. A slice's row replaces the world's row of the same ID (its
+  country), and every reference to the replaced row (a parent, a zone) goes to the slice's.
+- **Geometry.** Each part's arcs at their own level of detail; polygons grouped by admin level.
+  The replaced country's world outline is dropped, so the slice's (the pack's) outline decides
+  inside it.
+- **SEARCH.** Every part's keys and importance; the query rules joined, each part's unit types
+  moved past the earlier parts' (two phonetic keys, or more than 255 unit types, fail).
+- **Manifest.** The world part's address, release and licence; every part's notices, each line
+  once.
+- **Gates.** Z1: over 8,000,000 B fails the stage. Every ID of every part is one row, at the
+  last part's point (a planted "earlier part wins" fails it). Read back verified, geometry
+  checked.
+
+Measured 2026-11-10 (main, world + Nepal): 39,395 rows, 5,876,132 B (4,475,825 B on the wire),
+in 0.4 s at a 26 MB peak; 21 kB less than the two parts apart.
+
 ## The baseline slice (`baseline`)
 
 `forge baseline <cc> [--lite] [--tolerance-m <m>] [--cities <source>] [--key <seed-file>]`

@@ -157,6 +157,91 @@ fn a_slice_keeps_the_zones_of_its_places() {
     }
 }
 
+/// A merge (D-153): two parts that share rows answer as one layer exactly as they do as two
+/// layers, the later part above: the same place, name and chain for every ID, the same hits for
+/// every name; a shared row is the later part's, once.
+#[test]
+fn a_merge_answers_as_its_parts_as_layers() {
+    let model = synthetic(3_000, 31);
+    let whole_bytes = model.encode();
+    let pack = Pack::open(&whole_bytes).unwrap();
+    let rows_every = |m: u32| -> Vec<u32> {
+        (0..model.ids.len() as u32)
+            .filter(|&r| match model.kinds[r as usize] {
+                PlaceKind::Country | PlaceKind::Admin => true,
+                PlaceKind::Settlement => r % m == 0,
+                _ => false,
+            })
+            .collect()
+    };
+    let (a, b) = (rows_every(2), rows_every(3));
+    let part = |keep| extract::Part {
+        pack: &pack,
+        keep,
+        lod: 0,
+        names: None,
+    };
+    let merged = write(
+        &extract::merge(&[part(&a), part(&b)], &Options::default()).unwrap(),
+        "np",
+    );
+    let one = engine(merged);
+    let mut two = Engine::new();
+    let layer = |keep: &[u32], priority| {
+        let bytes = write(
+            &extract::rows(&pack, keep, 0, &Options::default()).unwrap(),
+            "np",
+        );
+        Layer::from_bytes(
+            bytes,
+            LayerOptions {
+                priority,
+                ..LayerOptions::default()
+            },
+        )
+        .unwrap()
+    };
+    two.add(layer(&a, 0));
+    two.add(layer(&b, 1));
+    let both: std::collections::BTreeSet<u32> = a.iter().chain(&b).copied().collect();
+    let (mut s, mut up_a, mut up_b, mut h_a, mut h_b) = (
+        Scratch::default(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    let mut buf = [0_u8; 512];
+    for &r in &both {
+        let id = model.ids[r as usize];
+        let (x, y) = (one.get(id).unwrap().unwrap(), two.get(id).unwrap().unwrap());
+        same(&one, &x, &two, &y);
+        one.ancestors(&x, &mut up_a).unwrap();
+        two.ancestors(&y, &mut up_b).unwrap();
+        let ids = |v: &[Place]| v.iter().map(|p| p.id).collect::<Vec<_>>();
+        assert_eq!(ids(&up_a), ids(&up_b), "row {r}");
+        if r % 7 == 0 {
+            let name = one.name(&x, &mut buf).unwrap().unwrap().to_owned();
+            one.search(&name, 10, &mut s, &mut h_a).unwrap();
+            two.search(&name, 10, &mut s, &mut h_b).unwrap();
+            let hits = |h: &[teigeodata_engine::Hit]| {
+                h.iter().map(|x| (x.place.id, x.score)).collect::<Vec<_>>()
+            };
+            assert_eq!(hits(&h_a), hits(&h_b), "{name}");
+        }
+    }
+    let rows = Pack::open(&write(
+        &extract::merge(&[part(&a), part(&b)], &Options::default()).unwrap(),
+        "np",
+    ))
+    .unwrap()
+    .section(Kind::PLACES)
+    .unwrap()
+    .item_count();
+    assert_eq!(rows, both.len() as u64, "a shared row once");
+    assert!(a.len() + b.len() > both.len() + 100, "the parts share rows");
+}
+
 /// A name rule (D-152): the slice keeps the canonical and the names the rule keeps, and its
 /// SEARCH is rebuilt from them, so a kept alias finds its place and a dropped one does not.
 #[test]

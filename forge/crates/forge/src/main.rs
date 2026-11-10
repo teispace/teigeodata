@@ -23,6 +23,7 @@
 //! forge make <cc> --release <v> [--lite] …       every stage from data/countries/<cc>/build.yaml, cached
 //! forge baseline <cc> [--lite] …                a country pack's slice of the embedded baseline
 //! forge world --release <v> [--lite] …           the world part of the embedded baseline
+//! forge embed [--lite] [--key <seed-file>]       the shipped baseline: the world part and every slice, one file
 //! forge path <source-id>                          print a fetched source's store path
 //! ```
 //!
@@ -118,6 +119,7 @@ fn stage(root: &Path, args: &[String]) -> Option<Result<String, String>> {
         "build" => build::run(root, args.get(1..).unwrap_or_default()),
         "baseline" => build::baseline::run(root, args.get(1..).unwrap_or_default()),
         "world" => build::world::run(root, args.get(1..).unwrap_or_default()),
+        "embed" => build::embed::run(root, args.get(1..).unwrap_or_default()),
         "make" => make::run(root, args.get(1..).unwrap_or_default()),
         "labels" => match (args.get(1).map(String::as_str), args.get(2..).unwrap_or_default()) {
             (Some("sample"), [cc, src, per, seed]) => match per.parse::<usize>() {

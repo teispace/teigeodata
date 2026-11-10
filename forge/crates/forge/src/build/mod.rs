@@ -39,6 +39,7 @@ mod cluster;
 mod corrections;
 mod dedupe;
 mod elevation;
+pub(crate) mod embed;
 pub(crate) mod geometry;
 mod ids;
 mod naming;

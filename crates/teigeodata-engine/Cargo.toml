@@ -39,6 +39,9 @@ shared = ["dep:arc-swap"]
 # Map pack files with `memmap2` (native targets only; WASM reads packs into memory). The one
 # module that uses `unsafe` is `map.rs` (D-113).
 mmap = ["dep:memmap2"]
+# Embed the baseline pack (`BASELINE`, `Engine::with_baseline`): the file at the absolute path in
+# `TEIGEODATA_BASELINE`, built by `forge embed`. Off by default: it adds the file's size.
+baseline = []
 
 [dependencies]
 teigeodata-core.workspace = true
@@ -71,6 +74,10 @@ required-features = ["elevation", "admin", "names", "search", "timezone", "timez
 [[test]]
 name = "extract"
 required-features = ["elevation", "admin", "names", "search", "admin-index"]
+
+[[test]]
+name = "baseline"
+required-features = ["baseline", "admin", "names", "search", "timezone", "admin-index"]
 
 [[test]]
 name = "world"

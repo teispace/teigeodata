@@ -120,8 +120,11 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   pack's zones (D-151)
 - [x] Forge: a slice keeps the names its world row would (the country's languages and
   English) and rebuilds SEARCH from them: Nepal's slice 157,532 → 72,988 B (D-152)
-- [ ] The baseline as shipped: the world part and every slice, as layers (slices above the
-  world) or one file; decide by the size gate and the engine's layer cost
+- [x] The baseline as shipped: one file (`forge embed`, `extract::merge`), not layers: layers
+  cost search 34× and reverse 98× at 200 slices; world + Nepal 5.88 MB, answers equal to the
+  layers' for every ID (D-153)
+- [ ] The world part's neighbours cut to each pack country's outline, so a pack border and
+  its neighbours share arcs (3 border places differ today, D-153)
 - [x] Pin `geonames-cities15000` (D-145) and `ne-admin0-nep` (D-147)
 - [x] Pin `ne-admin1` (D-150)
 - [ ] The OSM boundary extract as a CI job (main's per-country admin 1)
@@ -129,7 +132,9 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   (no buffered REGION, so no bytes), `LOCATOR_RADIUS_M` = the world part's 1 km tolerance;
   border-probe gate: no missed country over about 110,000 source vertices (D-149,
   [locator](../../02-research/notes/locator.md))
-- [ ] Size gate (proposed 8 MB, Z1); `baseline` feature; WASM loads it as a file (Z3)
+- [x] Size gate Z1 (8 MB) in `forge embed` and `tests/baseline.rs`; the engine's `baseline`
+  feature (`BASELINE`, `Engine::with_baseline`); WASM loads the file with
+  `LayerOptions::baseline()` (D-153)
 
 ### 4.3 Catalog and trust
 - [ ] TUF subset client (`sync::trust`): root chain, timestamp, snapshot, targets, canonical
@@ -211,3 +216,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.2: world admin 1 from Natural Earth cut to the Nepal view for both builds; the pin split from the OSM extract job | D-150 |
 | 2026-11-10 | 4.2: world timezones from the units and the cities' zones, not simplified TBB | D-151 |
 | 2026-11-10 | 4.2: slice names cut to the world part's languages, so slices fit the budget | D-152 |
+| 2026-11-10 | 4.2: the baseline ships as one merged file; neighbours cut to pack outlines added | D-153 |

@@ -154,11 +154,35 @@ pub struct Engine {
     next: u32,
 }
 
+/// The embedded baseline (feature `baseline`, step 4.2): every country, its first-level units,
+/// the cities of 15,000 people or more and their timezones, one pack built by `forge embed`
+/// (`baseline-main.tgd`, the main build, or `baseline-lite.tgd`, the lite build). The build reads it from the
+/// absolute path in `TEIGEODATA_BASELINE`, so an application picks the build it ships. Targets
+/// that would rather not embed it (WASM, D-144 Z3) load the same file with
+/// [`Layer::from_bytes`] and [`LayerOptions::baseline`].
+#[cfg(feature = "baseline")]
+pub static BASELINE: &[u8] = include_bytes!(env!(
+    "TEIGEODATA_BASELINE",
+    "the `baseline` feature embeds the baseline pack: set TEIGEODATA_BASELINE to the absolute path of a baseline-main.tgd or baseline-lite.tgd (built by `forge embed`)"
+));
+
 impl Engine {
     /// An engine with no layers.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// An engine holding the embedded [`BASELINE`], borrowed for the program's life: the answer
+    /// wherever no installed pack has one.
+    ///
+    /// # Errors
+    /// [`Error::Format`] if the embedded file is not a valid pack.
+    #[cfg(feature = "baseline")]
+    pub fn with_baseline() -> Result<Self, Error> {
+        let mut e = Self::new();
+        e.add(Layer::from_static(BASELINE, LayerOptions::baseline())?);
+        Ok(e)
     }
 
     /// Adds a layer at its place in the precedence order and returns its handle. The order
