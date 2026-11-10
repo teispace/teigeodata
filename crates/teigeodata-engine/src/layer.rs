@@ -11,7 +11,7 @@ use teigeodata_core::PlaceId;
 #[cfg(any(feature = "timezone-index", feature = "admin-index"))]
 use teigeodata_core::{E7, Point};
 #[cfg(feature = "admin-index")]
-use teigeodata_format::arcs::Arcs;
+use teigeodata_format::arcs::{ArcChunks, Arcs};
 use teigeodata_format::blocks::{BLOCK, Blocks};
 use teigeodata_format::component::{Component, Components};
 #[cfg(feature = "elevation")]
@@ -25,6 +25,8 @@ use teigeodata_format::place_index::PlaceIndex;
 #[cfg(feature = "timezone")]
 use teigeodata_format::place_tz::PlaceTz;
 use teigeodata_format::places::Places;
+#[cfg(feature = "admin-index")]
+use teigeodata_format::poly_index::PolyIndex;
 #[cfg(feature = "admin-index")]
 use teigeodata_format::polygons::Polygons;
 use teigeodata_format::redirects::Redirects;
@@ -149,6 +151,11 @@ pub(crate) struct Views<'a> {
     pub(crate) admin: Option<Region<'a>>,
     #[cfg(feature = "admin-index")]
     pub(crate) polygons: Option<Polygons<'a>>,
+    /// The outlines and their box index, for queries by distance (`countries_near`, D-149).
+    #[cfg(feature = "admin-index")]
+    pub(crate) arcs: Option<Arcs<'a>>,
+    #[cfg(feature = "admin-index")]
+    pub(crate) poly_index: Option<PolyIndex<'a>>,
     /// The block hashes of every installed section of 1 MiB or more, located but not proved:
     /// each list is proved against its section hash on the section's first use (D-142).
     pub(crate) blocks: Vec<(Kind, Blocks<'a, 'static>)>,
@@ -207,18 +214,22 @@ impl<'a> Views<'a> {
         #[cfg(feature = "timezone-index")]
         let zones = get(Kind::REGION).map(|s| Region::open(&s)).transpose()?;
         #[cfg(feature = "admin-index")]
-        let admin = {
-            let arcs = get(Kind::ARCS).map(|s| Arcs::open(&s)).transpose()?;
-            match (get(Kind::ADMIN_REGION), &arcs) {
-                (Some(s), Some(a)) => Some(Region::open_on_arcs(&s, a)?),
-                (Some(s), None) => Some(Region::open(&s)?),
-                (None, _) => None,
-            }
+        let arcs = get(Kind::ARCS).map(|s| Arcs::open(&s)).transpose()?;
+        #[cfg(feature = "admin-index")]
+        let admin = match (get(Kind::ADMIN_REGION), &arcs) {
+            (Some(s), Some(a)) => Some(Region::open_on_arcs(&s, a)?),
+            (Some(s), None) => Some(Region::open(&s)?),
+            (None, _) => None,
         };
         #[cfg(feature = "admin-index")]
         let polygons = get(Kind::POLYGONS)
             .map(|s| Polygons::open(&s))
             .transpose()?;
+        #[cfg(feature = "admin-index")]
+        let poly_index = match (get(Kind::POLY_INDEX), &polygons) {
+            (Some(s), Some(p)) => Some(PolyIndex::open(&s, p)?),
+            _ => None,
+        };
         let mut blocks = Vec::new();
         for s in pack.sections() {
             if Component::of(s.kind()).is_some_and(|c| !missing.contains(c))
@@ -251,6 +262,10 @@ impl<'a> Views<'a> {
             admin,
             #[cfg(feature = "admin-index")]
             polygons,
+            #[cfg(feature = "admin-index")]
+            arcs,
+            #[cfg(feature = "admin-index")]
+            poly_index,
             blocks,
             missing,
         })
@@ -393,6 +408,9 @@ pub struct Layer {
     /// `GOOD` or `BAD` (D-142).
     proved: Box<[AtomicU8]>,
     stamp: Option<FileStamp>,
+    /// The arcs' chunk boxes for `countries_near`, built on its first call (D-149).
+    #[cfg(feature = "admin-index")]
+    chunks: std::sync::OnceLock<ArcChunks>,
     pub(crate) id: LayerId,
 }
 
@@ -486,6 +504,8 @@ impl Layer {
             memo,
             proved,
             stamp,
+            #[cfg(feature = "admin-index")]
+            chunks: std::sync::OnceLock::new(),
             owned,
             id: LayerId(0),
         })
@@ -566,6 +586,14 @@ impl Layer {
 
     pub(crate) fn views(&self) -> &Views<'_> {
         self.owned.views()
+    }
+
+    /// The chunk boxes of the layer's arcs, built from ARCS on the first call (O(vertices),
+    /// about 40 B per 128 vertices); `None` without arcs. The caller ensures ARCS first.
+    #[cfg(feature = "admin-index")]
+    pub(crate) fn chunks(&self) -> Option<&ArcChunks> {
+        let arcs = self.views().arcs.as_ref()?;
+        Some(self.chunks.get_or_init(|| ArcChunks::build(arcs)))
     }
 
     /// Whether the pack may hold `id`, current or retired: O(1).

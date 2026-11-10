@@ -48,6 +48,12 @@ use std::sync::Arc;
 
 pub use layer::{Layer, LayerId, LayerOptions, Load, Verify, release_cmp};
 pub use query::{Hit, Near, Place, Scratch};
+
+/// The radius in metres for [`Engine::countries_near`] over the embedded baseline: its
+/// outlines are simplified within 1 km of the source borders (D-147), so at this radius no
+/// country whose border is near is missed (D-149).
+#[cfg(feature = "admin-index")]
+pub const LOCATOR_RADIUS_M: u32 = 1_000;
 #[cfg(feature = "shared")]
 pub use shared::{Shared, Snapshot};
 pub use teigeodata_format::Kind;

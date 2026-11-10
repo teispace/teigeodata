@@ -179,6 +179,59 @@ fn regions_into(region: &Region<'_>, at: Point<E7>, buf: &mut Vec<u32>) -> usize
     }
 }
 
+/// The box (1e-6°) around `at` holding every point within `radius_m` metres of it, rounded
+/// outward: the latitude band widened by the radius, the longitude by the radius over the
+/// cosine of the band's latitude farthest from the equator; all longitudes near a pole. Across
+/// the antimeridian `min_lon > max_lon`, as the index reads it.
+#[cfg(feature = "admin-index")]
+fn radius_box(at: Point<E7>, radius_m: u32) -> Rect {
+    // Metres per degree of latitude on the mean sphere (R = 6 371 008.8 m).
+    const M_PER_DEG: f64 = 111_195.08;
+    let dlat = f64::from(radius_m) / M_PER_DEG;
+    let lat = f64::from(at.lat()) * 1e-7;
+    let lon = f64::from(at.lon()) * 1e-7;
+    let (lo, hi) = ((lat - dlat).max(-90.0), (lat + dlat).min(90.0));
+    let cos = lo.abs().max(hi.abs()).to_radians().cos();
+    let e6 = |d: f64, up: bool| {
+        let v = if up {
+            (d * 1e6).ceil() + 1.0
+        } else {
+            (d * 1e6).floor() - 1.0
+        };
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "clamped to the 1e-6° range first"
+        )]
+        let v = v.clamp(-180e6, 180e6) as i32;
+        v
+    };
+    let (min_lat, max_lat) = (e6(lo, false).max(-90_000_000), e6(hi, true).min(90_000_000));
+    let dlon = if cos > 1e-9 { dlat / cos } else { 360.0 };
+    if dlon >= 180.0 {
+        return Rect {
+            min_lat,
+            max_lat,
+            min_lon: -180_000_000,
+            max_lon: 180_000_000,
+        };
+    }
+    let wrap = |d: f64| {
+        if d > 180.0 {
+            d - 360.0
+        } else if d < -180.0 {
+            d + 360.0
+        } else {
+            d
+        }
+    };
+    Rect {
+        min_lat,
+        max_lat,
+        min_lon: e6(wrap(lon - dlon), false),
+        max_lon: e6(wrap(lon + dlon), true),
+    }
+}
+
 /// Whether a layer's coverage box (1e-7°) can meet the query box (1e-6°); true without a box
 /// and for boxes across the antimeridian, which are not pruned.
 fn meets(bbox: Option<teigeodata_format::Bbox>, rect: &Rect) -> bool {
@@ -773,6 +826,118 @@ impl Engine {
         Ok(None)
     }
 
+    /// The countries that hold `at` or whose border is within `radius_m` metres of it, into
+    /// `out`, each once, as its winning layer answers it, in no set order. Every layer is asked,
+    /// the baseline too: this is the locator's question (D-149), "which country packs could
+    /// this point need?". The outlines are simplified, so pass a radius at least their
+    /// tolerance ([`LOCATOR_RADIUS_M`] for the baseline) and no border is missed; a larger one
+    /// only adds neighbours. Layers without outlines (`boundaries` not installed) are skipped.
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if a section it reads is corrupt.
+    #[cfg(feature = "admin-index")]
+    pub fn countries_near(
+        &self,
+        at: Point<E7>,
+        radius_m: u32,
+        out: &mut Vec<Place>,
+    ) -> Result<(), Error> {
+        out.clear();
+        let query = radius_box(at, radius_m);
+        let r_cm = radius_m.saturating_mul(100);
+        for (i, l) in self.layers.iter().enumerate() {
+            let v = l.views();
+            let (Some(polygons), Some(arcs), Some(index)) = (&v.polygons, &v.arcs, &v.poly_index)
+            else {
+                continue;
+            };
+            l.ensure(Kind::POLYGONS)?;
+            l.ensure(Kind::POLY_INDEX)?;
+            l.ensure(Kind::ARCS)?;
+            let Some(chunks) = l.chunks() else { continue };
+            let mut failed = None;
+            let _ = index.intersecting(query, 0..polygons.len(), |p| {
+                match self.country_within(i, (polygons, arcs, chunks), p, at, r_cm) {
+                    Ok(Some(c)) if !out.iter().any(|o| o.id == c.id) => out.push(c),
+                    Ok(_) => {}
+                    Err(e) => {
+                        failed = Some(e);
+                        return ControlFlow::Break(());
+                    }
+                }
+                ControlFlow::Continue(())
+            });
+            if let Some(e) = failed {
+                return Err(e);
+            }
+        }
+        Ok(())
+    }
+
+    /// The countries near `at` ([`countries_near`](Self::countries_near)) that no installed
+    /// pack answers for, into `out`: the packs to fetch before answering at `at` in full. A
+    /// country's pack address is its ID's namespace (`np`); a pack at that address answers for
+    /// it, and a pack of part of it (`ae-du`) where its coverage box holds `at`. Countries
+    /// without a code (`Namespace::WORLD`) have no pack and are left out.
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if a section it reads is corrupt.
+    #[cfg(feature = "admin-index")]
+    pub fn missing_packs(
+        &self,
+        at: Point<E7>,
+        radius_m: u32,
+        out: &mut Vec<Place>,
+    ) -> Result<(), Error> {
+        self.countries_near(at, radius_m, out)?;
+        out.retain(|c| {
+            let Some(code) = c.id.namespace().country() else {
+                return false;
+            };
+            !self.layers.iter().any(|l| {
+                if l.options().baseline {
+                    return false;
+                }
+                let a = l.address().as_bytes();
+                match a {
+                    [x, y] => [*x, *y] == code,
+                    [x, y, b'-', ..] => [*x, *y] == code && l.covers(at),
+                    _ => false,
+                }
+            })
+        });
+        Ok(())
+    }
+
+    /// Polygon `p` of layer `i` as its country, when it is one and holds `at` or has a border
+    /// within `r_cm` of it.
+    #[cfg(feature = "admin-index")]
+    fn country_within(
+        &self,
+        i: usize,
+        (polygons, arcs, chunks): (
+            &teigeodata_format::polygons::Polygons<'_>,
+            &teigeodata_format::arcs::Arcs<'_>,
+            &teigeodata_format::arcs::ArcChunks,
+        ),
+        p: usize,
+        at: Point<E7>,
+        r_cm: u32,
+    ) -> Result<Option<Place>, Error> {
+        let Some(row) = polygons.row(p) else {
+            return Ok(None);
+        };
+        let Some(place) = self.place(i, row as usize)? else {
+            return Ok(None);
+        };
+        if place.kind != Some(PlaceKind::Country)
+            || !polygons.within_chunked(arcs, chunks, p, at, r_cm)
+        {
+            return Ok(None);
+        }
+        self.winning(i, place)
+    }
+
     /// The timezone area holding `at`, from the layer with the highest precedence whose
     /// timezone index holds the point; `None` where none does.
     ///
@@ -844,5 +1009,39 @@ impl Engine {
             },
             None => Ok(None),
         }
+    }
+}
+
+#[cfg(all(test, feature = "admin-index"))]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "test code")]
+
+    use super::*;
+
+    fn at(lat: f64, lon: f64) -> Point<E7> {
+        Point::from_degrees(lat, lon).unwrap()
+    }
+
+    #[test]
+    fn the_radius_box_holds_the_circle() {
+        // 1 km at the equator: about 0.009° each way, rounded outward.
+        let b = radius_box(at(0.0, 10.0), 1_000);
+        assert_eq!((b.min_lat, b.max_lat), (-8_995, 8_995));
+        assert_eq!((b.min_lon, b.max_lon), (9_991_005, 10_008_995));
+        // At 60° the longitude span doubles.
+        let b = radius_box(at(60.0, 0.0), 1_000);
+        assert!(b.max_lon >= 17_990 && b.max_lon < 18_100, "{b:?}");
+        // Across the antimeridian: min_lon > max_lon.
+        let b = radius_box(at(0.0, 179.995), 1_000);
+        assert!(b.min_lon > b.max_lon && b.max_lon < -179_990_000, "{b:?}");
+        // Near a pole: every longitude, the latitude clamped.
+        let b = radius_box(at(89.995, 0.0), 1_000);
+        assert_eq!(
+            (b.min_lon, b.max_lon, b.max_lat),
+            (-180_000_000, 180_000_000, 90_000_000)
+        );
+        // Zero radius: the point's cell.
+        let b = radius_box(at(27.7, 85.3), 0);
+        assert!(b.min_lat < 27_700_000 && b.max_lat > 27_700_000);
     }
 }
