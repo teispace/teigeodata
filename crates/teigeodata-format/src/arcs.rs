@@ -391,6 +391,7 @@ impl<'a> Arcs<'a> {
         }
     }
 
+    #[cfg(feature = "alloc")]
     /// The vertices `range` of arc `a`, forwards, every level. `range.start` must be the arc's
     /// first vertex or a block's first (a checkpoint); otherwise empty.
     pub(crate) fn points_in(&self, a: usize, range: Range<usize>) -> ArcPoints<'a> {
@@ -740,6 +741,7 @@ pub struct Chunk {
 /// (O(vertices), 40 B per chunk, about one chunk per 128 vertices plus one per arc) for
 /// readers that skip the arcs far from a point (D-149, `Polygons::within_chunked`). Reads
 /// never allocate.
+#[cfg(feature = "alloc")]
 #[derive(Clone, Debug, Default)]
 pub struct ArcChunks {
     /// Per arc: its first chunk, then the chunk count.
@@ -747,6 +749,7 @@ pub struct ArcChunks {
     chunks: alloc::vec::Vec<Chunk>,
 }
 
+#[cfg(feature = "alloc")]
 impl ArcChunks {
     /// The chunks of every arc of `arcs`, decoded at full resolution.
     #[must_use]

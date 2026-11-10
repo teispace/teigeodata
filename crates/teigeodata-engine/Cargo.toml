@@ -42,7 +42,7 @@ mmap = ["dep:memmap2"]
 
 [dependencies]
 teigeodata-core.workspace = true
-teigeodata-format = { workspace = true, features = ["spatial"] }
+teigeodata-format = { workspace = true, features = ["spatial", "alloc"] }
 teigeodata-names = { workspace = true, optional = true }
 arc-swap = { version = "1.9.4", optional = true }
 

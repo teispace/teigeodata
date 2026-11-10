@@ -35,7 +35,9 @@ use teigeodata_core::bitpack::{Packed, unbias};
 use teigeodata_core::table::Table;
 use teigeodata_core::{E7, Point};
 
-use crate::arcs::{ArcChunks, ArcPoints, Arcs, Chunk};
+#[cfg(feature = "alloc")]
+use crate::arcs::{ArcChunks, Chunk};
+use crate::arcs::{ArcPoints, Arcs};
 use crate::{Error, Kind, Section, columns};
 
 /// Column: each polygon's PLACES row.
@@ -328,6 +330,7 @@ impl<'a> Polygons<'a> {
         inside
     }
 
+    #[cfg(feature = "alloc")]
     /// [`within`](Self::within), the same answer, reading only the arc chunks that can
     /// matter: a chunk wholly north or south of `at` adds no crossing, one wholly west none, one
     /// wholly east the crossing parity of its two ends; only a chunk at `at`'s latitude and

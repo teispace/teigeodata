@@ -29,7 +29,7 @@
 
 #![no_std]
 
-#[cfg(any(feature = "write", feature = "zstd"))]
+#[cfg(any(feature = "alloc", feature = "zstd"))]
 extern crate alloc;
 #[cfg(test)]
 extern crate std;

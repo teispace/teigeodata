@@ -10,8 +10,11 @@ rust-version.workspace = true
 publish.workspace = true
 
 [features]
+# Heap-built reader aids: `arcs::ArcChunks` and `Polygons::within_chunked` (the locator,
+# D-149). The plain reader does not allocate.
+alloc = ["teigeodata-core/alloc"]
 # The writer: the forge and tests. Needs `alloc`; the reader does not.
-write = ["teigeodata-core/alloc"]
+write = ["alloc"]
 # Ed25519 pack signatures: verification, and signing with `write`.
 signature = ["dep:ed25519-dalek"]
 # BLOBS decoding with `ruzstd` (pure Rust; allocates; internal `unsafe` accepted, D-079).
