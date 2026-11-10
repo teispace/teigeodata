@@ -42,7 +42,7 @@ use teigeodata_format::arcs::{self as arcs_section, ArcColumns};
 
 use self::arcs::{Parts, Ref, V, ring_points};
 use crate::lock::Lock;
-use crate::read::boundaries;
+use crate::read::{boundaries, natural_earth};
 
 /// The largest distance from a source parent's vertex to the border dissolved from its
 /// children, metres: COD-AB's levels differ by at most 1 cm (the geometry note §3.4), so 1 m is
@@ -83,7 +83,21 @@ fn src(level: u8, u: boundaries::Unit) -> Src {
     }
 }
 
+/// The units of a boundary source: a zipped COD-AB set (one file per level), or a plain
+/// Natural Earth admin-0 file (one level, coded by `ADM0_A3`, D-147).
 fn read_units(zip: &Path) -> Result<Vec<Src>, String> {
+    if natural_earth::is_plain(zip)? {
+        return Ok(natural_earth::read(zip)?
+            .into_iter()
+            .map(|c| Src {
+                level: 0,
+                pcode: c.code,
+                parents: Vec::new(),
+                rings: arcs::clean_rings(&c.polygon.rings),
+                area_km2: None,
+            })
+            .collect());
+    }
     let mut out = Vec::new();
     for level in boundaries::levels(zip)? {
         out.extend(

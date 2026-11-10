@@ -13,7 +13,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::fs;
-use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::time::Instant;
 
@@ -35,7 +34,7 @@ const TOLERANCE_M: u32 = 500;
 /// The slice's `ADMIN_REGION` index (D-145): a 4,096-cell fine grid instead of the packs' 2^18.
 /// On Nepal's slice at 500 m (2026-11-09) it is 20,516 B instead of 135,832 B, and `admin_at`
 /// takes 281 ns instead of 163 ns: a fallback tier does not need the packs' speed.
-fn region_options() -> teigeodata_format::region::Options {
+pub(super) fn region_options() -> teigeodata_format::region::Options {
     teigeodata_format::region::Options {
         fine_cells: 1 << 12,
         ..teigeodata_format::region::Options::default()
@@ -76,35 +75,13 @@ fn parse(args: &[String]) -> Result<Args, String> {
     Ok(a)
 }
 
-/// The `GeoNames` IDs and names of the listed cities in country `cc` (upper case), from the
-/// `.txt` table inside the list's zip.
+/// The `GeoNames` IDs and names of the listed cities in country `cc` (lower case).
 fn listed_cities(zip: &Path, cc: &str) -> Result<BTreeMap<u64, String>, String> {
-    let file = fs::File::open(zip).map_err(|e| format!("{}: {e}", zip.display()))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("{}: {e}", zip.display()))?;
-    let name = archive
-        .file_names()
-        .filter_map(Result::ok)
-        .find(|n| n.ends_with(".txt") && n != "readme.txt")
-        .map(std::borrow::Cow::into_owned)
-        .ok_or_else(|| format!("{}: no city table", zip.display()))?;
-    let entry = archive
-        .by_name(&name)
-        .map_err(|e| format!("{}: {name}: {e}", zip.display()))?;
-    let mut out = BTreeMap::new();
-    for line in BufReader::new(entry).lines() {
-        let line = line.map_err(|e| format!("{name}: {e}"))?;
-        // geonameid, name, asciiname, alternatenames, lat, lon, class, code, country, …
-        let f: Vec<&str> = line.split('\t').collect();
-        if let (Some(id), Some(n), Some(c)) = (f.first(), f.get(1), f.get(8))
-            && *c == cc
-        {
-            let id = id
-                .parse()
-                .map_err(|_| format!("{name}: bad geonameid `{id}`"))?;
-            out.insert(id, (*n).to_string());
-        }
-    }
-    Ok(out)
+    Ok(super::world::read_cities(zip)?
+        .into_iter()
+        .filter(|c| c.cc == cc)
+        .map(|c| (c.id, c.name))
+        .collect())
 }
 
 /// The live serial of each `geonames:` key in `build`'s packs.
@@ -229,7 +206,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         &fs::read_to_string(&ids_file).map_err(|e| format!("{}: {e}", ids_file.display()))?,
     )
     .map_err(|e| format!("{}: {e}", ids_file.display()))?;
-    let listed = listed_cities(&lock.path(root, &a.cities)?, &a.cc.to_ascii_uppercase())?;
+    let listed = listed_cities(&lock.path(root, &a.cities)?, &a.cc.to_ascii_lowercase())?;
     let pack = Pack::open(&bytes).map_err(|e| e.to_string())?;
     let sel = select(
         &pack,
@@ -339,7 +316,7 @@ fn write(
 }
 
 /// Reads the slice back: every section hashes, and the geometry passes the format's checks.
-fn check(bytes: &[u8], rows: usize) -> Result<(), String> {
+pub(super) fn check(bytes: &[u8], rows: usize) -> Result<(), String> {
     let e = |e: teigeodata_format::Error| format!("the baseline slice: {e}");
     let p = Pack::open_verified(bytes).map_err(e)?;
     if let (Some(a), Some(polys)) = (p.section(Kind::ARCS), p.section(Kind::POLYGONS)) {

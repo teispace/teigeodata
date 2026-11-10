@@ -3,6 +3,7 @@
 
 pub(crate) mod boundaries;
 mod geonames;
+pub(crate) mod natural_earth;
 mod osm;
 mod wikidata;
 

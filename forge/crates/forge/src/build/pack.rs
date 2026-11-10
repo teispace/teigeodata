@@ -106,14 +106,14 @@ const RANK_BONUS: [u8; 5] = [0, 0, 0, 14, 24];
 /// The importance of every former unit: below a settlement with no population, above a locality.
 const FORMER: u8 = 25;
 
-fn e6(p: (i32, i32)) -> Result<Point<E6>, String> {
+pub(super) fn e6(p: (i32, i32)) -> Result<Point<E6>, String> {
     Point::<E7>::from_units(p.1, p.0)
         .map(Point::to_e6)
         .ok_or_else(|| format!("point {p:?} is off the grid"))
 }
 
 /// The PLACES section of the rows.
-fn places_section(rows: &[&Place], points: &[Point<E6>]) -> Result<Vec<u8>, String> {
+pub(super) fn places_section(rows: &[&Place], points: &[Point<E6>]) -> Result<Vec<u8>, String> {
     let kinds: Vec<PlaceKind> = rows.iter().map(|p| p.kind).collect();
     let levels: Vec<u8> = rows.iter().map(|p| p.admin_level).collect();
     let flags: Vec<u32> = rows.iter().map(|p| p.flags).collect();
@@ -396,7 +396,7 @@ fn assemble(
 }
 
 /// The NAMES and SEARCH bodies of the rows.
-fn name_sections(
+pub(super) fn name_sections(
     rows: &[&Place],
     profile: &Profile,
     admin_source: &str,
@@ -779,7 +779,7 @@ fn verify_postal(
 
 /// Every place keeps its ID, point, parent and canonical name, is found by an exact search of
 /// that name, and is its own nearest place.
-fn verify_rows(
+pub(super) fn verify_rows(
     rows: &[&Place],
     places: &Places<'_>,
     hier: &Hierarchy<'_>,

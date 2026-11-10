@@ -42,6 +42,21 @@ used_by = "spikes S1, S2, S3, S5"
 attribution = "GeoNames (https://www.geonames.org), CC BY 4.0"
 
 [[source]]
+id = "ne-admin0-nep"
+title = "Natural Earth 1:10m admin 0 countries, Nepal point of view (GeoJSON)"
+kind = "http"
+url = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_admin_0_countries_nep.geojson"
+version = "5.1.2 (tag v5.1.2; the file's data is 5.1.1)"
+retrieved = "2026-11-10"
+sha256 = "b56e5675c080fca9f520a37cebae32d549cf60cbe2aa0b46453eb74cfb27c297"
+size = 13242878
+licence = "public-domain"
+licence_class = "public-domain"
+countries = ["*"]
+used_by = "the embedded baseline's countries without a pack (D-144, D-147)"
+attribution = "Made with Natural Earth (https://www.naturalearthdata.com), public domain"
+
+[[source]]
 id = "geonames-cities15000"
 title = "GeoNames cities with more than 15,000 people, and capitals (cities15000.zip)"
 kind = "http"

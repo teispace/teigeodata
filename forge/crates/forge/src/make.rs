@@ -48,7 +48,7 @@ const CODE_BUILD: &[u8] = env!("FORGE_CODE_BUILD").as_bytes();
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Recipe {
+pub(crate) struct Recipe {
     #[expect(dead_code, reason = "checked by `cargo xtask check-data`")]
     schema: String,
     admin: String,
@@ -80,12 +80,12 @@ struct Recipe {
     wire_kb: std::collections::BTreeMap<String, u64>,
     /// The country's slice of the embedded baseline (D-145), made after the build.
     #[serde(default)]
-    baseline: Option<Baseline>,
+    pub(crate) baseline: Option<Baseline>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Baseline {
+pub(crate) struct Baseline {
     cities: String,
     tolerance_m: u32,
 }
@@ -108,7 +108,7 @@ struct Points {
 
 impl Recipe {
     /// The country's `build.yaml`.
-    fn read(country: &Path) -> Result<Self, String> {
+    pub(crate) fn read(country: &Path) -> Result<Self, String> {
         let path = country.join("build.yaml");
         let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
@@ -128,6 +128,7 @@ impl Recipe {
             .chain(self.buildings.iter().map(|b| &b.source))
             .chain(&self.dem)
             .chain(&self.population)
+            .chain(self.baseline.iter().map(|b| &b.cities))
             .chain(postal);
         for id in all {
             if !out.contains(&id.as_str()) {
@@ -793,14 +794,14 @@ mod tests {
 
     #[test]
     fn a_recipe_names_every_input_once() {
-        let yaml = "schema: teigeodata/build/v1\nadmin: bounds\ntimezones: [tz, tz2]\ntimezone_first: [Asia/Kathmandu]\npoints:\n  - { reader: osm, source: osm }\n  - { reader: geonames, source: gn, extra: [gn-alt, gn-hier] }\nbuildings:\n  - { reader: osm, source: osm }\n  - { reader: msbuildings, source: ms }\ndem: [dem, dem2]\npopulation: pop\n";
+        let yaml = "schema: teigeodata/build/v1\nadmin: bounds\ntimezones: [tz, tz2]\ntimezone_first: [Asia/Kathmandu]\npoints:\n  - { reader: osm, source: osm }\n  - { reader: geonames, source: gn, extra: [gn-alt, gn-hier] }\nbuildings:\n  - { reader: osm, source: osm }\n  - { reader: msbuildings, source: ms }\ndem: [dem, dem2]\npopulation: pop\nbaseline: { cities: cities, tolerance_m: 500 }\n";
         let recipe: Recipe = serde_saphyr::from_str(yaml).unwrap();
         let postal = ["gpo".to_string(), "bounds".to_string()];
         assert_eq!(
             recipe.inputs(&postal),
             [
                 "osm", "gn", "gn-alt", "gn-hier", "bounds", "tz", "tz2", "ms", "dem", "dem2",
-                "pop", "gpo"
+                "pop", "cities", "gpo"
             ]
         );
         let bare: Recipe = serde_saphyr::from_str(

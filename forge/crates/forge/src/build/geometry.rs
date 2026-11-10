@@ -116,6 +116,36 @@ pub(super) fn sections(
     encode(g, &linked)
 }
 
+/// The sections of polygons coded by `pcode` (one level), each linked to the row `row_of`
+/// gives it; a polygon without a row is an error (D-147).
+pub(super) fn sections_by_code(
+    g: &Geometry,
+    row_of: &BTreeMap<String, u32>,
+) -> Result<Vec<Body>, String> {
+    let mut linked: Vec<(u8, u32, &Poly)> = g
+        .polys
+        .iter()
+        .map(|p| {
+            row_of
+                .get(&p.pcode)
+                .map(|&row| (p.level, row, p))
+                .ok_or_else(|| format!("{}: a polygon without a place", p.pcode))
+        })
+        .collect::<Result<_, String>>()?;
+    linked.sort_by_key(|&(level, row, _)| (level, row));
+    encode(g, &linked)
+}
+
+impl Geometry {
+    /// Each polygon's label point (lon, lat on the 1e-7° grid), by code.
+    pub(super) fn labels(&self) -> BTreeMap<&str, (i32, i32)> {
+        self.polys
+            .iter()
+            .map(|p| (p.pcode.as_str(), p.label))
+            .collect()
+    }
+}
+
 /// The sections of linked polygons, `(level, row, polygon)` in (level, row) order.
 fn encode(g: &Geometry, linked: &[(u8, u32, &Poly)]) -> Result<Vec<Body>, String> {
     let mut groups = Vec::new();

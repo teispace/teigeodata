@@ -73,6 +73,10 @@ name = "extract"
 required-features = ["elevation", "admin", "names", "search", "admin-index"]
 
 [[test]]
+name = "world"
+required-features = ["admin", "names", "search", "admin-index"]
+
+[[test]]
 name = "queries"
 required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
 
