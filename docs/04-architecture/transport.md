@@ -86,13 +86,27 @@ back into a staging file of the pack's length.
    head frame (and the footer when the last section is not installed), and returns the fetches:
    `BLOCK_HASHES` alone first when a section of 1 MiB or more is wanted, then the sections in
    file order (`Frames::plan_install`).
-3. `feed(i, bytes, write)` decodes each frame of fetch `i` with its output capped, then checks
+3. `feed(fetch, bytes, write)` takes any run of wanted frames still to do (a fetch of the plan,
+   or of `remaining()`), decodes each frame with its output capped, then checks
    it before writing: a section under 1 MiB whole against its BLAKE3, a larger one block by
    block against its block hashes (`blocks::proven_cvs`, proven against the section hash when
    `BLOCK_HASHES` arrives), padding as zeros, the footer as the head's. A covered section fed
    before its block hashes is refused.
-4. `finish()` once every fetch is fed: bytes fetched (equal to the catalog's `size_of(set).wire`)
-   and written.
+4. `finish()` once every wanted frame is done: bytes fetched (equal to the catalog's
+   `size_of(set).wire` on a fresh install), written, and kept from staging, and the pack length.
+
+**Resume (D-169).** Progress is tracked per frame, and the staging file is its own record. On a
+new attempt `fetch::install` fetches the seek table and head again (one `ETag` per attempt; the
+asset host ignores `If-Range`, so a changed asset is refused, never mixed), feeds `BLOCK_HASHES`
+first, then reads back every wanted frame the old file could hold and offers it to
+`Install::staged`, which checks it exactly as a fetched frame and keeps it if it passes. Only
+`remaining()` is fetched. A torn write, a stale file from another release or a foreign file
+costs just its bad frames; no journal or resume record can disagree with the bytes, because
+there is none. `BLOCK_HASHES` is never kept (it is 0.2% of what it covers), so a stale list
+cannot vouch for stale frames. The caller cuts the file to `Installed::pack_len` and syncs it
+before the rename. Tests cut an install at every request and resume it (the pack, byte for byte,
+never more fetched than fresh), flip a byte inside NAMES (only its frame is fetched again), stale
+the list, and resume over a foreign, longer file.
 
 Nothing is written before it is bound to the signed chain (catalog entry → head hash → section
 hashes → block hashes). Tests in `xtask` (`tuf::install_tests`) install every component set

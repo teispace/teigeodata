@@ -212,8 +212,10 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] `Transport` trait with a `ureq` default (binary size gate against `reqwest`): `ureq`
   1.28 MB against `reqwest` 2.34 MB for one ranged GET (2026-11-10, D-168)
 - [x] Verify-then-write per block (2026-11-10, D-167)
-- [ ] Resume by frame with ETag and length checks (the host ignores `If-Range`); mirrors with
-  demotion
+- [x] Resume by frame with ETag and length checks (the host ignores `If-Range`): every frame
+  left in staging is checked against the signed hashes and kept, only the rest fetched
+  (2026-11-10, D-169)
+- [ ] Mirrors with demotion
 - [ ] Staging, fsync, rename, journal commit, crash recovery; snapshot swap on install
 - [ ] Platform transport prototypes for gate 14 (iOS background `URLSession`, Android UIDT,
   web `fetch` + OPFS); packaging stays in Phase 5
@@ -279,3 +281,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.5: the first item split into the head-only parser (done), the planner and installer, and the transport | D-166 |
 | 2026-11-10 | 4.5: the installer and verify-then-write done; resume and mirrors their own item | D-167 |
 | 2026-11-10 | 4.5: the transport and its driver done, with the size measurement | D-168 |
+| 2026-11-10 | 4.5: resume done, the staging file its own record; mirrors split into their own item | D-169 |

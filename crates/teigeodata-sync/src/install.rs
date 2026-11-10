@@ -13,12 +13,18 @@
 //!    address, component, release) and against itself ([`PackHead::parse`]); the table against
 //!    the head. It writes the head frame and, when the last section is not installed, the
 //!    footer, and returns the fetches: `BLOCK_HASHES` first, then the sections in file order.
-//! 3. [`Install::feed`] takes one fetch's bytes. Each frame is decoded with its output capped
+//! 3. [`Install::feed`] takes one fetch's bytes (any run of wanted frames still to do). Each frame is decoded with its output capped
 //!    at its size, then checked: a section under 1 MiB whole against its hash, a larger one
 //!    block by block against its proven block hashes, padding as zeros, the footer as the
 //!    head's. Only then is it written. `BLOCK_HASHES` itself is written once it is whole and
 //!    proven.
-//! 4. [`Install::finish`] once every fetch is fed.
+//! 4. [`Install::finish`] once every wanted frame is done.
+//!
+//! Resume (D-169): progress is per frame. After `start`, [`Install::staged`] offers frames an
+//! earlier attempt left in staging; each is checked as a fetched one and kept if it passes, and
+//! [`Install::remaining`] gives the fetches for the rest. `BLOCK_HASHES` is never kept, so it is
+//! fed first again and covered frames are checked against the fresh list. No resume record is
+//! needed: the signed hashes are the record, and a torn write is just a frame still to do.
 //!
 //! Trust: the catalog entry is signed (TUF, D-159), it gives the head hash, the head's table
 //! gives every section's BLAKE3, and `BLOCK_HASHES` gives every block's chaining value under
@@ -34,7 +40,7 @@ use teigeodata_format::{Encoding, Kind, PackHead, SectionEntry};
 
 use crate::Error;
 use crate::catalog::Entry;
-use crate::transport::{Decoder, Fetch, Frames, SeekTable};
+use crate::transport::{Decoder, Fetch, Frame, Frames, SeekTable};
 
 /// A section of the pack, owned (the head is parsed once, then let go).
 #[derive(Clone, Debug)]
@@ -76,11 +82,17 @@ struct Planned {
     footer: [u8; teigeodata_format::FOOTER_SIZE],
     pack_len: u64,
     fetches: Vec<Fetch>,
-    fed: Vec<bool>,
+    /// Per frame: whether the plan wants it, and whether it is checked and staged.
+    wanted: Vec<bool>,
+    done: Vec<bool>,
     /// `BLOCK_HASHES`, gathered until whole when it spans several frames.
     list: Vec<u8>,
     /// Whether the block hashes the plan needs are proven.
     proven: bool,
+    /// Bytes fed and written so far.
+    fetched: u64,
+    written: u64,
+    kept: u64,
 }
 
 /// One install of one pack: see the [module](self).
@@ -108,6 +120,10 @@ pub struct Installed {
     pub fetched: u64,
     /// Bytes written to the staging file.
     pub written: u64,
+    /// Decoded bytes an earlier attempt left in staging that checked and were kept (resume).
+    pub kept: u64,
+    /// The pack's length: the staging file's, once cut to it.
+    pub pack_len: u64,
 }
 
 const fn fail(problem: &'static str) -> Error {
@@ -172,10 +188,12 @@ impl Install {
         if self.planned.is_some() {
             return Err(fail("started twice").into());
         }
-        let planned = self.plan(table, head_frame)?;
+        let mut planned = self.plan(table, head_frame)?;
         write(0, &self.out)?;
+        planned.written = len_of(&self.out);
         if !planned.sections.is_empty() && !ends(&planned.fetches, self.pack_len) {
             write(self.pack_len - len_of(&planned.footer), &planned.footer)?;
+            planned.written += len_of(&planned.footer);
         }
         Ok(&self.planned.insert(planned).fetches)
     }
@@ -230,8 +248,18 @@ impl Install {
                 .any(|s| s.length >= MIN_COVERED && s.kind != Kind::BLOCK_HASHES && overlaps(f, s))
         });
         sections.sort_unstable_by_key(|s| (s.offset, s.length));
+        let mut wanted = alloc::vec![false; frames.len()];
+        for f in &fetches {
+            for w in wanted.get_mut(f.frames.clone()).into_iter().flatten() {
+                *w = true;
+            }
+        }
         Ok(Planned {
-            fed: alloc::vec![false; fetches.len()],
+            done: alloc::vec![false; frames.len()],
+            wanted,
+            fetched: self.seek_table + self.head_wire,
+            written: 0,
+            kept: 0,
             footer: head.footer(),
             pack_len: self.pack_len,
             frames,
@@ -242,25 +270,39 @@ impl Install {
         })
     }
 
-    /// Takes the bytes of fetch `index` (of [`Install::start`]'s list), checks each of its
-    /// frames and writes it with `write(offset, bytes)`. `BLOCK_HASHES`, when the plan has it,
-    /// must be fed first; the others in any order.
+    /// Takes the bytes of `fetch` (one of [`Install::start`]'s, or of [`Install::remaining`]'s
+    /// on a resume), checks each of its frames and writes it with `write(offset, bytes)`.
+    /// `BLOCK_HASHES`, when the plan has it, must be fed first; the others in any order.
     ///
     /// # Errors
-    /// [`Error::Install`] for an unknown or repeated fetch, bytes of the wrong length, or a
-    /// covered section before its block hashes; [`Error::Frame`] for a frame that does not
-    /// decode to its size; [`Error::Pack`] (`SectionHash`) for bytes the hashes refuse; or
-    /// `write`'s.
+    /// [`Error::Install`] for a fetch that is not a run of wanted frames still to do, bytes of
+    /// the wrong length, or a covered section before its block hashes; [`Error::Frame`] for a
+    /// frame that does not decode to its size; [`Error::Pack`] (`SectionHash`) for bytes the
+    /// hashes refuse; or `write`'s.
     pub fn feed<E: From<Error>>(
         &mut self,
-        index: usize,
+        fetch: &Fetch,
         bytes: &[u8],
         mut write: impl FnMut(u64, &[u8]) -> Result<(), E>,
     ) -> Result<(), E> {
         let p = self.planned.as_mut().ok_or(fail("fed before start"))?;
-        let fetch = p.fetches.get(index).cloned().ok_or(fail("no such fetch"))?;
-        if p.fed.get(index) != Some(&false) {
-            return Err(fail("a fetch fed twice").into());
+        let first = p.frames.frame(fetch.frames.start);
+        let last = fetch
+            .frames
+            .end
+            .checked_sub(1)
+            .and_then(|l| p.frames.frame(l));
+        let (Some(first), Some(last)) = (first, last) else {
+            return Err(fail("not a fetch of this install").into());
+        };
+        if fetch.compressed != (first.compressed.start..last.compressed.end)
+            || fetch.decoded != (first.decoded.start..last.decoded.end)
+        {
+            return Err(fail("not a fetch of this install").into());
+        }
+        let todo = |i: usize| p.wanted.get(i) == Some(&true) && p.done.get(i) == Some(&false);
+        if !fetch.frames.clone().all(todo) {
+            return Err(fail("a frame not wanted, or fed twice").into());
         }
         if len_of(bytes) != fetch.compressed.end - fetch.compressed.start {
             return Err(fail("a fetch did not return its length").into());
@@ -275,42 +317,123 @@ impl Install {
             let (a, b) = at(frame.compressed.clone()).ok_or(fail("too large"))?;
             let src = bytes.get(a..b).ok_or(fail("a frame outside its fetch"))?;
             self.decoder.frame(i, &frame, src, &mut self.out)?;
-            check_frame(p, frame.decoded.start, &self.out, &mut write)?;
-        }
-        if let Some(f) = p.fed.get_mut(index) {
-            *f = true;
+            check_frame(p, i, frame.decoded.start, &self.out, &mut write)?;
+            p.fetched += frame.compressed.end - frame.compressed.start;
         }
         Ok(())
     }
 
-    /// The end of the install: every fetch fed.
+    /// Resume (D-169): frame `index`'s bytes as an earlier attempt left them in the staging
+    /// file (`decoded`, its decoded range of the pack). They are checked as a fetched frame is,
+    /// and when they pass the frame counts as done and is not fetched again; a torn or stale
+    /// frame stays to do. A frame of a covered section can only be checked once `BLOCK_HASHES`
+    /// is fed; `BLOCK_HASHES` itself is never kept (it is fetched again: 32 bytes per 16 KiB it
+    /// covers, 0.2%), so a stale list cannot pass a stale frame.
     ///
     /// # Errors
-    /// [`Error::Install`] if a fetch was not fed or the install never started.
+    /// [`Error::Install`] before start, or for a frame not wanted or already done.
+    pub fn staged(&mut self, index: usize, decoded: &[u8]) -> Result<bool, Error> {
+        let p = self.planned.as_mut().ok_or(fail("staged before start"))?;
+        if p.wanted.get(index) != Some(&true) || p.done.get(index) != Some(&false) {
+            return Err(fail("a frame not wanted, or already done"));
+        }
+        let frame = p.frames.frame(index).ok_or(fail("no such frame"))?;
+        let in_list = p.sections.iter().any(|s| {
+            s.kind == Kind::BLOCK_HASHES
+                && s.length > 0
+                && s.offset <= frame.decoded.start
+                && frame.decoded.start < s.end()
+        });
+        if in_list || len_of(decoded) != frame.decoded.end - frame.decoded.start {
+            return Ok(false);
+        }
+        let mut none = |_: u64, _: &[u8]| Ok::<(), Error>(());
+        let written = p.written;
+        let ok = check_frame(p, index, frame.decoded.start, decoded, &mut none).is_ok();
+        p.written = written;
+        if ok {
+            p.kept += len_of(decoded);
+        }
+        Ok(ok)
+    }
+
+    /// Whether frame `index` is wanted and still to do (neither fed nor kept from staging).
+    #[must_use]
+    pub fn todo(&self, index: usize) -> bool {
+        self.planned.as_ref().is_some_and(|p| {
+            p.wanted.get(index) == Some(&true) && p.done.get(index) == Some(&false)
+        })
+    }
+
+    /// Whether the block hashes the plan needs are proven (at once when it needs none).
+    #[must_use]
+    pub fn proven(&self) -> bool {
+        self.planned.as_ref().is_some_and(|p| p.proven)
+    }
+
+    /// Frame `index`'s ranges, once started.
+    #[must_use]
+    pub fn frame(&self, index: usize) -> Option<Frame> {
+        self.planned.as_ref()?.frames.frame(index)
+    }
+
+    /// The fetches still to make: runs of wanted frames not yet done, `BLOCK_HASHES`'s first.
+    /// After [`Install::start`] it is the plan; after [`Install::staged`] the rest of it.
+    #[must_use]
+    pub fn remaining(&self) -> Vec<Fetch> {
+        let Some(p) = self.planned.as_ref() else {
+            return Vec::new();
+        };
+        let list = p
+            .sections
+            .iter()
+            .find(|s| s.kind == Kind::BLOCK_HASHES)
+            .map(|s| s.offset..s.end());
+        let in_list = |i: usize| {
+            p.frames
+                .frame(i)
+                .zip(list.clone())
+                .is_some_and(|(f, l)| l.contains(&f.decoded.start))
+        };
+        let todo = |i: &usize| p.wanted.get(*i) == Some(&true) && p.done.get(*i) == Some(&false);
+        let mut runs: Vec<(bool, Range<usize>)> = Vec::new();
+        for i in (0..p.done.len()).filter(todo) {
+            let l = in_list(i);
+            match runs.last_mut() {
+                Some((rl, r)) if r.end == i && *rl == l => r.end = i + 1,
+                _ => runs.push((l, i..i + 1)),
+            }
+        }
+        runs.sort_by_key(|(l, r)| (!l, r.start));
+        runs.into_iter()
+            .filter_map(|(_, r)| {
+                let head = p.frames.frame(r.start)?;
+                let tail = p.frames.frame(r.end - 1)?;
+                Some(Fetch {
+                    frames: r,
+                    compressed: head.compressed.start..tail.compressed.end,
+                    decoded: head.decoded.start..tail.decoded.end,
+                })
+            })
+            .collect()
+    }
+
+    /// The end of the install: every wanted frame done.
+    ///
+    /// # Errors
+    /// [`Error::Install`] if a frame is still to do or the install never started.
     pub fn finish(&self) -> Result<Installed, Error> {
         let p = self.planned.as_ref().ok_or(fail("never started"))?;
-        if p.fed.iter().any(|f| !f) || !p.proven {
-            return Err(fail("a fetch was not fed"));
+        let all = p.wanted.iter().zip(&p.done).all(|(w, d)| !w || *d);
+        if !all || !p.proven {
+            return Err(fail("a frame was not fed"));
         }
-        let fetched = p
-            .fetches
-            .iter()
-            .map(|f| f.compressed.end - f.compressed.start)
-            .sum::<u64>()
-            + self.seek_table
-            + self.head_wire;
-        let written = p
-            .fetches
-            .iter()
-            .map(|f| f.decoded.end - f.decoded.start)
-            .sum::<u64>()
-            + self.head_disk
-            + if ends(&p.fetches, self.pack_len) || p.sections.is_empty() {
-                0
-            } else {
-                len_of(&p.footer)
-            };
-        Ok(Installed { fetched, written })
+        Ok(Installed {
+            fetched: p.fetched,
+            written: p.written,
+            kept: p.kept,
+            pack_len: self.pack_len,
+        })
     }
 
     /// The fetches, once started.
@@ -331,6 +454,20 @@ fn overlaps(f: &Fetch, s: &Section) -> bool {
 
 /// Checks one decoded frame starting at pack offset `at` and writes it.
 fn check_frame<E: From<Error>>(
+    p: &mut Planned,
+    index: usize,
+    at: u64,
+    bytes: &[u8],
+    write: &mut impl FnMut(u64, &[u8]) -> Result<(), E>,
+) -> Result<(), E> {
+    check_and_write(p, at, bytes, write)?;
+    if let Some(d) = p.done.get_mut(index) {
+        *d = true;
+    }
+    Ok(())
+}
+
+fn check_and_write<E: From<Error>>(
     p: &mut Planned,
     at: u64,
     bytes: &[u8],
@@ -381,7 +518,9 @@ fn check_frame<E: From<Error>>(
         p.proven = true;
         let start = s_end - len_of(&list);
         write(start, &list)?;
-        return write(start + len_of(&list), tail);
+        write(start + len_of(&list), tail)?;
+        p.written += len_of(&list) + len_of(tail);
+        return Ok(());
     }
     match &s.cvs {
         Some(cvs) => {
@@ -403,5 +542,7 @@ fn check_frame<E: From<Error>>(
             }
         }
     }
-    write(at, bytes)
+    write(at, bytes)?;
+    p.written += len_of(bytes);
+    Ok(())
 }

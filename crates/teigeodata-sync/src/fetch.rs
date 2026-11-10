@@ -12,7 +12,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 use core::ops::Range;
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 
 use teigeodata_format::component::Components;
 
@@ -119,14 +119,21 @@ pub fn content_range(value: Option<&str>, range: &Range<u64>) -> Result<u64, Fet
 }
 
 /// Installs `set` of the pack `entry` names from its asset at `url` (`asset_len` bytes, the TUF
-/// target's length) over `transport`, into `staging` (truncated and sized to the pack; sparse
-/// where nothing is installed), then flushes it to disk ([`std::fs::File::sync_all`] is the
-/// caller's for a file it renames, as staging is).
+/// target's length) over `transport`, into `staging`, then flushes it. Where nothing is
+/// installed the file is sparse. The caller then cuts the file to [`Installed::pack_len`] (an old
+/// file may be longer) and calls [`std::fs::File::sync_all`] before renaming it into place.
+///
+/// Resume (D-169): frames an earlier attempt left in `staging` are read back and checked against
+/// the signed hashes like fetched ones; those that pass are kept and only the rest is fetched,
+/// so no resume record is needed and a torn, stale or foreign file costs only its bad frames.
+/// An empty file is a fresh install. The seek table and head are always fetched again, and one
+/// `ETag` holds within an attempt (the asset host ignores `If-Range`, so a changed asset is
+/// refused, never mixed).
 ///
 /// # Errors
 /// The first [`FetchError`]: a request, a response that is not exactly its range, an asset whose
 /// length or `ETag` changes, the install's checks, or the file.
-pub fn install<T: Transport, F: Write + Seek>(
+pub fn install<T: Transport, F: Read + Write + Seek>(
     transport: &mut T,
     url: &str,
     entry: &Entry,
@@ -154,23 +161,70 @@ pub fn install<T: Transport, F: Write + Seek>(
             }
         }
     };
-    let mut write = |at: u64, b: &[u8]| -> Result<(), FetchError> {
-        staging.seek(SeekFrom::Start(at))?;
-        staging.write_all(b)?;
-        Ok(())
-    };
     let [t, h] = inst.first()?;
     let (mut table, mut head) = (Vec::new(), Vec::new());
     get(transport, t, &mut table)?;
     get(transport, h, &mut head)?;
-    let fetches = inst.start(&table, &head, &mut write)?.to_vec();
     let mut buf = Vec::new();
-    for (i, f) in fetches.iter().enumerate() {
+    // Taken before start writes the head: what the last attempt left.
+    let old_len = staging.seek(SeekFrom::End(0))?;
+    let write = |f: &mut F, at: u64, b: &[u8]| -> Result<(), FetchError> {
+        f.seek(SeekFrom::Start(at))?;
+        f.write_all(b)?;
+        Ok(())
+    };
+    let plan = inst
+        .start(&table, &head, |at, b| write(staging, at, b))?
+        .to_vec();
+    if old_len > 0 {
+        // BLOCK_HASHES first (the plan lists it first), always fetched; then keep what checks.
+        while !inst.proven() {
+            let Some(f) = inst.remaining().into_iter().next() else {
+                break;
+            };
+            get(transport, f.compressed.clone(), &mut buf)?;
+            inst.feed(&f, &buf, |at, b| write(staging, at, b))?;
+        }
+        let frames: Vec<usize> = plan.iter().flat_map(|f| f.frames.clone()).collect();
+        keep(&mut inst, staging, &frames, old_len, &mut buf)?;
+    }
+    for f in inst.remaining() {
         get(transport, f.compressed.clone(), &mut buf)?;
-        inst.feed(i, &buf, &mut write)?;
+        inst.feed(&f, &buf, |at, b| write(staging, at, b))?;
     }
     staging.flush()?;
     Ok(inst.finish()?)
+}
+
+/// Offers each of `frames` still to do that an earlier attempt could have written (it ends within
+/// `old_len`) to [`Install::staged`], read back from `staging`.
+fn keep<F: Read + Seek>(
+    inst: &mut Install,
+    staging: &mut F,
+    frames: &[usize],
+    old_len: u64,
+    buf: &mut Vec<u8>,
+) -> Result<(), FetchError> {
+    for &i in frames {
+        let Some(d) = inst.frame(i).map(|f| f.decoded) else {
+            continue;
+        };
+        if !inst.todo(i) || d.end > old_len {
+            continue;
+        }
+        staging.seek(SeekFrom::Start(d.start))?;
+        buf.resize(
+            usize::try_from(d.end - d.start).map_err(|_| too_large())?,
+            0,
+        );
+        staging.read_exact(buf)?;
+        inst.staged(i, buf)?;
+    }
+    Ok(())
+}
+
+const fn too_large() -> FetchError {
+    FetchError::Response("a frame too large for this platform")
 }
 
 /// The default transport (feature `http`): `ureq` over rustls with the platform's trust store,

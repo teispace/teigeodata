@@ -11,7 +11,7 @@ use teigeodata_format::component::{Component, Components};
 use teigeodata_format::{Encoding, Kind, Pack, Tag, Writer};
 use teigeodata_sync::Error;
 use teigeodata_sync::install::Install;
-use teigeodata_sync::transport::{SeekTable, encode_table};
+use teigeodata_sync::transport::{Fetch, Frames, Layout, SeekTable, encode_table};
 
 /// A pack with a 2.5 MiB NAMES (three frames, covered by `BLOCK_HASHES`), small sections of
 /// other components, and an empty one.
@@ -60,8 +60,8 @@ fn install(
         let fetches = inst
             .start(&asset[at(&t)], &asset[at(&h)], &mut put)?
             .to_vec();
-        for (i, f) in fetches.iter().enumerate() {
-            inst.feed(i, &asset[at(&f.compressed)], &mut put)?;
+        for f in &fetches {
+            inst.feed(f, &asset[at(&f.compressed)], &mut put)?;
         }
         inst.finish()
     })();
@@ -212,7 +212,13 @@ fn the_caller_is_held_to_the_order() {
     let (entry, asset, _) = super::entry_of(&pack).unwrap();
     let mut put = |_: u64, _: &[u8]| -> Result<(), Error> { Ok(()) };
     let mut inst = Install::new(&entry, asset.len() as u64, Components::all());
-    assert!(inst.feed(0, &[], &mut put).is_err(), "fed before start");
+    let none = Fetch {
+        frames: 0..1,
+        compressed: 0..1,
+        decoded: 0..1,
+    };
+    assert!(inst.feed(&none, &[], &mut put).is_err(), "fed before start");
+    assert!(inst.staged(0, &[]).is_err(), "staged before start");
     assert!(inst.finish().is_err(), "never started");
     let [t, h] = inst.first().unwrap();
     // A host that returns a short head frame.
@@ -230,23 +236,75 @@ fn the_caller_is_held_to_the_order() {
         .expect("NAMES's three frames, merged with their neighbours");
     assert_ne!(names, 0);
     assert_eq!(
-        inst.feed(names, &asset[at(&fetches[names].compressed)], &mut put),
+        inst.feed(
+            &fetches[names],
+            &asset[at(&fetches[names].compressed)],
+            &mut put
+        ),
         Err(Error::Install("a large section before its block hashes"))
     );
-    inst.feed(0, &asset[at(&fetches[0].compressed)], &mut put)
-        .unwrap();
-    assert!(
-        inst.feed(0, &asset[at(&fetches[0].compressed)], &mut put)
-            .is_err(),
-        "fed twice"
+    // A fetch that is not one of this install's: a range one byte off, frames past the table.
+    let f0 = &fetches[0];
+    let mut off = f0.clone();
+    off.compressed.end += 1;
+    assert_eq!(
+        inst.feed(&off, &asset[at(&off.compressed)], &mut put),
+        Err(Error::Install("not a fetch of this install"))
     );
-    assert!(inst.finish().is_err(), "not every fetch fed");
+    let mut past = f0.clone();
+    past.frames = 1_000..1_001;
+    assert!(inst.feed(&past, &[], &mut put).is_err());
+    inst.feed(f0, &asset[at(&f0.compressed)], &mut put).unwrap();
+    assert_eq!(
+        inst.feed(f0, &asset[at(&f0.compressed)], &mut put),
+        Err(Error::Install("a frame not wanted, or fed twice"))
+    );
+    assert!(inst.staged(f0.frames.start, &[]).is_err(), "already done");
+    // The rest of the plan, less the frames of the refused NAMES fetch that came before NAMES
+    // and were checked and written before it was refused.
+    let rest = inst.remaining();
+    assert_eq!(rest.len(), 2, "{rest:?}");
+    assert_eq!(rest[0].frames.end, fetches[names].frames.end);
+    assert!(rest[0].frames.start > fetches[names].frames.start);
+    assert_eq!(rest[1], fetches[2]);
+    assert!(inst.finish().is_err(), "not every frame fed");
     // A write that fails stops the install with its error.
     let mut full = |_: u64, _: &[u8]| -> Result<(), Error> { Err(Error::Install("disk full")) };
     assert_eq!(
-        inst.feed(1, &asset[at(&fetches[1].compressed)], &mut full),
+        inst.feed(&rest[1], &asset[at(&rest[1].compressed)], &mut full),
         Err(Error::Install("disk full"))
     );
+
+    // Staged bytes (resume): the list is never kept, even when right; a covered frame is not
+    // kept before the list is fed; a small section's right bytes are, and wrong ones are not.
+    let mut inst = Install::new(&entry, asset.len() as u64, Components::all());
+    let fetches = inst
+        .start(&asset[at(&t)], &asset[at(&h)], &mut put)
+        .unwrap()
+        .to_vec();
+    let bytes = |i: usize| {
+        let d = inst.frame(i).unwrap().decoded;
+        pack[at(&d)].to_vec()
+    };
+    let hashes = fetches[0].frames.start;
+    let (first, last) = (fetches[names].frames.start, fetches[names].frames.end - 1);
+    let (lb, cb, sb) = (bytes(hashes), bytes(last - 1), bytes(first));
+    assert_eq!(
+        inst.staged(hashes, &lb),
+        Ok(false),
+        "the list is never kept"
+    );
+    assert_eq!(
+        inst.staged(last - 1, &cb),
+        Ok(false),
+        "covered, before the list"
+    );
+    let mut wrong = sb.clone();
+    wrong[0] ^= 1;
+    assert_eq!(inst.staged(first, &wrong), Ok(false));
+    assert_eq!(inst.staged(first, &sb[1..]), Ok(false), "a short frame");
+    assert_eq!(inst.staged(first, &sb), Ok(true));
+    assert!(!inst.todo(first) && inst.todo(hashes) && inst.todo(last - 1));
 }
 
 /// How the test host answers.
@@ -394,4 +452,173 @@ fn the_default_transport_installs_and_refuses_bad_hosts() {
         &mut staged,
     );
     assert!(matches!(r, Err(FetchError::Transport(_))), "{r:?}");
+}
+
+/// An in-memory host that counts the bytes it serves and can drop the connection at request `cut`.
+struct Mem<'a> {
+    asset: &'a [u8],
+    served: u64,
+    calls: usize,
+    cut: Option<usize>,
+}
+
+impl<'a> Mem<'a> {
+    fn new(asset: &'a [u8], cut: Option<usize>) -> Self {
+        Self {
+            asset,
+            served: 0,
+            calls: 0,
+            cut,
+        }
+    }
+}
+
+impl teigeodata_sync::fetch::Transport for Mem<'_> {
+    fn get(
+        &mut self,
+        _: &str,
+        range: Range<u64>,
+        out: &mut Vec<u8>,
+    ) -> Result<teigeodata_sync::fetch::Got, teigeodata_sync::fetch::FetchError> {
+        if self.cut == Some(self.calls) {
+            return Err(teigeodata_sync::fetch::FetchError::Transport("cut".into()));
+        }
+        self.calls += 1;
+        self.served += range.end - range.start;
+        out.clear();
+        out.extend_from_slice(&self.asset[at(&range)]);
+        Ok(teigeodata_sync::fetch::Got {
+            etag: Some("\"a\"".into()),
+            total: self.asset.len() as u64,
+        })
+    }
+}
+
+/// The asset's frames, checked against the pack.
+fn frames_of(pack: &[u8], asset: &[u8]) -> Frames {
+    let tail = SeekTable::tail_len(asset).unwrap();
+    let table = SeekTable::parse(&asset[asset.len() - tail..]).unwrap();
+    let layout = Layout::of(&Pack::open(pack).unwrap()).unwrap();
+    table.check(asset.len() as u64, layout).unwrap()
+}
+
+/// Resume (D-169): whatever an earlier attempt left in staging, the install ends with the pack
+/// byte for byte, keeps every frame that checks, and fetches only the rest.
+#[test]
+fn resume_keeps_what_checks_and_fetches_the_rest() {
+    use std::io::Cursor;
+    use teigeodata_sync::fetch::install;
+    let pack = pack();
+    let (entry, asset, _) = super::entry_of(&pack).unwrap();
+    let n = asset.len() as u64;
+    let all = Components::all();
+    let frames = frames_of(&pack, &asset);
+    let tail = SeekTable::tail_len(&asset).unwrap() as u64;
+    let head = frames.frame(0).unwrap().compressed;
+    // Every attempt pays for the seek table and the head frame.
+    let base = tail + (head.end - head.start);
+    let run = |file: &mut Cursor<Vec<u8>>, cut: Option<usize>| {
+        let mut host = Mem::new(&asset, cut);
+        let r = install(&mut host, "mem:", &entry, n, all, file);
+        if let Ok(done) = &r {
+            assert_eq!(done.fetched, host.served, "the count is what was served");
+            file.get_mut()
+                .truncate(usize::try_from(done.pack_len).unwrap());
+        }
+        (r, host.served)
+    };
+    let mut fresh = Cursor::new(Vec::new());
+    let (r, full) = run(&mut fresh, None);
+    let done = r.unwrap();
+    assert!(fresh.get_ref() == &pack, "fresh: the pack");
+    assert_eq!(done.kept, 0);
+    let requests = Mem::new(&asset, None);
+    let mut count = Cursor::new(Vec::new());
+    let mut host = requests;
+    install(&mut host, "mem:", &entry, n, all, &mut count).unwrap();
+    let calls = host.calls;
+    assert!(calls >= 4, "table, head, block hashes, the rest");
+
+    // Cut at every request, then resume: the pack, byte for byte, and never more than a fresh
+    // install; once anything past the head was written, less.
+    for cut in 0..calls {
+        let mut file = Cursor::new(Vec::new());
+        assert!(run(&mut file, Some(cut)).0.is_err());
+        let (r, served) = run(&mut file, None);
+        let done = r.unwrap_or_else(|e| panic!("cut at {cut}: {e}"));
+        assert!(file.get_ref() == &pack, "cut at {cut}");
+        assert!(served <= full, "cut at {cut}");
+        if cut > 3 {
+            assert!(
+                served < full && done.kept > 0,
+                "cut at {cut}: {served} of {full}"
+            );
+        }
+    }
+
+    // The block-hash list's frame: always fetched again on a resume.
+    let p = Pack::open(&pack).unwrap();
+    let list = p.section(Kind::BLOCK_HASHES).unwrap().bytes();
+    let list_at = list.as_ptr() as usize - pack.as_ptr() as usize;
+    let lf = frames
+        .iter()
+        .find(|f| f.decoded.contains(&(list_at as u64)))
+        .unwrap();
+    let base = base + (lf.compressed.end - lf.compressed.start);
+
+    // A whole staged file: only the table, the head and the list are fetched; the rest is kept.
+    let mut file = Cursor::new(pack.clone());
+    let (r, served) = run(&mut file, None);
+    assert_eq!(served, base);
+    let head_len = frames.frame(0).unwrap().decoded.end;
+    assert_eq!(
+        r.unwrap().written,
+        head_len + (lf.decoded.end - lf.decoded.start),
+        "nothing written but the head and the list"
+    );
+
+    // A torn frame (one byte flipped inside NAMES): only its frame is fetched again.
+    let names = p.section(Kind::NAMES).unwrap().bytes();
+    let names_at = names.as_ptr() as usize - pack.as_ptr() as usize;
+    let torn_at = names_at + names.len() / 2;
+    let torn = frames
+        .iter()
+        .find(|f| f.decoded.contains(&(torn_at as u64)))
+        .unwrap();
+    let mut bad = pack.clone();
+    bad[torn_at] ^= 1;
+    let mut file = Cursor::new(bad);
+    let (r, served) = run(&mut file, None);
+    r.unwrap();
+    assert!(file.get_ref() == &pack, "resumed: the pack");
+    assert_eq!(served, base + (torn.compressed.end - torn.compressed.start));
+
+    // A stale block-hash list: the fresh one replaces it, and the NAMES frames are still kept,
+    // checked against it.
+    let mut bad = pack.clone();
+    bad[list_at + 5] ^= 1;
+    let mut file = Cursor::new(bad);
+    let (r, served) = run(&mut file, None);
+    let done = r.unwrap();
+    assert!(file.get_ref() == &pack, "resumed: the pack");
+    assert_eq!(served, base);
+    assert!(done.kept >= names.len() as u64);
+
+    // A foreign file, longer than the pack: everything is fetched and the file cut to size.
+    let mut file = Cursor::new((0..pack.len() + 4_096).map(|i| (i % 251) as u8).collect());
+    let (r, served) = run(&mut file, None);
+    assert_eq!(r.unwrap().kept, 0);
+    assert!(file.get_ref() == &pack, "resumed: the pack");
+    assert_eq!(served, full);
+
+    // Points only, cut midway, then resumed: its sections check.
+    let pts = Components::of(&[Component::Point]);
+    let mut file = Cursor::new(Vec::new());
+    let mut host = Mem::new(&asset, Some(2));
+    assert!(install(&mut host, "mem:", &entry, n, pts, &mut file).is_err());
+    let mut host = Mem::new(&asset, None);
+    install(&mut host, "mem:", &entry, n, pts, &mut file).unwrap();
+    let s = Pack::open_head(file.get_ref()).unwrap();
+    s.section(Kind::IDMAP).unwrap().verify().unwrap();
+    s.section(Kind::PLACES).unwrap().verify().unwrap();
 }
