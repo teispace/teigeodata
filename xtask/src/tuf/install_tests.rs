@@ -248,3 +248,150 @@ fn the_caller_is_held_to_the_order() {
         Err(Error::Install("disk full"))
     );
 }
+
+/// How the test host answers.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Host {
+    Honest,
+    /// 200 with the whole asset, as a host that ignores `Range`.
+    IgnoresRange,
+    /// A `Content-Range` one byte off.
+    ShiftsRange,
+    /// A new `ETag` from the third request on, as an asset replaced midway.
+    ChangesEtag,
+    /// One byte more than asked.
+    RunsOver,
+}
+
+/// A local HTTP/1.1 host for `asset`, answering as `how`; its URL.
+fn serve(asset: Vec<u8>, how: Host) -> String {
+    use std::io::{BufRead, BufReader, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/asset.tgd.zst", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for (n, stream) in listener.incoming().enumerate() {
+            let Ok(mut stream) = stream else { return };
+            let mut range = None;
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                    break;
+                }
+                if let Some(v) = line.to_ascii_lowercase().strip_prefix("range: bytes=") {
+                    let (a, b) = v.trim().split_once('-').unwrap();
+                    range = Some((a.parse::<usize>().unwrap(), b.parse::<usize>().unwrap()));
+                }
+            }
+            let total = asset.len();
+            let (a, b) = range.unwrap_or((0, total - 1));
+            let etag = if how == Host::ChangesEtag && n >= 2 {
+                "\"b\""
+            } else {
+                "\"a\""
+            };
+            let (status, cr, body) = match how {
+                Host::IgnoresRange => ("200 OK", String::new(), &asset[..]),
+                Host::ShiftsRange => (
+                    "206 Partial Content",
+                    format!("Content-Range: bytes {}-{}/{total}\r\n", a + 1, b + 1),
+                    &asset[a..=b],
+                ),
+                Host::RunsOver => (
+                    "206 Partial Content",
+                    format!("Content-Range: bytes {a}-{b}/{total}\r\n"),
+                    &asset[a..=(b + 1).min(total - 1)],
+                ),
+                _ => (
+                    "206 Partial Content",
+                    format!("Content-Range: bytes {a}-{b}/{total}\r\n"),
+                    &asset[a..=b],
+                ),
+            };
+            let head = format!(
+                "HTTP/1.1 {status}\r\n{cr}Content-Length: {}\r\nETag: {etag}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(head.as_bytes());
+            let _ = stream.write_all(body);
+        }
+    });
+    url
+}
+
+/// The driver over the default transport (D-168): an honest host installs the pack byte for
+/// byte; each kind of dishonest host is refused for its own reason.
+#[test]
+fn the_default_transport_installs_and_refuses_bad_hosts() {
+    use teigeodata_sync::fetch::{FetchError, Ureq, install};
+    let pack = pack();
+    let (entry, asset, _) = super::entry_of(&pack).unwrap();
+    let n = asset.len() as u64;
+    let run = |how: Host, set: Components| {
+        let url = serve(asset.clone(), how);
+        let mut staged = std::io::Cursor::new(Vec::new());
+        let r = install(&mut Ureq::new(), &url, &entry, n, set, &mut staged);
+        (r, staged.into_inner())
+    };
+    let (r, staged) = run(Host::Honest, Components::all());
+    let done = r.unwrap();
+    assert!(staged == pack, "the pack, byte for byte");
+    assert_eq!(done.fetched, entry.size_of(Components::all()).wire);
+    // Points only: the staged file is the pack's length, its sections the pack's.
+    let (r, staged) = run(Host::Honest, Components::of(&[Component::Point]));
+    r.unwrap();
+    assert_eq!(staged.len(), pack.len());
+    let s = Pack::open_head(&staged).unwrap();
+    s.section(Kind::IDMAP).unwrap().verify().unwrap();
+    assert!(matches!(
+        run(Host::IgnoresRange, Components::all()).0,
+        Err(FetchError::Status(200))
+    ));
+    for (how, why) in [
+        (
+            Host::ShiftsRange,
+            "Content-Range is not the range asked for",
+        ),
+        (
+            Host::ChangesEtag,
+            "the asset changed on the host during the install",
+        ),
+        (Host::RunsOver, "the body is not the range's length"),
+    ] {
+        match run(how, Components::all()).0 {
+            Err(FetchError::Response(p)) => assert_eq!(p, why),
+            other => panic!("{why}: {other:?}"),
+        }
+    }
+    // The catalog says another length: the first response is refused.
+    let url = serve(asset.clone(), Host::Honest);
+    let mut staged = std::io::Cursor::new(Vec::new());
+    let r = install(
+        &mut Ureq::new(),
+        &url,
+        &entry,
+        n - 1,
+        Components::all(),
+        &mut staged,
+    );
+    assert!(
+        matches!(
+            r,
+            Err(FetchError::Response(
+                "the asset's length is not the catalog's"
+            ))
+        ),
+        "{r:?}"
+    );
+    // Nobody listening.
+    let mut staged = std::io::Cursor::new(Vec::new());
+    let r = install(
+        &mut Ureq::new(),
+        "http://127.0.0.1:9/none",
+        &entry,
+        n,
+        Components::all(),
+        &mut staged,
+    );
+    assert!(matches!(r, Err(FetchError::Transport(_))), "{r:?}");
+}

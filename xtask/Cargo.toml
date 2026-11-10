@@ -12,7 +12,7 @@ publish = false
 teigeodata-core.workspace = true
 teigeodata-format = { workspace = true, features = ["write"] }
 teigeodata-names = { workspace = true, features = ["serde"] }
-teigeodata-sync = { workspace = true, features = ["install", "repo", "write"] }
+teigeodata-sync = { workspace = true, features = ["http", "repo", "write"] }
 # Ed25519 keys of the catalog repository (xtask tuf, D-163).
 ed25519-dalek = { version = "3.0.0", default-features = false }
 getrandom = "0.4.3"

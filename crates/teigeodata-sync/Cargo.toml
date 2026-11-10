@@ -23,6 +23,12 @@ repo = ["trust"]
 # The sans-I/O installer: a pack from its transport asset by range requests, checked against
 # the signed catalog before any byte is written (D-167).
 install = ["trust", "zstd"]
+# The standard library: files and sockets, for the drivers below.
+std = []
+# The driver over a `Transport` into a staging file (D-168).
+fetch = ["install", "std"]
+# The default transport: `ureq` with rustls and the platform's trust store (D-168).
+http = ["fetch", "dep:ureq"]
 # The fuzz and property harnesses, shared by `cargo test` and cargo-fuzz (D-072).
 fuzz = ["write"]
 
@@ -32,6 +38,7 @@ ed25519-dalek = { version = "3.0.0", default-features = false, optional = true }
 serde_json = { version = "1.0.154", default-features = false, features = ["alloc"], optional = true }
 sha2 = { version = "0.11.1", default-features = false, optional = true }
 ruzstd = { version = "0.9.1", default-features = false, optional = true }
+ureq = { version = "3.5.1", default-features = false, features = ["rustls", "platform-verifier"], optional = true }
 teigeodata-core = { workspace = true, optional = true }
 teigeodata-format.workspace = true
 

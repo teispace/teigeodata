@@ -100,6 +100,17 @@ from the entry and asset `entry_of` publishes and compare with the pack, and for
 each padding byte and the footer (validly recompressed, so only the hashes can tell): every
 forgery fails and no forged byte reaches the staging file.
 
+**Moving the bytes (feature `fetch`, `http`; D-168).** `sync::fetch::Transport` is one ranged
+GET; `fetch::install` drives `Install` over one into a `Write + Seek` staging file. Every
+response is held to its request: status 206, a `Content-Range` naming exactly the requested
+bytes and the catalog's asset length, at most those bytes read, and one `ETag` for the whole
+install. `Ureq` (feature `http`) is the default transport: `ureq` 3.5.1 with rustls and the
+platform's trust store, no gzip, redirects followed with `Range` kept. Platform apps bring their
+own transport behind the trait, or drive `Install` directly. Tests run the driver against a
+local host that answers honestly, ignores `Range`, shifts `Content-Range`, swaps the asset
+midway, or sends a byte too many: the honest host installs the pack byte for byte, each other
+one is refused for its own reason.
+
 **Trust.** The seek table is not signed and does not need to be. A lying table either fails
 `check`, or (sizes shifted between frames, total kept) makes a frame fail to decode. In every
 case a frame's output is bounded by what the signed head implies, and the bytes are then checked

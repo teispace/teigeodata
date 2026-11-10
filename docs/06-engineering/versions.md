@@ -91,7 +91,7 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | duckdb (QA only) | 1.20000.1 (DuckDB 2.0) | 2026-11-06 | crates.io | 2026-12-06 |
 | ed25519-dalek | 3.0 | 2026-11-06 | crates.io | 2026-12-06 |
 | blake3 | 1.8 | 2026-11-06 | crates.io | 2026-12-06 |
-| ureq | 3.5 | 2026-11-06 | crates.io | 2026-12-06 |
+| ureq (`teigeodata-sync` feature `http`, D-168) | 3.5.1 | 2026-11-10 | crates.io | 2026-12-10 |
 | tough (`tools/tough-oracle`, the TUF differential, D-165) | 0.24.0 | 2026-11-10 | crates.io | 2026-12-10 |
 | serde-saphyr (xtask YAML) | 2.1.1 | 2026-11-06 | crates.io (serde_yaml is deprecated) | 2026-12-06 |
 | fst (search spike; own automaton, not its Levenshtein DFA) | 0.4.7 | 2026-11-06 | crates.io (last release 2021-06-06) | 2026-12-06 |

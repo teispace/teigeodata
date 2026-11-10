@@ -307,6 +307,23 @@ server offers it. Not worth building into the Rust default.
 Binary size and build cost of each are **not measured** here (no builds). A gate must measure the
 release-size delta of the `sync` feature with each client on Linux, Android and iOS.
 
+**Measured (2026-11-10, D-168).** A minimal binary doing one ranged GET, built on this Mac
+(aarch64-apple-darwin) with `opt-level = "s"`, LTO, one codegen unit, `panic = "abort"`,
+stripped:
+
+| Client and features | Binary B | `cargo tree` lines |
+|---|---:|---:|
+| `ureq` 3.5.1, defaults (rustls + ring, webpki-roots, gzip) | 1,315,408 | 40 |
+| `ureq` 3.5.1, `rustls` + `platform-verifier`, no gzip | 1,284,176 | — |
+| `reqwest` 0.13.5, `blocking` (tokio, hyper, rustls + aws-lc, platform verifier) | 2,335,328 | 247 |
+
+`ureq` is about 1.0 MB (44 %) smaller with a sixth of the dependency tree, and builds without a
+C toolchain for aws-lc. It keeps the `Range` header through GitHub's release-asset redirect: a
+`bytes=0-1023` request for a public release asset returned 1,024 bytes and the ETag. The
+default is `ureq` with `platform-verifier` (the OS trust store, so enterprise and user roots
+work) and no gzip (assets are zstd). Linux, Android and iOS sizes remain for the binding builds
+of Phase 5.
+
 **Platform clients.** URLSession (iOS, macOS), OkHttp or Cronet (Android), `fetch` (web) already
 handle proxies, the user's and the enterprise's trust store, HTTP/2 or HTTP/3, cellular policy,
 and — the decisive point — **OS background downloads**. Our core should not own sockets on these

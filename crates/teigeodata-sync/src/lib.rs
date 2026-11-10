@@ -42,12 +42,14 @@
 #![no_std]
 
 extern crate alloc;
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 extern crate std;
 
 #[cfg(feature = "trust")]
 pub mod catalog;
 mod error;
+#[cfg(feature = "fetch")]
+pub mod fetch;
 #[cfg(feature = "fuzz")]
 #[doc(hidden)]
 pub mod fuzz;
