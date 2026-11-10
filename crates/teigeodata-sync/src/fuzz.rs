@@ -233,9 +233,10 @@ fn plan(frames: &Frames, c: &mut Cursor<'_>) {
     let need: Vec<bool> = frames
         .iter()
         .map(|f| {
+            // An empty range wants no byte, so no frame (`plan` ignores it).
             wanted
                 .iter()
-                .any(|w| w.start < f.decoded.end && f.decoded.start < w.end)
+                .any(|w| !w.is_empty() && w.start < f.decoded.end && f.decoded.start < w.end)
         })
         .collect();
     let mut got = vec![false; frames.len()];
@@ -260,7 +261,10 @@ fn plan(frames: &Frames, c: &mut Cursor<'_>) {
     }
     // Exactly the needed frames, except that a run may not hold a gap: runs are maximal, so
     // fetched equals needed.
-    assert_eq!(got, need, "the plan fetches the wrong frames");
+    assert_eq!(
+        got, need,
+        "the plan fetches the wrong frames for {wanted:?}: {fetches:?}"
+    );
 }
 
 /// A pack from the writer, its transport asset, then an attack and a client's read.

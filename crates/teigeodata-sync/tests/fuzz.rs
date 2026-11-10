@@ -49,3 +49,13 @@ fn attacked_assets() {
 fn frames() {
     drive(23, iterations(10_000), fuzz::frame);
 }
+
+/// Inputs libFuzzer found failing, kept so they stay fixed.
+#[test]
+fn found_by_libfuzzer() {
+    // Nightly 2026-11-10, `transport_table`: "the plan fetches the wrong frames".
+    fuzz::table(&[
+        43, 25, 0, 10, 0, 10, 24, 0, 184, 184, 184, 184, 43, 43, 42, 43, 11, 59, 59, 59, 59, 59,
+        59, 59, 59, 59, 59, 59, 59, 25,
+    ]);
+}
