@@ -13,10 +13,19 @@ use std::fmt::Write as _;
 
 use teigeodata_format::component::{Component, Components};
 use teigeodata_format::{Kind, Pack};
+use teigeodata_sync::catalog::{BlockHashes, Size};
 use teigeodata_sync::transport::{self, Layout, SeekTable};
 
 /// The zstd level releases compress frames with.
 const LEVEL: i32 = 19;
+
+/// The catalog entry's size fields, from the measured asset.
+pub(crate) struct CatalogSizes {
+    pub(crate) seek_table: u64,
+    pub(crate) head_frame: Size,
+    pub(crate) block_hashes: Option<BlockHashes>,
+    pub(crate) sizes: BTreeMap<Component, Size>,
+}
 
 /// One pack's asset, measured.
 pub(crate) struct Wire {
@@ -24,8 +33,14 @@ pub(crate) struct Wire {
     asset: u64,
     /// The head frame and the seek table: every client fetches both.
     fixed: u64,
+    /// The seek table alone.
+    table: u64,
+    /// The head's bytes in the pack (what the head frame decodes to).
+    head_raw: u64,
     /// `BLOCK_HASHES`.
     hashes: u64,
+    /// `BLOCK_HASHES` in the pack.
+    hashes_raw: u64,
     /// Raw and compressed bytes of each component's own sections.
     parts: BTreeMap<Component, (u64, u64)>,
     /// The components with a section of 1 MiB or more, which needs `BLOCK_HASHES`.
@@ -35,6 +50,11 @@ pub(crate) struct Wire {
 impl Wire {
     /// Writes `bytes` as its transport asset in memory and measures it.
     pub(crate) fn measure(bytes: &[u8]) -> Result<Self, String> {
+        Self::measure_asset(bytes).map(|(w, _)| w)
+    }
+
+    /// [`Wire::measure`], also giving the asset.
+    pub(crate) fn measure_asset(bytes: &[u8]) -> Result<(Self, Vec<u8>), String> {
         let err = |e: teigeodata_sync::Error| e.to_string();
         let asset =
             transport::encode(bytes, |d| zstd::bulk::compress(d, LEVEL).ok()).map_err(err)?;
@@ -51,7 +71,10 @@ impl Wire {
         let mut wire = Self {
             asset: asset_len,
             fixed: frames.table_len(),
+            table: frames.table_len(),
+            head_raw: 0,
             hashes: 0,
+            hashes_raw: 0,
             parts: BTreeMap::new(),
             blocked: Components::NONE,
         };
@@ -60,6 +83,7 @@ impl Wire {
             // The section whose span (to the next section) holds the frame; none: the head.
             let Some(s) = spans.iter().rev().find(|s| s.offset <= f.decoded.start) else {
                 wire.fixed += len;
+                wire.head_raw += f.decoded.end - f.decoded.start;
                 continue;
             };
             match Component::of(s.kind) {
@@ -69,6 +93,9 @@ impl Wire {
             }
         }
         for s in pack.sections() {
+            if s.kind() == Kind::BLOCK_HASHES {
+                wire.hashes_raw += s.bytes().len() as u64;
+            }
             if let Some(k) = Component::of(s.kind()) {
                 wire.parts.entry(k).or_default().0 += s.bytes().len() as u64;
                 if pack.blocks(s.kind()).map_err(|e| e.to_string())?.is_some() {
@@ -76,7 +103,26 @@ impl Wire {
                 }
             }
         }
-        Ok(wire)
+        Ok((wire, asset))
+    }
+
+    /// The catalog's sizes for this pack (D-162): the head frame, the seek table, each
+    /// component, and `BLOCK_HASHES` with the components that need it.
+    pub(crate) fn catalog_sizes(&self) -> CatalogSizes {
+        let size = |wire: u64, disk: u64| Size { wire, disk };
+        CatalogSizes {
+            seek_table: self.table,
+            head_frame: size(self.fixed - self.table, self.head_raw),
+            block_hashes: (self.hashes > 0).then(|| BlockHashes {
+                size: size(self.hashes, self.hashes_raw),
+                needed_by: self.blocked,
+            }),
+            sizes: self
+                .parts
+                .iter()
+                .map(|(&c, &(raw, wire))| (c, size(wire, raw)))
+                .collect(),
+        }
     }
 
     /// What a client downloads for `set` and everything it needs: the head, the seek table,
@@ -200,6 +246,34 @@ mod tests {
                 + w.hashes
         );
         assert_eq!(w.of(Components::all()), w.asset);
+        // The catalog's arithmetic gives G-wire's download bytes for every set of components.
+        let c = w.catalog_sizes();
+        let entry = teigeodata_sync::catalog::Entry {
+            address: "zz".into(),
+            component: "places".into(),
+            release: "2026.11.0".into(),
+            file: String::new(),
+            pack_length: 0,
+            head: [0; 16],
+            seek_table: c.seek_table,
+            head_frame: c.head_frame,
+            block_hashes: c.block_hashes,
+            sizes: c.sizes,
+            deps: vec![],
+            min_reader: 0,
+            bbox: None,
+            licence: "CC0-1.0".into(),
+        };
+        for bits in 0_u16..1 << 12 {
+            let set = Components::of(
+                &Component::ALL
+                    .iter()
+                    .copied()
+                    .filter(|c| bits >> (*c as u16) & 1 == 1)
+                    .collect::<Vec<_>>(),
+            );
+            assert_eq!(entry.size_of(set).wire, w.of(set), "{bits:#b}");
+        }
         let budget = |name: &str, kb: u64| BTreeMap::from([(name.to_owned(), kb)]);
         assert_eq!(
             w.gate(&budget("point", point.div_ceil(1000))),

@@ -1,0 +1,54 @@
+# The catalog's daily timestamp (ADR-0037, D-163): signs a 14-day timestamp for the current
+# snapshot and pushes it to the `catalog` branch, which GitHub Pages serves. `verify` fails 7
+# days before anything expires, so a stopped schedule is seen with a week left; the daily
+# commit also keeps the repository active (GitHub stops schedules after 60 quiet days).
+#
+# Off until the first ceremony (docs/06-engineering/catalog-keys.md): the maintainer creates the
+# `catalog` branch and Pages site, the `catalog-timestamp` environment (deployment branch: main)
+# with the secret TUF_TIMESTAMP_KEY, and sets the repository variable CATALOG_LIVE to true.
+name: catalog-timestamp
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-timestamp
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  timestamp:
+    if: vars.CATALOG_LIVE == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: catalog-timestamp
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: catalog
+          path: catalog
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Sign the timestamp
+        env:
+          TUF_TIMESTAMP_KEY: ${{ secrets.TUF_TIMESTAMP_KEY }}
+        run: cargo xtask tuf timestamp catalog --key env:TUF_TIMESTAMP_KEY
+      - name: Publish
+        working-directory: catalog
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add timestamp.json
+          git commit -m "chore(data): refresh the catalog timestamp"
+          git push origin HEAD:catalog

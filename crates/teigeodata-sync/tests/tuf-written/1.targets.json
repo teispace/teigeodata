@@ -1,0 +1,50 @@
+{
+  "signatures": [
+    {
+      "keyid": "a303a72316a605f7b653e8403253f265a650c24df098ebd34a181437990979d9",
+      "sig": "b45097f20e0855dd8a3e3fd71e5f1718806d9634f85d468a51df4996ad5703eba38472e3ec2d7ee77a52c639e2fb0ea29c3a760ea8fd693641342ed0e248f00d"
+    }
+  ],
+  "signed": {
+    "_type": "targets",
+    "expires": "2027-11-10T00:00:00Z",
+    "spec_version": "1.0.31",
+    "targets": {
+      "np.places.tgd": {
+        "custom": {
+          "address": "np",
+          "component": "places",
+          "deps": [],
+          "file": "np.places.2026.11.0.38180b69.tgd.zst",
+          "licence": "ODbL-1.0",
+          "min_reader": 0,
+          "pack": {
+            "head": "abababababababababababababababab",
+            "length": 128
+          },
+          "release": "2026.11.0",
+          "schema": 1,
+          "sizes": {
+            "point": [
+              20,
+              64
+            ]
+          },
+          "transport": {
+            "encoding": "zstd-seekable",
+            "head": [
+              2,
+              64
+            ],
+            "seek_table": 9
+          }
+        },
+        "hashes": {
+          "sha256": "38180b69e55b3b2f6283c345f18d6504e7f24cb59388a1041a4b1a134c97fcda"
+        },
+        "length": 31
+      }
+    },
+    "version": 1
+  }
+}

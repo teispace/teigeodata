@@ -12,7 +12,8 @@
 //!
 //! Step 4.3: `trust` (feature `trust`) verifies the signed catalog, a subset of TUF: the root
 //! chain, timestamp, snapshot and targets, with length caps and the offline-first expiry rule.
-//! [`catalog`] (feature `trust`) reads each target's pack details, schema v1.
+//! [`catalog`] (feature `trust`) reads each target's pack details, schema v1; `repo` (feature
+//! `repo`) writes and signs the roles.
 //!
 //! The reader side is `no_std` with `alloc` and sans-I/O: it never touches a file or a socket.
 //!
@@ -50,6 +51,8 @@ mod error;
 #[cfg(feature = "fuzz")]
 #[doc(hidden)]
 pub mod fuzz;
+#[cfg(feature = "repo")]
+pub mod repo;
 pub mod transport;
 #[cfg(feature = "trust")]
 pub mod trust;

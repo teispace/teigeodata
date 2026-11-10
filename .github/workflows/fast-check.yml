@@ -47,6 +47,7 @@ jobs:
           rustup target add thumbv7em-none-eabihf
           cargo build --locked -p teigeodata-core -p teigeodata-format -p teigeodata-names -p teigeodata-blob --target thumbv7em-none-eabihf
           cargo build --locked -p teigeodata-sync --no-default-features --features trust --target thumbv7em-none-eabihf
+          cargo build --locked -p teigeodata-sync --no-default-features --features repo --target thumbv7em-none-eabihf
 
   forge:
     runs-on: ubuntu-latest
@@ -153,6 +154,7 @@ jobs:
 
   tuf-oracle:
     # python-tuf rebuilds and judges the differential corpus; any change to it fails (D-161).
+    # It also reads the repository our writer wrote (D-163).
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -165,6 +167,7 @@ jobs:
           git status --porcelain crates/teigeodata-sync/tests/tuf
           test -z "$(git status --porcelain crates/teigeodata-sync/tests/tuf)"
           "$RUNNER_TEMP/oracle/bin/python" -I tools/tuf-oracle/check_schema.py crates/teigeodata-sync/schema/catalog-custom-v1.json
+          "$RUNNER_TEMP/oracle/bin/python" -I tools/tuf-oracle/read_written.py crates/teigeodata-sync/tests/tuf-written
 
   typos:
     runs-on: ubuntu-latest

@@ -38,6 +38,8 @@ pub use meta::{
     Common, Envelope, Hashes, MetaFile, Role, RoleName, Root, Snapshot, Target, Targets, Timestamp,
     check_hashes, known,
 };
+#[cfg(feature = "repo")]
+pub(crate) use time::format as format_time;
 
 /// The largest root, timestamp, snapshot and targets accepted when no signed length is known
 /// (python-tuf's defaults).
@@ -373,6 +375,17 @@ impl Trusted {
         }
         self.targets = Some(new);
         Ok(())
+    }
+
+    /// When `role`'s trusted metadata expires (Unix seconds), once loaded.
+    #[must_use]
+    pub fn expires(&self, role: RoleName) -> Option<i64> {
+        match role {
+            RoleName::Root => Some(self.root.common.expires),
+            RoleName::Timestamp => self.timestamp.as_ref().map(|m| m.common.expires),
+            RoleName::Snapshot => self.snapshot.as_ref().map(|m| m.common.expires),
+            RoleName::Targets => self.targets.as_ref().map(|m| m.common.expires),
+        }
     }
 
     /// The target at `path`.

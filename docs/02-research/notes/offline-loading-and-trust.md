@@ -523,9 +523,9 @@ process death and a new process can list and resume it.
               "deps": ["np.admin.tgd"], "min_reader": 1, "sections": "…hash of section table…" } }
 ```
 
-TUF requires `sha256`/`sha512` only by convention; the spec allows any hash name, but `tough` and
-python-tuf only *verify* algorithms they know, so the oracle test must include `sha256` as well
-(**unverified** whether either accepts unknown names without failing; to test). A binary catalog
+TUF requires `sha256`/`sha512` only by convention; the spec allows any hash name. **Measured
+2026-11-10 (D-162):** python-tuf 7.0.1 refuses a target that lists an algorithm it does not know
+(`Unsupported algorithm 'blake3'`), so targets carry `sha256` alone. A binary catalog
 (for example `postcard`) would be smaller and faster to parse but loses interoperability with
 existing TUF tools, readability and easy debugging; JSON compresses well over HTTP and is parsed
 once per refresh. Recommendation: JSON on the wire; the client may cache a parsed binary form

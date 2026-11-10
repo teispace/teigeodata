@@ -18,6 +18,8 @@ write = ["zstd", "teigeodata-format/write"]
 # The catalog: its trust chain, a TUF 1.0 client for the four top-level roles (D-159), and its
 # pack details, schema v1 (D-160).
 trust = ["dep:ed25519-dalek", "dep:serde_json", "dep:sha2", "dep:blake3", "dep:teigeodata-core"]
+# The repository side: writes and signs the roles the client verifies (D-162).
+repo = ["trust"]
 # The fuzz and property harnesses, shared by `cargo test` and cargo-fuzz (D-072).
 fuzz = ["write"]
 
@@ -31,7 +33,7 @@ teigeodata-core = { workspace = true, optional = true }
 teigeodata-format.workspace = true
 
 [dev-dependencies]
-teigeodata-sync = { path = ".", features = ["fuzz", "trust"] }
+teigeodata-sync = { path = ".", features = ["fuzz", "repo", "trust"] }
 # C zstd at the levels the forge uses, and the seekable-format oracle over the same C library.
 zeekstd = { version = "0.6.3", default-features = false, features = ["std"] }
 zstd = { version = "0.14.3", default-features = false }

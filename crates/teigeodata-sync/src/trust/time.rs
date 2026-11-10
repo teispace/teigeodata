@@ -58,6 +58,39 @@ pub(super) fn parse(s: &str) -> Result<i64, Error> {
     Ok(days_from_civil(year, month, day) * 86_400 + hour * 3_600 + minute * 60 + second)
 }
 
+/// `YYYY-MM-DDTHH:MM:SSZ` of Unix seconds `t`, the inverse of [`parse`] for years 0–9999.
+///
+/// # Errors
+/// [`Error::Format`] outside years 0–9999.
+#[cfg(any(feature = "repo", test))]
+pub(crate) fn format(t: i64) -> Result<alloc::string::String, Error> {
+    let (days, secs) = (t.div_euclid(86_400), t.rem_euclid(86_400));
+    let (y, m, d) = civil_from_days(days);
+    if !(0..=9999).contains(&y) {
+        return Err(Error::Format("expires outside years 0-9999"));
+    }
+    Ok(alloc::format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z",
+        secs / 3_600,
+        secs % 3_600 / 60,
+        secs % 60
+    ))
+}
+
+/// The date of `z` days since 1970-01-01 (Howard Hinnant's algorithm).
+#[cfg(any(feature = "repo", test))]
+const fn civil_from_days(z: i64) -> (i64, i64, i64) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    (yoe + era * 400 + if m <= 2 { 1 } else { 0 }, m, d)
+}
+
 /// Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant's algorithm).
 const fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
@@ -73,7 +106,25 @@ const fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 mod tests {
     #![allow(clippy::unwrap_used, reason = "test code")]
 
-    use super::parse;
+    use super::{format, parse};
+
+    #[test]
+    fn format_is_the_inverse_of_parse() {
+        for t in [
+            0,
+            951_825_600,
+            1_794_268_800,
+            2_147_483_648,
+            253_402_300_799,
+            86_399,
+            5_097_600,
+        ] {
+            assert_eq!(parse(&format(t).unwrap()).unwrap(), t, "{t}");
+        }
+        assert_eq!(format(1_794_268_800).unwrap(), "2026-11-10T00:00:00Z");
+        assert!(format(253_402_300_800).is_err());
+        assert!(format(-62_167_219_201).is_err());
+    }
 
     #[test]
     fn known_instants() {

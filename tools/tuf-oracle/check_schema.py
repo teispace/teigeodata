@@ -14,12 +14,16 @@ Draft202012Validator.check_schema(schema)
 v = Draft202012Validator(schema)
 good = {"schema": 1, "address": "np", "component": "places", "release": "2026.11.0",
   "file": "np.places.2026.11.0.1a1a1a1a.tgd.zst", "pack": {"length": 11748636, "head": "ab"*16},
-  "transport": {"encoding": "zstd-seekable", "seek_table": 293},
+  "transport": {"encoding": "zstd-seekable", "seek_table": 293, "head": [512, 1024]},
+  "block_hashes": {"size": [6100, 6144], "for": ["names"]},
   "sizes": {"point": [522192, 601344], "names": [917602, 1302528]}, "deps": ["np.baseline.tgd"],
   "min_reader": 0, "bbox": [801000000, 263000000, 882000000, 304500000], "licence": "ODbL-1.0", "future": 1}
 assert not list(v.iter_errors(good)), list(v.iter_errors(good))
 bad = [("schema", 2), ("address", "NP"), ("release", "2026/11"), ("file", "x.tgd"), ("pack", {"length": 1, "head": "AB"*16}),
-  ("transport", {"encoding": "raw", "seek_table": 1}), ("transport", {"encoding": "zstd-seekable", "seek_table": 0}),
+  ("transport", {"encoding": "raw", "seek_table": 1, "head": [1, 1]}),
+  ("transport", {"encoding": "zstd-seekable", "seek_table": 0, "head": [1, 1]}),
+  ("transport", {"encoding": "zstd-seekable", "seek_table": 1}),
+  ("block_hashes", {"size": [1, 1], "for": []}), ("block_hashes", {"for": ["names"]}),
   ("sizes", {}), ("sizes", {"point": [1]}), ("deps", ["np"]), ("deps", ["np.dem.tgd"]*2), ("min_reader", 70000),
   ("bbox", [80.1, 26.3, 88.2, 30.4]), ("bbox", [0, 0, 1, 900000001]), ("licence", "CC BY")]
 for k, val in bad:

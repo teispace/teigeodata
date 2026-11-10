@@ -22,6 +22,7 @@ mod recipe;
 mod romanise;
 mod sizes;
 mod sources;
+mod tuf;
 mod wire;
 mod workspace;
 
@@ -54,6 +55,8 @@ Tasks:
   mirror [<id>…]    Upload the stored bytes of pinned sources (every source with a
                     mirror_url when none are named) to the content-addressed release
                     `sources`, one asset per file named by its SHA-256 (D-127); needs `gh`.
+  tuf <command>     The catalog repository (D-163): keygen, pubkey, root, sign,
+                    release, timestamp, verify; `cargo xtask tuf` lists them.
   clean [--all]     Free disk: incremental caches and scratch of both workspaces; --all
                     also runs `cargo clean` in both. Fetched sources are kept.
   sizes [--native|--wasm]
@@ -82,6 +85,7 @@ fn main() -> ExitCode {
         "check-pack" => report(pack::run(&root, rest)),
         "check-workspace" => report(workspace::check(&root)),
         "mirror" => report(mirror::run(&root, rest)),
+        "tuf" => report(tuf::run(rest)),
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
         "sizes" => {
             let only = |f: &str| rest.iter().any(|a| a == f);

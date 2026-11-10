@@ -53,7 +53,9 @@ A short status. The numbers and evidence live in each phase file and the
   units, locator radius 3 km, 0 probes missed), and a region ranked below the city of its name
   (D-158); thinning on sorted, banded records (122 s, 2.46 GB peak); the TUF client
   `sync::trust` (D-159), the catalog's `custom` schema v1 (D-160) and the differential against
-  python-tuf (D-161). Next: 4.3 repository tooling in `xtask`, then discovery, then `tough`; the world byte-identity check after the thinning change
+  python-tuf (D-161), sizes that match G-wire and SHA-256 targets (D-162), and the repository
+  tooling `xtask tuf` with the timestamp workflow, off until the first ceremony (D-163). Next:
+  4.3 discovery (`catalog.find`), the release upload, then `tough`; the world byte-identity check after the thinning change
   waits for the inputs to be fetched again.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).

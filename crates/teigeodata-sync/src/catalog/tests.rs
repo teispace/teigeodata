@@ -9,11 +9,11 @@ use teigeodata_core::Point;
 use teigeodata_format::Bbox;
 use teigeodata_format::component::{Component, Components};
 
-use super::{Entry, Error, Size, file_name, path};
+use super::{BlockHashes, Entry, Error, Size, file_name, path};
 use crate::trust::{Target, canonical_json};
 
 const ASSET_LEN: u64 = 8_227_234;
-const BLAKE3: [u8; 32] = [0x1a; 32];
+const SHA256: [u8; 32] = [0x1a; 32];
 
 fn entry() -> Entry {
     let mut sizes = BTreeMap::new();
@@ -49,10 +49,21 @@ fn entry() -> Entry {
         address: "np".to_string(),
         component: "places".to_string(),
         release: "2026.11.0".to_string(),
-        file: file_name("np", "places", "2026.11.0", &BLAKE3),
+        file: file_name("np", "places", "2026.11.0", &SHA256),
         pack_length: 11_748_636,
         head: [0xab; 16],
         seek_table: 293,
+        head_frame: Size {
+            wire: 512,
+            disk: 1_024,
+        },
+        block_hashes: Some(BlockHashes {
+            size: Size {
+                wire: 6_100,
+                disk: 6_144,
+            },
+            needed_by: Components::of(&[Component::Names]),
+        }),
         sizes,
         deps: alloc::vec!["np.baseline.tgd".to_string()],
         min_reader: 0,
@@ -66,7 +77,7 @@ fn entry() -> Entry {
 
 fn target(custom: Value) -> Target {
     let mut hashes = BTreeMap::new();
-    hashes.insert("blake3".to_string(), BLAKE3.to_vec());
+    hashes.insert("sha256".to_string(), SHA256.to_vec());
     Target {
         length: ASSET_LEN,
         hashes,
@@ -90,8 +101,9 @@ fn an_entry_round_trips_through_its_custom_object() {
     assert_eq!(back, e);
     // Canonical JSON has no floats: the whole object encodes.
     let bytes = canonical_json(&e.to_custom()).unwrap();
-    // 466 B on 2026-11-10 (D-160); a growing entry grows the catalog of every app.
-    assert!(bytes.len() <= 480, "{} B", bytes.len());
+    // 536 B on 2026-11-10 with BLOCK_HASHES (D-162; 466 B before, D-160); a growing entry
+    // grows the catalog of every app.
+    assert!(bytes.len() <= 550, "{} B", bytes.len());
 }
 
 #[test]
@@ -106,25 +118,27 @@ fn unknown_fields_and_components_are_skipped() {
 #[test]
 fn a_plan_counts_what_a_set_needs() {
     let e = entry();
-    // Search needs names, and names needs point.
+    let fixed = Size {
+        wire: 512 + 293,
+        disk: 1_024 + 32,
+    };
+    let plus = |a: Size, w: u64, d: u64| Size {
+        wire: a.wire + w,
+        disk: a.disk + d,
+    };
+    // Search needs names, and names needs point; names needs BLOCK_HASHES.
     let s = e.size_of(Components::of(&[Component::Search]));
-    assert_eq!(
-        s,
-        Size {
-            wire: 522_192 + 917_602 + 300_000,
-            disk: 601_344 + 1_302_528 + 410_000
-        }
+    let own = plus(
+        fixed,
+        522_192 + 917_602 + 300_000,
+        601_344 + 1_302_528 + 410_000,
     );
+    assert_eq!(s, plus(own, 6_100, 6_144));
+    // Point alone: no BLOCK_HASHES.
     let p = e.size_of(Components::of(&[Component::Point]));
-    assert_eq!(
-        p,
-        Size {
-            wire: 522_192,
-            disk: 601_344
-        }
-    );
-    // A component the pack lacks counts nothing.
-    assert_eq!(e.size_of(Components::of(&[Component::Dem])).wire, 0);
+    assert_eq!(p, plus(fixed, 522_192, 601_344));
+    // A component the pack lacks counts nothing beyond what every install fetches.
+    assert_eq!(e.size_of(Components::of(&[Component::Dem])), fixed);
 }
 
 /// The entry with `key` set to `v` (`key` may be `outer.inner`).
@@ -255,10 +269,10 @@ fn every_malformed_or_disagreeing_entry_is_refused() {
     );
     let mut t = target(e.to_custom());
     t.hashes.clear();
-    t.hashes.insert("sha256".to_string(), alloc::vec![0; 32]);
+    t.hashes.insert("sha512".to_string(), alloc::vec![0; 64]);
     assert_eq!(
         Entry::from_target("np.places.tgd", &t),
-        Err(Error::Name("the target has no blake3"))
+        Err(Error::Name("the target has no sha256"))
     );
     t.custom = None;
     assert_eq!(Entry::from_target("np.places.tgd", &t), Err(Error::Missing));
@@ -297,7 +311,9 @@ fn the_json_schema_matches_the_reader() {
     assert_eq!(names(&schema["properties"]), names(&written));
     let mut no_bbox = written.clone();
     no_bbox.as_object_mut().unwrap().remove("bbox");
-    // Every field but the optional bbox is required; removing any one is refused.
+    no_bbox.as_object_mut().unwrap().remove("block_hashes");
+    // Every field but the optional bbox and block_hashes is required; removing any one is
+    // refused.
     assert_eq!(names(&schema["required"]), names(&no_bbox));
     for k in names(&no_bbox) {
         let t = with(|m| {
@@ -305,7 +321,11 @@ fn the_json_schema_matches_the_reader() {
         });
         assert!(Entry::from_target("np.places.tgd", &t).is_err(), "{k}");
     }
-    for (k, sub) in [("pack", "pack"), ("transport", "transport")] {
+    for (k, sub) in [
+        ("pack", "pack"),
+        ("transport", "transport"),
+        ("block_hashes", "block_hashes"),
+    ] {
         assert_eq!(
             names(&schema["properties"][k]["required"]),
             names(&written[sub]),

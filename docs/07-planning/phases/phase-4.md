@@ -178,8 +178,16 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   recorded difference (key IDs against keys); the corpus is checked in and the `tuf-oracle` job
   regenerates it; five planted faults and a falsified verdict each fail
 - [ ] The same corpus against `tough`, in its own crate outside the workspace
-- [ ] Repository tooling in `xtask`: sign, publish metadata to Pages, upload to sharded immutable
-  releases, the scheduled timestamp job; key ceremony and rotation drill documented
+- [x] Repository tooling ([research](../../02-research/notes/catalog-repository-tooling.md),
+  2026-11-10, D-162, D-163): `sync::repo` writes and signs the roles with the client's canonical
+  JSON; `xtask tuf` keygen, pubkey, root, sign, release (assets and catalog entries from packs),
+  timestamp, verify; the rotation drill as a test; python-tuf reads what it writes; five planted
+  faults each fail
+- [x] The timestamp workflow `catalog-timestamp` (daily, 14-day expiry, fails 7 days before
+  expiry), off until the maintainer's first ceremony; the [ceremony
+  document](../../06-engineering/catalog-keys.md) (2026-11-10, D-163)
+- [ ] Upload to sharded immutable releases (at most 1,000 assets each) and the first ceremony
+  (the maintainer: keys, the `catalog` branch and Pages, the environment secret)
 - [ ] Discovery: `catalog.find(name)` over the baseline (and the gazetteer pack when present),
   then the locator, then the catalog; `Resolver` trait
 
@@ -261,3 +269,5 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.3: the root cap is python-tuf's 512,000 B, not 64 KiB | D-159 |
 | 2026-11-10 | 4.3: the catalog gives sizes per component and the head hash, not one target per component | D-160 |
 | 2026-11-10 | 4.3: the differential split: python-tuf done, `tough` its own item | D-161 |
+| 2026-11-10 | 4.3: repository tooling split into the writer and `xtask tuf`, and the workflow and ceremony | [catalog repository tooling](../../02-research/notes/catalog-repository-tooling.md) |
+| 2026-11-10 | 4.3: catalog sizes count the head, seek table and BLOCK_HASHES; targets SHA-256 only; tooling and workflow done, upload and the ceremony their own item | D-162, D-163 |

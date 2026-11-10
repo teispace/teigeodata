@@ -18,7 +18,7 @@ Rules for writing here: [CONVENTIONS.md](CONVENTIONS.md).
 | What we learned | `02-research/notes/` |
 | How it is built | [architecture overview](04-architecture/overview.md), [pack format](04-architecture/pack-format.md), [transport](04-architecture/transport.md), [forge](04-architecture/forge.md) |
 | The data | [schema](05-data/schema.md), [adding a country](05-data/adding-a-country.md), [Nepal](05-data/countries/np.md) |
-| How we work | [quality bar](06-engineering/quality-bar.md), [CI](06-engineering/ci.md), [versions](06-engineering/versions.md), [resources](06-engineering/resources.md), [benchmarks](06-engineering/benchmarks.md) |
+| How we work | [quality bar](06-engineering/quality-bar.md), [CI](06-engineering/ci.md), [versions](06-engineering/versions.md), [resources](06-engineering/resources.md), [benchmarks](06-engineering/benchmarks.md), [catalog keys](06-engineering/catalog-keys.md) |
 | How to contribute a specific thing | `09-guidelines/`, and [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Words we use | [glossary](GLOSSARY.md) |
 | Agent and session rules | [AGENTS.md](../AGENTS.md) |
