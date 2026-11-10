@@ -46,8 +46,9 @@ A short status. The numbers and evidence live in each phase file and the
   30 kB, `tz_at` agrees with a city's own zone at 97.57% of cities); slices keep the names
   their world row would (D-152: Nepal's slice 73 kB, −54%); the baseline ships as one merged
   file (D-153: `forge embed`, 5.90 MB, the engine's `baseline` feature), and the world meets each
-  pack country on its slice's line (D-154: every place answers as the layers do). Next: 4.3 TUF
-  trust; discovery over the baseline with the catalog.
+  pack country on its slice's line (D-154: every place answers as the layers do); main's
+  world admin 0 and 1 to come from Overture's OSM-derived divisions (D-155, researched). Next:
+  the five D-155 steps in phase 4.2, then 4.3 TUF trust.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).
 - **Waiting on the maintainer:** review of `data/countries/np/corrections/` (unreviewed), the labelled sample (Q-005, needed for `ACCURACY.md` and M3),

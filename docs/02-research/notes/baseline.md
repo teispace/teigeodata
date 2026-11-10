@@ -333,13 +333,13 @@ index).
 - D-152: a slice keeps the names its world row would, and rebuilds SEARCH from them.
 - D-153: the baseline ships as one merged file, not layers; Z1 gates it in `forge embed`.
 - Pinned: `ne-admin0-nep` (2026-11-10), `ne-admin1` (2026-11-10, D-150) and
-  `geonames-cities15000` (2026-11-09). Still to come: OSM admin 1 extracts for main.
+  `geonames-cities15000` (2026-11-09). Still to come: main's OSM admin 1, from Overture divisions (D-155, [world admin 1 from OSM](world-admin1-osm.md)).
 
 ## 7. Risks and open items
 
-- Main's OSM admin 1 for the world needs a boundary-only extract (`osmium tags-filter` on the
-  planet) in a CI job with the disk for it; until that job exists, main uses Natural Earth's
-  cut admin 1 as lite does (D-150).
+- Main's OSM admin 1 for the world comes from Overture's divisions, not a planet extract
+  (D-155, [world admin 1 from OSM](world-admin1-osm.md)); until it is built, main uses Natural
+  Earth's cut admin 1 as lite does (D-150).
 - Natural Earth's admin 1 is drawn independently of its admin 0: the two disagree by a few
   metres along shared borders (§3.9), which the 10 m parent limit allows. A new release that
   disagrees more fails G-topo and is measured again before the limit moves.

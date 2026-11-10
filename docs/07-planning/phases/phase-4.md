@@ -128,7 +128,18 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   (D-154)
 - [x] Pin `geonames-cities15000` (D-145) and `ne-admin0-nep` (D-147)
 - [x] Pin `ne-admin1` (D-150)
-- [ ] The OSM boundary extract as a CI job (main's per-country admin 1)
+- [x] Research main's OSM admin 1: Overture `divisions`, not a planet extract; main's admin 0
+  from the same lines, Natural Earth's Nepal view as the owner of disputed units (D-155,
+  [world admin 1 from OSM](../../02-research/notes/world-admin1-osm.md))
+- [ ] Pin `overture-division-area` and `overture-division` (tilesets of the release's part
+  files)
+- [ ] `read::overture`: streamed row groups, land countries, dependencies and regions, WKB on
+  the 1e-7° grid, Wikidata and OSM relation from `division`
+- [ ] Pre-simplification per country as shared arcs within 100 m; gate: noded, shared borders
+  one arc
+- [ ] `forge world` main on Overture: units owned by the Nepal view, countries dissolved from
+  units, the ownership width measured on known disputes; Z1, ID and locator gates
+- [ ] The data-build job fetches the pinned Overture tilesets for main's world part
 - [x] The locator: `countries_near` and `missing_packs` by distance on the stored outlines
   (no buffered REGION, so no bytes), `LOCATOR_RADIUS_M` = the world part's 1 km tolerance;
   border-probe gate: no missed country over about 110,000 source vertices (D-149,
@@ -219,3 +230,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.2: slice names cut to the world part's languages, so slices fit the budget | D-152 |
 | 2026-11-10 | 4.2: the baseline ships as one merged file; neighbours cut to pack outlines added | D-153 |
 | 2026-11-10 | 4.2: neighbours cut to pack outlines done | D-154 |
+| 2026-11-10 | 4.2: the OSM extract item becomes Overture divisions for main's admin 0 and 1, in five steps | D-155 |
