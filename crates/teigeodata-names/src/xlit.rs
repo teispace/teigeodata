@@ -1166,13 +1166,13 @@ fn lattice(profile: &Profile, model: &Model, scratch: &mut Scratch, w: &str, out
         return;
     };
     scratch.text.clear();
-    while let Some(nd) = scratch.nodes.get(node as usize) {
-        for k in (nd.start..nd.start + nd.len).rev() {
+    while let Some(at) = scratch.nodes.get(node as usize) {
+        for k in (at.start..at.start + at.len).rev() {
             if let Some(&c) = scratch.chars.get(k as usize) {
                 scratch.text.push(c);
             }
         }
-        node = nd.parent;
+        node = at.parent;
     }
     scratch.word.clear();
     scratch.word.extend(scratch.text.iter().rev());
