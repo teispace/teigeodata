@@ -275,11 +275,11 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-core"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "teigeodata-engine"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "arc-swap",
  "memmap2",
@@ -290,7 +290,7 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-format"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "blake3",
  "ed25519-dalek",
@@ -302,7 +302,7 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-names"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "unicode-normalization",
  "unicode-script",
