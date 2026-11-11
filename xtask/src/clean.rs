@@ -5,13 +5,18 @@ use std::path::Path;
 use std::process::Command;
 
 /// Removes incremental caches and scratch directories of both workspaces (the main one and
-/// `forge/`); with `all`, runs `cargo clean` in both too. The fetched sources in
-/// `data/cache/store/` are kept: they are pinned inputs, not build output.
+/// `forge/`) and the forge's transient scratch (`data/build/tz-rules`); with `all`, also the
+/// built packs and stage outputs in `data/build/` (a Nepal rebuild takes minutes) and runs
+/// `cargo clean` in both workspaces. The fetched sources in `data/cache/store/` are kept:
+/// they are pinned inputs, not build output.
 pub(crate) fn run(root: &Path, all: bool) -> Result<String, Vec<String>> {
     let mut removed = Vec::new();
     let mut problems = Vec::new();
 
-    let mut candidates = vec![root.join("scratch"), root.join("data/build")];
+    let mut candidates = vec![root.join("scratch"), root.join("data/build/tz-rules")];
+    if all {
+        candidates.push(root.join("data/build"));
+    }
     for target in [root.join("target"), root.join("forge/target")] {
         for profile_dir in read_dirs(&target) {
             candidates.push(profile_dir.join("incremental"));

@@ -64,8 +64,9 @@ Tasks:
                     `sources`, one asset per file named by its SHA-256 (D-127); needs `gh`.
   tuf <command>     The catalog repository (D-163): keygen, pubkey, root, sign,
                     release, timestamp, verify; `cargo xtask tuf` lists them.
-  clean [--all]     Free disk: incremental caches and scratch of both workspaces; --all
-                    also runs `cargo clean` in both. Fetched sources are kept.
+  clean [--all]     Free disk: incremental caches and scratch of both workspaces (built
+                    packs in data/build/ are kept); --all also removes data/build/ and
+                    runs `cargo clean` in both. Fetched sources are kept.
   sizes [--native|--wasm]
                     Z2: the bytes each feature set of core and format adds to a linked
                     library, native and wasm32, raw and gzipped (tools/size-probe).
