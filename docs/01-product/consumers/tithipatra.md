@@ -30,6 +30,26 @@ and offsets; teistro: civil-time policy, sky and calendars, and the adapter).
 | TG-08 | Zones before 1970 (`backzone`) | 4.9b (research) | done (research) | this change | [Note](../../02-research/notes/zones-before-1970.md): tzdb 2026f's `backzone` has no South Asian zone (only a commented-out `Asia/Chennai` placeholder), so a backzone build changes no South Asian instant; the default build already carries `Asia/Kolkata`'s Madras time (+05:21:10) and IST since 1906, and the war-time +06:30. No outline source exists for Bombay or Calcutta time (timezone-boundary-builder issue 171 is open), so a pre-1955 Mumbai instant reads `Asia/Kolkata` and we ship nothing invented. Whether the rules are built with `backzone` limited to `zone.tab` is decided with TG-03 |
 | TG-09 | Horizon profile from the DEM | [ideas](../ideas.md) | idea | | Scheduled after the DEM ships in releases |
 
+## Addendum 1: offline first (2026-11-11)
+
+The maintainer handed over addendum 1 (D-275, D-276 on Tithipatra's side): one embedded file,
+15 MB on the wire at most (10 MB the target), with the world, Nepal in full and India's towns,
+every place named in Nepali and English. Accepted as D-213, and placed before our accuracy
+labels. Plan: [embedded layer](../../02-research/notes/embedded-layer.md).
+
+| TG | Request | Status | Notes |
+|---|---|---|---|
+| TG-11 | Size report per component and language | done | `cargo xtask pack-sizes <pack> --langs ne,en`; tables in [sizes](../../05-data/sizes.md). Finding: only 9.1% of Nepal's places (main) and 0.7% of world cities have a Devanagari name today |
+| TG-12 | Embedded layer from a profile | planned | |
+| TG-13 | World cities of 5,000 with heights | planned | |
+| TG-14 | Nepali and English for every place | planned | the largest data gap; transliteration research first |
+| TG-15 | India: towns, then villages | planned | research note first |
+| TG-16 | Outlines only as fine as needed | planned | Nepal at 20 m keeps 21% of vertices |
+| TG-17 | Opens fast, searches fast, small in memory | planned | SUBSTRING derived on the device: byte-identical in 0.38 s for Nepal |
+| TG-18 | Search at the MVP's bar, strict-tier option | planned | please send the MVP's test cases |
+| TG-19 | `reverse` with distance, bearing, inside | planned | |
+| TG-10 | Coarse elevation layer | planned | |
+
 ## Questions back
 
 - TG-02: the codes come from a per-entry call, `iso_code(&place)`, not inside `admin_at`'s and
@@ -49,3 +69,4 @@ and offsets; teistro: civil-time policy, sky and calendars, and the adapter).
 |---|---|---|
 | 2026-11-11 | First reply: every TG placed in the plan | Tithipatra's brief (D-193) |
 | 2026-11-11 | TG-06 done; both TG-06 questions stay open | D-199 |
+| 2026-11-11 | Addendum 1 accepted and placed; TG-11 done | D-213 |

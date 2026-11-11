@@ -70,6 +70,42 @@ impl Wire {
         out
     }
 
+    /// The transport asset's bytes.
+    pub(crate) const fn asset(&self) -> u64 {
+        self.0.asset
+    }
+
+    /// [`Wire::report`] with each component's raw and wire bytes per place (`places`).
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "bytes per place shown with two decimals"
+    )]
+    pub(crate) fn report_per_place(&self, places: usize) -> String {
+        let per = |b: u64| b as f64 / places.max(1) as f64;
+        let mut out = String::from(
+            "| Component | Disk B | Wire B | Disk B/place | Wire B/place | Download with what it needs |\n|---|--:|--:|--:|--:|--:|\n",
+        );
+        for (&c, &(raw, wire)) in &self.0.parts {
+            let _ = writeln!(
+                out,
+                "| {} | {raw} | {wire} | {:.2} | {:.2} | {} |",
+                c.name(),
+                per(raw),
+                per(wire),
+                self.of(Components::of(&[c]))
+            );
+        }
+        let _ = writeln!(
+            out,
+            "| head and seek table | | {} | | | |\n| BLOCK_HASHES | | {} | | | |\n| **asset** | | {} | | {:.2} | |",
+            self.0.fixed,
+            self.0.hashes,
+            self.0.asset,
+            per(self.0.asset)
+        );
+        out
+    }
+
     /// The table: each component's raw and wire bytes, and what a client downloads for it with
     /// everything it needs.
     pub(crate) fn report(&self) -> String {

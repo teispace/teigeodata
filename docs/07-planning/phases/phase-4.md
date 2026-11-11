@@ -319,6 +319,28 @@ The first consumer brief (Tithipatra, 2026-11-11, D-193); the reply and statuses
 - [x] TG-08: research note on zones before 1970 (`backzone`) for South Asia
   ([note](../../02-research/notes/zones-before-1970.md): backzone adds no South Asian zone)
 
+### 4.9c Consumer requests: offline first (addendum 1, D-213)
+
+Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuses on the
+[consumer page](../../01-product/consumers/tithipatra.md).
+
+- [x] TG-11: `cargo xtask pack-sizes` (components on disk and wire and per place, columns,
+  names by language and script, the names cut to a profile's languages, outlines by admin
+  level and level of detail); tables in [sizes](../../05-data/sizes.md) (2026-11-11)
+- [ ] Everything separable (D-213): names by language and outlines by admin level and level
+  of detail as their own components, each sized in the catalog; the profile and the client
+  pick any set
+- [ ] Derive SUBSTRING on the device (engine feature `derive`), checked by digest
+- [ ] TG-12: `forge embed` from a profile file; a second, smaller profile
+- [ ] Nepal in full in the embedded layer
+- [ ] TG-13: world cities of 5,000 with heights; TG-14: Nepali and English names for every
+  place (research note on transliteration first)
+- [ ] TG-16: outline tolerance measured, Nepal's border exact
+- [ ] TG-15: India research note, then towns
+- [ ] TG-18, TG-19 and the strict-tier option
+- [ ] TG-17: phone-class benches with gates
+- [ ] TG-10: coarse elevation layer
+
 ### 4.10 Exit review
 - [ ] M4 criteria met, each with its evidence; progress updated
 
@@ -382,3 +404,4 @@ The first consumer brief (Tithipatra, 2026-11-11, D-193); the reply and statuses
 | 2026-11-11 | 4.9b: the first consumer brief's requests placed (TG-01 to TG-08) | D-193 |
 | 2026-11-11 | 4.9b TG-02 done: ISO codes in their own `admin` section; `split.yaml` takes part addresses from `iso3166.yaml`; the world part's codes wait for CLDR | D-197 |
 | 2026-11-11 | 4.9b TG-06 done: substring search in its own section and component | D-199 |
+| 2026-11-11 | 4.9c: Tithipatra's addendum 1 placed; TG-11 done; indexes may be derived on the device | D-213 |

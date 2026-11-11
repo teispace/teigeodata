@@ -8,6 +8,7 @@
 )]
 
 mod bindings;
+mod breakdown;
 mod clean;
 mod commit;
 mod corrections;
@@ -52,6 +53,10 @@ Tasks:
                     each section's size; G-wire: the transport asset's bytes per
                     component add up, and each fits the country's wire_kb (D-135);
                     --dump writes each section's bytes to <dir>.
+  pack-sizes <pack.tgd> [--langs ne,en]
+                    TG-11: where a pack's bytes go: each component on disk and on the
+                    wire and per place, each column, names by language (and the names
+                    section cut to --langs), outlines by admin level and level of detail.
   check-workspace   Check that the forge, bindings/ and the C ABI crate keep the main lint
                     table (boundary crates may only lower unsafe_code to deny).
   mirror [<id>…]    Upload the stored bytes of pinned sources (every source with a
@@ -85,6 +90,7 @@ fn main() -> ExitCode {
         }
         "check-data" => report(data::check(&root)),
         "check-pack" => report(pack::run(&root, rest)),
+        "pack-sizes" => report(breakdown::run(rest)),
         "check-workspace" => report(workspace::check(&root)),
         "mirror" => report(mirror::run(&root, rest)),
         "tuf" => report(tuf::run(rest)),
