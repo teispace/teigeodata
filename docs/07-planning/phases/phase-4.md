@@ -236,9 +236,10 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   - [x] (b) macOS `URLSession`, foreground and background, `Range` kept across a redirect (D-184)
   - [x] (c) The iOS simulator: a background session, the app killed mid-download and relaunched
     by the system, the range filed and the pack committed (D-185)
-  - [ ] (d) Android UIDT on the emulator
-  - [ ] (e) The browser: ranged `fetch` into OPFS in a worker, over localhost (the CORS mirror
-    is Q-014)
+  - [x] (d) Android UIDT on the emulator: the job restarted by the system after its process is
+    killed (D-186)
+  - [x] (e) The browser: ranged `fetch` into OPFS in a worker across origins, resumed from OPFS
+    after the browser is killed (D-186; the CORS mirror for the real hosts is Q-014)
 
 ### 4.6 Storage manager
 - [x] Installed list, quota, LRU eviction with pinning and dependency protection, the disk-peak
@@ -336,3 +337,4 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
 | 2026-11-11 | 4.9d done; the store gains `init` and `config.json`; the asset measurement moves into `sync::measure` | D-182: the end-to-end test found two store bugs the unit tests missed |
 | 2026-11-11 | 4.9e done; timings are an ignored test (median of 15 runs) instead of `hyperfine`; the guide is the crate's README until the docs site | D-183 |
 | 2026-11-11 | Gate 14 split into (a) to (e); platforms install in passes over one installer | D-184, [platform transports](../../02-research/notes/platform-transports.md) |
+| 2026-11-11 | Gate 14 met by prototypes on macOS, the iOS simulator, the Android emulator and headless Chrome | D-185, D-186 |

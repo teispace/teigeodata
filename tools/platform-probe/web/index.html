@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>teigeodata probe</title>
+<!--
+  The browser prototype's page (D-184), run headless by run-web.sh. It reads `pending.json`
+  (a `tgd install --downloads` listing), runs worker.js, then hands every whole file in OPFS
+  `dl/` back to the host with PUT /upload/dl/<asset>/<file> so the real installer checks them,
+  and PUTs its results to /upload/results-<round>.json. `started-<round>` marks the moment the
+  big download began, for the script to kill the browser mid-way.
+-->
+<script type="module">
+const round = new URLSearchParams(location.search).get("round");
+const put = (path, body) => fetch(`/upload/${path}`, { method: "PUT", body });
+const pending = await (await fetch(`pending-${round}.json`)).json();
+const worker = new Worker("worker.js");
+const results = await new Promise((resolve) => {
+  worker.onmessage = (e) => {
+    if (e.data.progress) put(`started-${round}`, e.data.progress);
+    if (e.data.results) resolve(e.data.results);
+  };
+  worker.postMessage({ pending });
+});
+const root = await navigator.storage.getDirectory();
+const dl = await root.getDirectoryHandle("dl", { create: true });
+for await (const [asset, dir] of dl.entries()) {
+  for await (const [name, file] of dir.entries()) {
+    if (name.endsWith(".part")) continue;
+    await put(`dl/${asset}/${name}`, await file.getFile());
+  }
+}
+const persisted = await navigator.storage.persisted();
+await put(`results-${round}.json`, JSON.stringify({ results, persisted, crossOrigin: true }));
+</script>

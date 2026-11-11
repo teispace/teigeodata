@@ -9,14 +9,17 @@
 - Every request is logged as one JSON line to `--log`: method, path, range, status, bytes.
 - `--rate N`: bodies are sent at about N bytes a second, so a download is still running when a
   prototype suspends or kills its app.
+- `--upload DIR`: `PUT /upload/<path>` writes the body to `DIR/<path>`, for the browser
+  prototype to hand back what it downloaded into OPFS (localhost only, paths kept inside DIR).
 
-Standard library only. Usage: serve.py DIR [--port N] [--redirect] [--log FILE] [--rate N]
+Standard library only. Usage: serve.py DIR [--port N] [--redirect] [--log FILE] [--rate N] [--upload DIR]
 """
 
 import argparse
 import hashlib
 import http.server
 import json
+import mimetypes
 import os
 import re
 import sys
@@ -25,7 +28,7 @@ import time
 RANGE = re.compile(r"^bytes=(\d+)-(\d*)$")
 
 
-def make_handler(root, redirect, log, rate):
+def make_handler(root, redirect, log, rate, upload):
     class Handler(http.server.BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
@@ -40,7 +43,8 @@ def make_handler(root, redirect, log, rate):
 
         def cors(self):
             self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Allow-Headers", "Range")
+            self.send_header("Access-Control-Allow-Headers", "Range, Content-Type")
+            self.send_header("Access-Control-Allow-Methods", "GET, PUT, OPTIONS")
             self.send_header("Access-Control-Expose-Headers", "Content-Range, ETag, Content-Length")
 
         def do_OPTIONS(self):
@@ -49,6 +53,27 @@ def make_handler(root, redirect, log, rate):
             self.send_header("Content-Length", "0")
             self.end_headers()
             self.record(204, 0, None)
+
+        def do_PUT(self):
+            n = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(n)
+            path = self.path.split("?", 1)[0]
+            status = 404
+            if upload and path.startswith("/upload/"):
+                base = os.path.realpath(upload)
+                full = os.path.realpath(os.path.join(base, path[len("/upload/"):]))
+                if full.startswith(base + os.sep):
+                    os.makedirs(os.path.dirname(full), exist_ok=True)
+                    tmp = full + ".tmp"
+                    with open(tmp, "wb") as f:
+                        f.write(body)
+                    os.replace(tmp, full)
+                    status = 201
+            self.send_response(status)
+            self.cors()
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            self.record(status, n, None)
 
         def do_GET(self):
             rng = self.headers.get("Range")
@@ -97,7 +122,8 @@ def make_handler(root, redirect, log, rate):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("ETag", etag)
             self.send_header("Accept-Ranges", "bytes")
-            self.send_header("Content-Type", "application/octet-stream")
+            kind = mimetypes.guess_type(full)[0] or "application/octet-stream"
+            self.send_header("Content-Type", kind)
             self.cors()
             self.end_headers()
             try:
@@ -123,9 +149,17 @@ def main():
     p.add_argument("--redirect", action="store_true")
     p.add_argument("--log", default=os.devnull)
     p.add_argument("--rate", type=int, default=0)
+    p.add_argument("--upload", default=None)
     a = p.parse_args()
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", a.port),
-                                             make_handler(a.root, a.redirect, a.log, a.rate))
+    class Server(http.server.ThreadingHTTPServer):
+        def handle_error(self, request, client_address):
+            # A client killed mid-request (the prototypes do it on purpose) is not an error.
+            if isinstance(sys.exc_info()[1], (ConnectionResetError, BrokenPipeError)):
+                return
+            super().handle_error(request, client_address)
+
+    server = Server(("127.0.0.1", a.port),
+                    make_handler(a.root, a.redirect, a.log, a.rate, a.upload))
     print(f"http://127.0.0.1:{server.server_address[1]}", flush=True)
     try:
         server.serve_forever()

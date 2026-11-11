@@ -272,3 +272,21 @@ repository with the 302 redirect, the server at 300 kB/s for the big round:
 | 1 | the table and the head, background session | 2 ranges, 206 each, filed |
 | 2 | 2,450,114 bytes; the app killed 2 s in | the daemon finished the download; iOS relaunched the app in the background; the recreated session filed the range (206, exact `Content-Range`) |
 | 3 | `tgd install --downloads` | committed, deep check Good |
+
+On the Android emulator (API 35, arm64, created and deleted by `run-android.sh`), the same
+repository with the 302 redirect, 300 kB/s:
+
+| Round | What happened | Result |
+|---|---|---|
+| 1 | the table and the head, a user-initiated job | 2 ranges, 206 each, filed |
+| 2 | 2,450,114 bytes; the app's process killed with `kill -9` 2 s in | the system restarted the job; it fetched the range again (206, exact `Content-Range`, 8,985 ms) |
+| 3 | `tgd install --downloads` | committed, deep check Good |
+
+In headless Chrome 157 (`run-web.sh`, a profile of its own, the page and the mirror on two
+origins, the 302 redirect, 300 kB/s):
+
+| Round | What happened | Result |
+|---|---|---|
+| 1 | the table and the head, into OPFS | 2 ranges, 206 each, filed |
+| 2 | 2,450,114 bytes; Chrome killed 2 s in, then started again on the same profile | resumed from OPFS at 645,000 bytes with `Range: bytes=645701-2450814` (206, exact `Content-Range`) |
+| 3 | `tgd install --downloads` | committed, deep check Good |

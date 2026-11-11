@@ -88,13 +88,22 @@ against a localhost server that sends the headers.
   14, WorkManager's foreground service is the fallback (developer.android.com, UIDT page,
   fetched 2026-11-11).
 - Inside the job, the app does its own HTTP (OkHttp or `HttpURLConnection`), so ranged requests
-  are ordinary. The prototype measures that the job runs and survives the app being swiped away.
+  are ordinary. **Measured on the API 35 emulator (2026-11-11, D-186):** the job runs as
+  user-initiated after the activity removes its own task, `HttpURLConnection` keeps `Range`
+  across a 302, and when the process is killed mid-download the system restarts the job. The
+  prototype fetches the range again from its start; a real app resumes from the `.part` file's
+  length, as the browser prototype does.
 
 ### 3.3 Web: ranged `fetch` into OPFS
 
 - `FileSystemSyncAccessHandle` (in a dedicated worker) writes at offsets, so a ranged
   response is written where it belongs ([offline loading and trust](offline-loading-and-trust.md)
   §3: Chrome 102, Firefox 111, Safari 15.2 for OPFS).
+- **Measured in headless Chrome 157 (2026-11-11, D-186):** a worker writes each chunk at its
+  offset through the sync access handle, across origins and a 302; after the browser is killed,
+  the next session resumes each `.part` from its length with a narrower `Range`, and the
+  installer accepts every byte. A browser has no background download, so resume is the web's
+  way to survive being closed.
 - GitHub's release asset downloads send no `Access-Control-Allow-Origin`, even after the
   redirect. GitHub's own forum says the release asset bucket does not support CORS (GitHub
   community discussion 45446; corsfix write-up, fetched 2026-11-11). A browser app needs a
