@@ -1,18 +1,8 @@
 # How `forge make np --split` cuts Nepal into one pack per province (split builds, D-191).
-# Schema: teigeodata/split/v1. Each unit of `level`, by the admin source's key, gets the pack
-# address `<cc>-<code>` from its ISO 3166-2 code (lowercased, the country prefix dropped).
+# Schema: teigeodata/split/v1. Each unit of `level` with an ISO 3166-2 code in iso3166.yaml gets
+# the pack address `<cc>-<code>` (lowercased, the country prefix dropped: NP-P3 → np-p3); the
+# codes and their source live there (one fact, one home, D-197). A split at a level ISO does
+# not code lists `source` and `units` (key → address part) here instead.
 # Nepal ships whole; the split is the forge's gate on real data until a country needs it.
 schema: teigeodata/split/v1
 level: 1
-# ISO 3166-2:NP, the seven provinces (checked 2026-11-11 against the ISO 3166-2:NP table on
-# Wikipedia, which links the ISO Online Browsing Platform, and Statoids' provinces of Nepal);
-# COD-AB v02 P-codes NP01 to NP07 name the same provinces in the same order.
-source: "ISO 3166-2:NP via https://en.wikipedia.org/wiki/ISO_3166-2:NP and https://statoids.com/unp.html (2026-11-11)"
-units:
-  "admin:NP01": p1  # Koshi
-  "admin:NP02": p2  # Madhesh
-  "admin:NP03": p3  # Bagmati
-  "admin:NP04": p4  # Gandaki
-  "admin:NP05": p5  # Lumbini
-  "admin:NP06": p6  # Karnali
-  "admin:NP07": p7  # Sudurpashchim

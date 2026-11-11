@@ -42,6 +42,7 @@ mod elevation;
 pub(crate) mod embed;
 pub(crate) mod geometry;
 mod ids;
+mod iso;
 mod naming;
 mod pack;
 mod population;
@@ -230,13 +231,15 @@ fn topology(root: &Path, a: &Args) -> Result<Option<geometry::Geometry>, String>
 }
 
 /// What the pack stage reads beside the places: where it writes, the ID registry, the
-/// topology and the timezones the sources state.
+/// topology, the timezones the sources state and the ISO 3166 codes.
 struct PackInputs {
     file: PathBuf,
     ids_file: PathBuf,
     registry: ids::Registry,
     geometry: Option<geometry::Geometry>,
     stated_tz: BTreeMap<String, String>,
+    /// The country's ISO 3166 codes (D-197), when it has `iso3166.yaml`.
+    iso: Option<iso::Iso>,
 }
 
 impl PackInputs {
@@ -247,6 +250,7 @@ impl PackInputs {
             registry: registry(root, a.ids.as_deref())?,
             geometry: topology(root, a)?,
             stated_tz: zones::stated(&root.join("data/build"), sources)?,
+            iso: iso::read(root, &a.cc)?,
         })
     }
 }
@@ -335,7 +339,6 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let elevations = elevation::load(root, g.dem.as_deref(), &places)?;
 
     let f = PackInputs::read(root, &a, &g.sources, &out_dir)?;
-    let outline = first_level(&units.levels);
     let input = pack::Input {
         root,
         args: &a,
@@ -351,9 +354,11 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         geometry: f.geometry.as_ref(),
         postal: g.postal.as_ref(),
         elevation: elevations.as_ref(),
-        outline: &outline,
+        // The country's area, its DEM's mask (D-192).
+        outline: &first_level(&units.levels),
         attribution: &g.attribution,
         stated_tz: &f.stated_tz,
+        iso: f.iso.as_ref(),
     };
     let report = packs(
         &input,

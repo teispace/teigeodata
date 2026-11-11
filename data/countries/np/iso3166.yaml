@@ -1,0 +1,28 @@
+# ISO 3166 codes of Nepal's country row and units (principle P16: countries are data; D-197).
+# Schema: teigeodata/iso3166/v1. The pack stage writes them to ISO_CODES and gate G-iso checks
+# them; split.yaml takes each part's address from these codes.
+schema: teigeodata/iso3166/v1
+# ISO 3166-1 alpha-2 of the country row; equals profile.yaml's country.
+country: NP
+# The ISO change last checked, and where. P1 to P7 were added on 2018-11-26 and have been the
+# only first-level codes since the development regions and zones were deleted on 2022-11-29;
+# the change of 2023-11-23 renamed NP-P1 (Koshi). CLDR's validity list has the same seven
+# (npp1~7). COD-AB v02 P-codes NP01 to NP07 name the same provinces in the same order.
+source: "ISO 3166-2:NP, OBP change 2023-11-23, via https://en.wikipedia.org/wiki/ISO_3166-2:NP (checked 2026-11-11); Wikidata P300; CLDR validity/subdivision.xml (2026-11-11)"
+# Pack builds: the admin source's key of each unit and its code.
+units:
+  "admin:NP01": NP-P1  # Koshi
+  "admin:NP02": NP-P2  # Madhesh
+  "admin:NP03": NP-P3  # Bagmati
+  "admin:NP04": NP-P4  # Gandaki
+  "admin:NP05": NP-P5  # Lumbini
+  "admin:NP06": NP-P6  # Karnali
+  "admin:NP07": NP-P7  # Sudurpashchim
+# World sources that state a code ISO has since changed. Nepal's world rows are replaced by
+# its own slice (D-153), so none is needed.
+renamed: []
+# Current units with no ISO code, each with its reason.
+no_code: {}
+# Former units (FLAG_FORMER) keeping their deleted code. Nepal's former zones and regions come
+# from the points sources, not the admin source, so they have no admin key to map yet.
+former: {}

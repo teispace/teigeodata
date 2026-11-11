@@ -26,6 +26,7 @@ use unicode_script::Script;
 
 use crate::corrections;
 use crate::golden;
+use crate::iso3166;
 use crate::lexicon::{self, Evidence, EvidenceKind, Native, Status};
 use crate::postal;
 use crate::recipe;
@@ -147,6 +148,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     let mut postal_codes = 0usize;
     let mut fixes = 0usize;
     let mut split_units = 0usize;
+    let mut iso_units = 0usize;
     let mut scheme_ids = BTreeSet::new();
     let mut lexicons = Vec::new();
     let profiles = romanise::ids(root);
@@ -188,8 +190,14 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
             postal_codes += n;
             problems.extend(found.into_iter().map(|p| format!("{at}/postal.yaml: {p}")));
         }
+        let iso = path.join("iso3166.yaml");
+        if let Ok(text) = fs::read_to_string(&iso) {
+            let (n, found) = iso3166::check_text(cc, &text);
+            iso_units += n;
+            problems.extend(found.into_iter().map(|p| format!("{at}/iso3166.yaml: {p}")));
+        }
         if let Ok(text) = fs::read_to_string(path.join("split.yaml")) {
-            let (n, found) = split::check_text(&text);
+            let (n, found) = split::check_text(&text, iso.exists());
             split_units += n;
             problems.extend(found.into_iter().map(|p| format!("{at}/split.yaml: {p}")));
         }
@@ -224,7 +232,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     }
     if problems.is_empty() {
         Ok(format!(
-            "data ok: {} countries, {terms} lexicon terms, {queries} golden query entries, {postal_codes} postal codes, {fixes} corrections, {split_units} split units, {profiles} romanisation profiles, {pinned} pinned sources checked",
+            "data ok: {} countries, {terms} lexicon terms, {queries} golden query entries, {postal_codes} postal codes, {fixes} corrections, {split_units} split units, {iso_units} ISO-coded units, {profiles} romanisation profiles, {pinned} pinned sources checked",
             countries.len()
         ))
     } else {

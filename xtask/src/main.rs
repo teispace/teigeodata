@@ -14,6 +14,7 @@ mod corrections;
 mod data;
 mod docs;
 mod golden;
+mod iso3166;
 mod lexicon;
 mod mirror;
 mod pack;

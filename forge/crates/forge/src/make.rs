@@ -665,7 +665,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let dem_key = dem_stage(root, &recipe, &lock, lite, &mut r)?;
 
     // build: the conflation (and core), the topology, the admin and timezone sources, the
-    // postal and naming inputs, the arguments, the ID registry and the signing seed.
+    // postal, naming and ISO 3166 inputs, the arguments, the ID registry and the signing seed.
     let mut build_args: Vec<String> = vec![cc.clone(), "--topology".to_string()];
     build_args.extend(pass.iter().cloned());
     if let Some((run, _)) = &core_key {
@@ -691,6 +691,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         &names_inputs(root, &country)?,
         &corrections_inputs(&country)?,
         &split_input(&pass, &country)?,
+        &read_or_empty(&country.join("iso3166.yaml"))?,
         build_args.join("\0").as_bytes(),
         &file("--ids")?,
         blake3::hash(&file("--key")?).as_bytes(),

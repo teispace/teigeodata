@@ -1,6 +1,8 @@
 //! `split.yaml` (schema `teigeodata/split/v1`): the admin level a country's split build cuts at
-//! and each unit's address code (D-191, ADR-0010). Checked by `check-data`; `forge make --split`
-//! also checks that every unit is a place of the build at that level.
+//! and, at a level ISO 3166-2 does not code, each unit's address code (D-191, ADR-0010). Without
+//! `units`, each unit's address comes from its ISO code in `iso3166.yaml` (D-197), which must
+//! then exist. Checked by `check-data`; `forge make --split` also checks that every unit is a
+//! place of the build at that level.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -15,8 +17,8 @@ const SCHEMA: &str = "teigeodata/split/v1";
 struct Split {
     schema: String,
     level: u8,
-    source: String,
-    units: BTreeMap<String, String>,
+    source: Option<String>,
+    units: Option<BTreeMap<String, String>>,
 }
 
 /// Whether `code` can be the part of a pack address after `<cc>-`: lower-case ASCII letters,
@@ -31,8 +33,9 @@ fn is_code(code: &str) -> bool {
         && !code.ends_with('-')
 }
 
-/// The problems of one `split.yaml`, and its number of units.
-pub(crate) fn check_text(text: &str) -> (usize, Vec<String>) {
+/// The problems of one `split.yaml`, and its number of units; `iso` is whether the country has
+/// an `iso3166.yaml` to take the units from.
+pub(crate) fn check_text(text: &str, iso: bool) -> (usize, Vec<String>) {
     let s: Split = match serde_saphyr::from_str(text) {
         Ok(s) => s,
         Err(e) => return (0, vec![e.to_string()]),
@@ -47,14 +50,27 @@ pub(crate) fn check_text(text: &str) -> (usize, Vec<String>) {
             s.level
         ));
     }
-    if !has_date(&s.source) {
+    let (source, units) = match (s.source, s.units) {
+        (None, None) => {
+            if !iso {
+                out.push("no units, and no iso3166.yaml to take them from".to_owned());
+            }
+            return (0, out);
+        }
+        (Some(source), Some(units)) => (source, units),
+        _ => {
+            out.push("source and units go together".to_owned());
+            return (0, out);
+        }
+    };
+    if !has_date(&source) {
         out.push("source must name where the codes come from, with the date read".to_owned());
     }
-    if s.units.is_empty() {
+    if units.is_empty() {
         out.push("no units".to_owned());
     }
     let mut seen = BTreeSet::new();
-    for (key, code) in &s.units {
+    for (key, code) in &units {
         if key.trim().is_empty() {
             out.push("a unit with an empty key".to_owned());
         }
@@ -66,7 +82,7 @@ pub(crate) fn check_text(text: &str) -> (usize, Vec<String>) {
             out.push(format!("{key}: code {code:?} is used twice"));
         }
     }
-    (s.units.len(), out)
+    (units.len(), out)
 }
 
 #[cfg(test)]
@@ -77,7 +93,10 @@ mod tests {
 
     #[test]
     fn a_good_split_passes() {
-        assert_eq!(check_text(GOOD), (2, Vec::new()));
+        assert_eq!(check_text(GOOD, false), (2, Vec::new()));
+        // Units from iso3166.yaml.
+        let iso = "schema: teigeodata/split/v1\nlevel: 1\n";
+        assert_eq!(check_text(iso, true), (0, Vec::new()));
     }
 
     #[test]
@@ -93,9 +112,19 @@ mod tests {
                 GOOD.replace("level: 1\n", "level: 1\nextra: 2\n"),
                 "unknown field",
             ),
+            (
+                GOOD.replace("source: ISO 3166-2 (2026-11-11)\n", ""),
+                "go together",
+            ),
         ] {
-            let (_, found) = check_text(&bad);
+            let (_, found) = check_text(&bad, true);
             assert!(found.iter().any(|f| f.contains(want)), "{want}: {found:?}");
         }
+        // No units and no iso3166.yaml.
+        let (_, found) = check_text("schema: teigeodata/split/v1\nlevel: 1\n", false);
+        assert!(
+            found.iter().any(|f| f.contains("no iso3166.yaml")),
+            "{found:?}"
+        );
     }
 }

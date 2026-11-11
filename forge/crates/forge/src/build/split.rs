@@ -2,8 +2,10 @@
 //! one pack per unit of an admin level, each holding its own places and every ancestor of them
 //! as a row (ancestor stubs, D-143), written by the same pack stage as the country pack.
 //!
-//! `data/countries/<cc>/split.yaml` names the level and each unit's address code (its ISO
-//! 3166-2 code). A part holds:
+//! `data/countries/<cc>/split.yaml` names the level; each unit of that level with an ISO 3166-2
+//! code in `iso3166.yaml` gets the address `<cc>-<code>` (lowercased, the country prefix dropped,
+//! D-197), or, at a level ISO does not code, the file lists each unit's address code. A part
+//! holds:
 //! - its own places: those whose chain of parents reaches the unit (the unit included);
 //! - every ancestor of them (the stubs);
 //! - the timezone zones whose box meets the part's box, with their zone places;
@@ -22,6 +24,7 @@ use std::path::Path;
 use teigeodata_core::PlaceKind;
 use teigeodata_format::hierarchy::Hierarchy;
 use teigeodata_format::idmap::IdMap;
+use teigeodata_format::iso_codes::IsoCodes;
 use teigeodata_format::names::Names;
 use teigeodata_format::place_tz::PlaceTz;
 use teigeodata_format::places::Places;
@@ -36,26 +39,84 @@ use crate::geom::{Polygon, clip_ring};
 /// `data/countries/<cc>/split.yaml`.
 #[derive(Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Split {
+struct SplitFile {
     schema: String,
+    level: u8,
+    source: Option<String>,
+    units: Option<BTreeMap<String, String>>,
+}
+
+/// The split a build follows.
+#[derive(Debug, Clone)]
+pub(crate) struct Split {
     /// The admin level whose units are the parts.
     level: u8,
     /// Where the codes come from.
     source: String,
     /// Each unit's address code, by its place key (`admin:NP03` → `p3`).
     units: BTreeMap<String, String>,
+    /// Whether the units are `iso3166.yaml`'s, of any level: the build keeps those at `level`.
+    from_iso: bool,
+}
+
+impl Split {
+    /// The split as it applies to `places`: units from `iso3166.yaml` are only those of its
+    /// level.
+    fn for_places(&self, places: &[Place]) -> Self {
+        if !self.from_iso {
+            return self.clone();
+        }
+        let level: BTreeMap<&str, u8> = places
+            .iter()
+            .map(|p| (p.key.as_str(), p.admin_level))
+            .collect();
+        Self {
+            units: self
+                .units
+                .iter()
+                .filter(|(k, _)| level.get(k.as_str()) == Some(&self.level))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            ..self.clone()
+        }
+    }
 }
 
 const SCHEMA: &str = "teigeodata/split/v1";
 
-/// Reads the country's split, checking its schema, its source and every code.
+/// Reads the country's split, checking its schema, its source and every code; without units
+/// of its own, the units and their codes are `iso3166.yaml`'s.
 pub(crate) fn read(root: &Path, cc: &str) -> Result<Split, String> {
     let path = root.join("data/countries").join(cc).join("split.yaml");
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let s: Split = serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
-    if s.schema != SCHEMA {
+    let f: SplitFile =
+        serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    if f.schema != SCHEMA {
         return Err(format!("{}: schema must be {SCHEMA}", path.display()));
     }
+    let s = match (f.source, f.units) {
+        (Some(source), Some(units)) => Split {
+            level: f.level,
+            source,
+            units,
+            from_iso: false,
+        },
+        (None, None) => {
+            let iso = super::iso::read(root, cc)?.ok_or_else(|| {
+                format!(
+                    "{}: no units, and no iso3166.yaml to take them from",
+                    path.display()
+                )
+            })?;
+            Split {
+                level: f.level,
+                units: iso.addresses(),
+                source: iso.source,
+                from_iso: true,
+            }
+        }
+        _ => return Err(format!("{}: source and units go together", path.display())),
+    };
     if s.source.trim().is_empty() || s.units.is_empty() {
         return Err(format!(
             "{}: a source and at least one unit",
@@ -340,6 +401,7 @@ pub(crate) fn run(
 ) -> Result<String, String> {
     let cc = input.args.cc.as_str();
     let places = input.places;
+    let split = &split.for_places(places);
     let mut report = format!(
         "\n## Split (D-191)\n\nLevel {}, {} parts, codes from {}.\n\n| Part | Own places | Rows | Zones | Bytes |\n|---|---:|---:|---:|---:|\n",
         split.level,
@@ -468,6 +530,7 @@ fn write_part(
         outline,
         attribution: input.attribution,
         stated_tz: input.stated_tz,
+        iso: input.iso,
     };
     let (_, built) = pack::write(&part_input)?;
     let line = format!(
@@ -493,6 +556,7 @@ pub(crate) fn check(
     let w = Opened::new(whole)?;
     let mut owner: BTreeMap<&str, &str> = BTreeMap::new();
     let mut checked = 0_usize;
+    let mut coded = 0_usize;
     let mut opened = Vec::with_capacity(parts.len());
     for (address, own, built) in parts {
         let p = Opened::new(&built.bytes)?;
@@ -526,12 +590,30 @@ pub(crate) fn check(
                     "{address}: {id} ({key}) has another chain of ancestors (a stub is missing)"
                 ));
             }
+            if w.iso(wr) != p.iso(pr) {
+                return Err(format!("{address}: {id} ({key}) has another ISO 3166 code"));
+            }
             if w.zone(wr) != p.zone(pr) {
                 return Err(format!(
                     "{address}: {id} ({key}) has another timezone area (a zone is missing)"
                 ));
             }
             checked += 1;
+        }
+        // Stubs carry their codes too: every row of the part has the country pack's code.
+        for pr in 0..p.places.len() {
+            let id = p
+                .ids
+                .id(pr)
+                .ok_or_else(|| format!("{address}: row {pr} has no ID"))?;
+            let wr = w
+                .ids
+                .row(id)
+                .ok_or_else(|| format!("{address}: {id} is not in the country pack"))?;
+            if w.iso(wr) != p.iso(pr) {
+                return Err(format!("{address}: {id} has another ISO 3166 code"));
+            }
+            coded += usize::from(p.iso(pr).is_some());
         }
         opened.push(p);
     }
@@ -553,7 +635,7 @@ pub(crate) fn check(
         }
     }
     Ok(format!(
-        "Split checked against the country pack: {checked} own places in {} parts keep their ID, point, canonical name, chain of ancestors and timezone area; none is in two parts; all {} rows of the country pack are in a part but {unused} timezone areas that hold no place.",
+        "Split checked against the country pack: {checked} own places in {} parts keep their ID, point, canonical name, chain of ancestors, timezone area and ISO 3166 code; {coded} coded rows (stubs included) carry the country pack's code; none is in two parts; all {} rows of the country pack are in a part but {unused} timezone areas that hold no place.",
         parts.len(),
         w.places.len() - unused
     ))
@@ -577,6 +659,7 @@ struct Opened<'a> {
     names: Names<'a>,
     hier: Hierarchy<'a>,
     tz: Option<PlaceTz<'a>>,
+    iso: Option<IsoCodes<'a>>,
 }
 
 impl<'a> Opened<'a> {
@@ -584,9 +667,15 @@ impl<'a> Opened<'a> {
         let e = |e: teigeodata_format::Error| e.to_string();
         let p = Pack::open(bytes).map_err(e)?;
         let s = |k| p.section(k).ok_or(format!("no {k}"));
+        let places = Places::open(&s(Kind::PLACES)?).map_err(e)?;
         Ok(Self {
             ids: IdMap::open(&s(Kind::IDMAP)?).map_err(e)?,
-            places: Places::open(&s(Kind::PLACES)?).map_err(e)?,
+            iso: p
+                .section(Kind::ISO_CODES)
+                .map(|t| IsoCodes::open(&t, places.len()))
+                .transpose()
+                .map_err(e)?,
+            places,
             names: Names::open(&s(Kind::NAMES)?).map_err(e)?,
             hier: Hierarchy::open(&s(Kind::HIERARCHY)?).map_err(e)?,
             tz: p
@@ -595,6 +684,11 @@ impl<'a> Opened<'a> {
                 .transpose()
                 .map_err(e)?,
         })
+    }
+
+    /// The ISO 3166 code of `row`, if it has one.
+    fn iso(&self, row: usize) -> Option<teigeodata_core::IsoCode> {
+        self.iso.as_ref()?.get(u32::try_from(row).ok()?)
     }
 
     /// The ID of `row`'s timezone area, if it has one.
@@ -630,13 +724,13 @@ mod tests {
 
     fn split(units: &[(&str, &str)]) -> Split {
         Split {
-            schema: super::SCHEMA.to_owned(),
             level: 1,
             source: "test".to_owned(),
             units: units
                 .iter()
                 .map(|&(k, c)| (k.to_owned(), c.to_owned()))
                 .collect::<BTreeMap<_, _>>(),
+            from_iso: false,
         }
     }
 
@@ -739,12 +833,12 @@ mod tests {
     #[test]
     fn split_files_are_checked() {
         let dir = std::env::temp_dir().join(format!("forge-split-{}", std::process::id()));
-        let cc = dir.join("data/countries/xx");
+        let cc = dir.join("data/countries/kq");
         std::fs::create_dir_all(&cc).unwrap();
         let write = |text: &str| std::fs::write(cc.join("split.yaml"), text).unwrap();
         let head = "schema: teigeodata/split/v1\nlevel: 1\nsource: test\n";
         write(&format!("{head}units:\n  a: p1\n  b: p2\n"));
-        assert_eq!(read(&dir, "xx").unwrap().units.len(), 2);
+        assert_eq!(read(&dir, "kq").unwrap().units.len(), 2);
         for bad in [
             format!("{head}units:\n  a: p1\n  b: p1\n"),
             format!("{head}units:\n  a: P1\n"),
@@ -752,10 +846,29 @@ mod tests {
             format!("{head}units: {{}}\n"),
             "schema: other\nlevel: 1\nsource: test\nunits:\n  a: p1\n".to_owned(),
             format!("{head}units:\n  a: p1\nextra: 1\n"),
+            "schema: teigeodata/split/v1\nlevel: 1\nsource: test\n".to_owned(),
+            "schema: teigeodata/split/v1\nlevel: 1\n".to_owned(),
         ] {
             write(&bad);
-            assert!(read(&dir, "xx").is_err(), "{bad}");
+            assert!(read(&dir, "kq").is_err(), "{bad}");
         }
+        // Without units of its own, the units are iso3166.yaml's, of its level only.
+        write("schema: teigeodata/split/v1\nlevel: 1\n");
+        std::fs::write(
+            cc.join("iso3166.yaml"),
+            "schema: teigeodata/iso3166/v1\ncountry: KQ\nsource: test\nunits:\n  a: KQ-P1\n  b: KQ-P2\n  c: KQ-1A\n",
+        )
+        .unwrap();
+        let s = read(&dir, "kq").unwrap();
+        assert_eq!(s.units.len(), 3);
+        assert_eq!(s.units.get("a").map(String::as_str), Some("p1"));
+        let places = [
+            place("a", PlaceKind::Admin, 1, None, 0),
+            place("b", PlaceKind::Admin, 1, None, 0),
+            place("c", PlaceKind::Admin, 2, Some("a"), 0),
+        ];
+        let at = s.for_places(&places);
+        assert_eq!(at.units.keys().collect::<Vec<_>>(), ["a", "b"]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

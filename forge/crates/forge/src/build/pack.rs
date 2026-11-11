@@ -7,10 +7,11 @@ use std::fs;
 use std::ops::ControlFlow;
 use std::path::Path;
 
-use teigeodata_core::{E6, E7, Namespace, PlaceId, PlaceKind, Point, hilbert};
+use teigeodata_core::{E6, E7, IsoCode, Namespace, PlaceId, PlaceKind, Point, hilbert};
 use teigeodata_format::elevation::Elevations as Heights;
 use teigeodata_format::hierarchy::{self, Hierarchy};
 use teigeodata_format::idmap::{self, IdMap};
+use teigeodata_format::iso_codes::IsoCodes;
 use teigeodata_format::names::{self, NameRecord, Names, TEXT_BUFFER};
 use teigeodata_format::place_index::{self, Neighbour, PlaceIndex};
 use teigeodata_format::places::{self, PlaceColumns, Places};
@@ -66,6 +67,8 @@ pub(super) struct Input<'a> {
     /// The timezone each source record states, by record key (D-138): the independent check
     /// of `PLACE_TZ`.
     pub(super) stated_tz: &'a BTreeMap<String, String>,
+    /// The country's ISO 3166 codes (D-197), when it has `iso3166.yaml`.
+    pub(super) iso: Option<&'a super::iso::Iso>,
 }
 
 /// The search importance of a place, 0 to 130 as in spike S3 (D-052), from what every source
@@ -207,6 +210,26 @@ fn place_tz_section(
         .map(|b| (Kind::PLACE_TZ, Encoding::TABLE, points.len() as u64, b)))
 }
 
+/// Coded rows and their codes, in row order.
+type Coded = Vec<(u32, IsoCode)>;
+
+/// Gate G-iso on the rows, the stale-key check on the country pack only, and the `ISO_CODES`
+/// section of their codes added to `sections` (D-197): none without codes. Returns the codes.
+fn iso_section(
+    input: &Input<'_>,
+    rows: &[&Place],
+    sections: &mut Vec<Body>,
+) -> Result<Coded, String> {
+    let Some(iso) = input.iso else {
+        return Ok(Vec::new());
+    };
+    let codes = super::iso::gate(iso, rows, input.given.is_none())?;
+    let body = teigeodata_format::iso_codes::encode(&codes).map_err(|e| e.to_string())?;
+    let k = codes.len() as u64;
+    sections.extend(body.map(|b| (Kind::ISO_CODES, Encoding::TABLE, k, b)));
+    Ok(codes)
+}
+
 /// The IDs a pack was written with, by place key, and its redirects: what a split build's
 /// parts are given (D-191).
 pub(super) struct Given {
@@ -265,6 +288,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
         (Kind::SEARCH, Encoding::TABLE, n as u64, search_body),
         (Kind::PLACE_INDEX, Encoding::TABLE, n as u64, index_body),
     ];
+    let iso_codes = iso_section(input, &rows, &mut sections)?;
     terrain(input, heights_body, n, &mut sections)?;
     if !input.zones.rings.is_empty() {
         let body =
@@ -309,6 +333,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
         key.as_ref(),
         &mut report,
     )?;
+    verify_iso(&bytes, &iso_codes, &mut report)?;
     crate::make::write_atomic(input.file, &bytes)?;
     if let (Some(assigned), Some(file)) = (&assigned, input.ids_file) {
         crate::make::write_atomic(file, assigned.registry.render().as_bytes())?;
@@ -800,6 +825,42 @@ fn verify_zones(p: &Pack<'_>, rows: &[&Place], input: &Input<'_>) -> Result<usiz
 /// The most source records whose stated timezone may differ from their place's (G-tz,
 /// D-138), as a share of the records compared.
 const TZ_DIFFER_MAX: f64 = 0.001;
+
+/// `ISO_CODES` read back (D-197): `check`, and every coded row reads back its code and no other
+/// row has one.
+fn verify_iso(bytes: &[u8], want: &[(u32, IsoCode)], report: &mut String) -> Result<(), String> {
+    let err = |e: teigeodata_format::Error| e.to_string();
+    let pack = Pack::open(bytes).map_err(err)?;
+    let places = Places::open(&pack.section(Kind::PLACES).ok_or("no PLACES")?)
+        .map_err(err)?
+        .len();
+    let Some(section) = pack.section(Kind::ISO_CODES) else {
+        return if want.is_empty() {
+            Ok(())
+        } else {
+            Err("no ISO_CODES section".into())
+        };
+    };
+    let t = IsoCodes::open(&section, places).map_err(err)?;
+    t.check().map_err(err)?;
+    if !t.iter().eq(want.iter().copied()) {
+        return Err("ISO_CODES differs from the codes written".into());
+    }
+    for &(row, code) in want {
+        if t.get(row) != Some(code) {
+            return Err(format!("row {row}: ISO code {code} does not read back"));
+        }
+    }
+    let countries = want.iter().filter(|c| c.1.is_country()).count();
+    let _ = writeln!(
+        report,
+        "\nISO 3166 codes (G-iso, D-197): {} rows coded ({countries} country, {} units), each read back; {} bytes.",
+        want.len(),
+        want.len() - countries,
+        section.bytes().len()
+    );
+    Ok(())
+}
 
 /// `PLACE_TZ` read back (D-134): `check`, one row per place, and every place's area is the
 /// area REGION holds at the place's point as read back from PLACES. No REGION, no `PLACE_TZ`.

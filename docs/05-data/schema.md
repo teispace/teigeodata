@@ -26,7 +26,7 @@ from; this page gathers them in one place and does not override them.
 | `supersedes` | list of u64 | IDs merged into this one |
 | `superseded_by` | u64 | Set on redirects; a tombstone has `superseded_by = null` and `status = retired` |
 | `status` | enum, *required* | `current`, `redirect`, `retired` |
-| `ext` | map scheme → string | Cross-references, never identity: `geonames`, `osm` (`n123`/`w123`/`r123`), `wikidata`, `gers`, `wof`, `cbs` (Nepal), `lgd` (India), `iso3166_2`, `unlocode` |
+| `ext` | map scheme → string | Cross-references, never identity: `geonames`, `osm` (`n123`/`w123`/`r123`), `wikidata`, `gers`, `wof`, `cbs` (Nepal), `lgd` (India), `unlocode`. ISO 3166 codes are a field of their own (`iso_code`, below), since consumers key on them |
 
 ## Kind
 
@@ -59,6 +59,7 @@ from; this page gathers them in one place and does not override them.
 | `admin` | list of (level, id) | The full chain from the country down; derived from point-in-polygon, never from stated parents alone |
 | `valid_from`, `valid_to` | date | For units that were created, merged or dissolved (for example Nepal's 2017 restructuring). Former units stay, with `status = retired` and links to their successors |
 | `successors`, `predecessors` | list of u64 | Restructuring links (split and merge) |
+| `iso_code` | string | The ISO 3166-1 alpha-2 code of a country (`NP`) or the ISO 3166-2 code of a subdivision (`NP-P3`), always with its alpha-2 prefix; null where ISO assigns none. From `data/countries/<cc>/iso3166.yaml`, never derived from names or the ID namespace (D-197, [ISO 3166 codes](../02-research/notes/iso-3166-codes.md)) |
 
 ## Names ([ADR-0014](../03-decisions/adr/ADR-0014-names-and-search.md), [ADR-0031](../03-decisions/adr/ADR-0031-canonical-spelling.md))
 
@@ -113,7 +114,7 @@ For each field: `source` (adapter ID), `source_version`, `licence_class` (as in
 | Component | Fields | Default |
 |---|---|---|
 | `core` | identity, kind, point, name, parent | always |
-| `admin` | admin chain, validity, restructuring links | on |
+| `admin` | admin chain, validity, restructuring links, ISO 3166 codes | on |
 | `names` | the name list | on |
 | `elevation` | elevation fields | on |
 | `boundaries` | geometry per level of detail | off; chosen per LOD |

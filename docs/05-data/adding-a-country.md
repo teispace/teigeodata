@@ -28,6 +28,13 @@ data/countries/<cc>/        lower-case ISO 3166-1 alpha-2
   lexicon.yaml              generic place-name terms and their canonical spellings; the
                             build respells variants in display names, but never the
                             `not_respelled` forms (other words, such as Pura)
+  iso3166.yaml              required for a pack country: the country's ISO 3166-1
+                            alpha-2 code, the source with the ISO change checked, each
+                            admin unit's ISO 3166-2 code by its admin-source key, units
+                            with no code and why, stale world-source codes (`renamed`)
+                            and former units' deleted codes (D-197; gate G-iso)
+  split.yaml                optional: the admin level a split build cuts at; the parts'
+                            addresses come from iso3166.yaml (D-191, D-197)
   postal.yaml               postal schemes and their codes files (D-090, D-105)
   corrections/<id>.yaml     reviewed, guarded corrections (ADR-0036, D-117): add or
                             remove a name, move a place, set a population, or merge
