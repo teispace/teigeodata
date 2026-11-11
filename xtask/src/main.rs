@@ -28,6 +28,7 @@ mod split;
 mod tuf;
 mod wire;
 mod workspace;
+mod xlit;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

@@ -157,7 +157,7 @@ struct Cols {
 }
 
 /// A TSV cell: `"literal"` (with `\"`, `\\`, `\t`, `\n` escapes), `<iri>` or empty.
-fn unquote(cell: &str) -> String {
+pub(crate) fn unquote(cell: &str) -> String {
     if let Some(inner) = cell.strip_prefix('<').and_then(|c| c.strip_suffix('>')) {
         return inner.to_string();
     }

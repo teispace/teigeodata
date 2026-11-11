@@ -34,7 +34,7 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | blake3 (section and head hashes, no default features) | 1.8.7 | 2026-11-07 | crates.io | 2026-12-07 |
 | ed25519-dalek (pack signatures, no default features) | 3.0.0 | 2026-11-07 | crates.io | 2026-12-07 |
 | ruzstd (BLOBS decoding, feature `zstd`, no default features) | 0.9.1 | 2026-11-07 | crates.io | 2026-12-07 |
-| libm (PLACE_INDEX haversine, feature `spatial`, no default features) | 0.2.16 | 2026-11-07 | crates.io | 2026-12-07 |
+| libm (PLACE_INDEX haversine, feature `spatial`; the names crate's transliteration model; no default features) | 0.2.16 | 2026-11-07 | crates.io | 2026-12-07 |
 | zstd (C zstd 1.5.7 via `zstd-sys` 2.1.2; BLOBS compression in tests, benches and the forge) | 0.14.3 | 2026-11-07 | crates.io | 2026-12-07 |
 | ruzstd (transport frame decoding in `teigeodata-sync`, feature `zstd`) | 0.9.1 | 2026-11-09 | crates.io | 2026-12-09 |
 | zeekstd (seekable-format oracle, dev-dependency of `teigeodata-sync` only; over `zstd-safe` 8.2.0) | 0.6.3 | 2026-11-09 | crates.io | 2026-12-09 |

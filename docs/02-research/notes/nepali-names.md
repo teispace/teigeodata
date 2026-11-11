@@ -1,7 +1,7 @@
 ---
 title: "Nepali names for every place (TG-14)"
 status: research
-updated: 2026-11-11
+updated: 2026-11-12
 owner: teigeodata maintainers
 revisit: 2027-05-11
 ---
@@ -361,6 +361,98 @@ SELECT ?gn ?l WHERE { ?c wdt:P1566 ?gn . ?c rdfs:label ?l . FILTER(LANG(?l) = "n
 `geonames-alternate-names` file, rows whose language is `ne`, `hi`, `mr`, `new` or `mai`
 (49,079 rows), with the script tested by the regex `[\x{0900}-\x{097F}]`.
 
+### 5.5 Built: the engine, the profile and G-xlit (2026-11-12, D-222)
+
+- **Engine:** `teigeodata_names::xlit` (`no_std` + `alloc`). A beam search (16 per Latin
+  position) over the lattice of the profile's Latin units, scored by option costs plus
+  `lm_weight` × the model's `-ln p` of every letter written and of the word's end; hypotheses
+  with the same model context recombine. A consonant after a bare consonant either keeps the
+  unwritten inherent vowel (`schwa`) or takes the virama (`conjunct`); a vowel is a sign after
+  a consonant, an independent letter elsewhere; a written final vowel has its own `end` cost.
+  Before the lattice: the profile's `words` (designators and pinned spellings, phrases
+  first), the lexicon's terms, the word memory, then a generic term ending a word (Lahachowk:
+  the stem transliterated, then चोक). Output is deterministic (two runs, byte-identical miss
+  lists) and holds only the target block and single spaces. Per-call working memory
+  (`Scratch`) is reusable.
+- **Model:** a character 5-gram, interpolated Witten-Bell, stored in back-off form (sorted
+  `u64` keys of packed symbols, `f32` costs; probabilities sum to 1, tested), plus a word
+  memory from aligned pairs: a pair's words are aligned after the profile's phrases, a word
+  enters when seen twice and the engine's own output for it is within a third of its length
+  (so a misaligned pair or a typo label does not). Natural logs come from `libm`, so training
+  gives the same model on every platform.
+- **Profile:** [`data/xlit/ne-Latn-Deva.yaml`](../../../data/xlit/ne-Latn-Deva.yaml), checked
+  by `cargo xtask check-data` (parse, name, compile with every lexicon).
+- **Gate:** `forge xlit-eval ne-Latn-Deva` reads
+  [`data/xlit/ne-Latn-Deva.gate.yaml`](../../../data/xlit/ne-Latn-Deva.gate.yaml): training
+  sources, test sets, floors. Folds are BLAKE3 of the ID (not the prototype's BLAKE2) modulo
+  5; fold 0 is test, `--dev` measures fold 1 and holds out both, for tuning without touching
+  the test fold. Training never sees a held-out item nor any label holding a held-out
+  reference as a run of whole words (stricter than the prototype, which only dropped the
+  items). The examples are checked with the model trained on every fold, as a build would
+  ship it. `--input <file>` writes a review list; `--misses <file>` the test misses;
+  `--lm-weight 0` switches the model off.
+- **Training data (lite):** `wikidata-labels-ne` (Wikidata `ne` labels of every item with a
+  coordinate, CC0), the `ne` labels and aliases of `wikidata-np`, and the training folds of
+  both sets. 11,646 labels used, 4,729 held out.
+- **The CBS list is pinned:** `cbs-np-local-levels` (753 rows) and `cbs-np-districts` (77),
+  Open Data Nepal, CC BY. The set strips the type word from both sides, the source's
+  misspellings included ("Metropolitian"). The `wd` set cuts a comma's qualifier and a
+  trailing designator from each side (`खलङ्गा, बैतडी` for Khalanga; `फुलेक गा.वि.स.`).
+
+**Measured (lite, test fold, 2026-11-12, the shared 10-core build machine at load average 70–140):**
+
+| Set | Pairs / test | Exact | Folded exact | CER | Floor (exact / folded / CER) |
+|---|--:|--:|--:|--:|---|
+| cbs | 830 / 159 | 44.0% | 44.7% | 0.123 | 0.440 / 0.446 / ≤ 0.124 |
+| wd | 4,699 / 975 | 36.1% | 36.2% | 0.192 | 0.361 / 0.362 / ≤ 0.193 |
+| cbs, model off (`--lm-weight 0`) | | 6.9% | 7.5% | 0.274 | fails |
+| wd, model off | | 14.1% | 14.1% | 0.303 | fails |
+| cbs, planted fault (`t` prefers ट) | | 40.3% | 40.9% | 0.149 | fails |
+| wd, planted fault | | 33.1% | 33.2% | 0.206 | fails |
+
+- **Model:** 81,543 n-gram and context entries and 17 memory words, 1.31 MB in memory
+  (16 bytes an entry; not yet compressed or pruned). Training 0.2 s.
+- **Speed:** 52–66 µs per name over the 1,134 test names at load average 70–140, and 145–300 µs
+  at 500–700 (release build, one thread). The machine was shared and loaded throughout, so
+  these are upper bounds; a quiet-machine bench is open.
+- **Against the prototype** (§3.3: cbs 64.0% folded, wd 36.2%): `wd` is level; `cbs` is 20
+  points lower. The stricter hold-out is the likely cause: CBS names recur in Wikidata labels
+  ("फक्ताङ्लुङ्ग गाउँपालिका"), which the prototype's LM saw. The tuning on the dev fold
+  (lm weight 0.6 against 1.0: +2 to +3 points; conjunct cost 0 against 0.3: +0.5; order 4 or
+  6, unit cost changes: within ±1) did not close it. Adding Wikidata `hi` labels to the model
+  lowered `wd` by 5.6 points, so Hindi stays out of the Nepali model. The v1 targets of §5.3
+  (cbs 0.65, wd 0.40 folded) are not met; more lite-clean Nepali text (census ward names,
+  Q-011; GeoNames Devanagari `ne`) and the word memory from more pairs are the next levers.
+- **Pinned spellings:** the model writes लाहा for Laha and बिराटनगर for Biratnagar. The CBS
+  list itself writes बिराटनगर, and Wikidata is split; the maintainer's examples (लहाचोक,
+  विराटनगर) and Kathmandu's irregular काठमाडौं are pinned in the profile's `words`. Biratnagar
+  falls in the `wd` test fold, so the pin adds one exact match there (0.1 point).
+
+**On main, with the D-220 fold (2026-11-12).** The same command after the merge: cbs exact
+45.28%, folded 50.31%, CER 0.109; wd exact 37.2%, folded 42.26%, CER 0.176; 53 µs per name
+under load. Folded rises because the comparison fold now also treats vowel length, candra
+vowels and nasal conjuncts as one. wd folded passes the v1 target (0.40); cbs folded (0.65)
+does not yet. The floors were raised to these values, rounded down, and a floor set above
+them fails the gate.
+
+### 5.6 Proposal: the name-origin marker (not built)
+
+NAMES already has an optional per-record column `RULE` (id 9, a `u32`, 0 = none), which no
+build writes yet, and the schema lists its intended values in words only. Proposal:
+
+- Give `RULE` a registry of codes in `teigeodata-format` (`NameRule`), stable once released:
+  1 `official`, 2 `signage`, 3 `lexicon`, 4 `osm_majority`, 5 `geonames`, 6 `wikidata`,
+  7 `romanisation`, 8 `transliteration` (§5.1 tiers 5 and 6), 9 `donor` (tier 4, a related
+  language's label after the spelling pass). Unknown codes read as "other", never an error,
+  so a later code does not break an older reader.
+- Widen its meaning from "which step chose the canonical name" to "how this record was
+  made", for every record. Codes 7 to 9 are machine output.
+- The engine answers `Name::is_machine()`; search and display may rank machine names below
+  human ones; an embed profile (`data/embed/<name>.yaml`) gains `machine_names: keep | mark |
+  drop`, so Tithipatra can hide them or show them differently.
+- `forge` writes the code where it adds the name; `check-data`'s golden gate refuses a
+  machine name that became canonical (D-215).
+
 ## 6. Impact on the plan
 
 - **TG-14:** the chain of §5.1 and the gate of §5.3. Order:
@@ -369,7 +461,7 @@ SELECT ?gn ?l WHERE { ?c wdt:P1566 ?gn . ?c rdfs:label ?l . FILTER(LANG(?l) = "n
   3. the transliteration engine with the `ne-Latn-Deva` profile;
   4. the `hi-ne` donor pass when India lands (TG-15).
 - **Sources to pin** in `data/sources.lock`:
-  - the CBS code list (Open Data Nepal, CC BY);
+  - the CBS code list (Open Data Nepal, CC BY): pinned 2026-11-12 (§5.5);
   - Wikidata `ne`/`hi` labels for the world part (QLever snapshot, CC0);
   - CLDR 49 `ne.xml`;
   - GeoNames `cities5000` (TG-13).

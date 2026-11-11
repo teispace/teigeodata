@@ -33,6 +33,7 @@ use crate::recipe;
 use crate::romanise;
 use crate::sources;
 use crate::split;
+use crate::xlit;
 
 const PROFILE_SCHEMA: &str = "teigeodata/profile/v1";
 
@@ -208,6 +209,8 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     }
     let (profiles, found) = romanise::check(root, &lexicons);
     problems.extend(found);
+    let (xlits, found) = xlit::check(root, &lexicons);
+    problems.extend(found);
     let folders: BTreeSet<String> = countries
         .iter()
         .filter_map(|p| p.file_name()?.to_str().map(str::to_string))
@@ -224,7 +227,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     }
     if problems.is_empty() {
         Ok(format!(
-            "data ok: {} countries, {terms} lexicon terms, {queries} golden query entries, {postal_codes} postal codes, {fixes} corrections, {split_units} split units, {iso_units} ISO-coded units, {profiles} romanisation profiles, {pinned} pinned sources checked",
+            "data ok: {} countries, {terms} lexicon terms, {queries} golden query entries, {postal_codes} postal codes, {fixes} corrections, {split_units} split units, {iso_units} ISO-coded units, {profiles} romanisation profiles, {xlits} transliteration profiles, {pinned} pinned sources checked",
             countries.len()
         ))
     } else {

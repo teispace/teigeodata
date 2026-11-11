@@ -346,8 +346,10 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     places by key, CLDR 49 `ne.xml` for country names
   - [ ] the chain in the forge, each name's origin in its record (`rule`), with a coverage
     report per step (TG-11's names table)
-  - [ ] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
+  - [x] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
     model trained in the forge on the build's licence class; gate G-xlit with floors
+    (`forge xlit-eval ne-Latn-Deva`: cbs 44.7%, wd 36.2% folded; D-222, 2026-11-12). Open: the
+    §5.3 v1 targets; the name-origin marker (`RULE` codes) before packs carry machine names
   - [ ] a profile's languages are complete: every place of the layer has each, or the build
     names the gap
 - [ ] TG-16: outline tolerance measured, Nepal's border exact
@@ -426,3 +428,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-11 | 4.9c: Tithipatra's addendum 1 placed; TG-11 done; indexes may be derived on the device | D-213 |
 | 2026-11-11 | 4.9c: TG-12 and Nepal in full done; TG-14 and TG-15 researched | D-214 to D-217 |
 | 2026-11-11 | 4.9c: SUBSTRING derived on the device | D-218 |
+| 2026-11-12 | 4.9c: TG-14's transliterator and gate G-xlit built; the CBS code list pinned | D-222 |

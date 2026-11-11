@@ -205,6 +205,40 @@ query = "forge/queries/wikidata-places.rq"
 query_params = { COUNTRY = "wd:Q837" }
 
 [[source]]
+id = "cbs-np-local-levels"
+title = "CBS geographical codes: Nepal's 753 local levels with English and Devanagari names (CSV, Open Data Nepal)"
+kind = "http"
+url = "https://api.opendatanepal.com/dataset/22870675-146d-4e4f-8848-2216380170de/resource/e33aa0f3-72de-4074-a38b-c6a1bf55d9a8/download/tmpkzco5wr_.csv"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "Open Data Nepal record, metadata modified 2026-06-14"
+retrieved = "2026-11-11"
+sha256 = "6d580ab7e80cc7a656df03fc48701ce615965ed8aa4f0ba93267e3c78c8a5e4f"
+size = 75955
+licence = "CC-BY (Open Data Nepal record: \"Creative Commons Attribution\", harvested from CBS)"
+licence_class = "cc-by"
+countries = ["NP"]
+used_by = "forge xlit-eval, set cbs (TG-14, D-222)"
+attribution = "Central Bureau of Statistics (now National Statistics Office), Nepal, via Open Data Nepal (https://opendatanepal.com), Creative Commons Attribution"
+
+[[source]]
+id = "cbs-np-districts"
+title = "CBS geographical codes: Nepal's 77 districts with English and Devanagari names (CSV, Open Data Nepal)"
+kind = "http"
+url = "https://api.opendatanepal.com/dataset/22870675-146d-4e4f-8848-2216380170de/resource/de973922-7b56-4521-b6a4-aa3de7f8d8a2/download/tmp8hp3gb3m.csv"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "Open Data Nepal record, metadata modified 2026-06-14"
+retrieved = "2026-11-11"
+sha256 = "1f30defca88023473da0a3900739be620f9c0a9014078f9bda65ca2bc71b6312"
+size = 3022
+licence = "CC-BY (Open Data Nepal record: \"Creative Commons Attribution\", harvested from CBS)"
+licence_class = "cc-by"
+countries = ["NP"]
+used_by = "forge xlit-eval, set cbs (TG-14, D-222)"
+attribution = "Central Bureau of Statistics (now National Statistics Office), Nepal, via Open Data Nepal (https://opendatanepal.com), Creative Commons Attribution"
+
+[[source]]
 id = "tbb-2026f"
 title = "timezone-boundary-builder 2026f, zones with oceans (GeoJSON, zipped)"
 kind = "http"
