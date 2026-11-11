@@ -12,4 +12,4 @@ evidence:
   - { source: "Wikidata Q20588832 and Q6647 (accessed 2026-11-09)", url: "https://www.wikidata.org/wiki/Q20588832", licence_class: cc0 }
 created: 2026-11-09
 author: teigeodata maintainers
-review: { by: unreviewed, on: 2026-11-09 }
+review: { by: teigeodata maintainer, on: 2026-11-11 }

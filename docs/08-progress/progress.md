@@ -88,8 +88,12 @@ A short status. The numbers and evidence live in each phase file and the
   India are W1.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
   arcs ([ideas](../01-product/ideas.md)).
-- **Waiting on the maintainer:** review of `data/countries/np/corrections/` (unreviewed), the labelled sample (Q-005, needed for `ACCURACY.md` and M3),
-  the postal licence (Q-009), Copernicus for lite (Q-008).
+- **Maintainer answers (2026-11-11, D-203 to D-212):** mirror approved; lite keeps NASADEM;
+  postcodes main only until Nepal Post opens them; lite claim area digitised from the 2020
+  map; ODbL comparisons allowed as gates; corrections approved; labels delegated to agents;
+  full key ceremony; all registry names reserved (the maintainer signs in); GitHub private
+  reporting; Cloudflare R2 for browsers. **Waiting on the maintainer:** the key ceremony,
+  registry sign-ins, the Cloudflare account, sending the Nepal Post request.
 
 ## Session log
 
