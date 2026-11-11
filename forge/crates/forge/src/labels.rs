@@ -12,8 +12,8 @@
 //!   `tests/golden/<cc>-places.csv` for labellers. The draw is the lowest BLAKE3 of
 //!   (seed, record ID) per stratum, so it is the same on every run and needs no random number
 //!   generator. Every fifth row is marked for a second labeller. The locator is the source
-//!   point rounded to 0.01° (about 1 km): enough to find the place, too coarse to anchor the
-//!   label. Nothing from the forge's own outputs is shown, so the labels stay independent of
+//!   point truncated to 0.01° (about 1 km; the place lies in the cell north-east of it): enough
+//!   to find the place, too coarse to anchor the label. Nothing from the forge's own outputs is shown, so the labels stay independent of
 //!   the core they judge (the D-060 rule).
 //! - `score` reads the labelled rows (`label_lat`, `label_lon` filled) and reports, per
 //!   stratum, how far the source point and the consensus point of the `core` run are from the
@@ -45,7 +45,7 @@ fn class_of(class: &str) -> Option<&'static str> {
 }
 
 /// A CSV field: quoted when it holds a comma, a quote or a line break.
-fn field(s: &str) -> String {
+pub(crate) fn field(s: &str) -> String {
     if s.contains([',', '"', '\n', '\r']) {
         format!("\"{}\"", s.replace('"', "\"\""))
     } else {
@@ -54,7 +54,7 @@ fn field(s: &str) -> String {
 }
 
 /// Splits one CSV line (quotes as written by [`field`]).
-fn split(line: &str) -> Vec<String> {
+pub(crate) fn split(line: &str) -> Vec<String> {
     let (mut out, mut cur, mut quoted, mut chars) =
         (Vec::new(), String::new(), false, line.chars().peekable());
     while let Some(c) = chars.next() {

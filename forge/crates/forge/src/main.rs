@@ -16,7 +16,7 @@
 //! forge build <cc> --release <v> --admin <b> …    write and check a country's pack
 //! forge buildings <reader> <source> <extent>    one point per building, clipped
 //! forge core <points run> <buildings run>      consensus points with settlement cores
-//! forge labels sample|score …                   the hand-labelled truth set (Q-005)
+//! forge labels sample|score|chips|set …         the labelled truth set (Q-005, D-209)
 //! forge topology <boundary-source>                shared arcs, levels of detail, polygons (B10)
 //! forge topology --geoboundaries <file> <name>   the same on one geoBoundaries level (measurement)
 //! forge dem-section <tileset> <w,s,e,n> [--step-mm N]   the DEM section over a box (B11)
@@ -38,6 +38,7 @@ mod aliases;
 mod budget;
 mod build;
 mod buildings;
+mod chips;
 mod conflate;
 mod core;
 mod dem;
@@ -127,7 +128,9 @@ fn stage(root: &Path, args: &[String]) -> Option<Result<String, String>> {
                 Err(e) => Err(format!("count per stratum: {e}")),
             },
             (Some("score"), [cc, run, b]) => labels::score(root, cc, run, b),
-            _ => Err("usage: forge labels sample <cc> <points-source> <count-per-stratum> <seed> | forge labels score <cc> <points run> <buildings run>".into()),
+            (Some("chips"), [cc, rest @ ..]) => chips::chips(root, cc, rest),
+            (Some("set"), [cc, rest @ ..]) => chips::set(root, cc, rest),
+            _ => Err("usage: forge labels sample <cc> <points-source> <count-per-stratum> <seed> | forge labels score <cc> <points run> <buildings run> | forge labels chips <cc> [--pass 2] [--only <id,…>] | forge labels set <cc> <picks.tsv> <labeller> [--pass 2]".into()),
         },
         "topology" => match args.get(1..).unwrap_or_default() {
             [flag, file, name] if flag == "--geoboundaries" => {

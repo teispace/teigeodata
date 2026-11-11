@@ -7,7 +7,7 @@
 //! `BigTIFF`, LZW or DEFLATE, with or without a horizontal predictor (the `tiff` crate).
 
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Read, Seek};
 use std::path::Path;
 
 use tiff::decoder::{Decoder, DecodingResult};
@@ -26,9 +26,19 @@ pub(crate) struct Georef {
 
 /// Opens `path` and reads its grid.
 pub(crate) fn open(path: &Path) -> Result<(Decoder<BufReader<File>>, Georef), String> {
-    let err = |e: tiff::TiffError| format!("{}: {e}", path.display());
     let file = File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let mut d = Decoder::new(BufReader::new(file)).map_err(err)?;
+    open_reader(BufReader::new(file), &path.display().to_string())
+}
+
+/// Opens a raster from any seekable reader (a file, or HTTP ranges of a cloud-optimised one)
+/// and reads its grid; `what` names it in errors. For a projected raster (UTM) the grid's
+/// `lon0`, `lat0` are its easting and northing.
+pub(crate) fn open_reader<R: Read + Seek>(
+    reader: R,
+    what: &str,
+) -> Result<(Decoder<R>, Georef), String> {
+    let err = |e: tiff::TiffError| format!("{what}: {e}");
+    let mut d = Decoder::new(reader).map_err(err)?;
     let (w, h) = d.dimensions().map_err(err)?;
     let scale = d.get_tag_f64_vec(Tag::ModelPixelScaleTag).map_err(err)?;
     let tie = d.get_tag_f64_vec(Tag::ModelTiepointTag).map_err(err)?;
@@ -43,10 +53,10 @@ pub(crate) fn open(path: &Path) -> Result<(Decoder<BufReader<File>>, Georef), St
         tie.get(3),
         tie.get(4),
     ) else {
-        return Err(format!("{}: missing georeferencing tags", path.display()));
+        return Err(format!("{what}: missing georeferencing tags"));
     };
     if !(dx > 0.0 && dy > 0.0) {
-        return Err(format!("{}: pixel size is not positive", path.display()));
+        return Err(format!("{what}: pixel size is not positive"));
     }
     // GeoKey 1025 (GTRasterTypeGeoKey): 1 = PixelIsArea (tie point at a pixel's corner), 2 =
     // PixelIsPoint (at its centre). Keys are 4-tuples after a 4-short header.
