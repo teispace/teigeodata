@@ -263,8 +263,8 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
   commit point, crash-safe at every write (D-179)
 - [x] (b) Crate `teigeodata-cli` (`tgd`, clap): `inspect`, `verify`, `diff` (sections and
   records), `extract` (by component and by box), `export` (NDJSON, GeoJSON, streamed) (D-180)
-- [ ] (c) Queries `get`, `reverse`, `search`, `near`, `admin`, `tz`; outputs text, `--json`,
-  `--geojson`, `--nominatim` (ADR-0038) from one mapping module
+- [x] (c) Queries `get`, `reverse`, `search`, `near`, `admin`, `tz`; outputs text, `--json`,
+  `--geojson`, `--nominatim` (ADR-0038) from one mapping module (D-181)
 - [ ] (d) Sync: `refresh`, `catalog`, `find`, `locate`, `install`, `update`, `remove`, `pin`,
   `repair`, `status`, end to end against a `tuf release` repository served on localhost
 - [ ] (e) Every command run and its output read; `--help`, completions, the docs; `hyperfine`
@@ -323,3 +323,4 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
 | 2026-11-11 | 4.9 split into (a) to (e) from its research; the catalog refresh comes first, in `sync`; `merge` waits on 4.7 | D-178, [CLI note](../../02-research/notes/cli.md) |
 | 2026-11-11 | 4.9a done: metadata stored by version, the timestamp written last as the commit point | a refresh cut off mid-way left a timestamp ahead of its snapshot and an empty offline catalog (D-179) |
 | 2026-11-11 | 4.9b done; `extract` also cuts by box (the format's slice already existed); the deep check is a format module | D-180 |
+| 2026-11-11 | 4.9c done; a query with no result exits 1 | D-181 |

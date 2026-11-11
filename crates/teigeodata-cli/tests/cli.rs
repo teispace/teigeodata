@@ -428,3 +428,183 @@ fn a_tiny_box_keeps_its_places_whole_chain() {
         at = by_id(parent);
     }
 }
+
+/// Every record `export` writes for the pack at `p`.
+fn records(p: &Path) -> Vec<Value> {
+    ok(&["export", s(p)])
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect()
+}
+
+/// `args`, then the packs, then `--json`.
+fn with<'a>(args: &[&'a str], pack: &[&'a str]) -> Vec<&'a str> {
+    [args, pack, &["--json"]].concat()
+}
+
+fn one(args: &[&str]) -> Vec<Value> {
+    json(args).as_array().unwrap().clone()
+}
+
+#[test]
+fn queries_answer_as_the_records_say() {
+    let d = dir("queries");
+    let p = pack_in(&d, 900);
+    let all = records(&p);
+    let settlement = all
+        .iter()
+        .filter(|r| r["kind"] == "settlement" && r["parent"].is_string())
+        .nth(17)
+        .unwrap();
+    let id = settlement["id"].as_str().unwrap();
+    let (lat, lon) = (
+        settlement["lat"].as_f64().unwrap().to_string(),
+        settlement["lon"].as_f64().unwrap().to_string(),
+    );
+    let pack = ["--pack", s(&p)];
+
+    // get: the export's record, field for field (one mapping).
+    for r in all.iter().step_by(97) {
+        let got = one(&with(&["get", r["id"].as_str().unwrap()], &pack));
+        assert_eq!(&got[0], r);
+    }
+    // reverse at its point: itself, 0 m away.
+    let near = one(&with(&["reverse", &lat, &lon, "-k", "3"], &pack));
+    assert_eq!(near[0]["id"], id);
+    assert_eq!(near.len(), 3);
+    assert_eq!(near[0]["meters"], 0.0);
+    assert!(
+        near.windows(2)
+            .all(|w| w[0]["meters"].as_f64() <= w[1]["meters"].as_f64())
+    );
+    // near: never itself, nearest first, within the radius.
+    let around = one(&with(&["near", id, "-k", "5"], &pack));
+    assert_eq!(around.len(), 5);
+    assert!(around.iter().all(|r| r["id"] != id));
+    let r3 = around[2]["meters"].as_f64().unwrap();
+    let radius = (r3 + 0.5).to_string();
+    let inside = one(&with(&["near", id, "-k", "50", "--radius", &radius], &pack));
+    assert!(
+        inside.iter().all(|r| r["id"] != id),
+        "itself within its radius"
+    );
+    assert!(
+        inside.len() >= 3
+            && inside
+                .iter()
+                .all(|r| r["meters"].as_f64().unwrap() <= r3 + 0.5)
+    );
+    // search: its name finds it; "name, parent" ranks it first.
+    let name = settlement["name"].as_str().unwrap();
+    let parent = all
+        .iter()
+        .find(|r| r["id"] == settlement["parent"])
+        .unwrap();
+    let q = format!("{name}, {}", parent["name"].as_str().unwrap());
+    let hits = one(&with(&["search", &q, "-k", "5"], &pack));
+    // Names repeat, so "name, parent" may boost several: it is among them, and every boosted
+    // hit has that parent.
+    let boosted: Vec<&Value> = hits
+        .iter()
+        .filter(|h| h["score"].as_i64().unwrap() > 1000)
+        .collect();
+    assert!(boosted.iter().any(|h| h["id"] == id), "{hits:?}");
+    assert!(
+        boosted.iter().all(|h| h["parent"] == settlement["parent"]),
+        "{hits:?}"
+    );
+    // admin: coarse to fine, from the country.
+    let units = one(&with(&["admin", &lat, &lon], &pack));
+    assert_eq!(units[0]["kind"], "country");
+    assert!(
+        units
+            .windows(2)
+            .all(|w| w[0]["admin_level"].as_u64() < w[1]["admin_level"].as_u64())
+    );
+    // tz: of the place and at its point, the zone its record names.
+    let of = one(&with(&["tz", id], &pack));
+    let at = one(&with(&["tz", &lat, &lon], &pack));
+    assert_eq!(of[0]["name"], settlement["timezone"]);
+    assert_eq!(at[0]["name"], settlement["timezone"]);
+}
+
+#[test]
+fn compatibility_outputs_come_from_the_native_record() {
+    let d = dir("outputs");
+    let p = pack_in(&d, 600);
+    let all = records(&p);
+    let r = all
+        .iter()
+        .find(|r| r["kind"] == "settlement" && r["parent"].is_string())
+        .unwrap();
+    let id = r["id"].as_str().unwrap();
+    let n: Value = serde_json::from_str(&ok(&["get", id, "--pack", s(&p), "--nominatim"])).unwrap();
+    let n = &n[0];
+    assert_eq!(n["place_id"], id);
+    assert_eq!(n["name"], r["name"]);
+    assert_eq!(
+        n["lat"].as_str().unwrap().parse::<f64>().unwrap(),
+        r["lat"].as_f64().unwrap()
+    );
+    assert_eq!(n["boundingbox"][2], n["lon"]);
+    let parent = all.iter().find(|x| x["id"] == r["parent"]).unwrap();
+    let display = format!(
+        "{}, {}",
+        r["name"].as_str().unwrap(),
+        parent["name"].as_str().unwrap()
+    );
+    assert!(
+        n["display_name"].as_str().unwrap().starts_with(&display),
+        "{n}"
+    );
+    assert_eq!(n["address"]["country_code"], "np");
+    assert_eq!(n["licence"], ATTRIBUTION.replace('\n', "; "));
+    for absent in ["osm_id", "osm_type", "class", "type", "importance"] {
+        assert!(n.get(absent).is_none(), "{absent} is faked");
+    }
+    let g: Value = serde_json::from_str(&ok(&["get", id, "--pack", s(&p), "--geojson"])).unwrap();
+    let mut props = g["features"][0]["properties"].clone();
+    let mut native = r.clone();
+    native
+        .as_object_mut()
+        .unwrap()
+        .retain(|k, _| k != "lat" && k != "lon");
+    props.as_object_mut().unwrap().retain(|_, _| true);
+    assert_eq!(props, native);
+    assert_eq!(g["features"][0]["geometry"]["coordinates"][1], r["lat"]);
+    let text = ok(&["get", id, "--pack", s(&p)]);
+    assert!(
+        text.starts_with(r["name"].as_str().unwrap()) && text.contains(id),
+        "{text}"
+    );
+    // Modes conflict; Nominatim is offered only where Nominatim has the query.
+    assert_eq!(
+        tgd(&["get", id, "--pack", s(&p), "--json", "--geojson"])
+            .status
+            .code(),
+        Some(2)
+    );
+    assert_eq!(
+        tgd(&["admin", "1", "2", "--pack", s(&p), "--nominatim"])
+            .status
+            .code(),
+        Some(2)
+    );
+    // No result: the empty output, then exit 1; an unknown ID likewise.
+    let o = tgd(&["tz", "-12.5", "-77", "--pack", s(&p), "--json"]);
+    assert_eq!(o.status.code(), Some(1));
+    assert_eq!(
+        serde_json::from_slice::<Value>(&o.stdout).unwrap(),
+        serde_json::json!([])
+    );
+    assert_eq!(
+        tgd(&["get", "tgd:np/zzzzzz", "--pack", s(&p)])
+            .status
+            .code(),
+        Some(1)
+    );
+    assert_eq!(
+        tgd(&["get", "nonsense", "--pack", s(&p)]).status.code(),
+        Some(1)
+    );
+}
