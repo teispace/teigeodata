@@ -634,3 +634,57 @@ fn every_command_has_help_and_completions() {
     }
     assert_eq!(tgd(&["completions", "tcsh"]).status.code(), Some(2));
 }
+
+#[test]
+fn elevation_reads_the_packs_terrain() {
+    use teigeodata_format::dem::{self, DATUM_EGM2008, Family, Grid, GridInput, THRESHOLDS};
+    let d = dir("elevation");
+    // One 64 × 64 tile at tile (3,496, 14,400): a plane 1,000 m high rising 2 m a column.
+    let q: Vec<i32> = (0..4096).map(|i| 500 + i % 64).collect();
+    let family = Family::standard();
+    let code = dem::encode_tile(&q, 6, &family, &THRESHOLDS, &dem::TileOptions::default()).unwrap();
+    let grid = Grid {
+        tile_row0: 3_496,
+        tile_col0: 14_400,
+        tile_rows: 1,
+        tile_cols: 1,
+        lat_step: 10,
+        lon_step: 10,
+        step_mm: 2_000,
+        datum: DATUM_EGM2008,
+        tile_log2: 6,
+        first_tile: 0,
+    };
+    let tiles = [Some(code.as_slice())];
+    let body = dem::encode(
+        &[GridInput {
+            grid,
+            tiles: &tiles,
+        }],
+        &family,
+        &THRESHOLDS,
+    )
+    .unwrap();
+    let pack = d.join("dem.tgd");
+    let bytes = Writer::new("np", "places", "2026.11.0")
+        .unwrap()
+        .pack(&[(Kind::DEM, Encoding::TABLE, 1, &body)], None)
+        .unwrap();
+    std::fs::write(&pack, bytes).unwrap();
+    // Sample row 10, column 20 of the tile: 2 × (500 + 20) = 1,040 m.
+    let lat = 90.0 - (3_496.0 * 64.0 + 10.0) / 3600.0;
+    let lon = -180.0 + (14_400.0 * 64.0 + 20.0) / 3600.0;
+    let (lat, lon) = (format!("{lat:.7}"), format!("{lon:.7}"));
+    let text = ok(&["elevation", &lat, &lon, "--pack", s(&pack)]);
+    assert_eq!(text.trim(), "1040.0 m above EGM2008");
+    let v = json(&["elevation", &lat, &lon, "--pack", s(&pack), "--json"]);
+    assert_eq!(v["elevation_m"], 1040.0);
+    assert_eq!(v["datum"], "EGM2008");
+    // No terrain there: exit 1, and null in JSON.
+    let o = tgd(&["elevation", "10", "10", "--pack", s(&pack)]);
+    assert_eq!(o.status.code(), Some(1));
+    let o = tgd(&["elevation", "10", "10", "--pack", s(&pack), "--json"]);
+    assert_eq!(o.status.code(), Some(1));
+    let v: Value = serde_json::from_slice(&o.stdout).unwrap();
+    assert!(v["elevation_m"].is_null());
+}

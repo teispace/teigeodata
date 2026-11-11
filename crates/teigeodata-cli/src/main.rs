@@ -202,6 +202,20 @@ enum Command {
         #[command(flatten)]
         out: Out,
     },
+    /// The terrain height at a point, in metres above EGM2008, from the packs' DEM.
+    Elevation {
+        /// Latitude in degrees.
+        #[arg(allow_hyphen_values = true)]
+        lat: f64,
+        /// Longitude in degrees.
+        #[arg(allow_hyphen_values = true)]
+        lon: f64,
+        #[command(flatten)]
+        packs: Packs,
+        /// Print JSON: `{"lat", "lon", "elevation_m", "datum"}`.
+        #[arg(long)]
+        json: bool,
+    },
     /// Set up the store: the catalog's mirrors and its trusted root.
     Init {
         /// A metadata mirror (the catalog's TUF repository); repeat for several, best first.
@@ -535,6 +549,12 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             };
             query::run(store, &packs.packs, ask, o.mode(), out)
         }
+        Command::Elevation {
+            lat,
+            lon,
+            packs,
+            json,
+        } => query::elevation(store, &packs.packs, (lat, lon), json, out),
         Command::Init { repo, assets, root } => sync::init(store, &repo, &assets, &root, out),
         Command::Refresh { countries } => sync::refresh(store, &countries, out),
         Command::Catalog { json } => sync::catalog(store, json, out),

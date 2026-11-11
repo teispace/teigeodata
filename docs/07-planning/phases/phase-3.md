@@ -85,7 +85,10 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 - [x] B11 on all 45 Nepal tiles (D-109): 139.3 MB for the 9° × 5° box, 1.907 bits per sample,
   all probes within 1 m, 163 s
 - [ ] B11 on 2–3 tiles elsewhere, and against LERC and zstd
-- [ ] The DEM section in the Nepal packs: its own component, tiles masked to the country
+- [ ] The DEM section in the Nepal packs: its own component, tiles masked to the country.
+  Built 2026-11-11 (D-192): `dem::mask`, the forge's mask and read-back gate,
+  `Engine::elevation_at`, `tgd elevation`; the item closes with the Nepal size, once the DEM
+  tiles are fetched again
 - [x] Elevation at each place's consensus point from the DEM section into PLACES column 7 (since D-133 its own ELEVATION section)
   (D-109, D-111): `forge make` runs the recipe's `dem` tileset as a stage, `build` samples it
   at every place's final point and checks every row on read back. Nepal main: 101,542 of
@@ -207,3 +210,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | 3.7: G-conf (D-131) | the silver-label scores had no gate |
 | 2026-11-09 | 3.4: lite elevation from NASADEM (D-132) | the lite build had no heights |
 | 2026-11-09 | 3.7: lite timezones from tzdb (D-138); a GeoNames timezone check its own item | the lite build had no timezones |
+| 2026-11-11 | 3.4: the DEM ships masked to the pack's units, terrain by `elevation_at` | D-192 |

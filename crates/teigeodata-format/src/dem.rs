@@ -177,6 +177,9 @@ pub struct DemScratch {
     q: [i32; MAX_TILE],
     /// The tile in `q` (section tile number), if any.
     tile: Option<usize>,
+    /// The address of the payload that tile came from, so a scratch shared between sections
+    /// (packs, layers) never answers one section from another's tile.
+    owner: usize,
     log2: u32,
     /// Samples decoded so far.
     done: usize,
@@ -202,6 +205,7 @@ impl Default for DemScratch {
         Self {
             q: [0; MAX_TILE],
             tile: None,
+            owner: 0,
             log2: 0,
             done: 0,
             state: 0,
@@ -371,6 +375,7 @@ impl Coder<'_> {
         s.log2 = log2;
         s.done = 1;
         s.tile = Some(t);
+        s.owner = self.payload.as_ptr().addr();
         Some(())
     }
 
@@ -613,7 +618,7 @@ impl<'a> Dem<'a> {
         let t = g.tile(r >> log2, c >> log2)?;
         let mask = (1_u64 << log2) - 1;
         let i = usize::try_from(((r & mask) << log2) | (c & mask)).ok()?;
-        if s.tile != Some(t) {
+        if s.tile != Some(t) || s.owner != self.coder.payload.as_ptr().addr() {
             self.coder.start(self.code(t)?, t, log2, s)?;
         }
         if s.done <= i && self.coder.run(s, i + 1).is_none() {
@@ -779,7 +784,7 @@ impl<'a> Dem<'a> {
 }
 
 #[cfg(feature = "write")]
-pub use write::{Family, GridInput, THRESHOLDS, TileOptions, encode, encode_tile};
+pub use write::{Family, GridInput, THRESHOLDS, TileOptions, encode, encode_tile, mask};
 
 #[cfg(feature = "write")]
 mod write {
@@ -1228,6 +1233,77 @@ mod write {
         family: &Family,
         thresholds: &[u32; 7],
     ) -> Result<Vec<u8>, Error> {
+        encode_raw(grids, &family.bytes, thresholds)
+    }
+
+    /// A copy of `dem` holding only the present tiles that `keep(grid, tile_row, tile_col)`
+    /// accepts (rows and columns on the global tile grid), each grid's box shrunk to its kept
+    /// tiles and a grid with none dropped: the section body and its item count (tiles), or
+    /// `None` if nothing is kept. Tile codes are copied, not re-coded, so every kept sample
+    /// reads back exactly; a query in a dropped tile reads as in an absent one. O(tiles).
+    ///
+    /// # Errors
+    /// [`Error::Write`] if the copy is too large for u32 offsets.
+    pub fn mask(
+        dem: &super::Dem<'_>,
+        keep: impl Fn(&Grid, u32, u32) -> bool,
+    ) -> Result<Option<(Vec<u8>, u64)>, Error> {
+        let mut kept: Vec<(Grid, Vec<Option<&[u8]>>)> = Vec::new();
+        for g in 0..dem.grids() {
+            let Some(grid) = dem.grid(g) else { continue };
+            let (rows, cols) = (grid.tile_rows, grid.tile_cols);
+            let at = |r: u32, c: u32| -> Option<&[u8]> {
+                let t = grid.first_tile as usize + r as usize * cols as usize + c as usize;
+                let (start, end) = dem.code(t)?;
+                keep(&grid, grid.tile_row0 + r, grid.tile_col0 + c)
+                    .then(|| dem.coder.payload.get(start..end))
+                    .flatten()
+            };
+            let (mut r0, mut c0, mut r1, mut c1) = (u32::MAX, u32::MAX, 0, 0);
+            for r in 0..rows {
+                for c in 0..cols {
+                    if at(r, c).is_some() {
+                        (r0, c0, r1, c1) = (r0.min(r), c0.min(c), r1.max(r), c1.max(c));
+                    }
+                }
+            }
+            if r0 > r1 || c0 > c1 {
+                continue;
+            }
+            let mut tiles = Vec::with_capacity(((r1 - r0 + 1) * (c1 - c0 + 1)) as usize);
+            for r in r0..=r1 {
+                for c in c0..=c1 {
+                    tiles.push(at(r, c));
+                }
+            }
+            let shrunk = Grid {
+                tile_row0: grid.tile_row0 + r0,
+                tile_col0: grid.tile_col0 + c0,
+                tile_rows: r1 - r0 + 1,
+                tile_cols: c1 - c0 + 1,
+                first_tile: 0,
+                ..grid
+            };
+            kept.push((shrunk, tiles));
+        }
+        if kept.is_empty() {
+            return Ok(None);
+        }
+        let inputs: Vec<GridInput<'_>> = kept
+            .iter()
+            .map(|(grid, tiles)| GridInput { grid: *grid, tiles })
+            .collect();
+        let count: u64 = kept.iter().map(|(_, t)| t.len() as u64).sum();
+        let body = encode_raw(&inputs, dem.coder.models, &dem.coder.thresholds)?;
+        Ok(Some((body, count)))
+    }
+
+    /// [`encode`] with the family as its [`MODELS`] bytes.
+    fn encode_raw(
+        grids: &[GridInput<'_>],
+        models: &[u8],
+        thresholds: &[u32; 7],
+    ) -> Result<Vec<u8>, Error> {
         let too_big = || Error::Write("a DEM section above 4 GiB");
         let mut cols: [Vec<u32>; 10] = Default::default();
         let mut offsets = alloc::vec![0_u32];
@@ -1274,7 +1350,7 @@ mod write {
             .map(|(&id, v)| (id, Codec::Bitpack, encode_auto(v)))
             .collect();
         bodies.push((OFFSETS, Codec::Bitpack, encode_auto(&offsets)));
-        bodies.push((MODELS, Codec::Bytes, family.bytes.clone()));
+        bodies.push((MODELS, Codec::Bytes, models.to_vec()));
         bodies.push((CONTEXTS, Codec::Bitpack, encode_auto(thresholds)));
         bodies.push((PAYLOAD, Codec::Bytes, payload));
         let refs: Vec<(u16, Codec, &[u8])> = bodies

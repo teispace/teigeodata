@@ -88,6 +88,9 @@ pub(crate) struct PrefixCand {
 /// reused, so a warm query does not allocate (M1). One per thread; [`Default`] is empty.
 #[derive(Debug, Default)]
 pub struct Scratch {
+    /// A decoded DEM tile, allocated on the first terrain query (19 KiB).
+    #[cfg(feature = "dem")]
+    dem: Option<Box<teigeodata_format::dem::DemScratch>>,
     neighbours: Vec<Neighbour>,
     near: Vec<NearCand>,
     pub(crate) segs: Vec<Range<usize>>,
@@ -313,6 +316,34 @@ impl Engine {
             }
         }
         Ok(false)
+    }
+
+    /// The terrain height at `at` in metres above EGM2008, from the first layer covering the
+    /// point whose DEM has samples around it (D-089, D-192): bilinear between the four samples
+    /// around it, each within half the DEM's height step of its source (±1 m in shipped
+    /// packs). `None` where no layer has terrain (the sea, outside every DEM). A warm query
+    /// does not allocate; it decodes at most one tile, and the next query in that tile goes on
+    /// from where it stopped.
+    ///
+    /// # Errors
+    /// [`Error::MissingComponent`] if a layer covering the point has a DEM that is not
+    /// installed; [`Error::Integrity`] if it is corrupt.
+    #[cfg(feature = "dem")]
+    pub fn elevation_at(&self, at: Point<E7>, s: &mut Scratch) -> Result<Option<f64>, Error> {
+        for l in &self.layers {
+            if !l.covers(at) {
+                continue;
+            }
+            l.ensure(Kind::DEM)?;
+            let Some(dem) = &l.views().dem else {
+                continue;
+            };
+            let scratch = s.dem.get_or_insert_with(Box::default);
+            if let Some(h) = dem.elevation(at, scratch) {
+                return Ok(Some(h));
+            }
+        }
+        Ok(None)
     }
 
     /// The elevation of `place` in whole metres above EGM2008, from its layer's `elevation`

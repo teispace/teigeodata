@@ -416,6 +416,23 @@ the planted-bug proofs of the new tests (item 7). Thresholds and refinement were
    max error ≤ E over every sample (a deep check).
 7. Prove each check fails on a deliberate violation (a wrong coefficient, a step of 2E + 1).
 
+### 6.3 In the packs (D-192, 2026-11-11)
+
+The DEM ships as the pack's `dem` component, masked to the pack's area: the tiles an outline
+edge passes through or whose centre is inside a first-level unit, grown by 0.05° in whole
+tiles (`forge::build::elevation::tiles_near`). The mask copies tile codes (`dem::mask`), so
+every kept sample reads back exactly and the forge does not code Nepal twice; each grid's box
+shrinks to its kept tiles. A split part masks to its own unit. The build reads every place's
+height back from the pack's own DEM, so a place whose terrain was masked away fails the build.
+The engine answers `elevation_at(point)` from the first layer whose DEM has samples around the
+point, and `tgd elevation` prints it. Expected Nepal size: about a third of the 139.3 MB box
+(Nepal is about 30% of its 9° × 5° box, mostly mountains), to be measured when the DEM tiles
+are fetched again.
+
+A reader's `DemScratch` now remembers which section its tile came from: one scratch used on
+two packs' DEMs answered the second from the first's tile when the tile numbers matched (a
+test planted with the old check fails).
+
 ## 7. Risks and open items
 
 - **Four tiles are a sample.** The Nepal size is an estimate weighted by an unverified terrain

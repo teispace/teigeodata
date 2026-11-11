@@ -229,17 +229,47 @@ fn topology(root: &Path, a: &Args) -> Result<Option<geometry::Geometry>, String>
         .transpose()
 }
 
+/// What the pack stage reads beside the places: where it writes, the ID registry, the
+/// topology and the timezones the sources state.
+struct PackInputs {
+    file: PathBuf,
+    ids_file: PathBuf,
+    registry: ids::Registry,
+    geometry: Option<geometry::Geometry>,
+    stated_tz: BTreeMap<String, String>,
+}
+
+impl PackInputs {
+    fn read(root: &Path, a: &Args, sources: &[String], out_dir: &Path) -> Result<Self, String> {
+        Ok(Self {
+            file: out_dir.join(format!("{}-places-{}.tgd", a.cc, a.build_name())),
+            ids_file: out_dir.join(format!("{}-ids-{}.tsv", a.cc, a.build_name())),
+            registry: registry(root, a.ids.as_deref())?,
+            geometry: topology(root, a)?,
+            stated_tz: zones::stated(&root.join("data/build"), sources)?,
+        })
+    }
+}
+
+/// The country's area, its DEM's mask (D-192): the polygons of its first admin level.
+fn first_level(levels: &[Level]) -> Vec<&crate::geom::Polygon> {
+    levels
+        .first()
+        .map(|l| l.polys.iter().collect())
+        .unwrap_or_default()
+}
+
 /// Writes the country pack and, with a split (D-191), its parts beside it, after removing any
 /// parts an earlier build left there. Returns the report.
 fn packs(
     input: &pack::Input<'_>,
-    split: Option<&split::Split>,
+    split: Option<(&split::Split, &[Level])>,
     out_dir: &Path,
 ) -> Result<String, String> {
     split::remove_parts(out_dir, &input.args.cc, input.args.build_name())?;
     let (mut report, country) = pack::write(input)?;
-    if let Some(s) = split {
-        report.push_str(&split::run(input, &country, s, out_dir)?);
+    if let Some((s, levels)) = split {
+        report.push_str(&split::run(input, &country, s, levels, out_dir)?);
     }
     Ok(report)
 }
@@ -304,11 +334,8 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let unnamed = keep_named(&mut places) + unnamed_clusters;
     let elevations = elevation::load(root, g.dem.as_deref(), &places)?;
 
-    let file = out_dir.join(format!("{}-places-{}.tgd", a.cc, a.build_name()));
-    let registry = registry(root, a.ids.as_deref())?;
-    let geometry = topology(root, &a)?;
-    let stated_tz = zones::stated(&build, &g.sources)?;
-    let ids_file = out_dir.join(format!("{}-ids-{}.tsv", a.cc, a.build_name()));
+    let f = PackInputs::read(root, &a, &g.sources, &out_dir)?;
+    let outline = first_level(&units.levels);
     let input = pack::Input {
         root,
         args: &a,
@@ -318,16 +345,21 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         profile: &profile,
         zones: &zones,
         coverage,
-        file: &file,
-        registry: &registry,
-        ids_file: Some(&ids_file),
-        geometry: geometry.as_ref(),
+        file: &f.file,
+        registry: &f.registry,
+        ids_file: Some(&f.ids_file),
+        geometry: f.geometry.as_ref(),
         postal: g.postal.as_ref(),
         elevation: elevations.as_ref(),
+        outline: &outline,
         attribution: &g.attribution,
-        stated_tz: &stated_tz,
+        stated_tz: &f.stated_tz,
     };
-    let report = packs(&input, split.as_ref(), &out_dir)?;
+    let report = packs(
+        &input,
+        split.as_ref().map(|s| (s, units.levels.as_slice())),
+        &out_dir,
+    )?;
     let mut summary = header(&a, places.len(), &g.sources, g.tz.as_deref());
     notes(&mut summary, held, unnamed, &g);
     summary.push_str(&naming.line());
@@ -342,7 +374,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     modelled.write(&out_dir, a.build_name())?;
     finish(
         (summary, &report, &g.attribution),
-        (root, &out_dir, &file),
+        (root, &out_dir, &f.file),
         a.build_name(),
         t,
     )

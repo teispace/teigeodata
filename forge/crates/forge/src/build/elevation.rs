@@ -13,7 +13,7 @@
 //!   section sampled afresh at the row's stored point, a path that shares no code with the
 //!   sampling here.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
@@ -26,6 +26,7 @@ use teigeodata_format::places::Places;
 use teigeodata_format::{Kind, Pack};
 
 use super::Place;
+use crate::geom::Polygon;
 use crate::record::{column, for_each_batch};
 
 /// The DEM a build samples, and the heights it gave.
@@ -160,7 +161,29 @@ fn stated(build: &Path, sources: &[String]) -> Result<BTreeMap<String, Stated>, 
     Ok(out)
 }
 
+/// How far a pack's DEM reaches past its outline: 0.05° (about 5 km), so places on the border
+/// and just across it keep terrain around them (D-192).
+pub(crate) const DEM_HALO_DEG: f64 = 0.05;
+
 impl Elevations {
+    /// The DEM section for a pack whose area is `outline` (its units' polygons): the tiles
+    /// within [`DEM_HALO_DEG`] of it, copied from the build's DEM (`dem::mask`, no re-coding),
+    /// with the section's tile count; `None` without an outline or with nothing near it.
+    pub(crate) fn masked(&self, outline: &[&Polygon]) -> Result<Option<(Vec<u8>, u64)>, String> {
+        if outline.is_empty() {
+            return Ok(None);
+        }
+        let dem = open(&self.bytes)?;
+        let mut keep: HashSet<(u32, u32)> = HashSet::new();
+        for g in 0..dem.grids() {
+            if let Some(grid) = dem.grid(g) {
+                keep.extend(tiles_near(outline, &grid, DEM_HALO_DEG));
+            }
+        }
+        teigeodata_format::dem::mask(&dem, |_, r, c| keep.contains(&(r, c)))
+            .map_err(|e| e.to_string())
+    }
+
     /// The heights of the places `at` (indexes into the build's places), in that order: a split
     /// build's part (D-191). The DEM is shared, not copied.
     pub(crate) fn subset(&self, at: &[usize]) -> Self {
@@ -321,11 +344,91 @@ pub(crate) fn verify(
     ))
 }
 
+/// The tiles of `grid` (global tile row, column) within `halo` degrees of the polygons: every
+/// tile an edge passes through or whose centre lies inside (even-odd per row of tile centres),
+/// grown by the halo in whole tiles. Degrees, not metres: a longitude tile is narrower than a
+/// latitude one away from the equator, so the halo is never less than asked.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "tile indices from degrees inside the grid, far below 2^31"
+)]
+pub(crate) fn tiles_near(
+    polys: &[&Polygon],
+    grid: &teigeodata_format::dem::Grid,
+    halo: f64,
+) -> HashSet<(u32, u32)> {
+    let side = grid.side() as f64;
+    let (t_lat, t_lon) = (
+        side * f64::from(grid.lat_step) / 36_000.0,
+        side * f64::from(grid.lon_step) / 36_000.0,
+    );
+    let (r0, c0) = (i64::from(grid.tile_row0), i64::from(grid.tile_col0));
+    let (r1, c1) = (
+        r0 + i64::from(grid.tile_rows),
+        c0 + i64::from(grid.tile_cols),
+    );
+    let row_of = |lat: f64| ((90.0 - lat) / t_lat).floor() as i64;
+    let col_of = |lon: f64| ((lon + 180.0) / t_lon).floor() as i64;
+    let deg = |(x, y): (i32, i32)| (f64::from(x) * 1e-7, f64::from(y) * 1e-7);
+    let mut hit: HashSet<(i64, i64)> = HashSet::new();
+    let edges = || {
+        polys.iter().flat_map(|p| &p.rings).flat_map(|ring| {
+            let close = ring.last().zip(ring.first()).map(|(a, b)| (*a, *b));
+            ring.windows(2)
+                .filter_map(|w| Some((*w.first()?, *w.get(1)?)))
+                .chain(close)
+        })
+    };
+    // Edges: sampled at under half a tile, so no tile they cross is skipped.
+    let step = t_lat.min(t_lon) / 2.0;
+    for (a, b) in edges() {
+        let ((x0, y0), (x1, y1)) = (deg(a), deg(b));
+        let n = ((x1 - x0).hypot(y1 - y0) / step).ceil().max(1.0) as usize;
+        for i in 0..=n {
+            let t = i as f64 / n as f64;
+            hit.insert((row_of(y0 + (y1 - y0) * t), col_of(x0 + (x1 - x0) * t)));
+        }
+    }
+    // Interiors: each row of tile centres against every edge, even-odd.
+    let mut xs: Vec<f64> = Vec::new();
+    for r in r0..r1 {
+        let centre = 90.0 - (r as f64 + 0.5) * t_lat;
+        xs.clear();
+        for (a, b) in edges() {
+            let ((x0, y0), (x1, y1)) = (deg(a), deg(b));
+            if (y0 > centre) != (y1 > centre) {
+                xs.push(x0 + (centre - y0) / (y1 - y0) * (x1 - x0));
+            }
+        }
+        xs.sort_by(f64::total_cmp);
+        for &[w, e] in xs.as_chunks::<2>().0 {
+            // Tiles whose centre is in [w, e].
+            let west = ((w + 180.0) / t_lon - 0.5).ceil() as i64;
+            let east = ((e + 180.0) / t_lon - 0.5).floor() as i64;
+            for c in west.max(c0)..=east.min(c1 - 1) {
+                hit.insert((r, c));
+            }
+        }
+    }
+    let (kr, kc) = ((halo / t_lat).ceil() as i64, (halo / t_lon).ceil() as i64);
+    let mut out = HashSet::new();
+    for &(r, c) in &hit {
+        for rr in (r - kr).max(r0)..=(r + kr).min(r1 - 1) {
+            for cc in (c - kc).max(c0)..=(c + kc).min(c1 - 1) {
+                out.insert((rr as u32, cc as u32));
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, reason = "tests")]
 
-    use super::{metres, sample, verify};
+    use super::{metres, sample, tiles_near, verify};
     use crate::build::Place;
     use teigeodata_core::{E7, PlaceKind, Point};
     use teigeodata_format::dem::{
@@ -478,5 +581,63 @@ mod tests {
             .expect("known");
         let one = Heights::open(&Section::unpacked(Kind::ELEVATION, 1, &h)).expect("open");
         assert!(verify(&dem, &two, Some(&one)).is_err(), "a short ELEVATION");
+    }
+
+    #[test]
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "degrees to tile indices in the test grid"
+    )]
+    fn tiles_near_an_outline_are_its_inside_and_its_halo() {
+        let grid = Grid {
+            tile_row0: 3_400,
+            tile_col0: 14_800,
+            tile_rows: 300,
+            tile_cols: 300,
+            lat_step: 10,
+            lon_step: 10,
+            step_mm: 2_000,
+            datum: DATUM_EGM2008,
+            tile_log2: 6,
+            first_tile: 0,
+        };
+        let e7 = |d: f64| (d * 1e7).round() as i32;
+        let square = |w: f64, s: f64, e: f64, n: f64| crate::geom::Polygon {
+            rings: vec![vec![
+                (e7(w), e7(s)),
+                (e7(e), e7(s)),
+                (e7(e), e7(n)),
+                (e7(w), e7(n)),
+            ]],
+        };
+        // A 0.6° square with a 0.2° hole in its middle (the hole is still within no halo).
+        let mut p = square(84.2, 26.0, 84.8, 26.6);
+        p.rings.push(square(84.4, 26.2, 84.6, 26.4).rings.remove(0));
+        let kept = tiles_near(&[&p], &grid, 0.05);
+        let tile = |lon: f64, lat: f64| {
+            let t = 64.0 / 3600.0;
+            (((90.0 - lat) / t) as u32, ((lon + 180.0) / t) as u32)
+        };
+        assert!(kept.contains(&tile(84.3, 26.1)), "inside");
+        assert!(
+            kept.contains(&tile(84.84, 26.3)),
+            "0.04° outside, in the halo"
+        );
+        assert!(!kept.contains(&tile(84.9, 26.3)), "0.1° outside");
+        assert!(!kept.contains(&tile(85.5, 26.3)), "far outside");
+        assert!(
+            kept.contains(&tile(84.5, 26.23)),
+            "in the hole, within the halo of its edge"
+        );
+        assert!(
+            !kept.contains(&tile(84.5, 26.3)),
+            "the hole's middle, 0.1° from its edges"
+        );
+        // Every kept tile is in the grid.
+        assert!(
+            kept.iter()
+                .all(|&(r, c)| (3_400..3_700).contains(&r) && (14_800..15_100).contains(&c))
+        );
     }
 }

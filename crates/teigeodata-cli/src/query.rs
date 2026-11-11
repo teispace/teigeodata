@@ -167,3 +167,36 @@ pub(crate) fn run(
     }
     Ok(())
 }
+
+/// `tgd elevation`: the terrain height at a point from the packs' DEM (D-192), in metres
+/// above EGM2008 to a tenth; no terrain there is exit 1.
+pub(crate) fn elevation(
+    store: &std::path::Path,
+    packs: &[PathBuf],
+    (lat, lon): (f64, f64),
+    json: bool,
+    out: &mut dyn Write,
+) -> Result<(), Fail> {
+    let e = if packs.is_empty() {
+        crate::sync::Opened::open(store)?.engine(&[])?
+    } else {
+        engine(packs)?
+    };
+    let h = e.elevation_at(point::<E7>(lat, lon)?, &mut Scratch::default())?;
+    match (h, json) {
+        (Some(m), false) => writeln!(out, "{m:.1} m above EGM2008")?,
+        (Some(m), true) => writeln!(
+            out,
+            "{{\"lat\":{lat},\"lon\":{lon},\"elevation_m\":{m:.1},\"datum\":\"EGM2008\"}}"
+        )?,
+        (None, true) => writeln!(
+            out,
+            "{{\"lat\":{lat},\"lon\":{lon},\"elevation_m\":null,\"datum\":\"EGM2008\"}}"
+        )?,
+        (None, false) => {}
+    }
+    match h {
+        Some(_) => Ok(()),
+        None => Err(Fail::Refused("no terrain there".into())),
+    }
+}

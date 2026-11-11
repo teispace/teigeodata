@@ -577,6 +577,8 @@ writes one pack per unit of the level `data/countries/<cc>/split.yaml` names, at
   when the cut zone holds it;
 - its own places' postal codes and heights, the redirects to them, and every tombstone.
 
+A part's DEM is masked to its own unit's polygon (D-192).
+
 G-tz fails only the country pack: a part holds a subset of the same records. After writing,
 `split::check` reads every part back against the country pack: each own place is in one part
 only, with the same ID, point, canonical name, chain of ancestors and timezone area, and every

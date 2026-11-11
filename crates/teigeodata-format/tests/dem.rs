@@ -335,3 +335,82 @@ fn resumed_queries_equal_fresh_ones() {
     }
     assert!(asked > 500);
 }
+
+#[test]
+fn a_mask_keeps_its_tiles_exactly_and_shrinks_the_box() {
+    let mut rng = Rng(7);
+    // 4 × 6 tiles, tile 9 absent.
+    let (grid, codes, truth) = grid_codes(ROW0, COL0, 4, 6, &[9], &mut rng);
+    let body = section(grid, &codes);
+    let whole = open(&body, 24);
+    // Keep tile rows 1–2 and columns 2–4 (global), but not (2, 4).
+    let keep = |_: &Grid, r: u32, c: u32| {
+        let (r, c) = (r - ROW0, c - COL0);
+        (1..=2).contains(&r) && (2..=4).contains(&c) && (r, c) != (2, 4)
+    };
+    let (masked, count) = dem::mask(&whole, keep).unwrap().unwrap();
+    assert_eq!(count, 6, "2 rows × 3 columns");
+    let d = open(&masked, 6);
+    d.check().unwrap();
+    let g = d.grid(0).unwrap();
+    assert_eq!(
+        (g.tile_row0, g.tile_col0, g.tile_rows, g.tile_cols),
+        (ROW0 + 1, COL0 + 2, 2, 3)
+    );
+    let mut s = DemScratch::new();
+    for r in 0..2_usize {
+        for c in 0..3_usize {
+            let got = d.decode_tile(r * 3 + c, &mut s).map(<[i32]>::to_vec);
+            let want = if (r, c) == (1, 2) {
+                None
+            } else {
+                truth[(r + 1) * 6 + c + 2].clone()
+            };
+            assert_eq!(got, want, "tile ({r}, {c})");
+        }
+    }
+    // A point in a kept tile reads as in the whole section; one in a dropped tile reads none.
+    let (mut a, mut b) = (DemScratch::new(), DemScratch::new());
+    let inside = point(
+        f64::from(ROW0 + 1) * 64.0 + 10.5,
+        f64::from(COL0 + 2) * 64.0 + 20.25,
+    );
+    assert_eq!(d.elevation(inside, &mut a), whole.elevation(inside, &mut b));
+    assert!(d.elevation(inside, &mut a).is_some());
+    let dropped = point(f64::from(ROW0) * 64.0 + 10.5, f64::from(COL0) * 64.0 + 10.5);
+    assert!(whole.elevation(dropped, &mut b).is_some());
+    assert_eq!(d.elevation(dropped, &mut a), None);
+    // Nothing kept: no section.
+    assert!(dem::mask(&whole, |_, _, _| false).unwrap().is_none());
+    // The same mask gives the same bytes.
+    assert_eq!(dem::mask(&whole, keep).unwrap().unwrap().0, masked);
+}
+
+#[test]
+fn one_scratch_never_mixes_two_sections_tiles() {
+    // Two sections over the same tiles with different terrain.
+    let (g1, c1, _) = grid_codes(ROW0, COL0, 1, 1, &[], &mut Rng(1));
+    let (g2, mut c2, _) = grid_codes(ROW0, COL0, 1, 1, &[], &mut Rng(99));
+    // A flat tile far from the other's heights.
+    c2[0] = Some(
+        dem::encode_tile(
+            &[5_000; 4096],
+            LOG2,
+            &Family::standard(),
+            &THRESHOLDS,
+            &TileOptions::default(),
+        )
+        .unwrap(),
+    );
+    let (b1, b2) = (section(g1, &c1), section(g2, &c2));
+    let (d1, d2) = (open(&b1, 1), open(&b2, 1));
+    let at = point(f64::from(ROW0) * 64.0 + 30.5, f64::from(COL0) * 64.0 + 30.5);
+    let fresh = |d: &Dem<'_>| d.elevation(at, &mut DemScratch::new());
+    let mut shared = DemScratch::new();
+    for _ in 0..3 {
+        assert_eq!(d1.elevation(at, &mut shared), fresh(&d1));
+        assert_eq!(d2.elevation(at, &mut shared), fresh(&d2));
+    }
+    assert_eq!(fresh(&d2), Some(10_000.0));
+    assert_ne!(fresh(&d1), fresh(&d2));
+}

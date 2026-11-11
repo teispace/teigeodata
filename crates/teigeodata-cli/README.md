@@ -73,6 +73,7 @@ tgd search "Lahachowk, Kaski"
 tgd near tgd:np/da65m6 --radius 5000
 tgd admin 27.7172 85.3240
 tgd tz 27.7172 85.3240
+tgd elevation 27.7172 85.3240   # terrain height (m above EGM2008); --json
 ```
 
 Each query reads `--pack FILE` (repeat for several) or, without it, the store. Output is text

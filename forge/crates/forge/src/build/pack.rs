@@ -58,6 +58,9 @@ pub(super) struct Input<'a> {
     pub(super) postal: Option<&'a super::postal::Postal>,
     /// Place elevations, one per place in `places`, when the build samples a DEM.
     pub(super) elevation: Option<&'a super::elevation::Elevations>,
+    /// The pack's area: its units' polygons, which its DEM section is masked to (D-192). Empty:
+    /// no DEM section.
+    pub(super) outline: &'a [&'a crate::geom::Polygon],
     /// The sources' notices, one per line (D-126).
     pub(super) attribution: &'a str,
     /// The timezone each source record states, by record key (D-138): the independent check
@@ -262,9 +265,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
         (Kind::SEARCH, Encoding::TABLE, n as u64, search_body),
         (Kind::PLACE_INDEX, Encoding::TABLE, n as u64, index_body),
     ];
-    if let Some(body) = heights_body {
-        sections.push((Kind::ELEVATION, Encoding::TABLE, n as u64, body));
-    }
+    terrain(input, heights_body, n, &mut sections)?;
     if !input.zones.rings.is_empty() {
         let body =
             region::encode(&input.zones.rings, &Options::default()).map_err(|e| e.to_string())?;
@@ -714,6 +715,10 @@ fn verify(
     match (input.elevation, heights) {
         (Some(d), h) => {
             let _ = writeln!(report, "\n{}", d.verify(&places, h.as_ref())?);
+            if let Some(s) = p.section(Kind::DEM) {
+                let line = verify_dem(&s, &places, h.as_ref())?;
+                let _ = writeln!(report, "\n{line}");
+            }
         }
         (None, None) => {}
         (None, Some(_)) => return Err("an ELEVATION section without a DEM".into()),
@@ -723,6 +728,47 @@ fn verify(
         let _ = writeln!(report, "\n{line}");
     }
     Ok(())
+}
+
+/// ELEVATION (one height per row) and, when the build samples a DEM, the DEM masked to the
+/// pack's outline (D-192), added to `sections`.
+fn terrain(
+    input: &Input<'_>,
+    heights: Option<Vec<u8>>,
+    rows: usize,
+    sections: &mut Vec<Body>,
+) -> Result<(), String> {
+    if let Some(body) = heights {
+        sections.push((Kind::ELEVATION, Encoding::TABLE, rows as u64, body));
+    }
+    if let Some((body, tiles)) = input
+        .elevation
+        .map(|e| e.masked(input.outline))
+        .transpose()?
+        .flatten()
+    {
+        sections.push((Kind::DEM, Encoding::TABLE, tiles, body));
+    }
+    Ok(())
+}
+
+/// The pack's own DEM read back (D-192): `check`, then every row's height equals the masked
+/// DEM at its stored point, so no place's terrain was masked away.
+fn verify_dem(
+    s: &teigeodata_format::Section<'_>,
+    places: &Places<'_>,
+    heights: Option<&Heights<'_>>,
+) -> Result<String, String> {
+    let dem = teigeodata_format::dem::Dem::open(s).map_err(|e| e.to_string())?;
+    dem.check().map_err(|e| format!("the pack's DEM: {e}"))?;
+    let line = super::elevation::verify(&dem, places, heights)
+        .map_err(|e| format!("the pack's DEM: {e}"))?;
+    Ok(format!(
+        "DEM (D-192): {} tiles in its boxes, {} B, masked to the pack's outline and {}° around it. In it: {line}",
+        dem.tiles(),
+        s.bytes().len(),
+        super::elevation::DEM_HALO_DEG
+    ))
 }
 
 /// REGION read back: `check`, and every zone holds its own point and links to its row.

@@ -8,12 +8,14 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use teigeodata_core::PlaceId;
-#[cfg(any(feature = "timezone-index", feature = "admin-index"))]
+#[cfg(any(feature = "timezone-index", feature = "admin-index", feature = "dem"))]
 use teigeodata_core::{E7, Point};
 #[cfg(feature = "admin-index")]
 use teigeodata_format::arcs::{ArcChunks, Arcs};
 use teigeodata_format::blocks::{BLOCK, Blocks};
 use teigeodata_format::component::{Component, Components};
+#[cfg(feature = "dem")]
+use teigeodata_format::dem::Dem;
 #[cfg(feature = "elevation")]
 use teigeodata_format::elevation::Elevations;
 #[cfg(feature = "admin")]
@@ -113,7 +115,7 @@ const KINDS: usize = 32;
 
 /// The components whose Cargo feature is off: this build has no reader for them, so their
 /// sections are never read and their queries do not exist (D-137). `point` is always built;
-/// `postal`, `dem` and `extra` are read raw through [`Layer::section_bytes`].
+/// `postal` and `extra` are read raw through [`Layer::section_bytes`].
 const NOT_BUILT: &[Component] = &[
     #[cfg(not(feature = "elevation"))]
     Component::Elevation,
@@ -131,7 +133,25 @@ const NOT_BUILT: &[Component] = &[
     Component::Boundaries,
     #[cfg(not(feature = "admin-index"))]
     Component::AdminIndex,
+    #[cfg(not(feature = "dem"))]
+    Component::Dem,
 ];
+
+/// Where the block-hash list of every installed section is (located, not proved: D-142).
+fn located_blocks<'a>(
+    pack: &Pack<'a>,
+    missing: Components,
+) -> Result<Vec<(Kind, Blocks<'a, 'static>)>, Error> {
+    let mut blocks = Vec::new();
+    for s in pack.sections() {
+        if Component::of(s.kind()).is_some_and(|c| !missing.contains(c))
+            && let Some(b) = pack.locate_blocks(s.kind())?
+        {
+            blocks.push((s.kind(), b));
+        }
+    }
+    Ok(blocks)
+}
 
 /// The zero-copy views of one pack, opened once (structure checks only).
 #[derive(Debug)]
@@ -167,6 +187,9 @@ pub(crate) struct Views<'a> {
     pub(crate) arcs: Option<Arcs<'a>>,
     #[cfg(feature = "admin-index")]
     pub(crate) poly_index: Option<PolyIndex<'a>>,
+    /// Terrain heights at any point (D-192); absent in a pack without them.
+    #[cfg(feature = "dem")]
+    pub(crate) dem: Option<Dem<'a>>,
     /// The block hashes of every installed section of 1 MiB or more, located but not proved:
     /// each list is proved against its section hash on the section's first use (D-142).
     pub(crate) blocks: Vec<(Kind, Blocks<'a, 'static>)>,
@@ -241,14 +264,9 @@ impl<'a> Views<'a> {
             (Some(s), Some(p)) => Some(PolyIndex::open(&s, p)?),
             _ => None,
         };
-        let mut blocks = Vec::new();
-        for s in pack.sections() {
-            if Component::of(s.kind()).is_some_and(|c| !missing.contains(c))
-                && let Some(b) = pack.locate_blocks(s.kind())?
-            {
-                blocks.push((s.kind(), b));
-            }
-        }
+        #[cfg(feature = "dem")]
+        let dem = get(Kind::DEM).map(|s| Dem::open(&s)).transpose()?;
+        let blocks = located_blocks(&pack, missing)?;
         Ok(Self {
             pack,
             ids,
@@ -277,6 +295,8 @@ impl<'a> Views<'a> {
             arcs,
             #[cfg(feature = "admin-index")]
             poly_index,
+            #[cfg(feature = "dem")]
+            dem,
             blocks,
             missing,
         })
@@ -626,7 +646,7 @@ impl Layer {
     }
 
     /// Whether the coverage box holds `at` (true without a box).
-    #[cfg(any(feature = "timezone-index", feature = "admin-index"))]
+    #[cfg(any(feature = "timezone-index", feature = "admin-index", feature = "dem"))]
     pub(crate) fn covers(&self, at: Point<E7>) -> bool {
         self.bbox.is_none_or(|b| {
             let (lat, lon) = (at.lat(), at.lon());

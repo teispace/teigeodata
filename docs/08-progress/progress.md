@@ -69,6 +69,8 @@ A short status. The numbers and evidence live in each phase file and the
   gzip, D-176), both oracles agreeing over the country roles (D-177); 4.9: the CLI researched (D-178) and the catalog refresh `sync::refresh` with the timestamp as the commit point (D-179), `tgd`'s pack commands (D-180), its queries with native, GeoJSON and Nominatim output (D-181), its store commands from `init` to `remove`, end to end over HTTP (D-182), and its completions, guide and timings (D-183); gate 14's seam, installs in passes over the files a platform downloaded, with macOS `URLSession` keeping `Range` in the background and across a redirect (D-184), the iOS simulator surviving an app killed mid-download (D-185), and Android UIDT and the browser's OPFS doing the same (D-186): sync gate 14 green by hand; gate 8 with `tgd` itself killed mid-install, which made installs stream frame by frame (D-187); a world-size install whose block-hash list spans frames, run nightly (D-188); a partial install takes only its sections' space on disk, holes punched where APFS would fill them (D-189), Windows too, with a Windows CI job (D-190). Next: the two-release delta measurement needs two Nepal builds; the release upload and the first
   ceremony wait for the maintainer; the world byte-identity check after the thinning change
   waits for the inputs to be fetched again.
+- **Terrain (D-192):** packs carry the DEM masked to their units; `elevation_at` and
+  `tgd elevation` answer any point; the Nepal size waits for the DEM tiles.
 - **Split builds (D-191):** `forge make <cc> --split` writes one pack per province with its
   ancestor stubs, proved against the country pack; Nepal 7 parts, 1.16× the pack. Tiles for
   India are W1.

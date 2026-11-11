@@ -21,6 +21,7 @@ default = [
     "timezone-index",
     "boundaries",
     "admin-index",
+    "dem",
 ]
 # One feature per component (D-133, D-135, D-136): a build without one carries none of its
 # readers or queries, and a pack's sections of it are treated as not installed. `point` (IDs,
@@ -33,6 +34,8 @@ timezone = []
 timezone-index = []
 boundaries = []
 admin-index = ["boundaries"]
+# Terrain heights at any point from a pack's DEM (D-089, D-192): `Engine::elevation_at`.
+dem = []
 # Discovery (D-164): the engine as the catalog's `Resolver` (`teigeodata_sync::catalog`), a name
 # to places and the countries whose packs hold them. Off by default: it adds the catalog reader.
 catalog = ["search", "admin-index", "dep:teigeodata-sync"]
@@ -97,6 +100,10 @@ required-features = ["elevation", "admin", "names", "search", "timezone", "timez
 [[test]]
 name = "discover"
 required-features = ["catalog", "names"]
+
+[[test]]
+name = "dem"
+required-features = ["dem"]
 
 [[test]]
 name = "shared"

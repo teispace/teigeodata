@@ -91,6 +91,7 @@ asks its layer for each section before reading it (`ensure`). Per query:
 | `search` | `search` (with `names`); a context that matches rows also `admin` |
 | `tz_of(place)` | `timezone`, else `timezone-index`; names `timezone` when neither is installed |
 | `tz_at` | `timezone-index` |
+| `elevation_at` | `dem` |
 | `admin_at` | `admin-index` (with `boundaries`) |
 | `countries_near`, `missing_packs` | `admin-index`; a layer without `boundaries` installed is skipped |
 
@@ -100,8 +101,8 @@ never touches heights.
 ## Cargo features per component (D-137)
 
 Each component the engine reads has a Cargo feature, all on by default: `elevation`, `admin`,
-`names`, `search` (with `names`), `timezone`, `timezone-index`, `boundaries` and
-`admin-index` (with `boundaries`). `point` is always built; `postal`, `dem` and `extra` are
+`names`, `search` (with `names`), `timezone`, `timezone-index`, `boundaries`,
+`admin-index` (with `boundaries`) and `dem`. `point` is always built; `postal` and `extra` are
 read raw through `Layer::section_bytes`. A build without a feature has neither the query nor
 the section reader, and treats the component as not installed: a pack's sections of it are
 never read or hashed, `Layer::components()` leaves it out, and a query of a built component
@@ -116,6 +117,7 @@ that needs it (a search context needs `admin`) returns `Error::MissingComponent`
 | `search` | `search` |
 | `tz_of` | `timezone` or `timezone-index` |
 | `tz_at` | `timezone-index` |
+| `elevation_at` | `dem` |
 | `admin_at` | `admin-index` |
 | `countries_near`, `missing_packs` | `admin-index` |
 
@@ -187,6 +189,7 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 | `nearby(place, k)` | As `reverse` | `reverse` from the place's point, without the place |
 | `admin_at(at)` | The first layer in precedence order whose ADMIN_REGION holds the point (coverage beats existence) | none; a unit whose ID a higher layer claims is answered from that layer |
 | `tz_at(at)` | The first layer whose REGION (timezones) holds the point; a layer without REGION but with PLACE_TZ and admin outlines (the baseline) answers with the zone of its deepest unit holding the point (D-151) | as `admin_at` |
+| `elevation_at(at)` | The first layer covering the point whose DEM has samples around it; a layer whose DEM has an absent tile there (masked away, the sea) is passed (D-192) | none: a height, bilinear between four samples, within half the DEM's step (±1 m) |
 | `countries_near(at, r)` | Every layer with outlines: POLY_INDEX boxes that meet the circle's box, then `Polygons::within` (holds the point or a border within `r`) on the country polygons (the locator, D-149) | union by ID, each answered by the layer that wins it |
 | `missing_packs(at, r)` | As `countries_near` | its countries whose pack (the ID's namespace, `np`) is not installed; a partial pack (`ae-du`) counts where its box holds the point |
 | `search(q, k)` | Every layer with SEARCH | Each layer scores its rows and keeps its best k visible; k-way merge by score, then ID. Fuzzy keys share the first letter unless no layer has a visible strong match; a context after a comma matches ancestors in the row's own pack (D-119); the layer's query rules add matches (D-121) |
@@ -248,4 +251,5 @@ Each gate was first shown to fail on a planted bug (D-114).
 | 2026-11-09 | `parent`, `ancestors`, `children` across packs by ancestor stubs | D-143 |
 | 2026-11-10 | `countries_near`, `missing_packs` (the locator) | D-149 |
 | 2026-11-10 | `tz_at` from a layer's units and PLACE_TZ when it has no timezone REGION | D-151 |
+| 2026-11-11 | `elevation_at` (feature `dem`): terrain at any point from a layer's DEM; the DEM scratch lives in `Scratch` | D-192 |
 | 2026-11-10 | The embedded baseline: feature `baseline`, `BASELINE`, `Engine::with_baseline`, `LayerOptions::baseline()` | D-153 |

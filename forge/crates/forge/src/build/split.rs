@@ -28,6 +28,7 @@ use teigeodata_format::places::Places;
 use teigeodata_format::{Kind, Pack};
 
 use super::pack::{self, Built, Input};
+use super::units::Level;
 use super::zones::Zones;
 use super::{Place, postal};
 use crate::geom::{Polygon, clip_ring};
@@ -84,6 +85,8 @@ pub(crate) fn read(root: &Path, cc: &str) -> Result<Split, String> {
 /// build's places.
 struct Part {
     address: String,
+    /// The unit's place key.
+    unit: String,
     own: BTreeSet<usize>,
     rows: BTreeSet<usize>,
 }
@@ -203,6 +206,7 @@ fn parts(places: &[Place], split: &Split, cc: &str) -> Result<(Vec<Part>, usize)
         }
         out.push(Part {
             address: format!("{cc}-{code}"),
+            unit: key.clone(),
             own,
             rows,
         });
@@ -331,6 +335,7 @@ pub(crate) fn run(
     input: &Input<'_>,
     whole: &Built,
     split: &Split,
+    levels: &[Level],
     out_dir: &Path,
 ) -> Result<String, String> {
     let cc = input.args.cc.as_str();
@@ -344,7 +349,15 @@ pub(crate) fn run(
     let (all, near) = parts(places, split, cc)?;
     let mut written = Vec::new();
     for part in all {
-        let (line, done) = write_part(input, whole, &part, out_dir)?;
+        // The part's area: its unit's polygon at the split's level (D-192).
+        let outline: Vec<&Polygon> = levels
+            .iter()
+            .filter(|l| l.number == split.level)
+            .flat_map(|l| l.keys.iter().zip(&l.polys))
+            .filter(|(k, _)| **k == part.unit)
+            .map(|(_, p)| p)
+            .collect();
+        let (line, done) = write_part(input, whole, &part, &outline, out_dir)?;
         report.push_str(&line);
         written.push(done);
     }
@@ -361,6 +374,7 @@ fn write_part(
     input: &Input<'_>,
     whole: &Built,
     part: &Part,
+    outline: &[&Polygon],
     out_dir: &Path,
 ) -> Result<(String, Written), String> {
     let places = input.places;
@@ -451,6 +465,7 @@ fn write_part(
         geometry: geometry.as_ref(),
         postal: post.as_ref().filter(|p| !p.entries.is_empty()),
         elevation: heights.as_ref(),
+        outline,
         attribution: input.attribution,
         stated_tz: input.stated_tz,
     };
