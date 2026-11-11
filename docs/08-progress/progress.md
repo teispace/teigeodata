@@ -74,11 +74,14 @@ A short status. The numbers and evidence live in each phase file and the
   product, spacing and datum (TG-07, D-195), zone rules from the outlines' own tzdb release
   (TG-03, D-196), ISO 3166 codes (TG-02, D-197), the release policy and the `v0.1.0` tag
   (TG-01, D-198), zones before 1970 researched (TG-08: backzone adds nothing for South Asia).
-  Point → postal code in the engine and `tgd postal` (3.5, D-200). Next: substring search
-  (TG-06, being built in a worktree), then 3.4 summit heights. Waiting: Nepal and India data
-  releases (TG-05, maintainer steps).
-- **Terrain (D-192):** packs carry the DEM masked to their units; `elevation_at` and
-  `tgd elevation` answer any point; the Nepal size waits for the DEM tiles.
+  Point → postal code in the engine and `tgd postal` (3.5, D-200); substring search (TG-06,
+  D-199: Nepal SUBSTRING 2.56 MB, golden substring class 9 of 9 at rank 3). Waiting: Nepal and
+  India data releases (TG-05, maintainer steps).
+- **Terrain (D-192):** packs carry the DEM masked to their units and the tiles around every
+  place with a height; `elevation_at` and `tgd elevation` answer any point; Nepal main DEM
+  64.2 MB of a 78.8 MB pack, points-only download 536 kB. Summits are `natural` places with
+  their surveyed heights where they agree with the DEM (D-201: 2,726, Everest 8,849 m); names
+  carrying their context are dropped (D-202). Next: the lite build with NASADEM.
 - **Split builds (D-191):** `forge make <cc> --split` writes one pack per province with its
   ancestor stubs, proved against the country pack; Nepal 7 parts, 1.16× the pack. Tiles for
   India are W1.
@@ -135,3 +138,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-11 | 4.8: installs stream frame by frame with a SIGKILL gate (D-187); the world-size install, its list over two frames, cut and resumed, nightly (D-188); 4.1b: partial installs punch holes, points only 1.50 of 2.85 MB on disk (D-189) | two-release delta (needs Nepal builds); M4 exit review |
 | 2026-11-11 | Tithipatra's brief planned (D-193); TG-04 extent (D-194), TG-07 height source (D-195), TG-01 release policy (D-198); four research notes (ISO codes, zone rules, substring search, zones before 1970) by parallel agents; zone rules and ISO codes being built in worktrees | Merge TG-03 and TG-02, tag v0.1.0, TG-06, then 3.5 |
 | 2026-11-11 | TG-03 and TG-02 merged, `v0.1.0` tagged (D-198); 3.5 point → postal code in the engine and `tgd postal` (D-200) | TG-06 merge, 3.4 summit heights |
+| 2026-11-11 | TG-06 merged (D-199); NASADEM fetched upstream when no mirror; 3.4 DEM section sized on Nepal and summit heights (D-201); context-carrying names dropped (D-202); golden baseline regenerated | Lite build and gate, then 3.7 |
