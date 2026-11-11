@@ -225,6 +225,7 @@ fn each_component_set_answers_as_the_whole_pack_or_names_what_is_missing() {
             Component::Postal,
             Component::Dem,
             Component::TzRules,
+            Component::Substring,
         ]))
     );
     // The probes are not trivially empty.
@@ -311,6 +312,24 @@ fn a_set_without_what_it_needs_is_refused() {
         Some(Component::Names)
     );
     assert_eq!(refused(&[Component::Elevation]), Some(Component::Point));
+    // Substring search ranks with search (D-199).
+    let mut m = synthetic(200, 3);
+    m.with_substring();
+    let refused_in = |list: &[Component]| {
+        let options = LayerOptions {
+            installed: Some(Components::of(list)),
+            ..LayerOptions::default()
+        };
+        match Layer::from_bytes(m.encode(), options) {
+            Err(Error::MissingComponent { component, .. }) => Some(component),
+            Ok(_) => None,
+            Err(e) => panic!("{e}"),
+        }
+    };
+    let (p, n, s) = (Component::Point, Component::Names, Component::Search);
+    assert_eq!(refused_in(&[p, n, Component::Substring]), Some(s));
+    assert_eq!(refused_in(&[p, n, s, Component::Substring]), None);
+    assert_eq!(refused_in(&[p, n, s]), None);
     // A pack without rules (the baseline, a pack built before D-196) installs its zones alone.
     assert_eq!(refused(&[Component::Point, Component::Timezone]), None);
     // A pack with rules: a zone needs them (D-196).

@@ -235,6 +235,26 @@ impl Model {
         }
     }
 
+    /// Adds SUBSTRING (D-199) cut from the model's names as the forge cuts it, with SEARCH's
+    /// importance, to the sections written as they are (a subset or split drops it).
+    pub fn with_substring(&mut self) {
+        let mut keys: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
+        for (row, names) in self.names.iter().enumerate() {
+            for n in names {
+                let f = teigeodata_names::fold(&n.text);
+                teigeodata_names::substring_keys(&f, |k| {
+                    if k.len() < 255 {
+                        keys.entry(k.to_string()).or_default().insert(row as u32);
+                    }
+                });
+            }
+        }
+        let body = search::encode_substring(&keys, &self.importance).unwrap();
+        self.raw.retain(|r| r.0 != Kind::SUBSTRING);
+        self.raw
+            .push((Kind::SUBSTRING, self.ids.len() as u64, body));
+    }
+
     /// The rows every part must hold: the places the region indexes link to.
     pub fn linked_rows(&self) -> BTreeSet<u32> {
         self.zones

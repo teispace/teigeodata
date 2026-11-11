@@ -157,6 +157,9 @@ pub struct Scratch {
     pub(crate) rows: Vec<(u32, i32)>,
     #[cfg(feature = "search")]
     pub(crate) prefix: Vec<PrefixCand>,
+    /// The substring tier's best rows over every layer (D-199).
+    #[cfg(feature = "substring")]
+    pub(crate) substring: Vec<PrefixCand>,
     #[cfg(feature = "search")]
     pub(crate) loose: String,
     /// The rows a layer's names match the query's context with, sorted.

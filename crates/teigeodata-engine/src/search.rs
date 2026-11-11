@@ -9,6 +9,8 @@ use teigeodata_format::Kind;
 use teigeodata_format::idmap::IdMap;
 use teigeodata_format::search::fuzzy::{Fuzzy, MAX_CHARS};
 use teigeodata_format::search::{EXACT, LOOSE, PHONETIC, Search};
+#[cfg(feature = "substring")]
+use teigeodata_format::search::{SUBSTRING, SUBSTRING_MIN};
 use teigeodata_names::KeyBuf;
 
 use crate::layer::QueryRules;
@@ -41,6 +43,13 @@ const STRONG: i32 = FUZZY_BONUS - FUZZY_PER_EDIT;
 const PREFIX_K: usize = 16;
 /// The prefix tier runs from this many characters.
 const PREFIX_MIN: usize = 3;
+/// A substring match (D-199): below prefix (30) and one edit (25), above two edits (15) and
+/// phonetic (5). Not strong, so it never stops the unanchored fuzzy pass.
+#[cfg(feature = "substring")]
+const SUBSTRING_BONUS: i32 = 20;
+/// The substring tier takes the best rows by importance over every layer, as the prefix tier.
+#[cfg(feature = "substring")]
+const SUBSTRING_K: usize = 16;
 /// The fuzzy tier runs from this many characters (D-086).
 const FUZZY_MIN: usize = 4;
 
@@ -66,7 +75,10 @@ impl Engine {
     /// (D-052): exact 60, loose 55, one edit 25 (queries of 4 to 63 characters, keys with the
     /// query's first letter; any first letter only when no layer has a visible match of one
     /// edit or better), plus the best 16 by importance over every layer for a prefix of 3
-    /// characters or more (30), each plus the row's importance. After a comma the query names a
+    /// characters or more (30), each plus the row's importance. With the `substring` feature, a
+    /// query of 3 or more code points without a space also takes the best 16 by importance over
+    /// every layer that has the `substring` component whose name holds it inside a word (20;
+    /// D-199): "mandu" finds Kathmandu. After a comma the query names a
     /// context ("Name, Parent"): a row whose ancestor (or itself) has a name matching it,
     /// exactly, loosely, within 2 edits or as a prefix, gains 1,000, so a named parent outranks
     /// every other match (ADR-0032, D-119). Each layer keeps its best `k` visible rows; a k-way
@@ -85,6 +97,8 @@ impl Engine {
         s.hits.clear();
         s.segs.clear();
         s.prefix.clear();
+        #[cfg(feature = "substring")]
+        s.substring.clear();
         if k == 0 {
             return Ok(());
         }
@@ -112,20 +126,7 @@ impl Engine {
         } else {
             None
         };
-        if chars >= PREFIX_MIN {
-            for (i, l) in self.layers.iter().enumerate() {
-                l.ensure(Kind::SEARCH)?;
-                l.ensure(Kind::IDMAP)?;
-                let v = l.views();
-                let (Some(search), Some(ids)) = (&v.search, &v.ids) else {
-                    continue;
-                };
-                self.prefix_best(i, search, ids, q, &mut s.prefix)?;
-            }
-            s.prefix
-                .sort_unstable_by(|a, b| b.importance.cmp(&a.importance).then(a.id.cmp(&b.id)));
-            s.prefix.truncate(PREFIX_K);
-        }
+        self.tiers_by_importance(q, chars, s)?;
         // Fuzzy keys start with the query's first letter; only when no layer has a strong match
         // (exact, loose, within one edit or a prefix) does a second pass take any first letter
         // (ADR-0032): first-letter typos are rare, and the anchored walk is several times faster.
@@ -229,6 +230,13 @@ impl Engine {
                 .filter(|p| p.layer == me)
                 .map(|p| (p.row, PREFIX_BONUS)),
         );
+        #[cfg(feature = "substring")]
+        rows.extend(
+            s.substring
+                .iter()
+                .filter(|p| p.layer == me)
+                .map(|p| (p.row, SUBSTRING_BONUS)),
+        );
         rows.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
         rows.dedup_by_key(|r| r.0);
         let unit = abbr.and_then(|a| rules.unit(a));
@@ -290,24 +298,65 @@ impl Engine {
         Ok(strong)
     }
 
-    /// Appends layer `i`'s best [`PREFIX_K`] visible rows under a key starting with `q`, by
-    /// importance then ID. Skips keys and blocks of keys that cannot enter (`Search::best_in`).
-    fn prefix_best(
+    /// The tiers ranked by importance alone, over every layer: the best [`PREFIX_K`] rows
+    /// under a key starting with `q` (from 3 characters), and, with the `substring` feature,
+    /// the best [`SUBSTRING_K`] whose name holds `q` inside a word (one word, 3 code points or
+    /// more, D-199). Only layers installed with `substring` have its section; the others add
+    /// nothing to that tier.
+    fn tiers_by_importance(&self, q: &str, chars: usize, s: &mut Scratch) -> Result<(), Error> {
+        let by_rank =
+            |a: &PrefixCand, b: &PrefixCand| b.importance.cmp(&a.importance).then(a.id.cmp(&b.id));
+        if chars >= PREFIX_MIN {
+            for (i, l) in self.layers.iter().enumerate() {
+                l.ensure(Kind::SEARCH)?;
+                l.ensure(Kind::IDMAP)?;
+                let v = l.views();
+                let (Some(search), Some(ids)) = (&v.search, &v.ids) else {
+                    continue;
+                };
+                self.best_by_importance(i, search, ids, (EXACT, q), false, &mut s.prefix)?;
+            }
+            s.prefix.sort_unstable_by(by_rank);
+            s.prefix.truncate(PREFIX_K);
+        }
+        #[cfg(feature = "substring")]
+        if chars >= SUBSTRING_MIN && !q.contains(' ') {
+            for (i, l) in self.layers.iter().enumerate() {
+                let v = l.views();
+                let (Some(sub), Some(ids)) = (&v.substring, &v.ids) else {
+                    continue;
+                };
+                l.ensure(Kind::SUBSTRING)?;
+                l.ensure(Kind::IDMAP)?;
+                self.best_by_importance(i, sub, ids, (SUBSTRING, q), true, &mut s.substring)?;
+            }
+            s.substring.sort_unstable_by(by_rank);
+            s.substring.truncate(SUBSTRING_K);
+        }
+        Ok(())
+    }
+
+    /// Appends layer `i`'s best [`PREFIX_K`] visible rows under a key of map `tag` starting
+    /// with `q`, by importance. Skips keys and blocks of keys that cannot enter
+    /// (`Search::best_in`). Not `strict` (the prefix tier), keys whose best row ties the worst
+    /// kept one are still read once full, so ties are broken by ID; `strict` (the substring
+    /// tier, D-199), they are skipped and ties fall in key order: a 3-letter substring ranges
+    /// over thousands of equal keys, and reading them cost p99 7× in the note's bench.
+    fn best_by_importance(
         &self,
         i: usize,
         search: &Search<'_>,
         ids: &IdMap<'_>,
-        q: &str,
+        (tag, q): (u8, &str),
+        strict: bool,
         prefix: &mut Vec<PrefixCand>,
     ) -> Result<(), Error> {
         let start = prefix.len();
-        // Once full, keys whose best row ties the worst kept one are still read: a tie is
-        // broken by ID, which the key order does not follow.
         let floor = Cell::new(-1_i32);
         let mut failed = None;
         let me = index(i);
         search.best_in(
-            search.range(EXACT, q),
+            search.range(tag, q),
             || floor.get(),
             |o| {
                 search.rows_of(o, |r| {
@@ -358,7 +407,7 @@ impl Engine {
                             .map(|p| p.importance)
                             .min()
                             .unwrap_or(0);
-                        floor.set(i32::from(low) - 1);
+                        floor.set(i32::from(low) - i32::from(!strict));
                     }
                     ControlFlow::Continue(())
                 });

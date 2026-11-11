@@ -147,6 +147,8 @@ const NOT_BUILT: &[Component] = &[
     Component::TzRules,
     #[cfg(not(feature = "postal"))]
     Component::Postal,
+    #[cfg(not(feature = "substring"))]
+    Component::Substring,
 ];
 
 /// Where the block-hash list of every installed section is (located, not proved: D-142).
@@ -187,6 +189,10 @@ pub(crate) struct Views<'a> {
     pub(crate) names: Option<Names<'a>>,
     #[cfg(feature = "search")]
     pub(crate) search: Option<Search<'a>>,
+    /// Word-suffix keys for substring search (D-199); absent in a pack without them, or when
+    /// the layer was installed without the `substring` component.
+    #[cfg(feature = "substring")]
+    pub(crate) substring: Option<Search<'a>>,
     /// SEARCH's query rules, read once here so a search decodes none of them (D-120).
     #[cfg(feature = "search")]
     pub(crate) rules: QueryRules<'a>,
@@ -267,6 +273,8 @@ impl<'a> Views<'a> {
         let search = get(Kind::SEARCH).map(|s| Search::open(&s)).transpose()?;
         #[cfg(feature = "search")]
         let rules = search.as_ref().map(QueryRules::new).unwrap_or_default();
+        #[cfg(feature = "substring")]
+        let substring = get(Kind::SUBSTRING).map(|s| Search::open(&s)).transpose()?;
         let place_index = match (get(Kind::PLACE_INDEX), places) {
             (Some(s), Some(p)) => Some(PlaceIndex::open(&s, p)?),
             _ => None,
@@ -318,6 +326,8 @@ impl<'a> Views<'a> {
             names,
             #[cfg(feature = "search")]
             search,
+            #[cfg(feature = "substring")]
+            substring,
             #[cfg(feature = "search")]
             rules,
             place_index,

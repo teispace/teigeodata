@@ -24,6 +24,7 @@ default = [
     "dem",
     "tz-rules",
     "postal",
+    "substring",
 ]
 # One feature per component (D-133, D-135, D-136): a build without one carries none of its
 # readers or queries, and a pack's sections of it are treated as not installed. `point` (IDs,
@@ -42,6 +43,11 @@ dem = []
 tz-rules = []
 # Postal codes (D-090, D-200): a code to its places, autocomplete, a place's codes and a point's.
 postal = []
+# Substring search (D-199): `search` also finds a name from 3 or more code points inside a word,
+# where a layer has the `substring` component. On by default: it adds a few hundred bytes of
+# code over `search` (the same reader), and the megabytes are the component's, which a client
+# installs only when it wants them.
+substring = ["search"]
 # Discovery (D-164): the engine as the catalog's `Resolver` (`teigeodata_sync::catalog`), a name
 # to places and the countries whose packs hold them. Off by default: it adds the catalog reader.
 catalog = ["search", "admin-index", "dep:teigeodata-sync"]
@@ -118,6 +124,10 @@ required-features = ["dem"]
 [[test]]
 name = "iso"
 required-features = ["admin"]
+
+[[test]]
+name = "substring"
+required-features = ["substring"]
 
 [[test]]
 name = "tz_rules"

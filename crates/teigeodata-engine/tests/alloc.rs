@@ -62,7 +62,9 @@ fn warm_queries_do_not_allocate() {
         count(|| drop(std::hint::black_box(Vec::<u8>::with_capacity(9)))),
         1
     );
-    let model = synthetic(2000, 21);
+    let mut model = synthetic(2000, 21);
+    // The whole pack also has SUBSTRING (D-199); the split parts do not.
+    model.with_substring();
     let whole = model.encode();
     let parts = model.split(3, |r, _| r as usize % 3);
     for packs in [vec![whole], parts] {
@@ -77,7 +79,16 @@ fn warm_queries_do_not_allocate() {
             Vec::with_capacity(64),
         );
         let points: Vec<_> = model.points.iter().step_by(97).copied().collect();
-        let queries = ["kamapur", "Ramkot", "kam", "dhara pani", "ramkat"];
+        // "apur" and "amko" are found from the middle of a word (the substring tier).
+        let queries = [
+            "kamapur",
+            "Ramkot",
+            "kam",
+            "dhara pani",
+            "ramkat",
+            "apur",
+            "amko",
+        ];
         let run = |e: &Engine, s: &mut Scratch, near: &mut Vec<_>, admin: &mut Vec<_>| {
             for (i, &at) in points.iter().enumerate() {
                 let id = model.ids[i * 7 % model.ids.len()];
