@@ -505,6 +505,7 @@ terms:
   query: "Lahachok"
   class: variant          # exact_latin | exact_native | variant | typo | prefix | abbreviation
                           # | historical | colloquial | mixed_script | with_context | ambiguous
+                          # | substring (a name from the middle of a word, D-199)
   focus: null             # optional lat/lon for proximity tests
   expect: [np:place:lahachowk-kaski]   # relevant ids, graded below
   grades: { np:place:lahachowk-kaski: 3 }

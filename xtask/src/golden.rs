@@ -11,8 +11,9 @@ use unicode_normalization::is_nfc;
 
 const SCHEMA: &str = "teigeodata/golden/v0";
 
-/// The query classes of names-and-search §5.7.
-pub(crate) const CLASSES: [&str; 11] = [
+/// The query classes of names-and-search §5.7, and `substring` (a name from the middle of a
+/// word, D-199).
+pub(crate) const CLASSES: [&str; 12] = [
     "exact_latin",
     "exact_native",
     "variant",
@@ -24,6 +25,7 @@ pub(crate) const CLASSES: [&str; 11] = [
     "mixed_script",
     "with_context",
     "ambiguous",
+    "substring",
 ];
 
 /// Source-key schemes an expectation may use until our stable IDs exist.
@@ -143,11 +145,21 @@ queries:
     }
 
     #[test]
+    fn accepts_the_substring_class() {
+        let text = GOOD.replacen("class: variant", "class: substring", 1);
+        let (counts, p) = check_text("np", &text);
+        assert!(p.is_empty(), "{p:?}");
+        assert_eq!(counts.get("substring"), Some(&1));
+    }
+
+    #[test]
     fn rejects_each_violation() {
         let cases = [
             ("country: NP", "country: IN", "must be `NP`"),
             ("id: np-0001", "id: in-0001", "must start with"),
             ("class: variant", "class: spelling", "unknown class"),
+            // A near miss of a known class is still refused.
+            ("class: variant", "class: substrings", "unknown class"),
             (
                 "\"geonames:1283240\": 3",
                 "\"geonames:1283240\": 1",

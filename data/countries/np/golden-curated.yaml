@@ -75,3 +75,57 @@ queries:
     expect: { "geonames:1282931": 3, "geonames:12096256": 3, "geonames:12095487": 2 }
     max_rank: 1
     source: "Lalitpur names the city (Patan), the metropolitan city and the district; India also has a Lalitpur"
+  - id: np-c013
+    class: substring
+    query: "mandu"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 1
+    source: "GeoNames 1283240 Kathmandu; a mid-word substring (TG-06)"
+  - id: np-c014
+    class: substring
+    query: "athmand"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 1
+    source: "GeoNames 1283240 Kathmandu; a mid-word substring (TG-06)"
+  - id: np-c015
+    class: substring
+    query: "काठ"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 1
+    source: "GeoNames 1283240 alternate काठमाडौं; 3 code points, 2 graphemes (TG-06)"
+  - id: np-c016
+    class: substring
+    query: "माडौं"
+    expect: { "geonames:1283240": 3 }
+    max_rank: 1
+    source: "GeoNames 1283240 alternate काठमाडौं; a mid-word Devanagari substring (TG-06)"
+  - id: np-c017
+    class: substring
+    query: "khara"
+    expect: { "geonames:1282898": 3 }
+    max_rank: 3
+    source: "GeoNames 1282898 Pokhara; many smaller names also contain 'khara' (TG-06)"
+  - id: np-c018
+    class: substring
+    query: "खरा"
+    expect: { "geonames:1282898": 3 }
+    max_rank: 3
+    source: "GeoNames 1282898 alternate पोखरा (TG-06)"
+  - id: np-c019
+    class: substring
+    query: "ratnagar"
+    expect: { "geonames:1283582": 3 }
+    max_rank: 1
+    source: "GeoNames 1283582 Biratnagar (TG-06)"
+  - id: np-c020
+    class: substring
+    query: "राटनगर"
+    expect: { "geonames:1283582": 3 }
+    max_rank: 1
+    source: "GeoNames 1283582 alternate बिराटनगर (TG-06)"
+  - id: np-c021
+    class: substring
+    query: "Pokhara"
+    expect: { "geonames:1282898": 3 }
+    max_rank: 1
+    source: "Guard: an exact match stays first over names containing it (Bhimpokhara, Thulapokhara)"
