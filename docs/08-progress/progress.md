@@ -17,7 +17,7 @@ A short status. The numbers and evidence live in each phase file and the
 | 1 Core and format | **M1 met** 2026-11-07 (D-080) | [phase 1 §1.6](../07-planning/phases/phase-1.md#16-exit-review) |
 | 2 Indexes | **M2 met** 2026-11-07 (D-087) | [phase 2 §2.4](../07-planning/phases/phase-2.md#24-exit-review) |
 | 3 Forge and Nepal data | in progress: 3.1–3.3 and 3.5 done (3.5 lite codes wait on Q-009); 3.4 DEM and 3.6 names in progress; 3.7–3.8 open | [phase 3](../07-planning/phases/phase-3.md) |
-| 4 Engine, baseline and sync | started in parallel with Phase 3: 4.1 engine and 4.4 transport | [phase 4](../07-planning/phases/phase-4.md) |
+| 4 Engine, baseline and sync | in progress; now 4.9c, the offline-first embedded layer for Tithipatra (D-213) | [phase 4](../07-planning/phases/phase-4.md) |
 | 5–8 | not started (bindings prototyped in S4, D-065 to D-068) | [roadmap](../07-planning/roadmap.md) |
 
 - **Now (Phase 3):** the Nepal main pack has 100,358 places with heights (D-111), admin
@@ -144,3 +144,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-11 | Tithipatra's brief planned (D-193); TG-04 extent (D-194), TG-07 height source (D-195), TG-01 release policy (D-198); four research notes (ISO codes, zone rules, substring search, zones before 1970) by parallel agents; zone rules and ISO codes being built in worktrees | Merge TG-03 and TG-02, tag v0.1.0, TG-06, then 3.5 |
 | 2026-11-11 | TG-03 and TG-02 merged, `v0.1.0` tagged (D-198); 3.5 point → postal code in the engine and `tgd postal` (D-200) | TG-06 merge, 3.4 summit heights |
 | 2026-11-11 | TG-06 merged (D-199); NASADEM fetched upstream when no mirror; 3.4 DEM section sized on Nepal and summit heights (D-201); context-carrying names dropped (D-202); golden baselines regenerated, lite built and gated | 3.7 |
+| 2026-11-11 | Maintainer answers D-203 to D-212; data build green after the world test reads the pack country's slice; Sentinel-2 chips for labels (D-209), cloud checked per chip; Tithipatra's addendum 1 accepted ahead of labels (D-213); TG-11 done: `cargo xtask pack-sizes`, [sizes](../05-data/sizes.md): Devanagari names on 9.1% of Nepal's places; SUBSTRING derives on the device byte for byte in 0.38 s | 4.9c: everything separable (names by language, outlines by level), derive SUBSTRING on the device, TG-12 profile, TG-14 Nepali names |
