@@ -1,7 +1,7 @@
 //! `SEARCH` (kind 5): name keys to places, for exact, prefix and fuzzy search (D-052, B7).
 //!
 //! Keys are byte strings that start with a **tag** naming their map ([`EXACT`], [`LOOSE`],
-//! [`PHONETIC`]; the forge defines how each map folds a name), then the folded name. All maps
+//! [`PHONETIC`], [`MACHINE`]; the forge defines how each map folds a name), then the folded name. All maps
 //! share one [automaton](fst), so their common suffixes are stored once. A key's ordinal (its
 //! position in sorted order) indexes its **list** of rows: the places with that key, most
 //! important first. Fuzzy matching counts edits in characters, so every script costs the same
@@ -67,6 +67,10 @@ pub const LOOSE: u8 = 2;
 pub const PHONETIC: u8 = 3;
 /// Tag of the substring map, the one map of a SUBSTRING section: word suffixes (D-199).
 pub const SUBSTRING: u8 = 4;
+/// Tag of the machine map: the search fold of each name a program wrote (D-228,
+/// [`Origin::is_machine`](crate::names::Origin::is_machine)), kept apart so a query scores
+/// such a match below a name a person wrote.
+pub const MACHINE: u8 = 5;
 /// The fewest code points of a substring key, and of a substring query (D-199).
 pub const SUBSTRING_MIN: usize = 3;
 
@@ -455,8 +459,8 @@ mod write {
 
     use super::fst::Builder;
     use super::{
-        AUTOMATON, BLOCK, BLOCK_MAX, EXACT, IDS, IMPORTANCE, LENGTH, LOOSE, PHONETIC, RULES,
-        STARTS, SUBSTRING, SUBSTRING_MIN, UNIT,
+        AUTOMATON, BLOCK, BLOCK_MAX, EXACT, IDS, IMPORTANCE, LENGTH, LOOSE, MACHINE, PHONETIC,
+        RULES, STARTS, SUBSTRING, SUBSTRING_MIN, UNIT,
     };
     use crate::Error;
 
@@ -469,6 +473,8 @@ mod write {
         pub loose: BTreeMap<alloc::string::String, BTreeSet<u32>>,
         /// The phonetic key.
         pub phonetic: BTreeMap<alloc::string::String, BTreeSet<u32>>,
+        /// The search fold of each machine name (D-228).
+        pub machine: BTreeMap<alloc::string::String, BTreeSet<u32>>,
     }
 
     /// Encodes a SEARCH body from its three maps (D-086): a loose key keeps only the rows its
@@ -511,6 +517,7 @@ mod write {
             (EXACT, &maps.exact),
             (LOOSE, &maps.loose),
             (PHONETIC, &maps.phonetic),
+            (MACHINE, &maps.machine),
         ] {
             for (text, rows) in map {
                 let rows: BTreeSet<u32> = match maps.exact.get(text) {

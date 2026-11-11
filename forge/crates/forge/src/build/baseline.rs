@@ -250,8 +250,11 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
                 || (places.kind(row as usize) == Some(PlaceKind::Country) && world.contains(&l))
         })
     };
-    let keys = |text: &str, row: u32, maps: &mut teigeodata_format::search::Maps| {
-        super::pack::add_keys(maps, text, row, &profile);
+    let keys = |text: &str,
+                origin: super::Origin,
+                row: u32,
+                maps: &mut teigeodata_format::search::Maps| {
+        super::pack::add_keys(maps, (text, origin), row, &profile);
     };
     let rule = extract::NameRule {
         keep: &keep_name,

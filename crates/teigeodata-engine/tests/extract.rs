@@ -270,7 +270,10 @@ fn a_name_rule_keeps_names_and_their_keys_only() {
         .filter(|&r| model.kinds[r as usize] != PlaceKind::TimezoneArea && r % 3 == 0)
         .collect();
     let keep_name = |_: u32, _: usize, n: &NameRecord<'_>| n.lang != Some(de);
-    let keys = |text: &str, row: u32, maps: &mut teigeodata_format::search::Maps| {
+    let keys = |text: &str,
+                _: teigeodata_format::names::Origin,
+                row: u32,
+                maps: &mut teigeodata_format::search::Maps| {
         let f = teigeodata_names::fold(text);
         maps.loose
             .entry(f.replace(' ', ""))

@@ -77,9 +77,9 @@ pub fn rows(pack: &Pack<'_>, keep: &[u32], lod: u8, region: &Options) -> Result<
 pub struct NameRule<'a> {
     /// Whether name `i` (0 is the canonical, always kept) of pack row `row` stays.
     pub keep: &'a dyn Fn(u32, usize, &NameRecord<'_>) -> bool,
-    /// Adds the SEARCH keys of `text`, a name of new row `row`, to the maps, exactly as the
-    /// pack's build keyed it.
-    pub keys: &'a dyn Fn(&str, u32, &mut search::Maps),
+    /// Adds the SEARCH keys of `text`, a name of new row `row` made as its origin says, to
+    /// the maps, exactly as the pack's build keyed it.
+    pub keys: &'a dyn Fn(&str, names::Origin, u32, &mut search::Maps),
 }
 
 impl core::fmt::Debug for NameRule<'_> {
@@ -449,8 +449,8 @@ impl<'a> Merged<'_, 'a> {
                     let mut maps = search::Maps::default();
                     for &r in &o.own {
                         let new = o.own_of.get(r as usize).copied().unwrap_or(u32::MAX);
-                        for (t, _) in rows.get(new as usize).into_iter().flatten() {
-                            (rule.keys)(t, new, &mut maps);
+                        for (t, meta) in rows.get(new as usize).into_iter().flatten() {
+                            (rule.keys)(t, names::Origin::from_code(meta.4), new, &mut maps);
                         }
                     }
                     for (key, list) in search::tagged_keys(&maps) {

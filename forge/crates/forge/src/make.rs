@@ -613,6 +613,18 @@ fn fetch_inputs(
             ids.push(id);
         }
     }
+    // What the country's transliteration profiles train on (D-228).
+    let cc = country
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    for xlit in build::Profile::read(root, cc)?.transliterate {
+        for id in crate::xlit::sources(root, &xlit)? {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+    }
     crate::fetch::run(root, &ids, false, false)
 }
 

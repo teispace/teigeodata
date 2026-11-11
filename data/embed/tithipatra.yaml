@@ -7,7 +7,7 @@ about: >-
 build: lite
 # timezone-index (zone outlines for tz_at near zone lines) joins with TG-16, once the merge carries REGION.
 # tz-rules: every zone's UTC offsets and transitions, compiled from the pinned tzdb (D-224).
-components: [point, elevation, admin, names, search, timezone, tz-rules, boundaries, admin-index]
+components: [point, elevation, dem-coarse, admin, names, search, timezone, tz-rules, boundaries, admin-index]
 # Nepali in Devanagari only: GeoNames tags Survey Department romanisations `ne` (D-215);
 # Hindi in Devanagari where no Nepali name exists (D-221).
 languages: [ne-Deva, hi-Deva, en]

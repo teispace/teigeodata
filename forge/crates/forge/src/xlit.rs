@@ -183,9 +183,8 @@ type Split = (String, Vec<Pair>, Vec<Pair>);
 /// # Errors
 /// A bad gate, profile or source, a source not fetched, a floor not met or an example not
 /// reproduced.
-pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
-    let args = parse_args(args)?;
-    let id = args.id.as_str();
+/// Profile `id`'s gate file, checked.
+fn gate(root: &Path, id: &str) -> Result<Gate, String> {
     let gate_path = root.join("data/xlit").join(format!("{id}.gate.yaml"));
     let gate_yaml =
         std::fs::read_to_string(&gate_path).map_err(|e| format!("{}: {e}", gate_path.display()))?;
@@ -200,6 +199,67 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     if gate.folds < 2 {
         return Err("folds must be at least 2".into());
     }
+    Ok(gate)
+}
+
+/// The fetched file of `source`, or an error naming the fetch.
+fn fetched_in<'l>(
+    root: &'l Path,
+    lock: &'l Lock,
+) -> impl Fn(&str) -> Result<std::path::PathBuf, String> + 'l {
+    move |source: &str| {
+        let p = lock.path(root, source)?;
+        if p.is_file() {
+            Ok(p)
+        } else {
+            Err(format!("{source} is not fetched yet: forge fetch {source}"))
+        }
+    }
+}
+
+/// Every source profile `id`'s shipping model reads: its gate's training texts and pairs, in
+/// file order, each once (`forge make --fetch`, D-228).
+pub(crate) fn sources(root: &Path, id: &str) -> Result<Vec<String>, String> {
+    let gate = gate(root, id)?;
+    let mut out: Vec<String> = Vec::new();
+    let all = gate.train.iter().map(|t| &t.source).chain(
+        gate.sets
+            .iter()
+            .flat_map(|s| s.parts.iter().map(|p| &p.source)),
+    );
+    for s in all {
+        if !out.contains(s) {
+            out.push(s.clone());
+        }
+    }
+    Ok(out)
+}
+
+/// The model a build ships for profile `id` (D-222): trained on every fold of its gate's
+/// sources, as `xlit-eval` checks its examples; with the profile and its target script.
+pub(crate) fn shipping(root: &Path, id: &str) -> Result<(Profile, Model, String), String> {
+    let gate = gate(root, id)?;
+    let (profile, script) = load_profile(root, id, &gate.lexicon)?;
+    let lock = Lock::read(&root.join("data/sources.lock"))?;
+    let fetched = fetched_in(root, &lock);
+    let (sets, hidden) = load_sets(&gate, &fetched, 0)?;
+    let mut all: Vec<&Pair> = sets.iter().flat_map(|(_, train, _)| train).collect();
+    all.extend(&hidden);
+    let texts = train_texts(&gate, &fetched, &all, &script)?;
+    let train = Training {
+        profile: &profile,
+        order: gate.order,
+        texts: &texts,
+        pairs: &all,
+    };
+    let (model, _, _) = train.model(&BTreeSet::new(), &BTreeSet::new())?;
+    Ok((profile, model, script))
+}
+
+pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
+    let args = parse_args(args)?;
+    let id = args.id.as_str();
+    let gate = gate(root, id)?;
     let (profile, script) = load_profile(root, id, &gate.lexicon)?;
     let profile = match args.lm_weight {
         Some(w) => {
@@ -210,14 +270,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         None => profile,
     };
     let lock = Lock::read(&root.join("data/sources.lock"))?;
-    let fetched = |source: &str| -> Result<std::path::PathBuf, String> {
-        let p = lock.path(root, source)?;
-        if p.is_file() {
-            Ok(p)
-        } else {
-            Err(format!("{source} is not fetched yet: forge fetch {source}"))
-        }
-    };
+    let fetched = fetched_in(root, &lock);
     // The fold measured: 0 (test), or 1 (dev) for tuning, so the test fold stays unseen.
     let (sets, hidden) = load_sets(&gate, &fetched, u64::from(args.dev))?;
     // Held-out references as runs of words, so no training text holds one.

@@ -10,7 +10,7 @@ use teigeodata_format::Kind;
 use teigeodata_format::idmap::IdMap;
 use teigeodata_format::places::Places;
 use teigeodata_format::search::fuzzy::{Fuzzy, MAX_CHARS};
-use teigeodata_format::search::{EXACT, LOOSE, PHONETIC, Search};
+use teigeodata_format::search::{EXACT, LOOSE, MACHINE, PHONETIC, Search};
 #[cfg(feature = "substring")]
 use teigeodata_format::search::{SUBSTRING, SUBSTRING_MIN};
 use teigeodata_names::KeyBuf;
@@ -35,6 +35,9 @@ const CONTEXT_MAX: usize = 4_096;
 const CONTEXT_EDITS: u8 = 2;
 /// A phonetic match: a low-weight safety net that never decides alone (ADR-0032).
 const PHONETIC_BONUS: i32 = 5;
+/// An exact match of a name a program wrote (D-228): below every match of a name a person
+/// wrote (exact 60, loose 55, after a dropped suffix 50) and level with a prefix.
+const MACHINE_BONUS: i32 = 30;
 /// A loose match once a droppable suffix is removed ("Janakpurdham").
 const DROP_BONUS: i32 = LOOSE_BONUS - 5;
 /// Added to a row of the unit type a query names by its abbreviation ("Janaki RM").
@@ -322,6 +325,7 @@ impl Engine {
             }
         };
         add(search.get(EXACT, q), EXACT_BONUS, rows);
+        add(search.get(MACHINE, q), MACHINE_BONUS, rows);
         // A loose lookup reads the loose list and its exact twin (D-086).
         add(search.get(LOOSE, loose), LOOSE_BONUS, rows);
         add(search.get(EXACT, loose), LOOSE_BONUS, rows);

@@ -580,7 +580,26 @@ fn assemble(
 
 /// Adds the SEARCH keys of name `text` of row `row`: the one way every build keys a name
 /// (packs, and a baseline slice rebuilding its keys from the names it keeps, D-152).
-pub(super) fn add_keys(maps: &mut Maps, text: &str, row: u32, profile: &Profile) {
+pub(super) fn add_keys(
+    maps: &mut Maps,
+    (text, origin): (&str, super::Origin),
+    row: u32,
+    profile: &Profile,
+) {
+    // A name added to fill a language gap (D-228: a transliteration or a donor label) is found
+    // by its exact fold only, in a map of its own that a query scores below a name a person
+    // wrote; no loose or phonetic key, so it never adds noise. A romanised display name is the
+    // place's canonical name and keeps every key: it must be found as written.
+    if matches!(
+        origin,
+        super::Origin::Transliteration | super::Origin::Donor
+    ) {
+        let k = fold(text);
+        if !k.is_empty() && k.len() < 255 {
+            maps.machine.entry(k).or_default().insert(row);
+        }
+        return;
+    }
     search_keys(text, &profile.droppable, profile.phonetic, |m, k| {
         let map = match m {
             SearchMap::Exact => &mut maps.exact,
@@ -630,7 +649,7 @@ pub(super) fn name_sections(
     for (row, p) in rows.iter().enumerate() {
         let row = u32::try_from(row).unwrap_or(u32::MAX);
         for nm in &p.names {
-            add_keys(&mut maps, &nm.text, row, profile);
+            add_keys(&mut maps, (&nm.text, nm.origin), row, profile);
         }
     }
     let mut importance: Vec<u8> = rows.iter().map(|p| importance(p)).collect();

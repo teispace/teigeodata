@@ -58,6 +58,9 @@ struct Profile {
     /// Romanisation profiles (`data/romanise/<id>.yaml`) for its names, in order.
     #[serde(default)]
     romanise: Vec<String>,
+    /// Transliteration profiles (`data/xlit/<id>.yaml`) that fill missing names (D-228).
+    #[serde(default)]
+    transliterate: Vec<String>,
     admin_levels: Vec<AdminLevel>,
     #[serde(default)]
     unit_types: Vec<UnitType>,
@@ -152,7 +155,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     let mut iso_units = 0usize;
     let mut scheme_ids = BTreeSet::new();
     let mut lexicons = Vec::new();
-    let profiles = romanise::ids(root);
+    let known = (romanise::ids(root), xlit_ids(root));
     let lock_text = fs::read_to_string(root.join("data/sources.lock")).unwrap_or_default();
     let pinned = sources::ids(&lock_text);
     for path in &countries {
@@ -169,7 +172,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
         }
         match fs::read_to_string(path.join("profile.yaml")) {
             Ok(text) => problems.extend(
-                check_profile(cc, &text, &profiles)
+                check_profile(cc, &text, (&known.0, &known.1))
                     .into_iter()
                     .map(|p| format!("{at}/profile.yaml: {p}")),
             ),
@@ -278,7 +281,23 @@ fn iso_and_split(path: &Path, cc: &str, problems: &mut Vec<String>) -> (usize, u
     units
 }
 
-fn check_profile(cc: &str, text: &str, profiles: &BTreeSet<String>) -> Vec<String> {
+/// The IDs of `data/xlit/<id>.yaml`, gate files left out.
+fn xlit_ids(root: &Path) -> BTreeSet<String> {
+    fs::read_dir(root.join("data/xlit"))
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|n| !n.ends_with(".gate.yaml"))
+        .filter_map(|n| n.strip_suffix(".yaml").map(str::to_owned))
+        .collect()
+}
+
+fn check_profile(
+    cc: &str,
+    text: &str,
+    (profiles, xlits): (&BTreeSet<String>, &BTreeSet<String>),
+) -> Vec<String> {
     let p: Profile = match serde_saphyr::from_str(text) {
         Ok(p) => p,
         Err(e) => return vec![format!("not a valid profile: {e}")],
@@ -303,6 +322,8 @@ fn check_profile(cc: &str, text: &str, profiles: &BTreeSet<String>) -> Vec<Strin
             ));
         }
     }
+    let unknown = p.transliterate.iter().filter(|id| !xlits.contains(*id));
+    out.extend(unknown.map(|id| format!("transliterate: no profile data/xlit/{id}.yaml")));
     if p.country != cc.to_ascii_uppercase() {
         out.push(format!(
             "country `{}` must be `{}`",
@@ -530,7 +551,7 @@ sources:
 
     #[test]
     fn accepts_a_valid_profile() {
-        let p = check_profile("np", GOOD, &profiles());
+        let p = check_profile("np", GOOD, (&profiles(), &BTreeSet::new()));
         assert!(p.is_empty(), "{p:?}");
     }
 
@@ -598,6 +619,11 @@ sources:
             ),
             ("text: \"प्रदेश\"", "text: \"প্রদেশ\"", "outside Deva"),
             (
+                "scripts: [Deva, Latn]",
+                "scripts: [Deva, Latn]\ntransliterate: [ne-Latn-Deva]",
+                "no profile data/xlit/ne-Latn-Deva.yaml",
+            ),
+            (
                 "name: Nepal",
                 "name: Nepal\ncapital: Kathmandu",
                 "not a valid profile",
@@ -606,7 +632,7 @@ sources:
         for (from, to, expect) in cases {
             assert!(GOOD.contains(from), "test setup: `{from}` not found");
             let bad = GOOD.replacen(from, to, 1);
-            let p = check_profile("np", &bad, &profiles());
+            let p = check_profile("np", &bad, (&profiles(), &BTreeSet::new()));
             assert!(
                 p.iter().any(|m| m.contains(expect)),
                 "expected `{expect}` for `{to}`, got {p:?}"

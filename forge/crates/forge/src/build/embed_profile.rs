@@ -43,7 +43,7 @@ use teigeodata_sync::transport;
 use super::Profile;
 
 /// A part's search keyer: the key function its pack was built with.
-type Keyer<'a> = Box<dyn Fn(&str, u32, &mut search::Maps) + 'a>;
+type Keyer<'a> = Box<dyn Fn(&str, super::Origin, u32, &mut search::Maps) + 'a>;
 
 /// A consumer's profile, `data/embed/<name>.yaml`.
 #[derive(Deserialize)]
@@ -137,9 +137,11 @@ pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, 
     let keyers: Vec<Keyer<'_>> = profiles
         .iter()
         .map(|pr| {
-            Box::new(move |text: &str, row: u32, maps: &mut search::Maps| {
-                super::pack::add_keys(maps, text, row, pr);
-            }) as Keyer<'_>
+            Box::new(
+                move |text: &str, origin, row: u32, maps: &mut search::Maps| {
+                    super::pack::add_keys(maps, (text, origin), row, pr);
+                },
+            ) as Keyer<'_>
         })
         .collect();
     let rules: Vec<NameRule<'_>> = keyers

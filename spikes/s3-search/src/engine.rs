@@ -63,6 +63,7 @@ fn packed(maps: [(u8, &BTreeMap<String, BTreeSet<u32>>); 3], recs: &[Rec]) -> Pa
             exact: maps[0].1.clone(),
             loose: maps[1].1.clone(),
             phonetic: maps[2].1.clone(),
+            machine: BTreeMap::new(),
         };
         tsearch::encode_maps(&m, &importance).unwrap()
     } else {

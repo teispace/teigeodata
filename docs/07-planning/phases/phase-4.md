@@ -345,11 +345,15 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   - [ ] sources pinned: the CBS code list (official names), Wikidata labels for Nepal's
     places by key, CLDR 49 `ne.xml` for country names
   - [ ] the chain in the forge, each name's origin in its record (`rule`), with a coverage
-    report per step (TG-11's names table)
+    report per step (TG-11's names table). Done: origins in `RULE` (D-227), tier 6 (the
+    canonical name transliterated, marked machine, searched apart; 99.0% of Nepal named,
+    D-228, 2026-11-12). Open: tier 1 (CBS official names by code), tier 2 (Wikidata labels
+    of Nepal's places by key), tier 4 (donor), the `machine_names` profile option
   - [x] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
     model trained in the forge on the build's licence class; gate G-xlit with floors
     (`forge xlit-eval ne-Latn-Deva`: cbs 44.7%, wd 36.2% folded; D-222, 2026-11-12). Open: the
-    §5.3 v1 targets; the name-origin marker (`RULE` codes) before packs carry machine names
+    §5.3 v1 targets (on main, with the D-220 fold: cbs 50.3%, wd 42.3% folded; wd meets its
+    target)
   - [x] a profile's languages are complete: every place of the layer has each, or the build
     names the gap (the layer summary's table per country, 2026-11-12; `tithipatra`: Nepal
     1.1% `ne-Deva`, D-227)
@@ -431,3 +435,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-11 | 4.9c: TG-12 and Nepal in full done; TG-14 and TG-15 researched | D-214 to D-217 |
 | 2026-11-11 | 4.9c: SUBSTRING derived on the device | D-218 |
 | 2026-11-12 | 4.9c: TG-14's transliterator and gate G-xlit built; the CBS code list pinned | D-222 |
+| 2026-11-12 | 4.9c: TG-10 coarse DEM; TG-18 focus and strict order; name origins; Nepal's names filled by transliteration | D-225 to D-228 |

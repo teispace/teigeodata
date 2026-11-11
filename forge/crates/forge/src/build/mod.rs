@@ -57,6 +57,7 @@ pub(crate) mod world;
 mod world_labels;
 mod world_overture;
 mod world_tz;
+mod xlit_fill;
 mod zones;
 
 use std::collections::BTreeMap;
@@ -343,6 +344,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         a.lite,
     );
     let corrected = corrections::run(root, who, &g.sources, &mut places, &units.levels, &out_dir)?;
+    let transliterated = xlit_fill::run(root, &profile.transliterate, &mut places)?;
     let zones = zone_places(root, &lock, g.tz.as_deref(), coverage, &a)?;
     let rules = tz_rules::compile(root, &lock, g.tz.as_deref(), &zones)?;
     places.extend(zones.places.iter().cloned());
@@ -384,6 +386,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     summary.push_str(&admin.line());
     summary.push_str(&dedupe::report(&merged, &out_dir, a.build_name())?);
     summary.push_str(&corrected);
+    summary.push_str(&transliterated);
     if let Some(e) = &elevations {
         summary.push_str(&e.summary(&build, &g.sources, &places)?);
     }
@@ -610,6 +613,8 @@ pub(crate) struct Profile {
     pub(crate) wikidata: Option<String>,
     /// The romanisation profiles of its names (`ne-Deva`), in order.
     pub(crate) romanise: Vec<String>,
+    /// The transliteration profiles that fill missing names (`ne-Latn-Deva`, D-228).
+    pub(crate) transliterate: Vec<String>,
     /// The unit types, in profile order: a row's unit type is its position plus 1 (D-120).
     pub(crate) units: Vec<UnitType>,
     /// Per source family (`codab`): where a unit's code holds its unit type.
@@ -649,6 +654,8 @@ struct ProfileFile {
     wikidata: Option<String>,
     #[serde(default)]
     romanise: Vec<String>,
+    #[serde(default)]
+    transliterate: Vec<String>,
     #[serde(default)]
     unit_types: Vec<UnitType>,
     #[serde(default)]
@@ -696,6 +703,7 @@ impl Profile {
             droppable: p.droppable_suffixes.iter().map(|t| fold(&t.text)).collect(),
             wikidata: p.wikidata,
             romanise: p.romanise,
+            transliterate: p.transliterate,
             units: p
                 .unit_types
                 .into_iter()

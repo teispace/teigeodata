@@ -17,6 +17,9 @@ languages: [ne, en, new]
 scripts: [Deva, Latn, Newa]
 # Romanisation of names with no Latin spelling (data/romanise/; names-canonical §5.1).
 romanise: [ne-Deva]
+# Names in Devanagari for places with none, from the transliterator (D-222, D-228): alt names
+# marked `transliteration`, never canonical.
+transliterate: [ne-Latn-Deva]
 admin_levels:
   - { level: 1, english: Province, native: [{ lang: ne, script: Deva, text: "प्रदेश" }] }
   - { level: 2, english: District, native: [{ lang: ne, script: Deva, text: "जिल्ला" }] }
