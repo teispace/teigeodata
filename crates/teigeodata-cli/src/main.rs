@@ -33,7 +33,13 @@ use teigeodata_format::component::Component;
 
 /// The teigeodata command line: packs, queries and the store.
 #[derive(Debug, Parser)]
-#[command(name = "tgd", version, propagate_version = true, max_term_width = 100)]
+#[command(
+    name = "tgd",
+    bin_name = "tgd",
+    version,
+    propagate_version = true,
+    max_term_width = 100
+)]
 struct Cli {
     /// The store: installed packs and the verified catalog [default: the platform's data
     /// directory]

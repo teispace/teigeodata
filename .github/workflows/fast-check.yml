@@ -67,7 +67,7 @@ jobs:
       - name: Lints
         run: cargo clippy --locked -p teigeodata-sync -p teigeodata-cli --all-targets --all-features -- -D warnings
       - name: Tests
-        run: cargo test --locked -p teigeodata-sync -p teigeodata-cli --all-features
+        run: cargo test --locked --no-fail-fast -p teigeodata-sync -p teigeodata-cli --all-features
 
   forge:
     runs-on: ubuntu-latest
