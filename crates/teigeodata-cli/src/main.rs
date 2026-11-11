@@ -197,6 +197,9 @@ enum Command {
         /// With a latitude: the longitude in degrees.
         #[arg(allow_hyphen_values = true)]
         lon: Option<f64>,
+        /// The instant the UTC offset is given for, in Unix seconds; now when left out.
+        #[arg(long, allow_hyphen_values = true)]
+        time: Option<i64>,
         #[command(flatten)]
         packs: Packs,
         #[command(flatten)]
@@ -559,17 +562,24 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
         Command::Tz {
             at,
             lon,
+            time,
             packs,
             out: o,
         } => {
+            let t = time.unwrap_or_else(|| {
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
+            });
             let ask = match lon {
                 Some(lon) => query::Ask::TzAt {
                     lat: at
                         .parse()
                         .map_err(|e| Fail::Refused(format!("{at}: {e}")))?,
                     lon,
+                    t,
                 },
-                None => query::Ask::TzOf { id: at },
+                None => query::Ask::TzOf { id: at, t },
             };
             query::run(store, &packs.packs, ask, o.mode(), out)
         }

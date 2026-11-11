@@ -231,6 +231,9 @@ pub(crate) fn variant(cities: &str, labels: &[String]) -> String {
     v
 }
 
+/// The default timezone source of the world part, and of a profile's `tz-rules` (D-224).
+pub(crate) const DEFAULT_TZ: &str = "tzdb-2026f";
+
 /// The default city list; another (`--cities geonames-cities5000`) writes its own world part,
 /// `world-baseline-<build>-<source>.tgd` (TG-13).
 pub(crate) const DEFAULT_CITIES: &str = "geonames-cities15000";
@@ -243,7 +246,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
         admin: "ne-admin0-nep".into(),
         admin1: String::new(),
         cities: DEFAULT_CITIES.into(),
-        tz: "tzdb-2026f".into(),
+        tz: DEFAULT_TZ.into(),
         tolerance_m: 0,
         islet_km2: -1.0,
         ids: None,

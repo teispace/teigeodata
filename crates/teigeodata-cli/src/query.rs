@@ -8,7 +8,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use teigeodata_core::{E6, E7, PlaceId, Point};
-use teigeodata_engine::{Engine, Layer, LayerOptions, Load, Scratch};
+use teigeodata_engine::{Engine, Layer, LayerOptions, Load, Place, Scratch};
 
 use crate::Fail;
 use crate::output::{self, Item, Mode};
@@ -67,9 +67,11 @@ pub(crate) enum Ask {
     TzAt {
         lat: f64,
         lon: f64,
+        t: i64,
     },
     TzOf {
         id: String,
+        t: i64,
     },
 }
 
@@ -107,6 +109,7 @@ pub(crate) fn run(
                     bearing: Some(n.bearing_deg),
                     inside: n.inside,
                     score: None,
+                    offset: None,
                 })
                 .collect()
         }
@@ -135,6 +138,7 @@ pub(crate) fn run(
                     bearing: Some(n.bearing_deg),
                     inside: None,
                     score: None,
+                    offset: None,
                 })
                 .collect()
         }
@@ -148,6 +152,7 @@ pub(crate) fn run(
                     bearing: None,
                     inside: None,
                     score: Some(h.score),
+                    offset: None,
                 })
                 .collect()
         }
@@ -156,16 +161,16 @@ pub(crate) fn run(
             e.admin_at(point::<E7>(lat, lon)?, &mut s, &mut units)?;
             units.into_iter().map(Item::from).collect()
         }
-        Ask::TzAt { lat, lon } => e
-            .tz_at(point::<E7>(lat, lon)?)?
-            .into_iter()
-            .map(Item::from)
-            .collect(),
-        Ask::TzOf { id: text } => {
+        Ask::TzAt { lat, lon, t } => {
+            let area = e.tz_at(point::<E7>(lat, lon)?)?;
+            with_offsets(&e, area, t)?
+        }
+        Ask::TzOf { id: text, t } => {
             let place = e
                 .get(id(&text)?)?
                 .ok_or_else(|| Fail::Refused(format!("{text}: not found")))?;
-            e.tz_of(&place)?.into_iter().map(Item::from).collect()
+            let area = e.tz_of(&place)?;
+            with_offsets(&e, area, t)?
         }
     };
     output::write(&e, &items, mode, out)?;
@@ -174,6 +179,21 @@ pub(crate) fn run(
         return Err(Fail::Refused("no result".into()));
     }
     Ok(())
+}
+
+/// A timezone area with the UTC offset in force at `t` when its rules are installed (TG-03).
+fn with_offsets(e: &Engine, area: Option<Place>, t: i64) -> Result<Vec<Item>, Fail> {
+    let mut out = Vec::new();
+    if let Some(a) = area {
+        let mut item = Item::from(a);
+        if let Some(zone) = e.zone_name(&a)?
+            && let Some(o) = output::installed(e.tz_offset_at(zone, t))?
+        {
+            item.offset = Some(o);
+        }
+        out.push(item);
+    }
+    Ok(out)
 }
 
 /// `tgd elevation`: the terrain height at a point from the packs' DEM (D-192), in metres

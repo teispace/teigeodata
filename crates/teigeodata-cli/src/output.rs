@@ -67,6 +67,13 @@ pub(crate) struct Record<'a> {
     pub(crate) inside: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) score: Option<i32>,
+    /// `+05:45` (`tgd tz`, TG-03).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) utc_offset: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) tz_abbr: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) is_dst: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -106,6 +113,8 @@ pub(crate) struct Item {
     pub(crate) bearing: Option<f64>,
     pub(crate) inside: Option<bool>,
     pub(crate) score: Option<i32>,
+    /// A timezone area's UTC offset at the instant asked (`tgd tz`).
+    pub(crate) offset: Option<teigeodata_engine::Offset>,
 }
 
 impl From<Place> for Item {
@@ -116,13 +125,14 @@ impl From<Place> for Item {
             bearing: None,
             inside: None,
             score: None,
+            offset: None,
         }
     }
 }
 
 /// An optional field: absent when its component is not installed (D-133), so a store that
 /// installed part of a pack answers with what it has; any other error stands.
-fn installed<T>(r: Result<Option<T>, Error>) -> Result<Option<T>, Error> {
+pub(crate) fn installed<T>(r: Result<Option<T>, Error>) -> Result<Option<T>, Error> {
     match r {
         Err(Error::MissingComponent { .. }) => Ok(None),
         r => r,
@@ -158,6 +168,9 @@ pub(crate) fn record<'b>(
         bearing: item.bearing.map(|b| (b * 10.0).round() / 10.0),
         inside: item.inside,
         score: item.score,
+        utc_offset: item.offset.map(|o| hhmm(o.seconds)),
+        tz_abbr: item.offset.as_ref().map(|o| o.abbr().to_owned()),
+        is_dst: item.offset.map(|o| o.is_dst),
     })
 }
 
@@ -310,8 +323,30 @@ fn text(out: &mut dyn Write, r: &Record<'_>) -> Result<(), Fail> {
     if let Some(s) = r.score {
         write!(out, "  score {s}")?;
     }
+    if let Some(o) = &r.utc_offset {
+        write!(out, "  UTC{o}")?;
+        if let Some(a) = &r.tz_abbr {
+            write!(
+                out,
+                " ({a}{})",
+                if r.is_dst == Some(true) { ", DST" } else { "" }
+            )?;
+        }
+    }
     writeln!(out)?;
     Ok(())
+}
+
+/// `+05:45` for 20,700 seconds east of UTC.
+fn hhmm(seconds: i32) -> String {
+    let sign = if seconds < 0 { '-' } else { '+' };
+    let s = seconds.unsigned_abs();
+    let (h, m, sec) = (s / 3600, s / 60 % 60, s % 60);
+    if sec == 0 {
+        format!("{sign}{h:02}:{m:02}")
+    } else {
+        format!("{sign}{h:02}:{m:02}:{sec:02}")
+    }
 }
 
 /// The Nominatim `json` object of `item`, from its native record.

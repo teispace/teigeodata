@@ -126,7 +126,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         })
         .collect();
     let sections = extract::merge(&list, &super::baseline::region_options()).map_err(e)?;
-    let out = write(&packs, &sections, a.key.as_deref(), root)?;
+    let out = write(&packs, &sections, (a.key.as_deref(), None), root)?;
     super::baseline::check(&out, rows_of(&sections))?;
     let replaced = check_ids(&packs, &out)?;
     let file = dir.join(format!("baseline-{build}.tgd"));
@@ -158,7 +158,7 @@ pub(super) fn rows_of(sections: &[extract::Body]) -> usize {
 pub(super) fn write(
     packs: &[Pack<'_>],
     sections: &[extract::Body],
-    key: Option<&str>,
+    (key, tzdb): (Option<&str>, Option<&str>),
     root: &Path,
 ) -> Result<Vec<u8>, String> {
     let e = |e: teigeodata_format::Error| e.to_string();
@@ -183,6 +183,10 @@ pub(super) fn write(
         .map_err(e)?;
     if let Some(v) = world.get(Tag::LICENCE) {
         w.manifest(Tag::LICENCE, v).map_err(e)?;
+    }
+    // The release the layer's zone rules were compiled from (D-196, D-224).
+    if let Some(v) = tzdb {
+        w.manifest(Tag::TZDB, v.as_bytes()).map_err(e)?;
     }
     let key = key
         .map(|p| super::pack::signing_key(&root.join(p)))

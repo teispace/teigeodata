@@ -62,6 +62,9 @@ struct File {
     /// The world part's label chain (`forge world --labels`, D-221).
     #[serde(default)]
     world_labels: Vec<String>,
+    /// The timezone source whose tzdb release compiles `tz-rules` (D-224); the world part's.
+    #[serde(default)]
+    tz: Option<String>,
     wire_kb: u64,
 }
 
@@ -166,10 +169,21 @@ pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, 
     let mut sections =
         extract::merge(&list, &super::baseline::region_options()).map_err(|e| e.to_string())?;
     sections.retain(|s| Component::of(s.0).is_none_or(|c| wanted.contains(c)));
-    if wanted.contains(Component::Substring) {
-        sections.push(substring(&sections)?);
-    }
-    // A component the profile names must be in the layer: never silently left out.
+    let tzdb = derived(root, &p, wanted, &mut sections)?;
+    refuse_missing(&path, &p, &sections)?;
+    finish(
+        root,
+        name,
+        &p,
+        (&inputs, &packs),
+        &sections,
+        (key, tzdb.as_deref()),
+        t,
+    )
+}
+
+/// A component the profile names must be in the layer: never silently left out.
+fn refuse_missing(path: &Path, p: &File, sections: &[extract::Body]) -> Result<(), String> {
     let missing: Vec<&str> = p
         .components
         .iter()
@@ -186,7 +200,90 @@ pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, 
             missing.join(", ")
         ));
     }
-    finish(root, name, &p, (&inputs, &packs), &sections, key, t)
+    Ok(())
+}
+
+/// The sections the layer derives instead of merging: SUBSTRING from its names (D-218) and
+/// `TZ_RULES` from tzdb (D-224); returns the tzdb release when rules were compiled.
+fn derived(
+    root: &Path,
+    p: &File,
+    wanted: Components,
+    sections: &mut Vec<extract::Body>,
+) -> Result<Option<String>, String> {
+    if wanted.contains(Component::Substring) {
+        let b = substring(sections)?;
+        sections.push(b);
+    }
+    if !wanted.contains(Component::TzRules) {
+        return Ok(None);
+    }
+    let tz = p.tz.as_deref().unwrap_or(super::world::DEFAULT_TZ);
+    let (version, body) = tz_rules(root, tz, sections)?;
+    sections.push(body);
+    Ok(Some(version))
+}
+
+/// `TZ_RULES` for every timezone area of the merged layer (D-224): their zones compiled from
+/// the pinned tzdb release, each linked to its area's row, and G-tzrules run on the section.
+fn tz_rules(
+    root: &Path,
+    tz: &str,
+    sections: &[extract::Body],
+) -> Result<(String, extract::Body), String> {
+    let body = |k: Kind| {
+        sections
+            .iter()
+            .find(|s| s.0 == k)
+            .ok_or(format!("tz-rules needs {k}"))
+    };
+    let (pl, nm) = (body(Kind::PLACES)?, body(Kind::NAMES)?);
+    let places = Places::open(&teigeodata_format::Section::unpacked(
+        Kind::PLACES,
+        pl.2,
+        &pl.3,
+    ))
+    .map_err(|e| e.to_string())?;
+    let names = Names::open(&teigeodata_format::Section::unpacked(
+        Kind::NAMES,
+        nm.2,
+        &nm.3,
+    ))
+    .map_err(|e| e.to_string())?;
+    let mut buf = vec![0; teigeodata_format::names::TEXT_BUFFER];
+    // One link per zone name: a later part's area (a country pack's, finer than the world
+    // part's) replaces an earlier one of the same zone.
+    let mut zones: BTreeMap<String, u32> = BTreeMap::new();
+    for row in 0..places.len() {
+        if places.kind(row) != Some(teigeodata_core::PlaceKind::TimezoneArea) {
+            continue;
+        }
+        let name = names
+            .canonical(row)
+            .ok_or_else(|| format!("timezone area row {row} has no name"))?;
+        let text = name.text(&mut buf).map_err(|e| e.to_string())?;
+        let row = u32::try_from(row).map_err(|_| "too many rows")?;
+        zones.insert(text.to_owned(), row);
+    }
+    if zones.is_empty() {
+        return Err("tz-rules: the layer has no timezone areas".into());
+    }
+    let lock = crate::lock::Lock::read(&root.join("data/sources.lock"))?;
+    let linked: Vec<(&str, u32)> = zones.iter().map(|(n, r)| (n.as_str(), *r)).collect();
+    let list: Vec<&str> = linked.iter().map(|z| z.0).collect();
+    let compiled = super::tz_rules::compile_names(root, &lock, tz, &list)?;
+    let b = super::tz_rules::section(&compiled, &linked)?;
+    let rules = teigeodata_format::tz_rules::TzRules::open(&teigeodata_format::Section::unpacked(
+        Kind::TZ_RULES,
+        linked.len() as u64,
+        &b,
+    ))
+    .map_err(|e| e.to_string())?;
+    super::tz_rules::check(&rules, Some(&compiled.version), &linked, &compiled)?;
+    Ok((
+        compiled.version.clone(),
+        (Kind::TZ_RULES, Encoding::TABLE, linked.len() as u64, b),
+    ))
 }
 
 /// Writes the layer, runs its gates and writes its summary.
@@ -196,7 +293,7 @@ fn finish(
     p: &File,
     (inputs, packs): (&[Input], &[Pack<'_>]),
     sections: &[extract::Body],
-    key: Option<&str>,
+    key: (Option<&str>, Option<&str>),
     t: Instant,
 ) -> Result<String, String> {
     let build = p.build.as_str();

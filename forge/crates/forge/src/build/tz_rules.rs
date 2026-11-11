@@ -79,11 +79,30 @@ pub(super) fn compile(
     let (Some(tz), false) = (tz, zones.places.is_empty()) else {
         return Ok(None);
     };
+    let names: Vec<&str> = zones
+        .places
+        .iter()
+        .map(|p| zone_name(&p.key).ok_or_else(|| format!("{}: not a zone key", p.key)))
+        .collect::<Result<_, _>>()?;
+    compile_names(root, lock, tz, &names).map(Some)
+}
+
+/// Compiles the rules of the zones `names` from the release of timezone source `tz`: one code
+/// path for a pack's areas and an embedded layer's (D-224).
+///
+/// # Errors
+/// As [`compile`].
+pub(super) fn compile_names(
+    root: &Path,
+    lock: &Lock,
+    tz: &str,
+    names: &[&str],
+) -> Result<Compiled, String> {
     let (version, [data, code]) = sources(lock, tz)?;
     let scratch = root.join("data/build/tz-rules").join(&version);
-    let result = run(root, lock, (&data, &code), &version, &scratch, zones);
+    let result = run(root, lock, (&data, &code), &version, &scratch, names);
     let _ = fs::remove_dir_all(&scratch);
-    result.map(Some)
+    result
 }
 
 fn run(
@@ -92,7 +111,7 @@ fn run(
     (data, code): (&str, &str),
     version: &str,
     scratch: &Path,
-    zones: &Zones,
+    names: &[&str],
 ) -> Result<Compiled, String> {
     let _ = fs::remove_dir_all(scratch);
     let (src, out) = (scratch.join("src"), scratch.join("out"));
@@ -136,8 +155,7 @@ fn run(
     cmd.args(DATA_FILES.iter().map(|f| src.join(f)));
     exec(&mut cmd, "zic -b slim")?;
     let mut files = BTreeMap::new();
-    for p in &zones.places {
-        let name = zone_name(&p.key).ok_or_else(|| format!("{}: not a zone key", p.key))?;
+    for &name in names {
         if !rules::is_zone_name(name) {
             return Err(format!("G-tzrules: {name:?} is not a tzdb zone name"));
         }
