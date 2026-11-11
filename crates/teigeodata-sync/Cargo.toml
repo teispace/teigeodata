@@ -27,9 +27,11 @@ install = ["trust", "zstd"]
 std = []
 # The driver over a `Transport` into a staging file (D-168).
 fetch = ["install", "std"]
-# The default transport: `ureq` with rustls and the platform's trust store (D-168).
-http = ["fetch", "dep:ureq"]
-# The installed packs on disk: staging, the atomic install, the journal and recovery (D-171).
+# The default transport: `ureq` with rustls and the platform's trust store (D-168), and gzip
+# for the catalog's metadata (D-179).
+http = ["fetch", "dep:ureq", "ureq/gzip"]
+# The installed packs on disk: staging, the atomic install, the journal and recovery (D-171),
+# and the catalog refresh that keeps the verified metadata beside them (D-178).
 store = ["fetch"]
 # The fuzz and property harnesses, shared by `cargo test` and cargo-fuzz (D-072).
 fuzz = ["write"]

@@ -19,7 +19,7 @@ use super::install_tests::{Mem, pack_at, pack_of, pack_with};
 
 /// What a crash does to data not yet synced.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Crash {
+pub(super) enum Crash {
     /// Lost: files hold what was last synced, directories what was last synced.
     Lose,
     /// Kept: everything written reached the disk.
@@ -34,14 +34,14 @@ struct Inode {
 /// A disk with POSIX-like durability: file data is durable at `sync`, a directory's entries at
 /// `sync_dir` of that directory.
 #[derive(Default)]
-struct Disk {
+pub(super) struct Disk {
     inodes: Vec<Inode>,
     live: BTreeMap<String, usize>,
     durable: BTreeMap<String, usize>,
     dirs: BTreeSet<String>,
     dirs_durable: BTreeSet<String>,
-    ops: usize,
-    crash_at: Option<usize>,
+    pub(super) ops: usize,
+    pub(super) crash_at: Option<usize>,
     crashed: bool,
 }
 
@@ -64,7 +64,7 @@ impl Disk {
         Ok(())
     }
 
-    fn reboot(&mut self, how: Crash) {
+    pub(super) fn reboot(&mut self, how: Crash) {
         if how == Crash::Lose {
             self.live = self.durable.clone();
             self.dirs = self.dirs_durable.clone();
@@ -78,9 +78,9 @@ impl Disk {
 }
 
 #[derive(Clone)]
-struct MemFs(Rc<RefCell<Disk>>);
+pub(super) struct MemFs(pub(super) Rc<RefCell<Disk>>);
 
-struct MemFile {
+pub(super) struct MemFile {
     disk: Rc<RefCell<Disk>>,
     ino: usize,
     pos: u64,

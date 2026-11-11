@@ -35,13 +35,24 @@ pub struct Got {
     pub total: u64,
 }
 
-/// One ranged GET.
+/// The two requests sync makes: a ranged GET for pack assets, and a whole-file GET for the
+/// catalog's metadata ([`crate::refresh`], D-178).
 pub trait Transport {
     /// Fetches exactly the bytes `range` of the asset at `url` into `out` (cleared first).
     ///
     /// # Errors
     /// A [`FetchError`]: the request failed, or the response was not exactly `range`.
     fn get(&mut self, url: &str, range: Range<u64>, out: &mut Vec<u8>) -> Result<Got, FetchError>;
+
+    /// Fetches the whole file at `url` into `out` (cleared first): status 200, at most `max`
+    /// bytes after any `Content-Encoding` is decoded (the cap holds against a compression
+    /// bomb). Metadata hosts serve gzip, and a transport should accept it.
+    ///
+    /// # Errors
+    /// [`FetchError::Status`] for any other status (404 and 403 end a root walk);
+    /// [`FetchError::Response`] for more than `max` bytes; [`FetchError::Transport`] when the
+    /// request failed.
+    fn fetch(&mut self, url: &str, max: u64, out: &mut Vec<u8>) -> Result<(), FetchError>;
 }
 
 /// Why fetching or installing failed.
@@ -416,6 +427,25 @@ impl Mirrors {
         &self.list
     }
 
+    /// Counts an attempt on mirror `i` that failed on the network or the protocol.
+    pub(crate) fn failed(&mut self, i: usize) {
+        if let Some(m) = self.list.get_mut(i) {
+            m.failures += 1;
+        }
+    }
+
+    /// Counts an attempt on mirror `i` whose bytes were refused.
+    pub(crate) fn refused(&mut self, i: usize) {
+        if let Some(m) = self.list.get_mut(i) {
+            m.refused += 1;
+        }
+    }
+
+    /// The base URL of mirror `i`.
+    pub(crate) fn base(&self, i: usize) -> Option<&str> {
+        self.list.get(i).map(|m| m.base.as_str())
+    }
+
     /// Indexes into [`Mirrors::mirrors`], best first.
     #[must_use]
     pub fn order(&self) -> Vec<usize> {
@@ -605,11 +635,38 @@ impl Transport for Ureq {
         }
         Ok(Got { etag, total })
     }
+
+    fn fetch(&mut self, url: &str, max: u64, out: &mut Vec<u8>) -> Result<(), FetchError> {
+        use std::io::Read;
+        out.clear();
+        // No `Accept-Encoding` override: ureq asks for gzip and decodes it (feature `gzip`).
+        let mut r = self
+            .agent
+            .get(url)
+            .call()
+            .map_err(|e| FetchError::Transport(alloc::format!("{e}")))?;
+        let status = r.status().as_u16();
+        if status != 200 {
+            return Err(FetchError::Status(status));
+        }
+        r.body_mut()
+            .as_reader()
+            .take(max.saturating_add(1))
+            .read_to_end(out)
+            .map_err(|e| FetchError::Transport(alloc::format!("{e}")))?;
+        if out.len() as u64 > max {
+            out.clear();
+            return Err(FetchError::Response("longer than allowed"));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{FetchError, content_range};
+    #[cfg(feature = "http")]
+    use alloc::{string::String, vec, vec::Vec};
 
     #[test]
     fn content_range_names_exactly_the_request() {
@@ -638,5 +695,102 @@ mod tests {
                 "{v:?} for {r:?}"
             );
         }
+    }
+
+    /// A server on localhost that answers each connection with the next canned response.
+    #[cfg(feature = "http")]
+    fn serve(answers: Vec<Vec<u8>>) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            for answer in answers {
+                let (mut c, _) = listener.accept().unwrap();
+                let mut req = Vec::new();
+                let mut b = [0_u8; 1024];
+                while !req.windows(4).any(|w| w == b"\r\n\r\n") {
+                    let n = c.read(&mut b).unwrap();
+                    if n == 0 {
+                        break;
+                    }
+                    req.extend_from_slice(&b[..n]);
+                }
+                c.write_all(&answer).unwrap();
+            }
+        });
+        alloc::format!("http://{addr}/f")
+    }
+
+    #[cfg(feature = "http")]
+    fn answer(status: &str, headers: &str, body: &[u8]) -> Vec<u8> {
+        let mut a = alloc::format!(
+            "HTTP/1.1 {status}\r\ncontent-length: {}\r\nconnection: close\r\n{headers}\r\n",
+            body.len()
+        )
+        .into_bytes();
+        a.extend_from_slice(body);
+        a
+    }
+
+    /// `body` as gzip with one stored deflate block (RFC 1951 3.2.4, RFC 1952).
+    #[cfg(feature = "http")]
+    fn gzip(body: &[u8]) -> Vec<u8> {
+        let mut crc = !0_u32;
+        for b in body {
+            crc ^= u32::from(*b);
+            for _ in 0..8 {
+                crc = (crc >> 1) ^ (0xEDB8_8320 & (crc & 1).wrapping_neg());
+            }
+        }
+        let len = u16::try_from(body.len()).unwrap();
+        let mut g = vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255, 1];
+        g.extend_from_slice(&len.to_le_bytes());
+        g.extend_from_slice(&(!len).to_le_bytes());
+        g.extend_from_slice(body);
+        g.extend_from_slice(&(!crc).to_le_bytes());
+        g.extend_from_slice(&u32::from(len).to_le_bytes());
+        g
+    }
+
+    #[cfg(feature = "http")]
+    #[test]
+    fn a_fetch_is_whole_capped_after_decoding_and_200_only() {
+        use super::{Transport, Ureq};
+        let body = b"{\"signed\":{}}".repeat(20);
+        let max = body.len() as u64;
+        let url = serve(vec![
+            answer("200 OK", "", &body),
+            answer("200 OK", "content-encoding: gzip\r\n", &gzip(&body)),
+            answer("200 OK", "", &[&body[..], b"x"].concat()),
+            // Small on the wire, over the cap once decoded.
+            answer(
+                "200 OK",
+                "content-encoding: gzip\r\n",
+                &gzip(&[&body[..], b"x"].concat()),
+            ),
+            answer("404 Not Found", "", b""),
+            answer("206 Partial Content", "", &body),
+        ]);
+        let mut t = Ureq::new();
+        let mut out = Vec::new();
+        t.fetch(&url, max, &mut out).unwrap();
+        assert_eq!(out, body);
+        t.fetch(&url, max, &mut out).unwrap();
+        assert_eq!(out, body, "gzip is decoded");
+        for _ in 0..2 {
+            assert!(
+                matches!(t.fetch(&url, max, &mut out), Err(FetchError::Response(_))),
+                "over the cap"
+            );
+            assert_eq!(out.len(), 0, "nothing is kept");
+        }
+        assert!(matches!(
+            t.fetch(&url, max, &mut out),
+            Err(FetchError::Status(404))
+        ));
+        assert!(matches!(
+            t.fetch(&url, max, &mut out),
+            Err(FetchError::Status(206))
+        ));
     }
 }

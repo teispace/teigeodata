@@ -128,23 +128,31 @@ Nominatim's is not), `lat`, `lon`, `name`, `display_name` (the place and its anc
 want)` returns the `Trusted` metadata with the roles of `want` and of every stored role. It
 keeps everything under `meta/` in the store:
 
-- `meta/root.json`: the newest trusted root. The shipped root is only the starting point the
-  first time, or when it is newer than the stored one.
-- `meta/timestamp.json`, `meta/snapshot.json`, `meta/targets.json` and `meta/roles/<name>.json`.
+- `meta/root.json`: the newest trusted root, stored only after a rotation. The shipped root is
+  the starting point the first time, or when it is newer than the stored one.
+- `meta/V.snapshot.json`, `meta/V.targets.json` and `meta/roles/V.<name>.json`, named by
+  version, so a new release never overwrites the files of the one in use.
+- `meta/timestamp.json`: the commit point, written last.
 
 Each file is written to a temporary name, synced, renamed and its directory synced (the
-store's discipline, D-171). Ordering is what keeps a crash safe:
+store's discipline, D-171). Ordering is what keeps a crash safe (as built, D-179):
 
-1. Walk the roots (each `N+1.root.json` until a 404 or 403, at most 256). If the walk rotated
-   the timestamp or snapshot keys, delete the stored timestamp and snapshot **before** storing
-   the new root. Otherwise a crash between the two would leave a new root beside an old
-   fast-forwarded timestamp, and the next run would not know to drop it.
-2. Load the stored timestamp, then fetch `timestamp.json` (capped at 16 KB). If it is
-   unchanged, the stored copy stays; otherwise it is stored.
-3. Use the stored snapshot if it is the one the timestamp names; else fetch `V.snapshot.json`
-   (capped at its signed length) and store it.
-4. The same for the top-level targets and each wanted role. A stored role the new snapshot no
-   longer lists is deleted.
+1. Walk the roots (each `N+1.root.json` until a 404 or 403, at most 256). If the walk changed
+   the timestamp or snapshot keys, delete the stored timestamp **before** storing the new
+   root. Otherwise a crash between the two would leave a new root beside an old
+   fast-forwarded timestamp, and the next run would not know to drop it. The delete matters
+   even when the old key stays listed, so the old timestamp would still verify.
+2. Load the committed timestamp, then fetch `timestamp.json` (capped by the root). If it is
+   unchanged, nothing more is fetched or written.
+3. Load the committed snapshot as the floor for the targets' versions, then take
+   `V.snapshot.json` from the store if a cut-off refresh left it, else from a host (capped at
+   its signed length).
+4. The same for the top-level targets and each role asked for or held.
+5. Write `timestamp.json`: the new catalog is committed. Then remove the files the new chain
+   does not name, and the roles not held.
+
+A refresh cut off anywhere before step 5 leaves the old chain whole: offline, `load` gives the
+old catalog (with any role it names that was already stored), never a mix of releases.
 
 Metadata comes from its own mirrors (GitHub Pages first). Assets have theirs (the release
 host). A mirror that fails is demoted as for packs (D-170). The only failure that is not a
@@ -158,9 +166,12 @@ implements it beside `get`.
 **The tests:**
 
 - an in-memory host with a repository written by `sync::repo`: rotations, a fast-forward
-  recovery, an unchanged timestamp fetching nothing more, a new country release fetching only
-  its role, a lying mirror demoted;
-- a crash at every write, replayed;
+  recovery (also with the old key still listed), an unchanged timestamp fetching nothing more
+  and writing nothing, a new country release fetching only its role, a lying mirror demoted, a
+  dead one passed over, and the last catalog kept offline after a failed refresh;
+- a crash at every write, replayed in both crash modes (lost and kept unsynced writes);
+- `ureq`'s `fetch` against a server on localhost: the cap after gzip decoding, 404 and 206
+  refused;
 - the CLI's commands run end to end against a repository written by `tuf release` and served
   over HTTP on localhost.
 

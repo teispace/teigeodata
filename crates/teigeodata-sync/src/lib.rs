@@ -55,6 +55,8 @@ pub mod fetch;
 pub mod fuzz;
 #[cfg(feature = "install")]
 pub mod install;
+#[cfg(feature = "store")]
+pub mod refresh;
 #[cfg(feature = "repo")]
 pub mod repo;
 #[cfg(feature = "store")]

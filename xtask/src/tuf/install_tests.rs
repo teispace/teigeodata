@@ -489,6 +489,15 @@ impl<'a> Mem<'a> {
 }
 
 impl teigeodata_sync::fetch::Transport for Mem<'_> {
+    fn fetch(
+        &mut self,
+        _: &str,
+        _: u64,
+        _: &mut Vec<u8>,
+    ) -> Result<(), teigeodata_sync::fetch::FetchError> {
+        Err(teigeodata_sync::fetch::FetchError::Response("assets only"))
+    }
+
     fn get(
         &mut self,
         _: &str,
@@ -659,6 +668,15 @@ struct Hosts<'a> {
 }
 
 impl teigeodata_sync::fetch::Transport for Hosts<'_> {
+    fn fetch(
+        &mut self,
+        _: &str,
+        _: u64,
+        _: &mut Vec<u8>,
+    ) -> Result<(), teigeodata_sync::fetch::FetchError> {
+        Err(teigeodata_sync::fetch::FetchError::Response("assets only"))
+    }
+
     fn get(
         &mut self,
         url: &str,
