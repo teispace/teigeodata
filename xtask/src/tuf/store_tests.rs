@@ -8,10 +8,12 @@ use std::fmt::Write as _;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::rc::Rc;
 
+use teigeodata_format::component::Component;
 use teigeodata_format::component::Components;
+use teigeodata_format::{Kind, Pack};
 use teigeodata_sync::catalog::Entry;
 use teigeodata_sync::fetch::Mirrors;
-use teigeodata_sync::store::{Fs, Record, Room, Store, StoreError, StoreFile, plan_room};
+use teigeodata_sync::store::{Fs, Health, Record, Room, Store, StoreError, StoreFile, plan_room};
 
 use super::install_tests::{Mem, pack_at, pack_of};
 
@@ -618,11 +620,7 @@ fn a_version_1_journal_is_read_and_upgraded() {
     let mut store = Store::open(fs.clone()).unwrap().0;
     put(&mut store, &entry, &asset);
     let r = store.packs()[0].clone();
-    let set: Vec<&str> = r
-        .set
-        .iter()
-        .map(teigeodata_format::component::Component::name)
-        .collect();
+    let set: Vec<&str> = r.set.iter().map(Component::name).collect();
     let head = r.head.iter().fold(String::new(), |mut h, b| {
         let _ = write!(h, "{b:02x}");
         h
@@ -829,4 +827,234 @@ fn plan_room_never_removes_what_must_stay() {
         }
     }
     assert!(short > 100 && removed > 500, "{short} {removed}");
+}
+
+/// Where section `kind` starts in `pack`.
+fn offset_of(pack: &[u8], kind: Kind) -> u64 {
+    let p = Pack::open(pack).unwrap();
+    let s = p.section(kind).unwrap();
+    (s.bytes().as_ptr() as usize - pack.as_ptr() as usize) as u64
+}
+
+/// Flips the byte at `at` of the installed file `path`, durably.
+fn flip(fs: &MemFs, path: &str, at: u64) {
+    let mut f = fs.clone().open(path).unwrap();
+    let mut b = [0_u8; 1];
+    f.seek(SeekFrom::Start(at)).unwrap();
+    f.read_exact(&mut b).unwrap();
+    f.seek(SeekFrom::Start(at)).unwrap();
+    f.write_all(&[b[0] ^ 1]).unwrap();
+    f.sync().unwrap();
+}
+
+/// `verify` finds each kind of damage offline, deep only where it must read sections; `repair`
+/// fetches only what fails, and the result is the pack again.
+#[test]
+fn verify_finds_damage_and_repair_fetches_only_it() {
+    let pack = pack_of("2026.11.0");
+    let (entry, asset, _) = super::entry_of(&pack).unwrap();
+    let fs = MemFs(Rc::default());
+    let mut store = Store::open(fs.clone()).unwrap().0;
+    put(&mut store, &entry, &asset);
+    let (addr, comp) = (entry.address.clone(), entry.component.clone());
+    let file = Store::<MemFs>::path_of(&store.packs()[0]);
+    assert_eq!(store.verify(&addr, &comp, true).unwrap(), Health::Good);
+    assert!(matches!(
+        store.verify("none", &comp, true),
+        Err(StoreError::NotInstalled)
+    ));
+
+    // A byte of NAMES (a large section, checked by blocks when installed): deep finds it.
+    let names = offset_of(&pack, Kind::NAMES) + 1_500_000;
+    flip(&fs, &file, names);
+    assert_eq!(
+        store.verify(&addr, &comp, false).unwrap(),
+        Health::Good,
+        "shallow reads no section"
+    );
+    assert_eq!(
+        store.verify(&addr, &comp, true).unwrap(),
+        Health::Sections(vec![Kind::NAMES])
+    );
+    let mut host = Mem::new(&asset, None);
+    let done = store
+        .repair(
+            &mut host,
+            &mut Mirrors::new(["m/"]),
+            "a",
+            &entry,
+            asset.len() as u64,
+        )
+        .unwrap();
+    // One NAMES frame (at most 1 MiB decoded) is fetched again; every other frame is kept.
+    assert!(
+        done.kept + (1 << 20) + 64 * 1024 >= pack.len() as u64,
+        "kept {} B of a {} B pack",
+        done.kept,
+        pack.len()
+    );
+    assert!(
+        done.written <= (1 << 20) + 64 * 1024,
+        "wrote {} B",
+        done.written
+    );
+    assert!(
+        fs.clone().read(&file).unwrap().unwrap() == pack,
+        "repaired whole"
+    );
+    assert_eq!(store.verify(&addr, &comp, true).unwrap(), Health::Good);
+    assert!(
+        fs.clone().list("staging").unwrap().is_empty(),
+        "staging left behind"
+    );
+
+    // The head, the footer, the length.
+    flip(&fs, &file, 200);
+    assert_eq!(store.verify(&addr, &comp, false).unwrap(), Health::Head);
+    flip(&fs, &file, 200);
+    flip(&fs, &file, pack.len() as u64 - 3);
+    assert_eq!(store.verify(&addr, &comp, false).unwrap(), Health::Footer);
+    flip(&fs, &file, pack.len() as u64 - 3);
+    fs.clone().open(&file).unwrap().set_len(10).unwrap();
+    assert_eq!(store.verify(&addr, &comp, true).unwrap(), Health::Length);
+    // A release the catalog no longer names is an install, not a repair, even when the host
+    // serves it whole.
+    let (newer, newer_asset, _) = super::entry_of(&pack_of("2026.12.0")).unwrap();
+    let mut other = Mem::new(&newer_asset, None);
+    assert!(matches!(
+        store.repair(
+            &mut other,
+            &mut Mirrors::new(["m/"]),
+            "a",
+            &newer,
+            newer_asset.len() as u64
+        ),
+        Err(StoreError::Fetch(_))
+    ));
+    let mut host = Mem::new(&asset, None);
+    store
+        .repair(
+            &mut host,
+            &mut Mirrors::new(["m/"]),
+            "a",
+            &entry,
+            asset.len() as u64,
+        )
+        .unwrap();
+    assert!(
+        fs.clone().read(&file).unwrap().unwrap() == pack,
+        "repaired from 10 bytes"
+    );
+    // Another valid pack in its place (same length, its own head intact) is not this one.
+    let other_pack = pack_of("2026.12.0");
+    assert_eq!(other_pack.len(), pack.len());
+    let mut f = fs.clone().open(&file).unwrap();
+    f.write_all(&other_pack).unwrap();
+    assert_eq!(store.verify(&addr, &comp, false).unwrap(), Health::Head);
+}
+
+/// A points-only install has holes where other components would be: deep checks skip them
+/// and still find damage in what is installed.
+#[test]
+fn verify_reads_only_what_is_installed() {
+    let pack = pack_of("2026.11.0");
+    let (entry, asset, _) = super::entry_of(&pack).unwrap();
+    let fs = MemFs(Rc::default());
+    let mut store = Store::open(fs.clone()).unwrap().0;
+    let mut host = Mem::new(&asset, None);
+    let points = Components::of(&[Component::Point]);
+    store
+        .install(
+            &mut host,
+            &mut Mirrors::new(["m/"]),
+            "a",
+            &entry,
+            asset.len() as u64,
+            points,
+        )
+        .unwrap();
+    let (addr, comp) = (entry.address.clone(), entry.component.clone());
+    let file = Store::<MemFs>::path_of(&store.packs()[0]);
+    assert_eq!(store.verify(&addr, &comp, true).unwrap(), Health::Good);
+    flip(&fs, &file, offset_of(&pack, Kind::NAMES) + 7);
+    assert_eq!(
+        store.verify(&addr, &comp, true).unwrap(),
+        Health::Good,
+        "a hole is not read"
+    );
+    flip(&fs, &file, offset_of(&pack, Kind::PLACES) + 7);
+    assert_eq!(
+        store.verify(&addr, &comp, true).unwrap(),
+        Health::Sections(vec![Kind::PLACES])
+    );
+}
+
+/// A repair crashed at any step leaves the damaged or the repaired file, never a mix, and the
+/// next repair completes.
+#[test]
+fn a_repair_survives_a_crash_at_every_step() {
+    let pack = pack_of("2026.11.0");
+    let (entry, asset, _) = super::entry_of(&pack).unwrap();
+    let (addr, comp) = (entry.address.clone(), entry.component.clone());
+    let names = offset_of(&pack, Kind::NAMES) + 1_500_000;
+    let fresh = || {
+        let fs = MemFs(Rc::default());
+        let mut store = Store::open(fs.clone()).unwrap().0;
+        put(&mut store, &entry, &asset);
+        let file = Store::<MemFs>::path_of(&store.packs()[0]);
+        flip(&fs, &file, names);
+        fs.0.borrow_mut().reboot(Crash::Lose);
+        (fs, file)
+    };
+    let repair = |fs: &MemFs| {
+        let mut host = Mem::new(&asset, None);
+        Store::open(fs.clone())
+            .map_err(|e| e.to_string())?
+            .0
+            .repair(
+                &mut host,
+                &mut Mirrors::new(["m/"]),
+                "a",
+                &entry,
+                asset.len() as u64,
+            )
+            .map_err(|e| e.to_string())
+    };
+    let (fs, _) = fresh();
+    let before = fs.0.borrow().ops;
+    repair(&fs).unwrap();
+    let steps = fs.0.borrow().ops - before;
+    assert!(steps > 5, "{steps}");
+    let mut seen = BTreeSet::new();
+    for how in [Crash::Lose, Crash::Keep] {
+        for k in 0..steps {
+            let (fs, file) = fresh();
+            let at = fs.0.borrow().ops + k;
+            fs.0.borrow_mut().crash_at = Some(at);
+            let ok = repair(&fs).is_ok();
+            fs.0.borrow_mut().reboot(how);
+            let bytes = fs.clone().read(&file).unwrap().unwrap();
+            let whole = bytes == pack;
+            let mut damaged = pack.clone();
+            damaged[usize::try_from(names).unwrap()] ^= 1;
+            assert!(whole || bytes == damaged, "{how:?} {k}: a mix");
+            assert!(
+                !ok || whole || how == Crash::Lose,
+                "{how:?} {k}: Ok, yet damaged"
+            );
+            seen.insert(whole);
+            repair(&fs).unwrap();
+            let mut store = Store::open(fs.clone()).unwrap().0;
+            assert_eq!(
+                store.verify(&addr, &comp, true).unwrap(),
+                Health::Good,
+                "{how:?} {k}"
+            );
+        }
+    }
+    assert_eq!(
+        seen.len(),
+        2,
+        "crashes before and after the rename both happen"
+    );
 }

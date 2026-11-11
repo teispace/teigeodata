@@ -209,6 +209,23 @@ publishes once. Running queries keep their snapshot, so a dropped file stays map
 end. A pack that fails to open is reported in `Followed::failed` and left out; nothing is
 published when nothing changed.
 
+**Verify and repair (D-173).** `Store::verify(address, component, deep)` works offline. It checks
+the file's length against the journal, parses the head and compares its digest with the
+recorded head hash (which the signed catalog gave), and checks the footer. With `deep` it also
+hashes every installed section with BLAKE3 against the head's table, 64 KiB at a time, so memory
+stays bounded whatever the pack's size; a component's section that was not installed is a hole
+and is not read, and `BLOCK_HASHES` is checked when an installed section is 1 MiB or more. The
+answer is `Health::{Good, Length, Head, Footer, Sections(kinds)}`.
+
+`Store::repair(transport, mirrors, path, entry, asset_len)` copies the installed file into
+staging and runs the resume path (D-169) over it: every frame that checks against the signed
+catalog is kept, only the rest is fetched, and the result is renamed over the same name. The
+journal does not change, so a crash leaves the damaged or the repaired file, and a second call
+resumes. A catalog entry for another release is refused (that is an install). `Shared::follow`
+reopens a store layer whose file was replaced, while running queries keep the old mapping. The
+copy reads the whole pack once; a copy-on-write clone (APFS `clonefile`, Linux `FICLONE`) would
+avoid it and is an idea, not built.
+
 **Gates.** `plan_room` runs on 3,000 generated stores: what it removes is never pinned, kept or
 needed by a pack that stays, the result fits and fits only with its last removal, or it is
 short and removing everything removable is short too. The removal crash test crashes `remove`
@@ -216,7 +233,15 @@ before every step, with unsynced data lost and kept: the packs are listed and wh
 with no file left, and both happen. 13 planted faults (each eviction rule, the quota, the
 dependant check, auto-removal of an asked pack, an unsaved touch, delete before commit, an
 unjournaled pin, follow dropping the app's layers or publishing a no-op, disk sizes without
-padding) are all caught.
+padding) are all caught. For verify and repair: a NAMES byte flipped is found by the deep check
+only, and the repair keeps all but one frame of the pack and writes back the pack exactly; a
+flipped head byte, a flipped footer byte, a truncated file and another valid pack of the same
+length in its place are each found; a points-only install with a hole flipped verifies good and
+a flipped PLACES byte does not; a repair crashed before every step (unsynced data lost and kept)
+leaves the damaged or the whole file, both happen, and the next repair completes. Nine planted
+faults (no head-hash, footer or length check, holes read, the last chunk skipped, repair without
+the copy, without the sync, of another release, and `follow` ignoring a replaced file) are all
+caught.
 
 ## Writing it (feature `write`)
 

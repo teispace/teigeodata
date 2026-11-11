@@ -62,7 +62,8 @@ A short status. The numbers and evidence live in each phase file and the
   as its own record (D-169), and mirrors with demotion (D-170), and the store: atomic install, journal and
   recovery, crash-tested at every step (D-171); 4.6: the storage manager (quota, LRU eviction
   with pins and dependency protection, journal version 2) and the snapshot swap
-  `Shared::follow` (D-172). Next: `verify(deep)` and repair by section (4.6), then the platform
+  `Shared::follow` (D-172), and offline `verify(deep)` and repair by resuming over a copy
+  (D-173). Next: 4.7 delta updates (section re-download over frames), then the platform
   transport prototypes; the release upload and the first
   ceremony wait for the maintainer; the world byte-identity check after the thinning change
   waits for the inputs to be fetched again.

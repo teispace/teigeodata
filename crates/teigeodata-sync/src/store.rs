@@ -37,6 +37,7 @@ use std::io::{self, Read, Seek, Write};
 
 use serde_json::{Map, Value};
 use teigeodata_format::component::{Component, Components};
+use teigeodata_format::{Kind, PackHead};
 
 use crate::catalog::{self, Entry};
 use crate::fetch::{FetchError, Mirrors, Transport, install_from};
@@ -203,6 +204,24 @@ impl From<FetchError> for StoreError {
         }
     }
 }
+
+/// What [`Store::verify`] found.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Health {
+    /// Every check passed.
+    Good,
+    /// The file is missing or not the length the journal records.
+    Length,
+    /// The head does not parse, or is not the head of the pack the journal records.
+    Head,
+    /// The footer is not the one the head implies.
+    Footer,
+    /// These installed sections do not match their hashes (deep checks only).
+    Sections(Vec<Kind>),
+}
+
+/// Bytes read at a time when hashing or copying a pack.
+const CHUNK: usize = 64 * 1024;
 
 /// What an install asks of the disk, for [`plan_room`].
 #[derive(Clone, Copy, Debug)]
@@ -574,6 +593,142 @@ impl<D: Fs> Store<D> {
         Ok(())
     }
 
+    /// Checks an installed pack against the journal, offline: its length, its head (parsed and
+    /// equal to the recorded head hash, which the signed catalog gave), and its footer; with
+    /// `deep`, every installed section against its BLAKE3 hash in the head, read a chunk at a
+    /// time, so memory stays bounded whatever the pack's size. A section of a component not
+    /// installed is a hole and is not read; `BLOCK_HASHES` is checked when an installed section
+    /// is large enough to need it.
+    ///
+    /// # Errors
+    /// [`StoreError::NotInstalled`] or [`StoreError::Io`].
+    pub fn verify(
+        &mut self,
+        address: &str,
+        component: &str,
+        deep: bool,
+    ) -> Result<Health, StoreError> {
+        let r = self
+            .packs
+            .get(self.find(address, component)?)
+            .cloned()
+            .ok_or(StoreError::NotInstalled)?;
+        let path = Self::path_of(&r);
+        if self.fs.len(&path)? != Some(r.pack_len) {
+            return Ok(Health::Length);
+        }
+        let mut f = self.fs.open(&path)?;
+        let Some(head) = read_head(&mut f, r.pack_len)? else {
+            return Ok(Health::Head);
+        };
+        let Ok(h) = PackHead::parse(&head, r.pack_len) else {
+            return Ok(Health::Head);
+        };
+        if h.digest().get(..16) != Some(&r.head[..]) {
+            return Ok(Health::Head);
+        }
+        let mut footer = [0_u8; teigeodata_format::FOOTER_SIZE];
+        f.seek(io::SeekFrom::Start(
+            r.pack_len - teigeodata_format::FOOTER_SIZE as u64,
+        ))?;
+        f.read_exact(&mut footer)?;
+        if footer != h.footer() {
+            return Ok(Health::Footer);
+        }
+        if !deep {
+            return Ok(Health::Good);
+        }
+        let installed = |kind: Kind| Component::of(kind).is_none_or(|c| r.set.contains(c));
+        let blocked = h.sections().any(|s| {
+            installed(s.kind)
+                && s.kind != Kind::BLOCK_HASHES
+                && s.length >= teigeodata_format::blocks::MIN_COVERED
+        });
+        let mut bad = Vec::new();
+        let mut buf = alloc::vec![0_u8; CHUNK];
+        for s in h.sections() {
+            let wanted = if s.kind == Kind::BLOCK_HASHES {
+                blocked
+            } else {
+                installed(s.kind)
+            };
+            if !wanted {
+                continue;
+            }
+            f.seek(io::SeekFrom::Start(s.offset))?;
+            let mut hasher = blake3::Hasher::new();
+            let mut left = s.length;
+            while left > 0 {
+                let n = usize::try_from(left).map_or(CHUNK, |l| l.min(CHUNK));
+                let chunk = buf.get_mut(..n).ok_or_else(|| invalid("a chunk"))?;
+                f.read_exact(chunk)?;
+                hasher.update(chunk);
+                left -= n as u64;
+            }
+            if hasher.finalize().as_bytes() != s.hash {
+                bad.push(s.kind);
+            }
+        }
+        Ok(if bad.is_empty() {
+            Health::Good
+        } else {
+            Health::Sections(bad)
+        })
+    }
+
+    /// Repairs an installed pack from `mirrors`: copies it into staging, where the resume path
+    /// (D-169) keeps every frame that checks against the signed catalog and fetches only the
+    /// rest, then renames the result over the same name. The journal does not change (same
+    /// release, same bytes meant), so a crash leaves the damaged or the repaired file, and a
+    /// second call resumes. `entry` must name the installed release. On Windows a mapped file
+    /// cannot be renamed over: drop the layer first.
+    ///
+    /// # Errors
+    /// [`StoreError::NotInstalled`]; [`StoreError::Fetch`] when `entry` is another release or
+    /// the install fails; [`StoreError::Io`].
+    pub fn repair<T: Transport>(
+        &mut self,
+        transport: &mut T,
+        mirrors: &mut Mirrors,
+        path: &str,
+        entry: &Entry,
+        asset_len: u64,
+    ) -> Result<Installed, StoreError> {
+        let r = self
+            .packs
+            .get(self.find(&entry.address, &entry.component)?)
+            .cloned()
+            .ok_or(StoreError::NotInstalled)?;
+        if r.release != entry.release || r.head != entry.head {
+            return Err(StoreError::Fetch(FetchError::Response(
+                "the catalog names another release: install it instead",
+            )));
+        }
+        let target = Self::path_of(&r);
+        let staging = alloc::format!("{STAGING}/{}.part", r.file);
+        let mut f = self.fs.open(&staging)?;
+        if f.seek(io::SeekFrom::End(0))? == 0 {
+            // Start from the installed bytes; whatever does not check is fetched again.
+            let mut from = self.fs.open(&target)?;
+            let mut buf = alloc::vec![0_u8; CHUNK];
+            loop {
+                let n = from.read(&mut buf)?;
+                let Some(chunk) = buf.get(..n).filter(|c| !c.is_empty()) else {
+                    break;
+                };
+                f.write_all(chunk)?;
+            }
+        }
+        let done = install_from(transport, mirrors, path, entry, asset_len, r.set, &mut f)?;
+        f.set_len(done.pack_len)?;
+        f.sync()?;
+        drop(f);
+        self.fs.rename(&staging, &target)?;
+        self.fs.sync_dir(PACKS)?;
+        self.fs.sync_dir(STAGING)?;
+        Ok(done)
+    }
+
     fn find(&self, address: &str, component: &str) -> Result<usize, StoreError> {
         self.packs
             .iter()
@@ -672,6 +827,23 @@ pub fn pack_name(entry: &Entry, set: Components) -> Result<String, FetchError> {
         return Err(FetchError::Response("an unsafe pack name"));
     }
     Ok(name)
+}
+
+/// The head of a pack of `len` bytes: a prefix read from the start, doubled until it holds the
+/// head, or `None` when even the whole file does not.
+fn read_head<F: Read + Seek>(f: &mut F, len: u64) -> io::Result<Option<Vec<u8>>> {
+    let mut want: u64 = 16 * 1024;
+    loop {
+        let n = want.min(len);
+        let mut head = alloc::vec![0_u8; usize::try_from(n).map_err(|_| invalid("a head"))?];
+        f.seek(io::SeekFrom::Start(0))?;
+        f.read_exact(&mut head)?;
+        match PackHead::parse(&head, len) {
+            Err(teigeodata_format::Error::Truncated) if n < len => want = want.saturating_mul(2),
+            Ok(_) => return Ok(Some(head)),
+            Err(_) => return Ok(None),
+        }
+    }
 }
 
 fn render(packs: &[Record]) -> Vec<u8> {

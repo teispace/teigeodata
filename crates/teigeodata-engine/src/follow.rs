@@ -1,8 +1,9 @@
 //! The snapshot swap on install (D-172): the engine follows the store's journal.
 //!
 //! [`Engine::follow`] opens each pack the journal lists that is not open yet, with the
-//! component set it was installed with, and drops each open layer from the store's `packs/`
-//! directory that the journal no longer lists. [`Shared::follow`](crate::Shared::follow) does
+//! component set it was installed with, drops each open layer from the store's `packs/`
+//! directory that the journal no longer lists, and reopens one whose file was replaced (a
+//! repair). [`Shared::follow`](crate::Shared::follow) does
 //! it on the next engine and publishes once: queries already running keep the old layers
 //! mapped until they end, and a pack file is never written over (D-113, D-171).
 
@@ -26,7 +27,8 @@ pub struct Followed {
 
 impl Engine {
     /// Makes the layers from `dir`'s `packs/` match `packs`, the store's journal: opens what is
-    /// missing with `options` (the installed set from each record), drops what is gone. Layers
+    /// missing with `options` (the installed set from each record), drops what is gone, and
+    /// reopens a layer whose file was replaced since (it is in both lists). Layers
     /// from anywhere else (the baseline, packs the app opened itself) are left alone. A pack
     /// whose open fails is reported in [`Followed::failed`]; with the same journal, a second
     /// call changes nothing more.
@@ -34,12 +36,15 @@ impl Engine {
         let root = dir.packs_dir();
         let wanted: Vec<PathBuf> = packs.iter().map(|r| dir.pack_path(r)).collect();
         let mut out = Followed::default();
+        // Gone from the journal, or its file replaced since it was opened (a repair, D-172):
+        // dropped here, and a listed one opened again below.
         let gone: Vec<_> = self
             .layers()
             .filter_map(|l| {
                 let p = l.path()?;
-                (p.parent() == Some(root.as_path()) && !wanted.iter().any(|w| w == p))
-                    .then(|| (l.id(), p.to_path_buf()))
+                (p.parent() == Some(root.as_path())
+                    && (!wanted.iter().any(|w| w == p) || !l.unchanged()))
+                .then(|| (l.id(), p.to_path_buf()))
             })
             .collect();
         for (id, path) in gone {

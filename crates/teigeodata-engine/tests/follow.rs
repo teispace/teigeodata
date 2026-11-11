@@ -119,3 +119,53 @@ fn the_engine_follows_the_journal() {
     assert_eq!(shared.load().layers().len(), 2, "the app's own layers stay");
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+/// A repair renames a new file over the same name: follow drops the old mapping and opens the
+/// new file, while a running query keeps the old one.
+#[test]
+fn a_replaced_file_is_opened_again() {
+    let root = std::env::temp_dir().join(format!("tgd-follow-re-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let dir = Dir::new(&root).unwrap();
+    std::fs::create_dir_all(dir.packs_dir()).unwrap();
+    let model = synthetic(300, 11);
+    let parts = model.split(2, |_, id| (id.get() % 2) as usize);
+    let all = Components::all().closed();
+    let pa = record("a.tgd", parts[0].len(), all);
+    let path = dir.pack_path(&pa);
+    std::fs::write(&path, &parts[0]).unwrap();
+    let shared = Shared::new(Engine::new());
+    shared.follow(&dir, std::slice::from_ref(&pa), LayerOptions::default());
+    let first = model
+        .ids
+        .iter()
+        .copied()
+        .find(|id| id.get() % 2 == 0)
+        .unwrap();
+    let second = model
+        .ids
+        .iter()
+        .copied()
+        .find(|id| id.get() % 2 == 1)
+        .unwrap();
+    let old = shared.load();
+    // The repaired file, renamed over the old name (other bytes, so the change shows).
+    let tmp = root.join("staging.part");
+    std::fs::write(&tmp, &parts[1]).unwrap();
+    std::fs::rename(&tmp, &path).unwrap();
+    let got = shared.follow(&dir, std::slice::from_ref(&pa), LayerOptions::default());
+    assert_eq!(got.closed, std::slice::from_ref(&path));
+    assert_eq!(got.opened, std::slice::from_ref(&path));
+    assert!(
+        old.get(first).unwrap().is_some(),
+        "the old mapping still answers"
+    );
+    let now = shared.load();
+    assert_eq!(now.layers().len(), 1);
+    assert!(now.get(second).unwrap().is_some(), "the new file answers");
+    drop((old, now));
+    // And once open, the same journal changes nothing.
+    let got = shared.follow(&dir, std::slice::from_ref(&pa), LayerOptions::default());
+    assert!(got.opened.is_empty() && got.closed.is_empty());
+    std::fs::remove_dir_all(&root).unwrap();
+}

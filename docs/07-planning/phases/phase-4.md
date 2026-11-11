@@ -229,7 +229,8 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   formula ([download and delta](../../02-research/notes/download-and-delta.md) §3.4):
   `store::plan_room`, `Store::{need, make_room, remove, pin, mark, touch}`, journal version 2
   ([storage manager](../../02-research/notes/storage-manager.md); 2026-11-11, D-172)
-- [ ] `verify(deep)` and repair by section
+- [x] `verify(deep)` and repair by section: `Store::verify`, `Store::repair` over the resume
+  path, `follow` reopening a repaired file (2026-11-11, D-173)
 
 ### 4.7 Delta updates
 - [ ] Section re-download over frames (S3)
@@ -293,3 +294,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.5: the store done with sync gate 8 (crash at every step); the snapshot swap split into its own item, built with 4.6 | D-171 |
 | 2026-11-10 | 4.5: mirrors done; 4.8 gains a world-size install for multi-frame block-hash lists, which no unit-size pack reaches | D-170 |
 | 2026-11-11 | 4.6 first item and the 4.5 snapshot swap done together; the catalog's disk sizes now count section padding | D-172: a whole install's parts were 48 B short of the file |
+| 2026-11-11 | 4.6 done: verify and repair | D-173: repair is resume over a copy of the installed file, so it needs no code of its own to fetch only what fails |
