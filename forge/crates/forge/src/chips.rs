@@ -49,6 +49,11 @@ const SIZE: usize = 600;
 const HALF_M: f64 = 1000.0;
 /// Pass 2's shift of the chip centre (east, north), metres.
 const SHIFT_M: (f64, f64) = (237.0, -173.0);
+/// True colour at or above this in every channel is cloud or snow.
+const BRIGHT: u8 = 200;
+/// A chip with at most this many bright pixels per thousand is taken at once; otherwise the
+/// clearest of the scenes tried is.
+const CLEAR_PER_MILLE: usize = 10;
 /// HTTP range block.
 const BLOCK: u64 = 1 << 20;
 /// A building point's colour (magenta) and the grid's (white).
@@ -361,7 +366,7 @@ fn draw(
     half: f64,
     mirror: bool,
     shift: (f64, f64),
-) -> Result<Option<(Frame, Vec<u8>)>, String> {
+) -> Result<Option<Drawn>, String> {
     let what = &scene.url;
     let (mut dec, grid) = raster::open_reader(Ranged::open(what)?, what)?;
     let keys = dec
@@ -440,8 +445,27 @@ fn draw(
     if empty * 50 > SIZE * SIZE {
         return Ok(None);
     }
+    let bright = bright_share(&rgb);
     stretch(&mut rgb);
-    Ok(Some((frame, rgb)))
+    Ok(Some(Drawn { frame, rgb, bright }))
+}
+
+/// A chip as drawn from one scene, before the overlay.
+struct Drawn {
+    frame: Frame,
+    rgb: Vec<u8>,
+    /// Pixels per thousand bright in every channel: cloud, or snow.
+    bright: usize,
+}
+
+/// Pixels per thousand whose every channel is at least `BRIGHT` (cloud or snow in true colour).
+fn bright_share(rgb: &[u8]) -> usize {
+    let (chunks, _) = rgb.as_chunks::<3>();
+    let n = chunks
+        .iter()
+        .filter(|p| p.iter().all(|&c| c >= BRIGHT))
+        .count();
+    n * 1000 / chunks.len().max(1)
 }
 
 /// Stretches each channel from its 2nd to its 98th percentile, for hills in shadow.
@@ -722,14 +746,20 @@ fn one(
     let b = chip_box(r);
     let deg = |v: i32| f64::from(v) / E7;
     let found = scenes((deg(b.0), deg(b.1), deg(b.2), deg(b.3)))?;
-    let mut done = None;
+    // The first clear chip; else the clearest of those tried (snow never clears).
+    let mut best: Option<(&Scene, Drawn)> = None;
     for s in found.iter().take(TRIES) {
         if let Some(chip) = draw(s, r.at, half_of(r), mirror, shift)? {
-            done = Some((s, chip));
-            break;
+            let clear = chip.bright <= CLEAR_PER_MILLE;
+            if best.as_ref().is_none_or(|(_, b)| chip.bright < b.bright) {
+                best = Some((s, chip));
+            }
+            if clear {
+                break;
+            }
         }
     }
-    let Some((s, (frame, mut rgb))) = done else {
+    let Some((s, Drawn { frame, mut rgb, .. })) = best else {
         return Ok(None);
     };
     let utm = Utm::of_epsg(frame.epsg).ok_or("not UTM")?;
@@ -1073,6 +1103,19 @@ mod tests {
             .read_to_end(&mut out)
             .unwrap();
         assert_eq!(out.len(), 3 * (1 + 4 * 3));
+    }
+
+    #[test]
+    fn bright_share_counts_cloud_not_bright_soil() {
+        // 10 of 100 pixels white (cloud), 20 bright in red only (soil): 100 per thousand.
+        let mut rgb = vec![90_u8; 300];
+        for p in rgb.as_chunks_mut::<3>().0.iter_mut().take(10) {
+            *p = [250, 245, 240];
+        }
+        for p in rgb.as_chunks_mut::<3>().0.iter_mut().skip(10).take(20) {
+            *p = [230, 150, 90];
+        }
+        assert_eq!(bright_share(&rgb), 100);
     }
 
     #[test]
