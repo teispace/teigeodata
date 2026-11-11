@@ -652,6 +652,7 @@ fn elevation_reads_the_packs_terrain() {
         lon_step: 10,
         step_mm: 2_000,
         datum: DATUM_EGM2008,
+        source: dem::Source::CopernicusGlo30.code(),
         tile_log2: 6,
         first_tile: 0,
     };
@@ -676,10 +677,15 @@ fn elevation_reads_the_packs_terrain() {
     let lon = -180.0 + (14_400.0 * 64.0 + 20.0) / 3600.0;
     let (lat, lon) = (format!("{lat:.7}"), format!("{lon:.7}"));
     let text = ok(&["elevation", &lat, &lon, "--pack", s(&pack)]);
-    assert_eq!(text.trim(), "1040.0 m above EGM2008");
+    assert_eq!(
+        text.trim(),
+        "1040.0 m above EGM2008 (Copernicus DEM GLO-30, 31 m spacing)"
+    );
     let v = json(&["elevation", &lat, &lon, "--pack", s(&pack), "--json"]);
     assert_eq!(v["elevation_m"], 1040.0);
     assert_eq!(v["datum"], "EGM2008");
+    assert_eq!(v["source"], "copernicus-glo30");
+    assert_eq!(v["resolution_m"], 30.9);
     // No terrain there: exit 1, and null in JSON.
     let o = tgd(&["elevation", "10", "10", "--pack", s(&pack)]);
     assert_eq!(o.status.code(), Some(1));

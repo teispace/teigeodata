@@ -55,6 +55,8 @@ use std::sync::Arc;
 pub use layer::{Layer, LayerId, LayerOptions, Load, Verify};
 #[cfg(feature = "boundaries")]
 pub use outline::{Outline, Ring};
+#[cfg(feature = "dem")]
+pub use query::{Datum, DemSource, Height};
 pub use query::{Hit, Near, Place, Scratch};
 pub use teigeodata_format::release_cmp;
 

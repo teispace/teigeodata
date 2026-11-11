@@ -289,6 +289,7 @@ fn dem_case(c: &mut Cursor<'_>, structured: bool) {
         lon_step,
         step_mm: 2_000,
         datum: DATUM_EGM2008,
+        source: 0,
         tile_log2: LOG2,
         first_tile: 0,
     };

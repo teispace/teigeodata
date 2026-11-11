@@ -297,8 +297,8 @@ The first consumer brief (Tithipatra, 2026-11-11, D-193); the reply and statuses
 
 - [x] TG-04: `Engine::bbox_of(place)` and `Engine::boundary(place, lod, &mut Outline)` over the
   stored outline boxes and arcs (D-194, 2026-11-11)
-- [ ] TG-07: the DEM section names its source; `elevation_at` returns metres with source,
-  resolution in metres and datum
+- [x] TG-07: the DEM section names its source; `elevation_at` returns metres with source,
+  resolution in metres and datum (D-195, 2026-11-11)
 - [ ] TG-02: ISO 3166-1 and 3166-2 codes on countries and level-1 units, from data files with
   their source; `admin_at` and `ancestors` give them (research note first)
 - [ ] TG-03: zone rules in the pack: compiled TZif for every zone the outlines name, from the

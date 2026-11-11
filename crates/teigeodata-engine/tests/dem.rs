@@ -13,7 +13,7 @@
 
 use teigeodata_core::{E7, Point};
 use teigeodata_engine::{
-    Component, Components, Engine, Error, Layer, LayerOptions, Scratch, Verify,
+    Component, Components, Datum, DemSource, Engine, Error, Layer, LayerOptions, Scratch, Verify,
 };
 use teigeodata_format::dem::{
     self, DATUM_EGM2008, Dem, DemScratch, Family, Grid, GridInput, THRESHOLDS, TileOptions,
@@ -24,7 +24,8 @@ use teigeodata_format::{Encoding, Kind, Pack, Writer};
 const ROW0: u32 = 3_496;
 const COL0: u32 = 14_400;
 
-/// A DEM pack at `address` of one grid of 1 × `cols` tiles at (`ROW0`, `COL0`), tile `c` at height
+/// A DEM pack at `address`, made from NASADEM when the address names a part (`np-p4`) and
+/// from Copernicus GLO-30 otherwise, of one grid of 1 × `cols` tiles at (`ROW0`, `COL0`), tile `c` at height
 /// `base + c·100 m` sloping east, `absent` tiles left out.
 fn dem_pack(address: &str, cols: u32, base: i32, absent: &[u32]) -> Vec<u8> {
     let family = Family::standard();
@@ -48,6 +49,11 @@ fn dem_pack(address: &str, cols: u32, base: i32, absent: &[u32]) -> Vec<u8> {
         lon_step: 10,
         step_mm: 2_000,
         datum: DATUM_EGM2008,
+        source: if address.contains('-') {
+            dem::Source::Nasadem.code()
+        } else {
+            dem::Source::CopernicusGlo30.code()
+        },
         tile_log2: 6,
         first_tile: 0,
     };
@@ -104,16 +110,28 @@ fn heights_come_from_the_first_layer_with_terrain_there() {
     e.add(layer(upper.clone(), None));
     e.add(layer(lower.clone(), None));
     let mut s = Scratch::default();
+    let ids: Vec<_> = e.layers().map(Layer::id).collect();
+    // Each height says where it came from: the answering layer's product, spacing and datum.
     for c in [0, 2] {
-        let got = e.elevation_at(at(c), &mut s).unwrap();
-        assert_eq!(got, direct(&upper, at(c)), "tile {c}");
-        assert!(got.unwrap() < 1_000.0);
+        let got = e.elevation_at(at(c), &mut s).unwrap().unwrap();
+        assert_eq!(Some(got.meters), direct(&upper, at(c)), "tile {c}");
+        assert!(got.meters < 1_000.0);
+        assert_eq!(got.source, Some(DemSource::Nasadem));
+        assert_eq!(got.layer, ids[0]);
     }
     // Absent above, present below; beyond the upper grid; beyond both.
     for c in [1, 3] {
-        let got = e.elevation_at(at(c), &mut s).unwrap();
-        assert_eq!(got, direct(&lower, at(c)), "tile {c}");
-        assert!(got.unwrap() > 2_500.0);
+        let got = e.elevation_at(at(c), &mut s).unwrap().unwrap();
+        assert_eq!(Some(got.meters), direct(&lower, at(c)), "tile {c}");
+        assert!(got.meters > 2_500.0);
+        assert_eq!(got.source, Some(DemSource::CopernicusGlo30));
+        assert_eq!((got.datum, got.layer), (Datum::Egm2008, ids[1]));
+        // 1″ of latitude.
+        assert!(
+            (got.resolution_m - 30.92).abs() < 0.01,
+            "{}",
+            got.resolution_m
+        );
     }
     assert_eq!(e.elevation_at(at(9), &mut s).unwrap(), None);
     // The same answers again from the warm scratch, alternating layers.
@@ -123,7 +141,10 @@ fn heights_come_from_the_first_layer_with_terrain_there() {
         } else {
             direct(&lower, at(c))
         };
-        assert_eq!(e.elevation_at(at(c), &mut s).unwrap(), want);
+        assert_eq!(
+            e.elevation_at(at(c), &mut s).unwrap().map(|h| h.meters),
+            want
+        );
     }
 }
 

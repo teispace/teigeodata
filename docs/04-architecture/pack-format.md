@@ -646,16 +646,18 @@ item count is the number of tiles over all grids, absent ones included.
 | 12 | MODELS | bytes: 64 models × 64 symbols, u16 frequencies summing to 4,096 | required |
 | 13 | CONTEXTS | 7 activity thresholds, non-decreasing | required |
 | 14 | PAYLOAD | bytes: the tile codes back to back | required |
+| 15 | SOURCE | per grid: its DEM product, 1 Copernicus DEM GLO-30, 2 GLO-90, 3 NASADEM, 4 SRTM GL1; 0 = not stated (D-195) | optional, absent = 0 |
 
 - **Tile code:** the base `q` (zigzag LEB128), 5 i8 predictor coefficients, 8 model indices
   (6 bits each), the rANS state (u32), then its renormalisation bytes. The predictor, edge
   rules, contexts and escape are in the module comment of `dem.rs`. A flat tile is 17 bytes.
-- **Reads.** `Dem::elevation(point, &mut DemScratch)` is bilinear between the four samples
+- **Reads.** `Dem::elevation(point, &mut DemScratch)` (or `Dem::height`, which also gives the
+  answering grid: its source, spacing and datum) is bilinear between the four samples
   around the point, from the first grid that has any; samples in absent tiles are left out and
   the weights renormalised. Decoding runs in raster order and stops after the sample it needs;
   the scratch (18 KB, caller-owned) keeps the tile part-decoded, so the next query in the tile
   goes on from there. No allocation, no `unsafe`. `decode_tile` decodes a whole tile.
-- **Rules** (`Dem::check`, O(samples)): tile sides 16 to 64, positive steps, a known datum,
+- **Rules** (`Dem::check`, O(samples)): tile sides 16 to 64, positive steps, a known datum and source,
   grids inside the globe and in order; offsets non-decreasing within PAYLOAD; every model sums
   to 4,096; thresholds non-decreasing; every present tile decodes whole, its rANS state back
   at the start value and every byte used. A tile whose models do not sum to 4,096 is refused

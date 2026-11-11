@@ -418,6 +418,9 @@ the planted-bug proofs of the new tests (item 7). Thresholds and refinement were
 
 ### 6.3 In the packs (D-192, 2026-11-11)
 
+Each grid states its source product (optional column 15 `SOURCE`, D-195), set by the forge from
+the tileset's `query_params.dem` in `data/sources.lock`, so a height says where it came from.
+
 The DEM ships as the pack's `dem` component, masked to the pack's area: the tiles an outline
 edge passes through or whose centre is inside a first-level unit, grown by 0.05° in whole
 tiles (`forge::build::elevation::tiles_near`). The mask copies tile codes (`dem::mask`), so

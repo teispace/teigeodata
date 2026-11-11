@@ -459,6 +459,7 @@ mod tests {
             lon_step: 10,
             step_mm: 1000,
             datum: DATUM_EGM2008,
+            source: 0,
             tile_log2: 6,
             first_tile: 0,
         };
@@ -599,6 +600,7 @@ mod tests {
             lon_step: 10,
             step_mm: 2_000,
             datum: DATUM_EGM2008,
+            source: 0,
             tile_log2: 6,
             first_tile: 0,
         };

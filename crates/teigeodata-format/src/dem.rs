@@ -39,6 +39,7 @@
 //! | 12 | [`MODELS`] | bytes: 64 models × 64 symbols, u16 little-endian frequencies summing to 4,096 |
 //! | 13 | [`CONTEXTS`] | the 7 activity thresholds, non-decreasing |
 //! | 14 | [`PAYLOAD`] | bytes: the tile codes back to back, zero-padded |
+//! | 15 | [`SOURCE`] | per grid: the DEM product it was made from ([`Source`]), 0 = not stated; optional, absent = 0 |
 //!
 //! A tile code: the base `q` (zigzag LEB128), the five coefficients (i8, in the order `b`, `c`,
 //! `d`, `aa`, `bb`), 8 model indices (6 bits each, little-endian, 6 bytes), the rANS state
@@ -89,6 +90,89 @@ pub const MODELS: u16 = 12;
 pub const CONTEXTS: u16 = 13;
 /// Column: the tile codes (bytes).
 pub const PAYLOAD: u16 = 14;
+
+/// Column: each grid's source DEM product, a [`Source`] code (optional).
+pub const SOURCE: u16 = 15;
+
+/// The DEM product a grid was made from, so an answer can say where a height came from and
+/// how fine it is (D-195). Codes are stable: a new product takes the next code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Source {
+    /// Copernicus DEM GLO-30 (about 30 m; DLR and Airbus under the Copernicus programme).
+    CopernicusGlo30,
+    /// Copernicus DEM GLO-90 (about 90 m).
+    CopernicusGlo90,
+    /// NASADEM (about 30 m; NASA JPL, reprocessed SRTM).
+    Nasadem,
+    /// SRTM GL1 (about 30 m; NASA, USGS).
+    SrtmGl1,
+}
+
+impl Source {
+    /// Every product, in code order (codes 1 to 4).
+    pub const ALL: [Self; 4] = [
+        Self::CopernicusGlo30,
+        Self::CopernicusGlo90,
+        Self::Nasadem,
+        Self::SrtmGl1,
+    ];
+
+    /// The stored code, 1 or more.
+    #[must_use]
+    pub const fn code(self) -> u32 {
+        match self {
+            Self::CopernicusGlo30 => 1,
+            Self::CopernicusGlo90 => 2,
+            Self::Nasadem => 3,
+            Self::SrtmGl1 => 4,
+        }
+    }
+
+    /// The product of `code`; `None` for 0 (not stated) or a code this reader does not know.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Option<Self> {
+        match code {
+            1 => Some(Self::CopernicusGlo30),
+            2 => Some(Self::CopernicusGlo90),
+            3 => Some(Self::Nasadem),
+            4 => Some(Self::SrtmGl1),
+            _ => None,
+        }
+    }
+
+    /// Its key in a source lock's `query_params.dem` (`copernicus-glo30`).
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::CopernicusGlo30 => "copernicus-glo30",
+            Self::CopernicusGlo90 => "copernicus-glo90",
+            Self::Nasadem => "nasadem",
+            Self::SrtmGl1 => "srtm-gl1",
+        }
+    }
+
+    /// The product named by `key`.
+    #[must_use]
+    pub fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.key() == key)
+    }
+
+    /// Its display name (`Copernicus DEM GLO-30`).
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::CopernicusGlo30 => "Copernicus DEM GLO-30",
+            Self::CopernicusGlo90 => "Copernicus DEM GLO-90",
+            Self::Nasadem => "NASADEM",
+            Self::SrtmGl1 => "SRTM GL1",
+        }
+    }
+}
+
+/// Metres per 0.1″ of latitude: a meridian degree is about 111,320 m (WGS 84 mean), so 0.1″
+/// is 3.0922 m. Good to 0.6% at any latitude, enough to state a DEM's sample spacing.
+pub const METRES_PER_DECI_ARCSEC: f64 = 111_320.0 / 36_000.0;
 
 /// Heights above the EGM2008 geoid (orthometric), as Copernicus GLO-30 ships them.
 pub const DATUM_EGM2008: u32 = 1;
@@ -145,6 +229,8 @@ pub struct Grid {
     pub step_mm: u32,
     /// Vertical datum.
     pub datum: u32,
+    /// The source product's code ([`Source::code`]), 0 = not stated.
+    pub source: u32,
     /// log2 of the tile side.
     pub tile_log2: u32,
     /// Its first tile in the section.
@@ -231,6 +317,7 @@ impl DemScratch {
 #[derive(Clone, Copy, Debug)]
 pub struct Dem<'a> {
     cols: [Packed<'a>; 10],
+    source: Option<Packed<'a>>,
     grids: usize,
     tiles: usize,
     offsets: Packed<'a>,
@@ -530,10 +617,11 @@ impl<'a> Dem<'a> {
         let table: Table<'a> = columns::open(section, Kind::DEM)?;
         let tiles = usize::try_from(section.item_count())
             .map_err(|_| fail(0, "the tile count does not fit this platform"))?;
-        if table.ids().any(|id| id == 0 || id > PAYLOAD) {
+        if table.ids().any(|id| id == 0 || id > SOURCE) {
             return Err(fail(0, "an unknown column"));
         }
         let grids = columns::required(&table, Kind::DEM, TILE_ROW0, None)?.len();
+        let source = columns::optional(&table, Kind::DEM, SOURCE, grids)?;
         let col = |id| columns::required(&table, Kind::DEM, id, Some(grids));
         let cols = [
             col(TILE_ROW0)?,
@@ -562,6 +650,7 @@ impl<'a> Dem<'a> {
             .map_err(|e| columns::map(Kind::DEM, e))?;
         Ok(Self {
             cols,
+            source,
             grids,
             tiles,
             offsets,
@@ -599,6 +688,7 @@ impl<'a> Dem<'a> {
             lon_step: v(5)?,
             step_mm: v(6)?,
             datum: v(7)?,
+            source: self.source.as_ref().map_or(Some(0), |c| c.get(g))?,
             tile_log2: v(8)?,
             first_tile: v(9)?,
         })
@@ -633,7 +723,15 @@ impl<'a> Dem<'a> {
     /// the weights of the rest renormalised; `None` where no grid has a sample with weight.
     #[must_use]
     pub fn elevation(&self, at: Point<E7>, s: &mut DemScratch) -> Option<f64> {
-        (0..self.grids).find_map(|g| self.grid(g).and_then(|grid| self.bilinear(&grid, at, s)))
+        self.height(at, s).map(|(h, _)| h)
+    }
+
+    /// [`Dem::elevation`] with the grid that answered: its source, spacing and datum.
+    pub fn height(&self, at: Point<E7>, s: &mut DemScratch) -> Option<(f64, Grid)> {
+        (0..self.grids).find_map(|g| {
+            let grid = self.grid(g)?;
+            self.bilinear(&grid, at, s).map(|h| (h, grid))
+        })
     }
 
     #[allow(
@@ -721,6 +819,9 @@ impl<'a> Dem<'a> {
             if grid.datum != DATUM_EGM2008 {
                 return Err(fail(DATUM, "an unknown datum"));
             }
+            if grid.source != 0 && Source::from_code(grid.source).is_none() {
+                return Err(fail(SOURCE, "an unknown source"));
+            }
             let side = u64::from(grid.tile_log2);
             let rows = (u64::from(grid.tile_row0) + u64::from(grid.tile_rows)) << side;
             let cols = (u64::from(grid.tile_col0) + u64::from(grid.tile_cols)) << side;
@@ -801,8 +902,8 @@ mod write {
     use super::{
         CONTEXT_COUNT, CONTEXTS, Coder, DATUM, DemScratch, ESCAPE, FAMILY, Grid, LAT_STEP,
         LON_STEP, MAX_ESCAPE, MAX_LOG2, MIN_LOG2, MODELS, OFFSETS, PAYLOAD, RANS_L, SCALE,
-        SCALE_BITS, STEP_MM, SYMBOLS, TILE_COL0, TILE_COLS, TILE_LOG2, TILE_ROW0, TILE_ROWS,
-        TILE_START, neighbours, predict, small_contexts, zigzag,
+        SCALE_BITS, SOURCE, STEP_MM, SYMBOLS, TILE_COL0, TILE_COLS, TILE_LOG2, TILE_ROW0,
+        TILE_ROWS, TILE_START, neighbours, predict, small_contexts, zigzag,
     };
     use crate::Error;
 
@@ -1337,6 +1438,7 @@ mod write {
             first = u32::try_from(offsets.len() - 1).map_err(|_| too_big())?;
         }
         cols[9].push(first);
+        let sources: Vec<u32> = grids.iter().map(|g| g.grid.source).collect();
         while payload.len() % 4 != 0 {
             payload.push(0);
         }
@@ -1353,6 +1455,10 @@ mod write {
         bodies.push((MODELS, Codec::Bytes, models.to_vec()));
         bodies.push((CONTEXTS, Codec::Bitpack, encode_auto(thresholds)));
         bodies.push((PAYLOAD, Codec::Bytes, payload));
+        // Stated only when a grid states it: a section without sources keeps its bytes.
+        if sources.iter().any(|&v| v != 0) {
+            bodies.push((SOURCE, Codec::Bitpack, encode_auto(&sources)));
+        }
         let refs: Vec<(u16, Codec, &[u8])> = bodies
             .iter()
             .map(|(id, c, b)| (*id, *c, b.as_slice()))

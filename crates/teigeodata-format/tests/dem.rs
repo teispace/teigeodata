@@ -101,6 +101,7 @@ fn grid_codes(
         lon_step: 10,
         step_mm: 2_000,
         datum: DATUM_EGM2008,
+        source: 0,
         tile_log2: LOG2,
         first_tile: 0,
     };
@@ -413,4 +414,41 @@ fn one_scratch_never_mixes_two_sections_tiles() {
     }
     assert_eq!(fresh(&d2), Some(10_000.0));
     assert_ne!(fresh(&d1), fresh(&d2));
+}
+
+/// D-195: a grid states its source product; the code reads back, survives a mask, and a code
+/// no reader knows is refused. A section without sources writes no column and reads 0.
+#[test]
+fn a_grid_states_its_source() {
+    let mut rng = Rng(11);
+    let (grid, codes, _) = grid_codes(ROW0, COL0, 1, 2, &[], &mut rng);
+    let plain = section(grid, &codes);
+    assert_eq!(open(&plain, 2).grid(0).unwrap().source, 0);
+    let stated = section(
+        Grid {
+            source: dem::Source::Nasadem.code(),
+            ..grid
+        },
+        &codes,
+    );
+    assert!(
+        stated.len() > plain.len(),
+        "the column is written only when stated"
+    );
+    let d = open(&stated, 2);
+    d.check().unwrap();
+    let g = d.grid(0).unwrap();
+    assert_eq!(dem::Source::from_code(g.source), Some(dem::Source::Nasadem));
+    let inside = point(f64::from(ROW0) * 64.0 + 3.5, f64::from(COL0) * 64.0 + 3.5);
+    let (h, hg) = d.height(inside, &mut DemScratch::new()).unwrap();
+    assert_eq!(Some(h), d.elevation(inside, &mut DemScratch::new()));
+    assert_eq!(hg.source, g.source);
+    let (masked, _) = dem::mask(&d, |_, _, c| c == COL0).unwrap().unwrap();
+    assert_eq!(open(&masked, 1).grid(0).unwrap().source, g.source);
+    for s in dem::Source::ALL {
+        assert_eq!(dem::Source::from_key(s.key()), Some(s));
+        assert_eq!(dem::Source::from_code(s.code()), Some(s));
+    }
+    let unknown = section(Grid { source: 99, ..grid }, &codes);
+    assert!(open(&unknown, 2).check().is_err());
 }

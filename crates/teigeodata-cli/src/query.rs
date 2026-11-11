@@ -183,11 +183,25 @@ pub(crate) fn elevation(
         engine(packs)?
     };
     let h = e.elevation_at(point::<E7>(lat, lon)?, &mut Scratch::default())?;
-    match (h, json) {
-        (Some(m), false) => writeln!(out, "{m:.1} m above EGM2008")?,
-        (Some(m), true) => writeln!(
+    match (&h, json) {
+        (Some(h), false) => {
+            let from = h.source.map_or("an unstated DEM", |s| s.name());
+            writeln!(
+                out,
+                "{:.1} m above {} ({from}, {:.0} m spacing)",
+                h.meters,
+                h.datum.name(),
+                h.resolution_m
+            )?;
+        }
+        (Some(h), true) => writeln!(
             out,
-            "{{\"lat\":{lat},\"lon\":{lon},\"elevation_m\":{m:.1},\"datum\":\"EGM2008\"}}"
+            "{{\"lat\":{lat},\"lon\":{lon},\"elevation_m\":{:.1},\"datum\":\"{}\",\"source\":{},\"resolution_m\":{:.1}}}",
+            h.meters,
+            h.datum.name(),
+            h.source
+                .map_or_else(|| "null".to_owned(), |s| format!("\"{}\"", s.key())),
+            h.resolution_m
         )?,
         (None, true) => writeln!(
             out,

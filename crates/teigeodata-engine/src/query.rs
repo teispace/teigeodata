@@ -19,6 +19,9 @@ use teigeodata_format::region::Region;
 #[cfg(feature = "search")]
 use teigeodata_names::KeyBuf;
 
+#[cfg(feature = "dem")]
+pub use teigeodata_format::dem::Source as DemSource;
+
 use crate::{Engine, Error, LayerId};
 
 /// A place in an answer, read from the layer that won its ID.
@@ -38,6 +41,57 @@ pub struct Place {
     pub admin_level: u8,
     /// Its flag bits (`places::FLAG_FORMER`).
     pub flags: u32,
+}
+
+/// A terrain height and where it came from, from [`Engine::elevation_at`] (D-195).
+#[cfg(feature = "dem")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Height {
+    /// Metres above the datum.
+    pub meters: f64,
+    /// The DEM product it was read from; `None` for a pack that does not state it.
+    pub source: Option<DemSource>,
+    /// The DEM's sample spacing north to south in metres (about 30.9 for 1″); east to west it
+    /// narrows with the cosine of the latitude.
+    pub resolution_m: f64,
+    /// The vertical datum.
+    pub datum: Datum,
+    /// The layer it came from.
+    pub layer: LayerId,
+}
+
+/// A vertical datum.
+#[cfg(feature = "dem")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Datum {
+    /// Orthometric heights above the EGM2008 geoid.
+    Egm2008,
+}
+
+#[cfg(feature = "dem")]
+impl Datum {
+    /// Its name (`EGM2008`).
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Egm2008 => "EGM2008",
+        }
+    }
+}
+
+#[cfg(feature = "dem")]
+impl Height {
+    fn of(meters: f64, grid: &teigeodata_format::dem::Grid, layer: LayerId) -> Self {
+        Self {
+            meters,
+            source: DemSource::from_code(grid.source),
+            resolution_m: f64::from(grid.lat_step) * teigeodata_format::dem::METRES_PER_DECI_ARCSEC,
+            // The reader refuses a grid on any other datum (`Dem::check`, D-089).
+            datum: Datum::Egm2008,
+            layer,
+        }
+    }
 }
 
 /// A place near a point, from [`Engine::reverse`].
@@ -318,8 +372,9 @@ impl Engine {
         Ok(false)
     }
 
-    /// The terrain height at `at` in metres above EGM2008, from the first layer covering the
-    /// point whose DEM has samples around it (D-089, D-192): bilinear between the four samples
+    /// The terrain height at `at` in metres above EGM2008, with where it came from (its DEM
+    /// product, sample spacing and datum, D-195), from the first layer covering the point
+    /// whose DEM has samples around it (D-089, D-192): bilinear between the four samples
     /// around it, each within half the DEM's height step of its source (±1 m in shipped
     /// packs). `None` where no layer has terrain (the sea, outside every DEM). A warm query
     /// does not allocate; it decodes at most one tile, and the next query in that tile goes on
@@ -329,7 +384,7 @@ impl Engine {
     /// [`Error::MissingComponent`] if a layer covering the point has a DEM that is not
     /// installed; [`Error::Integrity`] if it is corrupt.
     #[cfg(feature = "dem")]
-    pub fn elevation_at(&self, at: Point<E7>, s: &mut Scratch) -> Result<Option<f64>, Error> {
+    pub fn elevation_at(&self, at: Point<E7>, s: &mut Scratch) -> Result<Option<Height>, Error> {
         for l in &self.layers {
             if !l.covers(at) {
                 continue;
@@ -339,8 +394,8 @@ impl Engine {
                 continue;
             };
             let scratch = s.dem.get_or_insert_with(Box::default);
-            if let Some(h) = dem.elevation(at, scratch) {
-                return Ok(Some(h));
+            if let Some((meters, grid)) = dem.height(at, scratch) {
+                return Ok(Some(Height::of(meters, &grid, l.id)));
             }
         }
         Ok(None)

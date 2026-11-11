@@ -94,6 +94,19 @@ impl Shift {
     }
 }
 
+/// The product code a DEM tileset names in `query_params.dem` (`copernicus-glo30`), so every
+/// height says where it came from (D-195). A tileset without one, or with an unknown one, is
+/// refused.
+pub(crate) fn product(lock: &Lock, tileset: &str) -> Result<u32, String> {
+    let key =
+        lock.get(tileset)?.query_params.get("dem").ok_or_else(|| {
+            format!("{tileset}: a DEM tileset names its product in query_params.dem")
+        })?;
+    dem::Source::from_key(key)
+        .map(dem::Source::code)
+        .ok_or_else(|| format!("{tileset}: unknown DEM product {key:?}"))
+}
+
 /// The pinned geoids a tileset's section reads: its own and EGM2008, when they differ.
 pub(crate) fn geoids<'a>(lock: &'a Lock, tileset: &str) -> Result<Vec<&'a str>, String> {
     Ok(match lock.get(tileset)?.query_params.get("geoid") {
@@ -308,6 +321,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         .get("tile")
         .ok_or_else(|| format!("{id}: no tile name template"))?;
     let shift = Shift::of(root, &lock, id)?;
+    let product = product(&lock, id)?;
     let manifest = tiles::manifest(root, source)?;
     let by_name: BTreeMap<&str, &Tile> = manifest.iter().map(|t| (t.name.as_str(), t)).collect();
     let (w, s, e, n) = parse_box(bx)?;
@@ -446,6 +460,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         lon_step: 10,
         step_mm,
         datum: DATUM_EGM2008,
+        source: product,
         tile_log2: LOG2,
         first_tile: 0,
     };

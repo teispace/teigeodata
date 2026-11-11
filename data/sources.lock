@@ -223,7 +223,7 @@ title = "Copernicus DEM GLO-30 Public (DGED), Cloud Optimized GeoTIFF tiles over
 kind = "tileset"
 url = "https://copernicus-dem-30m.s3.amazonaws.com/{tile}/{tile}.tif"
 tiles = "data/sources/copernicus-glo30-np.tiles"
-query_params = { bbox = "80,26,88,30", tile = "Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_DEM" }
+query_params = { bbox = "80,26,88,30", tile = "Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_DEM", dem = "copernicus-glo30" }
 version = "GLO-30 Public DGED, AWS COG (Float32, DEFLATE, predictor 3, PixelIsPoint)"
 retrieved = "2026-11-06"
 sha256 = "6c5c6de35f6e27da64ec1e84f0bf205fe62ce3ab1c96013cddc623ec6e5820f1"
@@ -276,7 +276,7 @@ title = "NASADEM HGT v001, Cloud Optimized GeoTIFF tiles over Nepal (Microsoft P
 kind = "tileset"
 url = "https://nasademeuwest.blob.core.windows.net/nasadem-cog/v001/{tile}.tif"
 tiles = "data/sources/nasadem-np.tiles"
-query_params = { bbox = "80,26,88,30", tile = "NASADEM_HGT_{ns}{LAT2}{ew}{LON3}", token_url = "https://planetarycomputer.microsoft.com/api/sas/v1/token/nasadem", geoid = "egm96-5" }
+query_params = { bbox = "80,26,88,30", tile = "NASADEM_HGT_{ns}{LAT2}{ew}{LON3}", token_url = "https://planetarycomputer.microsoft.com/api/sas/v1/token/nasadem", geoid = "egm96-5", dem = "nasadem" }
 # Upstream reads need a short-lived SAS token that refused 6 of 45 tiles with 403 on 2026-11-09:
 # builds read the mirror (D-127, D-132).
 mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
