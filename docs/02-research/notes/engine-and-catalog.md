@@ -365,6 +365,34 @@ path delegations are in spec 1.0 and both oracles (python-tuf, tough) read them.
 becomes: the top-level targets, the snapshot and the largest country role each within
 512 KiB gzip.
 
+**As built (2026-11-11, D-176).** The generated world now shares its parts out unevenly
+(Zipf over 250 countries: the first gets 779 of 5,000 targets), so the largest role is a large
+country's. Release build on this Mac:
+
+| File | JSON | gzip -9 |
+|---|---:|---:|
+| Top-level targets (two packs of no country, 250 delegations) | 77,125 B | 3,761 B |
+| Snapshot (251 entries) | 48,603 B | 12,978 B |
+| Largest country role (779 targets) | 1,725,594 B | 220,313 B |
+
+Verified and read: every role 96.7 ms, the largest country alone 16.1 ms. At about 283 B a
+target, one country role fits about 1,850 targets in the budget; a country past that splits
+into roles by part (a pattern per part prefix), which the client already reads. Choices made
+in building it:
+
+- A role is named by its country code (`np`, file `V.np.json`) and signs `np.*` and `np-*`;
+  an address that is not a two-letter lower-case code (or one and a part) belongs to no country
+  and stays in the top-level targets (`catalog::country_of`, shared by writer and reader).
+- Patterns are matched one `/`-segment at a time with `*` and `?` (python-tuf's rule); `[`
+  classes and `path_hash_prefixes` are refused rather than misread. Role names are safe file
+  names. A delegated role that delegates again is refused (one level).
+- `Trusted::target` consults matching roles in order and stops at a terminating one; a role
+  that must be consulted and is not loaded is `Error::Unloaded`, never a silent miss, and
+  `Trusted::roles_for(path)` names what to fetch. A role is never trusted for a path outside
+  its patterns; `tuf verify` refuses a repository where a role lists one.
+- `tuf release` re-signs a country's role only when its packs change or it has less than half
+  its year left, so a Nepal release leaves India's role (and every client's copy) untouched.
+
 ## 4. Options compared
 
 **Snapshot swap.**

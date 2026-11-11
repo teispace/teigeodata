@@ -48,7 +48,8 @@ Constraints that drive every verdict:
 ## 2. Summary and recommendation
 
 **Trust chain.** Adopt **TUF metadata (spec 1.0.37) with a deliberately small subset**: the four
-top-level roles (root, timestamp, snapshot, targets), no delegations, consistent snapshots, and
+top-level roles (root, timestamp, snapshot, targets), no delegations (since D-176, one level of
+`paths` delegations, one role per country, to keep each file within gate 12), consistent snapshots, and
 pack details in each target's `custom` field. Write **our own small verifying client** in the
 `sync` crate (a few hundred lines over `ed25519-dalek`, `blake3`, `serde_json`) and use
 `tough` 0.24 and python-tuf as **differential test oracles** in CI. Root keys are offline

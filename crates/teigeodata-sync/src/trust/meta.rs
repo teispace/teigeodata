@@ -142,6 +142,121 @@ pub struct Targets {
     pub common: Common,
     /// The target files by path.
     pub targets: BTreeMap<String, Target>,
+    /// The roles it delegates to, if any (only the top-level targets may delegate, D-175).
+    pub delegations: Option<Delegations>,
+}
+
+/// The roles a targets file delegates to (spec 1.0 §4.5), one level deep: their keys, and the
+/// roles in the order a client consults them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Delegations {
+    /// Ed25519 public keys by key ID.
+    pub keys: BTreeMap<String, [u8; 32]>,
+    /// The delegated roles, in order.
+    pub roles: Vec<Delegated>,
+}
+
+/// One delegated targets role.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Delegated {
+    /// Its name: the metadata file is `NAME.json` (`V.NAME.json` with consistent snapshots).
+    pub name: String,
+    /// Its keys and threshold.
+    pub role: Role,
+    /// The target paths it may sign: shell-style patterns, `*` and `?`, matched one path
+    /// segment at a time (`*` never crosses a `/`), as python-tuf matches them.
+    pub paths: Vec<String>,
+    /// Whether a target it matches is never looked for in a later role.
+    pub terminating: bool,
+}
+
+impl Delegated {
+    /// Whether `path` is one this role may sign.
+    #[must_use]
+    pub fn matches(&self, path: &str) -> bool {
+        self.paths.iter().any(|p| path_matches(p, path))
+    }
+}
+
+impl Delegations {
+    /// The roles to consult for `path`, in order: every role that matches it, up to and
+    /// including the first terminating one.
+    pub fn matching<'a, 'p>(
+        &'a self,
+        path: &'p str,
+    ) -> impl Iterator<Item = &'a Delegated> + use<'a, 'p> {
+        let mut done = false;
+        self.roles.iter().filter(move |r| {
+            if done || !r.matches(path) {
+                return false;
+            }
+            done = r.terminating;
+            true
+        })
+    }
+
+    /// The role named `name`.
+    #[must_use]
+    pub fn role(&self, name: &str) -> Option<&Delegated> {
+        self.roles.iter().find(|r| r.name == name)
+    }
+}
+
+/// Whether `path` matches `pattern`: the same number of `/`-separated segments, each matched
+/// by a shell-style glob where `*` is any run of characters and `?` exactly one.
+#[must_use]
+pub fn path_matches(pattern: &str, path: &str) -> bool {
+    pattern.split('/').count() == path.split('/').count()
+        && pattern
+            .split('/')
+            .zip(path.split('/'))
+            .all(|(p, s)| glob(p.as_bytes(), s.as_bytes()))
+}
+
+/// The length of the UTF-8 character that starts with byte `b`.
+const fn char_len(b: u8) -> usize {
+    match b {
+        0xF0..=0xFF => 4,
+        0xE0..=0xEF => 3,
+        0xC0..=0xDF => 2,
+        _ => 1,
+    }
+}
+
+/// A glob match with one backtracking point (the last `*`): linear in practice, never
+/// exponential.
+fn glob(p: &[u8], s: &[u8]) -> bool {
+    let (mut pi, mut si) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while let Some(&c) = s.get(si) {
+        match p.get(pi) {
+            Some(b'*') => {
+                star = Some((pi, si));
+                pi += 1;
+                continue;
+            }
+            Some(b'?') => {
+                pi += 1;
+                si += char_len(c);
+                continue;
+            }
+            Some(&q) if q == c => {
+                pi += 1;
+                si += 1;
+                continue;
+            }
+            _ => {}
+        }
+        let Some((sp, ss)) = star else {
+            return false;
+        };
+        let next = ss + s.get(ss).map_or(1, |&b| char_len(b));
+        star = Some((sp, next));
+        pi = sp + 1;
+        si = next;
+    }
+    p.get(pi..)
+        .is_some_and(|rest| rest.iter().all(|&c| c == b'*'))
 }
 
 /// A parsed envelope: the `signed` object, its canonical bytes and the signatures.
@@ -199,10 +314,33 @@ impl Envelope {
     /// # Errors
     /// [`Error::Signature`] below the threshold.
     pub fn verify(&self, root: &Root, role: RoleName) -> Result<(), Error> {
-        let r = root.role(role);
+        if self.signed_by(&root.keys, root.role(role)) {
+            Ok(())
+        } else {
+            Err(Error::Signature(role))
+        }
+    }
+
+    /// Checks that the delegated role `role` of `delegations` signed, as [`Self::verify`] does.
+    ///
+    /// # Errors
+    /// [`Error::Signature`] (of the targets role) below the threshold.
+    pub fn verify_delegated(
+        &self,
+        delegations: &Delegations,
+        role: &Delegated,
+    ) -> Result<(), Error> {
+        if self.signed_by(&delegations.keys, &role.role) {
+            Ok(())
+        } else {
+            Err(Error::Signature(RoleName::Targets))
+        }
+    }
+
+    fn signed_by(&self, keys: &BTreeMap<String, [u8; 32]>, r: &Role) -> bool {
         let mut good: BTreeSet<[u8; 32]> = BTreeSet::new();
         for id in &r.keyids {
-            let Some(public) = root.keys.get(id) else {
+            let Some(public) = keys.get(id) else {
                 continue;
             };
             let Ok(key) = VerifyingKey::from_bytes(public) else {
@@ -217,11 +355,7 @@ impl Envelope {
                 good.insert(*public);
             }
         }
-        if good.len() >= r.threshold {
-            Ok(())
-        } else {
-            Err(Error::Signature(role))
-        }
+        good.len() >= r.threshold
     }
 
     fn common(&self) -> Result<Common, Error> {
@@ -246,43 +380,9 @@ impl Envelope {
             None => false,
             Some(_) => return Err(Error::Format("consistent_snapshot is not a boolean")),
         };
-        let mut keys = BTreeMap::new();
-        for (id, k) in obj_field(&self.signed, "keys")? {
-            let Value::Object(k) = k else {
-                return Err(Error::Format("a key that is not an object"));
-            };
-            // Only Ed25519 keys are trusted; another type is ignored, as an unknown key would
-            // be: it can never count towards a threshold.
-            if str_field(k, "keytype")? != "ed25519" || str_field(k, "scheme")? != "ed25519" {
-                continue;
-            }
-            let public = hex(str_field(obj_field(k, "keyval")?, "public")?)?;
-            let public: [u8; 32] = public
-                .try_into()
-                .map_err(|_| Error::Format("an Ed25519 key that is not 32 bytes"))?;
-            keys.insert(id.clone(), public);
-        }
+        let keys = keys(obj_field(&self.signed, "keys")?)?;
         let roles_obj = obj_field(&self.signed, "roles")?;
-        let role = |name: RoleName| -> Result<Role, Error> {
-            let r = obj_field(roles_obj, name.as_str())?;
-            let threshold = usize::try_from(u64_field(r, "threshold")?)
-                .map_err(|_| Error::Format("a threshold out of range"))?;
-            if threshold == 0 {
-                return Err(Error::Format("a threshold of 0"));
-            }
-            let Some(Value::Array(ids)) = r.get("keyids") else {
-                return Err(Error::Format("a role without keyids"));
-            };
-            let keyids = ids
-                .iter()
-                .map(|v| {
-                    v.as_str()
-                        .map(ToString::to_string)
-                        .ok_or(Error::Format("a key ID that is not a string"))
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(Role { keyids, threshold })
-        };
+        let role = |name: RoleName| role(obj_field(roles_obj, name.as_str())?);
         Ok(Root {
             common,
             consistent_snapshot,
@@ -323,18 +423,17 @@ impl Envelope {
         Ok(Snapshot { common, meta })
     }
 
-    /// The targets it holds. Delegations are not supported (the catalog has none, D-159).
+    /// The targets it holds, with the roles it delegates to (`None` when it delegates to none).
     ///
     /// # Errors
-    /// [`Error::Format`] or [`Error::Field`] for malformed targets or delegated roles.
+    /// [`Error::Format`] or [`Error::Field`] for malformed targets or delegations.
     pub fn targets(&self) -> Result<Targets, Error> {
         let common = self.common()?;
-        if let Some(Value::Object(d)) = self.signed.get("delegations")
-            && d.get("roles")
-                .is_some_and(|r| r.as_array().is_none_or(|a| !a.is_empty()))
-        {
-            return Err(Error::Format("delegated roles are not supported"));
-        }
+        let delegations = match self.signed.get("delegations") {
+            None => None,
+            Some(Value::Object(d)) => delegations(d)?,
+            Some(_) => return Err(Error::Format("delegations that are not an object")),
+        };
         let mut targets = BTreeMap::new();
         for (path, t) in obj_field(&self.signed, "targets")? {
             let Value::Object(t) = t else {
@@ -353,8 +452,117 @@ impl Envelope {
                 },
             );
         }
-        Ok(Targets { common, targets })
+        Ok(Targets {
+            common,
+            targets,
+            delegations,
+        })
     }
+}
+
+/// Ed25519 public keys by ID. Only Ed25519 keys are trusted; another type is ignored, as an
+/// unknown key would be: it can never count towards a threshold.
+fn keys(obj: &Map<String, Value>) -> Result<BTreeMap<String, [u8; 32]>, Error> {
+    let mut keys = BTreeMap::new();
+    for (id, k) in obj {
+        let Value::Object(k) = k else {
+            return Err(Error::Format("a key that is not an object"));
+        };
+        if str_field(k, "keytype")? != "ed25519" || str_field(k, "scheme")? != "ed25519" {
+            continue;
+        }
+        let public = hex(str_field(obj_field(k, "keyval")?, "public")?)?;
+        let public: [u8; 32] = public
+            .try_into()
+            .map_err(|_| Error::Format("an Ed25519 key that is not 32 bytes"))?;
+        keys.insert(id.clone(), public);
+    }
+    Ok(keys)
+}
+
+/// A role's key IDs and threshold (at least 1).
+fn role(r: &Map<String, Value>) -> Result<Role, Error> {
+    let threshold = usize::try_from(u64_field(r, "threshold")?)
+        .map_err(|_| Error::Format("a threshold out of range"))?;
+    if threshold == 0 {
+        return Err(Error::Format("a threshold of 0"));
+    }
+    let Some(Value::Array(ids)) = r.get("keyids") else {
+        return Err(Error::Format("a role without keyids"));
+    };
+    let keyids = ids
+        .iter()
+        .map(|v| {
+            v.as_str()
+                .map(ToString::to_string)
+                .ok_or(Error::Format("a key ID that is not a string"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Role { keyids, threshold })
+}
+
+/// Whether `name` may name a delegated role: it becomes a file name, so it is 1 to 64 of
+/// `A-Z a-z 0-9 - _ .`, does not start with a dot, and is none of the top-level roles.
+#[must_use]
+pub fn role_name_ok(name: &str) -> bool {
+    (1..=64).contains(&name.len())
+        && !name.starts_with('.')
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+        && !["root", "timestamp", "snapshot", "targets"].contains(&name)
+}
+
+/// The `delegations` object: `None` when it lists no roles. Only `paths` patterns are read:
+/// a role with `path_hash_prefixes` (hash bins, TAP 15) is refused rather than misread.
+fn delegations(d: &Map<String, Value>) -> Result<Option<Delegations>, Error> {
+    let Some(Value::Array(list)) = d.get("roles") else {
+        return Err(Error::Field("roles"));
+    };
+    if list.is_empty() {
+        return Ok(None);
+    }
+    let keys = keys(obj_field(d, "keys")?)?;
+    let mut roles: Vec<Delegated> = Vec::with_capacity(list.len());
+    for r in list {
+        let Value::Object(r) = r else {
+            return Err(Error::Format("a delegated role that is not an object"));
+        };
+        let name = str_field(r, "name")?;
+        if !role_name_ok(name) {
+            return Err(Error::Format(
+                "a delegated role name that is not a safe file name",
+            ));
+        }
+        if roles.iter().any(|o| o.name == name) {
+            return Err(Error::Format("two delegated roles of one name"));
+        }
+        if r.contains_key("path_hash_prefixes") {
+            return Err(Error::Format("path_hash_prefixes are not supported"));
+        }
+        let Some(Value::Array(ps)) = r.get("paths") else {
+            return Err(Error::Field("paths"));
+        };
+        let paths = ps
+            .iter()
+            .map(|p| match p.as_str() {
+                Some(p) if !p.is_empty() && !p.contains(['[', ']', '\\']) => Ok(p.to_string()),
+                _ => Err(Error::Format("a path pattern that is not a plain glob")),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let terminating = match r.get("terminating") {
+            None => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return Err(Error::Format("terminating is not a boolean")),
+        };
+        roles.push(Delegated {
+            name: name.to_string(),
+            role: role(r)?,
+            paths,
+            terminating,
+        });
+    }
+    Ok(Some(Delegations { keys, roles }))
 }
 
 /// Whether the client can check this hash algorithm.

@@ -1,5 +1,6 @@
 //! The repository side of the catalog: writes and signs the four TUF roles that
-//! [`trust`](crate::trust) verifies, with the same canonical JSON (D-162).
+//! [`trust`](crate::trust) verifies, with the same canonical JSON (D-162), and the catalog's
+//! delegated roles, one per country (D-175, [`by_country`]).
 //!
 //! Every function is pure: the caller reads and writes files and holds the keys. Key IDs are
 //! computed as `securesystemslib` computes them (SHA-256 of the canonical key object), so
@@ -14,7 +15,10 @@ use ed25519_dalek::{Signer as _, SigningKey};
 use serde_json::{Map, Value, json};
 use sha2::Digest as _;
 
-use crate::trust::{Envelope, Error, Hashes, RoleName, canonical_json, format_time, lower_hex};
+use crate::catalog::country_of;
+use crate::trust::{
+    Envelope, Error, Hashes, RoleName, canonical_json, format_time, lower_hex, role_name_ok,
+};
 
 /// The TUF specification version written into every role.
 pub const SPEC_VERSION: &str = "1.0.31";
@@ -57,27 +61,29 @@ pub fn root(version: u64, expires: i64, roles: &[RoleKeys; 4]) -> Result<Value, 
         RoleName::Targets,
     ];
     for (name, r) in names.iter().zip(roles) {
-        if r.threshold == 0 || r.threshold > r.keys.len() {
-            return Err(Error::Format("a threshold of 0 or above the role's keys"));
-        }
-        let mut ids: Vec<String> = r.keys.iter().map(key_id).collect();
-        ids.sort();
-        if ids.windows(2).any(|w| w.first() == w.get(1)) {
-            return Err(Error::Format("a key listed twice in one role"));
-        }
-        for k in &r.keys {
-            keys.insert(key_id(k), key_object(k));
-        }
-        role_map.insert(
-            name.as_str().to_string(),
-            json!({"keyids": ids, "threshold": r.threshold}),
-        );
+        role_map.insert(name.as_str().to_string(), role_value(r, &mut keys)?);
     }
     Ok(json!({
         "_type": "root", "spec_version": SPEC_VERSION, "version": version,
         "expires": format_time(expires)?, "consistent_snapshot": true,
         "keys": keys, "roles": role_map,
     }))
+}
+
+/// `{"keyids", "threshold"}` of `r`, its keys added to `keys`.
+fn role_value(r: &RoleKeys, keys: &mut Map<String, Value>) -> Result<Value, Error> {
+    if r.threshold == 0 || r.threshold > r.keys.len() {
+        return Err(Error::Format("a threshold of 0 or above the role's keys"));
+    }
+    let mut ids: Vec<String> = r.keys.iter().map(key_id).collect();
+    ids.sort();
+    if ids.windows(2).any(|w| w.first() == w.get(1)) {
+        return Err(Error::Format("a key listed twice in one role"));
+    }
+    for k in &r.keys {
+        keys.insert(key_id(k), key_object(k));
+    }
+    Ok(json!({"keyids": ids, "threshold": r.threshold}))
 }
 
 /// What a timestamp or snapshot says of `data` at `version`: version, length and SHA-256.
@@ -113,11 +119,132 @@ pub fn snapshot(
     targets: &[u8],
     targets_version: u64,
 ) -> Result<Value, Error> {
+    snapshot_listing(version, expires, &[("targets", targets, targets_version)])
+}
+
+/// The `signed` object of a snapshot naming each of `roles`: the top-level targets
+/// (`"targets"`) and every delegated role, as (name, its bytes, its version).
+///
+/// # Errors
+/// [`Error::Format`] for an expiry outside years 0–9999, a name listed twice, or a list
+/// without the top-level targets.
+pub fn snapshot_listing(
+    version: u64,
+    expires: i64,
+    roles: &[(&str, &[u8], u64)],
+) -> Result<Value, Error> {
+    let mut meta = Map::new();
+    for &(name, data, v) in roles {
+        if meta
+            .insert(alloc::format!("{name}.json"), meta_of(v, data))
+            .is_some()
+        {
+            return Err(Error::Format("a role listed twice"));
+        }
+    }
+    if !meta.contains_key("targets.json") {
+        return Err(Error::Format("a snapshot without targets.json"));
+    }
     Ok(json!({
         "_type": "snapshot", "spec_version": SPEC_VERSION, "version": version,
-        "expires": format_time(expires)?,
-        "meta": {"targets.json": meta_of(targets_version, targets)},
+        "expires": format_time(expires)?, "meta": meta,
     }))
+}
+
+/// A delegated targets role, as the top-level targets list it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DelegatedRole {
+    /// Its name ([`role_name_ok`]).
+    pub name: String,
+    /// Its keys and threshold.
+    pub keys: RoleKeys,
+    /// The target path patterns it may sign.
+    pub paths: Vec<String>,
+    /// Whether a target it matches is never looked for in a later role.
+    pub terminating: bool,
+}
+
+/// The delegated role of country `cc`: named `cc`, signing `cc.*` and `cc-*` (the country's
+/// own packs and those of its parts), terminating, with `keys` (D-175).
+#[must_use]
+pub fn country_role(cc: [u8; 2], keys: RoleKeys) -> DelegatedRole {
+    let name: String = cc.iter().map(|&b| char::from(b)).collect();
+    DelegatedRole {
+        paths: alloc::vec![alloc::format!("{name}.*"), alloc::format!("{name}-*")],
+        name,
+        keys,
+        terminating: true,
+    }
+}
+
+/// The catalog split by country (D-175): the files of no country (an address that is not a
+/// two-letter code or such a code and a part, `ae-du`), kept by the top-level targets, and
+/// each country's files, for its role.
+#[must_use]
+pub fn by_country(files: Files) -> (Files, BTreeMap<[u8; 2], Files>) {
+    let mut top = BTreeMap::new();
+    let mut countries: BTreeMap<[u8; 2], Files> = BTreeMap::new();
+    for (path, f) in files {
+        let address = path.split('.').next().unwrap_or_default();
+        match country_of(address) {
+            Some(cc) => {
+                countries.entry(cc).or_default().insert(path, f);
+            }
+            None => {
+                top.insert(path, f);
+            }
+        }
+    }
+    (top, countries)
+}
+
+/// The `signed` object of the top-level targets listing `files` and delegating `roles`, in
+/// order. With no roles it is [`targets`].
+///
+/// # Errors
+/// As [`targets`]; [`Error::Format`] for a role name that is not a safe file name or is listed
+/// twice, a role without patterns, a pattern the client would refuse, or a bad threshold.
+pub fn targets_delegating(
+    version: u64,
+    expires: i64,
+    files: &BTreeMap<String, TargetFile>,
+    roles: &[DelegatedRole],
+) -> Result<Value, Error> {
+    let mut v = targets(version, expires, files)?;
+    if roles.is_empty() {
+        return Ok(v);
+    }
+    let mut keys = Map::new();
+    let mut list = Vec::with_capacity(roles.len());
+    let mut names = alloc::collections::BTreeSet::new();
+    for r in roles {
+        if !role_name_ok(&r.name) || !names.insert(r.name.as_str()) {
+            return Err(Error::Format(
+                "a delegated role name unsafe or listed twice",
+            ));
+        }
+        if r.paths.is_empty()
+            || r.paths
+                .iter()
+                .any(|p| p.is_empty() || p.contains(['[', ']', '\\']))
+        {
+            return Err(Error::Format("a delegated role without plain patterns"));
+        }
+        let Value::Object(mut role) = role_value(&r.keys, &mut keys)? else {
+            return Err(Error::Format("a role that is not an object"));
+        };
+        role.insert("name".to_string(), Value::String(r.name.clone()));
+        role.insert("paths".to_string(), json!(r.paths));
+        role.insert("terminating".to_string(), Value::Bool(r.terminating));
+        list.push(Value::Object(role));
+    }
+    if let Value::Object(m) = &mut v {
+        m.insert(
+            "delegations".to_string(),
+            json!({"keys": keys, "roles": list}),
+        );
+    }
+    Ok(v)
 }
 
 /// One target file: its length, hashes and the repository's `custom` object.
@@ -130,6 +257,9 @@ pub struct TargetFile {
     /// The catalog entry, as [`crate::catalog::Entry::to_custom`] writes it.
     pub custom: Option<Value>,
 }
+
+/// Target files by path.
+pub type Files = BTreeMap<String, TargetFile>;
 
 /// The `signed` object of targets listing `files` by path.
 ///

@@ -169,3 +169,125 @@ fn a_signature_is_added_once_per_key_and_never_to_garbage() {
     let (_, _, ts) = release(1);
     assert!(add_signature(&ts, RoleName::Root, &key(1)).is_err());
 }
+
+/// D-175: the catalog split by country, written and read back by the client.
+#[test]
+fn a_catalog_delegated_by_country_round_trips() {
+    use super::{by_country, country_role, snapshot_listing, targets_delegating};
+    let file = |data: &[u8]| TargetFile {
+        length: data.len() as u64,
+        hashes: target_hashes(data),
+        custom: None,
+    };
+    let mut files = BTreeMap::new();
+    for p in [
+        "np.places.tgd",
+        "np-p1.places.tgd",
+        "in.places.tgd",
+        "earth.places.tgd",
+        "NP.places.tgd",
+    ] {
+        files.insert(p.to_string(), file(p.as_bytes()));
+    }
+    let (top, countries) = by_country(files);
+    assert_eq!(
+        top.keys().collect::<Vec<_>>(),
+        ["NP.places.tgd", "earth.places.tgd"],
+        "no country: a long or upper-case address"
+    );
+    assert_eq!(countries.keys().collect::<Vec<_>>(), [b"in", b"np"]);
+    assert_eq!(countries[b"np"].len(), 2);
+
+    let tk = RoleKeys {
+        keys: alloc::vec![public(30)],
+        threshold: 1,
+    };
+    let np = country_role(*b"np", tk.clone());
+    assert_eq!((np.name.as_str(), np.terminating), ("np", true));
+    assert_eq!(np.paths, ["np.*", "np-*"]);
+    let delegated: Vec<_> = countries
+        .keys()
+        .map(|&cc| country_role(cc, tk.clone()))
+        .collect();
+    let tg = sign(
+        &targets_delegating(1, NOW + YEAR, &top, &delegated).unwrap(),
+        &[&key(30)],
+    )
+    .unwrap();
+    let role = |cc: &[u8; 2]| {
+        sign(
+            &targets(1, NOW + YEAR, &countries[cc]).unwrap(),
+            &[&key(30)],
+        )
+        .unwrap()
+    };
+    let (role_in, rnp) = (role(b"in"), role(b"np"));
+    let sn = sign(
+        &snapshot_listing(
+            1,
+            NOW + YEAR,
+            &[("targets", &tg, 1), ("in", &role_in, 1), ("np", &rnp, 1)],
+        )
+        .unwrap(),
+        &[&key(20)],
+    )
+    .unwrap();
+    let ts = sign(&timestamp(1, NOW + YEAR, &sn, 1).unwrap(), &[&key(10)]).unwrap();
+    let root1 = sign(
+        &root(1, NOW + YEAR, &roles(&[1, 2, 3], 10)).unwrap(),
+        &[&key(1), &key(2)],
+    )
+    .unwrap();
+    let mut t = Trusted::new(&root1, NOW).unwrap();
+    t.update_timestamp(&ts).unwrap();
+    t.update_snapshot(&sn, false).unwrap();
+    t.update_targets(&tg).unwrap();
+    assert_eq!(t.roles_for("np-p1.places.tgd"), ["np"]);
+    t.update_delegated("np", &rnp).unwrap();
+    t.verify_target("np-p1.places.tgd", b"np-p1.places.tgd")
+        .unwrap();
+    t.verify_target("earth.places.tgd", b"earth.places.tgd")
+        .unwrap();
+    assert_eq!(t.target("in.places.tgd"), Err(Error::Unloaded));
+    assert_eq!(t.trusted_targets().count(), 4);
+}
+
+/// The writer refuses what the client would.
+#[test]
+fn the_writer_refuses_delegations_the_client_would() {
+    use super::{country_role, snapshot_listing, targets_delegating};
+    let tk = RoleKeys {
+        keys: alloc::vec![public(30)],
+        threshold: 1,
+    };
+    let top = BTreeMap::new();
+    let np = country_role(*b"np", tk.clone());
+    let tg = sign(&targets(1, NOW + YEAR, &top).unwrap(), &[&key(30)]).unwrap();
+    let rnp = tg.clone();
+    let bad = |name: &str, paths: &[&str]| {
+        let r = super::DelegatedRole {
+            name: name.to_string(),
+            keys: tk.clone(),
+            paths: paths.iter().map(ToString::to_string).collect(),
+            terminating: true,
+        };
+        targets_delegating(1, NOW + YEAR, &top, &[r]).is_err()
+    };
+    assert!(bad("../np", &["np.*"]));
+    assert!(bad("snapshot", &["np.*"]));
+    assert!(bad("np", &[]));
+    assert!(bad("np", &["np[.]*"]));
+    assert!(!bad("np", &["np.*"]));
+    assert!(
+        targets_delegating(1, NOW + YEAR, &top, &[np.clone(), np]).is_err(),
+        "a name twice"
+    );
+    assert!(
+        snapshot_listing(1, NOW + YEAR, &[("np", &rnp, 1)]).is_err(),
+        "no targets.json"
+    );
+    assert!(
+        snapshot_listing(1, NOW + YEAR, &[("targets", &tg, 1), ("targets", &tg, 1)]).is_err(),
+        "a role twice"
+    );
+}

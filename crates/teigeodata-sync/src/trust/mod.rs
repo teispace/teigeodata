@@ -1,5 +1,6 @@
-//! The catalog's trust chain: a TUF 1.0 client for the four top-level roles, no delegations
-//! (ADR-0012, D-159, [offline loading and trust](https://github.com/teispace/teigeodata/blob/main/docs/02-research/notes/offline-loading-and-trust.md)).
+//! The catalog's trust chain: a TUF 1.0 client for the four top-level roles and one level of
+//! delegated targets roles, matched by `paths` patterns (ADR-0012, D-159, D-175,
+//! [offline loading and trust](https://github.com/teispace/teigeodata/blob/main/docs/02-research/notes/offline-loading-and-trust.md)).
 //!
 //! Sans-I/O: the caller fetches each file (at most [`Trusted::max_len`] bytes) and hands its
 //! bytes in; [`Trusted`] verifies and keeps it, as python-tuf's `TrustedMetadataSet` does. The
@@ -10,7 +11,9 @@
 //! 2. [`Trusted::update_timestamp`] with `timestamp.json`;
 //! 3. [`Trusted::update_snapshot`] with the snapshot the timestamp names;
 //! 4. [`Trusted::update_targets`] with the targets the snapshot names;
-//! 5. [`Trusted::verify_target`] on a downloaded target file.
+//! 5. [`Trusted::update_delegated`] with each delegated role the app needs (the catalog is
+//!    delegated by country, D-175; [`Trusted::roles_for`] names the roles a path needs);
+//! 6. [`Trusted::verify_target`] on a downloaded target file.
 //!
 //! Each verified file is kept by the caller. On the next start the stored timestamp, snapshot
 //! and targets are loaded with the same calls (the snapshot with `stored: true`), so a
@@ -30,13 +33,15 @@ mod meta;
 mod tests;
 mod time;
 
+use alloc::collections::BTreeMap;
 use alloc::string::String;
+use alloc::vec::Vec;
 use core::fmt::{self, Write as _};
 
 pub use cjson::encode as canonical_json;
 pub use meta::{
-    Common, Envelope, Hashes, MetaFile, Role, RoleName, Root, Snapshot, Target, Targets, Timestamp,
-    check_hashes, known,
+    Common, Delegated, Delegations, Envelope, Hashes, MetaFile, Role, RoleName, Root, Snapshot,
+    Target, Targets, Timestamp, check_hashes, known, path_matches, role_name_ok,
 };
 #[cfg(feature = "repo")]
 pub(crate) use time::format as format_time;
@@ -48,7 +53,9 @@ pub const MAX_ROOT_LEN: u64 = 512_000;
 pub const MAX_TIMESTAMP_LEN: u64 = 16_384;
 /// See [`MAX_ROOT_LEN`].
 pub const MAX_SNAPSHOT_LEN: u64 = 2_000_000;
-/// See [`MAX_ROOT_LEN`]: a world catalog of about 5,000 targets is about 1.5 MB.
+/// See [`MAX_ROOT_LEN`], for the top-level targets and each delegated role: a world catalog of
+/// about 5,000 targets in one file is about 11 MB, delegated by country about 3 MB at the top
+/// and well under 1 MB for the largest country (D-175).
 pub const MAX_TARGETS_LEN: u64 = 5_000_000;
 /// The most root versions one update walks (python-tuf's limit).
 pub const MAX_ROOT_ROTATIONS: u64 = 256;
@@ -81,6 +88,11 @@ pub enum Error {
     Dropped,
     /// No such target.
     NoTarget,
+    /// The targets delegate no role of that name, or the snapshot does not list it.
+    NoRole,
+    /// A delegated role that must be consulted for this path is not loaded yet
+    /// ([`Trusted::roles_for`] names it).
+    Unloaded,
 }
 
 impl fmt::Display for Error {
@@ -97,6 +109,8 @@ impl fmt::Display for Error {
             Self::Order(p) => write!(f, "out of order: {p}"),
             Self::Dropped => f.write_str("the snapshot drops a trusted targets file"),
             Self::NoTarget => f.write_str("no such target"),
+            Self::NoRole => f.write_str("no such delegated role"),
+            Self::Unloaded => f.write_str("a delegated role it needs is not loaded"),
         }
     }
 }
@@ -112,6 +126,8 @@ pub struct Trusted {
     timestamp: Option<Timestamp>,
     snapshot: Option<Snapshot>,
     targets: Option<Targets>,
+    /// The delegated roles loaded, by name.
+    delegated: BTreeMap<String, Targets>,
 }
 
 impl Trusted {
@@ -133,6 +149,7 @@ impl Trusted {
             timestamp: None,
             snapshot: None,
             targets: None,
+            delegated: BTreeMap::new(),
         })
     }
 
@@ -373,7 +390,116 @@ impl Trusted {
         if new.common.expires <= self.now {
             return Err(Error::Expired(RoleName::Targets));
         }
+        // Roles loaded under other targets were delegated by them, not by these.
+        self.delegated.clear();
         self.targets = Some(new);
+        Ok(())
+    }
+
+    /// The roles the trusted targets delegate to, once loaded.
+    #[must_use]
+    pub fn delegations(&self) -> Option<&Delegations> {
+        self.targets.as_ref()?.delegations.as_ref()
+    }
+
+    /// The delegated role `name`, once loaded.
+    #[must_use]
+    pub fn delegated(&self, name: &str) -> Option<&Targets> {
+        self.delegated.get(name)
+    }
+
+    /// The delegated roles to load to look up `path`, in order: none when the top-level
+    /// targets list it, else every role whose patterns match it, up to the first terminating
+    /// one. Most apps load only the roles of the countries they need.
+    #[must_use]
+    pub fn roles_for<'a>(&'a self, path: &str) -> Vec<&'a str> {
+        let Some(t) = &self.targets else {
+            return Vec::new();
+        };
+        if t.targets.contains_key(path) {
+            return Vec::new();
+        }
+        t.delegations.as_ref().map_or_else(Vec::new, |d| {
+            d.matching(path).map(|r| r.name.as_str()).collect()
+        })
+    }
+
+    /// What the snapshot says of the delegated role `name`, and the role.
+    fn delegated_meta(&self, name: &str) -> Result<(&MetaFile, &Delegated), Error> {
+        let t = self
+            .targets
+            .as_ref()
+            .ok_or(Error::Order("a delegated role before the targets"))?;
+        let role = t
+            .delegations
+            .as_ref()
+            .and_then(|d| d.role(name))
+            .ok_or(Error::NoRole)?;
+        let meta = self
+            .snapshot
+            .as_ref()
+            .and_then(|s| s.meta.get(&alloc::format!("{name}.json")))
+            .ok_or(Error::NoRole)?;
+        Ok((meta, role))
+    }
+
+    /// The file of the delegated role `name` to fetch: `V.NAME.json` with consistent
+    /// snapshots, else `NAME.json`.
+    ///
+    /// # Errors
+    /// Before the targets, or a role the targets do not delegate or the snapshot does not list.
+    pub fn delegated_name(&self, name: &str) -> Result<String, Error> {
+        let (m, _) = self.delegated_meta(name)?;
+        Ok(self.versioned(m.version, &alloc::format!("{name}.json")))
+    }
+
+    /// The most bytes to fetch for the delegated role `name`: its signed length, else
+    /// [`MAX_TARGETS_LEN`].
+    #[must_use]
+    pub fn max_delegated_len(&self, name: &str) -> u64 {
+        self.delegated_meta(name)
+            .ok()
+            .and_then(|(m, _)| m.length)
+            .unwrap_or(MAX_TARGETS_LEN)
+    }
+
+    /// Takes the delegated role `name`, as [`Self::update_targets`] takes the targets: length,
+    /// hashes and version as the snapshot says; signed by the threshold of the keys the
+    /// targets delegate to it; not expired; and delegating to no role itself (one level,
+    /// D-175). Its targets are trusted only for the paths its patterns match.
+    ///
+    /// # Errors
+    /// Any refusal; nothing is kept.
+    pub fn update_delegated(&mut self, name: &str, data: &[u8]) -> Result<(), Error> {
+        let (Some(s), Some(t), Some(top)) = (&self.snapshot, &self.timestamp, &self.targets) else {
+            return Err(Error::Order("a delegated role before the targets"));
+        };
+        if s.common.expires <= self.now {
+            return Err(Error::Expired(RoleName::Snapshot));
+        }
+        if s.common.version != t.snapshot.version {
+            return Err(Error::Version(RoleName::Snapshot));
+        }
+        if top.common.expires <= self.now {
+            return Err(Error::Expired(RoleName::Targets));
+        }
+        let (want, role) = self.delegated_meta(name)?;
+        cap(data, want.length.unwrap_or(MAX_TARGETS_LEN))?;
+        check_hashes(data, &want.hashes, false)?;
+        let env = Envelope::parse(data, RoleName::Targets)?;
+        let delegations = top.delegations.as_ref().ok_or(Error::NoRole)?;
+        env.verify_delegated(delegations, role)?;
+        let new = env.targets()?;
+        if new.delegations.is_some() {
+            return Err(Error::Format("a delegated role that delegates again"));
+        }
+        if new.common.version != want.version {
+            return Err(Error::Version(RoleName::Targets));
+        }
+        if new.common.expires <= self.now {
+            return Err(Error::Expired(RoleName::Targets));
+        }
+        self.delegated.insert(String::from(name), new);
         Ok(())
     }
 
@@ -388,17 +514,46 @@ impl Trusted {
         }
     }
 
-    /// The target at `path`.
+    /// The target at `path`: from the top-level targets, else from the first delegated role
+    /// whose patterns match it and that lists it, in order, stopping at a terminating one
+    /// (spec 1.0 §5.6.7). A role that lists a path its patterns do not match is not trusted
+    /// for it.
     ///
     /// # Errors
-    /// Before the targets, or no such target.
+    /// Before the targets; [`Error::Unloaded`] when a role to consult is not loaded;
+    /// [`Error::NoTarget`] when none lists it.
     pub fn target(&self, path: &str) -> Result<&Target, Error> {
-        self.targets
-            .as_ref()
-            .ok_or(Error::Order("a target before the targets"))?
+        let top = self
             .targets
-            .get(path)
-            .ok_or(Error::NoTarget)
+            .as_ref()
+            .ok_or(Error::Order("a target before the targets"))?;
+        if let Some(t) = top.targets.get(path) {
+            return Ok(t);
+        }
+        let Some(d) = &top.delegations else {
+            return Err(Error::NoTarget);
+        };
+        for role in d.matching(path) {
+            let loaded = self.delegated.get(&role.name).ok_or(Error::Unloaded)?;
+            if let Some(t) = loaded.targets.get(path) {
+                return Ok(t);
+            }
+        }
+        Err(Error::NoTarget)
+    }
+
+    /// Every target the client trusts, by path, with those of the delegated roles loaded so
+    /// far: each path once, from the role [`Self::target`] takes it from. A path whose lookup
+    /// needs a role not yet loaded is left out.
+    pub fn trusted_targets(&self) -> impl Iterator<Item = (&str, &Target)> {
+        let top = self.targets.as_ref();
+        let own = top.into_iter().flat_map(|t| t.targets.iter());
+        let delegated = self
+            .delegated
+            .values()
+            .flat_map(|t| t.targets.iter())
+            .filter(|&(p, t)| self.target(p).is_ok_and(|x| core::ptr::eq(x, t)));
+        own.chain(delegated).map(|(p, t)| (p.as_str(), t))
     }
 
     /// The file name of the target at `path`: `dir/HASH.name` with consistent snapshots (the

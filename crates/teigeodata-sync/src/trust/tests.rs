@@ -456,3 +456,339 @@ fn a_fast_forward_is_recovered_by_rotating_the_timestamp_key() {
     t.update_snapshot(&r.snapshot, false).unwrap();
     t.update_targets(&r.targets).unwrap();
 }
+
+// Delegation by country (D-175): one level, `paths` patterns, terminating roles.
+
+fn target_obj(data: &[u8]) -> Value {
+    json!({"length": data.len(), "hashes": {"blake3": hexs(blake3::hash(data).as_bytes())}})
+}
+
+/// A delegated role `name` of `version` listing `paths`, each with the bytes of its own path.
+fn role_file(version: u64, expires: &str, paths: &[&str], extra: Option<Value>) -> Value {
+    let mut targets = serde_json::Map::new();
+    for p in paths {
+        targets.insert((*p).into(), target_obj(p.as_bytes()));
+    }
+    let mut v = json!({"_type": "targets", "spec_version": "1.0.31", "version": version,
+                       "expires": expires, "targets": targets});
+    if let (Some(Value::Object(e)), Value::Object(m)) = (extra, &mut v) {
+        m.extend(e);
+    }
+    v
+}
+
+/// The top-level targets delegating `roles` (name, key seed, patterns, terminating); it lists
+/// one target of its own, `PACK` at `np/np-places-main.tgd`.
+fn delegating(roles: &[(&str, u8, &[&str], bool)]) -> Vec<u8> {
+    let mut keys = serde_json::Map::new();
+    let list: Vec<Value> = roles
+        .iter()
+        .map(|&(name, seed, paths, terminating)| {
+            keys.insert(id(seed), key_obj(seed));
+            json!({"name": name, "keyids": [id(seed)], "threshold": 1, "paths": paths,
+                   "terminating": terminating})
+        })
+        .collect();
+    sign(
+        &json!({"_type": "targets", "spec_version": "1.0.31", "version": 1, "expires": LATER,
+                "targets": {"np/np-places-main.tgd": target_obj(PACK)},
+                "delegations": {"keys": keys, "roles": list}}),
+        &[30],
+    )
+}
+
+/// A chain over `targets` whose snapshot lists each of `roles` (name, its file, its version).
+fn delegated_chain(targets: &[u8], roles: &[(&str, &[u8], u64)]) -> Trusted {
+    let mut meta_obj = serde_json::Map::new();
+    meta_obj.insert("targets.json".into(), meta(1, targets));
+    for &(name, data, version) in roles {
+        meta_obj.insert(alloc::format!("{name}.json"), meta(version, data));
+    }
+    let snapshot = sign(
+        &json!({"_type": "snapshot", "spec_version": "1.0.31", "version": 1,
+                "expires": LATER, "meta": meta_obj}),
+        &[20],
+    );
+    let mut t = Trusted::new(&sign(&root(1, &[1, 2, 3], 2, 10, LATER), &[1, 2]), NOW).unwrap();
+    t.update_timestamp(&timestamp(1, &snapshot, 1, LATER))
+        .unwrap();
+    t.update_snapshot(&snapshot, false).unwrap();
+    t.update_targets(targets).unwrap();
+    t
+}
+
+const NP: &[&str] = &["np.*", "np-*"];
+const IN: &[&str] = &["in.*", "in-*"];
+
+#[test]
+fn a_catalog_delegated_by_country_loads_only_the_countries_asked_for() {
+    let top = delegating(&[("np", 40, NP, true), ("in", 41, IN, true)]);
+    // Nepal's role also lists an Indian pack: outside its patterns, it is never trusted.
+    let np = sign(
+        &role_file(
+            1,
+            LATER,
+            &["np.places.tgd", "np-p001.places.tgd", "in.places.tgd"],
+            None,
+        ),
+        &[40],
+    );
+    let ind = sign(&role_file(1, LATER, &["in.places.tgd"], None), &[41]);
+    let mut t = delegated_chain(&top, &[("np", &np, 1), ("in", &ind, 1)]);
+
+    assert_eq!(t.roles_for("np.places.tgd"), ["np"]);
+    assert_eq!(t.roles_for("np-p001.places.tgd"), ["np"]);
+    assert!(
+        t.roles_for("np/np-places-main.tgd").is_empty(),
+        "a top-level target"
+    );
+    assert!(t.roles_for("fj.places.tgd").is_empty(), "no role matches");
+    assert_eq!(t.delegated_name("np").unwrap(), "1.np.json");
+    assert_eq!(t.max_delegated_len("np"), np.len() as u64);
+    assert_eq!(t.target("np.places.tgd"), Err(Error::Unloaded));
+    assert_eq!(t.target("fj.places.tgd"), Err(Error::NoTarget));
+    assert_eq!(t.trusted_targets().count(), 1, "only the top-level target");
+
+    t.update_delegated("np", &np).unwrap();
+    t.verify_target("np.places.tgd", b"np.places.tgd").unwrap();
+    t.verify_target("np-p001.places.tgd", b"np-p001.places.tgd")
+        .unwrap();
+    assert_eq!(
+        t.target("in.places.tgd"),
+        Err(Error::Unloaded),
+        "India's pack waits for India's role, not Nepal's word"
+    );
+    assert_eq!(t.target("np.names.tgd"), Err(Error::NoTarget));
+    let mut paths: Vec<&str> = t.trusted_targets().map(|(p, _)| p).collect();
+    paths.sort_unstable();
+    assert_eq!(
+        paths,
+        [
+            "np-p001.places.tgd",
+            "np.places.tgd",
+            "np/np-places-main.tgd"
+        ]
+    );
+
+    // Targets loaded again drop the roles their predecessor delegated.
+    t.update_targets(&top).unwrap();
+    assert!(t.delegated("np").is_none());
+    assert_eq!(t.target("np.places.tgd"), Err(Error::Unloaded));
+    t.update_delegated("np", &np).unwrap();
+    t.update_delegated("in", &ind).unwrap();
+    let from_india = t.delegated("in").unwrap().targets.get("in.places.tgd");
+    assert!(core::ptr::eq(
+        t.target("in.places.tgd").unwrap(),
+        from_india.unwrap()
+    ));
+    assert_eq!(t.trusted_targets().count(), 4, "each path once");
+}
+
+#[test]
+fn a_delegated_role_is_refused_unless_the_snapshot_and_its_keys_vouch_for_it() {
+    let top = delegating(&[("np", 40, NP, true), ("in", 41, IN, true)]);
+    let good = sign(&role_file(2, LATER, &["np.places.tgd"], None), &[40]);
+    let fresh = || delegated_chain(&top, &[("np", &good, 2)]);
+    let refuse = |name: &str, data: &[u8], want: Error, why: &str| {
+        let mut t = fresh();
+        assert_eq!(t.update_delegated(name, data), Err(want), "{why}");
+        assert!(t.delegated(name).is_none(), "{why}: nothing kept");
+    };
+    let body = role_file(2, LATER, &["np.places.tgd"], None);
+    refuse(
+        "np",
+        &sign(&body, &[41]),
+        Error::Hash,
+        "another file than the snapshot names",
+    );
+    // Signatures: the snapshot must vouch for the bytes, so these chains list the bad file.
+    for (seeds, why) in [
+        (&[41_u8][..], "India's key signing Nepal"),
+        (
+            &[30][..],
+            "the top-level targets key, not the delegated one",
+        ),
+        (&[][..], "unsigned"),
+    ] {
+        let bad = sign(&body, seeds);
+        let mut t = delegated_chain(&top, &[("np", &bad, 2)]);
+        assert_eq!(
+            t.update_delegated("np", &bad),
+            Err(Error::Signature(RoleName::Targets)),
+            "{why}"
+        );
+    }
+    let mut t = fresh();
+    let long = [&good[..], b" "].concat();
+    assert_eq!(t.update_delegated("np", &long), Err(Error::Length));
+    let old = sign(&role_file(1, LATER, &["np.places.tgd"], None), &[40]);
+    let mut t = delegated_chain(&top, &[("np", &old, 2)]);
+    assert_eq!(
+        t.update_delegated("np", &old),
+        Err(Error::Version(RoleName::Targets)),
+        "not the version the snapshot names"
+    );
+    let expired = sign(&role_file(2, PAST, &["np.places.tgd"], None), &[40]);
+    let mut t = delegated_chain(&top, &[("np", &expired, 2)]);
+    assert_eq!(
+        t.update_delegated("np", &expired),
+        Err(Error::Expired(RoleName::Targets))
+    );
+    let nested = sign(
+        &role_file(
+            2,
+            LATER,
+            &["np.places.tgd"],
+            Some(
+                json!({"delegations": {"keys": {id(42): key_obj(42)}, "roles": [
+                {"name": "np-east", "keyids": [id(42)], "threshold": 1, "paths": ["np-*"]}]}}),
+            ),
+        ),
+        &[40],
+    );
+    let mut t = delegated_chain(&top, &[("np", &nested, 2)]);
+    assert_eq!(
+        t.update_delegated("np", &nested),
+        Err(Error::Format("a delegated role that delegates again"))
+    );
+    refuse(
+        "fj",
+        &good,
+        Error::NoRole,
+        "a role the targets do not delegate",
+    );
+    refuse(
+        "in",
+        &good,
+        Error::NoRole,
+        "a role the snapshot does not list",
+    );
+    let mut t = Trusted::new(&sign(&root(1, &[1, 2, 3], 2, 10, LATER), &[1, 2]), NOW).unwrap();
+    assert!(matches!(
+        t.update_delegated("np", &good),
+        Err(Error::Order(_))
+    ));
+    fresh().update_delegated("np", &good).unwrap();
+}
+
+#[test]
+fn roles_are_consulted_in_order_and_a_terminating_one_ends_the_search() {
+    let top = delegating(&[
+        ("a", 40, &["x*"], false),
+        ("b", 41, &["x*"], true),
+        ("c", 42, &["*"], false),
+    ]);
+    let a = sign(&role_file(1, LATER, &["xa"], None), &[40]);
+    let b = sign(&role_file(1, LATER, &["xa", "xb"], None), &[41]);
+    let c = sign(&role_file(1, LATER, &["xc", "zz"], None), &[42]);
+    let mut t = delegated_chain(&top, &[("a", &a, 1), ("b", &b, 1), ("c", &c, 1)]);
+    assert_eq!(t.roles_for("xc"), ["a", "b"], "c is never reached past b");
+    assert_eq!(t.roles_for("zz"), ["c"]);
+    for (name, data) in [("a", &a), ("b", &b), ("c", &c)] {
+        t.update_delegated(name, data).unwrap();
+    }
+    let in_role = |role: &str, path: &str| {
+        let want = t.delegated(role).unwrap().targets.get(path).unwrap();
+        core::ptr::eq(t.target(path).unwrap(), want)
+    };
+    assert!(in_role("a", "xa"), "the first role that lists it");
+    assert!(in_role("b", "xb"));
+    assert!(in_role("c", "zz"));
+    assert_eq!(
+        t.target("xc"),
+        Err(Error::NoTarget),
+        "b terminates the search"
+    );
+    let mut paths: Vec<&str> = t.trusted_targets().map(|(p, _)| p).collect();
+    paths.sort_unstable();
+    assert_eq!(paths, ["np/np-places-main.tgd", "xa", "xb", "zz"]);
+}
+
+#[test]
+fn malformed_delegations_are_refused() {
+    let with = |roles: Value| {
+        sign(
+            &json!({"_type": "targets", "spec_version": "1.0.31", "version": 1, "expires": LATER,
+                    "targets": {}, "delegations": {"keys": {id(40): key_obj(40)}, "roles": roles}}),
+            &[30],
+        )
+    };
+    let role = |name: &str, paths: Value| json!({"name": name, "keyids": [id(40)], "threshold": 1, "paths": paths});
+    let cases = [
+        (
+            json!([role("../np", json!(["np.*"]))]),
+            "a delegated role name that is not a safe file name",
+        ),
+        (
+            json!([role("..", json!(["np.*"]))]),
+            "a delegated role name that is not a safe file name",
+        ),
+        (
+            json!([role("targets", json!(["np.*"]))]),
+            "a delegated role name that is not a safe file name",
+        ),
+        (
+            json!([role("np", json!(["np.*"])), role("np", json!(["in.*"]))]),
+            "two delegated roles of one name",
+        ),
+        (
+            json!([role("np", json!(["np[.]*"]))]),
+            "a path pattern that is not a plain glob",
+        ),
+        (
+            json!([role("np", json!([""]))]),
+            "a path pattern that is not a plain glob",
+        ),
+        (
+            json!([{"name": "np", "keyids": [id(40)], "threshold": 1, "path_hash_prefixes": ["00"]}]),
+            "path_hash_prefixes are not supported",
+        ),
+        (
+            json!([{"name": "np", "keyids": [id(40)], "threshold": 0, "paths": ["np.*"]}]),
+            "a threshold of 0",
+        ),
+        (
+            json!([{"name": "np", "keyids": [id(40)], "threshold": 1, "paths": ["np.*"], "terminating": "yes"}]),
+            "terminating is not a boolean",
+        ),
+    ];
+    for (roles, why) in cases {
+        let data = with(roles);
+        let snapshot = sign(
+            &json!({"_type": "snapshot", "spec_version": "1.0.31", "version": 1,
+                    "expires": LATER, "meta": {"targets.json": meta(1, &data)}}),
+            &[20],
+        );
+        let mut t = Trusted::new(&sign(&root(1, &[1, 2, 3], 2, 10, LATER), &[1, 2]), NOW).unwrap();
+        t.update_timestamp(&timestamp(1, &snapshot, 1, LATER))
+            .unwrap();
+        t.update_snapshot(&snapshot, false).unwrap();
+        assert_eq!(t.update_targets(&data), Err(Error::Format(why)), "{why}");
+    }
+}
+
+#[test]
+fn path_patterns_match_one_segment_at_a_time() {
+    use super::path_matches as m;
+    assert!(m("np.*", "np.places.tgd"));
+    assert!(m("np-*", "np-p001.places.tgd"));
+    assert!(!m("np.*", "np-p001.places.tgd"));
+    assert!(!m("np.*", "npx.places.tgd"));
+    assert!(m("*", ""), "a star matches nothing");
+    assert!(!m("*", "a/b"), "a star never crosses a slash");
+    assert!(m("*/*.tgd", "np/x.tgd"));
+    assert!(m("a*b*c", "a-b-b-c"));
+    assert!(!m("a*b*c", "a-b-b-d"));
+    assert!(
+        m("??.*", "ने.x"),
+        "a question mark is one character, not one byte"
+    );
+    assert!(!m("?", "ने"));
+    assert!(m("**", "abc"));
+    assert!(!m("abc", "ab"));
+    assert!(!m("ab", "abc"));
+    // Many stars over a long name: one backtracking point, so this is quick.
+    let long = "a".repeat(4096);
+    let pattern = alloc::format!("{}b", "*a".repeat(64));
+    assert!(!m(&pattern, &long));
+}

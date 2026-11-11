@@ -141,6 +141,23 @@ pub struct BlockHashes {
     pub needed_by: Components,
 }
 
+/// The country of a pack's address: its two lower-case letters when the address is a country
+/// (`np`) or a part of one (`ae-du`); `None` for any other address, whose packs belong to no
+/// country. The catalog is delegated by it (D-175).
+#[must_use]
+pub fn country_of(address: &str) -> Option<[u8; 2]> {
+    match address.as_bytes() {
+        [a, b, rest @ ..]
+            if a.is_ascii_lowercase()
+                && b.is_ascii_lowercase()
+                && (rest.is_empty() || rest.first() == Some(&b'-')) =>
+        {
+            Some([*a, *b])
+        }
+        _ => None,
+    }
+}
+
 /// The logical path of a pack: `address.component.tgd`.
 #[must_use]
 pub fn path(address: &str, component: &str) -> String {

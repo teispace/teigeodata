@@ -1,7 +1,7 @@
 ---
 title: "Progress"
 status: living
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # Progress
@@ -65,7 +65,8 @@ A short status. The numbers and evidence live in each phase file and the
   `Shared::follow` (D-172), and offline `verify(deep)` and repair by resuming over a copy
   (D-173); 4.7: updates reuse every unchanged frame of the replaced release (D-174); 4.8: the
   gate register, packs refuse an older release, and gate 12 measured red on a generated world
-  (1.42 MB gzip, D-175). Next: delegate the catalog by country (4.3, D-175), then the platform
+  (1.42 MB gzip, D-175); the catalog delegated by country, gate 12 green (largest role 220 KB
+  gzip, D-176). Next: both oracles over delegated roles (4.3), then the platform
   transport prototypes; the two-release delta measurement needs two Nepal builds; the release upload and the first
   ceremony wait for the maintainer; the world byte-identity check after the thinning change
   waits for the inputs to be fetched again.

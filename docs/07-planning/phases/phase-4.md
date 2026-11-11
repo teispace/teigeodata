@@ -191,10 +191,11 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] Discovery: `catalog.find(name)` over the baseline (and the gazetteer pack when present),
   then the locator, then the catalog; `Resolver` trait (2026-11-10, D-164)
 
-- [ ] Targets delegated by country (D-175): spec 1.0 delegations in `sync::trust` (one level,
-  `paths` patterns, terminating), `sync::repo` and `tuf release` writing one role per country,
-  `Catalog` over the roles a client fetched, both oracles extended; gate 12 green on the
-  generated world (top-level targets, snapshot and the largest country role each ≤ 512 KiB gzip)
+- [x] Targets delegated by country (D-175, D-176, 2026-11-11): spec 1.0 delegations in
+  `sync::trust` (one level, `paths` patterns, terminating), `sync::repo` and `tuf release`
+  writing one role per country, `Catalog::trusted` over the roles a client fetched; gate 12
+  green on the generated world (top-level 3.8 KB, snapshot 13 KB, largest role 220 KB gzip)
+- [ ] Both oracles (python-tuf, tough) extended to delegated roles
 
 ### 4.4 Transport assets
 - [x] Seekable zstd writer (frames on the head and sections, ≤ 1 MiB at 16 KiB boundaries) with
@@ -305,3 +306,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-11 | 4.6 done: verify and repair | D-173: repair is resume over a copy of the installed file, so it needs no code of its own to fetch only what fails |
 | 2026-11-11 | 4.7 first item done: section re-download at frame granularity, reusing the resume check | D-174; the real two-release measurement stays open until two Nepal releases are built |
 | 2026-11-11 | 4.3 gains delegation by country; the 4.8 register written; packs refuse an older release (gate 1) and fast-forward recovery has its own test (gate 2) | D-175: one targets file for the world is 1.42 MB gzip, 2.7 times gate 12's budget |
+| 2026-11-11 | 4.3: delegation by country built and gate 12 green; extending the oracles is its own item | D-176 |

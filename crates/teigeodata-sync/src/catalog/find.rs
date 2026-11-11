@@ -13,8 +13,8 @@ use alloc::vec::Vec;
 
 use teigeodata_core::{E7, Point};
 
-use super::{Entry, Error};
-use crate::trust::Targets;
+use super::{Entry, Error, country_of};
+use crate::trust::{Target, Targets, Trusted};
 
 /// A place a [`Resolver`] found.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -62,25 +62,34 @@ impl Catalog {
     /// so one bad or newer entry never hides the rest.
     #[must_use]
     pub fn new(targets: &Targets) -> (Self, Vec<(String, Error)>) {
+        Self::of(targets.targets.iter().map(|(p, t)| (p.as_str(), t)))
+    }
+
+    /// The entries of every target `trusted` trusts: the top-level targets and the delegated
+    /// roles loaded so far (one per country the app asked for, D-175), each path from the role
+    /// that may sign it. Refusals as [`Self::new`].
+    #[must_use]
+    pub fn trusted(trusted: &Trusted) -> (Self, Vec<(String, Error)>) {
+        Self::of(trusted.trusted_targets())
+    }
+
+    fn of<'a>(
+        targets: impl Iterator<Item = (&'a str, &'a Target)>,
+    ) -> (Self, Vec<(String, Error)>) {
         let mut c = Self::default();
         let mut refused = Vec::new();
-        for (path, t) in &targets.targets {
+        for (path, t) in targets {
             match Entry::from_target(path, t) {
-                Ok(e) => c.insert(path.clone(), e),
-                Err(err) => refused.push((path.clone(), err)),
+                Ok(e) => c.insert(String::from(path), e),
+                Err(err) => refused.push((String::from(path), err)),
             }
         }
         (c, refused)
     }
 
     fn insert(&mut self, path: String, e: Entry) {
-        if let [a, b, rest @ ..] = e.address.as_bytes()
-            && (rest.is_empty() || rest.first() == Some(&b'-'))
-        {
-            self.by_country
-                .entry([*a, *b])
-                .or_default()
-                .push(path.clone());
+        if let Some(cc) = country_of(&e.address) {
+            self.by_country.entry(cc).or_default().push(path.clone());
         }
         self.entries.insert(path, e);
     }

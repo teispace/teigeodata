@@ -25,7 +25,7 @@ oracle jobs on every push.
 | 9 | Resume | `install_tests::resume_keeps_what_checks_and_fetches_the_rest`; `ChangesEtag` host | D-169 | green |
 | 10 | Bad mirror | `install_tests::mirrors_fail_over_and_demote` | D-170 | green |
 | 11 | Section delta | `store_tests::an_update_fetches_only_what_changed` (mechanism) | D-174 | **open**: two real Nepal releases to measure |
-| 12 | Catalog size | `tuf::world` tests; `cargo xtask tuf world-catalog` | D-175 | **red**: 1.42 MB gzip for 5,000 targets against 512 KiB; delegation by country planned |
+| 12 | Catalog size | `tuf::world` tests; `cargo xtask tuf world-catalog` | D-175, D-176 | **green** (2026-11-11): delegated by country, the top-level targets 3.8 KB, the snapshot 13.0 KB and the largest role (779 targets) 220 KB gzip, each against 512 KiB |
 | 13 | Binary size | `tools/size-probe` | D-168 | measured: `ureq` 1.28 MB, `reqwest` 2.34 MB |
 | 14 | Platform | iOS, Android and web prototypes | — | **open**: needs simulators or devices |
 | 15 | Eviction | `store_tests::plan_room_never_removes_what_must_stay`, `the_storage_manager_keeps_what_is_pinned_needed_or_kept`; the baseline is embedded, never in the store | D-172 | green |

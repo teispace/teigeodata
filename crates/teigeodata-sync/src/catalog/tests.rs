@@ -406,6 +406,7 @@ mod find {
                 expires: 0,
             },
             targets,
+            delegations: None,
         })
     }
 
@@ -485,6 +486,7 @@ mod find {
                 expires: 0,
             },
             targets,
+            delegations: None,
         });
         assert_eq!(c.packs_at(*b"fj", pt(-17.0, 178.0)).count(), 1);
         assert_eq!(c.packs_at(*b"fj", pt(-17.0, -179.0)).count(), 1);

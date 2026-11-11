@@ -2,7 +2,11 @@
 //! [catalog repository tooling](../../docs/02-research/notes/catalog-repository-tooling.md)).
 //!
 //! The repository is a directory of metadata as GitHub Pages serves it: `N.root.json` for every
-//! root, `N.targets.json`, `N.snapshot.json` and `timestamp.json`. Transport assets go to a
+//! root, `N.targets.json`, `N.snapshot.json`, `timestamp.json`, and `N.cc.json` for each
+//! country's delegated role (D-175): the top-level targets keep the packs of no country and
+//! delegate each country's (`cc.*`, `cc-*`) to a role signed with the targets key, so a
+//! client fetches only the countries it needs. A release re-signs only the roles whose packs
+//! changed, or that would expire within half their lifetime. Transport assets go to a
 //! separate directory, named as the catalog says (`address.component.release.hash8.tgd.zst`),
 //! for the release upload. Keys are 32-byte Ed25519 seeds in hex, in a file or in an
 //! environment variable (`env:NAME`), never in the repository. Every command that writes ends by
@@ -17,8 +21,8 @@ use ed25519_dalek::SigningKey;
 use serde_json::Value;
 use teigeodata_format::{Pack, Tag};
 use teigeodata_sync::catalog::{Entry, file_name};
-use teigeodata_sync::repo::{self, RoleKeys, TargetFile};
-use teigeodata_sync::trust::{Hashes, RoleName, Trusted};
+use teigeodata_sync::repo::{self, Files, RoleKeys, TargetFile};
+use teigeodata_sync::trust::{Envelope, Hashes, RoleName, Trusted};
 
 use crate::wire::Wire;
 
@@ -47,8 +51,9 @@ cargo xtask tuf <command>
   verify <repo> [--assets DIR] [--min-days 7]
                                          the whole chain with the client, every entry, the assets
   world-catalog [--targets 5000] [--runs 5]
-                                         sync gate 12: a generated world catalog's gzip bytes
-                                         against 512 KiB, and the time to verify and read it
+                                         sync gate 12: a generated world catalog delegated by
+                                         country; each file's gzip bytes against 512 KiB, and
+                                         the time to verify and read it
 KEY is a key file or env:NAME; PUB is a public key in hex.";
 
 pub(crate) fn run(args: &[String]) -> Result<String, Vec<String>> {
@@ -108,24 +113,33 @@ fn dispatch(args: &[String]) -> Result<String, String> {
                     .map_err(|e| e.to_string())?;
             let runs = usize::try_from(a.num("--runs", 5)?).map_err(|e| e.to_string())?;
             let m = world::measure(n, runs)?;
-            let verdict = if m.gzip <= world::BUDGET {
-                "within"
-            } else {
-                "OVER"
+            let line = |what: &str, b: world::Bytes| {
+                format!(
+                    "  {what}: {} B of JSON, {} B gzip{}",
+                    b.json,
+                    b.gzip,
+                    if b.gzip <= world::BUDGET { "" } else { " OVER" }
+                )
             };
-            let out = format!(
-                "{} targets: {} B of JSON, {} B gzip ({verdict} the {} B budget), verified and read in {:.1} ms",
-                m.targets,
-                m.json,
-                m.gzip,
-                world::BUDGET,
-                m.read_ms
-            );
-            if m.gzip <= world::BUDGET {
-                Ok(out)
-            } else {
-                Err(out)
-            }
+            let (name, count, largest) = &m.largest;
+            let out = [
+                format!(
+                    "{} targets in {} country roles; each file within {} B gzip: {}",
+                    m.targets,
+                    m.roles,
+                    world::BUDGET,
+                    if m.within() { "yes" } else { "NO" }
+                ),
+                line("top-level targets", m.top),
+                line("snapshot", m.snapshot),
+                line(&format!("largest role, {name} ({count} targets)"), *largest),
+                format!(
+                    "  verified and read: every role {:.1} ms, {name} alone {:.1} ms",
+                    m.read_all_ms, m.read_one_ms
+                ),
+            ]
+            .join("\n");
+            if m.within() { Ok(out) } else { Err(out) }
         }
         Some("timestamp") => timestamp(
             Path::new(a.pos(0)?),
@@ -365,26 +379,25 @@ fn hashes_of(v: &Value) -> Result<Hashes, String> {
     Ok(out)
 }
 
-/// The current targets (by path) and versions of targets, snapshot and timestamp; empty and 0
-/// before the first release.
-fn current(repo: &Path) -> Result<(BTreeMap<String, TargetFile>, [u64; 3]), String> {
-    let ts_path = repo.join("timestamp.json");
-    if !ts_path.exists() {
-        return Ok((BTreeMap::new(), [0; 3]));
-    }
-    let ts = signed_of(&read(&ts_path)?)?;
-    let sn_version = ts
-        .pointer("/meta/snapshot.json/version")
-        .and_then(Value::as_u64)
-        .ok_or("the timestamp names no snapshot")?;
-    let sn = signed_of(&read(&repo.join(format!("{sn_version}.snapshot.json")))?)?;
-    let tg_version = sn
-        .pointer("/meta/targets.json/version")
-        .and_then(Value::as_u64)
-        .ok_or("the snapshot names no targets")?;
-    let tg = signed_of(&read(&repo.join(format!("{tg_version}.targets.json")))?)?;
+/// A delegated role as published: its version, its files and when it expires.
+struct Published {
+    version: u64,
+    files: Files,
+    expires: i64,
+}
+
+/// The repository's current state: every target (top-level and delegated), the versions of the
+/// top-level targets, snapshot and timestamp, and each delegated role as published.
+struct Current {
+    files: Files,
+    versions: [u64; 3],
+    roles: BTreeMap<String, Published>,
+}
+
+/// The target files a `targets` role lists.
+fn files_of(signed: &Value) -> Result<Files, String> {
     let mut files = BTreeMap::new();
-    for (path, t) in tg
+    for (path, t) in signed
         .get("targets")
         .and_then(Value::as_object)
         .ok_or("no targets")?
@@ -401,7 +414,67 @@ fn current(repo: &Path) -> Result<(BTreeMap<String, TargetFile>, [u64; 3]), Stri
             },
         );
     }
-    Ok((files, [tg_version, sn_version, version_of(&ts)?]))
+    Ok(files)
+}
+
+fn current(repo: &Path) -> Result<Current, String> {
+    let ts_path = repo.join("timestamp.json");
+    if !ts_path.exists() {
+        return Ok(Current {
+            files: BTreeMap::new(),
+            versions: [0; 3],
+            roles: BTreeMap::new(),
+        });
+    }
+    let ts = signed_of(&read(&ts_path)?)?;
+    let sn_version = ts
+        .pointer("/meta/snapshot.json/version")
+        .and_then(Value::as_u64)
+        .ok_or("the timestamp names no snapshot")?;
+    let sn = signed_of(&read(&repo.join(format!("{sn_version}.snapshot.json")))?)?;
+    let mut tg_version = None;
+    let mut roles = BTreeMap::new();
+    let mut files = BTreeMap::new();
+    for (file, m) in sn
+        .get("meta")
+        .and_then(Value::as_object)
+        .ok_or("a snapshot without meta")?
+    {
+        let version = m
+            .get("version")
+            .and_then(Value::as_u64)
+            .ok_or("a snapshot entry without a version")?;
+        let name = file
+            .strip_suffix(".json")
+            .ok_or("a snapshot entry not named .json")?;
+        if name == "targets" {
+            tg_version = Some(version);
+            continue;
+        }
+        let bytes = read(&repo.join(format!("{version}.{file}")))?;
+        let role_files = files_of(&signed_of(&bytes)?)?;
+        files.extend(role_files.clone());
+        roles.insert(
+            name.to_string(),
+            Published {
+                version,
+                files: role_files,
+                expires: Envelope::parse(&bytes, RoleName::Targets)
+                    .and_then(|e| e.targets())
+                    .map_err(|e| format!("{version}.{file}: {e}"))?
+                    .common
+                    .expires,
+            },
+        );
+    }
+    let tg_version = tg_version.ok_or("the snapshot names no targets")?;
+    let tg = signed_of(&read(&repo.join(format!("{tg_version}.targets.json")))?)?;
+    files.extend(files_of(&tg)?);
+    Ok(Current {
+        files,
+        versions: [tg_version, sn_version, version_of(&ts)?],
+        roles,
+    })
 }
 
 /// The SPDX identifier of a manifest's licence class (ADR-0002).
@@ -443,6 +516,54 @@ pub(crate) fn entry_of(bytes: &[u8]) -> Result<(Entry, Vec<u8>, Hashes), String>
     Ok((entry, asset, hashes))
 }
 
+/// Each country's role for a release: kept when its packs are the same and it has half its
+/// life left, else re-signed at the next version and added to `written`. As (name, bytes,
+/// version), by name.
+fn country_roles(
+    repo: &Path,
+    countries: &BTreeMap<[u8; 2], Files>,
+    published: &BTreeMap<String, Published>,
+    keys: &Keys,
+    now: i64,
+    written: &mut Vec<(PathBuf, Vec<u8>)>,
+) -> Result<Vec<(String, Vec<u8>, u64)>, String> {
+    let e = |err: teigeodata_sync::trust::Error| err.to_string();
+    let expires = now + OFFLINE_DAYS * DAY;
+    let mut roles: Vec<(String, Vec<u8>, u64)> = Vec::with_capacity(countries.len());
+    for (cc, role_files) in countries {
+        let name: String = cc.iter().map(|&b| char::from(b)).collect();
+        let old = published.get(&name);
+        let keep = old
+            .is_some_and(|p| p.files == *role_files && p.expires - now >= OFFLINE_DAYS / 2 * DAY);
+        let (version, bytes) = match old {
+            Some(p) if keep => (
+                p.version,
+                read(&repo.join(format!("{}.{name}.json", p.version)))?,
+            ),
+            _ => {
+                let v = old.map_or(1, |p| p.version + 1);
+                let b = repo::sign(
+                    &repo::targets(v, expires, role_files).map_err(e)?,
+                    &[&keys.targets],
+                )
+                .map_err(e)?;
+                written.push((repo.join(format!("{v}.{name}.json")), b.clone()));
+                (v, b)
+            }
+        };
+        roles.push((name, bytes, version));
+    }
+    if let Some(gone) = published
+        .keys()
+        .find(|n| !roles.iter().any(|(r, _, _)| r == *n))
+    {
+        return Err(format!(
+            "the role {gone} would be dropped: packs are never unpublished"
+        ));
+    }
+    Ok(roles)
+}
+
 pub(crate) fn release(
     repo: &Path,
     assets: &Path,
@@ -454,7 +575,11 @@ pub(crate) fn release(
         return Err("no --pack".into());
     }
     fs::create_dir_all(assets).map_err(|e| format!("{}: {e}", assets.display()))?;
-    let (mut files, [targets_v, snapshot_v, timestamp_v]) = current(repo)?;
+    let Current {
+        mut files,
+        versions: [targets_v, snapshot_v, timestamp_v],
+        roles: published,
+    } = current(repo)?;
     let mut out = String::new();
     for p in packs {
         let (entry, asset, hashes) =
@@ -482,18 +607,31 @@ pub(crate) fn release(
         let _ = writeln!(out, "{} → {} ({} B)", entry.path(), entry.file, asset.len());
         files.insert(entry.path(), file);
     }
+    let expires = now + OFFLINE_DAYS * DAY;
+    let e = |err: teigeodata_sync::trust::Error| err.to_string();
+    let (top, countries) = repo::by_country(files);
+    let targets_key = RoleKeys {
+        keys: vec![keys.targets.verifying_key().to_bytes()],
+        threshold: 1,
+    };
+    let mut written = Vec::new();
+    let roles = country_roles(repo, &countries, &published, keys, now, &mut written)?;
+    let delegated: Vec<repo::DelegatedRole> = countries
+        .keys()
+        .map(|&cc| repo::country_role(cc, targets_key.clone()))
+        .collect();
     let tg = repo::sign(
-        &repo::targets(targets_v + 1, now + OFFLINE_DAYS * DAY, &files)
-            .map_err(|e| e.to_string())?,
+        &repo::targets_delegating(targets_v + 1, expires, &top, &delegated).map_err(e)?,
         &[&keys.targets],
     )
-    .map_err(|e| e.to_string())?;
+    .map_err(e)?;
+    let mut listed: Vec<(&str, &[u8], u64)> = vec![("targets", &tg, targets_v + 1)];
+    listed.extend(roles.iter().map(|(n, b, v)| (n.as_str(), b.as_slice(), *v)));
     let sn = repo::sign(
-        &repo::snapshot(snapshot_v + 1, now + OFFLINE_DAYS * DAY, &tg, targets_v + 1)
-            .map_err(|e| e.to_string())?,
+        &repo::snapshot_listing(snapshot_v + 1, expires, &listed).map_err(e)?,
         &[&keys.snapshot],
     )
-    .map_err(|e| e.to_string())?;
+    .map_err(e)?;
     let ts = repo::sign(
         &repo::timestamp(
             timestamp_v + 1,
@@ -501,14 +639,12 @@ pub(crate) fn release(
             &sn,
             snapshot_v + 1,
         )
-        .map_err(|e| e.to_string())?,
+        .map_err(e)?,
         &[&keys.timestamp],
     )
-    .map_err(|e| e.to_string())?;
-    let written = [
-        (repo.join(format!("{}.targets.json", targets_v + 1)), tg),
-        (repo.join(format!("{}.snapshot.json", snapshot_v + 1)), sn),
-    ];
+    .map_err(e)?;
+    written.push((repo.join(format!("{}.targets.json", targets_v + 1)), tg));
+    written.push((repo.join(format!("{}.snapshot.json", snapshot_v + 1)), sn));
     commit(repo, &written, &ts, || {
         verify(repo, Some(assets), now, MIN_DAYS)
     })
@@ -521,7 +657,10 @@ pub(crate) fn timestamp(
     now: i64,
     days: i64,
 ) -> Result<String, String> {
-    let (_, [_, sn_v, ts_v]) = current(repo)?;
+    let Current {
+        versions: [_, sn_v, ts_v],
+        ..
+    } = current(repo)?;
     if ts_v == 0 {
         return Err("no timestamp yet: run a release first".into());
     }
@@ -596,15 +735,34 @@ pub(crate) fn verify(
         .map_err(e(&sn))?;
     let tg = t.targets_name().map_err(e("targets name"))?;
     t.update_targets(&read(&repo.join(&tg))?).map_err(e(&tg))?;
-    let targets = t.targets().ok_or("no targets")?;
+    let names: Vec<String> = t
+        .delegations()
+        .map(|d| d.roles.iter().map(|r| r.name.clone()).collect())
+        .unwrap_or_default();
+    let mut listed = t.targets().map_or(0, |x| x.targets.len());
+    for name in &names {
+        let file = t.delegated_name(name).map_err(e(name))?;
+        t.update_delegated(name, &read(&repo.join(&file))?)
+            .map_err(e(&file))?;
+        listed += t.delegated(name).map_or(0, |x| x.targets.len());
+    }
     let mut bytes = 0;
-    for (path, target) in &targets.targets {
+    let mut count = 0;
+    for (path, target) in t.trusted_targets() {
         let entry = Entry::from_target(path, target).map_err(|err| format!("{path}: {err}"))?;
         if let Some(dir) = assets {
             t.verify_target(path, &read(&dir.join(&entry.file))?)
                 .map_err(e(path))?;
         }
         bytes += target.length;
+        count += 1;
+    }
+    // A role listing a pack outside its countries, or two roles listing one, is a repository
+    // bug the client would quietly skip: refuse it here.
+    if count != listed {
+        return Err(format!(
+            "{listed} targets listed but {count} trusted: a role lists a pack outside its country"
+        ));
     }
     let mut soonest = i64::MAX;
     for role in [
@@ -623,9 +781,19 @@ pub(crate) fn verify(
         }
         soonest = soonest.min(left);
     }
+    for name in &names {
+        let left = t.delegated(name).ok_or("a role not loaded")?.common.expires - now;
+        if left < min_days * DAY {
+            return Err(format!(
+                "the role {name} expires in {} days, under {min_days}",
+                left.div_euclid(DAY)
+            ));
+        }
+        soonest = soonest.min(left);
+    }
     Ok(format!(
-        "verified: root {roots}, {sn}, {tg}, {} targets ({bytes} B){}; the soonest expiry is in {} days",
-        targets.targets.len(),
+        "verified: root {roots}, {sn}, {tg}, {} country roles, {count} targets ({bytes} B){}; the soonest expiry is in {} days",
+        names.len(),
         if assets.is_some() {
             ", every asset"
         } else {

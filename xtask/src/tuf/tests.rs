@@ -26,9 +26,13 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 fn pack(dir: &Path, release: &str, fill: u8) -> PathBuf {
+    pack_of(dir, "zz", release, fill)
+}
+
+fn pack_of(dir: &Path, address: &str, release: &str, fill: u8) -> PathBuf {
     let ids = vec![fill; 40_000];
     let tz = vec![fill.wrapping_add(1); 3_000];
-    let mut w = Writer::new("zz", "places", release).unwrap();
+    let mut w = Writer::new(address, "places", release).unwrap();
     w.manifest(Tag::LICENCE, b"odbl").unwrap();
     let bytes = w
         .pack(
@@ -39,7 +43,7 @@ fn pack(dir: &Path, release: &str, fill: u8) -> PathBuf {
             None,
         )
         .unwrap();
-    let p = dir.join(format!("zz-{release}.tgd"));
+    let p = dir.join(format!("{address}-{release}.tgd"));
     std::fs::write(&p, bytes).unwrap();
     p
 }
@@ -232,5 +236,125 @@ fn the_command_line_runs_a_ceremony_and_a_release() {
     // Fifteen days ask for more than a 14-day timestamp has.
     assert!(run(&["verify", &repo, "--min-days", "15"]).is_err());
     assert!(run(&["frobnicate"]).is_err());
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+/// The files in `repo`, sorted.
+fn listing(repo: &Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(repo)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    v.sort();
+    v
+}
+
+/// D-175: each country's packs go to its own role; a release re-signs only the roles whose
+/// packs changed; the packs of no country stay in the top-level targets.
+#[test]
+fn a_release_signs_only_the_countries_it_changes() {
+    let d = scratch("countries");
+    let (repo, assets) = (d.join("metadata"), d.join("assets"));
+    root(&repo, &[1, 2, 3], 10);
+    let r1 = repo.join("1.root.json");
+    sign_file(&r1, RoleName::Root, &key(1)).unwrap();
+    sign_file(&r1, RoleName::Root, &key(2)).unwrap();
+    let np = pack_of(&d, "np", "2026.11.0", 1);
+    let np_part = pack_of(&d, "np-p1", "2026.11.0", 2);
+    let ind = pack_of(&d, "in", "2026.11.0", 3);
+    let earth = pack_of(&d, "earth", "2026.11.0", 4);
+    let out = release(&repo, &assets, &[np, np_part, ind, earth], &keys(10), NOW).unwrap();
+    assert!(
+        out.contains("2 country roles, 4 targets") && out.contains("every asset"),
+        "{out}"
+    );
+    assert_eq!(
+        listing(&repo),
+        [
+            "1.in.json",
+            "1.np.json",
+            "1.root.json",
+            "1.snapshot.json",
+            "1.targets.json",
+            "timestamp.json"
+        ]
+    );
+    let top = std::fs::read_to_string(repo.join("1.targets.json")).unwrap();
+    assert!(top.contains("earth.places.tgd") && !top.contains("np.places.tgd"));
+    let nepal = std::fs::read_to_string(repo.join("1.np.json")).unwrap();
+    assert!(nepal.contains("np.places.tgd") && nepal.contains("np-p1.places.tgd"));
+
+    // A new Indian release: India's role moves to version 2, Nepal's stays at 1.
+    let ind2 = pack_of(&d, "in", "2026.12.0", 5);
+    let out = release(&repo, &assets, &[ind2], &keys(10), NOW + DAY).unwrap();
+    assert!(out.contains("2 country roles, 4 targets"), "{out}");
+    let files = listing(&repo);
+    assert!(files.contains(&"2.in.json".to_string()), "{files:?}");
+    assert!(!files.contains(&"2.np.json".to_string()), "{files:?}");
+    let snapshot = std::fs::read_to_string(repo.join("2.snapshot.json")).unwrap();
+    let sn: serde_json::Value = serde_json::from_str(&snapshot).unwrap();
+    assert_eq!(sn["signed"]["meta"]["np.json"]["version"], 1);
+    assert_eq!(sn["signed"]["meta"]["in.json"]["version"], 2);
+
+    // Half a year on, every role is re-signed, changed or not, before it nears its expiry.
+    let ind3 = pack_of(&d, "in", "2027.6.0", 6);
+    release(&repo, &assets, &[ind3], &keys(10), NOW + 190 * DAY).unwrap();
+    assert!(listing(&repo).contains(&"2.np.json".to_string()));
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+/// A role that lists a pack of another country is never trusted for it by a client, so
+/// `verify` refuses the repository instead of letting the pack quietly vanish.
+#[test]
+fn verify_refuses_a_role_that_lists_another_country() {
+    use teigeodata_sync::repo;
+    let d = scratch("stray");
+    let (repo_dir, assets) = (d.join("metadata"), d.join("assets"));
+    root(&repo_dir, &[1, 2, 3], 10);
+    let r1 = repo_dir.join("1.root.json");
+    sign_file(&r1, RoleName::Root, &key(1)).unwrap();
+    sign_file(&r1, RoleName::Root, &key(2)).unwrap();
+    let np = pack_of(&d, "np", "2026.11.0", 1);
+    let ind = pack_of(&d, "in", "2026.11.0", 3);
+    release(&repo_dir, &assets, &[np, ind], &keys(10), NOW).unwrap();
+    verify(&repo_dir, None, NOW, 7).unwrap();
+    // Nepal's role also lists India's pack (a writer bug): re-signed, and the snapshot and
+    // timestamp with it, so every signature and hash is good.
+    let read_json = |name: &str| -> serde_json::Value {
+        serde_json::from_slice(&std::fs::read(repo_dir.join(name)).unwrap()).unwrap()
+    };
+    let mut np_role = read_json("1.np.json")["signed"].clone();
+    let india = read_json("1.in.json")["signed"]["targets"]["in.places.tgd"].clone();
+    np_role["targets"]["in.places.tgd"] = india;
+    let np_bytes = repo::sign(&np_role, &[&key(30)]).unwrap();
+    std::fs::write(repo_dir.join("1.np.json"), &np_bytes).unwrap();
+    let tg = std::fs::read(repo_dir.join("1.targets.json")).unwrap();
+    let in_bytes = std::fs::read(repo_dir.join("1.in.json")).unwrap();
+    let sn = repo::sign(
+        &repo::snapshot_listing(
+            1,
+            NOW + 365 * DAY,
+            &[
+                ("targets", &tg, 1),
+                ("np", &np_bytes, 1),
+                ("in", &in_bytes, 1),
+            ],
+        )
+        .unwrap(),
+        &[&key(20)],
+    )
+    .unwrap();
+    std::fs::write(repo_dir.join("1.snapshot.json"), &sn).unwrap();
+    let ts = repo::sign(
+        &repo::timestamp(1, NOW + 14 * DAY, &sn, 1).unwrap(),
+        &[&key(10)],
+    )
+    .unwrap();
+    std::fs::write(repo_dir.join("timestamp.json"), ts).unwrap();
+    let err = verify(&repo_dir, None, NOW, 7).unwrap_err();
+    assert!(
+        err.contains("a role lists a pack outside its country"),
+        "{err}"
+    );
     std::fs::remove_dir_all(&d).unwrap();
 }
