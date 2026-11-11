@@ -8,6 +8,11 @@
 //! bytes read, and one `ETag` for the whole install, so a host that ignores `Range` or swaps the
 //! asset midway is refused, not trusted (the GitHub asset host ignores `If-Range`).
 //!
+//! A platform whose downloads run without our code (iOS background `URLSession`, Android UIDT
+//! jobs, `fetch` into OPFS) installs in passes (D-184): over [`Downloads`], the bytes it has
+//! fetched so far, the installer answers [`FetchError::Needs`] with every range still missing;
+//! the platform downloads them and runs it again. Every byte is checked as for any transport.
+//!
 //! An update ([`update_from`], D-174) reads the release it replaces: every frame of the new
 //! pack whose sections are unchanged (same kind, hash and length) is put together from the old
 //! file, checked against the new release's signed hashes like a fetched frame, and only then
@@ -74,6 +79,9 @@ pub enum FetchError {
         /// The installed release.
         installed: String,
     },
+    /// The transport does not hold these byte ranges of the asset yet: a platform downloads
+    /// them, then installs again (D-184). Ranges are in file order, adjacent ones merged.
+    Needs(Vec<Range<u64>>),
 }
 
 impl fmt::Display for FetchError {
@@ -88,6 +96,14 @@ impl fmt::Display for FetchError {
                 write!(
                     f,
                     "the catalog names a release older than the installed {installed}"
+                )
+            }
+            Self::Needs(r) => {
+                let bytes: u64 = r.iter().map(|r| r.end - r.start).sum();
+                write!(
+                    f,
+                    "{} byte ranges ({bytes} bytes) still to download",
+                    r.len()
                 )
             }
         }
@@ -220,8 +236,11 @@ fn run<T: Transport, F: Read + Write + Seek>(
     };
     let [t, h] = inst.first()?;
     let (mut table, mut head) = (Vec::new(), Vec::new());
-    get(transport, t, &mut table)?;
-    get(transport, h, &mut head)?;
+    // Both at once when a platform must download them (D-184).
+    let mut needs = Needs::default();
+    needs.take(get(transport, t, &mut table))?;
+    needs.take(get(transport, h, &mut head))?;
+    needs.done()?;
     let mut buf = Vec::new();
     // Taken before start writes the head: what the last attempt left.
     let old_len = staging.seek(SeekFrom::End(0))?;
@@ -258,15 +277,55 @@ fn run<T: Transport, F: Read + Write + Seek>(
             )?;
         }
     }
+    // A frame not yet downloaded is listed, and the rest still fed: what a platform holds is
+    // written and kept for the next pass (D-184).
+    let mut needs = Needs::default();
     for f in inst.remaining() {
-        get(transport, f.compressed.clone(), &mut buf)?;
-        inst.feed(&f, &buf, |at, b| write(staging, at, b))?;
+        if needs.take(get(transport, f.compressed.clone(), &mut buf))? {
+            inst.feed(&f, &buf, |at, b| write(staging, at, b))?;
+        }
     }
     staging.flush()?;
+    needs.done()?;
     let mut done = inst.finish()?;
     done.kept -= reused;
     done.reused = reused;
     Ok(done)
+}
+
+/// The ranges a pass found missing, merged in file order.
+#[derive(Default)]
+struct Needs(Vec<Range<u64>>);
+
+impl Needs {
+    /// `Ok(true)` for bytes fetched, `Ok(false)` for ranges noted as needed, or the error.
+    fn take<T>(&mut self, r: Result<T, FetchError>) -> Result<bool, FetchError> {
+        match r {
+            Ok(_) => Ok(true),
+            Err(FetchError::Needs(more)) => {
+                self.0.extend(more);
+                Ok(false)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// The ranges in file order, adjacent or overlapping ones merged (the plan lists
+    /// `BLOCK_HASHES` first, though it lies near the end): fewer, larger downloads.
+    fn done(mut self) -> Result<(), FetchError> {
+        if self.0.is_empty() {
+            return Ok(());
+        }
+        self.0.sort_by_key(|r| r.start);
+        let mut merged: Vec<Range<u64>> = Vec::with_capacity(self.0.len());
+        for r in self.0 {
+            match merged.last_mut() {
+                Some(last) if last.end >= r.start => last.end = last.end.max(r.end),
+                _ => merged.push(r),
+            }
+        }
+        Err(FetchError::Needs(merged))
+    }
 }
 
 /// The head of a pack of `len` bytes read from `f`: a prefix from the start, doubled until it
@@ -378,6 +437,99 @@ fn reuse<F: Read + Write + Seek>(
         }
     }
     Ok(reused)
+}
+
+/// The bytes of one asset a platform has downloaded, as files in one directory (D-184): each
+/// file is named `<start>-<end>` (decimal, `end` exclusive) and holds exactly those bytes of the
+/// asset. A [`Transport`] over them for [`install_from`] and [`update_from`]: a range the files
+/// hold is served from them; a range they do not is [`FetchError::Needs`], which the installer
+/// collects. Bytes are checked by the installer like any host's, so a file need not be trusted;
+/// one whose length is not its range's is refused (a download that ignored `Range`).
+#[derive(Clone, Debug)]
+pub struct Downloads {
+    dir: std::path::PathBuf,
+    total: u64,
+    parts: Vec<Range<u64>>,
+}
+
+impl Downloads {
+    /// The files in `dir` (none if it does not exist) of an asset of `total` bytes.
+    ///
+    /// # Errors
+    /// The file system's.
+    pub fn open(dir: impl Into<std::path::PathBuf>, total: u64) -> std::io::Result<Self> {
+        let dir = dir.into();
+        let mut parts = Vec::new();
+        match std::fs::read_dir(&dir) {
+            Ok(entries) => {
+                for e in entries {
+                    let e = e?;
+                    if let Some(r) = e.file_name().to_str().and_then(Self::parse)
+                        && r.end <= total
+                    {
+                        parts.push(r);
+                    }
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+        parts.sort_by_key(|r| (r.start, r.end));
+        Ok(Self { dir, total, parts })
+    }
+
+    /// The file name that holds `range`.
+    #[must_use]
+    pub fn name(range: &Range<u64>) -> String {
+        alloc::format!("{}-{}", range.start, range.end)
+    }
+
+    fn parse(name: &str) -> Option<Range<u64>> {
+        let (a, b) = name.split_once('-')?;
+        let (a, b) = (a.parse().ok()?, b.parse().ok()?);
+        (a < b).then_some(a..b)
+    }
+
+    /// The downloaded ranges, in file order.
+    #[must_use]
+    pub fn parts(&self) -> &[Range<u64>] {
+        &self.parts
+    }
+}
+
+impl Transport for Downloads {
+    fn get(&mut self, _url: &str, range: Range<u64>, out: &mut Vec<u8>) -> Result<Got, FetchError> {
+        out.clear();
+        let Some(part) = self
+            .parts
+            .iter()
+            .find(|p| p.start <= range.start && range.end <= p.end)
+        else {
+            return Err(FetchError::Needs(alloc::vec![range]));
+        };
+        let mut f = std::fs::File::open(self.dir.join(Self::name(part)))?;
+        if f.metadata()?.len() != part.end - part.start {
+            return Err(FetchError::Response(
+                "a downloaded file is not the range it is named for",
+            ));
+        }
+        f.seek(SeekFrom::Start(range.start - part.start))?;
+        out.resize(
+            usize::try_from(range.end - range.start).map_err(|_| too_large())?,
+            0,
+        );
+        f.read_exact(out)?;
+        Ok(Got {
+            etag: None,
+            total: self.total,
+        })
+    }
+
+    fn fetch(&mut self, _url: &str, _max: u64, _out: &mut Vec<u8>) -> Result<(), FetchError> {
+        Err(FetchError::Transport(
+            "metadata is not fetched from downloaded parts".into(),
+        ))
+    }
 }
 
 /// One mirror: a base URL, and how it has done.
@@ -518,7 +670,7 @@ fn from_mirrors<T: Transport, F: Read + Write + Seek>(
         let prev = previous.as_deref_mut();
         match run(transport, &url, asset.entry, asset.len, set, staging, prev) {
             Ok(done) => return Ok(done),
-            Err(e @ FetchError::Io(_)) => return Err(e),
+            Err(e @ (FetchError::Io(_) | FetchError::Needs(_))) => return Err(e),
             Err(e @ FetchError::Install(_)) => {
                 m.refused += 1;
                 last = e;

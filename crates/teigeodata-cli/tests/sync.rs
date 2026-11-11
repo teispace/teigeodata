@@ -523,3 +523,66 @@ fn timings() {
         median(&["--store", st, "status", "--deep"], &none)
     );
 }
+
+/// A platform's loop over `install --downloads` (D-184): exit 4 lists the ranges to fetch; the
+/// "platform" fetches them (here from the host's files), and runs install again until it ends.
+#[test]
+fn a_platform_installs_through_downloads() {
+    let host: Host = Arc::default();
+    publish(&host, 1, &[pack("2026.11.0", false)]);
+    let url = serve(Arc::clone(&host));
+    let store = store_for("downloads", &url);
+    ok(&store, &["refresh", "--countries", "np"]);
+    let dl = store.parent().unwrap().join("dl");
+    let dls = dl.to_str().unwrap();
+    let mut rounds = 0;
+    loop {
+        rounds += 1;
+        assert!(rounds <= 4, "at most three rounds of downloads");
+        let o = tgd(&store, &["install", "np", "--downloads", dls]);
+        match o.status.code() {
+            Some(0) => break,
+            Some(4) => {}
+            c => panic!("{c:?}: {}", String::from_utf8_lossy(&o.stderr)),
+        }
+        let need: Value = serde_json::from_slice(&o.stdout).unwrap();
+        for asset in need.as_array().unwrap() {
+            let u = asset["urls"][0].as_str().unwrap();
+            assert!(u.starts_with(&url), "{u}");
+            let path = u.strip_prefix(&format!("{url}/")).unwrap();
+            let bytes = host.lock().unwrap()[path].clone();
+            let dir = PathBuf::from(asset["dir"].as_str().unwrap());
+            std::fs::create_dir_all(&dir).unwrap();
+            for r in asset["ranges"].as_array().unwrap() {
+                let (a, b) = (r["start"].as_u64().unwrap(), r["end"].as_u64().unwrap());
+                let part = &bytes[usize::try_from(a).unwrap()..usize::try_from(b).unwrap()];
+                std::fs::write(dir.join(r["file"].as_str().unwrap()), part).unwrap();
+            }
+        }
+    }
+    assert_eq!(rounds, 3, "table and head, the frames, done");
+    let s = json(&store, &["status", "--json", "--deep"]);
+    assert_eq!(s["packs"][0]["health"], "Good");
+    assert!(
+        std::fs::read_dir(&dl).unwrap().next().is_none(),
+        "the downloaded files are removed once committed"
+    );
+    assert!(ok(&store, &["search", "Ritarra", "-k", "1"]).contains("Ritarra"));
+}
+
+/// Writes a signed repository of a 100,000-place pack to `TGD_REPO_OUT`: `meta/`, `assets/` and
+/// the trusted `root.json`, for the platform prototypes (`tools/platform-probe`) to serve.
+/// Run: `TGD_REPO_OUT=DIR cargo test -p teigeodata-cli --test sync -- --ignored write_repo`.
+#[test]
+#[ignore = "writes a repository for the platform prototypes"]
+fn write_repo() {
+    let out = PathBuf::from(std::env::var("TGD_REPO_OUT").unwrap());
+    let host: Host = Arc::default();
+    publish(&host, 1, &[pack_of(100_000, "2026.11.0", false)]);
+    for (path, bytes) in host.lock().unwrap().iter() {
+        let p = out.join(path);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, bytes).unwrap();
+    }
+    std::fs::write(out.join("root.json"), root_file()).unwrap();
+}

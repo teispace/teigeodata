@@ -229,8 +229,15 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   every step (2026-11-10, D-171)
 - [x] Snapshot swap on install: the engine reopens from the journal while readers keep the old
   mapping: `Shared::follow` (2026-11-11, D-172)
-- [ ] Platform transport prototypes for gate 14 (iOS background `URLSession`, Android UIDT,
-  web `fetch` + OPFS); packaging stays in Phase 5
+- Platform transport prototypes for gate 14; packaging stays in Phase 5
+  ([platform transports](../../02-research/notes/platform-transports.md), D-184):
+  - [x] (a) The seam: installs in passes over `fetch::Downloads`, `FetchError::Needs`, `tgd
+    install --downloads` (D-184)
+  - [x] (b) macOS `URLSession`, foreground and background, `Range` kept across a redirect (D-184)
+  - [ ] (c) The iOS simulator: a background session, the app suspended and relaunched
+  - [ ] (d) Android UIDT on the emulator
+  - [ ] (e) The browser: ranged `fetch` into OPFS in a worker, over localhost (the CORS mirror
+    is Q-014)
 
 ### 4.6 Storage manager
 - [x] Installed list, quota, LRU eviction with pinning and dependency protection, the disk-peak
@@ -327,3 +334,4 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
 | 2026-11-11 | 4.9c done; a query with no result exits 1 | D-181 |
 | 2026-11-11 | 4.9d done; the store gains `init` and `config.json`; the asset measurement moves into `sync::measure` | D-182: the end-to-end test found two store bugs the unit tests missed |
 | 2026-11-11 | 4.9e done; timings are an ignored test (median of 15 runs) instead of `hyperfine`; the guide is the crate's README until the docs site | D-183 |
+| 2026-11-11 | Gate 14 split into (a) to (e); platforms install in passes over one installer | D-184, [platform transports](../../02-research/notes/platform-transports.md) |

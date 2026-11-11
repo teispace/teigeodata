@@ -48,6 +48,11 @@ exits 3. Everything else still answers from the store.
 prints its field as null; a query that needs it, such as `tz` without the timezone component,
 is refused.
 
+An app whose platform downloads in the background (iOS `URLSession`, Android UIDT jobs, a
+browser worker) installs in passes: `tgd install np --downloads DIR` installs from the files
+under `DIR`, or exits 4 and prints the byte ranges still needed, with each file's name. The
+platform downloads them, and install runs again. See `tools/platform-probe`.
+
 ## Packs
 
 ```sh
@@ -87,6 +92,7 @@ by default, or:
 | 1 | refused: not verified, not found, nothing matched, a file not readable or writable |
 | 2 | a usage error |
 | 3 | the network: try again later |
+| 4 | `install --downloads DIR`: the byte ranges to download first, printed as JSON |
 
 ## Licence
 

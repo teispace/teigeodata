@@ -1312,3 +1312,135 @@ fn an_older_release_is_refused() {
     put_done(&mut store, &en, &xn);
     assert_eq!(store.packs()[0].release, "2026.12.0");
 }
+
+/// A platform's passes (D-184): the store installs over [`Downloads`], the files a platform
+/// fetched; each pass answers `Needs` with every range still missing, which the "platform"
+/// then downloads. Returns the rounds, the bytes downloaded and the most ranges one round asked.
+fn in_passes(
+    store: &mut Store<MemFs>,
+    entry: &Entry,
+    asset: &[u8],
+    dir: &std::path::Path,
+) -> (usize, u64, usize) {
+    use teigeodata_sync::fetch::{Downloads, FetchError};
+    let _ = std::fs::remove_dir_all(dir);
+    let (mut rounds, mut bytes, mut most) = (0, 0, 0);
+    loop {
+        rounds += 1;
+        assert!(
+            rounds <= 4,
+            "an install takes at most three rounds of downloads"
+        );
+        let mut parts = Downloads::open(dir, asset.len() as u64).unwrap();
+        match store.install(
+            &mut parts,
+            &mut Mirrors::new(["m/"]),
+            "a",
+            entry,
+            asset.len() as u64,
+            Components::all(),
+        ) {
+            Ok(_) => return (rounds, bytes, most),
+            Err(FetchError::Needs(ranges)) => {
+                most = most.max(ranges.len());
+                std::fs::create_dir_all(dir).unwrap();
+                for r in &ranges {
+                    let at = usize::try_from(r.start).unwrap()..usize::try_from(r.end).unwrap();
+                    std::fs::write(dir.join(Downloads::name(r)), &asset[at]).unwrap();
+                    bytes += r.end - r.start;
+                }
+            }
+            Err(e) => panic!("{e}"),
+        }
+    }
+}
+
+#[test]
+fn a_platform_installs_and_updates_in_passes() {
+    use teigeodata_sync::fetch::{Downloads, FetchError};
+    let dir = std::env::temp_dir().join(format!("tgd-passes-{}", std::process::id()));
+    let a = pack_with("zz", "2026.11.0", 0);
+    let (ea, xa, _) = super::entry_of(&a).unwrap();
+    let fs = MemFs(Rc::default());
+    let mut store = Store::open(fs.clone()).unwrap().0;
+    let file = |store: &Store<MemFs>| Store::<MemFs>::path_of(&store.packs()[0]);
+
+    // A first install: the table and head, then every frame; each byte downloaded once.
+    let (rounds, bytes, most) = in_passes(&mut store, &ea, &xa, &dir);
+    assert_eq!(rounds, 3, "table and head, then the frames, then done");
+    assert_eq!(
+        most, 2,
+        "the table and the head; the frames merged into one range"
+    );
+    assert_eq!(bytes, xa.len() as u64, "the whole asset, once");
+    assert!(
+        fs.clone().read(&file(&store)).unwrap().unwrap() == a,
+        "installed whole"
+    );
+
+    // An update where PLACES changed: the old release's frames are reused, so far fewer bytes.
+    let c = pack_with("zz", "2026.12.0", 5);
+    let (ec, xc, _) = super::entry_of(&c).unwrap();
+    let (rounds, bytes, _) = in_passes(&mut store, &ec, &xc, &dir);
+    assert!(rounds <= 4, "{rounds}");
+    // No more than an update over a live host fetches, and less than the asset.
+    let direct = {
+        let mut s = Store::open(MemFs(Rc::default())).unwrap().0;
+        put_done(&mut s, &ea, &xa);
+        put_done(&mut s, &ec, &xc).fetched
+    };
+    assert!(
+        bytes <= direct && bytes < xc.len() as u64,
+        "{bytes}, direct {direct}, asset {}",
+        xc.len()
+    );
+    assert!(
+        fs.clone().read(&file(&store)).unwrap().unwrap() == c,
+        "updated whole"
+    );
+    assert_eq!(store.verify("zz", "places", true).unwrap(), Health::Good);
+
+    // A platform that ignored Range (the whole asset in a file named for a range): refused.
+    let fs = MemFs(Rc::default());
+    let mut store = Store::open(fs).unwrap().0;
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let [t, _] = teigeodata_sync::install::Install::new(&ea, xa.len() as u64, Components::all())
+        .first()
+        .unwrap();
+    std::fs::write(dir.join(Downloads::name(&t)), &xa).unwrap();
+    let mut parts = Downloads::open(&dir, xa.len() as u64).unwrap();
+    let r = store.install(
+        &mut parts,
+        &mut Mirrors::new(["m/"]),
+        "a",
+        &ea,
+        xa.len() as u64,
+        Components::all(),
+    );
+    assert!(matches!(r, Err(FetchError::Response(_))), "{r:?}");
+
+    // Wrong bytes under the right names: refused by the signed hashes, never written.
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let whole = 0..xa.len() as u64;
+    let mut junk = xa.clone();
+    let mid = junk.len() / 2;
+    junk[mid] ^= 0xff;
+    std::fs::write(dir.join(Downloads::name(&whole)), &junk).unwrap();
+    let mut parts = Downloads::open(&dir, xa.len() as u64).unwrap();
+    let r = store.install(
+        &mut parts,
+        &mut Mirrors::new(["m/"]),
+        "a",
+        &ea,
+        xa.len() as u64,
+        Components::all(),
+    );
+    assert!(
+        r.is_err() && !matches!(r, Err(FetchError::Needs(_))),
+        "{r:?}"
+    );
+    assert_eq!(store.packs().len(), 0, "nothing installed");
+    let _ = std::fs::remove_dir_all(&dir);
+}

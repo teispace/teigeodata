@@ -10,6 +10,7 @@
 //! | 1 | refused: verification failed, not found, a file could not be read or written |
 //! | 2 | a usage error (clap's) |
 //! | 3 | the network: try again later |
+//! | 4 | `install --downloads`: the byte ranges to download first, printed as JSON |
 //!
 //! A closed standard output (`tgd export x.tgd | head`) ends the command quietly with 0.
 //!
@@ -263,6 +264,10 @@ enum Command {
         /// Never evict them.
         #[arg(long)]
         pin: bool,
+        /// Install from the byte ranges a platform downloaded into DIR/<asset>/, files named
+        /// `<start>-<end>`; what is still missing is printed as JSON, with exit code 4.
+        #[arg(long, value_name = "DIR")]
+        downloads: Option<PathBuf>,
     },
     /// Update installed packs to the catalog's releases (all of them by default).
     Update {
@@ -378,6 +383,8 @@ pub(crate) enum Fail {
     Refused(String),
     /// Exit 3: the network failed; trying again may work.
     Network(String),
+    /// Exit 4: `install --downloads` printed the byte ranges a platform must download first.
+    Pending,
     /// Standard output was closed: stop quietly.
     Closed,
 }
@@ -545,7 +552,8 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             packs,
             components,
             pin,
-        } => sync::install(store, &packs, &components, pin, out),
+            downloads,
+        } => sync::install(store, &packs, &components, pin, downloads.as_deref(), out),
         Command::Update { packs } => sync::update(store, &packs, out),
         Command::Remove { pack } => sync::remove(store, &pack, out),
         Command::Pin { pack, off } => sync::pin(store, &pack, !off, out),
@@ -587,5 +595,6 @@ fn main() -> ExitCode {
             let _ = writeln!(io::stderr(), "tgd: {m}");
             ExitCode::from(3)
         }
+        Err(Fail::Pending) => ExitCode::from(4),
     }
 }

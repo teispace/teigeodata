@@ -248,3 +248,18 @@ test `timings` in `crates/teigeodata-cli/tests/sync.rs`. **The machine was share
 
 Run: `TGD_BIN=target/dist/tgd cargo test -p teigeodata-cli --test sync -- --ignored timings
 --nocapture`.
+
+### Platform prototypes (D-184)
+
+2026-11-11, macOS on this machine, Swift 6.4.2, `tools/platform-probe/apple/run.sh` over the
+repository `write_repo` writes (a 100,000-place pack, asset 2,450,928 bytes), served by
+`serve.py` on localhost. The loop: `tgd install --downloads`, the probe, again.
+
+| Session | Redirect | Passes | Ranges per round | Server saw |
+|---|---|---|---|---|
+| foreground (`.default`) | no | 3 | 2 (814 B), then 1 (2,450,114 B) | 3 × 206 with `Range` |
+| background | no | 3 | the same | 3 × 206 with `Range` |
+| background | 302, as GitHub's release host | 3 | the same | 3 × 302 then 3 × 206, `Range` on both |
+
+Every response was 206 with exactly the requested `Content-Range`, and the store's deep check
+was Good.

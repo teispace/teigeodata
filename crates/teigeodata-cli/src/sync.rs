@@ -20,7 +20,7 @@ use teigeodata_core::E7;
 use teigeodata_engine::{Engine, Layer, LayerOptions, Load, Place};
 use teigeodata_format::component::{Component, Components};
 use teigeodata_sync::catalog::{self, Catalog, Entry};
-use teigeodata_sync::fetch::{FetchError, Mirrors, Ureq};
+use teigeodata_sync::fetch::{Downloads, FetchError, Mirrors, Ureq};
 use teigeodata_sync::refresh::{self, RefreshError};
 use teigeodata_sync::store::{Dir, Health, Store, StoreError};
 use teigeodata_sync::trust::Trusted;
@@ -109,6 +109,10 @@ pub(crate) struct Opened {
     shipped: Vec<u8>,
     repo: Vec<String>,
     assets: Vec<String>,
+    /// `install --downloads`: the directory a platform downloads assets into (D-184).
+    downloads: Option<PathBuf>,
+    /// What the packs installed from `downloads` still need, one record per asset.
+    pending: Vec<Value>,
 }
 
 impl Opened {
@@ -141,6 +145,8 @@ impl Opened {
             shipped,
             repo: list("repo"),
             assets: list("assets"),
+            downloads: None,
+            pending: Vec::new(),
         })
     }
 
@@ -480,15 +486,55 @@ fn install_one(
         writeln!(out, "{path} {} is installed", entry.release)?;
         return Ok(());
     }
-    let mut mirrors = Mirrors::new(s.assets.clone());
-    let done = s.store.install(
-        &mut Ureq::new(),
-        &mut mirrors,
-        &entry.file,
-        &entry,
-        asset_len,
-        set,
-    )?;
+    let done = if let Some(dir) = s.downloads.clone() {
+        // A platform's pass (D-184): the files it downloaded, or what is still missing.
+        let at = dir.join(&entry.file);
+        let mut parts = Downloads::open(&at, asset_len).map_err(|e| Fail::of(at.display(), e))?;
+        let mut mirrors = Mirrors::new(["downloads/"]);
+        match s.store.install(
+            &mut parts,
+            &mut mirrors,
+            &entry.file,
+            &entry,
+            asset_len,
+            set,
+        ) {
+            Err(FetchError::Needs(ranges)) => {
+                let urls: Vec<String> = s
+                    .assets
+                    .iter()
+                    .map(|m| format!("{m}{}", entry.file))
+                    .collect();
+                let parts: Vec<Value> = ranges
+                    .iter()
+                    .map(|r| json!({ "start": r.start, "end": r.end, "file": Downloads::name(r) }))
+                    .collect();
+                s.pending.push(json!({
+                    "pack": path,
+                    "urls": urls,
+                    "length": asset_len,
+                    "dir": at,
+                    "ranges": parts,
+                }));
+                return Ok(());
+            }
+            r => r?,
+        }
+    } else {
+        let mut mirrors = Mirrors::new(s.assets.clone());
+        s.store.install(
+            &mut Ureq::new(),
+            &mut mirrors,
+            &entry.file,
+            &entry,
+            asset_len,
+            set,
+        )?
+    };
+    if let Some(dir) = &s.downloads {
+        // Committed: the downloaded files are no longer needed.
+        let _ = std::fs::remove_dir_all(dir.join(&entry.file));
+    }
     if !asked && installed.is_none() {
         s.store.mark(&entry.address, &entry.component, false)?;
     }
@@ -505,9 +551,11 @@ pub(crate) fn install(
     packs: &[String],
     components: &[Component],
     pin: bool,
+    downloads: Option<&Path>,
     out: &mut dyn Write,
 ) -> Result<(), Fail> {
     let mut s = Opened::open(root)?;
+    s.downloads = downloads.map(Path::to_path_buf);
     let paths: Vec<String> = packs.iter().map(|p| path_of(p)).collect();
     let t = catalog_for(&mut s, &paths)?;
     // No components named: the whole pack.
@@ -518,12 +566,17 @@ pub(crate) fn install(
     });
     for p in &paths {
         install_one(&mut s, &t, p, set, true, out)?;
-        if pin {
+        if pin && s.store.packs().iter().any(|r| r.key() == *p) {
             let (a, c) = split(p);
             s.store.pin(a, c, true)?;
         }
     }
-    Ok(())
+    if s.pending.is_empty() {
+        return Ok(());
+    }
+    serde_json::to_writer_pretty(&mut *out, &s.pending)?;
+    writeln!(out)?;
+    Err(Fail::Pending)
 }
 
 pub(crate) fn update(root: &Path, packs: &[String], out: &mut dyn Write) -> Result<(), Fail> {
