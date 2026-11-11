@@ -1038,7 +1038,7 @@ fn sections(
         .iter()
         .map(|p| p.parent.as_deref().and_then(|k| row_of.get(k).copied()))
         .collect();
-    let (names, search) = name_sections(places, &Profile::default(), "")?;
+    let (names, search, _) = name_sections(places, &Profile::default(), "")?;
     let heights: Vec<Option<i16>> = rows.iter().map(|r| r.elevation).collect();
     let mut full: Vec<extract::Body> = vec![
         (

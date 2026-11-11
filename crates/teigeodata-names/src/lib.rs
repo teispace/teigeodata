@@ -159,6 +159,34 @@ pub fn search_keys(
     out(SearchMap::Exact, f);
 }
 
+/// The fewest code points of a substring key (D-199): the query minimum of substring search.
+pub const SUBSTRING_MIN: usize = 3;
+
+/// Calls `out` with every substring key of `folded`, a name folded with [`fold`] (D-199): for
+/// each token (split on the fold's single spaces), every suffix of [`SUBSTRING_MIN`] or more
+/// code points that does not start on a combining mark (`General_Category` M: a vowel sign, a
+/// virama, an anusvara), except the first token's whole text: an exact prefix range already
+/// finds a query at the start of the name. One rule for every script (P16). Keys may repeat
+/// across names; each is a slice of `folded`, so nothing is allocated.
+pub fn substring_keys<'f>(folded: &'f str, mut out: impl FnMut(&'f str)) {
+    for (i, token) in folded.split(' ').enumerate() {
+        // The token's code points from the end, so a suffix's length is known at its start.
+        let mut chars = 0;
+        for (at, c) in token.char_indices().rev() {
+            chars += 1;
+            if chars < SUBSTRING_MIN
+                || (i == 0 && at == 0)
+                || unicode_normalization::char::is_combining_mark(c)
+            {
+                continue;
+            }
+            if let Some(suffix) = token.get(at..) {
+                out(suffix);
+            }
+        }
+    }
+}
+
 /// The first script of a text that is not Common or Inherited.
 #[must_use]
 pub fn script_of(s: &str) -> Script {
@@ -717,6 +745,111 @@ mod search_key_tests {
                 s(SearchMap::Loose, "pokhara")
             ]
         );
+    }
+}
+
+#[cfg(test)]
+mod substring_key_tests {
+    use super::{SUBSTRING_MIN, fold, substring_keys};
+    use alloc::string::String;
+    use alloc::vec::Vec;
+
+    fn keys(name: &str) -> Vec<String> {
+        let f = fold(name);
+        let mut out = Vec::new();
+        substring_keys(&f, |k| out.push(String::from(k)));
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn suffixes_of_three_code_points_not_starting_on_a_mark() {
+        assert_eq!(
+            keys("Kathmandu"),
+            [
+                "andu", "athmandu", "du", "hmandu", "mandu", "ndu", "thmandu"
+            ]
+            .into_iter()
+            .filter(|k| k.chars().count() >= SUBSTRING_MIN)
+            .collect::<Vec<_>>()
+        );
+        // The second word's whole text is a key; the first's is not.
+        let k = keys("Pokhara Lekhnath");
+        assert!(k.iter().any(|x| x == "lekhnath") && k.iter().any(|x| x == "khara"));
+        assert!(!k.iter().any(|x| x == "pokhara" || x == "pokhara lekhnath"));
+        // काठमाडौं is क ा ठ म ा ड ौ ं: starts on the marks ा ौ ं are skipped.
+        let k = keys("काठमाडौं");
+        assert!(k.iter().any(|x| x == "माडौं") && k.iter().any(|x| x == "ठमाडौं"));
+        assert!(
+            !k.iter()
+                .any(|x| x.starts_with('\u{093e}') || x.starts_with('\u{094c}'))
+        );
+        assert!(!k.iter().any(|x| x == "काठमाडौं"));
+        // A start after a virama is kept: the rule is about marks, not clusters.
+        assert!(keys("Xक्षत्र").iter().any(|x| x == "षत्र"));
+        // Too short for any key.
+        assert_eq!(keys("ab cd"), Vec::<String>::new());
+    }
+
+    /// The tiers together find what a scan finds (the note's gate 5): for a query of 3 or more
+    /// code points without a space, not starting on a mark, a name holds it exactly when its
+    /// fold starts with it (the exact prefix range) or a substring key does.
+    #[test]
+    fn exact_prefix_and_substring_keys_agree_with_a_scan() {
+        const PARTS: [&str; 10] = [
+            "ka", "th", "\u{e9}", "man", "du", " ", "\u{915}", "\u{93e}", "\u{920}", "\u{94d}",
+        ];
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = |n: usize| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            usize::try_from(state % n as u64).unwrap_or(0)
+        };
+        let names: Vec<String> = (0..300)
+            .map(|_| {
+                let parts = 1 + next(6);
+                (0..parts)
+                    .map(|_| PARTS[next(PARTS.len())])
+                    .collect::<String>()
+            })
+            .map(|n| fold(&n))
+            .filter(|f| !f.is_empty())
+            .collect();
+        let mut found: Vec<Vec<&str>> = Vec::new();
+        for f in &names {
+            let mut k = Vec::new();
+            substring_keys(f, |s| k.push(s));
+            found.push(k);
+        }
+        let mut queries = 0;
+        for f in &names {
+            let chars: Vec<(usize, char)> = f.char_indices().collect();
+            for (a, &(at, c)) in chars.iter().enumerate() {
+                if unicode_normalization::char::is_combining_mark(c) {
+                    continue;
+                }
+                for len in SUBSTRING_MIN..=SUBSTRING_MIN + 2 {
+                    let end = chars.get(a + len).map_or(f.len(), |e| e.0);
+                    if a + len > chars.len() {
+                        break;
+                    }
+                    let q = &f[at..end];
+                    if q.contains(' ') {
+                        continue;
+                    }
+                    queries += 1;
+                    for (n, keys) in names.iter().zip(&found) {
+                        let tiers = n.starts_with(q) || keys.iter().any(|k| k.starts_with(q));
+                        assert_eq!(tiers, n.contains(q), "{q:?} in {n:?}");
+                    }
+                }
+            }
+            if queries > 400 {
+                break;
+            }
+        }
+        assert!(queries > 100, "{queries}");
     }
 }
 

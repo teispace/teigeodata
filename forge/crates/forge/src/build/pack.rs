@@ -21,7 +21,7 @@ use teigeodata_format::region::{self, Options, Region};
 use teigeodata_format::search::rules::Rule;
 use teigeodata_format::search::{self, EXACT, Maps, Search};
 use teigeodata_format::{Bbox, Encoding, Kind, Pack, Tag, Writer};
-use teigeodata_names::{SearchMap, fold, search_keys};
+use teigeodata_names::{SearchMap, fold, search_keys, substring_keys};
 
 use super::ids::{Assignment, Registry, assign};
 use super::{Args, Place, Profile, Zones, tags};
@@ -335,7 +335,9 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
     let (ids, moved, assigned) = ids_for(input, &rows)?;
     let idmap_body = idmap::encode(&ids).map_err(|e| e.to_string())?;
 
-    let (names_body, search_body) = name_sections(&rows, input.profile, &input.args.admin)?;
+    let (names_body, search_body, importance) =
+        name_sections(&rows, input.profile, &input.args.admin)?;
+    let substring_body = substring_section(&rows, &importance)?;
     let index_body = place_index::encode(&points, NODE).map_err(|e| e.to_string())?;
 
     let mut sections: Vec<Body> = vec![
@@ -344,6 +346,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
         (Kind::HIERARCHY, Encoding::TABLE, n as u64, hierarchy_body),
         (Kind::NAMES, Encoding::TABLE, n as u64, names_body),
         (Kind::SEARCH, Encoding::TABLE, n as u64, search_body),
+        (Kind::SUBSTRING, Encoding::TABLE, n as u64, substring_body),
         (Kind::PLACE_INDEX, Encoding::TABLE, n as u64, index_body),
     ];
     let iso_codes = iso_section(input, &rows, &mut sections)?;
@@ -590,12 +593,15 @@ pub(super) fn add_keys(maps: &mut Maps, text: &str, row: u32, profile: &Profile)
     });
 }
 
-/// The NAMES and SEARCH bodies of the rows.
+/// The NAMES and SEARCH bodies, and each row's search importance.
+pub(super) type NameBodies = (Vec<u8>, Vec<u8>, Vec<u8>);
+
+/// The NAMES and SEARCH bodies of the rows, and each row's search importance.
 pub(super) fn name_sections(
     rows: &[&Place],
     profile: &Profile,
     admin_source: &str,
-) -> Result<(Vec<u8>, Vec<u8>), String> {
+) -> Result<NameBodies, String> {
     let records: Vec<Vec<NameRecord<'_>>> = rows
         .iter()
         .map(|p| {
@@ -651,7 +657,33 @@ pub(super) fn name_sections(
     let search_body =
         search::encode_maps_with(&maps, &importance, &extra).map_err(|e| e.to_string())?;
 
-    Ok((names_body, search_body))
+    Ok((names_body, search_body, importance))
+}
+
+/// The SUBSTRING body of the rows (D-199): the word suffixes of every name the SEARCH keys
+/// fold, with SEARCH's importance, so a query from the middle of a word ranks as search does.
+/// Keys longer than the automaton allows are left out, as in SEARCH.
+pub(super) fn substring_section(rows: &[&Place], importance: &[u8]) -> Result<Vec<u8>, String> {
+    let mut keys: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
+    for (row, p) in rows.iter().enumerate() {
+        let row = u32::try_from(row).unwrap_or(u32::MAX);
+        for nm in &p.names {
+            let f = fold(&nm.text);
+            substring_keys(&f, |k| {
+                if k.len() < 255 {
+                    match keys.get_mut(k) {
+                        Some(set) => {
+                            set.insert(row);
+                        }
+                        None => {
+                            keys.insert(k.to_string(), BTreeSet::from([row]));
+                        }
+                    }
+                }
+            });
+        }
+    }
+    search::encode_substring(&keys, importance).map_err(|e| e.to_string())
 }
 
 /// The country's query rules for SEARCH (D-120): its phonetic key, unit-type abbreviations,
@@ -746,6 +778,7 @@ fn verify(
     index.check().map_err(e)?;
 
     verify_rows(rows, &places, &hier, &ids, &names, &search, &index)?;
+    let substring_line = verify_substring(&p, &search, rows)?;
     let geometry_line = match input.geometry {
         Some(g) => Some(super::geometry::verify(&p, rows, g)?),
         None => None,
@@ -770,6 +803,7 @@ fn verify(
         rows.len(),
         distinct.len(),
     );
+    let _ = writeln!(report, "\n{substring_line}");
     if let Some(line) = tz_line {
         let _ = writeln!(report, "\n{line}");
     }
@@ -800,6 +834,65 @@ fn verify(
         let _ = writeln!(report, "\n{line}");
     }
     Ok(())
+}
+
+/// SUBSTRING read back (D-199): `check`, SEARCH's importance row for row, and every place found
+/// from the longest word suffix of its canonical name that is a key (a mid-word query).
+fn verify_substring(p: &Pack<'_>, search: &Search<'_>, rows: &[&Place]) -> Result<String, String> {
+    let e = |e: teigeodata_format::Error| e.to_string();
+    let section = p.section(Kind::SUBSTRING).ok_or("no SUBSTRING section")?;
+    let sub = Search::open(&section).map_err(e)?;
+    sub.check().map_err(e)?;
+    if sub.rows() != rows.len() {
+        return Err("SUBSTRING: not one row per place".into());
+    }
+    let mut keyed = 0;
+    for (row, place) in rows.iter().enumerate() {
+        let r = u32::try_from(row).unwrap_or(u32::MAX);
+        if sub.importance(r) != search.importance(r) {
+            return Err(format!(
+                "row {row}: SUBSTRING's importance differs from SEARCH's"
+            ));
+        }
+        let first = place
+            .names
+            .first()
+            .map(|n| fold(&n.text))
+            .unwrap_or_default();
+        let mut longest = None;
+        substring_keys(&first, |k| {
+            if k.len() < 255 && longest.is_none_or(|l: &str| k.len() > l.len()) {
+                longest = Some(k);
+            }
+        });
+        let Some(key) = longest else { continue };
+        let mut hit = false;
+        if let Some(o) = sub.get(search::SUBSTRING, key) {
+            sub.rows_of(o, |x| {
+                hit |= x == r;
+                if hit {
+                    ControlFlow::Break(())
+                } else {
+                    ControlFlow::Continue(())
+                }
+            });
+        }
+        if !hit {
+            return Err(format!(
+                "{}: not found from {key:?} in SUBSTRING",
+                place.key
+            ));
+        }
+        keyed += 1;
+    }
+    let bytes = section.bytes().len();
+    let tenths = bytes * 10 / rows.len().max(1);
+    Ok(format!(
+        "SUBSTRING (D-199): {} keys, {bytes} B ({}.{} B per place); all {keyed} places with a word suffix of 3 or more code points in their canonical name are found from its longest one.",
+        sub.keys(),
+        tenths / 10,
+        tenths % 10
+    ))
 }
 
 /// ELEVATION (one height per row) and, when the build samples a DEM, the DEM masked to the
