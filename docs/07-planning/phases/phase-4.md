@@ -234,7 +234,8 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   - [x] (a) The seam: installs in passes over `fetch::Downloads`, `FetchError::Needs`, `tgd
     install --downloads` (D-184)
   - [x] (b) macOS `URLSession`, foreground and background, `Range` kept across a redirect (D-184)
-  - [ ] (c) The iOS simulator: a background session, the app suspended and relaunched
+  - [x] (c) The iOS simulator: a background session, the app killed mid-download and relaunched
+    by the system, the range filed and the pack committed (D-185)
   - [ ] (d) Android UIDT on the emulator
   - [ ] (e) The browser: ranged `fetch` into OPFS in a worker, over localhost (the CORS mirror
     is Q-014)

@@ -22,6 +22,7 @@ swiftc -O -o "$work/probe" "$here/ProbeCore.swift" "$here/cli/main.swift"
 log="$work/requests.jsonl"
 python3 "$here/../serve.py" "$repo" $redirect --log "$log" > "$work/url" &
 server=$!
+disown "$server"
 trap 'kill $server 2>/dev/null || true' EXIT
 until [ -s "$work/url" ]; do sleep 0.1; done
 url=$(cat "$work/url")

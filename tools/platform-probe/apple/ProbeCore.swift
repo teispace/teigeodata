@@ -49,6 +49,8 @@ final class Probe: NSObject, URLSessionDownloadDelegate {
     var finished: () -> Void = {}
     /// The system's completion handler after a background relaunch (iOS).
     var eventsDone: (() -> Void)?
+    /// Where a range's file goes: its `dir` by default; an iOS app maps it into its container.
+    var directory: (Want) -> URL = { URL(fileURLWithPath: $0.dir) }
     private(set) var failed = 0
     private var started: [Int: Date] = [:]
     private var left = 0
@@ -112,7 +114,7 @@ final class Probe: NSObject, URLSessionDownloadDelegate {
                 as? NSNumber)?.uint64Value ?? 0
             ok = size == w.end - w.start
             if ok {
-                let dir = URL(fileURLWithPath: w.dir)
+                let dir = directory(w)
                 let to = dir.appendingPathComponent(w.file)
                 do {
                     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

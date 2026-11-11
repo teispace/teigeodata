@@ -66,8 +66,13 @@ against a localhost server that sends the headers.
   keeps a `Range` header the app sets itself is not documented. **Measured on macOS
   (2026-11-11):** it does, and keeps it across a 302 redirect; every response was 206 with the
   exact `Content-Range` ([benches](../benches/phase-4.md#platform-prototypes-d-184)). macOS runs
-  background sessions in the same `nsurlsessiond` daemon as iOS; the simulator confirms it on
-  iOS.
+  background sessions in the same `nsurlsessiond` daemon as iOS. **On the iOS 27.0 simulator
+  (2026-11-11, D-185)** the same holds, and an app killed mid-download is relaunched by the
+  system in the background to receive the finished file.
+- A real app must recreate its background session on every launch, whatever the reason: the
+  system's background relaunch carries no arguments of ours, and its events reach only a
+  session made with the same identifier. The iOS 27 SDK refuses to launch an app without the
+  UIScene life cycle. A task's `taskDescription` survives the kill, so it carries the range.
 - iOS 26 adds `BGContinuedProcessingTask`, for user-started work that continues in the
   background with progress the system shows. It reports through `ProgressReporting`. Forum
   threads report it pausing while the device is locked, and a launch handler that stopped firing

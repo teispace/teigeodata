@@ -7,8 +7,11 @@ prototype downloads those ranges with its platform's own service and runs instal
 
 - `serve.py`: a static range host on localhost (206, `ETag`, CORS, an optional 302 redirect
   like GitHub's release host, a JSON log of every request).
-- `apple/`: URLSession download tasks, foreground or background (`run.sh ... --background
-  --redirect`). Runs on macOS; the same code is the iOS prototype.
+- `apple/`: URLSession download tasks over one shared probe (`ProbeCore.swift`).
+  `run.sh ... --background --redirect` runs it on macOS; `run-ios.sh REPO WORK --redirect`
+  builds the iOS app (`ios/`, no Xcode project), creates a simulator of its own, kills the app
+  mid-download, and checks that iOS relaunches it to file the range; the simulator is deleted
+  at the end.
 
 A repository to serve:
 

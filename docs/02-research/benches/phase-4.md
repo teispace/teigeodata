@@ -263,3 +263,12 @@ repository `write_repo` writes (a 100,000-place pack, asset 2,450,928 bytes), se
 
 Every response was 206 with exactly the requested `Content-Range`, and the store's deep check
 was Good.
+
+On the iOS 27.0 simulator (iPhone 17 Pro, created and deleted by `run-ios.sh`), the same
+repository with the 302 redirect, the server at 300 kB/s for the big round:
+
+| Round | What happened | Result |
+|---|---|---|
+| 1 | the table and the head, background session | 2 ranges, 206 each, filed |
+| 2 | 2,450,114 bytes; the app killed 2 s in | the daemon finished the download; iOS relaunched the app in the background; the recreated session filed the range (206, exact `Content-Range`) |
+| 3 | `tgd install --downloads` | committed, deep check Good |
