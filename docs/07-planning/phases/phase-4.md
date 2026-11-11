@@ -356,7 +356,8 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 - [ ] TG-18 and the strict-tier option. Done: the Brahmic search fold of nasal
   conjuncts, vowel length and candra vowels (D-220, 2026-11-11)
 - [ ] TG-17: phone-class benches with gates
-- [ ] TG-10: coarse elevation layer
+- [x] TG-10: coarse elevation layer: `DEM_COARSE`, component `dem-coarse`, 15″ at 8 m steps,
+  518 kB on the wire for Nepal; `elevation_at` falls back to it; G-dem-coarse (D-225, 2026-11-12)
 
 ### 4.10 Exit review
 - [ ] M4 criteria met, each with its evidence; progress updated

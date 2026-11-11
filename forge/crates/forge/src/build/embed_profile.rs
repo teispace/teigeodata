@@ -18,6 +18,7 @@
 //! The world part comes first, then the countries by code; a later part's row replaces an
 //! earlier one of the same ID ([`extract::merge`]). SUBSTRING, when asked for, is rebuilt from
 //! the merged NAMES with the format's one builder, the same bytes a device derives.
+//! `dem-coarse` carries every part's coarse terrain grid, codes copied (D-225).
 //!
 //! Gates: every ID of every part is one row with the last part's point and ISO code; the pack
 //! reads back verified with valid geometry; the transport asset fits `wire_kb`.
@@ -169,6 +170,7 @@ pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, 
     let mut sections =
         extract::merge(&list, &super::baseline::region_options()).map_err(|e| e.to_string())?;
     sections.retain(|s| Component::of(s.0).is_none_or(|c| wanted.contains(c)));
+    sections.extend(coarse_terrain(&packs, wanted)?);
     let tzdb = derived(root, &p, wanted, &mut sections)?;
     refuse_missing(&path, &p, &sections)?;
     finish(
@@ -201,6 +203,24 @@ fn refuse_missing(path: &Path, p: &File, sections: &[extract::Body]) -> Result<(
         ));
     }
     Ok(())
+}
+
+/// `DEM_COARSE` of the layer when the profile asks for `dem-coarse` (D-225): every part's coarse
+/// grids in one section, the tile codes copied, later parts' grids first so a part's own grid
+/// answers in the halo it shares with an earlier one (as a later part's rows win).
+fn coarse_terrain(packs: &[Pack<'_>], wanted: Components) -> Result<Option<extract::Body>, String> {
+    if !wanted.contains(Component::DemCoarse) {
+        return Ok(None);
+    }
+    let dems: Vec<teigeodata_format::dem::Dem<'_>> = packs
+        .iter()
+        .rev()
+        .filter_map(|p| p.section(Kind::DEM_COARSE))
+        .map(|s| teigeodata_format::dem::Dem::open(&s).map_err(|e| e.to_string()))
+        .collect::<Result<_, _>>()?;
+    Ok(teigeodata_format::dem::concat(&dems)
+        .map_err(|e| format!("DEM_COARSE: {e}"))?
+        .map(|(body, n)| (Kind::DEM_COARSE, Encoding::TABLE, n, body)))
 }
 
 /// The sections the layer derives instead of merging: SUBSTRING from its names (D-218) and

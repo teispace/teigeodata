@@ -22,6 +22,7 @@ default = [
     "boundaries",
     "admin-index",
     "dem",
+    "dem-coarse",
     "tz-rules",
     "postal",
     "substring",
@@ -39,6 +40,10 @@ boundaries = []
 admin-index = ["boundaries"]
 # Terrain heights at any point from a pack's DEM (D-089, D-192): `Engine::elevation_at`.
 dem = []
+# Terrain heights from a pack's coarse grid (D-225), where no fine DEM is installed: the same
+# reader and `Engine::elevation_at` as `dem`, a few hundred kilobytes of data instead of tens of
+# megabytes.
+dem-coarse = []
 # Zone rules (D-196): offsets at an instant, the offsets of a civil time, the tzdb release.
 tz-rules = []
 # Postal codes (D-090, D-200): a code to its places, autocomplete, a place's codes and a point's.
@@ -122,7 +127,7 @@ required-features = ["boundaries"]
 
 [[test]]
 name = "dem"
-required-features = ["dem"]
+required-features = ["dem", "dem-coarse"]
 
 [[test]]
 name = "iso"

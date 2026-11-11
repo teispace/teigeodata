@@ -185,13 +185,11 @@ pub(crate) fn run(
             let keep = rows_in(&pack, b).map_err(bad)?;
             let mut v =
                 extract::rows(&pack, &keep, opts.lod, &RegionOptions::default()).map_err(bad)?;
-            if let Some(dem) = pack.section(Kind::DEM) {
-                v.push((
-                    Kind::DEM,
-                    dem.encoding(),
-                    dem.item_count(),
-                    dem.bytes().to_vec(),
-                ));
+            // Terrain grids are kept whole: they are keyed by coordinates, not rows.
+            for kind in [Kind::DEM, Kind::DEM_COARSE] {
+                if let Some(dem) = pack.section(kind) {
+                    v.push((kind, dem.encoding(), dem.item_count(), dem.bytes().to_vec()));
+                }
             }
             v
         }

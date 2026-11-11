@@ -19,6 +19,7 @@
 //! | `extra` | COMPONENTS, BLOBS | point | optional fields, cold data |
 //! | `tz-rules` | `TZ_RULES` | | a zone's offset at an instant, a civil time's offsets |
 //! | `substring` | SUBSTRING | search | name search from the middle of a word |
+//! | `dem-coarse` | `DEM_COARSE` | | the height at any coordinate, from a coarse grid (D-225) |
 //!
 //! `BLOCK_HASHES` belongs to none: a client fetches it with any section of 1 MiB or more, whose
 //! blocks it verifies (D-078).
@@ -57,11 +58,13 @@ pub enum Component {
     TzRules = 12,
     /// Substring search (D-199): a name found from 3 or more characters inside a word.
     Substring = 13,
+    /// A coarse elevation grid (D-225): terrain anywhere in a few hundred kilobytes.
+    DemCoarse = 14,
 }
 
 impl Component {
     /// Every component, in order.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Point,
         Self::Elevation,
         Self::Admin,
@@ -76,6 +79,7 @@ impl Component {
         Self::Extra,
         Self::TzRules,
         Self::Substring,
+        Self::DemCoarse,
     ];
 
     /// Its name, as users, recipes and bindings spell it.
@@ -96,6 +100,7 @@ impl Component {
             Self::Extra => "extra",
             Self::TzRules => "tz-rules",
             Self::Substring => "substring",
+            Self::DemCoarse => "dem-coarse",
         }
     }
 
@@ -133,6 +138,7 @@ impl Component {
             Self::Extra => &[Kind::COMPONENTS, Kind::BLOBS],
             Self::TzRules => &[Kind::TZ_RULES],
             Self::Substring => &[Kind::SUBSTRING],
+            Self::DemCoarse => &[Kind::DEM_COARSE],
         }
     }
 
@@ -140,7 +146,7 @@ impl Component {
     #[must_use]
     pub const fn needs(self) -> &'static [Self] {
         match self {
-            Self::Point | Self::Dem | Self::TzRules => &[],
+            Self::Point | Self::Dem | Self::DemCoarse | Self::TzRules => &[],
             Self::Search => &[Self::Names],
             // Its matches are ranked with search's, from SEARCH's importance (D-199).
             Self::Substring => &[Self::Search],

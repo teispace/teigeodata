@@ -127,7 +127,7 @@ pub fn sections(pack: &Pack<'_>, mut each: impl FnMut(Kind, Result<bool, Error>)
                     let r = rows.ok_or(needs(kind, "no PLACES to count rows"))?;
                     Postal::open(&s, r)?.check()?;
                 }
-                Kind::DEM => Dem::open(&s)?.check()?,
+                Kind::DEM | Kind::DEM_COARSE => Dem::open(&s)?.check()?,
                 Kind::COMPONENTS => Components::open(&s)?.check()?,
                 Kind::BLOBS => {
                     let b = Blobs::open(&s)?;

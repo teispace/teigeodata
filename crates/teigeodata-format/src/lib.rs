@@ -144,6 +144,8 @@ impl Kind {
     /// Word-suffix keys of names to places, for substring search (D-199): the SEARCH layout
     /// with one map.
     pub const SUBSTRING: Self = Self(23);
+    /// A coarse elevation grid for small installs (D-225): DEM's layout, about 15″.
+    pub const DEM_COARSE: Self = Self(24);
 
     /// This reader's name for the kind, if it knows it.
     #[must_use]
@@ -177,6 +179,7 @@ pub(crate) const KINDS: &[(Kind, &str)] = &[
     (Kind::ISO_CODES, "ISO_CODES"),
     (Kind::TZ_RULES, "TZ_RULES"),
     (Kind::SUBSTRING, "SUBSTRING"),
+    (Kind::DEM_COARSE, "DEM_COARSE"),
 ];
 
 impl fmt::Display for Kind {

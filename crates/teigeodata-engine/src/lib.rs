@@ -65,7 +65,7 @@ pub use layer::{Layer, LayerId, LayerOptions, Load, Verify};
 pub use outline::{Outline, Ring};
 #[cfg(feature = "postal")]
 pub use postal::PostalCode;
-#[cfg(feature = "dem")]
+#[cfg(any(feature = "dem", feature = "dem-coarse"))]
 pub use query::{Datum, DemSource, Height};
 pub use query::{Hit, Near, Place, Scratch};
 #[cfg(feature = "admin")]

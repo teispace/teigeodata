@@ -140,6 +140,7 @@ parameters).
 | 21 | ISO_CODES | the ISO 3166 code of each coded country and subdivision row | `admin` | column table (D-197): the coded rows and their packed codes, [below](#iso_codes) |
 | 22 | TZ_RULES | the rules of the pack's timezones: transitions, local time types, abbreviations, parsed POSIX TZ footers, zone names linked to their areas | `tz-rules` | column table (D-196, [ADR-0039](../03-decisions/adr/ADR-0039-tz-rules.md)): 93 kB for the world's 444 outline zones, 2.5 kB for three; [below](#tz_rules) |
 | 23 | SUBSTRING | word-suffix keys of 3 or more code points → lists of rows by importance; a name from the middle of a word | `substring` | column table (D-199): SEARCH's layout with one map; 19.9 B per place on a GeoNames proxy of Nepal (2.59 MB, 2.5× its SEARCH), [below](#substring) |
+| 24 | DEM_COARSE | a coarse elevation grid for small installs: terrain anywhere at about 15″ | `dem-coarse` | DEM's column table and coder (D-225): block means of the pack's own DEM, [below](#dem) |
 
 ### Components of a pack
 
@@ -147,8 +148,8 @@ Each section belongs to one component (D-133, D-135), and a client chooses compo
 sections. `teigeodata_format::component` holds the table: each component's sections, and the
 components it needs (`search` needs `names`, `substring` needs `search`, `admin-index` needs
 `boundaries`, `timezone` and
-`timezone-index` need `tz-rules` as well as `point`, every other one but `dem` and `tz-rules`
-needs `point`). BLOCK_HASHES belongs to none; a client fetches it with any section of
+`timezone-index` need `tz-rules` as well as `point`, every other one but `dem`, `dem-coarse` and
+`tz-rules` needs `point`). BLOCK_HASHES belongs to none; a client fetches it with any section of
 1 MiB or more. A test checks this table's Component column against that module.
 
 ### Column tables (encoding 1)
@@ -724,6 +725,14 @@ item count is the number of tiles over all grids, absent ones included.
   to 4,096; thresholds non-decreasing; every present tile decodes whole, its rANS state back
   at the start value and every byte used. A tile whose models do not sum to 4,096 is refused
   when it starts, so decoding needs no other checks.
+- **DEM_COARSE** (kind 24, component `dem-coarse`, D-225) has this layout and is read by the
+  same `Dem::open`: a coarse grid for small installs. `dem::coarsen` makes it from a DEM
+  section: each coarse sample is the mean of the source samples of its cell (`factor × factor`
+  of them, centred on it), quantised to the coarse step; a coarse tile with no source sample is
+  absent, and in a present tile a cell with none takes the nearest present value in its row
+  (else the nearest filled row), so a coarse grid reaches at most one coarse tile past its
+  source. The packs carry 15″ cells, a 2 m step and 32-sample tiles. `dem::concat` joins the
+  grids of several sections (an embedded layer), codes copied.
 - **The writer** (feature `write`): `encode_tile` fits the coefficients by least squares,
   refines them on the coded cost, picks each context's model and decodes the code back before
   returning it; `encode` builds the section from the grids' codes. Measured in

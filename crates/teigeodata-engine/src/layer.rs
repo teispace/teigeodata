@@ -8,7 +8,12 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use teigeodata_core::PlaceId;
-#[cfg(any(feature = "timezone-index", feature = "admin-index", feature = "dem"))]
+#[cfg(any(
+    feature = "timezone-index",
+    feature = "admin-index",
+    feature = "dem",
+    feature = "dem-coarse"
+))]
 use teigeodata_core::{E7, Point};
 #[cfg(feature = "admin-index")]
 use teigeodata_format::arcs::ArcChunks;
@@ -16,7 +21,7 @@ use teigeodata_format::arcs::ArcChunks;
 use teigeodata_format::arcs::Arcs;
 use teigeodata_format::blocks::{BLOCK, Blocks};
 use teigeodata_format::component::{Component, Components};
-#[cfg(feature = "dem")]
+#[cfg(any(feature = "dem", feature = "dem-coarse"))]
 use teigeodata_format::dem::Dem;
 #[cfg(feature = "elevation")]
 use teigeodata_format::elevation::Elevations;
@@ -143,6 +148,8 @@ const NOT_BUILT: &[Component] = &[
     Component::AdminIndex,
     #[cfg(not(feature = "dem"))]
     Component::Dem,
+    #[cfg(not(feature = "dem-coarse"))]
+    Component::DemCoarse,
     #[cfg(not(feature = "tz-rules"))]
     Component::TzRules,
     #[cfg(not(feature = "postal"))]
@@ -211,6 +218,9 @@ pub(crate) struct Views<'a> {
     /// Terrain heights at any point (D-192); absent in a pack without them.
     #[cfg(feature = "dem")]
     pub(crate) dem: Option<Dem<'a>>,
+    /// The coarse terrain grid (D-225); absent in a pack without it, or not installed.
+    #[cfg(feature = "dem-coarse")]
+    pub(crate) dem_coarse: Option<Dem<'a>>,
     /// The rules of the pack's timezones (D-196); absent in a pack without them.
     #[cfg(feature = "tz-rules")]
     pub(crate) tz_rules: Option<TzRules<'a>>,
@@ -300,6 +310,8 @@ impl<'a> Views<'a> {
         };
         #[cfg(feature = "dem")]
         let dem = get(Kind::DEM).map(|s| Dem::open(&s)).transpose()?;
+        #[cfg(feature = "dem-coarse")]
+        let dem_coarse = get(Kind::DEM_COARSE).map(|s| Dem::open(&s)).transpose()?;
         #[cfg(feature = "tz-rules")]
         let tz_rules = get(Kind::TZ_RULES).map(|s| TzRules::open(&s)).transpose()?;
         #[cfg(feature = "postal")]
@@ -343,6 +355,8 @@ impl<'a> Views<'a> {
             poly_index,
             #[cfg(feature = "dem")]
             dem,
+            #[cfg(feature = "dem-coarse")]
+            dem_coarse,
             #[cfg(feature = "tz-rules")]
             tz_rules,
             #[cfg(feature = "postal")]
@@ -703,7 +717,12 @@ impl Layer {
     }
 
     /// Whether the coverage box holds `at` (true without a box).
-    #[cfg(any(feature = "timezone-index", feature = "admin-index", feature = "dem"))]
+    #[cfg(any(
+        feature = "timezone-index",
+        feature = "admin-index",
+        feature = "dem",
+        feature = "dem-coarse"
+    ))]
     pub(crate) fn covers(&self, at: Point<E7>) -> bool {
         self.bbox.is_none_or(|b| {
             let (lat, lon) = (at.lat(), at.lon());

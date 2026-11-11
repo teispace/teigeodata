@@ -1,6 +1,7 @@
 //! Terrain at any point (D-192): `elevation_at` answers from the first layer whose DEM has
 //! samples around the point, falls through layers whose DEM does not, reads as the DEM reader
-//! does, and refuses a layer whose DEM is not installed.
+//! does, and refuses a layer whose DEM is not installed. Where no fine DEM answers, the coarse
+//! grid does (D-225), and the answer states its spacing.
 
 #![allow(
     clippy::unwrap_used,
@@ -158,4 +159,110 @@ fn a_dem_that_is_not_installed_is_named() {
         Err(Error::MissingComponent { component, .. }) => assert_eq!(component, Component::Dem),
         other => panic!("{other:?}"),
     }
+}
+
+/// The DEM section of a pack from [`dem_pack`].
+fn dem_body(pack: &[u8]) -> (Vec<u8>, u64) {
+    let p = Pack::open(pack).unwrap();
+    let s = p.section(Kind::DEM).unwrap();
+    (s.bytes().to_vec(), s.item_count())
+}
+
+/// A pack with the given DEM and coarse sections (either may be left out).
+fn terrain_pack(fine: Option<&(Vec<u8>, u64)>, coarse: Option<&(Vec<u8>, u64)>) -> Vec<u8> {
+    let mut sections: Vec<(Kind, Encoding, u64, &[u8])> = Vec::new();
+    if let Some((b, n)) = fine {
+        sections.push((Kind::DEM, Encoding::TABLE, *n, b));
+    }
+    if let Some((b, n)) = coarse {
+        sections.push((Kind::DEM_COARSE, Encoding::TABLE, *n, b));
+    }
+    Writer::new("np", "places", "2026.11.0")
+        .unwrap()
+        .pack(&sections, None)
+        .unwrap()
+}
+
+/// What the coarse reader alone gives at `p`.
+fn coarse_direct(body: &(Vec<u8>, u64), p: Point<E7>) -> Option<f64> {
+    let s = teigeodata_format::Section::unpacked(Kind::DEM_COARSE, body.1, &body.0);
+    Dem::open(&s).unwrap().elevation(p, &mut DemScratch::new())
+}
+
+/// D-225: the fine DEM answers where installed and present; the coarse grid where it is not
+/// installed, absent there, or not in the pack; each answer states its spacing.
+#[test]
+fn the_coarse_grid_answers_where_no_fine_dem_does() {
+    let fine = dem_body(&dem_pack("np", 4, 1_500, &[1]));
+    // The coarse grid of the whole DEM, 4″ cells.
+    let whole = dem_body(&dem_pack("np", 4, 1_500, &[]));
+    let c = dem::Coarse {
+        factor: 4,
+        step_mm: 2_000,
+        tile_log2: 4,
+    };
+    let src = Dem::open(&teigeodata_format::Section::unpacked(
+        Kind::DEM,
+        whole.1,
+        &whole.0,
+    ))
+    .unwrap();
+    let coarse = dem::coarsen(
+        &src,
+        c,
+        &Family::standard(),
+        &THRESHOLDS,
+        &TileOptions::default(),
+    )
+    .unwrap()
+    .unwrap();
+    let both = terrain_pack(Some(&fine), Some(&coarse));
+    let fine_m = 30.92;
+    let coarse_m = 4.0 * 30.92;
+    let near = |r: f64, want: f64| (r - want).abs() < 0.05;
+    let mut s = Scratch::default();
+    let ask = |installed: Option<Components>, bytes: &[u8], c: u32, s: &mut Scratch| {
+        let mut e = Engine::new();
+        e.add(layer(bytes.to_vec(), installed));
+        e.elevation_at(at(c), s)
+    };
+    // Both installed: the fine DEM where it has samples, the coarse grid in its absent tile.
+    let h = ask(None, &both, 0, &mut s).unwrap().unwrap();
+    assert!(near(h.resolution_m, fine_m), "{}", h.resolution_m);
+    assert_eq!(Some(h.meters), direct(&both, at(0)));
+    let h = ask(None, &both, 1, &mut s).unwrap().unwrap();
+    assert!(near(h.resolution_m, coarse_m), "{}", h.resolution_m);
+    assert_eq!(Some(h.meters), coarse_direct(&coarse, at(1)));
+    assert_eq!(h.source, Some(DemSource::CopernicusGlo30));
+    // The coarse sample is its cell's mean: near the fine height, not equal to it.
+    let fine_there = direct(&terrain_pack(Some(&whole), None), at(1)).unwrap();
+    assert!(
+        (h.meters - fine_there).abs() < 10.0,
+        "{} vs {fine_there}",
+        h.meters
+    );
+    // Only the coarse grid installed: it answers everywhere it has samples.
+    let only = Some(Components::of(&[Component::DemCoarse]));
+    for c in 0..4 {
+        let h = ask(only, &both, c, &mut s).unwrap().unwrap();
+        assert!(near(h.resolution_m, coarse_m));
+        assert_eq!(Some(h.meters), coarse_direct(&coarse, at(c)));
+    }
+    // Only the fine DEM installed: its absent tile has no terrain.
+    let fine_only = Some(Components::of(&[Component::Dem]));
+    let h = ask(fine_only, &both, 0, &mut s).unwrap().unwrap();
+    assert!(near(h.resolution_m, fine_m));
+    assert_eq!(ask(fine_only, &both, 1, &mut s).unwrap(), None);
+    // A pack with only the coarse grid.
+    let coarse_pack = terrain_pack(None, Some(&coarse));
+    let h = ask(None, &coarse_pack, 2, &mut s).unwrap().unwrap();
+    assert!(near(h.resolution_m, coarse_m));
+    // Neither installed: the fine DEM is named.
+    let none = Some(Components::of(&[Component::Point]));
+    match ask(none, &both, 0, &mut s) {
+        Err(Error::MissingComponent { component, .. }) => assert_eq!(component, Component::Dem),
+        other => panic!("{other:?}"),
+    }
+    // Outside both grids: nothing, and no error.
+    assert_eq!(ask(only, &both, 9, &mut s).unwrap(), None);
 }

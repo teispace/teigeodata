@@ -814,6 +814,11 @@ fn verify(
             if let Some(s) = p.section(Kind::DEM) {
                 let line = verify_dem(&s, &places, h.as_ref())?;
                 let _ = writeln!(report, "\n{line}");
+                let coarse = p
+                    .section(Kind::DEM_COARSE)
+                    .ok_or("a DEM without its coarse grid (D-225)")?;
+                let line = super::dem_coarse::verify(&coarse, &s, &places)?;
+                let _ = writeln!(report, "\n{line}");
             }
         }
         (None, None) => {}
@@ -886,7 +891,7 @@ fn verify_substring(p: &Pack<'_>, search: &Search<'_>, rows: &[&Place]) -> Resul
 }
 
 /// ELEVATION (one height per row) and, when the build samples a DEM, the DEM masked to the
-/// pack's outline (D-192), added to `sections`.
+/// pack's outline (D-192) and its coarse grid (D-225), added to `sections`.
 fn terrain(
     input: &Input<'_>,
     heights: Option<Vec<u8>>,
@@ -902,6 +907,12 @@ fn terrain(
         .transpose()?
         .flatten()
     {
+        // The coarse grid for small installs, its own component (D-225).
+        if let Some((coarse, n)) =
+            super::dem_coarse::build(&body, tiles, super::dem_coarse::DEFAULT)?
+        {
+            sections.push((Kind::DEM_COARSE, Encoding::TABLE, n, coarse));
+        }
         sections.push((Kind::DEM, Encoding::TABLE, tiles, body));
     }
     Ok(())

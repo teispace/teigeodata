@@ -452,3 +452,155 @@ fn a_grid_states_its_source() {
     let unknown = section(Grid { source: 99, ..grid }, &codes);
     assert!(open(&unknown, 2).check().is_err());
 }
+
+fn coarse_open(body: &[u8], tiles: u64) -> Dem<'_> {
+    Dem::open(&Section::unpacked(Kind::DEM_COARSE, tiles, body)).unwrap()
+}
+
+/// D-225: a factor of 1 at the source's step and tile side is the source itself, absent
+/// tiles included; `DEM_COARSE` opens with DEM's reader and passes its check.
+#[test]
+fn a_coarse_grid_of_factor_one_is_its_source() {
+    let mut rng = Rng(5);
+    let (grid, codes, truth) = grid_codes(ROW0, COL0, 2, 3, &[4], &mut rng);
+    let body = section(
+        Grid {
+            source: dem::Source::Nasadem.code(),
+            ..grid
+        },
+        &codes,
+    );
+    let fine = open(&body, 6);
+    let c = dem::Coarse {
+        factor: 1,
+        step_mm: 2_000,
+        tile_log2: LOG2,
+    };
+    let opts = TileOptions::default();
+    let (cb, n) = dem::coarsen(&fine, c, &Family::standard(), &THRESHOLDS, &opts)
+        .unwrap()
+        .unwrap();
+    assert_eq!(n, 6);
+    let d = coarse_open(&cb, n);
+    d.check().unwrap();
+    assert_eq!(d.grid(0).unwrap().source, dem::Source::Nasadem.code());
+    let mut s = DemScratch::new();
+    for (t, want) in truth.iter().enumerate() {
+        assert_eq!(
+            d.decode_tile(t, &mut s).map(<[i32]>::to_vec).as_ref(),
+            want.as_ref()
+        );
+    }
+    // DEM's reader refuses a section of another kind.
+    assert!(Dem::open(&Section::unpacked(Kind::ELEVATION, n, &cb)).is_err());
+}
+
+/// D-225: each coarse sample is its cell's mean within half the coarse step; the grid's
+/// spacing is the factor times the source's; a coarse tile with no source sample is absent,
+/// and a query at a coarse sample reads that sample.
+#[test]
+fn a_coarse_sample_is_its_cells_mean() {
+    let mut rng = Rng(3);
+    // 4 × 4 source tiles of 64 at 1″, tile rows 1 and 2 absent.
+    let absent: Vec<usize> = (4..12).collect();
+    let (grid, codes, truth) = grid_codes(ROW0, COL0, 4, 4, &absent, &mut rng);
+    let body = section(grid, &codes);
+    let fine = open(&body, 16);
+    let (f, step_mm) = (4_i64, 1_000_u32);
+    let c = dem::Coarse {
+        factor: 4,
+        step_mm,
+        tile_log2: 4,
+    };
+    let opts = TileOptions::default();
+    let (cb, n) = dem::coarsen(&fine, c, &Family::standard(), &THRESHOLDS, &opts)
+        .unwrap()
+        .unwrap();
+    let d = coarse_open(&cb, n);
+    d.check().unwrap();
+    let g = d.grid(0).unwrap();
+    assert_eq!(
+        (g.lat_step, g.lon_step, g.step_mm, g.tile_log2),
+        (40, 40, 1_000, 4)
+    );
+    // The source in metres at a global sample, `None` in the absent tile or outside.
+    let src = |r: i64, c: i64| -> Option<f64> {
+        let (tr, tc) = (r / 64 - i64::from(ROW0), c / 64 - i64::from(COL0));
+        if !(0..4).contains(&tr) || !(0..4).contains(&tc) {
+            return None;
+        }
+        truth[(tr * 4 + tc) as usize]
+            .as_ref()
+            .map(|q| f64::from(q[((r % 64) * 64 + c % 64) as usize]) * 2.0)
+    };
+    let mut s = DemScratch::new();
+    let (mut checked, mut absent_tiles) = (0, 0);
+    for t in 0..u64::from(g.tile_rows * g.tile_cols) {
+        let (tr, tc) = (t / u64::from(g.tile_cols), t % u64::from(g.tile_cols));
+        let Some(q) = d.decode_tile(t as usize, &mut s).map(<[i32]>::to_vec) else {
+            absent_tiles += 1;
+            continue;
+        };
+        for i in 0..256_i64 {
+            let rr = (i64::from(g.tile_row0) + tr as i64) * 16 + i / 16;
+            let cc = (i64::from(g.tile_col0) + tc as i64) * 16 + i % 16;
+            let cell: Vec<f64> = (rr * f - 2..rr * f + 2)
+                .flat_map(|r| (cc * f - 2..cc * f + 2).filter_map(move |c| src(r, c)))
+                .collect();
+            if cell.is_empty() {
+                continue;
+            }
+            let mean = cell.iter().sum::<f64>() / cell.len() as f64;
+            let got = f64::from(q[i as usize]) * f64::from(step_mm) / 1000.0;
+            assert!(
+                (got - mean).abs() <= 0.5 + 1e-9,
+                "cell ({rr}, {cc}): {got} vs {mean}"
+            );
+            // A query at the coarse sample itself reads it.
+            let at = point(rr as f64 * 4.0, cc as f64 * 4.0);
+            let h = d.elevation(at, &mut DemScratch::new()).unwrap();
+            // The 1e-7° point grid leaves a neighbour a weight of at most 1e-4 (cliffs: 3 km).
+            assert!((h - got).abs() < 0.5, "{h} vs {got}");
+            checked += 1;
+        }
+    }
+    assert!(checked > 1_000, "{checked}");
+    // Coarse tile rows cover source rows [64k − 2, 64k + 62): the one over source rows
+    // 126–189 has none, so its tiles are absent: 5 of them, as the grid's last cell column
+    // (64, from source columns 254 and 255) starts a fifth tile column.
+    assert_eq!((g.tile_rows, g.tile_cols), (5, 5));
+    assert_eq!(absent_tiles, 5);
+    // Deterministic.
+    let again = dem::coarsen(&fine, c, &Family::standard(), &THRESHOLDS, &opts).unwrap();
+    assert_eq!(again.map(|a| a.0), Some(cb));
+    // Bad choices are refused.
+    for bad in [
+        dem::Coarse { factor: 0, ..c },
+        dem::Coarse { step_mm: 0, ..c },
+        dem::Coarse { tile_log2: 7, ..c },
+    ] {
+        assert!(dem::coarsen(&fine, bad, &Family::standard(), &THRESHOLDS, &opts).is_err());
+    }
+}
+
+/// D-225: `concat` keeps every section's grids, in order, tile codes as they were.
+#[test]
+fn concat_keeps_every_grid() {
+    let (g1, c1, t1) = grid_codes(ROW0, COL0, 1, 2, &[], &mut Rng(1));
+    let (g2, c2, t2) = grid_codes(ROW0 + 4, COL0 + 9, 2, 1, &[1], &mut Rng(2));
+    let (b1, b2) = (section(g1, &c1), section(g2, &c2));
+    let (d1, d2) = (open(&b1, 2), open(&b2, 2));
+    let (body, n) = dem::concat(&[d1, d2]).unwrap().unwrap();
+    assert_eq!(n, 4);
+    let d = coarse_open(&body, n);
+    d.check().unwrap();
+    assert_eq!(d.grids(), 2);
+    let mut s = DemScratch::new();
+    for (t, want) in t1.iter().chain(&t2).enumerate() {
+        assert_eq!(
+            d.decode_tile(t, &mut s).map(<[i32]>::to_vec).as_ref(),
+            want.as_ref()
+        );
+    }
+    assert!(dem::concat(&[]).unwrap().is_none());
+}
