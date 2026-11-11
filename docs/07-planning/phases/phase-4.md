@@ -305,9 +305,9 @@ The first consumer brief (Tithipatra, 2026-11-11, D-193); the reply and statuses
   `Engine::by_iso`, called on each entry `admin_at` and `ancestors` return (D-197, 2026-11-11).
   Open: the CLDR differential of G-iso (CLDR not yet pinned), the world part's codes (Natural
   Earth's are stale; needs CLDR to know which), India's file with the four 2023 renames
-- [ ] TG-03: zone rules in the pack: compiled TZif for every zone the outlines name, from the
+- [x] TG-03: zone rules in the pack: compiled TZif for every zone the outlines name, from the
   same tzdb release, its version in the manifest; `tz_offset_at`, `tz_local_candidates`,
-  `tz_version`; a gate that every zone has rules (research note first)
+  `tz_version`; a gate that every zone has rules (D-196, 2026-11-11)
 - [ ] TG-06: substring search of 3+ characters across scripts, measured for size (research
   note first)
 - [ ] TG-01: `CHANGELOG.md` and a `v0.x` tag; a consumer builds the engine from the tag

@@ -1,7 +1,7 @@
 ---
 title: "The engine: layered packs"
 status: draft
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # The engine: layered packs
@@ -93,6 +93,8 @@ asks its layer for each section before reading it (`ensure`). Per query:
 | `tz_of(place)` | `timezone`, else `timezone-index`; names `timezone` when neither is installed |
 | `tz_at` | `timezone-index` |
 | `elevation_at` | `dem` |
+| `tz_offset_at`, `tz_local_candidates`, `zone_name` | `tz-rules` |
+| `tz_offset_at_point` | `timezone-index` and `tz-rules` |
 | `bbox_of`, `boundary` | `boundaries`; a layer without it is skipped |
 | `admin_at` | `admin-index` (with `boundaries`) |
 | `countries_near`, `missing_packs` | `admin-index`; a layer without `boundaries` installed is skipped |
@@ -104,7 +106,7 @@ never touches heights.
 
 Each component the engine reads has a Cargo feature, all on by default: `elevation`, `admin`,
 `names`, `search` (with `names`), `timezone`, `timezone-index`, `boundaries`,
-`admin-index` (with `boundaries`) and `dem`. `point` is always built; `postal` and `extra` are
+`admin-index` (with `boundaries`), `dem` and `tz-rules`. `point` is always built; `postal` and `extra` are
 read raw through `Layer::section_bytes`. A build without a feature has neither the query nor
 the section reader, and treats the component as not installed: a pack's sections of it are
 never read or hashed, `Layer::components()` leaves it out, and a query of a built component
@@ -120,6 +122,8 @@ that needs it (a search context needs `admin`) returns `Error::MissingComponent`
 | `tz_of` | `timezone` or `timezone-index` |
 | `tz_at` | `timezone-index` |
 | `elevation_at` | `dem` |
+| `tz_offset_at`, `tz_local_candidates`, `tz_version`, `zone_name` | `tz-rules` |
+| `tz_offset_at_point` | `tz-rules` and `timezone-index` |
 | `bbox_of`, `boundary` | `boundaries` |
 | `admin_at` | `admin-index` |
 | `countries_near`, `missing_packs` | `admin-index` |
@@ -193,6 +197,9 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 | `admin_at(at)` | The first layer in precedence order whose ADMIN_REGION holds the point (coverage beats existence) | none; a unit whose ID a higher layer claims is answered from that layer |
 | `tz_at(at)` | The first layer whose REGION (timezones) holds the point; a layer without REGION but with PLACE_TZ and admin outlines (the baseline) answers with the zone of its deepest unit holding the point (D-151) | as `admin_at` |
 | `elevation_at(at)` | The first layer covering the point whose DEM has samples around it; a layer whose DEM has an absent tile there (masked away, the sea) is passed (D-192) | none: a `Height`, bilinear between four samples, within half the DEM's step (±1 m), with the DEM product, its spacing in metres, the datum and the layer (D-195) |
+| `tz_offset_at(zone, t)`, `tz_local_candidates(zone, civil)` | The first layer by precedence whose `TZ_RULES` holds the zone name or link (D-196) | none: an `Offset` (seconds east of UTC, tzdb's abbreviation, `is_dst`, the layer), from the stored transitions, then the POSIX TZ footer; a civil time is `Local::Unique`, `Gap { before, after }` or `Overlap { earlier, later }` (offset `o` is valid when the offset at `civil − o` is `o`). Years ±9,999; no allocation, no text parsing |
+| `tz_version()` | The first layer by precedence with `TZ_RULES` | its manifest's `tzdb` (`2026f`) |
+| `tz_offset_at_point(at, t)` | `tz_at(at)`, then the area's zone as its own layer's rules link it to its row (`zone_name`), then `tz_offset_at` | the area and its offset |
 | `bbox_of(place)`, `boundary(place, lod)` | The first layer by precedence whose pack has a row for the place's ID with an outline: a part holding a unit only as a stub is passed (D-194) | none: `bbox_of` is the stored POLY_INDEX box (O(depth), rounded outward, so it holds the outline); `boundary` writes the rings into a reused `Outline`, level of detail 0 to 6 with its tolerance |
 | `iso_code(place)` | The first layer by precedence whose pack has a row for the place's ID with an ISO 3166 code: a pack without `ISO_CODES` is passed, a part's stub carries its unit's code (D-197) | none: an `IsoCode` (`NP`, `NP-P3`), inline, `as_str()` without allocation; O(log rows) per layer |
 | `by_iso(code)` | Layers with `ISO_CODES` in precedence order, a scan of each one's codes | none: the place as the winning layer answers for its ID, while that answer still has the code |
@@ -261,4 +268,5 @@ Each gate was first shown to fail on a planted bug (D-114).
 | 2026-11-11 | `bbox_of` and `boundary` (feature `boundaries`): a place's extent for framing a map, and its outline at a level of detail | D-194 |
 | 2026-11-11 | `elevation_at` returns a `Height`: metres, DEM product, spacing, datum and layer | D-195 |
 | 2026-11-11 | `iso_code` and `by_iso` (feature `admin`): ISO 3166 codes of countries and units | D-197 |
+| 2026-11-11 | Zone rules (feature `tz-rules`): `tz_offset_at`, `tz_local_candidates`, `tz_version`, `tz_offset_at_point`, `zone_name` | D-196 |
 | 2026-11-10 | The embedded baseline: feature `baseline`, `BASELINE`, `Engine::with_baseline`, `LayerOptions::baseline()` | D-153 |

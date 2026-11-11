@@ -223,6 +223,7 @@ fn each_component_set_answers_as_the_whole_pack_or_names_what_is_missing() {
             Component::Boundaries,
             Component::Postal,
             Component::Dem,
+            Component::TzRules,
         ]))
     );
     // The probes are not trivially empty.
@@ -247,8 +248,8 @@ fn each_component_set_answers_as_the_whole_pack_or_names_what_is_missing() {
     let sets: [&[Component]; 9] = [
         &[P],
         &[P, Elevation],
-        &[P, Timezone],
-        &[P, TimezoneIndex],
+        &[P, Timezone, Component::TzRules],
+        &[P, TimezoneIndex, Component::TzRules],
         &[P, Names],
         &[P, Names, Search],
         &[P, Names, Search, Admin],
@@ -309,4 +310,9 @@ fn a_set_without_what_it_needs_is_refused() {
         Some(Component::Names)
     );
     assert_eq!(refused(&[Component::Elevation]), Some(Component::Point));
+    // A zone needs its rules (D-196).
+    assert_eq!(
+        refused(&[Component::Point, Component::Timezone]),
+        Some(Component::TzRules)
+    );
 }

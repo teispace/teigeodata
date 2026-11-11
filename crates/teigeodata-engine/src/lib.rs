@@ -50,6 +50,8 @@ mod query;
 mod search;
 #[cfg(feature = "shared")]
 mod shared;
+#[cfg(feature = "tz-rules")]
+mod tz;
 
 use core::fmt;
 use std::sync::Arc;
@@ -63,6 +65,10 @@ pub use query::{Hit, Near, Place, Scratch};
 #[cfg(feature = "admin")]
 pub use teigeodata_core::IsoCode;
 pub use teigeodata_format::release_cmp;
+#[cfg(feature = "tz-rules")]
+pub use teigeodata_format::tz_rules::{Civil, Local};
+#[cfg(feature = "tz-rules")]
+pub use tz::Offset;
 
 /// The radius in metres for [`Engine::countries_near`] over the embedded baseline: its
 /// outlines are simplified at the 2 km level (main, D-157; lite at 500 m, D-147), whose

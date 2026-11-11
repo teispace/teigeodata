@@ -42,6 +42,8 @@ use teigeodata_format::region::Region;
 use teigeodata_format::search::Search;
 #[cfg(feature = "search")]
 use teigeodata_format::search::rules::Rule;
+#[cfg(feature = "tz-rules")]
+use teigeodata_format::tz_rules::TzRules;
 use teigeodata_format::{Bbox, Kind, Pack, release_cmp};
 #[cfg(feature = "search")]
 use teigeodata_names::PhoneticKey;
@@ -139,6 +141,8 @@ const NOT_BUILT: &[Component] = &[
     Component::AdminIndex,
     #[cfg(not(feature = "dem"))]
     Component::Dem,
+    #[cfg(not(feature = "tz-rules"))]
+    Component::TzRules,
 ];
 
 /// Where the block-hash list of every installed section is (located, not proved: D-142).
@@ -197,6 +201,9 @@ pub(crate) struct Views<'a> {
     /// Terrain heights at any point (D-192); absent in a pack without them.
     #[cfg(feature = "dem")]
     pub(crate) dem: Option<Dem<'a>>,
+    /// The rules of the pack's timezones (D-196); absent in a pack without them.
+    #[cfg(feature = "tz-rules")]
+    pub(crate) tz_rules: Option<TzRules<'a>>,
     /// The block hashes of every installed section of 1 MiB or more, located but not proved:
     /// each list is proved against its section hash on the section's first use (D-142).
     pub(crate) blocks: Vec<(Kind, Blocks<'a, 'static>)>,
@@ -278,6 +285,8 @@ impl<'a> Views<'a> {
         };
         #[cfg(feature = "dem")]
         let dem = get(Kind::DEM).map(|s| Dem::open(&s)).transpose()?;
+        #[cfg(feature = "tz-rules")]
+        let tz_rules = get(Kind::TZ_RULES).map(|s| TzRules::open(&s)).transpose()?;
         let blocks = located_blocks(&pack, missing)?;
         Ok(Self {
             pack,
@@ -312,6 +321,8 @@ impl<'a> Views<'a> {
             poly_index,
             #[cfg(feature = "dem")]
             dem,
+            #[cfg(feature = "tz-rules")]
+            tz_rules,
             blocks,
             missing,
         })

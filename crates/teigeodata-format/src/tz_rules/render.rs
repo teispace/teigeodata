@@ -12,22 +12,22 @@ use crate::Error;
 /// `zic`'s `addabbr`: adds `abbr` to the characters `chs` (NUL-terminated strings), sharing a
 /// suffix of an existing abbreviation, or growing one that is a suffix of `abbr`; its index.
 pub(super) fn add_abbr(chs: &mut Vec<u8>, abbr: &[u8]) -> usize {
-    let alen = abbr.len();
-    let mut incr = alen + 1;
+    let abbr_len = abbr.len();
+    let mut incr = abbr_len + 1;
     let mut i = 0;
     while i < chs.len() {
         let rest = chs.get(i..).unwrap_or_default();
-        let clen = rest.iter().position(|&b| b == 0).unwrap_or(rest.len());
-        if alen <= clen {
-            let isuff = i + (clen - alen);
-            if chs.get(isuff..isuff + alen) == Some(abbr) {
+        let chars_len = rest.iter().position(|&b| b == 0).unwrap_or(rest.len());
+        if abbr_len <= chars_len {
+            let isuff = i + (chars_len - abbr_len);
+            if chs.get(isuff..isuff + abbr_len) == Some(abbr) {
                 return isuff;
             }
-        } else if chs.get(i..i + clen) == abbr.get(alen - clen..) {
-            incr = alen - clen;
+        } else if chs.get(i..i + chars_len) == abbr.get(abbr_len - chars_len..) {
+            incr = abbr_len - chars_len;
             break;
         }
-        i += clen + 1;
+        i += chars_len + 1;
     }
     let mut add: Vec<u8> = abbr.to_vec();
     add.push(0);
