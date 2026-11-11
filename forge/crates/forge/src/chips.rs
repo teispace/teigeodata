@@ -703,6 +703,49 @@ fn chip_line(r: &Row, png: &str, s: &Scene, frame: &Frame) -> String {
     )
 }
 
+/// Draws chip `k` of `rows` and returns its `chips.tsv` line; `None` when no scene covers it.
+fn one(
+    k: usize,
+    rows: &[Row],
+    points: &[Vec<(i32, i32)>],
+    dir: &Path,
+    pass: u8,
+) -> Result<Option<String>, String> {
+    let Some(r) = rows.get(k) else {
+        return Ok(None);
+    };
+    let (mirror, shift) = if pass == 2 {
+        (true, SHIFT_M)
+    } else {
+        (false, (0.0, 0.0))
+    };
+    let b = chip_box(r);
+    let deg = |v: i32| f64::from(v) / E7;
+    let found = scenes((deg(b.0), deg(b.1), deg(b.2), deg(b.3)))?;
+    let mut done = None;
+    for s in found.iter().take(TRIES) {
+        if let Some(chip) = draw(s, r.at, half_of(r), mirror, shift)? {
+            done = Some((s, chip));
+            break;
+        }
+    }
+    let Some((s, (frame, mut rgb))) = done else {
+        return Ok(None);
+    };
+    let utm = Utm::of_epsg(frame.epsg).ok_or("not UTM")?;
+    let pts: Vec<(f64, f64)> = points
+        .get(k)
+        .into_iter()
+        .flatten()
+        .map(|&(x, y)| utm.forward((f64::from(x) / E7, f64::from(y) / E7)))
+        .collect();
+    overlay(&mut rgb, &frame, &pts);
+    let name = format!("{:03}-{}.png", k + 1, r.id.replace(':', "-"));
+    let file = dir.join(&name);
+    fs::write(&file, png(&rgb, SIZE, SIZE)?).map_err(|e| format!("{}: {e}", file.display()))?;
+    Ok(Some(chip_line(r, &name, s, &frame)))
+}
+
 /// `forge labels chips <cc> [--pass 2] [--only <id,…>]`.
 pub(crate) fn chips(root: &Path, cc: &str, args: &[String]) -> Result<String, String> {
     let (mut pass, mut only) = (1_u8, None::<BTreeSet<String>>);
@@ -714,66 +757,89 @@ pub(crate) fn chips(root: &Path, cc: &str, args: &[String]) -> Result<String, St
             _ => return Err("usage: forge labels chips <cc> [--pass 2] [--only <id,…>]".into()),
         }
     }
-    let rows: Vec<Row> = rows(root, cc)?
-        .into_iter()
-        .filter(|r| pass == 1 || r.second)
-        .filter(|r| only.as_ref().is_none_or(|o| o.contains(&r.id)))
-        .collect();
+    // Every row keeps its number in the sample, whichever rows are drawn.
+    let rows: Vec<Row> = rows(root, cc)?;
+    let wanted =
+        |r: &Row| (pass == 1 || r.second) && only.as_ref().is_none_or(|o| o.contains(&r.id));
     let dir = root
         .join("data/build/labels")
         .join(cc)
         .join(format!("pass{pass}"));
     fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let boxes: Vec<(i32, i32, i32, i32)> = rows.iter().map(chip_box).collect();
+    // Boxes of the rows not drawn are empty, so their points are not gathered.
+    let boxes: Vec<(i32, i32, i32, i32)> = rows
+        .iter()
+        .map(|r| if wanted(r) { chip_box(r) } else { (1, 1, 0, 0) })
+        .collect();
     let points = buildings(root, cc, &boxes)?;
+    // Chips already drawn are kept (a run resumes), unless named by `--only`.
+    let file = dir.join("chips.tsv");
+    let mut lines: BTreeMap<String, String> = BTreeMap::new();
+    if let Ok(text) = fs::read_to_string(&file) {
+        for line in text.lines().skip(1) {
+            let mut f = line.split('\t');
+            if let (Some(id), Some(png)) = (f.next(), f.nth(2))
+                && dir.join(png).exists()
+                && only.as_ref().is_none_or(|o| !o.contains(id))
+            {
+                lines.insert(id.to_string(), format!("{line}\n"));
+            }
+        }
+    }
+    let todo: Vec<usize> = (0..rows.len())
+        .filter(|&k| {
+            rows.get(k)
+                .is_some_and(|r| wanted(r) && !lines.contains_key(&r.id))
+        })
+        .collect();
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(4)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let results: Vec<(usize, Result<Option<String>, String>)> = pool.install(|| {
+        use rayon::prelude::*;
+        todo.par_iter()
+            .map(|&k| {
+                // A network error is retried; a place still failing is reported, not fatal.
+                let mut last = Ok(None);
+                for _ in 0..3 {
+                    last = one(k, &rows, &points, &dir, pass);
+                    if last.is_ok() {
+                        break;
+                    }
+                }
+                (k, last)
+            })
+            .collect()
+    });
+    let (mut drawn, mut missing) = (0_usize, Vec::new());
+    for (k, result) in results {
+        let id = rows.get(k).map_or("?", |r| r.id.as_str());
+        match result {
+            Ok(Some(line)) => {
+                lines.insert(id.to_string(), line);
+                drawn += 1;
+            }
+            Ok(None) => missing.push(format!("{id} (no clear scene)")),
+            Err(e) => missing.push(format!("{id} ({e})")),
+        }
+    }
+    let mut ordered: Vec<&String> = lines.values().collect();
+    ordered.sort_by_key(|l| l.split('\t').nth(3).unwrap_or_default().to_string());
     let mut tsv = String::from(
         "id\tname\tclass\tpng\tscene\tdate\tcloud\tepsg\tcentre_e\tcentre_n\thalf_m\tmirror\n",
     );
-    let (mut drawn, mut missing) = (0_usize, Vec::new());
-    for (k, r) in rows.iter().enumerate() {
-        let (mirror, shift) = if pass == 2 {
-            (true, SHIFT_M)
-        } else {
-            (false, (0.0, 0.0))
-        };
-        let b = boxes.get(k).copied().unwrap_or_default();
-        let deg = |v: i32| f64::from(v) / E7;
-        let found = scenes((deg(b.0), deg(b.1), deg(b.2), deg(b.3)))?;
-        let mut done = None;
-        for s in found.iter().take(TRIES) {
-            if let Some(chip) = draw(s, r.at, half_of(r), mirror, shift)? {
-                done = Some((s, chip));
-                break;
-            }
-        }
-        let Some((s, (frame, mut rgb))) = done else {
-            missing.push(r.id.clone());
-            continue;
-        };
-        let utm = Utm::of_epsg(frame.epsg).ok_or("not UTM")?;
-        let pts: Vec<(f64, f64)> = points
-            .get(k)
-            .into_iter()
-            .flatten()
-            .map(|&(x, y)| utm.forward((f64::from(x) / E7, f64::from(y) / E7)))
-            .collect();
-        overlay(&mut rgb, &frame, &pts);
-        let name = format!("{:03}-{}.png", k + 1, r.id.replace(':', "-"));
-        let file = dir.join(&name);
-        fs::write(&file, png(&rgb, SIZE, SIZE)?).map_err(|e| format!("{}: {e}", file.display()))?;
-        tsv.push_str(&chip_line(r, &name, s, &frame));
-        drawn += 1;
-    }
-    let file = dir.join("chips.tsv");
+    tsv.extend(ordered.into_iter().map(String::as_str));
     fs::write(&file, tsv).map_err(|e| format!("{}: {e}", file.display()))?;
     Ok(format!(
-        "labels chips: {drawn} of {} drawn into {} (pass {pass}){}",
-        rows.len(),
+        "labels chips: {drawn} drawn, {} kept, of {} into {} (pass {pass}){}",
+        lines.len() - drawn,
+        rows.iter().filter(|r| wanted(r)).count(),
         dir.display(),
         if missing.is_empty() {
             String::new()
         } else {
-            format!("; no clear scene for {}", missing.join(", "))
+            format!("; not drawn: {}", missing.join("; "))
         }
     ))
 }
