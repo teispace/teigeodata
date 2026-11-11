@@ -16,7 +16,7 @@ A short status. The numbers and evidence live in each phase file and the
 | 0 Foundations and research | **M0 met** 2026-11-07 (D-069) | [phase 0 §0.5](../07-planning/phases/phase-0.md#05-exit-review) |
 | 1 Core and format | **M1 met** 2026-11-07 (D-080) | [phase 1 §1.6](../07-planning/phases/phase-1.md#16-exit-review) |
 | 2 Indexes | **M2 met** 2026-11-07 (D-087) | [phase 2 §2.4](../07-planning/phases/phase-2.md#24-exit-review) |
-| 3 Forge and Nepal data | in progress: 3.1–3.3 and 3.5 done; 3.4 DEM and 3.6 names in progress; 3.7–3.8 open | [phase 3](../07-planning/phases/phase-3.md) |
+| 3 Forge and Nepal data | in progress: 3.1–3.3 and 3.5 done (3.5 lite codes wait on Q-009); 3.4 DEM and 3.6 names in progress; 3.7–3.8 open | [phase 3](../07-planning/phases/phase-3.md) |
 | 4 Engine, baseline and sync | started in parallel with Phase 3: 4.1 engine and 4.4 transport | [phase 4](../07-planning/phases/phase-4.md) |
 | 5–8 | not started (bindings prototyped in S4, D-065 to D-068) | [roadmap](../07-planning/roadmap.md) |
 
@@ -74,7 +74,8 @@ A short status. The numbers and evidence live in each phase file and the
   product, spacing and datum (TG-07, D-195), zone rules from the outlines' own tzdb release
   (TG-03, D-196), ISO 3166 codes (TG-02, D-197), the release policy and the `v0.1.0` tag
   (TG-01, D-198), zones before 1970 researched (TG-08: backzone adds nothing for South Asia).
-  Next: substring search (TG-06), then 3.5 point → postal code. Waiting: Nepal and India data
+  Point → postal code in the engine and `tgd postal` (3.5, D-200). Next: substring search
+  (TG-06, being built in a worktree), then 3.4 summit heights. Waiting: Nepal and India data
   releases (TG-05, maintainer steps).
 - **Terrain (D-192):** packs carry the DEM masked to their units; `elevation_at` and
   `tgd elevation` answer any point; the Nepal size waits for the DEM tiles.
@@ -133,3 +134,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-10 | 4.2: main's world part built from Overture (D-155 to D-158): ownership by the view, islets and 2 km to fit Z1, locator radius 3 km, region below its city; every world, locator, Z1 and golden gate green | snap rounding on sorted records; 4.3 TUF trust |
 | 2026-11-11 | 4.8: installs stream frame by frame with a SIGKILL gate (D-187); the world-size install, its list over two frames, cut and resumed, nightly (D-188); 4.1b: partial installs punch holes, points only 1.50 of 2.85 MB on disk (D-189) | two-release delta (needs Nepal builds); M4 exit review |
 | 2026-11-11 | Tithipatra's brief planned (D-193); TG-04 extent (D-194), TG-07 height source (D-195), TG-01 release policy (D-198); four research notes (ISO codes, zone rules, substring search, zones before 1970) by parallel agents; zone rules and ISO codes being built in worktrees | Merge TG-03 and TG-02, tag v0.1.0, TG-06, then 3.5 |
+| 2026-11-11 | TG-03 and TG-02 merged, `v0.1.0` tagged (D-198); 3.5 point → postal code in the engine and `tgd postal` (D-200) | TG-06 merge, 3.4 summit heights |
