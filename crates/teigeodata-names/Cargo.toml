@@ -12,6 +12,8 @@ publish.workspace = true
 [dependencies]
 unicode-normalization = { version = "0.1.26", default-features = false }
 unicode-script = { version = "0.5.9", default-features = false }
+# Natural logs for the transliteration model (`xlit`), the same result on every platform.
+libm = { version = "0.2.16", default-features = false }
 serde = { version = "1.0.229", default-features = false, features = ["alloc", "derive"], optional = true }
 
 [features]

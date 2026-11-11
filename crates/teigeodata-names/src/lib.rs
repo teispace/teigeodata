@@ -21,6 +21,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 pub mod romanise;
+pub mod xlit;
 
 use unicode_normalization::UnicodeNormalization;
 use unicode_script::{Script, UnicodeScript};
