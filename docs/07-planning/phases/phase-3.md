@@ -114,7 +114,9 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   5.0 M codes within 3.1% of the model ([benchmark](../../02-research/benches/phase-3.md#postal))
 - [ ] Nepal's codes in the lite build: wait for a stated licence (Q-009) or derive them from
   the CBS codes
-- [ ] Point → postal code in the SDK: ADMIN_REGION's unit, then its records (with the engine)
+- [x] Point → postal code in the SDK (D-200): `Engine::postal_at` (ADMIN_REGION's deepest
+  unit with codes of an admin-aligned scheme, then its records), `postal_lookup`,
+  `postal_prefix`, `postal_codes_of`, `tgd postal`
 
 ### 3.6 Names and corrections
 - [x] Display names from the lexicon and a romaniser (D-106): rule tables as data
@@ -211,3 +213,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | 3.4: lite elevation from NASADEM (D-132) | the lite build had no heights |
 | 2026-11-09 | 3.7: lite timezones from tzdb (D-138); a GeoNames timezone check its own item | the lite build had no timezones |
 | 2026-11-11 | 3.4: the DEM ships masked to the pack's units, terrain by `elevation_at` | D-192 |
+| 2026-11-11 | 3.5: point → postal code in the engine and `tgd postal` (D-200) | the SDK half of 3.5 |

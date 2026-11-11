@@ -216,6 +216,30 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Postal codes: a code to its places (`44600`, `SW1A 1AA`), codes by prefix, or the codes
+    /// at a point (latitude and longitude).
+    Postal {
+        /// A code, or a latitude in degrees.
+        #[arg(allow_hyphen_values = true)]
+        code: String,
+        /// With a latitude: the longitude in degrees.
+        #[arg(allow_hyphen_values = true)]
+        lon: Option<f64>,
+        /// Only this scheme (`np`, `gb`).
+        #[arg(long)]
+        scheme: Option<String>,
+        /// The codes that start with it (autocomplete).
+        #[arg(long, conflicts_with = "lon")]
+        prefix: bool,
+        /// With `--prefix`: at most this many codes.
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+        #[command(flatten)]
+        packs: Packs,
+        /// Print a JSON array of `{"scheme", "code", "kind", "id", "name", …}`.
+        #[arg(long)]
+        json: bool,
+    },
     /// Set up the store: the catalog's mirrors and its trusted root.
     Init {
         /// A metadata mirror (the catalog's TUF repository); repeat for several, best first.
@@ -555,6 +579,31 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             packs,
             json,
         } => query::elevation(store, &packs.packs, (lat, lon), json, out),
+        Command::Postal {
+            code,
+            lon,
+            scheme,
+            prefix,
+            limit,
+            packs,
+            json,
+        } => {
+            let ask = match lon {
+                Some(lon) => query::PostalAsk::At {
+                    lat: code
+                        .parse()
+                        .map_err(|e| Fail::Refused(format!("{code}: {e}")))?,
+                    lon,
+                },
+                None => query::PostalAsk::Code {
+                    code,
+                    scheme,
+                    prefix,
+                    limit,
+                },
+            };
+            query::postal(store, &packs.packs, ask, json, out)
+        }
         Command::Init { repo, assets, root } => sync::init(store, &repo, &assets, &root, out),
         Command::Refresh { countries } => sync::refresh(store, &countries, out),
         Command::Catalog { json } => sync::catalog(store, json, out),

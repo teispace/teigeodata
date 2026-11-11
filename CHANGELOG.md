@@ -11,6 +11,16 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ## [Unreleased]
 
+### Engine (`teigeodata-engine`)
+
+- Postal codes (feature `postal`, D-200): `postal_lookup(code, scheme)`, `postal_prefix`,
+  `postal_codes_of(place)`, `postal_at(point)` and `postal_replacement`, returning
+  `PostalCode` (scheme, code, kind, validity, place).
+
+### Command line (`tgd`)
+
+- `tgd postal <code>` (or `--prefix`, or `<lat> <lon>`) prints codes and their places; `--json`.
+
 ## [0.1.0] - 2026-11-11
 
 The first tagged version. Everything below is new.

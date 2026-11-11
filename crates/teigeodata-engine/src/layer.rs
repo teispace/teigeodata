@@ -35,6 +35,8 @@ use teigeodata_format::places::Places;
 use teigeodata_format::poly_index::PolyIndex;
 #[cfg(feature = "boundaries")]
 use teigeodata_format::polygons::Polygons;
+#[cfg(feature = "postal")]
+use teigeodata_format::postal::Postal;
 use teigeodata_format::redirects::Redirects;
 #[cfg(any(feature = "timezone-index", feature = "admin-index"))]
 use teigeodata_format::region::Region;
@@ -121,7 +123,7 @@ const KINDS: usize = 32;
 
 /// The components whose Cargo feature is off: this build has no reader for them, so their
 /// sections are never read and their queries do not exist (D-137). `point` is always built;
-/// `postal` and `extra` are read raw through [`Layer::section_bytes`].
+/// `extra` is read raw through [`Layer::section_bytes`].
 const NOT_BUILT: &[Component] = &[
     #[cfg(not(feature = "elevation"))]
     Component::Elevation,
@@ -143,6 +145,8 @@ const NOT_BUILT: &[Component] = &[
     Component::Dem,
     #[cfg(not(feature = "tz-rules"))]
     Component::TzRules,
+    #[cfg(not(feature = "postal"))]
+    Component::Postal,
 ];
 
 /// Where the block-hash list of every installed section is (located, not proved: D-142).
@@ -204,6 +208,9 @@ pub(crate) struct Views<'a> {
     /// The rules of the pack's timezones (D-196); absent in a pack without them.
     #[cfg(feature = "tz-rules")]
     pub(crate) tz_rules: Option<TzRules<'a>>,
+    /// Postal codes to places (D-090, D-200); absent in a pack without them.
+    #[cfg(feature = "postal")]
+    pub(crate) postal: Option<Postal<'a>>,
     /// The block hashes of every installed section of 1 MiB or more, located but not proved:
     /// each list is proved against its section hash on the section's first use (D-142).
     pub(crate) blocks: Vec<(Kind, Blocks<'a, 'static>)>,
@@ -287,6 +294,11 @@ impl<'a> Views<'a> {
         let dem = get(Kind::DEM).map(|s| Dem::open(&s)).transpose()?;
         #[cfg(feature = "tz-rules")]
         let tz_rules = get(Kind::TZ_RULES).map(|s| TzRules::open(&s)).transpose()?;
+        #[cfg(feature = "postal")]
+        let postal = get(Kind::POSTAL)
+            .zip(places)
+            .map(|(s, p)| Postal::open(&s, p.len()))
+            .transpose()?;
         let blocks = located_blocks(&pack, missing)?;
         Ok(Self {
             pack,
@@ -323,6 +335,8 @@ impl<'a> Views<'a> {
             dem,
             #[cfg(feature = "tz-rules")]
             tz_rules,
+            #[cfg(feature = "postal")]
+            postal,
             blocks,
             missing,
         })

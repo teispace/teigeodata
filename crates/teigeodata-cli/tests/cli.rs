@@ -621,7 +621,7 @@ fn every_command_has_help_and_completions() {
         .filter_map(|l| l.split_whitespace().next())
         .filter(|c| *c != "help")
         .collect();
-    assert!(commands.len() >= 22, "{commands:?}");
+    assert!(commands.len() >= 23, "{commands:?}");
     for c in &commands {
         let h = ok(&[c, "--help"]);
         assert!(h.contains(&format!("Usage: tgd {c}")), "{c}: {h}");
@@ -737,4 +737,77 @@ fn admin_units_show_their_iso_codes() {
     let id = settlement["id"].as_str().unwrap();
     let nominatim = json(&["get", id, "--pack", s(&p), "--nominatim"]);
     assert_eq!(nominatim[0]["address"]["country_code"], "np");
+}
+
+/// Postal codes (D-200): a code to its place in another script's digits, autocomplete, the
+/// codes at a point through its district, JSON, and exit 1 for nothing found.
+#[test]
+fn postal_codes_answer_by_code_prefix_and_point() {
+    use teigeodata_format::postal::{self, Code, CodeKind, Rule};
+    let d = dir("postal");
+    let mut m = common::synthetic(300, 3);
+    let districts: Vec<u32> = m.admin.as_ref().unwrap().rows[1..].to_vec();
+    let rules = [Rule {
+        name: "np".into(),
+        admin_aligned: true,
+        ignore: " -".into(),
+        templates: vec!["99999".into(), "9999999".into()],
+        ..Rule::default()
+    }];
+    let mut codes = Vec::new();
+    for (i, &row) in districts.iter().enumerate() {
+        for (text, kind) in [
+            (format!("1060{i}"), CodeKind::Area),
+            (format!("1060{i}01"), CodeKind::Part),
+        ] {
+            codes.push(Code {
+                scheme: "np".into(),
+                code: text,
+                place: row,
+                kind,
+                valid_from: None,
+                valid_to: None,
+                redirect: None,
+            });
+        }
+    }
+    let body = postal::encode(&rules, &codes, m.ids.len() as u32, true).unwrap();
+    m.raw.push((Kind::POSTAL, codes.len() as u64, body));
+    let p = d.join("np.tgd");
+    std::fs::write(&p, signed(&m.encode())).unwrap();
+    let pack = s(&p);
+    let text = ok(&["postal", "१०६०२", "--pack", pack]);
+    assert_eq!(text.lines().count(), 1, "{text}");
+    assert!(text.starts_with("np 10602\tarea\t"), "{text}");
+    let v = json(&[
+        "postal", "106", "--prefix", "--limit", "3", "--pack", pack, "--json",
+    ]);
+    let found: Vec<&str> = v
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["code"].as_str().unwrap())
+        .collect();
+    assert_eq!(found, ["10600", "1060001", "10601"]);
+    // At district 2's centre: its code and its ward's.
+    let all = records(&p);
+    let id = v[0]["id"].as_str().unwrap();
+    let d0 = all.iter().find(|r| r["id"] == id).unwrap();
+    let (lat, lon) = (
+        d0["lat"].as_f64().unwrap().to_string(),
+        d0["lon"].as_f64().unwrap().to_string(),
+    );
+    let v = json(&["postal", &lat, &lon, "--pack", pack, "--json"]);
+    let found: Vec<(&str, &str)> = v
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| (c["code"].as_str().unwrap(), c["kind"].as_str().unwrap()))
+        .collect();
+    assert_eq!(found, [("10600", "area"), ("1060001", "part")]);
+    assert_eq!(v[0]["id"], id);
+    // Nothing found: exit 1; JSON still an empty array.
+    let o = tgd(&["postal", "99999", "--pack", pack, "--json"]);
+    assert_eq!(o.status.code(), Some(1));
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "[]");
 }

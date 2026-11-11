@@ -98,6 +98,8 @@ asks its layer for each section before reading it (`ensure`). Per query:
 | `bbox_of`, `boundary` | `boundaries`; a layer without it is skipped |
 | `admin_at` | `admin-index` (with `boundaries`) |
 | `countries_near`, `missing_packs` | `admin-index`; a layer without `boundaries` installed is skipped |
+| `postal_lookup`, `postal_prefix`, `postal_codes_of`, `postal_replacement` | `postal`; a layer with codes not installed is passed, and named only when no layer answers |
+| `postal_at` | `postal` and `admin-index` |
 
 `Place` carries no elevation: `Engine::elevation(&place)` reads it, so a points-only `get`
 never touches heights.
@@ -106,8 +108,8 @@ never touches heights.
 
 Each component the engine reads has a Cargo feature, all on by default: `elevation`, `admin`,
 `names`, `search` (with `names`), `timezone`, `timezone-index`, `boundaries`,
-`admin-index` (with `boundaries`), `dem` and `tz-rules`. `point` is always built; `postal` and `extra` are
-read raw through `Layer::section_bytes`. A build without a feature has neither the query nor
+`admin-index` (with `boundaries`), `dem`, `tz-rules` and `postal`. `point` is always built;
+`extra` is read raw through `Layer::section_bytes`. A build without a feature has neither the query nor
 the section reader, and treats the component as not installed: a pack's sections of it are
 never read or hashed, `Layer::components()` leaves it out, and a query of a built component
 that needs it (a search context needs `admin`) returns `Error::MissingComponent`.
@@ -127,6 +129,8 @@ that needs it (a search context needs `admin`) returns `Error::MissingComponent`
 | `bbox_of`, `boundary` | `boundaries` |
 | `admin_at` | `admin-index` |
 | `countries_near`, `missing_packs` | `admin-index` |
+| `postal_lookup`, `postal_prefix`, `postal_codes_of`, `postal_replacement` | `postal` |
+| `postal_at` | `postal` and `admin-index` |
 
 Measured by `cargo xtask sizes --native` (macOS arm64, release, LTO, 2026-11-09): the engine
 with no component features (open, `get`, `reverse`) adds 97.3 KiB (60.9 KiB gzip) to a
@@ -202,6 +206,9 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 | `tz_offset_at_point(at, t)` | `tz_at(at)`, then the area's zone as its own layer's rules link it to its row (`zone_name`), then `tz_offset_at` | the area and its offset |
 | `bbox_of(place)`, `boundary(place, lod)` | The first layer by precedence whose pack has a row for the place's ID with an outline: a part holding a unit only as a stub is passed (D-194) | none: `bbox_of` is the stored POLY_INDEX box (O(depth), rounded outward, so it holds the outline); `boundary` writes the rings into a reused `Outline`, level of detail 0 to 6 with its tolerance |
 | `iso_code(place)` | The first layer by precedence whose pack has a row for the place's ID with an ISO 3166 code: a pack without `ISO_CODES` is passed, a part's stub carries its unit's code (D-197) | none: an `IsoCode` (`NP`, `NP-P3`), inline, `as_str()` without allocation; O(log rows) per layer |
+| `postal_lookup(code, scheme)`, `postal_prefix(input, scheme, limit)` | The first layer by precedence whose `POSTAL` holds the code: a code in two layers answers once (D-200) | the code's records as `PostalCode`s (scheme and code inline, kind, validity, whether replaced), each place as the layer that wins its ID answers it; input in any form the scheme's rule folds (other scripts' digits, full-width, separators) |
+| `postal_codes_of(place)` | The first layer by precedence holding the place's ID whose `POSTAL` has records for it: a part without codes is passed | in code order: an area code and its parts (a local level and its wards), a post office |
+| `postal_at(at)` | `admin_at(at)`, then the deepest unit that an admin-aligned scheme gives codes to | that unit and its codes; a scheme that is not admin-aligned is never answered from a point |
 | `by_iso(code)` | Layers with `ISO_CODES` in precedence order, a scan of each one's codes | none: the place as the winning layer answers for its ID, while that answer still has the code |
 | `countries_near(at, r)` | Every layer with outlines: POLY_INDEX boxes that meet the circle's box, then `Polygons::within` (holds the point or a border within `r`) on the country polygons (the locator, D-149) | union by ID, each answered by the layer that wins it |
 | `missing_packs(at, r)` | As `countries_near` | its countries whose pack (the ID's namespace, `np`) is not installed; a partial pack (`ae-du`) counts where its box holds the point |
@@ -266,6 +273,7 @@ Each gate was first shown to fail on a planted bug (D-114).
 | 2026-11-10 | `tz_at` from a layer's units and PLACE_TZ when it has no timezone REGION | D-151 |
 | 2026-11-11 | `elevation_at` (feature `dem`): terrain at any point from a layer's DEM; the DEM scratch lives in `Scratch` | D-192 |
 | 2026-11-11 | `bbox_of` and `boundary` (feature `boundaries`): a place's extent for framing a map, and its outline at a level of detail | D-194 |
+| 2026-11-11 | Postal codes (feature `postal`): `postal_lookup`, `postal_prefix`, `postal_codes_of`, `postal_at`, `postal_replacement` | D-200 |
 | 2026-11-11 | `elevation_at` returns a `Height`: metres, DEM product, spacing, datum and layer | D-195 |
 | 2026-11-11 | `iso_code` and `by_iso` (feature `admin`): ISO 3166 codes of countries and units | D-197 |
 | 2026-11-11 | Zone rules (feature `tz-rules`): `tz_offset_at`, `tz_local_candidates`, `tz_version`, `tz_offset_at_point`, `zone_name` | D-196 |

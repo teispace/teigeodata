@@ -45,6 +45,8 @@ mod layer;
 mod map;
 #[cfg(feature = "boundaries")]
 mod outline;
+#[cfg(feature = "postal")]
+mod postal;
 mod query;
 #[cfg(feature = "search")]
 mod search;
@@ -59,11 +61,15 @@ use std::sync::Arc;
 pub use layer::{Layer, LayerId, LayerOptions, Load, Verify};
 #[cfg(feature = "boundaries")]
 pub use outline::{Outline, Ring};
+#[cfg(feature = "postal")]
+pub use postal::PostalCode;
 #[cfg(feature = "dem")]
 pub use query::{Datum, DemSource, Height};
 pub use query::{Hit, Near, Place, Scratch};
 #[cfg(feature = "admin")]
 pub use teigeodata_core::IsoCode;
+#[cfg(feature = "postal")]
+pub use teigeodata_format::postal::CodeKind;
 pub use teigeodata_format::release_cmp;
 #[cfg(feature = "tz-rules")]
 pub use teigeodata_format::tz_rules::{Civil, Local};

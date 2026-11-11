@@ -214,3 +214,101 @@ pub(crate) fn elevation(
         None => Err(Fail::Refused("no terrain there".into())),
     }
 }
+
+/// What `tgd postal` asks.
+#[derive(Debug)]
+pub(crate) enum PostalAsk {
+    /// A code to its places; with `prefix`, up to `limit` codes starting with it.
+    Code {
+        code: String,
+        scheme: Option<String>,
+        prefix: bool,
+        limit: usize,
+    },
+    /// The codes at a point (D-200).
+    At { lat: f64, lon: f64 },
+}
+
+const fn code_kind(kind: teigeodata_engine::CodeKind) -> &'static str {
+    use teigeodata_engine::CodeKind;
+    match kind {
+        CodeKind::Area => "area",
+        CodeKind::Part => "part",
+        CodeKind::PostOffice => "post_office",
+        CodeKind::Point => "point",
+    }
+}
+
+/// `tgd postal`: a code to its places, codes by prefix, or the codes at a point (D-200). One
+/// line per code and place, or a JSON array; nothing found is exit 1.
+pub(crate) fn postal(
+    store: &std::path::Path,
+    packs: &[PathBuf],
+    ask: PostalAsk,
+    json: bool,
+    out: &mut dyn Write,
+) -> Result<(), Fail> {
+    let e = if packs.is_empty() {
+        crate::sync::Opened::open(store)?.engine(&[])?
+    } else {
+        engine(packs)?
+    };
+    let mut codes = Vec::new();
+    match ask {
+        PostalAsk::Code {
+            code,
+            scheme,
+            prefix: false,
+            ..
+        } => e.postal_lookup(&code, scheme.as_deref(), &mut codes)?,
+        PostalAsk::Code {
+            code,
+            scheme,
+            prefix: true,
+            limit,
+        } => e.postal_prefix(&code, scheme.as_deref(), limit, &mut codes)?,
+        PostalAsk::At { lat, lon } => {
+            e.postal_at(point::<E7>(lat, lon)?, &mut Scratch::default(), &mut codes)?;
+        }
+    }
+    let mut buf = [0_u8; 1024];
+    let mut rows = Vec::with_capacity(codes.len());
+    for c in &codes {
+        let name = match e.name(&c.place, &mut buf) {
+            Ok(n) => n.map(str::to_owned),
+            Err(teigeodata_engine::Error::MissingComponent { .. }) => None,
+            Err(x) => return Err(x.into()),
+        };
+        rows.push(serde_json::json!({
+            "scheme": c.scheme(),
+            "code": c.code(),
+            "kind": code_kind(c.kind),
+            "valid_from": c.valid_from,
+            "valid_to": c.valid_to,
+            "replaced": c.is_replaced(),
+            "id": c.place.id.to_string(),
+            "name": name,
+            "admin_level": c.place.admin_level,
+        }));
+    }
+    if json {
+        writeln!(out, "{}", serde_json::Value::Array(rows))?;
+    } else {
+        for (c, r) in codes.iter().zip(&rows) {
+            writeln!(
+                out,
+                "{} {}\t{}\t{}\t{}{}",
+                c.scheme(),
+                c.code(),
+                code_kind(c.kind),
+                c.place.id,
+                r["name"].as_str().unwrap_or("-"),
+                if c.is_replaced() { "\t(replaced)" } else { "" }
+            )?;
+        }
+    }
+    if codes.is_empty() {
+        return Err(Fail::Refused("no postal code".into()));
+    }
+    Ok(())
+}
