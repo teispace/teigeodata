@@ -70,6 +70,8 @@ pub use query::{Datum, DemSource, Height};
 pub use query::{Hit, Near, Place, Scratch};
 #[cfg(feature = "admin")]
 pub use teigeodata_core::IsoCode;
+#[cfg(feature = "elevation")]
+pub use teigeodata_format::elevation::HeightSource;
 #[cfg(feature = "postal")]
 pub use teigeodata_format::postal::CodeKind;
 pub use teigeodata_format::release_cmp;

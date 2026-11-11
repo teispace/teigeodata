@@ -4,7 +4,7 @@
 //! The HTTP server (Phase 6) moves this module as it is.
 //!
 //! - **Native** (`--json`, NDJSON): `id`, `name`, `kind`, `admin_level`, `lat`, `lon`,
-//!   `elevation` (m), `parent` (ID), `timezone` (its area's name), `iso_code` (ISO 3166, a
+//!   `elevation` (m), `elevation_source` (`surveyed` or `model`, when stated), `parent` (ID), `timezone` (its area's name), `iso_code` (ISO 3166, a
 //!   country's or unit's, only when it has one, D-197), and for a query `meters` (distance) or
 //!   `score` (search).
 //! - **GeoJSON** (RFC 7946): a FeatureCollection of points, the native record as properties
@@ -22,7 +22,7 @@ use std::io::Write;
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value, json};
 use teigeodata_core::{IsoCode, PlaceId, PlaceKind};
-use teigeodata_engine::{Engine, Error, Place};
+use teigeodata_engine::{Engine, Error, HeightSource, Place};
 
 use crate::Fail;
 
@@ -50,6 +50,9 @@ pub(crate) struct Record<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) lon: Option<f64>,
     pub(crate) elevation: Option<i16>,
+    /// Where the height came from: `surveyed` or `model` (D-219).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) elevation_source: Option<&'static str>,
     pub(crate) parent: Option<Shown<PlaceId>>,
     pub(crate) timezone: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -137,6 +140,7 @@ pub(crate) fn record<'b>(
         lat: with_point.then(|| place.point.lat_degrees()),
         lon: with_point.then(|| place.point.lon_degrees()),
         elevation: installed(engine.elevation(place))?,
+        elevation_source: installed(engine.elevation_source(place))?.map(HeightSource::name),
         parent,
         timezone,
         iso_code: installed(engine.iso_code(place))?.map(Shown),
@@ -275,6 +279,9 @@ fn text(out: &mut dyn Write, r: &Record<'_>) -> Result<(), Fail> {
     )?;
     if let Some(e) = r.elevation {
         write!(out, "  {e} m")?;
+        if let Some(s) = r.elevation_source {
+            write!(out, " ({s})")?;
+        }
     }
     if let Some(t) = r.timezone {
         write!(out, "  {t}")?;

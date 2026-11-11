@@ -11,6 +11,8 @@ use core::ops::{ControlFlow, Range};
 
 use teigeodata_core::{E6, E7, PlaceId, PlaceKind, Point};
 use teigeodata_format::Kind;
+#[cfg(feature = "elevation")]
+use teigeodata_format::elevation::HeightSource;
 use teigeodata_format::idmap::IdMap;
 use teigeodata_format::place_index::{Neighbour, PlaceIndex, Rect, haversine_of};
 use teigeodata_format::redirects::Fate;
@@ -420,6 +422,23 @@ impl Engine {
             .heights
             .as_ref()
             .and_then(|h| h.get(place.row as usize)))
+    }
+
+    /// Where the stored height of `place` came from (TG-13, D-219): surveyed or the model;
+    /// `None` where unstated or the layer has no heights.
+    ///
+    /// # Errors
+    /// As [`Engine::elevation`].
+    #[cfg(feature = "elevation")]
+    pub fn elevation_source(&self, place: &Place) -> Result<Option<HeightSource>, Error> {
+        let Some(l) = self.layer(place.layer) else {
+            return Ok(None);
+        };
+        l.ensure(Kind::ELEVATION)?;
+        Ok(l.views()
+            .heights
+            .as_ref()
+            .and_then(|h| h.source(place.row as usize)))
     }
 
     /// The canonical name of `place` (its first name record), decoded into `buf`.

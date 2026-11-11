@@ -345,10 +345,14 @@ impl<'a> Merged<'_, 'a> {
             place_index::encode(&points, node)?,
         ));
         if self.any(Kind::ELEVATION) {
-            let heights = self.scatter_in(Kind::ELEVATION, None, Elevations::open, |h, _, r| {
-                Ok(h.get(r as usize))
-            })?;
-            if let Some(body) = elevation::encode(&heights)? {
+            let both = self.scatter_in(
+                Kind::ELEVATION,
+                (None, None),
+                Elevations::open,
+                |h, _, r| Ok((h.get(r as usize), h.source(r as usize))),
+            )?;
+            let (heights, sources): (Vec<_>, Vec<_>) = both.into_iter().unzip();
+            if let Some(body) = elevation::encode_with(&heights, &sources)? {
                 out.push((Kind::ELEVATION, Encoding::TABLE, k, body));
             }
         }

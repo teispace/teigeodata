@@ -1,11 +1,12 @@
 //! ELEVATION (kind 19): each place's height, one row per PLACES row (D-133). Its own section,
 //! so a client that wants coordinates only never downloads it ([components]).
 //!
-//! A [column table](teigeodata_core::table) with one column:
+//! A [column table](teigeodata_core::table):
 //!
-//! | ID | Column | Values |
-//! |---:|---|---|
-//! | 1 | [`HEIGHT`] | orthometric metres above EGM2008, + [`BIAS`]; 0 = unknown |
+//! | ID | Column | Values | |
+//! |---:|---|---|---|
+//! | 1 | [`HEIGHT`] | orthometric metres above EGM2008, + [`BIAS`]; 0 = unknown | required |
+//! | 2 | [`SOURCE`] | where each height came from, a [`HeightSource`] code; 0 = unstated | optional (TG-13, D-219) |
 //!
 //! The item count is the number of places, and must equal PLACES' (the engine checks it when it
 //! opens a layer). A pack where no place has a height has no ELEVATION section. Reads never panic.
@@ -18,6 +19,47 @@ use crate::{Error, Kind, Section, columns};
 
 /// The height column.
 pub const HEIGHT: u16 = 1;
+/// The source column (D-219).
+pub const SOURCE: u16 = 2;
+
+/// Where a place's stored height came from (TG-13, D-219).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum HeightSource {
+    /// Surveyed: the height a survey or gazetteer states for the place (a summit's surveyed
+    /// height, a gazetteer's `elevation`), kept because it agrees with the terrain model.
+    Surveyed = 1,
+    /// Modelled: a digital elevation model sampled at the place's point.
+    Model = 2,
+}
+
+impl HeightSource {
+    /// The stored code.
+    #[must_use]
+    pub const fn code(self) -> u32 {
+        self as u32
+    }
+
+    /// The source of a stored code; `None` for 0 (unstated) and unknown codes.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Option<Self> {
+        match code {
+            1 => Some(Self::Surveyed),
+            2 => Some(Self::Model),
+            _ => None,
+        }
+    }
+
+    /// Its name, as reports and bindings spell it.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Surveyed => "surveyed",
+            Self::Model => "model",
+        }
+    }
+}
+
 /// What [`HEIGHT`] adds to a height so that every `i16` but `i16::MIN` is stored above 0.
 pub const BIAS: i32 = 32_768;
 
@@ -25,6 +67,7 @@ pub const BIAS: i32 = 32_768;
 #[derive(Clone, Copy, Debug)]
 pub struct Elevations<'a> {
     height: Packed<'a>,
+    source: Option<Packed<'a>>,
 }
 
 fn fail(problem: &'static str) -> Error {
@@ -46,10 +89,11 @@ impl<'a> Elevations<'a> {
         let rows = usize::try_from(section.item_count())
             .map_err(|_| fail("the row count does not fit this platform"))?;
         let height = columns::required(&table, Kind::ELEVATION, HEIGHT, Some(rows))?;
-        if table.ids().any(|id| id != HEIGHT) {
+        if table.ids().any(|id| id != HEIGHT && id != SOURCE) {
             return Err(fail("an unknown column"));
         }
-        Ok(Self { height })
+        let source = columns::optional(&table, Kind::ELEVATION, SOURCE, rows)?;
+        Ok(Self { height, source })
     }
 
     /// The number of rows.
@@ -77,8 +121,16 @@ impl<'a> Elevations<'a> {
             .and_then(|v| i16::try_from(v - BIAS).ok())
     }
 
-    /// Checks every value: each fits an `i16` once unbiased, and at least one is known (the
-    /// writer leaves the section out otherwise). O(rows).
+    /// Where the height of `row` came from; `None` where unstated, unknown or past the end.
+    #[must_use]
+    pub fn source(&self, row: usize) -> Option<HeightSource> {
+        self.get(row)?;
+        HeightSource::from_code(self.source?.get(row)?)
+    }
+
+    /// Checks every value: each fits an `i16` once unbiased, at least one is known (the
+    /// writer leaves the section out otherwise), and each source is a known code, stated only
+    /// for a known height. O(rows).
     ///
     /// # Errors
     /// [`Error::Payload`] on the first bad value.
@@ -90,6 +142,17 @@ impl<'a> Elevations<'a> {
                 return Err(fail("a height outside i16"));
             }
             known |= v != 0;
+        }
+        if let Some(src) = self.source {
+            for (v, h) in src.values(0..n).zip(self.height.values(0..n)) {
+                if v != 0 && (HeightSource::from_code(v).is_none() || h == 0) {
+                    return Err(Error::Payload {
+                        kind: Kind::ELEVATION.0,
+                        column: SOURCE,
+                        problem: "a source code unknown, or stated for an unknown height",
+                    });
+                }
+            }
         }
         if known {
             Ok(())
@@ -109,7 +172,33 @@ impl<'a> Elevations<'a> {
 /// [`Error::Write`] for `i16::MIN`, the stored "unknown".
 #[cfg(feature = "write")]
 pub fn encode(heights: &[Option<i16>]) -> Result<Option<alloc::vec::Vec<u8>>, Error> {
+    encode_with(heights, &[])
+}
+
+/// [`encode`] with each height's source (D-219): `sources` is empty (no column) or one per
+/// height; a source beside an unknown height is refused. The column is left out when no
+/// source is stated.
+///
+/// # Errors
+/// As [`encode`], and [`Error::Write`] when `sources` has another length or states a source
+/// for an unknown height.
+#[cfg(feature = "write")]
+pub fn encode_with(
+    heights: &[Option<i16>],
+    sources: &[Option<HeightSource>],
+) -> Result<Option<alloc::vec::Vec<u8>>, Error> {
     use alloc::vec::Vec;
+    if !sources.is_empty()
+        && (sources.len() != heights.len()
+            || sources
+                .iter()
+                .zip(heights)
+                .any(|(s, h)| s.is_some() && h.is_none()))
+    {
+        return Err(Error::Write(
+            "height sources are not one per height, or one is stated for an unknown height",
+        ));
+    }
     if heights.contains(&Some(i16::MIN)) {
         return Err(Error::Write("an elevation of i16::MIN"));
     }
@@ -121,14 +210,23 @@ pub fn encode(heights: &[Option<i16>]) -> Result<Option<alloc::vec::Vec<u8>>, Er
         .map(|h| h.map_or(0, |m| (i32::from(m) + BIAS).unsigned_abs()))
         .collect();
     let col = teigeodata_core::bitpack::encode_auto(&values);
-    teigeodata_core::table::encode(&[(HEIGHT, &col[..])])
+    let src: Vec<u32> = sources
+        .iter()
+        .map(|s| s.map_or(0, HeightSource::code))
+        .collect();
+    let src_col = teigeodata_core::bitpack::encode_auto(&src);
+    let mut cols: Vec<(u16, &[u8])> = alloc::vec![(HEIGHT, &col[..])];
+    if src.iter().any(|&v| v != 0) {
+        cols.push((SOURCE, &src_col[..]));
+    }
+    teigeodata_core::table::encode(&cols)
         .map(Some)
         .map_err(|_| Error::Write("the elevation table"))
 }
 
 #[cfg(all(test, feature = "write"))]
 mod tests {
-    use super::{Elevations, encode};
+    use super::{Elevations, HeightSource, encode, encode_with};
     use crate::{Kind, Section};
 
     #[test]
@@ -156,5 +254,30 @@ mod tests {
         assert!(Elevations::open(&wrong).is_err());
         let other = Section::unpacked(Kind::PLACES, 6, &bytes);
         assert!(Elevations::open(&other).is_err());
+        // Without the column every source is unstated.
+        assert_eq!(e.source(0), None);
+    }
+
+    #[test]
+    fn sources_round_trip_and_bad_ones_are_refused() {
+        use HeightSource::{Model, Surveyed};
+        let heights = [Some(8_848), Some(1_400), None];
+        let sources = [Some(Surveyed), Some(Model), None];
+        let bytes = encode_with(&heights, &sources).unwrap().unwrap();
+        let s = Section::unpacked(Kind::ELEVATION, 3, &bytes);
+        let e = Elevations::open(&s).unwrap();
+        e.check().unwrap();
+        assert_eq!(
+            (e.source(0), e.source(1), e.source(2), e.source(3)),
+            (Some(Surveyed), Some(Model), None, None)
+        );
+        // No source stated: no column, the same bytes as `encode`.
+        assert_eq!(
+            encode_with(&heights, &[None; 3]).unwrap(),
+            encode(&heights).unwrap()
+        );
+        // A source for an unknown height, or the wrong count, is refused.
+        assert!(encode_with(&heights, &[None, None, Some(Model)]).is_err());
+        assert!(encode_with(&heights, &[Some(Model)]).is_err());
     }
 }
