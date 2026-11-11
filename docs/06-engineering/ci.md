@@ -22,7 +22,7 @@ and checked again before each workflow change.
 | `bindings` | push to `main`, release | cross-compile matrix (Android ABIs, iOS slices, WASM variants, desktop targets), binding tests per language | ≤ 45 min |
 | `fast-check` (`windows` job) | push, PR | clippy and tests of `teigeodata-sync` and `teigeodata-cli` on `windows-latest` (D-190) | ≤ 25 min |
 | `nightly` | schedule | fuzzing, Miri, sanitizers, mutants, coverage, differential, benchmarks against baselines | ≤ 6 h per job |
-| `data-build` | manual (weekly once the mirror exists) | one job per pack: `forge make --fetch`, then G-det (the build stage again, `cmp`), G-lic (`cargo xtask check-pack`, also on the baseline slice, D-145, and the world part, D-147), the world and locator gates
+| `data-build` | weekly (Monday 03:41 UTC) and manual | one job per pack: `forge make --fetch`, then G-det (the build stage again, `cmp`), G-lic (`cargo xtask check-pack`, also on the baseline slice, D-145, and the world part, D-147), the world and locator gates
 (`tests/world.rs` on the built files: cities under their country, the slice's IDs, the border
 probes, `missing_packs`; D-147, D-149) and the golden gate (`pack-eval` with `S3_GATE`); reports as artifacts. Later: sharded tiles and a final verify-sign-publish job | per shard ≤ 3 h |
 | `release` | tag | crates.io, npm, PyPI, pub.dev, Maven Central, NuGet, SwiftPM, CLI binaries; signing, SBOM, provenance attestations | |
