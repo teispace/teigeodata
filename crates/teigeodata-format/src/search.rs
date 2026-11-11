@@ -441,7 +441,8 @@ fn tagged<'b>(buf: &'b mut [u8; fst::MAX_KEY], tag: u8, key: &str) -> Option<&'b
 
 #[cfg(feature = "write")]
 pub use write::{
-    Extra, Maps, encode, encode_maps, encode_maps_with, encode_substring, encode_with, tagged_keys,
+    Extra, Maps, SubstringKeys, encode, encode_maps, encode_maps_with, encode_substring,
+    encode_with, substring_from_names, tagged_keys,
 };
 
 #[cfg(feature = "write")]
@@ -548,6 +549,46 @@ mod write {
             tagged.insert(key, rows.clone());
         }
         encode(&tagged, importance)
+    }
+
+    /// The substring keys of one name text, each passed to the sink: the caller's fold and
+    /// key rule (`teigeodata-names`), which the format does not depend on.
+    pub type SubstringKeys<'a> = dyn Fn(&str, &mut dyn FnMut(&str)) + 'a;
+
+    /// The SUBSTRING body of a NAMES section (D-199, D-213): every substring key `keys` gives
+    /// for each name text, with `importance` (SEARCH's, one per row). The one code path of the
+    /// forge, an embedded layer's build and a device that derives the index instead of
+    /// downloading it, so all three write the same bytes. Keys of 255 bytes or more are left
+    /// out, as in SEARCH.
+    ///
+    /// # Errors
+    /// As [`encode_substring`]; a reader's error for a malformed name.
+    pub fn substring_from_names(
+        names: &crate::names::Names<'_>,
+        importance: &[u8],
+        keys: &SubstringKeys<'_>,
+    ) -> Result<Vec<u8>, Error> {
+        let mut map: BTreeMap<alloc::string::String, BTreeSet<u32>> = BTreeMap::new();
+        let mut buf = [0_u8; crate::names::TEXT_BUFFER];
+        for row in 0..names.len() {
+            let r = u32::try_from(row).map_err(|_| Error::Write("too many rows"))?;
+            for name in names.names(row) {
+                let text = name.text(&mut buf)?;
+                keys(text, &mut |k: &str| {
+                    if k.len() < 255 {
+                        match map.get_mut(k) {
+                            Some(set) => {
+                                set.insert(r);
+                            }
+                            None => {
+                                map.insert(k.into(), BTreeSet::from([r]));
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        encode_substring(&map, importance)
     }
 
     /// Encodes a SEARCH body: `keys` maps each tagged key (tag byte, then the folded text) to

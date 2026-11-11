@@ -363,11 +363,10 @@ mod tests {
 /// `TGD_PACK=<pack> cargo test --release -p xtask -- --ignored derive --nocapture`
 #[cfg(test)]
 mod derive {
-    use std::collections::{BTreeMap, BTreeSet};
     use std::time::Instant;
 
-    use teigeodata_format::names::{Names, TEXT_BUFFER};
-    use teigeodata_format::search::{Search, encode_substring};
+    use teigeodata_format::names::Names;
+    use teigeodata_format::search::{Search, substring_from_names};
     use teigeodata_format::{Kind, Pack};
     use teigeodata_names::{fold, substring_keys};
 
@@ -379,34 +378,23 @@ mod derive {
         let names = Names::open(&pack.section(Kind::NAMES).unwrap()).unwrap();
         let search = Search::open(&pack.section(Kind::SEARCH).unwrap()).unwrap();
         let t0 = Instant::now();
-        let mut keys: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
-        let mut buf = [0_u8; TEXT_BUFFER];
-        for row in 0..names.len() {
-            let r = u32::try_from(row).unwrap();
-            for n in names.names(row) {
-                let f = fold(n.text(&mut buf).unwrap());
-                substring_keys(&f, |k| {
-                    if k.len() < 255 {
-                        keys.entry(k.to_owned()).or_default().insert(r);
-                    }
-                });
-            }
-        }
         let importance: Vec<u8> = (0..names.len())
             .map(|r| search.importance(u32::try_from(r).unwrap()))
             .collect();
+        let keys = |text: &str, out: &mut dyn FnMut(&str)| substring_keys(&fold(text), out);
+        let body = substring_from_names(&names, &importance, &keys).unwrap();
         let t1 = Instant::now();
-        let body = encode_substring(&keys, &importance).unwrap();
-        let t2 = Instant::now();
         let shipped = pack.section(Kind::SUBSTRING).unwrap().bytes();
         println!(
-            "keys {} in {:?}; encode {:?}; derived {} B, shipped {} B, equal {}",
-            keys.len(),
+            "derived in {:?}: {} B, shipped {} B, equal {}",
             t1 - t0,
-            t2 - t1,
             body.len(),
             shipped.len(),
             body == shipped
+        );
+        assert_eq!(
+            body, shipped,
+            "the derived SUBSTRING differs from the shipped one"
         );
     }
 }

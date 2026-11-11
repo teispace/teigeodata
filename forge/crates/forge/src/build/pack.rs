@@ -337,7 +337,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
 
     let (names_body, search_body, importance) =
         name_sections(&rows, input.profile, &input.args.admin)?;
-    let substring_body = substring_section(&rows, &importance)?;
+    let substring_body = substring_section(&names_body, &importance)?;
     let index_body = place_index::encode(&points, NODE).map_err(|e| e.to_string())?;
 
     let mut sections: Vec<Body> = vec![
@@ -660,30 +660,19 @@ pub(super) fn name_sections(
     Ok((names_body, search_body, importance))
 }
 
-/// The SUBSTRING body of the rows (D-199): the word suffixes of every name the SEARCH keys
-/// fold, with SEARCH's importance, so a query from the middle of a word ranks as search does.
-/// Keys longer than the automaton allows are left out, as in SEARCH.
-pub(super) fn substring_section(rows: &[&Place], importance: &[u8]) -> Result<Vec<u8>, String> {
-    let mut keys: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
-    for (row, p) in rows.iter().enumerate() {
-        let row = u32::try_from(row).unwrap_or(u32::MAX);
-        for nm in &p.names {
-            let f = fold(&nm.text);
-            substring_keys(&f, |k| {
-                if k.len() < 255 {
-                    match keys.get_mut(k) {
-                        Some(set) => {
-                            set.insert(row);
-                        }
-                        None => {
-                            keys.insert(k.to_string(), BTreeSet::from([row]));
-                        }
-                    }
-                }
-            });
-        }
-    }
-    search::encode_substring(&keys, importance).map_err(|e| e.to_string())
+/// The SUBSTRING body of a NAMES body (D-199): the word suffixes of every name it holds,
+/// folded, with SEARCH's importance, through the format's one builder
+/// ([`search::substring_from_names`]), so a device that derives the index writes these bytes.
+pub(super) fn substring_section(names_body: &[u8], importance: &[u8]) -> Result<Vec<u8>, String> {
+    let n = importance.len() as u64;
+    let section = teigeodata_format::Section::unpacked(Kind::NAMES, n, names_body);
+    let names = Names::open(&section).map_err(|e| e.to_string())?;
+    search::substring_from_names(&names, importance, &substring_keys_of).map_err(|e| e.to_string())
+}
+
+/// The substring keys of a name text: its fold's word suffixes (D-199).
+pub(crate) fn substring_keys_of(text: &str, out: &mut dyn FnMut(&str)) {
+    substring_keys(&fold(text), out);
 }
 
 /// The country's query rules for SEARCH (D-120): its phonetic key, unit-type abbreviations,
