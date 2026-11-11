@@ -12,8 +12,10 @@ under its licence.
 A [Teispace](https://github.com/teispace) project. Code under Apache-2.0; data under ODbL, with
 a CC-BY 4.0 lite build.
 
-> **Status:** Phase 0 (foundations and research). Nothing is published yet. See
-> [progress](docs/08-progress/progress.md) and the [roadmap](docs/07-planning/roadmap.md).
+> **Status:** Phases 3 and 4 (Nepal data, the engine and sync). No data release yet; the
+> crates are tagged for early consumers ([CHANGELOG.md](CHANGELOG.md),
+> [releases](docs/06-engineering/releases.md)). See [progress](docs/08-progress/progress.md)
+> and the [roadmap](docs/07-planning/roadmap.md).
 
 ## What it will do
 

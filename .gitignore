@@ -22,3 +22,4 @@ node_modules/
 __pycache__/
 /bindings/dart/pubspec.lock
 mutants.out*/
+/.claude/worktrees/
