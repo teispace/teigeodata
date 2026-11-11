@@ -40,10 +40,10 @@ labels. Plan: [embedded layer](../../02-research/notes/embedded-layer.md).
 | TG | Request | Status | Notes |
 |---|---|---|---|
 | TG-11 | Size report per component and language | done | `cargo xtask pack-sizes <pack> --langs ne,en`; tables in [sizes](../../05-data/sizes.md). Finding: only 9.1% of Nepal's places (main) and 0.7% of world cities have a Devanagari name today |
-| TG-12 | Embedded layer from a profile | planned | |
+| TG-12 | Embedded layer from a profile | done (D-214) | `forge embed --profile <name>` over `data/embed/<name>.yaml`; `baseline` rebuilds today's file byte for byte; `tithipatra` (world plus all of Nepal, Nepali and English names, search, outlines at 20 m) is 7.32 MB on the wire; `points-en` 1.17 MB. Zone outlines join with TG-16 |
 | TG-13 | World cities of 5,000 with heights | planned | |
-| TG-14 | Nepali and English for every place | planned | the largest data gap; transliteration research first |
-| TG-15 | India: towns, then villages | planned | research note first |
+| TG-14 | Nepali and English for every place | research done (D-215) | [note](../../02-research/notes/nepali-names.md): transliteration is the main path (about 80% of Nepal's places); our own engine reached 61% exact on official names in a prototype; please send the 100-per-kind correction list as data when ready |
+| TG-15 | India: towns, then villages | research done (D-216, D-217) | [note](../../02-research/notes/india-sources.md): Census 2011 towns joined to LGD; about 260 kB on the wire for 8,000 towns |
 | TG-16 | Outlines only as fine as needed | planned | Nepal at 20 m keeps 21% of vertices |
 | TG-17 | Opens fast, searches fast, small in memory | planned | SUBSTRING derived on the device: byte-identical in 0.38 s for Nepal |
 | TG-18 | Search at the MVP's bar, strict-tier option | planned | please send the MVP's test cases |

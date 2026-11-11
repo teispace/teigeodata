@@ -331,12 +331,13 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   of detail as their own components, each sized in the catalog; the profile and the client
   pick any set
 - [ ] Derive SUBSTRING on the device (engine feature `derive`), checked by digest
-- [ ] TG-12: `forge embed` from a profile file; a second, smaller profile
-- [ ] Nepal in full in the embedded layer
-- [ ] TG-13: world cities of 5,000 with heights; TG-14: Nepali and English names for every
-  place (research note on transliteration first)
+- [x] TG-12: `forge embed --profile` from `data/embed/<name>.yaml`; `baseline` byte-identical, `tithipatra` 7.32 MB wire, `points-en` 1.17 MB (D-214, 2026-11-11)
+- [x] Nepal in full in the embedded layer: all 95,726 places, IDs kept (D-214). Open: zone outlines and rules in the merge
+- [ ] TG-13: world cities of 5,000 with heights
+- [ ] TG-14: Nepali and English names for every place: research done (D-215); the chain, the
+  transliterator and G-xlit
 - [ ] TG-16: outline tolerance measured, Nepal's border exact
-- [ ] TG-15: India research note, then towns
+- [ ] TG-15: India: research done (D-216, D-217); then towns
 - [ ] TG-18, TG-19 and the strict-tier option
 - [ ] TG-17: phone-class benches with gates
 - [ ] TG-10: coarse elevation layer
@@ -405,3 +406,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-11 | 4.9b TG-02 done: ISO codes in their own `admin` section; `split.yaml` takes part addresses from `iso3166.yaml`; the world part's codes wait for CLDR | D-197 |
 | 2026-11-11 | 4.9b TG-06 done: substring search in its own section and component | D-199 |
 | 2026-11-11 | 4.9c: Tithipatra's addendum 1 placed; TG-11 done; indexes may be derived on the device | D-213 |
+| 2026-11-11 | 4.9c: TG-12 and Nepal in full done; TG-14 and TG-15 researched | D-214 to D-217 |
