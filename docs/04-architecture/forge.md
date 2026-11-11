@@ -1,7 +1,7 @@
 ---
 title: "The forge (data pipeline)"
 status: draft
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # The forge (data pipeline)
@@ -401,6 +401,17 @@ its place's `PLACE_TZ`; at most 0.1% may differ. Nepal 2026-11-09: main 28 of 93
 places just outside Nepal on timezone-boundary-builder's map, the G-pip set); lite 9 of 93,621
 (0.010%: far-western border records, Kalapani among them, that GeoNames puts in
 `Asia/Kolkata`).
+
+Zone rules (D-196, [ADR-0039](../03-decisions/adr/ADR-0039-tz-rules.md)): when a pack has
+timezone areas, the forge builds `zic` from the pinned tzcode of the outlines' tzdb release
+(`tzcode-2026f`; the release is the timezone source's `version` in `sources.lock`), runs
+`zic -b slim` on tzdata's main files and `backward` in a scratch directory under
+`data/build/tz-rules/`, removes it, and writes `TZ_RULES` with the manifest tag `tzdb`. Both
+tarballs pass the licence gate and join the attribution. G-tzrules: every area has its rules
+linked to its row, each zone rebuilds byte for byte as `zic` wrote it, and the tag is the
+compiled release; a zone `zic` did not compile stops the build. Split parts carry the rules
+of their own zones. Measured on 2026f: 93,232 B for the world's 444 outline zones; 2,492 B
+for Nepal's three.
 
 Measured on COD-AB Nepal on 2026-11-08:
 

@@ -69,6 +69,8 @@ pub(super) struct Input<'a> {
     pub(super) stated_tz: &'a BTreeMap<String, String>,
     /// The country's ISO 3166 codes (D-197), when it has `iso3166.yaml`.
     pub(super) iso: Option<&'a super::iso::Iso>,
+    /// The timezones' compiled rules (D-196); a pack with timezone areas needs them.
+    pub(super) tz_rules: Option<&'a super::tz_rules::Compiled>,
 }
 
 /// The search importance of a place, 0 to 130 as in spike S3 (D-052), from what every source
@@ -230,6 +232,28 @@ fn iso_section(
     Ok(codes)
 }
 
+/// `TZ_RULES` (D-196): the rules of each timezone area, linked to its PLACES row.
+fn tz_rules_section(
+    rows: &[u32],
+) -> Result<(Kind, Encoding, u64, Vec<u8>), String> {
+    let named: Vec<(&str, u32)> = input
+        .zones
+        .places
+        .iter()
+        .zip(rows)
+        .map(|(p, &row)| {
+            super::tz_rules::zone_name(&p.key)
+                .map(|n| (n, row))
+                .ok_or_else(|| format!("{}: not a zone key", p.key))
+        })
+        .collect::<Result<_, _>>()?;
+    let compiled = input
+        .tz_rules
+        .ok_or("G-tzrules: a pack with timezone areas and no compiled rules")?;
+    let body = super::tz_rules::section(compiled, &named)?;
+    Ok((Kind::TZ_RULES, Encoding::TABLE, named.len() as u64, body))
+}
+
 /// The IDs a pack was written with, by place key, and its redirects: what a split build's
 /// parts are given (D-191).
 pub(super) struct Given {
@@ -309,6 +333,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
             sections.push(tz);
         }
         sections.push((Kind::REGION, Encoding::TABLE, zone_rows.len() as u64, body));
+        sections.push(tz_rules_section(input, &zone_rows)?);
     }
     if let Some(g) = input.geometry {
         sections.extend(super::geometry::sections(g, &rows, &row_of)?);
@@ -495,6 +520,10 @@ fn assemble(
     let licence = if input.args.lite { "cc-by-4.0" } else { "odbl" };
     w.manifest(Tag::LICENCE, licence.as_bytes())
         .map_err(|e| e.to_string())?;
+    if let Some(r) = input.tz_rules.filter(|_| !input.zones.places.is_empty()) {
+        w.manifest(Tag::TZDB, r.version.as_bytes())
+            .map_err(|e| e.to_string())?;
+    }
     if !input.attribution.is_empty() {
         w.manifest(Tag::ATTRIBUTION, input.attribution.as_bytes())
             .map_err(|e| e.to_string())?;
@@ -708,6 +737,7 @@ fn verify(
         None => None,
     };
     let zones_ok = verify_zones(&p, rows, input)?;
+    let rules_line = verify_tz_rules(&p, rows, input)?;
     let tz_line = verify_place_tz(&p, &places, rows, input.stated_tz, input.given.is_none())?;
     let by_kind: BTreeMap<String, usize> = rows.iter().fold(BTreeMap::new(), |mut m, r| {
         *m.entry(format!("{:?}", r.kind)).or_default() += 1;
@@ -727,6 +757,9 @@ fn verify(
         distinct.len(),
     );
     if let Some(line) = tz_line {
+        let _ = writeln!(report, "\n{line}");
+    }
+    if let Some(line) = rules_line {
         let _ = writeln!(report, "\n{line}");
     }
     if let Some(line) = geometry_line {
@@ -820,6 +853,54 @@ fn verify_zones(p: &Pack<'_>, rows: &[&Place], input: &Input<'_>) -> Result<usiz
         }
     }
     Ok(zones_ok)
+}
+
+/// G-tzrules (D-196) on the written pack: a pack with timezone areas has `TZ_RULES` and the
+/// manifest's `tzdb`, every area has its rules linked to its row and rebuilt as `zic` wrote
+/// them, and the release is the one compiled; a pack without areas has neither.
+fn verify_tz_rules(
+    p: &Pack<'_>,
+    rows: &[&Place],
+    input: &Input<'_>,
+) -> Result<Option<String>, String> {
+    let tzdb = p.manifest().text(Tag::TZDB);
+    let Some(s) = p.section(Kind::TZ_RULES) else {
+        if input.zones.places.is_empty() && tzdb.is_none() {
+            return Ok(None);
+        }
+        return Err("G-tzrules: timezone areas without TZ_RULES, or a tzdb tag without it".into());
+    };
+    let compiled = input
+        .tz_rules
+        .ok_or("G-tzrules: TZ_RULES with nothing compiled")?;
+    let row_of: BTreeMap<&str, u32> = rows
+        .iter()
+        .enumerate()
+        .map(|(r, p)| (p.key.as_str(), u32::try_from(r).unwrap_or(u32::MAX)))
+        .collect();
+    let zones: Vec<(&str, u32)> = input
+        .zones
+        .places
+        .iter()
+        .map(|z| {
+            let name = super::tz_rules::zone_name(&z.key).ok_or("a zone key")?;
+            let row = row_of
+                .get(z.key.as_str())
+                .copied()
+                .ok_or("a zone has no row")?;
+            Ok((name, row))
+        })
+        .collect::<Result<_, &str>>()?;
+    let rules = teigeodata_format::tz_rules::TzRules::open(&s).map_err(|e| e.to_string())?;
+    super::tz_rules::check(&rules, tzdb, &zones, compiled)?;
+    Ok(Some(format!(
+        "G-tzrules (D-196): all {} timezone areas have rules from tzdb {} ({} sets, {} transitions, {} B), each linked to its row and rebuilt byte for byte as `zic -b slim` wrote it.",
+        zones.len(),
+        compiled.version,
+        rules.sets(),
+        rules.transitions(),
+        s.bytes().len()
+    )))
 }
 
 /// The most source records whose stated timezone may differ from their place's (G-tz,

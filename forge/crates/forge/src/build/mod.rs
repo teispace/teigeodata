@@ -49,6 +49,7 @@ mod population;
 mod postal;
 mod sources;
 mod split;
+pub(crate) mod tz_rules;
 mod units;
 pub(crate) mod world;
 mod world_overture;
@@ -279,6 +280,7 @@ fn packs(
 }
 
 /// `forge build …`.
+#[allow(clippy::too_many_lines, reason = "the build's stages, in order")]
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
     let (a, split) = args_and_split(root, args)?;
@@ -334,6 +336,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     );
     let corrected = corrections::run(root, who, &g.sources, &mut places, &units.levels, &out_dir)?;
     let zones = zone_places(root, &lock, g.tz.as_deref(), coverage, &a)?;
+    let rules = tz_rules::compile(root, &lock, g.tz.as_deref(), &zones)?;
     places.extend(zones.places.iter().cloned());
     let unnamed = keep_named(&mut places) + unnamed_clusters;
     let elevations = elevation::load(root, g.dem.as_deref(), &places)?;
@@ -359,6 +362,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         attribution: &g.attribution,
         stated_tz: &f.stated_tz,
         iso: f.iso.as_ref(),
+        tz_rules: rules.as_ref(),
     };
     let report = packs(
         &input,
@@ -486,6 +490,16 @@ fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
         Some(id) if allowed(id)? => Some(id.clone()),
         _ => None,
     };
+    // The zone rules come from the outlines' tzdb release (D-196): its data and code are read.
+    if let Some(t) = &tz {
+        for id in tz_rules::sources(lock, t)?.1 {
+            if !allowed(&id)? {
+                return Err(format!(
+                    "the zone rules' source {id} is not allowed in this build"
+                ));
+            }
+        }
+    }
     let postal = postal::load(root, &a.cc, lock, &a.admin, &mut allowed)?;
     let dem = match &a.dem {
         Some(id) if allowed(id)? => Some(id.clone()),

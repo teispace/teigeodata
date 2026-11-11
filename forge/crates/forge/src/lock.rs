@@ -20,6 +20,9 @@ pub(crate) struct Source {
     pub(crate) id: String,
     pub(crate) kind: String,
     pub(crate) url: String,
+    /// The upstream release (`2026f`); the timezone rules take the outlines' (D-196).
+    #[serde(default)]
+    pub(crate) version: Option<String>,
     #[serde(default)]
     pub(crate) mirror_url: Option<String>,
     #[serde(default)]

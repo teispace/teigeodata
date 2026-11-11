@@ -214,7 +214,22 @@ size = 483310
 licence = "Public domain (tzdb's LICENSE: \"Unless specified below, all files in the tz code and data are in the public domain\")"
 licence_class = "public-domain"
 countries = ["*"]
-used_by = "the lite build's timezones (D-138): zone1970.tab gives a single-zone country its zone over its admin-0 outline"
+used_by = "the lite build's timezones (D-138): zone1970.tab gives a single-zone country its zone over its admin-0 outline; the zone rules of every pack with timezones (D-196)"
+attribution = "Time zones: IANA Time Zone Database 2026f (public domain)"
+
+[[source]]
+id = "tzcode-2026f"
+title = "IANA Time Zone Database 2026f, code (tzcode2026f.tar.gz): the zic that compiles the zone rules"
+kind = "http"
+url = "https://data.iana.org/time-zones/releases/tzcode2026f.tar.gz"
+version = "2026f"
+retrieved = "2026-11-11"
+sha256 = "5a18da01393679ef2559214dc687563f7f3d05691f6f58b7fbc0166f3e796cd6"
+size = 329832
+licence = "Public domain (tzdb's LICENSE: \"Unless specified below, all files in the tz code and data are in the public domain\")"
+licence_class = "public-domain"
+countries = ["*"]
+used_by = "the zone rules of every pack with timezones (D-196): zic built from it compiles tzdb-2026f with -b slim"
 attribution = "Time zones: IANA Time Zone Database 2026f (public domain)"
 
 [[source]]

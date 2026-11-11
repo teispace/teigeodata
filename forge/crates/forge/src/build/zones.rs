@@ -215,12 +215,24 @@ fn country_zones<'a>(zone_tab: &'a str, cc: &str) -> Vec<&'a str> {
 
 /// The text of file `name` in the gzipped ustar archive at `path`.
 pub(super) fn tar_file(path: &Path, name: &str) -> Result<String, String> {
+    let (_, bytes) = tar_entries(path)?
+        .into_iter()
+        .find(|(n, _)| n == name)
+        .ok_or_else(|| format!("{}: no {name}", path.display()))?;
+    String::from_utf8(bytes).map_err(|e| format!("{name}: {e}"))
+}
+
+/// The regular files of the gzipped ustar archive at `path` (a tzdb or tzcode release, whose
+/// files are all at its top level): name and bytes. A name with a directory part, or `.` or
+/// `..`, is refused, so a name is safe to join to a directory.
+pub(super) fn tar_entries(path: &Path) -> Result<Vec<(String, Vec<u8>)>, String> {
     use std::io::Read as _;
     let file = fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut tar = Vec::new();
     flate2::read::GzDecoder::new(file)
         .read_to_end(&mut tar)
         .map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut out = Vec::new();
     let mut at = 0;
     while let Some(header) = tar.get(at..at + 512) {
         let field = |r: core::ops::Range<usize>| {
@@ -237,15 +249,23 @@ pub(super) fn tar_file(path: &Path, name: &str) -> Result<String, String> {
         let size = usize::from_str_radix(&field(124..136), 8)
             .map_err(|_| format!("{}: a tar header with a bad size", path.display()))?;
         let body = at + 512;
-        if entry.trim_start_matches("./") == name {
+        let kind = header.get(156).copied().unwrap_or(0);
+        if kind == b'0' || kind == 0 {
+            let name = entry.trim_start_matches("./").to_string();
+            if name.is_empty() || name.contains('/') || name == "." || name == ".." {
+                return Err(format!(
+                    "{}: an entry {name:?} not at the top",
+                    path.display()
+                ));
+            }
             let bytes = tar
                 .get(body..body + size)
                 .ok_or_else(|| format!("{}: {name} is cut short", path.display()))?;
-            return String::from_utf8(bytes.to_vec()).map_err(|e| format!("{name}: {e}"));
+            out.push((name, bytes.to_vec()));
         }
         at = body + size.div_ceil(512) * 512;
     }
-    Err(format!("{}: no {name}", path.display()))
+    Ok(out)
 }
 
 #[cfg(test)]

@@ -531,6 +531,7 @@ fn write_part(
         attribution: input.attribution,
         stated_tz: input.stated_tz,
         iso: input.iso,
+        tz_rules: input.tz_rules,
     };
     let (_, built) = pack::write(&part_input)?;
     let line = format!(

@@ -608,7 +608,20 @@ fn fetch_inputs(
             }
         }
     }
+    for id in rule_sources(lock, tz_of(recipe, lock, lite)?)? {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
     crate::fetch::run(root, &ids, false, false)
+}
+
+/// The zone rules' tzdb data and code (D-196): the release of timezone source `tz`.
+fn rule_sources(lock: &Lock, tz: Option<&str>) -> Result<Vec<String>, String> {
+    Ok(match tz {
+        Some(t) => build::tz_rules::sources(lock, t)?.1.into(),
+        None => Vec::new(),
+    })
 }
 
 /// `forge make <cc> …`.
@@ -676,6 +689,8 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     build_args.extend(sources.iter().cloned());
     let mut inputs: Vec<&str> = vec![recipe.admin.as_str()];
     inputs.extend(tz);
+    let rules = rule_sources(&lock, tz)?;
+    inputs.extend(rules.iter().map(String::as_str));
     inputs.extend(recipe.population.iter().map(String::as_str));
     let file = |name: &str| flag(name).map_or(Ok(Vec::new()), |p| read_or_empty(&root.join(p)));
     let bk = key(&[
