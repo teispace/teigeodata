@@ -90,8 +90,19 @@ outlines (4.8 MB), the substring and search indexes (3.7 MB), the point-to-unit 
 (1.6 MB) and names (1.1 MB). Where each goes is planned in
 [embedded layer](../02-research/notes/embedded-layer.md).
 
+## Embedded layers built from profiles
+
+`forge embed --profile <name>` (D-214), lite, 2026-11-11:
+
+| Profile | Rows | Disk | Wire |
+|---|--:|--:|--:|
+| `baseline` (world part and Nepal's slice; today's file, byte for byte) | 39,395 | 5,891,068 | 4,492,597 |
+| `tithipatra` (world part and all of Nepal at 20 m, names in Nepali and English) | 135,067 | 9,990,588 | 7,319,731 |
+| `points-en` (points, heights, admin, English names and search; no outlines) | 39,395 | 1,822,396 | 1,172,779 |
+
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-11 | Embedded layers from profiles | D-214 |
 | 2026-11-11 | First tables: components, names by script, outlines by level and level of detail | TG-11 |

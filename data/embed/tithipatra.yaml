@@ -1,0 +1,13 @@
+# Tithipatra's tier 1 (addendum 1, TG-12, D-213): offline from the first launch.
+# Grows as TG-13 (cities of 5,000), TG-14 (Nepali names everywhere), TG-15 (India's towns) and
+# TG-16 (measured tolerance) land.
+about: >-
+  Tithipatra's offline-first layer: the world's countries, first-level units and cities, and
+  Nepal in full, named in Nepali and English, with heights, zones, admin units and search.
+build: lite
+# timezone-index (zone outlines for tz_at near zone lines) joins with TG-16, once the merge carries REGION.
+components: [point, elevation, admin, names, search, timezone, boundaries, admin-index]
+languages: [ne, en]
+countries:
+  np: { rows: all, tolerance_m: 20 }
+wire_kb: 15000

@@ -40,6 +40,7 @@ mod corrections;
 mod dedupe;
 mod elevation;
 pub(crate) mod embed;
+mod embed_profile;
 pub(crate) mod geometry;
 mod ids;
 mod iso;

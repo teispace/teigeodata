@@ -2,6 +2,7 @@
 //!
 //! ```text
 //! forge embed [--lite] [--key <seed-file>]
+//! forge embed --profile <name> [--key <seed-file>]
 //! ```
 //!
 //! Merges the world part (`forge world`) and every country's slice (`forge baseline <cc>`) of
@@ -11,6 +12,9 @@
 //! the world's. One file and one engine layer, not a layer per slice: under 200 slice layers
 //! `search` took 34× and `reverse` 98× the world part's time (`tests/world.rs`,
 //! `the_cost_of_slices_as_layers`).
+//!
+//! With `--profile`, the layer is built from a consumer's profile instead
+//! ([`super::embed_profile`], TG-12).
 //!
 //! Gates: Z1, the file is at most [`BUDGET`] bytes; every ID of every part is a row, with the
 //! last part's point and ISO 3166 code (G-iso, D-197); the pack reads back verified with valid
@@ -35,18 +39,23 @@ pub(crate) const BUDGET: usize = 8_000_000;
 struct Args {
     lite: bool,
     key: Option<String>,
+    profile: Option<String>,
 }
 
 fn parse(args: &[String]) -> Result<Args, String> {
     let mut a = Args {
         lite: false,
         key: None,
+        profile: None,
     };
     let mut it = args.iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--lite" => a.lite = true,
             "--key" => a.key = Some(it.next().ok_or("--key needs a seed file")?.clone()),
+            "--profile" => {
+                a.profile = Some(it.next().ok_or("--profile needs a name")?.clone());
+            }
             other => return Err(format!("forge embed: unknown argument {other}")),
         }
     }
@@ -80,6 +89,9 @@ fn parts(dir: &Path, build: &str) -> Result<Vec<(String, PathBuf)>, String> {
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
     let a = parse(args)?;
+    if let Some(name) = &a.profile {
+        return super::embed_profile::run(root, name, a.key.as_deref());
+    }
     let build = if a.lite { "lite" } else { "main" };
     let dir = root.join("data/build/baseline");
     let files = parts(&dir, build)?;
@@ -114,7 +126,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         })
         .collect();
     let sections = extract::merge(&list, &super::baseline::region_options()).map_err(e)?;
-    let out = write(&packs, &sections, &a, root)?;
+    let out = write(&packs, &sections, a.key.as_deref(), root)?;
     super::baseline::check(&out, rows_of(&sections))?;
     let replaced = check_ids(&packs, &out)?;
     let file = dir.join(format!("baseline-{build}.tgd"));
@@ -134,7 +146,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     ))
 }
 
-fn rows_of(sections: &[extract::Body]) -> usize {
+pub(super) fn rows_of(sections: &[extract::Body]) -> usize {
     sections
         .iter()
         .find(|s| s.0 == Kind::PLACES)
@@ -143,10 +155,10 @@ fn rows_of(sections: &[extract::Body]) -> usize {
 }
 
 /// The world part's address, release and licence; every part's attribution, each line once.
-fn write(
+pub(super) fn write(
     packs: &[Pack<'_>],
     sections: &[extract::Body],
-    a: &Args,
+    key: Option<&str>,
     root: &Path,
 ) -> Result<Vec<u8>, String> {
     let e = |e: teigeodata_format::Error| e.to_string();
@@ -172,9 +184,7 @@ fn write(
     if let Some(v) = world.get(Tag::LICENCE) {
         w.manifest(Tag::LICENCE, v).map_err(e)?;
     }
-    let key = a
-        .key
-        .as_ref()
+    let key = key
         .map(|p| super::pack::signing_key(&root.join(p)))
         .transpose()?;
     let signer = key.as_ref().map(teigeodata_format::signer);
@@ -214,7 +224,7 @@ type Want = (teigeodata_core::Point<teigeodata_core::E6>, Option<IsoCode>);
 
 /// Every ID of every part is one row of the merged pack, at the point and with the ISO 3166
 /// code of the last part that holds it. Returns how many rows a later part replaced.
-fn check_ids(packs: &[Pack<'_>], merged: &[u8]) -> Result<usize, String> {
+pub(super) fn check_ids(packs: &[Pack<'_>], merged: &[u8]) -> Result<usize, String> {
     let e = |e: teigeodata_format::Error| format!("the baseline: {e}");
     let mut want: BTreeMap<PlaceId, Want> = BTreeMap::new();
     let mut total = 0;

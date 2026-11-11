@@ -1,0 +1,8 @@
+# The shipped embedded baseline (step 4.2, D-144): the world part and Nepal's slice, every name.
+# `forge embed --profile baseline` must write the same bytes as `forge embed` (TG-12's proof).
+about: The default embedded baseline, the world part with each country's slice.
+build: lite
+components: [point, elevation, admin, names, search, timezone, boundaries, admin-index]
+countries:
+  np: { rows: slice }
+wire_kb: 8000

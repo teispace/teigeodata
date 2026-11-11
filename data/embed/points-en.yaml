@@ -1,0 +1,9 @@
+# A small layer (TG-12's second profile): places, heights and English names with search; no
+# outlines. For an app that only needs to find and show places.
+about: Points, heights and English names with search, the world and Nepal's slice; no outlines.
+build: lite
+components: [point, elevation, admin, search]
+languages: [en]
+countries:
+  np: { rows: slice }
+wire_kb: 3000
