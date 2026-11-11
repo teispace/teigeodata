@@ -1,0 +1,28 @@
+{
+ "steps": [
+  {
+   "file": "01-timestamp.json",
+   "op": "timestamp",
+   "python": "ok"
+  },
+  {
+   "file": "02-snapshot.json",
+   "op": "snapshot",
+   "python": "ok"
+  },
+  {
+   "file": "03-targets.json",
+   "op": "targets",
+   "python": "ok"
+  },
+  {
+   "file": "04-delegated.json",
+   "op": "delegated",
+   "ours": "reject",
+   "ours_why": "one level of delegation (D-176): the catalog never nests, so a nested role is a fault",
+   "python": "ok",
+   "role": "np"
+  }
+ ],
+ "why": "a country's role that delegates again"
+}

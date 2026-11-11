@@ -195,7 +195,9 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   `sync::trust` (one level, `paths` patterns, terminating), `sync::repo` and `tuf release`
   writing one role per country, `Catalog::trusted` over the roles a client fetched; gate 12
   green on the generated world (top-level 3.8 KB, snapshot 13 KB, largest role 220 KB gzip)
-- [ ] Both oracles (python-tuf, tough) extended to delegated roles
+- [x] Both oracles (python-tuf, tough) extended to delegated roles (2026-11-11, D-177): python-tuf
+  judges 43 cases (17 on delegation) and reads the written repository's country role; tough
+  agrees on 23 repositories written in the delegated layout
 
 ### 4.4 Transport assets
 - [x] Seekable zstd writer (frames on the head and sections, ≤ 1 MiB at 16 KiB boundaries) with
@@ -307,3 +309,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-11 | 4.7 first item done: section re-download at frame granularity, reusing the resume check | D-174; the real two-release measurement stays open until two Nepal releases are built |
 | 2026-11-11 | 4.3 gains delegation by country; the 4.8 register written; packs refuse an older release (gate 1) and fast-forward recovery has its own test (gate 2) | D-175: one targets file for the world is 1.42 MB gzip, 2.7 times gate 12's budget |
 | 2026-11-11 | 4.3: delegation by country built and gate 12 green; extending the oracles is its own item | D-176 |
+| 2026-11-11 | 4.3: both oracles over delegated roles | D-177 |

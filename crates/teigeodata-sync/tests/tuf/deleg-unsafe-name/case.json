@@ -1,0 +1,22 @@
+{
+ "steps": [
+  {
+   "file": "01-timestamp.json",
+   "op": "timestamp",
+   "python": "ok"
+  },
+  {
+   "file": "02-snapshot.json",
+   "op": "snapshot",
+   "python": "ok"
+  },
+  {
+   "file": "03-targets.json",
+   "op": "targets",
+   "ours": "reject",
+   "ours_why": "a role name becomes a file name, so it must be a safe one (D-176)",
+   "python": "ok"
+  }
+ ],
+ "why": "a role named .."
+}

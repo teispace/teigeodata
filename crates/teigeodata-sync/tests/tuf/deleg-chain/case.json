@@ -1,0 +1,80 @@
+{
+ "steps": [
+  {
+   "file": "01-timestamp.json",
+   "op": "timestamp",
+   "python": "ok"
+  },
+  {
+   "file": "02-snapshot.json",
+   "op": "snapshot",
+   "python": "ok"
+  },
+  {
+   "file": "03-targets.json",
+   "op": "targets",
+   "python": "ok"
+  },
+  {
+   "file": "04-target.bin",
+   "op": "target",
+   "path": "earth.places.tgd",
+   "python": "ok"
+  },
+  {
+   "file": "05-target.bin",
+   "op": "target",
+   "path": "np.places.tgd",
+   "python": "reject"
+  },
+  {
+   "file": "06-delegated.json",
+   "op": "delegated",
+   "python": "ok",
+   "role": "np"
+  },
+  {
+   "file": "07-target.bin",
+   "op": "target",
+   "path": "np.places.tgd",
+   "python": "ok"
+  },
+  {
+   "file": "08-target.bin",
+   "op": "target",
+   "path": "np-p1.places.tgd",
+   "python": "ok"
+  },
+  {
+   "file": "09-target.bin",
+   "op": "target",
+   "path": "np.places.tgd",
+   "python": "reject"
+  },
+  {
+   "file": "10-target.bin",
+   "op": "target",
+   "path": "in-x.places.tgd",
+   "python": "reject"
+  },
+  {
+   "file": "11-delegated.json",
+   "op": "delegated",
+   "python": "ok",
+   "role": "in"
+  },
+  {
+   "file": "12-target.bin",
+   "op": "target",
+   "path": "in.places.tgd",
+   "python": "ok"
+  },
+  {
+   "file": "13-target.bin",
+   "op": "target",
+   "path": "in-x.places.tgd",
+   "python": "reject"
+  }
+ ],
+ "why": "a country's role and its packs"
+}

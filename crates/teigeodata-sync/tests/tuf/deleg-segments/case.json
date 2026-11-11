@@ -1,0 +1,68 @@
+{
+ "steps": [
+  {
+   "file": "01-timestamp.json",
+   "op": "timestamp",
+   "python": "ok"
+  },
+  {
+   "file": "02-snapshot.json",
+   "op": "snapshot",
+   "python": "ok"
+  },
+  {
+   "file": "03-targets.json",
+   "op": "targets",
+   "python": "ok"
+  },
+  {
+   "file": "04-delegated.json",
+   "op": "delegated",
+   "python": "ok",
+   "role": "s"
+  },
+  {
+   "file": "05-target.bin",
+   "op": "target",
+   "path": "b.tgd",
+   "python": "ok"
+  },
+  {
+   "file": "06-target.bin",
+   "op": "target",
+   "path": "a/b.tgd",
+   "python": "reject"
+  },
+  {
+   "file": "07-target.bin",
+   "op": "target",
+   "path": "\u0928\u0947.x",
+   "python": "ok"
+  },
+  {
+   "file": "08-target.bin",
+   "op": "target",
+   "path": "n.x",
+   "python": "reject"
+  },
+  {
+   "file": "09-target.bin",
+   "op": "target",
+   "path": "ab.x",
+   "python": "ok"
+  },
+  {
+   "file": "10-target.bin",
+   "op": "target",
+   "path": "d/e",
+   "python": "ok"
+  },
+  {
+   "file": "11-target.bin",
+   "op": "target",
+   "path": "d/e/f",
+   "python": "reject"
+  }
+ ],
+ "why": "patterns match one path segment at a time"
+}

@@ -1,0 +1,22 @@
+{
+ "steps": [
+  {
+   "file": "01-timestamp.json",
+   "op": "timestamp",
+   "python": "ok"
+  },
+  {
+   "file": "02-snapshot.json",
+   "op": "snapshot",
+   "python": "ok"
+  },
+  {
+   "file": "03-targets.json",
+   "op": "targets",
+   "ours": "reject",
+   "ours_why": "path_hash_prefixes are refused, never misread (D-176)",
+   "python": "ok"
+  }
+ ],
+ "why": "a role by path_hash_prefixes (hash bins)"
+}

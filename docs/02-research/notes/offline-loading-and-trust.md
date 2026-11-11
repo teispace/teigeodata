@@ -622,6 +622,9 @@ agrees but one: python-tuf counts a threshold by key IDs, so one key listed unde
 a threshold of 2; we count distinct public keys and refuse it, so one key can never stand for
 two signers. python-tuf's own serialization verifies under our canonical JSON,
 including control characters, non-ASCII keys and `u64::MAX`.
+Since D-177 the corpus also covers delegated roles (43 cases): our client agrees at every step
+except four places where it is stricter on purpose, each recorded with its reason in the case
+(a nested delegation, `path_hash_prefixes`, a `[class]` pattern, an unsafe role name).
 
 **Differential against `tough` 0.24.0 (D-165).** tough reads the system clock and has no way to
 set it, so python-tuf's fixed-time corpus cannot be replayed through it. Instead

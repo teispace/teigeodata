@@ -49,6 +49,7 @@ fn replay(dir: &Path, now: i64) -> Vec<String> {
             "snapshot" => t.update_snapshot(&data, false),
             "snapshot_stored" => t.update_snapshot(&data, true),
             "targets" => t.update_targets(&data),
+            "delegated" => t.update_delegated(step["role"].as_str().unwrap(), &data),
             "target" => t.verify_target(step["path"].as_str().unwrap(), &data),
             _ => panic!("{name}: unknown step {op}"),
         };

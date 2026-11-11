@@ -1,0 +1,62 @@
+{
+ "steps": [
+  {
+   "file": "01-timestamp.json",
+   "op": "timestamp",
+   "python": "ok"
+  },
+  {
+   "file": "02-snapshot.json",
+   "op": "snapshot",
+   "python": "ok"
+  },
+  {
+   "file": "03-targets.json",
+   "op": "targets",
+   "python": "ok"
+  },
+  {
+   "file": "04-delegated.json",
+   "op": "delegated",
+   "python": "ok",
+   "role": "a"
+  },
+  {
+   "file": "05-delegated.json",
+   "op": "delegated",
+   "python": "ok",
+   "role": "b"
+  },
+  {
+   "file": "06-delegated.json",
+   "op": "delegated",
+   "python": "ok",
+   "role": "c"
+  },
+  {
+   "file": "07-target.bin",
+   "op": "target",
+   "path": "xa",
+   "python": "ok"
+  },
+  {
+   "file": "08-target.bin",
+   "op": "target",
+   "path": "xb",
+   "python": "ok"
+  },
+  {
+   "file": "09-target.bin",
+   "op": "target",
+   "path": "zz",
+   "python": "ok"
+  },
+  {
+   "file": "10-target.bin",
+   "op": "target",
+   "path": "xc",
+   "python": "reject"
+  }
+ ],
+ "why": "roles in order; a terminating role ends the search"
+}

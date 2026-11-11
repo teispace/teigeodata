@@ -2,20 +2,45 @@
   "signatures": [
     {
       "keyid": "a303a72316a605f7b653e8403253f265a650c24df098ebd34a181437990979d9",
-      "sig": "199ec4915c73288b6d575e6bb93b6c712c6352faef6044983b9654d88b636eb0f5326b963f8b30f9ce402c321ce7a8e73dcc6fa1035d504bc9d9130287a38208"
+      "sig": "3b78b77abf62be6cd43fc6b4b1b09e33fc868aa6d7d150a5796595d32c0f7fb77ae50712d9c603f774be2193c16cb1f90c7c92bd9953379aabe0f741f0074b0d"
     }
   ],
   "signed": {
     "_type": "targets",
+    "delegations": {
+      "keys": {
+        "a303a72316a605f7b653e8403253f265a650c24df098ebd34a181437990979d9": {
+          "keytype": "ed25519",
+          "keyval": {
+            "public": "acdb0e29743f0ccb8686d0a104cb96e05abefec1538765e7595869f7dc8c49aa"
+          },
+          "scheme": "ed25519"
+        }
+      },
+      "roles": [
+        {
+          "keyids": [
+            "a303a72316a605f7b653e8403253f265a650c24df098ebd34a181437990979d9"
+          ],
+          "name": "np",
+          "paths": [
+            "np.*",
+            "np-*"
+          ],
+          "terminating": true,
+          "threshold": 1
+        }
+      ]
+    },
     "expires": "2027-11-10T00:00:00Z",
     "spec_version": "1.0.31",
     "targets": {
-      "np.places.tgd": {
+      "earth.places.tgd": {
         "custom": {
-          "address": "np",
+          "address": "earth",
           "component": "places",
           "deps": [],
-          "file": "np.places.2026.11.0.38180b69.tgd.zst",
+          "file": "earth.places.2026.11.0.38180b69.tgd.zst",
           "licence": "ODbL-1.0",
           "min_reader": 0,
           "pack": {

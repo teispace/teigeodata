@@ -20,7 +20,7 @@ oracle jobs on every push.
 | 4 | Mix-and-match | `trust::tests::mix_and_match_is_refused_by_hashes_and_versions` | D-159 | green |
 | 5 | Endless data | metadata: `trust::tests::endless_data_is_refused`; packs: `install_tests::the_default_transport_installs_and_refuses_bad_hosts` (`RunsOver`, `IgnoresRange`) | D-159, D-168 | green |
 | 6 | Root rotation | `trust::tests::a_root_rotates_only_with_both_thresholds_and_the_next_version` | D-159 | green |
-| 7 | Differential | `tests/tuf_differential.rs` against python-tuf (`tuf-oracle` job) and `tools/tough-oracle` (`tough-oracle` job) | D-161, D-165 | green |
+| 7 | Differential | `tests/tuf_differential.rs` against python-tuf (`tuf-oracle` job) and `tools/tough-oracle` (`tough-oracle` job), both over country roles | D-161, D-165, D-177 | green: python-tuf 43 cases, tough 23 repositories (2026-11-11) |
 | 8 | Crash in an install | `store_tests::the_store_survives_a_crash_at_every_step`, `a_removal_survives_a_crash_at_every_step`, `a_repair_survives_a_crash_at_every_step` | D-171, D-172, D-173 | green; SIGKILL of a real process not yet run |
 | 9 | Resume | `install_tests::resume_keeps_what_checks_and_fetches_the_rest`; `ChangesEtag` host | D-169 | green |
 | 10 | Bad mirror | `install_tests::mirrors_fail_over_and_demote` | D-170 | green |

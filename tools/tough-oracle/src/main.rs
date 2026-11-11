@@ -3,6 +3,10 @@
 //! root 1: our `trust::Trusted` and tough's `RepositoryLoader`. They must reach the case's
 //! verdict, and for a repository both accept, read the same bytes for every target. Exits 1 on
 //! any disagreement. tough reads the system clock, so its repositories cannot be checked in.
+//!
+//! Repositories are delegated by country as `tuf release` writes them (D-176): `np.places.tgd`
+//! in the role `np`, `ae-du.places.tgd` in `ae`, and a pack of no country (`earth`) in the
+//! top-level targets; one case keeps the flat layout of D-165.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -28,6 +32,7 @@ fn public(seed: u8) -> [u8; 32] {
 
 /// How a case's repository departs from a valid one.
 #[derive(Clone)]
+#[allow(clippy::struct_excessive_bools, reason = "one flag per planted fault")]
 struct Spec {
     /// Seconds from now until each role expires: root, timestamp, snapshot, targets.
     expires: [i64; 4],
@@ -43,6 +48,16 @@ struct Spec {
     timestamp_length: i64,
     /// One target's bytes are changed after signing.
     tamper_target: bool,
+    /// One targets file for everything, no delegation (the layout before D-176).
+    flat: bool,
+    /// Nepal's role is signed by this key instead of the targets key (30).
+    role_key: u8,
+    /// Seconds from now until the country roles expire.
+    role_expires: i64,
+    /// The snapshot names Nepal's role with the hash of other bytes.
+    role_wrong_hash: bool,
+    /// Nepal's role also lists the Emirates' pack, outside its patterns.
+    role_lists_other: bool,
 }
 
 impl Default for Spec {
@@ -55,6 +70,11 @@ impl Default for Spec {
             snapshot_wrong_hash: false,
             timestamp_length: 0,
             tamper_target: false,
+            flat: false,
+            role_key: 30,
+            role_expires: 30 * DAY,
+            role_wrong_hash: false,
+            role_lists_other: false,
         }
     }
 }
@@ -89,6 +109,7 @@ fn files() -> BTreeMap<String, Vec<u8>> {
         "ae-du.places.tgd".to_string(),
         (0..=255_u8).cycle().take(70_000).collect(),
     );
+    f.insert("earth.places.tgd".to_string(), b"no country".repeat(30));
     f
 }
 
@@ -125,8 +146,21 @@ fn write(dir: &Path, s: &Spec, now: i64, timestamp_version: u64) {
         }
         std::fs::write(tdir.join(format!("{hex}.{path}")), &bytes).expect("target");
     }
+    let (top, countries) = if s.flat {
+        (listed, BTreeMap::new())
+    } else {
+        repo::by_country(listed)
+    };
+    let one = |k: u8| RoleKeys {
+        keys: vec![public(k)],
+        threshold: 1,
+    };
+    let delegated: Vec<repo::DelegatedRole> = countries
+        .keys()
+        .map(|&cc| repo::country_role(cc, one(30)))
+        .collect();
     let tg = signed(
-        &repo::targets(1, now + s.expires[3], &listed).expect("targets"),
+        &repo::targets_delegating(1, now + s.expires[3], &top, &delegated).expect("targets"),
         &[30],
     );
     put("1.targets.json", &tg);
@@ -135,8 +169,35 @@ fn write(dir: &Path, s: &Spec, now: i64, timestamp_version: u64) {
     if s.snapshot_wrong_hash {
         named[0] ^= 1;
     }
-    let sn_signed =
-        repo::snapshot(1, now + s.expires[2], &named, s.snapshot_names_targets).expect("snapshot");
+    let mut role_files = Vec::new();
+    for (cc, files) in &countries {
+        let name: String = cc.iter().map(|&b| char::from(b)).collect();
+        let mut files = files.clone();
+        let nepal = name == "np";
+        if nepal && s.role_lists_other {
+            let ae = countries[b"ae"].iter().next().expect("ae");
+            files.insert(ae.0.clone(), ae.1.clone());
+        }
+        let key = if nepal { s.role_key } else { 30 };
+        let b = signed(
+            &repo::targets(1, now + s.role_expires, &files).expect("role"),
+            &[key],
+        );
+        put(&format!("1.{name}.json"), &b);
+        let mut named = b.clone();
+        if nepal && s.role_wrong_hash {
+            named[0] ^= 1;
+        }
+        role_files.push((name, named));
+    }
+    let mut meta: Vec<(&str, &[u8], u64)> =
+        vec![("targets", named.as_slice(), s.snapshot_names_targets)];
+    meta.extend(
+        role_files
+            .iter()
+            .map(|(n, b)| (n.as_str(), b.as_slice(), 1)),
+    );
+    let sn_signed = repo::snapshot_listing(1, now + s.expires[2], &meta).expect("snapshot");
     if s.snapshot_names_targets != 1 {
         // The snapshot names a version whose file holds version 1.
         put(&format!("{}.targets.json", s.snapshot_names_targets), &tg);
@@ -178,13 +239,15 @@ fn ours(dir: &Path, now: i64, stored: Option<&[u8]>) -> Judged {
     t.update_snapshot(&read(&sn)?, false).map_err(e(&sn))?;
     let tg = t.targets_name().map_err(e("targets name"))?;
     t.update_targets(&read(&tg)?).map_err(e(&tg))?;
-    let paths: Vec<String> = t
-        .targets()
-        .ok_or("no targets")?
-        .targets
-        .keys()
-        .cloned()
-        .collect();
+    let names: Vec<String> = t
+        .delegations()
+        .map(|d| d.roles.iter().map(|r| r.name.clone()).collect())
+        .unwrap_or_default();
+    for name in &names {
+        let file = t.delegated_name(name).map_err(e(name))?;
+        t.update_delegated(name, &read(&file)?).map_err(e(&file))?;
+    }
+    let paths: Vec<String> = t.trusted_targets().map(|(p, _)| p.to_string()).collect();
     let mut out = BTreeMap::new();
     for p in paths {
         let name = t.target_name(&p).map_err(e(&p))?;
@@ -251,6 +314,41 @@ fn cases() -> Vec<(&'static str, &'static str, Spec)> {
     };
     vec![
         ("valid", "ok", d()),
+        ("valid-flat", "ok", Spec { flat: true, ..d() }),
+        (
+            "role-wrong-key",
+            "reject",
+            Spec {
+                role_key: 20,
+                ..d()
+            },
+        ),
+        (
+            "role-expired",
+            "reject",
+            Spec {
+                role_expires: -DAY,
+                ..d()
+            },
+        ),
+        (
+            "role-wrong-hash",
+            "reject",
+            Spec {
+                role_wrong_hash: true,
+                ..d()
+            },
+        ),
+        (
+            // Both clients refuse to take the Emirates' pack from Nepal's role; each still
+            // reads it from the Emirates' own role, so the bytes agree.
+            "role-lists-another-country",
+            "ok",
+            Spec {
+                role_lists_other: true,
+                ..d()
+            },
+        ),
         (
             "target-tampered",
             "reject",

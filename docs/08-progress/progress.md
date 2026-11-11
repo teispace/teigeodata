@@ -66,7 +66,7 @@ A short status. The numbers and evidence live in each phase file and the
   (D-173); 4.7: updates reuse every unchanged frame of the replaced release (D-174); 4.8: the
   gate register, packs refuse an older release, and gate 12 measured red on a generated world
   (1.42 MB gzip, D-175); the catalog delegated by country, gate 12 green (largest role 220 KB
-  gzip, D-176). Next: both oracles over delegated roles (4.3), then the platform
+  gzip, D-176), both oracles agreeing over the country roles (D-177). Next: the platform
   transport prototypes; the two-release delta measurement needs two Nepal builds; the release upload and the first
   ceremony wait for the maintainer; the world byte-identity check after the thinning change
   waits for the inputs to be fetched again.
