@@ -75,6 +75,10 @@ fuzzing time per target as an input).
   4,000 native inputs and the job hit its 5-hour budget (found 2026-11-08; one input takes
   0.03 s for the bitmap harness, 4,000 took 21 minutes). Nightly results do not gate work: a
   failure is fixed when it is found.
+- **world-install**: the world-size install (D-188), in release: a 576 MiB pack whose
+  `BLOCK_HASHES` spans two frames, installed, cut at every request and mid-NAMES, and resumed
+  through `fetch::install`. About 1.2 GB of memory and 600 MB of disk, so it is `#[ignore]` in
+  `cargo test`.
   The core property tests take their case counts from `crate::cases(n)`: `n` natively, a
   thousandth (at least 4) under Miri; libFuzzer covers the volume.
 

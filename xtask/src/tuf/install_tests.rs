@@ -469,12 +469,14 @@ fn the_default_transport_installs_and_refuses_bad_hosts() {
     assert!(matches!(r, Err(FetchError::Transport(_))), "{r:?}");
 }
 
-/// An in-memory host that counts the bytes it serves and can drop the connection at request `cut`.
+/// An in-memory host that counts the bytes it serves and can drop the connection at request `cut`,
+/// or mid-body once it has streamed `budget` bytes.
 pub(super) struct Mem<'a> {
     asset: &'a [u8],
     pub(super) served: u64,
     calls: usize,
     cut: Option<usize>,
+    budget: u64,
 }
 
 impl<'a> Mem<'a> {
@@ -484,6 +486,15 @@ impl<'a> Mem<'a> {
             served: 0,
             calls: 0,
             cut,
+            budget: u64::MAX,
+        }
+    }
+
+    /// A host that drops the connection mid-body once it has streamed `budget` bytes.
+    fn dropping_after(asset: &'a [u8], budget: u64) -> Self {
+        Self {
+            budget,
+            ..Self::new(asset, None)
         }
     }
 }
@@ -511,6 +522,32 @@ impl teigeodata_sync::fetch::Transport for Mem<'_> {
         self.served += range.end - range.start;
         out.clear();
         out.extend_from_slice(&self.asset[at(&range)]);
+        Ok(teigeodata_sync::fetch::Got {
+            etag: Some("\"a\"".into()),
+            total: self.asset.len() as u64,
+        })
+    }
+
+    fn get_streamed(
+        &mut self,
+        _: &str,
+        range: Range<u64>,
+        _: &mut Vec<u8>,
+        sink: &mut dyn FnMut(&[u8]) -> Result<(), teigeodata_sync::fetch::FetchError>,
+    ) -> Result<teigeodata_sync::fetch::Got, teigeodata_sync::fetch::FetchError> {
+        if self.cut == Some(self.calls) {
+            return Err(teigeodata_sync::fetch::FetchError::Transport("cut".into()));
+        }
+        self.calls += 1;
+        for piece in self.asset[at(&range)].chunks(64 << 10) {
+            if self.served + piece.len() as u64 > self.budget {
+                return Err(teigeodata_sync::fetch::FetchError::Transport(
+                    "dropped".into(),
+                ));
+            }
+            self.served += piece.len() as u64;
+            sink(piece)?;
+        }
         Ok(teigeodata_sync::fetch::Got {
             etag: Some("\"a\"".into()),
             total: self.asset.len() as u64,
@@ -830,4 +867,158 @@ fn mirrors_fail_over_and_demote() {
             refused: 0,
         }
     );
+}
+
+/// A pack with a 576 MiB NAMES: its block-hash list is over one frame.
+fn world_pack() -> Vec<u8> {
+    let names: Vec<u8> = (0..576_u32 << 20)
+        .map(|i| b"Lahachowk Kathmandu Pokhara "[(i % 28) as usize] ^ (i >> 16) as u8)
+        .collect();
+    let places: Vec<u8> = (0..30_000_u32).map(|i| (i % 13) as u8).collect();
+    let mut w = Writer::new("zz", "places", "2026.11.0").unwrap();
+    w.manifest(Tag::LICENCE, b"odbl").unwrap();
+    w.pack(
+        &[
+            (Kind::PLACES, Encoding::RAW, 1, &places),
+            (Kind::NAMES, Encoding::RAW, 1, &names),
+        ],
+        None,
+    )
+    .unwrap()
+}
+
+/// Asserts the file at `file` is `pack`, compared a window at a time.
+fn same_as(file: &mut std::fs::File, pack: &[u8]) {
+    use std::io::{Read as _, Seek as _, SeekFrom};
+    assert_eq!(file.metadata().unwrap().len(), pack.len() as u64);
+    file.seek(SeekFrom::Start(0)).unwrap();
+    let mut buf = vec![0_u8; 8 << 20];
+    for want in pack.chunks(buf.len()) {
+        let got = &mut buf[..want.len()];
+        file.read_exact(got).unwrap();
+        assert!(got == want, "the staged file differs from the pack");
+    }
+}
+
+/// Asserts nothing was written to `file` from `from` on: zeros or past its end.
+fn unwritten_from(file: &mut std::fs::File, from: u64) {
+    use std::io::{Read as _, Seek as _, SeekFrom};
+    let len = file.metadata().unwrap().len();
+    if len <= from {
+        return;
+    }
+    file.seek(SeekFrom::Start(from)).unwrap();
+    let mut buf = vec![0_u8; 1 << 20];
+    let mut left = len - from;
+    while left > 0 {
+        let k = left.min(buf.len() as u64) as usize;
+        file.read_exact(&mut buf[..k]).unwrap();
+        assert!(
+            buf[..k].iter().all(|&b| b == 0),
+            "a byte past {from} was written"
+        );
+        left -= k as u64;
+    }
+}
+
+/// A world-size install (step 4.8, D-170, D-188): NAMES over 512 MiB, so its `BLOCK_HASHES`
+/// list is over one 1 MiB frame. The list is fed in one fetch, gathered there, and only then
+/// checks the NAMES frames; a resume fetches it whole again, and a forged second frame of it is
+/// refused. About 1.2 GB of memory and 600 MB of disk: the data build runs it.
+#[test]
+#[ignore = "world size: a 576 MiB pack; the data build runs it"]
+fn a_world_size_install_gathers_a_block_hash_list_of_several_frames() {
+    use teigeodata_sync::fetch::install;
+    let pack = world_pack();
+    let (entry, asset, _) = super::entry_of(&pack).unwrap();
+    let asset_len = asset.len() as u64;
+    let frames = frames_of(&pack, &asset);
+    let opened = Pack::open(&pack).unwrap();
+    let list = opened.section(Kind::BLOCK_HASHES).unwrap().bytes();
+    let list_at = (list.as_ptr() as usize - pack.as_ptr() as usize) as u64;
+    let list_span = list_at..list_at + list.len() as u64;
+    let list_frames: Vec<usize> = (0..frames.len())
+        .filter(|&i| {
+            let d = frames.frame(i).unwrap().decoded;
+            d.start < list_span.end && list_span.start < d.end
+        })
+        .collect();
+    assert!(
+        list_frames.len() >= 2,
+        "the list spans {} frames",
+        list_frames.len()
+    );
+    let names = opened.section(Kind::NAMES).unwrap().bytes();
+    let names_at = (names.as_ptr() as usize - pack.as_ptr() as usize) as u64;
+    let names_span = names_at..names_at + names.len() as u64;
+    // NAMES's bytes on the wire: a drop inside them falls past the list.
+    let names_wire: u64 = (0..frames.len())
+        .map(|i| frames.frame(i).unwrap())
+        .filter(|f| names_span.contains(&f.decoded.start))
+        .map(|f| f.compressed.end - f.compressed.start)
+        .sum();
+
+    let dir = std::env::temp_dir().join(format!("tgd-world-install-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("staging");
+    let open = || {
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)
+            .unwrap()
+    };
+    let all = Components::all();
+    let run = |mut host: Mem<'_>| {
+        let mut file = open();
+        let r = install(&mut host, "mem:", &entry, asset_len, all, &mut file);
+        if let Ok(done) = &r {
+            assert_eq!(done.fetched, host.served);
+            file.set_len(done.pack_len).unwrap();
+            same_as(&mut file, &pack);
+        }
+        (r, host.served, host.calls)
+    };
+
+    let (r, full, calls) = run(Mem::new(&asset, None));
+    assert_eq!(r.unwrap().kept, 0);
+    // Cut at every request, then mid-way through NAMES: each resume ends with the pack; once
+    // NAMES frames were written, it keeps them and fetches less.
+    let cuts = (0..calls).map(|c| Mem::new(&asset, Some(c)));
+    let drops = [names_wire / 2, names_wire / 4].map(|b| Mem::dropping_after(&asset, full - b));
+    for (k, host) in cuts.chain(drops).enumerate() {
+        std::fs::remove_file(&path).unwrap();
+        assert!(run(host).0.is_err(), "attempt {k} was not cut");
+        let (r, served, _) = run(Mem::new(&asset, None));
+        let done = r.unwrap_or_else(|e| panic!("attempt {k}: {e}"));
+        assert!(served <= full, "attempt {k}");
+        if k >= calls {
+            assert!(
+                done.kept > 0 && served < full,
+                "attempt {k}: {served} of {full}"
+            );
+        }
+    }
+
+    // The list's second frame forged (recompressed validly): refused, with no NAMES byte
+    // written, since nothing checks before the whole list is proved.
+    let forged = forge_frame(&asset, list_frames[1], |b| b[100] ^= 1);
+    std::fs::remove_file(&path).unwrap();
+    let mut file = open();
+    let mut host = Mem::new(&forged, None);
+    let err = install(
+        &mut host,
+        "mem:",
+        &entry,
+        forged.len() as u64,
+        all,
+        &mut file,
+    )
+    .unwrap_err();
+    println!("forged list frame: {err}");
+    unwritten_from(&mut file, names_at);
+    drop(file);
+    std::fs::remove_dir_all(&dir).unwrap();
 }

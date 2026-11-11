@@ -262,8 +262,10 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   green, 12 red until 4.3's delegation, 11 and 14 open) (listed in [offline loading and
   trust](../../02-research/notes/offline-loading-and-trust.md) §6) built, first shown to fail on
   a deliberate violation, then green in CI
-- [ ] A world-size install in the data build: a section over 512 MiB, so `BLOCK_HASHES` spans
-  frames and its one-fetch rule (D-170) is exercised; a planted split list must fail there
+- [x] A world-size install: a section over 512 MiB, so `BLOCK_HASHES` spans frames and its
+  one-fetch rule (D-170) is exercised; a planted split list fails it (2026-11-11, D-188). It
+  runs in `nightly`, not the data build: it needs no data, and the data build waits on the
+  input mirror
 
 ### 4.9 CLI `tgd`
 Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-178).
@@ -338,3 +340,4 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
 | 2026-11-11 | 4.9e done; timings are an ignored test (median of 15 runs) instead of `hyperfine`; the guide is the crate's README until the docs site | D-183 |
 | 2026-11-11 | Gate 14 split into (a) to (e); platforms install in passes over one installer | D-184, [platform transports](../../02-research/notes/platform-transports.md) |
 | 2026-11-11 | Gate 14 met by prototypes on macOS, the iOS simulator, the Android emulator and headless Chrome | D-185, D-186 |
+| 2026-11-11 | 4.8: the world-size install runs in `nightly`, not the data build | D-188: it needs no data; the data build waits on the input mirror (D-127) |

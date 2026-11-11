@@ -1,5 +1,5 @@
-# Nightly hardening (docs/06-engineering/ci.md): libFuzzer on every harness, and Miri on the
-# reader and codec tests. Budget: well under the 6 h per job limit.
+# Nightly hardening (docs/06-engineering/ci.md): libFuzzer on every harness, Miri on the
+# reader and codec tests, and the world-size install. Budget: well under the 6 h per job limit.
 name: nightly
 
 on:
@@ -125,3 +125,17 @@ jobs:
           tool: cargo-nextest@0.9.151
       - name: Miri
         run: cargo +nightly miri nextest run --locked --profile miri --no-tests=pass ${{ matrix.args }}
+
+  # A world-size install (step 4.8, D-188): a 576 MiB pack whose block-hash list spans frames,
+  # installed, cut and resumed through the real driver. About 1.2 GB of memory and 600 MB of
+  # disk, so it is ignored in `cargo test` and run here, in release.
+  world-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: World-size install
+        run: cargo test --release --locked -p xtask a_world_size -- --ignored --nocapture
