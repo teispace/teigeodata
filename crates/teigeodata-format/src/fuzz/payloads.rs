@@ -124,7 +124,8 @@ pub fn sections(data: &[u8]) {
     let mut c = Cursor(data);
     let mode = c.u8();
     let structured = mode & 0x80 != 0;
-    match mode % 14 {
+    match mode % 15 {
+        14 => substring_case(&mut c, structured),
         12 => iso_codes_case(&mut c, structured),
         13 => tz_rules_case(&mut c, structured),
         11 => postal_case(&mut c, structured),
@@ -139,6 +140,105 @@ pub fn sections(data: &[u8]) {
         5 => region_case(&mut c, structured),
         6 => search_case(&mut c, structured),
         _ => blobs_case(&mut c, structured),
+    }
+}
+
+/// SUBSTRING (D-199): model word suffixes encode, open as their own kind, check, and answer
+/// ranges and best-first reads as the model; a key under 3 code points is refused by the writer,
+/// and an edited body never panics.
+fn substring_case(c: &mut Cursor<'_>, structured: bool) {
+    let rows = 1 + c.below(limit(200, 16));
+    let importance: Vec<u8> = (0..rows).map(|_| c.u8()).collect();
+    let mut model: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
+    for _ in 0..c.below(limit(120, 12)) {
+        let list = model.entry(search_text(c)).or_default();
+        for _ in 0..=c.below(3) {
+            list.insert(c.below(rows) as u32);
+        }
+    }
+    let short = model
+        .keys()
+        .any(|k| k.chars().count() < search::SUBSTRING_MIN);
+    let mut items = rows as u64;
+    let (mut body, mut valid) = (Vec::new(), false);
+    if structured {
+        match search::encode_substring(&model, &importance) {
+            Ok(b) => {
+                assert!(!short, "a substring key under 3 code points is written");
+                body = b;
+                valid = !edit(c, &mut body, &mut items);
+            }
+            Err(e) => {
+                assert!(short, "a substring model is refused: {e}");
+                return;
+            }
+        }
+    } else {
+        body.extend_from_slice(c.rest());
+    }
+    let Some(file) = pack(&[(Kind::SUBSTRING, items, &body)]) else {
+        return;
+    };
+    let p = open(&file);
+    let ix = match Search::open(&section(&p, Kind::SUBSTRING)) {
+        Ok(ix) => ix,
+        Err(e) => {
+            assert!(!valid, "a written SUBSTRING section is refused: {e}");
+            return;
+        }
+    };
+    let checked = ix.check().is_ok();
+    assert!(
+        checked || !valid,
+        "a written SUBSTRING section fails its check"
+    );
+    let keys: Vec<&String> = model.keys().collect();
+    for _ in 0..4 {
+        let query: String = match keys.get(c.below(keys.len() + 2)) {
+            Some(k) if c.u8() & 1 == 0 => k.chars().skip(c.below(2)).collect(),
+            _ => search_text(c),
+        };
+        let range = ix.range(search::SUBSTRING, &query);
+        let floor = c.u8();
+        let mut best = Vec::new();
+        let read = ix.best_in(
+            range.clone(),
+            || i32::from(floor),
+            |o| {
+                best.push(o);
+                ControlFlow::Continue(())
+            },
+        );
+        assert!(read <= range.len(), "best_in reads past its range");
+        if checked {
+            assert!(
+                range.end <= ix.keys() && range.start <= range.end,
+                "a bad range"
+            );
+            assert!(
+                best.iter()
+                    .all(|&o| range.contains(&o) && i32::from(ix.key_max(o)) > i32::from(floor))
+            );
+        }
+        if valid {
+            let want: Vec<u32> = keys
+                .iter()
+                .enumerate()
+                .filter(|(_, k)| k.starts_with(query.as_str()))
+                .map(|(i, _)| i as u32)
+                .collect();
+            assert_eq!(range.clone().collect::<Vec<_>>(), want, "range {query:?}");
+            let above: Vec<u32> = want
+                .iter()
+                .copied()
+                .filter(|&o| {
+                    model[keys[o as usize]]
+                        .iter()
+                        .any(|&r| importance[r as usize] > floor)
+                })
+                .collect();
+            assert_eq!(best, above, "best {query:?} above {floor}");
+        }
     }
 }
 

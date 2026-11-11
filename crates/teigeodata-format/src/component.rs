@@ -18,6 +18,7 @@
 //! | `dem` | DEM | | the height at any coordinate |
 //! | `extra` | COMPONENTS, BLOBS | point | optional fields, cold data |
 //! | `tz-rules` | `TZ_RULES` | | a zone's offset at an instant, a civil time's offsets |
+//! | `substring` | SUBSTRING | search | name search from the middle of a word |
 //!
 //! `BLOCK_HASHES` belongs to none: a client fetches it with any section of 1 MiB or more, whose
 //! blocks it verifies (D-078).
@@ -54,11 +55,13 @@ pub enum Component {
     Extra = 11,
     /// The timezones' rules (D-196): offsets at instants, civil times' offsets.
     TzRules = 12,
+    /// Substring search (D-199): a name found from 3 or more characters inside a word.
+    Substring = 13,
 }
 
 impl Component {
     /// Every component, in order.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Point,
         Self::Elevation,
         Self::Admin,
@@ -72,6 +75,7 @@ impl Component {
         Self::Dem,
         Self::Extra,
         Self::TzRules,
+        Self::Substring,
     ];
 
     /// Its name, as users, recipes and bindings spell it.
@@ -91,6 +95,7 @@ impl Component {
             Self::Dem => "dem",
             Self::Extra => "extra",
             Self::TzRules => "tz-rules",
+            Self::Substring => "substring",
         }
     }
 
@@ -127,6 +132,7 @@ impl Component {
             Self::Dem => &[Kind::DEM],
             Self::Extra => &[Kind::COMPONENTS, Kind::BLOBS],
             Self::TzRules => &[Kind::TZ_RULES],
+            Self::Substring => &[Kind::SUBSTRING],
         }
     }
 
@@ -136,6 +142,8 @@ impl Component {
         match self {
             Self::Point | Self::Dem | Self::TzRules => &[],
             Self::Search => &[Self::Names],
+            // Its matches are ranked with search's, from SEARCH's importance (D-199).
+            Self::Substring => &[Self::Search],
             Self::AdminIndex => &[Self::Boundaries],
             // A zone without its rules is a broken answer, and the rules are a few kB (D-196).
             Self::Timezone | Self::TimezoneIndex => &[Self::Point, Self::TzRules],
@@ -296,6 +304,13 @@ mod tests {
                 .iter()
                 .eq([Component::TzRules])
         );
+        // Substring search ranks with search, and so needs it and what it needs (D-199).
+        assert!(Components::of(&[Component::Substring]).closed().iter().eq([
+            Component::Point,
+            Component::Names,
+            Component::Search,
+            Component::Substring
+        ]));
         let names = Components::of(&[Component::Names]);
         assert_eq!(s.without(names).union(names), s);
         assert!(!s.without(names).contains(Component::Names));

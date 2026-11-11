@@ -90,7 +90,7 @@ pub fn sections(pack: &Pack<'_>, mut each: impl FnMut(Kind, Result<bool, Error>)
                     Redirects::open(&s)?.check(&ids)?;
                 }
                 Kind::NAMES => Names::open(&s)?.check()?,
-                Kind::SEARCH => Search::open(&s)?.check()?,
+                Kind::SEARCH | Kind::SUBSTRING => Search::open(&s)?.check()?,
                 Kind::PLACE_INDEX => {
                     let p = places
                         .and_then(Result::ok)

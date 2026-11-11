@@ -139,12 +139,14 @@ parameters).
 | 20 | PLACE_TZ | each place's timezone area, one row per PLACES row | `timezone` | column table (D-134): the areas' rows and a per-place index into them, [below](#place_tz) |
 | 21 | ISO_CODES | the ISO 3166 code of each coded country and subdivision row | `admin` | column table (D-197): the coded rows and their packed codes, [below](#iso_codes) |
 | 22 | TZ_RULES | the rules of the pack's timezones: transitions, local time types, abbreviations, parsed POSIX TZ footers, zone names linked to their areas | `tz-rules` | column table (D-196, [ADR-0039](../03-decisions/adr/ADR-0039-tz-rules.md)): 93 kB for the world's 444 outline zones, 2.5 kB for three; [below](#tz_rules) |
+| 23 | SUBSTRING | word-suffix keys of 3 or more code points → lists of rows by importance; a name from the middle of a word | `substring` | column table (D-199): SEARCH's layout with one map, [below](#substring) |
 
 ### Components of a pack
 
 Each section belongs to one component (D-133, D-135), and a client chooses components, not
 sections. `teigeodata_format::component` holds the table: each component's sections, and the
-components it needs (`search` needs `names`, `admin-index` needs `boundaries`, `timezone` and
+components it needs (`search` needs `names`, `substring` needs `search`, `admin-index` needs
+`boundaries`, `timezone` and
 `timezone-index` need `tz-rules` as well as `point`, every other one but `dem` and `tz-rules`
 needs `point`). BLOCK_HASHES belongs to none; a client fetches it with any section of
 1 MiB or more. A test checks this table's Component column against that module.
@@ -342,6 +344,27 @@ A column ID of 0 or above 8 is refused.
   sets and every row's importance, refuses an empty key or list, a key over 255 bytes and a row
   past the end, and is deterministic. Its node registry is a bounded direct-mapped table of
   2^18 slots, so a missed share costs size, never memory.
+
+### SUBSTRING
+
+Word-suffix keys to places, for substring search from 3 code points (D-199, TG-06,
+[research](../02-research/notes/substring-search.md)). Code: `teigeodata_format::search`, the
+same reader as [SEARCH](#search): `Search::open` reads either kind.
+
+- **Layout:** SEARCH's columns 1 to 6 (LENGTH, AUTOMATON, STARTS, IDS, IMPORTANCE, BLOCK_MAX),
+  with the same rules. RULES and UNIT are refused (a column ID of 0 or above 6). IMPORTANCE
+  holds SEARCH's values, so the section ranks on its own.
+- **Keys** are tag 4, then a word suffix of a folded name in UTF-8: for every token of every
+  name form, each suffix of 3 or more code points that does not start on a General_Category M
+  code point (a vowel sign, virama or anusvara), except the first token's whole text, which
+  SEARCH's exact map already holds. The forge cuts them with `teigeodata_names::substring_keys`;
+  keys over 254 bytes are left out.
+- **Queries:** a substring query is `range(4, q)` read best-first with `best_in`, as SEARCH's
+  prefix tier.
+- **`check`** is SEARCH's, and also proves that every key is tag 4 and 3 or more code points of
+  UTF-8. The no-mark rule is the forge's: a key that breaks it changes no answer.
+- **The writer** is `search::encode_substring` (feature `write`): untagged keys, each of 3 or
+  more code points.
 
 ### PLACE_INDEX
 

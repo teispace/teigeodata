@@ -20,6 +20,11 @@
 //! | 7 | [`RULES`] | bytes: the country's query [rules] (optional) |
 //! | 8 | [`UNIT`] | per row: its unit type as the rules name it, 0 = none (optional) |
 //!
+//! `SUBSTRING` (kind 23, D-199) has the same layout with one map, [`SUBSTRING`]: the word
+//! suffixes of each folded name (at least [`SUBSTRING_MIN`] code points), so a query from the
+//! middle of a word is a prefix range over them. It has no RULES or UNIT column, and
+//! [`Search::check`] also proves every key's tag and length. [`Search::open`] reads both kinds.
+//!
 //! Its item count is the number of places (rows). [`Search::open`] checks the structure;
 //! [`Search::check`] every key, list, importance and block maximum. Queries never panic and never
 //! allocate, and return only rows below the row count.
@@ -60,13 +65,17 @@ pub const EXACT: u8 = 1;
 pub const LOOSE: u8 = 2;
 /// Tag of the phonetic map: the phonetic key.
 pub const PHONETIC: u8 = 3;
+/// Tag of the substring map, the one map of a SUBSTRING section: word suffixes (D-199).
+pub const SUBSTRING: u8 = 4;
+/// The fewest code points of a substring key, and of a substring query (D-199).
+pub const SUBSTRING_MIN: usize = 3;
 
 /// Keys per block maximum.
 pub const BLOCK: usize = 128;
 
-fn fail(column: u16, problem: &'static str) -> Error {
+fn fail(kind: Kind, column: u16, problem: &'static str) -> Error {
     Error::Payload {
-        kind: Kind::SEARCH.0,
+        kind: kind.0,
         column,
         problem,
     }
@@ -83,6 +92,7 @@ pub struct Search<'a> {
     rules: Option<Rules<'a>>,
     unit: Option<Packed<'a>>,
     rows: usize,
+    kind: Kind,
 }
 
 impl<'a> Search<'a> {
@@ -93,20 +103,30 @@ impl<'a> Search<'a> {
     /// [`Error::Payload`] if the section is not a SEARCH column table, or a column is missing,
     /// malformed or of the wrong length.
     pub fn open(section: &Section<'a>) -> Result<Self, Error> {
-        let t: Table<'a> = columns::open(section, Kind::SEARCH)?;
+        let kind = if section.kind() == Kind::SUBSTRING {
+            Kind::SUBSTRING
+        } else {
+            Kind::SEARCH
+        };
+        let fail = |column, problem| fail(kind, column, problem);
+        let t: Table<'a> = columns::open(section, kind)?;
         let rows = usize::try_from(section.item_count())
             .map_err(|_| fail(0, "the row count does not fit this platform"))?;
-        if t.ids().any(|id| id == 0 || id > UNIT) {
+        // SUBSTRING has no query rules or unit types.
+        let last = if kind == Kind::SUBSTRING {
+            BLOCK_MAX
+        } else {
+            UNIT
+        };
+        if t.ids().any(|id| id == 0 || id > last) {
             return Err(fail(0, "an unknown column"));
         }
-        let length = columns::required(&t, Kind::SEARCH, LENGTH, Some(1))?;
+        let length = columns::required(&t, kind, LENGTH, Some(1))?;
         let len = length
             .get(0)
             .and_then(|v| usize::try_from(v).ok())
             .unwrap_or(0);
-        let padded = t
-            .bytes(AUTOMATON)
-            .map_err(|e| columns::map(Kind::SEARCH, e))?;
+        let padded = t.bytes(AUTOMATON).map_err(|e| columns::map(kind, e))?;
         if padded.len() != len.next_multiple_of(4) {
             return Err(fail(
                 AUTOMATON,
@@ -120,7 +140,7 @@ impl<'a> Search<'a> {
                 "the automaton is empty or its padding is not zero",
             ));
         }
-        let starts = columns::required(&t, Kind::SEARCH, STARTS, None)?;
+        let starts = columns::required(&t, kind, STARTS, None)?;
         let keys = starts
             .len()
             .checked_sub(1)
@@ -130,19 +150,19 @@ impl<'a> Search<'a> {
             .get(keys)
             .and_then(|v| usize::try_from(v).ok())
             .ok_or(fail(STARTS, "the list starts are empty"))?;
-        let ids = columns::required(&t, Kind::SEARCH, IDS, Some(entries))?;
-        let importance = columns::required(&t, Kind::SEARCH, IMPORTANCE, Some(rows))?;
-        let block_max = columns::required(&t, Kind::SEARCH, BLOCK_MAX, Some(keys.div_ceil(BLOCK)))?;
+        let ids = columns::required(&t, kind, IDS, Some(entries))?;
+        let importance = columns::required(&t, kind, IMPORTANCE, Some(rows))?;
+        let block_max = columns::required(&t, kind, BLOCK_MAX, Some(keys.div_ceil(BLOCK)))?;
         let fst =
             Fst::new(bytes, keys32).ok_or(fail(AUTOMATON, "the automaton's root is malformed"))?;
         let rules = if t.ids().any(|id| id == RULES) {
             Some(Rules::new(
-                t.bytes(RULES).map_err(|e| columns::map(Kind::SEARCH, e))?,
+                t.bytes(RULES).map_err(|e| columns::map(kind, e))?,
             ))
         } else {
             None
         };
-        let unit = columns::optional(&t, Kind::SEARCH, UNIT, rows)?;
+        let unit = columns::optional(&t, kind, UNIT, rows)?;
         Ok(Self {
             fst,
             starts,
@@ -152,7 +172,14 @@ impl<'a> Search<'a> {
             rules,
             unit,
             rows,
+            kind,
         })
+    }
+
+    /// The section's kind: SEARCH or SUBSTRING.
+    #[must_use]
+    pub const fn kind(&self) -> Kind {
+        self.kind
     }
 
     /// The number of keys.
@@ -304,10 +331,25 @@ impl<'a> Search<'a> {
     /// Checks every key, list, importance and block maximum: O(automaton + entries).
     ///
     /// # Errors
-    /// [`Error::Payload`] if the automaton is not canonical, a list is empty, out of order or
+    /// [`Error::Payload`] if the automaton is not canonical, a SUBSTRING key is not its tag
+    /// and [`SUBSTRING_MIN`] or more code points of UTF-8, a list is empty, out of order or
     /// names a row past the end, an importance is above 255, or a block maximum is wrong.
     pub fn check(&self) -> Result<(), Error> {
-        self.fst.check(|_, _| {}).map_err(|p| fail(AUTOMATON, p))?;
+        let fail = |column, problem| fail(self.kind, column, problem);
+        // A SUBSTRING key is its tag, then at least SUBSTRING_MIN code points of UTF-8.
+        let substring = self.kind == Kind::SUBSTRING;
+        let mut bad_key = false;
+        self.fst
+            .check(|_, key| {
+                bad_key |= substring && !substring_key(key);
+            })
+            .map_err(|p| fail(AUTOMATON, p))?;
+        if bad_key {
+            return Err(fail(
+                AUTOMATON,
+                "a substring key is not its tag and 3 or more code points of UTF-8",
+            ));
+        }
         let units = match &self.rules {
             Some(r) => r.check()?,
             None => 0,
@@ -376,6 +418,17 @@ impl<'a> Search<'a> {
     }
 }
 
+/// Whether `key` is a SUBSTRING key: the tag, then [`SUBSTRING_MIN`] or more code points of
+/// UTF-8.
+fn substring_key(key: &[u8]) -> bool {
+    match key.split_first() {
+        Some((&SUBSTRING, text)) => {
+            core::str::from_utf8(text).is_ok_and(|t| t.chars().nth(SUBSTRING_MIN - 1).is_some())
+        }
+        _ => false,
+    }
+}
+
 /// `tag` then `key` in `buf`, if it fits a key.
 fn tagged<'b>(buf: &'b mut [u8; fst::MAX_KEY], tag: u8, key: &str) -> Option<&'b [u8]> {
     let n = key.len() + 1;
@@ -387,7 +440,9 @@ fn tagged<'b>(buf: &'b mut [u8; fst::MAX_KEY], tag: u8, key: &str) -> Option<&'b
 }
 
 #[cfg(feature = "write")]
-pub use write::{Extra, Maps, encode, encode_maps, encode_maps_with, encode_with, tagged_keys};
+pub use write::{
+    Extra, Maps, encode, encode_maps, encode_maps_with, encode_substring, encode_with, tagged_keys,
+};
 
 #[cfg(feature = "write")]
 mod write {
@@ -400,7 +455,7 @@ mod write {
     use super::fst::Builder;
     use super::{
         AUTOMATON, BLOCK, BLOCK_MAX, EXACT, IDS, IMPORTANCE, LENGTH, LOOSE, PHONETIC, RULES,
-        STARTS, UNIT,
+        STARTS, SUBSTRING, SUBSTRING_MIN, UNIT,
     };
     use crate::Error;
 
@@ -471,6 +526,28 @@ mod write {
             }
         }
         keys
+    }
+
+    /// Encodes a SUBSTRING body (D-199): `keys` maps each word suffix (folded, untagged) to its
+    /// rows; `importance` holds every row's importance, as SEARCH's.
+    ///
+    /// # Errors
+    /// As [`encode`], and if a key has fewer than [`SUBSTRING_MIN`] code points.
+    pub fn encode_substring(
+        keys: &BTreeMap<alloc::string::String, BTreeSet<u32>>,
+        importance: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        let mut tagged: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
+        for (text, rows) in keys {
+            if text.chars().nth(SUBSTRING_MIN - 1).is_none() {
+                return Err(Error::Write("a substring key has fewer than 3 code points"));
+            }
+            let mut key = Vec::with_capacity(text.len() + 1);
+            key.push(SUBSTRING);
+            key.extend_from_slice(text.as_bytes());
+            tagged.insert(key, rows.clone());
+        }
+        encode(&tagged, importance)
     }
 
     /// Encodes a SEARCH body: `keys` maps each tagged key (tag byte, then the folded text) to

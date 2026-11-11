@@ -141,6 +141,9 @@ impl Kind {
     pub const ISO_CODES: Self = Self(21);
     /// The rules of the pack's timezones: transitions, types and footers (D-196).
     pub const TZ_RULES: Self = Self(22);
+    /// Word-suffix keys of names to places, for substring search (D-199): the SEARCH layout
+    /// with one map.
+    pub const SUBSTRING: Self = Self(23);
 
     /// This reader's name for the kind, if it knows it.
     #[must_use]
@@ -173,6 +176,7 @@ pub(crate) const KINDS: &[(Kind, &str)] = &[
     (Kind::PLACE_TZ, "PLACE_TZ"),
     (Kind::ISO_CODES, "ISO_CODES"),
     (Kind::TZ_RULES, "TZ_RULES"),
+    (Kind::SUBSTRING, "SUBSTRING"),
 ];
 
 impl fmt::Display for Kind {
