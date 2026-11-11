@@ -6,6 +6,7 @@
 //!   ([`E7`]) for geometry
 //!   ([ADR-0029](https://github.com/teispace/teigeodata/blob/main/docs/03-decisions/adr/ADR-0029-coordinate-grid.md)).
 //! - [`PlaceKind`]: the kind of a place and its one-byte code.
+//! - [`IsoCode`]: an ISO 3166-1 alpha-2 or ISO 3166-2 code, inline, packed in 28 bits (D-197).
 //! - [`hilbert`]: the Hilbert index that orders the rows of every pack (spike S1).
 //! - [`bitpack`]: frame-of-reference bit-packing in lane-interleaved blocks (B1); encoders with
 //!   the `alloc` feature.
@@ -52,10 +53,12 @@ pub mod fsst;
 mod grid;
 mod hilbert;
 mod id;
+mod iso;
 mod kind;
 pub mod table;
 
 pub use grid::{E6, E7, Grid, GridError, Point};
 pub use hilbert::hilbert;
 pub use id::{IdError, Namespace, PlaceId, SERIAL_MAX};
+pub use iso::{IsoCode, IsoError};
 pub use kind::PlaceKind;

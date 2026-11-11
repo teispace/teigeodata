@@ -11,7 +11,7 @@
 //! level of detail `lod` of the pack's ARCS (0 = full resolution): the levels are the forge's
 //! topology-safe simplification, so no new simplifier runs here. `PLACE_TZ` keeps each kept
 //! row's zone when the zone's row is kept too, and none otherwise (D-151): keep the zone rows
-//! of the kept places to keep their zones.
+//! of the kept places to keep their zones. `ISO_CODES` keeps each kept row's code (D-197).
 //!
 //! Left out, for the caller to add if it needs them: REGION (a slice answers `tz_at` from its
 //! units and `PLACE_TZ`), REDIRECTS, POSTAL, DEM, BLOBS and EXTRA. The manifest is the
@@ -28,6 +28,7 @@ use crate::arcs::{self, ArcColumns, Arcs};
 use crate::elevation::{self, Elevations};
 use crate::hierarchy::{self, Hierarchy};
 use crate::idmap::{self, IdMap};
+use crate::iso_codes::{self, IsoCodes};
 use crate::names::{self, NameRecord, Names};
 use crate::place_index::{self, PlaceIndex};
 use crate::place_tz::{self, PlaceTz};
@@ -193,6 +194,7 @@ pub fn merge(parts: &[Part<'_, '_>], region: &Options) -> Result<Vec<Body>, Erro
     out.extend(m.zones()?);
     out.extend(m.names_and_search()?);
     out.extend(m.hierarchy()?);
+    out.extend(m.iso_codes()?);
     out.extend(m.geometry(region)?);
     Ok(out)
 }
@@ -363,6 +365,26 @@ impl<'a> Merged<'_, 'a> {
         })?;
         let k = u64::from(self.total);
         Ok(place_tz::encode(&zone_of)?.map(|b| (Kind::PLACE_TZ, Encoding::TABLE, k, b)))
+    }
+
+    /// `ISO_CODES`: each kept row's code, from the part that owns the row.
+    fn iso_codes(&self) -> Result<Option<Body>, Error> {
+        let mut codes = Vec::new();
+        for o in &self.open {
+            let Some(s) = o.section(Kind::ISO_CODES) else {
+                continue;
+            };
+            let t = IsoCodes::open(&s, o.places.len())?;
+            for &r in &o.own {
+                if let Some(c) = t.get(r) {
+                    let new = o.own_of.get(r as usize).copied().unwrap_or(u32::MAX);
+                    codes.push((new, c));
+                }
+            }
+        }
+        codes.sort_unstable_by_key(|c| c.0);
+        let k = codes.len() as u64;
+        Ok(iso_codes::encode(&codes)?.map(|b| (Kind::ISO_CODES, Encoding::TABLE, k, b)))
     }
 
     /// HIERARCHY: each row's nearest kept ancestor, through rows dropped or replaced.

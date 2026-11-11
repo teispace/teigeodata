@@ -51,6 +51,7 @@ pub mod extract;
 pub mod fuzz;
 pub mod hierarchy;
 pub mod idmap;
+pub mod iso_codes;
 mod layout;
 mod manifest;
 pub mod names;
@@ -135,6 +136,8 @@ impl Kind {
     pub const ELEVATION: Self = Self(19);
     /// Each place's timezone area (D-134).
     pub const PLACE_TZ: Self = Self(20);
+    /// The ISO 3166 code of each coded country and subdivision row (D-197).
+    pub const ISO_CODES: Self = Self(21);
 
     /// This reader's name for the kind, if it knows it.
     #[must_use]
@@ -165,6 +168,7 @@ pub(crate) const KINDS: &[(Kind, &str)] = &[
     (Kind::ARCS_OVERVIEW, "ARCS_OVERVIEW"),
     (Kind::ELEVATION, "ELEVATION"),
     (Kind::PLACE_TZ, "PLACE_TZ"),
+    (Kind::ISO_CODES, "ISO_CODES"),
 ];
 
 impl fmt::Display for Kind {

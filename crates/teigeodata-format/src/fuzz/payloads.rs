@@ -30,6 +30,7 @@ use crate::dem::{
 use crate::elevation::{self, Elevations};
 use crate::hierarchy::{self, Hierarchy, MAX_DEPTH};
 use crate::idmap::{self, IdMap};
+use crate::iso_codes::{self, IsoCodes};
 use crate::place_index::{self, MAX_NODE, MIN_NODE, Neighbour, PlaceIndex, Rect};
 use crate::places::{self, PlaceColumns, Places};
 use crate::poly_index::{self, PolyIndex, polygon_box};
@@ -43,7 +44,7 @@ use crate::{Encoding, Kind, Pack, Writer};
 use teigeodata_core::bitpack::{self, BLOCK_LEN, Coding, Packed};
 use teigeodata_core::bits::{self as bitmap, Bits};
 use teigeodata_core::table::{self as frame, Codec, Table, TableError};
-use teigeodata_core::{E6, E7, Namespace, PlaceId, PlaceKind, Point, SERIAL_MAX, hilbert};
+use teigeodata_core::{E6, E7, IsoCode, Namespace, PlaceId, PlaceKind, Point, SERIAL_MAX, hilbert};
 
 use super::{Cursor, limit};
 
@@ -120,7 +121,8 @@ pub fn sections(data: &[u8]) {
     let mut c = Cursor(data);
     let mode = c.u8();
     let structured = mode & 0x80 != 0;
-    match mode % 12 {
+    match mode % 13 {
+        12 => iso_codes_case(&mut c, structured),
         11 => postal_case(&mut c, structured),
         10 => dem_case(&mut c, structured),
         8 => arcs_case(&mut c, structured),
@@ -133,6 +135,96 @@ pub fn sections(data: &[u8]) {
         5 => region_case(&mut c, structured),
         6 => search_case(&mut c, structured),
         _ => blobs_case(&mut c, structured),
+    }
+}
+
+/// A code from the input: a valid one, or a raw value.
+fn iso_code(c: &mut Cursor<'_>) -> Option<IsoCode> {
+    let letter = |c: &mut Cursor<'_>| b'A' + c.u8() % 26;
+    let char36 = |c: &mut Cursor<'_>| match c.u8() % 36 {
+        v @ 0..=9 => b'0' + v,
+        v => b'A' + v - 10,
+    };
+    let mut text = vec![letter(c), letter(c)];
+    let sub = c.u8() % 4;
+    if sub > 0 {
+        text.push(b'-');
+        for _ in 0..sub {
+            text.push(char36(c));
+        }
+    }
+    IsoCode::from_bytes(&text).ok()
+}
+
+/// `ISO_CODES` on up to [`MAX_ROWS`] coded rows of up to twice as many places: lookups by row
+/// and by code never panic; a checked section yields only codes at increasing rows; a written
+/// one reads back as the model.
+fn iso_codes_case(c: &mut Cursor<'_>, structured: bool) {
+    let places = 1 + c.below(2 * MAX_ROWS);
+    let (mut body, mut model) = (Vec::new(), None);
+    let mut items;
+    if structured {
+        let mut codes: BTreeMap<u32, IsoCode> = BTreeMap::new();
+        for _ in 0..c.below(MAX_ROWS + 1) {
+            let row = c.below(places) as u32;
+            if let Some(code) = iso_code(c) {
+                codes.insert(row, code);
+            }
+        }
+        let codes: Vec<(u32, IsoCode)> = codes.into_iter().collect();
+        let Some(b) = iso_codes::encode(&codes)
+            .unwrap_or_else(|e| panic!("increasing coded rows are refused: {e}"))
+        else {
+            assert!(codes.is_empty(), "codes encode to no section");
+            return;
+        };
+        body = b;
+        items = codes.len() as u64;
+        if !edit(c, &mut body, &mut items) {
+            model = Some(codes);
+        }
+    } else {
+        items = u64::from(c.u16());
+        body.extend_from_slice(c.rest());
+    }
+    let Some(file) = pack(&[(Kind::ISO_CODES, items, &body)]) else {
+        return;
+    };
+    let p = open(&file);
+    let Ok(t) = IsoCodes::open(&section(&p, Kind::ISO_CODES), places) else {
+        assert!(model.is_none(), "a written ISO_CODES payload does not open");
+        return;
+    };
+    for r in rows(places) {
+        if let Some(code) = t.get(r as u32) {
+            let _ = t.row_of(code);
+        }
+    }
+    let _ = t.entry(t.len());
+    let checked = t.check().is_ok();
+    if checked {
+        let mut last = None;
+        let mut n = 0;
+        for (r, code) in t.iter() {
+            assert!(last < Some(r) && (r as usize) < places, "a checked row");
+            assert_eq!(t.get(r), Some(code), "a checked row's code");
+            last = Some(r);
+            n += 1;
+        }
+        assert_eq!(
+            n,
+            t.len(),
+            "a checked section has a value that is not a code"
+        );
+    }
+    if let Some(codes) = &model {
+        assert!(checked, "a written ISO_CODES payload fails its check");
+        assert!(t.iter().eq(codes.iter().copied()));
+        for &(r, code) in codes {
+            assert_eq!(t.get(r), Some(code));
+            let first = codes.iter().find(|x| x.1 == code).map(|x| x.0);
+            assert_eq!(t.row_of(code), first);
+        }
     }
 }
 

@@ -3,7 +3,7 @@
 //! `check` reads every value, O(rows). Sections that read others are checked against them, as
 //! the engine opens them: `PLACE_INDEX` on PLACES, POLYGONS on ARCS and the row count,
 //! `POLY_INDEX` on POLYGONS and ARCS, REDIRECTS on IDMAP, POSTAL on the row count, ELEVATION,
-//! `PLACE_TZ` and HIERARCHY one row per place, `ARCS_OVERVIEW` against ARCS, `ADMIN_REGION` on
+//! `PLACE_TZ` and HIERARCHY one row per place, `ISO_CODES` on the row count, `ARCS_OVERVIEW` against ARCS, `ADMIN_REGION` on
 //! ARCS when it reads its vertices from them; a section's block-hash list is proved against
 //! its hash. BLOBS frames are decoded with the `zstd` feature. No allocation.
 //!
@@ -17,6 +17,7 @@ use crate::dem::Dem;
 use crate::elevation::Elevations;
 use crate::hierarchy::Hierarchy;
 use crate::idmap::IdMap;
+use crate::iso_codes::IsoCodes;
 use crate::names::Names;
 use crate::place_index::PlaceIndex;
 use crate::place_tz::PlaceTz;
@@ -79,6 +80,10 @@ pub fn sections(pack: &Pack<'_>, mut each: impl FnMut(Kind, Result<bool, Error>)
                     let h = Hierarchy::open(&s)?;
                     h.check()?;
                     one_per_place(kind, h.len())?;
+                }
+                Kind::ISO_CODES => {
+                    let r = rows.ok_or(needs(kind, "no PLACES to count rows"))?;
+                    IsoCodes::open(&s, r)?.check()?;
                 }
                 Kind::REDIRECTS => {
                     let ids = ids.ok_or(needs(kind, "no IDMAP to check against"))?;

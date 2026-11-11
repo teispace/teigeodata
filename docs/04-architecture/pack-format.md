@@ -136,6 +136,7 @@ parameters).
 | 18 | ARCS_OVERVIEW | the coarse levels of ARCS alone, for fast coarse reads | `boundaries` | column table (D-102), [below](#arcs_overview) |
 | 19 | ELEVATION | each place's height, one row per PLACES row | `elevation` | column table (D-133): one bit-packed column; 1.3 B per place on Nepal, [below](#elevation) |
 | 20 | PLACE_TZ | each place's timezone area, one row per PLACES row | `timezone` | column table (D-134): the areas' rows and a per-place index into them, [below](#place_tz) |
+| 21 | ISO_CODES | the ISO 3166 code of each coded country and subdivision row | `admin` | column table (D-197): the coded rows and their packed codes, [below](#iso_codes) |
 
 ### Components of a pack
 
@@ -736,6 +737,26 @@ The children of row `r` are `children[end[r − 1] .. end[r]]`, from 0 for row 0
 parents is at most 32 long (`MAX_DEPTH`), which bounds every walk up the tree. The deep check
 proves that the columns describe one forest: each row's children are exactly the rows that
 name it as parent, and no chain is a cycle.
+
+### ISO_CODES
+
+The ISO 3166-1 alpha-2 code of a country row and the ISO 3166-2 code of a subdivision row
+(D-197, [ISO 3166 codes](../02-research/notes/iso-3166-codes.md)). `item_count` is the number
+of coded rows, at least one; a pack with no codes has no ISO_CODES section.
+
+| ID | Column | Values | |
+|---:|---|---|---|
+| 1 | rows | the PLACES rows that have a code, strictly increasing | required |
+| 2 | code | each row's code, packed in 28 bits | required |
+
+A code packs as `alpha 1 << 23 | alpha 2 << 18 | sub 1 << 12 | sub 2 << 6 | sub 3`: letters
+1–26, a subdivision character 0 (none), 1–10 for `0`–`9`, 11–36 for `A`–`Z`, with no gap
+between subdivision characters. The value is never 0, a country has sub 1 = 0, and integer
+order equals string order. The full code is stored, alpha-2 included: the ID namespace is the
+allocating country, not the ISO code (ADR-0008). A lookup by row is a binary search on `rows`
+(the sorted-key search of IDMAP). Open refuses a row at or past PLACES' count and any other
+column; the deep check refuses rows out of order and a value that is not a code, user-assigned
+alpha-2 codes (`AA`, `QM`–`QZ`, `XA`–`XZ`, `ZZ`) included. Older readers skip the kind.
 
 ### IDMAP and REDIRECTS
 

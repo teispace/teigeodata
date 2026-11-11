@@ -7,7 +7,7 @@
 //! |---|---|---|---|
 //! | `point` | IDMAP, PLACES, `PLACE_INDEX`, REDIRECTS | | ID, lat/lon, kind; nearest, box |
 //! | `elevation` | ELEVATION | point | a place's height |
-//! | `admin` | HIERARCHY | point | a place's parents and children |
+//! | `admin` | HIERARCHY, `ISO_CODES` | point | a place's parents and children, ISO 3166 codes |
 //! | `names` | NAMES | point | names |
 //! | `search` | SEARCH | names | name search |
 //! | `timezone` | `PLACE_TZ` | point | a place's timezone |
@@ -31,7 +31,7 @@ pub enum Component {
     Point = 0,
     /// Each place's height.
     Elevation = 1,
-    /// Each place's parent and children.
+    /// Each place's parent and children, and the ISO 3166 codes of countries and units.
     Admin = 2,
     /// The name records.
     Names = 3,
@@ -106,7 +106,7 @@ impl Component {
                 Kind::REDIRECTS,
             ],
             Self::Elevation => &[Kind::ELEVATION],
-            Self::Admin => &[Kind::HIERARCHY],
+            Self::Admin => &[Kind::HIERARCHY, Kind::ISO_CODES],
             Self::Names => &[Kind::NAMES],
             Self::Search => &[Kind::SEARCH],
             Self::Timezone => &[Kind::PLACE_TZ],
