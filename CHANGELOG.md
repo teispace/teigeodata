@@ -11,6 +11,8 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-11
+
 The first tagged version. Everything below is new.
 
 ### Engine (`teigeodata-engine`)
@@ -24,6 +26,12 @@ The first tagged version. Everything below is new.
   spacing in metres, the datum and the layer (D-192, D-195).
 - `bbox_of(place)` and `boundary(place, lod, &mut Outline)`: a place's extent and its outline at
   a level of detail (D-194).
+- `iso_code(place)` and `by_iso(code)`: ISO 3166-1 and 3166-2 codes of countries and level-1
+  units (`NP`, `NP-P3`), from per-country data files (D-197).
+- Zone rules from the outlines' own tzdb release (feature `tz-rules`, D-196):
+  `tz_offset_at(zone, instant)` (offset, abbreviation, DST, before the first rule),
+  `tz_local_candidates(zone, civil)` (`Unique`, `Gap`, `Overlap`), `tz_version()` and
+  `tz_offset_at_point(point, instant)`.
 - One Cargo feature per data component, so an app carries only the readers it uses (D-137).
 - Lazy verification of every section against the signed pack (D-078).
 
@@ -43,7 +51,12 @@ The first tagged version. Everything below is new.
   per-section verification. Specified in
   [docs/04-architecture/pack-format.md](docs/04-architecture/pack-format.md).
 - The DEM section states each grid's source product (column 15 `SOURCE`, D-195).
+- New sections: `ISO_CODES` (kind 21, `admin`) and `TZ_RULES` (kind 22, component `tz-rules`),
+  with the manifest tag `tzdb`. Older readers skip them.
 
 ### Breaking
 
 None: no version was released before this one.
+
+[Unreleased]: https://github.com/teispace/teigeodata/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/teispace/teigeodata/releases/tag/v0.1.0

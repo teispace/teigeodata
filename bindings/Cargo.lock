@@ -455,7 +455,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "teigeodata-api"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "teigeodata-blob",
  "teigeodata-names",
@@ -463,7 +463,7 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-blob"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "teigeodata-jvm"
@@ -475,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-names"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "unicode-normalization",
  "unicode-script",
