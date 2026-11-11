@@ -577,6 +577,12 @@ impl Layer {
         self.owned.is_mapped()
     }
 
+    /// The number of places (PLACES rows) in the pack; 0 without PLACES.
+    #[must_use]
+    pub fn rows(&self) -> usize {
+        self.owned.views().places.map_or(0, |p| p.len())
+    }
+
     /// The pack's length in bytes.
     #[must_use]
     pub fn len(&self) -> usize {

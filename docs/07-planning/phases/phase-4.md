@@ -261,8 +261,8 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
 - [x] (a) `Transport::fetch` (a capped whole-file GET) and `sync::refresh`: the TUF client
   workflow over the store, metadata kept under `meta/` by version with the timestamp as the
   commit point, crash-safe at every write (D-179)
-- [ ] (b) Crate `teigeodata-cli` (`tgd`, clap): `inspect`, `verify`, `diff` (sections and
-  records), `extract` (by component), `export` (NDJSON, GeoJSON, streamed)
+- [x] (b) Crate `teigeodata-cli` (`tgd`, clap): `inspect`, `verify`, `diff` (sections and
+  records), `extract` (by component and by box), `export` (NDJSON, GeoJSON, streamed) (D-180)
 - [ ] (c) Queries `get`, `reverse`, `search`, `near`, `admin`, `tz`; outputs text, `--json`,
   `--geojson`, `--nominatim` (ADR-0038) from one mapping module
 - [ ] (d) Sync: `refresh`, `catalog`, `find`, `locate`, `install`, `update`, `remove`, `pin`,
@@ -322,3 +322,4 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
 | 2026-11-11 | 4.3: both oracles over delegated roles | D-177 |
 | 2026-11-11 | 4.9 split into (a) to (e) from its research; the catalog refresh comes first, in `sync`; `merge` waits on 4.7 | D-178, [CLI note](../../02-research/notes/cli.md) |
 | 2026-11-11 | 4.9a done: metadata stored by version, the timestamp written last as the commit point | a refresh cut off mid-way left a timestamp ahead of its snapshot and an empty offline catalog (D-179) |
+| 2026-11-11 | 4.9b done; `extract` also cuts by box (the format's slice already existed); the deep check is a format module | D-180 |

@@ -284,6 +284,19 @@ impl Engine {
         }))
     }
 
+    /// The place at PLACES row `row` of layer `layer`, as that layer holds it, whatever the
+    /// layers above say: for walking one pack in its stored (Hilbert) order, as `tgd export`
+    /// does. `None` past the last row or for a layer the engine does not hold.
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if a section it reads is corrupt.
+    pub fn at_row(&self, layer: LayerId, row: u32) -> Result<Option<Place>, Error> {
+        match self.layers.iter().position(|l| l.id == layer) {
+            Some(i) => self.place(i, row as usize),
+            None => Ok(None),
+        }
+    }
+
     /// Whether a layer above layer `i` knows `id`: then the place in layer `i` is hidden.
     pub(crate) fn claimed_above(&self, i: usize, id: PlaceId) -> Result<bool, Error> {
         for l in self.layers.get(..i).unwrap_or_default() {

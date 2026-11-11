@@ -37,6 +37,7 @@ extern crate std;
 pub mod arcs;
 pub mod blobs;
 pub mod blocks;
+pub mod check;
 mod columns;
 pub mod component;
 pub mod components;

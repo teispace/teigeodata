@@ -1,0 +1,31 @@
+[package]
+name = "teigeodata-cli"
+description = "tgd, the teigeodata command line: inspect, verify, diff, extract and export packs; query them; keep a store of them in sync."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "tgd"
+path = "src/main.rs"
+
+[dependencies]
+teigeodata-core.workspace = true
+teigeodata-engine.workspace = true
+# The writer for `extract`, BLOBS decoding and signatures for `verify`.
+teigeodata-format = { workspace = true, features = ["write", "zstd", "signature"] }
+# clap derive (D-178): help, suggestions, uniform usage errors and completions.
+clap = { version = "4.6.7", features = ["derive"] }
+ed25519-dalek = { version = "3.0.0", default-features = false }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+teigeodata-names.workspace = true
+
+[lints]
+workspace = true

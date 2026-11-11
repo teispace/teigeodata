@@ -3,3 +3,5 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 allow-indexing-slicing-in-tests = true
+# Names written as their specifications spell them ("..": and clippy's defaults).
+doc-valid-idents = ["GeoJSON", "FeatureCollection", "NDJSON", ".."]

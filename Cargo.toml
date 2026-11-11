@@ -7,6 +7,7 @@ members = [
     "crates/teigeodata-api",
     "crates/teigeodata-bench",
     "crates/teigeodata-blob",
+    "crates/teigeodata-cli",
     "crates/teigeodata-core",
     "crates/teigeodata-engine",
     "crates/teigeodata-ffi",

@@ -517,3 +517,43 @@ fn the_baseline_slice_under_its_pack() {
     }
     println!("{cities} cities checked; {checked} names find their row");
 }
+
+/// Each section's verdict from `check::sections`, by kind.
+fn verdicts(bytes: &[u8]) -> Vec<(Kind, Result<bool, teigeodata_format::Error>)> {
+    let pack = Pack::open_verified(bytes).unwrap();
+    let mut v = Vec::new();
+    teigeodata_format::check::sections(&pack, |k, r| v.push((k, r)));
+    v
+}
+
+#[test]
+fn every_section_checks_whole_and_a_mismatch_is_named() {
+    let model = synthetic(2_000, 5);
+    let whole = model.encode();
+    let v = verdicts(&whole);
+    assert!(v.len() > 10, "{v:?}");
+    for (k, r) in &v {
+        assert!(matches!(r, Ok(true)), "{k}: {r:?}");
+    }
+    // ELEVATION one row short: written and hashed correctly, refused by the deep check alone.
+    let pack = Pack::open(&whole).unwrap();
+    let all: Vec<u32> = (0..model.ids.len() as u32).collect();
+    let mut sections = extract::rows(&pack, &all, 0, &Options::default()).unwrap();
+    let short = vec![Some(7_i16); model.ids.len() - 1];
+    let e = sections
+        .iter_mut()
+        .find(|s| s.0 == Kind::ELEVATION)
+        .unwrap();
+    e.3 = teigeodata_format::elevation::encode(&short)
+        .unwrap()
+        .unwrap();
+    e.2 = short.len() as u64;
+    let v = verdicts(&write(&sections, "np"));
+    for (k, r) in &v {
+        if *k == Kind::ELEVATION {
+            assert!(r.is_err(), "the short ELEVATION passed");
+        } else {
+            assert!(matches!(r, Ok(true)), "{k}: {r:?}");
+        }
+    }
+}

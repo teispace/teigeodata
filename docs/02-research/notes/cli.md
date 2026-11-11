@@ -159,6 +159,12 @@ host). A mirror that fails is demoted as for packs (D-170). The only failure tha
 refusal is the network, and the stored metadata then stays as it was: the app works offline
 on what it has.
 
+**The pack commands, as built (D-180).** `extract --components` copies sections as stored;
+`--bbox` re-encodes the kept rows with `format::extract`, keeping each place's ancestors and
+timezone area, and leaves out what is keyed by renumbered rows. The deep check of `verify` is
+`teigeodata_format::check::sections`, one function for every section. `export` maps a place
+to one record for NDJSON and GeoJSON; the query outputs (4.9c) reuse it.
+
 **`Transport::fetch(url, max, out)`.** A plain GET: status 200 (404 and 403 reported as
 `Status`), at most `max + 1` bytes read, more than `max` refused. A platform transport
 implements it beside `get`.
