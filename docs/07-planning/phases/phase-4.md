@@ -63,8 +63,10 @@ call (ADR-0012).
   in the row's own pack (D-119), which every pack holds as stubs (D-143); the metamorphic gate
   now asks "Name, Parent" and "Name, Pare" queries on synthetic and Nepal splits, and a context
   bonus planted to apply in one layer only fails it
-- [ ] Forge: split builds (city packs, grid tiles) write their places' ancestor stubs (D-143),
-  gated by check-pack
+- [x] Forge: split builds (city packs, grid tiles) write their places' ancestor stubs (D-143),
+  gated by check-pack (2026-11-11, D-191): `forge make --split` by `split.yaml`, proved
+  against the country pack by `split::check`; Nepal by province 7 parts, 1.16× the pack.
+  Grid tiles for units over a budget are W1, with India's sizes
 - [x] Snapshot swap: `arc-swap` against `RwLock` A/B in L5 (D-141, 2026-11-09): with 8
   readers and a writer, `arc-swap` 510–555 ns per `get` on 3 layers, a held `RwLock`
   1,665–1,864 ns (its writer waited up to 26 ms), a `Mutex` 4,990–5,283 ns; `Shared` built on
@@ -347,3 +349,4 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
 | 2026-11-11 | Gate 14 met by prototypes on macOS, the iOS simulator, the Android emulator and headless Chrome | D-185, D-186 |
 | 2026-11-11 | 4.8: the world-size install runs in `nightly`, not the data build | D-188: it needs no data; the data build waits on the input mirror (D-127) |
 | 2026-11-11 | 4.1b: storage on disk by punching holes, not a compact file; Windows its own item | D-189: APFS fills gaps under 16 MiB, so a partial install saved no disk |
+| 2026-11-11 | Split builds: zones cut to each part, outlines of own places only, outside places to the nearest unit | D-191: parts were 2.3× the pack with whole zone rings; a "rest" part is not findable by point |

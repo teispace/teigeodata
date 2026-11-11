@@ -31,7 +31,8 @@ use crate::record::{column, for_each_batch};
 /// The DEM a build samples, and the heights it gave.
 pub(crate) struct Elevations {
     pub(crate) tileset: String,
-    bytes: Vec<u8>,
+    /// The `dem-section` pack, shared by a split build's parts.
+    bytes: std::sync::Arc<Vec<u8>>,
     /// One per place, in the build's place order.
     pub(crate) values: Vec<Option<i16>>,
 }
@@ -101,7 +102,7 @@ pub(crate) fn load(
     let values = sample(&open(&bytes)?, places)?;
     Ok(Some(Elevations {
         tileset: tileset.to_string(),
-        bytes,
+        bytes: std::sync::Arc::new(bytes),
         values,
     }))
 }
@@ -160,6 +161,19 @@ fn stated(build: &Path, sources: &[String]) -> Result<BTreeMap<String, Stated>, 
 }
 
 impl Elevations {
+    /// The heights of the places `at` (indexes into the build's places), in that order: a split
+    /// build's part (D-191). The DEM is shared, not copied.
+    pub(crate) fn subset(&self, at: &[usize]) -> Self {
+        Self {
+            tileset: self.tileset.clone(),
+            bytes: std::sync::Arc::clone(&self.bytes),
+            values: at
+                .iter()
+                .map(|&i| self.values.get(i).copied().flatten())
+                .collect(),
+        }
+    }
+
     /// The summary: how many places have a height, their range, and the QA comparison with
     /// what the source records state, by place kind: at the place's point (what the pack
     /// holds) and at the record's own point (the DEMs' disagreement alone, without the move

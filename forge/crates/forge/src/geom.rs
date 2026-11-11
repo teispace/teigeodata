@@ -112,6 +112,78 @@ impl Polygon {
     }
 }
 
+/// `ring` cut to the box `area` (Sutherland–Hodgman, one box side at a time), closed, without
+/// repeated vertices; empty when fewer than three vertices remain. Every point strictly inside
+/// `area` has the same winding number about the cut ring as about `ring`, so containment there
+/// is unchanged. Cut points lie exactly on the box's sides; their other coordinate is rounded to
+/// the grid, which tilts a cut edge by under half a unit (5 mm).
+pub(crate) fn clip_ring(ring: &[(i32, i32)], area: Bbox) -> Vec<(i32, i32)> {
+    let (west, south, east, north) = area;
+    let mut pts: Vec<(i32, i32)> = ring.to_vec();
+    if pts.len() > 1 && pts.first() == pts.last() {
+        pts.pop();
+    }
+    // (axis 0 = lon / 1 = lat, the side's value, keep the side above it).
+    for (axis, at, above) in [
+        (0, west, true),
+        (0, east, false),
+        (1, south, true),
+        (1, north, false),
+    ] {
+        let coord = |p: (i32, i32)| if axis == 0 { p.0 } else { p.1 };
+        let inside = |p: (i32, i32)| {
+            if above {
+                coord(p) >= at
+            } else {
+                coord(p) <= at
+            }
+        };
+        let cut = |a: (i32, i32), b: (i32, i32)| {
+            let (ca, cb) = (i128::from(coord(a)), i128::from(coord(b)));
+            let (oa, ob) = if axis == 0 { (a.1, b.1) } else { (a.0, b.0) };
+            let (oa, ob) = (i128::from(oa), i128::from(ob));
+            // oa + (ob − oa)·(at − ca)/(cb − ca), rounded half away from zero; cb ≠ ca since a
+            // and b are on either side of `at`.
+            let (num, den) = ((ob - oa) * (i128::from(at) - ca), cb - ca);
+            let (num, den) = if den < 0 { (-num, -den) } else { (num, den) };
+            let q = if num >= 0 {
+                (2 * num + den) / (2 * den)
+            } else {
+                -((2 * -num + den) / (2 * den))
+            };
+            let other = i32::try_from(oa + q).unwrap_or(if q > 0 { i32::MAX } else { i32::MIN });
+            if axis == 0 { (at, other) } else { (other, at) }
+        };
+        let Some(&last) = pts.last() else { break };
+        let mut out = Vec::with_capacity(pts.len() + 4);
+        let mut prev = last;
+        for &cur in &pts {
+            match (inside(prev), inside(cur)) {
+                (true, true) => out.push(cur),
+                (true, false) => out.push(cut(prev, cur)),
+                (false, true) => {
+                    out.push(cut(prev, cur));
+                    out.push(cur);
+                }
+                (false, false) => {}
+            }
+            prev = cur;
+        }
+        pts = out;
+    }
+    pts.dedup();
+    if pts.len() > 1 && pts.first() == pts.last() {
+        pts.pop();
+    }
+    if pts.len() < 3 {
+        return Vec::new();
+    }
+    if let Some(&first) = pts.first() {
+        pts.push(first);
+    }
+    pts
+}
+
 /// Edges of a ring, including the closing one (a zero-length no-op when the ring is closed).
 fn edges(ring: &[(i32, i32)]) -> impl Iterator<Item = ((i32, i32), (i32, i32))> + '_ {
     let closing = ring.last().zip(ring.first()).map(|(l, f)| (*l, *f));
@@ -215,6 +287,50 @@ impl GridIndex {
 #[cfg(test)]
 mod tests {
     use super::{GridIndex, Polygon};
+
+    #[test]
+    fn a_clipped_ring_keeps_containment_inside_the_box() {
+        use super::clip_ring;
+        // A concave ring (a U) over the box (2, 2)–(8, 8), with a hole-like notch.
+        let ring = vec![
+            (0, 0),
+            (10, 0),
+            (10, 10),
+            (6, 10),
+            (6, 4),
+            (4, 4),
+            (4, 10),
+            (0, 10),
+            (0, 0),
+        ];
+        let area = (2, 2, 8, 8);
+        let cut = clip_ring(&ring, area);
+        assert_eq!(cut.first(), cut.last());
+        assert!(
+            cut.iter()
+                .all(|&(x, y)| (2..=8).contains(&x) && (2..=8).contains(&y))
+        );
+        let whole = Polygon { rings: vec![ring] };
+        let part = Polygon { rings: vec![cut] };
+        for x in 3..8 {
+            for y in 3..8 {
+                if x == 4 || x == 6 || y == 4 {
+                    continue; // on an edge of the notch: inside both ways
+                }
+                assert_eq!(whole.contains(x, y), part.contains(x, y), "({x}, {y})");
+            }
+        }
+        // A ring off the box is gone; a box inside the ring is the box.
+        assert_eq!(
+            clip_ring(&[(20, 20), (30, 20), (30, 30), (20, 20)], area),
+            []
+        );
+        let boxed = clip_ring(&[(0, 0), (10, 0), (10, 10), (0, 10), (0, 0)], area);
+        assert_eq!(boxed.len(), 5);
+        // A slanted edge is cut at its rounded crossing.
+        let tri = clip_ring(&[(0, 0), (10, 0), (0, 10), (0, 0)], (0, 0, 10, 3));
+        assert!(tri.contains(&(7, 3)) && tri.contains(&(0, 3)), "{tri:?}");
+    }
 
     fn square(x0: i32, y0: i32, s: i32) -> Vec<(i32, i32)> {
         vec![

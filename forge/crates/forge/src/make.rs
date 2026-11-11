@@ -2,7 +2,7 @@
 //! D-095).
 //!
 //! ```text
-//! forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--force] [--fetch]
+//! forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--split] [--force] [--fetch]
 //! ```
 //!
 //! The recipe is `data/countries/<cc>/build.yaml`. The stages are `read` for each points
@@ -690,6 +690,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         &postal_inputs(&country, &lock)?,
         &names_inputs(root, &country)?,
         &corrections_inputs(&country)?,
+        &split_input(&pass, &country)?,
         build_args.join("\0").as_bytes(),
         &file("--ids")?,
         blake3::hash(&file("--key")?).as_bytes(),
@@ -723,10 +724,19 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     )
 }
 
+/// The split a `--split` build follows (D-191): part of the build stage's key.
+fn split_input(pass: &[String], country: &Path) -> Result<Vec<u8>, String> {
+    if pass.iter().any(|a| a == "--split") {
+        read_or_empty(&country.join("split.yaml"))
+    } else {
+        Ok(Vec::new())
+    }
+}
+
 /// The country code and the arguments `make` passes on to `build` (all but `--force` and
 /// `--fetch`); `--release` is required.
 fn make_args(args: &[String]) -> Result<(&String, Vec<String>), String> {
-    let usage = "usage: forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--force] [--fetch]";
+    let usage = "usage: forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--split] [--force] [--fetch]";
     let cc = args.first().ok_or(usage)?;
     let pass: Vec<String> = args
         .iter()

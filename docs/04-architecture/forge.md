@@ -561,9 +561,32 @@ registry, the input of the next main build. Measured on Nepal on 2026-11-07:
 The registry is 3.5 MB, 0.42 MB with `zstd -19`. Publishing it with each release and pinning
 it in `sources.lock` comes with the catalog (step 3.7).
 
+### Split builds (`--split`)
+
+`forge make <cc> … --split` (D-191, [split builds](../02-research/notes/split-builds.md)) also
+writes one pack per unit of the level `data/countries/<cc>/split.yaml` names, at the address
+`<cc>-<code>` (ADR-0010), beside the country pack and through the same pack stage
+(`build/split.rs`). The country pack's bytes do not change with the flag. A part holds:
+- its own places: those whose chain of parents reaches the unit. A place under no unit (a
+  border town just outside every unit, a former region) goes to the unit whose box of own
+  places is nearest; none is dropped;
+- every ancestor of them as a row (the stubs, D-143), under the country pack's IDs;
+- the outlines of its own places only, on just the arcs they use (a stub's outline stays with
+  the country pack and the baseline);
+- the timezone zones cut to its box grown by 0.05° (`geom::clip_ring`); a zone keeps its point
+  when the cut zone holds it;
+- its own places' postal codes and heights, the redirects to them, and every tombstone.
+
+G-tz fails only the country pack: a part holds a subset of the same records. After writing,
+`split::check` reads every part back against the country pack: each own place is in one part
+only, with the same ID, point, canonical name, chain of ancestors and timezone area, and every
+row of the country pack is in a part, except a zone that holds no place. A build removes the
+parts an earlier build left in its output. Nepal by province on 2026-11-11 (recipe without the
+uncached buildings and DEM): 7 parts, 13.49 MB together for an 11.59 MB country pack.
+
 ## Run every stage (`make`)
 
-`forge make <cc> --release <v> [--lite] [--key <seed-file>] [--ids <registry>] [--force] [--fetch]` runs a
+`forge make <cc> --release <v> [--lite] [--key <seed-file>] [--ids <registry>] [--split] [--force] [--fetch]` runs a
 country's stages from its recipe, `data/countries/<cc>/build.yaml` (checked by
 `cargo xtask check-data`): `read` for each points source, `conflate` over them, `buildings`
 for each building source the build may read, `core`, `topology` for the admin source, `dem`

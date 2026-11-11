@@ -22,6 +22,7 @@ use super::pack::Body;
 use crate::topo::{self, arcs::Parts};
 
 /// One polygon of the `topology` stage.
+#[derive(Clone)]
 struct Poly {
     level: u8,
     pcode: String,
@@ -139,6 +140,77 @@ pub(super) fn sections_by_code(
 }
 
 impl Geometry {
+    /// The polygons of the places `keep` holds (by key, the country's as `country`), on only
+    /// the arcs they use, renumbered in their old order: a split build's part (D-191). Arcs
+    /// keep their vertices and levels exactly, so the part's outlines equal the whole's.
+    pub(super) fn subset(
+        &self,
+        country: Option<&str>,
+        keep: impl Fn(&str) -> bool,
+    ) -> Result<Self, String> {
+        let polys: Vec<Poly> = self
+            .polys
+            .iter()
+            .filter(|p| !p.pcode.starts_with(topo::pov::FILLER))
+            .filter_map(|p| match key(p, country) {
+                Ok(k) => keep(&k).then(|| Ok(p.clone())),
+                Err(e) => Some(Err(e)),
+            })
+            .collect::<Result<_, String>>()?;
+        let mut used: Vec<u32> = polys
+            .iter()
+            .flat_map(|p| p.parts.iter().flatten().flatten().map(|&r| r >> 1))
+            .collect();
+        used.sort_unstable();
+        used.dedup();
+        let new_of: BTreeMap<u32, u32> = used.iter().zip(0_u32..).map(|(&a, n)| (a, n)).collect();
+        let all = Arcs::open(&Section::unpacked(Kind::ARCS, self.arc_count, &self.arcs))
+            .map_err(|e| e.to_string())?;
+        let mut points: Vec<Vec<Point<E7>>> = Vec::with_capacity(used.len());
+        let mut levels: Vec<Vec<u8>> = Vec::with_capacity(used.len());
+        for &a in &used {
+            let a = a as usize;
+            points.push(all.points(a, false, 0).collect());
+            if all.has_levels() {
+                let range = all.range(a).ok_or("an arc out of range")?;
+                levels.push(
+                    range
+                        .map(|v| all.level(v).ok_or("a vertex without a level"))
+                        .collect::<Result<_, _>>()?,
+                );
+            }
+        }
+        let tolerances: Vec<u32> = if all.has_levels() {
+            (1..arcs::PINNED)
+                .map(|l| all.tolerance_cm(l).ok_or("a missing tolerance"))
+                .collect::<Result<_, _>>()?
+        } else {
+            Vec::new()
+        };
+        let arc_refs: Vec<&[Point<E7>]> = points.iter().map(Vec::as_slice).collect();
+        let level_refs: Vec<&[u8]> = levels.iter().map(Vec::as_slice).collect();
+        let body = arcs::encode(&arcs::ArcColumns {
+            arcs: &arc_refs,
+            levels: &level_refs,
+            tolerances_cm: &tolerances,
+        })
+        .map_err(|e| e.to_string())?;
+        let polys = polys
+            .into_iter()
+            .map(|mut p| {
+                for r in p.parts.iter_mut().flatten().flatten() {
+                    *r = new_of[&(*r >> 1)] << 1 | (*r & 1);
+                }
+                p
+            })
+            .collect();
+        Ok(Self {
+            arcs: body,
+            arc_count: used.len() as u64,
+            polys,
+        })
+    }
+
     /// Each polygon's label point (lon, lat on the 1e-7° grid), by code.
     pub(super) fn labels(&self) -> BTreeMap<&str, (i32, i32)> {
         self.polys

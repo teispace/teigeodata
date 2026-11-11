@@ -38,15 +38,20 @@ pub(super) const NODE: usize = 16;
 pub(super) struct Input<'a> {
     pub(super) root: &'a Path,
     pub(super) args: &'a Args,
+    /// The pack's address: the country code, or a split build's part (`np-p3`, D-191).
+    pub(super) address: &'a str,
+    /// A split build's part takes the country pack's IDs and redirects (D-191); the country
+    /// pack allocates them through the registry.
+    pub(super) given: Option<&'a Given>,
     pub(super) places: &'a [Place],
     pub(super) profile: &'a Profile,
     pub(super) zones: &'a Zones,
     /// (min lon, min lat, max lon, max lat).
     pub(super) coverage: (i32, i32, i32, i32),
     pub(super) file: &'a Path,
-    /// The ID registry the build starts from, and where the updated one goes.
+    /// The ID registry the build starts from, and where the updated one goes (none for a part).
     pub(super) registry: &'a Registry,
-    pub(super) ids_file: &'a Path,
+    pub(super) ids_file: Option<&'a Path>,
     /// The admin geometry of the `topology` stage, when the build adds it.
     pub(super) geometry: Option<&'a super::geometry::Geometry>,
     /// The postal codes, when the country has them and the build may read them.
@@ -199,7 +204,20 @@ fn place_tz_section(
         .map(|b| (Kind::PLACE_TZ, Encoding::TABLE, points.len() as u64, b)))
 }
 
-pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
+/// The IDs a pack was written with, by place key, and its redirects: what a split build's
+/// parts are given (D-191).
+pub(super) struct Given {
+    pub(super) ids: BTreeMap<String, PlaceId>,
+    pub(super) moved: Vec<(PlaceId, Option<PlaceId>)>,
+}
+
+/// A written pack: its bytes, and the IDs it was written with.
+pub(super) struct Built {
+    pub(super) bytes: Vec<u8>,
+    pub(super) given: Given,
+}
+
+pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
     let places = input.places;
     // Rows: Hilbert order of the stored (1e-6°) point, ties by key.
     let mut order: Vec<(u64, &str, usize)> = Vec::with_capacity(places.len());
@@ -230,7 +248,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
         .collect();
     let hierarchy_body = hierarchy::encode(&parents).map_err(|e| e.to_string())?;
 
-    let (ids, moved, assigned) = allocate(input, &rows)?;
+    let (ids, moved, assigned) = ids_for(input, &rows)?;
     let idmap_body = idmap::encode(&ids).map_err(|e| e.to_string())?;
 
     let (names_body, search_body) = name_sections(&rows, input.profile, &input.args.admin)?;
@@ -291,8 +309,10 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
         &mut report,
     )?;
     crate::make::write_atomic(input.file, &bytes)?;
-    crate::make::write_atomic(input.ids_file, assigned.registry.render().as_bytes())?;
-    ids_report(&assigned, input, &mut report);
+    if let (Some(assigned), Some(file)) = (&assigned, input.ids_file) {
+        crate::make::write_atomic(file, assigned.registry.render().as_bytes())?;
+        ids_report(assigned, file, input, &mut report);
+    }
     let _ = writeln!(report, "\n| Section | Bytes |\n|---|---:|");
     for s in &sections {
         let _ = writeln!(report, "| {} | {} |", s.0, s.3.len());
@@ -303,7 +323,45 @@ pub(super) fn write(input: &Input<'_>) -> Result<String, String> {
         bytes.len(),
         blake3::hash(&bytes).to_hex()
     );
-    Ok(report)
+    let given = Given {
+        ids: rows.iter().map(|p| p.key.clone()).zip(ids).collect(),
+        moved,
+    };
+    Ok((report, Built { bytes, given }))
+}
+
+/// The rows' IDs and the pack's redirects: given to a split build's part, else allocated
+/// through the registry (whose outcome is returned).
+#[allow(
+    clippy::type_complexity,
+    reason = "the IDs, the redirects and the registry outcome"
+)]
+fn ids_for(
+    input: &Input<'_>,
+    rows: &[&Place],
+) -> Result<
+    (
+        Vec<PlaceId>,
+        Vec<(PlaceId, Option<PlaceId>)>,
+        Option<Assignment>,
+    ),
+    String,
+> {
+    if let Some(g) = input.given {
+        let ids = rows
+            .iter()
+            .map(|p| {
+                g.ids
+                    .get(&p.key)
+                    .copied()
+                    .ok_or_else(|| format!("{}: no ID in the country pack", p.key))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((ids, g.moved.clone(), None))
+    } else {
+        let (ids, moved, assigned) = allocate(input, rows)?;
+        Ok((ids, moved, Some(assigned)))
+    }
 }
 
 /// The POSTAL section: every code links to its unit's row (D-105), with the place index.
@@ -370,7 +428,7 @@ fn allocate(
 
 pub(super) type Body = (Kind, Encoding, u64, Vec<u8>);
 
-fn ids_report(a: &Assignment, input: &Input<'_>, report: &mut String) {
+fn ids_report(a: &Assignment, ids_file: &Path, input: &Input<'_>, report: &mut String) {
     let _ = writeln!(
         report,
         "\nIDs ({}): {} kept, {} new, {} retired into a successor, {} retired with none; {} redirects in the pack. Registry: `{}`.",
@@ -384,10 +442,9 @@ fn ids_report(a: &Assignment, input: &Input<'_>, report: &mut String) {
         a.merged,
         a.gone,
         a.redirects.len(),
-        input
-            .ids_file
+        ids_file
             .strip_prefix(input.root)
-            .unwrap_or(input.ids_file)
+            .unwrap_or(ids_file)
             .display(),
     );
 }
@@ -399,7 +456,7 @@ fn assemble(
     sections: &[Body],
 ) -> Result<(Vec<u8>, Option<ed25519_dalek::SigningKey>), String> {
     let mut w =
-        Writer::new(&input.args.cc, "places", &input.args.release).map_err(|e| e.to_string())?;
+        Writer::new(input.address, "places", &input.args.release).map_err(|e| e.to_string())?;
     let (x0, y0, x1, y1) = input.coverage;
     let corner = |lat, lon| Point::<E7>::from_units(lat, lon).ok_or("coverage off the grid");
     let bbox = Bbox {
@@ -625,7 +682,7 @@ fn verify(
         None => None,
     };
     let zones_ok = verify_zones(&p, rows, input)?;
-    let tz_line = verify_place_tz(&p, &places, rows, input.stated_tz)?;
+    let tz_line = verify_place_tz(&p, &places, rows, input.stated_tz, input.given.is_none())?;
     let by_kind: BTreeMap<String, usize> = rows.iter().fold(BTreeMap::new(), |mut m, r| {
         *m.entry(format!("{:?}", r.kind)).or_default() += 1;
         m
@@ -701,12 +758,16 @@ const TZ_DIFFER_MAX: f64 = 0.001;
 /// `PLACE_TZ` read back (D-134): `check`, one row per place, and every place's area is the
 /// area REGION holds at the place's point as read back from PLACES. No REGION, no `PLACE_TZ`.
 /// G-tz (D-138): each source record that states a timezone is compared with its place's;
-/// at most [`TZ_DIFFER_MAX`] of them may differ.
+/// at most [`TZ_DIFFER_MAX`] of them may differ. G-tz is a gate on the country's records, so
+/// it fails only the country pack (`gate`): a split build's part (D-191) holds a subset of the
+/// same records, reports its share, and is proved equal to the country pack, timezone areas
+/// included, by `split::check`.
 fn verify_place_tz(
     p: &Pack<'_>,
     places: &Places<'_>,
     rows: &[&Place],
     stated: &BTreeMap<String, String>,
+    gate: bool,
 ) -> Result<Option<String>, String> {
     let e = |e: teigeodata_format::Error| e.to_string();
     let (tz, zones) = match (p.section(Kind::PLACE_TZ), p.section(Kind::REGION)) {
@@ -775,7 +836,7 @@ fn verify_place_tz(
                 .join("; ")
         );
     }
-    if share > TZ_DIFFER_MAX {
+    if share > TZ_DIFFER_MAX && gate {
         return Err(line);
     }
     Ok(Some(line))

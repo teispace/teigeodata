@@ -31,6 +31,7 @@ use crate::postal;
 use crate::recipe;
 use crate::romanise;
 use crate::sources;
+use crate::split;
 
 const PROFILE_SCHEMA: &str = "teigeodata/profile/v1";
 
@@ -145,6 +146,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     let mut queries = 0usize;
     let mut postal_codes = 0usize;
     let mut fixes = 0usize;
+    let mut split_units = 0usize;
     let mut scheme_ids = BTreeSet::new();
     let mut lexicons = Vec::new();
     let profiles = romanise::ids(root);
@@ -186,6 +188,11 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
             postal_codes += n;
             problems.extend(found.into_iter().map(|p| format!("{at}/postal.yaml: {p}")));
         }
+        if let Ok(text) = fs::read_to_string(path.join("split.yaml")) {
+            let (n, found) = split::check_text(&text);
+            split_units += n;
+            problems.extend(found.into_iter().map(|p| format!("{at}/split.yaml: {p}")));
+        }
         let lex = path.join("lexicon.yaml");
         if lex.exists() {
             match fs::read_to_string(&lex) {
@@ -217,7 +224,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     }
     if problems.is_empty() {
         Ok(format!(
-            "data ok: {} countries, {terms} lexicon terms, {queries} golden query entries, {postal_codes} postal codes, {fixes} corrections, {profiles} romanisation profiles, {pinned} pinned sources checked",
+            "data ok: {} countries, {terms} lexicon terms, {queries} golden query entries, {postal_codes} postal codes, {fixes} corrections, {split_units} split units, {profiles} romanisation profiles, {pinned} pinned sources checked",
             countries.len()
         ))
     } else {

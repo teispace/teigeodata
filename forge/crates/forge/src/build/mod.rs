@@ -47,6 +47,7 @@ mod pack;
 mod population;
 mod postal;
 mod sources;
+mod split;
 mod units;
 pub(crate) mod world;
 mod world_overture;
@@ -56,7 +57,7 @@ mod zones;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use teigeodata_core::PlaceKind;
@@ -67,6 +68,7 @@ use crate::lock::Lock;
 use crate::names::Namer;
 
 use cluster::{Clustered, cluster_places, link_admins};
+use naming::Naming;
 use sources::core_points;
 use units::{Level, admin_places, country_place};
 use zones::{Zones, zone_places};
@@ -108,7 +110,7 @@ pub(crate) struct Args {
 
 impl Args {
     pub(crate) fn parse(args: &[String]) -> Result<Self, String> {
-        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--tz-first <zone,...>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--topology] [--dem <tileset>] [--population <grid>] <points-source> <points-source> [...]";
+        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--tz-first <zone,...>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--topology] [--dem <tileset>] [--population <grid>] [--split] <points-source> <points-source> [...]";
         let mut it = args.iter();
         let cc = it.next().ok_or(usage)?.clone();
         let (mut release, mut admin, mut tz, mut key, mut ids, mut core, mut lite) =
@@ -191,20 +193,71 @@ pub(crate) struct Place {
     pub(crate) sources: Vec<String>,
 }
 
+/// The arguments and, with `--split` (D-191), the country's split. `--split` is not part of
+/// `Args`: the build ID hashes `Args`, and the country pack must be the same bytes whether or
+/// not its parts are written.
+fn args_and_split(root: &Path, args: &[String]) -> Result<(Args, Option<split::Split>), String> {
+    let with = args.iter().any(|a| a == "--split");
+    let args: Vec<String> = args.iter().filter(|a| *a != "--split").cloned().collect();
+    let a = Args::parse(&args)?;
+    let split = with.then(|| split::read(root, &a.cc)).transpose()?;
+    Ok((a, split))
+}
+
+/// Adds the country's own place (when its source has one) after the first `units` rows of
+/// `places`, and parents the top units to it.
+fn add_country(
+    build: &Path,
+    sources: &[String],
+    profile: &Profile,
+    (places, units): (&mut Vec<Place>, usize),
+    naming: &mut Naming,
+) -> Result<(), String> {
+    let current = places.get(..units).unwrap_or_default();
+    if let Some(country) = country_place(build, sources, profile, current, naming)? {
+        let key = country.key.clone();
+        places.push(country);
+        units::parent_to_country(places, &key);
+    }
+    Ok(())
+}
+
+/// The admin source's shared-boundary topology when the build asks for it (`--topology`).
+fn topology(root: &Path, a: &Args) -> Result<Option<geometry::Geometry>, String> {
+    a.topology
+        .then(|| geometry::load(root, &a.admin))
+        .transpose()
+}
+
+/// Writes the country pack and, with a split (D-191), its parts beside it, after removing any
+/// parts an earlier build left there. Returns the report.
+fn packs(
+    input: &pack::Input<'_>,
+    split: Option<&split::Split>,
+    out_dir: &Path,
+) -> Result<String, String> {
+    split::remove_parts(out_dir, &input.args.cc, input.args.build_name())?;
+    let (mut report, country) = pack::write(input)?;
+    if let Some(s) = split {
+        report.push_str(&split::run(input, &country, s, out_dir)?);
+    }
+    Ok(report)
+}
+
 /// `forge build …`.
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
-    let a = Args::parse(args)?;
+    let (a, split) = args_and_split(root, args)?;
     let lock = Lock::read(&root.join("data/sources.lock"))?;
     let g = gate(root, &a, &lock)?;
 
     let build = root.join("data/build");
     let profile = Profile::read(root, &a.cc)?;
     let units = admin_places(root, &lock, &a.admin)?;
-    let core = match &a.core {
-        Some(b) => core_points(&build, &a.sources, b)?,
-        None => BTreeMap::new(),
-    };
+    let core = a.core.as_ref().map_or_else(
+        || Ok(BTreeMap::new()),
+        |b| core_points(&build, &a.sources, b),
+    )?;
     let namer = Namer::load(root, &a.cc, &profile.romanise)?;
     let fixes = corrections::load(root, &a.cc)?;
     let Clustered {
@@ -227,20 +280,16 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let unit_count = units.places.len();
     let mut places: Vec<Place> = units.places;
     places.extend(clustered);
-    let current = places.get(..unit_count).unwrap_or_default();
-    if let Some(country) = country_place(&build, &g.sources, &profile, current, &mut naming)? {
-        let key = country.key.clone();
-        places.push(country);
-        units::parent_to_country(&mut places, &key);
-    }
+    add_country(
+        &build,
+        &g.sources,
+        &profile,
+        (&mut places, unit_count),
+        &mut naming,
+    )?;
     admin.added = link_admins(&mut places, std::mem::take(&mut admin.links));
     let coverage = units.coverage.ok_or("the boundary source has no units")?;
-    let grid = g
-        .population
-        .as_deref()
-        .map(|id| lock.path(root, id))
-        .transpose()?;
-    let modelled = population::run(grid.as_slice(), &units.levels, coverage, &mut places)?;
+    let modelled = population::run(g.grid.as_slice(), &units.levels, coverage, &mut places)?;
     let out_dir = build.join("pack").join(&a.cc);
     fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
     let who = (
@@ -257,26 +306,28 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
 
     let file = out_dir.join(format!("{}-places-{}.tgd", a.cc, a.build_name()));
     let registry = registry(root, a.ids.as_deref())?;
-    let geometry = a
-        .topology
-        .then(|| geometry::load(root, &a.admin))
-        .transpose()?;
-    let report = pack::write(&pack::Input {
+    let geometry = topology(root, &a)?;
+    let stated_tz = zones::stated(&build, &g.sources)?;
+    let ids_file = out_dir.join(format!("{}-ids-{}.tsv", a.cc, a.build_name()));
+    let input = pack::Input {
         root,
         args: &a,
+        address: &a.cc,
+        given: None,
         places: &places,
         profile: &profile,
         zones: &zones,
         coverage,
         file: &file,
         registry: &registry,
-        ids_file: &out_dir.join(format!("{}-ids-{}.tsv", a.cc, a.build_name())),
+        ids_file: Some(&ids_file),
         geometry: geometry.as_ref(),
         postal: g.postal.as_ref(),
         elevation: elevations.as_ref(),
         attribution: &g.attribution,
-        stated_tz: &zones::stated(&build, &g.sources)?,
-    })?;
+        stated_tz: &stated_tz,
+    };
+    let report = packs(&input, split.as_ref(), &out_dir)?;
     let mut summary = header(&a, places.len(), &g.sources, g.tz.as_deref());
     notes(&mut summary, held, unnamed, &g);
     summary.push_str(&naming.line());
@@ -360,7 +411,8 @@ struct Gated {
     tz: Option<String>,
     postal: Option<postal::Postal>,
     dem: Option<String>,
-    population: Option<String>,
+    /// The population grid's file, when the build reads one.
+    grid: Option<PathBuf>,
     /// The sources not read, with their licence class.
     skipped: Vec<String>,
     /// The notices of every source the build reads, one per line, in reading order (D-126).
@@ -402,8 +454,8 @@ fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
         Some(id) if allowed(id)? => Some(id.clone()),
         _ => None,
     };
-    let population = match &a.population {
-        Some(id) if allowed(id)? => Some(id.clone()),
+    let grid = match &a.population {
+        Some(id) if allowed(id)? => Some(lock.path(root, id)?),
         _ => None,
     };
     // The core run's buildings shape every place's point: each must be allowed.
@@ -421,7 +473,7 @@ fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
         tz,
         postal,
         dem,
-        population,
+        grid,
         skipped,
         attribution,
     })

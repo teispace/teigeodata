@@ -22,6 +22,7 @@ mod recipe;
 mod romanise;
 mod sizes;
 mod sources;
+mod split;
 mod tuf;
 mod wire;
 mod workspace;
