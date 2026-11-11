@@ -53,6 +53,7 @@ mod split;
 pub(crate) mod tz_rules;
 mod units;
 pub(crate) mod world;
+mod world_labels;
 mod world_overture;
 mod world_tz;
 mod zones;

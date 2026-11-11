@@ -337,9 +337,13 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   geonames-cities5000` (69,972 cities), ELEVATION's SOURCE column, `Engine::elevation_source`
   (D-219, 2026-11-11)
 - [ ] TG-14: Nepali and English names for every place: research done (D-215). Steps:
-  - [ ] the read stage tags GeoNames' Latin-script `ne` names `ne-Latn`, never Nepali
-  - [ ] sources pinned: the CBS code list (official names), Wikidata `ne`/`hi` labels of the
-    built places (a QLever result, CC0), CLDR 49 `ne.xml` for country names
+  - [x] GeoNames' Latin-script `ne` names are never taken as Nepali: every stored name
+    carries the script of its text, and a profile asks for `ne-Deva` (D-215, 2026-11-11)
+  - [x] World places: Wikidata `ne`, then `hi`, labels by `wikidata:`/`geonames:` key,
+    `forge world --labels`, two pinned CC0 sources; 13,724 world places named (D-221,
+    2026-11-11)
+  - [ ] sources pinned: the CBS code list (official names), Wikidata labels for Nepal's
+    places by key, CLDR 49 `ne.xml` for country names
   - [ ] the chain in the forge, each name's origin in its record (`rule`), with a coverage
     report per step (TG-11's names table)
   - [ ] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
@@ -348,7 +352,8 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     names the gap
 - [ ] TG-16: outline tolerance measured, Nepal's border exact
 - [ ] TG-15: India: research done (D-216, D-217); then towns
-- [ ] TG-18, TG-19 and the strict-tier option
+- [ ] TG-18, TG-19 and the strict-tier option. Done: the Brahmic search fold of nasal
+  conjuncts, vowel length and candra vowels (D-220, 2026-11-11)
 - [ ] TG-17: phone-class benches with gates
 - [ ] TG-10: coarse elevation layer
 

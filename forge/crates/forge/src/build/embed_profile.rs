@@ -59,6 +59,9 @@ struct File {
     /// The world part's city list (`forge world --cities`); the default list when absent.
     #[serde(default)]
     world: Option<String>,
+    /// The world part's label chain (`forge world --labels`, D-221).
+    #[serde(default)]
+    world_labels: Vec<String>,
     wire_kb: u64,
 }
 
@@ -268,11 +271,10 @@ fn components(names: &[String]) -> Result<Components, String> {
 /// The world part, then each country by code, as the profile cuts it.
 fn inputs(root: &Path, p: &File, build: &str) -> Result<Vec<Input>, String> {
     let read = |f: &Path| fs::read(f).map_err(|e| format!("{}: {e}", f.display()));
-    let variant = match p.world.as_deref() {
-        None => String::new(),
-        Some(c) if c == super::world::DEFAULT_CITIES => String::new(),
-        Some(c) => format!("-{c}"),
-    };
+    let variant = super::world::variant(
+        p.world.as_deref().unwrap_or(super::world::DEFAULT_CITIES),
+        &p.world_labels,
+    );
     let world = root.join(format!(
         "data/build/baseline/world/world-baseline-{build}{variant}.tgd"
     ));

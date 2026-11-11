@@ -7,10 +7,13 @@ about: >-
 build: lite
 # timezone-index (zone outlines for tz_at near zone lines) joins with TG-16, once the merge carries REGION.
 components: [point, elevation, admin, names, search, timezone, boundaries, admin-index]
-# Nepali in Devanagari only: GeoNames tags Survey Department romanisations `ne` (D-215).
-languages: [ne-Deva, en]
+# Nepali in Devanagari only: GeoNames tags Survey Department romanisations `ne` (D-215);
+# Hindi in Devanagari where no Nepali name exists (D-221).
+languages: [ne-Deva, hi-Deva, en]
 # Every city of 5,000 or more (TG-13), each with a height and its source.
 world: geonames-cities5000
+# Nepali labels from Wikidata, then Hindi ones (tagged hi) where Wikidata has no Nepali (D-221).
+world_labels: [wikidata-labels-ne, wikidata-labels-hi]
 countries:
   np: { rows: all, tolerance_m: 20 }
 wire_kb: 15000

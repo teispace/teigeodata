@@ -212,6 +212,23 @@ struct Args {
     islet_km2: f64,
     ids: Option<String>,
     key: Option<String>,
+    /// Label sources, a chain (D-221).
+    labels: Vec<String>,
+}
+
+/// The file-name part of a world part built from `cities` and the label chain `labels`
+/// (TG-13, D-221): empty for the default list and no labels, so the default file keeps its name.
+pub(crate) fn variant(cities: &str, labels: &[String]) -> String {
+    let mut v = String::new();
+    if cities != DEFAULT_CITIES {
+        v.push('-');
+        v.push_str(cities);
+    }
+    for l in labels {
+        v.push('-');
+        v.push_str(l);
+    }
+    v
 }
 
 /// The default city list; another (`--cities geonames-cities5000`) writes its own world part,
@@ -219,7 +236,7 @@ struct Args {
 pub(crate) const DEFAULT_CITIES: &str = "geonames-cities15000";
 
 fn parse(args: &[String]) -> Result<Args, String> {
-    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--ids <dir>] [--key <seed-file>]";
+    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--labels <source>]… [--ids <dir>] [--key <seed-file>]";
     let mut a = Args {
         release: String::new(),
         lite: false,
@@ -231,6 +248,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
         islet_km2: -1.0,
         ids: None,
         key: None,
+        labels: Vec::new(),
     };
     let mut it = args.iter();
     while let Some(f) = it.next() {
@@ -258,6 +276,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
             }
             "--ids" => a.ids = Some(value()?),
             "--key" => a.key = Some(value()?),
+            "--labels" => a.labels.push(value()?),
             _ => return Err(format!("unknown argument `{f}`; {usage}")),
         }
     }
@@ -757,7 +776,10 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let a = parse(args)?;
     let build = if a.lite { "lite" } else { "main" };
     let lock = Lock::read(&root.join("data/sources.lock"))?;
-    for id in [&a.admin, &a.admin1, &a.cities, &a.tz] {
+    for id in [&a.admin, &a.admin1, &a.cities, &a.tz]
+        .into_iter()
+        .chain(&a.labels)
+    {
         let s = lock.get(id)?;
         if a.lite && !super::LITE.contains(&s.licence_class.as_str()) {
             return Err(format!(
@@ -790,15 +812,12 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     }
     let (ids, registries) = allocate(root, &rows, &a, &packs)?;
     let sections = sections(&places, &rows, &ids, &row_of, &geometry, a.tolerance_m)?;
-    let notices = super::notices(
-        &lock,
-        &[
-            a.admin.as_str(),
-            a.admin1.as_str(),
-            a.cities.as_str(),
-            a.tz.as_str(),
-        ],
-    )?;
+    let read: Vec<&str> = [&a.admin, &a.admin1, &a.cities, &a.tz]
+        .into_iter()
+        .chain(&a.labels)
+        .map(String::as_str)
+        .collect();
+    let notices = super::notices(&lock, &read)?;
     let out = write(&sections, &a, &notices, root)?;
     super::baseline::check(&out, places.len())?;
     verify(&out, &places)?;
@@ -813,11 +832,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         )?;
     }
     // A city list other than the default is its own world part, named by it (TG-13).
-    let variant = if a.cities == DEFAULT_CITIES {
-        String::new()
-    } else {
-        format!("-{}", a.cities)
-    };
+    let variant = variant(&a.cities, &a.labels);
     let file = dir.join(format!("world-baseline-{build}{variant}.tgd"));
     crate::make::write_atomic(&file, &out)?;
     let probes = probes(&countries, &ids, &row_of);
@@ -985,11 +1000,13 @@ fn world_rows(
         .count();
     rows.extend(cities);
     let dropped = dedup_keys(&mut rows);
+    let chain = super::world_labels::read(root, lock, &a.labels)?;
+    let named = super::world_labels::apply(&chain, rows.iter_mut().map(|r| &mut r.place));
     let tz_report = zone_rows(root, a, lock, countries, &mut rows)?;
     let counts = format!(
         "- {} countries and disputed areas ({}).\n{}\n- {n_cities} cities ({}): {under_unit} \
          under a unit, {fallback} under the feature of their code, {orphans} with no \
-         country.\n- {dropped} source keys another row already holds dropped.\n{tz_report}",
+         country.\n- {dropped} source keys another row already holds dropped.\n{named}{tz_report}",
         countries.len(),
         a.admin,
         part.report,

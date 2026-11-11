@@ -407,3 +407,39 @@ licence_class = "odbl"
 countries = ["*"]
 used_by = "the main build's world admin 0 and 1 (D-155)"
 attribution = "© OpenStreetMap contributors, under the Open Database License 1.0 (https://www.openstreetmap.org/copyright); Overture Maps Foundation (https://overturemaps.org)"
+[[source]]
+id = "wikidata-labels-ne"
+title = "Wikidata Nepali labels of every item with a coordinate, with GeoNames IDs (QLever snapshot)"
+kind = "sparql"
+url = "https://qlever.dev/api/wikidata"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "QLever Wikidata snapshot"
+retrieved = "2026-11-11"
+sha256 = "c7dbc6b0de0fd08f12280719ab10a9517b4327c0cfbb122ad36e417273cd16ed"
+size = 1042231
+licence = "CC0-1.0"
+licence_class = "cc0"
+countries = ["*"]
+used_by = "forge world --labels (TG-14, D-221)"
+attribution = "Wikidata (https://www.wikidata.org), CC0 1.0"
+query = "forge/queries/wikidata-labels.rq"
+query_params = { LANG = "ne" }
+[[source]]
+id = "wikidata-labels-hi"
+title = "Wikidata Hindi labels of every item with a coordinate, with GeoNames IDs (QLever snapshot)"
+kind = "sparql"
+url = "https://qlever.dev/api/wikidata"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "QLever Wikidata snapshot"
+retrieved = "2026-11-11"
+sha256 = "1f154247727d8d337e722916b3451a82d2deb9ed0e514d3a2f4b766ac34748cb"
+size = 6475358
+licence = "CC0-1.0"
+licence_class = "cc0"
+countries = ["*"]
+used_by = "forge world --labels (TG-14, D-221)"
+attribution = "Wikidata (https://www.wikidata.org), CC0 1.0"
+query = "forge/queries/wikidata-labels.rq"
+query_params = { LANG = "hi" }

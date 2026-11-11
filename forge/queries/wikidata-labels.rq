@@ -1,0 +1,13 @@
+# Wikidata labels in one language of every item with a coordinate, with the item's GeoNames
+# IDs (forge `world --labels`, TG-14, D-221). World-general: {{LANG}} is the BCP 47 code from
+# the source's `query_params`. One row per item, GeoNames ID and label; a world row takes the
+# label of the item its `wikidata:` or `geonames:` source key names.
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT DISTINCT ?item ?gn ?text WHERE {
+  ?item rdfs:label ?l . FILTER(LANG(?l) = "{{LANG}}")
+  ?item wdt:P625 ?c .
+  OPTIONAL { ?item wdt:P1566 ?gn }
+  BIND(STR(?l) AS ?text)
+}
+ORDER BY ?item ?gn
