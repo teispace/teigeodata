@@ -26,7 +26,7 @@ use std::path::Path;
 use arrow_array::{Array, Float32Array, Int32Array, StringArray};
 use teigeodata_core::{E6, E7, PlaceKind, Point, hilbert};
 use teigeodata_format::dem::{Dem, DemScratch};
-use teigeodata_format::elevation::Elevations as Heights;
+use teigeodata_format::elevation::{Elevations as Heights, HeightSource};
 use teigeodata_format::places::Places;
 use teigeodata_format::{Kind, Pack};
 
@@ -41,6 +41,9 @@ pub(crate) struct Elevations {
     bytes: std::sync::Arc<Vec<u8>>,
     /// One per place, in the build's place order.
     pub(crate) values: Vec<Option<i16>>,
+    /// Where each value came from (D-219): surveyed for a summit's stated height taken, the
+    /// model for a DEM sample.
+    pub(crate) sources: Vec<Option<HeightSource>>,
     /// What the summit rule did (D-201).
     pub(crate) summits: Summits,
 }
@@ -54,6 +57,8 @@ pub(crate) struct Summits {
     pub(crate) stated: usize,
     /// Stated heights taken.
     pub(crate) taken: usize,
+    /// The places whose stated height was taken, as indexes into the build's places.
+    pub(crate) taken_at: Vec<usize>,
     /// Stated heights refused: (place key, stated, the DEM at the point).
     pub(crate) refused: Vec<(String, f64, f64)>,
     /// For the summits taken: stated − the DEM's highest sample nearby (the DEM's under-read).
@@ -117,7 +122,7 @@ fn summits(
 ) -> Result<Summits, String> {
     let mut out = Summits::default();
     let mut s = Box::new(DemScratch::new());
-    for (p, v) in places.iter().zip(values.iter_mut()) {
+    for (i, (p, v)) in places.iter().zip(values.iter_mut()).enumerate() {
         if p.kind != PlaceKind::Natural {
             continue;
         }
@@ -136,6 +141,7 @@ fn summits(
         let max = dem_max(dem, p.point, &mut s);
         if agrees(h, Some(at_point), max) {
             out.taken += 1;
+            out.taken_at.push(i);
             *v = Some(metres(h)?);
             if let Some(m) = max {
                 out.under.push(h - m);
@@ -219,22 +225,38 @@ pub(crate) fn load(
     } else {
         Summits::default()
     };
+    let mut sources: Vec<Option<HeightSource>> = values
+        .iter()
+        .map(|v| v.map(|_| HeightSource::Model))
+        .collect();
+    for &i in &summits.taken_at {
+        if let Some(s) = sources.get_mut(i) {
+            *s = Some(HeightSource::Surveyed);
+        }
+    }
     Ok(Some(Elevations {
         tileset: tileset.to_string(),
         bytes: std::sync::Arc::new(bytes),
         values,
+        sources,
         summits,
     }))
 }
 
-/// The PLACES elevation column: each row's height, rows given as indices into the build's
-/// places; empty (no column) without elevations.
+/// Each row's height and its source, rows given as indices into the build's places; empty
+/// (no section) without elevations.
 pub(crate) fn in_rows(
     e: Option<&Elevations>,
     rows: impl Iterator<Item = usize>,
-) -> Vec<Option<i16>> {
-    e.map_or_else(Vec::new, |e| {
-        rows.map(|i| e.values.get(i).copied().flatten()).collect()
+) -> (Vec<Option<i16>>, Vec<Option<HeightSource>>) {
+    e.map_or_else(Default::default, |e| {
+        rows.map(|i| {
+            (
+                e.values.get(i).copied().flatten(),
+                e.sources.get(i).copied().flatten(),
+            )
+        })
+        .unzip()
     })
 }
 
@@ -325,6 +347,10 @@ impl Elevations {
             values: at
                 .iter()
                 .map(|&i| self.values.get(i).copied().flatten())
+                .collect(),
+            sources: at
+                .iter()
+                .map(|&i| self.sources.get(i).copied().flatten())
                 .collect(),
             summits: Summits::default(),
         }

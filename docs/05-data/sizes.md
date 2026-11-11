@@ -92,17 +92,19 @@ outlines (4.8 MB), the substring and search indexes (3.7 MB), the point-to-unit 
 
 ## Embedded layers built from profiles
 
-`forge embed --profile <name>` (D-214), lite, 2026-11-11:
+`forge embed --profile <name>` (D-214), lite, 2026-11-11. Per component, `tithipatra`'s wire bytes: point 1,035,391; elevation 229,894; admin 251,730; names 908,983; search 1,901,498; timezone 13,564; boundaries 2,776,845; admin-index 1,146,916.
+
 
 | Profile | Rows | Disk | Wire |
 |---|--:|--:|--:|
 | `baseline` (world part and Nepal's slice; today's file, byte for byte) | 39,395 | 5,891,068 | 4,492,597 |
-| `tithipatra` (world part and all of Nepal at 20 m, names in Nepali and English) | 135,067 | 9,990,588 | 7,319,731 |
+| `tithipatra` (world part with every city of 5,000, all of Nepal at 20 m, names in Devanagari Nepali and English) | 170,892 | 11,527,868 | 8,283,420 |
 | `points-en` (points, heights, admin, English names and search; no outlines) | 39,395 | 1,822,396 | 1,172,779 |
 
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-11 | `tithipatra` with cities of 5,000 (69,972) and `ne-Deva`: 8.28 MB wire, 35,825 more rows for 0.96 MB | TG-13, D-219 |
 | 2026-11-11 | Embedded layers from profiles | D-214 |
 | 2026-11-11 | First tables: components, names by script, outlines by level and level of detail | TG-11 |

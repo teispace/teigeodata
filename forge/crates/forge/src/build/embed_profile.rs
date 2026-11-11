@@ -5,11 +5,14 @@
 //! - `build`: `lite` or `main`;
 //! - `components`: what the layer carries (the [component](teigeodata_format::component) names;
 //!   each brings what it needs);
-//! - `languages`: the name languages every place keeps beside its canonical name (empty keeps
-//!   every name);
+//! - `languages`: the name languages every place keeps beside its canonical name, each a BCP 47
+//!   language with an optional script (`ne-Deva` keeps Nepali in Devanagari, not a
+//!   romanisation tagged `ne`); empty keeps every name;
 //! - `countries`: per country code, `rows: slice` (the country's baseline slice, `forge
 //!   baseline`) or `rows: all` (every place of its pack, with the pack's IDs, so installing the
 //!   pack later changes nothing a person chose), and an optional outline `tolerance_m`;
+//! - `world`: the world part's city list (`geonames-cities5000` for cities of 5,000 or more,
+//!   TG-13), the default list when absent;
 //! - `wire_kb`: the layer's budget on the wire (the transport asset, zstd 19).
 //!
 //! The world part comes first, then the countries by code; a later part's row replaces an
@@ -53,6 +56,9 @@ struct File {
     languages: Vec<String>,
     #[serde(default)]
     countries: BTreeMap<String, Country>,
+    /// The world part's city list (`forge world --cities`); the default list when absent.
+    #[serde(default)]
+    world: Option<String>,
     wire_kb: u64,
 }
 
@@ -100,13 +106,18 @@ pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, 
         .iter()
         .map(|i| Pack::open_verified(&i.bytes).map_err(|e| format!("{}: {e}", i.name)))
         .collect::<Result<_, _>>()?;
-    let langs: Vec<Tag> = p.languages.iter().filter_map(|l| Tag::new(l)).collect();
-    if langs.len() != p.languages.len() {
-        return Err(format!(
-            "{}: a language is not a BCP 47 tag",
-            path.display()
-        ));
-    }
+    let langs: Vec<Wanted> = p
+        .languages
+        .iter()
+        .map(|l| {
+            language(l).ok_or_else(|| {
+                format!(
+                    "{}: `{l}` is not a language or language-Script tag",
+                    path.display()
+                )
+            })
+        })
+        .collect::<Result<_, _>>()?;
     let profiles: Vec<Profile> = inputs
         .iter()
         .map(|i| {
@@ -115,7 +126,7 @@ pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, 
         })
         .collect::<Result<_, _>>()?;
     let keep_name =
-        |_: u32, i: usize, n: &NameRecord<'_>| i == 0 || n.lang.is_some_and(|l| langs.contains(&l));
+        |_: u32, i: usize, n: &NameRecord<'_>| i == 0 || langs.iter().any(|w| w.keeps(n));
     let keyers: Vec<Keyer<'_>> = profiles
         .iter()
         .map(|pr| {
@@ -220,6 +231,31 @@ fn finish(
     ))
 }
 
+/// A profile language: a BCP 47 language, and its script when named (`ne-Deva`), so a name
+/// tagged `ne` but written in Latin (a romanisation) is not taken as a Nepali name (D-215).
+struct Wanted {
+    lang: Tag,
+    script: Option<Tag>,
+}
+
+impl Wanted {
+    fn keeps(&self, n: &NameRecord<'_>) -> bool {
+        n.lang == Some(self.lang) && self.script.is_none_or(|s| n.script == Some(s))
+    }
+}
+
+/// `ne` or `ne-Deva`; `None` for anything else.
+fn language(code: &str) -> Option<Wanted> {
+    let mut it = code.split('-');
+    let lang = Tag::new(it.next()?)?;
+    let script = match it.next() {
+        None => None,
+        Some(s) if s.len() == 4 => Some(Tag::new(s)?),
+        Some(_) => return None,
+    };
+    it.next().is_none().then_some(Wanted { lang, script })
+}
+
 /// The set of `names`, each with what it needs.
 fn components(names: &[String]) -> Result<Components, String> {
     let list: Vec<Component> = names
@@ -232,8 +268,13 @@ fn components(names: &[String]) -> Result<Components, String> {
 /// The world part, then each country by code, as the profile cuts it.
 fn inputs(root: &Path, p: &File, build: &str) -> Result<Vec<Input>, String> {
     let read = |f: &Path| fs::read(f).map_err(|e| format!("{}: {e}", f.display()));
+    let variant = match p.world.as_deref() {
+        None => String::new(),
+        Some(c) if c == super::world::DEFAULT_CITIES => String::new(),
+        Some(c) => format!("-{c}"),
+    };
     let world = root.join(format!(
-        "data/build/baseline/world/world-baseline-{build}.tgd"
+        "data/build/baseline/world/world-baseline-{build}{variant}.tgd"
     ));
     let mut out = vec![Input {
         name: "world".into(),
@@ -361,4 +402,32 @@ fn report(
         blake3::hash(out).to_hex()
     );
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::language;
+    use teigeodata_format::names::{NameRecord, Tag};
+
+    #[test]
+    fn a_language_with_its_script_keeps_only_that_script() {
+        let rec = |text, lang, script| NameRecord {
+            text,
+            lang: Tag::new(lang),
+            script: Tag::new(script),
+            ..NameRecord::default()
+        };
+        let deva = rec("पोखरा", "ne", "Deva");
+        let roman = rec("Pokharā", "ne", "Latn");
+        let ne = language("ne-Deva").unwrap();
+        assert!(ne.keeps(&deva));
+        assert!(
+            !ne.keeps(&roman),
+            "a romanisation tagged ne is not a Nepali name"
+        );
+        let any = language("ne").unwrap();
+        assert!(any.keeps(&deva) && any.keeps(&roman));
+        assert!(!language("en").unwrap().keeps(&deva));
+        assert!(language("ne-Deva-x").is_none() && language("ne-De").is_none());
+    }
 }

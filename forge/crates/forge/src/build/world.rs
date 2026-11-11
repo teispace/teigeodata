@@ -62,6 +62,7 @@ use crate::geom::{GridIndex, Polygon};
 use crate::lock::Lock;
 use crate::read::natural_earth::{self, Country};
 use crate::topo::pov;
+use teigeodata_format::elevation::HeightSource;
 
 /// One row of the city list (`GeoNames`' dump columns).
 #[derive(Debug)]
@@ -77,8 +78,9 @@ pub(super) struct City {
     /// Its settlement rank from the feature class and code (`P.PPLC` a national capital,
     /// `P.PPLA` a first-level seat), as a pack's records (`sources::settlement_rank`).
     pub(super) rank: u8,
-    /// `elevation`, else the `dem` column (SRTM3 or GTOPO30), in metres.
-    pub(super) elevation: Option<i16>,
+    /// `elevation` (surveyed), else the `dem` column (SRTM3 or GTOPO30, the model), in
+    /// metres, with its source (D-219).
+    pub(super) elevation: Option<(i16, HeightSource)>,
     /// The IANA zone the list states (`timezone`), empty when it states none.
     pub(super) timezone: String,
 }
@@ -137,7 +139,9 @@ pub(super) fn read_cities(zip: &Path) -> Result<Vec<City>, String> {
             cc: cc.to_ascii_lowercase(),
             population: pop.parse().ok().filter(|&p: &i64| p > 0),
             rank: super::sources::settlement_rank(&format!("{class}.{code}")),
-            elevation: metres(elev).or_else(|| metres(dem)),
+            elevation: metres(elev)
+                .map(|m| (m, HeightSource::Surveyed))
+                .or_else(|| metres(dem).map(|m| (m, HeightSource::Model))),
             timezone: timezone.to_string(),
         });
     }
@@ -210,6 +214,10 @@ struct Args {
     key: Option<String>,
 }
 
+/// The default city list; another (`--cities geonames-cities5000`) writes its own world part,
+/// `world-baseline-<build>-<source>.tgd` (TG-13).
+pub(crate) const DEFAULT_CITIES: &str = "geonames-cities15000";
+
 fn parse(args: &[String]) -> Result<Args, String> {
     let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--ids <dir>] [--key <seed-file>]";
     let mut a = Args {
@@ -217,7 +225,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
         lite: false,
         admin: "ne-admin0-nep".into(),
         admin1: String::new(),
-        cities: "geonames-cities15000".into(),
+        cities: DEFAULT_CITIES.into(),
         tz: "tzdb-2026f".into(),
         tolerance_m: 0,
         islet_km2: -1.0,
@@ -374,7 +382,7 @@ fn pack_countries(root: &Path) -> Result<Vec<String>, String> {
 struct Row {
     place: Place,
     ns: Namespace,
-    elevation: Option<i16>,
+    elevation: Option<(i16, HeightSource)>,
     /// The zone the source states (a city's), and the key of the zone row assigned (D-151).
     stated_tz: Option<String>,
     zone: Option<String>,
@@ -804,11 +812,17 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
             reg.render().as_bytes(),
         )?;
     }
-    let file = dir.join(format!("world-baseline-{build}.tgd"));
+    // A city list other than the default is its own world part, named by it (TG-13).
+    let variant = if a.cities == DEFAULT_CITIES {
+        String::new()
+    } else {
+        format!("-{}", a.cities)
+    };
+    let file = dir.join(format!("world-baseline-{build}{variant}.tgd"));
     crate::make::write_atomic(&file, &out)?;
     let probes = probes(&countries, &ids, &row_of);
     crate::make::write_atomic(
-        &dir.join(format!("world-probes-{build}.tsv")),
+        &dir.join(format!("world-probes-{build}{variant}.tsv")),
         probes.as_bytes(),
     )?;
     let mut r = format!(
@@ -831,7 +845,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         out.len(),
         blake3::hash(&out).to_hex()
     );
-    fs::write(dir.join(format!("summary-{build}.md")), &r).map_err(|e| e.to_string())?;
+    fs::write(dir.join(format!("summary-{build}{variant}.md")), &r).map_err(|e| e.to_string())?;
     Ok(format!(
         "{r}\n→ {} in {:.1?}",
         file.strip_prefix(root).unwrap_or(&file).display(),
@@ -1039,7 +1053,9 @@ fn sections(
         .map(|p| p.parent.as_deref().and_then(|k| row_of.get(k).copied()))
         .collect();
     let (names, search, _) = name_sections(places, &Profile::default(), "")?;
-    let heights: Vec<Option<i16>> = rows.iter().map(|r| r.elevation).collect();
+    let heights: Vec<Option<i16>> = rows.iter().map(|r| r.elevation.map(|e| e.0)).collect();
+    let sources: Vec<Option<HeightSource>> =
+        rows.iter().map(|r| r.elevation.map(|e| e.1)).collect();
     let mut full: Vec<extract::Body> = vec![
         (
             Kind::IDMAP,
@@ -1068,7 +1084,7 @@ fn sections(
             place_index::encode(&points, NODE).map_err(e)?,
         ),
     ];
-    if let Some(body) = teigeodata_format::elevation::encode(&heights).map_err(e)? {
+    if let Some(body) = teigeodata_format::elevation::encode_with(&heights, &sources).map_err(e)? {
         full.push((Kind::ELEVATION, Encoding::TABLE, n, body));
     }
     let by_code: BTreeMap<String, u32> = row_of

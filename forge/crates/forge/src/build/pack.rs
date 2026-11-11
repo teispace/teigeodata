@@ -323,8 +323,9 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
     let points: Vec<Point<E6>> = rows.iter().map(|p| e6(p.point)).collect::<Result<_, _>>()?;
     let places_body = places_section(&rows, &points)?;
     // Heights in their own section (D-109, D-133), absent when no place has one.
-    let heights = super::elevation::in_rows(input.elevation, order.iter().map(|o| o.2));
-    let heights_body = teigeodata_format::elevation::encode(&heights).map_err(|e| e.to_string())?;
+    let (heights, sources) = super::elevation::in_rows(input.elevation, order.iter().map(|o| o.2));
+    let heights_body =
+        teigeodata_format::elevation::encode_with(&heights, &sources).map_err(|e| e.to_string())?;
 
     let parents: Vec<Option<u32>> = rows
         .iter()

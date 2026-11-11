@@ -333,9 +333,19 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 - [x] Derive SUBSTRING on the device: `Store::derive` checked against the head's hash, engine feature `derive`; Nepal lite in 0.50 s, byte for byte (D-218, 2026-11-11)
 - [x] TG-12: `forge embed --profile` from `data/embed/<name>.yaml`; `baseline` byte-identical, `tithipatra` 7.32 MB wire, `points-en` 1.17 MB (D-214, 2026-11-11)
 - [x] Nepal in full in the embedded layer: all 95,726 places, IDs kept (D-214). Open: zone outlines and rules in the merge
-- [ ] TG-13: world cities of 5,000 with heights
-- [ ] TG-14: Nepali and English names for every place: research done (D-215); the chain, the
-  transliterator and G-xlit
+- [x] TG-13: world cities of 5,000 with heights and their source: `forge world --cities
+  geonames-cities5000` (69,972 cities), ELEVATION's SOURCE column, `Engine::elevation_source`
+  (D-219, 2026-11-11)
+- [ ] TG-14: Nepali and English names for every place: research done (D-215). Steps:
+  - [ ] the read stage tags GeoNames' Latin-script `ne` names `ne-Latn`, never Nepali
+  - [ ] sources pinned: the CBS code list (official names), Wikidata `ne`/`hi` labels of the
+    built places (a QLever result, CC0), CLDR 49 `ne.xml` for country names
+  - [ ] the chain in the forge, each name's origin in its record (`rule`), with a coverage
+    report per step (TG-11's names table)
+  - [ ] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
+    model trained in the forge on the build's licence class; gate G-xlit with floors
+  - [ ] a profile's languages are complete: every place of the layer has each, or the build
+    names the gap
 - [ ] TG-16: outline tolerance measured, Nepal's border exact
 - [ ] TG-15: India: research done (D-216, D-217); then towns
 - [ ] TG-18, TG-19 and the strict-tier option

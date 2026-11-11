@@ -89,6 +89,23 @@ used_by = "the embedded baseline's cities (D-144, D-145): a country pack's slice
 attribution = "GeoNames (https://www.geonames.org), CC BY 4.0"
 
 [[source]]
+id = "geonames-cities5000"
+title = "GeoNames cities with more than 5,000 people, and capitals (cities5000.zip)"
+kind = "http"
+url = "https://download.geonames.org/export/dump/cities5000.zip"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "daily dump"
+retrieved = "2026-11-11"
+sha256 = "1937668153a6b5c82ef5aafa96b9ef37f73ca3543d6a86d4ad7179066085a55b"
+size = 5726394
+licence = "CC-BY-4.0"
+licence_class = "cc-by"
+countries = ["*"]
+used_by = "the world part's cities at the 5,000 threshold (TG-13, D-219), a profile's choice beside cities15000"
+attribution = "GeoNames (https://www.geonames.org), CC BY 4.0"
+
+[[source]]
 id = "geonames-alternate-names"
 title = "GeoNames alternate names V2 (all countries; with language and colloquial, short and historic flags)"
 kind = "http"
