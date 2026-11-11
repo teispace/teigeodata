@@ -354,7 +354,9 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 - [ ] TG-15: India: research done (D-216, D-217); then towns
 - [x] TG-19: `Near::bearing_deg` and `Engine::mark_inside` (D-223, 2026-11-11)
 - [ ] TG-18 and the strict-tier option. Done: the Brahmic search fold of nasal
-  conjuncts, vowel length and candra vowels (D-220, 2026-11-11)
+  conjuncts, vowel length and candra vowels (D-220, 2026-11-11); the focus point and the
+  strict-tier option, `search_with` (D-226, 2026-11-12). Open: the व/ब variant (`viratnagar`),
+  the MVP's golden cases
 - [ ] TG-17: phone-class benches with gates
 - [ ] TG-10: coarse elevation layer
 

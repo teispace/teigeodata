@@ -32,7 +32,7 @@ default = [
 elevation = []
 admin = []
 names = []
-search = ["names", "dep:teigeodata-names"]
+search = ["names", "dep:teigeodata-names", "dep:libm"]
 timezone = []
 timezone-index = []
 boundaries = []
@@ -73,6 +73,8 @@ teigeodata-format = { workspace = true, features = ["spatial", "alloc"] }
 teigeodata-names = { workspace = true, optional = true }
 teigeodata-sync = { workspace = true, features = ["trust"], optional = true }
 arc-swap = { version = "1.9.4", optional = true }
+# The focus decay of search (D-226): the same result on every platform, as `spatial`.
+libm = { version = "0.2.16", default-features = false, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 memmap2 = { version = "0.9.12", optional = true }

@@ -5,8 +5,10 @@
 use core::cell::Cell;
 use core::ops::ControlFlow;
 
+use teigeodata_core::{E6, Point};
 use teigeodata_format::Kind;
 use teigeodata_format::idmap::IdMap;
+use teigeodata_format::places::Places;
 use teigeodata_format::search::fuzzy::{Fuzzy, MAX_CHARS};
 use teigeodata_format::search::{EXACT, LOOSE, PHONETIC, Search};
 #[cfg(feature = "substring")]
@@ -52,6 +54,86 @@ const SUBSTRING_BONUS: i32 = 20;
 const SUBSTRING_K: usize = 16;
 /// The fuzzy tier runs from this many characters (D-086).
 const FUZZY_MIN: usize = 4;
+/// The most a focus point adds (D-226): at the focus, halving every `scale_m` away (Pelias's
+/// exponential decay). Half the exact bonus: it reorders matches of like quality and
+/// importance, and never lifts a weak match over a strong one of the same importance.
+const FOCUS_BONUS: f64 = 30.0;
+/// In strict order each match bonus is scaled by this before importance and focus are added
+/// (at most 255 + 30), so the tier decides first and they only break ties within it (D-226).
+const STRICT_SCALE: i32 = 1_000;
+/// A named parent in strict order: above every scaled tier (at most 80,000).
+#[cfg(feature = "admin")]
+const STRICT_CONTEXT_BONUS: i32 = 1_000_000;
+
+/// How [`Engine::search_with`] ranks (D-226). The default is [`Engine::search`]'s order.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[non_exhaustive]
+pub struct SearchOptions {
+    /// Prefer places near this point: the user's location, or a point in their home country
+    /// with a wide scale.
+    pub focus: Option<Focus>,
+    /// Rank by match tier first (exact, loose, prefix, one edit, substring, two edits,
+    /// phonetic), then importance and focus within a tier, instead of one additive score
+    /// (D-052). A named parent still comes first.
+    pub strict: bool,
+}
+
+impl SearchOptions {
+    /// These options with `focus`.
+    #[must_use]
+    pub const fn with_focus(mut self, focus: Focus) -> Self {
+        self.focus = Some(focus);
+        self
+    }
+
+    /// These options in strict tier order, or not.
+    #[must_use]
+    pub const fn with_strict(mut self, strict: bool) -> Self {
+        self.strict = strict;
+        self
+    }
+}
+
+/// A focus point and its scale: a place at the point gains 30, one `scale_m` away 15, two
+/// away 7.5, and so on (D-226).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Focus {
+    /// The point.
+    pub at: Point<E6>,
+    /// The distance, in metres, at which the gain halves; positive.
+    pub scale_m: f64,
+}
+
+impl Focus {
+    /// Pelias's default scale: 50 km, a city and its surroundings.
+    pub const DEFAULT_SCALE_M: f64 = 50_000.0;
+
+    /// A focus at `at` with the default scale.
+    #[must_use]
+    pub const fn new(at: Point<E6>) -> Self {
+        Self {
+            at,
+            scale_m: Self::DEFAULT_SCALE_M,
+        }
+    }
+
+    /// The gain of a place at `p`, rounded: 0 for a scale that is not positive.
+    fn bonus(&self, p: Point<E6>) -> i32 {
+        if self.scale_m.is_nan() || self.scale_m <= 0.0 {
+            return 0;
+        }
+        let d = teigeodata_format::place_index::meters_between(
+            self.at.lat_degrees(),
+            self.at.lon_degrees(),
+            p.lat_degrees(),
+            p.lon_degrees(),
+        );
+        // In [0, 30]: the cast cannot truncate or wrap.
+        #[allow(clippy::cast_possible_truncation, reason = "in [0, 30]")]
+        let b = libm::round(FOCUS_BONUS * libm::exp2(-d / self.scale_m)) as i32;
+        b
+    }
+}
 
 /// A query as each layer reads it: the folded name, its loose key, the fuzzy automaton with
 /// its anchor, and a unit-type abbreviation it ended with.
@@ -63,6 +145,9 @@ struct Query<'q> {
     abbr: Option<&'q str>,
     /// The layer's query rules.
     rules: &'q QueryRules<'q>,
+    /// How to rank, and the layer's places when there is a focus.
+    opts: &'q SearchOptions,
+    places: Option<&'q Places<'q>>,
 }
 
 fn hit_less(a: &HitCand, b: &HitCand) -> bool {
@@ -90,6 +175,23 @@ impl Engine {
         &self,
         query: &str,
         k: usize,
+        s: &mut Scratch,
+        out: &mut Vec<Hit>,
+    ) -> Result<(), Error> {
+        self.search_with(query, k, &SearchOptions::default(), s, out)
+    }
+
+    /// [`Engine::search`] ranked by `opts` (D-226): a focus point adds up to 30 to each match,
+    /// halving every `scale_m` away, before each layer keeps its best `k`; strict order ranks
+    /// by match tier first. A hit's score compares only with the same query's.
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if a section it reads is corrupt.
+    pub fn search_with(
+        &self,
+        query: &str,
+        k: usize,
+        opts: &SearchOptions,
         s: &mut Scratch,
         out: &mut Vec<Hit>,
     ) -> Result<(), Error> {
@@ -136,6 +238,9 @@ impl Engine {
             for (i, l) in self.layers.iter().enumerate() {
                 l.ensure(Kind::SEARCH)?;
                 l.ensure(Kind::IDMAP)?;
+                if opts.focus.is_some() {
+                    l.ensure(Kind::PLACES)?;
+                }
                 let v = l.views();
                 let (Some(search), Some(ids)) = (&v.search, &v.ids) else {
                     continue;
@@ -152,6 +257,8 @@ impl Engine {
                     fuzzy: walk,
                     abbr,
                     rules: &v.rules,
+                    opts,
+                    places: v.places.as_ref(),
                 };
                 strong |= self.layer_hits(i, search, ids, query, k, s)?;
                 s.segs.push(start..s.hits.len());
@@ -191,6 +298,8 @@ impl Engine {
             fuzzy,
             abbr,
             rules,
+            opts,
+            places,
         }: Query<'_>,
         k: usize,
         s: &mut Scratch,
@@ -264,13 +373,9 @@ impl Engine {
                 break;
             }
         }
-        #[cfg(feature = "admin")]
-        self.context_bonus(i, &s.context, rows);
-        // Score every row, then read IDs (and check visibility) only for the groups of equal
-        // score that can still enter this layer's best k.
-        for r in rows.iter_mut() {
-            r.1 += i32::from(search.importance(r.0));
-        }
+        self.score(i, search, (opts, places), &s.context, rows);
+        // Read IDs (and check visibility) only for the groups of equal score that can still
+        // enter this layer's best k.
         rows.sort_unstable_by_key(|r| core::cmp::Reverse(r.1));
         let start = s.hits.len();
         for group in rows.chunk_by(|a, b| a.1 == b.1) {
@@ -296,6 +401,45 @@ impl Engine {
         seg.sort_unstable_by(|a, b| b.score.cmp(&a.score).then(a.id.cmp(&b.id)));
         s.hits.truncate(start + k.min(seg_len(start, s.hits.len())));
         Ok(strong)
+    }
+
+    /// The final scores of layer `i`'s matched `rows` (each holding its match bonus): scaled in
+    /// strict order, plus the context bonus, the importance and the focus's gain (D-226).
+    fn score(
+        &self,
+        i: usize,
+        search: &Search<'_>,
+        (opts, places): (&SearchOptions, Option<&Places<'_>>),
+        context: &[u32],
+        rows: &mut [(u32, i32)],
+    ) {
+        if opts.strict {
+            for r in rows.iter_mut() {
+                r.1 *= STRICT_SCALE;
+            }
+        }
+        #[cfg(feature = "admin")]
+        self.context_bonus(
+            i,
+            context,
+            rows,
+            if opts.strict {
+                STRICT_CONTEXT_BONUS
+            } else {
+                CONTEXT_BONUS
+            },
+        );
+        #[cfg(not(feature = "admin"))]
+        let _ = (self, i, context);
+        let focus = opts.focus.as_ref().zip(places);
+        for r in rows.iter_mut() {
+            r.1 += i32::from(search.importance(r.0));
+            if let Some((f, places)) = focus
+                && let Some(p) = places.point(r.0 as usize)
+            {
+                r.1 += f.bonus(p);
+            }
+        }
     }
 
     /// The tiers ranked by importance alone, over every layer: the best [`PREFIX_K`] rows
@@ -427,10 +571,10 @@ const fn seg_len(start: usize, end: usize) -> usize {
 }
 
 impl Engine {
-    /// Adds [`CONTEXT_BONUS`] to each of layer `i`'s `rows` whose ancestor (or itself) is one
-    /// of the `context` rows.
+    /// Adds `bonus` to each of layer `i`'s `rows` whose ancestor (or itself) is one of the
+    /// `context` rows.
     #[cfg(feature = "admin")]
-    fn context_bonus(&self, i: usize, context: &[u32], rows: &mut [(u32, i32)]) {
+    fn context_bonus(&self, i: usize, context: &[u32], rows: &mut [(u32, i32)], bonus: i32) {
         let hierarchy = self
             .layers
             .get(i)
@@ -441,7 +585,7 @@ impl Engine {
             for r in rows.iter_mut() {
                 let row = r.0 as usize;
                 if named(row) || h.ancestors(row).any(named) {
-                    r.1 += CONTEXT_BONUS;
+                    r.1 += bonus;
                 }
             }
         }

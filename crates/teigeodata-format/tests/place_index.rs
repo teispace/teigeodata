@@ -394,3 +394,24 @@ fn bearings_follow_the_compass() {
     let ktm_pkr = b(27.7017, 85.3206, 28.2669, 83.968);
     assert!((290.0..300.0).contains(&ktm_pkr), "{ktm_pkr}");
 }
+
+/// D-226: the distance the search focus decays by: a degree of latitude is π/180 of the mean
+/// radius, a point is 0 from itself, the antipode is half a turn, and it agrees with the
+/// haversine the nearest-place query keeps.
+#[test]
+fn distances_follow_the_sphere() {
+    let degree = EARTH_RADIUS_M * core::f64::consts::PI / 180.0;
+    assert!((place_index::meters_between(10.0, 20.0, 11.0, 20.0) - degree).abs() < 1e-6);
+    assert!(place_index::meters_between(27.7, 85.3, 27.7, 85.3).abs() < 1e-9);
+    let half = EARTH_RADIUS_M * core::f64::consts::PI;
+    assert!((place_index::meters_between(0.0, 0.0, 0.0, 180.0) - half).abs() < 1e-3);
+    let m = place_index::meters_between(27.7172, 85.324, 28.2096, 83.9856);
+    let n = Neighbour {
+        row: 0,
+        haversine: place_index::haversine_of(m),
+    };
+    assert!(
+        (n.meters() - m).abs() < 1e-3 && (140_000.0..146_000.0).contains(&m),
+        "{m}"
+    );
+}

@@ -215,6 +215,7 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 | `countries_near(at, r)` | Every layer with outlines: POLY_INDEX boxes that meet the circle's box, then `Polygons::within` (holds the point or a border within `r`) on the country polygons (the locator, D-149) | union by ID, each answered by the layer that wins it |
 | `missing_packs(at, r)` | As `countries_near` | its countries whose pack (the ID's namespace, `np`) is not installed; a partial pack (`ae-du`) counts where its box holds the point |
 | `search(q, k)` | Every layer with SEARCH | Each layer scores its rows and keeps its best k visible; k-way merge by score, then ID. Fuzzy keys share the first letter unless no layer has a visible strong match; a context after a comma matches ancestors in the row's own pack (D-119); the layer's query rules add matches (D-121); the substring tier reads every layer with SUBSTRING installed (D-199) |
+| `search_with(q, k, opts)` | As `search` | As `search`, plus a focus point's gain on each match before each layer's cut and, when strict, the match tier first (D-226) |
 | `within_bbox(rect, limit)` | Layers whose box meets the rect | Smallest IDs first, k-way merge by ID |
 | `parent(place)` | The place's own layer, else the first layer by precedence holding the same ID with a parent | none; the parent is answered by the layer that wins its ID (D-143) |
 | `ancestors(place)` | As `parent`, step by step | parent first, at most `MAX_DEPTH`, never a place twice |

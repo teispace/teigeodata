@@ -46,7 +46,7 @@ labels. Plan: [embedded layer](../../02-research/notes/embedded-layer.md).
 | TG-15 | India: towns, then villages | research done (D-216, D-217) | [note](../../02-research/notes/india-sources.md): Census 2011 towns joined to LGD; about 260 kB on the wire for 8,000 towns |
 | TG-16 | Outlines only as fine as needed | planned | Nepal at 20 m keeps 21% of vertices |
 | TG-17 | Opens fast, searches fast, small in memory | in progress | SUBSTRING is built on the device instead of downloaded (D-218): `teigeodata_engine::derive::derive_installed` (feature `derive`), 0.50 s for Nepal, checked against the pack's signed hash. Phone-class benches next |
-| TG-18 | Search at the MVP's bar, strict-tier option | in progress (D-220) | Checked on the `tithipatra` layer (2026-11-11): `काठमाडौँ`, `काठमाडौं`, `janakapur`, `tansen`, `kageshwari manohara`, `Kageshwari-Manohara`, `kathmandu`, `दुबई`, `टोकियो` find their place first. The search fold now treats a nasal conjunct as the anusvara (`हङ्स` finds हंसपुर, `मङ्सिर` = `मंसिर`, `हिन्दी` = `हिंदी`), and vowel length and ॉ/ो as one (`न्यूयोर्क` = `न्युयोर्क` = `न्यूयॉर्क`). Open: `viratnagar` ranks India's Viratnagar (an exact name) above Biratnagar, the strict-tier question. Please send the MVP's test cases for the golden file |
+| TG-18 | Search at the MVP's bar, strict-tier option | in progress (D-220, D-226) | Checked on the `tithipatra` layer (2026-11-11): `काठमाडौँ`, `काठमाडौं`, `janakapur`, `tansen`, `kageshwari manohara`, `Kageshwari-Manohara`, `kathmandu`, `दुबई`, `टोकियो` find their place first. The search fold now treats a nasal conjunct as the anusvara (`हङ्स` finds हंसपुर, `मङ्सिर` = `मंसिर`, `हिन्दी` = `हिंदी`), and vowel length and ॉ/ो as one (`न्यूयोर्क` = `न्युयोर्क` = `न्यूयॉर्क`). `search_with` takes a focus point (the user's place, or a point in the home country with a wide scale) and a strict-tier option (D-226): focused on Kathmandu, `ललितपुर` gives Nepal's Lalitpur first. Open: `viratnagar` ranks India's Viratnagar (an exact name) above Biratnagar, a व/ब spelling variant for the lexicon. Please send the MVP's test cases for the golden file |
 | TG-19 | `reverse` with distance, bearing, inside | done (D-223) | Each `Near` carries `meters` and `bearing_deg` (from the place to the point, clockwise from north); `Engine::mark_inside(at, &mut scratch, &mut near)` sets `inside` for every country and unit among the answers with one `admin_at`, and leaves it `None` for places without an outline. `tgd reverse` prints both (`781.2 m away at 114.3°`, `"inside": true`) |
 | TG-10 | Coarse elevation layer | planned | |
 
@@ -59,7 +59,9 @@ labels. Plan: [embedded layer](../../02-research/notes/embedded-layer.md).
   Our search uses one additive score (D-052): strict tiers lost recall on prefix queries, so an
   important place found by a substring can rank above an obscure exact match. A substring
   match scores below prefix and one-edit matches. Is that acceptable, or does your UI need an
-  exact match always first? We can offer a strict-tier option if it is needed.
+  exact match always first? We can offer a strict-tier option if it is needed. Answered by
+  D-226: `SearchOptions::with_strict(true)` ranks by tier first; the default stays the additive
+  score.
 - TG-06: "3 characters" is read as 3 Unicode code points (काठ is 3 code points, 2 graphemes),
   as the rest of our search counts.
 

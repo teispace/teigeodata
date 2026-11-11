@@ -110,6 +110,18 @@ pub fn haversine_of(meters: f64) -> f64 {
     s * s
 }
 
+/// The great-circle distance in metres between (`lat1`, `lon1`) and (`lat2`, `lon2`), in
+/// degrees, by the haversine on the mean Earth sphere; the same result on every platform.
+#[cfg(feature = "spatial")]
+#[must_use]
+pub fn meters_between(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let (p1, p2) = (lat1.to_radians(), lat2.to_radians());
+    let sp = libm::sin((p2 - p1) / 2.0);
+    let sl = libm::sin((lon2 - lon1).to_radians() / 2.0);
+    let h = libm::fma(libm::cos(p1), libm::cos(p2) * sl * sl, sp * sp);
+    2.0 * EARTH_RADIUS_M * libm::asin(libm::sqrt(h.clamp(0.0, 1.0)))
+}
+
 /// The initial great-circle bearing from the point (`lat1`, `lon1`) to (`lat2`, `lon2`), all in
 /// degrees, as degrees clockwise from true north in `[0, 360)`: "3 km at 45° from Pokhara" is
 /// the bearing from Pokhara to the point (TG-19). 0 for one point or either pole's

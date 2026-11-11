@@ -68,6 +68,8 @@ pub use postal::PostalCode;
 #[cfg(feature = "dem")]
 pub use query::{Datum, DemSource, Height};
 pub use query::{Hit, Near, Place, Scratch};
+#[cfg(feature = "search")]
+pub use search::{Focus, SearchOptions};
 #[cfg(feature = "admin")]
 pub use teigeodata_core::IsoCode;
 #[cfg(feature = "elevation")]

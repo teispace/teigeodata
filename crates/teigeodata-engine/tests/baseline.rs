@@ -91,3 +91,57 @@ fn reverse_says_bearing_and_inside() {
     assert!(near.iter().any(|n| n.inside == Some(true)));
     assert!(near.iter().any(|n| n.inside == Some(false)));
 }
+
+/// D-226: a focus point lifts the namesake near it (Hyderabad, Pakistan over Hyderabad,
+/// India), and lifts it less the farther it is; strict order puts an exact match (Rome) above a
+/// more important prefix match (Romania); neither changes which places match.
+#[test]
+fn focus_and_strict_reorder_search() {
+    use teigeodata_engine::{Focus, SearchOptions};
+    let e = Engine::with_baseline().unwrap();
+    let (mut s, mut hits) = (Scratch::default(), Vec::new());
+    let country = |h: &teigeodata_engine::Hit| h.place.id.namespace().country().unwrap();
+    let ids = |hits: &[teigeodata_engine::Hit]| {
+        let mut v: Vec<_> = hits.iter().map(|h| h.place.id).collect();
+        v.sort_unstable();
+        v
+    };
+    e.search("Hyderabad", 2, &mut s, &mut hits).unwrap();
+    assert_eq!(country(&hits[0]), *b"in");
+    let plain = ids(&hits);
+    let sindh = Point::<teigeodata_core::E6>::from_degrees(25.3969, 68.3772).unwrap();
+    let opts = SearchOptions::default().with_focus(Focus::new(sindh));
+    e.search_with("Hyderabad", 2, &opts, &mut s, &mut hits)
+        .unwrap();
+    assert_eq!(country(&hits[0]), *b"pk");
+    assert_eq!(ids(&hits), plain);
+    let near_score = hits[0].score;
+    let mut far = Focus::new(Point::from_degrees(24.86, 67.0).unwrap());
+    e.search_with(
+        "Hyderabad",
+        2,
+        &SearchOptions::default().with_focus(far),
+        &mut s,
+        &mut hits,
+    )
+    .unwrap();
+    let pk = hits.iter().find(|h| country(h) == *b"pk").unwrap();
+    assert!(pk.score < near_score, "{} vs {near_score}", pk.score);
+    far.scale_m = 0.0;
+    e.search_with(
+        "Hyderabad",
+        2,
+        &SearchOptions::default().with_focus(far),
+        &mut s,
+        &mut hits,
+    )
+    .unwrap();
+    assert_eq!(country(&hits[0]), *b"in", "a scale of 0 adds nothing");
+
+    e.search("rome", 4, &mut s, &mut hits).unwrap();
+    assert_eq!(name(&e, &hits[0].place), "Romania");
+    let strict = SearchOptions::default().with_strict(true);
+    e.search_with("rome", 4, &strict, &mut s, &mut hits)
+        .unwrap();
+    assert_eq!(name(&e, &hits[0].place), "Rome");
+}

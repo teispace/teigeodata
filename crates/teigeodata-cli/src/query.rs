@@ -35,6 +35,24 @@ where
     Point::from_degrees(lat, lon).map_err(|e| Fail::Refused(format!("{lat},{lon}: {e}")))
 }
 
+/// `tgd search`'s ranking: a focus (latitude, longitude, scale in metres) and strict order.
+fn search_options(
+    (focus, strict): (Option<(f64, f64, f64)>, bool),
+) -> Result<teigeodata_engine::SearchOptions, Fail> {
+    let opts = teigeodata_engine::SearchOptions::default().with_strict(strict);
+    let Some((lat, lon, scale_m)) = focus else {
+        return Ok(opts);
+    };
+    if !(scale_m.is_finite() && scale_m > 0.0) {
+        return Err(Fail::Refused(format!(
+            "--scale-km must be positive: {scale_m} m"
+        )));
+    }
+    let mut f = teigeodata_engine::Focus::new(point(lat, lon)?);
+    f.scale_m = scale_m;
+    Ok(opts.with_focus(f))
+}
+
 fn id(text: &str) -> Result<PlaceId, Fail> {
     text.parse()
         .map_err(|e| Fail::Refused(format!("{text}: {e}")))
@@ -59,6 +77,8 @@ pub(crate) enum Ask {
     Search {
         query: String,
         k: usize,
+        /// A focus (latitude, longitude, scale in metres) and strict order.
+        rank: (Option<(f64, f64, f64)>, bool),
     },
     Admin {
         lat: f64,
@@ -142,9 +162,10 @@ pub(crate) fn run(
                 })
                 .collect()
         }
-        Ask::Search { query, k } => {
+        Ask::Search { query, k, rank } => {
+            let opts = search_options(rank)?;
             let mut hits = Vec::new();
-            e.search(&query, k, &mut s, &mut hits)?;
+            e.search_with(&query, k, &opts, &mut s, &mut hits)?;
             hits.iter()
                 .map(|h| Item {
                     place: h.place,

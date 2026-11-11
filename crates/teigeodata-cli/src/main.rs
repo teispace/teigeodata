@@ -156,6 +156,16 @@ enum Command {
         /// How many.
         #[arg(short, default_value_t = 10)]
         k: usize,
+        /// Prefer places near this point (D-226): up to 30 points at it, halving every
+        /// `--scale-km`.
+        #[arg(long, value_name = "LAT,LON", value_parser = lat_lon, allow_hyphen_values = true)]
+        focus: Option<(f64, f64)>,
+        /// The focus's scale: the distance at which its gain halves.
+        #[arg(long, default_value_t = 50.0, requires = "focus")]
+        scale_km: f64,
+        /// Rank by match tier first (exact, loose, prefix, one edit, substring), then importance.
+        #[arg(long)]
+        strict: bool,
         #[command(flatten)]
         packs: Packs,
         #[command(flatten)]
@@ -525,12 +535,22 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
         Command::Search {
             query: q,
             k,
+            focus,
+            scale_km,
+            strict,
             packs,
             out: o,
         } => query::run(
             store,
             &packs.packs,
-            query::Ask::Search { query: q, k },
+            query::Ask::Search {
+                query: q,
+                k,
+                rank: (
+                    focus.map(|(lat, lon)| (lat, lon, scale_km * 1_000.0)),
+                    strict,
+                ),
+            },
             o.mode(),
             out,
         ),
@@ -682,4 +702,13 @@ fn main() -> ExitCode {
         }
         Err(Fail::Pending) => ExitCode::from(4),
     }
+}
+
+/// `LAT,LON` in degrees.
+fn lat_lon(s: &str) -> Result<(f64, f64), String> {
+    let (lat, lon) = s
+        .split_once(',')
+        .ok_or_else(|| format!("`{s}`: expected LAT,LON"))?;
+    let num = |v: &str| v.trim().parse::<f64>().map_err(|e| format!("`{v}`: {e}"));
+    Ok((num(lat)?, num(lon)?))
 }
