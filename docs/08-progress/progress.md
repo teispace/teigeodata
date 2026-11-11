@@ -92,8 +92,8 @@ A short status. The numbers and evidence live in each phase file and the
   postcodes main only until Nepal Post opens them; lite claim area digitised from the 2020
   map; ODbL comparisons allowed as gates; corrections approved; labels delegated to agents;
   full key ceremony; all registry names reserved (the maintainer signs in); GitHub private
-  reporting; Cloudflare R2 for browsers. **Waiting on the maintainer:** the key ceremony,
-  registry sign-ins, the Cloudflare account, sending the Nepal Post request.
+  reporting; the browser host deferred, GitHub Releases only (D-212). **Waiting on the maintainer:**
+  the key ceremony, registry sign-ins (later, before the first public release), sending the Nepal Post request.
 
 ## Session log
 
