@@ -32,8 +32,8 @@ fetch = ["install", "std"]
 http = ["fetch", "dep:ureq", "ureq/gzip"]
 # The installed packs on disk: staging, the atomic install, the journal and recovery (D-171),
 # and the catalog refresh that keeps the verified metadata beside them (D-178). Sections a
-# partial install leaves out are punched out of the file (D-189): `libc` where it can.
-store = ["fetch", "dep:libc"]
+# partial install leaves out are punched out of the file (D-189): `libc` or `windows-sys`.
+store = ["fetch", "dep:libc", "dep:windows-sys"]
 # The fuzz and property harnesses, shared by `cargo test` and cargo-fuzz (D-072).
 fuzz = ["write"]
 
@@ -50,6 +50,9 @@ teigeodata-format.workspace = true
 # Hole punching for partial installs (D-189), in `holes.rs` only.
 [target.'cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))'.dependencies]
 libc = { version = "0.2.191", default-features = false, optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", optional = true, features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Ioctl"] }
 
 [dev-dependencies]
 teigeodata-sync = { path = ".", features = ["fuzz", "install", "repo", "trust"] }

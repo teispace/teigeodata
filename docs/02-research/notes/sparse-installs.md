@@ -31,9 +31,10 @@ open (D-136) is unchanged. Measured after the change: points only 1.50 MB on dis
 are 1.49 MB), points and names 1.99 MB, against 2.94 MB for the whole pack. Adding names to the
 hollowed file reused the 1.49 MB of point frames from it and fetched only NAMES.
 
-Windows keeps the default (no holes) until a Windows run exists: it needs `FSCTL_SET_SPARSE`
-before `FSCTL_SET_ZERO_DATA` (**unverified**, open item). A compact file with an offset map is
-not needed anywhere we ship today.
+On Windows the store marks the file sparse (`FSCTL_SET_SPARSE`) and frees the range with
+`FSCTL_SET_ZERO_DATA`, rounded in to NTFS's 64 KiB unit (D-190); the `windows` job of
+`fast-check` runs it on NTFS. A compact file with an offset map is not needed anywhere we ship
+today.
 
 ## 3. Findings
 
@@ -60,7 +61,11 @@ not).
 ### 3.3 Windows
 
 NTFS files are not sparse until `FSCTL_SET_SPARSE`; then `FSCTL_SET_ZERO_DATA` frees a range
-(Cygwin implements `fallocate(PUNCH_HOLE)` this way). Not built: no Windows target or run here.
+(Cygwin implements `fallocate(PUNCH_HOLE)` this way), in whole allocation units of the sparse
+block (64 KiB with 4 KiB clusters); a partly covered unit is zeroed, not freed. FAT and exFAT
+answer `ERROR_INVALID_FUNCTION`. Built with `windows-sys` 0.61.2 (D-190): clippy on the
+`x86_64-pc-windows-gnullvm` target here, the tests on `windows-latest` in CI, the space freed
+measured by `GetCompressedFileSizeW`.
 
 ### 3.4 Rust crates (checked 2026-11-11)
 
@@ -96,14 +101,13 @@ repair, held sections punched, a punch that frees nothing.
 
 ## 6. Impact on the plan
 
-- 4.1b "Storage on disk": done for Apple platforms, Linux and Android; Windows sparse files
-  open (D-189).
+- 4.1b "Storage on disk": done for Apple platforms, Linux and Android (D-189), and Windows
+  (D-190).
 - The disk-peak formula of the storage manager counts a partial install at its sections' size
   on these platforms.
 
 ## 7. Risks and open items
 
-- Windows: `FSCTL_SET_SPARSE` and `FSCTL_SET_ZERO_DATA`, once a Windows run exists.
 - FAT and exFAT (SD cards on Android): no holes; the bytes stay, nothing breaks.
 - The browser (OPFS) is not this store; whether OPFS files are sparse is unknown.
 
@@ -112,6 +116,7 @@ repair, held sections punched, a punch that frees nothing.
 | Thing | Version | Checked on | Where |
 |---|---|---|---|
 | `libc` | 0.2.191 | 2026-11-11 | Cargo.lock, crates.io |
+| `windows-sys` | 0.61.2 | 2026-11-11 | crates.io |
 | `rustix` | 1.1.2 | 2026-11-11 | docs.rs |
 | `drill-press` | 0.1.2 | 2026-11-11 | docs.rs |
 | `hole-punch` | 0.0.3 | 2026-11-11 | docs.rs |

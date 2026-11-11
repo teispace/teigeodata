@@ -96,8 +96,9 @@ signed pack per address; a client holds any subset of its sections.
   record of what is present (D-171); APFS fills gaps under 16 MiB, so the store punches what a
   partial install never writes (`F_PUNCHHOLE`, `fallocate`): points only 1.50 MB of a 2.85 MB
   pack on disk (2026-11-11, D-189; [sparse installs](../../02-research/notes/sparse-installs.md))
-- [ ] Windows sparse files (`FSCTL_SET_SPARSE`, `FSCTL_SET_ZERO_DATA`) once a Windows run exists
-  (D-189); no compact-file layout is needed elsewhere
+- [x] Windows sparse files: `FSCTL_SET_SPARSE`, `FSCTL_SET_ZERO_DATA`, and a `windows` job in
+  `fast-check` for the store and the CLI (2026-11-11, D-190); no compact-file layout is needed
+  elsewhere
 - [x] Engine: a layer opens with any closed subset; a query that needs a missing component
   returns `MissingComponent`; `Engine::elevation` (D-136, 2026-11-09)
 - [x] Sync: `Frames::plan_components(set)` plans only those sections' frames and the head

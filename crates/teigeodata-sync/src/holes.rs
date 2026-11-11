@@ -5,7 +5,8 @@
 //! written. File systems do not all leave that as a hole: APFS fills a gap of under 16 MiB with
 //! zeros when a write extends the file (measured 2026-11-11), so a points-only install of a
 //! country pack took the whole pack's space. The store therefore frees those ranges itself:
-//! `F_PUNCHHOLE` on Apple platforms, `fallocate(FALLOC_FL_PUNCH_HOLE)` on Linux and Android.
+//! `F_PUNCHHOLE` on Apple platforms, `fallocate(FALLOC_FL_PUNCH_HOLE)` on Linux and Android,
+//! and on Windows `FSCTL_SET_SPARSE` then `FSCTL_SET_ZERO_DATA` (NTFS frees whole 64 KiB units).
 //! Where neither exists, or the file system refuses, nothing happens: the bytes stay and read
 //! the same, so freeing space is never needed for correctness.
 
@@ -40,8 +41,9 @@ fn block_of(file: &File) -> u64 {
     }
     #[cfg(not(unix))]
     {
+        // NTFS's sparse unit: 16 clusters of 4 KiB.
         let _ = file;
-        4096
+        64 << 10
     }
 }
 
@@ -111,10 +113,103 @@ fn finish(r: libc::c_int, len: u64) -> io::Result<u64> {
     if unsupported(&e) { Ok(0) } else { Err(e) }
 }
 
-/// No holes here: the bytes stay (Windows needs `FSCTL_SET_SPARSE`, an open item of D-189).
-#[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "android")))]
+#[cfg(windows)]
+fn sys(file: &File, offset: u64, len: u64) -> io::Result<u64> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Foundation::{
+        ERROR_INVALID_FUNCTION, ERROR_INVALID_PARAMETER, ERROR_NOT_SUPPORTED,
+    };
+    use windows_sys::Win32::System::IO::DeviceIoControl;
+    use windows_sys::Win32::System::Ioctl::{
+        FILE_ZERO_DATA_INFORMATION, FSCTL_SET_SPARSE, FSCTL_SET_ZERO_DATA,
+    };
+    let (Ok(from), Some(Ok(to))) = (
+        i64::try_from(offset),
+        offset.checked_add(len).map(i64::try_from),
+    ) else {
+        return Ok(0);
+    };
+    let handle = file.as_raw_handle();
+    let info = FILE_ZERO_DATA_INFORMATION {
+        FileOffset: from,
+        BeyondFinalZero: to,
+    };
+    let info_len = u32::try_from(size_of::<FILE_ZERO_DATA_INFORMATION>()).unwrap_or(u32::MAX);
+    let mut returned = 0_u32;
+    #[allow(
+        unsafe_code,
+        reason = "D-189: two `DeviceIoControl` calls on a handle borrowed from an open `File`; \
+                  the only buffer is `info`, valid for the call, no output and no overlap"
+    )]
+    // SAFETY: `handle` stays open while `file` is borrowed; `FSCTL_SET_SPARSE` takes no buffer
+    // (null means "set sparse"); `FSCTL_SET_ZERO_DATA` reads `info_len` bytes of `info`, which
+    // outlives the call; `returned` is a valid out-pointer; the calls are synchronous.
+    let ok = unsafe {
+        DeviceIoControl(
+            handle,
+            FSCTL_SET_SPARSE,
+            core::ptr::null(),
+            0,
+            core::ptr::null_mut(),
+            0,
+            &raw mut returned,
+            core::ptr::null_mut(),
+        ) != 0
+            && DeviceIoControl(
+                handle,
+                FSCTL_SET_ZERO_DATA,
+                (&raw const info).cast(),
+                info_len,
+                core::ptr::null_mut(),
+                0,
+                &raw mut returned,
+                core::ptr::null_mut(),
+            ) != 0
+    };
+    if ok {
+        return Ok(len);
+    }
+    let e = io::Error::last_os_error();
+    let none = [
+        ERROR_INVALID_FUNCTION,
+        ERROR_NOT_SUPPORTED,
+        ERROR_INVALID_PARAMETER,
+    ];
+    if e.raw_os_error()
+        .and_then(|c| u32::try_from(c).ok())
+        .is_some_and(|c| none.contains(&c))
+    {
+        Ok(0)
+    } else {
+        Err(e)
+    }
+}
+
+/// No holes here: the bytes stay.
+#[cfg(not(any(
+    target_vendor = "apple",
+    target_os = "linux",
+    target_os = "android",
+    windows
+)))]
 fn sys(_: &File, _: u64, _: u64) -> io::Result<u64> {
     Ok(0)
+}
+
+/// The bytes `path` takes on disk, for the tests.
+#[cfg(all(test, windows))]
+fn allocated(path: &std::path::Path) -> u64 {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::GetCompressedFileSizeW;
+    let wide: alloc::vec::Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    let mut high = 0_u32;
+    #[allow(
+        unsafe_code,
+        reason = "D-189, tests: a NUL-terminated path and an out-pointer"
+    )]
+    // SAFETY: `wide` is NUL-terminated and outlives the call; `high` is a valid out-pointer.
+    let low = unsafe { GetCompressedFileSizeW(wide.as_ptr(), &raw mut high) };
+    (u64::from(high) << 32) | u64::from(low)
 }
 
 #[cfg(test)]
@@ -163,11 +258,21 @@ mod tests {
         );
         let zeros = back[s..e].iter().filter(|&&b| b == 0).count() as u64;
         assert_eq!(zeros, freed, "exactly the freed bytes read as zero");
-        #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+        #[cfg(any(
+            target_vendor = "apple",
+            target_os = "linux",
+            target_os = "android",
+            windows
+        ))]
         {
-            use std::os::unix::fs::MetadataExt;
             assert!(freed > (end - start) * 9 / 10, "freed {freed}");
-            let on_disk = f.metadata().unwrap().blocks() * 512;
+            #[cfg(unix)]
+            let on_disk = {
+                use std::os::unix::fs::MetadataExt;
+                f.metadata().unwrap().blocks() * 512
+            };
+            #[cfg(windows)]
+            let on_disk = super::allocated(&path);
             assert!(
                 on_disk + freed * 9 / 10 <= len as u64 + 65_536,
                 "on disk {on_disk}"

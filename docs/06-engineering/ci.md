@@ -20,6 +20,7 @@ and checked again before each workflow change.
 | `counts` | push to `main` and PRs touching `crates/` | instruction counts of the hot paths under Callgrind (gungraun, `teigeodata-bench/benches/counts.rs`): a PR measures its base first and fails above +1% instructions on any benchmark | ≤ 40 min |
 | `verify` | push to `main` | full tests on Linux x64/arm64, macOS arm64, Windows x64; doc tests; golden; parity (fast set) | ≤ 30 min |
 | `bindings` | push to `main`, release | cross-compile matrix (Android ABIs, iOS slices, WASM variants, desktop targets), binding tests per language | ≤ 45 min |
+| `fast-check` (`windows` job) | push, PR | clippy and tests of `teigeodata-sync` and `teigeodata-cli` on `windows-latest` (D-190) | ≤ 25 min |
 | `nightly` | schedule | fuzzing, Miri, sanitizers, mutants, coverage, differential, benchmarks against baselines | ≤ 6 h per job |
 | `data-build` | manual (weekly once the mirror exists) | one job per pack: `forge make --fetch`, then G-det (the build stage again, `cmp`), G-lic (`cargo xtask check-pack`, also on the baseline slice, D-145, and the world part, D-147), the world and locator gates
 (`tests/world.rs` on the built files: cities under their country, the slice's IDs, the border

@@ -54,6 +54,21 @@ jobs:
           cargo build --locked -p teigeodata-sync --no-default-features --features repo --target thumbv7em-none-eabihf
           cargo build --locked -p teigeodata-sync --no-default-features --features install --target thumbv7em-none-eabihf
 
+  # Windows (D-190): the store and the CLI on NTFS, sparse files included (D-189). Linux and
+  # macOS paths run in `check` and on the maintainer's Mac; this is the only Windows run.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Lints
+        run: cargo clippy --locked -p teigeodata-sync -p teigeodata-cli --all-targets --all-features -- -D warnings
+      - name: Tests
+        run: cargo test --locked -p teigeodata-sync -p teigeodata-cli --all-features
+
   forge:
     runs-on: ubuntu-latest
     timeout-minutes: 15

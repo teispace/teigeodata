@@ -1685,6 +1685,7 @@ dependencies = [
  "teigeodata-format",
  "teigeodata-sync",
  "ureq",
+ "windows-sys 0.61.2",
  "zeekstd",
  "zstd",
 ]
