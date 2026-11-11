@@ -49,7 +49,7 @@ part; the ADR each part comes from is linked.
 | `bindings/*` (own workspace) | Generated PyO3, napi-rs and JNI shims; Swift and Dart wrappers | no | D-067 |
 | `teigeodata-mcp` | MCP server | no | [ADR-0017](../03-decisions/adr/ADR-0017-mcp.md) |
 | `teigeodata-server` | HTTP server | no | [ADR-0025](../03-decisions/adr/ADR-0025-hosted-ready.md) |
-| `teigeodata-cli` (`tgd`) | build, extract, inspect, verify, diff, merge, tiles, export | no | |
+| `teigeodata-cli` (`tgd`) | inspect, verify, diff, extract, export; queries; refresh, catalog, find, locate, install, update, remove, pin, repair (D-178); building is the forge's | no | |
 | `xtask` | every repository task and gate, including the IDL extractor and generators | no | [ADR-0021](../03-decisions/adr/ADR-0021-rust-tooling.md) |
 | `forge/*` (own workspace) | the data pipeline and source adapters | no | [ADR-0001](../03-decisions/adr/ADR-0001-rust-core.md) |
 

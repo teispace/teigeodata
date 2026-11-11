@@ -257,9 +257,18 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   frames and its one-fetch rule (D-170) is exercised; a planted split list must fail there
 
 ### 4.9 CLI `tgd`
-- [ ] `inspect`, `verify`, `diff` (sections and records), `extract`, `merge` (compaction),
-  `export`; `catalog`, `find`, `install`, `update`, `remove`, `pin`, `locate`
-- [ ] Every command run and its output read; documented in `--help` and the docs
+Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-178).
+- [ ] (a) `Transport::fetch` (a capped whole-file GET) and `sync::refresh`: the TUF client
+  workflow over the store, metadata kept under `meta/`, crash-safe at every write
+- [ ] (b) Crate `teigeodata-cli` (`tgd`, clap): `inspect`, `verify`, `diff` (sections and
+  records), `extract` (by component), `export` (NDJSON, GeoJSON, streamed)
+- [ ] (c) Queries `get`, `reverse`, `search`, `near`, `admin`, `tz`; outputs text, `--json`,
+  `--geojson`, `--nominatim` (ADR-0038) from one mapping module
+- [ ] (d) Sync: `refresh`, `catalog`, `find`, `locate`, `install`, `update`, `remove`, `pin`,
+  `repair`, `status`, end to end against a `tuf release` repository served on localhost
+- [ ] (e) Every command run and its output read; `--help`, completions, the docs; `hyperfine`
+  timings of open, query and install
+- [ ] `merge` (compaction) once 4.7 decides on delta packs
 
 ### 4.10 Exit review
 - [ ] M4 criteria met, each with its evidence; progress updated
@@ -310,3 +319,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-11 | 4.3 gains delegation by country; the 4.8 register written; packs refuse an older release (gate 1) and fast-forward recovery has its own test (gate 2) | D-175: one targets file for the world is 1.42 MB gzip, 2.7 times gate 12's budget |
 | 2026-11-11 | 4.3: delegation by country built and gate 12 green; extending the oracles is its own item | D-176 |
 | 2026-11-11 | 4.3: both oracles over delegated roles | D-177 |
+| 2026-11-11 | 4.9 split into (a) to (e) from its research; the catalog refresh comes first, in `sync`; `merge` waits on 4.7 | D-178, [CLI note](../../02-research/notes/cli.md) |
