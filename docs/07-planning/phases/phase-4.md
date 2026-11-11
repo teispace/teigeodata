@@ -361,7 +361,8 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   strict-tier option, `search_with` (D-226, 2026-11-12). Open: the व/ब variant (`viratnagar`),
   the MVP's golden cases
 - [ ] TG-17: phone-class benches with gates
-- [ ] TG-10: coarse elevation layer
+- [x] TG-10: coarse elevation layer: `DEM_COARSE`, component `dem-coarse`, 15″ at 8 m steps,
+  518 kB on the wire for Nepal; `elevation_at` falls back to it; G-dem-coarse (D-225, 2026-11-12)
 
 ### 4.10 Exit review
 - [ ] M4 criteria met, each with its evidence; progress updated

@@ -33,6 +33,7 @@ Wire bytes per component, with bytes per place in brackets.
 | admin-index (point → unit) | 719,289 (7.5) | 719,289 (7.0) | 920,345 (23.4) |
 | postal | not in lite (D-205) | 7,285 | not built |
 | dem (30 m) | 68,384,347 | 64,167,225 | not built |
+| dem-coarse (15″, about 460 m; D-225) | 517,997 | not measured | not built |
 | head, seek table, block hashes | 155,391 | 153,910 | 8,072 |
 | **asset** | **76,817,390** | **74,682,703** | **4,492,597** |
 | asset without the DEM | 8,433,043 | 10,515,478 | 4,492,597 |

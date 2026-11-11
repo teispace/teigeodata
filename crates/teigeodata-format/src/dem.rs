@@ -1,4 +1,4 @@
-//! DEM (kind 13): elevation on regular grids, at a bounded error, in tiles a point query decodes
+//! DEM (kind 13) and `DEM_COARSE` (kind 24, D-225, the same layout): elevation on regular grids, at a bounded error, in tiles a point query decodes
 //! on its own (D-089, B11).
 //!
 //! Heights are quantised to `q = round(h / step)`, so every stored height is within `step / 2`
@@ -614,15 +614,21 @@ impl<'a> Dem<'a> {
     /// [`Error::Payload`] if it is not a DEM column table, or a column is missing, unknown,
     /// malformed or of the wrong length.
     pub fn open(section: &Section<'a>) -> Result<Self, Error> {
-        let table: Table<'a> = columns::open(section, Kind::DEM)?;
+        // DEM_COARSE (D-225) has DEM's layout: one reader for both.
+        let kind = if section.kind() == Kind::DEM_COARSE {
+            Kind::DEM_COARSE
+        } else {
+            Kind::DEM
+        };
+        let table: Table<'a> = columns::open(section, kind)?;
         let tiles = usize::try_from(section.item_count())
             .map_err(|_| fail(0, "the tile count does not fit this platform"))?;
         if table.ids().any(|id| id == 0 || id > SOURCE) {
             return Err(fail(0, "an unknown column"));
         }
-        let grids = columns::required(&table, Kind::DEM, TILE_ROW0, None)?.len();
-        let source = columns::optional(&table, Kind::DEM, SOURCE, grids)?;
-        let col = |id| columns::required(&table, Kind::DEM, id, Some(grids));
+        let grids = columns::required(&table, kind, TILE_ROW0, None)?.len();
+        let source = columns::optional(&table, kind, SOURCE, grids)?;
+        let col = |id| columns::required(&table, kind, id, Some(grids));
         let cols = [
             col(TILE_ROW0)?,
             col(TILE_COL0)?,
@@ -633,21 +639,17 @@ impl<'a> Dem<'a> {
             col(STEP_MM)?,
             col(DATUM)?,
             col(TILE_LOG2)?,
-            columns::required(&table, Kind::DEM, TILE_START, Some(grids + 1))?,
+            columns::required(&table, kind, TILE_START, Some(grids + 1))?,
         ];
-        let offsets = columns::required(&table, Kind::DEM, OFFSETS, Some(tiles + 1))?;
-        let models = table
-            .bytes(MODELS)
-            .map_err(|e| columns::map(Kind::DEM, e))?;
+        let offsets = columns::required(&table, kind, OFFSETS, Some(tiles + 1))?;
+        let models = table.bytes(MODELS).map_err(|e| columns::map(kind, e))?;
         if models.len() != FAMILY * SYMBOLS * 2 {
             return Err(fail(MODELS, "the model family is not 64 × 64 frequencies"));
         }
-        let ctx = columns::required(&table, Kind::DEM, CONTEXTS, Some(7))?;
+        let ctx = columns::required(&table, kind, CONTEXTS, Some(7))?;
         let mut thresholds = [0; 7];
         ctx.decode_all(&mut thresholds);
-        let payload = table
-            .bytes(PAYLOAD)
-            .map_err(|e| columns::map(Kind::DEM, e))?;
+        let payload = table.bytes(PAYLOAD).map_err(|e| columns::map(kind, e))?;
         Ok(Self {
             cols,
             source,
@@ -885,7 +887,9 @@ impl<'a> Dem<'a> {
 }
 
 #[cfg(feature = "write")]
-pub use write::{Family, GridInput, THRESHOLDS, TileOptions, encode, encode_tile, mask};
+pub use write::{
+    Coarse, Family, GridInput, THRESHOLDS, TileOptions, coarsen, concat, encode, encode_tile, mask,
+};
 
 #[cfg(feature = "write")]
 mod write {
@@ -900,10 +904,10 @@ mod write {
     use teigeodata_core::table::{Codec, encode_with};
 
     use super::{
-        CONTEXT_COUNT, CONTEXTS, Coder, DATUM, DemScratch, ESCAPE, FAMILY, Grid, LAT_STEP,
-        LON_STEP, MAX_ESCAPE, MAX_LOG2, MIN_LOG2, MODELS, OFFSETS, PAYLOAD, RANS_L, SCALE,
-        SCALE_BITS, SOURCE, STEP_MM, SYMBOLS, TILE_COL0, TILE_COLS, TILE_LOG2, TILE_ROW0,
-        TILE_ROWS, TILE_START, neighbours, predict, small_contexts, zigzag,
+        CONTEXT_COUNT, CONTEXTS, Coder, DATUM, DemScratch, ESCAPE, FAMILY, Grid, HALF_TURN,
+        LAT_STEP, LON_STEP, MAX_ESCAPE, MAX_LOG2, MIN_LOG2, MODELS, OFFSETS, PAYLOAD, RANS_L,
+        SCALE, SCALE_BITS, SOURCE, STEP_MM, SYMBOLS, TILE_COL0, TILE_COLS, TILE_LOG2, TILE_ROW0,
+        TILE_ROWS, TILE_START, TURN, neighbours, predict, small_contexts, zigzag,
     };
     use crate::Error;
 
@@ -1396,6 +1400,291 @@ mod write {
             .collect();
         let count: u64 = kept.iter().map(|(_, t)| t.len() as u64).sum();
         let body = encode_raw(&inputs, dem.coder.models, &dem.coder.thresholds)?;
+        Ok(Some((body, count)))
+    }
+
+    /// The choices of a coarse grid ([`coarsen`], D-225).
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Coarse {
+        /// Source samples per coarse sample along each axis: 15 makes 15″ of a 1″ grid.
+        pub factor: u32,
+        /// The coarse grid's height step in millimetres: heights within `step / 2` of the
+        /// cell's mean.
+        pub step_mm: u32,
+        /// log2 of the coarse tile side, 4 to 6.
+        pub tile_log2: u32,
+    }
+
+    /// A coarse copy of every grid of `dem` (D-225): each coarse sample `(R, C)` is the mean of
+    /// the source samples whose `(⌊(r + f/2) / f⌋, ⌊(c + f/2) / f⌋)` is `(R, C)`, `f` the
+    /// factor (a cell of `f × f` samples centred on the coarse sample; for an even factor, half
+    /// a source sample north-west of it), quantised to `step_mm`. The coarse grid keeps its
+    /// source's product and datum; its spacing is `f` times the source's. A coarse tile with no
+    /// source sample is absent; in a present tile, a cell with none takes the nearest present
+    /// value before it in its row (else after it), and a row with none the nearest filled row
+    /// above (else below), so the grid reaches at most one coarse tile past its source. Streams
+    /// one coarse tile at a time, each decoding only the source tiles under it: memory is one
+    /// coarse tile's sums plus the codes written. Returns the section body and its tile count,
+    /// or `None` if no tile has a sample.
+    ///
+    /// # Errors
+    /// [`Error::Write`] for a factor or step of zero, a tile side outside 16 to 64, a coarse
+    /// grid past the globe, or a tile the coder refuses.
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "tile rows and columns are below 2^32 on any grid that fits the globe; indices within a tile"
+    )]
+    pub fn coarsen(
+        dem: &super::Dem<'_>,
+        coarse: Coarse,
+        family: &Family,
+        thresholds: &[u32; 7],
+        opts: &TileOptions,
+    ) -> Result<Option<(Vec<u8>, u64)>, Error> {
+        let Coarse {
+            factor,
+            step_mm,
+            tile_log2: olog2,
+        } = coarse;
+        if factor == 0 || step_mm == 0 || !(MIN_LOG2..=MAX_LOG2).contains(&olog2) {
+            return Err(Error::Write(
+                "a coarse DEM needs a factor and step above 0 and a tile side of 16 to 64",
+            ));
+        }
+        let f = u64::from(factor);
+        let h = f / 2;
+        let width = 1_usize << olog2;
+        let mut scratch = DemScratch::new();
+        let mut cells = Cells {
+            sums: alloc::vec![0; width * width],
+            counts: alloc::vec![0; width * width],
+        };
+        let mut q = alloc::vec![0_i32; width * width];
+        let mut out: Vec<(Grid, Vec<Option<Vec<u8>>>)> = Vec::new();
+        for g in 0..dem.grids() {
+            let Some(src) = dem.grid(g) else { continue };
+            let slog2 = src.tile_log2;
+            if !(MIN_LOG2..=MAX_LOG2).contains(&slog2) {
+                return Err(Error::Write("a DEM grid's tile side is not 16, 32 or 64"));
+            }
+            if src.tile_rows == 0 || src.tile_cols == 0 {
+                continue;
+            }
+            // The coarse tiles holding the cells of the grid's first and last samples.
+            let span = |t0: u32, n: u32| {
+                let first = u64::from(t0) << slog2;
+                let last = ((u64::from(t0) + u64::from(n)) << slog2) - 1;
+                (((first + h) / f) >> olog2, ((last + h) / f) >> olog2)
+            };
+            let (tr0, tr1) = span(src.tile_row0, src.tile_rows);
+            let (tc0, tc1) = span(src.tile_col0, src.tile_cols);
+            let (lat_step, lon_step) = src
+                .lat_step
+                .checked_mul(factor)
+                .zip(src.lon_step.checked_mul(factor))
+                .ok_or(Error::Write("a coarse DEM step past u32"))?;
+            let past = |t1: u64, step: u32, turn: u64| {
+                (t1 + 1) << olog2 > turn / u64::from(step) + (1 << olog2)
+            };
+            if past(tr1, lat_step, HALF_TURN) || past(tc1, lon_step, TURN) {
+                return Err(Error::Write("a coarse DEM grid reaches past the globe"));
+            }
+            let grid = Grid {
+                tile_row0: tr0 as u32,
+                tile_col0: tc0 as u32,
+                tile_rows: (tr1 - tr0 + 1) as u32,
+                tile_cols: (tc1 - tc0 + 1) as u32,
+                lat_step,
+                lon_step,
+                step_mm,
+                tile_log2: olog2,
+                first_tile: 0,
+                ..src
+            };
+            let mut tiles = Vec::new();
+            for tr in tr0..=tr1 {
+                for tc in tc0..=tc1 {
+                    if !cells.gather(dem, &src, (f, olog2), (tr, tc), &mut scratch)? {
+                        tiles.push(None);
+                        continue;
+                    }
+                    let (num, den) = (i64::from(src.step_mm), i64::from(step_mm));
+                    for ((v, &sum), &n) in q.iter_mut().zip(&cells.sums).zip(&cells.counts) {
+                        if n > 0 {
+                            *v = div_round(sum * num, i64::from(n) * den)?;
+                        }
+                    }
+                    fill(&mut q, &cells.counts, width);
+                    tiles.push(Some(encode_tile(&q, olog2, family, thresholds, opts)?));
+                }
+            }
+            if tiles.iter().any(Option::is_some) {
+                out.push((grid, tiles));
+            }
+        }
+        if out.is_empty() {
+            return Ok(None);
+        }
+        let refs: Vec<Vec<Option<&[u8]>>> = out
+            .iter()
+            .map(|(_, t)| t.iter().map(Option::as_deref).collect())
+            .collect();
+        let inputs: Vec<GridInput<'_>> = out
+            .iter()
+            .zip(&refs)
+            .map(|((grid, _), tiles)| GridInput { grid: *grid, tiles })
+            .collect();
+        let count = refs.iter().map(|t| t.len() as u64).sum();
+        Ok(Some((encode(&inputs, family, thresholds)?, count)))
+    }
+
+    /// One coarse tile's cells: the sum and count of the source samples in each.
+    struct Cells {
+        sums: Vec<i64>,
+        counts: Vec<u32>,
+    }
+
+    impl Cells {
+        /// Sums the samples of `src` whose cells lie in coarse tile `(tr, tc)` (factor `f`,
+        /// coarse tile side `1 << olog2`), decoding only the source tiles under it; whether any
+        /// sample was found.
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "a cell's row and column within its tile are below 64"
+        )]
+        fn gather(
+            &mut self,
+            dem: &super::Dem<'_>,
+            src: &Grid,
+            (f, olog2): (u64, u32),
+            (tr, tc): (u64, u64),
+            scratch: &mut DemScratch,
+        ) -> Result<bool, Error> {
+            self.sums.fill(0);
+            self.counts.fill(0);
+            let h = f / 2;
+            // The source rows (or columns) whose cells lie in coarse tile row (column) `t`.
+            let window = |t: u64| {
+                let lo = ((t << olog2) * f).saturating_sub(h);
+                let hi = (((t + 1) << olog2) * f).saturating_sub(h);
+                (lo, hi)
+            };
+            let ((r_lo, r_hi), (c_lo, c_hi)) = (window(tr), window(tc));
+            if r_hi == 0 || c_hi == 0 {
+                return Ok(false);
+            }
+            let slog2 = src.tile_log2;
+            let src_side = 1_u64 << slog2;
+            let width = 1_usize << olog2;
+            let mut any = false;
+            for sr in (r_lo >> slog2)..=((r_hi - 1) >> slog2) {
+                for sc in (c_lo >> slog2)..=((c_hi - 1) >> slog2) {
+                    let Some(t) = src.tile(sr, sc) else { continue };
+                    if dem.code(t).is_none() {
+                        continue;
+                    }
+                    let samples = dem
+                        .decode_tile(t, scratch)
+                        .ok_or(Error::Write("a source DEM tile does not decode"))?;
+                    for (i, &v) in samples.iter().enumerate() {
+                        let r = (sr << slog2) + i as u64 / src_side;
+                        let c = (sc << slog2) + i as u64 % src_side;
+                        if r < r_lo || r >= r_hi || c < c_lo || c >= c_hi {
+                            continue;
+                        }
+                        let cell = (((r + h) / f - (tr << olog2)) as usize) * width
+                            + ((c + h) / f - (tc << olog2)) as usize;
+                        self.sums[cell] += i64::from(v);
+                        self.counts[cell] += 1;
+                        any = true;
+                    }
+                }
+            }
+            Ok(any)
+        }
+    }
+
+    /// `n / d` (`d` > 0) rounded half away from zero, as a height in steps.
+    fn div_round(n: i64, d: i64) -> Result<i32, Error> {
+        let r = if n >= 0 {
+            (n + d / 2) / d
+        } else {
+            -((d / 2 - n) / d)
+        };
+        i32::try_from(r).map_err(|_| Error::Write("a coarse DEM height out of range"))
+    }
+
+    /// Gives each cell with no sample (`counts` 0) the nearest present value before it in its
+    /// row, else after it; and a row with none the nearest filled row above, else below.
+    fn fill(q: &mut [i32], counts: &[u32], side: usize) {
+        let mut row_has = alloc::vec![false; side];
+        for (r, has) in row_has.iter_mut().enumerate() {
+            let at = r * side;
+            let Some(first) = counts[at..at + side].iter().position(|&n| n > 0) else {
+                continue;
+            };
+            *has = true;
+            let mut last = q[at + first];
+            for i in at..at + side {
+                if counts[i] > 0 {
+                    last = q[i];
+                } else {
+                    q[i] = last;
+                }
+            }
+        }
+        let Some(first) = row_has.iter().position(|&h| h) else {
+            return;
+        };
+        for r in 0..side {
+            if !row_has.get(r).copied().unwrap_or(true) {
+                let from = if r < first { first } else { r - 1 };
+                q.copy_within(from * side..(from + 1) * side, r * side);
+            }
+        }
+    }
+
+    /// One section holding every grid of `dems`, in order, tile codes copied, not re-coded: a
+    /// layer merged from several packs keeps each one's grids (D-225); a query answers from
+    /// the first grid with samples around the point. `None` if they have no grids.
+    ///
+    /// # Errors
+    /// [`Error::Write`] if the sections' model families or thresholds differ (their codes
+    /// would not decode under one), or the result is too large for u32 offsets.
+    pub fn concat(dems: &[super::Dem<'_>]) -> Result<Option<(Vec<u8>, u64)>, Error> {
+        let Some(first) = dems.first() else {
+            return Ok(None);
+        };
+        let mut kept: Vec<(Grid, Vec<Option<&[u8]>>)> = Vec::new();
+        for dem in dems {
+            if dem.coder.models != first.coder.models
+                || dem.coder.thresholds != first.coder.thresholds
+            {
+                return Err(Error::Write(
+                    "DEM sections with different model families or thresholds",
+                ));
+            }
+            for g in 0..dem.grids() {
+                let Some(grid) = dem.grid(g) else { continue };
+                let n = grid.tile_rows as usize * grid.tile_cols as usize;
+                let tiles = (0..n)
+                    .map(|i| {
+                        let (start, end) = dem.code(grid.first_tile as usize + i)?;
+                        dem.coder.payload.get(start..end)
+                    })
+                    .collect();
+                kept.push((grid, tiles));
+            }
+        }
+        if kept.is_empty() {
+            return Ok(None);
+        }
+        let inputs: Vec<GridInput<'_>> = kept
+            .iter()
+            .map(|(grid, tiles)| GridInput { grid: *grid, tiles })
+            .collect();
+        let count: u64 = kept.iter().map(|(_, t)| t.len() as u64).sum();
+        let body = encode_raw(&inputs, first.coder.models, &first.coder.thresholds)?;
         Ok(Some((body, count)))
     }
 

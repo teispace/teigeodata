@@ -67,7 +67,7 @@ pub use outline::{Outline, Ring};
 pub use postal::PostalCode;
 #[cfg(feature = "names")]
 pub use query::NameInfo;
-#[cfg(feature = "dem")]
+#[cfg(any(feature = "dem", feature = "dem-coarse"))]
 pub use query::{Datum, DemSource, Height};
 pub use query::{Hit, Near, Place, Scratch};
 #[cfg(feature = "search")]

@@ -264,7 +264,7 @@ pub(crate) fn in_rows(
 type Diffs = BTreeMap<(String, &'static str), (Vec<f64>, Vec<f64>)>;
 
 /// The `q`-quantile of sorted values (nearest rank).
-fn quantile(sorted: &[f64], q: f64) -> f64 {
+pub(super) fn quantile(sorted: &[f64], q: f64) -> f64 {
     #[allow(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,

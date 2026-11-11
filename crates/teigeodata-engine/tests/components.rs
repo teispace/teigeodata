@@ -226,6 +226,7 @@ fn each_component_set_answers_as_the_whole_pack_or_names_what_is_missing() {
             Component::Dem,
             Component::TzRules,
             Component::Substring,
+            Component::DemCoarse,
         ]))
     );
     // The probes are not trivially empty.

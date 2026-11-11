@@ -38,6 +38,7 @@ pub(crate) mod baseline;
 mod cluster;
 mod corrections;
 mod dedupe;
+pub(crate) mod dem_coarse;
 mod elevation;
 pub(crate) mod embed;
 mod embed_profile;

@@ -21,7 +21,7 @@ use teigeodata_format::region::Region;
 #[cfg(feature = "search")]
 use teigeodata_names::KeyBuf;
 
-#[cfg(feature = "dem")]
+#[cfg(any(feature = "dem", feature = "dem-coarse"))]
 pub use teigeodata_format::dem::Source as DemSource;
 
 use crate::{Engine, Error, LayerId};
@@ -46,7 +46,7 @@ pub struct Place {
 }
 
 /// A terrain height and where it came from, from [`Engine::elevation_at`] (D-195).
-#[cfg(feature = "dem")]
+#[cfg(any(feature = "dem", feature = "dem-coarse"))]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Height {
     /// Metres above the datum.
@@ -63,7 +63,7 @@ pub struct Height {
 }
 
 /// A vertical datum.
-#[cfg(feature = "dem")]
+#[cfg(any(feature = "dem", feature = "dem-coarse"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum Datum {
@@ -71,7 +71,7 @@ pub enum Datum {
     Egm2008,
 }
 
-#[cfg(feature = "dem")]
+#[cfg(any(feature = "dem", feature = "dem-coarse"))]
 impl Datum {
     /// Its name (`EGM2008`).
     #[must_use]
@@ -82,7 +82,7 @@ impl Datum {
     }
 }
 
-#[cfg(feature = "dem")]
+#[cfg(any(feature = "dem", feature = "dem-coarse"))]
 impl Height {
     fn of(meters: f64, grid: &teigeodata_format::dem::Grid, layer: LayerId) -> Self {
         Self {
@@ -151,7 +151,7 @@ pub(crate) struct PrefixCand {
 #[derive(Debug, Default)]
 pub struct Scratch {
     /// A decoded DEM tile, allocated on the first terrain query (19 KiB).
-    #[cfg(feature = "dem")]
+    #[cfg(any(feature = "dem", feature = "dem-coarse"))]
     dem: Option<Box<teigeodata_format::dem::DemScratch>>,
     neighbours: Vec<Neighbour>,
     near: Vec<NearCand>,
@@ -387,29 +387,72 @@ impl Engine {
     }
 
     /// The terrain height at `at` in metres above EGM2008, with where it came from (its DEM
-    /// product, sample spacing and datum, D-195), from the first layer covering the point
-    /// whose DEM has samples around it (D-089, D-192): bilinear between the four samples
-    /// around it, each within half the DEM's height step of its source (±1 m in shipped
-    /// packs). `None` where no layer has terrain (the sea, outside every DEM). A warm query
-    /// does not allocate; it decodes at most one tile, and the next query in that tile goes on
-    /// from where it stopped.
+    /// product, sample spacing and datum, D-195). The fine DEM answers first: the first layer
+    /// covering the point whose DEM (`dem`) has samples around it (D-089, D-192); where none
+    /// has, the first covering layer whose coarse grid (`dem-coarse`, D-225) has, and
+    /// [`Height::resolution_m`] says which spacing answered. Bilinear between the four samples
+    /// around the point, each within half its grid's height step of its source (±1 m in
+    /// shipped packs; a coarse sample is its cell's mean). `None` where no layer has terrain
+    /// (the sea, outside every grid). A warm query does not allocate; it decodes at most one
+    /// tile per grid it reads, and the next query in that tile goes on from where it stopped.
     ///
     /// # Errors
-    /// [`Error::MissingComponent`] if a layer covering the point has a DEM that is not
-    /// installed; [`Error::Integrity`] if it is corrupt.
-    #[cfg(feature = "dem")]
+    /// [`Error::MissingComponent`] if no installed grid answers and a layer covering the point
+    /// has a DEM or coarse grid that is not installed and no other grid installed (the first
+    /// such); [`Error::Integrity`] if a grid read is corrupt.
+    #[cfg(any(feature = "dem", feature = "dem-coarse"))]
     pub fn elevation_at(&self, at: Point<E7>, s: &mut Scratch) -> Result<Option<Height>, Error> {
+        let mut missing = None;
+        #[cfg(feature = "dem")]
+        if let Some(h) = self.terrain(at, Kind::DEM, s, &mut missing)? {
+            return Ok(Some(h));
+        }
+        #[cfg(feature = "dem-coarse")]
+        if let Some(h) = self.terrain(at, Kind::DEM_COARSE, s, &mut missing)? {
+            return Ok(Some(h));
+        }
+        missing.map_or(Ok(None), Err)
+    }
+
+    /// The height from the first layer covering `at` whose grid of `kind` (DEM or
+    /// `DEM_COARSE`) has samples around it; a layer whose grid is not installed is skipped,
+    /// the first such noted in `missing`.
+    #[cfg(any(feature = "dem", feature = "dem-coarse"))]
+    fn terrain(
+        &self,
+        at: Point<E7>,
+        kind: Kind,
+        s: &mut Scratch,
+        missing: &mut Option<Error>,
+    ) -> Result<Option<Height>, Error> {
         for l in &self.layers {
             if !l.covers(at) {
                 continue;
             }
-            l.ensure(Kind::DEM)?;
-            let Some(dem) = &l.views().dem else {
+            let v = l.views();
+            let (dem, other) = match kind {
+                #[cfg(feature = "dem")]
+                Kind::DEM => (v.dem.as_ref(), Kind::DEM_COARSE),
+                #[cfg(feature = "dem-coarse")]
+                Kind::DEM_COARSE => (v.dem_coarse.as_ref(), Kind::DEM),
+                _ => (None, kind),
+            };
+            match l.ensure(kind) {
+                // Named only where the layer has no other grid installed to answer instead.
+                Err(e @ Error::MissingComponent { .. }) => {
+                    if !(v.installed(other) && v.pack.section(other).is_some()) {
+                        missing.get_or_insert(e);
+                    }
+                    continue;
+                }
+                r => r?,
+            }
+            let Some(dem) = dem else {
                 continue;
             };
             let scratch = s.dem.get_or_insert_with(Box::default);
-            if let Some((meters, grid)) = dem.height(at, scratch) {
-                return Ok(Some(Height::of(meters, &grid, l.id)));
+            if let Some((meters, g)) = dem.height(at, scratch) {
+                return Ok(Some(Height::of(meters, &g, l.id)));
             }
         }
         Ok(None)

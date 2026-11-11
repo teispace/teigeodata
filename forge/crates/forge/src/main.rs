@@ -20,6 +20,7 @@
 //! forge topology <boundary-source>                shared arcs, levels of detail, polygons (B10)
 //! forge topology --geoboundaries <file> <name>   the same on one geoBoundaries level (measurement)
 //! forge dem-section <tileset> <w,s,e,n> [--step-mm N]   the DEM section over a box (B11)
+//! forge dem-coarse <pack> [--arcsec N] [--step-m M] [--log2 L] [--out <file>]  a pack's coarse DEM, gated
 //! forge make <cc> --release <v> [--lite] …       every stage from data/countries/<cc>/build.yaml, cached
 //! forge baseline <cc> [--lite] …                a country pack's slice of the embedded baseline
 //! forge world --release <v> [--lite] …           the world part of the embedded baseline
@@ -194,6 +195,7 @@ fn stage(root: &Path, args: &[String]) -> Option<Result<String, String>> {
             _ => Err("usage: forge dem <tileset-source> <points-source> [...]".into()),
         },
         "dem-section" => dem::section::run(root, args.get(1..).unwrap_or_default()),
+        "dem-coarse" => build::dem_coarse::run(args.get(1..).unwrap_or_default()),
         "dem-ref" => match (args.get(1), args.get(2), args.get(3)) {
             (Some(d), Some(r), Some(g)) => {
                 dem::reference::run(root, d, r, g, args.get(4).map(String::as_str))

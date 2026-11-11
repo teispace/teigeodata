@@ -93,7 +93,7 @@ asks its layer for each section before reading it (`ensure`). Per query:
 | `search` | `search` (with `names`); a context that matches rows also `admin`; matches from the middle of a word only from layers with `substring` installed (others add none) |
 | `tz_of(place)` | `timezone`, else `timezone-index`; names `timezone` when neither is installed |
 | `tz_at` | `timezone-index` |
-| `elevation_at` | `dem` |
+| `elevation_at` | `dem`, else `dem-coarse` (D-225); names `dem` (or `dem-coarse`) only when no installed grid answers and a covering layer has neither installed |
 | `tz_offset_at`, `tz_local_candidates`, `zone_name` | `tz-rules` |
 | `tz_offset_at_point` | `timezone-index` and `tz-rules` |
 | `bbox_of`, `boundary` | `boundaries`; a layer without it is skipped |
@@ -109,7 +109,8 @@ never touches heights.
 
 Each component the engine reads has a Cargo feature, all on by default: `elevation`, `admin`,
 `names`, `search` (with `names`), `timezone`, `timezone-index`, `boundaries`,
-`admin-index` (with `boundaries`), `dem`, `tz-rules`, `postal` and `substring` (with `search`).
+`admin-index` (with `boundaries`), `dem`, `dem-coarse`, `tz-rules`, `postal` and `substring`
+(with `search`).
 `point` is always built; `extra` is read raw through `Layer::section_bytes`. A build without a
 feature has neither the query nor
 the section reader, and treats the component as not installed: a pack's sections of it are
@@ -125,7 +126,7 @@ that needs it (a search context needs `admin`) returns `Error::MissingComponent`
 | `search` | `search`; its matches from the middle of a word `substring` |
 | `tz_of` | `timezone` or `timezone-index` |
 | `tz_at` | `timezone-index` |
-| `elevation_at` | `dem` |
+| `elevation_at` | `dem` or `dem-coarse` |
 | `tz_offset_at`, `tz_local_candidates`, `tz_version`, `zone_name` | `tz-rules` |
 | `tz_offset_at_point` | `tz-rules` and `timezone-index` |
 | `bbox_of`, `boundary` | `boundaries` |
