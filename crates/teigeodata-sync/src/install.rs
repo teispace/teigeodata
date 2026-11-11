@@ -402,6 +402,32 @@ impl Install {
         self.planned.as_ref()?.frames.frame(index)
     }
 
+    /// `fetch` as one fetch per frame, so a driver that streams a response feeds each frame as
+    /// soon as its bytes are in, and a cut connection loses at most the frame in flight. The
+    /// block-hash list stays one fetch: it is fed whole.
+    #[must_use]
+    pub fn frames_of(&self, fetch: &Fetch) -> Vec<Fetch> {
+        let Some(p) = self.planned.as_ref() else {
+            return alloc::vec![fetch.clone()];
+        };
+        let lf = &p.list_frames;
+        if fetch.frames.start < lf.end && lf.start < fetch.frames.end {
+            return alloc::vec![fetch.clone()];
+        }
+        fetch
+            .frames
+            .clone()
+            .filter_map(|i| {
+                let f = p.frames.frame(i)?;
+                Some(Fetch {
+                    frames: i..i + 1,
+                    compressed: f.compressed,
+                    decoded: f.decoded,
+                })
+            })
+            .collect()
+    }
+
     /// The fetches still to make: runs of wanted frames not yet done, `BLOCK_HASHES`'s first.
     /// After [`Install::start`] it is the plan; after [`Install::staged`] the rest of it.
     #[must_use]

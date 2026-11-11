@@ -147,6 +147,12 @@ fn publish(host: &Host, v: u64, packs: &[Vec<u8>]) {
 /// Serves `host` on localhost: GET, whole or one `bytes=a-b` range, `ETag` by path, 404 for
 /// anything else. Returns the base URL.
 fn serve(host: Host) -> String {
+    serve_at(host, 0)
+}
+
+/// [`serve`], sending bodies at about `rate` bytes a second (0: at once), so a client can be
+/// killed mid-download.
+fn serve_at(host: Host, rate: usize) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     std::thread::spawn(move || {
@@ -199,7 +205,16 @@ fn serve(host: Host) -> String {
                     r
                 }
             };
-            let _ = c.write_all(&reply);
+            if rate == 0 {
+                let _ = c.write_all(&reply);
+            } else {
+                for chunk in reply.chunks((rate / 20).max(1)) {
+                    if c.write_all(chunk).is_err() {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            }
             let _ = c.flush();
             let mut sink = [0_u8; 1];
             let _ = c.set_read_timeout(Some(std::time::Duration::from_millis(5)));
@@ -585,4 +600,81 @@ fn write_repo() {
         std::fs::write(p, bytes).unwrap();
     }
     std::fs::write(out.join("root.json"), root_file()).unwrap();
+}
+
+/// Sync gate 8 with a real process: `tgd install` and `tgd update` killed (SIGKILL on Unix) at
+/// points across their download, each kill followed by `status --deep`, which must find every
+/// installed pack whole (or none installed); the next run then finishes, keeping what checked.
+#[test]
+fn a_killed_install_or_update_never_damages_the_store() {
+    let host: Host = Arc::default();
+    publish(&host, 1, &[pack_of(20_000, "2026.11.0", false)]);
+    let asset_len = host
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(k, _)| k.starts_with("assets/"))
+        .map(|(_, v)| v.len())
+        .unwrap();
+    // About a second and a half for the whole asset.
+    let url = serve_at(Arc::clone(&host), asset_len * 2 / 3);
+    let store = store_for("killed", &url);
+    ok(&store, &["refresh", "--countries", "np"]);
+    let killed = |args: &[&str], after_ms: u64| {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_tgd"))
+            .arg("--store")
+            .arg(&store)
+            .args(args)
+            .env_remove("TEIGEODATA_STORE")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(after_ms));
+        let finished = child.try_wait().unwrap().is_some();
+        let _ = child.kill();
+        let _ = child.wait();
+        let s = tgd(&store, &["status", "--json", "--deep"]);
+        assert_eq!(
+            s.status.code(),
+            Some(0),
+            "{args:?} killed at {after_ms} ms: the store is damaged"
+        );
+        finished
+    };
+    let mut cut = 0;
+    for ms in [80, 250, 450, 700, 950, 1200] {
+        cut += usize::from(!killed(&["install", "np"], ms));
+    }
+    assert!(
+        cut >= 3,
+        "the kills landed before the install finished ({cut} of 6)"
+    );
+    let done = ok(&store, &["install", "np"]);
+    assert!(
+        done.contains("is installed") || !done.contains(" 0 kept"),
+        "the next install keeps what an earlier one checked: {done}"
+    );
+    let s = json(&store, &["status", "--json", "--deep"]);
+    assert_eq!(s["packs"][0]["release"], "2026.11.0");
+    assert_eq!(s["packs"][0]["health"], "Good");
+
+    // An update killed the same way: the old release stays whole until the new one commits.
+    publish(&host, 2, &[pack_of(20_000, "2026.12.0", true)]);
+    ok(&store, &["refresh"]);
+    for ms in [80, 300, 600, 900] {
+        killed(&["update"], ms);
+        let s = json(&store, &["status", "--json", "--deep"]);
+        assert_eq!(s["packs"].as_array().unwrap().len(), 1, "{s}");
+        assert_eq!(s["packs"][0]["health"], "Good", "{s}");
+    }
+    ok(&store, &["update"]);
+    let s = json(&store, &["status", "--json", "--deep"]);
+    assert_eq!(s["packs"][0]["release"], "2026.12.0");
+    assert_eq!(s["packs"][0]["health"], "Good");
+    let staged: Vec<_> = std::fs::read_dir(store.join("staging")).unwrap().collect();
+    assert!(
+        staged.is_empty(),
+        "no staging file is left behind: {staged:?}"
+    );
 }

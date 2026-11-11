@@ -49,6 +49,25 @@ pub trait Transport {
     /// A [`FetchError`]: the request failed, or the response was not exactly `range`.
     fn get(&mut self, url: &str, range: Range<u64>, out: &mut Vec<u8>) -> Result<Got, FetchError>;
 
+    /// [`Transport::get`], handing the body to `sink` as it arrives, in order, so the installer
+    /// checks and writes each frame as soon as it is in and a cut connection loses at most the
+    /// frame in flight. The default fetches the whole range into `buf` and hands it over once;
+    /// a transport that can stream overrides it, with the same checks as `get`.
+    ///
+    /// # Errors
+    /// As [`Transport::get`], and `sink`'s.
+    fn get_streamed(
+        &mut self,
+        url: &str,
+        range: Range<u64>,
+        buf: &mut Vec<u8>,
+        sink: &mut dyn FnMut(&[u8]) -> Result<(), FetchError>,
+    ) -> Result<Got, FetchError> {
+        let got = self.get(url, range, buf)?;
+        sink(buf)?;
+        Ok(got)
+    }
+
     /// Fetches the whole file at `url` into `out` (cleared first): status 200, at most `max`
     /// bytes after any `Content-Encoding` is decoded (the cap holds against a compression
     /// bomb). Metadata hosts serve gzip, and a transport should accept it.
@@ -215,24 +234,10 @@ fn run<T: Transport, F: Read + Write + Seek>(
     previous: Option<&mut (dyn Previous + '_)>,
 ) -> Result<Installed, FetchError> {
     let mut inst = Install::new(entry, asset_len, set);
-    let mut etag: Option<Option<String>> = None;
+    let mut same = SameAsset::new(asset_len);
     let mut get = |transport: &mut T, range: Range<u64>, out: &mut Vec<u8>| {
         let got = transport.get(url, range, out)?;
-        if got.total != asset_len {
-            return Err(FetchError::Response(
-                "the asset's length is not the catalog's",
-            ));
-        }
-        match &etag {
-            Some(e) if *e != got.etag => Err(FetchError::Response(
-                "the asset changed on the host during the install",
-            )),
-            Some(_) => Ok(()),
-            None => {
-                etag = Some(got.etag);
-                Ok(())
-            }
-        }
+        same.check(got)
     };
     let [t, h] = inst.first()?;
     let (mut table, mut head) = (Vec::new(), Vec::new());
@@ -277,12 +282,35 @@ fn run<T: Transport, F: Read + Write + Seek>(
             )?;
         }
     }
-    // A frame not yet downloaded is listed, and the rest still fed: what a platform holds is
-    // written and kept for the next pass (D-184).
+    // Each response is streamed and each frame fed as soon as its bytes are in: a cut loses at
+    // most the frame in flight, and the next attempt keeps the rest (resume). A frame not yet
+    // downloaded is listed, and the rest still fed: what a platform holds is written and kept
+    // for the next pass (D-184).
     let mut needs = Needs::default();
+    let mut acc: Vec<u8> = Vec::new();
     for f in inst.remaining() {
-        if needs.take(get(transport, f.compressed.clone(), &mut buf))? {
-            inst.feed(&f, &buf, |at, b| write(staging, at, b))?;
+        let parts = inst.frames_of(&f);
+        let mut next = 0;
+        acc.clear();
+        let mut feed = |chunk: &[u8]| -> Result<(), FetchError> {
+            acc.extend_from_slice(chunk);
+            let mut used = 0;
+            while let Some(p) = parts.get(next) {
+                let n = usize::try_from(p.compressed.end - p.compressed.start)
+                    .map_err(|_| too_large())?;
+                let Some(bytes) = acc.get(used..used + n) else {
+                    break;
+                };
+                inst.feed(p, bytes, |at, b| write(staging, at, b))?;
+                used += n;
+                next += 1;
+            }
+            acc.drain(..used);
+            Ok(())
+        };
+        let got = transport.get_streamed(url, f.compressed.clone(), &mut buf, &mut feed);
+        if needs.take(got.and_then(|g| same.check(g)))? && next != parts.len() {
+            return Err(FetchError::Response("the body is not the range's length"));
         }
     }
     staging.flush()?;
@@ -291,6 +319,44 @@ fn run<T: Transport, F: Read + Write + Seek>(
     done.kept -= reused;
     done.reused = reused;
     Ok(done)
+}
+
+/// Holds every response of one install to the same asset: the catalog's length, and one `ETag`
+/// (or none) for all of them.
+struct SameAsset {
+    len: u64,
+    seen: bool,
+    etag: Option<String>,
+}
+
+impl SameAsset {
+    const fn new(len: u64) -> Self {
+        Self {
+            len,
+            seen: false,
+            etag: None,
+        }
+    }
+
+    fn check(&mut self, got: Got) -> Result<(), FetchError> {
+        if got.total != self.len {
+            return Err(FetchError::Response(
+                "the asset's length is not the catalog's",
+            ));
+        }
+        if !self.seen {
+            self.seen = true;
+            self.etag = got.etag;
+            return Ok(());
+        }
+        if self.etag == got.etag {
+            Ok(())
+        } else {
+            Err(FetchError::Response(
+                "the asset changed on the host during the install",
+            ))
+        }
+    }
 }
 
 /// The ranges a pass found missing, merged in file order.
@@ -577,6 +643,7 @@ impl Mirrors {
     }
 
     /// Counts an attempt on mirror `i` that failed on the network or the protocol.
+    #[cfg(feature = "store")]
     pub(crate) fn failed(&mut self, i: usize) {
         if let Some(m) = self.list.get_mut(i) {
             m.failures += 1;
@@ -584,6 +651,7 @@ impl Mirrors {
     }
 
     /// Counts an attempt on mirror `i` whose bytes were refused.
+    #[cfg(feature = "store")]
     pub(crate) fn refused(&mut self, i: usize) {
         if let Some(m) = self.list.get_mut(i) {
             m.refused += 1;
@@ -591,6 +659,7 @@ impl Mirrors {
     }
 
     /// The base URL of mirror `i`.
+    #[cfg(feature = "store")]
     pub(crate) fn base(&self, i: usize) -> Option<&str> {
         self.list.get(i).map(|m| m.base.as_str())
     }
@@ -749,6 +818,10 @@ impl Ureq {
     }
 }
 
+/// The read size of a streamed response.
+#[cfg(feature = "http")]
+const STREAM_CHUNK: usize = 64 * 1024;
+
 #[cfg(feature = "http")]
 impl Transport for Ureq {
     fn get(&mut self, url: &str, range: Range<u64>, out: &mut Vec<u8>) -> Result<Got, FetchError> {
@@ -780,6 +853,56 @@ impl Transport for Ureq {
             .read_to_end(out)
             .map_err(|e| FetchError::Transport(alloc::format!("{e}")))?;
         if out.len() as u64 != want {
+            return Err(FetchError::Response("the body is not the range's length"));
+        }
+        Ok(Got { etag, total })
+    }
+
+    fn get_streamed(
+        &mut self,
+        url: &str,
+        range: Range<u64>,
+        buf: &mut Vec<u8>,
+        sink: &mut dyn FnMut(&[u8]) -> Result<(), FetchError>,
+    ) -> Result<Got, FetchError> {
+        use std::io::Read;
+        if range.is_empty() {
+            return Err(FetchError::Response("an empty range"));
+        }
+        let header = alloc::format!("bytes={}-{}", range.start, range.end - 1);
+        let mut r = self
+            .agent
+            .get(url)
+            .header("Range", &header)
+            .header("Accept-Encoding", "identity")
+            .call()
+            .map_err(|e| FetchError::Transport(alloc::format!("{e}")))?;
+        let status = r.status().as_u16();
+        if status != 206 {
+            return Err(FetchError::Status(status));
+        }
+        let text = |name: &str| r.headers().get(name).and_then(|v| v.to_str().ok());
+        let total = content_range(text("content-range"), &range)?;
+        let etag = text("etag").map(String::from);
+        let want = range.end - range.start;
+        // At most one byte past the range is read, to see a body that runs over.
+        let mut reader = r.body_mut().as_reader().take(want + 1);
+        buf.resize(STREAM_CHUNK, 0);
+        let mut seen: u64 = 0;
+        loop {
+            let n = reader
+                .read(buf)
+                .map_err(|e| FetchError::Transport(alloc::format!("{e}")))?;
+            if n == 0 {
+                break;
+            }
+            seen += n as u64;
+            if seen > want {
+                return Err(FetchError::Response("the body is not the range's length"));
+            }
+            sink(buf.get(..n).ok_or_else(too_large)?)?;
+        }
+        if seen != want {
             return Err(FetchError::Response("the body is not the range's length"));
         }
         Ok(Got { etag, total })

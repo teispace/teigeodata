@@ -254,7 +254,7 @@ frame against the signed hashes on the next attempt, so the paragraph below is t
 plan.* The resume record holds the asset name, ETag, total length and the set of finished
 frames. The GitHub asset host ignores `If-Range` (measured 2026-11-06), so every resumed request
 re-checks the ETag and the `Content-Range` total. A frame is either finished and verified, or
-fetched again, so at most 1 MiB is lost. A whole-file download that gets interrupted resumes
+fetched again, so at most 1 MiB is lost. *As built (D-187): the driver streams each response and feeds each frame as soon as its bytes are in, so a cut loses at most the frame in flight; before that, it lost the whole run.* A whole-file download that gets interrupted resumes
 from its last finished frame boundary in the same way.
 
 **Background transfers.**
