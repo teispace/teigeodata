@@ -299,8 +299,12 @@ The first consumer brief (Tithipatra, 2026-11-11, D-193); the reply and statuses
   stored outline boxes and arcs (D-194, 2026-11-11)
 - [x] TG-07: the DEM section names its source; `elevation_at` returns metres with source,
   resolution in metres and datum (D-195, 2026-11-11)
-- [ ] TG-02: ISO 3166-1 and 3166-2 codes on countries and level-1 units, from data files with
-  their source; `admin_at` and `ancestors` give them (research note first)
+- [x] TG-02: ISO 3166-1 and 3166-2 codes on countries and level-1 units, from data files with
+  their source: the `ISO_CODES` section (kind 21, `admin`), `data/countries/<cc>/iso3166.yaml`,
+  gate G-iso in the pack stage and the shipped baseline, `Engine::iso_code` and
+  `Engine::by_iso`, called on each entry `admin_at` and `ancestors` return (D-197, 2026-11-11).
+  Open: the CLDR differential of G-iso (CLDR not yet pinned), the world part's codes (Natural
+  Earth's are stale; needs CLDR to know which), India's file with the four 2023 renames
 - [ ] TG-03: zone rules in the pack: compiled TZif for every zone the outlines name, from the
   same tzdb release, its version in the manifest; `tz_offset_at`, `tz_local_candidates`,
   `tz_version`; a gate that every zone has rules (research note first)
@@ -370,3 +374,4 @@ The first consumer brief (Tithipatra, 2026-11-11, D-193); the reply and statuses
 | 2026-11-11 | 4.1b: storage on disk by punching holes, not a compact file; Windows its own item | D-189: APFS fills gaps under 16 MiB, so a partial install saved no disk |
 | 2026-11-11 | Split builds: zones cut to each part, outlines of own places only, outside places to the nearest unit | D-191: parts were 2.3× the pack with whole zone rings; a "rest" part is not findable by point |
 | 2026-11-11 | 4.9b: the first consumer brief's requests placed (TG-01 to TG-08) | D-193 |
+| 2026-11-11 | 4.9b TG-02 done: ISO codes in their own `admin` section; `split.yaml` takes part addresses from `iso3166.yaml`; the world part's codes wait for CLDR | D-197 |

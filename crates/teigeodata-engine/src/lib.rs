@@ -39,6 +39,8 @@
 mod discover;
 #[cfg(feature = "store")]
 mod follow;
+#[cfg(feature = "admin")]
+mod iso;
 mod layer;
 mod map;
 #[cfg(feature = "boundaries")]
@@ -58,6 +60,8 @@ pub use outline::{Outline, Ring};
 #[cfg(feature = "dem")]
 pub use query::{Datum, DemSource, Height};
 pub use query::{Hit, Near, Place, Scratch};
+#[cfg(feature = "admin")]
+pub use teigeodata_core::IsoCode;
 pub use teigeodata_format::release_cmp;
 
 /// The radius in metres for [`Engine::countries_near`] over the embedded baseline: its

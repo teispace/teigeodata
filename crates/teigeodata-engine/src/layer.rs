@@ -23,6 +23,8 @@ use teigeodata_format::elevation::Elevations;
 #[cfg(feature = "admin")]
 use teigeodata_format::hierarchy::Hierarchy;
 use teigeodata_format::idmap::IdMap;
+#[cfg(feature = "admin")]
+use teigeodata_format::iso_codes::IsoCodes;
 #[cfg(feature = "names")]
 use teigeodata_format::names::Names;
 use teigeodata_format::place_index::PlaceIndex;
@@ -169,6 +171,9 @@ pub(crate) struct Views<'a> {
     pub(crate) place_tz: Option<PlaceTz<'a>>,
     #[cfg(feature = "admin")]
     pub(crate) hierarchy: Option<Hierarchy<'a>>,
+    /// The ISO 3166 codes of the coded rows (D-197); absent in a pack without them.
+    #[cfg(feature = "admin")]
+    pub(crate) iso: Option<IsoCodes<'a>>,
     pub(crate) redirects: Option<Redirects<'a>>,
     #[cfg(feature = "names")]
     pub(crate) names: Option<Names<'a>>,
@@ -204,6 +209,7 @@ impl<'a> Views<'a> {
     /// the structure of each view and where each block-hash list is. No section is hashed, no
     /// block-hash list is proved (D-142), and no section of a component outside `installed` is
     /// read.
+    #[allow(clippy::too_many_lines, reason = "one view per section kind, in order")]
     pub(crate) fn open(bytes: &'a [u8], installed: Option<Components>) -> Result<Self, Error> {
         // A partial install may have holes, BLOCK_HASHES among them: only the head is read.
         let pack = match installed {
@@ -234,6 +240,10 @@ impl<'a> Views<'a> {
         let hierarchy = get(Kind::HIERARCHY)
             .map(|s| Hierarchy::open(&s))
             .transpose()?;
+        #[cfg(feature = "admin")]
+        let iso = get(Kind::ISO_CODES)
+            .zip(places)
+            .map(|(s, p)| IsoCodes::open(&s, p.len()));
         let redirects = get(Kind::REDIRECTS)
             .map(|s| Redirects::open(&s))
             .transpose()?;
@@ -279,6 +289,9 @@ impl<'a> Views<'a> {
             place_tz,
             #[cfg(feature = "admin")]
             hierarchy,
+            // Rows past PLACES are refused when it opens; without PLACES it has no rows.
+            #[cfg(feature = "admin")]
+            iso: iso.transpose()?,
             redirects,
             #[cfg(feature = "names")]
             names,

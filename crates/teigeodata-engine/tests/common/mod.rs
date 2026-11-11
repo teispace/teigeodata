@@ -21,11 +21,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use teigeodata_core::{E6, E7, Namespace, PlaceId, PlaceKind, Point, hilbert};
+use teigeodata_core::{E6, E7, IsoCode, Namespace, PlaceId, PlaceKind, Point, hilbert};
 use teigeodata_format::arcs::Arcs;
 use teigeodata_format::elevation::{self, Elevations};
 use teigeodata_format::hierarchy::{self, Hierarchy};
 use teigeodata_format::idmap::{self, IdMap};
+use teigeodata_format::iso_codes::{self, IsoCodes};
 use teigeodata_format::names::{self, NameRecord, NameType, Names, Tag as NameTag};
 use teigeodata_format::place_index::{self, PlaceIndex};
 use teigeodata_format::place_tz;
@@ -83,6 +84,8 @@ pub struct Model {
     pub arcs: Option<(Vec<u8>, u64)>,
     /// Each row's parent row (HIERARCHY); empty for none.
     pub parents: Vec<Option<u32>>,
+    /// The coded rows and their ISO 3166 codes (`ISO_CODES`), increasing; empty for none.
+    pub iso: Vec<(u32, IsoCode)>,
     /// Sections written as they are (POLYGONS, `POLY_INDEX`): their rows are this model's,
     /// so a subset drops them.
     pub raw: Vec<(Kind, u64, Vec<u8>)>,
@@ -218,6 +221,10 @@ impl Model {
                     (0..n).map(|r| h.parent(r).map(|p| p as u32)).collect()
                 })
                 .unwrap_or_default(),
+            iso: pack
+                .section(Kind::ISO_CODES)
+                .map(|s| IsoCodes::open(&s, n).unwrap().iter().collect())
+                .unwrap_or_default(),
             raw: [Kind::POLYGONS, Kind::POLY_INDEX]
                 .into_iter()
                 .filter_map(|k| {
@@ -320,6 +327,12 @@ impl Model {
                     })
                     .collect()
             },
+            iso: self
+                .iso
+                .iter()
+                .filter(|&&(r, _)| new_of[r as usize] != u32::MAX)
+                .map(|&(r, c)| (new_of[r as usize], c))
+                .collect(),
             raw: Vec::new(),
         }
     }
@@ -413,6 +426,9 @@ impl Model {
                 self.redirects.len() as u64,
                 redirects::encode(&self.redirects).unwrap(),
             ));
+        }
+        if let Some(b) = iso_codes::encode(&self.iso).unwrap() {
+            bodies.push((Kind::ISO_CODES, self.iso.len() as u64, b));
         }
         bodies.extend(self.raw.iter().cloned());
         let mut w = Writer::new(&self.address, &self.component, &self.release).unwrap();
@@ -699,6 +715,7 @@ pub fn synthetic(n: usize, seed: u64) -> Model {
         }),
         arcs: None,
         raw: Vec::new(),
+        iso: Vec::new(),
         parents: rows.iter().map(|p| p.parent.map(|q| new_of[&q])).collect(),
     }
 }

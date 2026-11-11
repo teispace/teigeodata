@@ -110,6 +110,10 @@ name = "dem"
 required-features = ["dem"]
 
 [[test]]
+name = "iso"
+required-features = ["admin"]
+
+[[test]]
 name = "shared"
 required-features = ["shared"]
 

@@ -190,17 +190,9 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
             postal_codes += n;
             problems.extend(found.into_iter().map(|p| format!("{at}/postal.yaml: {p}")));
         }
-        let iso = path.join("iso3166.yaml");
-        if let Ok(text) = fs::read_to_string(&iso) {
-            let (n, found) = iso3166::check_text(cc, &text);
-            iso_units += n;
-            problems.extend(found.into_iter().map(|p| format!("{at}/iso3166.yaml: {p}")));
-        }
-        if let Ok(text) = fs::read_to_string(path.join("split.yaml")) {
-            let (n, found) = split::check_text(&text, iso.exists());
-            split_units += n;
-            problems.extend(found.into_iter().map(|p| format!("{at}/split.yaml: {p}")));
-        }
+        let (iso, split) = iso_and_split(path, cc, &mut problems);
+        iso_units += iso;
+        split_units += split;
         let lex = path.join("lexicon.yaml");
         if lex.exists() {
             match fs::read_to_string(&lex) {
@@ -264,6 +256,25 @@ fn check_golden(root: &Path, path: &Path, cc: &str, problems: &mut Vec<String>) 
 
 /// Validates one profile; `cc` is the folder name.
 /// `profiles` are the IDs of `data/romanise/*.yaml`.
+/// `iso3166.yaml` and `split.yaml` of the country folder `path` (D-197, D-191): their numbers
+/// of units, their problems added to `problems`.
+fn iso_and_split(path: &Path, cc: &str, problems: &mut Vec<String>) -> (usize, usize) {
+    let at = format!("data/countries/{cc}");
+    let iso = path.join("iso3166.yaml");
+    let mut units = (0, 0);
+    if let Ok(text) = fs::read_to_string(&iso) {
+        let (n, found) = iso3166::check_text(cc, &text);
+        units.0 = n;
+        problems.extend(found.into_iter().map(|p| format!("{at}/iso3166.yaml: {p}")));
+    }
+    if let Ok(text) = fs::read_to_string(path.join("split.yaml")) {
+        let (n, found) = split::check_text(&text, iso.exists());
+        units.1 = n;
+        problems.extend(found.into_iter().map(|p| format!("{at}/split.yaml: {p}")));
+    }
+    units
+}
+
 fn check_profile(cc: &str, text: &str, profiles: &BTreeSet<String>) -> Vec<String> {
     let p: Profile = match serde_saphyr::from_str(text) {
         Ok(p) => p,

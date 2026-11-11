@@ -1,6 +1,6 @@
 ---
 title: "ISO 3166 codes on countries and level-1 units"
-status: research
+status: accepted
 updated: 2026-11-11
 owner: maintainer's agents
 revisit: 2026-12-15
@@ -298,6 +298,24 @@ wrong prefix, a stale key, and a merge that drops the section; each must fail.
 - Whether Nepal's pack holds former zones and regions as `FLAG_FORMER` rows, and so whether
   `former` codes are worth shipping, is checked when the stage is built.
 - Overture's `region` freshness for main is unverified until the first G-iso run.
+
+## 7a. As built (2026-11-11, D-197)
+
+- Built as §5: `ISO_CODES` (kind 21, `admin`), `teigeodata_core::IsoCode`, `Engine::iso_code`
+  and `Engine::by_iso`, `data/countries/np/iso3166.yaml`, G-iso in the pack stage (items 1, 2
+  and 4 of §5.3 on every pack, split parts included) and in `forge embed` (item 5). Measured:
+  Nepal's 8 codes spread over 97,000 rows encode to **604 B** (estimate 0.6 kB), plus the 80 B
+  section entry.
+- **Uniqueness is a data gate, not a format rule:** `check` reads without allocating, and a
+  pairwise check would cost O(n²) on the world baseline; the forge refuses duplicates.
+- **`split.yaml`** keeps `level` and takes each unit's address from `iso3166.yaml` (`NP-P3` →
+  `np-p3`); a split at a level ISO does not code may still list `source` and `units` itself.
+- **Former units:** Nepal's former zones and regions come from the points sources, not the
+  admin source, so `former` stays empty until they have stable keys.
+- **Open:** the CLDR differential (§5.3 item 3) and the world part's codes (item 4) need CLDR
+  pinned in `data/sources.lock`; without it a stale Natural Earth code for a country with no
+  file cannot be told from a current one, so the world part ships no codes outside the country
+  slices rather than guessing. India's file waits for India's pack (it has no admin source yet).
 
 ## 8. Versions checked
 

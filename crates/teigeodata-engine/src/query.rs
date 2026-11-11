@@ -558,7 +558,7 @@ impl Engine {
         feature = "timezone-index",
         feature = "admin-index"
     ))]
-    fn winning(&self, i: usize, p: Place) -> Result<Option<Place>, Error> {
+    pub(crate) fn winning(&self, i: usize, p: Place) -> Result<Option<Place>, Error> {
         if self.claimed_above(i, p.id)? {
             self.get(p.id)
         } else {

@@ -4,22 +4,24 @@
 //! The HTTP server (Phase 6) moves this module as it is.
 //!
 //! - **Native** (`--json`, NDJSON): `id`, `name`, `kind`, `admin_level`, `lat`, `lon`,
-//!   `elevation` (m), `parent` (ID), `timezone` (its area's name), and for a query `meters`
-//!   (distance) or `score` (search).
+//!   `elevation` (m), `parent` (ID), `timezone` (its area's name), `iso_code` (ISO 3166, a
+//!   country's or unit's, only when it has one, D-197), and for a query `meters` (distance) or
+//!   `score` (search).
 //! - **GeoJSON** (RFC 7946): a FeatureCollection of points, the native record as properties
 //!   without `lat` and `lon` (they are the geometry), the attribution as a foreign member.
 //! - **Nominatim** (`json` format): `place_id` (our stable ID), `licence` (the attribution),
 //!   `lat` and `lon` as strings, `name`, `display_name` (the place and its ancestors),
 //!   `boundingbox` (the point's: south, north, west, east, as strings), and `address`: each
 //!   ancestor's name under `country` for a country and `admin_level_<n>` otherwise, and the
-//!   ISO `country_code` from the ID's namespace.
+//!   ISO `country_code`: the country's ISO 3166 code where the packs have it, else the ID's
+//!   namespace.
 
 use std::fmt::Display;
 use std::io::Write;
 
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value, json};
-use teigeodata_core::{PlaceId, PlaceKind};
+use teigeodata_core::{IsoCode, PlaceId, PlaceKind};
 use teigeodata_engine::{Engine, Error, Place};
 
 use crate::Fail;
@@ -50,6 +52,8 @@ pub(crate) struct Record<'a> {
     pub(crate) elevation: Option<i16>,
     pub(crate) parent: Option<Shown<PlaceId>>,
     pub(crate) timezone: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) iso_code: Option<Shown<IsoCode>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) meters: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -135,6 +139,7 @@ pub(crate) fn record<'b>(
         elevation: installed(engine.elevation(place))?,
         parent,
         timezone,
+        iso_code: installed(engine.iso_code(place))?.map(Shown),
         meters: item.meters.map(|m| (m * 10.0).round() / 10.0),
         score: item.score,
     })
@@ -258,6 +263,9 @@ fn text(out: &mut dyn Write, r: &Record<'_>) -> Result<(), Fail> {
     if r.admin_level > 0 {
         write!(out, " {}", r.admin_level)?;
     }
+    if let Some(c) = &r.iso_code {
+        write!(out, " {}", c.0)?;
+    }
     write!(
         out,
         "  {:.6},{:.6}  {}",
@@ -294,7 +302,11 @@ fn nominatim(
     let mut address = Map::new();
     let mut display = Vec::new();
     let mut buf = [0_u8; NAME];
+    let mut country_code = None;
     for a in core::iter::once(place).chain(&ancestors) {
+        if a.kind == Some(PlaceKind::Country) && country_code.is_none() {
+            country_code = installed(engine.iso_code(a))?.map(IsoCode::country);
+        }
         let Some(n) = installed(engine.name(a, &mut buf))? else {
             continue;
         };
@@ -309,7 +321,7 @@ fn nominatim(
         };
         address.entry(key).or_insert_with(|| json!(n));
     }
-    if let Some(cc) = place.id.namespace().country() {
+    if let Some(cc) = country_code.or_else(|| place.id.namespace().country()) {
         let cc: String = cc
             .iter()
             .map(|b| char::from(*b).to_ascii_lowercase())

@@ -694,3 +694,47 @@ fn elevation_reads_the_packs_terrain() {
     let v: Value = serde_json::from_slice(&o.stdout).unwrap();
     assert!(v["elevation_m"].is_null());
 }
+
+/// ISO 3166 codes (D-197): the admin units at a point carry their codes in the native record
+/// and the text line; Nominatim's `country_code` is the country's code.
+#[test]
+fn admin_units_show_their_iso_codes() {
+    let d = dir("iso");
+    let mut m = common::synthetic(300, 3);
+    let mut n = 0;
+    for (r, (&kind, &level)) in m.kinds.iter().zip(&m.levels).enumerate() {
+        if kind == teigeodata_core::PlaceKind::Country {
+            m.iso.push((r as u32, "NP".parse().unwrap()));
+        } else if kind == teigeodata_core::PlaceKind::Admin && level == 1 {
+            n += 1;
+            m.iso.push((r as u32, format!("NP-D{n}").parse().unwrap()));
+        }
+    }
+    let p = d.join("np.tgd");
+    std::fs::write(&p, signed(&m.encode())).unwrap();
+    let all = records(&p);
+    let settlement = all
+        .iter()
+        .find(|r| r["kind"] == "settlement" && r["parent"].is_string())
+        .unwrap();
+    assert!(settlement.get("iso_code").is_none(), "only coded places");
+    let (lat, lon) = (
+        settlement["lat"].as_f64().unwrap().to_string(),
+        settlement["lon"].as_f64().unwrap().to_string(),
+    );
+    let pack = ["--pack", s(&p)];
+    let units = one(&with(&["admin", &lat, &lon], &pack));
+    assert_eq!(units[0]["iso_code"], "NP");
+    assert!(
+        units[1]["iso_code"]
+            .as_str()
+            .is_some_and(|c| c.starts_with("NP-D")),
+        "{units:?}"
+    );
+    let text = ok(&["admin", &lat, &lon, "--pack", s(&p)]);
+    let first = text.lines().next().unwrap();
+    assert!(first.contains("country NP "), "{text}");
+    let id = settlement["id"].as_str().unwrap();
+    let nominatim = json(&["get", id, "--pack", s(&p), "--nominatim"]);
+    assert_eq!(nominatim[0]["address"]["country_code"], "np");
+}
