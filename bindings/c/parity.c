@@ -26,7 +26,7 @@ static bool upto3(void *ctx, uint32_t step) {
 
 int main(void) {
     tg_bytes out = {0};
-    CHECK(tg_version(&out) == TG_OK && out.len == 5 && memcmp(out.ptr, "0.0.0", 5) == 0);
+    CHECK(tg_version(&out) == TG_OK && out.len == 5 && memcmp(out.ptr, "0.1.0", 5) == 0);
     tg_bytes_free(out);
     CHECK(tg_noop() == TG_OK);
 

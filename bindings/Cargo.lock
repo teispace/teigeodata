@@ -467,7 +467,7 @@ version = "0.1.0"
 
 [[package]]
 name = "teigeodata-jvm"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "jni",
  "teigeodata-api",
@@ -483,7 +483,7 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-node"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "napi",
  "napi-build",
@@ -493,7 +493,7 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-python"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "pyo3",
  "teigeodata-api",

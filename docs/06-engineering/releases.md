@@ -46,7 +46,10 @@ built for a release name the reader version they need in the catalog.
 
 1. Every gate of the [quality bar](quality-bar.md) is green on `main` in CI.
 2. Move the changelog's "Unreleased" section under the new version and date; bump
-   `workspace.package.version`; commit `chore(repo): release vX.Y.Z`.
+   `workspace.package.version`, the bindings' version (`bindings/Cargo.toml`,
+   `bindings/parity.json`, `bindings/c/parity.c`, `bindings/dart/pubspec.yaml`,
+   `bindings/node/package.json`: each parity test checks it against the core's); commit
+   `chore(repo): release vX.Y.Z`.
 3. Tag `vX.Y.Z` (annotated) on that commit and push the tag.
 4. Check from a scratch project: `cargo build` with the `git` + `tag` dependency above, then
    open a pack with `Layer::open` and answer a `get`.
@@ -55,4 +58,5 @@ built for a release name the reader version they need in the catalog.
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-11 | The bindings' versions are part of a release (they were left at 0.0.0 by v0.1.0) | the parity test failed |
 | 2026-11-11 | First version: one workspace version, SemVer with 0.x rules, `git` tags first | TG-01 (D-198) |
