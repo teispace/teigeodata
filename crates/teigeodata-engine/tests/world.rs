@@ -605,7 +605,7 @@ fn the_shipped_baseline_answers_as_its_parts() {
 /// asked by its name, comes back with the country it hangs from among its candidate countries,
 /// so the catalog offers that country's packs; a city near a border also names the neighbour.
 #[test]
-#[ignore = "needs TGD_WORLD"]
+#[ignore = "needs TGD_WORLD; TGD_BASELINE once a country has a pack"]
 fn discovery_names_the_country_of_every_city() {
     use teigeodata_sync::catalog::Resolver;
     let world = read("TGD_WORLD").expect("TGD_WORLD");
@@ -657,6 +657,11 @@ fn discovery_names_the_country_of_every_city() {
     );
     // Almost every city is found by its own name (the rest share it with 50 bigger places).
     assert!(found * 100 >= cities * 99, "{found} of {cities}");
+    // A pack country's cities are its slice's, not the world part's (D-154), as the shipped
+    // baseline holds them: Kathmandu needs Nepal's slice once Nepal has a pack.
+    if let Some(slice) = read("TGD_BASELINE") {
+        e.add(Layer::from_bytes(slice, baseline(1)).unwrap());
+    }
     for (city, cc) in [("Dubai", *b"ae"), ("Kathmandu", *b"np"), ("Paris", *b"fr")] {
         e.resolve(city, 1, &mut out).unwrap();
         assert!(
