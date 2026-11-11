@@ -19,6 +19,7 @@ use teigeodata_engine::{
     Component, Components, Engine, Error, Layer, LayerOptions, Place, Rect, Scratch, Verify,
 };
 use teigeodata_format::blocks::MIN_COVERED;
+use teigeodata_format::tz_rules;
 use teigeodata_format::{Encoding, Kind, Pack, Writer};
 
 /// `pack` with a 2 MiB BLOBS section (`extra`) added, so it has `BLOCK_HASHES`.
@@ -310,9 +311,37 @@ fn a_set_without_what_it_needs_is_refused() {
         Some(Component::Names)
     );
     assert_eq!(refused(&[Component::Elevation]), Some(Component::Point));
-    // A zone needs its rules (D-196).
-    assert_eq!(
-        refused(&[Component::Point, Component::Timezone]),
-        Some(Component::TzRules)
-    );
+    // A pack without rules (the baseline, a pack built before D-196) installs its zones alone.
+    assert_eq!(refused(&[Component::Point, Component::Timezone]), None);
+    // A pack with rules: a zone needs them (D-196).
+    let mut m = synthetic(200, 3);
+    let utc = tz_rules::ZoneRules {
+        version: 2,
+        transitions: Vec::new(),
+        types: vec![tz_rules::TypeRow {
+            offset: 0,
+            is_dst: false,
+            abbr: "UTC".into(),
+        }],
+        footer: tz_rules::parse_footer("UTC0").unwrap(),
+        first_abbr: 0,
+    };
+    let zone = tz_rules::ZoneInput {
+        name: "Etc/UTC",
+        rules: &utc,
+        place: None,
+    };
+    m.raw
+        .push((Kind::TZ_RULES, 1, tz_rules::encode(&[zone], false).unwrap()));
+    let with_rules = m.encode();
+    let options = LayerOptions {
+        installed: Some(Components::of(&[Component::Point, Component::Timezone])),
+        ..LayerOptions::default()
+    };
+    match Layer::from_bytes(with_rules, options) {
+        Err(Error::MissingComponent { component, .. }) => {
+            assert_eq!(component, Component::TzRules);
+        }
+        other => panic!("zones without their rules: {:?}", other.err()),
+    }
 }

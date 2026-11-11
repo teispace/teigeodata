@@ -357,10 +357,17 @@ fn missing(pack: &Pack<'_>, installed: Option<Components>) -> Result<Components,
         // A whole pack: what this build has no reader for is missing.
         return Ok(has.without(Components::all().without(off)));
     };
-    let lacking = set.closed().without(set).iter().next().or_else(|| {
-        (has.contains(Component::Point) && !set.contains(Component::Point))
-            .then_some(Component::Point)
-    });
+    // A need counts only where the pack has it: a pack without `tz-rules` (built before
+    // D-196, or the baseline) still installs `timezone` alone.
+    let lacking = set
+        .closed()
+        .without(set)
+        .iter()
+        .find(|&c| has.contains(c))
+        .or_else(|| {
+            (has.contains(Component::Point) && !set.contains(Component::Point))
+                .then_some(Component::Point)
+        });
     if let Some(component) = lacking {
         return Err(Error::MissingComponent {
             address: pack.manifest().address().into(),
