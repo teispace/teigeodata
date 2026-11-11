@@ -189,12 +189,10 @@ pub(crate) fn fetch(
             .get(n)
             .is_none_or(|t| t.sha256.is_some() && tile_path(root, t).is_none_or(|p| !p.is_file()))
     };
-    // A mirrored tileset restores its pinned tiles from the mirror: no upstream token.
-    let upstream = pin || s.mirror_url.as_deref().is_none_or(str::is_empty);
+    // A token whenever a tile is to be downloaded: a mirror that lacks a tile falls back to
+    // upstream.
     let token = match s.query_params.get("token_url") {
-        Some(u) if upstream && (pin || names.iter().any(|(n, _, _)| missing(n))) => {
-            Some(read_token(u)?)
-        }
+        Some(u) if pin || names.iter().any(|(n, _, _)| missing(n)) => Some(read_token(u)?),
         _ => None,
     };
     let pool = rayon::ThreadPoolBuilder::new()
@@ -357,7 +355,7 @@ fn fetch_tile(
             Some(_) => {}
         }
     }
-    // A pinned tile comes from the mirror when there is one, as a plain GET.
+    // A pinned tile comes from the mirror when there is one, as a plain GET, else upstream.
     let mirrored = known
         .and_then(|t| t.sha256.as_deref())
         .filter(|_| !pin)
@@ -365,33 +363,41 @@ fn fetch_tile(
     let base = want
         .url
         .map_or_else(|| s.url.replace("{tile}", name), str::to_string);
-    let url = match (&mirrored, want.token) {
-        (Some(m), _) => m.clone(),
-        (None, None) => base,
-        (None, Some(t)) => format!("{base}?{t}"),
+    let upstream = match want.token {
+        None => base,
+        Some(t) => format!("{base}?{t}"),
     };
-    let body = match &s.query {
-        _ if mirrored.is_some() => None,
-        None => None,
-        Some(template) => {
-            let corners = [
-                ("W", want.lon),
-                ("S", want.lat),
-                ("E", want.lon + 1),
-                ("N", want.lat + 1),
-            ]
-            .map(|(k, v)| (k.to_string(), v.to_string()));
-            let params = s
-                .query_params
-                .iter()
-                .chain(corners.iter().map(|(k, v)| (k, v)));
-            Some(render(root, template, params)?)
-        }
+    let body = || -> Result<Option<String>, String> {
+        let Some(template) = &s.query else {
+            return Ok(None);
+        };
+        let corners = [
+            ("W", want.lon),
+            ("S", want.lat),
+            ("E", want.lon + 1),
+            ("N", want.lat + 1),
+        ]
+        .map(|(k, v)| (k.to_string(), v.to_string()));
+        let params = s
+            .query_params
+            .iter()
+            .chain(corners.iter().map(|(k, v)| (k, v)));
+        render(root, template, params).map(Some)
     };
     let partial = root
         .join("data/cache/store/sha256")
         .join(format!(".partial-{name}"));
-    let Some((hash, size)) = download(s, name, &url, body.as_deref(), &partial)? else {
+    // The mirror first; a tile it does not hold yet comes from upstream, checked against the
+    // same pin below.
+    let from_mirror = match &mirrored {
+        Some(m) => download(s, name, m, None, &partial)?,
+        None => None,
+    };
+    let got = match from_mirror {
+        Some(g) => Some(g),
+        None => download(s, name, &upstream, body()?.as_deref(), &partial)?,
+    };
+    let Some((hash, size)) = got else {
         return Ok(Tile {
             name: name.to_string(),
             sha256: None,
