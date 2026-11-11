@@ -92,8 +92,12 @@ signed pack per address; a client holds any subset of its sections.
   asset, and gates them (G-wire, D-135) (2026-11-09)
 - [x] The partial file: head, installed sections at their offsets, the footer rebuilt from the
   head (`footer_of`), opened with `Pack::open_head` (D-136, 2026-11-09)
-- [ ] Storage on disk: the partial file as a sparse file (or offsets in a compact file where a
-  platform has no holes), a sidecar of present and verified sections; with 4.5 and 4.6
+- [x] Storage on disk: the partial file as a sparse file, the journal's component set as the
+  record of what is present (D-171); APFS fills gaps under 16 MiB, so the store punches what a
+  partial install never writes (`F_PUNCHHOLE`, `fallocate`): points only 1.50 MB of a 2.85 MB
+  pack on disk (2026-11-11, D-189; [sparse installs](../../02-research/notes/sparse-installs.md))
+- [ ] Windows sparse files (`FSCTL_SET_SPARSE`, `FSCTL_SET_ZERO_DATA`) once a Windows run exists
+  (D-189); no compact-file layout is needed elsewhere
 - [x] Engine: a layer opens with any closed subset; a query that needs a missing component
   returns `MissingComponent`; `Engine::elevation` (D-136, 2026-11-09)
 - [x] Sync: `Frames::plan_components(set)` plans only those sections' frames and the head
@@ -341,3 +345,4 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
 | 2026-11-11 | Gate 14 split into (a) to (e); platforms install in passes over one installer | D-184, [platform transports](../../02-research/notes/platform-transports.md) |
 | 2026-11-11 | Gate 14 met by prototypes on macOS, the iOS simulator, the Android emulator and headless Chrome | D-185, D-186 |
 | 2026-11-11 | 4.8: the world-size install runs in `nightly`, not the data build | D-188: it needs no data; the data build waits on the input mirror (D-127) |
+| 2026-11-11 | 4.1b: storage on disk by punching holes, not a compact file; Windows its own item | D-189: APFS fills gaps under 16 MiB, so a partial install saved no disk |

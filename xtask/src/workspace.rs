@@ -3,9 +3,12 @@
 //! - The forge is a separate Cargo workspace (ADR-0001), so it cannot inherit the main table;
 //!   its `[workspace.lints]` must be identical.
 //! - Boundary crates (the C ABI crate, the `bindings/` workspace of language shims, and the
-//!   engine, which maps pack files, D-113) need `unsafe` in their audited modules. Their table must be the main one with a
+//!   engine, which maps pack files, D-113, and the sync crate, which punches holes, D-189) need
+//!   `unsafe` in their audited modules. Their table must be the main one with a
 //!   single change: `unsafe_code` lowered from `forbid` to `deny`, so a module can allow it
 //!   with a reason (and nothing else can).
+//! - Every other crate under `crates/` inherits the main table (`[lints] workspace = true`), so
+//!   a crate cannot leave the check by writing a table of its own.
 
 use std::fs;
 use std::path::Path;
@@ -16,6 +19,7 @@ const TABLES: &[(&str, &[&str], bool)] = &[
     ("bindings/Cargo.toml", &["workspace", "lints"], true),
     ("crates/teigeodata-ffi/Cargo.toml", &["lints"], true),
     ("crates/teigeodata-engine/Cargo.toml", &["lints"], true),
+    ("crates/teigeodata-sync/Cargo.toml", &["lints"], true),
 ];
 
 pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
@@ -38,6 +42,7 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
             Err(e) => problems.push(e),
         }
     }
+    problems.extend(unlisted(root));
     if problems.is_empty() {
         Ok(format!(
             "workspace ok: {} lint tables match the main workspace",
@@ -46,6 +51,32 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
     } else {
         Err(problems)
     }
+}
+
+/// Every crate under `crates/` that neither inherits the main table nor is listed in `TABLES`.
+fn unlisted(root: &Path) -> Vec<String> {
+    let Ok(dirs) = fs::read_dir(root.join("crates")) else {
+        return vec!["crates/: cannot be read".to_owned()];
+    };
+    let mut problems = Vec::new();
+    for d in dirs.flatten() {
+        let rel = format!("crates/{}/Cargo.toml", d.file_name().to_string_lossy());
+        let Ok(text) = fs::read_to_string(root.join(&rel)) else {
+            continue;
+        };
+        let listed = TABLES.iter().any(|(r, _, _)| *r == rel);
+        let inherits = toml::from_str::<toml::Table>(&text)
+            .ok()
+            .and_then(|t| at(&t, &["lints", "workspace"]).and_then(toml::Value::as_bool))
+            == Some(true);
+        if !listed && !inherits {
+            problems.push(format!(
+                "{rel}: needs `[lints] workspace = true` (or a listed boundary table)"
+            ));
+        }
+    }
+    problems.sort();
+    problems
 }
 
 fn at<'a>(t: &'a toml::Table, path: &[&str]) -> Option<&'a toml::Value> {

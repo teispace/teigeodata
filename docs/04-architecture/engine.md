@@ -71,7 +71,7 @@ The `mmap` feature (default, not on `wasm32`) gates `memmap2`; without it `Load:
 
 A pack may be installed with only some of its components (D-133). `LayerOptions::installed`
 names them (`None`: the whole pack). The layer opens no view on, and never hashes, a section of
-a component outside the set, so those bytes may be holes in a sparse file; under
+a component outside the set, so those bytes may be holes in a sparse file (the store punches them, D-189); under
 `Verify::Eager` only the installed sections are checked. The set must hold what its components
 need (`Components::closed`) and `point` whenever the pack has it, or the layer is refused with
 `Error::MissingComponent`. `Layer::components()` says what is installed and present. A layer

@@ -56,6 +56,16 @@ pub trait StoreFile: Read + Write + Seek {
     /// # Errors
     /// The file system's.
     fn sync(&mut self) -> io::Result<()>;
+    /// Frees the storage of what lies in `range` where the file system can, after which it
+    /// reads as zeros; elsewhere it does nothing. The store calls it on the ranges a partial
+    /// install never writes (D-189), so they take no space.
+    ///
+    /// # Errors
+    /// The file system's.
+    fn punch(&mut self, range: core::ops::Range<u64>) -> io::Result<()> {
+        let _ = range;
+        Ok(())
+    }
 }
 
 /// The file system under a store's root. Paths are relative to the root and use `/`.
@@ -476,6 +486,7 @@ impl<D: Fs> Store<D> {
         };
         drop(previous);
         f.set_len(done.pack_len)?;
+        hollow(&mut f, done.pack_len, set)?;
         f.sync()?;
         drop(f);
         let target = alloc::format!("{PACKS}/{file}");
@@ -674,21 +685,11 @@ impl<D: Fs> Store<D> {
         if !deep {
             return Ok(Health::Good);
         }
-        let installed = |kind: Kind| Component::of(kind).is_none_or(|c| r.set.contains(c));
-        let blocked = h.sections().any(|s| {
-            installed(s.kind)
-                && s.kind != Kind::BLOCK_HASHES
-                && s.length >= teigeodata_format::blocks::MIN_COVERED
-        });
+        let wanted = held(&h, r.set);
         let mut bad = Vec::new();
         let mut buf = alloc::vec![0_u8; CHUNK];
         for s in h.sections() {
-            let wanted = if s.kind == Kind::BLOCK_HASHES {
-                blocked
-            } else {
-                installed(s.kind)
-            };
-            if !wanted {
+            if !wanted(s.kind) {
                 continue;
             }
             f.seek(io::SeekFrom::Start(s.offset))?;
@@ -757,6 +758,7 @@ impl<D: Fs> Store<D> {
         }
         let done = install_from(transport, mirrors, path, entry, asset_len, r.set, &mut f)?;
         f.set_len(done.pack_len)?;
+        hollow(&mut f, done.pack_len, r.set)?;
         f.sync()?;
         drop(f);
         self.fs.rename(&staging, &target)?;
@@ -999,6 +1001,54 @@ impl StoreFile for std::fs::File {
     fn sync(&mut self) -> io::Result<()> {
         self.sync_all()
     }
+    fn punch(&mut self, range: core::ops::Range<u64>) -> io::Result<()> {
+        crate::holes::punch(self, range.start, range.end).map(drop)
+    }
+}
+
+/// Whether an install of `set` holds section `kind` of the pack `h` heads: its components'
+/// sections, sections of no component, and `BLOCK_HASHES` when it covers one of them.
+fn held(h: &PackHead<'_>, set: Components) -> impl Fn(Kind) -> bool + use<> {
+    let installed = move |kind: Kind| Component::of(kind).is_none_or(|c| set.contains(c));
+    let blocked = h.sections().any(|s| {
+        installed(s.kind)
+            && s.kind != Kind::BLOCK_HASHES
+            && s.length >= teigeodata_format::blocks::MIN_COVERED
+    });
+    move |kind| {
+        if kind == Kind::BLOCK_HASHES {
+            blocked
+        } else {
+            installed(kind)
+        }
+    }
+}
+
+/// Punches every range of the staged pack that an install of `set` never writes: the sections
+/// it does not hold and the gaps around them, never the head, a held section or the footer
+/// (D-189). A file whose head does not read is left as it is: the install checked it already.
+fn hollow<F: StoreFile>(f: &mut F, pack_len: u64, set: Components) -> io::Result<()> {
+    let Some(head) = crate::fetch::read_head(f, pack_len)? else {
+        return Ok(());
+    };
+    let Ok(h) = PackHead::parse(&head, pack_len) else {
+        return Ok(());
+    };
+    let wanted = held(&h, set);
+    let Some(mut at) = h.sections().next().map(|s| s.offset) else {
+        return Ok(());
+    };
+    for s in h.sections().filter(|s| wanted(s.kind) && s.length > 0) {
+        if s.offset > at {
+            f.punch(at..s.offset)?;
+        }
+        at = at.max(s.offset.saturating_add(s.length));
+    }
+    let footer = pack_len.saturating_sub(teigeodata_format::FOOTER_SIZE as u64);
+    if footer > at {
+        f.punch(at..footer)?;
+    }
+    Ok(())
 }
 
 impl Fs for Dir {

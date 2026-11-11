@@ -53,6 +53,8 @@ pub mod fetch;
 #[cfg(feature = "fuzz")]
 #[doc(hidden)]
 pub mod fuzz;
+#[cfg(feature = "store")]
+mod holes;
 #[cfg(feature = "install")]
 pub mod install;
 #[cfg(feature = "repo")]

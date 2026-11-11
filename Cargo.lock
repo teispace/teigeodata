@@ -1677,6 +1677,7 @@ version = "0.0.0"
 dependencies = [
  "blake3",
  "ed25519-dalek",
+ "libc",
  "ruzstd",
  "serde_json",
  "sha2",

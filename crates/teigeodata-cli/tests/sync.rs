@@ -450,6 +450,64 @@ fn an_update_keeps_the_components_installed() {
     assert_eq!(s["packs"][0]["health"], "Good");
 }
 
+/// A partial install takes only its sections' space on disk (D-189): what it never writes is
+/// punched out, after an install, an added component and a repair alike.
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+#[test]
+fn a_partial_install_takes_only_its_bytes_on_disk() {
+    use std::os::unix::fs::MetadataExt;
+    let host: Host = Arc::default();
+    publish(&host, 1, &[pack_of(100_000, "2026.11.0", false)]);
+    let url = serve(Arc::clone(&host));
+    let store = store_for("holes", &url);
+    // The installed file: its length and the bytes it takes.
+    let file = || {
+        let f = std::fs::read_dir(store.join("packs"))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .find(|p| p.extension().is_some_and(|x| x == "tgd"))
+            .unwrap();
+        let m = std::fs::metadata(&f).unwrap();
+        (f, m.len(), m.blocks() * 512)
+    };
+    let good = || {
+        let s = json(&store, &["status", "--json", "--deep"]);
+        assert_eq!(s["packs"][0]["health"], "Good", "{s}");
+    };
+    ok(&store, &["install", "np", "--components", "point"]);
+    good();
+    let (_, len, used) = file();
+    // Point is 52% of this pack; the rest is never written.
+    assert!(
+        used * 10 < len * 6,
+        "points only: {used} of {len} bytes on disk"
+    );
+    ok(&store, &["install", "np", "--components", "names"]);
+    good();
+    let (path, len, with_names) = file();
+    assert!(
+        with_names > used && with_names * 10 < len * 8,
+        "{with_names} of {len}"
+    );
+    // A repair copies the installed file into staging: it must not fill the holes again.
+    let mut bytes = std::fs::read(&path).unwrap();
+    let at = bytes.len() / 50;
+    bytes[at] ^= 1;
+    std::fs::write(&path, &bytes).unwrap();
+    assert_eq!(
+        tgd(&store, &["status", "--deep"]).status.code(),
+        Some(1),
+        "damaged"
+    );
+    ok(&store, &["repair", "np"]);
+    good();
+    let (_, _, repaired) = file();
+    assert!(
+        repaired <= with_names + 65_536,
+        "repaired: {repaired} of {len}"
+    );
+}
+
 /// Timings of the binary `TGD_BIN` (default: this build's), the median of `TGD_RUNS` runs
 /// (default 15) over a pack of 100,000 places, about Nepal's size: open and query, and an
 /// install over HTTP on localhost. Run: `TGD_BIN=target/dist/tgd cargo test --release -p
