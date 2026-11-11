@@ -308,8 +308,11 @@ The first consumer brief (Tithipatra, 2026-11-11, D-193); the reply and statuses
 - [x] TG-03: zone rules in the pack: compiled TZif for every zone the outlines name, from the
   same tzdb release, its version in the manifest; `tz_offset_at`, `tz_local_candidates`,
   `tz_version`; a gate that every zone has rules (D-196, 2026-11-11)
-- [ ] TG-06: substring search of 3+ characters across scripts, measured for size (research
-  note first)
+- [x] TG-06: substring search of 3+ characters across scripts, measured for size: the
+  `SUBSTRING` section (kind 23) in component `substring`, the forge's word-suffix keys, the
+  engine tier at bonus 20, golden class `substring` (D-199, 2026-11-11). Open: size and p99 on
+  the real Nepal pack (measured on a GeoNames proxy: 19.9 B per place), and the p99 of
+  3-code-point queries
 - [x] TG-01: `CHANGELOG.md` and a `v0.x` tag; a consumer builds the engine from the tag
   (D-198, `v0.1.0` 2026-11-11: a scratch project built `teigeodata-engine` and
   `teigeodata-sync` from the tag through `git`, wrote a pack and answered a `get`)
@@ -378,3 +381,4 @@ The first consumer brief (Tithipatra, 2026-11-11, D-193); the reply and statuses
 | 2026-11-11 | Split builds: zones cut to each part, outlines of own places only, outside places to the nearest unit | D-191: parts were 2.3× the pack with whole zone rings; a "rest" part is not findable by point |
 | 2026-11-11 | 4.9b: the first consumer brief's requests placed (TG-01 to TG-08) | D-193 |
 | 2026-11-11 | 4.9b TG-02 done: ISO codes in their own `admin` section; `split.yaml` takes part addresses from `iso3166.yaml`; the world part's codes wait for CLDR | D-197 |
+| 2026-11-11 | 4.9b TG-06 done: substring search in its own section and component | D-199 |

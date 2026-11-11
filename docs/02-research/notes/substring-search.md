@@ -1,6 +1,6 @@
 ---
 title: "Substring (infix) search of 3+ characters, Latin and Devanagari (TG-06)"
-status: research
+status: accepted
 updated: 2026-11-11
 owner: maintainer's agents
 revisit: 2027-05-11
@@ -367,8 +367,8 @@ India cases are added with India's golden set: for example "galuru" (Bengaluru),
   opt-in. India's state split builds (D-191) put it in per-state parts.
 - **Not covered:** typos inside a substring (no fuzzy substring), and substrings across a space
   ("du met"). A multi-word query uses the existing tiers only. Revisit if a consumer asks.
-- The bench was run under load average 50–94. Re-measure with instruction counts in the
-  implementation step.
+- The bench was run under load average 50–94. Re-measured in the implementation step under
+  load 14–25 (§10); instruction counts still need a Linux run.
 - While reading, the Typesense docs page contained text addressed to AI agents asking for
   another page to be fetched. It was ignored; only the documented facts above were used.
 
@@ -394,3 +394,54 @@ India cases are added with India's golden set: for example "galuru" (Bengaluru),
 - [UAX #29 Unicode Text Segmentation](https://www.unicode.org/reports/tr29/), rule GB9c (Unicode 15.1), Unicode Consortium.
 - Daciuk, Mihov, Watson and Watson, "Incremental construction of minimal acyclic finite-state automata", *Computational Linguistics* 26(1), 2000 (the FST, via [the SEARCH note](search-index.md)).
 - Ferragina and Manzini, "Opportunistic data structures with applications", FOCS 2000 (the FM-index).
+
+## 10. As built (2026-11-11)
+
+Built as §5 says (D-199), with these differences and numbers.
+
+**Differences from §5:**
+
+- The keys come from a function of their own, `teigeodata_names::substring_keys(folded, out)`,
+  not from a fourth output of `search_keys`: the world pack and the baseline call `search_keys`
+  and need no suffixes, and the new function returns slices of the fold, so it allocates
+  nothing. The forge calls it on every name it keys for SEARCH.
+- "General_Category M" is `unicode_normalization::char::is_combining_mark`, which
+  `teigeodata-names` already uses for its fold.
+- `Search::check` proves on a SUBSTRING section that every key is tag 4 and at least 3 code
+  points of UTF-8. The no-mark rule is the writer's; the reader has no Unicode tables and a key
+  that breaks it changes no answer.
+- The prefix tier and the substring tier share one function (`best_by_importance`); only the
+  map and the floor rule differ.
+- A layer whose pack has SUBSTRING but which was installed without `substring` adds nothing to
+  the tier, and `search` still answers; installing `substring` without `search` is refused
+  with `MissingComponent(search)`.
+
+**Measured** with `cargo run --release -p teigeodata-engine --example substring --
+data/cache/geonames-np/NP.txt` (checked in): the proxy of §3.2, but keyed by the real fold,
+`search_keys` and `substring_keys`, importance a class base plus 12·log10(population). A real
+Nepal build was not run: its inputs (OSM, Wikidata, buildings, DEM) are not all in the local
+store and were not fetched. Apple M2 Pro, release build, load average 14–25 from other
+projects; each query the best of 11 runs.
+
+| | substring off | substring on |
+|---|---:|---:|
+| SEARCH (exact and loose maps, no phonetic, no rules) | 1,028,032 B | 1,028,032 B |
+| SUBSTRING | – | 2,586,228 B, 19.9 B per place |
+| whole `search`, 2,000 queries: p50 / p99 / max | 4.9 / 80.5 / 243 µs | 10.8 / 115.3 / 284 µs |
+| the 1,287 queries of 4 or more code points: p50 / p99 | 6.1 / 37.5 µs | 10.4 / 41.0 µs |
+| random mid-word queries: the source place first / in the top 10 | 31 / 53 | 159 / 541 |
+| the nine golden `substring` cases (np-c013 to np-c021) at rank 1 | 2 (काठ, Pokhara) | 9 |
+
+The slowest queries are 3 code points ("kha", "bha", "cha"): 243 µs already without the tier,
+because the prefix tier reads ties to break them by ID over thousands of keys; the tier adds
+about 40–60 µs to them. Random mid-word queries are often common fragments, so the source
+place is one of many equal matches; "in the top 10" is a floor, not a recall figure.
+
+**Gates of §5:** (1) 19.9 B per place on the proxy, under 24; the real pack is still to be
+measured. (2) Golden recall: the `substring` class is 9 of 9 at rank 1 on the proxy; the
+existing 512 queries must be scored on a real pack. (3) p99 under 100 µs holds for queries of
+4 or more code points (41 µs), not for 3-code-point queries; it was timed under load, not
+counted in instructions (Callgrind runs on Linux only). (4) Always on was kept: a fallback
+that runs only without strong matches would hide Pokhara behind names that start with
+"khara". (5) The differential test is in `teigeodata-names`: exact prefix plus substring keys
+find what a scan of the folds finds, over ASCII, 2-byte and 3-byte UTF-8 and mark starts.

@@ -150,6 +150,10 @@ name = "verify"
 required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
 
 [[example]]
+name = "substring"
+required-features = ["substring"]
+
+[[example]]
 name = "snapshot-ab"
 required-features = ["shared"]
 

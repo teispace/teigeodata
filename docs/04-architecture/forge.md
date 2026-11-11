@@ -453,7 +453,9 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   outline, refusing a country with several (D-138). A place keeps the names that fit the search key
   limit; a place with none is left out and counted.
 - **Sections.** Rows in Hilbert order (ties by key), so IDs follow rows (D-075): IDMAP,
-  PLACES, HIERARCHY, NAMES, SEARCH, PLACE_INDEX, the timezone REGION linked to its places
+  PLACES, HIERARCHY, NAMES, SEARCH, SUBSTRING (the word suffixes of every name SEARCH keys,
+  with SEARCH's importance, D-199; read back: every place is found from its canonical name's
+  longest suffix), PLACE_INDEX, the timezone REGION linked to its places
   (column 16), POSTAL when the country has a `postal.yaml`, and REDIRECTS when the registry
   has retired serials. Importance is provisional (kind, admin level, log population).
 - **Display names (D-106).** A settlement or locality shows the majority of its records'

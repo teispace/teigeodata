@@ -13,9 +13,18 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Engine (`teigeodata-engine`)
 
+- `search` finds a place from 3 or more code points inside a word of any of its names, in any
+  script ("mandu" finds Kathmandu, "माडौं" काठमाडौं), ranked below exact, prefix and one-edit
+  matches (bonus 20). It needs the new `substring` component (with `search`) installed and the
+  engine feature `substring` (on by default) (D-199).
 - Postal codes (feature `postal`, D-200): `postal_lookup(code, scheme)`, `postal_prefix`,
   `postal_codes_of(place)`, `postal_at(point)` and `postal_replacement`, returning
   `PostalCode` (scheme, code, kind, validity, place).
+
+### Format (`teigeodata-format`)
+
+- Section `SUBSTRING` (kind 23), the word-suffix keys in SEARCH's layout, and component
+  `substring` (13); `search::encode_substring` and `teigeodata_names::substring_keys` (D-199).
 
 ### Command line (`tgd`)
 

@@ -139,7 +139,7 @@ parameters).
 | 20 | PLACE_TZ | each place's timezone area, one row per PLACES row | `timezone` | column table (D-134): the areas' rows and a per-place index into them, [below](#place_tz) |
 | 21 | ISO_CODES | the ISO 3166 code of each coded country and subdivision row | `admin` | column table (D-197): the coded rows and their packed codes, [below](#iso_codes) |
 | 22 | TZ_RULES | the rules of the pack's timezones: transitions, local time types, abbreviations, parsed POSIX TZ footers, zone names linked to their areas | `tz-rules` | column table (D-196, [ADR-0039](../03-decisions/adr/ADR-0039-tz-rules.md)): 93 kB for the world's 444 outline zones, 2.5 kB for three; [below](#tz_rules) |
-| 23 | SUBSTRING | word-suffix keys of 3 or more code points → lists of rows by importance; a name from the middle of a word | `substring` | column table (D-199): SEARCH's layout with one map, [below](#substring) |
+| 23 | SUBSTRING | word-suffix keys of 3 or more code points → lists of rows by importance; a name from the middle of a word | `substring` | column table (D-199): SEARCH's layout with one map; 19.9 B per place on a GeoNames proxy of Nepal (2.59 MB, 2.5× its SEARCH), [below](#substring) |
 
 ### Components of a pack
 
@@ -365,6 +365,11 @@ same reader as [SEARCH](#search): `Search::open` reads either kind.
   UTF-8. The no-mark rule is the forge's: a key that breaks it changes no answer.
 - **The writer** is `search::encode_substring` (feature `write`): untagged keys, each of 3 or
   more code points.
+- **Size** (2026-11-11, the GeoNames proxy of Nepal: 129,799 places, 143,864 names, the real
+  fold): 2,586,228 B, 19.9 B per place, against SEARCH's 1,028,032 B on the same input. The
+  automaton is the smaller part; the lists hold most of the bytes
+  ([note](../02-research/notes/substring-search.md#10-as-built-2026-11-11)). Budget: 24 B per
+  place.
 
 ### PLACE_INDEX
 

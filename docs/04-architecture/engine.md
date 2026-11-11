@@ -89,7 +89,7 @@ asks its layer for each section before reading it (`ensure`). Per query:
 | `parent`, `ancestors`, `children` | `admin` |
 | `iso_code(place)`, `by_iso(code)` | `admin` where a layer has `ISO_CODES`; a layer without the section is skipped |
 | `name(place)` | `names` |
-| `search` | `search` (with `names`); a context that matches rows also `admin` |
+| `search` | `search` (with `names`); a context that matches rows also `admin`; matches from the middle of a word only from layers with `substring` installed (others add none) |
 | `tz_of(place)` | `timezone`, else `timezone-index`; names `timezone` when neither is installed |
 | `tz_at` | `timezone-index` |
 | `elevation_at` | `dem` |
@@ -108,8 +108,9 @@ never touches heights.
 
 Each component the engine reads has a Cargo feature, all on by default: `elevation`, `admin`,
 `names`, `search` (with `names`), `timezone`, `timezone-index`, `boundaries`,
-`admin-index` (with `boundaries`), `dem`, `tz-rules` and `postal`. `point` is always built;
-`extra` is read raw through `Layer::section_bytes`. A build without a feature has neither the query nor
+`admin-index` (with `boundaries`), `dem`, `tz-rules`, `postal` and `substring` (with `search`).
+`point` is always built; `extra` is read raw through `Layer::section_bytes`. A build without a
+feature has neither the query nor
 the section reader, and treats the component as not installed: a pack's sections of it are
 never read or hashed, `Layer::components()` leaves it out, and a query of a built component
 that needs it (a search context needs `admin`) returns `Error::MissingComponent`.
@@ -120,7 +121,7 @@ that needs it (a search context needs `admin`) returns `Error::MissingComponent`
 | `elevation` | `elevation` |
 | `parent`, `ancestors`, `children`, `iso_code`, `by_iso` | `admin` |
 | `name` | `names` |
-| `search` | `search` |
+| `search` | `search`; its matches from the middle of a word `substring` |
 | `tz_of` | `timezone` or `timezone-index` |
 | `tz_at` | `timezone-index` |
 | `elevation_at` | `dem` |
@@ -212,7 +213,7 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 | `by_iso(code)` | Layers with `ISO_CODES` in precedence order, a scan of each one's codes | none: the place as the winning layer answers for its ID, while that answer still has the code |
 | `countries_near(at, r)` | Every layer with outlines: POLY_INDEX boxes that meet the circle's box, then `Polygons::within` (holds the point or a border within `r`) on the country polygons (the locator, D-149) | union by ID, each answered by the layer that wins it |
 | `missing_packs(at, r)` | As `countries_near` | its countries whose pack (the ID's namespace, `np`) is not installed; a partial pack (`ae-du`) counts where its box holds the point |
-| `search(q, k)` | Every layer with SEARCH | Each layer scores its rows and keeps its best k visible; k-way merge by score, then ID. Fuzzy keys share the first letter unless no layer has a visible strong match; a context after a comma matches ancestors in the row's own pack (D-119); the layer's query rules add matches (D-121) |
+| `search(q, k)` | Every layer with SEARCH | Each layer scores its rows and keeps its best k visible; k-way merge by score, then ID. Fuzzy keys share the first letter unless no layer has a visible strong match; a context after a comma matches ancestors in the row's own pack (D-119); the layer's query rules add matches (D-121); the substring tier reads every layer with SUBSTRING installed (D-199) |
 | `within_bbox(rect, limit)` | Layers whose box meets the rect | Smallest IDs first, k-way merge by ID |
 | `parent(place)` | The place's own layer, else the first layer by precedence holding the same ID with a parent | none; the parent is answered by the layer that wins its ID (D-143) |
 | `ancestors(place)` | As `parent`, step by step | parent first, at most `MAX_DEPTH`, never a place twice |
@@ -227,6 +228,17 @@ once at open, add: a trailing unit-type abbreviation that some layer names is cu
 and the rows of that type (column UNIT) gain 20; the query's phonetic key 5; a native generic
 the query ends with, replaced by each of its Latin spellings and looked up loosely, 55; a
 droppable suffix removed, 50 (D-121). The unit bonus does not count towards a strong match.
+With feature `substring` (D-199), a one-word query of 3 or more code points also takes the best
+16 rows by importance across all layers whose SUBSTRING keys (word suffixes) start with it: 20,
+below prefix and one edit, so it is never a strong match and the pass over every first letter
+still runs. This tier reads ties strictly (a key whose best row only ties the 16th is skipped):
+equal importance falls in key order, not by ID, because a 3-letter substring ranges over
+thousands of equal keys. The feature is on by default: it adds a few hundred bytes of code
+over `search`, and the section's size is the component's, installed only on request.
+Measured on a GeoNames proxy of Nepal (129,799 places) (load average 14–25): SUBSTRING 19.9 B per place; the whole
+search p50 4.9 → 10.8 µs and p99 80.5 → 115.3 µs with the component installed, p99 37.5 →
+41.0 µs for queries of 4 or more code points
+([note](../02-research/notes/substring-search.md#10-as-built-2026-11-11)).
 
 ## Gates
 
@@ -277,4 +289,5 @@ Each gate was first shown to fail on a planted bug (D-114).
 | 2026-11-11 | `elevation_at` returns a `Height`: metres, DEM product, spacing, datum and layer | D-195 |
 | 2026-11-11 | `iso_code` and `by_iso` (feature `admin`): ISO 3166 codes of countries and units | D-197 |
 | 2026-11-11 | Zone rules (feature `tz-rules`): `tz_offset_at`, `tz_local_candidates`, `tz_version`, `tz_offset_at_point`, `zone_name` | D-196 |
+| 2026-11-11 | Substring search (feature `substring`): a name from 3 or more code points inside a word, bonus 20 | D-199 |
 | 2026-11-10 | The embedded baseline: feature `baseline`, `BASELINE`, `Engine::with_baseline`, `LayerOptions::baseline()` | D-153 |
