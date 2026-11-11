@@ -74,12 +74,17 @@ pub(crate) enum Ask {
 }
 
 pub(crate) fn run(
+    store: &std::path::Path,
     packs: &[PathBuf],
     ask: Ask,
     mode: Mode,
     out: &mut dyn Write,
 ) -> Result<(), Fail> {
-    let e = engine(packs)?;
+    let e = if packs.is_empty() {
+        crate::sync::Opened::open(store)?.engine(&[])?
+    } else {
+        engine(packs)?
+    };
     let mut s = Scratch::default();
     let items: Vec<Item> = match ask {
         Ask::Get { id: text } => {

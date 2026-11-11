@@ -265,8 +265,9 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
   records), `extract` (by component and by box), `export` (NDJSON, GeoJSON, streamed) (D-180)
 - [x] (c) Queries `get`, `reverse`, `search`, `near`, `admin`, `tz`; outputs text, `--json`,
   `--geojson`, `--nominatim` (ADR-0038) from one mapping module (D-181)
-- [ ] (d) Sync: `refresh`, `catalog`, `find`, `locate`, `install`, `update`, `remove`, `pin`,
-  `repair`, `status`, end to end against a `tuf release` repository served on localhost
+- [x] (d) Sync: `init`, `refresh`, `catalog`, `find`, `locate`, `install`, `update`, `remove`,
+  `pin`, `repair`, `status`, end to end against a repository written as `tuf release` writes it,
+  served on localhost with range requests (D-182)
 - [ ] (e) Every command run and its output read; `--help`, completions, the docs; `hyperfine`
   timings of open, query and install
 - [ ] `merge` (compaction) once 4.7 decides on delta packs
@@ -324,3 +325,4 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
 | 2026-11-11 | 4.9a done: metadata stored by version, the timestamp written last as the commit point | a refresh cut off mid-way left a timestamp ahead of its snapshot and an empty offline catalog (D-179) |
 | 2026-11-11 | 4.9b done; `extract` also cuts by box (the format's slice already existed); the deep check is a format module | D-180 |
 | 2026-11-11 | 4.9c done; a query with no result exits 1 | D-181 |
+| 2026-11-11 | 4.9d done; the store gains `init` and `config.json`; the asset measurement moves into `sync::measure` | D-182: the end-to-end test found two store bugs the unit tests missed |

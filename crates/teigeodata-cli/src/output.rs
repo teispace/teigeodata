@@ -103,6 +103,15 @@ impl From<Place> for Item {
     }
 }
 
+/// An optional field: absent when its component is not installed (D-133), so a store that
+/// installed part of a pack answers with what it has; any other error stands.
+fn installed<T>(r: Result<Option<T>, Error>) -> Result<Option<T>, Error> {
+    match r {
+        Err(Error::MissingComponent { .. }) => Ok(None),
+        r => r,
+    }
+}
+
 /// The native record of `item`; `with_point` puts `lat` and `lon` in it.
 pub(crate) fn record<'b>(
     engine: &Engine,
@@ -111,19 +120,19 @@ pub(crate) fn record<'b>(
     with_point: bool,
 ) -> Result<Record<'b>, Error> {
     let place = &item.place;
-    let parent = engine.parent(place)?.map(|p| Shown(p.id));
-    let timezone = match engine.tz_of(place)? {
-        Some(z) => engine.name(&z, &mut bufs.tz)?,
+    let parent = installed(engine.parent(place))?.map(|p| Shown(p.id));
+    let timezone = match installed(engine.tz_of(place))? {
+        Some(z) => installed(engine.name(&z, &mut bufs.tz))?,
         None => None,
     };
     Ok(Record {
         id: Shown(place.id),
-        name: engine.name(place, &mut bufs.name)?,
+        name: installed(engine.name(place, &mut bufs.name))?,
         kind: place.kind.map(PlaceKind::name),
         admin_level: place.admin_level,
         lat: with_point.then(|| place.point.lat_degrees()),
         lon: with_point.then(|| place.point.lon_degrees()),
-        elevation: engine.elevation(place)?,
+        elevation: installed(engine.elevation(place))?,
         parent,
         timezone,
         meters: item.meters.map(|m| (m * 10.0).round() / 10.0),
@@ -281,12 +290,12 @@ fn nominatim(
 ) -> Result<Value, Error> {
     let place = &item.place;
     let mut ancestors = Vec::new();
-    engine.ancestors(place, &mut ancestors)?;
+    installed(engine.ancestors(place, &mut ancestors).map(Some))?;
     let mut address = Map::new();
     let mut display = Vec::new();
     let mut buf = [0_u8; NAME];
     for a in core::iter::once(place).chain(&ancestors) {
-        let Some(n) = engine.name(a, &mut buf)? else {
+        let Some(n) = installed(engine.name(a, &mut buf))? else {
             continue;
         };
         display.push(n.to_owned());

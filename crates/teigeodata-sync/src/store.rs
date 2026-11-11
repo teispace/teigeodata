@@ -97,7 +97,7 @@ pub trait Fs {
     /// # Errors
     /// The file system's.
     fn sync_dir(&mut self, path: &str) -> io::Result<()>;
-    /// The names of the files in a directory.
+    /// The names of the files in a directory; none for a directory that does not exist.
     ///
     /// # Errors
     /// The file system's.
@@ -1056,7 +1056,12 @@ impl Fs for Dir {
 
     fn list(&mut self, path: &str) -> io::Result<Vec<String>> {
         let mut out = Vec::new();
-        for e in std::fs::read_dir(self.at(path))? {
+        let entries = match std::fs::read_dir(self.at(path)) {
+            Ok(e) => e,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(out),
+            Err(e) => return Err(e),
+        };
+        for e in entries {
             let e = e?;
             if e.file_type()?.is_file()
                 && let Some(n) = e.file_name().to_str()

@@ -165,6 +165,14 @@ timezone area, and leaves out what is keyed by renumbered rows. The deep check o
 `teigeodata_format::check::sections`, one function for every section. `export` maps a place
 to one record for NDJSON and GeoJSON; the query outputs (4.9c) reuse it.
 
+**The store commands, as built (D-182).** One store per root: `root.json` (the trust anchor,
+written by `tgd init` once it verifies by itself), `config.json` (metadata and asset mirrors),
+`meta/` (the refresh), `journal`, `packs/` and `staging/` (the store). `install` with no
+`--components` takes the whole pack, and with some adds them to what is installed; `update`
+keeps each pack's components. Queries with no `--pack` open the installed packs with their
+installed components; a field whose component is missing prints null. The catalog entry of a
+pack is `teigeodata_sync::measure::entry`, the one function `tuf release` and the tests use.
+
 **`Transport::fetch(url, max, out)`.** A plain GET: status 200 (404 and 403 reported as
 `Status`), at most `max + 1` bytes read, more than `max` refused. A platform transport
 implements it beside `get`.

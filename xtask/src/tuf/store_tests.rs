@@ -1145,6 +1145,69 @@ fn an_update_fetches_only_what_changed() {
     assert_eq!(store.verify("zz", "places", true).unwrap(), Health::Good);
 }
 
+/// A pack whose sections are all under 1 MiB, so it has no `BLOCK_HASHES`, yet larger than
+/// the 16 KiB a head read starts with; `salt` changes PLACES.
+fn small_pack(release: &str, salt: u8) -> Vec<u8> {
+    use teigeodata_format::{Encoding, Tag, Writer};
+    let ids: Vec<u8> = (0..40_000_u32).map(|i| (i * 7 % 251) as u8).collect();
+    let places: Vec<u8> = (0..30_000_u32).map(|i| (i % 13) as u8 ^ salt).collect();
+    let names: Vec<u8> = (0..200_000_u32).map(|i| (i % 97) as u8).collect();
+    let mut w = Writer::new("zz", "places", release).unwrap();
+    w.manifest(Tag::LICENCE, b"odbl").unwrap();
+    w.pack(
+        &[
+            (Kind::IDMAP, Encoding::RAW, 1, &ids),
+            (Kind::PLACES, Encoding::RAW, 1, &places),
+            (Kind::HIERARCHY, Encoding::RAW, 0, &[]),
+            (Kind::NAMES, Encoding::RAW, 1, &names),
+        ],
+        None,
+    )
+    .unwrap()
+}
+
+/// Widening an installed pack and updating it work without `BLOCK_HASHES`: the new head is read
+/// back as the head frame alone, whatever else the staging file holds yet (a regression: it was
+/// read as the first planned frame, past the end of a fresh staging file).
+#[test]
+fn widening_and_updating_a_pack_without_block_hashes() {
+    let a = small_pack("2026.11.0", 0);
+    let (ea, xa, _) = super::entry_of(&a).unwrap();
+    assert!(ea.block_hashes.is_none() && a.len() > 16 * 1024);
+    let fs = MemFs(Rc::default());
+    let mut store = Store::open(fs.clone()).unwrap().0;
+    let get = |store: &mut Store<MemFs>, e: &Entry, x: &[u8], set: Components| {
+        store
+            .install(
+                &mut Mem::new(x, None),
+                &mut Mirrors::new(["m/"]),
+                "a",
+                e,
+                x.len() as u64,
+                set,
+            )
+            .unwrap()
+    };
+    get(&mut store, &ea, &xa, Components::of(&[Component::Point]));
+    let done = get(&mut store, &ea, &xa, Components::all());
+    assert!(done.reused > 0, "the points are reused: {done:?}");
+    let file = |store: &Store<MemFs>| Store::<MemFs>::path_of(&store.packs()[0]);
+    assert!(
+        fs.clone().read(&file(&store)).unwrap().unwrap() == a,
+        "widened whole"
+    );
+
+    let b = small_pack("2026.12.0", 3);
+    let (eb, xb, _) = super::entry_of(&b).unwrap();
+    let done = get(&mut store, &eb, &xb, Components::all());
+    assert!(done.reused > 0, "NAMES and IDMAP are reused: {done:?}");
+    assert!(
+        fs.clone().read(&file(&store)).unwrap().unwrap() == b,
+        "updated whole"
+    );
+    assert_eq!(store.verify("zz", "places", true).unwrap(), Health::Good);
+}
+
 /// Seeded from bytes that are not a pack, or another pack entirely, an update is an install.
 #[test]
 fn an_update_from_junk_is_an_install() {

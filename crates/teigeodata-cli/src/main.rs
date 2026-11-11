@@ -20,6 +20,7 @@ mod extract;
 mod output;
 mod pack;
 mod query;
+mod sync;
 
 use std::fmt;
 use std::io::{self, BufWriter, Write};
@@ -33,6 +34,10 @@ use teigeodata_format::component::Component;
 #[derive(Debug, Parser)]
 #[command(name = "tgd", version, propagate_version = true, max_term_width = 100)]
 struct Cli {
+    /// The store: installed packs and the verified catalog [default: `TEIGEODATA_STORE`, else
+    /// the platform's data directory]
+    #[arg(long, global = true, value_name = "DIR", env = "TEIGEODATA_STORE")]
+    store: Option<PathBuf>,
     #[command(subcommand)]
     command: Command,
 }
@@ -179,6 +184,106 @@ enum Command {
         #[command(flatten)]
         out: Out,
     },
+    /// Set up the store: the catalog's mirrors and its trusted root.
+    Init {
+        /// A metadata mirror (the catalog's TUF repository); repeat for several, best first.
+        #[arg(long, required = true, value_name = "URL")]
+        repo: Vec<String>,
+        /// An asset mirror (the packs' host); repeat for several, best first.
+        #[arg(long, required = true, value_name = "URL")]
+        assets: Vec<String>,
+        /// The trusted root metadata: the trust anchor, from the project's release.
+        #[arg(long, value_name = "FILE")]
+        root: PathBuf,
+    },
+    /// Fetch what changed in the catalog: the countries installed, and those named.
+    Refresh {
+        /// Countries to list too (two-letter codes, comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        countries: Vec<String>,
+    },
+    /// List the catalog's packs, from the store alone.
+    Catalog {
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Find a place by name, with the packs that hold it, offline.
+    Find {
+        /// The name, optionally followed by a comma and a parent's name.
+        query: String,
+        /// How many.
+        #[arg(short, default_value_t = 5)]
+        k: usize,
+        /// A pack to search besides the installed ones (a world pack); repeatable.
+        #[arg(long = "pack", value_name = "FILE")]
+        with: Vec<PathBuf>,
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
+    /// The countries at a point, with their packs, offline.
+    Locate {
+        /// Latitude in degrees.
+        #[arg(allow_hyphen_values = true)]
+        lat: f64,
+        /// Longitude in degrees.
+        #[arg(allow_hyphen_values = true)]
+        lon: f64,
+        /// Also countries within this many metres.
+        #[arg(long, default_value_t = teigeodata_engine::LOCATOR_RADIUS_M)]
+        radius: u32,
+        /// A pack to locate with besides the installed ones (a world pack); repeatable.
+        #[arg(long = "pack", value_name = "FILE")]
+        with: Vec<PathBuf>,
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Install packs (`np`, `np.dem`, or a catalog path), their dependencies first.
+    Install {
+        /// The packs.
+        #[arg(required = true)]
+        packs: Vec<String>,
+        /// Only these components, with what they need (default: all).
+        #[arg(long, value_delimiter = ',', value_parser = component)]
+        components: Vec<Component>,
+        /// Never evict them.
+        #[arg(long)]
+        pin: bool,
+    },
+    /// Update installed packs to the catalog's releases (all of them by default).
+    Update {
+        /// The packs; all installed ones when left out.
+        packs: Vec<String>,
+    },
+    /// Remove a pack, and the dependencies nothing else needs.
+    Remove {
+        /// The pack.
+        pack: String,
+    },
+    /// Pin a pack (never evicted), or unpin it.
+    Pin {
+        /// The pack.
+        pack: String,
+        /// Unpin it.
+        #[arg(long)]
+        off: bool,
+    },
+    /// Check an installed pack value by value and fetch what is damaged.
+    Repair {
+        /// The pack.
+        pack: String,
+    },
+    /// The installed packs and the catalog's state.
+    Status {
+        /// Hash every installed section.
+        #[arg(long)]
+        deep: bool,
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
     /// Write every place of a pack, streamed, in its stored order.
     Export {
         /// The pack file.
@@ -195,9 +300,8 @@ enum Command {
 /// The packs a query reads, as one dataset.
 #[derive(Debug, Args)]
 struct Packs {
-    /// A pack file; repeat for several (a later pack wins where packs disagree only by the
-    /// engine's precedence rules).
-    #[arg(long = "pack", value_name = "FILE", required = true)]
+    /// A pack file; repeat for several. Without one, the store's installed packs.
+    #[arg(long = "pack", value_name = "FILE")]
     packs: Vec<PathBuf>,
 }
 
@@ -264,7 +368,6 @@ pub(crate) enum Fail {
     /// Exit 1: the data is bad, missing, or a file could not be read or written.
     Refused(String),
     /// Exit 3: the network failed; trying again may work.
-    #[allow(dead_code, reason = "the sync commands (4.9d) return it")]
     Network(String),
     /// Standard output was closed: stop quietly.
     Closed,
@@ -306,6 +409,8 @@ impl From<serde_json::Error> for Fail {
     reason = "one arm per command: the dispatch table"
 )]
 fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
+    let store = cli.store.clone().unwrap_or_else(sync::default_store);
+    let store = store.as_path();
     match cli.command {
         Command::Inspect { pack, json } => pack::inspect(&pack, json, out),
         Command::Verify {
@@ -339,7 +444,7 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             out,
         ),
         Command::Get { id, packs, out: o } => {
-            query::run(&packs.packs, query::Ask::Get { id }, o.mode(), out)
+            query::run(store, &packs.packs, query::Ask::Get { id }, o.mode(), out)
         }
         Command::Reverse {
             lat,
@@ -348,6 +453,7 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             packs,
             out: o,
         } => query::run(
+            store,
             &packs.packs,
             query::Ask::Reverse { lat, lon, k },
             o.mode(),
@@ -359,6 +465,7 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             packs,
             out: o,
         } => query::run(
+            store,
             &packs.packs,
             query::Ask::Search { query: q, k },
             o.mode(),
@@ -371,6 +478,7 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             packs,
             out: o,
         } => query::run(
+            store,
             &packs.packs,
             query::Ask::Near { id, k, radius },
             o.mode(),
@@ -381,7 +489,13 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             lon,
             packs,
             out: o,
-        } => query::run(&packs.packs, query::Ask::Admin { lat, lon }, o.mode(), out),
+        } => query::run(
+            store,
+            &packs.packs,
+            query::Ask::Admin { lat, lon },
+            o.mode(),
+            out,
+        ),
         Command::Tz {
             at,
             lon,
@@ -397,8 +511,37 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
                 },
                 None => query::Ask::TzOf { id: at },
             };
-            query::run(&packs.packs, ask, o.mode(), out)
+            query::run(store, &packs.packs, ask, o.mode(), out)
         }
+        Command::Init { repo, assets, root } => sync::init(store, &repo, &assets, &root, out),
+        Command::Refresh { countries } => sync::refresh(store, &countries, out),
+        Command::Catalog { json } => sync::catalog(store, json, out),
+        Command::Find {
+            query: q,
+            k,
+            with,
+            json,
+        } => sync::find(store, &q, k, &with, json, out),
+        Command::Locate {
+            lat,
+            lon,
+            radius,
+            with,
+            json,
+        } => {
+            let at = query::point::<teigeodata_core::E7>(lat, lon)?;
+            sync::locate(store, at, radius, &with, json, out)
+        }
+        Command::Install {
+            packs,
+            components,
+            pin,
+        } => sync::install(store, &packs, &components, pin, out),
+        Command::Update { packs } => sync::update(store, &packs, out),
+        Command::Remove { pack } => sync::remove(store, &pack, out),
+        Command::Pin { pack, off } => sync::pin(store, &pack, !off, out),
+        Command::Repair { pack } => sync::repair(store, &pack, out),
+        Command::Status { deep, json } => sync::status(store, deep, json, out),
         Command::Export {
             pack,
             format,

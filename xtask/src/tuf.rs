@@ -19,12 +19,10 @@ use std::path::{Path, PathBuf};
 
 use ed25519_dalek::SigningKey;
 use serde_json::Value;
-use teigeodata_format::{Pack, Tag};
-use teigeodata_sync::catalog::{Entry, file_name};
+use teigeodata_format::Pack;
+use teigeodata_sync::catalog::Entry;
 use teigeodata_sync::repo::{self, Files, RoleKeys, TargetFile};
 use teigeodata_sync::trust::{Envelope, Hashes, RoleName, Trusted};
-
-use crate::wire::Wire;
 
 const DAY: i64 = 86_400;
 
@@ -477,42 +475,12 @@ fn current(repo: &Path) -> Result<Current, String> {
     })
 }
 
-/// The SPDX identifier of a manifest's licence class (ADR-0002).
-fn spdx(class: &str) -> Result<&'static str, String> {
-    match class {
-        "odbl" => Ok("ODbL-1.0"),
-        "cc-by-4.0" => Ok("CC-BY-4.0"),
-        other => Err(format!("licence `{other}` has no SPDX mapping")),
-    }
-}
-
 /// The transport asset and catalog entry of a pack.
 pub(crate) fn entry_of(bytes: &[u8]) -> Result<(Entry, Vec<u8>, Hashes), String> {
-    let pack = Pack::open_verified(bytes).map_err(|e| e.to_string())?;
-    let m = pack.manifest();
-    let (wire, asset) = Wire::measure_asset(bytes)?;
-    let c = wire.catalog_sizes();
+    Pack::open_verified(bytes).map_err(|e| e.to_string())?;
+    let asset = crate::wire::asset(bytes)?;
+    let entry = teigeodata_sync::measure::entry(bytes, &asset).map_err(|e| e.to_string())?;
     let hashes = repo::target_hashes(&asset);
-    let sha = hashes.get("sha256").ok_or("no sha256")?;
-    let licence = spdx(m.text(Tag::LICENCE).ok_or("the pack states no licence")?)?;
-    let mut head = [0_u8; 16];
-    head.copy_from_slice(pack.head_digest().get(..16).ok_or("short digest")?);
-    let entry = Entry {
-        address: m.address().to_string(),
-        component: m.component().to_string(),
-        release: m.release().to_string(),
-        file: file_name(m.address(), m.component(), m.release(), sha),
-        pack_length: bytes.len() as u64,
-        head,
-        seek_table: c.seek_table,
-        head_frame: c.head_frame,
-        block_hashes: c.block_hashes,
-        sizes: c.sizes,
-        deps: vec![],
-        min_reader: pack.min_reader_major(),
-        bbox: m.bbox(),
-        licence: licence.to_string(),
-    };
     Ok((entry, asset, hashes))
 }
 

@@ -1607,6 +1607,8 @@ dependencies = [
  "teigeodata-engine",
  "teigeodata-format",
  "teigeodata-names",
+ "teigeodata-sync",
+ "zstd",
 ]
 
 [[package]]

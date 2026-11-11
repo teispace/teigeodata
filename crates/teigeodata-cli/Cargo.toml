@@ -15,17 +15,23 @@ path = "src/main.rs"
 
 [dependencies]
 teigeodata-core.workspace = true
-teigeodata-engine.workspace = true
+# `catalog`: the engine as the catalog's resolver for `find` (D-164).
+teigeodata-engine = { workspace = true, features = ["catalog"] }
+# The store, the catalog refresh and the default transport (D-168, D-171, D-179).
+teigeodata-sync = { workspace = true, features = ["http", "store"] }
 # The writer for `extract`, BLOBS decoding and signatures for `verify`.
 teigeodata-format = { workspace = true, features = ["write", "zstd", "signature"] }
 # clap derive (D-178): help, suggestions, uniform usage errors and completions.
-clap = { version = "4.6.7", features = ["derive"] }
+clap = { version = "4.6.7", features = ["derive", "env"] }
 ed25519-dalek = { version = "3.0.0", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 
 [dev-dependencies]
 teigeodata-names.workspace = true
+# A repository written as a release writes it: the asset, its catalog entry, the signed roles.
+teigeodata-sync = { workspace = true, features = ["http", "store", "repo", "write"] }
+zstd = { version = "0.14.3", default-features = false }
 
 [lints]
 workspace = true

@@ -305,17 +305,14 @@ fn reuse<F: Read + Write + Seek>(
     frames: &[usize],
     buf: &mut Vec<u8>,
 ) -> Result<u64, FetchError> {
-    // The new head, as start wrote it; the old one, from the old file.
-    let Some(head_end) = frames
-        .first()
-        .and_then(|&i| inst.frame(i))
-        .map(|f| f.decoded.end)
-    else {
+    // The new head, as start wrote it (frame 0); the old one, from the old file.
+    let Some(head_end) = inst.frame(0).map(|f| f.decoded.end) else {
         return Ok(0);
     };
-    let Some(new_head) = read_head(staging, pack_len)? else {
-        return Ok(0);
-    };
+    // Exactly the head frame: the staging file may hold nothing past it yet.
+    let mut new_head = alloc::vec![0_u8; usize::try_from(head_end).map_err(|_| too_large())?];
+    staging.seek(SeekFrom::Start(0))?;
+    staging.read_exact(&mut new_head)?;
     let old_len = old.seek(SeekFrom::End(0))?;
     let Some(old_head) = read_head(old, old_len)? else {
         return Ok(0);
