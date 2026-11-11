@@ -37,6 +37,8 @@
 
 #[cfg(feature = "catalog")]
 mod discover;
+#[cfg(feature = "store")]
+mod follow;
 mod layer;
 mod map;
 mod query;
@@ -58,6 +60,8 @@ pub use query::{Hit, Near, Place, Scratch};
 /// missed (D-149).
 #[cfg(feature = "admin-index")]
 pub const LOCATOR_RADIUS_M: u32 = 3_000;
+#[cfg(feature = "store")]
+pub use follow::Followed;
 #[cfg(feature = "shared")]
 pub use shared::{Shared, Snapshot};
 pub use teigeodata_format::Kind;

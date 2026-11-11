@@ -565,6 +565,12 @@ impl Layer {
         self.id
     }
 
+    /// The file it was opened from; `None` for bytes in memory.
+    #[must_use]
+    pub fn path(&self) -> Option<&Path> {
+        self.stamp.as_ref().map(|s| s.path.as_path())
+    }
+
     /// Whether the bytes are a file mapping.
     #[must_use]
     pub const fn is_mapped(&self) -> bool {

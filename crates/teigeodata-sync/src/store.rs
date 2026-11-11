@@ -18,17 +18,27 @@
 //! not list (a crash between the rename and the commit, or a retired version), keeps staging for
 //! resume, and reports listed packs whose file is missing or the wrong length.
 //!
+//! The storage manager (D-172) works on the same journal: each pack carries its dependencies,
+//! whether it was asked for or installed as a dependency, a pin, and its last use.
+//! [`plan_room`] picks least-recently-used packs to remove until an install fits the free
+//! space and the quota, never a pinned pack, a kept one, or one a staying pack depends on;
+//! [`Store::remove`] refuses a pack another one needs and removes dependencies left unneeded.
+//! Every removal commits the journal first and deletes the files after, so a crash leaves at
+//! most files that recovery removes.
+//!
 //! All file system calls go through [`Fs`], so tests can crash the store at every step.
 
 use alloc::borrow::ToOwned;
+use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::fmt;
 use std::io::{self, Read, Seek, Write};
 
 use serde_json::{Map, Value};
 use teigeodata_format::component::{Component, Components};
 
-use crate::catalog::Entry;
+use crate::catalog::{self, Entry};
 use crate::fetch::{FetchError, Mirrors, Transport, install_from};
 use crate::install::Installed;
 
@@ -110,6 +120,193 @@ pub struct Record {
     pub pack_len: u64,
     /// The first 16 bytes of its head's BLAKE3, from the catalog.
     pub head: [u8; 16],
+    /// The packs it depends on, as catalog paths (`address.component.tgd`), from the catalog.
+    pub deps: Vec<String>,
+    /// Asked for by the user or the app; `false` when installed as another pack's dependency,
+    /// which is removed once no installed pack depends on it (apt's `auto`).
+    pub asked: bool,
+    /// Never evicted (Flatpak's pin); removed only when asked.
+    pub pinned: bool,
+    /// Its last use, in the caller's clock (seconds); 0 for never.
+    pub used: u64,
+}
+
+impl Record {
+    /// Its catalog path, `address.component.tgd`: what other packs' `deps` name.
+    #[must_use]
+    pub fn key(&self) -> String {
+        catalog::path(&self.address, &self.component)
+    }
+}
+
+/// Why a store operation failed.
+#[derive(Debug)]
+pub enum StoreError {
+    /// The file system's error. The journal is untouched unless the commit itself succeeded.
+    Io(io::Error),
+    /// No pack of this address and component is installed.
+    NotInstalled,
+    /// The pack is a dependency of this installed pack: remove that one first.
+    Needed {
+        /// The dependant's catalog path.
+        by: String,
+    },
+    /// The install does not fit even with every removable pack removed; nothing was removed.
+    Short {
+        /// Bytes the install needs.
+        need: u64,
+        /// The most bytes that could be had.
+        room: u64,
+    },
+    /// The install refused the pack's name.
+    Fetch(FetchError),
+}
+
+impl fmt::Display for StoreError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(e) => write!(f, "the store: {e}"),
+            Self::NotInstalled => f.write_str("the pack is not installed"),
+            Self::Needed { by } => write!(f, "the pack is needed by {by}"),
+            Self::Short { need, room } => {
+                write!(
+                    f,
+                    "the install needs {need} bytes and at most {room} can be had"
+                )
+            }
+            Self::Fetch(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl core::error::Error for StoreError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::Io(e) => Some(e),
+            Self::Fetch(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<io::Error> for StoreError {
+    fn from(e: io::Error) -> Self {
+        Self::Io(e)
+    }
+}
+
+impl From<FetchError> for StoreError {
+    fn from(e: FetchError) -> Self {
+        match e {
+            FetchError::Io(e) => Self::Io(e),
+            e => Self::Fetch(e),
+        }
+    }
+}
+
+/// What an install asks of the disk, for [`plan_room`].
+#[derive(Clone, Copy, Debug)]
+pub struct Room<'a> {
+    /// Bytes the install will write ([`Store::need`]).
+    pub need: u64,
+    /// Bytes free for this app now, from the platform (Android `getAllocatableBytes`, iOS
+    /// `volumeAvailableCapacityForImportantUsage`, the web's `storage.estimate()`).
+    pub available: u64,
+    /// The most bytes the installed packs may take together, if the developer set a cap.
+    pub quota: Option<u64>,
+    /// Catalog paths never to remove: the pack being installed and its dependencies.
+    pub keep: &'a [String],
+}
+
+impl Room<'_> {
+    /// The bytes that can be written with `installed` bytes of packs left after removing
+    /// `freed`.
+    fn room(&self, installed: u64, freed: u64) -> u64 {
+        let disk = self.available.saturating_add(freed);
+        match self.quota {
+            Some(q) => disk.min(q.saturating_sub(installed.saturating_sub(freed))),
+            None => disk,
+        }
+    }
+}
+
+/// The packs to remove, in order, so that an install fits: least recently used first, a
+/// dependency before a pack asked for at the same time, then the larger, then by path. Never
+/// a pinned pack, one in `keep`, or one a staying pack depends on; a removed pack's own
+/// dependencies may then go. Pure: it reads `packs` and decides.
+///
+/// # Errors
+/// [`StoreError::Short`] when even removing every removable pack is not enough; nothing is to
+/// be removed then.
+pub fn plan_room(packs: &[Record], want: &Room<'_>) -> Result<Vec<usize>, StoreError> {
+    let keys: Vec<String> = packs.iter().map(Record::key).collect();
+    let at: BTreeMap<&str, usize> = keys
+        .iter()
+        .enumerate()
+        .map(|(i, k)| (k.as_str(), i))
+        .collect();
+    // How many staying packs depend on each one.
+    let mut needed = alloc::vec![0_usize; packs.len()];
+    for r in packs {
+        for d in &r.deps {
+            if let Some(n) = at.get(d.as_str()).and_then(|&j| needed.get_mut(j)) {
+                *n += 1;
+            }
+        }
+    }
+    let installed = packs
+        .iter()
+        .fold(0_u64, |a, r| a.saturating_add(r.pack_len));
+    let mut gone = alloc::vec![false; packs.len()];
+    let mut order = Vec::new();
+    let mut freed = 0_u64;
+    loop {
+        if want.need <= want.room(installed, freed) {
+            return Ok(order);
+        }
+        let pick = packs
+            .iter()
+            .enumerate()
+            .filter(|&(i, r)| {
+                !gone.get(i).copied().unwrap_or(true)
+                    && needed.get(i) == Some(&0)
+                    && !r.pinned
+                    && keys.get(i).is_some_and(|k| !want.keep.contains(k))
+            })
+            .min_by(|(i, a), (j, b)| {
+                (
+                    a.used,
+                    a.asked,
+                    core::cmp::Reverse(a.pack_len),
+                    keys.get(*i),
+                )
+                    .cmp(&(
+                        b.used,
+                        b.asked,
+                        core::cmp::Reverse(b.pack_len),
+                        keys.get(*j),
+                    ))
+            })
+            .map(|(i, _)| i);
+        let Some(i) = pick else {
+            return Err(StoreError::Short {
+                need: want.need,
+                room: want.room(installed, freed),
+            });
+        };
+        if let Some(g) = gone.get_mut(i) {
+            *g = true;
+        }
+        order.push(i);
+        if let Some(r) = packs.get(i) {
+            freed = freed.saturating_add(r.pack_len);
+            for d in &r.deps {
+                if let Some(n) = at.get(d.as_str()).and_then(|&j| needed.get_mut(j)) {
+                    *n = n.saturating_sub(1);
+                }
+            }
+        }
+    }
 }
 
 /// What [`Store::open`] found and did.
@@ -126,14 +323,17 @@ pub struct Recovered {
 pub struct Store<D: Fs> {
     fs: D,
     packs: Vec<Record>,
+    /// Last-use times changed since the last commit.
+    dirty: bool,
 }
 
 const JOURNAL: &str = "journal";
 const JOURNAL_TMP: &str = "journal.tmp";
 const PACKS: &str = "packs";
 const STAGING: &str = "staging";
-/// The journal's format version.
-const VERSION: u64 = 1;
+/// The journal's format version: 2 adds the marks, dependencies and last use (D-172); 1 is
+/// read and upgraded on the next commit.
+const VERSION: u64 = 2;
 
 fn invalid(what: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, what)
@@ -170,7 +370,14 @@ impl<D: Fs> Store<D> {
                 rec.damaged.push(r.file.clone());
             }
         }
-        Ok((Self { fs, packs }, rec))
+        Ok((
+            Self {
+                fs,
+                packs,
+                dirty: false,
+            },
+            rec,
+        ))
     }
 
     /// The installed packs.
@@ -220,7 +427,15 @@ impl<D: Fs> Store<D> {
         self.fs.rename(&staging, &target)?;
         self.fs.sync_dir(PACKS)?;
         self.fs.sync_dir(STAGING)?;
-        let record = Record {
+        let mut packs = self.packs.clone();
+        let old = packs
+            .iter()
+            .position(|r| r.address == entry.address && r.component == entry.component)
+            .map(|i| packs.remove(i));
+        // A new pack counts as used as recently as anything the store knows, so it is not the
+        // first evicted; a replaced one keeps its marks.
+        let latest = self.packs.iter().map(|r| r.used).max().unwrap_or(0);
+        packs.push(Record {
             address: entry.address.clone(),
             component: entry.component.clone(),
             release: entry.release.clone(),
@@ -228,35 +443,207 @@ impl<D: Fs> Store<D> {
             file,
             pack_len: done.pack_len,
             head: entry.head,
-        };
-        let mut packs = self.packs.clone();
-        let old = packs
-            .iter()
-            .position(|r| r.address == record.address && r.component == record.component)
-            .map(|i| packs.remove(i));
-        packs.push(record);
+            deps: entry.deps.clone(),
+            asked: old.as_ref().is_none_or(|o| o.asked),
+            pinned: old.as_ref().is_some_and(|o| o.pinned),
+            used: old.as_ref().map_or(latest, |o| o.used.max(latest)),
+        });
         packs.sort_by(|a, b| (&a.address, &a.component).cmp(&(&b.address, &b.component)));
-        self.commit(&packs)?;
-        self.packs = packs;
-        if let Some(old) = old.filter(|o| self.packs.iter().all(|r| r.file != o.file)) {
-            // Best effort: a mapped file on Windows cannot go yet; recovery removes it later.
-            if self.fs.remove(&Self::path_of(&old)).is_ok() {
-                let _ = self.fs.sync_dir(PACKS);
-            }
+        self.commit(packs)?;
+        if let Some(old) = old {
+            self.retire(&[old]);
         }
         Ok(done)
     }
 
-    /// Writes `packs` as the journal: temp file, sync, rename, sync the root.
-    fn commit(&mut self, packs: &[Record]) -> io::Result<()> {
-        let bytes = render(packs);
+    /// The bytes an install of `set` of `entry` will still write: the pack on disk less what
+    /// staging already holds. The replaced release stays until the commit, so it frees nothing
+    /// here (the disk peak of [download and delta §3.4]).
+    ///
+    /// # Errors
+    /// [`StoreError::Io`], or [`StoreError::Fetch`] for an unsafe asset name.
+    pub fn need(&mut self, entry: &Entry, set: Components) -> Result<u64, StoreError> {
+        let staged = alloc::format!("{STAGING}/{}.part", pack_name(entry, set)?);
+        let have = self.fs.len(&staged)?.unwrap_or(0);
+        Ok(entry.size_of(set).disk.saturating_sub(have))
+    }
+
+    /// Removes least-recently-used packs until `set` of `entry` fits in `available` bytes and
+    /// the `quota`, keeping the pack itself and its dependencies, and commits the removal.
+    /// Returns what was removed (nothing when it already fits).
+    ///
+    /// # Errors
+    /// [`StoreError::Short`] when it cannot fit (nothing removed), or [`StoreError::Io`].
+    pub fn make_room(
+        &mut self,
+        entry: &Entry,
+        set: Components,
+        available: u64,
+        quota: Option<u64>,
+    ) -> Result<Vec<Record>, StoreError> {
+        let need = self.need(entry, set)?;
+        let mut keep = entry.deps.clone();
+        keep.push(entry.path());
+        let order = plan_room(
+            &self.packs,
+            &Room {
+                need,
+                available,
+                quota,
+                keep: &keep,
+            },
+        )?;
+        self.drop_packs(&order)
+    }
+
+    /// Removes the pack of `address` and `component`, and then every pack installed as a
+    /// dependency that no remaining pack needs and that is not pinned.
+    ///
+    /// # Errors
+    /// [`StoreError::NotInstalled`], [`StoreError::Needed`] when another installed pack depends
+    /// on it, or [`StoreError::Io`].
+    pub fn remove(&mut self, address: &str, component: &str) -> Result<Vec<Record>, StoreError> {
+        let i = self.find(address, component)?;
+        let key = catalog::path(address, component);
+        if let Some(by) = self.packs.iter().find(|r| r.deps.contains(&key)) {
+            return Err(StoreError::Needed { by: by.key() });
+        }
+        let mut gone = alloc::vec![i];
+        loop {
+            let needed = |k: &String| {
+                self.packs
+                    .iter()
+                    .enumerate()
+                    .any(|(j, r)| !gone.contains(&j) && r.deps.contains(k))
+            };
+            let next =
+                self.packs.iter().enumerate().find(|&(j, r)| {
+                    !gone.contains(&j) && !r.asked && !r.pinned && !needed(&r.key())
+                });
+            match next {
+                Some((j, _)) => gone.push(j),
+                None => break,
+            }
+        }
+        self.drop_packs(&gone)
+    }
+
+    /// Pins or unpins a pack. A pinned pack is never evicted.
+    ///
+    /// # Errors
+    /// [`StoreError::NotInstalled`] or [`StoreError::Io`].
+    pub fn pin(&mut self, address: &str, component: &str, pinned: bool) -> Result<(), StoreError> {
+        self.set(address, component, |r| r.pinned = pinned)
+    }
+
+    /// Marks a pack as asked for (`true`) or as installed for another pack (`false`), which
+    /// [`remove`](Self::remove) takes away once nothing needs it. A planner installing a
+    /// dependency marks it after the install; a crash between leaves it asked, which only
+    /// keeps it longer.
+    ///
+    /// # Errors
+    /// [`StoreError::NotInstalled`] or [`StoreError::Io`].
+    pub fn mark(&mut self, address: &str, component: &str, asked: bool) -> Result<(), StoreError> {
+        self.set(address, component, |r| r.asked = asked)
+    }
+
+    /// Records a use of a pack at `now` (the caller's clock, seconds), in memory: it is saved
+    /// with the next commit or by [`save`](Self::save). Returns whether the pack is installed.
+    pub fn touch(&mut self, address: &str, component: &str, now: u64) -> bool {
+        let Ok(i) = self.find(address, component) else {
+            return false;
+        };
+        if let Some(r) = self.packs.get_mut(i)
+            && now > r.used
+        {
+            r.used = now;
+            self.dirty = true;
+        }
+        true
+    }
+
+    /// Saves the uses recorded by [`touch`](Self::touch), if any; a crash before it loses only
+    /// the order of eviction.
+    ///
+    /// # Errors
+    /// The file system's.
+    pub fn save(&mut self) -> io::Result<()> {
+        if self.dirty {
+            self.commit(self.packs.clone())?;
+        }
+        Ok(())
+    }
+
+    fn find(&self, address: &str, component: &str) -> Result<usize, StoreError> {
+        self.packs
+            .iter()
+            .position(|r| r.address == address && r.component == component)
+            .ok_or(StoreError::NotInstalled)
+    }
+
+    fn set(
+        &mut self,
+        address: &str,
+        component: &str,
+        change: impl FnOnce(&mut Record),
+    ) -> Result<(), StoreError> {
+        let i = self.find(address, component)?;
+        let mut packs = self.packs.clone();
+        if let Some(r) = packs.get_mut(i) {
+            let was = r.clone();
+            change(r);
+            if *r == was {
+                return Ok(());
+            }
+        }
+        Ok(self.commit(packs)?)
+    }
+
+    /// Commits the journal without the packs at `indices`, then deletes their files.
+    fn drop_packs(&mut self, indices: &[usize]) -> Result<Vec<Record>, StoreError> {
+        if indices.is_empty() {
+            return Ok(Vec::new());
+        }
+        let (gone, stay): (Vec<_>, Vec<_>) = self
+            .packs
+            .iter()
+            .cloned()
+            .enumerate()
+            .partition(|(i, _)| indices.contains(i));
+        self.commit(stay.into_iter().map(|(_, r)| r).collect())?;
+        let gone: Vec<Record> = gone.into_iter().map(|(_, r)| r).collect();
+        self.retire(&gone);
+        Ok(gone)
+    }
+
+    /// Deletes the files of packs no longer in the journal. Best effort: a mapped file on
+    /// Windows cannot go yet, and recovery removes it later.
+    fn retire(&mut self, old: &[Record]) {
+        let mut any = false;
+        for o in old {
+            if self.packs.iter().all(|r| r.file != o.file) {
+                any |= self.fs.remove(&Self::path_of(o)).is_ok();
+            }
+        }
+        if any {
+            let _ = self.fs.sync_dir(PACKS);
+        }
+    }
+
+    /// Writes `packs` as the journal (temp file, sync, rename, sync the root) and makes them
+    /// the store's.
+    fn commit(&mut self, packs: Vec<Record>) -> io::Result<()> {
+        let bytes = render(&packs);
         let mut t = self.fs.open(JOURNAL_TMP)?;
         t.set_len(0)?;
         t.write_all(&bytes)?;
         t.sync()?;
         drop(t);
         self.fs.rename(JOURNAL_TMP, JOURNAL)?;
-        self.fs.sync_dir("")
+        self.fs.sync_dir("")?;
+        self.packs = packs;
+        self.dirty = false;
+        Ok(())
     }
 }
 
@@ -301,6 +688,11 @@ fn render(packs: &[Record]) -> Vec<u8> {
             m.insert("pack_len".into(), r.pack_len.into());
             let head = crate::trust::lower_hex(&r.head);
             m.insert("head".into(), head.into());
+            let deps: Vec<Value> = r.deps.iter().map(|d| d.clone().into()).collect();
+            m.insert("deps".into(), deps.into());
+            m.insert("asked".into(), r.asked.into());
+            m.insert("pinned".into(), r.pinned.into());
+            m.insert("used".into(), r.used.into());
             Value::Object(m)
         })
         .collect();
@@ -315,9 +707,11 @@ fn render(packs: &[Record]) -> Vec<u8> {
 fn parse(bytes: &[u8]) -> io::Result<Vec<Record>> {
     let bad = || invalid("the journal does not parse");
     let v: Value = serde_json::from_slice(bytes).map_err(|_| bad())?;
-    if v.get("version").and_then(Value::as_u64) != Some(VERSION) {
+    let version = v.get("version").and_then(Value::as_u64);
+    if !matches!(version, Some(1 | VERSION)) {
         return Err(invalid("the journal's version is unknown"));
     }
+    let v1 = version == Some(1);
     let text = |r: &Value, k: &str| r.get(k).and_then(Value::as_str).map(String::from);
     let mut out = Vec::new();
     for r in v.get("packs").and_then(Value::as_array).ok_or_else(bad)? {
@@ -337,6 +731,21 @@ fn parse(bytes: &[u8]) -> io::Result<Vec<Record>> {
                 .and_then(|h| u8::from_str_radix(h, 16).ok())
                 .ok_or_else(bad)?;
         }
+        // Version 1 had no marks: a pack asked for, unpinned, never used.
+        let (deps, asked, pinned, used) = if v1 {
+            (Vec::new(), true, false, 0)
+        } else {
+            let mut deps = Vec::new();
+            for d in r.get("deps").and_then(Value::as_array).ok_or_else(bad)? {
+                deps.push(d.as_str().ok_or_else(bad)?.to_owned());
+            }
+            (
+                deps,
+                r.get("asked").and_then(Value::as_bool).ok_or_else(bad)?,
+                r.get("pinned").and_then(Value::as_bool).ok_or_else(bad)?,
+                r.get("used").and_then(Value::as_u64).ok_or_else(bad)?,
+            )
+        };
         out.push(Record {
             address: text(r, "address").ok_or_else(bad)?,
             component: text(r, "component").ok_or_else(bad)?,
@@ -347,6 +756,10 @@ fn parse(bytes: &[u8]) -> io::Result<Vec<Record>> {
                 .ok_or_else(bad)?,
             pack_len: r.get("pack_len").and_then(Value::as_u64).ok_or_else(bad)?,
             head,
+            deps,
+            asked,
+            pinned,
+            used,
         });
     }
     Ok(out)
@@ -367,6 +780,18 @@ impl Dir {
         let root = root.into();
         std::fs::create_dir_all(&root)?;
         Ok(Self { root })
+    }
+
+    /// The file of an installed pack.
+    #[must_use]
+    pub fn pack_path(&self, record: &Record) -> std::path::PathBuf {
+        self.at(PACKS).join(&record.file)
+    }
+
+    /// The directory of the installed packs.
+    #[must_use]
+    pub fn packs_dir(&self) -> std::path::PathBuf {
+        self.at(PACKS)
     }
 
     fn at(&self, path: &str) -> std::path::PathBuf {

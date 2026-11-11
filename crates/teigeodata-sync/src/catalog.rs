@@ -28,7 +28,8 @@
 //! - `pack.head` is the pack's 16-byte head hash (header bytes 112–127): equal heads mean equal
 //!   packs, so an update with the installed head costs nothing.
 //! - `sizes` gives, per component of the pack (D-135), its download bytes (the frames of its
-//!   sections in the asset) and its disk bytes (the sections); unknown component names are
+//!   sections in the asset) and its disk bytes (the sections with their padding, D-172), so a
+//!   whole install's parts add up to `pack.length`; unknown component names are
 //!   skipped, for newer packs. Every install also fetches the head frame (`transport.head`) and
 //!   the seek table, and `BLOCK_HASHES` (`block_hashes`, absent when the pack has none) when it
 //!   holds one of the components that need it (a section of 1 MiB or more). [`Entry::size_of`]
@@ -127,7 +128,7 @@ pub struct Entry {
 pub struct Size {
     /// Bytes downloaded: its frames in the asset.
     pub wire: u64,
-    /// Bytes on disk: its sections in the pack.
+    /// Bytes on disk: its sections in the pack, each with its padding to the next (D-172).
     pub disk: u64,
 }
 
@@ -235,6 +236,11 @@ impl Entry {
                 .values()
                 .any(|s| s.wire > target.length || s.disk > entry.pack_length)
         {
+            return Err(Error::Field("sizes"));
+        }
+        // The parts of a whole install cannot outgrow the pack (equal unless a newer pack has
+        // components this reader skips).
+        if entry.size_of(Components::all()).disk > entry.pack_length {
             return Err(Error::Field("sizes"));
         }
         Ok(entry)

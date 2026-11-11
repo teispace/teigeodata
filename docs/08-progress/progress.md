@@ -60,8 +60,10 @@ A short status. The numbers and evidence live in each phase file and the
   the sans-I/O installer that checks every block before writing it (D-167), and the
   `Transport` trait with its `ureq` default (D-168), and resume by frame with the staging file
   as its own record (D-169), and mirrors with demotion (D-170), and the store: atomic install, journal and
-  recovery, crash-tested at every step (D-171). Next: platform transport prototypes, then the
-  storage manager (4.6) with the snapshot swap; the release upload and the first
+  recovery, crash-tested at every step (D-171); 4.6: the storage manager (quota, LRU eviction
+  with pins and dependency protection, journal version 2) and the snapshot swap
+  `Shared::follow` (D-172). Next: `verify(deep)` and repair by section (4.6), then the platform
+  transport prototypes; the release upload and the first
   ceremony wait for the maintainer; the world byte-identity check after the thinning change
   waits for the inputs to be fetched again.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin

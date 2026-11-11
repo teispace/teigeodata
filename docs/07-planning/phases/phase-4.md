@@ -219,14 +219,16 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   resumed by the next (2026-11-10, D-170)
 - [x] Staging, fsync, rename, journal commit, crash recovery: `sync::store`, the crash gate at
   every step (2026-11-10, D-171)
-- [ ] Snapshot swap on install: the engine reopens from the journal while readers keep the old
-  mapping (with 4.6)
+- [x] Snapshot swap on install: the engine reopens from the journal while readers keep the old
+  mapping: `Shared::follow` (2026-11-11, D-172)
 - [ ] Platform transport prototypes for gate 14 (iOS background `URLSession`, Android UIDT,
   web `fetch` + OPFS); packaging stays in Phase 5
 
 ### 4.6 Storage manager
-- [ ] Installed list, quota, LRU eviction with pinning and dependency protection, the disk-peak
-  formula ([download and delta](../../02-research/notes/download-and-delta.md) §3.4)
+- [x] Installed list, quota, LRU eviction with pinning and dependency protection, the disk-peak
+  formula ([download and delta](../../02-research/notes/download-and-delta.md) §3.4):
+  `store::plan_room`, `Store::{need, make_room, remove, pin, mark, touch}`, journal version 2
+  ([storage manager](../../02-research/notes/storage-manager.md); 2026-11-11, D-172)
 - [ ] `verify(deep)` and repair by section
 
 ### 4.7 Delta updates
@@ -290,3 +292,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.5: resume done, the staging file its own record; mirrors split into their own item | D-169 |
 | 2026-11-10 | 4.5: the store done with sync gate 8 (crash at every step); the snapshot swap split into its own item, built with 4.6 | D-171 |
 | 2026-11-10 | 4.5: mirrors done; 4.8 gains a world-size install for multi-frame block-hash lists, which no unit-size pack reaches | D-170 |
+| 2026-11-11 | 4.6 first item and the 4.5 snapshot swap done together; the catalog's disk sizes now count section padding | D-172: a whole install's parts were 48 B short of the file |

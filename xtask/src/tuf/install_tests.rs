@@ -21,13 +21,18 @@ fn pack() -> Vec<u8> {
 
 /// The same pack under another release.
 pub(super) fn pack_of(release: &str) -> Vec<u8> {
+    pack_at("zz", release)
+}
+
+/// The test pack under another address.
+pub(super) fn pack_at(address: &str, release: &str) -> Vec<u8> {
     let ids: Vec<u8> = (0..40_000_u32).map(|i| (i * 7 % 251) as u8).collect();
     let places: Vec<u8> = (0..30_000_u32).map(|i| (i % 13) as u8).collect();
     let names: Vec<u8> = (0..(5_u32 << 19))
         .map(|i| b"Lahachowk Kathmandu Pokhara "[(i % 28) as usize] ^ (i >> 16) as u8)
         .collect();
     let tz = vec![9_u8; 3_000];
-    let mut w = Writer::new("zz", "places", release).unwrap();
+    let mut w = Writer::new(address, "places", release).unwrap();
     w.manifest(Tag::LICENCE, b"odbl").unwrap();
     w.pack(
         &[

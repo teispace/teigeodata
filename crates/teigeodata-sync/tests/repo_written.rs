@@ -51,7 +51,7 @@ fn written() -> BTreeMap<String, Vec<u8>> {
         component: "places".into(),
         release: "2026.11.0".into(),
         file: file_name("np", "places", "2026.11.0", &hashes["sha256"]),
-        pack_length: 128,
+        pack_length: 64 + 64 + teigeodata_format::FOOTER_SIZE as u64,
         head: [0xab; 16],
         seek_table: 9,
         head_frame: Size { wire: 2, disk: 64 },

@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use teigeodata_format::component::{Component, Components};
-use teigeodata_format::{Kind, Pack};
+use teigeodata_format::{FOOTER_SIZE, Kind, Pack};
 use teigeodata_sync::catalog::{BlockHashes, Size};
 use teigeodata_sync::transport::{self, Layout, SeekTable};
 
@@ -41,7 +41,8 @@ pub(crate) struct Wire {
     hashes: u64,
     /// `BLOCK_HASHES` in the pack.
     hashes_raw: u64,
-    /// Raw and compressed bytes of each component's own sections.
+    /// Disk bytes (each section's span, padding included) and compressed bytes of each
+    /// component's own sections.
     parts: BTreeMap<Component, (u64, u64)>,
     /// The components with a section of 1 MiB or more, which needs `BLOCK_HASHES`.
     blocked: Components,
@@ -92,16 +93,35 @@ impl Wire {
                 None => return Err(format!("section {} has no component", s.kind)),
             }
         }
+        // On disk a section takes its span: its bytes and the padding to the next section, or
+        // to the footer for the last (D-172), so the parts add up to the file.
+        let body_end = (bytes.len() - FOOTER_SIZE) as u64;
+        for (i, s) in spans.iter().enumerate() {
+            let end = spans.get(i + 1).map_or(body_end, |n| n.offset);
+            let disk = end.checked_sub(s.offset).ok_or("sections out of order")?;
+            if s.kind == Kind::BLOCK_HASHES {
+                wire.hashes_raw += disk;
+            }
+            if let Some(k) = Component::of(s.kind) {
+                wire.parts.entry(k).or_default().0 += disk;
+            }
+        }
         for s in pack.sections() {
-            if s.kind() == Kind::BLOCK_HASHES {
-                wire.hashes_raw += s.bytes().len() as u64;
+            if let Some(k) = Component::of(s.kind())
+                && pack.blocks(s.kind()).map_err(|e| e.to_string())?.is_some()
+            {
+                wire.blocked = Components::of(&[k]).union(wire.blocked);
             }
-            if let Some(k) = Component::of(s.kind()) {
-                wire.parts.entry(k).or_default().0 += s.bytes().len() as u64;
-                if pack.blocks(s.kind()).map_err(|e| e.to_string())?.is_some() {
-                    wire.blocked = Components::of(&[k]).union(wire.blocked);
-                }
-            }
+        }
+        let disk = wire.head_raw
+            + wire.hashes_raw
+            + wire.parts.values().map(|p| p.0).sum::<u64>()
+            + FOOTER_SIZE as u64;
+        if disk != bytes.len() as u64 {
+            return Err(format!(
+                "the parts take {disk} B on disk, the pack is {} B",
+                bytes.len()
+            ));
         }
         Ok((wire, asset))
     }

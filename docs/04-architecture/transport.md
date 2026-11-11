@@ -146,7 +146,7 @@ harness `transport_asset` checks exactly that property on writer-made packs.
 `sync::store::Store` keeps the installed packs under one root:
 
 ```text
-<root>/journal           the installed packs (JSON, version 1): the commit point
+<root>/journal           the installed packs (JSON, version 2, D-172): the commit point
 <root>/packs/<name>.tgd  immutable; <name> is the asset's name with the component set
 <root>/staging/<name>.tgd.part
 ```
@@ -171,6 +171,52 @@ kept, reboots and recovers: every time exactly one release is installed, whole, 
 file in `packs/`, both outcomes occur, and the install then completes. Leaving out any of the
 four syncs, the orphan sweep or the journal's parse check fails it. A test on a real directory
 installs, replaces, sweeps leftovers and reports a truncated pack.
+
+## Managing it (feature `store`, D-172)
+
+The storage manager works on the same journal ([storage manager](../02-research/notes/storage-manager.md)).
+Version 2 of the journal gives each pack its dependencies (catalog paths, from the catalog's
+`deps`), `asked` (installed on request, or `false` when installed as a dependency, apt's
+`auto`), `pinned` (never evicted, Flatpak's pin) and `used` (last use, the caller's clock in
+seconds). Version 1 is read with the defaults (asked, unpinned, never used) and upgraded on the
+next commit; a newer version is refused.
+
+- `Store::need(entry, set)` is the bytes the install will still write: the catalog's disk size
+  of `set` (each section with its padding, so a whole pack's parts add up to its length) less
+  what staging holds. The replaced release stays until the commit, so it frees nothing.
+- `store::plan_room(packs, Room { need, available, quota, keep })` is pure: it removes the
+  least recently used pack (then a dependency before an asked pack, then the larger, then by
+  path) until the install fits `available` plus what was freed, and the quota if one is set.
+  Never a pinned pack, one in `keep` (the pack being installed and its dependencies), or one a
+  staying pack depends on; removing a pack lets its own dependencies go. If removing everything
+  removable is not enough it removes nothing and returns `Short { need, room }`.
+  `Store::make_room` plans and commits. `available` comes from the platform (Android
+  `getAllocatableBytes`, iOS `volumeAvailableCapacityForImportantUsage`, the web's
+  `storage.estimate()`).
+- `Store::remove` refuses a pack another installed pack needs (`Needed { by }`) and takes along
+  every pack installed as a dependency that nothing needs any more and is not pinned.
+  `Store::pin` and `Store::mark` change the marks with one commit each.
+- `Store::touch` records a use in memory; `Store::save` or the next commit writes it. A crash
+  loses only recent order.
+- Every removal commits the journal first and deletes the files after (best effort), so a crash
+  leaves at most an unlisted file that recovery removes.
+
+**The snapshot swap.** `Shared::follow(dir, packs, options)` (engine feature `store`) builds the
+next engine from the current one: it opens each pack the journal lists that is not open, with
+the component set it was installed with, drops each open layer from `packs/` the journal no
+longer lists, leaves every other layer alone (the baseline, files the app opened itself), and
+publishes once. Running queries keep their snapshot, so a dropped file stays mapped until they
+end. A pack that fails to open is reported in `Followed::failed` and left out; nothing is
+published when nothing changed.
+
+**Gates.** `plan_room` runs on 3,000 generated stores: what it removes is never pinned, kept or
+needed by a pack that stays, the result fits and fits only with its last removal, or it is
+short and removing everything removable is short too. The removal crash test crashes `remove`
+before every step, with unsynced data lost and kept: the packs are listed and whole, or gone
+with no file left, and both happen. 13 planted faults (each eviction rule, the quota, the
+dependant check, auto-removal of an asked pack, an unsaved touch, delete before commit, an
+unjournaled pin, follow dropping the app's layers or publishing a no-op, disk sizes without
+padding) are all caught.
 
 ## Writing it (feature `write`)
 

@@ -39,6 +39,9 @@ catalog = ["search", "admin-index", "dep:teigeodata-sync"]
 # `Shared`: publish a new set of packs while queries run on the old one, lock-free for readers
 # (`arc-swap`, D-141).
 shared = ["dep:arc-swap"]
+# The snapshot swap over the installed packs (D-172): `Shared::follow` opens what the store's
+# journal lists and drops what it no longer does, in one publish.
+store = ["shared", "dep:teigeodata-sync", "teigeodata-sync/store"]
 # Map pack files with `memmap2` (native targets only; WASM reads packs into memory). The one
 # module that uses `unsafe` is `map.rs` (D-113).
 mmap = ["dep:memmap2"]
@@ -98,6 +101,10 @@ required-features = ["catalog", "names"]
 [[test]]
 name = "shared"
 required-features = ["shared"]
+
+[[test]]
+name = "follow"
+required-features = ["store"]
 
 [[test]]
 name = "verify"
