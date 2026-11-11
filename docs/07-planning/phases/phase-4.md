@@ -310,8 +310,11 @@ The first consumer brief (Tithipatra, 2026-11-11, D-193); the reply and statuses
   `tz_version`; a gate that every zone has rules (D-196, 2026-11-11)
 - [ ] TG-06: substring search of 3+ characters across scripts, measured for size (research
   note first)
-- [ ] TG-01: `CHANGELOG.md` and a `v0.x` tag; a consumer builds the engine from the tag
-- [ ] TG-08: research note on zones before 1970 (`backzone`) for South Asia
+- [x] TG-01: `CHANGELOG.md` and a `v0.x` tag; a consumer builds the engine from the tag
+  (D-198, `v0.1.0` 2026-11-11: a scratch project built `teigeodata-engine` and
+  `teigeodata-sync` from the tag through `git`, wrote a pack and answered a `get`)
+- [x] TG-08: research note on zones before 1970 (`backzone`) for South Asia
+  ([note](../../02-research/notes/zones-before-1970.md): backzone adds no South Asian zone)
 
 ### 4.10 Exit review
 - [ ] M4 criteria met, each with its evidence; progress updated

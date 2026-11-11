@@ -71,11 +71,11 @@ A short status. The numbers and evidence live in each phase file and the
   waits for the inputs to be fetched again.
 - **First consumer brief (Tithipatra, D-193, [reply](../01-product/consumers/tithipatra.md),
   phase 4 §4.9b):** done: a place's box and outline (TG-04, D-194), a height names its DEM
-  product, spacing and datum (TG-07, D-195), the release policy and changelog (TG-01, D-198;
-  the `v0.1.0` tag follows TG-02 and TG-03); researched: ISO codes, zone rules, substring
-  search, zones before 1970 (TG-08: backzone adds nothing for South Asia). Building: zone rules
-  (TG-03, D-196) and ISO codes (TG-02, D-197) in parallel worktrees; then substring search
-  (TG-06), the tag, and 3.5 point → postal code.
+  product, spacing and datum (TG-07, D-195), zone rules from the outlines' own tzdb release
+  (TG-03, D-196), ISO 3166 codes (TG-02, D-197), the release policy and the `v0.1.0` tag
+  (TG-01, D-198), zones before 1970 researched (TG-08: backzone adds nothing for South Asia).
+  Next: substring search (TG-06), then 3.5 point → postal code. Waiting: Nepal and India data
+  releases (TG-05, maintainer steps).
 - **Terrain (D-192):** packs carry the DEM masked to their units; `elevation_at` and
   `tgd elevation` answer any point; the Nepal size waits for the DEM tiles.
 - **Split builds (D-191):** `forge make <cc> --split` writes one pack per province with its
