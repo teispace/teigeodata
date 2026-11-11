@@ -13,7 +13,8 @@
 //! `the_cost_of_slices_as_layers`).
 //!
 //! Gates: Z1, the file is at most [`BUDGET`] bytes; every ID of every part is a row, with the
-//! last part's point; the pack reads back verified with valid geometry.
+//! last part's point and ISO 3166 code (G-iso, D-197); the pack reads back verified with valid
+//! geometry.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -21,9 +22,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use teigeodata_core::PlaceId;
+use teigeodata_core::{IsoCode, PlaceId};
 use teigeodata_format::extract::{self, Part};
 use teigeodata_format::idmap::IdMap;
+use teigeodata_format::iso_codes::IsoCodes;
 use teigeodata_format::places::Places;
 use teigeodata_format::{Encoding, Kind, Pack, Tag, Writer};
 
@@ -196,22 +198,40 @@ fn open<'a>(p: &Pack<'a>) -> Result<(IdMap<'a>, Places<'a>), String> {
     ))
 }
 
-/// Every ID of every part is one row of the merged pack, at the point of the last part that
-/// holds it. Returns how many rows a later part replaced.
+/// The ISO 3166 code of each row of `p`, by row (D-197).
+fn codes(p: &Pack<'_>, rows: usize) -> Result<BTreeMap<u32, IsoCode>, String> {
+    let e = |e: teigeodata_format::Error| format!("the baseline: {e}");
+    let Some(s) = p.section(Kind::ISO_CODES) else {
+        return Ok(BTreeMap::new());
+    };
+    let t = IsoCodes::open(&s, rows).map_err(e)?;
+    t.check().map_err(e)?;
+    Ok(t.iter().collect())
+}
+
+/// A row's point and ISO 3166 code.
+type Want = (teigeodata_core::Point<teigeodata_core::E6>, Option<IsoCode>);
+
+/// Every ID of every part is one row of the merged pack, at the point and with the ISO 3166
+/// code of the last part that holds it. Returns how many rows a later part replaced.
 fn check_ids(packs: &[Pack<'_>], merged: &[u8]) -> Result<usize, String> {
     let e = |e: teigeodata_format::Error| format!("the baseline: {e}");
-    let mut want: BTreeMap<PlaceId, teigeodata_core::Point<teigeodata_core::E6>> = BTreeMap::new();
+    let mut want: BTreeMap<PlaceId, Want> = BTreeMap::new();
     let mut total = 0;
     for p in packs {
         let (ids, places) = open(p)?;
+        let coded = codes(p, places.len())?;
         for r in 0..ids.len() {
             let id = ids.id(r).ok_or("a row without an ID")?;
-            want.insert(id, places.point(r).ok_or("a row without a point")?);
+            let point = places.point(r).ok_or("a row without a point")?;
+            let row = u32::try_from(r).map_err(|_| "too many rows")?;
+            want.insert(id, (point, coded.get(&row).copied()));
             total += 1;
         }
     }
     let m = Pack::open(merged).map_err(e)?;
     let (ids, places) = open(&m)?;
+    let coded = codes(&m, places.len())?;
     if ids.len() != want.len() {
         return Err(format!(
             "the baseline has {} rows for {} IDs",
@@ -221,8 +241,13 @@ fn check_ids(packs: &[Pack<'_>], merged: &[u8]) -> Result<usize, String> {
     }
     for r in 0..ids.len() {
         let id = ids.id(r).ok_or("a row without an ID")?;
-        if want.get(&id) != places.point(r).as_ref() {
+        let (point, code) = want.get(&id).copied().ok_or("a row of no part")?;
+        if Some(point) != places.point(r) {
             return Err(format!("{id:?}: not the last part's row"));
+        }
+        let row = u32::try_from(r).map_err(|_| "too many rows")?;
+        if coded.get(&row).copied() != code {
+            return Err(format!("{id:?}: not the last part's ISO 3166 code (G-iso)"));
         }
     }
     Ok(total - want.len())
@@ -256,4 +281,114 @@ fn report(
     let _ = writeln!(s, "| **pack** | **{}** |", out.len());
     let _ = writeln!(s, "\nBLAKE3 of the pack: `{}`.", blake3::hash(out).to_hex());
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::check_ids;
+    use teigeodata_core::{E6, IsoCode, Namespace, PlaceId, PlaceKind, Point, hilbert};
+    use teigeodata_format::extract::{self, Part};
+    use teigeodata_format::places::{self, PlaceColumns};
+    use teigeodata_format::{Encoding, Kind, Pack, Writer, idmap, iso_codes};
+
+    /// A pack of places at `points` (lat, lon on the 1e-6° grid) with serials `serials` and
+    /// these codes by serial.
+    fn pack(points: &[(i32, i32)], serials: &[u64], with: &[(u64, &str)]) -> Vec<u8> {
+        let ns = Namespace::from_country(*b"np").unwrap();
+        let mut rows: Vec<(Point<E6>, u64)> = points
+            .iter()
+            .zip(serials)
+            .map(|(&(lat, lon), &s)| (Point::<E6>::from_units(lat, lon).unwrap(), s))
+            .collect();
+        rows.sort_by_key(|r| hilbert(r.0));
+        let pts: Vec<Point<E6>> = rows.iter().map(|r| r.0).collect();
+        let ids: Vec<PlaceId> = rows
+            .iter()
+            .map(|r| PlaceId::new(ns, r.1).unwrap())
+            .collect();
+        let kinds = vec![PlaceKind::Admin; pts.len()];
+        let mut codes: Vec<(u32, IsoCode)> = with
+            .iter()
+            .map(|&(s, c)| {
+                let r = rows.iter().position(|x| x.1 == s).unwrap();
+                (u32::try_from(r).unwrap(), c.parse().unwrap())
+            })
+            .collect();
+        codes.sort_unstable_by_key(|c| c.0);
+        let n = pts.len() as u64;
+        let mut bodies = vec![
+            (Kind::IDMAP, n, idmap::encode(&ids).unwrap()),
+            (
+                Kind::PLACES,
+                n,
+                places::encode(&PlaceColumns {
+                    points: &pts,
+                    kinds: &kinds,
+                    ..PlaceColumns::default()
+                })
+                .unwrap(),
+            ),
+        ];
+        if let Some(b) = iso_codes::encode(&codes).unwrap() {
+            bodies.push((Kind::ISO_CODES, codes.len() as u64, b));
+        }
+        let list: Vec<(Kind, Encoding, u64, &[u8])> = bodies
+            .iter()
+            .map(|b| (b.0, Encoding::TABLE, b.1, b.2.as_slice()))
+            .collect();
+        Writer::new("np", "places", "2026.11.0")
+            .unwrap()
+            .pack(&list, None)
+            .unwrap()
+    }
+
+    /// The merge keeps every part's codes, the later part's for a replaced row; a merge that
+    /// drops `ISO_CODES`, or keeps a replaced row's code, fails the check.
+    #[test]
+    fn the_baseline_keeps_every_parts_codes() {
+        let world = pack(
+            &[(10, 10), (20, 20), (30, 30)],
+            &[1, 2, 3],
+            &[(1, "NP-P1"), (2, "NP-P2")],
+        );
+        let slice = pack(&[(20, 21), (40, 40)], &[2, 4], &[(2, "NP-P3"), (4, "NP")]);
+        let packs = [Pack::open(&world).unwrap(), Pack::open(&slice).unwrap()];
+        let keeps = [vec![0, 1, 2], vec![0, 1]];
+        let parts: Vec<Part<'_, '_>> = packs
+            .iter()
+            .zip(&keeps)
+            .map(|(pack, keep)| Part {
+                pack,
+                keep,
+                lod: 0,
+                names: None,
+            })
+            .collect();
+        let sections = extract::merge(&parts, &super::super::baseline::region_options()).unwrap();
+        let write = |skip: Option<Kind>| {
+            let list: Vec<(Kind, Encoding, u64, &[u8])> = sections
+                .iter()
+                .filter(|s| Some(s.0) != skip)
+                .map(|s| (s.0, s.1, s.2, s.3.as_slice()))
+                .collect();
+            Writer::new("world", "baseline", "2026.11.0")
+                .unwrap()
+                .pack(&list, None)
+                .unwrap()
+        };
+        let merged = write(None);
+        assert_eq!(check_ids(&packs, &merged).unwrap(), 1);
+        // Planted: the merge drops the section.
+        let dropped = write(Some(Kind::ISO_CODES));
+        let err = check_ids(&packs, &dropped).unwrap_err();
+        assert!(err.contains("ISO 3166"), "{err}");
+        // Planted: the world's code for the row the slice replaced.
+        let stale = pack(
+            &[(10, 10), (20, 21), (30, 30), (40, 40)],
+            &[1, 2, 3, 4],
+            &[(1, "NP-P1"), (2, "NP-P2"), (4, "NP")],
+        );
+        let err = check_ids(&packs, &stale).unwrap_err();
+        assert!(err.contains("ISO 3166"), "{err}");
+    }
 }
