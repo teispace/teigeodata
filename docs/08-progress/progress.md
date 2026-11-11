@@ -81,7 +81,8 @@ A short status. The numbers and evidence live in each phase file and the
   place with a height; `elevation_at` and `tgd elevation` answer any point; Nepal main DEM
   64.2 MB of a 78.8 MB pack, points-only download 536 kB. Summits are `natural` places with
   their surveyed heights where they agree with the DEM (D-201: 2,726, Everest 8,849 m); names
-  carrying their context are dropped (D-202). Next: the lite build with NASADEM.
+  carrying their context are dropped (D-202). Lite: 80.2 MB pack (NASADEM DEM 68.4 MB),
+  points-only download 501 kB, golden recall@1 0.829, 210 s and 1.56 GB peak to build.
 - **Split builds (D-191):** `forge make <cc> --split` writes one pack per province with its
   ancestor stubs, proved against the country pack; Nepal 7 parts, 1.16× the pack. Tiles for
   India are W1.
@@ -138,4 +139,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-11 | 4.8: installs stream frame by frame with a SIGKILL gate (D-187); the world-size install, its list over two frames, cut and resumed, nightly (D-188); 4.1b: partial installs punch holes, points only 1.50 of 2.85 MB on disk (D-189) | two-release delta (needs Nepal builds); M4 exit review |
 | 2026-11-11 | Tithipatra's brief planned (D-193); TG-04 extent (D-194), TG-07 height source (D-195), TG-01 release policy (D-198); four research notes (ISO codes, zone rules, substring search, zones before 1970) by parallel agents; zone rules and ISO codes being built in worktrees | Merge TG-03 and TG-02, tag v0.1.0, TG-06, then 3.5 |
 | 2026-11-11 | TG-03 and TG-02 merged, `v0.1.0` tagged (D-198); 3.5 point → postal code in the engine and `tgd postal` (D-200) | TG-06 merge, 3.4 summit heights |
-| 2026-11-11 | TG-06 merged (D-199); NASADEM fetched upstream when no mirror; 3.4 DEM section sized on Nepal and summit heights (D-201); context-carrying names dropped (D-202); golden baseline regenerated | Lite build and gate, then 3.7 |
+| 2026-11-11 | TG-06 merged (D-199); NASADEM fetched upstream when no mirror; 3.4 DEM section sized on Nepal and summit heights (D-201); context-carrying names dropped (D-202); golden baselines regenerated, lite built and gated | 3.7 |

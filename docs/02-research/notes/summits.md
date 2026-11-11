@@ -43,6 +43,9 @@ stated height kept out? It feeds D-201.
 - The largest refusals are points far from their summit (a stated 8,410 m where the DEM reads
   7,897 m): the snap to the local maximum, still open, would admit them.
 - The golden gate did not lose a hit to the new names.
+- Lite (GeoNames and Wikidata only, NASADEM): 965 natural places, 127 with a stated height,
+  91 taken, 36 refused; G-PEAK P10 −25 m, P50 40 m, P90 74 m. The golden gate is unchanged
+  class by class; substring 9 of 9.
 
 ## 3. Findings
 
