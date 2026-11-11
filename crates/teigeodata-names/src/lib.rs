@@ -51,7 +51,63 @@ fn brahmic_fold(c: char) -> Fold {
         '\u{0A81}' => Fold::Map('\u{0A82}'),
         '\u{0B01}' => Fold::Map('\u{0B02}'),
         '\u{0C01}' => Fold::Map('\u{0C02}'),
-        _ => Fold::Keep,
+        _ => vowel_fold(c).map_or(Fold::Keep, Fold::Map),
+    }
+}
+
+/// Vowel length and the borrowed vowels, folded for search (D-220): long ई ऊ and ी ू to short
+/// इ उ and ि ु, and the candra vowels ऑ ॉ ऍ ॅ to ओ ो ए े. Spelling varies most here
+/// (न्यूयोर्क, न्युयोर्क, न्यूयॉर्क); the stored name keeps its spelling and ranking settles the
+/// few names that differ only in length. One rule over the shared block offsets.
+fn vowel_fold(c: char) -> Option<char> {
+    let (block, k) = brahmic_offset(c)?;
+    let to = match k {
+        0x08 | 0x0A | 0x40 | 0x42 => k - 1,
+        0x0D | 0x11 | 0x45 | 0x49 => k + 2,
+        _ => return None,
+    };
+    char::from_u32(block + to)
+}
+
+/// Brahmic blocks whose letters sit at Devanagari's offsets (velar nasal at +0x19, virama at
+/// +0x4D, anusvara at +0x02): Devanagari, Bengali, Gujarati, Oriya, Telugu, Kannada.
+const NASAL_BLOCKS: [u32; 6] = [0x0900, 0x0980, 0x0A80, 0x0B00, 0x0C00, 0x0C80];
+
+/// The block and offset of a code point in one of [`NASAL_BLOCKS`].
+fn brahmic_offset(c: char) -> Option<(u32, u32)> {
+    let u = u32::from(c);
+    NASAL_BLOCKS
+        .iter()
+        .find(|&&b| (b..b + 0x80).contains(&u))
+        .map(|&b| (b, u - b))
+}
+
+/// The anusvara a written nasal conjunct folds to, if it does: `nasal` + virama, then `next`.
+/// The five class nasals (ङ ञ ण न म) before a stop of their own class are the anusvara
+/// written out (हिन्दी = हिंदी); the velar ङ is also written for the anusvara before any
+/// consonant (मङ्सिर = मंसिर, हङ्सपुर = हंसपुर); and a nasal with a virama at the end of a
+/// word is a half-typed conjunct, so a typed prefix meets the folded name. Other clusters stay
+/// (न्य in न्यूयोर्क, कन्या). One rule per script, no country.
+fn nasal_conjunct(nasal: char, virama: char, next: Option<char>) -> Option<char> {
+    let (block, n) = brahmic_offset(nasal)?;
+    if !matches!(n, 0x19 | 0x1E | 0x23 | 0x28 | 0x2E)
+        || brahmic_offset(virama) != Some((block, 0x4D))
+    {
+        return None;
+    }
+    let anusvara = char::from_u32(block + 0x02)?;
+    let Some(next) = next else {
+        return Some(anusvara);
+    };
+    match brahmic_offset(next) {
+        // a stop of the nasal's own class (the four before it)
+        Some((b, k)) if b == block && (n - 4..n).contains(&k) => Some(anusvara),
+        // the velar nasal before any consonant
+        Some((b, k)) if b == block && n == 0x19 && (0x15..=0x39).contains(&k) => Some(anusvara),
+        Some((b, _)) if b == block => None,
+        // not a letter of this script: the end of the word
+        _ if next.is_alphanumeric() || unicode_normalization::char::is_combining_mark(next) => None,
+        _ => Some(anusvara),
     }
 }
 
@@ -87,18 +143,23 @@ fn fold_ascii(s: &str) -> String {
 
 /// [`fold`] for any text.
 fn fold_full(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut space = false;
-    let mut base = Script::Common;
+    let mut chars: Vec<char> = Vec::with_capacity(s.len());
     for c in s.nfkd() {
         if matches!(c, '\u{200C}' | '\u{200D}') {
             continue;
         }
-        let c = match brahmic_fold(c) {
-            Fold::Map(r) => r,
-            Fold::Drop => continue,
-            Fold::Keep => c,
-        };
+        match brahmic_fold(c) {
+            Fold::Map(r) => chars.push(r),
+            Fold::Drop => {}
+            Fold::Keep => chars.push(c),
+        }
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut space = false;
+    let mut base = Script::Common;
+    let mut i = 0;
+    while let Some(&c) = chars.get(i) {
+        i += 1;
         if unicode_normalization::char::is_combining_mark(c) {
             if !accents_optional(base) && !out.is_empty() && !space {
                 out.push(c);
@@ -106,6 +167,17 @@ fn fold_full(s: &str) -> String {
             continue;
         }
         if c.is_alphanumeric() {
+            // A nasal conjunct after a letter of the word folds to the anusvara (D-220).
+            if !out.is_empty()
+                && !space
+                && let Some(a) = chars
+                    .get(i)
+                    .and_then(|&v| nasal_conjunct(c, v, chars.get(i + 1).copied()))
+            {
+                out.push(a);
+                i += 1;
+                continue;
+            }
             base = c.script();
             if space && !out.is_empty() {
                 out.push(' ');
@@ -654,6 +726,24 @@ mod fold_tests {
         assert_eq!(fold("गाँउ"), "गांउ");
         assert_eq!(fold("ड़"), "ड");
         assert_eq!(fold("ক্ষ"), "ক্ষ");
+        // A written nasal conjunct is the anusvara (D-220): before a stop of its own class,
+        // the velar before any consonant, and half-typed at a word's end. Other clusters and
+        // a nasal starting a word stay.
+        assert_eq!(fold("हिन्दी"), fold("हिंदी"));
+        assert_eq!(fold("मङ्सिर"), fold("मंसिर"));
+        assert_eq!(fold("हङ्सपुर"), "हंसपुर");
+        assert_eq!(fold("सम्पत"), "संपत");
+        assert_eq!(fold("हङ्"), "हं");
+        assert_eq!(fold("हिन् x"), "हिं x");
+        assert_eq!(fold("न्यूयोर्क"), "न्युयोर्क");
+        assert_eq!(fold("कन्या"), "कन्या");
+        assert_eq!(fold("सम्राट"), "सम्राट");
+        assert_eq!(fold("বন্দর"), "বংদর");
+        // Vowel length and the candra vowels fold.
+        assert_eq!(fold("न्यूयोर्क"), fold("न्युयोर्क"));
+        assert_eq!(fold("न्यूयॉर्क"), fold("न्युयोर्क"));
+        assert_eq!(fold("दीपावली"), "दिपावलि");
+        assert_eq!(fold("ऊर्जा ईलाम ऑफ ऍप"), "उर्जा इलाम ओफ एप");
         // Arabic and Thai marks are kept.
         assert_eq!(fold("مُحَمَّد"), "مُحَمَّد");
         assert_eq!(fold("ภูเก็ต"), "ภูเก็ต");
