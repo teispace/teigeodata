@@ -34,8 +34,8 @@ use teigeodata_format::component::Component;
 #[derive(Debug, Parser)]
 #[command(name = "tgd", version, propagate_version = true, max_term_width = 100)]
 struct Cli {
-    /// The store: installed packs and the verified catalog [default: `TEIGEODATA_STORE`, else
-    /// the platform's data directory]
+    /// The store: installed packs and the verified catalog [default: the platform's data
+    /// directory]
     #[arg(long, global = true, value_name = "DIR", env = "TEIGEODATA_STORE")]
     store: Option<PathBuf>,
     #[command(subcommand)]
@@ -105,6 +105,17 @@ enum Command {
         /// component and release, so it must differ from the source's).
         #[arg(long, default_value = "extract")]
         name: String,
+    },
+    /// Write every place of a pack, streamed, in its stored order.
+    Export {
+        /// The pack file.
+        pack: PathBuf,
+        /// The output format.
+        #[arg(long, value_enum, default_value_t = Format::Ndjson)]
+        format: Format,
+        /// The file to write; standard output when left out.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
     },
     /// The place with this ID (a retired ID gives its survivor).
     Get {
@@ -245,7 +256,8 @@ enum Command {
         /// The packs.
         #[arg(required = true)]
         packs: Vec<String>,
-        /// Only these components, with what they need (default: all).
+        /// Only these components, comma-separated, with what they need; added to what is
+        /// installed (default: the whole pack). Values as for `extract --components`.
         #[arg(long, value_delimiter = ',', value_parser = component)]
         components: Vec<Component>,
         /// Never evict them.
@@ -284,16 +296,13 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Write every place of a pack, streamed, in its stored order.
-    Export {
-        /// The pack file.
-        pack: PathBuf,
-        /// The output format.
-        #[arg(long, value_enum, default_value_t = Format::Ndjson)]
-        format: Format,
-        /// The file to write; standard output when left out.
-        #[arg(short, long)]
-        out: Option<PathBuf>,
+    /// Print a shell's completion script.
+    ///
+    /// Save it where the shell loads completions, for example
+    /// `tgd completions zsh > ~/.zfunc/_tgd`, or source it from the shell's startup file.
+    Completions {
+        /// The shell.
+        shell: clap_complete::Shell,
     },
 }
 
@@ -542,6 +551,11 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
         Command::Pin { pack, off } => sync::pin(store, &pack, !off, out),
         Command::Repair { pack } => sync::repair(store, &pack, out),
         Command::Status { deep, json } => sync::status(store, deep, json, out),
+        Command::Completions { shell } => {
+            let mut cmd = <Cli as clap::CommandFactory>::command();
+            clap_complete::generate(shell, &mut cmd, "tgd", out);
+            Ok(())
+        }
         Command::Export {
             pack,
             format,

@@ -608,3 +608,29 @@ fn compatibility_outputs_come_from_the_native_record() {
         Some(1)
     );
 }
+
+/// Every command has its help, and every shell's completion script names every command.
+#[test]
+fn every_command_has_help_and_completions() {
+    let top = ok(&["--help"]);
+    let commands: Vec<&str> = top
+        .lines()
+        .skip_while(|l| !l.starts_with("Commands:"))
+        .skip(1)
+        .take_while(|l| l.starts_with("  "))
+        .filter_map(|l| l.split_whitespace().next())
+        .filter(|c| *c != "help")
+        .collect();
+    assert!(commands.len() >= 22, "{commands:?}");
+    for c in &commands {
+        let h = ok(&[c, "--help"]);
+        assert!(h.contains(&format!("Usage: tgd {c}")), "{c}: {h}");
+    }
+    for shell in ["bash", "zsh", "fish", "powershell", "elvish"] {
+        let script = ok(&["completions", shell]);
+        for c in &commands {
+            assert!(script.contains(c), "{shell} completes {c}");
+        }
+    }
+    assert_eq!(tgd(&["completions", "tcsh"]).status.code(), Some(2));
+}

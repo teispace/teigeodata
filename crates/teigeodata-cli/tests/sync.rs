@@ -61,7 +61,12 @@ fn root_file() -> Vec<u8> {
 /// The synthetic Nepal pack at `release`, with a licence and attribution; `shift` moves one
 /// place so releases differ.
 fn pack(release: &str, shift: bool) -> Vec<u8> {
-    let mut model = common::synthetic(700, 3);
+    pack_of(700, release, shift)
+}
+
+/// [`pack`] with `n` places.
+fn pack_of(n: usize, release: &str, shift: bool) -> Vec<u8> {
+    let mut model = common::synthetic(n, 3);
     if shift {
         let p = model.points[5];
         model.points[5] =
@@ -428,4 +433,93 @@ fn an_update_keeps_the_components_installed() {
         serde_json::json!(["point", "names", "search"])
     );
     assert_eq!(s["packs"][0]["health"], "Good");
+}
+
+/// Timings of the binary `TGD_BIN` (default: this build's), the median of `TGD_RUNS` runs
+/// (default 15) over a pack of 100,000 places, about Nepal's size: open and query, and an
+/// install over HTTP on localhost. Run: `TGD_BIN=target/dist/tgd cargo test --release -p
+/// teigeodata-cli --test sync -- --ignored timings --nocapture`.
+#[test]
+#[ignore = "a measurement: run by hand, see the doc comment"]
+#[allow(clippy::print_stdout, reason = "a measurement prints its table")]
+fn timings() {
+    let bin = std::env::var("TGD_BIN").unwrap_or_else(|_| env!("CARGO_BIN_EXE_tgd").into());
+    let runs: usize = std::env::var("TGD_RUNS").map_or(15, |r| r.parse().unwrap());
+    let host: Host = Arc::default();
+    let p = pack_of(100_000, "2026.11.0", false);
+    publish(&host, 1, std::slice::from_ref(&p));
+    let url = serve(Arc::clone(&host));
+    let d = dir("timings");
+    let file = d.join("np.tgd");
+    std::fs::write(&file, &p).unwrap();
+    let f = file.to_str().unwrap();
+    let id = {
+        let o = Command::new(&bin)
+            .args(["search", "Ritarra", "-k", "1", "--json", "--pack", f])
+            .output()
+            .unwrap();
+        let v: Value = serde_json::from_slice(&o.stdout).unwrap();
+        v[0]["id"].as_str().unwrap().to_string()
+    };
+    let median = |args: &[&str], before: &dyn Fn()| {
+        let mut t: Vec<f64> = (0..runs)
+            .map(|_| {
+                before();
+                let start = std::time::Instant::now();
+                let o = Command::new(&bin).args(args).output().unwrap();
+                let ms = start.elapsed().as_secs_f64() * 1e3;
+                assert!(
+                    o.status.success(),
+                    "{args:?}: {}",
+                    String::from_utf8_lossy(&o.stderr)
+                );
+                ms
+            })
+            .collect();
+        t.sort_by(f64::total_cmp);
+        t[t.len() / 2]
+    };
+    let none = || {};
+    println!("pack: {} bytes, {runs} runs, median ms", p.len());
+    for (name, args) in [
+        ("version (process start)", vec!["--version"]),
+        ("inspect", vec!["inspect", f]),
+        ("verify", vec!["verify", f]),
+        ("verify --deep", vec!["verify", "--deep", f]),
+        ("get", vec!["get", &id, "--pack", f]),
+        ("reverse", vec!["reverse", "27.7", "85.3", "--pack", f]),
+        ("search", vec!["search", "Ritarra", "--pack", f]),
+        ("admin", vec!["admin", "27.7", "85.3", "--pack", f]),
+    ] {
+        println!("{name:>24}: {:8.2}", median(&args, &none));
+    }
+    let store = store_for("timings-store", &url);
+    let st = store.to_str().unwrap();
+    ok(&store, &["refresh", "--countries", "np"]);
+    let remove = || {
+        let _ = tgd(&store, &["remove", "np"]);
+    };
+    let install = median(&["--store", st, "install", "np"], &remove);
+    println!("{:>24}: {install:8.2}", "install (whole, HTTP)");
+    let names = median(
+        &["--store", st, "install", "np", "--components", "search"],
+        &remove,
+    );
+    println!("{:>24}: {names:8.2}", "install (search, HTTP)");
+    ok(&store, &["install", "np"]);
+    println!(
+        "{:>24}: {:8.2}",
+        "get (store)",
+        median(&["--store", st, "get", &id], &none)
+    );
+    println!(
+        "{:>24}: {:8.2}",
+        "refresh (current)",
+        median(&["--store", st, "refresh"], &none)
+    );
+    println!(
+        "{:>24}: {:8.2}",
+        "status --deep",
+        median(&["--store", st, "status", "--deep"], &none)
+    );
 }

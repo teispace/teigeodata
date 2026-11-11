@@ -8,6 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+readme = "README.md"
 
 [[bin]]
 name = "tgd"
@@ -23,6 +24,7 @@ teigeodata-sync = { workspace = true, features = ["http", "store"] }
 teigeodata-format = { workspace = true, features = ["write", "zstd", "signature"] }
 # clap derive (D-178): help, suggestions, uniform usage errors and completions.
 clap = { version = "4.6.7", features = ["derive", "env"] }
+clap_complete = "4.6.11"
 ed25519-dalek = { version = "3.0.0", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

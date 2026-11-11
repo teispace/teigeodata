@@ -220,3 +220,31 @@ their places' ancestors as stubs.
 `children` across layers costs each child a check of the layers above its own (a hash split
 spreads the IDs of every layer over the same range, so no ID range skips a layer). Packs split
 by area are not measured yet.
+
+### `tgd` (D-183)
+
+2026-11-11, Apple M-series laptop, macOS, the `dist` profile (fat LTO, stripped). The binary
+is 3,831,200 bytes, 2,037,513 gzip. Times are whole processes, start to exit, the median of 15
+runs over a synthetic pack of 100,000 places (2.85 MB, about Nepal's size), from the ignored
+test `timings` in `crates/teigeodata-cli/tests/sync.rs`. **The machine was shared and loaded
+(load average 118 to 133 on 10 cores)**, so these are upper bounds: process start alone took
+7.9 ms. Re-measure on an idle machine before quoting them as the CLI's speed.
+
+| Command | Median ms |
+|---|---|
+| `--version` (process start) | 7.86 |
+| `inspect` | 9.88 |
+| `verify` | 9.20 |
+| `verify --deep` | 52.46 |
+| `get` (`--pack`) | 12.60 |
+| `reverse` | 8.36 |
+| `search` | 8.84 |
+| `admin` | 9.36 |
+| `install` whole, over HTTP on localhost | 63.90 |
+| `install --components search`, over HTTP | 53.02 |
+| `get` (the store) | 11.29 |
+| `refresh`, catalog current | 20.38 |
+| `status --deep` | 16.28 |
+
+Run: `TGD_BIN=target/dist/tgd cargo test -p teigeodata-cli --test sync -- --ignored timings
+--nocapture`.
