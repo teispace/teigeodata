@@ -110,6 +110,29 @@ pub(crate) fn morphemes(text: &str, script: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The accepted terms of a lexicon's text for transliteration into `script`: each Latin
+/// spelling (canonical, then variants) with the term's first native form in that script.
+/// Generic terms may end a compound word. Empty when the text does not parse.
+pub(crate) fn xlit_terms(text: &str, script: &str) -> Vec<teigeodata_names::xlit::Term> {
+    let Ok(file) = serde_saphyr::from_str::<LexiconFile>(text) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for t in file.terms.iter().filter(|t| t.status == Status::Accepted) {
+        let Some(native) = t.native.iter().find(|n| n.script == script) else {
+            continue;
+        };
+        for latin in std::iter::once(&t.canonical).chain(&t.variants) {
+            out.push(teigeodata_names::xlit::Term {
+                latin: latin.clone(),
+                native: native.text.clone(),
+                suffix: t.kind == Kind::Generic,
+            });
+        }
+    }
+    out
+}
+
 /// Validates one file's text; `stem` is the file name without `.yaml` (the country code).
 /// Returns the number of terms read and the problems found.
 pub(crate) fn check_text(stem: &str, text: &str) -> (usize, Vec<String>) {

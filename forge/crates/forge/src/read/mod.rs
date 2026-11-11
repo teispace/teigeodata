@@ -6,7 +6,7 @@ mod geonames;
 pub(crate) mod natural_earth;
 mod osm;
 pub(crate) mod overture;
-mod wikidata;
+pub(crate) mod wikidata;
 
 use std::path::Path;
 use std::time::Instant;

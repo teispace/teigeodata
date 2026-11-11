@@ -1,0 +1,143 @@
+# Latin to Devanagari transliteration for Nepali names (schema teigeodata/xlit/v1, D-222).
+# Design and measurement: docs/02-research/notes/nepali-names.md (§3.3, §3.5, §5.2).
+# Each Latin unit lists the letters it may stand for with a cost (natural-log units, like the
+# language model's -ln p). The model, trained by the forge on lite-clean Devanagari names,
+# decides most choices: त or ट, ि or ी, a conjunct or the inherent vowel, न् or ं.
+# Costs here only break ties and encode habits of informal romanisation (§3.5):
+#   - writers never mark retroflexion or vowel length, so the alternatives cost little;
+#   - a written final "a" is usually ा, because a final inherent vowel is silent;
+#   - व is read [b] or [w], so "b" may be व; foreign /v/ is often भ.
+schema: teigeodata/xlit/v1
+language: ne
+source: Latn
+script: Deva
+profile:
+  virama: "्"
+  zero: "०"
+  costs:
+    schwa: 0.0
+    conjunct: 0.0
+    final_virama: 6.0
+    skip: 8.0
+    lm_weight: 0.6
+    beam: 16
+  consonants:
+    - { latin: k, options: [["क", 0.0]] }
+    - { latin: kh, options: [["ख", 0.0]] }
+    - { latin: g, options: [["ग", 0.0]] }
+    - { latin: gh, options: [["घ", 0.0]] }
+    - { latin: ng, options: [["ङ", 0.3], ["ङ्ग", 0.6]] }
+    - { latin: ch, options: [["च", 0.0], ["छ", 0.8]] }
+    - { latin: chh, options: [["छ", 0.0]] }
+    - { latin: c, options: [["क", 0.5], ["च", 0.5], ["स", 1.0]] }
+    - { latin: j, options: [["ज", 0.0]] }
+    - { latin: jh, options: [["झ", 0.0]] }
+    - { latin: z, options: [["ज", 0.0]] }
+    - { latin: t, options: [["त", 0.0], ["ट", 0.2]] }
+    - { latin: th, options: [["थ", 0.0], ["ठ", 0.2]] }
+    - { latin: d, options: [["द", 0.0], ["ड", 0.2]] }
+    - { latin: dh, options: [["ध", 0.0], ["ढ", 0.4]] }
+    - { latin: "n", options: [["न", 0.0], ["ण", 1.0]] }
+    - { latin: p, options: [["प", 0.0]] }
+    - { latin: ph, options: [["फ", 0.0]] }
+    - { latin: f, options: [["फ", 0.0]] }
+    - { latin: b, options: [["ब", 0.0], ["व", 0.4]] }
+    - { latin: bh, options: [["भ", 0.0]] }
+    - { latin: v, options: [["व", 0.0], ["भ", 0.3], ["ब", 0.6]] }
+    - { latin: "m", options: [["म", 0.0]] }
+    - { latin: "y", options: [["य", 0.0]] }
+    - { latin: r, options: [["र", 0.0]] }
+    - { latin: l, options: [["ल", 0.0]] }
+    - { latin: w, options: [["व", 0.0]] }
+    - { latin: s, options: [["स", 0.0], ["श", 0.6], ["ष", 1.2]] }
+    - { latin: sh, options: [["श", 0.0], ["ष", 0.5], ["स", 0.8]] }
+    - { latin: h, options: [["ह", 0.0]] }
+    - { latin: q, options: [["क", 0.0]] }
+    - { latin: x, options: [["क्स", 0.0]] }
+    - { latin: ksh, options: [["क्ष", 0.0]] }
+    - { latin: gy, options: [["ज्ञ", 0.8]] }
+  vowels:
+    - latin: a
+      options:
+        - { independent: "अ", sign: "", cost: 0.0, end: 2.0 }
+        - { independent: "आ", sign: "ा", cost: 0.8, end: 0.0 }
+    - latin: aa
+      options:
+        - { independent: "आ", sign: "ा", cost: 0.0 }
+    - latin: i
+      options:
+        - { independent: "इ", sign: "ि", cost: 0.0 }
+        - { independent: "ई", sign: "ी", cost: 0.3 }
+    - latin: ee
+      options:
+        - { independent: "ई", sign: "ी", cost: 0.0 }
+        - { independent: "इ", sign: "ि", cost: 0.8 }
+    - latin: ii
+      options:
+        - { independent: "ई", sign: "ी", cost: 0.0 }
+    - latin: u
+      options:
+        - { independent: "उ", sign: "ु", cost: 0.0 }
+        - { independent: "ऊ", sign: "ू", cost: 0.4 }
+    - latin: oo
+      options:
+        - { independent: "ऊ", sign: "ू", cost: 0.0 }
+        - { independent: "उ", sign: "ु", cost: 0.5 }
+    - latin: uu
+      options:
+        - { independent: "ऊ", sign: "ू", cost: 0.0 }
+    - latin: e
+      options:
+        - { independent: "ए", sign: "े", cost: 0.0 }
+    - latin: ai
+      options:
+        - { independent: "ऐ", sign: "ै", cost: 0.0 }
+        - { independent: "ए", sign: "े", cost: 0.6 }
+    - latin: ei
+      options:
+        - { independent: "ए", sign: "े", cost: 0.3 }
+        - { independent: "ऐ", sign: "ै", cost: 0.6 }
+    - latin: o
+      options:
+        - { independent: "ओ", sign: "ो", cost: 0.0 }
+    - latin: au
+      options:
+        - { independent: "औ", sign: "ौ", cost: 0.0 }
+    - latin: ou
+      options:
+        - { independent: "औ", sign: "ौ", cost: 0.0 }
+        - { independent: "ओ", sign: "ो", cost: 0.5 }
+    - latin: ow
+      options:
+        - { independent: "ओ", sign: "ो", cost: 0.3 }
+        - { independent: "औ", sign: "ौ", cost: 0.3 }
+    - latin: ri
+      options:
+        - { independent: "ऋ", sign: "ृ", cost: 1.5 }
+  nasals:
+    - { latin: "n", options: [["ं", 0.8], ["ँ", 0.8]] }
+    - { latin: "m", options: [["ं", 1.2]] }
+  # Translated designators (§3.5) and irregular exonyms; each Devanagari form is the one the
+  # CBS list or Wikidata `ne` labels use.
+  words:
+    - ["rural municipality", "गाउँपालिका"]
+    - ["municipality", "नगरपालिका"]
+    - ["metropolitan city", "महानगरपालिका"]
+    - ["sub metropolitan city", "उपमहानगरपालिका"]
+    - ["district", "जिल्ला"]
+    - ["province", "प्रदेश"]
+    - ["village development committee", "गाउँ विकास समिति"]
+    - ["kathmandu", "काठमाडौं"]
+    # The model alone writes लाहा (Laha is rarer than Lahan, Lahar in the training names); the
+    # maintainer's example spelling is pinned.
+    - ["laha", "लहा"]
+    # Sources split: the CBS list and two Wikidata labels write बिराटनगर, the city's Wikidata
+    # label and two others विराटनगर (व read [b], §3.5). The maintainer's example is pinned.
+    - ["biratnagar", "विराटनगर"]
+  examples:
+    - ["Lalitpur", "ललितपुर"]
+    - ["Pokhara", "पोखरा"]
+    - ["Kathmandu", "काठमाडौं"]
+    - ["Biratnagar", "विराटनगर"]
+    - ["Gaun", "गाउँ"]
+    - ["Lahachowk", "लहाचोक"]

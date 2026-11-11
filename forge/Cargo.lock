@@ -1329,6 +1329,7 @@ dependencies = [
  "teigeodata-sync",
  "tiff",
  "toml",
+ "unicode-normalization",
  "ureq",
  "zip",
  "zstd",
@@ -1349,6 +1350,7 @@ dependencies = [
 name = "teigeodata-names"
 version = "0.1.0"
 dependencies = [
+ "libm",
  "serde",
  "unicode-normalization",
  "unicode-script",

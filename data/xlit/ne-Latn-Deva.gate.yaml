@@ -1,0 +1,40 @@
+# Gate G-xlit for the ne-Latn-Deva profile (schema teigeodata/xlit-gate/v1, D-222):
+# `forge xlit-eval ne-Latn-Deva`. Design: docs/02-research/notes/nepali-names.md §5.3.
+#
+# The model trains on lite-clean names only (CC0, CC BY). Each pair's test fold is fixed by
+# BLAKE3 of its ID (the Wikidata item, or `<source>:<code>`): the first 8 bytes, little-endian,
+# modulo `folds`, equal to 0. Training never sees a test item, nor any label that contains a
+# test reference as a run of whole words.
+schema: teigeodata/xlit-gate/v1
+profile: ne-Latn-Deva
+lexicon: np
+order: 5
+folds: 5
+# Target-script text for the language model, besides the sets' training folds.
+train:
+  - { source: wikidata-labels-ne, reader: labels }
+  - { source: wikidata-np, reader: wikidata, native: ne }
+sets:
+  - name: cbs
+    parts:
+      - { source: cbs-np-local-levels, reader: csv, id: Code, latin: "Local unit", native: "स्थानीय तह" }
+      - { source: cbs-np-districts, reader: csv, id: Code, latin: District, native: "जिल्ला" }
+    # The local-level type word is stripped from both sides (§3.3), the source's misspellings
+    # included.
+    strip:
+      latin: ["rural municipality", "sub metropolitan city", "sub metropolitian city", "metropolitan city", "municipality", "municipaity", "gaunpaika", "palika"]
+      native: ["गाउँपालिका", "गाउंपालिका", "उपमहानगरपालिका", "महानगरपालिका", "नगरपालिका", "नगरापालिका"]
+  - name: wd
+    parts:
+      - { source: wikidata-np, reader: wikidata, latin: en, native: ne, kinds: [populated_place, admin] }
+    # Labels carry qualifiers on one side only ("खलङ्गा, बैतडी" for Khalanga; "फुलेक गा.वि.स."
+    # for Phulek): a comma's qualifier and a trailing designator are cut from each side.
+    strip:
+      cut: [","]
+      latin: ["rural municipality", "sub metropolitan city", "metropolitan city", "municipality", "village development committee", "vdc"]
+      native: ["गाउँपालिका", "उपमहानगरपालिका", "महानगरपालिका", "नगरपालिका", "गा.वि.स.", "गाउँ विकास समिति"]
+# Floors, set at the first Rust measurement (2026-11-12: cbs 44.0% / 44.7% / 0.123, wd 36.1% /
+# 36.2% / 0.192); they only rise.
+floors:
+  cbs: { exact: 0.440, folded: 0.446, cer: 0.124 }
+  wd: { exact: 0.361, folded: 0.362, cer: 0.193 }

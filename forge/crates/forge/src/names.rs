@@ -96,6 +96,34 @@ fn accepted_terms(root: &Path, cc: &str) -> Result<Vec<Term>, String> {
         .collect())
 }
 
+/// Country `cc`'s accepted lexicon terms for transliteration into `script`: each Latin
+/// spelling (canonical, then variants) with the term's first native
+/// form in that script. Generic terms may end a compound word.
+///
+/// # Errors
+/// A bad lexicon.
+pub(crate) fn xlit_terms(
+    root: &Path,
+    cc: &str,
+    script: &str,
+) -> Result<Vec<teigeodata_names::xlit::Term>, String> {
+    let mut out = Vec::new();
+    for t in accepted_terms(root, cc)? {
+        let Some(native) = t.native.iter().find(|n| n.script == script) else {
+            continue;
+        };
+        let suffix = t.kind.as_deref() == Some("generic");
+        for latin in std::iter::once(&t.canonical).chain(&t.variants) {
+            out.push(teigeodata_names::xlit::Term {
+                latin: latin.clone(),
+                native: native.text.clone(),
+                suffix,
+            });
+        }
+    }
+    Ok(out)
+}
+
 /// The romanisation profile `<lang>-<Script>` with the morphemes of country `cc`'s lexicon.
 fn profile_with(root: &Path, terms: &[Term], id: &str) -> Result<(String, Profile), String> {
     let path = root.join("data/romanise").join(format!("{id}.yaml"));
