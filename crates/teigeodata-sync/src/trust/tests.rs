@@ -72,10 +72,21 @@ fn meta(version: u64, data: &[u8]) -> Value {
 }
 
 fn timestamp(version: u64, snapshot: &[u8], snapshot_version: u64, expires: &str) -> Vec<u8> {
+    timestamp_by(10, version, snapshot, snapshot_version, expires)
+}
+
+/// A timestamp signed by key `seed`.
+fn timestamp_by(
+    seed: u8,
+    version: u64,
+    snapshot: &[u8],
+    snapshot_version: u64,
+    expires: &str,
+) -> Vec<u8> {
     sign(
         &json!({"_type": "timestamp", "spec_version": "1.0.31", "version": version,
                 "expires": expires, "meta": {"snapshot.json": meta(snapshot_version, snapshot)}}),
-        &[10],
+        &[seed],
     )
 }
 
@@ -409,4 +420,39 @@ fn calls_out_of_order_are_refused() {
     assert!(matches!(t.update_targets(&r.targets), Err(Error::Order(_))));
     t.update_timestamp(&r.timestamp).unwrap();
     assert!(matches!(t.update_root(&r.root1), Err(Error::Order(_))));
+}
+
+/// Sync gate 2, fast-forward recovery (spec 5.3.11): a leaked timestamp key signs version
+/// 1,000,000 and the client stores it; every honest timestamp is then refused as a rollback.
+/// The repository rotates the timestamp key in root 2; a client walking to it sees the
+/// rotation, drops its stored timestamp, and trusts the new key's version 2.
+#[test]
+fn a_fast_forward_is_recovered_by_rotating_the_timestamp_key() {
+    let r = repo();
+    let inflated = timestamp(1_000_000, &r.snapshot, 1, LATER);
+    let honest = |seed: u8| timestamp_by(seed, 2, &r.snapshot, 1, LATER);
+    // Stuck: the stored inflated timestamp refuses the honest one.
+    let mut t = Trusted::new(&r.root1, NOW).unwrap();
+    t.update_timestamp(&inflated).unwrap();
+    assert!(!t.keys_rotated());
+    assert_eq!(
+        t.update_timestamp(&honest(10)),
+        Err(Error::Version(RoleName::Timestamp))
+    );
+    // Root 2 replaces timestamp key 10 with 11, signed by the root keys.
+    let root2 = sign(&root(2, &[1, 2, 3], 2, 11, LATER), &[1, 2]);
+    let mut t = Trusted::new(&r.root1, NOW).unwrap();
+    t.update_root(&root2).unwrap();
+    assert!(
+        t.keys_rotated(),
+        "the client must drop its stored timestamp"
+    );
+    // The inflated one no longer verifies, the honest one under the new key does.
+    assert_eq!(
+        t.update_timestamp(&inflated),
+        Err(Error::Signature(RoleName::Timestamp))
+    );
+    t.update_timestamp(&honest(11)).unwrap();
+    t.update_snapshot(&r.snapshot, false).unwrap();
+    t.update_targets(&r.targets).unwrap();
 }

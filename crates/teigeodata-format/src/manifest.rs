@@ -329,6 +329,30 @@ impl<'a> Manifest<'a> {
     }
 }
 
+/// Orders releases as dotted numbers (`2026.9.0 < 2026.11.0`): parts split at `.` and `-`,
+/// numeric parts compared as numbers and before text parts, text parts as text.
+#[must_use]
+pub fn release_cmp(left: &str, right: &str) -> core::cmp::Ordering {
+    let (mut pa, mut pb) = (left.split(['.', '-']), right.split(['.', '-']));
+    loop {
+        let (x, y) = match (pa.next(), pb.next()) {
+            (Some(x), Some(y)) => (x, y),
+            (None, None) => return core::cmp::Ordering::Equal,
+            (None, Some(_)) => return core::cmp::Ordering::Less,
+            (Some(_), None) => return core::cmp::Ordering::Greater,
+        };
+        let ord = match (x.parse::<u64>(), y.parse::<u64>()) {
+            (Ok(nx), Ok(ny)) => nx.cmp(&ny).then_with(|| x.len().cmp(&y.len())),
+            (Ok(_), Err(_)) => core::cmp::Ordering::Less,
+            (Err(_), Ok(_)) => core::cmp::Ordering::Greater,
+            (Err(_), Err(_)) => x.cmp(y),
+        };
+        if ord != core::cmp::Ordering::Equal {
+            return ord;
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::large_digit_groups,

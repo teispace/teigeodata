@@ -1216,3 +1216,36 @@ impl Seek for Checked<'_> {
         self.file.seek(to)
     }
 }
+
+/// Sync gate 1 for packs: an older release than the installed one is refused before anything
+/// is fetched or written; the same release again, or a newer one, installs.
+#[test]
+fn an_older_release_is_refused() {
+    let new = pack_with("zz", "2026.12.0", 0);
+    let (en, xn, _) = super::entry_of(&new).unwrap();
+    let old = pack_with("zz", "2026.9.0", 0);
+    let (eo, xo, _) = super::entry_of(&old).unwrap();
+    let fs = MemFs(Rc::default());
+    let mut store = Store::open(fs.clone()).unwrap().0;
+    put_done(&mut store, &en, &xn);
+    let before = fs.0.borrow().ops;
+    let mut host = Mem::new(&xo, None);
+    let got = store.install(
+        &mut host,
+        &mut Mirrors::new(["m/"]),
+        "a",
+        &eo,
+        xo.len() as u64,
+        Components::all(),
+    );
+    let Err(teigeodata_sync::fetch::FetchError::Older { installed }) = got else {
+        panic!("an older release installed: {got:?}")
+    };
+    assert_eq!(installed, "2026.12.0");
+    assert_eq!(host.served, 0, "nothing fetched");
+    assert_eq!(fs.0.borrow().ops, before, "nothing written");
+    assert_eq!(store.packs()[0].release, "2026.12.0");
+    // The same release again is a reinstall.
+    put_done(&mut store, &en, &xn);
+    assert_eq!(store.packs()[0].release, "2026.12.0");
+}

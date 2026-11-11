@@ -46,6 +46,9 @@ cargo xtask tuf <command>
   timestamp <repo> --key KEY [--days 14] a fresh timestamp for the same snapshot
   verify <repo> [--assets DIR] [--min-days 7]
                                          the whole chain with the client, every entry, the assets
+  world-catalog [--targets 5000] [--runs 5]
+                                         sync gate 12: a generated world catalog's gzip bytes
+                                         against 512 KiB, and the time to verify and read it
 KEY is a key file or env:NAME; PUB is a public key in hex.";
 
 pub(crate) fn run(args: &[String]) -> Result<String, Vec<String>> {
@@ -99,6 +102,31 @@ fn dispatch(args: &[String]) -> Result<String, String> {
             },
             now,
         ),
+        Some("world-catalog") => {
+            let n =
+                usize::try_from(a.num("--targets", i64::try_from(world::WORLD).unwrap_or(5_000))?)
+                    .map_err(|e| e.to_string())?;
+            let runs = usize::try_from(a.num("--runs", 5)?).map_err(|e| e.to_string())?;
+            let m = world::measure(n, runs)?;
+            let verdict = if m.gzip <= world::BUDGET {
+                "within"
+            } else {
+                "OVER"
+            };
+            let out = format!(
+                "{} targets: {} B of JSON, {} B gzip ({verdict} the {} B budget), verified and read in {:.1} ms",
+                m.targets,
+                m.json,
+                m.gzip,
+                world::BUDGET,
+                m.read_ms
+            );
+            if m.gzip <= world::BUDGET {
+                Ok(out)
+            } else {
+                Err(out)
+            }
+        }
         Some("timestamp") => timestamp(
             Path::new(a.pos(0)?),
             &load_key(a.req("--key")?)?,
@@ -613,3 +641,4 @@ mod install_tests;
 mod store_tests;
 #[cfg(test)]
 mod tests;
+mod world;

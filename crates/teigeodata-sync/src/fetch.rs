@@ -58,6 +58,11 @@ pub enum FetchError {
     Io(std::io::Error),
     /// The install refused the bytes.
     Install(Error),
+    /// The catalog names an older release than the one installed: a rollback (sync gate 1).
+    Older {
+        /// The installed release.
+        installed: String,
+    },
 }
 
 impl fmt::Display for FetchError {
@@ -68,6 +73,12 @@ impl fmt::Display for FetchError {
             Self::Transport(m) => write!(f, "the request failed: {m}"),
             Self::Io(e) => write!(f, "the staging file: {e}"),
             Self::Install(e) => write!(f, "{e}"),
+            Self::Older { installed } => {
+                write!(
+                    f,
+                    "the catalog names a release older than the installed {installed}"
+                )
+            }
         }
     }
 }

@@ -2063,6 +2063,7 @@ name = "xtask"
 version = "0.0.0"
 dependencies = [
  "ed25519-dalek",
+ "flate2",
  "getrandom 0.4.3",
  "minijinja",
  "proc-macro2",

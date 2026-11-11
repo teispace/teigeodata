@@ -191,6 +191,11 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] Discovery: `catalog.find(name)` over the baseline (and the gazetteer pack when present),
   then the locator, then the catalog; `Resolver` trait (2026-11-10, D-164)
 
+- [ ] Targets delegated by country (D-175): spec 1.0 delegations in `sync::trust` (one level,
+  `paths` patterns, terminating), `sync::repo` and `tuf release` writing one role per country,
+  `Catalog` over the roles a client fetched, both oracles extended; gate 12 green on the
+  generated world (top-level targets, snapshot and the largest country role each ≤ 512 KiB gzip)
+
 ### 4.4 Transport assets
 - [x] Seekable zstd writer (frames on the head and sections, ≤ 1 MiB at 16 KiB boundaries) with
   a byte-for-byte self-check; read by `zeekstd` and the `zstd` CLI (2026-11-09, D-112,
@@ -241,7 +246,8 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [ ] If delta packs win: forge emission, compaction policy, L5 with delta layers
 
 ### 4.8 The 15 sync gates
-- [ ] Each gate of ADR-0037 (listed in [offline loading and
+- [ ] Each gate of ADR-0037 (register: [sync gates](../../06-engineering/sync-gates.md); 11
+  green, 12 red until 4.3's delegation, 11 and 14 open) (listed in [offline loading and
   trust](../../02-research/notes/offline-loading-and-trust.md) §6) built, first shown to fail on
   a deliberate violation, then green in CI
 - [ ] A world-size install in the data build: a section over 512 MiB, so `BLOCK_HASHES` spans
@@ -298,3 +304,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-11 | 4.6 first item and the 4.5 snapshot swap done together; the catalog's disk sizes now count section padding | D-172: a whole install's parts were 48 B short of the file |
 | 2026-11-11 | 4.6 done: verify and repair | D-173: repair is resume over a copy of the installed file, so it needs no code of its own to fetch only what fails |
 | 2026-11-11 | 4.7 first item done: section re-download at frame granularity, reusing the resume check | D-174; the real two-release measurement stays open until two Nepal releases are built |
+| 2026-11-11 | 4.3 gains delegation by country; the 4.8 register written; packs refuse an older release (gate 1) and fast-forward recovery has its own test (gate 2) | D-175: one targets file for the world is 1.42 MB gzip, 2.7 times gate 12's budget |

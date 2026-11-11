@@ -424,8 +424,9 @@ impl<D: Fs> Store<D> {
     /// the next recovery when it cannot be (in use).
     ///
     /// # Errors
-    /// [`FetchError`]: the install's, or [`FetchError::Io`] for the file system. The journal
-    /// is untouched by any failure before the commit.
+    /// [`FetchError`]: the install's, [`FetchError::Older`] for a release older than the
+    /// installed one, or [`FetchError::Io`] for the file system. The journal is untouched by any
+    /// failure before the commit.
     pub fn install<T: Transport>(
         &mut self,
         transport: &mut T,
@@ -437,6 +438,17 @@ impl<D: Fs> Store<D> {
     ) -> Result<Installed, FetchError> {
         let set = set.closed();
         let file = pack_name(entry, set)?;
+        // Never back to an older release (sync gate 1): the catalog is signed and fresh, but a
+        // pack older than the installed one is refused here too.
+        if let Some(old) = self.packs.iter().find(|r| {
+            r.address == entry.address
+                && r.component == entry.component
+                && teigeodata_format::release_cmp(&entry.release, &r.release).is_lt()
+        }) {
+            return Err(FetchError::Older {
+                installed: old.release.clone(),
+            });
+        }
         let staging = alloc::format!("{STAGING}/{file}.part");
         let mut f = self.fs.open(&staging)?;
         // An update reads the release it replaces and fetches only what changed (D-174).

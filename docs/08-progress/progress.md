@@ -63,9 +63,10 @@ A short status. The numbers and evidence live in each phase file and the
   recovery, crash-tested at every step (D-171); 4.6: the storage manager (quota, LRU eviction
   with pins and dependency protection, journal version 2) and the snapshot swap
   `Shared::follow` (D-172), and offline `verify(deep)` and repair by resuming over a copy
-  (D-173); 4.7: updates reuse every unchanged frame of the replaced release (D-174). Next:
-  the 4.8 sync gates that need no device, then the platform transport prototypes; the
-  two-release delta measurement needs two Nepal builds; the release upload and the first
+  (D-173); 4.7: updates reuse every unchanged frame of the replaced release (D-174); 4.8: the
+  gate register, packs refuse an older release, and gate 12 measured red on a generated world
+  (1.42 MB gzip, D-175). Next: delegate the catalog by country (4.3, D-175), then the platform
+  transport prototypes; the two-release delta measurement needs two Nepal builds; the release upload and the first
   ceremony wait for the maintainer; the world byte-identity check after the thinning change
   waits for the inputs to be fetched again.
 - **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin

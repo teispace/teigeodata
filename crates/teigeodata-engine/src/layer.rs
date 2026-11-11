@@ -36,7 +36,7 @@ use teigeodata_format::region::Region;
 use teigeodata_format::search::Search;
 #[cfg(feature = "search")]
 use teigeodata_format::search::rules::Rule;
-use teigeodata_format::{Bbox, Kind, Pack};
+use teigeodata_format::{Bbox, Kind, Pack, release_cmp};
 #[cfg(feature = "search")]
 use teigeodata_names::PhoneticKey;
 
@@ -767,30 +767,6 @@ impl Layer {
 /// How specific an address is: its number of `-`-separated parts (`ae-du` is 2, `ae` 1).
 fn specificity(address: &str) -> usize {
     address.split('-').count()
-}
-
-/// Orders releases as dotted numbers (`2026.9.0 < 2026.11.0`): parts split at `.` and `-`,
-/// numeric parts compared as numbers and before text parts, text parts as text.
-#[must_use]
-pub fn release_cmp(left: &str, right: &str) -> Ordering {
-    let (mut pa, mut pb) = (left.split(['.', '-']), right.split(['.', '-']));
-    loop {
-        let (x, y) = match (pa.next(), pb.next()) {
-            (Some(x), Some(y)) => (x, y),
-            (None, None) => return Ordering::Equal,
-            (None, Some(_)) => return Ordering::Less,
-            (Some(_), None) => return Ordering::Greater,
-        };
-        let ord = match (x.parse::<u64>(), y.parse::<u64>()) {
-            (Ok(nx), Ok(ny)) => nx.cmp(&ny).then_with(|| x.len().cmp(&y.len())),
-            (Ok(_), Err(_)) => Ordering::Less,
-            (Err(_), Ok(_)) => Ordering::Greater,
-            (Err(_), Err(_)) => x.cmp(y),
-        };
-        if ord != Ordering::Equal {
-            return ord;
-        }
-    }
 }
 
 #[cfg(test)]

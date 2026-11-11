@@ -50,8 +50,9 @@ mod shared;
 use core::fmt;
 use std::sync::Arc;
 
-pub use layer::{Layer, LayerId, LayerOptions, Load, Verify, release_cmp};
+pub use layer::{Layer, LayerId, LayerOptions, Load, Verify};
 pub use query::{Hit, Near, Place, Scratch};
+pub use teigeodata_format::release_cmp;
 
 /// The radius in metres for [`Engine::countries_near`] over the embedded baseline: its
 /// outlines are simplified at the 2 km level (main, D-157; lite at 500 m, D-147), whose

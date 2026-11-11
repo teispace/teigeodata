@@ -336,6 +336,35 @@ entry gains `transport.head` and `block_hashes`, so a plan's download bytes equa
   `discovery_names_the_country_of_every_city` (every city found by its name names the country it
   hangs from), run by the data build.
 
+### 3.12 The world catalog, measured (2026-11-11, D-175)
+
+`cargo xtask tuf world-catalog` writes a world of generated entries the way `tuf release`
+writes real ones (twelve components with sizes that add up to the pack, block hashes, a box,
+a dependency on the country pack for every part, random SHA-256 and head hashes) and measures
+the signed targets file. On this Mac, release build:
+
+| Targets | JSON | gzip -9 | Verify and read every entry |
+|---:|---:|---:|---:|
+| 250 | 540,405 B | 71,765 B | 3.7 ms |
+| 1,000 | 2,199,189 B | 284,965 B | 22.2 ms |
+| 5,000 | 11,045,411 B | 1,415,052 B | 124–136 ms |
+
+About 283 B of gzip a target: the hashes (48 random bytes), two numbers per component and the
+box do not compress. Gate 12's 512 KiB would allow about 105 B a target, so no trimming of
+fields reaches it with one targets file. One file also means every pack release changes the
+file every client downloads.
+
+The way out is TUF's own: **delegate the targets by country.** The top-level targets file
+delegates one role per country (spec 1.0 delegations, `paths` patterns `cc.*` and `cc-*`,
+signed by the targets key, terminating), and each role lists that country's packs. A client
+fetches the top-level file (the delegation list, no packs) and the roles of the countries it
+installs; discovery already resolves a name to countries first (§3.11). TAP 15's succinct hash
+bins were the other candidate: they scatter a country's parts over bins (the bin comes from a
+hash of the path), and the TAP's status is unsettled and it is not backward compatible, while
+path delegations are in spec 1.0 and both oracles (python-tuf, tough) read them. Gate 12
+becomes: the top-level targets, the snapshot and the largest country role each within
+512 KiB gzip.
+
 ## 4. Options compared
 
 **Snapshot swap.**
