@@ -103,6 +103,12 @@ pub struct Near {
     pub place: Place,
     /// The great-circle distance in metres.
     pub meters: f64,
+    /// The initial bearing from the place to the point asked about, in degrees clockwise from
+    /// true north, `[0, 360)` (TG-19): "3.2 km at 45° from Pokhara".
+    pub bearing_deg: f64,
+    /// Whether the point lies inside the place's outline: `None` as `reverse` answers and for a
+    /// place without an outline; [`Engine::mark_inside`] sets it (TG-19).
+    pub inside: Option<bool>,
 }
 
 /// A place matching a name, from [`Engine::search`].
@@ -153,6 +159,9 @@ pub struct Scratch {
     pub(crate) heads: Vec<usize>,
     #[cfg(feature = "admin-index")]
     regions: Vec<u32>,
+    /// The units holding a point, for [`Engine::mark_inside`].
+    #[cfg(feature = "admin-index")]
+    units: Vec<Place>,
     #[cfg(feature = "search")]
     pub(crate) hits: Vec<HitCand>,
     #[cfg(feature = "search")]
@@ -731,7 +740,18 @@ impl Engine {
                     haversine: c.haversine,
                 }
                 .meters();
-                out.push(Near { place, meters });
+                let bearing_deg = teigeodata_format::place_index::bearing_deg(
+                    place.point.lat_degrees(),
+                    place.point.lon_degrees(),
+                    at.lat_degrees(),
+                    at.lon_degrees(),
+                );
+                out.push(Near {
+                    place,
+                    meters,
+                    bearing_deg,
+                    inside: None,
+                });
             }
             Ok(())
         })
@@ -946,6 +966,37 @@ impl Engine {
             return Ok(Some(l.id));
         }
         Ok(None)
+    }
+
+    /// Sets [`Near::inside`] on `near` (as [`reverse`](Self::reverse) answered for `at`): for a
+    /// country or an admin unit, whether it holds `at` by the stored outlines, as
+    /// [`admin_at`](Self::admin_at) answers; `None` for every other place, and for all of them
+    /// when no layer's outlines cover `at`. One `admin_at` for the whole answer (TG-19).
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if a section it reads is corrupt.
+    #[cfg(feature = "admin-index")]
+    pub fn mark_inside(
+        &self,
+        at: Point<E6>,
+        s: &mut Scratch,
+        near: &mut [Near],
+    ) -> Result<(), Error> {
+        let mut units = core::mem::take(&mut s.units);
+        let covered = self.admin_at(at.to_e7(), s, &mut units);
+        let covered = match covered {
+            Ok(c) => c.is_some(),
+            Err(e) => {
+                s.units = units;
+                return Err(e);
+            }
+        };
+        for n in near.iter_mut() {
+            let outlined = matches!(n.place.kind, Some(PlaceKind::Country | PlaceKind::Admin));
+            n.inside = (covered && outlined).then(|| units.iter().any(|u| u.id == n.place.id));
+        }
+        s.units = units;
+        Ok(())
     }
 
     /// The countries that hold `at` or whose border is within `radius_m` metres of it, into

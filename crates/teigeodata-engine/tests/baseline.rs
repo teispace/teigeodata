@@ -59,3 +59,35 @@ fn the_baseline_answers_the_world() {
         assert_eq!(top.as_deref(), Some(city), "{city}");
     }
 }
+
+/// TG-19: `reverse` gives each answer's bearing from the place to the point, and `mark_inside`
+/// says, for every country and unit among the answers, whether it holds the point, as
+/// `admin_at` does; other places stay `None`.
+#[test]
+fn reverse_says_bearing_and_inside() {
+    let e = Engine::with_baseline().unwrap();
+    let mut s = Scratch::default();
+    let (mut near, mut units) = (Vec::new(), Vec::new());
+    let at = Point::<teigeodata_core::E6>::from_degrees(28.2669, 84.10).unwrap();
+    e.reverse(at, 300, &mut s, &mut near).unwrap();
+    e.mark_inside(at, &mut s, &mut near).unwrap();
+    e.admin_at(at.to_e7(), &mut s, &mut units).unwrap();
+    let pokhara = near
+        .iter()
+        .find(|n| name(&e, &n.place) == "Pokhara")
+        .unwrap();
+    assert!(
+        (pokhara.bearing_deg - 90.0).abs() < 1.0,
+        "{}",
+        pokhara.bearing_deg
+    );
+    for n in &near {
+        let held = units.iter().any(|u| u.id == n.place.id);
+        match n.place.kind {
+            Some(PlaceKind::Country | PlaceKind::Admin) => assert_eq!(n.inside, Some(held)),
+            _ => assert_eq!(n.inside, None),
+        }
+    }
+    assert!(near.iter().any(|n| n.inside == Some(true)));
+    assert!(near.iter().any(|n| n.inside == Some(false)));
+}

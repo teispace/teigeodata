@@ -5,7 +5,9 @@
 //!
 //! - **Native** (`--json`, NDJSON): `id`, `name`, `kind`, `admin_level`, `lat`, `lon`,
 //!   `elevation` (m), `elevation_source` (`surveyed` or `model`, when stated), `parent` (ID), `timezone` (its area's name), `iso_code` (ISO 3166, a
-//!   country's or unit's, only when it has one, D-197), and for a query `meters` (distance) or
+//!   country's or unit's, only when it has one, D-197), and for a query `meters` (distance),
+//!   `bearing` (degrees clockwise from north, from the place to the point asked about) and
+//!   `inside` (whether the point is in a country's or unit's outline; `reverse`, TG-19), or
 //!   `score` (search).
 //! - **GeoJSON** (RFC 7946): a FeatureCollection of points, the native record as properties
 //!   without `lat` and `lon` (they are the geometry), the attribution as a foreign member.
@@ -60,6 +62,10 @@ pub(crate) struct Record<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) meters: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) bearing: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) inside: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) score: Option<i32>,
 }
 
@@ -97,6 +103,8 @@ impl Default for Bufs {
 pub(crate) struct Item {
     pub(crate) place: Place,
     pub(crate) meters: Option<f64>,
+    pub(crate) bearing: Option<f64>,
+    pub(crate) inside: Option<bool>,
     pub(crate) score: Option<i32>,
 }
 
@@ -105,6 +113,8 @@ impl From<Place> for Item {
         Self {
             place,
             meters: None,
+            bearing: None,
+            inside: None,
             score: None,
         }
     }
@@ -145,6 +155,8 @@ pub(crate) fn record<'b>(
         timezone,
         iso_code: installed(engine.iso_code(place))?.map(Shown),
         meters: item.meters.map(|m| (m * 10.0).round() / 10.0),
+        bearing: item.bearing.map(|b| (b * 10.0).round() / 10.0),
+        inside: item.inside,
         score: item.score,
     })
 }
@@ -288,6 +300,12 @@ fn text(out: &mut dyn Write, r: &Record<'_>) -> Result<(), Fail> {
     }
     if let Some(m) = r.meters {
         write!(out, "  {m} m away")?;
+        if let Some(b) = r.bearing.filter(|_| m > 0.0) {
+            write!(out, " at {b}°")?;
+        }
+    }
+    if r.inside == Some(true) {
+        write!(out, "  inside")?;
     }
     if let Some(s) = r.score {
         write!(out, "  score {s}")?;

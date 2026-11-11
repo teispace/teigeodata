@@ -97,11 +97,15 @@ pub(crate) fn run(
         }
         Ask::Reverse { lat, lon, k } => {
             let mut near = Vec::new();
-            e.reverse(point::<E6>(lat, lon)?, k, &mut s, &mut near)?;
+            let at = point::<E6>(lat, lon)?;
+            e.reverse(at, k, &mut s, &mut near)?;
+            e.mark_inside(at, &mut s, &mut near)?;
             near.iter()
                 .map(|n| Item {
                     place: n.place,
                     meters: Some(n.meters),
+                    bearing: Some(n.bearing_deg),
+                    inside: n.inside,
                     score: None,
                 })
                 .collect()
@@ -128,6 +132,8 @@ pub(crate) fn run(
                 .map(|n| Item {
                     place: n.place,
                     meters: Some(n.meters),
+                    bearing: Some(n.bearing_deg),
+                    inside: None,
                     score: None,
                 })
                 .collect()
@@ -139,6 +145,8 @@ pub(crate) fn run(
                 .map(|h| Item {
                     place: h.place,
                     meters: None,
+                    bearing: None,
+                    inside: None,
                     score: Some(h.score),
                 })
                 .collect()

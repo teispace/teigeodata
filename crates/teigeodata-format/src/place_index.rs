@@ -110,6 +110,26 @@ pub fn haversine_of(meters: f64) -> f64 {
     s * s
 }
 
+/// The initial great-circle bearing from the point (`lat1`, `lon1`) to (`lat2`, `lon2`), all in
+/// degrees, as degrees clockwise from true north in `[0, 360)`: "3 km at 45° from Pokhara" is
+/// the bearing from Pokhara to the point (TG-19). 0 for one point or either pole's
+/// undefined direction; the same result on every platform (`libm`).
+#[cfg(feature = "spatial")]
+#[must_use]
+pub fn bearing_deg(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let (p1, p2) = (lat1.to_radians(), lat2.to_radians());
+    let dl = (lon2 - lon1).to_radians();
+    let y = libm::sin(dl) * libm::cos(p2);
+    let x = libm::cos(p1) * libm::sin(p2) - libm::sin(p1) * libm::cos(p2) * libm::cos(dl);
+    if x == 0.0 && y == 0.0 {
+        return 0.0;
+    }
+    let d = libm::atan2(y, x).to_degrees();
+    let d = if d < 0.0 { d + 360.0 } else { d };
+    // -0.0 and a value that rounds up to 360 both read as north.
+    if d >= 360.0 || d == 0.0 { 0.0 } else { d }
+}
+
 #[cfg(feature = "spatial")]
 impl Neighbour {
     /// The great-circle distance in metres.

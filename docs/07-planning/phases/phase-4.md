@@ -352,7 +352,8 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     names the gap
 - [ ] TG-16: outline tolerance measured, Nepal's border exact
 - [ ] TG-15: India: research done (D-216, D-217); then towns
-- [ ] TG-18, TG-19 and the strict-tier option. Done: the Brahmic search fold of nasal
+- [x] TG-19: `Near::bearing_deg` and `Engine::mark_inside` (D-223, 2026-11-11)
+- [ ] TG-18 and the strict-tier option. Done: the Brahmic search fold of nasal
   conjuncts, vowel length and candra vowels (D-220, 2026-11-11)
 - [ ] TG-17: phone-class benches with gates
 - [ ] TG-10: coarse elevation layer

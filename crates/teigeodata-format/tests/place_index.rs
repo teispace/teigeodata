@@ -377,3 +377,20 @@ fn the_check_is_canonical() {
         );
     }
 }
+
+/// TG-19: the bearing from a place to a point, clockwise from north, on the compass points
+/// and on a real pair (Kathmandu to Pokhara is west by a little north).
+#[test]
+fn bearings_follow_the_compass() {
+    let b = place_index::bearing_deg;
+    let near = |x: f64, want: f64| assert!((x - want).abs() < 1e-9, "{x} against {want}");
+    near(b(0.0, 0.0, 1.0, 0.0), 0.0);
+    near(b(0.0, 0.0, 0.0, 1.0), 90.0);
+    near(b(0.0, 0.0, -1.0, 0.0), 180.0);
+    near(b(0.0, 0.0, 0.0, -1.0), 270.0);
+    near(b(27.7, 85.3, 27.7, 85.3), 0.0);
+    // across the antimeridian: east of 179° E is 179° W
+    near(b(0.0, 179.0, 0.0, -179.0), 90.0);
+    let ktm_pkr = b(27.7017, 85.3206, 28.2669, 83.968);
+    assert!((290.0..300.0).contains(&ktm_pkr), "{ktm_pkr}");
+}
