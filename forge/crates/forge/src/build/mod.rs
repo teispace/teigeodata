@@ -65,6 +65,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use teigeodata_core::PlaceKind;
+pub(crate) use teigeodata_format::names::Origin;
 use teigeodata_format::names::{NameType, Tag};
 use teigeodata_names::{PhoneticKey, fold, script_of};
 
@@ -171,6 +172,8 @@ pub(crate) struct PlaceName {
     pub(crate) text: String,
     pub(crate) lang: Option<String>,
     pub(crate) kind: Option<NameType>,
+    /// How it was made (D-227): written to NAMES' `RULE` column.
+    pub(crate) origin: Origin,
 }
 
 /// One place, before rows are assigned.
@@ -788,6 +791,7 @@ mod tests {
             text: text.into(),
             lang: None,
             kind: Some(teigeodata_format::names::NameType::Alt),
+            origin: crate::build::Origin::Unknown,
         }
     }
 

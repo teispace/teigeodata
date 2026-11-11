@@ -217,6 +217,7 @@ mod tests {
                 text: key.into(),
                 lang: None,
                 kind: None,
+                origin: crate::build::Origin::Unknown,
             }],
             population: None,
             rank: 0,

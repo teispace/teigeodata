@@ -1,5 +1,6 @@
 //! A place's names (D-060, D-107) and display name (D-106).
 
+use super::Origin;
 use super::Place;
 use super::PlaceName;
 use super::pack;
@@ -175,6 +176,7 @@ pub(super) fn place_names<'a>(
                 text: r.name.clone(),
                 lang: None,
                 kind: None,
+                origin: super::sources::origin_of(id),
             });
         }
         for n in names.get(s).and_then(|m| m.get(id)).into_iter().flatten() {
@@ -190,11 +192,20 @@ pub(super) fn place_names<'a>(
         }
         candidates.push(c);
     }
-    let canonical = display_name(here, recs, &candidates, &rest, display, naming)?;
+    let (canonical, origin) = display_name(here, recs, &candidates, &rest, display, naming)?;
+    // A name taken as written keeps the origin of the record it came from (D-227).
+    let origin = if origin == Origin::Unknown {
+        rest.iter()
+            .find(|n| n.text == canonical)
+            .map_or(Origin::Unknown, |n| n.origin)
+    } else {
+        origin
+    };
     let mut all: Vec<PlaceName> = vec![PlaceName {
         text: canonical.clone(),
         lang: None,
         kind: None,
+        origin,
     }];
     let mut seen: BTreeSet<String> = BTreeSet::from([canonical]);
     for n in rest {
@@ -269,7 +280,8 @@ pub(super) fn drop_qualified(places: &mut [Place], naming: &mut Naming) -> usize
 }
 
 /// The display name (names-canonical §5.2); else the first record's name, in source priority,
-/// that can be stored; else the first of the other names that can.
+/// that can be stored; else the first of the other names that can. With it, how it was made
+/// when this step made it: romanised, or respelled by the lexicon (D-227); else `Unknown`.
 pub(super) fn display_name(
     here: &Here<'_>,
     recs: &[(&Rec, &str, usize)],
@@ -277,7 +289,7 @@ pub(super) fn display_name(
     rest: &BTreeSet<PlaceName>,
     display: &Namer,
     naming: &mut Naming,
-) -> Option<String> {
+) -> Option<(String, Origin)> {
     let chosen = display.choose(candidates, pack::fits);
     match &chosen {
         Some(c) => {
@@ -299,7 +311,12 @@ pub(super) fn display_name(
                     how,
                 ));
             }
-            Some(c.text.clone())
+            let origin = match (c.how, c.rendered) {
+                (How::Romanised, _) => Origin::Romanisation,
+                (_, true) => Origin::Lexicon,
+                _ => Origin::Unknown,
+            };
+            Some((c.text.clone(), origin))
         }
         None => candidates
             .iter()
@@ -308,7 +325,7 @@ pub(super) fn display_name(
             .find(|n| pack::fits(n))
             .map(|n| {
                 naming.fallback += 1;
-                n.to_string()
+                (n.to_string(), Origin::Unknown)
             }),
     }
 }
@@ -331,6 +348,7 @@ mod qualified_tests {
                     text: (*t).into(),
                     lang: None,
                     kind: None,
+                    origin: crate::build::Origin::Unknown,
                 })
                 .collect(),
             population: None,

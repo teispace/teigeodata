@@ -14,7 +14,7 @@
 //! | 5 | [`SCRIPT`] | per record: the ISO 15924 script as a [`Tag`], 0 = unknown | optional |
 //! | 6 | [`TYPE`] | per record: the [`NameType`] code, 0 = unspecified | optional |
 //! | 7, 8 | [`VALID_FROM`], [`VALID_TO`] | per record: a day ([biased](teigeodata_core::bitpack::bias) days since 1970-01-01), 0 = open | optional |
-//! | 9 | [`RULE`] | per record: which precedence step chose a canonical name, 0 = none | optional |
+//! | 9 | [`RULE`] | per record: how the name was made, an [`Origin`] code, 0 = not recorded | optional |
 //! | 10 | [`TABLES`] | bytes: a count u32, then each FSST table, back to back | required |
 //! | 11 | [`HEAP`] | bytes: every record's codes, back to back, zero-padded to a multiple of 4 | required |
 //!
@@ -47,7 +47,7 @@ pub const TYPE: u16 = 6;
 pub const VALID_FROM: u16 = 7;
 /// The last day a record is valid.
 pub const VALID_TO: u16 = 8;
-/// The precedence rule behind a canonical name.
+/// How a name was made: an [`Origin`] code (D-227).
 pub const RULE: u16 = 9;
 /// The symbol tables.
 pub const TABLES: u16 = 10;
@@ -113,6 +113,103 @@ impl fmt::Display for Tag {
             write!(f, "{}", char::from(c))?;
         }
         Ok(())
+    }
+}
+
+/// How a name was made (column [`RULE`], D-227): its source or the step that wrote it. The
+/// codes are stable once released; a code this reader does not know reads as
+/// [`Origin::Other`], never an error, so a later code does not break an older reader.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum Origin {
+    /// Not recorded (code 0).
+    #[default]
+    Unknown,
+    /// An official list (a statistics office, a gazetteer).
+    Official,
+    /// Seen on signage.
+    Signage,
+    /// Respelled by a country's lexicon.
+    Lexicon,
+    /// The majority of a place's OpenStreetMap names.
+    OsmMajority,
+    /// `GeoNames`.
+    GeoNames,
+    /// A Wikidata label.
+    Wikidata,
+    /// A romanisation, by rule, of a native-script name: machine output.
+    Romanisation,
+    /// A transliteration of a Latin name into a script, by a trained model: machine output.
+    Transliteration,
+    /// A related language's label, respelled: machine output.
+    Donor,
+    /// A code this reader does not know.
+    Other(u32),
+}
+
+impl Origin {
+    /// The stored code; 0 for [`Origin::Unknown`].
+    #[must_use]
+    pub const fn code(self) -> u32 {
+        match self {
+            Self::Unknown => 0,
+            Self::Official => 1,
+            Self::Signage => 2,
+            Self::Lexicon => 3,
+            Self::OsmMajority => 4,
+            Self::GeoNames => 5,
+            Self::Wikidata => 6,
+            Self::Romanisation => 7,
+            Self::Transliteration => 8,
+            Self::Donor => 9,
+            Self::Other(c) => c,
+        }
+    }
+
+    /// The origin of a stored code.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Self {
+        match code {
+            0 => Self::Unknown,
+            1 => Self::Official,
+            2 => Self::Signage,
+            3 => Self::Lexicon,
+            4 => Self::OsmMajority,
+            5 => Self::GeoNames,
+            6 => Self::Wikidata,
+            7 => Self::Romanisation,
+            8 => Self::Transliteration,
+            9 => Self::Donor,
+            c => Self::Other(c),
+        }
+    }
+
+    /// Its name in snake case (`transliteration`); `other` for an unknown code.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::Official => "official",
+            Self::Signage => "signage",
+            Self::Lexicon => "lexicon",
+            Self::OsmMajority => "osm_majority",
+            Self::GeoNames => "geonames",
+            Self::Wikidata => "wikidata",
+            Self::Romanisation => "romanisation",
+            Self::Transliteration => "transliteration",
+            Self::Donor => "donor",
+            Self::Other(_) => "other",
+        }
+    }
+
+    /// Whether a program wrote the name rather than a person: a romanisation, a
+    /// transliteration or a donor label. An app may show such a name differently or hide it.
+    #[must_use]
+    pub const fn is_machine(self) -> bool {
+        matches!(
+            self,
+            Self::Romanisation | Self::Transliteration | Self::Donor
+        )
     }
 }
 
@@ -478,10 +575,16 @@ impl Name<'_, '_> {
         (day(3), day(4))
     }
 
-    /// The precedence rule code behind a canonical name; 0 for none.
+    /// The stored [`RULE`] code; 0 when not recorded.
     #[must_use]
     pub fn rule(&self) -> u32 {
         self.names.optional(5, self.record)
+    }
+
+    /// How the name was made (D-227).
+    #[must_use]
+    pub fn origin(&self) -> Origin {
+        Origin::from_code(self.rule())
     }
 }
 
@@ -501,7 +604,7 @@ pub struct NameRecord<'v> {
     pub valid_from: Option<i32>,
     /// The last day valid.
     pub valid_to: Option<i32>,
-    /// The precedence rule code, 0 for none.
+    /// The [`Origin`] code, 0 when not recorded.
     pub rule: u32,
 }
 

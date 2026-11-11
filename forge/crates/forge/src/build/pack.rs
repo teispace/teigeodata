@@ -616,6 +616,7 @@ pub(super) fn name_sections(
                         lang,
                         script,
                         kind: nm.kind,
+                        rule: nm.origin.code(),
                         ..NameRecord::default()
                     }
                 })

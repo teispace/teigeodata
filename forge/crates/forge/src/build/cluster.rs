@@ -206,6 +206,7 @@ pub(super) fn admin_cluster(
                 text: r.name.clone(),
                 lang: None,
                 kind: None,
+                origin: super::sources::origin_of(id),
             });
         }
         all.extend(

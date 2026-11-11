@@ -89,6 +89,7 @@ asks its layer for each section before reading it (`ensure`). Per query:
 | `parent`, `ancestors`, `children` | `admin` |
 | `iso_code(place)`, `by_iso(code)` | `admin` where a layer has `ISO_CODES`; a layer without the section is skipped |
 | `name(place)` | `names` |
+| `name_in(place, lang)`, `names(place, f)` | `names` |
 | `search` | `search` (with `names`); a context that matches rows also `admin`; matches from the middle of a word only from layers with `substring` installed (others add none) |
 | `tz_of(place)` | `timezone`, else `timezone-index`; names `timezone` when neither is installed |
 | `tz_at` | `timezone-index` |

@@ -469,6 +469,75 @@ impl Engine {
         }
     }
 
+    /// The name of `place` in `lang`, a BCP 47 language (`ne`) or language and script
+    /// (`ne-Deva`, so a romanisation tagged `ne` is not taken), decoded into `buf`, with what
+    /// it is. A name a person wrote comes before a machine one (D-227), then the stored order.
+    /// `None` when the place has no name in `lang` or `lang` is not such a tag.
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if NAMES is corrupt; [`Error::Format`] if `buf` is too small.
+    #[cfg(feature = "names")]
+    pub fn name_in<'b>(
+        &self,
+        place: &Place,
+        lang: &str,
+        buf: &'b mut [u8],
+    ) -> Result<Option<(&'b str, NameInfo)>, Error> {
+        let Some((want, script)) = parse_lang(lang) else {
+            return Ok(None);
+        };
+        let Some(names) = self.names_of(place)? else {
+            return Ok(None);
+        };
+        let fits = |n: &teigeodata_format::names::Name<'_, '_>| {
+            n.lang() == Some(want) && script.is_none_or(|s| n.script() == Some(s))
+        };
+        let best = names
+            .names(place.row as usize)
+            .filter(fits)
+            .min_by_key(|n| n.origin().is_machine());
+        match best {
+            Some(n) => {
+                let info = NameInfo::of(&n);
+                Ok(Some((n.text(buf)?, info)))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Calls `f` with each name of `place`, its canonical name first, decoded into `buf`, and
+    /// what it is: language, script, type and origin (D-227).
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if NAMES is corrupt; [`Error::Format`] if `buf` is too small.
+    #[cfg(feature = "names")]
+    pub fn names(
+        &self,
+        place: &Place,
+        buf: &mut [u8],
+        mut f: impl FnMut(&str, NameInfo),
+    ) -> Result<(), Error> {
+        if let Some(names) = self.names_of(place)? {
+            for n in names.names(place.row as usize) {
+                let info = NameInfo::of(&n);
+                f(n.text(buf)?, info);
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "names")]
+    fn names_of(
+        &self,
+        place: &Place,
+    ) -> Result<Option<&teigeodata_format::names::Names<'_>>, Error> {
+        let Some(l) = self.layer(place.layer) else {
+            return Ok(None);
+        };
+        l.ensure(Kind::NAMES)?;
+        Ok(l.views().names.as_ref())
+    }
+
     /// The parent of `place` (HIERARCHY), as the winning layer answers for the parent's ID:
     /// from `place`'s own layer, else from the first layer by precedence that holds the same ID
     /// with a parent, so a pack whose copy of a place is a root defers to one that knows its
@@ -1260,4 +1329,51 @@ mod tests {
         let b = radius_box(at(27.7, 85.3), 0);
         assert!(b.min_lat < 27_700_000 && b.max_lat > 27_700_000);
     }
+}
+
+/// What a name is (D-227): its language, script, type and how it was made.
+#[cfg(feature = "names")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct NameInfo {
+    /// Its language; `None` if undetermined.
+    pub lang: Option<teigeodata_format::names::Tag>,
+    /// Its script; `None` if unknown.
+    pub script: Option<teigeodata_format::names::Tag>,
+    /// Its type; `None` if unspecified.
+    pub kind: Option<teigeodata_format::names::NameType>,
+    /// How it was made; [`Origin::is_machine`](teigeodata_format::names::Origin::is_machine)
+    /// says whether a program wrote it.
+    pub origin: teigeodata_format::names::Origin,
+}
+
+#[cfg(feature = "names")]
+impl NameInfo {
+    fn of(n: &teigeodata_format::names::Name<'_, '_>) -> Self {
+        Self {
+            lang: n.lang(),
+            script: n.script(),
+            kind: n.kind(),
+            origin: n.origin(),
+        }
+    }
+}
+
+/// `ne` or `ne-Deva` as a language tag and an optional script tag.
+#[cfg(feature = "names")]
+fn parse_lang(
+    code: &str,
+) -> Option<(
+    teigeodata_format::names::Tag,
+    Option<teigeodata_format::names::Tag>,
+)> {
+    use teigeodata_format::names::Tag;
+    let mut it = code.split('-');
+    let lang = Tag::new(it.next()?)?;
+    let script = match it.next() {
+        None => None,
+        Some(s) if s.len() == 4 => Some(Tag::new(s)?),
+        Some(_) => return None,
+    };
+    it.next().is_none().then_some((lang, script))
 }

@@ -392,6 +392,7 @@ fn one(
                     text: name.text.clone(),
                     lang: name.lang.clone(),
                     kind: name_type(&name.kind),
+                    origin: crate::build::Origin::Unknown,
                 });
             }
         }
@@ -651,6 +652,7 @@ review: { by: maintainer, on: 2026-11-09 }
                     text: (*n).into(),
                     lang: None,
                     kind: None,
+                    origin: crate::build::Origin::Unknown,
                 })
                 .collect(),
             population: None,

@@ -307,7 +307,7 @@ fn finish(
     fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let file = dir.join(format!("{name}-{build}.tgd"));
     crate::make::write_atomic(&file, &out)?;
-    let report = report(
+    let mut report = report(
         name,
         p,
         inputs,
@@ -316,6 +316,13 @@ fn finish(
         replaced,
         super::embed::rows_of(sections),
     );
+    let names_in = coverage(p, inputs, sections)?;
+    if !names_in.is_empty() {
+        let _ = write!(
+            report,
+            "\nPlaces with a name in each language:\n\n{names_in}"
+        );
+    }
     fs::write(dir.join(format!("summary-{name}-{build}.md")), &report)
         .map_err(|e| e.to_string())?;
     if m.asset > p.wire_kb * 1000 {
@@ -340,8 +347,84 @@ struct Wanted {
 
 impl Wanted {
     fn keeps(&self, n: &NameRecord<'_>) -> bool {
-        n.lang == Some(self.lang) && self.script.is_none_or(|s| n.script == Some(s))
+        self.matches(n.lang, n.script)
     }
+
+    fn matches(&self, lang: Option<Tag>, script: Option<Tag>) -> bool {
+        lang == Some(self.lang) && self.script.is_none_or(|s| script == Some(s))
+    }
+}
+
+/// How complete each profile language is: for each country with a pack in the profile, and
+/// for the rest of the layer, the places (timezone areas left out) with a name in it, as a
+/// Markdown table; empty when the profile keeps every name.
+fn coverage(p: &File, inputs: &[Input], sections: &[extract::Body]) -> Result<String, String> {
+    use teigeodata_format::idmap::IdMap;
+    let langs: Vec<Wanted> = p.languages.iter().filter_map(|l| language(l)).collect();
+    if langs.is_empty() {
+        return Ok(String::new());
+    }
+    let section = |k: Kind| {
+        sections
+            .iter()
+            .find(|s| s.0 == k)
+            .map(|b| teigeodata_format::Section::unpacked(k, b.2, &b.3))
+            .ok_or(format!("coverage needs {k}"))
+    };
+    let err = |e: teigeodata_format::Error| e.to_string();
+    let places = Places::open(&section(Kind::PLACES)?).map_err(err)?;
+    let names = Names::open(&section(Kind::NAMES)?).map_err(err)?;
+    let ids = IdMap::open(&section(Kind::IDMAP)?).map_err(err)?;
+    let own: Vec<&str> = inputs.iter().filter_map(|i| i.cc.as_deref()).collect();
+    // Group 0 is the rest of the layer; group g > 0 is own[g - 1].
+    let mut counts = vec![(0_usize, vec![0_usize; langs.len()]); own.len() + 1];
+    for row in 0..places.len() {
+        if places.kind(row) == Some(teigeodata_core::PlaceKind::TimezoneArea) {
+            continue;
+        }
+        let cc = ids
+            .id(row)
+            .and_then(|id| id.namespace().country())
+            .map(|c| String::from_utf8_lossy(&c).into_owned());
+        let g = cc
+            .and_then(|c| own.iter().position(|o| *o == c))
+            .map_or(0, |i| i + 1);
+        let Some((total, with)) = counts.get_mut(g) else {
+            continue;
+        };
+        *total += 1;
+        for (w, n) in langs.iter().zip(with.iter_mut()) {
+            if names.names(row).any(|r| w.matches(r.lang(), r.script())) {
+                *n += 1;
+            }
+        }
+    }
+    let mut s = format!(
+        "| Places | Rows | {} |\n|---|--:|{}\n",
+        p.languages.join(" | "),
+        "--:|".repeat(langs.len())
+    );
+    let rows = counts.iter().enumerate();
+    for (g, (total, with)) in rows.clone().skip(1).chain(rows.take(1)) {
+        let label = g
+            .checked_sub(1)
+            .and_then(|i| own.get(i))
+            .map_or_else(|| "the rest".to_owned(), |c| format!("`{c}`"));
+        let cells: Vec<String> = with
+            .iter()
+            .map(|&n| {
+                #[allow(clippy::cast_precision_loss, reason = "a share for display")]
+                let pct = if *total == 0 {
+                    0.0
+                } else {
+                    100.0 * n as f64 / *total as f64
+                };
+                format!("{n} ({pct:.1}%)")
+            })
+            .collect();
+        let _ = writeln!(s, "| {label} | {total} | {} |", cells.join(" | "));
+    }
+    Ok(s)
 }
 
 /// `ne` or `ne-Deva`; `None` for anything else.

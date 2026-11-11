@@ -350,8 +350,9 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     model trained in the forge on the build's licence class; gate G-xlit with floors
     (`forge xlit-eval ne-Latn-Deva`: cbs 44.7%, wd 36.2% folded; D-222, 2026-11-12). Open: the
     §5.3 v1 targets; the name-origin marker (`RULE` codes) before packs carry machine names
-  - [ ] a profile's languages are complete: every place of the layer has each, or the build
-    names the gap
+  - [x] a profile's languages are complete: every place of the layer has each, or the build
+    names the gap (the layer summary's table per country, 2026-11-12; `tithipatra`: Nepal
+    1.1% `ne-Deva`, D-227)
 - [ ] TG-16: outline tolerance measured, Nepal's border exact
 - [ ] TG-15: India: research done (D-216, D-217); then towns
 - [x] TG-19: `Near::bearing_deg` and `Engine::mark_inside` (D-223, 2026-11-11)

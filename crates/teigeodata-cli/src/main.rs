@@ -128,6 +128,10 @@ enum Command {
     Get {
         /// The ID, as `tgd:np/abc123`.
         id: String,
+        /// Also list every name with its language and origin, and whether a program wrote it
+        /// (D-227).
+        #[arg(long)]
+        names: bool,
         #[command(flatten)]
         packs: Packs,
         #[command(flatten)]
@@ -516,9 +520,18 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             },
             out,
         ),
-        Command::Get { id, packs, out: o } => {
-            query::run(store, &packs.packs, query::Ask::Get { id }, o.mode(), out)
-        }
+        Command::Get {
+            id,
+            names,
+            packs,
+            out: o,
+        } => query::run(
+            store,
+            &packs.packs,
+            query::Ask::Get { id, names },
+            o.mode(),
+            out,
+        ),
         Command::Reverse {
             lat,
             lon,

@@ -131,6 +131,10 @@ name = "iso"
 required-features = ["admin"]
 
 [[test]]
+name = "names"
+required-features = ["names"]
+
+[[test]]
 name = "substring"
 required-features = ["substring"]
 

@@ -86,6 +86,7 @@ pub(super) fn admin_places(root: &Path, lock: &Lock, source: &str) -> Result<Uni
                     text: u.name.clone(),
                     lang: None,
                     kind: Some(NameType::Official),
+                    origin: crate::build::Origin::Unknown,
                 }],
                 population: None,
                 rank: 0,
@@ -172,6 +173,7 @@ pub(super) fn country_place(
                 text: r.name.clone(),
                 lang: None,
                 kind: Some(NameType::Official),
+                origin: crate::build::Origin::Unknown,
             }];
             let own = read_names(build, s)?.remove(&id).unwrap_or_default();
             names.extend(country_names(
@@ -232,6 +234,7 @@ mod tests {
             text: t.to_string(),
             lang: None,
             kind: None,
+            origin: crate::build::Origin::Unknown,
         }
     }
 

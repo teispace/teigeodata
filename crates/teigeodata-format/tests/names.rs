@@ -465,3 +465,19 @@ fn mutated_payloads_never_panic() {
         });
     }
 }
+
+/// D-227: every origin code round-trips, an unknown one reads as `Other`, and only the codes
+/// a program writes are machine output.
+#[test]
+fn origins_round_trip_and_say_which_are_machine() {
+    use teigeodata_format::names::Origin;
+    for code in 0..=9 {
+        let o = Origin::from_code(code);
+        assert_eq!(o.code(), code);
+        assert!(!matches!(o, Origin::Other(_)), "{code}");
+        assert_eq!(o.is_machine(), (7..=9).contains(&code), "{code}");
+    }
+    assert_eq!(Origin::from_code(10), Origin::Other(10));
+    assert!(!Origin::from_code(10).is_machine());
+    assert_eq!(Origin::default(), Origin::Unknown);
+}

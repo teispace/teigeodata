@@ -107,6 +107,7 @@ pub(super) fn read_names(
     source: &str,
 ) -> Result<BTreeMap<String, Vec<PlaceName>>, String> {
     let mut out: BTreeMap<String, Vec<PlaceName>> = BTreeMap::new();
+    let origin = origin_of(source);
     for_each_batch(
         &build.join("read").join(source).join("names.parquet"),
         |b| {
@@ -123,12 +124,24 @@ pub(super) fn read_names(
                             .filter(|l| !l.is_empty())
                             .map(str::to_string),
                         kind: name_type(kind.value(i)),
+                        origin,
                     });
             }
             Ok(())
         },
     )?;
     Ok(out)
+}
+
+/// The origin of a source's names (D-227), by the reader its ID or a record's key names
+/// (`geonames-np`, `wikidata:Q1`); `Unknown` for the others.
+pub(super) fn origin_of(source: &str) -> crate::build::Origin {
+    use crate::build::Origin;
+    match source.split(['-', ':']).next() {
+        Some("geonames") => Origin::GeoNames,
+        Some("wikidata") => Origin::Wikidata,
+        _ => Origin::Unknown,
+    }
 }
 
 /// A source's name kind as a NAMES type (`None` for the plain primary name).

@@ -63,6 +63,7 @@ fn id(text: &str) -> Result<PlaceId, Fail> {
 pub(crate) enum Ask {
     Get {
         id: String,
+        names: bool,
     },
     Reverse {
         lat: f64,
@@ -109,13 +110,13 @@ pub(crate) fn run(
     };
     let mut s = Scratch::default();
     let items: Vec<Item> = match ask {
-        Ask::Get { id: text } => {
-            let place = e.get(id(&text)?)?;
-            vec![
-                place
-                    .ok_or_else(|| Fail::Refused(format!("{text}: not found")))?
-                    .into(),
-            ]
+        Ask::Get { id: text, names } => {
+            let place = e
+                .get(id(&text)?)?
+                .ok_or_else(|| Fail::Refused(format!("{text}: not found")))?;
+            let mut item = Item::from(place);
+            item.all_names = names;
+            vec![item]
         }
         Ask::Reverse { lat, lon, k } => {
             let mut near = Vec::new();
@@ -130,6 +131,7 @@ pub(crate) fn run(
                     inside: n.inside,
                     score: None,
                     offset: None,
+                    all_names: false,
                 })
                 .collect()
         }
@@ -159,6 +161,7 @@ pub(crate) fn run(
                     inside: None,
                     score: None,
                     offset: None,
+                    all_names: false,
                 })
                 .collect()
         }
@@ -174,6 +177,7 @@ pub(crate) fn run(
                     inside: None,
                     score: Some(h.score),
                     offset: None,
+                    all_names: false,
                 })
                 .collect()
         }

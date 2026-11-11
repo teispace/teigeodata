@@ -65,6 +65,8 @@ pub use layer::{Layer, LayerId, LayerOptions, Load, Verify};
 pub use outline::{Outline, Ring};
 #[cfg(feature = "postal")]
 pub use postal::PostalCode;
+#[cfg(feature = "names")]
+pub use query::NameInfo;
 #[cfg(feature = "dem")]
 pub use query::{Datum, DemSource, Height};
 pub use query::{Hit, Near, Place, Scratch};
@@ -74,6 +76,8 @@ pub use search::{Focus, SearchOptions};
 pub use teigeodata_core::IsoCode;
 #[cfg(feature = "elevation")]
 pub use teigeodata_format::elevation::HeightSource;
+#[cfg(feature = "names")]
+pub use teigeodata_format::names::{NameType, Origin, Tag};
 #[cfg(feature = "postal")]
 pub use teigeodata_format::postal::CodeKind;
 pub use teigeodata_format::release_cmp;

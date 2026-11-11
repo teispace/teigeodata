@@ -142,6 +142,7 @@ fn to_places(zones: Vec<(String, Vec<Vec<[i32; 2]>>)>) -> Result<Zones, String> 
                 text: tzid,
                 lang: None,
                 kind: Some(NameType::Official),
+                origin: crate::build::Origin::Unknown,
             }],
             population: None,
             rank: 0,

@@ -256,6 +256,7 @@ mod tests {
                 text: key.to_string(),
                 lang: None,
                 kind: None,
+                origin: crate::build::Origin::Unknown,
             }],
             population,
             rank: 0,

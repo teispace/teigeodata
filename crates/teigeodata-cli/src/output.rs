@@ -68,6 +68,9 @@ pub(crate) struct Record<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) score: Option<i32>,
     /// `+05:45` (`tgd tz`, TG-03).
+    /// Every name, canonical first, with its language and origin (`tgd get`, D-227).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) names: Option<Vec<NameOut>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) utc_offset: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -115,6 +118,8 @@ pub(crate) struct Item {
     pub(crate) score: Option<i32>,
     /// A timezone area's UTC offset at the instant asked (`tgd tz`).
     pub(crate) offset: Option<teigeodata_engine::Offset>,
+    /// List every name with its language and origin (`tgd get`, D-227).
+    pub(crate) all_names: bool,
 }
 
 impl From<Place> for Item {
@@ -126,6 +131,7 @@ impl From<Place> for Item {
             inside: None,
             score: None,
             offset: None,
+            all_names: false,
         }
     }
 }
@@ -137,6 +143,43 @@ pub(crate) fn installed<T>(r: Result<Option<T>, Error>) -> Result<Option<T>, Err
         Err(Error::MissingComponent { .. }) => Ok(None),
         r => r,
     }
+}
+
+/// One name of a place: its text, language tag (`ne-Deva`), type and origin.
+#[derive(Serialize)]
+pub(crate) struct NameOut {
+    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lang: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kind: Option<&'static str>,
+    origin: &'static str,
+    machine: bool,
+}
+
+/// Every name of `place` (D-227).
+fn all_names(engine: &Engine, place: &Place, buf: &mut [u8]) -> Result<Vec<NameOut>, Error> {
+    let mut out = Vec::new();
+    engine.names(place, buf, |text, info| {
+        let tag = |t: teigeodata_engine::Tag| {
+            let (b, n) = t.to_bytes();
+            String::from_utf8_lossy(b.get(..n).unwrap_or_default()).into_owned()
+        };
+        let lang = match (info.lang, info.script) {
+            (Some(l), Some(s)) => Some(format!("{}-{}", tag(l), tag(s))),
+            (Some(l), None) => Some(tag(l)),
+            (None, Some(s)) => Some(format!("und-{}", tag(s))),
+            (None, None) => None,
+        };
+        out.push(NameOut {
+            text: text.to_owned(),
+            lang,
+            kind: info.kind.map(teigeodata_engine::NameType::as_str),
+            origin: info.origin.name(),
+            machine: info.origin.is_machine(),
+        });
+    })?;
+    Ok(out)
 }
 
 /// The native record of `item`; `with_point` puts `lat` and `lon` in it.
@@ -168,6 +211,11 @@ pub(crate) fn record<'b>(
         bearing: item.bearing.map(|b| (b * 10.0).round() / 10.0),
         inside: item.inside,
         score: item.score,
+        names: if item.all_names {
+            installed(all_names(engine, place, &mut [0; NAME]).map(Some))?
+        } else {
+            None
+        },
         utc_offset: item.offset.map(|o| hhmm(o.seconds)),
         tz_abbr: item.offset.as_ref().map(|o| o.abbr().to_owned()),
         is_dst: item.offset.map(|o| o.is_dst),
@@ -334,6 +382,16 @@ fn text(out: &mut dyn Write, r: &Record<'_>) -> Result<(), Fail> {
         }
     }
     writeln!(out)?;
+    for n in r.names.iter().flatten() {
+        writeln!(
+            out,
+            "  {}  {}  {}{}",
+            n.lang.as_deref().unwrap_or("-"),
+            n.text,
+            n.origin,
+            if n.machine { ", machine" } else { "" }
+        )?;
+    }
     Ok(())
 }
 

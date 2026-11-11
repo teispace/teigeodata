@@ -121,6 +121,7 @@ pub(super) fn apply<'p>(chain: &[Labels], places: impl Iterator<Item = &'p mut P
             text: text.clone(),
             lang: Some(l.lang.clone()),
             kind: None,
+            origin: crate::build::Origin::Wikidata,
         });
         *named.entry(i).or_default() += 1;
     }
@@ -156,6 +157,7 @@ mod tests {
                 text: "Dubai".into(),
                 lang: None,
                 kind: None,
+                origin: crate::build::Origin::Wikidata,
             }],
             population: None,
             rank: 0,

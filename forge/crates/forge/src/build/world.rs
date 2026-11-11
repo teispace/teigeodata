@@ -450,6 +450,7 @@ fn names_of(names: &[(Option<&'static str>, String)]) -> Vec<PlaceName> {
             text: text.clone(),
             lang: lang.map(str::to_string),
             kind: (i == 0).then_some(NameType::Official),
+            origin: crate::build::Origin::Unknown,
         });
     }
     out
@@ -626,12 +627,14 @@ fn city_rows(
                 text: c.name.clone(),
                 lang: None,
                 kind: None,
+                origin: crate::build::Origin::Unknown,
             }];
             if c.ascii != c.name && !c.ascii.is_empty() {
                 names.push(PlaceName {
                     text: c.ascii.clone(),
                     lang: None,
                     kind: Some(NameType::Alt),
+                    origin: crate::build::Origin::Unknown,
                 });
             }
             let key = format!("geonames:{}", c.id);
@@ -1217,6 +1220,7 @@ fn zone_rows(
                     text: id.clone(),
                     lang: None,
                     kind: Some(NameType::Official),
+                    origin: crate::build::Origin::Unknown,
                 }],
                 population: None,
                 rank: 0,
