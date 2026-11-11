@@ -27,6 +27,13 @@ three root keys apart.
 
 ## First ceremony (the maintainer)
 
+Before you start (D-210): on the everyday machine, build the tool once,
+`cargo build --release -p xtask`, and copy `target/release/xtask` and this page to a fresh USB
+drive. Have four more drives ready: one per root key and one for targets and snapshot. On the
+offline machine (network off, ideally a fresh account), run the copied binary as
+`./xtask tuf …` wherever the steps say `cargo xtask tuf …`. Only public keys and the signed
+`metadata/` leave that machine; the timestamp key leaves once, for step 5.
+
 1. On an offline machine, for each key: `cargo xtask tuf keygen <name>.key`. Note each printed
    `public` key. Copy each root key to its own medium; keep targets and snapshot together.
 2. Write root 1:
