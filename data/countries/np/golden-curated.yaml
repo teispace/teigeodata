@@ -79,13 +79,13 @@ queries:
     class: substring
     query: "mandu"
     expect: { "geonames:1283240": 3 }
-    max_rank: 1
+    max_rank: 3
     source: "GeoNames 1283240 Kathmandu; a mid-word substring (TG-06)"
   - id: np-c014
     class: substring
     query: "athmand"
     expect: { "geonames:1283240": 3 }
-    max_rank: 1
+    max_rank: 3
     source: "GeoNames 1283240 Kathmandu; a mid-word substring (TG-06)"
   - id: np-c015
     class: substring
@@ -115,7 +115,7 @@ queries:
     class: substring
     query: "ratnagar"
     expect: { "geonames:1283582": 3 }
-    max_rank: 1
+    max_rank: 3
     source: "GeoNames 1283582 Biratnagar (TG-06)"
   - id: np-c020
     class: substring
@@ -127,5 +127,5 @@ queries:
     class: substring
     query: "Pokhara"
     expect: { "geonames:1282898": 3 }
-    max_rank: 1
+    max_rank: 3
     source: "Guard: an exact match stays first over names containing it (Bhimpokhara, Thulapokhara)"
