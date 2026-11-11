@@ -6,6 +6,11 @@
 //!   read through the same reader an app uses (`teigeodata_format::dem`, bilinear).
 //! - **Which places:** every place but timezone areas, whose point is only somewhere inside the
 //!   zone. A place outside the section has none.
+//! - **Summits (D-201):** a natural place (a summit, hill, volcano or pass) takes the height
+//!   its records state (their median) where it is within 50 m + 1 % of the DEM at its point
+//!   or of the DEM's highest sample within 3″ (about 90 m): a DEM under-reads a sharp summit
+//!   (GLO-30 reads Everest 111 m low), and a stated height far from both is more likely wrong
+//!   than the terrain. Otherwise it keeps the DEM's height.
 //! - **Rounding:** half away from zero, to whole metres.
 //! - **QA, not input (D-061):** the summary compares each height with what the place's own
 //!   source records state (`elevation_m`) and with the DEM height `GeoNames` states (`dem_m`).
@@ -36,6 +41,110 @@ pub(crate) struct Elevations {
     bytes: std::sync::Arc<Vec<u8>>,
     /// One per place, in the build's place order.
     pub(crate) values: Vec<Option<i16>>,
+    /// What the summit rule did (D-201).
+    pub(crate) summits: Summits,
+}
+
+/// What the summit rule did (D-201), for the summary.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Summits {
+    /// Natural places with a height.
+    pub(crate) natural: usize,
+    /// Of those, with a stated height.
+    pub(crate) stated: usize,
+    /// Stated heights taken.
+    pub(crate) taken: usize,
+    /// Stated heights refused: (place key, stated, the DEM at the point).
+    pub(crate) refused: Vec<(String, f64, f64)>,
+    /// For the summits taken: stated − the DEM's highest sample nearby (the DEM's under-read).
+    pub(crate) under: Vec<f64>,
+}
+
+/// One arcsecond on the 1e-7° grid, rounded: the DEM's sample spacing.
+const ARCSEC_E7: i32 = 2_778;
+/// How far, in arcseconds, a summit's highest DEM sample is looked for (about 90 m).
+const SUMMIT_REACH: i32 = 3;
+
+/// How far a stated summit height may be from the DEM and still be taken: 50 m + 1 %.
+pub(crate) fn summit_tolerance(h: f64) -> f64 {
+    50.0 + 0.01 * h.abs()
+}
+
+/// The DEM's highest height within [`SUMMIT_REACH`] arcseconds of `at`, sampled every
+/// arcsecond.
+fn dem_max(dem: &Dem<'_>, (lon, lat): (i32, i32), s: &mut DemScratch) -> Option<f64> {
+    let mut best: Option<f64> = None;
+    for dy in -SUMMIT_REACH..=SUMMIT_REACH {
+        for dx in -SUMMIT_REACH..=SUMMIT_REACH {
+            let at = (
+                lon.saturating_add(dx * ARCSEC_E7),
+                lat.saturating_add(dy * ARCSEC_E7),
+            );
+            if let Some(h) = height(dem, at, s) {
+                best = Some(best.map_or(h, |b| b.max(h)));
+            }
+        }
+    }
+    best
+}
+
+/// Whether stated height `h` agrees with the DEM at the point or its nearby highest sample.
+fn agrees(h: f64, at_point: Option<f64>, max: Option<f64>) -> bool {
+    [at_point, max]
+        .into_iter()
+        .flatten()
+        .any(|d| (h - d).abs() <= summit_tolerance(h))
+}
+
+/// The median of the heights a place's records state.
+fn median(mut v: Vec<f64>) -> Option<f64> {
+    v.sort_by(f64::total_cmp);
+    let n = v.len();
+    match n {
+        0 => None,
+        _ if n % 2 == 1 => v.get(n / 2).copied(),
+        _ => Some((v.get(n / 2 - 1)? + v.get(n / 2)?) / 2.0),
+    }
+}
+
+/// Applies the summit rule (D-201) to the natural places among `places`, whose DEM heights are
+/// `values`, with the heights their records state.
+fn summits(
+    dem: &Dem<'_>,
+    places: &[Place],
+    values: &mut [Option<i16>],
+    stated: &BTreeMap<String, Stated>,
+) -> Result<Summits, String> {
+    let mut out = Summits::default();
+    let mut s = Box::new(DemScratch::new());
+    for (p, v) in places.iter().zip(values.iter_mut()) {
+        if p.kind != PlaceKind::Natural {
+            continue;
+        }
+        let Some(at_point) = v.map(f64::from) else {
+            continue;
+        };
+        out.natural += 1;
+        let heights: Vec<f64> = p
+            .sources
+            .iter()
+            .filter_map(|k| stated.get(k)?.0.map(f64::from))
+            .filter(|h| h.is_finite())
+            .collect();
+        let Some(h) = median(heights) else { continue };
+        out.stated += 1;
+        let max = dem_max(dem, p.point, &mut s);
+        if agrees(h, Some(at_point), max) {
+            out.taken += 1;
+            *v = Some(metres(h)?);
+            if let Some(m) = max {
+                out.under.push(h - m);
+            }
+        } else {
+            out.refused.push((p.key.clone(), h, at_point));
+        }
+    }
+    Ok(out)
 }
 
 /// The DEM section in a `dem-section` pack.
@@ -85,9 +194,12 @@ pub(crate) fn sample(dem: &Dem<'_>, places: &[Place]) -> Result<Vec<Option<i16>>
     Ok(out)
 }
 
-/// Loads the tileset's section and samples every place; `None` without a tileset.
+/// Loads the tileset's section and samples every place, natural places by the summit rule
+/// with the heights the records of `sources` (read in `build`) state; `None` without a
+/// tileset.
 pub(crate) fn load(
     root: &Path,
+    (build, sources): (&Path, &[String]),
     tileset: Option<&str>,
     places: &[Place],
 ) -> Result<Option<Elevations>, String> {
@@ -100,11 +212,18 @@ pub(crate) fn load(
         .join("dem.tgd");
     let bytes = fs::read(&path)
         .map_err(|e| format!("{}: {e}; run forge dem-section first", path.display()))?;
-    let values = sample(&open(&bytes)?, places)?;
+    let dem = open(&bytes)?;
+    let mut values = sample(&dem, places)?;
+    let summits = if places.iter().any(|p| p.kind == PlaceKind::Natural) {
+        summits(&dem, places, &mut values, &stated(build, sources)?)?
+    } else {
+        Summits::default()
+    };
     Ok(Some(Elevations {
         tileset: tileset.to_string(),
         bytes: std::sync::Arc::new(bytes),
         values,
+        summits,
     }))
 }
 
@@ -169,7 +288,15 @@ impl Elevations {
     /// The DEM section for a pack whose area is `outline` (its units' polygons): the tiles
     /// within [`DEM_HALO_DEG`] of it, copied from the build's DEM (`dem::mask`, no re-coding),
     /// with the section's tile count; `None` without an outline or with nothing near it.
-    pub(crate) fn masked(&self, outline: &[&Polygon]) -> Result<Option<(Vec<u8>, u64)>, String> {
+    ///
+    /// The tiles around every place with a height (`places`, the build's places this DEM was
+    /// sampled for) are kept too: a place outside the halo (a record placed across the border)
+    /// keeps the terrain its height came from, and the read-back holds every row to it.
+    pub(crate) fn masked(
+        &self,
+        outline: &[&Polygon],
+        places: &[Place],
+    ) -> Result<Option<(Vec<u8>, u64)>, String> {
         if outline.is_empty() {
             return Ok(None);
         }
@@ -178,6 +305,11 @@ impl Elevations {
         for g in 0..dem.grids() {
             if let Some(grid) = dem.grid(g) {
                 keep.extend(tiles_near(outline, &grid, DEM_HALO_DEG));
+                for (p, v) in places.iter().zip(&self.values) {
+                    if v.is_some() {
+                        keep.extend(tiles_around(p.point, &grid));
+                    }
+                }
             }
         }
         teigeodata_format::dem::mask(&dem, |_, r, c| keep.contains(&(r, c)))
@@ -194,6 +326,7 @@ impl Elevations {
                 .iter()
                 .map(|&i| self.values.get(i).copied().flatten())
                 .collect(),
+            summits: Summits::default(),
         }
     }
 
@@ -238,6 +371,7 @@ impl Elevations {
                 }
             );
         }
+        out.push_str(&self.summits.line());
         // |DEM − stated| for each source record of a place, by (kind, field): at the place's
         // point, and at the record's.
         let stated = stated(build, sources)?;
@@ -299,6 +433,41 @@ impl Elevations {
     }
 }
 
+impl Summits {
+    /// The summary's line: how many summits took their surveyed height, how many were refused,
+    /// and how far the DEM under-reads the summits taken (G-PEAK).
+    pub(crate) fn line(&self) -> String {
+        if self.natural == 0 {
+            return String::new();
+        }
+        let mut u = self.under.clone();
+        u.sort_by(f64::total_cmp);
+        let mut out = format!(
+            "Summits (D-201): {} natural places with a height, {} with a stated one, {} taken, {} refused (beyond 50 m + 1 % of the DEM)",
+            self.natural,
+            self.stated,
+            self.taken,
+            self.refused.len()
+        );
+        if !u.is_empty() {
+            let _ = write!(
+                out,
+                "; stated − the DEM's highest sample within 90 m: P10 {:.0} m, P50 {:.0} m, P90 {:.0} m",
+                quantile(&u, 0.1),
+                quantile(&u, 0.5),
+                quantile(&u, 0.9)
+            );
+        }
+        out.push_str(".\n");
+        let mut r = self.refused.clone();
+        r.sort_by(|a, b| (b.1 - b.2).abs().total_cmp(&(a.1 - a.2).abs()));
+        for (key, h, d) in r.iter().take(10) {
+            let _ = writeln!(out, "- refused: {key}: stated {h:.0} m, the DEM {d:.0} m");
+        }
+        out
+    }
+}
+
 /// See [`Elevations::verify`].
 pub(crate) fn verify(
     dem: &Dem<'_>,
@@ -316,7 +485,7 @@ pub(crate) fn verify(
         }
     }
     let mut s = Box::new(DemScratch::new());
-    let (mut with, mut worst) = (0_usize, 0.0_f64);
+    let (mut with, mut worst, mut surveyed) = (0_usize, 0.0_f64, 0_usize);
     for row in 0..places.len() {
         let at: Point<E6> = places.point(row).ok_or("a row without a point")?;
         let stored = heights.and_then(|h| h.get(row));
@@ -331,6 +500,19 @@ pub(crate) fn verify(
                 with += 1;
                 worst = worst.max((f64::from(m) - h).abs());
             }
+            // A natural place's surveyed height (D-201): within the summit rule's tolerance of
+            // the DEM here, or of its highest sample nearby.
+            (Some(m), Some(h))
+                if places.kind(row) == Some(PlaceKind::Natural)
+                    && agrees(
+                        f64::from(m),
+                        Some(h),
+                        dem_max(dem, (at.to_e7().lon(), at.to_e7().lat()), &mut s),
+                    ) =>
+            {
+                with += 1;
+                surveyed += 1;
+            }
             _ => {
                 return Err(format!(
                     "row {row} at {at}: ELEVATION {stored:?} m, the DEM {want:?} m"
@@ -339,9 +521,39 @@ pub(crate) fn verify(
         }
     }
     Ok(format!(
-        "Elevations: all {} rows agree with the DEM sampled afresh at their stored point ({with} with a height, at most {worst:.2} m apart).",
+        "Elevations: all {} rows agree with the DEM sampled afresh at their stored point ({with} with a height, at most {worst:.2} m apart; {surveyed} summits' surveyed heights within the summit rule).",
         places.len()
     ))
+}
+
+/// The tile of `grid` holding (lon, lat) on the 1e-7° grid and its eight neighbours, inside the
+/// grid: every tile a bilinear sample at the point may read.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "tile indices from degrees, clamped to the grid; a tile side is at most 2^12"
+)]
+pub(crate) fn tiles_around(
+    (lon, lat): (i32, i32),
+    grid: &teigeodata_format::dem::Grid,
+) -> impl Iterator<Item = (u32, u32)> {
+    let side = grid.side() as f64;
+    let (t_lat, t_lon) = (
+        side * f64::from(grid.lat_step) / 36_000.0,
+        side * f64::from(grid.lon_step) / 36_000.0,
+    );
+    let r = ((90.0 - f64::from(lat) * 1e-7) / t_lat).floor() as i64;
+    let c = ((f64::from(lon) * 1e-7 + 180.0) / t_lon).floor() as i64;
+    let (r0, c0) = (i64::from(grid.tile_row0), i64::from(grid.tile_col0));
+    let (r1, c1) = (
+        r0 + i64::from(grid.tile_rows),
+        c0 + i64::from(grid.tile_cols),
+    );
+    (r - 1..=r + 1)
+        .flat_map(move |rr| (c - 1..=c + 1).map(move |cc| (rr, cc)))
+        .filter(move |&(rr, cc)| (r0..r1).contains(&rr) && (c0..c1).contains(&cc))
+        .map(|(rr, cc)| (rr as u32, cc as u32))
 }
 
 /// The tiles of `grid` (global tile row, column) within `halo` degrees of the polygons: every
@@ -428,7 +640,9 @@ pub(crate) fn tiles_near(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, reason = "tests")]
 
-    use super::{metres, sample, tiles_near, verify};
+    use std::collections::BTreeMap;
+
+    use super::{metres, sample, summits, tiles_around, tiles_near, verify};
     use crate::build::Place;
     use teigeodata_core::{E7, PlaceKind, Point};
     use teigeodata_format::dem::{
@@ -523,6 +737,69 @@ mod tests {
     }
 
     #[test]
+    fn summits_take_their_stated_height_where_it_agrees_with_the_dem() {
+        let body = section();
+        let dem = Dem::open(&Section::unpacked(Kind::DEM, 1, &body)).expect("open");
+        let with = |kind, sources: &[&str]| Place {
+            sources: sources.iter().map(|s| (*s).to_string()).collect(),
+            ..place(kind, at(10.5, 20.25))
+        };
+        let places = [
+            // Stated 290 and 296: the median 293, within 50 m + 1 % of the highest sample
+            // nearby (243.25 m), not of the point's 222 m.
+            with(PlaceKind::Natural, &["osm:1", "geonames:2"]),
+            // Stated 400: refused, the DEM's height kept.
+            with(PlaceKind::Natural, &["osm:3"]),
+            // Nothing stated.
+            with(PlaceKind::Natural, &[]),
+            // A settlement's stated height is never taken.
+            with(PlaceKind::Settlement, &["osm:1"]),
+        ];
+        let stated: BTreeMap<String, super::Stated> =
+            [("osm:1", 290.0), ("geonames:2", 296.0), ("osm:3", 400.0)]
+                .into_iter()
+                .map(|(k, h)| (k.to_string(), (Some(h), None, None)))
+                .collect();
+        let mut values = sample(&dem, &places).expect("sample");
+        let s = summits(&dem, &places, &mut values, &stated).expect("summits");
+        assert_eq!(values, [Some(293), Some(222), Some(222), Some(222)]);
+        assert_eq!((s.natural, s.stated, s.taken), (3, 2, 1));
+        assert_eq!(s.refused.len(), 1);
+        assert!((s.under[0] - 49.75).abs() < 0.5, "{:?}", s.under);
+        assert!(s.line().contains("1 taken, 1 refused"), "{}", s.line());
+    }
+
+    #[test]
+    fn a_place_keeps_the_tiles_its_height_reads() {
+        let grid = Grid {
+            tile_row0: u32::try_from(TR).unwrap() - 1,
+            tile_col0: u32::try_from(TC).unwrap() - 1,
+            tile_rows: 3,
+            tile_cols: 2,
+            lat_step: 10,
+            lon_step: 10,
+            step_mm: 1000,
+            datum: DATUM_EGM2008,
+            source: 0,
+            tile_log2: 6,
+            first_tile: 0,
+        };
+        let (tr, tc) = (u32::try_from(TR).unwrap(), u32::try_from(TC).unwrap());
+        let mut got: Vec<(u32, u32)> = tiles_around(at(10.5, 20.25), &grid).collect();
+        got.sort_unstable();
+        // Its tile and the neighbours inside the grid: rows TR−1..=TR+1, columns TC−1..=TC.
+        let want: Vec<(u32, u32)> = (tr - 1..=tr + 1)
+            .flat_map(|r| (tc - 1..=tc).map(move |c| (r, c)))
+            .collect();
+        assert_eq!(got, want);
+        assert_eq!(
+            tiles_around(at(-5000.0, 20.0), &grid).count(),
+            0,
+            "far outside"
+        );
+    }
+
+    #[test]
     fn metres_round_half_away_from_zero_and_refuse_what_does_not_fit() {
         assert_eq!(metres(195.5), Ok(196));
         assert_eq!(metres(-0.5), Ok(-1));
@@ -569,6 +846,17 @@ mod tests {
             "a zone's height"
         );
         assert!(check(None, PlaceKind::TimezoneArea).is_ok());
+        // A summit's surveyed height (D-201): 222 m here, 243.25 m the highest within 3″.
+        assert!(
+            check(Some(270), PlaceKind::Natural).is_ok(),
+            "near the point"
+        );
+        assert!(check(Some(290), PlaceKind::Natural).is_ok(), "near the top");
+        assert!(check(Some(310), PlaceKind::Natural).is_err(), "beyond both");
+        assert!(
+            check(Some(270), PlaceKind::Settlement).is_err(),
+            "only natural places"
+        );
         // ELEVATION must have one row per place.
         let cols = PlaceColumns {
             points: &[point, point],

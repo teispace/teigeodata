@@ -77,9 +77,11 @@ fn main_row(line: &str, ids: &mut BTreeSet<u64>, out: &mut Output) {
     let Ok(gid) = gid.parse::<u64>() else { return };
     ids.insert(gid);
     let id = format!("geonames:{gid}");
-    let kind = match fclass {
-        "P" => "populated_place",
-        "A" => "admin",
+    let kind = match (fclass, fcode) {
+        ("P", _) => "populated_place",
+        ("A", _) => "admin",
+        // Point features with a height of their own (D-201); ranges and ridges are not.
+        ("T", "PK" | "MT" | "HLL" | "VLC" | "PASS" | "SDL") => "natural",
         _ => "other",
     };
     out.records.push(Record {

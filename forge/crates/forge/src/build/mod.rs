@@ -301,6 +301,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         places: mut clustered,
         unnamed: unnamed_clusters,
         held,
+        abroad,
         mut naming,
         mut admin,
     } = cluster_places(
@@ -324,6 +325,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         &mut naming,
     )?;
     admin.added = link_admins(&mut places, std::mem::take(&mut admin.links));
+    naming::drop_qualified(&mut places, &mut naming);
     let coverage = units.coverage.ok_or("the boundary source has no units")?;
     let modelled = population::run(g.grid.as_slice(), &units.levels, coverage, &mut places)?;
     let out_dir = build.join("pack").join(&a.cc);
@@ -339,7 +341,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let rules = tz_rules::compile(root, &lock, g.tz.as_deref(), &zones)?;
     places.extend(zones.places.iter().cloned());
     let unnamed = keep_named(&mut places) + unnamed_clusters;
-    let elevations = elevation::load(root, g.dem.as_deref(), &places)?;
+    let elevations = elevation::load(root, (&build, &g.sources), g.dem.as_deref(), &places)?;
 
     let f = PackInputs::read(root, &a, &g.sources, &out_dir)?;
     let input = pack::Input {
@@ -370,7 +372,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         &out_dir,
     )?;
     let mut summary = header(&a, places.len(), &g.sources, g.tz.as_deref());
-    notes(&mut summary, held, unnamed, &g);
+    notes(&mut summary, (held, abroad), unnamed, &g);
     summary.push_str(&naming.line());
     summary.push_str(&modelled.report);
     summary.push_str(&admin.line());
@@ -556,7 +558,7 @@ fn notices(lock: &Lock, read: &[&str]) -> Result<String, String> {
 
 /// The summary's notes: postal codes left out, places held at their seed point, left out,
 /// and sources not read.
-fn notes(summary: &mut String, held: usize, unnamed: usize, g: &Gated) {
+fn notes(summary: &mut String, (held, abroad): (usize, usize), unnamed: usize, g: &Gated) {
     let skipped = &g.skipped;
     for n in g.postal.iter().flat_map(|p| &p.notes) {
         let _ = writeln!(*summary, "Postal: {n}.");
@@ -569,6 +571,12 @@ fn notes(summary: &mut String, held: usize, unnamed: usize, g: &Gated) {
     }
     if unnamed > 0 {
         let _ = writeln!(*summary, "Left out: {unnamed} places with no usable name.");
+    }
+    if abroad > 0 {
+        let _ = writeln!(
+            *summary,
+            "Left out: {abroad} natural places more than 200 m outside every admin unit (D-201)."
+        );
     }
     if !skipped.is_empty() {
         let _ = writeln!(*summary, "Not read (licence): {}.", skipped.join(", "));

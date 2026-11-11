@@ -908,7 +908,7 @@ fn terrain(
     }
     if let Some((body, tiles)) = input
         .elevation
-        .map(|e| e.masked(input.outline))
+        .map(|e| e.masked(input.outline, input.places))
         .transpose()?
         .flatten()
     {

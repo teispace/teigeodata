@@ -1,4 +1,5 @@
-//! `read/osm`: places and admin boundaries from an OSM PBF extract, with `osmpbf`'s parallel
+//! `read/osm`: places, natural point features (summits, hills, volcanoes, passes: D-201) and
+//! admin boundaries from an OSM PBF extract, with `osmpbf`'s parallel
 //! decoder. Place nodes keep their exact 1e-7° position (OSM's own grid). Place areas (ways)
 //! and boundary relations are read without geometry here; area assembly is its own stage
 //! (forge note §3, benchmark B2).
@@ -30,13 +31,13 @@ pub(crate) fn read(path: &Path) -> Result<Output, String> {
             // Almost every element is untagged or irrelevant: test the tags lazily and allocate
             // only for places and boundaries (the planet has billions of nodes).
             |el| match el {
-                Element::Node(n) if n.tags().any(is_place) => node(
+                Element::Node(n) if n.tags().any(is_point_feature) => node(
                     n.id(),
                     n.decimicro_lat(),
                     n.decimicro_lon(),
                     &n.tags().collect::<Vec<_>>(),
                 ),
-                Element::DenseNode(n) if n.tags().any(is_place) => node(
+                Element::DenseNode(n) if n.tags().any(is_point_feature) => node(
                     n.id(),
                     n.decimicro_lat(),
                     n.decimicro_lon(),
@@ -63,6 +64,15 @@ pub(crate) fn read(path: &Path) -> Result<Output, String> {
 
 fn is_place((k, _): (&str, &str)) -> bool {
     k == "place"
+}
+
+/// A place, or a natural point feature (D-201): which nodes are read.
+fn is_point_feature(t: (&str, &str)) -> bool {
+    is_place(t)
+        || matches!(
+            t,
+            ("natural", "peak" | "volcano" | "hill" | "saddle") | ("mountain_pass", "yes")
+        )
 }
 
 fn is_boundary(t: (&str, &str)) -> bool {
@@ -107,8 +117,22 @@ fn area_or_point(rid: &str, point: Option<(i32, i32)>, tags: &[(&str, &str)]) ->
             point,
             tags,
         );
+    } else if point.is_some()
+        && let Some(class) = natural_class(tags)
+    {
+        push(&mut out, rid, &class, "natural", point, tags);
     }
     out
+}
+
+/// The class of a named point feature with a height of its own (D-201): a summit, a hill, a
+/// volcano or a pass. Ranges, ridges and valleys are areas or lines, not places.
+fn natural_class(tags: &[(&str, &str)]) -> Option<String> {
+    match tag(tags, "natural") {
+        Some(v @ ("peak" | "volcano" | "hill" | "saddle")) => Some(format!("natural={v}")),
+        _ if tag(tags, "mountain_pass") == Some("yes") => Some("mountain_pass=yes".into()),
+        _ => None,
+    }
 }
 
 fn tag<'a>(tags: &[(&str, &'a str)], k: &str) -> Option<&'a str> {
@@ -186,7 +210,43 @@ fn parse_metres(v: &str) -> Option<f32> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_lang, parse_metres};
+    use super::{area, is_lang, node, parse_metres};
+
+    #[test]
+    fn summits_and_passes_are_natural_points() {
+        let peak = node(
+            1,
+            279_881_000,
+            869_250_000,
+            &[
+                ("natural", "peak"),
+                ("name", "Sagarmatha"),
+                ("ele", "8848.86"),
+            ],
+        );
+        let r = &peak.records[0];
+        assert_eq!(
+            (r.kind.as_str(), r.class.as_str()),
+            ("natural", "natural=peak")
+        );
+        assert_eq!(r.elevation_m, Some(8848.86));
+        let pass = node(2, 1, 1, &[("mountain_pass", "yes"), ("name", "Thorong La")]);
+        assert_eq!(pass.records[0].class, "mountain_pass=yes");
+        // A ridge is a line, a range an area: neither is a place; a peak area is not read.
+        assert!(
+            node(3, 1, 1, &[("natural", "ridge"), ("name", "x")])
+                .records
+                .is_empty()
+        );
+        assert!(
+            area("way", 4, &[("natural", "peak"), ("name", "x")])
+                .records
+                .is_empty()
+        );
+        // A place keeps its own kind whatever else it is tagged.
+        let both = node(5, 1, 1, &[("place", "village"), ("natural", "hill")]);
+        assert_eq!(both.records[0].kind, "populated_place");
+    }
 
     #[test]
     fn languages_and_metres() {

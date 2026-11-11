@@ -35,6 +35,9 @@ pub(crate) enum Dropped {
     Uncorroborated,
     /// The name is the primary name of an admin unit or of another place nearby.
     Collision,
+    /// The name is another of the place's names with its context after a comma or in
+    /// brackets ("Bara District, Nepal"): search reads context itself (D-202).
+    Qualified,
 }
 
 impl Dropped {
@@ -42,6 +45,7 @@ impl Dropped {
         match self {
             Self::Uncorroborated => "uncorroborated",
             Self::Collision => "collision",
+            Self::Qualified => "qualified",
         }
     }
 }

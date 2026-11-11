@@ -15,6 +15,7 @@ use super::sources::settlement_rank;
 use super::units::Units;
 use super::units::deepest;
 use crate::aliases::rules::Rules;
+use crate::build::Level;
 use crate::names::Namer;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -34,8 +35,55 @@ pub(super) struct Clustered {
     pub(super) unnamed: usize,
     /// Places that kept their seed point because the core point lies outside every admin unit.
     pub(super) held: usize,
+    /// Natural places left out because they lie outside every admin unit (D-201).
+    pub(super) abroad: usize,
     pub(super) naming: Naming,
     pub(super) admin: AdminCounts,
+}
+
+/// How far a summit on the border may lie outside the country's units and still be the
+/// country's (D-201): about 200 m, in 1e-7°.
+const BORDER_REACH_E7: i32 = 20_000;
+
+/// A place's parent unit: the deepest holding it; a former unit's is its successor, the
+/// current unit one level up. `None` for a natural place across the border, which is the
+/// neighbour's (D-201).
+#[allow(
+    clippy::option_option,
+    reason = "outer None: not this country's place; inner: no parent"
+)]
+fn parent_of(
+    (kind, level, flags): (PlaceKind, u8, u32),
+    point: (i32, i32),
+    levels: &[Level],
+    units: &admins::Units<'_>,
+) -> Option<Option<String>> {
+    if kind == PlaceKind::Natural {
+        natural_parent(levels, point).map(Some)
+    } else if flags & places::FLAG_FORMER == 0 {
+        Some(deepest(levels, point))
+    } else {
+        Some(units.successor(level, point))
+    }
+}
+
+/// The deepest unit holding a natural place: at its point, else within [`BORDER_REACH_E7`] of
+/// it (a summit on the border line); `None` for one across the border.
+fn natural_parent(levels: &[Level], (lon, lat): (i32, i32)) -> Option<String> {
+    let r = BORDER_REACH_E7;
+    [
+        (0, 0),
+        (r, 0),
+        (-r, 0),
+        (0, r),
+        (0, -r),
+        (r, r),
+        (r, -r),
+        (-r, r),
+        (-r, -r),
+    ]
+    .into_iter()
+    .find_map(|(dx, dy)| deepest(levels, (lon.saturating_add(dx), lat.saturating_add(dy))))
 }
 
 /// What became of the clusters of admin records (D-110).
@@ -93,7 +141,8 @@ pub(super) fn link_admins(places: &mut [Place], links: Vec<admins::Link>) -> usi
 }
 
 /// A cluster's kind, admin level and flags; `None` for a cluster that is not a place of its
-/// own (an admin cluster linked to its unit, D-110, or a kind the build does not keep).
+/// own (an admin cluster linked to its unit, D-110, or a kind the build does not keep). A
+/// cluster with a settlement is a settlement, then a locality, an admin unit, a natural feature.
 pub(super) fn place_kind(
     recs: &[(&Rec, &str, usize)],
     names: &[BTreeMap<String, Vec<PlaceName>>],
@@ -108,7 +157,12 @@ pub(super) fn place_kind(
         return Some((PlaceKind::Locality, 0, 0));
     }
     if !recs.iter().any(|(r, _, _)| r.kind == "admin") {
-        return None;
+        // A summit, hill, volcano or pass (D-201).
+        return recs.iter().any(|(r, _, _)| r.kind == "natural").then_some((
+            PlaceKind::Natural,
+            0,
+            0,
+        ));
     }
     match admin_cluster(recs, names, at, units, admin) {
         Admin::Linked(link) => {
@@ -247,7 +301,7 @@ pub(super) fn cluster_places(
     rules.finish();
     let unit_index = admins::Units::new(&units.places, levels, &rules);
     let mut admin = AdminCounts::default();
-    let (mut out, mut unnamed, mut held) = (Vec::new(), 0_usize, 0_usize);
+    let (mut out, mut unnamed, mut held, mut abroad) = (Vec::new(), 0_usize, 0_usize, 0_usize);
     let mut naming = Naming::default();
     for (
         owner,
@@ -291,11 +345,9 @@ pub(super) fn cluster_places(
             unnamed += 1;
             continue;
         };
-        // A former unit's parent is its successor: the current unit one level up.
-        let parent = if flags & places::FLAG_FORMER == 0 {
-            deepest(levels, point)
-        } else {
-            unit_index.successor(level, point)
+        let Some(parent) = parent_of((kind, level, flags), point, levels, &unit_index) else {
+            abroad += 1;
+            continue;
         };
         out.push(Place {
             key: cluster,
@@ -319,6 +371,7 @@ pub(super) fn cluster_places(
         places: out,
         unnamed,
         held,
+        abroad,
         naming,
         admin,
     })

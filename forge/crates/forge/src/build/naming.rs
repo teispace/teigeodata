@@ -1,5 +1,6 @@
 //! A place's names (D-060, D-107) and display name (D-106).
 
+use super::Place;
 use super::PlaceName;
 use super::pack;
 use super::sources::Rec;
@@ -13,7 +14,9 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
+use teigeodata_core::PlaceKind;
 use teigeodata_format::names::NameType;
+use teigeodata_names::fold;
 
 /// How the clustered places got their display names (names-canonical §5.2).
 #[derive(Default)]
@@ -46,6 +49,9 @@ impl Naming {
             self.count(Dropped::Uncorroborated),
             self.count(Dropped::Collision),
             COLLISION_M / 1000.0
+        ) + &format!(
+            "Names with their context (D-202): {} not kept (another of the place's names, or the country's or a unit's name, after a comma or in brackets).\n",
+            self.count(Dropped::Qualified)
         )
     }
 
@@ -199,6 +205,69 @@ pub(super) fn place_names<'a>(
     Some(all)
 }
 
+/// The name before a qualifier: the text before the first `, ` or ` (`, when both parts have
+/// text ("Bara District, Nepal" → "Bara District").
+fn qualified_head(text: &str) -> Option<&str> {
+    let cut = [text.find(", "), text.find(" (")]
+        .into_iter()
+        .flatten()
+        .min()?;
+    let (head, tail) = (text.get(..cut)?.trim(), text.get(cut + 2..)?.trim());
+    (!head.is_empty() && !tail.is_empty()).then_some(head)
+}
+
+/// The country's and the admin units' names, folded: the context a qualifier names.
+fn context_names(places: &[Place]) -> BTreeSet<String> {
+    places
+        .iter()
+        .filter(|p| matches!(p.kind, PlaceKind::Country | PlaceKind::Admin))
+        .flat_map(|p| &p.names)
+        .map(|n| fold(&n.text))
+        .filter(|f| !f.is_empty())
+        .collect()
+}
+
+/// Drops the names (never the canonical, the first) that carry their context after a comma or
+/// in brackets: "Chandragiri, Nepal" beside "Chandragiri", or "Bara District, Nepal" where
+/// the text after the last comma is the country's or an admin unit's name. Search reads the
+/// context after a comma itself (D-119), and the qualifier's words would otherwise make the
+/// place a match for its country's or district's name (D-202). Returns how many were dropped.
+pub(super) fn drop_qualified(places: &mut [Place], naming: &mut Naming) -> usize {
+    let context = context_names(places);
+    let mut n = 0;
+    for p in places.iter_mut() {
+        let own: BTreeSet<String> = p.names.iter().map(|x| fold(&x.text)).collect();
+        let key = p.key.clone();
+        let mut first = true;
+        p.names.retain(|x| {
+            if std::mem::take(&mut first) {
+                return true;
+            }
+            let Some(head) = qualified_head(&x.text) else {
+                return true;
+            };
+            let tail = x.text.rsplit(", ").next().unwrap_or_default();
+            let why = if own.contains(&fold(head)) {
+                head.to_string()
+            } else if x.text.contains(", ") && context.contains(&fold(tail)) {
+                tail.to_string()
+            } else {
+                return true;
+            };
+            naming.dropped.insert((
+                key.clone(),
+                String::new(),
+                x.text.clone(),
+                Dropped::Qualified,
+                why,
+            ));
+            n += 1;
+            false
+        });
+    }
+    n
+}
+
 /// The display name (names-canonical §5.2); else the first record's name, in source priority,
 /// that can be stored; else the first of the other names that can.
 pub(super) fn display_name(
@@ -241,5 +310,74 @@ pub(super) fn display_name(
                 naming.fallback += 1;
                 n.to_string()
             }),
+    }
+}
+
+#[cfg(test)]
+mod qualified_tests {
+    use super::{Naming, Place, PlaceName, drop_qualified, qualified_head};
+    use teigeodata_core::PlaceKind;
+
+    fn place(key: &str, kind: PlaceKind, names: &[&str]) -> Place {
+        Place {
+            key: key.into(),
+            kind,
+            admin_level: 0,
+            flags: 0,
+            point: (0, 0),
+            names: names
+                .iter()
+                .map(|t| PlaceName {
+                    text: (*t).into(),
+                    lang: None,
+                    kind: None,
+                })
+                .collect(),
+            population: None,
+            rank: 0,
+            parent: None,
+            sources: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn names_with_their_context_are_dropped_and_others_kept() {
+        let mut places = vec![
+            place("c", PlaceKind::Country, &["Nepal"]),
+            place("d", PlaceKind::Admin, &["Bara", "Bara District, Nepal"]),
+            place(
+                "s",
+                PlaceKind::Settlement,
+                &[
+                    "Chandragiri",
+                    "Chandragiri, Nepal",
+                    "Chandragiri (Nepal)",
+                    "Ram, Shyam",
+                ],
+            ),
+            // The canonical name stays, whatever it is.
+            place("t", PlaceKind::Settlement, &["Mimi, Nepal", "Mimi"]),
+        ];
+        let mut naming = Naming::default();
+        assert_eq!(drop_qualified(&mut places, &mut naming), 3);
+        let names =
+            |i: usize| -> Vec<&str> { places[i].names.iter().map(|n| n.text.as_str()).collect() };
+        assert_eq!(names(1), ["Bara"]);
+        // "Ram, Shyam": neither part is the place's or the context's: kept.
+        assert_eq!(names(2), ["Chandragiri", "Ram, Shyam"]);
+        assert_eq!(names(3), ["Mimi, Nepal", "Mimi"]);
+    }
+
+    #[test]
+    fn a_qualifier_is_cut_after_a_comma_or_a_bracket() {
+        assert_eq!(
+            qualified_head("Bara District, Nepal"),
+            Some("Bara District")
+        );
+        assert_eq!(qualified_head("Seri (Nepal, Karnali)"), Some("Seri"));
+        assert_eq!(qualified_head("बेनी, सोलुखुम्बु"), Some("बेनी"));
+        assert_eq!(qualified_head("Kathmandu"), None);
+        assert_eq!(qualified_head(", Nepal"), None);
+        assert_eq!(qualified_head("Bara, "), None);
     }
 }
