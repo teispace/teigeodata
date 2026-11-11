@@ -625,6 +625,29 @@ fn rule_sources(lock: &Lock, tz: Option<&str>) -> Result<Vec<String>, String> {
 }
 
 /// `forge make <cc> …`.
+/// The conflate stage over the read stages, configured by the profile; returns its key.
+fn conflate_stage(
+    root: &Path,
+    cc: &str,
+    profile: &[u8],
+    (sources, read_keys): (&[String], &[String]),
+    r: &mut Runner,
+) -> Result<String, String> {
+    let joined_keys = read_keys.join(",");
+    let ck = key(&[
+        b"conflate",
+        CODE_CONFLATE,
+        cc.as_bytes(),
+        profile,
+        joined_keys.as_bytes(),
+    ]);
+    let dir = root.join("data/build/conflate").join(sources.join("+"));
+    r.step("conflate", (&dir, ".key", None), &ck, || {
+        conflate::run(root, cc, sources)
+    })?;
+    Ok(ck)
+}
+
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
     let (cc, pass) = make_args(args)?;
@@ -657,19 +680,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         ));
     }
 
-    // conflate: over the read stages, configured by the profile.
-    let joined_keys = read_keys.join(",");
-    let ck = key(&[
-        b"conflate",
-        CODE_CONFLATE,
-        cc.as_bytes(),
-        &profile,
-        joined_keys.as_bytes(),
-    ]);
-    let dir = root.join("data/build/conflate").join(sources.join("+"));
-    r.step("conflate", (&dir, ".key", None), &ck, || {
-        conflate::run(root, cc, &sources)
-    })?;
+    let ck = conflate_stage(root, cc, &profile, (&sources, &read_keys), &mut r)?;
 
     // buildings and core: the consensus points with the settlement core (D-091).
     let core_key = core_stages(root, &recipe, &lock, &ck, &sources, lite, &mut r)?;

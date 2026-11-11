@@ -432,6 +432,31 @@ pub(crate) fn run(
 }
 
 /// Writes one part through the pack stage; its report row, and what [`check`] needs.
+/// What a part is given from the whole pack: the IDs of its rows, and the redirects whose
+/// survivor it owns (tombstones go to every part).
+fn given_to(whole: &Built, keys: &BTreeSet<&str>, own_keys: &BTreeSet<&str>) -> pack::Given {
+    let own_ids: BTreeSet<_> = own_keys
+        .iter()
+        .filter_map(|k| whole.given.ids.get(*k))
+        .collect();
+    pack::Given {
+        ids: whole
+            .given
+            .ids
+            .iter()
+            .filter(|(k, _)| keys.contains(k.as_str()))
+            .map(|(k, &v)| (k.clone(), v))
+            .collect(),
+        moved: whole
+            .given
+            .moved
+            .iter()
+            .filter(|(_, to)| to.as_ref().is_none_or(|t| own_ids.contains(t)))
+            .copied()
+            .collect(),
+    }
+}
+
 fn write_part(
     input: &Input<'_>,
     whole: &Built,
@@ -487,26 +512,7 @@ fn write_part(
         notes: Vec::new(),
     });
     let heights = input.elevation.map(|e| e.subset(&at));
-    let own_ids: BTreeSet<_> = own_keys
-        .iter()
-        .filter_map(|k| whole.given.ids.get(*k))
-        .collect();
-    let given = pack::Given {
-        ids: whole
-            .given
-            .ids
-            .iter()
-            .filter(|(k, _)| keys.contains(k.as_str()))
-            .map(|(k, &v)| (k.clone(), v))
-            .collect(),
-        moved: whole
-            .given
-            .moved
-            .iter()
-            .filter(|(_, to)| to.as_ref().is_none_or(|t| own_ids.contains(t)))
-            .copied()
-            .collect(),
-    };
+    let given = given_to(whole, &keys, &own_keys);
     let file = out_dir.join(format!(
         "{}-places-{}.tgd",
         part.address,

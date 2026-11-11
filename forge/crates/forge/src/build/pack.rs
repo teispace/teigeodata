@@ -232,8 +232,42 @@ fn iso_section(
     Ok(codes)
 }
 
+/// The timezone sections, when the pack has zone areas: REGION linked to the areas' rows,
+/// each place's zone (`PLACE_TZ`) and the zones' rules (`TZ_RULES`, D-196).
+fn zone_sections(
+    input: &Input<'_>,
+    row_of: &BTreeMap<&str, u32>,
+    points: &[Point<E6>],
+    sections: &mut Vec<Body>,
+) -> Result<(), String> {
+    if input.zones.rings.is_empty() {
+        return Ok(());
+    }
+    let body =
+        region::encode(&input.zones.rings, &Options::default()).map_err(|e| e.to_string())?;
+    let zone_rows: Vec<u32> = input
+        .zones
+        .places
+        .iter()
+        .map(|p| {
+            row_of
+                .get(p.key.as_str())
+                .copied()
+                .ok_or("a zone has no row")
+        })
+        .collect::<Result<_, _>>()?;
+    let body = region::link(&body, &zone_rows).map_err(|e| e.to_string())?;
+    if let Some(tz) = place_tz_section(&body, zone_rows.len(), points)? {
+        sections.push(tz);
+    }
+    sections.push((Kind::REGION, Encoding::TABLE, zone_rows.len() as u64, body));
+    sections.push(tz_rules_section(input, &zone_rows)?);
+    Ok(())
+}
+
 /// `TZ_RULES` (D-196): the rules of each timezone area, linked to its PLACES row.
 fn tz_rules_section(
+    input: &Input<'_>,
     rows: &[u32],
 ) -> Result<(Kind, Encoding, u64, Vec<u8>), String> {
     let named: Vec<(&str, u32)> = input
@@ -314,27 +348,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
     ];
     let iso_codes = iso_section(input, &rows, &mut sections)?;
     terrain(input, heights_body, n, &mut sections)?;
-    if !input.zones.rings.is_empty() {
-        let body =
-            region::encode(&input.zones.rings, &Options::default()).map_err(|e| e.to_string())?;
-        let zone_rows: Vec<u32> = input
-            .zones
-            .places
-            .iter()
-            .map(|p| {
-                row_of
-                    .get(p.key.as_str())
-                    .copied()
-                    .ok_or("a zone has no row")
-            })
-            .collect::<Result<_, _>>()?;
-        let body = region::link(&body, &zone_rows).map_err(|e| e.to_string())?;
-        if let Some(tz) = place_tz_section(&body, zone_rows.len(), &points)? {
-            sections.push(tz);
-        }
-        sections.push((Kind::REGION, Encoding::TABLE, zone_rows.len() as u64, body));
-        sections.push(tz_rules_section(input, &zone_rows)?);
-    }
+    zone_sections(input, &row_of, &points, &mut sections)?;
     if let Some(g) = input.geometry {
         sections.extend(super::geometry::sections(g, &rows, &row_of)?);
     }
