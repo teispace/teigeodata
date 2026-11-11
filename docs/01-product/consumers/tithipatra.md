@@ -45,7 +45,7 @@ labels. Plan: [embedded layer](../../02-research/notes/embedded-layer.md).
 | TG-14 | Nepali and English for every place | research done (D-215) | [note](../../02-research/notes/nepali-names.md): transliteration is the main path (about 80% of Nepal's places); our own engine reached 61% exact on official names in a prototype; please send the 100-per-kind correction list as data when ready |
 | TG-15 | India: towns, then villages | research done (D-216, D-217) | [note](../../02-research/notes/india-sources.md): Census 2011 towns joined to LGD; about 260 kB on the wire for 8,000 towns |
 | TG-16 | Outlines only as fine as needed | planned | Nepal at 20 m keeps 21% of vertices |
-| TG-17 | Opens fast, searches fast, small in memory | planned | SUBSTRING derived on the device: byte-identical in 0.38 s for Nepal |
+| TG-17 | Opens fast, searches fast, small in memory | in progress | SUBSTRING is built on the device instead of downloaded (D-218): `teigeodata_engine::derive::derive_installed` (feature `derive`), 0.50 s for Nepal, checked against the pack's signed hash. Phone-class benches next |
 | TG-18 | Search at the MVP's bar, strict-tier option | planned | please send the MVP's test cases |
 | TG-19 | `reverse` with distance, bearing, inside | planned | |
 | TG-10 | Coarse elevation layer | planned | |

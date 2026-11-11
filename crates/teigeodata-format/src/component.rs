@@ -205,6 +205,12 @@ impl Components {
         self.0 & c.bit() != 0
     }
 
+    /// Whether every component of `other` is in the set.
+    #[must_use]
+    pub const fn contains_all(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
     /// Whether the set is empty.
     #[must_use]
     pub const fn is_empty(self) -> bool {

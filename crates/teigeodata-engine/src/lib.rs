@@ -35,6 +35,8 @@
 //! [ADR-0011]: https://github.com/teispace/teigeodata/blob/main/docs/03-decisions/adr/ADR-0011-layered-engine.md
 //! [engine]: https://github.com/teispace/teigeodata/blob/main/docs/04-architecture/engine.md
 
+#[cfg(feature = "derive")]
+pub mod derive;
 #[cfg(feature = "catalog")]
 mod discover;
 #[cfg(feature = "store")]

@@ -55,7 +55,7 @@ libc = { version = "0.2.191", default-features = false, optional = true }
 windows-sys = { version = "0.61.2", optional = true, features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Ioctl"] }
 
 [dev-dependencies]
-teigeodata-sync = { path = ".", features = ["fuzz", "install", "repo", "trust"] }
+teigeodata-sync = { path = ".", features = ["fuzz", "install", "repo", "trust", "store", "write"] }
 # C zstd at the levels the forge uses, and the seekable-format oracle over the same C library.
 zeekstd = { version = "0.6.3", default-features = false, features = ["std"] }
 zstd = { version = "0.14.3", default-features = false }

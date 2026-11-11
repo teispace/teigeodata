@@ -64,6 +64,9 @@ A phone-class core is about 2–3 times slower: about 1 s, once, in the backgrou
 first launch. Until it is built, prefix search answers and a substring query waits for the
 index.
 
+As built (D-218): `Store::derive` plus the engine's `derive::substring`, end to end on Nepal
+lite, derived and installed in 0.50 s with the file equal to the shipped pack byte for byte.
+
 ## 4. Options compared
 
 | Option | Wire | First search | Verdict |

@@ -48,6 +48,9 @@ postal = []
 # code over `search` (the same reader), and the megabytes are the component's, which a client
 # installs only when it wants them.
 substring = ["search"]
+# Indexes built on the device instead of downloaded (D-213): `derive::substring`, and with
+# `store` `derive::derive_installed`. Off by default: it adds the section writer.
+derive = ["substring", "teigeodata-format/write"]
 # Discovery (D-164): the engine as the catalog's `Resolver` (`teigeodata_sync::catalog`), a name
 # to places and the countries whose packs hold them. Off by default: it adds the catalog reader.
 catalog = ["search", "admin-index", "dep:teigeodata-sync"]

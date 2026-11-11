@@ -171,6 +171,8 @@ pub enum StoreError {
     },
     /// The install refused the pack's name.
     Fetch(FetchError),
+    /// A component could not be derived on the device; download it instead (D-213).
+    Derive(String),
 }
 
 impl fmt::Display for StoreError {
@@ -186,6 +188,7 @@ impl fmt::Display for StoreError {
                 )
             }
             Self::Fetch(e) => write!(f, "{e}"),
+            Self::Derive(why) => write!(f, "cannot derive on the device: {why}"),
         }
     }
 }
@@ -713,6 +716,110 @@ impl<D: Fs> Store<D> {
         })
     }
 
+    /// Adds `component` to an installed pack by building it on the device from sections the
+    /// pack already holds, instead of downloading it (D-213). `build` gets every installed
+    /// section of the components it needs, each checked against its BLAKE3 hash in the head,
+    /// and returns the component's one section; the result must match the hash the head
+    /// lists for it, so a derived section is exactly the signed one. The new pack is written
+    /// as an install writes one: staged under its new name (the old file is never written,
+    /// so a reader that has it mapped is safe), synced, renamed into `packs/` and committed;
+    /// the old file is retired. Already installed: nothing to do.
+    ///
+    /// # Errors
+    /// [`StoreError::NotInstalled`]; [`StoreError::Derive`] when a needed component is not
+    /// installed, the component is not one section, the result does not match its hash, or
+    /// the pack would need `BLOCK_HASHES` it does not hold (download then); [`StoreError::Io`].
+    pub fn derive(
+        &mut self,
+        address: &str,
+        component: &str,
+        add: Component,
+        build: impl FnOnce(&[(Kind, u64, Vec<u8>)]) -> Result<Vec<u8>, String>,
+    ) -> Result<(), StoreError> {
+        let derive = |why: &str| StoreError::Derive(why.to_owned());
+        let r = self
+            .packs
+            .get(self.find(address, component)?)
+            .cloned()
+            .ok_or(StoreError::NotInstalled)?;
+        if r.set.contains(add) {
+            return Ok(());
+        }
+        let needs = Components::of(add.needs()).closed();
+        if !r.set.contains_all(needs) {
+            return Err(derive("a component it is built from is not installed"));
+        }
+        let set = r.set.union(Components::of(&[add])).closed();
+        let path = Self::path_of(&r);
+        let mut old = self.fs.open(&path)?;
+        let head = crate::fetch::read_head(&mut old, r.pack_len)?
+            .ok_or_else(|| derive("the pack's head does not read"))?;
+        let h = PackHead::parse(&head, r.pack_len)
+            .map_err(|e| StoreError::Derive(alloc::format!("{e}")))?;
+        let (was, now) = (held(&h, r.set), held(&h, set));
+        if now(Kind::BLOCK_HASHES) && !was(Kind::BLOCK_HASHES) {
+            return Err(derive(
+                "the pack would need BLOCK_HASHES, which only a download brings",
+            ));
+        }
+        let mut target = None;
+        let mut inputs = Vec::new();
+        for s in h.sections() {
+            match Component::of(s.kind) {
+                Some(c) if c == add => {
+                    if target.replace(s).is_some() {
+                        return Err(derive("the component is more than one section"));
+                    }
+                }
+                Some(c) if needs.contains(c) => {
+                    let bytes = read_checked(&mut old, &s)?
+                        .ok_or_else(|| derive("an installed section does not match its hash"))?;
+                    inputs.push((s.kind, s.item_count, bytes));
+                }
+                _ => {}
+            }
+        }
+        let target = target.ok_or_else(|| derive("the pack has no such section"))?;
+        let body = build(&inputs).map_err(StoreError::Derive)?;
+        if body.len() as u64 != target.length || blake3::hash(&body).as_bytes() != target.hash {
+            return Err(derive("the derived section does not match the pack's hash"));
+        }
+        drop(inputs);
+        let file = name_with(&r.file, r.set, set)?;
+        let staging = alloc::format!("{STAGING}/{file}.part");
+        let mut f = self.fs.open(&staging)?;
+        f.set_len(0)?;
+        f.set_len(r.pack_len)?;
+        // The head, every held section and the footer, a chunk at a time; then the new one.
+        let first = h.sections().next().map_or(r.pack_len, |s| s.offset);
+        let footer = r
+            .pack_len
+            .saturating_sub(teigeodata_format::FOOTER_SIZE as u64);
+        copy_range(&mut old, &mut f, 0, first)?;
+        for s in h.sections().filter(|s| was(s.kind) && s.length > 0) {
+            copy_range(&mut old, &mut f, s.offset, s.length)?;
+        }
+        copy_range(&mut old, &mut f, footer, r.pack_len - footer)?;
+        drop(old);
+        f.seek(io::SeekFrom::Start(target.offset))?;
+        f.write_all(&body)?;
+        hollow(&mut f, r.pack_len, set)?;
+        f.sync()?;
+        drop(f);
+        self.fs
+            .rename(&staging, &alloc::format!("{PACKS}/{file}"))?;
+        self.fs.sync_dir(PACKS)?;
+        self.fs.sync_dir(STAGING)?;
+        let mut packs = self.packs.clone();
+        if let Some(p) = packs.iter_mut().find(|p| p.file == r.file) {
+            p.set = set;
+            p.file = file;
+        }
+        self.commit(packs)?;
+        self.retire(&[r]);
+        Ok(())
+    }
+
     /// Repairs an installed pack from `mirrors`: copies it into staging, where the resume path
     /// (D-169) keeps every frame that checks against the signed catalog and fetches only the
     /// rest, then renames the result over the same name. The journal does not change (same
@@ -840,6 +947,60 @@ impl<D: Fs> Store<D> {
     }
 }
 
+/// A section's bytes, read from `f` and checked against its hash; `None` when they differ.
+fn read_checked<F: Read + Seek>(
+    f: &mut F,
+    s: &teigeodata_format::SectionEntry<'_>,
+) -> io::Result<Option<Vec<u8>>> {
+    let len = usize::try_from(s.length).map_err(|_| invalid("a section's length"))?;
+    let mut bytes = alloc::vec![0_u8; len];
+    f.seek(io::SeekFrom::Start(s.offset))?;
+    f.read_exact(&mut bytes)?;
+    Ok((blake3::hash(&bytes).as_bytes() == s.hash).then_some(bytes))
+}
+
+/// Copies `len` bytes at `at` from `from` to the same place in `to`, a chunk at a time.
+fn copy_range<A: Read + Seek, B: Write + Seek>(
+    from: &mut A,
+    to: &mut B,
+    at: u64,
+    len: u64,
+) -> io::Result<()> {
+    from.seek(io::SeekFrom::Start(at))?;
+    to.seek(io::SeekFrom::Start(at))?;
+    let mut buf = alloc::vec![0_u8; CHUNK];
+    let mut left = len;
+    while left > 0 {
+        let n = usize::try_from(left).map_or(CHUNK, |l| l.min(CHUNK));
+        let chunk = buf.get_mut(..n).ok_or_else(|| invalid("a chunk"))?;
+        from.read_exact(chunk)?;
+        to.write_all(chunk)?;
+        left -= n as u64;
+    }
+    Ok(())
+}
+
+/// The installed file name of `file` (installed with `old`) when it holds `new` instead.
+fn name_with(file: &str, old: Components, new: Components) -> Result<String, StoreError> {
+    let base = file
+        .strip_suffix(&alloc::format!(".{}.tgd", set_tag(old)))
+        .ok_or_else(|| StoreError::Derive("an installed file name without its set".into()))?;
+    Ok(alloc::format!("{base}.{}.tgd", set_tag(new)))
+}
+
+/// A component set as file names spell it: `all`, or the names joined by `+`.
+fn set_tag(set: Components) -> String {
+    let set = set.closed();
+    if set == Components::all().closed() {
+        "all".to_owned()
+    } else {
+        set.iter()
+            .map(Component::name)
+            .collect::<Vec<_>>()
+            .join("+")
+    }
+}
+
 /// The installed file's name: the asset's, with the component set in place of `.zst`.
 ///
 /// # Errors
@@ -850,16 +1011,7 @@ pub fn pack_name(entry: &Entry, set: Components) -> Result<String, FetchError> {
         .file
         .strip_suffix(".tgd.zst")
         .ok_or(FetchError::Response("an asset name not ending .tgd.zst"))?;
-    let set = set.closed();
-    let tag = if set == Components::all().closed() {
-        "all".to_owned()
-    } else {
-        set.iter()
-            .map(Component::name)
-            .collect::<Vec<_>>()
-            .join("+")
-    };
-    let name = alloc::format!("{base}.{tag}.tgd");
+    let name = alloc::format!("{base}.{}.tgd", set_tag(set));
     let plain = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || "+-._".contains(c);
     if name.starts_with('.') || name.contains("..") || !name.chars().all(plain) {
         return Err(FetchError::Response("an unsafe pack name"));
@@ -1121,5 +1273,173 @@ impl Fs for Dir {
         }
         out.sort_unstable();
         Ok(out)
+    }
+}
+
+#[cfg(all(test, feature = "write"))]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation,
+    reason = "tests: small fixed data, failures panic with their message"
+)]
+mod derive_tests {
+    use alloc::collections::{BTreeMap, BTreeSet};
+    use alloc::string::String;
+    use alloc::vec::Vec;
+
+    use teigeodata_format::component::{Component, Components};
+    use teigeodata_format::names::{self, NameRecord, Names};
+    use teigeodata_format::search::{self, Search};
+    use teigeodata_format::{Encoding, Kind, Pack, Section, Writer};
+
+    use super::{Dir, JOURNAL, PACKS, Record, Store, StoreError, render, set_tag};
+
+    /// Every suffix of 3 or more bytes of a lowercase ASCII name: the test's key rule.
+    fn keys(text: &str, out: &mut dyn FnMut(&str)) {
+        let t = text.to_ascii_lowercase();
+        for at in 1..t.len().saturating_sub(2) {
+            if let Some(k) = t.get(at..) {
+                out(k);
+            }
+        }
+    }
+
+    fn build(inputs: &[(Kind, u64, Vec<u8>)]) -> Result<Vec<u8>, String> {
+        let get = |k: Kind| inputs.iter().find(|i| i.0 == k).ok_or("missing");
+        let (n, s) = (get(Kind::NAMES)?, get(Kind::SEARCH)?);
+        let names = Names::open(&Section::unpacked(Kind::NAMES, n.1, &n.2))
+            .map_err(|e| alloc::format!("{e}"))?;
+        let search = Search::open(&Section::unpacked(Kind::SEARCH, s.1, &s.2))
+            .map_err(|e| alloc::format!("{e}"))?;
+        let imp: Vec<u8> = (0..names.len())
+            .map(|r| search.importance(r as u32))
+            .collect();
+        search::substring_from_names(&names, &imp, &keys).map_err(|e| alloc::format!("{e}"))
+    }
+
+    /// A pack of NAMES, SEARCH and SUBSTRING over a few places.
+    fn pack() -> Vec<u8> {
+        let texts = [
+            "Lahachowk",
+            "Pokhara",
+            "Kathmandu",
+            "Biratnagar",
+            "Janakpur",
+        ];
+        let records: Vec<[NameRecord<'_>; 1]> = texts
+            .iter()
+            .map(|t| {
+                [NameRecord {
+                    text: t,
+                    ..NameRecord::default()
+                }]
+            })
+            .collect();
+        let refs: Vec<&[NameRecord<'_>]> = records.iter().map(<[_; 1]>::as_slice).collect();
+        let names_body = names::encode(&refs).unwrap();
+        let mut map: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
+        for (r, t) in texts.iter().enumerate() {
+            let mut k = alloc::vec![1_u8];
+            k.extend_from_slice(t.to_ascii_lowercase().as_bytes());
+            map.entry(k).or_default().insert(r as u32);
+        }
+        let imp = [5_u8, 9, 30, 12, 7];
+        let search_body = search::encode(&map, &imp).unwrap();
+        let n = texts.len() as u64;
+        let sub = build(&[
+            (Kind::NAMES, n, names_body.clone()),
+            (Kind::SEARCH, n, search_body.clone()),
+        ])
+        .unwrap();
+        Writer::new("zz", "places", "2026.11.0")
+            .unwrap()
+            .pack(
+                &[
+                    (Kind::NAMES, Encoding::TABLE, n, &names_body),
+                    (Kind::SEARCH, Encoding::TABLE, n, &search_body),
+                    (Kind::SUBSTRING, Encoding::TABLE, n, &sub),
+                ],
+                None,
+            )
+            .unwrap()
+    }
+
+    /// A store holding `pack` installed without SUBSTRING (its bytes zero, as a hole reads).
+    fn store(tag: &str, full: &[u8]) -> (std::path::PathBuf, Store<Dir>, Record) {
+        let root =
+            std::env::temp_dir().join(alloc::format!("tgd-derive-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let set = Components::of(&[Component::Search]).closed();
+        let file = alloc::format!("zz.places.2026.11.0.{}.tgd", set_tag(set));
+        let mut bytes = full.to_vec();
+        let p = Pack::open(full).unwrap();
+        let s = p
+            .head()
+            .sections()
+            .find(|s| s.kind == Kind::SUBSTRING)
+            .unwrap();
+        bytes[s.offset as usize..(s.offset + s.length) as usize].fill(0);
+        std::fs::create_dir_all(root.join(PACKS)).unwrap();
+        std::fs::write(root.join(PACKS).join(&file), &bytes).unwrap();
+        let r = Record {
+            address: "zz".into(),
+            component: "places".into(),
+            release: "2026.11.0".into(),
+            set,
+            file,
+            pack_len: bytes.len() as u64,
+            head: [0; 16],
+            deps: alloc::vec![],
+            asked: true,
+            pinned: false,
+            used: 0,
+        };
+        std::fs::write(root.join(JOURNAL), render(core::slice::from_ref(&r))).unwrap();
+        let (st, _) = Store::open(Dir::new(&root).unwrap()).unwrap();
+        (root, st, r)
+    }
+
+    #[test]
+    fn a_derived_component_is_the_signed_one_byte_for_byte() {
+        let full = pack();
+        let (root, mut st, old) = store("ok", &full);
+        st.derive("zz", "places", Component::Substring, build)
+            .unwrap();
+        let r = st.packs().first().unwrap().clone();
+        assert!(r.set.contains(Component::Substring));
+        assert_eq!(std::fs::read(root.join(PACKS).join(&r.file)).unwrap(), full);
+        assert!(
+            !root.join(PACKS).join(&old.file).exists(),
+            "the old file is retired"
+        );
+        // Twice: nothing to do.
+        st.derive("zz", "places", Component::Substring, |_| {
+            Err("not called".into())
+        })
+        .unwrap();
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_derived_section_that_differs_is_refused_and_nothing_changes() {
+        let full = pack();
+        let (root, mut st, old) = store("bad", &full);
+        let err = st
+            .derive("zz", "places", Component::Substring, |i| {
+                let mut b = build(i)?;
+                b[0] ^= 1;
+                Ok(b)
+            })
+            .unwrap_err();
+        assert!(matches!(err, StoreError::Derive(_)), "{err}");
+        assert_eq!(st.packs(), core::slice::from_ref(&old));
+        assert!(root.join(PACKS).join(&old.file).exists());
+        // A component whose inputs are not installed is refused too.
+        let err = st
+            .derive("zz", "places", Component::AdminIndex, build)
+            .unwrap_err();
+        assert!(matches!(err, StoreError::Derive(_)), "{err}");
+        let _ = std::fs::remove_dir_all(root);
     }
 }
