@@ -445,3 +445,15 @@ counted in instructions (Callgrind runs on Linux only). (4) Always on was kept: 
 that runs only without strong matches would hide Pokhara behind names that start with
 "khara". (5) The differential test is in `teigeodata-names`: exact prefix plus substring keys
 find what a scan of the folds finds, over ASCII, 2-byte and 3-byte UTF-8 and mark starts.
+
+### 10.1 On the real Nepal main pack (2026-11-11)
+
+Built with `forge make np` once the inputs were fetched: SUBSTRING 2,561,452 B (25.0 B per
+place over 102,367 places, above the proxy's 19.9 B: more names per place), 2.08 MB on the
+wire. Golden (`pack-eval`, product engine): the nine `substring` cases all within rank 3,
+four at rank 1; the others lose to a same-name district or municipality ("mandu":
+Kathmandu district first) or, by design, to a one-edit match ("ratnagar": Ramnagar), so
+their `max_rank` is 3 like the other same-name cases. All queries p50 7.4 µs, p99 110 µs.
+The first real build lost "Nepa" → Nepalganj: Wikidata labels such as "Bara District,
+Nepal" made the word "Nepal" a key of every district; D-202 drops such names.
+

@@ -85,10 +85,11 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 - [x] B11 on all 45 Nepal tiles (D-109): 139.3 MB for the 9° × 5° box, 1.907 bits per sample,
   all probes within 1 m, 163 s
 - [ ] B11 on 2–3 tiles elsewhere, and against LERC and zstd
-- [ ] The DEM section in the Nepal packs: its own component, tiles masked to the country.
+- [x] The DEM section in the Nepal packs: its own component, tiles masked to the country.
   Built 2026-11-11 (D-192): `dem::mask`, the forge's mask and read-back gate,
-  `Engine::elevation_at`, `tgd elevation`; the item closes with the Nepal size, once the DEM
-  tiles are fetched again
+  `Engine::elevation_at`, `tgd elevation`. Nepal main (2026-11-11): 64.2 MB raw, 64.2 MB on
+  the wire, of a 74.7 MB asset; the mask also keeps the tiles under every place with a height
+  (a record across the border kept its terrain, which the read-back caught)
 - [x] Elevation at each place's consensus point from the DEM section into PLACES column 7 (since D-133 its own ELEVATION section)
   (D-109, D-111): `forge make` runs the recipe's `dem` tileset as a stage, `build` samples it
   at every place's final point and checks every row on read back. Nepal main: 101,542 of
@@ -102,7 +103,12 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   94,758 of 94,760 places with a height; against the heights sources state, P50 23 m (main 25 m);
   section 156.3 MB, 2.14 bits per sample (Copernicus 1.91); 191 s. Copernicus for lite once
   Q-008 clears it
-- [ ] Surveyed heights for summits (D-089; moved from 3.2)
+- [x] Surveyed heights for summits (D-089; moved from 3.2; D-201,
+  [note](../../02-research/notes/summits.md)): summits, hills, volcanoes and passes are
+  `natural` places; one takes its records' stated height where it is within 50 m + 1 % of the
+  DEM. Nepal main: 2,726 natural places, 672 surveyed heights taken, 117 refused, 125 across
+  the border left out; the DEM under-reads the summits taken by 15 m (P50), 82 m (P90);
+  Everest 8,849 m
 - [ ] Review the consensus point where it moves a hill settlement far from its records: the
   height there differs from GeoNames' SRTM3 by more than 100 m for 14,597 records (P90 130 m,
   26 m at the records' own points); review with the consensus gate
@@ -214,3 +220,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-09 | 3.7: lite timezones from tzdb (D-138); a GeoNames timezone check its own item | the lite build had no timezones |
 | 2026-11-11 | 3.4: the DEM ships masked to the pack's units, terrain by `elevation_at` | D-192 |
 | 2026-11-11 | 3.5: point → postal code in the engine and `tgd postal` (D-200) | the SDK half of 3.5 |
+| 2026-11-11 | 3.4: summits as natural places with surveyed heights (D-201); the DEM section closed with the Nepal size | the DEM tiles fetched again |

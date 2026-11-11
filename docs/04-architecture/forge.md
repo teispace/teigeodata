@@ -446,8 +446,10 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   ([note](../02-research/notes/attribution.md)).
 - **Places.** The country (from its Wikidata item), the admin units of every COD-AB level
   below it (a point inside each polygon, its parent the unit of the level above), one place
-  per conflated cluster (a settlement when any record is a populated place, else a locality;
-  the parent is the deepest admin unit holding it), and one `timezone_area` place per IANA
+  per conflated cluster (a settlement when any record is a populated place, else a locality,
+  else a `natural` place for a summit, hill, volcano or pass, D-201; the parent is the deepest
+  admin unit holding it, and a natural place more than 200 m outside every unit is left out),
+  and one `timezone_area` place per IANA
   zone: each timezone-boundary-builder zone that meets the country's box, `--tz-first` zones
   first (D-093, D-084); or, from tzdb, the country's one `zone.tab` zone over its admin-0
   outline, refusing a country with several (D-138). A place keeps the names that fit the search key
@@ -470,7 +472,9 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   name, in source priority. Another record lends its names only when one matches an anchor
   name (fold, join or phonetic key, also of its romanisation); a lent name the anchor lacks by
   fold is dropped when it is the primary name of an admin unit, or of another place within
-  30 km. `forge aliases` applies the same rules (`aliases::rules`).
+  30 km. `forge aliases` applies the same rules (`aliases::rules`). A name with its context
+  after a comma or in brackets is dropped where the part before it is another of the place's
+  names or the part after the last comma is the country's or a unit's name (D-202).
 - **Corrections (ADR-0036, D-117).** `data/countries/<cc>/corrections/*.yaml`: `same-as` joins
   clusters before naming; `add-name`, `remove-name`, `set-point` and `set-population` apply to
   the built places. Each is retired, applied or stale by its guard and listed in
@@ -487,6 +491,9 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   polygon, under its successor one level up; an `ADMD` becomes a locality. The summary counts
   each outcome.
   `dropped-names-<build>.tsv` lists every dropped record or name and what it names.
+- **Summits (D-201).** A natural place takes the median height its records state where it
+  is within 50 m + 1 % of the DEM at its point or of the DEM's highest sample within 3″, else
+  the DEM's; the read-back holds it to the same rule, and the summary gives G-PEAK.
 - **Elevation (D-111).** With `--dem <tileset>`, every place but a timezone area takes the
   height of the tileset's `dem-section` (`data/build/dem-section/<tileset>/dem.tgd`) at its
   final point (the `core` consensus point, else its first record's), bilinear through the
@@ -590,7 +597,8 @@ writes one pack per unit of the level `data/countries/<cc>/split.yaml` names, at
   when the cut zone holds it;
 - its own places' postal codes and heights, the redirects to them, and every tombstone.
 
-A part's DEM is masked to its own unit's polygon (D-192).
+A part's DEM is masked to its own unit's polygon (D-192). Every mask also keeps the tiles
+under each place with a height, so a place's terrain is never masked away (D-201).
 
 G-tz fails only the country pack: a part holds a subset of the same records. After writing,
 `split::check` reads every part back against the country pack: each own place is in one part
