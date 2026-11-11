@@ -54,6 +54,9 @@ pub enum Error {
     Signature(&'static str),
     /// The writer was given something it cannot write.
     Write(&'static str),
+    /// A query's input, or bytes handed to a build-side parser (TZif, a TZ string), is
+    /// invalid or out of range.
+    Input(&'static str),
 }
 
 impl fmt::Display for Error {
@@ -94,6 +97,7 @@ impl fmt::Display for Error {
             ),
             Self::Signature(p) => write!(f, "pack signature: {p}"),
             Self::Write(p) => write!(f, "cannot write the pack: {p}"),
+            Self::Input(p) => write!(f, "invalid input: {p}"),
         }
     }
 }

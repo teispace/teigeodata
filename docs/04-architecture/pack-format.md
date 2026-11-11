@@ -1,7 +1,7 @@
 ---
 title: "The .tgd pack format v1 (draft)"
 status: draft
-updated: 2026-11-09
+updated: 2026-11-11
 ---
 
 # The .tgd pack format v1 (draft)
@@ -106,9 +106,10 @@ Tags known to format 0.1. A test fails if a tag in the code is missing here.
 | `0x0006` | `bbox` | 4 × i32 on the 1e-7° grid: min lat, min lon, max lat, max lon; min lon above max lon crosses the antimeridian | |
 | `0x0007` | `perspective` | as `address`: the default perspective, a country code ([ADR-0006](../03-decisions/adr/ADR-0006-perspective.md)) | |
 | `0x0008` | `attribution` | UTF-8, 1–8,192 bytes, no control character but the line feed: the notices of the sources the pack was built from, one per line (D-126), signed with the head | |
+| `0x0009` | `tzdb` | as `release`: the tzdb release the pack's [TZ_RULES](#tz_rules) were compiled from (`2026f`, D-196); present exactly when the pack has TZ_RULES | |
 
 Still to add, with the sections that need them: dependencies (other packs by address and hash),
-versions (tzdb, boundary and source releases), the perspectives present, the components and
+versions (boundary and source releases; tzdb's is `tzdb`), the perspectives present, the components and
 levels of detail present, and per-column encoding descriptors (codec ID, grid scale, block size,
 parameters).
 
@@ -137,13 +138,15 @@ parameters).
 | 19 | ELEVATION | each place's height, one row per PLACES row | `elevation` | column table (D-133): one bit-packed column; 1.3 B per place on Nepal, [below](#elevation) |
 | 20 | PLACE_TZ | each place's timezone area, one row per PLACES row | `timezone` | column table (D-134): the areas' rows and a per-place index into them, [below](#place_tz) |
 | 21 | ISO_CODES | the ISO 3166 code of each coded country and subdivision row | `admin` | column table (D-197): the coded rows and their packed codes, [below](#iso_codes) |
+| 22 | TZ_RULES | the rules of the pack's timezones: transitions, local time types, abbreviations, parsed POSIX TZ footers, zone names linked to their areas | `tz-rules` | column table (D-196, [ADR-0039](../03-decisions/adr/ADR-0039-tz-rules.md)): 93 kB for the world's 444 outline zones, 2.5 kB for three; [below](#tz_rules) |
 
 ### Components of a pack
 
 Each section belongs to one component (D-133, D-135), and a client chooses components, not
 sections. `teigeodata_format::component` holds the table: each component's sections, and the
-components it needs (`search` needs `names`, `admin-index` needs `boundaries`, every other one
-but `dem` needs `point`). BLOCK_HASHES belongs to none; a client fetches it with any section of
+components it needs (`search` needs `names`, `admin-index` needs `boundaries`, `timezone` and
+`timezone-index` need `tz-rules` as well as `point`, every other one but `dem` and `tz-rules`
+needs `point`). BLOCK_HASHES belongs to none; a client fetches it with any section of
 1 MiB or more. A test checks this table's Component column against that module.
 
 ### Column tables (encoding 1)
@@ -241,6 +244,36 @@ A place's area is the one the pack's REGION holds at the place's stored point, s
 a place and the area at its point agree; the forge proves it on read-back. A pack where no place
 has an area has no PLACE_TZ section. Any other column is refused. The deep check refuses areas
 out of order or past the rows, a value past the areas, and a section where no place has one.
+
+### TZ_RULES
+
+The rules of the timezones the pack's outlines name, compiled by `zic -b slim` (built from the
+pinned tzcode) from the same tzdb release as the outlines, and stored as integers so the reader
+parses no text (D-196, [ADR-0039](../03-decisions/adr/ADR-0039-tz-rules.md),
+[note](../02-research/notes/tz-rules.md)). `item_count` is the number of zone names. A *set* is
+one distinct TZif file; zones with identical files (tzdb's links) share it. The full column
+list is in `teigeodata_format::tz_rules`:
+
+| ID | Column | Values |
+|---:|---|---|
+| 1 | META | base minute (i64 as two u32), flags (bit 0: built with `backzone`) |
+| 2–5 | NAME_TEXT, NAME_ENDS, NAME_SET, NAME_PLACE | names in byte order (bytes + ends), each name's set, 1 + its area's PLACES row or 0 |
+| 6–8, 19 | SET_TRANS_ENDS, SET_TYPE_ENDS, SET_FOOTER, SET_TZIF | per set: ends into the transitions and types, 1 + footer or 0, TZif version and abbreviation layout |
+| 9–11 | TRANS_MINUTE, TRANS_SECOND, TRANS_TYPE | per transition: minutes since the base, second, type within its set |
+| 12–13 | TYPE_OFFSET, TYPE_FLAGS | per type: offset + 93,600; `isdst` and abbreviation index |
+| 14–15 | ABBR_TEXT, ABBR_ENDS | the distinct abbreviations, sorted |
+| 16–18 | FOOT_STD, FOOT_DST, FOOT_RULES | per footer: standard offset and abbreviation; DST abbreviation and offset; start and end rules (date code, time + 604,800) |
+
+Before a set's first transition its type 0 applies (tzdb's LMT stub); on or after its last,
+or always when it has none, its footer. `Zone::local` answers a civil time as `Unique`,
+`Gap { before, after }` or `Overlap { earlier, later }`, by the definition that offset `o` is
+valid when the offset at `local − o` is `o`. Open checks the frame and column lengths; the deep
+check proves names sorted, sets and footers numbered by first use, transitions increasing,
+every index and range, and each footer consistent with its last transition (RFC 9636). The
+encoding is lossless: `Zone::tzif` rebuilds every 2026f file byte for byte. Any other column is
+refused. Measured on 2026f: 97,260 B for all 598 names (345 sets, 17,085 transitions) against
+207,069 B of distinct slim TZif; 93,232 B for the 444 outline zones. A partly filled 128-value
+block costs as much as a full one, so three zones take 2,492 B.
 
 ### SEARCH
 

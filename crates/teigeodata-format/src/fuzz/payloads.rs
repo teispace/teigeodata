@@ -40,6 +40,9 @@ use crate::redirects::{self, Fate, Redirects, Resolved, resolve};
 use crate::region::{self, Region};
 use crate::search::fuzzy::Fuzzy;
 use crate::search::{self, Search};
+use crate::tz_rules::{
+    self, Civil, Dst, Footer, RuleDate, RuleTime, TypeRow, TzRules, ZoneInput, ZoneRules,
+};
 use crate::{Encoding, Kind, Pack, Writer};
 use teigeodata_core::bitpack::{self, BLOCK_LEN, Coding, Packed};
 use teigeodata_core::bits::{self as bitmap, Bits};
@@ -121,8 +124,9 @@ pub fn sections(data: &[u8]) {
     let mut c = Cursor(data);
     let mode = c.u8();
     let structured = mode & 0x80 != 0;
-    match mode % 13 {
+    match mode % 14 {
         12 => iso_codes_case(&mut c, structured),
+        13 => tz_rules_case(&mut c, structured),
         11 => postal_case(&mut c, structured),
         10 => dem_case(&mut c, structured),
         8 => arcs_case(&mut c, structured),
@@ -2230,5 +2234,192 @@ fn poly_index_checks(
             "a written POLY_INDEX fails its check"
         );
         assert_eq!(ix.len(), topo.polys.len());
+    }
+}
+
+/// A rule time from the input: any date form, within ±167 hours.
+fn tz_rule(c: &mut Cursor<'_>) -> RuleTime {
+    let date = match c.u8() % 3 {
+        0 => RuleDate::Month {
+            month: 1 + c.u8() % 12,
+            week: 1 + c.u8() % 5,
+            weekday: c.u8() % 7,
+        },
+        1 => RuleDate::Julian1(1 + c.u16() % 365),
+        _ => RuleDate::Julian0(c.u16() % 366),
+    };
+    let time = i32::from(c.u16() % 1_000) * 600 - 300_000;
+    RuleTime { date, time }
+}
+
+/// A model zone from the input: up to 40 transitions over a few types, and a footer (none,
+/// standard only, or with DST rules); the last transition is made to agree with the footer,
+/// as RFC 9636 requires, by asking a footer-only zone what it reads there.
+fn tz_model(c: &mut Cursor<'_>) -> ZoneRules {
+    let abbr = |c: &mut Cursor<'_>| -> String {
+        let n = 3 + c.below(3);
+        (0..n)
+            .map(|_| char::from(b"ABCDEFG+-019"[c.below(12)]))
+            .collect()
+    };
+    let offset = |c: &mut Cursor<'_>| i32::from(c.u16() % 1_000) * 180 - 89_999;
+    let mut types: Vec<TypeRow> = (0..=c.below(5))
+        .map(|_| TypeRow {
+            offset: offset(c),
+            is_dst: c.u8() & 1 == 1,
+            abbr: abbr(c),
+        })
+        .collect();
+    let mut t = -3_000_000_000 + i64::from(c.u32() % 1_000_000);
+    let mut transitions = Vec::new();
+    for _ in 0..c.below(41) {
+        t += 1 + i64::from(c.u32() % 40_000_000);
+        transitions.push((t, c.below(types.len()) as u8));
+    }
+    let footer = match c.u8() % 3 {
+        0 => None,
+        1 => Some(Footer {
+            std_offset: offset(c),
+            std_abbr: abbr(c),
+            dst: None,
+        }),
+        _ => Some(Footer {
+            std_offset: offset(c),
+            std_abbr: abbr(c),
+            dst: Some(Dst {
+                offset: offset(c),
+                abbr: abbr(c),
+                start: tz_rule(c),
+                end: tz_rule(c),
+            }),
+        }),
+    };
+    if let (Some(f), Some(last)) = (&footer, transitions.last_mut()) {
+        let alone = ZoneRules {
+            version: 3,
+            transitions: Vec::new(),
+            types: vec![TypeRow {
+                offset: f.std_offset,
+                is_dst: false,
+                abbr: f.std_abbr.clone(),
+            }],
+            footer: Some(f.clone()),
+            first_abbr: 0,
+        };
+        let one = [ZoneInput {
+            name: "A/B",
+            rules: &alone,
+            place: None,
+        }];
+        let bytes = tz_rules::encode(&one, false)
+            .unwrap_or_else(|e| panic!("a footer-only zone is refused: {e}"));
+        let s = crate::Section::unpacked(Kind::TZ_RULES, 1, &bytes);
+        let r = TzRules::open(&s).unwrap_or_else(|e| panic!("{e}"));
+        let l = r
+            .zone("A/B")
+            .and_then(|z| z.offset_at(last.0).ok())
+            .unwrap_or_else(|| panic!("a footer-only zone does not answer"));
+        types.push(TypeRow {
+            offset: l.offset,
+            is_dst: l.is_dst,
+            abbr: l.abbr.into(),
+        });
+        last.1 = (types.len() - 1) as u8;
+    }
+    ZoneRules {
+        version: 2 + c.u8() % 3,
+        transitions,
+        types,
+        footer,
+        first_abbr: 0,
+    }
+}
+
+/// `TZ_RULES` (D-196): model zones encode, check, answer as their model and rebuild TZif that
+/// parses back to it; fuzzed payloads, TZif bytes and TZ strings never panic.
+fn tz_rules_case(c: &mut Cursor<'_>, structured: bool) {
+    let (mut body, mut model) = (Vec::new(), None);
+    let items;
+    if structured {
+        let n = 1 + c.below(6);
+        let zones: Vec<ZoneRules> = (0..n).map(|_| tz_model(c)).collect();
+        let names: Vec<String> = (0..n)
+            .map(|i| alloc::format!("Z/{}{i}", c.u8() % 4))
+            .collect();
+        let inputs: Vec<ZoneInput<'_>> = names
+            .iter()
+            .zip(&zones)
+            .enumerate()
+            .map(|(i, (name, rules))| ZoneInput {
+                name,
+                rules,
+                place: (i % 2 == 0).then_some(i as u32),
+            })
+            .collect();
+        body = tz_rules::encode(&inputs, c.u8() & 1 == 1)
+            .unwrap_or_else(|e| panic!("valid zone rules are refused: {e}"));
+        let mut count = n as u64;
+        if !edit(c, &mut body, &mut count) {
+            model = Some((names.clone(), zones.clone()));
+        }
+        items = count;
+    } else {
+        items = u64::from(c.u8() % 8);
+        let rest = c.rest();
+        let _ = tz_rules::parse_tzif(rest);
+        if let Ok(text) = core::str::from_utf8(rest) {
+            let _ = tz_rules::parse_footer(text);
+        }
+        body.extend_from_slice(rest);
+    }
+    let Some(file) = pack(&[(Kind::TZ_RULES, items, &body)]) else {
+        return;
+    };
+    let p = open(&file);
+    let Ok(r) = TzRules::open(&section(&p, Kind::TZ_RULES)) else {
+        assert!(model.is_none(), "a written TZ_RULES payload does not open");
+        return;
+    };
+    let checked = r.check().is_ok();
+    let instants = [
+        tz_rules::MIN_UNIX,
+        -3_000_000_000,
+        0,
+        1_700_000_000,
+        tz_rules::MAX_UNIX,
+    ];
+    for i in 0..r.len().min(8) {
+        let Ok(z) = r.zone_at(i) else { continue };
+        for t in instants {
+            let _ = z.offset_at(t);
+            if let Ok(civil) = Civil::from_seconds(t) {
+                let _ = z.local(civil);
+            }
+        }
+        let _ = z.transitions().count();
+        let _ = z.tzif();
+    }
+    let _ = r.zone("Z/00");
+    let _ = r.zone_of_place(0);
+    let Some((names, zones)) = &model else {
+        return;
+    };
+    assert!(checked, "a written TZ_RULES payload fails its check");
+    for (name, want) in names.iter().zip(zones) {
+        let z = r
+            .zone(name)
+            .unwrap_or_else(|| panic!("zone {name} is missing"));
+        let back = tz_rules::parse_tzif(&z.tzif().unwrap_or_else(|e| panic!("{e}")))
+            .unwrap_or_else(|e| panic!("rebuilt TZif does not parse: {e}"));
+        assert_eq!(&back, want, "{name}");
+        for &(t, k) in &want.transitions {
+            let got = z.offset_at(t).unwrap_or_else(|e| panic!("{e}"));
+            let ty = &want.types[usize::from(k)];
+            assert_eq!(
+                (got.offset, got.is_dst, got.abbr),
+                (ty.offset, ty.is_dst, ty.abbr.as_str()),
+                "{name} at {t}"
+            );
+        }
     }
 }

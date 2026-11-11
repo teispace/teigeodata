@@ -1,6 +1,6 @@
 ---
 title: "Zone rules in the pack: TZif, POSIX TZ footers, and the TZ_RULES section"
-status: research
+status: accepted
 updated: 2026-11-11
 owner: maintainer's agents
 revisit: 2027-05-11
@@ -32,7 +32,7 @@ phase 4 §4.9b (TG-03), the pack format, the engine, the forge and a new decisio
 
 ## 2. Summary and recommendation
 
-- **Store parsed rules as columns, not raw TZif.** A new section `TZ_RULES` (kind 21), in a new
+- **Store parsed rules as columns, not raw TZif.** A new section `TZ_RULES` (kind 22; 21 was taken while this was built), in a new
   component `tz-rules` that needs nothing; `timezone` and `timezone-index` need it. The forge
   compiles tzdb with `zic -b slim`, parses each TZif (trusted, build side) and writes:
   sorted zone IDs, deduplicated rule sets, transition times, local time types, an abbreviation
@@ -244,7 +244,7 @@ same three cases with both offsets.
 
 ## 5. What we build ourselves, and why
 
-### 5.1 Section `TZ_RULES` (kind 21), component `tz-rules`
+### 5.1 Section `TZ_RULES` (kind 22), component `tz-rules`
 
 A column table (encoding 1). All columns are u32 bit-packed unless noted; "set" is a
 deduplicated rule set (identical TZif content).
@@ -270,6 +270,14 @@ deduplicated rule set (identical TZif content).
 | 17 | `FOOT_DST` | per footer: 1 + DST type, or 0 for no DST |
 | 18 | `FOOT_RULES` | per footer with DST: start date, start time, end date, end time (4 values; date = kind 2 bits + `M` month/week/day or `J`/`n` day; time + 604,800 within ±167 h) |
 
+**As built (D-196):** `SET_FOOTER` is 1 + the footer, 0 for an empty footer; `FOOT_STD` and
+`FOOT_DST` hold two values per footer (offset + 93,600 and abbreviation; 1 + DST abbreviation
+or 0, and the DST offset or 0), `FOOT_RULES` four per footer, zeros without DST; and column 19
+`SET_TZIF` holds each set's TZif version − 2 (bits 0–1) and, above them, the type whose
+abbreviation `zic` laid out first (`zic` swaps the default type into place 0 before laying out
+the characters), which makes the TZif rebuild byte-identical. The specification is
+[pack format § TZ_RULES](../../04-architecture/pack-format.md#tz_rules).
+
 Rule sets are ordered by first use in name order, so the encoding is canonical. Type 0 of each
 set is TZif's type 0 (the LMT stub where tzdb has one). The open check proves: names sorted and
 unique; every end column non-decreasing and ending at its column's length; every index in
@@ -283,8 +291,8 @@ planner and the bindings take the new row from `teigeodata_format::component`.
 
 ### 5.2 Manifest
 
-A new tag `TZDB` (0x0009, text, not critical), e.g. `2026f` (`2026f+backzone` if the flag is
-set), present exactly when `TZ_RULES` is. The tzdb version also stays with the TBB version in
+A new tag `TZDB` (0x0009, text, not critical), e.g. `2026f`, present exactly when `TZ_RULES`
+is. As built, the value is always the plain release; `backzone` is only the `META` flag. The tzdb version also stays with the TBB version in
 the pack's source list ([ADR-0022](../../03-decisions/adr/ADR-0022-timezone-and-postal.md)).
 
 ### 5.3 Format reader API (`teigeodata_format::tz_rules`, `no_std`, no `alloc`)
@@ -391,7 +399,7 @@ round-trip test and fuzzing reach them.
   `jiff` is a dev-dependency only. ADR-0033's "loaded through `jiff`" no longer holds; record
   it with a new ADR that refines ADR-0033 (ADRs are not edited) or a decision row naming the
   change, as the maintainer's process prefers.
-- [Pack format](../../04-architecture/pack-format.md): kind 21 `TZ_RULES`, component
+- [Pack format](../../04-architecture/pack-format.md): kind 22 `TZ_RULES`, component
   `tz-rules`, the manifest tag `TZDB`; the kinds test checks the new row.
 - Engine page: the four queries and the `tz-rules` feature.
 - [Phase 4](../../07-planning/phases/phase-4.md) §4.9b TG-03: steps in the order format →
@@ -402,10 +410,16 @@ round-trip test and fuzzing reach them.
 
 ## 7. Risks and open items
 
-- **`zic` version drift:** the host's `zic` (macOS 2022g) may differ from tzcode 2026f's.
-  Pinning tzcode removes the risk; whether the outputs differ is **unverified**.
-- **Size estimate:** the 60–75 KB is computed from counts, not from an encoder. If the real
-  section is not clearly smaller than the raw TZif, revisit option (a).
+- **`zic` version drift (resolved 2026-11-11):** the outputs differ. `zic` 2022g (macOS) and
+  `zic` 2026f give different slim files for 40 of the 598 names, so the forge builds `zic`
+  from the pinned tzcode 2026f.
+- **Size (measured 2026-11-11, the encoder in D-196):** 97,260 B for all 598 names (345
+  sets, 17,085 transitions) against 207,069 B of distinct slim TZif; 93,232 B for the 444
+  zones the outlines name, against 202,081 B. That is larger than the 60–75 KB estimated
+  from counts, but under half the raw TZif, so option (b) stands. Small packs pay a fixed
+  cost per column (a partly filled 128-value block costs as much as a full one, about 16 B
+  per bit of width): Kathmandu, Kolkata and Shanghai take 2,492 B against 774 B of TZif, not
+  the < 1 KB estimated.
 - **Mixed versions across layers:** two installed packs could carry different tzdb releases.
   The release process should keep one tzdb per data release; `tz_version` reports the
   answering layer's. Whether the engine should prefer the newest tzdb over layer precedence is

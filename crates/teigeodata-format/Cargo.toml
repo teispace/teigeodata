@@ -37,6 +37,8 @@ zerocopy = { version = "0.8.63", default-features = false, features = ["derive"]
 teigeodata-format = { path = ".", features = ["fuzz"] }
 # C zstd, as the forge compresses BLOBS: dictionaries and level 19 (`ruzstd` encodes neither).
 zstd = { version = "0.14.3", default-features = false, features = ["zdict_builder"] }
+# The differential test of TZ_RULES (D-196): jiff reads the same TZif bytes as the forge.
+jiff = { version = "0.2.42", default-features = false, features = ["std"] }
 
 [lints]
 workspace = true

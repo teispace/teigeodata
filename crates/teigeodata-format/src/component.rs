@@ -10,13 +10,14 @@
 //! | `admin` | HIERARCHY, `ISO_CODES` | point | a place's parents and children, ISO 3166 codes |
 //! | `names` | NAMES | point | names |
 //! | `search` | SEARCH | names | name search |
-//! | `timezone` | `PLACE_TZ` | point | a place's timezone |
-//! | `timezone-index` | REGION | point | the timezone at any coordinate |
+//! | `timezone` | `PLACE_TZ` | point, tz-rules | a place's timezone |
+//! | `timezone-index` | REGION | point, tz-rules | the timezone at any coordinate |
 //! | `boundaries` | ARCS, `ARCS_OVERVIEW`, POLYGONS, `POLY_INDEX` | point | outlines |
 //! | `admin-index` | `ADMIN_REGION` | boundaries | the admin units at any coordinate |
 //! | `postal` | POSTAL | point | postal codes |
 //! | `dem` | DEM | | the height at any coordinate |
 //! | `extra` | COMPONENTS, BLOBS | point | optional fields, cold data |
+//! | `tz-rules` | `TZ_RULES` | | a zone's offset at an instant, a civil time's offsets |
 //!
 //! `BLOCK_HASHES` belongs to none: a client fetches it with any section of 1 MiB or more, whose
 //! blocks it verifies (D-078).
@@ -51,11 +52,13 @@ pub enum Component {
     Dem = 10,
     /// Optional per-place fields and cold data.
     Extra = 11,
+    /// The timezones' rules (D-196): offsets at instants, civil times' offsets.
+    TzRules = 12,
 }
 
 impl Component {
     /// Every component, in order.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Point,
         Self::Elevation,
         Self::Admin,
@@ -68,6 +71,7 @@ impl Component {
         Self::Postal,
         Self::Dem,
         Self::Extra,
+        Self::TzRules,
     ];
 
     /// Its name, as users, recipes and bindings spell it.
@@ -86,6 +90,7 @@ impl Component {
             Self::Postal => "postal",
             Self::Dem => "dem",
             Self::Extra => "extra",
+            Self::TzRules => "tz-rules",
         }
     }
 
@@ -121,6 +126,7 @@ impl Component {
             Self::Postal => &[Kind::POSTAL],
             Self::Dem => &[Kind::DEM],
             Self::Extra => &[Kind::COMPONENTS, Kind::BLOBS],
+            Self::TzRules => &[Kind::TZ_RULES],
         }
     }
 
@@ -128,14 +134,14 @@ impl Component {
     #[must_use]
     pub const fn needs(self) -> &'static [Self] {
         match self {
-            Self::Point | Self::Dem => &[],
+            Self::Point | Self::Dem | Self::TzRules => &[],
             Self::Search => &[Self::Names],
             Self::AdminIndex => &[Self::Boundaries],
+            // A zone without its rules is a broken answer, and the rules are a few kB (D-196).
+            Self::Timezone | Self::TimezoneIndex => &[Self::Point, Self::TzRules],
             Self::Elevation
             | Self::Admin
             | Self::Names
-            | Self::Timezone
-            | Self::TimezoneIndex
             | Self::Boundaries
             | Self::Postal
             | Self::Extra => &[Self::Point],
@@ -256,8 +262,9 @@ mod tests {
         for (i, c) in Component::ALL.into_iter().enumerate() {
             assert_eq!(c as usize, i);
             assert_eq!(Component::from_name(c.name()), Some(c));
-            // A component's needs come before it, so the graph has no cycle.
-            assert!(c.needs().iter().all(|&d| d < c), "{c:?}");
+            // No component needs itself through the others, so the graph has no cycle.
+            let through = Components::of(c.needs()).closed();
+            assert!(!through.contains(c), "{c:?}");
         }
         assert_eq!(Component::from_name("points"), None);
         let s = Components::of(&[Component::Search, Component::AdminIndex]).closed();
@@ -278,6 +285,17 @@ mod tests {
                 .eq([Component::Dem])
         );
         assert!(Components::NONE.is_empty() && Components::NONE.closed().is_empty());
+        let tz = Components::of(&[Component::Timezone]).closed();
+        assert!(
+            tz.iter()
+                .eq([Component::Point, Component::Timezone, Component::TzRules])
+        );
+        assert!(
+            Components::of(&[Component::TzRules])
+                .closed()
+                .iter()
+                .eq([Component::TzRules])
+        );
         let names = Components::of(&[Component::Names]);
         assert_eq!(s.without(names).union(names), s);
         assert!(!s.without(names).contains(Component::Names));

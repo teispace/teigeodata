@@ -69,6 +69,7 @@ pub mod search;
 #[cfg(feature = "signature")]
 mod signature;
 mod sorted;
+pub mod tz_rules;
 #[cfg(feature = "write")]
 mod write;
 
@@ -138,6 +139,8 @@ impl Kind {
     pub const PLACE_TZ: Self = Self(20);
     /// The ISO 3166 code of each coded country and subdivision row (D-197).
     pub const ISO_CODES: Self = Self(21);
+    /// The rules of the pack's timezones: transitions, types and footers (D-196).
+    pub const TZ_RULES: Self = Self(22);
 
     /// This reader's name for the kind, if it knows it.
     #[must_use]
@@ -169,6 +172,7 @@ pub(crate) const KINDS: &[(Kind, &str)] = &[
     (Kind::ELEVATION, "ELEVATION"),
     (Kind::PLACE_TZ, "PLACE_TZ"),
     (Kind::ISO_CODES, "ISO_CODES"),
+    (Kind::TZ_RULES, "TZ_RULES"),
 ];
 
 impl fmt::Display for Kind {
@@ -199,8 +203,11 @@ mod tests {
     #[test]
     fn every_kind_is_documented_with_its_number() {
         let spec = include_str!("../../../docs/04-architecture/pack-format.md");
-        for (i, (k, name)) in KINDS.iter().enumerate() {
-            assert_eq!(u32::try_from(i + 1).ok(), Some(k.0), "{name}");
+        // Numbers increase from 1; a number can be reserved for a kind still being built.
+        let mut last = 0;
+        for (k, name) in KINDS {
+            assert!(k.0 > last, "{name}");
+            last = k.0;
             let row = std::format!("| {} | {name} |", k.0);
             assert!(
                 spec.contains(&row),

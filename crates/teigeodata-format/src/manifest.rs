@@ -51,6 +51,9 @@ impl Tag {
     /// The notices of the sources the pack was built from (D-031, D-126): UTF-8 lines, one
     /// notice each, that an application shows wherever it shows the data.
     pub const ATTRIBUTION: Self = Self(0x0008);
+    /// The tzdb release the pack's `TZ_RULES` were compiled from (`2026f`, D-196); present
+    /// exactly when the pack has `TZ_RULES`.
+    pub const TZDB: Self = Self(0x0009);
 
     /// The "must understand" bit.
     pub const CRITICAL: u16 = 0x8000;
@@ -87,6 +90,7 @@ pub(crate) const KNOWN: &[(Tag, &str, Value)] = &[
     (Tag::BBOX, "bbox", Value::Bbox),
     (Tag::PERSPECTIVE, "perspective", Value::Ident),
     (Tag::ATTRIBUTION, "attribution", Value::Text),
+    (Tag::TZDB, "tzdb", Value::Release),
 ];
 
 /// The longest text value: half the head's 16 KiB, so the manifest keeps room for the table and

@@ -43,6 +43,8 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | bitpacking (B1 rival, dev-dependency of `teigeodata-bench` only) | 0.9.3 | 2026-11-07 | crates.io | 2026-12-07 |
 | geo-index (B8 rival, flatbush with f64 boxes; dev-dependency of `teigeodata-bench` only) | 0.4.0 | 2026-11-07 | crates.io | 2026-12-07 |
 | rstar (B8 rival, R*-tree; dev-dependency of `teigeodata-bench` only) | 0.14.0 | 2026-11-07 | crates.io | 2026-12-07 |
+| jiff (TZ_RULES differential oracle, `default-features = false`, `std`; dev-dependency of `teigeodata-format` only, D-196) | 0.2.42 | 2026-11-11 | crates.io | 2026-12-11 |
+| tzcode (zic for TZ_RULES, built by the forge; pinned in `data/sources.lock`) | 2026f | 2026-11-11 | data.iana.org | with tzdb |
 | tzf-rs (B9 rival, `default-features = false`; dev-dependency of `teigeodata-bench` only) | 2.3.0 | 2026-11-07 | crates.io | 2026-12-07 |
 | tzf-dist `full.tzb` (B9 rival data, release asset `v0.0.2026-f`, SHA-256 `75513a16…35d8a3`) | 2026f | 2026-11-07 | GitHub release of ringsaturn/tzf-dist | 2026-12-07 |
 | serde, serde_json (B9 example reads the tbb GeoJSON in `teigeodata-bench`; `serde_json` with `alloc` only in `teigeodata-sync`'s `trust` feature) | 1.0.229, 1.0.154 | 2026-11-07 | crates.io | 2026-12-07 |
