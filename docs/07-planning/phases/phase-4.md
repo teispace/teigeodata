@@ -290,6 +290,25 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
   README until Phase 7); timings of open, query and install (D-183)
 - [ ] `merge` (compaction) once 4.7 decides on delta packs
 
+### 4.9b Consumer requests
+
+The first consumer brief (Tithipatra, 2026-11-11, D-193); the reply and statuses are in
+[consumers/tithipatra.md](../../01-product/consumers/tithipatra.md). Each is a general feature.
+
+- [x] TG-04: `Engine::bbox_of(place)` and `Engine::boundary(place, lod, &mut Outline)` over the
+  stored outline boxes and arcs (D-194, 2026-11-11)
+- [ ] TG-07: the DEM section names its source; `elevation_at` returns metres with source,
+  resolution in metres and datum
+- [ ] TG-02: ISO 3166-1 and 3166-2 codes on countries and level-1 units, from data files with
+  their source; `admin_at` and `ancestors` give them (research note first)
+- [ ] TG-03: zone rules in the pack: compiled TZif for every zone the outlines name, from the
+  same tzdb release, its version in the manifest; `tz_offset_at`, `tz_local_candidates`,
+  `tz_version`; a gate that every zone has rules (research note first)
+- [ ] TG-06: substring search of 3+ characters across scripts, measured for size (research
+  note first)
+- [ ] TG-01: `CHANGELOG.md` and a `v0.x` tag; a consumer builds the engine from the tag
+- [ ] TG-08: research note on zones before 1970 (`backzone`) for South Asia
+
 ### 4.10 Exit review
 - [ ] M4 criteria met, each with its evidence; progress updated
 
@@ -350,3 +369,4 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
 | 2026-11-11 | 4.8: the world-size install runs in `nightly`, not the data build | D-188: it needs no data; the data build waits on the input mirror (D-127) |
 | 2026-11-11 | 4.1b: storage on disk by punching holes, not a compact file; Windows its own item | D-189: APFS fills gaps under 16 MiB, so a partial install saved no disk |
 | 2026-11-11 | Split builds: zones cut to each part, outlines of own places only, outside places to the nearest unit | D-191: parts were 2.3× the pack with whole zone rings; a "rest" part is not findable by point |
+| 2026-11-11 | 4.9b: the first consumer brief's requests placed (TG-01 to TG-08) | D-193 |

@@ -102,6 +102,10 @@ name = "discover"
 required-features = ["catalog", "names"]
 
 [[test]]
+name = "outline"
+required-features = ["boundaries"]
+
+[[test]]
 name = "dem"
 required-features = ["dem"]
 

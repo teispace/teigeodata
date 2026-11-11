@@ -41,6 +41,8 @@ mod discover;
 mod follow;
 mod layer;
 mod map;
+#[cfg(feature = "boundaries")]
+mod outline;
 mod query;
 #[cfg(feature = "search")]
 mod search;
@@ -51,6 +53,8 @@ use core::fmt;
 use std::sync::Arc;
 
 pub use layer::{Layer, LayerId, LayerOptions, Load, Verify};
+#[cfg(feature = "boundaries")]
+pub use outline::{Outline, Ring};
 pub use query::{Hit, Near, Place, Scratch};
 pub use teigeodata_format::release_cmp;
 

@@ -83,6 +83,9 @@ pub struct Model {
     pub arcs: Option<(Vec<u8>, u64)>,
     /// Each row's parent row (HIERARCHY); empty for none.
     pub parents: Vec<Option<u32>>,
+    /// Sections written as they are (POLYGONS, `POLY_INDEX`): their rows are this model's,
+    /// so a subset drops them.
+    pub raw: Vec<(Kind, u64, Vec<u8>)>,
 }
 
 impl Model {
@@ -215,6 +218,13 @@ impl Model {
                     (0..n).map(|r| h.parent(r).map(|p| p as u32)).collect()
                 })
                 .unwrap_or_default(),
+            raw: [Kind::POLYGONS, Kind::POLY_INDEX]
+                .into_iter()
+                .filter_map(|k| {
+                    let s = pack.section(k)?;
+                    Some((k, s.item_count(), s.bytes().to_vec()))
+                })
+                .collect(),
         }
     }
 
@@ -310,6 +320,7 @@ impl Model {
                     })
                     .collect()
             },
+            raw: Vec::new(),
         }
     }
 
@@ -403,6 +414,7 @@ impl Model {
                 redirects::encode(&self.redirects).unwrap(),
             ));
         }
+        bodies.extend(self.raw.iter().cloned());
         let mut w = Writer::new(&self.address, &self.component, &self.release).unwrap();
         if let Some(b) = &self.bbox {
             w.manifest(Tag::BBOX, b).unwrap();
@@ -686,6 +698,7 @@ pub fn synthetic(n: usize, seed: u64) -> Model {
             rows: admin_rows,
         }),
         arcs: None,
+        raw: Vec::new(),
         parents: rows.iter().map(|p| p.parent.map(|q| new_of[&q])).collect(),
     }
 }

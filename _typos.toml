@@ -4,9 +4,15 @@ extend-ignore-re = [
   "[\\u0900-\\u097F]+",
   # The Unicode general category Nd (decimal digit).
   "general category `Nd`",
+  # ISO 3166-2 subdivision codes (NP-BA, IN-UT).
+  "\\b[A-Z]{2}-[A-Z0-9]{1,3}\\b",
 ]
 
 [default.extend-words]
+# IST, India Standard Time (tzdb abbreviation).
+ist = "ist"
+# CLDR subdivision code of Uttarakhand (IN-UT).
+inut = "inut"
 # Alo, a kingdom of Wallis and Futuna (Natural Earth admin 1).
 alo = "alo"
 # Nepali and Indian place-name terms.

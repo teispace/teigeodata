@@ -339,6 +339,32 @@ impl<'a> Tree<'a> {
         }
     }
 
+    /// The stored box of item `item`, decoded from the root down its one path: O(depth), no
+    /// allocation. `None` past the end, or for point leaves (nothing stored).
+    pub(crate) fn item_box(&self, item: usize) -> Option<Rect> {
+        if item >= self.len || matches!(self.leaves, Leaves::Points(_)) {
+            return None;
+        }
+        let mut parent = self.root;
+        let mut q = [0_u32; 4];
+        // Boxes of level `l` each hold node^(l+1) items; the root level is not stored.
+        for l in (0..self.depth.checked_sub(1)?).rev() {
+            let mut width = self.node;
+            for _ in 0..l {
+                width = width.saturating_mul(self.node);
+            }
+            let at = self.base + self.levels.get(l)?.0 + item / width;
+            if self.boxes.run(4 * at, &mut q) != 4 {
+                return None;
+            }
+            parent = decode_box(&q, &parent);
+        }
+        if self.boxes.run(4 * item, &mut q) != 4 {
+            return None;
+        }
+        Some(decode_box(&q, &parent))
+    }
+
     /// The items below box `i` of `level`.
     pub(crate) fn span(&self, level: usize, i: usize) -> Range<usize> {
         let mut width = self.node;

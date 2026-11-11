@@ -237,6 +237,22 @@ fn check_queries(o: &Open<'_>, seed: u64) {
     // A stored leaf moves each edge out by at most two quanta of its parent, and no parent is
     // wider than the root, the whole world here.
     let slack = 2 * (360_000_000 / QUANTA as i32 + 1);
+    // Each stored box holds its polygon, within the slack, and finds it.
+    for (p, e) in exact.iter().enumerate() {
+        let b = ix.bbox(p).unwrap();
+        assert!(b.contains(e), "box {b:?} of {p} misses {e:?}");
+        assert!(
+            grow_by(e, slack).contains(&b),
+            "box {b:?} of {p} far from {e:?}"
+        );
+        let mut hit = false;
+        let _ = ix.intersecting(b, p..p + 1, |_| {
+            hit = true;
+            ControlFlow::Break(())
+        });
+        assert!(hit, "polygon {p} not found by its own box");
+    }
+    assert_eq!(ix.bbox(n), None);
     let mut r = Rng(seed);
     let groups = groups_of(o);
     for q in queries(&mut r) {

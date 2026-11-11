@@ -11,7 +11,9 @@ use teigeodata_core::PlaceId;
 #[cfg(any(feature = "timezone-index", feature = "admin-index", feature = "dem"))]
 use teigeodata_core::{E7, Point};
 #[cfg(feature = "admin-index")]
-use teigeodata_format::arcs::{ArcChunks, Arcs};
+use teigeodata_format::arcs::ArcChunks;
+#[cfg(feature = "boundaries")]
+use teigeodata_format::arcs::Arcs;
 use teigeodata_format::blocks::{BLOCK, Blocks};
 use teigeodata_format::component::{Component, Components};
 #[cfg(feature = "dem")]
@@ -27,9 +29,9 @@ use teigeodata_format::place_index::PlaceIndex;
 #[cfg(feature = "timezone")]
 use teigeodata_format::place_tz::PlaceTz;
 use teigeodata_format::places::Places;
-#[cfg(feature = "admin-index")]
+#[cfg(feature = "boundaries")]
 use teigeodata_format::poly_index::PolyIndex;
-#[cfg(feature = "admin-index")]
+#[cfg(feature = "boundaries")]
 use teigeodata_format::polygons::Polygons;
 use teigeodata_format::redirects::Redirects;
 #[cfg(any(feature = "timezone-index", feature = "admin-index"))]
@@ -180,12 +182,12 @@ pub(crate) struct Views<'a> {
     pub(crate) zones: Option<Region<'a>>,
     #[cfg(feature = "admin-index")]
     pub(crate) admin: Option<Region<'a>>,
-    #[cfg(feature = "admin-index")]
+    #[cfg(feature = "boundaries")]
     pub(crate) polygons: Option<Polygons<'a>>,
-    /// The outlines and their box index, for queries by distance (`countries_near`, D-149).
-    #[cfg(feature = "admin-index")]
+    /// The outlines and their box index: `countries_near` (D-149), `bbox_of`, `boundary`.
+    #[cfg(feature = "boundaries")]
     pub(crate) arcs: Option<Arcs<'a>>,
-    #[cfg(feature = "admin-index")]
+    #[cfg(feature = "boundaries")]
     pub(crate) poly_index: Option<PolyIndex<'a>>,
     /// Terrain heights at any point (D-192); absent in a pack without them.
     #[cfg(feature = "dem")]
@@ -247,7 +249,7 @@ impl<'a> Views<'a> {
         };
         #[cfg(feature = "timezone-index")]
         let zones = get(Kind::REGION).map(|s| Region::open(&s)).transpose()?;
-        #[cfg(feature = "admin-index")]
+        #[cfg(feature = "boundaries")]
         let arcs = get(Kind::ARCS).map(|s| Arcs::open(&s)).transpose()?;
         #[cfg(feature = "admin-index")]
         let admin = match (get(Kind::ADMIN_REGION), &arcs) {
@@ -255,11 +257,11 @@ impl<'a> Views<'a> {
             (Some(s), None) => Some(Region::open(&s)?),
             (None, _) => None,
         };
-        #[cfg(feature = "admin-index")]
+        #[cfg(feature = "boundaries")]
         let polygons = get(Kind::POLYGONS)
             .map(|s| Polygons::open(&s))
             .transpose()?;
-        #[cfg(feature = "admin-index")]
+        #[cfg(feature = "boundaries")]
         let poly_index = match (get(Kind::POLY_INDEX), &polygons) {
             (Some(s), Some(p)) => Some(PolyIndex::open(&s, p)?),
             _ => None,
@@ -289,11 +291,11 @@ impl<'a> Views<'a> {
             zones,
             #[cfg(feature = "admin-index")]
             admin,
-            #[cfg(feature = "admin-index")]
+            #[cfg(feature = "boundaries")]
             polygons,
-            #[cfg(feature = "admin-index")]
+            #[cfg(feature = "boundaries")]
             arcs,
-            #[cfg(feature = "admin-index")]
+            #[cfg(feature = "boundaries")]
             poly_index,
             #[cfg(feature = "dem")]
             dem,

@@ -82,6 +82,14 @@ impl<'a> PolyIndex<'a> {
         self.tree.depth
     }
 
+    /// Polygon `p`'s stored box: its exact box rounded outward by at most two quanta of each
+    /// parent box, so it always holds the polygon. O(depth): one decode per level, no vertex
+    /// read, no allocation. `None` past the end.
+    #[must_use]
+    pub fn bbox(&self, p: usize) -> Option<Rect> {
+        self.tree.item_box(p)
+    }
+
     /// Calls `visit` with every polygon in `polygons` (a range of indices, such as a
     /// [group](Polygons::group)) whose stored box meets `query`, edges included, in an
     /// unspecified order; stops early when `visit` breaks. Stored boxes are rounded outward, so
