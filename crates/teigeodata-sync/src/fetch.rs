@@ -7,6 +7,11 @@
 //! `Content-Range` naming exactly the requested bytes and the asset's length, at most those
 //! bytes read, and one `ETag` for the whole install, so a host that ignores `Range` or swaps the
 //! asset midway is refused, not trusted (the GitHub asset host ignores `If-Range`).
+//!
+//! An update ([`update_from`], D-174) reads the release it replaces: every frame of the new
+//! pack whose sections are unchanged (same kind, hash and length) is put together from the old
+//! file, checked against the new release's signed hashes like a fetched frame, and only then
+//! written; the rest is fetched. A wrong or damaged old file costs bytes, never correctness.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -15,6 +20,7 @@ use core::ops::Range;
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use teigeodata_format::component::Components;
+use teigeodata_format::{FOOTER_SIZE, PackHead};
 
 use crate::Error;
 use crate::catalog::Entry;
@@ -141,6 +147,35 @@ pub fn install<T: Transport, F: Read + Write + Seek>(
     set: Components,
     staging: &mut F,
 ) -> Result<Installed, FetchError> {
+    run(transport, url, entry, asset_len, set, staging, None)
+}
+
+/// A file the driver reads an earlier release from (D-174).
+pub trait Previous: Read + Seek {}
+
+impl<T: Read + Seek> Previous for T {}
+
+/// The asset an install fetches: its path under each mirror, its catalog entry and its length
+/// (the TUF target's).
+#[derive(Clone, Copy, Debug)]
+pub struct Asset<'a> {
+    /// The path under each mirror's base.
+    pub path: &'a str,
+    /// The catalog entry.
+    pub entry: &'a Entry,
+    /// The asset's length.
+    pub len: u64,
+}
+
+fn run<T: Transport, F: Read + Write + Seek>(
+    transport: &mut T,
+    url: &str,
+    entry: &Entry,
+    asset_len: u64,
+    set: Components,
+    staging: &mut F,
+    previous: Option<&mut (dyn Previous + '_)>,
+) -> Result<Installed, FetchError> {
     let mut inst = Install::new(entry, asset_len, set);
     let mut etag: Option<Option<String>> = None;
     let mut get = |transport: &mut T, range: Range<u64>, out: &mut Vec<u8>| {
@@ -176,7 +211,8 @@ pub fn install<T: Transport, F: Read + Write + Seek>(
     let plan = inst
         .start(&table, &head, |at, b| write(staging, at, b))?
         .to_vec();
-    if old_len > 0 {
+    let mut reused = 0;
+    if old_len > 0 || previous.is_some() {
         // BLOCK_HASHES first (the plan lists it first), always fetched; then keep what checks.
         while !inst.proven() {
             let Some(f) = inst.remaining().into_iter().next() else {
@@ -186,14 +222,143 @@ pub fn install<T: Transport, F: Read + Write + Seek>(
             inst.feed(&f, &buf, |at, b| write(staging, at, b))?;
         }
         let frames: Vec<usize> = plan.iter().flat_map(|f| f.frames.clone()).collect();
-        keep(&mut inst, staging, &frames, old_len, &mut buf)?;
+        if old_len > 0 {
+            keep(&mut inst, staging, &frames, old_len, &mut buf)?;
+        }
+        if let Some(old) = previous {
+            reused = reuse(
+                &mut inst,
+                staging,
+                old,
+                entry.pack_length,
+                &frames,
+                &mut buf,
+            )?;
+        }
     }
     for f in inst.remaining() {
         get(transport, f.compressed.clone(), &mut buf)?;
         inst.feed(&f, &buf, |at, b| write(staging, at, b))?;
     }
     staging.flush()?;
-    Ok(inst.finish()?)
+    let mut done = inst.finish()?;
+    done.kept -= reused;
+    done.reused = reused;
+    Ok(done)
+}
+
+/// The head of a pack of `len` bytes read from `f`: a prefix from the start, doubled until it
+/// holds the head; `None` when even the whole file does not, or it is not a pack.
+pub(crate) fn read_head<R: Read + Seek + ?Sized>(
+    f: &mut R,
+    len: u64,
+) -> std::io::Result<Option<Vec<u8>>> {
+    let mut want: u64 = 16 * 1024;
+    loop {
+        let n = want.min(len);
+        let Ok(size) = usize::try_from(n) else {
+            return Ok(None);
+        };
+        let mut head = alloc::vec![0_u8; size];
+        f.seek(SeekFrom::Start(0))?;
+        f.read_exact(&mut head)?;
+        match PackHead::parse(&head, len) {
+            Err(teigeodata_format::Error::Truncated) if n < len => want = want.saturating_mul(2),
+            Ok(_) => return Ok(Some(head)),
+            Err(_) => return Ok(None),
+        }
+    }
+}
+
+/// Offers each of `frames` still to do whose bytes the old release holds (D-174): a frame is
+/// put together from the old file's unchanged sections (same kind, hash and length), zero
+/// padding between sections, and the new footer, checked by [`Install::staged`], and written
+/// only when it passes. A frame touching the head or a changed section is left to fetch.
+/// Returns the bytes reused.
+fn reuse<F: Read + Write + Seek>(
+    inst: &mut Install,
+    staging: &mut F,
+    old: &mut (dyn Previous + '_),
+    pack_len: u64,
+    frames: &[usize],
+    buf: &mut Vec<u8>,
+) -> Result<u64, FetchError> {
+    // The new head, as start wrote it; the old one, from the old file.
+    let Some(head_end) = frames
+        .first()
+        .and_then(|&i| inst.frame(i))
+        .map(|f| f.decoded.end)
+    else {
+        return Ok(0);
+    };
+    let Some(new_head) = read_head(staging, pack_len)? else {
+        return Ok(0);
+    };
+    let old_len = old.seek(SeekFrom::End(0))?;
+    let Some(old_head) = read_head(old, old_len)? else {
+        return Ok(0);
+    };
+    let (Ok(new), Ok(prev)) = (
+        PackHead::parse(&new_head, pack_len),
+        PackHead::parse(&old_head, old_len),
+    ) else {
+        return Ok(0);
+    };
+    // Each new section: its range, and where the old file holds the same bytes.
+    let spans: Vec<(Range<u64>, Option<u64>)> = new
+        .sections()
+        .map(|s| {
+            let same = prev.section(s.kind).filter(|o| {
+                o.hash == s.hash && o.length == s.length && o.offset + o.length <= old_len
+            });
+            (s.offset..s.offset + s.length, same.map(|o| o.offset))
+        })
+        .collect();
+    let body = spans.first().map_or(head_end, |(r, _)| r.start);
+    let footer_at = pack_len.saturating_sub(FOOTER_SIZE as u64);
+    let footer = new.footer();
+    let mut reused = 0;
+    'frames: for &i in frames {
+        let Some(d) = inst.frame(i).map(|f| f.decoded) else {
+            continue;
+        };
+        if !inst.todo(i) || d.start < body {
+            continue;
+        }
+        buf.clear();
+        buf.resize(
+            usize::try_from(d.end - d.start).map_err(|_| too_large())?,
+            0,
+        );
+        for (r, from) in &spans {
+            let (a, b) = (r.start.max(d.start), r.end.min(d.end));
+            if a >= b {
+                continue;
+            }
+            let Some(o) = from else {
+                continue 'frames;
+            };
+            let at = usize::try_from(a - d.start).map_err(|_| too_large())?;
+            let to = usize::try_from(b - d.start).map_err(|_| too_large())?;
+            old.seek(SeekFrom::Start(o + (a - r.start)))?;
+            old.read_exact(buf.get_mut(at..to).ok_or_else(too_large)?)?;
+        }
+        if d.end > footer_at {
+            let a = footer_at.max(d.start);
+            let skip = usize::try_from(a - footer_at).map_err(|_| too_large())?;
+            let at = usize::try_from(a - d.start).map_err(|_| too_large())?;
+            let part = footer.get(skip..).ok_or_else(too_large)?;
+            buf.get_mut(at..at + part.len())
+                .ok_or_else(too_large)?
+                .copy_from_slice(part);
+        }
+        if inst.staged(i, buf)? {
+            staging.seek(SeekFrom::Start(d.start))?;
+            staging.write_all(buf)?;
+            reused += d.end - d.start;
+        }
+    }
+    Ok(reused)
 }
 
 /// One mirror: a base URL, and how it has done.
@@ -273,13 +438,47 @@ pub fn install_from<T: Transport, F: Read + Write + Seek>(
     set: Components,
     staging: &mut F,
 ) -> Result<Installed, FetchError> {
+    let asset = Asset {
+        path,
+        entry,
+        len: asset_len,
+    };
+    from_mirrors(transport, mirrors, asset, set, staging, None)
+}
+
+/// [`install_from`] for an update (D-174): `previous` is the installed release being replaced
+/// (or any earlier one), and every frame of the new pack it holds unchanged is checked and
+/// reused instead of fetched; [`Installed::reused`] counts them. Resume works as for an install.
+///
+/// # Errors
+/// As [`install_from`]; reading `previous` fails as [`FetchError::Io`].
+pub fn update_from<T: Transport, F: Read + Write + Seek>(
+    transport: &mut T,
+    mirrors: &mut Mirrors,
+    asset: Asset<'_>,
+    set: Components,
+    staging: &mut F,
+    previous: &mut dyn Previous,
+) -> Result<Installed, FetchError> {
+    from_mirrors(transport, mirrors, asset, set, staging, Some(previous))
+}
+
+fn from_mirrors<T: Transport, F: Read + Write + Seek>(
+    transport: &mut T,
+    mirrors: &mut Mirrors,
+    asset: Asset<'_>,
+    set: Components,
+    staging: &mut F,
+    mut previous: Option<&mut (dyn Previous + '_)>,
+) -> Result<Installed, FetchError> {
     let mut last = FetchError::Response("no mirror");
     for i in mirrors.order() {
         let Some(m) = mirrors.list.get_mut(i) else {
             continue;
         };
-        let url = alloc::format!("{}{path}", m.base);
-        match install(transport, &url, entry, asset_len, set, staging) {
+        let url = alloc::format!("{}{}", m.base, asset.path);
+        let prev = previous.as_deref_mut();
+        match run(transport, &url, asset.entry, asset.len, set, staging, prev) {
             Ok(done) => return Ok(done),
             Err(e @ FetchError::Io(_)) => return Err(e),
             Err(e @ FetchError::Install(_)) => {

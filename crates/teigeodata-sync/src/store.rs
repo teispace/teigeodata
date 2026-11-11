@@ -40,7 +40,7 @@ use teigeodata_format::component::{Component, Components};
 use teigeodata_format::{Kind, PackHead};
 
 use crate::catalog::{self, Entry};
-use crate::fetch::{FetchError, Mirrors, Transport, install_from};
+use crate::fetch::{Asset, FetchError, Mirrors, Transport, install_from, update_from};
 use crate::install::Installed;
 
 /// A file the store writes.
@@ -418,7 +418,8 @@ impl<D: Fs> Store<D> {
 
     /// Installs `set` of the pack `entry` names from `mirrors` (the asset at `path` under each)
     /// and commits it, replacing any installed release or set of the same address and
-    /// component. Staging is resumed if an earlier attempt left one. On success the new pack is
+    /// component. Staging is resumed if an earlier attempt left one, and a replaced release is
+    /// read for every frame it holds unchanged (D-174), so an update fetches what changed. On success the new pack is
     /// in the journal and its file in `packs/`; the replaced one's file is removed, or left for
     /// the next recovery when it cannot be (in use).
     ///
@@ -438,7 +439,30 @@ impl<D: Fs> Store<D> {
         let file = pack_name(entry, set)?;
         let staging = alloc::format!("{STAGING}/{file}.part");
         let mut f = self.fs.open(&staging)?;
-        let done = install_from(transport, mirrors, path, entry, asset_len, set, &mut f)?;
+        // An update reads the release it replaces and fetches only what changed (D-174).
+        let replaced = self
+            .packs
+            .iter()
+            .find(|r| {
+                r.address == entry.address && r.component == entry.component && r.file != file
+            })
+            .map(Self::path_of);
+        let mut previous = match replaced {
+            Some(p) if self.fs.len(&p)?.is_some() => Some(self.fs.open(&p)?),
+            _ => None,
+        };
+        let done = match previous.as_mut() {
+            Some(old) => {
+                let asset = Asset {
+                    path,
+                    entry,
+                    len: asset_len,
+                };
+                update_from(transport, mirrors, asset, set, &mut f, old)?
+            }
+            None => install_from(transport, mirrors, path, entry, asset_len, set, &mut f)?,
+        };
+        drop(previous);
         f.set_len(done.pack_len)?;
         f.sync()?;
         drop(f);
@@ -618,7 +642,7 @@ impl<D: Fs> Store<D> {
             return Ok(Health::Length);
         }
         let mut f = self.fs.open(&path)?;
-        let Some(head) = read_head(&mut f, r.pack_len)? else {
+        let Some(head) = crate::fetch::read_head(&mut f, r.pack_len)? else {
             return Ok(Health::Head);
         };
         let Ok(h) = PackHead::parse(&head, r.pack_len) else {
@@ -827,23 +851,6 @@ pub fn pack_name(entry: &Entry, set: Components) -> Result<String, FetchError> {
         return Err(FetchError::Response("an unsafe pack name"));
     }
     Ok(name)
-}
-
-/// The head of a pack of `len` bytes: a prefix read from the start, doubled until it holds the
-/// head, or `None` when even the whole file does not.
-fn read_head<F: Read + Seek>(f: &mut F, len: u64) -> io::Result<Option<Vec<u8>>> {
-    let mut want: u64 = 16 * 1024;
-    loop {
-        let n = want.min(len);
-        let mut head = alloc::vec![0_u8; usize::try_from(n).map_err(|_| invalid("a head"))?];
-        f.seek(io::SeekFrom::Start(0))?;
-        f.read_exact(&mut head)?;
-        match PackHead::parse(&head, len) {
-            Err(teigeodata_format::Error::Truncated) if n < len => want = want.saturating_mul(2),
-            Ok(_) => return Ok(Some(head)),
-            Err(_) => return Ok(None),
-        }
-    }
 }
 
 fn render(packs: &[Record]) -> Vec<u8> {

@@ -15,7 +15,7 @@ use teigeodata_sync::catalog::Entry;
 use teigeodata_sync::fetch::Mirrors;
 use teigeodata_sync::store::{Fs, Health, Record, Room, Store, StoreError, StoreFile, plan_room};
 
-use super::install_tests::{Mem, pack_at, pack_of};
+use super::install_tests::{Mem, pack_at, pack_of, pack_with};
 
 /// What a crash does to data not yet synced.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1057,4 +1057,162 @@ fn a_repair_survives_a_crash_at_every_step() {
         2,
         "crashes before and after the rename both happen"
     );
+}
+
+/// Installs `entry` over whatever `store` holds; the result.
+fn put_done(
+    store: &mut Store<MemFs>,
+    entry: &Entry,
+    asset: &[u8],
+) -> teigeodata_sync::install::Installed {
+    let mut host = Mem::new(asset, None);
+    store
+        .install(
+            &mut host,
+            &mut Mirrors::new(["m/"]),
+            "a",
+            entry,
+            asset.len() as u64,
+            Components::all(),
+        )
+        .unwrap()
+}
+
+/// An update reads the release it replaces (D-174): it writes only the head, the block-hash
+/// list and the frames that changed, and the result is the new pack exactly, whatever state
+/// the old file is in.
+#[test]
+fn an_update_fetches_only_what_changed() {
+    let a = pack_with("zz", "2026.11.0", 0);
+    let (ea, xa, _) = super::entry_of(&a).unwrap();
+    // B: the same sections under a new release. C: PLACES changed too.
+    let b = pack_with("zz", "2026.12.0", 0);
+    let (eb, xb, _) = super::entry_of(&b).unwrap();
+    let c = pack_with("zz", "2026.12.0", 5);
+    let (ec, xc, _) = super::entry_of(&c).unwrap();
+    let fixed = |e: &Entry| e.head_frame.disk + e.block_hashes.map_or(0, |h| h.size.disk);
+    let fresh = |e: &Entry, x: &[u8]| {
+        let fs = MemFs(Rc::default());
+        let mut store = Store::open(fs).unwrap().0;
+        put_done(&mut store, e, x)
+    };
+    let with_a = || {
+        let fs = MemFs(Rc::default());
+        let mut store = Store::open(fs.clone()).unwrap().0;
+        put_done(&mut store, &ea, &xa);
+        (fs, store)
+    };
+    let file_of = |store: &Store<MemFs>| Store::<MemFs>::path_of(&store.packs()[0]);
+
+    // Nothing changed but the head: only the head and the list are written.
+    let (fs, mut store) = with_a();
+    let done = put_done(&mut store, &eb, &xb);
+    assert_eq!(done.written, fixed(&eb), "{done:?}");
+    assert_eq!(done.reused + done.written, b.len() as u64, "{done:?}");
+    assert!(done.fetched < fresh(&eb, &xb).fetched, "{done:?}");
+    assert!(
+        fs.clone().read(&file_of(&store)).unwrap().unwrap() == b,
+        "the new pack, whole"
+    );
+    assert_eq!(store.packs().len(), 1);
+    assert_eq!(fs.clone().list("packs").unwrap().len(), 1, "A retired");
+
+    // PLACES changed: its frames are fetched too, the rest reused.
+    let (fs, mut store) = with_a();
+    let done = put_done(&mut store, &ec, &xc);
+    let places = ec.sizes[&Component::Point].disk;
+    assert!(done.written > fixed(&ec), "{done:?}");
+    assert!(done.written <= fixed(&ec) + places, "{done:?}");
+    assert_eq!(done.reused + done.written, c.len() as u64, "{done:?}");
+    assert!(
+        fs.clone().read(&file_of(&store)).unwrap().unwrap() == c,
+        "the new pack, whole"
+    );
+
+    // A damaged old file: the damaged frame is fetched, never reused.
+    let (fs, mut store) = with_a();
+    flip(
+        &fs,
+        &file_of(&store),
+        offset_of(&a, Kind::NAMES) + 1_500_000,
+    );
+    let done = put_done(&mut store, &eb, &xb);
+    assert!(done.written > fixed(&eb), "{done:?}");
+    assert!(
+        fs.clone().read(&file_of(&store)).unwrap().unwrap() == b,
+        "the new pack, whole"
+    );
+    assert_eq!(store.verify("zz", "places", true).unwrap(), Health::Good);
+}
+
+/// Seeded from bytes that are not a pack, or another pack entirely, an update is an install.
+#[test]
+fn an_update_from_junk_is_an_install() {
+    use teigeodata_sync::fetch::{Asset, update_from};
+    let b = pack_with("zz", "2026.12.0", 0);
+    let (eb, xb, _) = super::entry_of(&b).unwrap();
+    let other = pack_at("yy", "2026.11.0");
+    // The release it replaces, damaged in NAMES: that frame must never reach staging.
+    let mut damaged = pack_with("zz", "2026.11.0", 0);
+    let at = usize::try_from(offset_of(&damaged, Kind::NAMES)).unwrap() + 1_500_000;
+    damaged[at] ^= 1;
+    for junk in [vec![7_u8; 100_000], Vec::new(), other, damaged] {
+        let mut staging = Checked {
+            file: io::Cursor::new(Vec::new()),
+            want: &b,
+            bad: 0,
+        };
+        let mut host = Mem::new(&xb, None);
+        let asset = Asset {
+            path: "a",
+            entry: &eb,
+            len: xb.len() as u64,
+        };
+        let done = update_from(
+            &mut host,
+            &mut Mirrors::new(["m/"]),
+            asset,
+            Components::all(),
+            &mut staging,
+            &mut io::Cursor::new(junk),
+        )
+        .unwrap();
+        assert_eq!(staging.bad, 0, "bytes written before they were checked");
+        let mut got = staging.file.into_inner();
+        got.truncate(usize::try_from(done.pack_len).unwrap());
+        assert!(got == b, "the pack, whole");
+    }
+}
+
+/// A staging file that counts writes of bytes other than the final pack's at that place:
+/// verify-then-write means there are none.
+struct Checked<'a> {
+    file: io::Cursor<Vec<u8>>,
+    want: &'a [u8],
+    bad: usize,
+}
+
+impl Read for Checked<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.file.read(buf)
+    }
+}
+
+impl Write for Checked<'_> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let at = usize::try_from(self.file.position()).unwrap();
+        if self.want.get(at..at + buf.len()) != Some(buf) {
+            self.bad += 1;
+        }
+        self.file.write(buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Seek for Checked<'_> {
+    fn seek(&mut self, to: SeekFrom) -> io::Result<u64> {
+        self.file.seek(to)
+    }
 }

@@ -243,6 +243,27 @@ faults (no head-hash, footer or length check, holes read, the last chunk skipped
 the copy, without the sync, of another release, and `follow` ignoring a replaced file) are all
 caught.
 
+## Updating it (D-174)
+
+An update is an install that reads the release it replaces. `fetch::update_from(transport,
+mirrors, Asset { path, entry, len }, set, staging, previous)` fetches the new head and
+`BLOCK_HASHES` as any install does, proves the list, then puts together every frame still to do
+whose sections `previous` holds unchanged (same kind, BLAKE3 hash and stored length): the old
+section bytes at their new offsets, zero padding between sections, and the new footer. Each
+such frame goes through `Install::staged`, the resume check, and is written only when it
+passes; the rest is fetched. `Installed::reused` counts the bytes taken from the old file.
+`Store::install` calls it whenever it replaces a release, so an app updates with the same call
+it installs with. A damaged, truncated or foreign old file costs bytes and never correctness,
+and resume works as for an install.
+
+Gates: an update that changes only the release string writes exactly the head and the list;
+one that changes PLACES writes those and PLACES's frames; one over a damaged old file fetches
+the damaged frame; seeded from junk, an empty file, another pack, or a damaged release, the
+result is the new pack and no byte is written before it is checked (a staging writer counts
+writes of bytes other than the final pack's). Four planted faults (write before check, no
+footer, reused counted as kept, the store not seeding) are caught; a fifth, reading a changed
+section from the old file, is no fault, since the check rejects it and the frame is fetched.
+
 ## Writing it (feature `write`)
 
 `transport::write(pack, compress, sink)` streams the asset frame by frame with bounded memory.

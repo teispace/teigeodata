@@ -26,8 +26,13 @@ pub(super) fn pack_of(release: &str) -> Vec<u8> {
 
 /// The test pack under another address.
 pub(super) fn pack_at(address: &str, release: &str) -> Vec<u8> {
+    pack_with(address, release, 0)
+}
+
+/// The test pack with its PLACES bytes changed by `salt` (0: as [`pack_at`]).
+pub(super) fn pack_with(address: &str, release: &str, salt: u8) -> Vec<u8> {
     let ids: Vec<u8> = (0..40_000_u32).map(|i| (i * 7 % 251) as u8).collect();
-    let places: Vec<u8> = (0..30_000_u32).map(|i| (i % 13) as u8).collect();
+    let places: Vec<u8> = (0..30_000_u32).map(|i| (i % 13) as u8 ^ salt).collect();
     let names: Vec<u8> = (0..(5_u32 << 19))
         .map(|i| b"Lahachowk Kathmandu Pokhara "[(i % 28) as usize] ^ (i >> 16) as u8)
         .collect();

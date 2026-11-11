@@ -125,6 +125,9 @@ pub struct Installed {
     pub written: u64,
     /// Decoded bytes an earlier attempt left in staging that checked and were kept (resume).
     pub kept: u64,
+    /// Decoded bytes taken from the release being replaced, checked against this release's
+    /// signed hashes before they were written (D-174); set by the driver, 0 here.
+    pub reused: u64,
     /// The pack's length: the staging file's, once cut to it.
     pub pack_len: u64,
 }
@@ -444,6 +447,7 @@ impl Install {
             fetched: p.fetched,
             written: p.written,
             kept: p.kept,
+            reused: 0,
             pack_len: self.pack_len,
         })
     }

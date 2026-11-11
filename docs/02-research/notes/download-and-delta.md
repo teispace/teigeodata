@@ -1,7 +1,7 @@
 ---
 title: "Download and delta: transport compression, ranged downloads, updates"
 status: research
-updated: 2026-11-09
+updated: 2026-11-11
 owner: research-agent
 revisit: 2027-02-09
 ---
@@ -356,6 +356,23 @@ footer.
 - A lying table that keeps the total but shifts compressed sizes between frames passes the
   table check by construction. It is caught when its frame fails to decode, never by luck: the
   fuzz harness asserts that any accepted output under a table lie is the pack itself.
+
+### 3.6 Section re-download as built (2026-11-11)
+
+Built as D-174 in `teigeodata-sync::fetch` (`update_from`) and used by `Store::install`
+whenever it replaces a release. It needs no new format, asset or plan: the new release's head
+frame and `BLOCK_HASHES` are fetched and proven as for any install, then every frame still to
+do whose sections the old file holds unchanged (same kind, BLAKE3 hash and stored length) is
+assembled from the old file (sections at their old offsets, zero padding, the new footer),
+checked against the new release's signed hashes, and written only if it passes. Everything
+else is fetched. So the delta is at frame granularity (at most 1 MiB decoded) rather than
+whole sections, and a damaged or foreign old file only costs bytes.
+
+On the test packs (2.70 MB raw, five sections): a release that changes nothing but its
+release string writes exactly the head and the block-hash list and reuses every other byte; a
+release with a changed PLACES section writes the head, the list and PLACES's frames. Real
+consecutive Nepal releases are still to measure (4.7 second item): that measurement decides
+between this and delta packs.
 
 ## 4. Options compared
 

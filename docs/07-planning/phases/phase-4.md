@@ -233,7 +233,9 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   path, `follow` reopening a repaired file (2026-11-11, D-173)
 
 ### 4.7 Delta updates
-- [ ] Section re-download over frames (S3)
+- [x] Section re-download over frames (S3): `fetch::update_from`, used by `Store::install`
+  over the release it replaces; unchanged frames read from the old file and checked against
+  the new signed hashes (2026-11-11, D-174)
 - [ ] Two real consecutive Nepal releases: bytes for section re-download against delta packs
   (and zstd patches, dropped unless this disagrees); decision recorded
 - [ ] If delta packs win: forge emission, compaction policy, L5 with delta layers
@@ -295,3 +297,4 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 | 2026-11-10 | 4.5: mirrors done; 4.8 gains a world-size install for multi-frame block-hash lists, which no unit-size pack reaches | D-170 |
 | 2026-11-11 | 4.6 first item and the 4.5 snapshot swap done together; the catalog's disk sizes now count section padding | D-172: a whole install's parts were 48 B short of the file |
 | 2026-11-11 | 4.6 done: verify and repair | D-173: repair is resume over a copy of the installed file, so it needs no code of its own to fetch only what fails |
+| 2026-11-11 | 4.7 first item done: section re-download at frame granularity, reusing the resume check | D-174; the real two-release measurement stays open until two Nepal releases are built |
