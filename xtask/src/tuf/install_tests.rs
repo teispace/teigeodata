@@ -1024,7 +1024,7 @@ fn a_world_size_install_gathers_a_block_hash_list_of_several_frames() {
 }
 
 /// A pack with NAMES in three parts (base, `*`, `ne`) and ARCS in two (base, the outline part
-/// of level 1 at lod 2), each 1.5 MiB so the large ones are covered by `BLOCK_HASHES`.
+/// of level 1), each 1.5 MiB so the large ones are covered by `BLOCK_HASHES`.
 fn split_pack() -> Vec<u8> {
     // Incompressible: the wire sizes are the bytes.
     let body = |seed: u64| -> Vec<u8> {
@@ -1042,7 +1042,7 @@ fn split_pack() -> Vec<u8> {
     let (base, rest, ne) = (body(1), body(2), body(3));
     let (arcs, arcs_1) = (body(4), body(5));
     let ne_key = Part::language("ne").unwrap();
-    let outline = Part::outline(1, 2).unwrap();
+    let outline = Part::outline(1, 0).unwrap();
     let mut w = Writer::new("zz", "places", "2026.11.0").unwrap();
     w.manifest(Tag::LICENCE, b"odbl").unwrap();
     w.pack_parts(
@@ -1066,7 +1066,7 @@ fn an_install_of_some_parts_fetches_and_writes_only_those() {
     let (entry, asset, _) = super::entry_of(&pack).unwrap();
     let p = Pack::open(&pack).unwrap();
     let (en, ne) = (Part::language("en").unwrap(), Part::language("ne").unwrap());
-    let outline = Part::outline(1, 2).unwrap();
+    let outline = Part::outline(1, 0).unwrap();
     let whole = Selection::from(Components::of(&[Component::Names, Component::Boundaries]));
     let (all, _) = install(&entry, &asset, pack.len(), whole);
     let all = all.unwrap();
@@ -1078,6 +1078,10 @@ fn an_install_of_some_parts_fetches_and_writes_only_those() {
     };
     let (done, staged) = install(&entry, &asset, pack.len(), some);
     let done = done.unwrap();
+    // The catalog lists the three parts but the bases, and predicts each install's bytes.
+    assert_eq!(entry.parts.len(), 3);
+    assert_eq!(done.fetched, entry.size_of(some).wire);
+    assert_eq!(all.fetched, entry.size_of(whole).wire);
     assert_eq!(done.parts.language_parts(), Some(&[Part::REST][..]));
     let s = Pack::open_head(&staged).unwrap();
     for sec in p.sections().filter(|s| s.kind() != Kind::BLOCK_HASHES) {

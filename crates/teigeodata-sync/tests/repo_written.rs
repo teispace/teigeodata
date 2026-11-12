@@ -112,6 +112,7 @@ fn entry(address: &str, sha256: &[u8]) -> Entry {
         head_frame: Size { wire: 2, disk: 64 },
         block_hashes: None,
         sizes,
+        parts: Vec::new(),
         deps: vec![],
         min_reader: 0,
         bbox: None,

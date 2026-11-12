@@ -12,11 +12,12 @@ use alloc::collections::BTreeMap;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
+use teigeodata_format::arcs::Arcs;
 use teigeodata_format::component::{Component, Components};
-use teigeodata_format::{FOOTER_SIZE, Kind, Pack, Tag};
+use teigeodata_format::{FOOTER_SIZE, Kind, Pack, Part, Tag};
 
 use crate::Error;
-use crate::catalog::{BlockHashes, Entry, Size, file_name};
+use crate::catalog::{BlockHashes, Entry, PartSize, Size, file_name};
 use crate::transport::{Layout, SeekTable};
 
 /// The catalog entry's size fields.
@@ -30,6 +31,8 @@ pub struct CatalogSizes {
     pub block_hashes: Option<BlockHashes>,
     /// Each component's download and disk bytes.
     pub sizes: BTreeMap<Component, Size>,
+    /// Each part of a split kind but its base, its tolerance not yet filled (D-253).
+    pub parts: Vec<PartSize>,
 }
 
 /// One pack's asset, measured.
@@ -49,6 +52,8 @@ pub struct Measured {
     pub hashes_raw: u64,
     /// Per component of its own sections: disk bytes (spans) and asset bytes.
     pub parts: BTreeMap<Component, (u64, u64)>,
+    /// The same for each part of a split kind but its base (ADR-0040): disk and asset bytes.
+    pub split: BTreeMap<(Component, Part), (u64, u64)>,
     /// The components with a section of 1 MiB or more, which need `BLOCK_HASHES`.
     pub blocked: Components,
 }
@@ -76,6 +81,7 @@ impl Measured {
             hashes: 0,
             hashes_raw: 0,
             parts: BTreeMap::new(),
+            split: BTreeMap::new(),
             blocked: Components::NONE,
         };
         for f in frames.iter() {
@@ -87,7 +93,12 @@ impl Measured {
                 continue;
             };
             match Component::of(s.kind) {
-                Some(k) => m.parts.entry(k).or_default().1 += len,
+                Some(k) => {
+                    m.parts.entry(k).or_default().1 += len;
+                    if !s.part.is_base() {
+                        m.split.entry((k, s.part)).or_default().1 += len;
+                    }
+                }
                 None if s.kind == Kind::BLOCK_HASHES => m.hashes += len,
                 None => return Err(Error::Layout("a section has no component")),
             }
@@ -103,6 +114,9 @@ impl Measured {
             }
             if let Some(k) = Component::of(s.kind) {
                 m.parts.entry(k).or_default().0 += disk;
+                if !s.part.is_base() {
+                    m.split.entry((k, s.part)).or_default().0 += disk;
+                }
             }
         }
         for s in p.sections() {
@@ -139,6 +153,16 @@ impl Measured {
                 .parts
                 .iter()
                 .map(|(&c, &(raw, wire))| (c, size(wire, raw)))
+                .collect(),
+            parts: self
+                .split
+                .iter()
+                .map(|(&(component, part), &(raw, wire))| PartSize {
+                    component,
+                    part,
+                    size: size(wire, raw),
+                    tolerance_m: 0,
+                })
                 .collect(),
         }
     }
@@ -180,8 +204,26 @@ pub fn spdx(class: &str) -> Result<&'static str, Error> {
 /// As [`Measured::of`], and [`Error::Write`] when the pack states no licence or one with no
 /// SPDX mapping.
 pub fn entry(pack: &[u8], asset: &[u8]) -> Result<Entry, Error> {
-    let c = Measured::of(pack, asset)?.catalog_sizes();
+    let mut c = Measured::of(pack, asset)?.catalog_sizes();
     let p = Pack::open(pack).map_err(Error::Pack)?;
+    // A coarser outline part's tolerance, from the base ARCS's levels (D-250).
+    let coarse = c
+        .parts
+        .iter()
+        .any(|q| q.part.outline_levels().is_some_and(|(_, lod)| lod > 0));
+    let arcs = p
+        .section(Kind::ARCS)
+        .filter(|_| coarse)
+        .map(|s| Arcs::open(&s))
+        .transpose()
+        .map_err(Error::Pack)?;
+    for part in &mut c.parts {
+        if let (Some((_, lod @ 1..)), Some(a)) = (part.part.outline_levels(), &arcs)
+            && part.component.kinds().iter().any(|k| k.is_outline())
+        {
+            part.tolerance_m = a.tolerance_cm(lod).map_or(0, |cm| cm / 100);
+        }
+    }
     let m = p.manifest();
     let licence = spdx(
         m.text(Tag::LICENCE)
@@ -204,6 +246,7 @@ pub fn entry(pack: &[u8], asset: &[u8]) -> Result<Entry, Error> {
         head_frame: c.head_frame,
         block_hashes: c.block_hashes,
         sizes: c.sizes,
+        parts: c.parts,
         deps: Vec::new(),
         min_reader: p.min_reader_major(),
         bbox: m.bbox(),

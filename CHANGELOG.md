@@ -32,6 +32,11 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   every part); `Installed::parts` and `Record::parts` hold the parts as resolved on the pack,
   `Record::selection()` both. `Frames::plan_install` and `plan_components` take a selection;
   `SectionSpan` has the section's `part`.
+- The catalog lists each part of a split kind but the base (D-253): `Entry::parts`
+  (`PartSize`: component, part, wire and disk bytes, and an outline's tolerance in metres),
+  measured by `Measured::catalog_sizes`; an optional `parts` field of `custom`, so older
+  readers ignore it. `Entry::size_of` takes `impl Into<Selection>` and counts only the parts
+  held.
 - The store's journal is version 3 when a pack holds some parts only (each record's `parts`),
   so a reader that knows only 2 refuses it; it stays 2 otherwise.
 

@@ -34,6 +34,12 @@
 //!   the seek table, and `BLOCK_HASHES` (`block_hashes`, absent when the pack has none) when it
 //!   holds one of the components that need it (a section of 1 MiB or more). [`Entry::size_of`]
 //!   adds them as G-wire does (D-162).
+//! - `parts` (optional, D-253) lists, per component, each part of a split kind but its base
+//!   (ADR-0040) as `[key, wire, disk]`, or `[key, wire, disk, tolerance_m]` for a coarser
+//!   outline part: `{"names": [[42, 185528, 361024], [25966, 493174, 1015552]]}`. The key is
+//!   the `Part` number. A component's `sizes` holds every part, so its base is the rest;
+//!   [`Entry::size_of`] counts only the parts a [`Selection`] holds. Unknown component names
+//!   are skipped.
 //! - `bbox` is `[west, south, east, north]` in units of 1e-7 degree: canonical JSON has no
 //!   floats. East is below west when the box crosses the antimeridian.
 //! - Unknown fields are ignored, so v1 may grow; a change that old clients would misread raises
@@ -50,8 +56,8 @@ use core::fmt;
 
 use serde_json::{Map, Value, json};
 use teigeodata_core::Point;
-use teigeodata_format::component::{Component, Components};
-use teigeodata_format::{Bbox, FOOTER_SIZE, name_like};
+use teigeodata_format::component::{Component, Components, Parts, Selection};
+use teigeodata_format::{Bbox, FOOTER_SIZE, Part, name_like};
 
 use crate::trust::{Target, lower_hex};
 
@@ -113,6 +119,9 @@ pub struct Entry {
     pub block_hashes: Option<BlockHashes>,
     /// Per component of the pack: download bytes and disk bytes.
     pub sizes: BTreeMap<Component, Size>,
+    /// Each part of a split kind but its base (D-253), by component then part; empty for a
+    /// pack without parts.
+    pub parts: Vec<PartSize>,
     /// The logical paths of the packs this one needs.
     pub deps: Vec<String>,
     /// The lowest format major that reads it.
@@ -130,6 +139,20 @@ pub struct Size {
     pub wire: u64,
     /// Bytes on disk: its sections in the pack, each with its padding to the next (D-172).
     pub disk: u64,
+}
+
+/// One part of a split kind in a pack (ADR-0040, D-253): its component, its key, its bytes,
+/// and for an outline part at a coarser level of detail that level's tolerance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PartSize {
+    /// The component of the part's sections.
+    pub component: Component,
+    /// The part's key.
+    pub part: Part,
+    /// Its download and disk bytes.
+    pub size: Size,
+    /// For a coarser outline part, its tolerance in metres; 0 otherwise.
+    pub tolerance_m: u32,
 }
 
 /// The `BLOCK_HASHES` section: its bytes and the components that need it.
@@ -218,6 +241,7 @@ impl Entry {
             head_frame: size(transport.get("head")).ok_or(Error::Field("transport.head"))?,
             block_hashes: block_hashes(c.get("block_hashes"))?,
             sizes: sizes(obj(c, "sizes")?)?,
+            parts: part_sizes(c.get("parts"))?,
             deps: deps(c, target_path)?,
             min_reader: c
                 .get("min_reader")
@@ -301,6 +325,26 @@ impl Entry {
                 json!({"size": [b.size.wire, b.size.disk], "for": names}),
             );
         }
+        if let (false, Value::Object(m)) = (self.parts.is_empty(), &mut v) {
+            let mut by: Map<String, Value> = Map::new();
+            for p in &self.parts {
+                let mut row = alloc::vec![
+                    Value::from(p.part.0),
+                    p.size.wire.into(),
+                    p.size.disk.into()
+                ];
+                if p.tolerance_m > 0 {
+                    row.push(p.tolerance_m.into());
+                }
+                if let Value::Array(list) = by
+                    .entry(p.component.name())
+                    .or_insert_with(|| Value::Array(Vec::new()))
+                {
+                    list.push(Value::Array(row));
+                }
+            }
+            m.insert("parts".to_owned(), Value::Object(by));
+        }
         if let (Some(b), Value::Object(m)) = (self.bbox, &mut v) {
             m.insert(
                 "bbox".to_owned(),
@@ -310,17 +354,15 @@ impl Entry {
         v
     }
 
-    /// Download and disk bytes of an install with `set`, closed by what each component needs:
-    /// the head frame and the seek table, the components' frames, and `BLOCK_HASHES` when one
-    /// of them needs it; on disk the head, the sections, `BLOCK_HASHES` and the footer.
-    /// Components the pack lacks count nothing.
+    /// Download and disk bytes of an install of `want`, its components closed by what each
+    /// needs: the head frame and the seek table, the frames of the parts it holds of those
+    /// components (D-253), and `BLOCK_HASHES` when one of them needs it; on disk the head, the
+    /// sections, `BLOCK_HASHES` and the footer. Components the pack lacks count nothing. A
+    /// [`Components`] holds every part.
     #[must_use]
-    pub fn size_of(&self, set: Components) -> Size {
-        let set = set.closed();
-        let add = |a: Size, b: Size| Size {
-            wire: a.wire.saturating_add(b.wire),
-            disk: a.disk.saturating_add(b.disk),
-        };
+    pub fn size_of(&self, want: impl Into<Selection>) -> Size {
+        let want = want.into().closed();
+        let parts = self.resolve(want.parts);
         let fixed = Size {
             wire: self.head_frame.wire.saturating_add(self.seek_table),
             disk: self.head_frame.disk.saturating_add(FOOTER_SIZE as u64),
@@ -328,11 +370,57 @@ impl Entry {
         let own = self
             .sizes
             .iter()
-            .filter(|(c, _)| set.contains(**c))
-            .fold(fixed, |a, (_, s)| add(a, *s));
+            .filter(|(c, _)| want.set.contains(**c))
+            .fold(fixed, |a, (&c, &s)| a.plus(self.held(c, s, parts)));
         match self.block_hashes {
-            Some(b) if set.iter().any(|c| b.needed_by.contains(c)) => add(own, b.size),
+            Some(b) if want.set.iter().any(|c| b.needed_by.contains(c)) => own.plus(b.size),
             _ => own,
+        }
+    }
+
+    /// `parts` on this pack: each language asked for as the part that holds it.
+    #[must_use]
+    pub fn resolve(&self, parts: Parts) -> Parts {
+        parts.resolve(|p| {
+            self.parts
+                .iter()
+                .any(|q| q.component == Component::Names && q.part == p)
+        })
+    }
+
+    /// Of component `c`, `total` bytes with every part, the bytes of the parts `parts` holds:
+    /// its base (the total less the listed parts) when held, and each listed part held.
+    fn held(&self, c: Component, total: Size, parts: Parts) -> Size {
+        let Some(&kind) = c.kinds().first() else {
+            return total;
+        };
+        let listed = self.parts.iter().filter(|p| p.component == c);
+        let all = listed.clone().fold(Size::ZERO, |a, p| a.plus(p.size));
+        let base = Size {
+            wire: total.wire.saturating_sub(all.wire),
+            disk: total.disk.saturating_sub(all.disk),
+        };
+        let start = if parts.holds(kind, Part::BASE) {
+            base
+        } else {
+            Size::ZERO
+        };
+        listed
+            .filter(|p| parts.holds(kind, p.part))
+            .fold(start, |a, p| a.plus(p.size))
+    }
+}
+
+impl Size {
+    /// No bytes.
+    pub const ZERO: Self = Self { wire: 0, disk: 0 };
+
+    /// Both sums, saturating.
+    #[must_use]
+    pub const fn plus(self, o: Self) -> Self {
+        Self {
+            wire: self.wire.saturating_add(o.wire),
+            disk: self.disk.saturating_add(o.disk),
         }
     }
 }
@@ -429,6 +517,42 @@ fn sizes(m: &Map<String, Value>) -> Result<BTreeMap<Component, Size>, Error> {
             out.insert(c, pair);
         }
     }
+    Ok(out)
+}
+
+/// The optional `parts` object; a component this reader does not know is skipped.
+fn part_sizes(v: Option<&Value>) -> Result<Vec<PartSize>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let bad = Error::Field("parts");
+    let mut out = Vec::new();
+    for (name, rows) in v.as_object().ok_or(bad)? {
+        let rows = rows.as_array().ok_or(bad)?;
+        let Some(component) = Component::from_name(name) else {
+            continue;
+        };
+        for row in rows {
+            let n = |i: usize| row.get(i).and_then(Value::as_u64);
+            let (Some(key), Some(wire), Some(disk)) = (n(0), n(1), n(2)) else {
+                return Err(bad);
+            };
+            let len = row.as_array().map_or(0, Vec::len);
+            let tolerance_m = match (len, n(3)) {
+                (3, _) => 0,
+                (4, Some(t)) => u32::try_from(t).ok().filter(|&t| t > 0).ok_or(bad)?,
+                _ => return Err(bad),
+            };
+            out.push(PartSize {
+                component,
+                part: Part(u32::try_from(key).ok().filter(|&k| k != 0).ok_or(bad)?),
+                size: Size { wire, disk },
+                tolerance_m,
+            });
+        }
+    }
+    // By component, then part: the order the measure gives.
+    out.sort_unstable_by_key(|p| (p.component, p.part));
     Ok(out)
 }
 

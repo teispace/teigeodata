@@ -98,6 +98,22 @@
         }
       }
     },
+    "parts": {
+      "description": "Per component, each part of a split kind but its base (ADR-0040, D-253): [key, wire, disk], or [key, wire, disk, tolerance_m] for a coarser outline part. The key is the part's number; a component's sizes include its parts.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 4,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
     "deps": {
       "type": "array",
       "uniqueItems": true,

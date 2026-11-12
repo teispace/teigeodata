@@ -197,6 +197,7 @@ mod tests {
             head_frame: c.head_frame,
             block_hashes: c.block_hashes,
             sizes: c.sizes,
+            parts: c.parts,
             deps: vec![],
             min_reader: 0,
             bbox: None,

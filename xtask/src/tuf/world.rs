@@ -245,6 +245,7 @@ fn target_file(rng: &mut Rng, address: &str) -> Result<(String, TargetFile), Str
             ]),
         }),
         sizes,
+        parts: Vec::new(),
         deps: if part && country {
             vec![format!("{}.places.tgd", &address[..2])]
         } else {

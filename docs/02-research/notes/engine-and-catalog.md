@@ -296,6 +296,14 @@ D-160 settles §3.8 with four changes found while building it:
   signed file whose sections a client installs by component, so the catalog gives
   `[wire, disk]` bytes for each component and a plan sums the set it asks for, closed by what
   each component needs.
+- **`parts`: each part's sizes (D-253).** A pack that splits kinds into parts (ADR-0040) lists
+  every part but the base, grouped by component: `"parts": {"names": [[key, wire, disk], ...],
+  "boundaries": [[key, wire, disk, tolerance_m], ...]}`, with the outline parts' tolerance in
+  metres (0 for full resolution). A component's `sizes` stay the whole component, so a reader
+  that does not know `parts` still sums right; `Entry::size_of(selection)` takes the whole
+  component, subtracts the parts not held and so gives what an install of those parts
+  fetches. Arrays instead of keyed objects: Nepal lite's 28 parts take 1,484 B of `custom`
+  instead of 2,781 B.
 - **`bbox` in integers.** Canonical JSON (and so TUF's signatures) has no floats: the box is
   `[west, south, east, north]` in 1e-7 degree, the manifest's own grid.
 - **`file` checked.** The asset's name carries the first 8 hex digits of the target's BLAKE3,

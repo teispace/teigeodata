@@ -6,10 +6,10 @@ use alloc::vec::Vec;
 
 use serde_json::{Value, json};
 use teigeodata_core::Point;
-use teigeodata_format::Bbox;
-use teigeodata_format::component::{Component, Components};
+use teigeodata_format::component::{Component, Components, Parts, Selection};
+use teigeodata_format::{Bbox, Part};
 
-use super::{BlockHashes, Entry, Error, Size, file_name, path};
+use super::{BlockHashes, Entry, Error, PartSize, Size, file_name, path};
 use crate::trust::{Target, canonical_json};
 
 const ASSET_LEN: u64 = 8_227_234;
@@ -65,6 +65,7 @@ fn entry() -> Entry {
             needed_by: Components::of(&[Component::Names]),
         }),
         sizes,
+        parts: Vec::new(),
         deps: alloc::vec!["np.baseline.tgd".to_string()],
         min_reader: 0,
         bbox: Some(Bbox {
@@ -73,6 +74,82 @@ fn entry() -> Entry {
         }),
         licence: "ODbL-1.0".to_string(),
     }
+}
+
+/// [`entry`] with its NAMES in three parts (base, `*`, `ne`) and a boundaries component with a
+/// coarser outline part.
+fn entry_with_parts() -> Entry {
+    let mut e = entry();
+    let size = |wire, disk| Size { wire, disk };
+    e.sizes
+        .insert(Component::Boundaries, size(400_000, 500_000));
+    e.parts = alloc::vec![
+        PartSize {
+            component: Component::Names,
+            part: Part::REST,
+            size: size(200_000, 280_000),
+            tolerance_m: 0,
+        },
+        PartSize {
+            component: Component::Names,
+            part: Part::language("ne").unwrap(),
+            size: size(400_000, 560_000),
+            tolerance_m: 0,
+        },
+        PartSize {
+            component: Component::Boundaries,
+            part: Part::outline(2, 3).unwrap(),
+            size: size(30_000, 40_000),
+            tolerance_m: 100,
+        },
+    ];
+    e.parts.sort_unstable_by_key(|p| (p.component, p.part));
+    e
+}
+
+#[test]
+fn parts_round_trip_and_a_selection_counts_only_its_parts() {
+    let e = entry_with_parts();
+    let back = Entry::from_target(&e.path(), &target(e.to_custom())).unwrap();
+    assert_eq!(back, e);
+    let names = Components::of(&[Component::Names]);
+    let whole = e.size_of(names);
+    // English: the base and `*` (English has no part of its own here), not `ne`.
+    let en = Selection {
+        set: names,
+        parts: Parts::ALL
+            .languages(&[Part::language("en").unwrap()])
+            .unwrap(),
+    };
+    assert_eq!(
+        e.resolve(en.parts).language_parts(),
+        Some(&[Part::REST][..])
+    );
+    let s = e.size_of(en);
+    assert_eq!(
+        (whole.wire - s.wire, whole.disk - s.disk),
+        (400_000, 560_000)
+    );
+    // One outline part: the boundaries' base (400,000 − 30,000 on the wire) is not fetched.
+    let b = Components::of(&[Component::Boundaries]);
+    let one = Selection {
+        set: b,
+        parts: Parts::ALL.outline(Part::outline(2, 3).unwrap()),
+    };
+    assert_eq!(e.size_of(b).wire - e.size_of(one).wire, 370_000);
+    // The base outline part alone: everything but the listed part.
+    let base = Selection {
+        set: b,
+        parts: Parts::ALL.outline(Part::BASE),
+    };
+    assert_eq!(e.size_of(b).wire - e.size_of(base).wire, 30_000);
+    // A bad part key is refused.
+    let t = target({
+        let mut c = e.to_custom();
+        c["parts"]["names"][0][0] = json!(0);
+        c
+    });
+    assert!(Entry::from_target(&e.path(), &t).is_err());
 }
 
 fn target(custom: Value) -> Target {
@@ -307,13 +384,14 @@ fn the_json_schema_matches_the_reader() {
         out.sort();
         out
     };
-    let written = entry().to_custom();
+    let written = entry_with_parts().to_custom();
     assert_eq!(names(&schema["properties"]), names(&written));
     let mut no_bbox = written.clone();
     no_bbox.as_object_mut().unwrap().remove("bbox");
     no_bbox.as_object_mut().unwrap().remove("block_hashes");
-    // Every field but the optional bbox and block_hashes is required; removing any one is
-    // refused.
+    no_bbox.as_object_mut().unwrap().remove("parts");
+    // Every field but the optional bbox, block_hashes and parts is required; removing any one
+    // is refused.
     assert_eq!(names(&schema["required"]), names(&no_bbox));
     for k in names(&no_bbox) {
         let t = with(|m| {
