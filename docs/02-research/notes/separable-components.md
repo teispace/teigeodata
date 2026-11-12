@@ -146,6 +146,32 @@ Proof each step must give:
 - The head limit caps parts at about 190 sections per pack; the writer and the reader already
   refuse a head over 16 KiB (`HEAD_MAX`).
 
+## 7a. Step 3 design: outlines by level group (2026-11-12)
+
+What the format already fixes, and what follows from it:
+
+- POLYGONS refers to arcs by their global index (`2·arc + reversed`), and ADMIN_REGION numbers
+  its edges by global ARCS vertex (edge `e` joins vertices `e` and `e + 1`). So the arcs are
+  **ordered by group** in the build, coarsest first (group = the coarsest admin level using the
+  arc), and ARCS part `g` holds group `g`'s arcs: parts 0 to *k* are then a prefix of today's
+  numbering, and every index a coarser part stores stays valid when finer parts are absent.
+  Ordering changes the bytes of every pack with outlines once; the arcs' content does not.
+- **Readers join parts**: an `ArcSet` over the ARCS parts present maps a global arc (and
+  vertex) to its part by a binary search on each part's first arc (and vertex), so
+  `Polygons::ring`, `Region::open_on_arcs` and `PolyIndex::check` take the set where they take
+  `Arcs` today. With one part it is today's reader.
+- **POLYGONS and POLY_INDEX by level**: part `g` holds the polygons of level group `g` (POLYGONS
+  already groups them coarse to fine, so a part is one group); POLY_INDEX part `g` indexes
+  that part alone (the tree already restricts queries to one group's range).
+- **ADMIN_REGION per deepest level**: part `k` is a whole region over the polygons of levels 0
+  to *k* on arcs 0 to *k* (its sets differ from the full region's, so it cannot be cut from it).
+  A client takes the one part for its deepest level; the base part stays the full region, so
+  a client that takes everything is unchanged. Measure the copies' sum against the 977 KB of
+  Nepal's full region before choosing.
+- **Gate:** `admin_at` with parts down to level *k* equals the full pack's chain cut at *k*, at
+  every place and on a 0.01° grid (the G-tz-layer method); golden and layer gates unchanged.
+- **ARCS_OVERVIEW** follows ARCS's parts, and levels of detail (step 4) add the `lod` byte.
+
 ## 8. Versions checked
 
 | Thing | Version | Checked on | Where |
