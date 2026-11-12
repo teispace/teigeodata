@@ -13,6 +13,8 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Engine (`teigeodata-engine`)
 
+- `LayerOptions::outline_level`: read the outlines of one admin level and the coarser ones,
+  from the pack's outline part (D-249); admin units below it are not found at a point.
 - `search` finds a place from 3 or more code points inside a word of any of its names, in any
   script ("mandu" finds Kathmandu, "माडौं" काठमाडौं), ranked below exact, prefix and one-edit
   matches (bonus 20). It needs the new `substring` component (with `search`) installed and the
@@ -29,6 +31,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   `Writer::pack_parts`, `Part`.
 - Names and search by language (D-248): `names::LanguageParts`, `names::encode_part`,
   `NameSet`, `Search::open_part`, `SearchSet`, `search::substring_part_from_names`.
+- Outlines by admin level (D-249): `Part::outline(deepest, lod)` is `deepest + 1 | lod << 8`,
+  `Part::outline_levels`; `ARCS_OVERVIEW` takes parts; `check` reads each outline part on its
+  own arcs.
 
 ### Sync (`teigeodata-sync`)
 
@@ -39,6 +44,7 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 - Country packs built from this version split NAMES, SEARCH and SUBSTRING by language. A reader
   from 0.1.0 refuses them (it sees a non-zero reserved byte); upgrade the crates with the data.
+- `LayerOptions` has a new field, `outline_level`: build it with `..LayerOptions::default()`.
 - `teigeodata_engine::derive::substring` takes `(Kind, Part, u64, Vec<u8>)` inputs and returns
   one `(Part, bytes)` per NAMES part; `Store::derive`'s `build` likewise.
 

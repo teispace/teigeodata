@@ -365,13 +365,13 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
     // Names, search and substring by language (ADR-0040).
     let named = name_sections(&rows, input.profile, &input.args.admin, true)?;
     let substring = substring_sections(&named.names, &named.importance)?;
-    let mut parts: Vec<(Kind, Part, Vec<u8>)> = Vec::new();
+    let mut parts: Vec<PartBody> = Vec::new();
     for (kind, list) in [
         (Kind::NAMES, named.names),
         (Kind::SEARCH, named.search),
         (Kind::SUBSTRING, substring),
     ] {
-        parts.extend(list.into_iter().map(|(p, b)| (kind, p, b)));
+        parts.extend(list.into_iter().map(|(p, b)| (kind, p, n as u64, b)));
     }
     let index_body = place_index::encode(&points, NODE).map_err(|e| e.to_string())?;
 
@@ -386,6 +386,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
     zone_sections(input, &row_of, &points, &mut sections)?;
     if let Some(g) = input.geometry {
         sections.extend(super::geometry::sections(g, &rows, &row_of)?);
+        parts.extend(super::geometry::outline_parts(g, &rows, &row_of)?);
     }
     if let Some(p) = input.postal.filter(|p| !p.entries.is_empty()) {
         sections.push(postal_section(p, &row_of, n)?);
@@ -414,19 +415,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
         ids_report(assigned, file, input, &mut report);
     }
     let _ = writeln!(report, "\n| Section | Bytes |\n|---|---:|");
-    let mut listed: Vec<(Kind, Part, usize)> = sections
-        .iter()
-        .map(|s| (s.0, Part::BASE, s.3.len()))
-        .chain(parts.iter().map(|s| (s.0, s.1, s.2.len())))
-        .collect();
-    listed.sort_unstable();
-    for (kind, part, len) in listed {
-        if part.is_base() {
-            let _ = writeln!(report, "| {kind} | {len} |");
-        } else {
-            let _ = writeln!(report, "| {kind} `{part}` | {len} |");
-        }
-    }
+    sections_table(&sections, &parts, &mut report);
     let _ = writeln!(
         report,
         "| **pack** | **{}** |\n\nBLAKE3 of the pack: `{}`.",
@@ -538,6 +527,9 @@ fn allocate(
 
 pub(super) type Body = (Kind, Encoding, u64, Vec<u8>);
 
+/// A section that is a part of its kind (ADR-0040): kind, part, item count, bytes.
+pub(super) type PartBody = (Kind, Part, u64, Vec<u8>);
+
 fn ids_report(a: &Assignment, ids_file: &Path, input: &Input<'_>, report: &mut String) {
     let _ = writeln!(
         report,
@@ -559,12 +551,35 @@ fn ids_report(a: &Assignment, ids_file: &Path, input: &Input<'_>, report: &mut S
     );
 }
 
-/// The number of places of a pack's sections: PLACES' item count.
-fn input_rows(sections: &[Body]) -> u64 {
-    sections
+/// The summary's table of section sizes, parts listed after their base (ADR-0040).
+fn sections_table(sections: &[Body], parts: &[PartBody], report: &mut String) {
+    let mut listed: Vec<(Kind, Part, usize)> = sections
         .iter()
-        .find(|s| s.0 == Kind::PLACES)
-        .map_or(0, |s| s.2)
+        .map(|s| (s.0, Part::BASE, s.3.len()))
+        .chain(parts.iter().map(|s| (s.0, s.1, s.3.len())))
+        .collect();
+    listed.sort_unstable();
+    for (kind, part, len) in listed {
+        let outline = matches!(
+            kind,
+            Kind::ARCS
+                | Kind::ARCS_OVERVIEW
+                | Kind::POLYGONS
+                | Kind::POLY_INDEX
+                | Kind::ADMIN_REGION
+        );
+        match part.outline_levels().filter(|_| outline) {
+            _ if part.is_base() => {
+                let _ = writeln!(report, "| {kind} | {len} |");
+            }
+            Some((deepest, _)) => {
+                let _ = writeln!(report, "| {kind} to level {deepest} | {len} |");
+            }
+            None => {
+                let _ = writeln!(report, "| {kind} `{part}` | {len} |");
+            }
+        }
+    }
 }
 
 /// The pack file: the manifest (coverage box, build ID, `SOURCE_DATE_EPOCH`), the sections,
@@ -572,7 +587,7 @@ fn input_rows(sections: &[Body]) -> u64 {
 fn assemble(
     input: &Input<'_>,
     sections: &[Body],
-    parts: &[(Kind, Part, Vec<u8>)],
+    parts: &[PartBody],
 ) -> Result<(Vec<u8>, Option<ed25519_dalek::SigningKey>), String> {
     let mut w =
         Writer::new(input.address, "places", &input.args.release).map_err(|e| e.to_string())?;
@@ -614,14 +629,13 @@ fn assemble(
         None => None,
     };
     let signer = key.as_ref().map(teigeodata_format::signer);
-    let rows = input_rows(sections);
     let bodies: Vec<(Kind, Part, Encoding, u64, &[u8])> = sections
         .iter()
         .map(|s| (s.0, Part::BASE, s.1, s.2, s.3.as_slice()))
         .chain(
             parts
                 .iter()
-                .map(|s| (s.0, s.1, Encoding::TABLE, rows, s.2.as_slice())),
+                .map(|s| (s.0, s.1, Encoding::TABLE, s.2, s.3.as_slice())),
         )
         .collect();
     let bytes = w

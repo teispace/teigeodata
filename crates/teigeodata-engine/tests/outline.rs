@@ -18,7 +18,7 @@ use teigeodata_engine::{Engine, Layer, LayerOptions, Outline, Rect};
 use teigeodata_format::arcs::{self, ArcColumns, PINNED};
 use teigeodata_format::poly_index;
 use teigeodata_format::polygons::{self, PolygonInput, arc_ref};
-use teigeodata_format::{Kind, Pack};
+use teigeodata_format::{Encoding, Kind, Pack, Part, Writer};
 
 /// Half the side of a district, 1e-7°: the synthetic country is 4 × 2 districts of 2° × 2°.
 const HALF: i32 = (EAST - WEST) / 8;
@@ -222,5 +222,66 @@ fn a_stub_in_a_part_falls_through_to_the_pack_with_the_outline() {
             whole_id
         };
         assert_eq!(e.boundary(&p, 0, &mut out).unwrap(), Some(from));
+    }
+}
+
+/// Each outlined row with its exact box `[w, s, e, n]`.
+type Shapes = Vec<(u32, [i32; 4])>;
+
+/// The whole pack with the country-only outlines added as its outline part of level 0
+/// (ADR-0040, D-249).
+fn with_level_0_part() -> (Model, Shapes, Vec<u8>) {
+    let (m, shapes) = outlined(false);
+    let (c, _) = outlined(true);
+    let (whole, country) = (m.encode(), c.encode());
+    let (whole_pack, country_pack) = (Pack::open(&whole).unwrap(), Pack::open(&country).unwrap());
+    let part = Part::outline(0, 0);
+    let mut sections: Vec<(Kind, Part, Encoding, u64, &[u8])> = whole_pack
+        .sections()
+        .filter(|s| s.kind() != Kind::BLOCK_HASHES)
+        .map(|s| (s.kind(), s.part(), s.encoding(), s.item_count(), s.bytes()))
+        .collect();
+    sections.extend(
+        country_pack
+            .sections()
+            .filter(|s| matches!(s.kind(), Kind::ARCS | Kind::POLYGONS | Kind::POLY_INDEX))
+            .map(|s| (s.kind(), part, s.encoding(), s.item_count(), s.bytes())),
+    );
+    sections.sort_by_key(|s| (s.0, s.1));
+    let mf = whole_pack.manifest();
+    let bytes = Writer::new(mf.address(), mf.component(), mf.release())
+        .unwrap()
+        .pack_parts(&sections, None)
+        .unwrap();
+    (m, shapes, bytes)
+}
+
+#[test]
+fn an_outline_level_reads_the_part_that_holds_it() {
+    let (m, shapes, bytes) = with_level_0_part();
+    let at_level = |level: Option<u8>| {
+        let options = LayerOptions {
+            outline_level: level,
+            ..LayerOptions::default()
+        };
+        let mut e = Engine::new();
+        e.add(Layer::from_bytes(bytes.clone(), options).unwrap());
+        e
+    };
+    // Every level, level 1 (the deepest, the whole outlines) and above: every outline.
+    // Level 0: the part, the country's outline alone.
+    for (level, districts) in [
+        (None, true),
+        (Some(1), true),
+        (Some(7), true),
+        (Some(0), false),
+    ] {
+        let e = at_level(level);
+        for &(row, _) in &shapes {
+            let p = e.get(m.ids[row as usize]).unwrap().unwrap();
+            let country = p.kind == Some(PlaceKind::Country);
+            let has = e.bbox_of(&p).unwrap().is_some();
+            assert_eq!(has, country || districts, "level {level:?}, row {row}");
+        }
     }
 }

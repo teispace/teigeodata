@@ -15,10 +15,10 @@ use teigeodata_format::arcs::{self, Arcs};
 use teigeodata_format::poly_index::{self, PolyIndex, Rect};
 use teigeodata_format::polygons::{self, PolygonInput, Polygons};
 use teigeodata_format::region::{self, Options, Region};
-use teigeodata_format::{Encoding, Kind, Pack, Section, Writer, places};
+use teigeodata_format::{Encoding, Kind, Pack, Part, Section, Writer, places};
 
 use super::Place;
-use super::pack::Body;
+use super::pack::{Body, PartBody};
 use crate::topo::{self, arcs::Parts};
 
 /// One polygon of the `topology` stage.
@@ -148,12 +148,31 @@ impl Geometry {
         country: Option<&str>,
         keep: impl Fn(&str) -> bool,
     ) -> Result<Self, String> {
+        self.subset_where(|p| key(p, country).map(|k| keep(&k)))
+    }
+
+    /// The polygons of admin level `deepest` and coarser, on only the arcs they use: an outline
+    /// part (ADR-0040), whole for its levels.
+    pub(super) fn up_to(&self, deepest: u8) -> Result<Self, String> {
+        self.subset_where(|p| Ok(p.level <= deepest))
+    }
+
+    /// The admin levels that have polygons, coarse to fine.
+    pub(super) fn levels(&self) -> Vec<u8> {
+        let mut levels: Vec<u8> = self.polys.iter().map(|q| q.level).collect();
+        levels.sort_unstable();
+        levels.dedup();
+        levels
+    }
+
+    /// The polygons `keep` takes, on only the arcs they use, renumbered in their old order.
+    fn subset_where(&self, keep: impl Fn(&Poly) -> Result<bool, String>) -> Result<Self, String> {
         let polys: Vec<Poly> = self
             .polys
             .iter()
             .filter(|p| !p.pcode.starts_with(topo::pov::FILLER))
-            .filter_map(|p| match key(p, country) {
-                Ok(k) => keep(&k).then(|| Ok(p.clone())),
+            .filter_map(|p| match keep(p) {
+                Ok(k) => k.then(|| Ok(p.clone())),
                 Err(e) => Some(Err(e)),
             })
             .collect::<Result<_, String>>()?;
@@ -327,9 +346,7 @@ pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<Stri
     let line = check(p, rows.len(), &places)?;
     let polys = Polygons::open(&p.section(Kind::POLYGONS).ok_or("no POLYGONS")?).map_err(e)?;
     // Group k holds the k-th admin level present, coarse to fine.
-    let mut levels: Vec<u8> = g.polys.iter().map(|q| q.level).collect();
-    levels.sort_unstable();
-    levels.dedup();
+    let levels = g.levels();
     let mut with = vec![false; rows.len()];
     for i in 0..polys.len() {
         let row = polys.row(i).ok_or("a polygon without a row")? as usize;
@@ -366,8 +383,114 @@ pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<Stri
     let admin = Region::open_on_arcs(&p.section(Kind::ADMIN_REGION).ok_or("no ADMIN_REGION")?, &a)
         .map_err(e)?;
     let pip = pip(&admin, &polys, &levels, rows)?;
+    let parts = verify_parts(p, (&admin, &polys), &levels, rows)?;
     Ok(format!(
-        "{line}; every current admin unit and the country has its polygon.\n\n{pip}"
+        "{line}; every current admin unit and the country has its polygon.\n\n{pip}{parts}"
+    ))
+}
+
+/// The outline parts (ADR-0040): one per admin level but the deepest, each every outline
+/// section of that level and coarser, whole, keyed [`Part::outline`]`(level, 0)`.
+pub(super) fn outline_parts(
+    g: &Geometry,
+    rows: &[&Place],
+    row_of: &BTreeMap<&str, u32>,
+) -> Result<Vec<PartBody>, String> {
+    let levels = g.levels();
+    let mut out = Vec::new();
+    for &level in levels.iter().take(levels.len().saturating_sub(1)) {
+        let sub = g.up_to(level)?;
+        let part = Part::outline(level, 0);
+        out.extend(
+            sections(&sub, rows, row_of)?
+                .into_iter()
+                .map(|(kind, _, n, body)| (kind, part, n, body)),
+        );
+    }
+    Ok(out)
+}
+
+/// Each outline part read back: every section passes `check` against its own part's ARCS
+/// and POLYGONS, and at every settlement and locality its `ADMIN_REGION` holds exactly the units
+/// of its levels that the whole pack's holds. Returns a line for the summary, empty without
+/// parts.
+fn verify_parts(
+    p: &Pack<'_>,
+    (admin, polys): (&Region<'_>, &Polygons<'_>),
+    levels: &[u8],
+    rows: &[&Place],
+) -> Result<String, String> {
+    let err = |e: teigeodata_format::Error| e.to_string();
+    let mut lines = Vec::new();
+    for s in p.parts(Kind::POLYGONS).filter(|s| !s.part().is_base()) {
+        let part = s.part();
+        let (deepest, _) = part
+            .outline_levels()
+            .ok_or("an outline part with a bad key")?;
+        let of = |k: Kind| p.part(k, part).ok_or(format!("part {part}: no {k}"));
+        let arcs = Arcs::open(&of(Kind::ARCS)?).map_err(err)?;
+        arcs.check().map_err(err)?;
+        let mine = Polygons::open(&s).map_err(err)?;
+        mine.check(&arcs, rows.len()).map_err(err)?;
+        PolyIndex::open(&of(Kind::POLY_INDEX)?, &mine)
+            .and_then(|i| i.check(&mine, &arcs))
+            .map_err(err)?;
+        let region = Region::open_on_arcs(&of(Kind::ADMIN_REGION)?, &arcs).map_err(err)?;
+        region.check().map_err(err)?;
+        // The whole pack's groups of this level and coarser.
+        let groups = levels.iter().take_while(|&&l| l <= deepest).count();
+        let last = polys.group(groups.saturating_sub(1)).map_or(0, |r| r.end);
+        let (mut want, mut got) = ([0_u32; region::MAX_SET], [0_u32; region::MAX_SET]);
+        let (mut whole, mut cut) = (Vec::new(), Vec::new());
+        let mut checked = 0_usize;
+        for r in rows
+            .iter()
+            .filter(|r| matches!(r.kind, PlaceKind::Settlement | PlaceKind::Locality))
+        {
+            let at = Point::<E7>::from_units(r.point.1, r.point.0).ok_or("a place off the grid")?;
+            let n = admin.regions_at(at, &mut want);
+            whole.clear();
+            whole.extend(
+                want.get(..n)
+                    .unwrap_or_default()
+                    .iter()
+                    .filter(|&&i| (i as usize) < last)
+                    .filter_map(|&i| polys.row(i as usize)),
+            );
+            let n = region.regions_at(at, &mut got);
+            cut.clear();
+            cut.extend(
+                got.get(..n)
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|&i| mine.row(i as usize)),
+            );
+            whole.sort_unstable();
+            cut.sort_unstable();
+            if whole != cut {
+                return Err(format!(
+                    "{}: outline part {part} holds rows {cut:?}, the whole pack {whole:?}",
+                    r.key
+                ));
+            }
+            checked += 1;
+        }
+        lines.push(format!(
+            "levels to {deepest}: {} polygons, {} arcs, ADMIN_REGION {} B",
+            mine.len(),
+            arcs.len(),
+            of(Kind::ADMIN_REGION)?.bytes().len()
+        ));
+        if checked == 0 {
+            return Err(format!("outline part {part}: no place to check"));
+        }
+    }
+    if lines.is_empty() {
+        return Ok(String::new());
+    }
+    Ok(format!(
+        "\n\nOutline parts (ADR-0040), each whole for its levels and equal to the whole pack's units of those levels at every settlement and locality: {}.",
+        lines.join("; ")
     ))
 }
 

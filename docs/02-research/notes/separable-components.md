@@ -148,7 +148,14 @@ Proof each step must give:
 
 ## 7a. Step 3 design: outlines by level group (2026-11-12)
 
-What the format already fixes, and what follows from it:
+**Superseded by what was built (D-249):** each outline part is a whole copy over levels 0 to
+*k*, re-encoded on only the arcs those levels use, and a reader takes one part. The analysis
+below is kept because it shows why: a reader joining arc parts would dispatch on every vertex
+read, through ADMIN_REGION's global vertex numbering and the `Copy` `Arcs` inside ring
+iterators. Measured (Nepal lite, wire): all levels 3.29 MB, to districts 1.31 MB, to provinces
+0.64 MB, the country 0.36 MB; the asset +2.31 MB.
+
+The arc-group design as first written:
 
 - POLYGONS refers to arcs by their global index (`2·arc + reversed`), and ADMIN_REGION numbers
   its edges by global ARCS vertex (edge `e` joins vertices `e` and `e + 1`). So the arcs are

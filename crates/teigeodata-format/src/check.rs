@@ -119,6 +119,14 @@ pub fn sections(pack: &Pack<'_>, mut each: impl FnMut(Kind, Result<bool, Error>)
                     #[cfg(feature = "zstd")]
                     b.decoder()?.check()?;
                 }
+                // An outline part is checked against the ARCS and POLYGONS of its own part
+                // (ADR-0040: each is a whole copy for its levels).
+                _ if !s.part().is_base() => {
+                    let of = |k| pack.part(k, s.part());
+                    let arcs = of(Kind::ARCS).map(|a| Arcs::open(&a)).transpose()?;
+                    let polygons = of(Kind::POLYGONS).map(|p| Polygons::open(&p)).transpose()?;
+                    return outlines(&s, arcs.as_ref(), polygons.as_ref(), rows);
+                }
                 _ => return outlines(&s, arcs.as_ref(), polygons.as_ref(), rows),
             }
             Ok(true)

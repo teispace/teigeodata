@@ -167,6 +167,13 @@ SUBSTRING part has no IMPORTANCE, RULES or UNIT column: it reads the base part's
 (`Search::open_part`), and rules and unit types are the base's. `NameSet` and `SearchSet` read
 across the parts present; a row found in several counts once.
 
+**Outlines by admin level** (D-249): for each admin level *k* but the deepest, ARCS,
+`ARCS_OVERVIEW`, POLYGONS, POLY_INDEX and `ADMIN_REGION` have a part keyed
+`Part::outline(k, 0)` = `k + 1`: every outline section over levels 0 to *k*, whole, on only the
+arcs those levels use. A reader takes one part (the engine's `LayerOptions::outline_level`);
+the base part holds every level. `check` reads each outline part against its own ARCS and
+POLYGONS.
+
 ### Components of a pack
 
 Each section belongs to one component (D-133, D-135), and a client chooses components, not

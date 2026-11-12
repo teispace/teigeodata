@@ -24,9 +24,14 @@ and byte ranges inside one section.
   part. Part 0 is the **base part**, which is every section as packs have them today, and the
   first section of any kind that is split.
 - The key's meaning is **fixed per kind**, so the table describes itself: a language for NAMES,
-  SEARCH and SUBSTRING (`*` for the languages without a part of their own); an admin level
-  group and a level of detail for ARCS, POLYGONS, POLY_INDEX and `ADMIN_REGION`. Other known
-  kinds take only the base part; a kind the reader does not know may have parts.
+  SEARCH and SUBSTRING (`*` for the languages without a part of their own); the deepest admin
+  level held (`level + 1`) and a level of detail (`<< 8`) for ARCS, `ARCS_OVERVIEW`,
+  POLYGONS, POLY_INDEX and `ADMIN_REGION`. Other known kinds take only the base part; a kind
+  the reader does not know may have parts.
+- **Outline parts are whole copies** (amended with step 3, D-249): the part of level *k* holds
+  every outline section over levels 0 to *k*, on only the arcs they use; a reader takes one
+  part, and the base holds every level. Arc groups that a reader joins were the first design;
+  they were dropped because polygons and the admin index address arcs and vertices globally.
 - BLOCK_HASHES' directory names each covered section by kind and part, in the `u32` that was
   reserved there.
 - Each part is a section: its own hash in the signed head, its own frames on the wire, its own

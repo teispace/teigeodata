@@ -211,3 +211,7 @@ allow_attributes_without_reason = "warn"
 [[example]]
 name = "tz-agree"
 required-features = ["timezone", "timezone-index", "admin-index", "tz-rules"]
+
+[[example]]
+name = "admin-cut"
+required-features = ["admin-index"]

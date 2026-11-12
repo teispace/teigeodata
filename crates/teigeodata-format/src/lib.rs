@@ -158,6 +158,7 @@ impl Kind {
                 | Self::SEARCH
                 | Self::SUBSTRING
                 | Self::ARCS
+                | Self::ARCS_OVERVIEW
                 | Self::POLYGONS
                 | Self::POLY_INDEX
                 | Self::ADMIN_REGION
@@ -212,7 +213,8 @@ impl fmt::Display for Kind {
 /// each section a part with its own key; the base part, 0, is the only one of a kind that
 /// takes no parts and comes first of its kind. What a key means is fixed per kind: a language
 /// packed as NAMES' `lang` column packs it ([`Part::language`]) for NAMES, SEARCH and
-/// SUBSTRING; an admin level group and a level of detail ([`Part::outline`]) for the outlines.
+/// SUBSTRING; the deepest admin level held and a level of detail ([`Part::outline`]) for the
+/// outlines, each part a whole copy for those levels.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Part(pub u32);
 
@@ -237,10 +239,23 @@ impl Part {
         Some(Self(v))
     }
 
-    /// The outline part of admin level group `group` at level of detail `lod`.
+    /// The outline part that holds every admin unit of level `deepest` and coarser, whole, at
+    /// level of detail `lod`: `(deepest + 1) | lod << 8`, never the base part, which holds every
+    /// level at full detail.
     #[must_use]
-    pub const fn outline(group: u8, lod: u8) -> Self {
-        Self(group as u32 | (lod as u32) << 8)
+    pub const fn outline(deepest: u8, lod: u8) -> Self {
+        Self((deepest as u32 + 1) | (lod as u32) << 8)
+    }
+
+    /// The deepest admin level and the level of detail of an outline part; `None` for the base
+    /// part.
+    #[must_use]
+    pub const fn outline_levels(self) -> Option<(u8, u8)> {
+        let [deepest, lod, a, b] = self.0.to_le_bytes();
+        if deepest == 0 || a != 0 || b != 0 {
+            return None;
+        }
+        Some((deepest - 1, lod))
     }
 
     /// Whether this is the base part.
@@ -307,7 +322,10 @@ mod tests {
         assert_eq!(Part::REST.to_string(), "*");
         assert_eq!(Part::language("ne-Deva").unwrap().to_string(), "ne");
         assert_eq!(Part::language("MAI").unwrap().to_string(), "mai");
-        assert_eq!(Part::outline(3, 1).to_string(), "0x103");
+        assert_eq!(Part::outline(3, 1).to_string(), "0x104");
+        assert_eq!(Part::outline(0, 0).outline_levels(), Some((0, 0)));
+        assert_ne!(Part::outline(0, 0), Part::BASE);
+        assert_eq!(Part::BASE.outline_levels(), None);
     }
 
     #[test]

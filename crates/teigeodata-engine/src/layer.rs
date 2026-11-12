@@ -100,6 +100,10 @@ pub struct LayerOptions {
     /// returns [`Error::MissingComponent`]. The set must hold what its components need, and
     /// `point` whenever the pack has it.
     pub installed: Option<Components>,
+    /// The deepest admin level whose outlines are read (ADR-0040): the pack's outline part
+    /// that holds that level and the coarser ones, whole; `None` for every level. Admin units
+    /// below it are not found at a point, and their outlines are not read.
+    pub outline_level: Option<u8>,
 }
 
 impl LayerOptions {
@@ -174,6 +178,61 @@ fn located_blocks<'a>(
     Ok(blocks)
 }
 
+/// Whether `kind` is an outline kind, read from one part (ADR-0040).
+pub(crate) const fn is_outline(kind: Kind) -> bool {
+    matches!(
+        kind,
+        Kind::ARCS | Kind::ARCS_OVERVIEW | Kind::POLYGONS | Kind::POLY_INDEX | Kind::ADMIN_REGION
+    )
+}
+
+#[cfg(any(feature = "boundaries", feature = "admin-index"))]
+/// The part the outline kinds are read from for `level` (ADR-0040): the base part, which holds
+/// every level, when `level` is `None` or the pack holds no level below it; else the outline
+/// part of the deepest level at most `level` (the coarsest part when every part is deeper).
+fn outline_part(
+    pack: &Pack<'_>,
+    places: Option<teigeodata_format::Section<'_>>,
+    level: Option<u8>,
+) -> Part {
+    let Some(k) = level else {
+        return Part::BASE;
+    };
+    let mut best: Option<(u8, Part)> = None;
+    let mut coarsest: Option<(u8, Part)> = None;
+    let mut deeper = false;
+    for s in pack.parts(Kind::POLYGONS) {
+        let Some((d, 0)) = s.part().outline_levels() else {
+            continue;
+        };
+        if coarsest.is_none_or(|(c, _)| d < c) {
+            coarsest = Some((d, s.part()));
+        }
+        if d > k {
+            deeper = true;
+        } else if best.is_none_or(|(b, _)| d > b) {
+            best = Some((d, s.part()));
+        }
+    }
+    if deeper {
+        return best.or(coarsest).map_or(Part::BASE, |b| b.1);
+    }
+    // Every part is at most `k`: the base adds only the deepest level, the level of its last
+    // polygon's place.
+    let deepest = pack
+        .section(Kind::POLYGONS)
+        .and_then(|s| Polygons::open(&s).ok())
+        .zip(places.and_then(|s| Places::open(&s).ok()))
+        .and_then(|(p, places)| {
+            let row = p.row(p.len().checked_sub(1)?)?;
+            places.admin_level(usize::try_from(row).ok()?)
+        });
+    match (deepest, best) {
+        (Some(d), Some((_, part))) if d > k => part,
+        _ => Part::BASE,
+    }
+}
+
 /// The zero-copy views of one pack, opened once (structure checks only).
 #[derive(Debug)]
 pub(crate) struct Views<'a> {
@@ -234,6 +293,8 @@ pub(crate) struct Views<'a> {
     pub(crate) blocks: Vec<(Kind, Part, Blocks<'a, 'static>)>,
     /// The components the pack has sections of but that were not installed.
     pub(crate) missing: Components,
+    /// The part the outline kinds are read from ([`outline_part`]).
+    pub(crate) outline: Part,
 }
 
 impl<'a> Views<'a> {
@@ -242,7 +303,11 @@ impl<'a> Views<'a> {
     /// block-hash list is proved (D-142), and no section of a component outside `installed` is
     /// read.
     #[allow(clippy::too_many_lines, reason = "one view per section kind, in order")]
-    pub(crate) fn open(bytes: &'a [u8], installed: Option<Components>) -> Result<Self, Error> {
+    pub(crate) fn open(
+        bytes: &'a [u8],
+        installed: Option<Components>,
+        outline_level: Option<u8>,
+    ) -> Result<Self, Error> {
         // A partial install may have holes, BLOCK_HASHES among them: only the head is read.
         let pack = match installed {
             None => Pack::open(bytes)?,
@@ -251,6 +316,19 @@ impl<'a> Views<'a> {
         let missing = missing(&pack, installed)?;
         let get = |k| {
             pack.section(k)
+                .filter(|_| Component::of(k).is_none_or(|c| !missing.contains(c)))
+        };
+        // The outline kinds are read from one part, whole for its levels (ADR-0040).
+        #[cfg(any(feature = "boundaries", feature = "admin-index"))]
+        let outline = outline_part(&pack, get(Kind::PLACES), outline_level);
+        #[cfg(not(any(feature = "boundaries", feature = "admin-index")))]
+        let outline = {
+            let _ = outline_level;
+            Part::BASE
+        };
+        #[cfg(any(feature = "boundaries", feature = "admin-index"))]
+        let get_outline = |k| {
+            pack.part(k, outline)
                 .filter(|_| Component::of(k).is_none_or(|c| !missing.contains(c)))
         };
         let ids = get(Kind::IDMAP).map(|s| IdMap::open(&s)).transpose()?;
@@ -305,19 +383,21 @@ impl<'a> Views<'a> {
         #[cfg(feature = "timezone-index")]
         let zones = get(Kind::REGION).map(|s| Region::open(&s)).transpose()?;
         #[cfg(feature = "boundaries")]
-        let arcs = get(Kind::ARCS).map(|s| Arcs::open(&s)).transpose()?;
+        let arcs = get_outline(Kind::ARCS)
+            .map(|s| Arcs::open(&s))
+            .transpose()?;
         #[cfg(feature = "admin-index")]
-        let admin = match (get(Kind::ADMIN_REGION), &arcs) {
+        let admin = match (get_outline(Kind::ADMIN_REGION), &arcs) {
             (Some(s), Some(a)) => Some(Region::open_on_arcs(&s, a)?),
             (Some(s), None) => Some(Region::open(&s)?),
             (None, _) => None,
         };
         #[cfg(feature = "boundaries")]
-        let polygons = get(Kind::POLYGONS)
+        let polygons = get_outline(Kind::POLYGONS)
             .map(|s| Polygons::open(&s))
             .transpose()?;
         #[cfg(feature = "boundaries")]
-        let poly_index = match (get(Kind::POLY_INDEX), &polygons) {
+        let poly_index = match (get_outline(Kind::POLY_INDEX), &polygons) {
             (Some(s), Some(p)) => Some(PolyIndex::open(&s, p)?),
             _ => None,
         };
@@ -376,6 +456,7 @@ impl<'a> Views<'a> {
             postal,
             blocks,
             missing,
+            outline,
         })
     }
 
@@ -573,7 +654,7 @@ impl Layer {
         options: LayerOptions,
         stamp: Option<FileStamp>,
     ) -> Result<Self, Error> {
-        let owned = Owned::new(backing, options.installed)?;
+        let owned = Owned::new(backing, options.installed, options.outline_level)?;
         let v = owned.views();
         if options.verify == Verify::Eager {
             for s in v.pack.sections().filter(|s| v.installed(s.kind())) {
@@ -769,19 +850,23 @@ impl Layer {
         }
         let v = self.views();
         // Every part of the kind (ADR-0040): by its blocks past 1 MiB, else whole.
-        let ok = v.pack.parts(kind).all(|s| {
-            match v
-                .blocks
-                .iter()
-                .position(|(k, p, _)| (*k, *p) == (kind, s.part()))
-            {
-                Some(i) => {
-                    let len = v.blocks.get(i).map_or(0, |(_, _, b)| b.len());
-                    self.verify_blocks(i, 0..len).is_ok()
+        let ok = v
+            .pack
+            .parts(kind)
+            .filter(|s| !is_outline(kind) || s.part() == v.outline)
+            .all(|s| {
+                match v
+                    .blocks
+                    .iter()
+                    .position(|(k, p, _)| (*k, *p) == (kind, s.part()))
+                {
+                    Some(i) => {
+                        let len = v.blocks.get(i).map_or(0, |(_, _, b)| b.len());
+                        self.verify_blocks(i, 0..len).is_ok()
+                    }
+                    None => s.verify().is_ok(),
                 }
-                None => s.verify().is_ok(),
-            }
-        });
+            });
         slot.store(if ok { GOOD } else { BAD }, Atomic::Release);
         if ok {
             Ok(())
