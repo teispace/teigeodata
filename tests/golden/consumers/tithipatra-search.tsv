@@ -33,6 +33,17 @@
 गण्डकी प्रदेश	tgd:np/2922	1	-	a province with its level word: the word is dropped (D-243)
 Kailali District	tgd:np/2r9x	1	-	the English level word is dropped too
 Gandaki Province	tgd:np/2922	1	-	the province, not the rural municipality named Gandaki
+जनकपुरधाम	tgd:np/s70,tgd:np/s78	1	-	a renamed unit by its current name (D-244): the unit or its city
+पाथीभरा याङवरक	tgd:np/ehz	1	-	renamed from Yangwarak; its machine spelling was पाथीभरा याङवरक without the human source
+थुलुङ दुधकोशी	tgd:np/wx0	1	-	renamed from Dudhkaushika; Wikidata keeps the old label
+सिद्धकुमाख	tgd:np/1cwc	1	-	renamed from Dhorchaur
+जगन्नाथ	tgd:np/2me5	3	-	renamed from Pandav Gufa; a common name, so within 3
+पाण्डव गुफा	tgd:np/2me5	1	-	the former official name still finds the unit
+बराहक्षेत्र	tgd:np/kyr,tgd:np/jty	2	-	renamed from Baraha; the machine spelled it बराहचहेत्र (the unit or its town)
+लो-घेकर दामोदरकुण्ड	tgd:np/28rq	1	-	renamed from Dalome; the machine spelled it दमोदरकुंडा
+शुभकालिका	tgd:np/2ncp,tgd:np/2ncr	2	-	renamed from Kalika; the machine spelled it सुवा कालिका
+मनाङ ङिस्याङ	tgd:np/29be	1	-	renamed from Neshang; COD's English is Ngisyang
+भीमसेनथापा	tgd:np/23sf	1	-	renamed from Bhimsen; the machine spelled it भीमसेन्थापा
 भक्तपुर नगरपालिका	tgd:np/23n	1	-	a unit type's word favours that type: the municipality, not the district (D-243)
 पोखरा महानगरपालिका	tgd:np/1xnr,tgd:np/1xhb	1	-	Pokhara Metropolitan City: the unit or the city it is (as np-0089)
 #

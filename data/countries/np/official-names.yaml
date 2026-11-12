@@ -2,21 +2,14 @@
 # nepali-names §5.1, D-232; P16: countries are data). Schema: teigeodata/official-names/v1.
 # `units` is the crosswalk from each unit's key in the build (COD-AB v02 P-code) to the list's
 # code, made on 2026-11-12 by joining names inside each district: 715 of the 753 local levels by
-# the same name, 10 of them the same unit spelled differently (reviewed one by one, noted). Left
-# out: the 38 local levels renamed after the CBS list was made, whose list name is the old one
-# (Pathivara Yangwarak (Taplejung); Barahachhetra (Sunsari); Bhokraha Narsingh (Sunsari);
-# Shahidbhumi (Dhankuta); Mapya Dudhkoshi (Solukhumbu); Thulung Dudhkoshi (Solukhumbu); Diktel
-# Rupakot Majhuwagadhi (Khotang); Rawa Besi (Khotang); Diprung Chuichumma (Khotang); Limchunbung
-# (Udayapur); Rajgadh (Saptari); Janakpurdham (Dhanusa); Likhu Tamakoshi (Ramechhap); Baiteshwor
-# (Dolakha); Myagang (Nuwakot); Aamachhodingmo (Rasuwa); Netrawati Dabjong (Dhading); Barpak
-# Sulikot (Gorkha); Bhimsenthapa (Gorkha); Ngisyang (Manang); Narpa Bhumi (Manang); Pokhara
-# (Kaski); Lo Ghekar Damodarkunda (Mustang); Varagung Muktichhetra (Mustang); Ruruchhetra (Gulmi);
-# Gangadev (Rolpa); Pariwartan (Rolpa); Sunil Smriti (Rolpa); Kumakh (Salyan); Siddha Kumakh
-# (Salyan); Nalgad (Jajarkot); Shuva Kalika (Kalikot); Saipal (Bajhang); Khaptad Chhededaha
-# (Bajura); Jagannath (Bajura); Swamikartik Khapar (Bajura); Bogatan Phudsil (Doti); Dodhara
-# Chandani (Kanchanpur)), and the 22 protected areas, which the list does not have. Their Nepali
-# names come from later tiers. Each entry states the unit's name in COD-AB v02: a later release
-# that renames a unit fails the build, and the crosswalk is reviewed again.
+# the same name, 10 of them the same unit spelled differently (reviewed one by one, noted). The 38
+# local levels renamed after the CBS list was made are joined too, each with `renamed`: the
+# list's name is kept as the former official name and the current one comes from Nepali
+# Wikipedia's list of local levels (rev 1393801) and each unit's article, which agree; which old
+# name became which is evidenced per entry (2026-11-12, D-244). Left out: the 22 protected
+# areas, which the list does not have; their Nepali names come from later tiers. Each entry
+# states the unit's name in COD-AB v02: a later release that renames a unit fails the build, and
+# the crosswalk is reviewed again.
 schema: teigeodata/official-names/v1
 lists:
   # The districts: CBS, via Open Data Nepal, CC BY. All 77 join by name, but the published
@@ -130,6 +123,8 @@ lists:
       "admin:NP0101404": { code: "10103", unit: "Meringden" }
       "admin:NP0101405": { code: "10104", unit: "Maiwakhola" }
       "admin:NP0101406": { code: "10105", unit: "Aatharai Tribeni" }
+      "admin:NP0101407": { code: "10107", unit: "Pathivara Yangwarak",
+        renamed: { name: "पाथीभरा याङवरक", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0101408": { code: "10109", unit: "Sidingba" }
       "admin:NP0102301": { code: "10904", unit: "Phidim" }
       "admin:NP0102401": { code: "10902", unit: "Hilihan" }
@@ -186,10 +181,14 @@ lists:
       "admin:NP0105408": { code: "11216", unit: "Dhanapalthan" }
       "admin:NP0106201": { code: "11301", unit: "Dharan" }
       "admin:NP0106202": { code: "11306", unit: "Itahari" }
+      "admin:NP0106301": { code: "11302", unit: "Barahachhetra",
+        renamed: { name: "बराहक्षेत्र", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0106302": { code: "11305", unit: "Ramdhuni" }
       "admin:NP0106303": { code: "11309", unit: "Inaruwa" }
       "admin:NP0106304": { code: "11307", unit: "Duhabi" }
       "admin:NP0106401": { code: "11303", unit: "Koshi" }
+      "admin:NP0106402": { code: "11304", unit: "Bhokraha Narsingh",
+        renamed: { name: "भोक्राहा नरसिंह", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; Wikidata Q42896674 keeps the old name (2026-11-12)" } }
       "admin:NP0106403": { code: "11308", unit: "Gadhi" }
       "admin:NP0106404": { code: "11310", unit: "Harinagar" }  # (CBS spells it Harinagara)
       "admin:NP0106405": { code: "11311", unit: "Dewangunj" }
@@ -197,6 +196,8 @@ lists:
       "admin:NP0107301": { code: "10701", unit: "Mahalaxmi" }
       "admin:NP0107302": { code: "10702", unit: "Pakhribas" }
       "admin:NP0107303": { code: "10704", unit: "Dhankuta" }
+      "admin:NP0107401": { code: "10705", unit: "Shahidbhumi",
+        renamed: { name: "सहिदभूमि", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0107402": { code: "10703", unit: "Chhathar Jorpati" }
       "admin:NP0107403": { code: "10706", unit: "Sangurigadhi" }
       "admin:NP0107404": { code: "10707", unit: "Chaubise" }
@@ -229,11 +230,21 @@ lists:
       "admin:NP0111401": { code: "10301", unit: "Khumbu Pasanglhamu" }
       "admin:NP0111402": { code: "10302", unit: "Mahakulung" }
       "admin:NP0111403": { code: "10308", unit: "Likhu Pike" }
+      "admin:NP0111404": { code: "10304", unit: "Mapya Dudhkoshi",
+        renamed: { name: "माप्य दुधकोशी", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; Wikidata Q32572884 keeps the old name (2026-11-12)" } }
       "admin:NP0111405": { code: "10306", unit: "Necha Salyan" }
+      "admin:NP0111406": { code: "10305", unit: "Thulung Dudhkoshi",
+        renamed: { name: "थुलुङ दुधकोशी", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; Wikidata Q32571381 keeps the old name (2026-11-12)" } }
       "admin:NP0111407": { code: "10303", unit: "Sotang" }
       "admin:NP0112301": { code: "10504", unit: "Halesi Tuwachung" }
+      "admin:NP0112302": { code: "10505", unit: "Diktel Rupakot Majhuwagadhi",
+        renamed: { name: "दिक्तेल रुपाकोट मझुवागढी", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0112401": { code: "10502", unit: "Aiselukharka" }
       "admin:NP0112402": { code: "10501", unit: "Kepilasgadhi" }
+      "admin:NP0112403": { code: "10503", unit: "Rawa Besi",
+        renamed: { name: "रावा बेसी", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
+      "admin:NP0112404": { code: "10507", unit: "Diprung Chuichumma",
+        renamed: { name: "दिप्रुङ चुइचुम्मा", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; Wikidata Q55075107 keeps the old name (2026-11-12)" } }
       "admin:NP0112405": { code: "10506", unit: "Sakela" }
       "admin:NP0112406": { code: "10508", unit: "Khotehang" }
       "admin:NP0112407": { code: "10510", unit: "Baraha Pokhari" }
@@ -251,6 +262,8 @@ lists:
       "admin:NP0114303": { code: "11402", unit: "Chaudandigadhi" }
       "admin:NP0114304": { code: "11401", unit: "Belaka" }
       "admin:NP0114401": { code: "11406", unit: "Tapli" }
+      "admin:NP0114402": { code: "11405", unit: "Limchunbung",
+        renamed: { name: "लिम्चुङबुङ", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0114403": { code: "11408", unit: "Udayapurgadhi" }
       "admin:NP0114404": { code: "11404", unit: "Rautamai" }
       "admin:NP0215301": { code: "20107", unit: "Surunga" }
@@ -267,6 +280,8 @@ lists:
       "admin:NP0215403": { code: "20115", unit: "Tirahut" }
       "admin:NP0215404": { code: "20108", unit: "Balan-Bihul" }
       "admin:NP0215405": { code: "20114", unit: "Mahadewa" }
+      "admin:NP0215406": { code: "20111", unit: "Rajgadh",
+        renamed: { name: "राजगढ", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0215407": { code: "20112", unit: "Bishnupur" }
       "admin:NP0215408": { code: "20118", unit: "Chhinnamasta" }
       "admin:NP0215409": { code: "20117", unit: "Tilathi Koiladi" }
@@ -287,6 +302,8 @@ lists:
       "admin:NP0216407": { code: "20214", unit: "Nawarajpur" }
       "admin:NP0216408": { code: "20212", unit: "Sakhuwa Nankarkatti" }
       "admin:NP0216409": { code: "20213", unit: "Bhagawanpur" }
+      "admin:NP0217201": { code: "20315", unit: "Janakpurdham",
+        renamed: { name: "जनकपुरधाम", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0217301": { code: "20303", unit: "Mithila" }
       "admin:NP0217302": { code: "20301", unit: "Ganeshman Charnath" }
       "admin:NP0217303": { code: "20305", unit: "Chhireshwornath" }
@@ -403,11 +420,15 @@ lists:
       "admin:NP0321403": { code: "31002", unit: "Gokulganga" }
       "admin:NP0321404": { code: "31001", unit: "Umakunda" }
       "admin:NP0321405": { code: "31006", unit: "Khandadevi" }
+      "admin:NP0321406": { code: "31003", unit: "Likhu Tamakoshi",
+        renamed: { name: "लिखु तामाकोशी", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0322301": { code: "30109", unit: "Bhimeshwor" }
       "admin:NP0322302": { code: "30105", unit: "Jiri" }
       "admin:NP0322401": { code: "30102", unit: "Bigu" }
       "admin:NP0322402": { code: "30101", unit: "Gaurishankar" }
       "admin:NP0322403": { code: "30103", unit: "Kalinchowk" }
+      "admin:NP0322404": { code: "30104", unit: "Baiteshwor",
+        renamed: { name: "वैतेश्वर", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0322405": { code: "30108", unit: "Shailung" }
       "admin:NP0322406": { code: "30107", unit: "Melung" }
       "admin:NP0322407": { code: "30106", unit: "Tamakoshi" }
@@ -459,6 +480,8 @@ lists:
       "admin:NP0327310": { code: "30611", unit: "Dakshinkali" }
       "admin:NP0328301": { code: "30504", unit: "Bidur" }
       "admin:NP0328302": { code: "30508", unit: "Belkotgadhi" }
+      "admin:NP0328401": { code: "30506", unit: "Myagang",
+        renamed: { name: "म्यागङ", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0328402": { code: "30505", unit: "Kispang" }
       "admin:NP0328403": { code: "30507", unit: "Tarakeshwor" }
       "admin:NP0328404": { code: "30503", unit: "Suryagadhi" }
@@ -468,6 +491,8 @@ lists:
       "admin:NP0328408": { code: "30501", unit: "Dupcheshwor" }
       "admin:NP0328409": { code: "30512", unit: "Kakani" }
       "admin:NP0328410": { code: "30511", unit: "Shivapuri" }
+      "admin:NP0329401": { code: "30302", unit: "Aamachhodingmo",
+        renamed: { name: "आमाछोदिङ्मो", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0329402": { code: "30301", unit: "Gosaikunda" }
       "admin:NP0329403": { code: "30303", unit: "Uttargaya" }
       "admin:NP0329404": { code: "30304", unit: "Kalika" }
@@ -478,6 +503,8 @@ lists:
       "admin:NP0330402": { code: "30403", unit: "Ganga Jamuna" }
       "admin:NP0330403": { code: "30402", unit: "Khaniyabas" }
       "admin:NP0330404": { code: "30404", unit: "Tripurasundari" }
+      "admin:NP0330405": { code: "30405", unit: "Netrawati Dabjong",
+        renamed: { name: "नेत्रावती डबजोङ", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0330406": { code: "30407", unit: "Jwalamukhi" }
       "admin:NP0330407": { code: "30408", unit: "Siddhalek" }
       "admin:NP0330408": { code: "30409", unit: "Benighat Rorang" }
@@ -505,9 +532,13 @@ lists:
       "admin:NP0436302": { code: "40109", unit: "Gorkha" }
       "admin:NP0436401": { code: "40101", unit: "Chumanubri" }
       "admin:NP0436402": { code: "40102", unit: "Ajirkot" }
+      "admin:NP0436403": { code: "40103", unit: "Barpak Sulikot",
+        renamed: { name: "बारपाक सुलिकोट", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; Wikidata Q30317166 keeps the old name (2026-11-12)" } }
       "admin:NP0436404": { code: "40104", unit: "Dharche" }
       "admin:NP0436405": { code: "40107", unit: "Siranchowk" }
       "admin:NP0436406": { code: "40105", unit: "Aarughat" }
+      "admin:NP0436407": { code: "40106", unit: "Bhimsenthapa",
+        renamed: { name: "भीमसेनथापा", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; Wikidata Q30317302 keeps the old name (2026-11-12)" } }
       "admin:NP0436408": { code: "40110", unit: "Shahid Lakhan" }
       "admin:NP0436409": { code: "40111", unit: "Gandaki" }
       "admin:NP0437301": { code: "40604", unit: "Madhya Nepal" }
@@ -518,8 +549,14 @@ lists:
       "admin:NP0437402": { code: "40602", unit: "Marshyangdi" }
       "admin:NP0437403": { code: "40601", unit: "Dordi" }
       "admin:NP0437404": { code: "40608", unit: "Dudhapokhari" }
+      "admin:NP0438401": { code: "40202", unit: "Ngisyang",
+        renamed: { name: "मनाङ ङिस्याङ", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
+      "admin:NP0438402": { code: "40201", unit: "Narpa Bhumi",
+        renamed: { name: "नार्पा भूमि", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; Wikidata Q31732401 keeps the old name (2026-11-12)" } }
       "admin:NP0438403": { code: "40203", unit: "Chame" }
       "admin:NP0438404": { code: "40204", unit: "Nason" }  # (CBS spells it Nashong)
+      "admin:NP0439101": { code: "40504", unit: "Pokhara",
+        renamed: { name: "पोखरा", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0439401": { code: "40503", unit: "Annapurna" }
       "admin:NP0439402": { code: "40502", unit: "Machhapuchchhre" }
       "admin:NP0439403": { code: "40501", unit: "Madi" }
@@ -569,6 +606,10 @@ lists:
       "admin:NP0444404": { code: "40404", unit: "Malika" }
       "admin:NP0444405": { code: "40405", unit: "Mangala" }
       "admin:NP0445401": { code: "40304", unit: "Lomanthang" }
+      "admin:NP0445402": { code: "40301", unit: "Lo Ghekar Damodarkunda",
+        renamed: { name: "लो-घेकर दामोदरकुण्ड", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; Wikidata Q31286063 keeps the old name (2026-11-12)" } }
+      "admin:NP0445403": { code: "40303", unit: "Varagung Muktichhetra",
+        renamed: { name: "वारागुङ मुक्तिक्षेत्र", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; Wikidata Q31271626 keeps the old name (2026-11-12)" } }
       "admin:NP0445404": { code: "40302", unit: "Gharpajhong" }
       "admin:NP0445405": { code: "40305", unit: "Thasang" }
       "admin:NP0447301": { code: "40807", unit: "Madhya Bindu" }
@@ -637,16 +678,24 @@ lists:
       "admin:NP0551405": { code: "50410", unit: "Gulmi Durbar" }  # (CBS spells it Gulmi Durbar Gaunpaika)
       "admin:NP0551406": { code: "50403", unit: "Chandrakot" }
       "admin:NP0551407": { code: "50411", unit: "Chhatrakot" }
+      "admin:NP0551408": { code: "50412", unit: "Ruruchhetra",
+        renamed: { name: "रुरुक्षेत्र", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0551409": { code: "50402", unit: "Satyawoti" }
       "admin:NP0551410": { code: "50401", unit: "Kali Gandaki" }
       "admin:NP0552401": { code: "50102", unit: "Sisne" }
       "admin:NP0552402": { code: "50101", unit: "Putha Uttanganga" }
       "admin:NP0552403": { code: "50103", unit: "Bhoome" }
       "admin:NP0554301": { code: "50207", unit: "Rolpa" }
+      "admin:NP0554401": { code: "50204", unit: "Gangadev",
+        renamed: { name: "गङ्गादेव", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; en.wikipedia Rolpa District: previously Sukidaha (2026-11-12)" } }
+      "admin:NP0554402": { code: "50203", unit: "Pariwartan",
+        renamed: { name: "परिवर्तन", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; en.wikipedia Rolpa District: previously Duikholi (2026-11-12)" } }
       "admin:NP0554403": { code: "50202", unit: "Thawang" }
       "admin:NP0554404": { code: "50205", unit: "Madi" }
       "admin:NP0554405": { code: "50201", unit: "Sunchhahari" }
       "admin:NP0554406": { code: "50206", unit: "Tribeni" }
+      "admin:NP0554407": { code: "50209", unit: "Sunil Smriti",
+        renamed: { name: "सुनिलस्मृति", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; en.wikipedia Rolpa District: previously Suwarnawati (2026-11-12)" } }
       "admin:NP0554408": { code: "50210", unit: "Lungri" }
       "admin:NP0554409": { code: "50208", unit: "Runtigadhi" }
       "admin:NP0555301": { code: "50305", unit: "Sworgadwari" }
@@ -693,7 +742,11 @@ lists:
       "admin:NP0653301": { code: "60903", unit: "Banagad Kupinde" }
       "admin:NP0653302": { code: "60905", unit: "Bagachour" }
       "admin:NP0653303": { code: "60907", unit: "Sharada" }
+      "admin:NP0653401": { code: "60902", unit: "Kumakh",
+        renamed: { name: "कुमाख", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0653402": { code: "60901", unit: "Darma" }
+      "admin:NP0653403": { code: "60904", unit: "Siddha Kumakh",
+        renamed: { name: "सिद्धकुमाख", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; siddhakumakhmun.gov.np serves its files from dhorchaurmun.gov.np (2026-11-12)" } }
       "admin:NP0653404": { code: "60908", unit: "Kalimati" }
       "admin:NP0653405": { code: "60906", unit: "Chhatreshwori" }
       "admin:NP0653406": { code: "60909", unit: "Tribeni" }
@@ -709,6 +762,8 @@ lists:
       "admin:NP0659404": { code: "61001", unit: "Simta" }
       "admin:NP0660301": { code: "60704", unit: "Chhedagad" }
       "admin:NP0660302": { code: "60706", unit: "Bheri Malika" }
+      "admin:NP0660303": { code: "60707", unit: "Nalgad",
+        renamed: { name: "नलगाड", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0660401": { code: "60703", unit: "Junichande" }
       "admin:NP0660402": { code: "60702", unit: "Kuse" }
       "admin:NP0660403": { code: "60701", unit: "Barekot" }
@@ -747,6 +802,8 @@ lists:
       "admin:NP0664402": { code: "60504", unit: "Sanni Tribeni" }
       "admin:NP0664403": { code: "60502", unit: "Pachal Jharana" }
       "admin:NP0664404": { code: "60501", unit: "Palata" }
+      "admin:NP0664405": { code: "60509", unit: "Shuva Kalika",
+        renamed: { name: "शुभकालिका", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0664406": { code: "60508", unit: "Mahawai" }
       "admin:NP0665301": { code: "60202", unit: "Chhayanath Rara" }
       "admin:NP0665401": { code: "60204", unit: "Khatyad" }
@@ -761,6 +818,8 @@ lists:
       "admin:NP0666407": { code: "60306", unit: "Adanchuli" }
       "admin:NP0767301": { code: "70202", unit: "Bungal" }
       "admin:NP0767302": { code: "70206", unit: "Jayaprithbi" }
+      "admin:NP0767401": { code: "70201", unit: "Saipal",
+        renamed: { name: "साईपाल", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; MoFAGA rename, Setopati 139897 (2026-11-12)" } }
       "admin:NP0767402": { code: "70203", unit: "Surma" }
       "admin:NP0767403": { code: "70204", unit: "Talkot" }
       "admin:NP0767404": { code: "70210", unit: "Bitthadchir" }
@@ -776,6 +835,12 @@ lists:
       "admin:NP0768304": { code: "70109", unit: "Tribeni" }
       "admin:NP0768401": { code: "70101", unit: "Himali" }
       "admin:NP0768402": { code: "70102", unit: "Gaumul" }
+      "admin:NP0768403": { code: "70107", unit: "Khaptad Chhededaha",
+        renamed: { name: "खप्तड छेडेदह", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; MoFAGA rename, Setopati 139897 (2026-11-12)" } }
+      "admin:NP0768404": { code: "70105", unit: "Jagannath",
+        renamed: { name: "जगन्नाथ", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; MoFAGA rename, Setopati 139897 (2026-11-12)" } }
+      "admin:NP0768405": { code: "70104", unit: "Swamikartik Khapar",
+        renamed: { name: "स्वामीकार्तिक खापर", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; MoFAGA rename, Setopati 139897 (2026-11-12)" } }
       "admin:NP0769301": { code: "70704", unit: "Sanphebagar" }
       "admin:NP0769302": { code: "70706", unit: "Mangalsen" }
       "admin:NP0769303": { code: "70708", unit: "Kamal bazar" }
@@ -794,6 +859,8 @@ lists:
       "admin:NP0770404": { code: "70609", unit: "Jorayal" }
       "admin:NP0770405": { code: "70606", unit: "K.I. Singh" }
       "admin:NP0770406": { code: "70608", unit: "Badi Kedar" }
+      "admin:NP0770407": { code: "70607", unit: "Bogatan Phudsil",
+        renamed: { name: "बोगटान फुड्सिल", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; MoFAGA rename, Setopati 139897 (2026-11-12)" } }
       "admin:NP0771201": { code: "70813", unit: "Dhangadhi" }
       "admin:NP0771301": { code: "70803", unit: "Godawari" }
       "admin:NP0771302": { code: "70804", unit: "Gauriganga" }
@@ -807,6 +874,8 @@ lists:
       "admin:NP0771404": { code: "70809", unit: "Joshipur" }
       "admin:NP0771405": { code: "70806", unit: "Bardagoriya" }
       "admin:NP0771406": { code: "70808", unit: "Janaki" }
+      "admin:NP0772301": { code: "70905", unit: "Dodhara Chandani",
+        renamed: { name: "दोधारा चाँदनी", source: "ne.wikipedia नेपालका स्थानीय तहहरू rev 1393801 and its article; the one unit of its district left unjoined (2026-11-12)" } }
       "admin:NP0772302": { code: "70904", unit: "Bhimdatta" }
       "admin:NP0772303": { code: "70903", unit: "Bedkot" }
       "admin:NP0772304": { code: "70902", unit: "Shuklaphanta" }

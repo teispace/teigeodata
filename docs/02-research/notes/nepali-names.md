@@ -461,7 +461,8 @@ build writes yet, and the schema lists its intended values in words only. Propos
   705 local levels by the same name, 10 more reviewed by hand as the same unit spelled
   differently (Illam/Ilam, Melamchi/Melanchi, Temkemaiyum/Tyamke Maiyum…). 38 were renamed
   after the CBS list (Pokhara Lekhnath → Pokhara, Janakpur → Janakpurdham, Duikholi →
-  Gangadev): their CBS name is the old one, so they are left out. The 22 protected areas are
+  Sunil Smriti): their CBS name is the old one. They are joined with `renamed` (D-244, below).
+  The 22 protected areas are
   not in the list; a first join that did not exclude them matched 4 of them to same-named
   local levels, wrongly.
 - **CBS's district file is broken.** Its Nepali column is shifted from row 43: Nawalparasi
@@ -482,6 +483,18 @@ build writes yet, and the schema lists its intended values in words only. Propos
   the press write it, not CBS's बिराटनगर, which stays as an alternate. The crosswalk entry
   carries `prefer: { name, source }`; the build refuses one that equals the list or cites
   nothing.
+- **Renamed units** (D-244): no open, current list with Nepali names exists (2026-11-12); the
+  units' own `.gov.np` sites, which name them, do not answer from outside Nepal. Nepali
+  Wikipedia's list of local levels (rev 1393801) names all 38 as their articles do, and
+  Wikidata's Nepali labels are mostly the old names (दुधकोशी for Mapya Dudhkoshi, सुलीकोट for
+  Barpak Sulikot), which is how they were left unlinked. Which CBS row became which unit is
+  evidenced per entry: Wikidata's old label on the same item (9), the ministry's renames
+  reported by Setopati (5, Far-West), English Wikipedia's "previously" (3, Rolpa), the unit's
+  site serving files from its old domain (Siddha Kumakh, `dhorchaurmun.gov.np`), and otherwise
+  the one unit left in its district. The entry carries `renamed: { name, source }`: the
+  current name is official and the list's becomes the former official name, still searchable
+  ("जनकपुर" finds Janakpurdham). A name is a fact; the source is cited so a reviewer can check
+  it.
 - **A town named as its unit** (Jiri in Jiri, Kamalamai in Kamalamai) takes the unit's official
   name too; without it the unit's human name outranked the town's machine one and the golden
   gate lost two native-script hits.

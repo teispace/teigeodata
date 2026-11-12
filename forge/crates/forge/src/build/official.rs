@@ -87,6 +87,11 @@ struct Join {
     /// more common one; D-233). The list's spelling stays as an alternate, still searchable.
     #[serde(default)]
     prefer: Option<Prefer>,
+    /// The unit's name since it was renamed after the list was made, with the evidence (the
+    /// rename's record, where the new name is written). The list's name stays as the former
+    /// official name, still searchable.
+    #[serde(default)]
+    renamed: Option<Prefer>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -229,6 +234,7 @@ pub(super) fn run(
                 unit,
                 name: own,
                 prefer,
+                renamed,
             },
         ) in &l.units
         {
@@ -252,7 +258,9 @@ pub(super) fn run(
             if !seen.insert(code.as_str()) {
                 return Err(format!("{}: code {code} joined twice", l.source));
             }
-            let unit_names = joined(cut(name, &l.strip), prefer.as_ref(), &l.lang)
+            let newer = newer(prefer.as_ref(), renamed.as_ref())
+                .map_err(|e| format!("{}: {key}: {e}", l.source))?;
+            let unit_names = joined(cut(name, &l.strip), newer, &l.lang)
                 .map_err(|e| format!("{}: {key}: {e}", l.source))?;
             adds.extend(unit_names.into_iter().map(|n| (i, n)));
         }
@@ -295,28 +303,44 @@ fn listed_name<'a>(
     }
 }
 
+/// A crosswalk entry's newer name with the type its list name takes behind it: an alternate for a
+/// preferred spelling, the former official name for a rename. An entry has at most one.
+fn newer<'a>(
+    prefer: Option<&'a Prefer>,
+    renamed: Option<&'a Prefer>,
+) -> Result<Option<(&'a Prefer, NameType)>, &'static str> {
+    match (prefer, renamed) {
+        (Some(_), Some(_)) => Err("prefer or renamed, not both"),
+        (Some(p), None) => Ok(Some((p, NameType::Alt))),
+        (None, Some(r)) => Ok(Some((r, NameType::FormerOfficial))),
+        (None, None) => Ok(None),
+    }
+}
+
 /// A joined unit's names in the order `apply` needs: each is inserted right after the canonical
-/// name, so the last pushed ends up first. With a preferred spelling the list's own becomes an
-/// alternate behind it; the preference must differ from the list and cite a source.
-fn joined(listed: &str, prefer: Option<&Prefer>, lang: &str) -> Result<Vec<PlaceName>, String> {
+/// name, so the last pushed ends up first. With a newer name (a preferred spelling, or the name
+/// since a rename) the list's own goes behind it as `was` (an alternate, or the former official
+/// name); the newer name must differ from the list's and cite a source.
+fn joined(
+    listed: &str,
+    newer: Option<(&Prefer, NameType)>,
+    lang: &str,
+) -> Result<Vec<PlaceName>, String> {
     let named = |text: &str, kind| PlaceName {
         text: text.to_string(),
         lang: Some(lang.to_string()),
         kind: Some(kind),
         origin: Origin::Official,
     };
-    match prefer {
+    match newer {
         None => Ok(vec![named(listed, NameType::Official)]),
-        Some(Prefer { name, source }) => {
+        Some((Prefer { name, source }, was)) => {
             if name.trim().is_empty() || source.trim().is_empty() || name == listed {
                 return Err(format!(
-                    "the preferred name must differ from the list's ({listed}) and cite a source"
+                    "the newer name must differ from the list's ({listed}) and cite a source"
                 ));
             }
-            Ok(vec![
-                named(listed, NameType::Alt),
-                named(name, NameType::Official),
-            ])
+            Ok(vec![named(listed, was), named(name, NameType::Official)])
         }
     }
 }
@@ -451,7 +475,9 @@ fn apply(places: &mut [Place], adds: Vec<(usize, PlaceName)>) -> (usize, usize) 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, reason = "tests")]
 mod tests {
-    use super::{Origin, Place, PlaceName, Prefer, apply, cut, joined, listed_name, same_named};
+    use super::{
+        Origin, Place, PlaceName, Prefer, apply, cut, joined, listed_name, newer, same_named,
+    };
     use teigeodata_format::names::NameType;
 
     fn unit(names: &[(&str, Option<&str>, Origin)]) -> Place {
@@ -545,13 +571,31 @@ mod tests {
             name: name.into(),
             source: source.into(),
         };
-        assert!(joined("बिराटनगर", Some(&prefer("बिराटनगर", "x")), "ne").is_err());
-        assert!(joined("बिराटनगर", Some(&prefer("विराटनगर", " ")), "ne").is_err());
-        let adds: Vec<_> = joined("बिराटनगर", Some(&prefer("विराटनगर", "the city")), "ne")
-            .unwrap()
-            .into_iter()
-            .map(|n| (0, n))
-            .collect();
+        assert!(
+            joined(
+                "बिराटनगर",
+                Some((&prefer("बिराटनगर", "x"), NameType::Alt)),
+                "ne"
+            )
+            .is_err()
+        );
+        assert!(
+            joined(
+                "बिराटनगर",
+                Some((&prefer("विराटनगर", " "), NameType::Alt)),
+                "ne"
+            )
+            .is_err()
+        );
+        let adds: Vec<_> = joined(
+            "बिराटनगर",
+            Some((&prefer("विराटनगर", "the city"), NameType::Alt)),
+            "ne",
+        )
+        .unwrap()
+        .into_iter()
+        .map(|n| (0, n))
+        .collect();
         // A same-named town gets the preferred spelling only, never the alternate.
         let mut town = unit(&[("Biratnagar", None, Origin::GeoNames)]);
         town.key = "geonames:1".into();
@@ -575,6 +619,35 @@ mod tests {
             ]
         );
         assert_eq!(ps[1].names[1].text, "विराटनगर");
+    }
+
+    #[test]
+    fn a_renamed_unit_keeps_the_list_s_name_as_its_former_one() {
+        let mut ps = vec![unit(&[("Janakpurdham", None, Origin::Official)])];
+        let renamed = Prefer {
+            name: "जनकपुरधाम".into(),
+            source: "the rename".into(),
+        };
+        assert!(newer(Some(&renamed), Some(&renamed)).is_err());
+        let adds: Vec<_> = joined("जनकपुर", Some((&renamed, NameType::FormerOfficial)), "ne")
+            .unwrap()
+            .into_iter()
+            .map(|n| (0, n))
+            .collect();
+        apply(&mut ps, adds);
+        let got: Vec<_> = ps[0]
+            .names
+            .iter()
+            .map(|n| (n.text.as_str(), n.kind))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("Janakpurdham", None),
+                ("जनकपुरधाम", Some(NameType::Official)),
+                ("जनकपुर", Some(NameType::FormerOfficial)),
+            ]
+        );
     }
 
     #[test]

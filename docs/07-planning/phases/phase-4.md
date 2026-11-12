@@ -351,10 +351,10 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     gate: 715 local levels and 71 districts, D-232, D-234, 2026-11-12); tier 2 is in already
     (Nepal's Wikidata snapshot carries every language's labels); the 6 districts the CBS file
     loses (Nawalparasi East and West, Rukum East and West, Kailali, Kanchanpur) named from
-    Wikidata once Rukum East and Nawalparasi West link by outline (D-239). Open: the 38
-    renamed local levels (no open, current list with Nepali names found on 2026-11-12: the
-    open lists predate the renames or have no Nepali), tier 4 for India (Nepal's built, D-236), the `machine_names`
-    profile option. Done: a unit's labels lose their type word and a query may end in one
+    Wikidata once Rukum East and Nawalparasi West link by outline (D-239). Open: tier 4
+    for India (Nepal's built, D-236), the `machine_names` profile option. Done: the 38 renamed
+    local levels take their current Nepali names, the CBS name kept as the former official one
+    (D-244); a unit's labels lose their type word and a query may end in one
     (D-243); names distinct by text and language (D-242)
   - [x] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
     model trained in the forge on the build's licence class; gate G-xlit with floors
@@ -457,3 +457,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-12 | 4.9c: TG-19 reopened against the brief's criteria; the border rule built (`reverse_in_country`); inside by a radius open | D-237 |
 | 2026-11-12 | 4.9c: TG-19 done; inside by radius (nearest of its kind within a measured radius), researched against building extents | D-238 |
 | 2026-11-12 | 4.9c first, before phases 5 and 6; the 6 districts named, places across the border left out, `forge make` keeps IDs by default | D-239, D-240, D-241 |
+| 2026-11-12 | 4.9c: TG-14, a unit's type word cut and read in queries; the 38 renamed local levels named | D-242 to D-244 |
