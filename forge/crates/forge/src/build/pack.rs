@@ -20,7 +20,7 @@ use teigeodata_format::redirects::{self, Fate, Redirects};
 use teigeodata_format::region::{self, Options, Region};
 use teigeodata_format::search::rules::{LEVEL_WORD, Rule};
 use teigeodata_format::search::{self, EXACT, Maps, Search, SearchSet};
-use teigeodata_format::{Bbox, Encoding, Kind, Pack, Part, Tag, Writer};
+use teigeodata_format::{Bbox, Encoding, Kind, Pack, Part, SectionLabel, Tag, Writer};
 use teigeodata_names::{SearchMap, fold, search_keys, substring_keys};
 
 use super::ids::{Assignment, Registry, assign};
@@ -384,9 +384,13 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
     let iso_codes = iso_section(input, &rows, &mut sections)?;
     terrain(input, heights_body, n, &mut sections)?;
     zone_sections(input, &row_of, &points, &mut sections)?;
+    let mut lod_lines = Vec::new();
     if let Some(g) = input.geometry {
         sections.extend(super::geometry::sections(g, &rows, &row_of)?);
         parts.extend(super::geometry::outline_parts(g, &rows, &row_of)?);
+        let (lod, lines) = super::geometry::lod_parts(&sections)?;
+        parts.extend(lod);
+        lod_lines = lines;
     }
     if let Some(p) = input.postal.filter(|p| !p.entries.is_empty()) {
         sections.push(postal_section(p, &row_of, n)?);
@@ -413,6 +417,13 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
     if let (Some(assigned), Some(file)) = (&assigned, input.ids_file) {
         crate::make::write_atomic(file, assigned.registry.render().as_bytes())?;
         ids_report(assigned, file, input, &mut report);
+    }
+    if !lod_lines.is_empty() {
+        let _ = writeln!(
+            report,
+            "\nOutline levels of detail (ADR-0040): {}.",
+            lod_lines.join("; ")
+        );
     }
     let _ = writeln!(report, "\n| Section | Bytes |\n|---|---:|");
     sections_table(&sections, &parts, &mut report);
@@ -560,25 +571,7 @@ fn sections_table(sections: &[Body], parts: &[PartBody], report: &mut String) {
         .collect();
     listed.sort_unstable();
     for (kind, part, len) in listed {
-        let outline = matches!(
-            kind,
-            Kind::ARCS
-                | Kind::ARCS_OVERVIEW
-                | Kind::POLYGONS
-                | Kind::POLY_INDEX
-                | Kind::ADMIN_REGION
-        );
-        match part.outline_levels().filter(|_| outline) {
-            _ if part.is_base() => {
-                let _ = writeln!(report, "| {kind} | {len} |");
-            }
-            Some((deepest, _)) => {
-                let _ = writeln!(report, "| {kind} to level {deepest} | {len} |");
-            }
-            None => {
-                let _ = writeln!(report, "| {kind} `{part}` | {len} |");
-            }
-        }
+        let _ = writeln!(report, "| {} | {len} |", SectionLabel(kind, part));
     }
 }
 

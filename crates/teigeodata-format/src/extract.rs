@@ -222,6 +222,49 @@ pub fn merge(parts: &[Part<'_, '_>], region: &Options) -> Result<Vec<Body>, Erro
     Ok(out)
 }
 
+/// The admin geometry of `pack`'s units of admin level `deepest` and coarser, at level of detail
+/// `lod`, its arcs rewritten by `arcs`: an outline part's sections (ADR-0040), ARCS, POLYGONS,
+/// `POLY_INDEX` and `ADMIN_REGION`, on the pack's own rows. The merge's geometry path: boxes,
+/// labels and the region follow the coarser arcs. Empty if no unit is that coarse.
+///
+/// # Errors
+/// As [`merge`].
+pub fn outlines(
+    pack: &Pack<'_>,
+    deepest: u8,
+    (lod, arcs): (u8, Option<&ArcRewrite<'_>>),
+    region: &Options,
+) -> Result<Vec<Body>, Error> {
+    let ids = IdMap::open(&pack.section(Kind::IDMAP).ok_or(fail("no IDMAP"))?)?;
+    let places = Places::open(&pack.section(Kind::PLACES).ok_or(fail("no PLACES"))?)?;
+    let own_of = (0..places.len())
+        .map(|r| match places.admin_level(r) {
+            Some(l) if l <= deepest => u32::try_from(r).map_err(|_| fail("too many rows")),
+            _ => Ok(u32::MAX),
+        })
+        .collect::<Result<_, _>>()?;
+    let part = Part {
+        pack,
+        keep: &[],
+        lod,
+        names: None,
+        arcs,
+    };
+    let m = Merged {
+        open: vec![Opened {
+            at: 0,
+            part,
+            ids,
+            places,
+            own: Vec::new(),
+            own_of,
+        }],
+        by_id: BTreeMap::new(),
+        total: 0,
+    };
+    m.geometry(region)
+}
+
 /// A part with its rows opened and numbered.
 struct Opened<'p, 'a> {
     /// Its place among the parts.

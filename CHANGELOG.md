@@ -20,6 +20,9 @@ by admin level. Packs built with this version need its readers.
 
 - `LayerOptions::outline_level`: read the outlines of one admin level and the coarser ones,
   from the pack's outline part (D-249); admin units below it are not found at a point.
+- `LayerOptions::outline_tolerance_m`: read the outlines simplified to the coarsest level of
+  detail the pack publishes within that many metres (20 m and 100 m, D-250); 0 for full
+  resolution.
 - `search` finds a place from 3 or more code points inside a word of any of its names, in any
   script ("mandu" finds Kathmandu, "माडौं" काठमाडौं), ranked below exact, prefix and one-edit
   matches (bonus 20). It needs the new `substring` component (with `search`) installed and the
@@ -36,9 +39,10 @@ by admin level. Packs built with this version need its readers.
   `Writer::pack_parts`, `Part`.
 - Names and search by language (D-248): `names::LanguageParts`, `names::encode_part`,
   `NameSet`, `Search::open_part`, `SearchSet`, `search::substring_part_from_names`.
-- Outlines by admin level (D-249): `Part::outline(deepest, lod)` is `deepest + 1 | lod << 8`,
-  `Part::outline_levels`; `ARCS_OVERVIEW` takes parts; `check` reads each outline part on its
-  own arcs.
+- Outlines by admin level (D-249) and level of detail (D-250): `Part::outline(deepest, lod)`
+  is `deepest + 1 | lod << 8`, `None` past `Part::MAX_OUTLINE_LEVEL` (30) or lod 6;
+  `Part::outline_levels`; `Kind::is_outline`; `SectionLabel`; `extract::outlines`;
+  `ARCS_OVERVIEW` takes parts; `check` reads each outline part on its own arcs.
 
 ### Sync (`teigeodata-sync`)
 

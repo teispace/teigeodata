@@ -235,7 +235,7 @@ fn with_level_0_part() -> (Model, Shapes, Vec<u8>) {
     let (c, _) = outlined(true);
     let (whole, country) = (m.encode(), c.encode());
     let (whole_pack, country_pack) = (Pack::open(&whole).unwrap(), Pack::open(&country).unwrap());
-    let part = Part::outline(0, 0);
+    let part = Part::outline(0, 0).unwrap();
     let mut sections: Vec<(Kind, Part, Encoding, u64, &[u8])> = whole_pack
         .sections()
         .filter(|s| s.kind() != Kind::BLOCK_HASHES)

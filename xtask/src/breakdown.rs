@@ -75,13 +75,7 @@ pub(crate) fn run(args: &[String]) -> Result<String, Vec<String>> {
 
 /// A section's name in a report: its kind, and its part when not the base (ADR-0040).
 fn label(s: &teigeodata_format::Section<'_>) -> String {
-    match s.part().outline_levels() {
-        _ if s.part().is_base() => s.kind().to_string(),
-        Some((deepest, 0)) if s.part().language_code().is_none() => {
-            format!("{} to level {deepest}", s.kind())
-        }
-        _ => format!("{} `{}`", s.kind(), s.part()),
-    }
+    teigeodata_format::SectionLabel(s.kind(), s.part()).to_string()
 }
 
 /// Each column of each column-table section, largest first by its zstd bytes.

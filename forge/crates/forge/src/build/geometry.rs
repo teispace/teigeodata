@@ -400,7 +400,7 @@ pub(super) fn outline_parts(
     let mut out = Vec::new();
     for &level in levels.iter().take(levels.len().saturating_sub(1)) {
         let sub = g.up_to(level)?;
-        let part = Part::outline(level, 0);
+        let part = Part::outline(level, 0).ok_or("an admin level past the outline keys")?;
         out.extend(
             sections(&sub, rows, row_of)?
                 .into_iter()
@@ -408,6 +408,77 @@ pub(super) fn outline_parts(
         );
     }
     Ok(out)
+}
+
+/// The tolerances, in metres, at which a country pack publishes its outlines as parts too
+/// (ADR-0040, step 4): each the coarsest level of the pack's ARCS within it. A client that
+/// draws a district map or asks which unit holds a point does not need 5 m detail.
+pub(super) const OUTLINE_TOLERANCES_M: [u32; 2] = [20, 100];
+
+/// The outline parts at each published level of detail (ADR-0040, step 4): for every admin
+/// level, the units of that level and coarser, whole, on the arcs simplified to the level and
+/// snapped to its decimal grid (TG-16), with their boxes, labels and `ADMIN_REGION` rebuilt
+/// on them; keyed [`Part::outline`]`(level, lod)`. `base` holds the pack's IDMAP, PLACES,
+/// ARCS and POLYGONS. Returns the parts and a line per level of detail for the summary.
+pub(super) fn lod_parts(base: &[Body]) -> Result<(Vec<PartBody>, Vec<String>), String> {
+    let e = |e: teigeodata_format::Error| e.to_string();
+    let refs: Vec<(Kind, Encoding, u64, &[u8])> = base
+        .iter()
+        .filter(|s| {
+            matches!(
+                s.0,
+                Kind::IDMAP | Kind::PLACES | Kind::ARCS | Kind::POLYGONS
+            )
+        })
+        .map(|s| (s.0, s.1, s.2, s.3.as_slice()))
+        .collect();
+    let bytes = Writer::new("lod", "outlines", "0.0.0")
+        .map_err(e)?
+        .pack(&refs, None)
+        .map_err(e)?;
+    let pack = Pack::open(&bytes).map_err(e)?;
+    let (Some(a), Some(p)) = (pack.section(Kind::ARCS), pack.section(Kind::POLYGONS)) else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+    let arcs = Arcs::open(&a).map_err(e)?;
+    let places =
+        places::Places::open(&pack.section(Kind::PLACES).ok_or("no PLACES")?).map_err(e)?;
+    let polys = Polygons::open(&p).map_err(e)?;
+    let mut levels: Vec<u8> = (0..polys.len())
+        .filter_map(|i| places.admin_level(polys.row(i)? as usize))
+        .collect();
+    levels.sort_unstable();
+    levels.dedup();
+    let mut lods: Vec<u8> = OUTLINE_TOLERANCES_M
+        .iter()
+        .map(|&m| teigeodata_format::extract::lod_within(&arcs, m.saturating_mul(100)))
+        .filter(|&l| l > 0)
+        .collect();
+    lods.dedup();
+    let (mut out, mut lines) = (Vec::new(), Vec::new());
+    for lod in lods {
+        let snapper = topo::quantize::Snapper::at(Some(&arcs), lod);
+        for &level in &levels {
+            let part = Part::outline(level, lod).ok_or("an admin level past the outline keys")?;
+            let sections = snapper
+                .with(|rewrite| {
+                    teigeodata_format::extract::outlines(
+                        &pack,
+                        level,
+                        (lod, Some(rewrite)),
+                        &super::baseline::region_options(),
+                    )
+                })
+                .map_err(e)?;
+            out.extend(sections.into_iter().map(|(k, _, n, b)| (k, part, n, b)));
+        }
+        lines.push(format!(
+            "level of detail {lod} ({} m): {}",
+            arcs.tolerance_cm(lod).unwrap_or(0) / 100,
+            snapper.report().line(snapper.k).trim_end_matches('.')
+        ));
+    }
+    Ok((out, lines))
 }
 
 /// Each outline part read back: every section passes `check` against its own part's ARCS
@@ -424,7 +495,7 @@ fn verify_parts(
     let mut lines = Vec::new();
     for s in p.parts(Kind::POLYGONS).filter(|s| !s.part().is_base()) {
         let part = s.part();
-        let (deepest, _) = part
+        let (deepest, lod) = part
             .outline_levels()
             .ok_or("an outline part with a bad key")?;
         let of = |k: Kind| p.part(k, part).ok_or(format!("part {part}: no {k}"));
@@ -442,7 +513,7 @@ fn verify_parts(
         let last = polys.group(groups.saturating_sub(1)).map_or(0, |r| r.end);
         let (mut want, mut got) = ([0_u32; region::MAX_SET], [0_u32; region::MAX_SET]);
         let (mut whole, mut cut) = (Vec::new(), Vec::new());
-        let mut checked = 0_usize;
+        let (mut checked, mut differ) = (0_usize, 0_usize);
         for r in rows
             .iter()
             .filter(|r| matches!(r.kind, PlaceKind::Settlement | PlaceKind::Locality))
@@ -467,7 +538,11 @@ fn verify_parts(
             );
             whole.sort_unstable();
             cut.sort_unstable();
-            if whole != cut {
+            // A coarser level of detail may move a place near a border (the engine's gate
+            // G-outline-parts bounds it by the tolerance); full resolution may not.
+            if whole != cut && lod > 0 {
+                differ += 1;
+            } else if whole != cut {
                 return Err(format!(
                     "{}: outline part {part} holds rows {cut:?}, the whole pack {whole:?}",
                     r.key
@@ -476,10 +551,16 @@ fn verify_parts(
             checked += 1;
         }
         lines.push(format!(
-            "levels to {deepest}: {} polygons, {} arcs, ADMIN_REGION {} B",
+            "levels to {deepest} at level of detail {lod}: {} polygons, {} arcs, ADMIN_REGION \
+             {} B{}",
             mine.len(),
             arcs.len(),
-            of(Kind::ADMIN_REGION)?.bytes().len()
+            of(Kind::ADMIN_REGION)?.bytes().len(),
+            if lod > 0 {
+                format!(", {differ} of {checked} places differ near a border")
+            } else {
+                String::new()
+            }
         ));
         if checked == 0 {
             return Err(format!("outline part {part}: no place to check"));
@@ -489,7 +570,7 @@ fn verify_parts(
         return Ok(String::new());
     }
     Ok(format!(
-        "\n\nOutline parts (ADR-0040), each whole for its levels and equal to the whole pack's units of those levels at every settlement and locality: {}.",
+        "\n\nOutline parts (ADR-0040), each whole for its levels and, at full resolution, equal to the whole pack's units of those levels at every settlement and locality: {}.",
         lines.join("; ")
     ))
 }

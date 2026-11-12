@@ -125,7 +125,7 @@ impl Owned {
     pub(crate) fn new(
         backing: Backing,
         installed: Option<teigeodata_format::component::Components>,
-        outline_level: Option<u8>,
+        outlines: crate::layer::OutlinePick,
     ) -> Result<Self, Error> {
         let bytes: &[u8] = backing.bytes();
         #[allow(
@@ -137,7 +137,7 @@ impl Owned {
         )]
         // SAFETY: see the reason above and the module documentation.
         let bytes: &'static [u8] = unsafe { &*core::ptr::from_ref::<[u8]>(bytes) };
-        let views = Views::open(bytes, installed, outline_level)?;
+        let views = Views::open(bytes, installed, outlines)?;
         Ok(Self { views, backing })
     }
 

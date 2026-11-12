@@ -32,6 +32,10 @@ and byte ranges inside one section.
   every outline section over levels 0 to *k*, on only the arcs they use; a reader takes one
   part, and the base holds every level. Arc groups that a reader joins were the first design;
   they were dropped because polygons and the admin index address arcs and vertices globally.
+- **Levels of detail are outline parts too** (step 4, D-250): at each published tolerance the
+  pack has a part for every level, the deepest included, on simplified, snapped arcs with the
+  boxes, labels and admin index rebuilt; the base keeps full resolution. An outline key's low
+  byte is at most 31 and its lod at most 6, so it never reads as `*` or a language.
 - BLOCK_HASHES' directory names each covered section by kind and part, in the `u32` that was
   reserved there.
 - Each part is a section: its own hash in the signed head, its own frames on the wire, its own

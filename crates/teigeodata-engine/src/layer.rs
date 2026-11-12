@@ -104,6 +104,11 @@ pub struct LayerOptions {
     /// that holds that level and the coarser ones, whole; `None` for every level. Admin units
     /// below it are not found at a point, and their outlines are not read.
     pub outline_level: Option<u8>,
+    /// The largest simplification of the outlines read, in metres (ADR-0040): the pack's outline
+    /// parts at the coarsest level of detail whose tolerance is at most this, when it has
+    /// them; 0 (the default) for full resolution. Admin units at a point may differ within
+    /// the tolerance of a border.
+    pub outline_tolerance_m: u32,
 }
 
 impl LayerOptions {
@@ -178,33 +183,32 @@ fn located_blocks<'a>(
     Ok(blocks)
 }
 
-/// Whether `kind` is an outline kind, read from one part (ADR-0040).
-pub(crate) const fn is_outline(kind: Kind) -> bool {
-    matches!(
-        kind,
-        Kind::ARCS | Kind::ARCS_OVERVIEW | Kind::POLYGONS | Kind::POLY_INDEX | Kind::ADMIN_REGION
-    )
-}
-
 #[cfg(any(feature = "boundaries", feature = "admin-index"))]
-/// The part the outline kinds are read from for `level` (ADR-0040): the base part, which holds
-/// every level, when `level` is `None` or the pack holds no level below it; else the outline
-/// part of the deepest level at most `level` (the coarsest part when every part is deeper).
+/// The part the outline kinds are read from (ADR-0040), for the deepest admin level and the
+/// tolerance asked: at the coarsest level of detail the pack publishes within the tolerance
+/// (by its base ARCS's tolerances), the part of the deepest level at most `level` (the
+/// coarsest part when every part is deeper). At full resolution the base part holds every
+/// level, so it is read when `level` is `None` or the pack holds no level below it.
 fn outline_part(
     pack: &Pack<'_>,
     places: Option<teigeodata_format::Section<'_>>,
-    level: Option<u8>,
+    (level, tolerance_m): OutlinePick,
 ) -> Part {
-    let Some(k) = level else {
+    let lod = outline_lod(pack, tolerance_m);
+    if level.is_none() && lod == 0 {
         return Part::BASE;
-    };
+    }
+    let k = level.unwrap_or(u8::MAX);
     let mut best: Option<(u8, Part)> = None;
     let mut coarsest: Option<(u8, Part)> = None;
     let mut deeper = false;
     for s in pack.parts(Kind::POLYGONS) {
-        let Some((d, 0)) = s.part().outline_levels() else {
+        let Some((d, l)) = s.part().outline_levels() else {
             continue;
         };
+        if l != lod {
+            continue;
+        }
         if coarsest.is_none_or(|(c, _)| d < c) {
             coarsest = Some((d, s.part()));
         }
@@ -214,7 +218,8 @@ fn outline_part(
             best = Some((d, s.part()));
         }
     }
-    if deeper {
+    // A coarse level of detail has a part for every level, the deepest among them.
+    if deeper || lod > 0 {
         return best.or(coarsest).map_or(Part::BASE, |b| b.1);
     }
     // Every part is at most `k`: the base adds only the deepest level, the level of its last
@@ -232,6 +237,28 @@ fn outline_part(
         _ => Part::BASE,
     }
 }
+
+#[cfg(any(feature = "boundaries", feature = "admin-index"))]
+/// The coarsest level of detail of the pack's outline parts whose tolerance (in the base
+/// ARCS) is at most `tolerance_m`; 0 for full resolution.
+fn outline_lod(pack: &Pack<'_>, tolerance_m: u32) -> u8 {
+    if tolerance_m == 0 {
+        return 0;
+    }
+    let Some(arcs) = pack.section(Kind::ARCS).and_then(|s| Arcs::open(&s).ok()) else {
+        return 0;
+    };
+    let max_cm = tolerance_m.saturating_mul(100);
+    pack.parts(Kind::POLYGONS)
+        .filter_map(|s| s.part().outline_levels().map(|(_, l)| l))
+        .filter(|&l| l > 0 && arcs.tolerance_cm(l).is_some_and(|t| t <= max_cm))
+        .max()
+        .unwrap_or(0)
+}
+
+/// What [`LayerOptions`] asks of the outlines: the deepest admin level and the tolerance in
+/// metres.
+pub(crate) type OutlinePick = (Option<u8>, u32);
 
 /// The zero-copy views of one pack, opened once (structure checks only).
 #[derive(Debug)]
@@ -306,7 +333,7 @@ impl<'a> Views<'a> {
     pub(crate) fn open(
         bytes: &'a [u8],
         installed: Option<Components>,
-        outline_level: Option<u8>,
+        outlines: OutlinePick,
     ) -> Result<Self, Error> {
         // A partial install may have holes, BLOCK_HASHES among them: only the head is read.
         let pack = match installed {
@@ -320,10 +347,10 @@ impl<'a> Views<'a> {
         };
         // The outline kinds are read from one part, whole for its levels (ADR-0040).
         #[cfg(any(feature = "boundaries", feature = "admin-index"))]
-        let outline = outline_part(&pack, get(Kind::PLACES), outline_level);
+        let outline = outline_part(&pack, get(Kind::PLACES), outlines);
         #[cfg(not(any(feature = "boundaries", feature = "admin-index")))]
         let outline = {
-            let _ = outline_level;
+            let _ = outlines;
             Part::BASE
         };
         #[cfg(any(feature = "boundaries", feature = "admin-index"))]
@@ -654,7 +681,8 @@ impl Layer {
         options: LayerOptions,
         stamp: Option<FileStamp>,
     ) -> Result<Self, Error> {
-        let owned = Owned::new(backing, options.installed, options.outline_level)?;
+        let outlines = (options.outline_level, options.outline_tolerance_m);
+        let owned = Owned::new(backing, options.installed, outlines)?;
         let v = owned.views();
         if options.verify == Verify::Eager {
             for s in v.pack.sections().filter(|s| v.installed(s.kind())) {
@@ -853,7 +881,7 @@ impl Layer {
         let ok = v
             .pack
             .parts(kind)
-            .filter(|s| !is_outline(kind) || s.part() == v.outline)
+            .filter(|s| !kind.is_outline() || s.part() == v.outline)
             .all(|s| {
                 match v
                     .blocks

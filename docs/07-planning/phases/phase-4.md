@@ -344,8 +344,9 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     levels 0 to *k*), not arc groups; `LayerOptions::outline_level`; gate G-outline-parts,
     `admin_at` on each part equals the full chain cut at *k* at 427,014 points (D-249,
     2026-11-12)
-  - [ ] 4. Levels of detail as parts: the outline parts per published level (the key's
-    `lod` byte), each whole, as step 3's
+  - [x] 4. Levels of detail as parts: 20 m and 100 m, a whole part per admin level each;
+    Nepal lite every level 0.64 / 0.26 MB wire instead of 3.29 MB; G-outline-parts within
+    the tolerance, 0 beyond (D-250, 2026-11-12)
   - [ ] 5. The catalog lists each part's wire size; `tgd install np --names en --outlines
     district@20m`; profiles pick parts; the engine's installed set by part
 - [x] Derive SUBSTRING on the device: `Store::derive` checked against the head's hash, engine feature `derive`; Nepal lite in 0.50 s, byte for byte (D-218, 2026-11-11)
@@ -480,3 +481,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-12 | 4.9c: everything separable planned in five steps; step 1, section parts in the format | D-246 |
 | 2026-11-12 | 4.9c: step 2, names and search by language; a language's part from 128 KiB, not 16 KiB (measured); the English-only gate moves to step 5 | D-248 |
 | 2026-11-12 | 4.9c: step 3, outlines by admin level as whole copies, not arc groups; step 4 follows the same shape | D-249 |
+| 2026-11-12 | 4.9c: step 4, levels of detail as outline parts at 20 m and 100 m, made by the merge's geometry path; outline keys bounded | D-250 |

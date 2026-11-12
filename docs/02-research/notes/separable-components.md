@@ -141,8 +141,15 @@ Proof each step must give:
   part held): 8 parts at a 16 KiB threshold, search p50 6.8 → 13.0 µs; 3 parts at 128 KiB,
   7.2 → 11.1 µs. Hence 128 KiB. A per-part filter (skip a part with no key of the query's first
   character) would cut the rest; a client holding fewer parts pays less.
-- Full copies per level of detail grow the release asset and the host's storage; measure with
-  step 4 and drop a level that no profile or client asks for.
+- Full copies per level of detail grow the release asset and the host's storage. Measured
+  with step 4 (D-250, Nepal lite): eight parts at 20 m and 100 m add 1.4 MB to an 87.5 MB pack
+  and cut a client's outlines from 3.29 MB to 0.64 or 0.26 MB wire; drop a level no profile or
+  client asks for.
+- **Step 4 lesson:** the coarse outline path already existed (`extract::merge` for the embedded
+  layers, with snapping, labels moved inside and boxes from the coarse arcs). Exposing it as
+  `extract::outlines` made the parts without a second simplifier. A coarser level changes
+  `admin_at` only near borders: Nepal at 100 m, 1,032 of 427,014 points for municipalities, all
+  within 100 m of a border the whole pack draws.
 - The head limit caps parts at about 190 sections per pack; the writer and the reader already
   refuse a head over 16 KiB (`HEAD_MAX`).
 

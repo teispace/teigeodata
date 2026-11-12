@@ -108,7 +108,7 @@ fn the_language_key_packs_the_primary_subtag() {
     assert_eq!(Part::language("x"), None);
     assert_eq!(Part::language("toolong"), None);
     assert_eq!(Part::language("n3"), None);
-    assert_eq!(Part::outline(3, 2).0, 0x0204);
+    assert_eq!(Part::outline(3, 2).map(|p| p.0), Some(0x0204));
 }
 
 #[test]

@@ -1,14 +1,17 @@
-//! Gate G-outline-parts (D-249): a layer that reads a pack's outline part of level `k`
-//! (`LayerOptions::outline_level`) answers `admin_at` with exactly the units the whole pack
-//! gives at that point, cut at level `k`: at every place of the pack and on a grid over the
-//! places' box at `step` degrees, for every outline part the pack has. Any difference fails, and
-//! the runner exits non-zero.
+//! Gate G-outline-parts (D-249, D-250): a layer that reads a pack's outline part of level `k`
+//! (`LayerOptions::outline_level`) at level of detail `lod` (`outline_tolerance_m`) answers
+//! `admin_at` with the units the whole pack gives at that point, cut at level `k`: at every
+//! place of the pack and on a grid over the places' box at `step` degrees, for every outline
+//! part the pack has. At full resolution any difference fails; at a coarser level a point may
+//! differ only where the whole pack gives the part's answer within the level's tolerance of
+//! it (a border moved by the simplification). The runner exits non-zero on a failure.
 //!
-//! `shift` compares part `k` with the whole chain cut at `k + shift` instead: any shift other
-//! than 0 must fail (the planted fault).
+//! `shift` compares part `k` with the whole chain cut at `k + shift` instead, and `slack`
+//! scales the tolerance: any shift other than 0, or a slack of 0 on a pack with coarse parts,
+//! must fail (the planted faults).
 //!
 //! Usage: `cargo run --release -p teigeodata-engine --example admin-cut --
-//! <pack.tgd> [step_deg=0.01] [shift=0]`
+//! <pack.tgd> [step_deg=0.01] [shift=0] [slack=1]`
 #![allow(
     clippy::print_stdout,
     clippy::print_stderr,
@@ -19,13 +22,19 @@ use std::process::ExitCode;
 
 use teigeodata_core::{E7, PlaceId, PlaceKind, Point};
 use teigeodata_engine::{Engine, Layer, LayerOptions, Place, Scratch};
+use teigeodata_format::arcs::Arcs;
 use teigeodata_format::places::Places;
 use teigeodata_format::{Kind, Pack};
 
-/// The pack at `path` alone in an engine, reading the outlines of `level` (`None`: all).
-fn engine(path: &str, level: Option<u8>) -> Result<Engine, String> {
+/// Metres in a degree of latitude (the mean Earth radius).
+const M_PER_DEG: f64 = 111_194.93;
+
+/// The pack at `path` alone in an engine, reading the outlines of `level` (`None`: all) at the
+/// coarsest level of detail within `tolerance_m`.
+fn engine(path: &str, level: Option<u8>, tolerance_m: u32) -> Result<Engine, String> {
     let options = LayerOptions {
         outline_level: level,
+        outline_tolerance_m: tolerance_m,
         ..LayerOptions::default()
     };
     let layer = Layer::open(path, options).map_err(|e| format!("{path}: {e}"))?;
@@ -52,8 +61,23 @@ fn units(
     Ok(ids)
 }
 
-/// Every place's point of the pack, a grid at `step` over their box, and the outline levels.
-fn inputs(path: &str, step: f64) -> Result<(Vec<Point<E7>>, Vec<u8>), String> {
+/// `at` moved `m` metres in each of eight directions.
+fn around(at: Point<E7>, m: f64) -> impl Iterator<Item = Point<E7>> {
+    let (lat, lon) = (at.lat_degrees(), at.lon_degrees());
+    let dlat = m / M_PER_DEG;
+    let dlon = dlat / lat.to_radians().cos().max(1e-6);
+    (0..8_u8).filter_map(move |k| {
+        let a = f64::from(k) * std::f64::consts::FRAC_PI_4;
+        Point::<E7>::from_degrees(lat + dlat * a.sin(), lon + dlon * a.cos()).ok()
+    })
+}
+
+/// One outline part: its deepest level, its level of detail and that level's tolerance in
+/// metres (0 at full resolution).
+type Cut = (u8, u8, u32);
+
+/// Every place's point of the pack, a grid at `step` over their box, and the outline parts.
+fn inputs(path: &str, step: f64) -> Result<(Vec<Point<E7>>, Vec<Cut>), String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
     let pack = Pack::open(&bytes).map_err(|e| e.to_string())?;
     let s = pack.section(Kind::PLACES).ok_or("the pack has no PLACES")?;
@@ -85,44 +109,96 @@ fn inputs(path: &str, step: f64) -> Result<(Vec<Point<E7>>, Vec<u8>), String> {
         }
         i += 1;
     }
-    let levels: Vec<u8> = pack
-        .parts(Kind::POLYGONS)
-        .filter_map(|s| s.part().outline_levels().map(|(d, _)| d))
-        .collect();
-    Ok((out, levels))
+    Ok((out, cuts(&pack)?))
 }
 
-fn run(path: &str, step: f64, shift: u8) -> Result<usize, String> {
-    let (points, levels) = inputs(path, step)?;
-    if levels.is_empty() {
+/// The pack's outline parts, each with its tolerance from the base ARCS.
+fn cuts(pack: &Pack<'_>) -> Result<Vec<Cut>, String> {
+    let arcs = pack
+        .section(Kind::ARCS)
+        .map(|s| Arcs::open(&s))
+        .transpose()
+        .map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for s in pack.parts(Kind::POLYGONS) {
+        let Some((deepest, lod)) = s.part().outline_levels() else {
+            continue;
+        };
+        let tolerance_m = match lod {
+            0 => 0,
+            l => {
+                arcs.as_ref()
+                    .and_then(|a| a.tolerance_cm(l))
+                    .ok_or("a coarse part without its tolerance")?
+                    / 100
+            }
+        };
+        out.push((deepest, lod, tolerance_m));
+    }
+    Ok(out)
+}
+
+/// What one part's comparison found.
+#[derive(Default)]
+struct Tally {
+    compared: usize,
+    held: usize,
+    /// Different, with the part's answer within the tolerance.
+    border: usize,
+    failed: usize,
+}
+
+fn run(path: &str, step: f64, shift: u8, slack: f64) -> Result<usize, String> {
+    let (points, cuts) = inputs(path, step)?;
+    if cuts.is_empty() {
         return Err(format!("{path} has no outline parts"));
     }
-    let whole = engine(path, None)?;
+    let whole = engine(path, None, 0)?;
     let (mut s, mut out) = (Scratch::default(), Vec::new());
     let mut failed = 0;
-    for &k in &levels {
-        let cut = engine(path, Some(k))?;
-        let (mut compared, mut held) = (0_usize, 0_usize);
+    for &(k, lod, tolerance_m) in &cuts {
+        let cut = engine(path, Some(k), tolerance_m)?;
+        let want_k = k.saturating_add(shift);
+        let mut t = Tally::default();
         let mut first = None;
         for &at in &points {
-            let want = units(&whole, at, k.saturating_add(shift), &mut s, &mut out)?;
+            let want = units(&whole, at, want_k, &mut s, &mut out)?;
             let got = units(&cut, at, u8::MAX, &mut s, &mut out)?;
-            compared += 1;
-            held += usize::from(!want.is_empty());
-            if want != got {
-                failed += 1;
+            t.compared += 1;
+            t.held += usize::from(!want.is_empty());
+            if want == got {
+                continue;
+            }
+            let m = f64::from(tolerance_m) * slack;
+            let mut near = false;
+            if m > 0.0 {
+                for q in around(at, m) {
+                    if units(&whole, q, want_k, &mut s, &mut out)? == got {
+                        near = true;
+                        break;
+                    }
+                }
+            }
+            if near {
+                t.border += 1;
+            } else {
+                t.failed += 1;
                 first.get_or_insert((at, want, got));
             }
         }
-        println!("level {k}: {compared} points, {held} inside a unit");
+        println!(
+            "level {k} at lod {lod} ({tolerance_m} m): {} points, {} inside a unit, {} differ \
+             within the tolerance, {} beyond",
+            t.compared, t.held, t.border, t.failed
+        );
         if let Some((at, want, got)) = first {
             println!(
-                "FAIL {:.6},{:.6}: the whole pack cut at {} gives {want:?}, the part {got:?}",
+                "FAIL {:.6},{:.6}: the whole pack cut at {want_k} gives {want:?}, the part {got:?}",
                 at.lat_degrees(),
                 at.lon_degrees(),
-                k.saturating_add(shift)
             );
         }
+        failed += t.failed;
     }
     Ok(failed)
 }
@@ -130,26 +206,31 @@ fn run(path: &str, step: f64, shift: u8) -> Result<usize, String> {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(path) = args.first() else {
-        eprintln!("usage: admin-cut <pack.tgd> [step_deg=0.01] [shift=0]");
+        eprintln!("usage: admin-cut <pack.tgd> [step_deg=0.01] [shift=0] [slack=1]");
         return ExitCode::from(2);
     };
     let step = args.get(1).map_or(Ok(0.01), |v| v.parse::<f64>());
     let shift = args.get(2).map_or(Ok(0), |v| v.parse::<u8>());
-    let (Ok(step), Ok(shift)) = (step, shift) else {
-        eprintln!("step_deg is a number above 0, shift a small integer");
+    let slack = args.get(3).map_or(Ok(1.0), |v| v.parse::<f64>());
+    let (Ok(step), Ok(shift), Ok(slack)) = (step, shift, slack) else {
+        eprintln!("step_deg and slack are numbers, shift a small integer");
         return ExitCode::from(2);
     };
-    if step.partial_cmp(&0.0) != Some(core::cmp::Ordering::Greater) {
-        eprintln!("step_deg must be above 0");
+    if step.partial_cmp(&0.0) != Some(core::cmp::Ordering::Greater)
+        || slack
+            .partial_cmp(&0.0)
+            .is_none_or(core::cmp::Ordering::is_lt)
+    {
+        eprintln!("step_deg must be above 0, slack at least 0");
         return ExitCode::from(2);
     }
-    match run(path, step, shift) {
+    match run(path, step, shift, slack) {
         Ok(0) => {
             println!("G-outline-parts: ok");
             ExitCode::SUCCESS
         }
         Ok(n) => {
-            println!("G-outline-parts: FAIL, {n} points differ");
+            println!("G-outline-parts: FAIL, {n} points beyond the tolerance");
             ExitCode::FAILURE
         }
         Err(e) => {

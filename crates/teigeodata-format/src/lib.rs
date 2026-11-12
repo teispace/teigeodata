@@ -152,17 +152,23 @@ impl Kind {
     /// none has only its base part; a kind this reader does not know may have parts.
     #[must_use]
     pub fn takes_parts(self) -> bool {
+        matches!(self, Self::NAMES | Self::SEARCH | Self::SUBSTRING)
+            || self.is_outline()
+            || self.name().is_none()
+    }
+
+    /// Whether this is an outline kind, whose parts are keyed [`Part::outline`] and read
+    /// together from one part (ADR-0040).
+    #[must_use]
+    pub const fn is_outline(self) -> bool {
         matches!(
             self,
-            Self::NAMES
-                | Self::SEARCH
-                | Self::SUBSTRING
-                | Self::ARCS
+            Self::ARCS
                 | Self::ARCS_OVERVIEW
                 | Self::POLYGONS
                 | Self::POLY_INDEX
                 | Self::ADMIN_REGION
-        ) || self.name().is_none()
+        )
     }
 
     /// This reader's name for the kind, if it knows it.
@@ -239,23 +245,32 @@ impl Part {
         Some(Self(v))
     }
 
+    /// The deepest admin level an outline part may hold: its key's low byte stays below
+    /// printable ASCII, so no outline key reads as [`Part::REST`] or a language.
+    pub const MAX_OUTLINE_LEVEL: u8 = 30;
+
     /// The outline part that holds every admin unit of level `deepest` and coarser, whole, at
     /// level of detail `lod`: `(deepest + 1) | lod << 8`, never the base part, which holds every
-    /// level at full detail.
+    /// level at full detail. `None` past [`Part::MAX_OUTLINE_LEVEL`] or a lod past
+    /// [`arcs::PINNED`]` - 1`.
     #[must_use]
-    pub const fn outline(deepest: u8, lod: u8) -> Self {
-        Self((deepest as u32 + 1) | (lod as u32) << 8)
+    pub const fn outline(deepest: u8, lod: u8) -> Option<Self> {
+        if deepest > Self::MAX_OUTLINE_LEVEL || lod >= arcs::PINNED {
+            return None;
+        }
+        Some(Self((deepest as u32 + 1) | (lod as u32) << 8))
     }
 
     /// The deepest admin level and the level of detail of an outline part; `None` for the base
-    /// part.
+    /// part and any key [`Part::outline`] does not make.
     #[must_use]
     pub const fn outline_levels(self) -> Option<(u8, u8)> {
-        let [deepest, lod, a, b] = self.0.to_le_bytes();
-        if deepest == 0 || a != 0 || b != 0 {
+        let [low, lod, a, b] = self.0.to_le_bytes();
+        if low == 0 || low > Self::MAX_OUTLINE_LEVEL + 1 || lod >= arcs::PINNED || a != 0 || b != 0
+        {
             return None;
         }
-        Some((deepest - 1, lod))
+        Some((low - 1, lod))
     }
 
     /// Whether this is the base part.
@@ -275,6 +290,23 @@ impl Part {
         let (word, pad) = bytes.split_at(len);
         (len >= 2 && word.iter().all(u8::is_ascii_lowercase) && pad.iter().all(|&b| b == 0))
             .then_some(bytes)
+    }
+}
+
+/// A section's kind and part for people (reports, tables): `NAMES`, NAMES of the `ne` part,
+/// `ARCS to level 2`, `ARCS to level 2 at lod 3`.
+#[derive(Clone, Copy, Debug)]
+pub struct SectionLabel(pub Kind, pub Part);
+
+impl fmt::Display for SectionLabel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self(kind, part) = *self;
+        match part.outline_levels().filter(|_| kind.is_outline()) {
+            _ if part.is_base() => write!(f, "{kind}"),
+            Some((deepest, 0)) => write!(f, "{kind} to level {deepest}"),
+            Some((deepest, lod)) => write!(f, "{kind} to level {deepest} at lod {lod}"),
+            None => write!(f, "{kind} `{part}`"),
+        }
     }
 }
 
@@ -322,10 +354,17 @@ mod tests {
         assert_eq!(Part::REST.to_string(), "*");
         assert_eq!(Part::language("ne-Deva").unwrap().to_string(), "ne");
         assert_eq!(Part::language("MAI").unwrap().to_string(), "mai");
-        assert_eq!(Part::outline(3, 1).to_string(), "0x104");
-        assert_eq!(Part::outline(0, 0).outline_levels(), Some((0, 0)));
-        assert_ne!(Part::outline(0, 0), Part::BASE);
+        let outline = |d, l| Part::outline(d, l).unwrap();
+        assert_eq!(outline(3, 1).to_string(), "0x104");
+        assert_eq!(outline(0, 0).outline_levels(), Some((0, 0)));
+        assert_eq!(outline(30, 6).outline_levels(), Some((30, 6)));
+        assert_ne!(outline(0, 0), Part::BASE);
         assert_eq!(Part::BASE.outline_levels(), None);
+        // No outline key reads as another kind's: `*`, a language, a lod past the levels.
+        assert_eq!((Part::outline(31, 0), Part::outline(0, 7)), (None, None));
+        assert_eq!(Part::REST.outline_levels(), None);
+        assert_eq!(Part::language("ne").unwrap().outline_levels(), None);
+        assert_eq!(Part(0x0701).outline_levels(), None);
     }
 
     #[test]

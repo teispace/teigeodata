@@ -174,6 +174,13 @@ arcs those levels use. A reader takes one part (the engine's `LayerOptions::outl
 the base part holds every level. `check` reads each outline part against its own ARCS and
 POLYGONS.
 
+**Levels of detail** (D-250): at each published tolerance (20 m and 100 m) the outline kinds
+also have a part `Part::outline(k, lod)` = `(k + 1) | lod << 8` for every level *k*, the deepest
+included: levels 0 to *k* on the arcs kept at `lod`, snapped to that level's decimal grid, with
+POLYGONS' labels, POLY_INDEX's boxes and `ADMIN_REGION` built on them (the ARCS carry no vertex
+levels). The engine picks one with `LayerOptions::outline_tolerance_m`. Outline keys stay
+below `0x20` in the low byte (`Part::MAX_OUTLINE_LEVEL` = 30) and below 7 in the lod byte.
+
 ### Components of a pack
 
 Each section belongs to one component (D-133, D-135), and a client chooses components, not
