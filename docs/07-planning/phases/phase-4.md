@@ -352,7 +352,7 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     (Nepal's Wikidata snapshot carries every language's labels). Open: 6 districts the CBS file
     loses (Nawalparasi East and West, Rukum East and West, Kailali, Kanchanpur), the 38
     renamed local levels (no open, current list with Nepali names found on 2026-11-12: the
-    open lists predate the renames or have no Nepali), tier 4 (donor), the `machine_names`
+    open lists predate the renames or have no Nepali), tier 4 for India (Nepal's built, D-236), the `machine_names`
     profile option, a unit's Wikidata or GeoNames Nepali label kept with its type word
     (नलगाड नगरपालिका; 2 units, and 2 stray GeoNames units at level 3, "Ramechhap District")
   - [x] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
@@ -366,11 +366,12 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 - [x] TG-16: outline tolerance measured (Nepal stays at 20 m), outlines snapped to their level's decimal grid, 64-edge index leaves: `tithipatra` 9.21 MB wire (D-229, D-230)
 - [ ] TG-15: India: research done (D-216, D-217); then towns
 - [x] TG-19: `Near::bearing_deg` and `Engine::mark_inside` (D-223, 2026-11-11)
-- [ ] TG-18 and the strict-tier option. Done: the Brahmic search fold of nasal
-  conjuncts, vowel length and candra vowels (D-220, 2026-11-11); the focus point and the
-  strict-tier option, `search_with` (D-226, 2026-11-12); the व/ब variant as a spelling
-  convention rule (`viratnagar` finds Biratnagar, first when focused in Nepal; D-233,
-  2026-11-12). Open: the MVP's golden cases
+- [x] TG-18 and the strict-tier option: the Brahmic search fold of nasal conjuncts, vowel
+  length and candra vowels (D-220); the focus point and the strict-tier option, `search_with`
+  (D-226); the व/ब variant as a spelling rule (D-233); gate G-golden-tithipatra, 60 cases from
+  the MVP's search (brief §1.2), all passing on the `tithipatra` layer, with the prefix tier
+  from 2 code points, donor names and the f/ph, ee/i, oo/u rules (D-236, 2026-11-12). Open:
+  add the MVP's own test cases to the file if Tithipatra sends them
 - [x] TG-17: phone-class bench and gate G-phone ([note](../../02-research/notes/phone-class-bench.md),
   D-235, 2026-11-12): every target met on the `tithipatra` layer; deriving SUBSTRING 1.04 →
   0.38 s (121 → 54 MiB heap), the first height 63 → 0.42 ms by per-tile DEM checks. Open:
@@ -451,3 +452,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-12 | 4.9c: TG-18's व/ब variant as a SEARCH spelling rule; Biratnagar's official Nepali name as the city writes it | D-233 |
 | 2026-11-12 | 4.9c: 29 more districts' official names from the misaligned CBS rows, by the list's own text | D-234 |
 | 2026-11-12 | 4.9c: TG-17 done, the phone-class bench and gate G-phone; faster derive and per-tile DEM checks | D-235 |
+| 2026-11-12 | 4.9c: TG-18 done, gate G-golden-tithipatra; TG-14 tier 4 (donor names) for Nepal; prefix tier from 2 code points | D-236 |

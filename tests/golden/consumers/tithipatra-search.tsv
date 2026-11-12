@@ -1,0 +1,76 @@
+# Tithipatra's search at the MVP's bar (TG-18, D-236): the cases the MVP's search passed, from
+# the brief's description of it (Tithipatra brief addendum 1 §1.2), on the `tithipatra` layer.
+# Run: cargo run --release -p teigeodata-engine --all-features --example golden --
+#   tests/golden/consumers/tithipatra-search.tsv data/build/embed/tithipatra-lite.tgd
+# Columns (tab-separated): query, expected IDs (any passes), worst passing rank, options, note.
+# IDs are stable (D-084). Options: focus=LAT,LON scale_km=KM strict k=N; `-` for none.
+#
+# Devanagari: one name's spellings match each other.
+काठमाडौं	tgd:np/2cn,tgd:np/2gm,tgd:np/3c8	1	-	anusvara spelling of Kathmandu
+काठमाडौँ	tgd:np/2cn,tgd:np/2gm,tgd:np/3c8	1	-	chandrabindu spelling of Kathmandu
+हंसपुर	tgd:np/s4m,tgd:np/1ycj,tgd:np/k87	1	-	the anusvara as written
+हङ्सपुर	tgd:np/s4m,tgd:np/1ycj,tgd:np/k87	1	-	a nasal conjunct is the anusvara (D-220)
+हङ्स	tgd:np/s4m,tgd:np/1ycj,tgd:np/k87	3	-	a nasal conjunct while typing
+हङ्	tgd:np/s4m,tgd:np/1ycj,tgd:np/k87	40	-	a half-typed nasal lists हंसपुर among the 40 shown (MVP)
+हङ्	tgd:np/s4m,tgd:np/1ycj,tgd:np/k87	10	focus=28.3949,84.1240 scale_km=500	and near the top with a home-country focus (D-226)
+भक्तपुर	tgd:np/23n,tgd:np/242,tgd:np/241	1	-	Bhaktapur
+पोखरा	tgd:np/1xhb	1	-	Pokhara
+धरान	tgd:np/mn4,tgd:np/mhn	1	-	Dharan
+ललितपुर	tgd:np/437,tgd:np/45b,tgd:np/2e0	1	focus=27.7172,85.3240	Nepal's Lalitpur, focused on Kathmandu (D-226)
+विराटनगर	tgd:np/pm7,tgd:np/pm9	1	-	Biratnagar as the city writes it (D-233)
+बिराटनगर	tgd:np/pm7,tgd:np/pm9	1	-	Biratnagar as CBS writes it
+जनकपुर	tgd:np/s78,tgd:np/s70	1	-	Janakpur
+कृष्णनगर	tgd:np/1nhf,tgd:np/1nj0	1	-	Krishnanagar
+क्रिस्ननगर	tgd:np/1nhf,tgd:np/1nj0	3	-	a looser spelling: ृ as ्रि, ष as स, ण as न (MVP loose fold)
+क्रिस्नपुर	tgd:np/2x19,tgd:np/2vk4	3	-	a looser spelling of कृष्णपुर
+दुबई	tgd:ae/2f,tgd:ae/2g	1	-	Dubai in Nepali
+टोकियो	tgd:jp/p7,tgd:jp/rb	1	-	Tokyo in Nepali
+दिल्ली	tgd:in/207,tgd:in/1xa	1	-	Delhi in Nepali
+न्यूयोर्क	tgd:us/17a,tgd:us/pe	2	-	New York, long ू
+न्युयोर्क	tgd:us/17a,tgd:us/pe	2	-	New York, short ु (vowel length folded, D-220)
+#
+# Latin: case, accents and punctuation.
+kathmandu	tgd:np/2cn,tgd:np/2gm,tgd:np/3c8	1	-	typed in full, Kathmandu first
+Kathmandu	tgd:np/2cn,tgd:np/2gm,tgd:np/3c8	1	-	capitalised
+KATHMANDU	tgd:np/2cn,tgd:np/2gm,tgd:np/3c8	1	-	upper case
+Tānsen	tgd:np/1rpp,tgd:np/1rnn	1	-	accents off
+tansen	tgd:np/1rpp,tgd:np/1rnn	1	-	plain
+Kageshwari-Manohara	tgd:np/259	1	-	punctuation to a space
+kageshwari manohara	tgd:np/259	1	-	spaced
+#
+# Latin: prefixes and inside a word.
+pokh	tgd:np/1xhb	1	-	prefix
+lalit	tgd:np/437,tgd:np/45b,tgd:np/2e0	1	-	prefix
+manohara	tgd:np/259	10	-	a later word of the name (MVP word prefix)
+mandu	tgd:np/2cn,tgd:np/2gm,tgd:np/3c8	10	-	inside a word (MVP substring)
+#
+# Latin: the romanisation fold joins Nepali spelling variants.
+Biratnagar	tgd:np/pm7,tgd:np/pm9	1	-	as written
+viratnagar	tgd:np/pm7,tgd:np/pm9	2	-	v for b, unfocused: ties India's exact Viratnagar (D-233)
+viratnagar	tgd:np/pm7,tgd:np/pm9	1	focus=28.3949,84.1240 scale_km=500	v for b, with a home-country focus
+Janakpur	tgd:np/s78,tgd:np/s70	1	-	as written
+janakapur	tgd:np/s78,tgd:np/s70	1	-	an inherent vowel written out
+katmandu	tgd:np/2cn,tgd:np/2gm,tgd:np/3c8	1	-	th as t
+kaathmandu	tgd:np/2cn,tgd:np/2gm,tgd:np/3c8	1	-	aa as a
+phidim	tgd:np/ng6,tgd:np/d8t	1	-	as written
+fidim	tgd:np/ng6,tgd:np/d8t	1	-	f for ph
+kotang	tgd:np/wa6	1	-	k for kh
+dankuta	tgd:np/myr,tgd:np/myc,tgd:np/myq	1	-	d for dh
+baktapur	tgd:np/23n,tgd:np/242,tgd:np/241	1	-	b for bh
+gorahi	tgd:np/15kp,tgd:np/15ms	1	-	g for gh
+japa	tgd:np/r32	3	-	j for jh (Japan, a country, ranks first)
+butbal	tgd:np/1rcz,tgd:np/1rcy	1	-	b for w
+siangja	tgd:np/1wye	1	-	i for y
+beergunj	tgd:np/148z,tgd:np/14n0	1	-	ee for i
+goolmi	tgd:np/1hkm	1	-	oo for u
+chitvan	tgd:np/20df,tgd:np/21hf	1	-	v for w
+sivaraj	tgd:np/1n8y	1	-	s for sh
+ithari	tgd:np/m8b,tgd:np/m83	1	-	a dropped vowel
+nepalgunj	tgd:np/2v0x,tgd:np/2v32	1	-	gunj for ganj
+#
+# The world.
+delhi	tgd:in/207,tgd:in/1xa	1	-	Delhi
+dubai	tgd:ae/2f,tgd:ae/2g	1	-	Dubai
+tokyo	tgd:jp/p7,tgd:jp/rb	1	-	Tokyo
+new york	tgd:us/17a,tgd:us/pe	2	-	New York
+rome	tgd:it/md	1	strict	strict tier order: the exact Rome before Romania (D-226)

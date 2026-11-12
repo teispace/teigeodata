@@ -227,7 +227,7 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 `teigeodata_names::fold`. A row's score is its importance plus the best bonus it earns: exact
 60; loose (spaces removed, with its exact twin) 55; one fuzzy edit 25 (queries of 4 to 63
 characters); prefix 30 for the best 16 prefix matches by importance across all layers
-(queries of 3 characters or more). A layer's query rules (SEARCH column RULES, D-120), read
+(queries of 2 characters or more, D-236; a context from 3). A layer's query rules (SEARCH column RULES, D-120), read
 once at open, add: a trailing unit-type abbreviation that some layer names is cut from the name,
 and the rows of that type (column UNIT) gain 20; the query's phonetic key 5; a native generic
 the query ends with, replaced by each of its Latin spellings and looked up loosely, 55; a

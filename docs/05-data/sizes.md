@@ -93,19 +93,20 @@ outlines (4.8 MB), the substring and search indexes (3.7 MB), the point-to-unit 
 
 ## Embedded layers built from profiles
 
-`forge embed --profile <name>` (D-214), lite, 2026-11-12, outlines snapped (D-229) and the admin index at 64-edge leaves (D-230), Nepal's official names by code (D-232) and its spelling rule (D-233), 71 districts' official names (D-234). Per component, `tithipatra`'s wire bytes: point 1,035,391; elevation 229,894; admin 251,692; names 1,611,926; search 2,628,951; timezone 13,564; tz-rules 63,543; boundaries 2,025,380; admin-index 803,920; dem-coarse 517,996.
+`forge embed --profile <name>` (D-214), lite, 2026-11-12, outlines snapped (D-229) and the admin index at 64-edge leaves (D-230), Nepal's official names by code (D-232) and its spelling rule (D-233), 71 districts' official names (D-234), donor names and the f/ph, ee/i, oo/u spelling rules (D-236). Per component, `tithipatra`'s wire bytes: point 1,035,391; elevation 229,894; admin 251,692; names 1,603,020; search 2,633,052; timezone 13,564; tz-rules 63,543; boundaries 2,025,380; admin-index 803,920; dem-coarse 517,996.
 
 
 | Profile | Rows | Disk | Wire |
 |---|--:|--:|--:|
-| `baseline` (world part and Nepal's slice, with zone rules; the shipped file, byte for byte, D-231) | 39,395 | 4,992,200 | 3,645,898 |
-| `tithipatra` (world part with every city of 5,000, all of Nepal at 20 m; names in Devanagari Nepali, Hindi where Wikidata has no Nepali, and English, Nepal's gaps filled by the transliterator; zone rules for all 376 zones; the coarse DEM) | 170,892 | 14,708,564 | 9,206,057 |
-| `points-en` (points, heights, admin, English names and search; no outlines) | 39,395 | 1,837,692 | 1,177,583 |
+| `baseline` (world part and Nepal's slice, with zone rules; the shipped file, byte for byte, D-231) | 39,395 | 4,992,264 | 3,645,827 |
+| `tithipatra` (world part with every city of 5,000, all of Nepal at 20 m; names in Devanagari Nepali, Hindi where Wikidata has no Nepali, and English, Nepal's gaps filled by the transliterator; zone rules for all 376 zones; the coarse DEM) | 170,892 | 14,727,444 | 9,201,324 |
+| `points-en` (points, heights, admin, English names and search; no outlines) | 39,395 | 1,837,756 | 1,177,604 |
 
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-12 | Donor names, 641 more transliterated names and three spelling rules: `tithipatra` 9,206,057 → 9,201,324 B wire | D-236 |
 | 2026-11-12 | Outlines snapped to their level's decimal grid and 64-edge index leaves: `tithipatra` 10.30 → 9.21 MB wire, `baseline` 5.91 → 5.00 MB disk with zone rules | D-229 to D-231 |
 | 2026-11-11 | `tithipatra` with zone rules for its 376 zones: +63.6 kB wire | D-224 |
 | 2026-11-11 | `tithipatra` with Wikidata `ne`/`hi` labels on 13,724 world places: 8.69 MB wire (+0.41 MB) | D-221 |

@@ -183,6 +183,16 @@ fn a_name_is_found_from_the_middle_of_a_word() {
 }
 
 #[test]
+fn two_code_points_are_a_prefix() {
+    // A half-typed syllable lists its names while typing (TG-18, D-236): 2 code points, Latin
+    // or Devanagari (पो is one akshara), are a prefix (30); one is not.
+    let e = nepal(false);
+    assert_eq!(found(&e, "po"), [(POKHARA, 230)]);
+    assert_eq!(found(&e, "पो"), [(POKHARA, 230)]);
+    assert_eq!(serials(&e, "p"), Vec::<u64>::new());
+}
+
+#[test]
 fn an_exact_match_stays_first() {
     let e = nepal(true);
     // Pokhara exact (60 + 200) above Bhimpokhara from the middle (20 + 60).

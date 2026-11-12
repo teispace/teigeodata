@@ -46,8 +46,13 @@ const UNIT_BONUS: i32 = 20;
 const STRONG: i32 = FUZZY_BONUS - FUZZY_PER_EDIT;
 /// The prefix tier takes the best rows by importance (D-086).
 const PREFIX_K: usize = 16;
-/// The prefix tier runs from this many characters.
-const PREFIX_MIN: usize = 3;
+/// The prefix tier runs from this many characters (code points of the folded query): two, so
+/// a half-typed Brahmic syllable lists its names while typing (`हङ्` folds to `हं`, TG-18,
+/// D-236). Keystroke p99 on the `tithipatra` layer 72 → 286 µs, still a tenth of a frame on a
+/// low-end phone (G-phone).
+const PREFIX_MIN: usize = 2;
+/// A context ("Name, Parent") is matched as a prefix from this many characters (D-119).
+const CONTEXT_PREFIX_MIN: usize = 3;
 /// A substring match (D-199): below prefix (30) and one edit (25), above two edits (15) and
 /// phonetic (5). Not strong, so it never stops the unanchored fuzzy pass.
 #[cfg(feature = "substring")]
@@ -162,7 +167,7 @@ impl Engine {
     /// folded as the forge folds names; each layer scores its rows with the same formula
     /// (D-052): exact 60, loose 55, one edit 25 (queries of 4 to 63 characters, keys with the
     /// query's first letter; any first letter only when no layer has a visible match of one
-    /// edit or better), plus the best 16 by importance over every layer for a prefix of 3
+    /// edit or better), plus the best 16 by importance over every layer for a prefix of 2
     /// characters or more (30), each plus the row's importance. With the `substring` feature, a
     /// query of 3 or more code points without a space also takes the best 16 by importance over
     /// every layer that has the `substring` component whose name holds it inside a word (20;
@@ -447,7 +452,7 @@ impl Engine {
     }
 
     /// The tiers ranked by importance alone, over every layer: the best [`PREFIX_K`] rows
-    /// under a key starting with `q` (from 3 characters), and, with the `substring` feature,
+    /// under a key starting with `q` (from 2 characters), and, with the `substring` feature,
     /// the best [`SUBSTRING_K`] whose name holds `q` inside a word (one word, 3 code points or
     /// more, D-199). Only layers installed with `substring` have its section; the others add
     /// nothing to that tier.
@@ -723,7 +728,7 @@ fn context_rows(search: &Search<'_>, context: &str, out: &mut Vec<u32>) {
             }
         });
     }
-    if chars >= PREFIX_MIN {
+    if chars >= CONTEXT_PREFIX_MIN {
         for o in search.range(EXACT, context) {
             if out.len() >= CONTEXT_MAX {
                 break;

@@ -176,6 +176,10 @@ name = "measure"
 required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
 
 [[example]]
+name = "golden"
+required-features = ["names", "search", "derive"]
+
+[[example]]
 name = "phone"
 required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index", "derive"]
 

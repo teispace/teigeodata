@@ -99,6 +99,7 @@ packet loss; a host that ignores `If-Range`; a mirror that returns bad bytes.
 | ID | Measure | Gate |
 |---|---|---|
 | P1 | On a real layer: open, the first query of each kind, search a keystroke at a time (p50, p99, max), point queries (p99), `get` (p99), deriving SUBSTRING; each the minimum of rounds, scaled by the low-end phone factor (6.5); heap live, peak and while deriving | G-phone: each estimate within its target ([note](../02-research/notes/phone-class-bench.md) §3.3); `cargo run --release -p teigeodata-engine --all-features --example phone -- <layer.tgd>`, before each layer release |
+| P2 | A consumer's golden search cases on its layer, each with the app's options, SUBSTRING derived as on the device | G-golden-tithipatra: every case within its rank ([cases](../../tests/golden/consumers/tithipatra-search.tsv), D-236); `cargo run --release -p teigeodata-engine --all-features --example golden -- <cases.tsv> <layer.tgd>`, before each layer release |
 
 ### M: memory
 
