@@ -12,15 +12,15 @@ use teigeodata_format::elevation::Elevations as Heights;
 use teigeodata_format::hierarchy::{self, Hierarchy};
 use teigeodata_format::idmap::{self, IdMap};
 use teigeodata_format::iso_codes::IsoCodes;
-use teigeodata_format::names::{self, NameRecord, Names, TEXT_BUFFER};
+use teigeodata_format::names::{self, LanguageParts, NameRecord, NameSet, Names, TEXT_BUFFER};
 use teigeodata_format::place_index::{self, Neighbour, PlaceIndex};
 use teigeodata_format::places::{self, PlaceColumns, Places};
 use teigeodata_format::postal::{self, Postal};
 use teigeodata_format::redirects::{self, Fate, Redirects};
 use teigeodata_format::region::{self, Options, Region};
 use teigeodata_format::search::rules::{LEVEL_WORD, Rule};
-use teigeodata_format::search::{self, EXACT, Maps, Search};
-use teigeodata_format::{Bbox, Encoding, Kind, Pack, Tag, Writer};
+use teigeodata_format::search::{self, EXACT, Maps, Search, SearchSet};
+use teigeodata_format::{Bbox, Encoding, Kind, Pack, Part, Tag, Writer};
 use teigeodata_names::{SearchMap, fold, search_keys, substring_keys};
 
 use super::ids::{Assignment, Registry, assign};
@@ -110,6 +110,36 @@ fn importance(p: &Place) -> u8 {
     u8::try_from((base + pop).min(255)).unwrap_or(u8::MAX)
 }
 
+/// Whether `p` is a city whose name its first-level unit may share ([`below_their_city`]).
+fn is_city(p: &Place) -> bool {
+    p.kind == PlaceKind::Settlement && p.rank >= CITY_RANK && p.flags & places::FLAG_FORMER == 0
+}
+
+/// The exact keys that name a city, each with every row it names across the search parts'
+/// maps: all that [`below_their_city`] reads, without a union of every key.
+fn city_keys<'m>(rows: &[&Place], maps: &'m [Maps]) -> BTreeMap<&'m str, BTreeSet<u32>> {
+    let city = |r: &u32| {
+        usize::try_from(*r)
+            .ok()
+            .and_then(|r| rows.get(r))
+            .is_some_and(|p| is_city(p))
+    };
+    let mut out: BTreeMap<&str, BTreeSet<u32>> = maps
+        .iter()
+        .flat_map(|m| &m.exact)
+        .filter(|(_, set)| set.iter().any(city))
+        .map(|(k, _)| (k.as_str(), BTreeSet::new()))
+        .collect();
+    for m in maps {
+        for (k, set) in &mut out {
+            if let Some(rows) = m.exact.get(*k) {
+                set.extend(rows);
+            }
+        }
+    }
+    out
+}
+
 /// A first-level unit ranks just below a city of its own name that it holds (D-158): a search
 /// for "Tokyo", "Berlin" or "Seoul" means the city first, then the region (the order of the
 /// major geocoders); a region's base importance (90) is above a capital's (54 plus population).
@@ -117,9 +147,9 @@ fn importance(p: &Place) -> u8 {
 /// point source a duplicate (Nepal's golden set wants the municipality for "Damak" and
 /// "Kamalamai"). A city is a settlement of rank [`CITY_RANK`] or more; "its own name" is a
 /// shared exact search key; "holds" is the parent chain.
-fn below_their_city(
+fn below_their_city<'s>(
     rows: &[&Place],
-    exact: &BTreeMap<String, BTreeSet<u32>>,
+    sets: impl Iterator<Item = &'s BTreeSet<u32>>,
     importance: &mut [u8],
 ) {
     let row_of: BTreeMap<&str, usize> = rows
@@ -127,14 +157,10 @@ fn below_their_city(
         .enumerate()
         .map(|(i, p)| (p.key.as_str(), i))
         .collect();
-    for set in exact.values().filter(|s| s.len() > 1) {
+    for set in sets.filter(|s| s.len() > 1) {
         for &s in set {
             let s = usize::try_from(s).unwrap_or(usize::MAX);
-            let Some(city) = rows.get(s).filter(|p| {
-                p.kind == PlaceKind::Settlement
-                    && p.rank >= CITY_RANK
-                    && p.flags & places::FLAG_FORMER == 0
-            }) else {
+            let Some(city) = rows.get(s).filter(|p| is_city(p)) else {
                 continue;
             };
             let below = importance.get(s).map_or(0, |i| i.saturating_sub(1));
@@ -336,18 +362,23 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
     let (ids, moved, assigned) = ids_for(input, &rows)?;
     let idmap_body = idmap::encode(&ids).map_err(|e| e.to_string())?;
 
-    let (names_body, search_body, importance) =
-        name_sections(&rows, input.profile, &input.args.admin)?;
-    let substring_body = substring_section(&names_body, &importance)?;
+    // Names, search and substring by language (ADR-0040).
+    let named = name_sections(&rows, input.profile, &input.args.admin, true)?;
+    let substring = substring_sections(&named.names, &named.importance)?;
+    let mut parts: Vec<(Kind, Part, Vec<u8>)> = Vec::new();
+    for (kind, list) in [
+        (Kind::NAMES, named.names),
+        (Kind::SEARCH, named.search),
+        (Kind::SUBSTRING, substring),
+    ] {
+        parts.extend(list.into_iter().map(|(p, b)| (kind, p, b)));
+    }
     let index_body = place_index::encode(&points, NODE).map_err(|e| e.to_string())?;
 
     let mut sections: Vec<Body> = vec![
         (Kind::IDMAP, Encoding::TABLE, n as u64, idmap_body),
         (Kind::PLACES, Encoding::TABLE, n as u64, places_body),
         (Kind::HIERARCHY, Encoding::TABLE, n as u64, hierarchy_body),
-        (Kind::NAMES, Encoding::TABLE, n as u64, names_body),
-        (Kind::SEARCH, Encoding::TABLE, n as u64, search_body),
-        (Kind::SUBSTRING, Encoding::TABLE, n as u64, substring_body),
         (Kind::PLACE_INDEX, Encoding::TABLE, n as u64, index_body),
     ];
     let iso_codes = iso_section(input, &rows, &mut sections)?;
@@ -364,7 +395,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
         sections.push((Kind::REDIRECTS, Encoding::TABLE, moved.len() as u64, body));
     }
 
-    let (bytes, key) = assemble(input, &sections)?;
+    let (bytes, key) = assemble(input, &sections, &parts)?;
     // Read back from memory first: a pack that fails its checks is never written, and the
     // pack and its registry each replace the old file in one rename.
     let mut report = String::new();
@@ -383,8 +414,18 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
         ids_report(assigned, file, input, &mut report);
     }
     let _ = writeln!(report, "\n| Section | Bytes |\n|---|---:|");
-    for s in &sections {
-        let _ = writeln!(report, "| {} | {} |", s.0, s.3.len());
+    let mut listed: Vec<(Kind, Part, usize)> = sections
+        .iter()
+        .map(|s| (s.0, Part::BASE, s.3.len()))
+        .chain(parts.iter().map(|s| (s.0, s.1, s.2.len())))
+        .collect();
+    listed.sort_unstable();
+    for (kind, part, len) in listed {
+        if part.is_base() {
+            let _ = writeln!(report, "| {kind} | {len} |");
+        } else {
+            let _ = writeln!(report, "| {kind} `{part}` | {len} |");
+        }
     }
     let _ = writeln!(
         report,
@@ -518,11 +559,20 @@ fn ids_report(a: &Assignment, ids_file: &Path, input: &Input<'_>, report: &mut S
     );
 }
 
+/// The number of places of a pack's sections: PLACES' item count.
+fn input_rows(sections: &[Body]) -> u64 {
+    sections
+        .iter()
+        .find(|s| s.0 == Kind::PLACES)
+        .map_or(0, |s| s.2)
+}
+
 /// The pack file: the manifest (coverage box, build ID, `SOURCE_DATE_EPOCH`), the sections,
 /// and the signature when a key is given.
 fn assemble(
     input: &Input<'_>,
     sections: &[Body],
+    parts: &[(Kind, Part, Vec<u8>)],
 ) -> Result<(Vec<u8>, Option<ed25519_dalek::SigningKey>), String> {
     let mut w =
         Writer::new(input.address, "places", &input.args.release).map_err(|e| e.to_string())?;
@@ -564,12 +614,18 @@ fn assemble(
         None => None,
     };
     let signer = key.as_ref().map(teigeodata_format::signer);
-    let bodies: Vec<(Kind, Encoding, u64, &[u8])> = sections
+    let rows = input_rows(sections);
+    let bodies: Vec<(Kind, Part, Encoding, u64, &[u8])> = sections
         .iter()
-        .map(|s| (s.0, s.1, s.2, s.3.as_slice()))
+        .map(|s| (s.0, Part::BASE, s.1, s.2, s.3.as_slice()))
+        .chain(
+            parts
+                .iter()
+                .map(|s| (s.0, s.1, Encoding::TABLE, rows, s.2.as_slice())),
+        )
         .collect();
     let bytes = w
-        .pack(
+        .pack_parts(
             &bodies,
             signer.as_ref().map(|s| s as &teigeodata_format::Sign<'_>),
         )
@@ -613,47 +669,49 @@ pub(super) fn add_keys(
     });
 }
 
-/// The NAMES and SEARCH bodies, and each row's search importance.
-pub(super) type NameBodies = (Vec<u8>, Vec<u8>, Vec<u8>);
+/// The NAMES and SEARCH sections of a set of rows, each `(part, body)` in part order, the base
+/// part first; and each row's search importance.
+pub(super) struct NameParts {
+    pub(super) names: Vec<(Part, Vec<u8>)>,
+    pub(super) search: Vec<(Part, Vec<u8>)>,
+    pub(super) importance: Vec<u8>,
+}
 
-/// The NAMES and SEARCH bodies of the rows, and each row's search importance.
+/// The NAMES and SEARCH sections of the rows: one of each per language part when `split`
+/// (ADR-0040, [`LanguageParts`]), else the base part alone. A name's search keys go to its
+/// name's part; the base SEARCH part holds the importance, the query rules and the unit types,
+/// which every part shares. One part's records are in memory at a time; the search maps of all
+/// parts together hold what one unsplit map did.
 pub(super) fn name_sections(
     rows: &[&Place],
     profile: &Profile,
     admin_source: &str,
-) -> Result<NameBodies, String> {
-    let records: Vec<Vec<NameRecord<'_>>> = rows
-        .iter()
-        .map(|p| {
+    split: bool,
+) -> Result<NameParts, String> {
+    let langs = if split {
+        LanguageParts::of(rows.iter().map(|p| {
             p.names
                 .iter()
                 .filter(|n| fits(&n.text))
-                .map(|nm| {
-                    let (lang, script) = tags(nm);
-                    NameRecord {
-                        text: &nm.text,
-                        lang,
-                        script,
-                        kind: nm.kind,
-                        rule: nm.origin.code(),
-                        ..NameRecord::default()
-                    }
-                })
-                .collect()
-        })
-        .collect();
-    let refs: Vec<&[NameRecord<'_>]> = records.iter().map(Vec::as_slice).collect();
-    let names_body = names::encode(&refs).map_err(|e| e.to_string())?;
+                .map(|n| (tags(n).0, n.text.len()))
+        }))
+    } else {
+        LanguageParts::default()
+    };
+    let parts = langs.parts();
 
-    let mut maps = Maps::default();
+    let mut maps: Vec<Maps> = parts.iter().map(|_| Maps::default()).collect();
     for (row, p) in rows.iter().enumerate() {
         let row = u32::try_from(row).unwrap_or(u32::MAX);
-        for nm in &p.names {
-            add_keys(&mut maps, (&nm.text, nm.origin), row, profile);
+        for (i, nm, _) in placed(p, &langs) {
+            if let Some(m) = maps.get_mut(i) {
+                add_keys(m, (&nm.text, nm.origin), row, profile);
+            }
         }
     }
     let mut importance: Vec<u8> = rows.iter().map(|p| importance(p)).collect();
-    below_their_city(rows, &maps.exact, &mut importance);
+    let shared = city_keys(rows, &maps);
+    below_their_city(rows, shared.values(), &mut importance);
     let rules = query_rules(profile);
     let units: Vec<u8> = rows
         .iter()
@@ -667,28 +725,111 @@ pub(super) fn name_sections(
             if named { u } else { 0 }
         })
         .collect();
-    let extra = search::Extra {
+    let base = search::Extra {
         rules: (!rules.is_empty()).then_some(rules.as_slice()),
         units: if units.iter().any(|&u| u > 0) {
             &units
         } else {
             &[]
         },
+        part: false,
     };
-    let search_body =
-        search::encode_maps_with(&maps, &importance, &extra).map_err(|e| e.to_string())?;
+    let rest = search::Extra {
+        part: true,
+        ..search::Extra::default()
+    };
 
-    Ok((names_body, search_body, importance))
+    let mut out = NameParts {
+        names: Vec::with_capacity(parts.len()),
+        search: Vec::with_capacity(parts.len()),
+        importance: Vec::new(),
+    };
+    let (mut flat, mut ends): (Vec<NameRecord<'_>>, Vec<usize>) = (Vec::new(), Vec::new());
+    for (i, (&part, map)) in parts.iter().zip(&mut maps).enumerate() {
+        flat.clear();
+        ends.clear();
+        for p in rows {
+            flat.extend(
+                placed(p, &langs)
+                    .filter(|&(at, _, stored)| at == i && stored)
+                    .map(|(_, nm, _)| record(nm)),
+            );
+            ends.push(flat.len());
+        }
+        let refs: Vec<&[NameRecord<'_>]> = ends
+            .iter()
+            .scan(0, |start, &end| {
+                let r = flat.get(*start..end).unwrap_or_default();
+                *start = end;
+                Some(r)
+            })
+            .collect();
+        let (body, extra) = if part.is_base() {
+            (names::encode(&refs), &base)
+        } else {
+            (names::encode_part(&refs), &rest)
+        };
+        out.names.push((part, body.map_err(|e| e.to_string())?));
+        drop(refs);
+        // Each part's maps are freed once encoded.
+        let map = std::mem::take(map);
+        let body = search::encode_maps_with(&map, &importance, extra).map_err(|e| e.to_string())?;
+        out.search.push((part, body));
+    }
+    out.importance = importance;
+    Ok(out)
 }
 
-/// The SUBSTRING body of a NAMES body (D-199): the word suffixes of every name it holds,
-/// folded, with SEARCH's importance, through the format's one builder
+/// Each name of `p` with the index of its part in `langs.parts()` and whether it is stored
+/// (fits), in the place's order; the first stored name is the canonical one.
+fn placed<'p>(
+    p: &'p Place,
+    langs: &LanguageParts,
+) -> impl Iterator<Item = (usize, &'p super::PlaceName, bool)> {
+    let mut first = true;
+    let parts = langs.parts();
+    p.names.iter().map(move |nm| {
+        let stored = fits(&nm.text);
+        let part = langs.part_of(tags(nm).0, stored && first);
+        first &= !stored;
+        (parts.binary_search(&part).unwrap_or(0), nm, stored)
+    })
+}
+
+/// The record of a stored name.
+fn record(nm: &super::PlaceName) -> NameRecord<'_> {
+    let (lang, script) = tags(nm);
+    NameRecord {
+        text: &nm.text,
+        lang,
+        script,
+        kind: nm.kind,
+        rule: nm.origin.code(),
+        ..NameRecord::default()
+    }
+}
+
+/// The SUBSTRING section of each NAMES part (D-199, ADR-0040): the word suffixes of every name
+/// it holds, folded, with the base SEARCH's importance, through the format's one builder
 /// ([`search::substring_from_names`]), so a device that derives the index writes these bytes.
-pub(super) fn substring_section(names_body: &[u8], importance: &[u8]) -> Result<Vec<u8>, String> {
+pub(super) fn substring_sections(
+    names: &[(Part, Vec<u8>)],
+    importance: &[u8],
+) -> Result<Vec<(Part, Vec<u8>)>, String> {
     let n = importance.len() as u64;
-    let section = teigeodata_format::Section::unpacked(Kind::NAMES, n, names_body);
-    let names = Names::open(&section).map_err(|e| e.to_string())?;
-    search::substring_from_names(&names, importance, &substring_keys_of).map_err(|e| e.to_string())
+    names
+        .iter()
+        .map(|(part, body)| {
+            let section = teigeodata_format::Section::unpacked(Kind::NAMES, n, body);
+            let names = Names::open(&section).map_err(|e| e.to_string())?;
+            let built = if part.is_base() {
+                search::substring_from_names(&names, importance, &substring_keys_of)
+            } else {
+                search::substring_part_from_names(&names, importance, &substring_keys_of)
+            };
+            Ok((*part, built.map_err(|e| e.to_string())?))
+        })
+        .collect()
 }
 
 /// The substring keys of a name text: its fold's word suffixes (D-199).
@@ -801,6 +942,7 @@ fn verify(
     names.check().map_err(e)?;
     let search = Search::open(&section(Kind::SEARCH)?).map_err(e)?;
     search.check().map_err(e)?;
+    let parts_line = verify_name_parts(&p, rows)?;
     let index = PlaceIndex::open(&section(Kind::PLACE_INDEX)?, places).map_err(e)?;
     index.check().map_err(e)?;
 
@@ -830,6 +972,7 @@ fn verify(
         rows.len(),
         distinct.len(),
     );
+    let _ = writeln!(report, "\n{parts_line}");
     let _ = writeln!(report, "\n{substring_line}");
     if let Some(line) = tz_line {
         let _ = writeln!(report, "\n{line}");
@@ -866,6 +1009,57 @@ fn verify(
         let _ = writeln!(report, "\n{line}");
     }
     Ok(())
+}
+
+/// The NAMES and SEARCH parts read back (ADR-0040): every part passes `check`, every place
+/// keeps all its stored names across the NAMES parts, its canonical name first, and the parts
+/// of NAMES, SEARCH and SUBSTRING are the same.
+fn verify_name_parts(p: &Pack<'_>, rows: &[&Place]) -> Result<String, String> {
+    let e = |e: teigeodata_format::Error| e.to_string();
+    let names = NameSet::open(p.parts(Kind::NAMES)).map_err(e)?;
+    for n in names.parts() {
+        n.check().map_err(e)?;
+    }
+    let search = SearchSet::open(p.parts(Kind::SEARCH)).map_err(e)?;
+    let substring = SearchSet::open(p.parts(Kind::SUBSTRING)).map_err(e)?;
+    for s in search.parts().iter().chain(substring.parts()) {
+        s.check().map_err(e)?;
+    }
+    let keys = |k: Kind| p.parts(k).map(|s| s.part()).collect::<Vec<_>>();
+    let parts = keys(Kind::NAMES);
+    if keys(Kind::SEARCH) != parts || keys(Kind::SUBSTRING) != parts {
+        return Err("NAMES, SEARCH and SUBSTRING are split into different parts".into());
+    }
+    let mut buf = [0_u8; TEXT_BUFFER];
+    for (row, place) in rows.iter().enumerate() {
+        let want: Vec<&str> = place
+            .names
+            .iter()
+            .filter(|n| fits(&n.text))
+            .map(|n| n.text.as_str())
+            .collect();
+        let got: Vec<String> = names
+            .names(row)
+            .map(|n| n.text(&mut buf).map(str::to_owned))
+            .collect::<Result<_, _>>()
+            .map_err(e)?;
+        let mut sorted = want.clone();
+        sorted.sort_unstable();
+        let mut have: Vec<&str> = got.iter().map(String::as_str).collect();
+        have.sort_unstable();
+        if have != sorted || got.first().map(String::as_str) != want.first().copied() {
+            return Err(format!(
+                "{}: its names across the NAMES parts differ from the input",
+                place.key
+            ));
+        }
+    }
+    let list: Vec<String> = parts.iter().map(ToString::to_string).collect();
+    Ok(format!(
+        "Names by language (ADR-0040): {} parts ({}); every place keeps all its names across them, its canonical name first in the base part.",
+        parts.len(),
+        list.join(", ")
+    ))
 }
 
 /// SUBSTRING read back (D-199): `check`, SEARCH's importance row for row, and every place found
@@ -1397,7 +1591,7 @@ mod tests {
             "the municipality first without the rule"
         );
         let mut after = before.clone();
-        below_their_city(&refs, &exact, &mut after);
+        below_their_city(&refs, exact.values(), &mut after);
         assert_eq!(after[0], before[2] - 1, "the region just below its capital");
         assert_eq!(
             after[1..],

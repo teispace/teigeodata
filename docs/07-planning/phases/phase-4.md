@@ -334,12 +334,12 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   - [x] 1. Section parts in the format: the table's `part` key, (kind, part) order, block
     hashes by part, reader and writer refusals; packs without parts unchanged (D-246,
     2026-11-12)
-  - [ ] 2. Names and search by language: the forge writes NAMES, SEARCH and SUBSTRING parts
-    (base: canonical and undetermined names; a part per language of 16 KiB or more; `*` for
-    the rest); the engine reads every installed part, a row scored once at its best tier;
-    gates: golden lite and G-golden-tithipatra unchanged with every part, English-only
-    installs pass the English cases; `pack-sizes --langs` matches `ne-Deva` by its primary
-    subtag
+  - [x] 2. Names and search by language: the forge writes NAMES, SEARCH and SUBSTRING parts
+    (base: canonical and undetermined names; a part per language of 128 KiB or more, measured
+    against 16 KiB; `*` for the rest); the engine reads every installed part, a row scored
+    once at its best tier; golden lite and G-golden-tithipatra unchanged with every part;
+    `pack-sizes --langs` matches `ne-Deva` by its primary subtag (D-248, 2026-11-12). The
+    English-only install gate moves to step 5, with installs of parts
   - [ ] 3. Outlines by admin level group: ARCS by the coarsest level using each arc,
     POLYGONS and POLY_INDEX by level, `ADMIN_REGION` per deepest level; `admin_at` down to
     level *k* equals the full chain cut at *k* (the G-tz-layer method)
@@ -476,3 +476,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-12 | 4.9c: TG-14, a unit's type word cut and read in queries; the 38 renamed local levels named | D-242 to D-244 |
 | 2026-11-12 | 4.9c: zones at a point on the embedded layer by its units, no REGION; gate G-tz-layer | D-245 |
 | 2026-11-12 | 4.9c: everything separable planned in five steps; step 1, section parts in the format | D-246 |
+| 2026-11-12 | 4.9c: step 2, names and search by language; a language's part from 128 KiB, not 16 KiB (measured); the English-only gate moves to step 5 | D-248 |

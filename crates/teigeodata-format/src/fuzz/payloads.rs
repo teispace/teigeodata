@@ -771,6 +771,7 @@ fn search_case(c: &mut Cursor<'_>, structured: bool) {
     let extra = search::Extra {
         rules: with_rules.then_some(&rules[..]),
         units: if with_rules { &units } else { &[] },
+        part: false,
     };
     if structured {
         body = search::encode_with(&model, &importance, &extra)

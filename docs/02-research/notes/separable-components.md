@@ -31,8 +31,8 @@ signed file, verified ranged installs, and no cost to clients that take everythi
   POLY_INDEX `(level group, 0)`; for `ADMIN_REGION` `(deepest level, level of detail)`.
 - **Names and search by language.** The base part keeps every place's canonical name and the
   names with no language, and the search keys of those names with the importance, rules and
-  unit columns. A language whose names reach 16 KiB of text (one hash block) gets its own
-  NAMES and SEARCH part; the rest share one part keyed `*`. A client that wants a language
+  unit columns. A language whose names reach 128 KiB of text gets its own NAMES and SEARCH
+  part (16 KiB, one hash block, was the first plan; see §7); the rest share one part keyed `*`. A client that wants a language
   takes its part, or the `*` part when the language has none.
 - **Outlines by level and level of detail.** Arcs are grouped by the coarsest admin level that
   uses them (an arc counts once), and each group is stored at each level of detail the build
@@ -136,7 +136,11 @@ Proof each step must give:
 - The `*` part mixes languages: a client that wants one rare language takes all rare ones
   (at most a few hundred kB on Nepal).
 - Search ranking across parts: a row found by keys in two parts must score once, at its best
-  tier. Step 2's golden runs prove it.
+  tier. Step 2's golden runs prove it: golden lite unchanged class by class (D-248).
+- **Every part held costs its own lookups** (measured with step 2, D-248, Nepal lite, every
+  part held): 8 parts at a 16 KiB threshold, search p50 6.8 → 13.0 µs; 3 parts at 128 KiB,
+  7.2 → 11.1 µs. Hence 128 KiB. A per-part filter (skip a part with no key of the query's first
+  character) would cut the rest; a client holding fewer parts pays less.
 - Full copies per level of detail grow the release asset and the host's storage; measure with
   step 4 and drop a level that no profile or client asks for.
 - The head limit caps parts at about 190 sections per pack; the writer and the reader already

@@ -107,6 +107,35 @@ impl<'a> Search<'a> {
     /// [`Error::Payload`] if the section is not a SEARCH column table, or a column is missing,
     /// malformed or of the wrong length.
     pub fn open(section: &Section<'a>) -> Result<Self, Error> {
+        if !section.part().is_base() {
+            return Err(fail(
+                section.kind(),
+                0,
+                "a part other than the base opens with its base part (Search::open_part)",
+            ));
+        }
+        Self::open_with(section, None)
+    }
+
+    /// Opens a part other than the base of SEARCH or SUBSTRING (ADR-0040): its keys and lists,
+    /// with the importance of `base`, the kind's base part, which it does not repeat. A part has
+    /// no query rules or unit types of its own; a reader takes the base's.
+    ///
+    /// # Errors
+    /// As [`Search::open`], and if the part holds an importance, rules or unit column, or its
+    /// row count differs from the base's.
+    pub fn open_part(section: &Section<'a>, base: &Self) -> Result<Self, Error> {
+        if section.kind() != base.kind || section.item_count() != base.rows as u64 {
+            return Err(fail(
+                section.kind(),
+                0,
+                "a part's kind or row count differs from its base part's",
+            ));
+        }
+        Self::open_with(section, Some(base.importance))
+    }
+
+    fn open_with(section: &Section<'a>, base: Option<Packed<'a>>) -> Result<Self, Error> {
         let kind = if section.kind() == Kind::SUBSTRING {
             Kind::SUBSTRING
         } else {
@@ -155,7 +184,20 @@ impl<'a> Search<'a> {
             .and_then(|v| usize::try_from(v).ok())
             .ok_or(fail(STARTS, "the list starts are empty"))?;
         let ids = columns::required(&t, kind, IDS, Some(entries))?;
-        let importance = columns::required(&t, kind, IMPORTANCE, Some(rows))?;
+        let importance = match base {
+            None => columns::required(&t, kind, IMPORTANCE, Some(rows))?,
+            Some(imp) => {
+                if t.ids()
+                    .any(|id| id == IMPORTANCE || id == RULES || id == UNIT)
+                {
+                    return Err(fail(
+                        IMPORTANCE,
+                        "a part repeats its base part's importance, rules or unit types",
+                    ));
+                }
+                imp
+            }
+        };
         let block_max = columns::required(&t, kind, BLOCK_MAX, Some(keys.div_ceil(BLOCK)))?;
         let fst =
             Fst::new(bytes, keys32).ok_or(fail(AUTOMATON, "the automaton's root is malformed"))?;
@@ -422,6 +464,43 @@ impl<'a> Search<'a> {
     }
 }
 
+/// The SEARCH (or SUBSTRING) parts a reader has (ADR-0040): the base part, with the rows'
+/// importance, the query rules and the unit types, then each other part's keys and lists.
+#[derive(Clone, Debug, Default)]
+pub struct SearchSet<'a> {
+    parts: alloc::vec::Vec<Search<'a>>,
+}
+
+impl<'a> SearchSet<'a> {
+    /// The set of `sections`, parts of one kind in table order, the base part first.
+    ///
+    /// # Errors
+    /// As [`Search::open`] and [`Search::open_part`].
+    pub fn open(sections: impl IntoIterator<Item = Section<'a>>) -> Result<Self, Error> {
+        let mut parts: alloc::vec::Vec<Search<'a>> = alloc::vec::Vec::new();
+        for s in sections {
+            let opened = match parts.first() {
+                None => Search::open(&s)?,
+                Some(base) => Search::open_part(&s, base)?,
+            };
+            parts.push(opened);
+        }
+        Ok(Self { parts })
+    }
+
+    /// The base part: importance, rules and unit types.
+    #[must_use]
+    pub fn base(&self) -> Option<&Search<'a>> {
+        self.parts.first()
+    }
+
+    /// Every part, the base first.
+    #[must_use]
+    pub fn parts(&self) -> &[Search<'a>] {
+        &self.parts
+    }
+}
+
 /// Whether `key` is a SUBSTRING key: the tag, then [`SUBSTRING_MIN`] or more code points of
 /// UTF-8.
 fn substring_key(key: &[u8]) -> bool {
@@ -446,7 +525,7 @@ fn tagged<'b>(buf: &'b mut [u8; fst::MAX_KEY], tag: u8, key: &str) -> Option<&'b
 #[cfg(feature = "write")]
 pub use write::{
     Extra, Maps, SubstringKeys, encode, encode_maps, encode_maps_with, encode_substring,
-    encode_with, substring_from_names, tagged_keys,
+    encode_with, substring_from_names, substring_part_from_names, tagged_keys,
 };
 
 #[cfg(feature = "write")]
@@ -494,6 +573,9 @@ mod write {
         pub rules: Option<&'r [super::rules::Rule<'r>]>,
         /// Each row's unit type (0 = none); empty leaves UNIT out.
         pub units: &'r [u8],
+        /// A part other than the base (ADR-0040): IMPORTANCE is left out, its reader borrows
+        /// the base part's ([`Search::open_part`](super::Search::open_part)); no rules or units.
+        pub part: bool,
     }
 
     /// As [`encode_maps`], with the optional columns.
@@ -654,6 +736,32 @@ mod write {
         importance: &[u8],
         keys: &SubstringKeys<'_>,
     ) -> Result<Vec<u8>, Error> {
+        substring_with(names, importance, keys, &Extra::default())
+    }
+
+    /// [`substring_from_names`] for a NAMES part other than the base (ADR-0040): the SUBSTRING
+    /// part of the same language, which borrows the base part's importance.
+    ///
+    /// # Errors
+    /// As [`substring_from_names`].
+    pub fn substring_part_from_names(
+        names: &crate::names::Names<'_>,
+        importance: &[u8],
+        keys: &SubstringKeys<'_>,
+    ) -> Result<Vec<u8>, Error> {
+        let part = Extra {
+            part: true,
+            ..Extra::default()
+        };
+        substring_with(names, importance, keys, &part)
+    }
+
+    fn substring_with(
+        names: &crate::names::Names<'_>,
+        importance: &[u8],
+        keys: &SubstringKeys<'_>,
+        extra: &Extra<'_>,
+    ) -> Result<Vec<u8>, Error> {
         // Each distinct key once, and a flat (key, row) pair per key a name gives: a few bytes a
         // pair instead of a set per key, then one sort (D-235).
         let mut ids = Interner::default();
@@ -716,7 +824,7 @@ mod write {
             key.extend_from_slice(text.as_bytes());
             (key, g.iter().map(|p| p.1))
         });
-        encode_entries(texts.len(), entries, importance, &Extra::default())
+        encode_entries(texts.len(), entries, importance, extra)
     }
 
     /// Encodes a SEARCH body: `keys` maps each tagged key (tag byte, then the folded text) to
@@ -759,6 +867,11 @@ mod write {
         importance: &[u8],
         extra: &Extra<'_>,
     ) -> Result<Vec<u8>, Error> {
+        if extra.part && (extra.rules.is_some() || !extra.units.is_empty()) {
+            return Err(Error::Write(
+                "a search part takes its rules and unit types from its base part",
+            ));
+        }
         let rules = extra.rules.map(super::rules::encode).transpose()?;
         let named = rules
             .as_deref()
@@ -811,13 +924,15 @@ mod write {
             .map_err(|_| Error::Write("the search automaton is too large"))?;
         automaton.resize(automaton.len().next_multiple_of(4), 0);
         let imp: Vec<u32> = importance.iter().map(|&v| u32::from(v)).collect();
-        let cols = [
+        let mut cols = alloc::vec![
             (LENGTH, encode_direct(&[len])),
             (STARTS, pack(&starts, Coding::Delta)),
             (IDS, encode_direct(&ids)),
-            (IMPORTANCE, encode_direct(&imp)),
             (BLOCK_MAX, encode_direct(&block_max)),
         ];
+        if !extra.part {
+            cols.push((IMPORTANCE, encode_direct(&imp)));
+        }
         let units: Vec<u32> = extra.units.iter().map(|&u| u32::from(u)).collect();
         let units = (!units.is_empty()).then(|| encode_direct(&units));
         let mut with: Vec<(u16, Codec, &[u8])> = cols

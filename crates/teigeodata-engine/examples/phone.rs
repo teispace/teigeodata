@@ -38,7 +38,7 @@ use std::time::{Duration, Instant};
 use common::{Model, Rng};
 use teigeodata_core::{E6, E7, Point};
 use teigeodata_engine::{Engine, Layer, LayerOptions, Scratch};
-use teigeodata_format::Kind;
+use teigeodata_format::{Kind, Part};
 
 /// Live heap bytes and their peak.
 static LIVE: AtomicUsize = AtomicUsize::new(0);
@@ -131,14 +131,20 @@ fn main() {
     let model = Model::from_pack(&bytes);
     // The inputs a device derives SUBSTRING from: NAMES and SEARCH, as stored.
     let pack = teigeodata_format::Pack::open(&bytes).unwrap();
-    let inputs: Vec<(Kind, u64, Vec<u8>)> = [Kind::NAMES, Kind::SEARCH]
+    let inputs: Vec<(Kind, Part, u64, Vec<u8>)> = [Kind::NAMES, Kind::SEARCH]
         .into_iter()
-        .map(|k| {
-            let s = pack.section(k).expect("the layer has NAMES and SEARCH");
-            (k, s.item_count(), s.bytes().to_vec())
-        })
+        .flat_map(|k| pack.parts(k))
+        .map(|s| (s.kind(), s.part(), s.item_count(), s.bytes().to_vec()))
         .collect();
-    let shipped = pack.section(Kind::SUBSTRING).map(|s| s.bytes().to_vec());
+    assert!(
+        pack.section(Kind::NAMES).is_some() && pack.section(Kind::SEARCH).is_some(),
+        "the layer has NAMES and SEARCH"
+    );
+    let shipped: Option<Vec<(Part, Vec<u8>)>> = pack.section(Kind::SUBSTRING).map(|_| {
+        pack.parts(Kind::SUBSTRING)
+            .map(|s| (s.part(), s.bytes().to_vec()))
+            .collect()
+    });
     drop(bytes);
     let mut r = Rng(17);
     let n = 2_000;
@@ -283,13 +289,18 @@ fn main() {
     // A layer that ships SUBSTRING proves the derived bytes equal the forge's.
     if let Some(shipped) = &shipped {
         let ours = teigeodata_engine::derive::substring(&inputs).unwrap();
+        let len = |p: &[(Part, Vec<u8>)]| p.iter().map(|(_, b)| b.len()).sum::<usize>();
         assert!(
             ours == *shipped,
             "the derived SUBSTRING differs from the layer's ({} against {} bytes)",
-            ours.len(),
-            shipped.len()
+            len(&ours),
+            len(shipped)
         );
-        println!("derived SUBSTRING equals the layer's, {} bytes", ours.len());
+        println!(
+            "derived SUBSTRING equals the layer's, {} parts, {} bytes",
+            ours.len(),
+            len(&ours)
+        );
     }
     rows.push(("derive SUBSTRING".into(), derived));
 

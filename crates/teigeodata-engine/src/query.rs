@@ -638,7 +638,7 @@ impl Engine {
     fn names_of(
         &self,
         place: &Place,
-    ) -> Result<Option<&teigeodata_format::names::Names<'_>>, Error> {
+    ) -> Result<Option<&teigeodata_format::names::NameSet<'_>>, Error> {
         let Some(l) = self.layer(place.layer) else {
             return Ok(None);
         };

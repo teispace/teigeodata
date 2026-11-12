@@ -22,7 +22,7 @@ use std::process::ExitCode;
 
 use teigeodata_core::{E6, PlaceId, Point};
 use teigeodata_engine::{Engine, Focus, Hit, Layer, LayerOptions, Scratch, SearchOptions};
-use teigeodata_format::{Encoding, Kind, Pack, Tag, Writer};
+use teigeodata_format::{Encoding, Kind, Pack, Part, Tag, Writer};
 
 /// How many an app asks for unless a case says: the MVP listed 40 at most.
 const DEFAULT_K: usize = 40;
@@ -118,18 +118,16 @@ fn layer(path: &str) -> Result<(Layer, bool), String> {
             false,
         ));
     }
-    let inputs: Vec<(Kind, u64, Vec<u8>)> = [Kind::NAMES, Kind::SEARCH]
+    let inputs: Vec<(Kind, Part, u64, Vec<u8>)> = [Kind::NAMES, Kind::SEARCH]
         .into_iter()
-        .filter_map(|k| {
-            pack.section(k)
-                .map(|s| (k, s.item_count(), s.bytes().to_vec()))
-        })
+        .flat_map(|k| pack.parts(k))
+        .map(|s| (s.kind(), s.part(), s.item_count(), s.bytes().to_vec()))
         .collect();
     let derived = teigeodata_engine::derive::substring(&inputs)?;
     let rows = inputs
         .iter()
         .find(|i| i.0 == Kind::NAMES)
-        .map_or(0, |i| i.1);
+        .map_or(0, |i| i.2);
     let m = pack.manifest();
     let mut w = Writer::new(m.address(), m.component(), m.release()).map_err(|e| e.to_string())?;
     for (tag, value) in m.entries() {
@@ -137,13 +135,16 @@ fn layer(path: &str) -> Result<(Layer, bool), String> {
             w.manifest(tag, value).map_err(|e| e.to_string())?;
         }
     }
-    let mut sections: Vec<(Kind, Encoding, u64, &[u8])> = pack
+    let mut sections: Vec<(Kind, Part, Encoding, u64, &[u8])> = pack
         .sections()
         .filter(|s| s.kind() != Kind::BLOCK_HASHES)
-        .map(|s| (s.kind(), s.encoding(), s.item_count(), s.bytes()))
+        .map(|s| (s.kind(), s.part(), s.encoding(), s.item_count(), s.bytes()))
         .collect();
-    sections.push((Kind::SUBSTRING, Encoding::TABLE, rows, &derived));
-    let file = w.pack(&sections, None).map_err(|e| e.to_string())?;
+    for (part, body) in &derived {
+        sections.push((Kind::SUBSTRING, *part, Encoding::TABLE, rows, body));
+    }
+    sections.sort_by_key(|s| (s.0, s.1));
+    let file = w.pack_parts(&sections, None).map_err(|e| e.to_string())?;
     Ok((
         Layer::from_bytes(file, LayerOptions::default()).map_err(|e| e.to_string())?,
         true,

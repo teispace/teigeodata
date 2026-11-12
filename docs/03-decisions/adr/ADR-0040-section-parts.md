@@ -31,8 +31,10 @@ and byte ranges inside one section.
   reserved there.
 - Each part is a section: its own hash in the signed head, its own frames on the wire, its own
   block hashes past 1 MiB. Ranged, partial and delta installs need no new trust path.
-- A language gets its own part when its text reaches 16 KiB, one hash block; smaller ones share
-  the `*` part, which keeps the head under its 16 KiB limit.
+- A language gets its own part when its names other than canonical ones reach 128 KiB of text;
+  smaller ones share the `*` part, which keeps the head under its 16 KiB limit. (Planned at
+  16 KiB, one hash block; measured with step 2, D-248: every part held costs its own lookups, and
+  16 KiB gave Nepal 8 parts and twice the search time.)
 - Levels of detail are stored as full copies, one part per level, not as refinements.
 
 ## Consequences

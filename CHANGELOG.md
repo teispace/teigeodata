@@ -25,6 +25,22 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 - Section `SUBSTRING` (kind 23), the word-suffix keys in SEARCH's layout, and component
   `substring` (13); `search::encode_substring` and `teigeodata_names::substring_keys` (D-199).
+- Section parts (ADR-0040, D-246): a table entry's `part` key; `Pack::part`, `Pack::parts`,
+  `Writer::pack_parts`, `Part`.
+- Names and search by language (D-248): `names::LanguageParts`, `names::encode_part`,
+  `NameSet`, `Search::open_part`, `SearchSet`, `search::substring_part_from_names`.
+
+### Sync (`teigeodata-sync`)
+
+- `Store::derive` builds every part of a derived component; its `build` takes
+  `&[DeriveInput]` (kind, part, items, bytes) and returns `(Part, bytes)` per part.
+
+### Breaking
+
+- Country packs built from this version split NAMES, SEARCH and SUBSTRING by language. A reader
+  from 0.1.0 refuses them (it sees a non-zero reserved byte); upgrade the crates with the data.
+- `teigeodata_engine::derive::substring` takes `(Kind, Part, u64, Vec<u8>)` inputs and returns
+  one `(Part, bytes)` per NAMES part; `Store::derive`'s `build` likewise.
 
 ### Command line (`tgd`)
 

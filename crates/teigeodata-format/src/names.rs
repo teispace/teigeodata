@@ -18,6 +18,12 @@
 //! | 10 | [`TABLES`] | bytes: a count u32, then each FSST table, back to back | required |
 //! | 11 | [`HEAP`] | bytes: every record's codes, back to back, zero-padded to a multiple of 4 | required |
 //!
+//! **Parts** (ADR-0040): a pack may split NAMES by language. The base part holds every place's
+//! canonical name and its names with no language; each other part holds the names of one
+//! language (or of every language without a part of its own, [`Part::REST`]), and a place may
+//! have none there. [`LanguageParts`] is the one rule that makes the parts, and
+//! [`NameSet`] reads a place's names across the parts a reader has.
+//!
 //! Optional columns that are absent read as 0. [`Names::open`] checks the frame, every column's
 //! structure and length, and every table; [`Names::check`] also checks every value and that
 //! every text decodes to UTF-8. Reads never panic either way.
@@ -29,7 +35,7 @@ use teigeodata_core::bitpack::{Packed, unbias};
 use teigeodata_core::fsst::{FsstError, Symbols};
 use teigeodata_core::table::Table;
 
-use crate::{Error, Kind, Section, columns};
+use crate::{Error, Kind, Part, Section, columns};
 
 /// Each place's first record, and one past the last place's.
 pub const FIRST: u16 = 1;
@@ -286,6 +292,8 @@ fn fail(column: u16, problem: &'static str) -> Error {
 /// The NAMES section of an open pack.
 #[derive(Clone, Copy, Debug)]
 pub struct Names<'a> {
+    /// A part other than the base, whose places may have no records (ADR-0040).
+    part: bool,
     first: Packed<'a>,
     text_end: Packed<'a>,
     table: Packed<'a>,
@@ -326,6 +334,7 @@ impl<'a> Names<'a> {
             return Err(fail(0, "an unknown column"));
         }
         Ok(Self {
+            part: !section.part().is_base(),
             first,
             text_end,
             table,
@@ -415,7 +424,15 @@ impl<'a> Names<'a> {
         Ok((codes, table))
     }
 
-    /// Checks every value: places start at record 0, each has at least one record and they
+    /// Whether this is a part other than the base (ADR-0040): its places may have no records,
+    /// and its first record of a place is not the place's canonical name.
+    #[must_use]
+    pub const fn is_part(&self) -> bool {
+        self.part
+    }
+
+    /// Checks every value: places start at record 0, each has at least one record (none or
+    /// more in a part other than the base) and they
     /// end at the last; text spans increase and stay in the heap, whose padding is zero;
     /// tables, types and tags are valid; every text decodes to UTF-8. O(records).
     ///
@@ -424,7 +441,7 @@ impl<'a> Names<'a> {
     pub fn check(&self) -> Result<(), Error> {
         let mut prev = None;
         for f in self.first.values(0..self.first.len()) {
-            if prev.map_or(f != 0, |p| f <= p) {
+            if prev.map_or(f != 0, |p| f < p || (f == p && !self.part)) {
                 return Err(fail(
                     FIRST,
                     "places must start at record 0 and have records",
@@ -619,15 +636,30 @@ pub struct NameRecord<'v> {
 /// `i32::MIN`, or the section would pass 4 GiB.
 #[cfg(feature = "write")]
 pub fn encode(places: &[&[NameRecord<'_>]]) -> Result<alloc::vec::Vec<u8>, Error> {
+    if places.iter().any(|p| p.is_empty()) {
+        return Err(Error::Write("every place needs its canonical name"));
+    }
+    encode_records(places)
+}
+
+/// Encodes a NAMES part other than the base (ADR-0040, feature `write`): as [`encode`], but a
+/// place may have no records.
+///
+/// # Errors
+/// As [`encode`], except that a place may have none.
+#[cfg(feature = "write")]
+pub fn encode_part(places: &[&[NameRecord<'_>]]) -> Result<alloc::vec::Vec<u8>, Error> {
+    encode_records(places)
+}
+
+#[cfg(feature = "write")]
+fn encode_records(places: &[&[NameRecord<'_>]]) -> Result<alloc::vec::Vec<u8>, Error> {
     use alloc::vec::Vec;
     use teigeodata_core::bitpack::{bias, encode_auto, encode_direct};
     use teigeodata_core::table::{Codec, encode_with};
 
     let refuse = Error::Write;
     let records: Vec<&NameRecord<'_>> = places.iter().flat_map(|p| p.iter()).collect();
-    if places.iter().any(|p| p.is_empty()) {
-        return Err(refuse("every place needs its canonical name"));
-    }
     let (tables, group_of) = tables_for(&records);
 
     let mut heap = Vec::new();
@@ -755,4 +787,166 @@ fn tables_for(
     }
 
     (tables, group_of)
+}
+
+/// A language whose names hold at least this much text (UTF-8) gets a part of its own; the rest
+/// share [`Part::REST`] (ADR-0040): one hash block, so no part costs a request for less.
+pub const PART_MIN_TEXT: usize = 128 * 1024;
+
+/// The part a name record goes to, given the languages that have parts of their own: the base
+/// for a place's canonical name (`first`) and for a name with no language.
+#[must_use]
+pub fn part_of(lang: Option<Tag>, first: bool, own: &[Part]) -> Part {
+    let Some(code) = lang.filter(|_| !first) else {
+        return Part::BASE;
+    };
+    let p = Part(code.get());
+    if own.binary_search(&p).is_ok() {
+        p
+    } else {
+        Part::REST
+    }
+}
+
+/// The NAMES parts of a set of places, by language (ADR-0040): which languages have a part of
+/// their own, and every part that holds a name. The one rule of the forge, an embedded layer
+/// and a reader that needs to know where a language lives; it holds no names, so a writer
+/// builds one part at a time in memory bounded by that part.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LanguageParts {
+    own: alloc::vec::Vec<Part>,
+    parts: alloc::vec::Vec<Part>,
+}
+
+/// Every name in the base part: a section that is not split.
+impl Default for LanguageParts {
+    fn default() -> Self {
+        Self {
+            own: alloc::vec::Vec::new(),
+            parts: alloc::vec![Part::BASE],
+        }
+    }
+}
+
+impl LanguageParts {
+    /// The parts of `places`, each place's names as (language, text length), its canonical name
+    /// first: a language whose names other than the canonical ones reach [`PART_MIN_TEXT`] gets
+    /// its own part; the rest share [`Part::REST`]. The base part is always there.
+    pub fn of<P, N>(places: P) -> Self
+    where
+        P: IntoIterator<Item = N>,
+        N: IntoIterator<Item = (Option<Tag>, usize)>,
+    {
+        use alloc::collections::BTreeMap;
+        // A name with no language stays in the base part.
+        let mut text: BTreeMap<Part, usize> = BTreeMap::new();
+        for p in places {
+            for (lang, len) in p.into_iter().skip(1) {
+                if let Some(l) = lang {
+                    *text.entry(Part(l.get())).or_default() += len;
+                }
+            }
+        }
+        let own: alloc::vec::Vec<Part> = text
+            .iter()
+            .filter(|&(_, &n)| n >= PART_MIN_TEXT)
+            .map(|(&p, _)| p)
+            .collect();
+        let rest = text.values().any(|&n| n < PART_MIN_TEXT);
+        let mut parts = alloc::vec![Part::BASE];
+        parts.extend(own.iter().copied());
+        if rest {
+            parts.push(Part::REST);
+        }
+        parts.sort_unstable();
+        Self { own, parts }
+    }
+
+    /// Every part that holds a name, in part order, the base part first.
+    #[must_use]
+    pub fn parts(&self) -> &[Part] {
+        &self.parts
+    }
+
+    /// The part of a name in language `lang`; `first` for a place's canonical name.
+    #[must_use]
+    pub fn part_of(&self, lang: Option<Tag>, first: bool) -> Part {
+        part_of(lang, first, &self.own)
+    }
+
+    /// True when every name is in the base part: the section need not be split.
+    #[must_use]
+    pub fn is_whole(&self) -> bool {
+        self.parts.len() == 1
+    }
+}
+
+/// A place's names across the NAMES parts a reader has (ADR-0040): the base part first, whose
+/// first record of a place is its canonical name, then each other part in part order.
+#[derive(Clone, Debug, Default)]
+pub struct NameSet<'a> {
+    parts: alloc::vec::Vec<Names<'a>>,
+}
+
+impl<'a> NameSet<'a> {
+    /// The set of `sections`, NAMES parts in table order, the base part first.
+    ///
+    /// # Errors
+    /// As [`Names::open`]; [`Error::Payload`] if the first is not the base part or the parts'
+    /// place counts differ.
+    pub fn open(sections: impl IntoIterator<Item = Section<'a>>) -> Result<Self, Error> {
+        let mut parts = alloc::vec::Vec::new();
+        for s in sections {
+            let n = Names::open(&s)?;
+            if parts.is_empty() == n.is_part() {
+                return Err(fail(
+                    0,
+                    "the first NAMES part must be the base part, and only it",
+                ));
+            }
+            if parts
+                .first()
+                .is_some_and(|b: &Names<'_>| b.len() != n.len())
+            {
+                return Err(fail(FIRST, "the parts' place counts differ"));
+            }
+            parts.push(n);
+        }
+        Ok(Self { parts })
+    }
+
+    /// The base part.
+    #[must_use]
+    pub fn base(&self) -> Option<&Names<'a>> {
+        self.parts.first()
+    }
+
+    /// Every part, the base first.
+    #[must_use]
+    pub fn parts(&self) -> &[Names<'a>] {
+        &self.parts
+    }
+
+    /// The number of places.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.base().map_or(0, Names::len)
+    }
+
+    /// Whether there are no places.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// The names of place `row` across the parts, its canonical name first.
+    pub fn names(&self, row: usize) -> impl Iterator<Item = Name<'_, 'a>> + '_ {
+        self.parts.iter().flat_map(move |p| p.names(row))
+    }
+
+    /// The canonical name of place `row`.
+    #[must_use]
+    pub fn canonical(&self, row: usize) -> Option<Name<'_, 'a>> {
+        self.base().and_then(|b| b.canonical(row))
+    }
 }

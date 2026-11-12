@@ -1075,7 +1075,12 @@ fn sections(
         .iter()
         .map(|p| p.parent.as_deref().and_then(|k| row_of.get(k).copied()))
         .collect();
-    let (names, search, _) = name_sections(places, &Profile::default(), "")?;
+    // The world part stays whole: it is cut into layers, never downloaded by language.
+    let whole = name_sections(places, &Profile::default(), "", false)?;
+    let (names, search) = match (whole.names.as_slice(), whole.search.as_slice()) {
+        ([(_, n)], [(_, s)]) => (n.clone(), s.clone()),
+        _ => return Err("the world part's names are not one section".into()),
+    };
     let heights: Vec<Option<i16>> = rows.iter().map(|r| r.elevation.map(|e| e.0)).collect();
     let sources: Vec<Option<HeightSource>> =
         rows.iter().map(|r| r.elevation.map(|e| e.1)).collect();

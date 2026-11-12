@@ -10,7 +10,7 @@ use teigeodata_format::Kind;
 use teigeodata_format::idmap::IdMap;
 use teigeodata_format::places::Places;
 use teigeodata_format::search::fuzzy::{Fuzzy, MAX_CHARS};
-use teigeodata_format::search::{EXACT, LOOSE, MACHINE, PHONETIC, Search};
+use teigeodata_format::search::{EXACT, LOOSE, MACHINE, PHONETIC, Search, SearchSet};
 #[cfg(feature = "substring")]
 use teigeodata_format::search::{SUBSTRING, SUBSTRING_MIN};
 use teigeodata_names::KeyBuf;
@@ -253,7 +253,7 @@ impl Engine {
                 let (Some(search), Some(ids)) = (&v.search, &v.ids) else {
                     continue;
                 };
-                context_rows(search, &context, &mut s.context);
+                context_rows(search.parts(), &context, &mut s.context);
                 if !s.context.is_empty() {
                     l.ensure(Kind::HIERARCHY)?;
                 }
@@ -298,7 +298,7 @@ impl Engine {
     fn layer_hits(
         &self,
         i: usize,
-        search: &Search<'_>,
+        set: &SearchSet<'_>,
         ids: &IdMap<'_>,
         Query {
             q,
@@ -313,34 +313,42 @@ impl Engine {
         s: &mut Scratch,
     ) -> Result<bool, Error> {
         s.rows.clear();
-        rule_hits(
-            search,
-            rules,
-            q,
-            &mut s.rows,
-            (&mut s.form, &mut s.pkey, &mut s.keybuf),
-        );
-        let rows = &mut s.rows;
-        let add = |ordinal: Option<u32>, bonus: i32, rows: &mut Vec<(u32, i32)>| {
-            if let Some(o) = ordinal {
-                search.rows_of(o, |r| {
-                    rows.push((r, bonus));
+        let Some(base) = set.base() else {
+            return Ok(false);
+        };
+        // Every part's keys (ADR-0040); a row matched in several is kept once, at its best.
+        for search in set.parts() {
+            rule_hits(
+                search,
+                rules,
+                q,
+                &mut s.rows,
+                (&mut s.form, &mut s.pkey, &mut s.keybuf),
+            );
+            let rows = &mut s.rows;
+            let add = |ordinal: Option<u32>, bonus: i32, rows: &mut Vec<(u32, i32)>| {
+                if let Some(o) = ordinal {
+                    search.rows_of(o, |r| {
+                        rows.push((r, bonus));
+                        ControlFlow::Continue(())
+                    });
+                }
+            };
+            add(search.get(EXACT, q), EXACT_BONUS, rows);
+            add(search.get(MACHINE, q), MACHINE_BONUS, rows);
+            // A loose lookup reads the loose list and its exact twin (D-086).
+            add(search.get(LOOSE, loose), LOOSE_BONUS, rows);
+            add(search.get(EXACT, loose), LOOSE_BONUS, rows);
+            if let Some((f, anchor)) = fuzzy {
+                search.walk(EXACT, f, anchor, usize::MAX, |o, edits| {
+                    let bonus = FUZZY_BONUS - FUZZY_PER_EDIT * i32::from(edits);
+                    add(Some(o), bonus, rows);
                     ControlFlow::Continue(())
                 });
             }
-        };
-        add(search.get(EXACT, q), EXACT_BONUS, rows);
-        add(search.get(MACHINE, q), MACHINE_BONUS, rows);
-        // A loose lookup reads the loose list and its exact twin (D-086).
-        add(search.get(LOOSE, loose), LOOSE_BONUS, rows);
-        add(search.get(EXACT, loose), LOOSE_BONUS, rows);
-        if let Some((f, anchor)) = fuzzy {
-            search.walk(EXACT, f, anchor, usize::MAX, |o, edits| {
-                let bonus = FUZZY_BONUS - FUZZY_PER_EDIT * i32::from(edits);
-                add(Some(o), bonus, rows);
-                ControlFlow::Continue(())
-            });
         }
+        let rows = &mut s.rows;
+        let search = base;
         let me = index(i);
         rows.extend(
             s.prefix
@@ -467,7 +475,8 @@ impl Engine {
                 let (Some(search), Some(ids)) = (&v.search, &v.ids) else {
                     continue;
                 };
-                self.best_by_importance(i, search, ids, (EXACT, q), false, &mut s.prefix)?;
+                let parts = search.parts();
+                self.best_by_importance(i, parts, ids, (EXACT, q), false, &mut s.prefix)?;
             }
             s.prefix.sort_unstable_by(by_rank);
             s.prefix.truncate(PREFIX_K);
@@ -481,7 +490,8 @@ impl Engine {
                 };
                 l.ensure(Kind::SUBSTRING)?;
                 l.ensure(Kind::IDMAP)?;
-                self.best_by_importance(i, sub, ids, (SUBSTRING, q), true, &mut s.substring)?;
+                let parts = sub.parts();
+                self.best_by_importance(i, parts, ids, (SUBSTRING, q), true, &mut s.substring)?;
             }
             s.substring.sort_unstable_by(by_rank);
             s.substring.truncate(SUBSTRING_K);
@@ -498,7 +508,7 @@ impl Engine {
     fn best_by_importance(
         &self,
         i: usize,
-        search: &Search<'_>,
+        parts: &[Search<'_>],
         ids: &IdMap<'_>,
         (tag, q): (u8, &str),
         strict: bool,
@@ -508,69 +518,76 @@ impl Engine {
         let floor = Cell::new(-1_i32);
         let mut failed = None;
         let me = index(i);
-        search.best_in(
-            search.range(tag, q),
-            || floor.get(),
-            |o| {
-                search.rows_of(o, |r| {
-                    let importance = search.importance(r);
-                    if i32::from(importance) <= floor.get() {
-                        return ControlFlow::Break(());
-                    }
-                    let top = prefix.get(start..).unwrap_or_default();
-                    if top.iter().any(|p| p.row == r) {
-                        return ControlFlow::Continue(());
-                    }
-                    let Some(id) = ids.id(r as usize) else {
-                        return ControlFlow::Continue(());
-                    };
-                    let rank = |p: &PrefixCand| (p.importance, core::cmp::Reverse(p.id));
-                    let cand = PrefixCand {
-                        importance,
-                        id: id.get(),
-                        layer: me,
-                        row: r,
-                    };
-                    let full = top.len() == PREFIX_K;
-                    let worst = top
-                        .iter()
-                        .enumerate()
-                        .min_by_key(|(_, p)| rank(p))
-                        .map(|(j, p)| (j, rank(p)));
-                    if full && worst.is_some_and(|(_, w)| rank(&cand) <= w) {
-                        return ControlFlow::Continue(());
-                    }
-                    match self.claimed_above(i, id) {
-                        Ok(true) => return ControlFlow::Continue(()),
-                        Ok(false) => {}
-                        Err(e) => {
-                            failed = Some(e);
+        // Every part shares the base's importance (ADR-0040): one best list over them all, a
+        // row found in two parts counted once.
+        for search in parts {
+            search.best_in(
+                search.range(tag, q),
+                || floor.get(),
+                |o| {
+                    search.rows_of(o, |r| {
+                        let importance = search.importance(r);
+                        if i32::from(importance) <= floor.get() {
                             return ControlFlow::Break(());
                         }
-                    }
-                    if full && let Some((j, _)) = worst {
-                        prefix.swap_remove(start + j);
-                    }
-                    prefix.push(cand);
-                    if prefix.len() - start == PREFIX_K {
-                        let low = prefix
-                            .get(start..)
-                            .unwrap_or_default()
+                        let top = prefix.get(start..).unwrap_or_default();
+                        if top.iter().any(|p| p.row == r) {
+                            return ControlFlow::Continue(());
+                        }
+                        let Some(id) = ids.id(r as usize) else {
+                            return ControlFlow::Continue(());
+                        };
+                        let rank = |p: &PrefixCand| (p.importance, core::cmp::Reverse(p.id));
+                        let cand = PrefixCand {
+                            importance,
+                            id: id.get(),
+                            layer: me,
+                            row: r,
+                        };
+                        let full = top.len() == PREFIX_K;
+                        let worst = top
                             .iter()
-                            .map(|p| p.importance)
-                            .min()
-                            .unwrap_or(0);
-                        floor.set(i32::from(low) - i32::from(!strict));
+                            .enumerate()
+                            .min_by_key(|(_, p)| rank(p))
+                            .map(|(j, p)| (j, rank(p)));
+                        if full && worst.is_some_and(|(_, w)| rank(&cand) <= w) {
+                            return ControlFlow::Continue(());
+                        }
+                        match self.claimed_above(i, id) {
+                            Ok(true) => return ControlFlow::Continue(()),
+                            Ok(false) => {}
+                            Err(e) => {
+                                failed = Some(e);
+                                return ControlFlow::Break(());
+                            }
+                        }
+                        if full && let Some((j, _)) = worst {
+                            prefix.swap_remove(start + j);
+                        }
+                        prefix.push(cand);
+                        if prefix.len() - start == PREFIX_K {
+                            let low = prefix
+                                .get(start..)
+                                .unwrap_or_default()
+                                .iter()
+                                .map(|p| p.importance)
+                                .min()
+                                .unwrap_or(0);
+                            floor.set(i32::from(low) - i32::from(!strict));
+                        }
+                        ControlFlow::Continue(())
+                    });
+                    if failed.is_some() {
+                        ControlFlow::Break(())
+                    } else {
+                        ControlFlow::Continue(())
                     }
-                    ControlFlow::Continue(())
-                });
-                if failed.is_some() {
-                    ControlFlow::Break(())
-                } else {
-                    ControlFlow::Continue(())
-                }
-            },
-        );
+                },
+            );
+            if failed.is_some() {
+                break;
+            }
+        }
         failed.map_or(Ok(()), Err)
     }
 }
@@ -684,15 +701,26 @@ fn rule_hits(
     }
 }
 
-/// The rows of `search` whose names match `context` (folded): exactly, loosely, within
-/// [`CONTEXT_EDITS`] edits with the same first letter, or as a prefix of 3 characters or more; sorted, at most
-/// [`CONTEXT_MAX`]. Empty for an empty context.
-fn context_rows(search: &Search<'_>, context: &str, out: &mut Vec<u32>) {
+/// The rows of the search parts whose names match `context` (folded): exactly, loosely,
+/// within [`CONTEXT_EDITS`] edits with the same first letter, or as a prefix of 3 characters or
+/// more; sorted, at most [`CONTEXT_MAX`]. Empty for an empty context.
+fn context_rows(parts: &[Search<'_>], context: &str, out: &mut Vec<u32>) {
     out.clear();
     let context = context.trim();
     if context.is_empty() {
         return;
     }
+    for search in parts {
+        context_rows_in(search, context, out);
+    }
+    out.sort_unstable();
+    out.dedup();
+    out.truncate(CONTEXT_MAX);
+}
+
+/// Appends the rows of one search part that match `context` (trimmed, not empty), until `out`
+/// holds [`CONTEXT_MAX`].
+fn context_rows_in(search: &Search<'_>, context: &str, out: &mut Vec<u32>) {
     let take = |o: u32, out: &mut Vec<u32>| {
         search.rows_of(o, |r| {
             if out.len() >= CONTEXT_MAX {
@@ -736,8 +764,6 @@ fn context_rows(search: &Search<'_>, context: &str, out: &mut Vec<u32>) {
             take(o, out);
         }
     }
-    out.sort_unstable();
-    out.dedup();
 }
 
 /// `s` without spaces, in `buf` (the loose key's fold, D-086); `s` itself if it does not fit.
@@ -794,7 +820,7 @@ mod tests {
         let s = Search::open(&Section::unpacked(Kind::SEARCH, 5, &b)).unwrap();
         let mut out = Vec::new();
         let mut rows = |c: &str| {
-            context_rows(&s, c, &mut out);
+            context_rows(std::slice::from_ref(&s), c, &mut out);
             out.clone()
         };
         assert_eq!(rows("kathmandu"), [0]);
@@ -848,6 +874,7 @@ mod tests {
         let extra = search::Extra {
             rules: Some(&rules),
             units: &[0, 3, 0, 0, 0, 0],
+            part: false,
         };
         let b = search::encode_with(&keys, &[1; 6], &extra).unwrap();
         let s = Search::open(&Section::unpacked(Kind::SEARCH, 6, &b)).unwrap();
@@ -890,7 +917,7 @@ mod tests {
         let b = body(&refs, n as usize);
         let s = Search::open(&Section::unpacked(Kind::SEARCH, u64::from(n), &b)).unwrap();
         let mut out = Vec::new();
-        context_rows(&s, "kar", &mut out);
+        context_rows(std::slice::from_ref(&s), "kar", &mut out);
         assert_eq!(out.len(), CONTEXT_MAX);
         let mut buf = [0_u8; 256];
         assert_eq!(despace("a b  c", &mut buf), "abc");

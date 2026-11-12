@@ -31,7 +31,7 @@ use teigeodata_format::idmap::IdMap;
 #[cfg(feature = "admin")]
 use teigeodata_format::iso_codes::IsoCodes;
 #[cfg(feature = "names")]
-use teigeodata_format::names::Names;
+use teigeodata_format::names::NameSet;
 use teigeodata_format::place_index::PlaceIndex;
 #[cfg(feature = "timezone")]
 use teigeodata_format::place_tz::PlaceTz;
@@ -46,12 +46,12 @@ use teigeodata_format::redirects::Redirects;
 #[cfg(any(feature = "timezone-index", feature = "admin-index"))]
 use teigeodata_format::region::Region;
 #[cfg(feature = "search")]
-use teigeodata_format::search::Search;
-#[cfg(feature = "search")]
 use teigeodata_format::search::rules::Rule;
+#[cfg(feature = "search")]
+use teigeodata_format::search::{Search, SearchSet};
 #[cfg(feature = "tz-rules")]
 use teigeodata_format::tz_rules::TzRules;
-use teigeodata_format::{Bbox, Kind, Pack, release_cmp};
+use teigeodata_format::{Bbox, Kind, Pack, Part, release_cmp};
 #[cfg(feature = "search")]
 use teigeodata_names::PhoneticKey;
 
@@ -162,14 +162,13 @@ const NOT_BUILT: &[Component] = &[
 fn located_blocks<'a>(
     pack: &Pack<'a>,
     missing: Components,
-) -> Result<Vec<(Kind, Blocks<'a, 'static>)>, Error> {
+) -> Result<Vec<(Kind, Part, Blocks<'a, 'static>)>, Error> {
     let mut blocks = Vec::new();
-    // Base parts only: the engine reads no other part yet (ADR-0040, step 2).
-    for s in pack.sections().filter(|s| s.part().is_base()) {
+    for s in pack.sections() {
         if Component::of(s.kind()).is_some_and(|c| !missing.contains(c))
-            && let Some(b) = pack.locate_blocks(s.kind())?
+            && let Some(b) = pack.locate_part_blocks(s.kind(), s.part())?
         {
-            blocks.push((s.kind(), b));
+            blocks.push((s.kind(), s.part(), b));
         }
     }
     Ok(blocks)
@@ -193,14 +192,16 @@ pub(crate) struct Views<'a> {
     #[cfg(feature = "admin")]
     pub(crate) iso: Option<IsoCodes<'a>>,
     pub(crate) redirects: Option<Redirects<'a>>,
+    /// Every NAMES part (ADR-0040), the base first.
     #[cfg(feature = "names")]
-    pub(crate) names: Option<Names<'a>>,
+    pub(crate) names: Option<NameSet<'a>>,
+    /// Every SEARCH part, the base (importance, rules, unit types) first.
     #[cfg(feature = "search")]
-    pub(crate) search: Option<Search<'a>>,
-    /// Word-suffix keys for substring search (D-199); absent in a pack without them, or when
-    /// the layer was installed without the `substring` component.
+    pub(crate) search: Option<SearchSet<'a>>,
+    /// Word-suffix keys for substring search (D-199), every part; absent in a pack without
+    /// them, or when the layer was installed without the `substring` component.
     #[cfg(feature = "substring")]
-    pub(crate) substring: Option<Search<'a>>,
+    pub(crate) substring: Option<SearchSet<'a>>,
     /// SEARCH's query rules, read once here so a search decodes none of them (D-120).
     #[cfg(feature = "search")]
     pub(crate) rules: QueryRules<'a>,
@@ -230,7 +231,7 @@ pub(crate) struct Views<'a> {
     pub(crate) postal: Option<Postal<'a>>,
     /// The block hashes of every installed section of 1 MiB or more, located but not proved:
     /// each list is proved against its section hash on the section's first use (D-142).
-    pub(crate) blocks: Vec<(Kind, Blocks<'a, 'static>)>,
+    pub(crate) blocks: Vec<(Kind, Part, Blocks<'a, 'static>)>,
     /// The components the pack has sections of but that were not installed.
     pub(crate) missing: Components,
 }
@@ -278,14 +279,25 @@ impl<'a> Views<'a> {
         let redirects = get(Kind::REDIRECTS)
             .map(|s| Redirects::open(&s))
             .transpose()?;
+        // A split kind is read as every part it has (ADR-0040); its component installs them all.
         #[cfg(feature = "names")]
-        let names = get(Kind::NAMES).map(|s| Names::open(&s)).transpose()?;
+        let names = get(Kind::NAMES)
+            .map(|_| NameSet::open(pack.parts(Kind::NAMES)))
+            .transpose()?;
         #[cfg(feature = "search")]
-        let search = get(Kind::SEARCH).map(|s| Search::open(&s)).transpose()?;
+        let search = get(Kind::SEARCH)
+            .map(|_| SearchSet::open(pack.parts(Kind::SEARCH)))
+            .transpose()?;
         #[cfg(feature = "search")]
-        let rules = search.as_ref().map(QueryRules::new).unwrap_or_default();
+        let rules = search
+            .as_ref()
+            .and_then(SearchSet::base)
+            .map(QueryRules::new)
+            .unwrap_or_default();
         #[cfg(feature = "substring")]
-        let substring = get(Kind::SUBSTRING).map(|s| Search::open(&s)).transpose()?;
+        let substring = get(Kind::SUBSTRING)
+            .map(|_| SearchSet::open(pack.parts(Kind::SUBSTRING)))
+            .transpose()?;
         let place_index = match (get(Kind::PLACE_INDEX), places) {
             (Some(s), Some(p)) => Some(PlaceIndex::open(&s, p)?),
             _ => None,
@@ -567,7 +579,7 @@ impl Layer {
             for s in v.pack.sections().filter(|s| v.installed(s.kind())) {
                 s.verify()?;
             }
-            for (_, b) in &v.blocks {
+            for (_, _, b) in &v.blocks {
                 b.prove()?;
             }
         }
@@ -585,7 +597,7 @@ impl Layer {
         let memo = v
             .blocks
             .iter()
-            .map(|(_, b)| (0..b.memo_words()).map(|_| AtomicUsize::new(0)).collect())
+            .map(|(_, _, b)| (0..b.memo_words()).map(|_| AtomicUsize::new(0)).collect())
             .collect();
         let initial = if options.verify == Verify::Lazy {
             UNCHECKED
@@ -756,13 +768,20 @@ impl Layer {
             _ => {}
         }
         let v = self.views();
-        let ok = match v.blocks.iter().position(|(k, _)| *k == kind) {
-            Some(i) => {
-                let len = v.blocks.get(i).map_or(0, |(_, b)| b.len());
-                self.verify_blocks(i, 0..len).is_ok()
+        // Every part of the kind (ADR-0040): by its blocks past 1 MiB, else whole.
+        let ok = v.pack.parts(kind).all(|s| {
+            match v
+                .blocks
+                .iter()
+                .position(|(k, p, _)| (*k, *p) == (kind, s.part()))
+            {
+                Some(i) => {
+                    let len = v.blocks.get(i).map_or(0, |(_, _, b)| b.len());
+                    self.verify_blocks(i, 0..len).is_ok()
+                }
+                None => s.verify().is_ok(),
             }
-            None => v.pack.section(kind).is_none_or(|s| s.verify().is_ok()),
-        };
+        });
         slot.store(if ok { GOOD } else { BAD }, Atomic::Release);
         if ok {
             Ok(())
@@ -785,7 +804,11 @@ impl Layer {
         skip: core::ops::Range<usize>,
     ) -> Result<(), Error> {
         let v = self.views();
-        let Some(i) = v.blocks.iter().position(|(k, _)| *k == kind) else {
+        let Some(i) = v
+            .blocks
+            .iter()
+            .position(|(k, p, _)| *k == kind && p.is_base())
+        else {
             return self.ensure(kind);
         };
         let Some(slot) = usize::try_from(kind.0).ok().and_then(|k| self.state.get(k)) else {
@@ -797,7 +820,7 @@ impl Layer {
             MISSING => return Err(self.missing(kind)),
             _ => {}
         }
-        let len = v.blocks.get(i).map_or(0, |(_, b)| b.len());
+        let len = v.blocks.get(i).map_or(0, |(_, _, b)| b.len());
         // The blocks wholly inside `skip` are left; a block it shares with other bytes is not.
         let first = skip.start.div_ceil(BLOCK).min(len);
         let end = (skip.end / BLOCK).max(first).min(len);
@@ -827,7 +850,11 @@ impl Layer {
         }
         let section = v.pack.section(kind).ok_or(Error::Range)?;
         let out = section.bytes().get(range.clone()).ok_or(Error::Range)?;
-        match v.blocks.iter().position(|(k, _)| *k == kind) {
+        match v
+            .blocks
+            .iter()
+            .position(|(k, p, _)| *k == kind && p.is_base())
+        {
             Some(i) if !range.is_empty() => {
                 self.verify_blocks(i, range.start / BLOCK..(range.end - 1) / BLOCK + 1)?;
             }
@@ -840,7 +867,7 @@ impl Layer {
     /// Checks blocks `blocks` of covered section `i`, skipping those already checked.
     fn verify_blocks(&self, i: usize, blocks: core::ops::Range<usize>) -> Result<(), Error> {
         let v = self.views();
-        let (Some((kind, b)), Some(memo), Some(proof)) =
+        let (Some((kind, _, b)), Some(memo), Some(proof)) =
             (v.blocks.get(i), self.memo.get(i), self.proved.get(i))
         else {
             return Ok(());

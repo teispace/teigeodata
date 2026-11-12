@@ -158,6 +158,15 @@ parts. `Pack::section(kind)` is the base part; `Pack::part(kind, part)` and
 `Pack::parts(kind)` reach the rest. A pack without parts is byte for byte what it was before
 parts existed.
 
+**Names and search by language** (D-248): NAMES, SEARCH and SUBSTRING are split into the same
+parts. The base NAMES part holds each place's canonical name (its first record) and its names
+with no language; a language whose other names reach 128 KiB of text
+(`names::PART_MIN_TEXT`) has its own part, the rest share `*` (`names::LanguageParts` is the
+rule). A non-base NAMES part lists every place, some with no record. A non-base SEARCH or
+SUBSTRING part has no IMPORTANCE, RULES or UNIT column: it reads the base part's importance
+(`Search::open_part`), and rules and unit types are the base's. `NameSet` and `SearchSet` read
+across the parts present; a row found in several counts once.
+
 ### Components of a pack
 
 Each section belongs to one component (D-133, D-135), and a client chooses components, not

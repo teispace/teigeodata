@@ -29,14 +29,14 @@ use crate::elevation::{self, Elevations};
 use crate::hierarchy::{self, Hierarchy};
 use crate::idmap::{self, IdMap};
 use crate::iso_codes::{self, IsoCodes};
-use crate::names::{self, NameRecord, Names};
+use crate::names::{self, NameRecord, NameSet};
 use crate::place_index::{self, PlaceIndex};
 use crate::place_tz::{self, PlaceTz};
 use crate::places::{self, PlaceColumns, Places};
 use crate::poly_index::{self, PolyIndex, Rect};
 use crate::polygons::{self, PolygonInput, Polygons};
 use crate::region::{self, Options};
-use crate::search::{self, Search};
+use crate::search::{self, Search, SearchSet};
 use crate::{Encoding, Error, Kind, Pack};
 
 /// One section of the new pack: kind, encoding, item count, body.
@@ -294,13 +294,24 @@ impl<'a> Merged<'_, 'a> {
         kind: Kind,
         empty: T,
         open: impl Fn(&crate::Section<'a>) -> Result<S, Error>,
+        f: impl FnMut(&S, &Opened<'_, '_>, u32) -> Result<T, Error>,
+    ) -> Result<Vec<T>, Error> {
+        self.scatter_with(
+            |o| o.section(kind).as_ref().map(&open).transpose(),
+            empty,
+            f,
+        )
+    }
+
+    /// As [`Merged::scatter`], with what `open` makes of each pack, once (`None` where it has
+    /// nothing).
+    fn scatter_with<S, T: Clone>(
+        &self,
+        open: impl Fn(&Opened<'_, 'a>) -> Result<Option<S>, Error>,
+        empty: T,
         mut f: impl FnMut(&S, &Opened<'_, '_>, u32) -> Result<T, Error>,
     ) -> Result<Vec<T>, Error> {
-        let opened: Vec<Option<S>> = self
-            .open
-            .iter()
-            .map(|o| o.section(kind).as_ref().map(&open).transpose())
-            .collect::<Result<_, _>>()?;
+        let opened: Vec<Option<S>> = self.open.iter().map(open).collect::<Result<_, _>>()?;
         let mut out = vec![empty; self.total as usize];
         for (o, s) in self.open.iter().zip(&opened) {
             let Some(s) = s else { continue };
@@ -440,10 +451,16 @@ impl<'a> Merged<'_, 'a> {
         let k = u64::from(self.total);
         let mut out: Vec<Body> = Vec::new();
         let mut buf = vec![0_u8; 1 << 16];
-        let rows: Vec<Vec<OwnedName>> =
-            self.scatter_in(Kind::NAMES, Vec::new(), Names::open, |n, o, r| {
-                names_of(n, o, r, &mut buf)
-            })?;
+        // Every NAMES part of each pack (ADR-0040): the merge writes them as one section.
+        let rows: Vec<Vec<OwnedName>> = self.scatter_with(
+            |o| {
+                let has = o.section(Kind::NAMES).is_some();
+                has.then(|| NameSet::open(o.part.pack.parts(Kind::NAMES)))
+                    .transpose()
+            },
+            Vec::new(),
+            |n, o, r| names_of(n, o, r, &mut buf),
+        )?;
         if self.any(Kind::NAMES) {
             let recs: Vec<Vec<NameRecord<'_>>> = rows
                 .iter()
@@ -460,14 +477,19 @@ impl<'a> Merged<'_, 'a> {
         // Each part's unit types move past the earlier parts'.
         let mut shift = Vec::with_capacity(self.open.len());
         for o in &self.open {
-            let Some(s) = o.section(Kind::SEARCH) else {
+            let set = SearchSet::open(o.part.pack.parts(Kind::SEARCH))?;
+            let Some(s) = set.base() else {
                 shift.push(0);
                 continue;
             };
-            let s = Search::open(&s)?;
             shift.push(rules.add(s.rules())?);
             match o.part.names {
-                None => copy_keys(&s, &o.own_of, &mut keys)?,
+                // Every part's keys (ADR-0040), into the one SEARCH the merge writes.
+                None => {
+                    for p in set.parts() {
+                        copy_keys(p, &o.own_of, &mut keys)?;
+                    }
+                }
                 Some(rule) => {
                     let mut maps = search::Maps::default();
                     for &r in &o.own {
@@ -496,6 +518,7 @@ impl<'a> Merged<'_, 'a> {
         let extra = search::Extra {
             rules: (!rules.list.is_empty()).then_some(rules.list.as_slice()),
             units: &units,
+            part: false,
         };
         out.push((
             Kind::SEARCH,
@@ -534,7 +557,7 @@ impl<'a> Merged<'_, 'a> {
 
 /// The names of row `r` of part `o` that its rule keeps (the canonical always).
 fn names_of(
-    names: &Names<'_>,
+    names: &NameSet<'_>,
     o: &Opened<'_, '_>,
     r: u32,
     buf: &mut [u8],

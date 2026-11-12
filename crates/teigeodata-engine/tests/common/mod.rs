@@ -413,6 +413,7 @@ impl Model {
                 let extra = search::Extra {
                     rules: rules.as_deref(),
                     units: &self.units,
+                    part: false,
                 };
                 search::encode_with(&self.keys, &self.importance, &extra).unwrap()
             }));

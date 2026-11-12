@@ -250,9 +250,37 @@ impl Part {
     }
 }
 
+impl Part {
+    /// The language of a language part, as its primary subtag (`ne`); `None` for the base
+    /// part, [`Part::REST`] or any key that is not 2 to 4 packed ASCII lower-case letters.
+    #[must_use]
+    pub fn language_code(self) -> Option<[u8; 4]> {
+        let bytes = self.0.to_le_bytes();
+        let len = bytes.iter().position(|&b| b == 0).unwrap_or(4);
+        let (word, pad) = bytes.split_at(len);
+        (len >= 2 && word.iter().all(u8::is_ascii_lowercase) && pad.iter().all(|&b| b == 0))
+            .then_some(bytes)
+    }
+}
+
+/// `base`, `*` for [`Part::REST`], the language of a language part (`ne`), else the key in hex.
 impl fmt::Display for Part {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "part {:#x}", self.0)
+        if self.is_base() {
+            return f.write_str("base");
+        }
+        if *self == Self::REST {
+            return f.write_str("*");
+        }
+        match self.language_code() {
+            Some(code) => {
+                for b in code.iter().take_while(|&&b| b != 0) {
+                    write!(f, "{}", char::from(*b))?;
+                }
+                Ok(())
+            }
+            None => write!(f, "{:#x}", self.0),
+        }
     }
 }
 
@@ -270,7 +298,17 @@ impl Encoding {
 
 #[cfg(test)]
 mod tests {
-    use super::{KINDS, Kind};
+    use super::{KINDS, Kind, Part};
+
+    #[test]
+    fn a_part_names_its_language() {
+        use std::string::ToString;
+        assert_eq!(Part::BASE.to_string(), "base");
+        assert_eq!(Part::REST.to_string(), "*");
+        assert_eq!(Part::language("ne-Deva").unwrap().to_string(), "ne");
+        assert_eq!(Part::language("MAI").unwrap().to_string(), "mai");
+        assert_eq!(Part::outline(3, 1).to_string(), "0x103");
+    }
 
     #[test]
     fn every_kind_is_documented_with_its_number() {

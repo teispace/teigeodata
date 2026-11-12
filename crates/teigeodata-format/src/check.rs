@@ -28,7 +28,7 @@ use crate::postal::Postal;
 use crate::redirects::Redirects;
 use crate::region::Region;
 use crate::search::Search;
-use crate::{Error, Kind, Pack};
+use crate::{Error, Kind, Pack, Section};
 
 fn needs(kind: Kind, problem: &'static str) -> Error {
     Error::Payload {
@@ -89,7 +89,16 @@ pub fn sections(pack: &Pack<'_>, mut each: impl FnMut(Kind, Result<bool, Error>)
                     let ids = ids.ok_or(needs(kind, "no IDMAP to check against"))?;
                     Redirects::open(&s)?.check(&ids)?;
                 }
-                Kind::NAMES => Names::open(&s)?.check()?,
+                Kind::NAMES => {
+                    let n = Names::open(&s)?;
+                    n.check()?;
+                    one_per_place(kind, n.len())?;
+                }
+                Kind::SEARCH | Kind::SUBSTRING if !s.part().is_base() => {
+                    // A part borrows its base part's importance (ADR-0040).
+                    let base = get(kind).ok_or(needs(kind, "a part without its base part"))?;
+                    Search::open_part(&s, &Search::open(&base)?)?.check()?;
+                }
                 Kind::SEARCH | Kind::SUBSTRING => Search::open(&s)?.check()?,
                 Kind::PLACE_INDEX => {
                     let p = places
@@ -98,31 +107,6 @@ pub fn sections(pack: &Pack<'_>, mut each: impl FnMut(Kind, Result<bool, Error>)
                     PlaceIndex::open(&s, p)?.check()?;
                 }
                 Kind::REGION => Region::open(&s)?.check()?,
-                Kind::ADMIN_REGION => match &arcs {
-                    Some(a) => Region::open_on_arcs(&s, a)?.check()?,
-                    None => Region::open(&s)?.check()?,
-                },
-                Kind::ARCS => Arcs::open(&s)?.check()?,
-                Kind::ARCS_OVERVIEW => {
-                    let o = Arcs::open(&s)?;
-                    o.check()?;
-                    let full = arcs
-                        .as_ref()
-                        .ok_or(needs(kind, "no ARCS to check against"))?;
-                    o.check_overview(full)?;
-                }
-                Kind::POLYGONS => {
-                    let a = arcs.as_ref().ok_or(needs(kind, "no ARCS to draw from"))?;
-                    let r = rows.ok_or(needs(kind, "no PLACES to name units"))?;
-                    Polygons::open(&s)?.check(a, r)?;
-                }
-                Kind::POLY_INDEX => {
-                    let p = polygons
-                        .as_ref()
-                        .ok_or(needs(kind, "no POLYGONS to index"))?;
-                    let a = arcs.as_ref().ok_or(needs(kind, "no ARCS to index"))?;
-                    PolyIndex::open(&s, p)?.check(p, a)?;
-                }
                 Kind::POSTAL => {
                     let r = rows.ok_or(needs(kind, "no PLACES to count rows"))?;
                     Postal::open(&s, r)?.check()?;
@@ -135,10 +119,47 @@ pub fn sections(pack: &Pack<'_>, mut each: impl FnMut(Kind, Result<bool, Error>)
                     #[cfg(feature = "zstd")]
                     b.decoder()?.check()?;
                 }
-                _ => return Ok(false),
+                _ => return outlines(&s, arcs.as_ref(), polygons.as_ref(), rows),
             }
             Ok(true)
         })();
         each(kind, checked);
     }
+}
+
+/// Checks an outline section `s` (`ADMIN_REGION`, ARCS, `ARCS_OVERVIEW`, POLYGONS,
+/// `POLY_INDEX`) against the pack's ARCS, POLYGONS and row count: `Ok(false)` for any other
+/// kind.
+fn outlines(
+    s: &Section<'_>,
+    arcs: Option<&Arcs<'_>>,
+    polygons: Option<&Polygons<'_>>,
+    rows: Option<usize>,
+) -> Result<bool, Error> {
+    let kind = s.kind();
+    match kind {
+        Kind::ADMIN_REGION => match arcs {
+            Some(a) => Region::open_on_arcs(s, a)?.check()?,
+            None => Region::open(s)?.check()?,
+        },
+        Kind::ARCS => Arcs::open(s)?.check()?,
+        Kind::ARCS_OVERVIEW => {
+            let o = Arcs::open(s)?;
+            o.check()?;
+            let full = arcs.ok_or(needs(kind, "no ARCS to check against"))?;
+            o.check_overview(full)?;
+        }
+        Kind::POLYGONS => {
+            let a = arcs.ok_or(needs(kind, "no ARCS to draw from"))?;
+            let r = rows.ok_or(needs(kind, "no PLACES to name units"))?;
+            Polygons::open(s)?.check(a, r)?;
+        }
+        Kind::POLY_INDEX => {
+            let p = polygons.ok_or(needs(kind, "no POLYGONS to index"))?;
+            let a = arcs.ok_or(needs(kind, "no ARCS to index"))?;
+            PolyIndex::open(s, p)?.check(p, a)?;
+        }
+        _ => return Ok(false),
+    }
+    Ok(true)
 }

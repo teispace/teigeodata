@@ -25,7 +25,7 @@ use std::fs;
 
 use teigeodata_core::table::Table;
 use teigeodata_format::arcs::Arcs;
-use teigeodata_format::names::{NameRecord, Names, TEXT_BUFFER, Tag};
+use teigeodata_format::names::{NameRecord, NameSet, Names, TEXT_BUFFER, Tag};
 use teigeodata_format::places::Places;
 use teigeodata_format::polygons::Polygons;
 use teigeodata_format::{Encoding, Kind, Pack};
@@ -73,6 +73,15 @@ pub(crate) fn run(args: &[String]) -> Result<String, Vec<String>> {
     Ok(out)
 }
 
+/// A section's name in a report: its kind, and its part when not the base (ADR-0040).
+fn label(s: &teigeodata_format::Section<'_>) -> String {
+    if s.part().is_base() {
+        s.kind().to_string()
+    } else {
+        format!("{} `{}`", s.kind(), s.part())
+    }
+}
+
 /// Each column of each column-table section, largest first by its zstd bytes.
 fn columns(pack: &Pack<'_>, out: &mut String) {
     let mut rows = Vec::new();
@@ -82,16 +91,11 @@ fn columns(pack: &Pack<'_>, out: &mut String) {
         {
             for id in t.ids() {
                 if let Some(b) = t.column_bytes(id) {
-                    rows.push((s.kind().to_string(), id, b.len() as u64, zstd_len(b)));
+                    rows.push((label(&s), id, b.len() as u64, zstd_len(b)));
                 }
             }
         } else {
-            rows.push((
-                s.kind().to_string(),
-                0,
-                s.bytes().len() as u64,
-                zstd_len(s.bytes()),
-            ));
+            rows.push((label(&s), 0, s.bytes().len() as u64, zstd_len(s.bytes())));
         }
     }
     rows.sort_by(|a, b| b.3.cmp(&a.3).then_with(|| a.0.cmp(&b.0)));
@@ -104,6 +108,67 @@ fn columns(pack: &Pack<'_>, out: &mut String) {
     }
 }
 
+/// NAMES by part (ADR-0040), when split: each part's records and bytes.
+fn parts_table(pack: &Pack<'_>, names: &NameSet<'_>, out: &mut String) {
+    if names.parts().len() < 2 {
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "| Part | Records | Raw B | zstd B |\n|---|--:|--:|--:|"
+    );
+    for (s, n) in pack.parts(Kind::NAMES).zip(names.parts()) {
+        let _ = writeln!(
+            out,
+            "| `{}` | {} | {} | {} |",
+            s.part(),
+            n.records(),
+            s.bytes().len(),
+            zstd_len(s.bytes())
+        );
+    }
+    let _ = writeln!(out);
+}
+
+/// NAMES cut to the canonical name plus the languages `l`, measured.
+fn cut(
+    texts: &[Vec<(String, Option<Tag>, NameRecordOwned)>],
+    l: &[String],
+    places: usize,
+    out: &mut String,
+) -> Result<(), String> {
+    let records: Vec<Vec<NameRecord<'_>>> = texts
+        .iter()
+        .map(|p| {
+            p.iter()
+                .map(|(t, lang, o)| NameRecord {
+                    text: t,
+                    lang: *lang,
+                    script: o.script,
+                    kind: o
+                        .kind
+                        .and_then(teigeodata_format::names::NameType::from_code),
+                    valid_from: o.valid.0,
+                    valid_to: o.valid.1,
+                    rule: o.rule,
+                })
+                .collect()
+        })
+        .collect();
+    let refs: Vec<&[NameRecord<'_>]> = records.iter().map(Vec::as_slice).collect();
+    let cut = teigeodata_format::names::encode(&refs).map_err(|e| format!("NAMES cut: {e}"))?;
+    let _ = writeln!(
+        out,
+        "\nCut to the canonical name plus {}: {} records, {} B raw, {} B zstd 19, {:.1} B per place\n",
+        l.join(", "),
+        records.iter().map(Vec::len).sum::<usize>(),
+        cut.len(),
+        zstd_len(&cut),
+        cut.len() as f64 / places as f64
+    );
+    Ok(())
+}
+
 /// Names by language, and the section cut to `langs` plus each canonical name.
 fn names(
     pack: &Pack<'_>,
@@ -111,18 +176,25 @@ fn names(
     places: usize,
     out: &mut String,
 ) -> Result<(), String> {
-    let Some(section) = pack.section(Kind::NAMES) else {
+    if pack.section(Kind::NAMES).is_none() {
         return Ok(());
-    };
-    let names = Names::open(&section).map_err(|e| format!("NAMES: {e}"))?;
+    }
+    // Every part (ADR-0040): a place's names across them, its canonical name first.
+    let names = NameSet::open(pack.parts(Kind::NAMES)).map_err(|e| format!("NAMES: {e}"))?;
     // lang → (records, places with one, UTF-8 bytes)
     let mut by: BTreeMap<String, (u64, u64, u64)> = BTreeMap::new();
     // script → (records, places with one, UTF-8 bytes)
     let mut by_script: BTreeMap<String, (u64, u64, u64)> = BTreeMap::new();
     let mut texts: Vec<Vec<(String, Option<Tag>, NameRecordOwned)>> = Vec::new();
     let mut buf = [0_u8; TEXT_BUFFER];
-    let keep: Option<Vec<Tag>> =
-        langs.map(|l| l.iter().map(String::as_str).filter_map(Tag::new).collect());
+    // A profile names a language with its script (`ne-Deva`, D-215); NAMES keeps the primary
+    // subtag.
+    let keep: Option<Vec<Tag>> = langs.map(|l| {
+        l.iter()
+            .filter_map(|t| t.split(['-', '_']).next())
+            .filter_map(Tag::new)
+            .collect()
+    });
     for row in 0..names.len() {
         let mut seen: Vec<String> = Vec::new();
         let mut seen_script: Vec<String> = Vec::new();
@@ -170,47 +242,22 @@ fn names(
             texts.push(kept);
         }
     }
-    let total = section.bytes().len() as u64;
+    let total: u64 = pack
+        .parts(Kind::NAMES)
+        .map(|s| s.bytes().len() as u64)
+        .sum();
+    let zstd: u64 = pack.parts(Kind::NAMES).map(|s| zstd_len(s.bytes())).sum();
+    let records: usize = names.parts().iter().map(Names::records).sum();
     let _ = writeln!(
         out,
-        "\n### Names by language\n\nNAMES: {} records, {total} B raw, {} B zstd 19, {:.1} B per place\n\n\
-",
-        names.records(),
-        zstd_len(section.bytes()),
+        "\n### Names by language\n\nNAMES: {records} records, {total} B raw, {zstd} B zstd 19, {:.1} B per place\n",
         total as f64 / places as f64
     );
+    parts_table(pack, &names, out);
     tally(out, "Language", by, places);
     tally(out, "Script", by_script, places);
     if let Some(l) = langs {
-        let records: Vec<Vec<NameRecord<'_>>> = texts
-            .iter()
-            .map(|p| {
-                p.iter()
-                    .map(|(t, lang, o)| NameRecord {
-                        text: t,
-                        lang: *lang,
-                        script: o.script,
-                        kind: o
-                            .kind
-                            .and_then(teigeodata_format::names::NameType::from_code),
-                        valid_from: o.valid.0,
-                        valid_to: o.valid.1,
-                        rule: o.rule,
-                    })
-                    .collect()
-            })
-            .collect();
-        let refs: Vec<&[NameRecord<'_>]> = records.iter().map(Vec::as_slice).collect();
-        let cut = teigeodata_format::names::encode(&refs).map_err(|e| format!("NAMES cut: {e}"))?;
-        let _ = writeln!(
-            out,
-            "\nCut to the canonical name plus {}: {} records, {} B raw, {} B zstd 19, {:.1} B per place\n",
-            l.join(", "),
-            records.iter().map(Vec::len).sum::<usize>(),
-            cut.len(),
-            zstd_len(&cut),
-            cut.len() as f64 / places as f64
-        );
+        cut(&texts, l, places, out)?;
     }
     Ok(())
 }

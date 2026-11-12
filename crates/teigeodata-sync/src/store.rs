@@ -37,7 +37,10 @@ use std::io::{self, Read, Seek, Write};
 
 use serde_json::{Map, Value};
 use teigeodata_format::component::{Component, Components};
-use teigeodata_format::{Kind, PackHead};
+use teigeodata_format::{Kind, PackHead, Part, SectionEntry};
+
+/// One installed section a derive reads: its kind, part (ADR-0040), item count and bytes.
+pub type DeriveInput = (Kind, Part, u64, Vec<u8>);
 
 use crate::catalog::{self, Entry};
 use crate::fetch::{Asset, FetchError, Mirrors, Transport, install_from, update_from};
@@ -719,22 +722,23 @@ impl<D: Fs> Store<D> {
     /// Adds `component` to an installed pack by building it on the device from sections the
     /// pack already holds, instead of downloading it (D-213). `build` gets every installed
     /// section of the components it needs, each checked against its BLAKE3 hash in the head,
-    /// and returns the component's one section; the result must match the hash the head
-    /// lists for it, so a derived section is exactly the signed one. The new pack is written
+    /// and returns the component's sections, one per part the pack lists (ADR-0040); each must
+    /// match the hash the head lists for it, so a derived section is exactly the signed one. The new pack is written
     /// as an install writes one: staged under its new name (the old file is never written,
     /// so a reader that has it mapped is safe), synced, renamed into `packs/` and committed;
     /// the old file is retired. Already installed: nothing to do.
     ///
     /// # Errors
     /// [`StoreError::NotInstalled`]; [`StoreError::Derive`] when a needed component is not
-    /// installed, the component is not one section, the result does not match its hash, or
+    /// installed, the component is more than one kind, a part is missing or does not match its
+    /// hash, or
     /// the pack would need `BLOCK_HASHES` it does not hold (download then); [`StoreError::Io`].
     pub fn derive(
         &mut self,
         address: &str,
         component: &str,
         add: Component,
-        build: impl FnOnce(&[(Kind, u64, Vec<u8>)]) -> Result<Vec<u8>, String>,
+        build: impl FnOnce(&[DeriveInput]) -> Result<Vec<(Part, Vec<u8>)>, String>,
     ) -> Result<(), StoreError> {
         let derive = |why: &str| StoreError::Derive(why.to_owned());
         let r = self
@@ -762,29 +766,45 @@ impl<D: Fs> Store<D> {
                 "the pack would need BLOCK_HASHES, which only a download brings",
             ));
         }
-        let mut target = None;
+        // The component's sections: one kind, one or more parts (ADR-0040).
+        let mut targets = Vec::new();
         let mut inputs = Vec::new();
         for s in h.sections() {
             match Component::of(s.kind) {
                 Some(c) if c == add => {
-                    if target.replace(s).is_some() {
-                        return Err(derive("the component is more than one section"));
+                    if targets
+                        .first()
+                        .is_some_and(|t: &SectionEntry<'_>| t.kind != s.kind)
+                    {
+                        return Err(derive("the component is more than one kind"));
                     }
+                    targets.push(s);
                 }
                 Some(c) if needs.contains(c) => {
                     let bytes = read_checked(&mut old, &s)?
                         .ok_or_else(|| derive("an installed section does not match its hash"))?;
-                    inputs.push((s.kind, s.item_count, bytes));
+                    inputs.push((s.kind, s.part, s.item_count, bytes));
                 }
                 _ => {}
             }
         }
-        let target = target.ok_or_else(|| derive("the pack has no such section"))?;
-        let body = build(&inputs).map_err(StoreError::Derive)?;
-        if body.len() as u64 != target.length || blake3::hash(&body).as_bytes() != target.hash {
+        if targets.is_empty() {
+            return Err(derive("the pack has no such section"));
+        }
+        let bodies = build(&inputs).map_err(StoreError::Derive)?;
+        drop(inputs);
+        // Every part built, each equal to the bytes the signed head lists.
+        let same = bodies.len() == targets.len()
+            && targets.iter().all(|t| {
+                bodies.iter().any(|(p, b)| {
+                    *p == t.part
+                        && b.len() as u64 == t.length
+                        && blake3::hash(b).as_bytes() == t.hash
+                })
+            });
+        if !same {
             return Err(derive("the derived section does not match the pack's hash"));
         }
-        drop(inputs);
         let file = name_with(&r.file, r.set, set)?;
         let staging = alloc::format!("{STAGING}/{file}.part");
         let mut f = self.fs.open(&staging)?;
@@ -801,8 +821,12 @@ impl<D: Fs> Store<D> {
         }
         copy_range(&mut old, &mut f, footer, r.pack_len - footer)?;
         drop(old);
-        f.seek(io::SeekFrom::Start(target.offset))?;
-        f.write_all(&body)?;
+        for t in &targets {
+            if let Some((_, b)) = bodies.iter().find(|(p, _)| *p == t.part) {
+                f.seek(io::SeekFrom::Start(t.offset))?;
+                f.write_all(b)?;
+            }
+        }
         hollow(&mut f, r.pack_len, set)?;
         f.sync()?;
         drop(f);
@@ -948,10 +972,7 @@ impl<D: Fs> Store<D> {
 }
 
 /// A section's bytes, read from `f` and checked against its hash; `None` when they differ.
-fn read_checked<F: Read + Seek>(
-    f: &mut F,
-    s: &teigeodata_format::SectionEntry<'_>,
-) -> io::Result<Option<Vec<u8>>> {
+fn read_checked<F: Read + Seek>(f: &mut F, s: &SectionEntry<'_>) -> io::Result<Option<Vec<u8>>> {
     let len = usize::try_from(s.length).map_err(|_| invalid("a section's length"))?;
     let mut bytes = alloc::vec![0_u8; len];
     f.seek(io::SeekFrom::Start(s.offset))?;
@@ -1291,9 +1312,9 @@ mod derive_tests {
     use teigeodata_format::component::{Component, Components};
     use teigeodata_format::names::{self, NameRecord, Names};
     use teigeodata_format::search::{self, Search};
-    use teigeodata_format::{Encoding, Kind, Pack, Section, Writer};
+    use teigeodata_format::{Encoding, Kind, Pack, Part, Section, Writer};
 
-    use super::{Dir, JOURNAL, PACKS, Record, Store, StoreError, render, set_tag};
+    use super::{DeriveInput, Dir, JOURNAL, PACKS, Record, Store, StoreError, render, set_tag};
 
     /// Every suffix of 3 or more bytes of a lowercase ASCII name: the test's key rule.
     fn keys(text: &str, out: &mut dyn FnMut(&str)) {
@@ -1305,17 +1326,19 @@ mod derive_tests {
         }
     }
 
-    fn build(inputs: &[(Kind, u64, Vec<u8>)]) -> Result<Vec<u8>, String> {
+    fn build(inputs: &[DeriveInput]) -> Result<Vec<(Part, Vec<u8>)>, String> {
         let get = |k: Kind| inputs.iter().find(|i| i.0 == k).ok_or("missing");
         let (n, s) = (get(Kind::NAMES)?, get(Kind::SEARCH)?);
-        let names = Names::open(&Section::unpacked(Kind::NAMES, n.1, &n.2))
+        let names = Names::open(&Section::unpacked(Kind::NAMES, n.2, &n.3))
             .map_err(|e| alloc::format!("{e}"))?;
-        let search = Search::open(&Section::unpacked(Kind::SEARCH, s.1, &s.2))
+        let search = Search::open(&Section::unpacked(Kind::SEARCH, s.2, &s.3))
             .map_err(|e| alloc::format!("{e}"))?;
         let imp: Vec<u8> = (0..names.len())
             .map(|r| search.importance(r as u32))
             .collect();
-        search::substring_from_names(&names, &imp, &keys).map_err(|e| alloc::format!("{e}"))
+        let body =
+            search::substring_from_names(&names, &imp, &keys).map_err(|e| alloc::format!("{e}"))?;
+        Ok(alloc::vec![(Part::BASE, body)])
     }
 
     /// A pack of NAMES, SEARCH and SUBSTRING over a few places.
@@ -1348,10 +1371,12 @@ mod derive_tests {
         let search_body = search::encode(&map, &imp).unwrap();
         let n = texts.len() as u64;
         let sub = build(&[
-            (Kind::NAMES, n, names_body.clone()),
-            (Kind::SEARCH, n, search_body.clone()),
+            (Kind::NAMES, Part::BASE, n, names_body.clone()),
+            (Kind::SEARCH, Part::BASE, n, search_body.clone()),
         ])
-        .unwrap();
+        .unwrap()
+        .remove(0)
+        .1;
         Writer::new("zz", "places", "2026.11.0")
             .unwrap()
             .pack(
@@ -1428,7 +1453,7 @@ mod derive_tests {
         let err = st
             .derive("zz", "places", Component::Substring, |i| {
                 let mut b = build(i)?;
-                b[0] ^= 1;
+                b[0].1[0] ^= 1;
                 Ok(b)
             })
             .unwrap_err();
