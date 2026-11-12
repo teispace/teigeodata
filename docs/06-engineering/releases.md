@@ -72,7 +72,7 @@ comes first), data is released by hand as a GitHub pre-release (D-247):
    generic names (a profile's layer is published under a name for what it holds, such as
    `world-np-lite.tgd`), and no gate or doc of a consumer is cited.
 
-The first: [data-2026.11.12](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.12).
+The first: [data-2026.11.12](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.12). The latest: [data-2026.11.13](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.13), built from `ecb8561` for readers at `v0.2.0` (the Nepal pack with names by language and outline parts by level and level of detail); checked from a new project on `tag = "v0.2.0"`, which opened the published layer and answered `admin_at`.
 Once the catalog is live, data releases go through it and these pre-releases stop.
 
 ## Changelog
