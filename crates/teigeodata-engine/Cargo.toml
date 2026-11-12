@@ -175,6 +175,10 @@ required-features = ["shared"]
 name = "measure"
 required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
 
+[[example]]
+name = "phone"
+required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index", "derive"]
+
 # The workspace lints with `unsafe_code` lowered from forbid to deny, as for the boundary
 # crates (D-067): mapping a file is `unsafe` in Rust, and `map.rs` is the one module allowed to
 # do it, with a reason (D-113). `cargo xtask check-workspace` keeps this table equal to the

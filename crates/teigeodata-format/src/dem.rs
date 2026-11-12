@@ -607,6 +607,9 @@ impl Stream<'_> {
     }
 }
 
+/// A check of a tile's byte range in the payload before it is decoded: `false` refuses it.
+pub type Check<'c> = dyn FnMut(core::ops::Range<usize>) -> bool + 'c;
+
 impl<'a> Dem<'a> {
     /// Opens the section: frame, columns and lengths, in O(columns + grids).
     ///
@@ -705,13 +708,23 @@ impl<'a> Dem<'a> {
 
     /// The quantised sample at global sample row `r`, column `c` of grid `g`, decoding into `s`
     /// as needed; `None` outside the grid or in an absent tile.
-    fn sample(&self, g: &Grid, r: u64, c: u64, s: &mut DemScratch) -> Option<i32> {
+    fn sample(
+        &self,
+        g: &Grid,
+        (r, c): (u64, u64),
+        s: &mut DemScratch,
+        check: &mut Check<'_>,
+    ) -> Option<i32> {
         let log2 = g.tile_log2;
         let t = g.tile(r >> log2, c >> log2)?;
         let mask = (1_u64 << log2) - 1;
         let i = usize::try_from(((r & mask) << log2) | (c & mask)).ok()?;
         if s.tile != Some(t) || s.owner != self.coder.payload.as_ptr().addr() {
-            self.coder.start(self.code(t)?, t, log2, s)?;
+            let code = self.code(t)?;
+            if !check(code.0..code.1) {
+                return None;
+            }
+            self.coder.start(code, t, log2, s)?;
         }
         if s.done <= i && self.coder.run(s, i + 1).is_none() {
             s.tile = None;
@@ -730,17 +743,50 @@ impl<'a> Dem<'a> {
 
     /// [`Dem::elevation`] with the grid that answered: its source, spacing and datum.
     pub fn height(&self, at: Point<E7>, s: &mut DemScratch) -> Option<(f64, Grid)> {
+        self.height_checked(at, s, &mut |_| true)
+    }
+
+    /// [`Dem::height`], calling `check` with each tile's byte range in the payload
+    /// ([`Dem::payload_range`]) before decoding it: a reader that verifies the bytes it reads
+    /// (D-078) checks only the tiles a query touches. A tile `check` refuses is read as
+    /// absent; the caller reports why.
+    pub fn height_checked(
+        &self,
+        at: Point<E7>,
+        s: &mut DemScratch,
+        check: &mut Check<'_>,
+    ) -> Option<(f64, Grid)> {
         (0..self.grids).find_map(|g| {
             let grid = self.grid(g)?;
-            self.bilinear(&grid, at, s).map(|h| (h, grid))
+            self.bilinear(&grid, at, s, check).map(|h| (h, grid))
         })
+    }
+
+    /// Where the tile payload lies in `section`, the bytes the section was opened from; `None`
+    /// if they are other bytes.
+    #[must_use]
+    pub fn payload_range(&self, section: &[u8]) -> Option<core::ops::Range<usize>> {
+        let start = self
+            .coder
+            .payload
+            .as_ptr()
+            .addr()
+            .checked_sub(section.as_ptr().addr())?;
+        let end = start.checked_add(self.coder.payload.len())?;
+        (end <= section.len()).then_some(start..end)
     }
 
     #[allow(
         clippy::cast_precision_loss,
         reason = "remainders below 2^40 and heights below 2^31: exact in f64 to far below a millimetre"
     )]
-    fn bilinear(&self, g: &Grid, at: Point<E7>, s: &mut DemScratch) -> Option<f64> {
+    fn bilinear(
+        &self,
+        g: &Grid,
+        at: Point<E7>,
+        s: &mut DemScratch,
+        check: &mut Check<'_>,
+    ) -> Option<f64> {
         // Rows from 90° N and columns from 180° W, as exact fractions: 1e-7° × 36 / 1e4 = 0.1″.
         let num_r = (900_000_000 - i64::from(at.lat())).unsigned_abs() * 36;
         let num_c = (1_800_000_000 + i64::from(at.lon())).unsigned_abs() * 36;
@@ -759,7 +805,7 @@ impl<'a> Dem<'a> {
             for (dc, wc) in [(0, 1.0 - fc), (1, fc)] {
                 let w = wr * wc;
                 if w > 0.0
-                    && let Some(q) = self.sample(g, r + dr, c + dc, s)
+                    && let Some(q) = self.sample(g, (r + dr, c + dc), s, check)
                 {
                     sum += w * f64::from(q);
                     weight += w;

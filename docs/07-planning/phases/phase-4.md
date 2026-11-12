@@ -371,7 +371,10 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   strict-tier option, `search_with` (D-226, 2026-11-12); the व/ब variant as a spelling
   convention rule (`viratnagar` finds Biratnagar, first when focused in Nepal; D-233,
   2026-11-12). Open: the MVP's golden cases
-- [ ] TG-17: phone-class benches with gates
+- [x] TG-17: phone-class bench and gate G-phone ([note](../../02-research/notes/phone-class-bench.md),
+  D-235, 2026-11-12): every target met on the `tithipatra` layer; deriving SUBSTRING 1.04 →
+  0.38 s (121 → 54 MiB heap), the first height 63 → 0.42 ms by per-tile DEM checks. Open:
+  calibrate the factor on a real low-end phone; G-phone on CI once the data build runs there
 - [x] TG-10: coarse elevation layer: `DEM_COARSE`, component `dem-coarse`, 15″ at 8 m steps,
   518 kB on the wire for Nepal; `elevation_at` falls back to it; G-dem-coarse (D-225, 2026-11-12)
 
@@ -447,3 +450,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-12 | 4.9c: TG-14 tier 1, official names joined by code, with an alignment gate | D-232 |
 | 2026-11-12 | 4.9c: TG-18's व/ब variant as a SEARCH spelling rule; Biratnagar's official Nepali name as the city writes it | D-233 |
 | 2026-11-12 | 4.9c: 29 more districts' official names from the misaligned CBS rows, by the list's own text | D-234 |
+| 2026-11-12 | 4.9c: TG-17 done, the phone-class bench and gate G-phone; faster derive and per-tile DEM checks | D-235 |

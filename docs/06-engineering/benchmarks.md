@@ -1,7 +1,7 @@
 ---
 title: "Benchmarks"
 status: living
-updated: 2026-11-06
+updated: 2026-11-12
 ---
 
 # Benchmarks
@@ -93,6 +93,12 @@ packet loss; a host that ignores `If-Range`; a mirror that returns bad bytes.
 | S3 | Update by changed sections (range requests) against a full download | bytes saved, s |
 | S4 | Atomic install with a crash injected at each step (journal recovery) | recovery ms, correctness |
 | S5 | Repair of a corrupted section | bytes, s |
+
+### P: phone class (TG-17, D-235)
+
+| ID | Measure | Gate |
+|---|---|---|
+| P1 | On a real layer: open, the first query of each kind, search a keystroke at a time (p50, p99, max), point queries (p99), `get` (p99), deriving SUBSTRING; each the minimum of rounds, scaled by the low-end phone factor (6.5); heap live, peak and while deriving | G-phone: each estimate within its target ([note](../02-research/notes/phone-class-bench.md) §3.3); `cargo run --release -p teigeodata-engine --all-features --example phone -- <layer.tgd>`, before each layer release |
 
 ### M: memory
 

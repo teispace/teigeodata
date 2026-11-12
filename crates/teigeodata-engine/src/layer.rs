@@ -770,6 +770,44 @@ impl Layer {
         }
     }
 
+    /// Checks section `kind` before a query reads it, except the blocks wholly inside `skip`,
+    /// which the reader checks as it reads them ([`Layer::section_bytes`]): the DEM's tile
+    /// payload, so the first height does not hash every tile (D-235). A section not covered by
+    /// blocks is checked whole, as [`Layer::ensure`].
+    ///
+    /// # Errors
+    /// As [`Layer::ensure`].
+    pub(crate) fn ensure_except(
+        &self,
+        kind: Kind,
+        skip: core::ops::Range<usize>,
+    ) -> Result<(), Error> {
+        let v = self.views();
+        let Some(i) = v.blocks.iter().position(|(k, _)| *k == kind) else {
+            return self.ensure(kind);
+        };
+        let Some(slot) = usize::try_from(kind.0).ok().and_then(|k| self.state.get(k)) else {
+            return Ok(());
+        };
+        match slot.load(Atomic::Acquire) {
+            GOOD => return Ok(()),
+            BAD => return Err(self.integrity(kind)),
+            MISSING => return Err(self.missing(kind)),
+            _ => {}
+        }
+        let len = v.blocks.get(i).map_or(0, |(_, b)| b.len());
+        // The blocks wholly inside `skip` are left; a block it shares with other bytes is not.
+        let first = skip.start.div_ceil(BLOCK).min(len);
+        let end = (skip.end / BLOCK).max(first).min(len);
+        let r = self
+            .verify_blocks(i, 0..first)
+            .and_then(|()| self.verify_blocks(i, end..len));
+        if r.is_err() {
+            slot.store(BAD, Atomic::Release);
+        }
+        r
+    }
+
     /// The bytes `range` of section `kind`, each 16 KiB block they touch checked once (D-078):
     /// for readers that know which bytes they need. A section under 1 MiB is checked whole.
     ///

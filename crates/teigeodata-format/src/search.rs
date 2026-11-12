@@ -558,6 +558,85 @@ mod write {
         encode(&tagged, importance)
     }
 
+    /// Distinct keys, each given a dense ID in first-seen order: an open-addressing table over
+    /// one text buffer (FNV-1a), no allocation per key (D-235). A `BTreeMap` of boxed keys took
+    /// five times as long for the 1.15 million keys of the Tithipatra layer.
+    #[derive(Default)]
+    struct Interner {
+        /// Per slot, an ID plus one; 0 is empty. The length is a power of two.
+        slots: Vec<u32>,
+        /// Per ID, its text's start and end in `text`.
+        spans: Vec<(u32, u32)>,
+        text: alloc::string::String,
+    }
+
+    impl Interner {
+        fn hash(k: &[u8]) -> u64 {
+            k.iter().fold(0xcbf2_9ce4_8422_2325, |h, &b| {
+                (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+            })
+        }
+
+        const fn len(&self) -> usize {
+            self.spans.len()
+        }
+
+        fn text(&self, id: u32) -> &str {
+            self.spans
+                .get(id as usize)
+                .and_then(|&(a, b)| self.text.get(a as usize..b as usize))
+                .unwrap_or_default()
+        }
+
+        /// The slot of `k`: where it is, or the empty one where it goes.
+        fn slot(&self, k: &str) -> usize {
+            let mask = self.slots.len() - 1;
+            #[allow(clippy::cast_possible_truncation, reason = "masked to the table")]
+            let mut i = Self::hash(k.as_bytes()) as usize & mask;
+            loop {
+                match self.slots.get(i).copied().unwrap_or(0) {
+                    0 => return i,
+                    s if self.text(s - 1) == k => return i,
+                    _ => i = (i + 1) & mask,
+                }
+            }
+        }
+
+        /// The ID of `k`, added if new; `None` past `u32` IDs or text.
+        fn id(&mut self, key: &str) -> Option<u32> {
+            if self.slots.len() < 2 * (self.spans.len() + 1) {
+                self.grow();
+            }
+            let at = self.slot(key);
+            let taken = self.slots.get(at).copied().unwrap_or(0);
+            if taken != 0 {
+                return Some(taken - 1);
+            }
+            let id = u32::try_from(self.spans.len())
+                .ok()
+                .filter(|&id| id < u32::MAX)?;
+            let start = u32::try_from(self.text.len()).ok()?;
+            self.text.push_str(key);
+            let end = u32::try_from(self.text.len()).ok()?;
+            self.spans.push((start, end));
+            *self.slots.get_mut(at)? = id + 1;
+            Some(id)
+        }
+
+        /// Doubles the table (at least 1,024 slots) and places every key again.
+        fn grow(&mut self) {
+            let n = (self.slots.len() * 2).max(1_024);
+            self.slots = alloc::vec![0; n];
+            for id in 0..self.spans.len() {
+                let Ok(id) = u32::try_from(id) else { break };
+                let i = self.slot(self.text(id));
+                if let Some(s) = self.slots.get_mut(i) {
+                    *s = id + 1;
+                }
+            }
+        }
+    }
+
     /// The substring keys of one name text, each passed to the sink: the caller's fold and
     /// key rule (`teigeodata-names`), which the format does not depend on.
     pub type SubstringKeys<'a> = dyn Fn(&str, &mut dyn FnMut(&str)) + 'a;
@@ -575,27 +654,69 @@ mod write {
         importance: &[u8],
         keys: &SubstringKeys<'_>,
     ) -> Result<Vec<u8>, Error> {
-        let mut map: BTreeMap<alloc::string::String, BTreeSet<u32>> = BTreeMap::new();
+        // Each distinct key once, and a flat (key, row) pair per key a name gives: a few bytes a
+        // pair instead of a set per key, then one sort (D-235).
+        let mut ids = Interner::default();
+        let mut pairs: Vec<(u32, u32)> = Vec::new();
+        let mut full = false;
         let mut buf = [0_u8; crate::names::TEXT_BUFFER];
         for row in 0..names.len() {
             let r = u32::try_from(row).map_err(|_| Error::Write("too many rows"))?;
             for name in names.names(row) {
                 let text = name.text(&mut buf)?;
                 keys(text, &mut |k: &str| {
-                    if k.len() < 255 {
-                        match map.get_mut(k) {
-                            Some(set) => {
-                                set.insert(r);
-                            }
-                            None => {
-                                map.insert(k.into(), BTreeSet::from([r]));
-                            }
-                        }
+                    if k.len() >= 255 {
+                        return;
+                    }
+                    match ids.id(k) {
+                        Some(id) => pairs.push((id, r)),
+                        None => full = true,
                     }
                 });
             }
         }
-        encode_substring(&map, importance)
+        if full {
+            return Err(Error::Write("too many substring keys"));
+        }
+        // Renumber the keys in byte order, so the pairs sort into the automaton's order.
+        let mut order: Vec<u32> = (0..ids.len())
+            .filter_map(|i| u32::try_from(i).ok())
+            .collect();
+        order.sort_unstable_by(|&a, &b| ids.text(a).cmp(ids.text(b)));
+        let mut rank = alloc::vec![0_u32; ids.len()];
+        let mut texts: Vec<&str> = Vec::with_capacity(ids.len());
+        for (i, &id) in order.iter().enumerate() {
+            let text = ids.text(id);
+            if text.chars().nth(SUBSTRING_MIN - 1).is_none() {
+                return Err(Error::Write("a substring key has fewer than 3 code points"));
+            }
+            let i = u32::try_from(i).map_err(|_| Error::Write("too many substring keys"))?;
+            *rank
+                .get_mut(id as usize)
+                .ok_or(Error::Write("a substring key is out of range"))? = i;
+            texts.push(text);
+        }
+        for p in &mut pairs {
+            p.0 = *rank
+                .get(p.0 as usize)
+                .ok_or(Error::Write("a substring key is out of range"))?;
+        }
+        drop((rank, order));
+        pairs.sort_unstable();
+        pairs.dedup();
+        let groups = pairs.chunk_by(|a, b| a.0 == b.0);
+        let entries = groups.map(|g| {
+            let text = g
+                .first()
+                .and_then(|p| texts.get(p.0 as usize))
+                .copied()
+                .unwrap_or_default();
+            let mut key = Vec::with_capacity(text.len() + 1);
+            key.push(SUBSTRING);
+            key.extend_from_slice(text.as_bytes());
+            (key, g.iter().map(|p| p.1))
+        });
+        encode_entries(texts.len(), entries, importance, &Extra::default())
     }
 
     /// Encodes a SEARCH body: `keys` maps each tagged key (tag byte, then the folded text) to
@@ -621,6 +742,23 @@ mod write {
         importance: &[u8],
         extra: &Extra<'_>,
     ) -> Result<Vec<u8>, Error> {
+        encode_entries(
+            keys.len(),
+            keys.iter()
+                .map(|(k, rows)| (k.as_slice(), rows.iter().copied())),
+            importance,
+            extra,
+        )
+    }
+
+    /// The one encoder behind [`encode_with`] and [`substring_from_names`]: `n` entries of a
+    /// tagged key and its rows, keys strictly ascending, each row once.
+    fn encode_entries<K: AsRef<[u8]>, R: IntoIterator<Item = u32>>(
+        n: usize,
+        entries: impl Iterator<Item = (K, R)>,
+        importance: &[u8],
+        extra: &Extra<'_>,
+    ) -> Result<Vec<u8>, Error> {
         let rules = extra.rules.map(super::rules::encode).transpose()?;
         let named = rules
             .as_deref()
@@ -633,32 +771,39 @@ mod write {
             ));
         }
         let mut b = Builder::new();
-        let mut starts = Vec::with_capacity(keys.len() + 1);
+        let mut starts = Vec::with_capacity(n + 1);
         let mut ids = Vec::new();
-        let mut block_max = Vec::with_capacity(keys.len().div_ceil(BLOCK));
+        let mut block_max = Vec::with_capacity(n.div_ceil(BLOCK));
         let mut best = 0_u8;
-        for (i, (key, rows)) in keys.iter().enumerate() {
-            if key.is_empty() || rows.is_empty() {
+        let mut list: Vec<(u8, u32)> = Vec::new();
+        let mut i = 0;
+        for (key, rows) in entries {
+            let key = key.as_ref();
+            list.clear();
+            for r in rows {
+                let imp = *importance
+                    .get(r as usize)
+                    .ok_or(Error::Write("a search list names a row past the end"))?;
+                list.push((imp, r));
+            }
+            if key.is_empty() || list.is_empty() {
                 return Err(Error::Write("a search key or its list is empty"));
             }
             b.insert(key)?;
             starts.push(
                 u32::try_from(ids.len()).map_err(|_| Error::Write("too many search entries"))?,
             );
-            let mut list: Vec<(u8, u32)> = Vec::with_capacity(rows.len());
-            for &r in rows {
-                let imp = *importance
-                    .get(r as usize)
-                    .ok_or(Error::Write("a search list names a row past the end"))?;
-                list.push((imp, r));
-            }
-            list.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+            list.sort_unstable_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
             best = best.max(list.first().map_or(0, |e| e.0));
             ids.extend(list.iter().map(|e| e.1));
-            if (i + 1).is_multiple_of(BLOCK) || i + 1 == keys.len() {
+            i += 1;
+            if i % BLOCK == 0 || i == n {
                 block_max.push(u32::from(best));
                 best = 0;
             }
+        }
+        if i != n {
+            return Err(Error::Write("the search entries are not as many as stated"));
         }
         starts.push(u32::try_from(ids.len()).map_err(|_| Error::Write("too many search entries"))?);
         let (mut automaton, _) = b.finish()?;

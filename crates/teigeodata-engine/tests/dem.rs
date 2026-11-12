@@ -266,3 +266,92 @@ fn the_coarse_grid_answers_where_no_fine_dem_does() {
     // Outside both grids: nothing, and no error.
     assert_eq!(ask(only, &both, 9, &mut s).unwrap(), None);
 }
+
+/// A DEM pack of `cols` tiles of noise, large enough (over 1 MiB) for `BLOCK_HASHES`.
+fn noisy_dem(cols: u32) -> Vec<u8> {
+    let family = Family::standard();
+    let mut seed = 0x9e37_79b9_u32;
+    let codes: Vec<Vec<u8>> = (0..cols)
+        .map(|c| {
+            let q: Vec<i32> = (0..4096)
+                .map(|_| {
+                    seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    500 + c.cast_signed() + (seed >> 20).cast_signed()
+                })
+                .collect();
+            dem::encode_tile(&q, 6, &family, &THRESHOLDS, &TileOptions::default()).unwrap()
+        })
+        .collect();
+    let tiles: Vec<Option<&[u8]>> = codes.iter().map(|c| Some(c.as_slice())).collect();
+    let grid = Grid {
+        tile_row0: ROW0,
+        tile_col0: COL0,
+        tile_rows: 1,
+        tile_cols: cols,
+        lat_step: 10,
+        lon_step: 10,
+        step_mm: 2_000,
+        datum: DATUM_EGM2008,
+        source: dem::Source::CopernicusGlo30.code(),
+        tile_log2: 6,
+        first_tile: 0,
+    };
+    let body = dem::encode(
+        &[GridInput {
+            grid,
+            tiles: &tiles,
+        }],
+        &family,
+        &THRESHOLDS,
+    )
+    .unwrap();
+    Writer::new("np", "places", "2026.11.0")
+        .unwrap()
+        .pack(
+            &[(Kind::DEM, Encoding::TABLE, u64::from(cols), &body)],
+            None,
+        )
+        .unwrap()
+}
+
+#[test]
+fn a_large_dem_is_checked_a_tile_at_a_time() {
+    // D-235: the first height checks the DEM's head and the tiles it reads, not every tile; a
+    // corrupt tile fails the heights that read it, every time, and no other.
+    let good = noisy_dem(200);
+    let pack = Pack::open(&good).unwrap();
+    assert!(
+        pack.section(Kind::BLOCK_HASHES).is_some(),
+        "the DEM must be block-covered"
+    );
+    let s = pack.section(Kind::DEM).unwrap();
+    let payload = Dem::open(&s).unwrap().payload_range(s.bytes()).unwrap();
+    assert!(payload.len() > 1 << 20, "{} bytes", payload.len());
+    let start = s.bytes().as_ptr().addr() - good.as_ptr().addr();
+    let mut bad = good.clone();
+    bad[start + payload.start + payload.len() / 2] ^= 0x10;
+    let mut e = Engine::new();
+    e.add(layer(bad, None));
+    let mut sc = Scratch::default();
+    // A tile far from the flipped byte reads as the good pack does.
+    let far = e.elevation_at(at(0), &mut sc).unwrap().unwrap();
+    assert!((far.meters - direct(&good, at(0)).unwrap()).abs() < 1e-9);
+    let failing: Vec<u32> = (0..200)
+        .filter(|&c| matches!(e.elevation_at(at(c), &mut sc), Err(Error::Integrity { .. })))
+        .collect();
+    assert!(!failing.is_empty() && failing.len() < 10, "{failing:?}");
+    let c = failing[0];
+    assert!(matches!(
+        e.elevation_at(at(c), &mut sc),
+        Err(Error::Integrity { .. })
+    ));
+    // A corrupt head (outside the payload) fails the first height anywhere.
+    let mut head = good.clone();
+    head[start + payload.start - 3] ^= 0x10;
+    let mut h = Engine::new();
+    h.add(layer(head, None));
+    assert!(matches!(
+        h.elevation_at(at(0), &mut sc),
+        Err(Error::Integrity { .. })
+    ));
+}

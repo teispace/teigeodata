@@ -437,7 +437,13 @@ impl Engine {
                 Kind::DEM_COARSE => (v.dem_coarse.as_ref(), Kind::DEM),
                 _ => (None, kind),
             };
-            match l.ensure(kind) {
+            // The tile payload is checked tile by tile as it is read; the rest now (D-235).
+            let payload = dem.and_then(|d| d.payload_range(v.pack.section(kind)?.bytes()));
+            let head = match &payload {
+                Some(p) => l.ensure_except(kind, p.clone()),
+                None => l.ensure(kind),
+            };
+            match head {
                 // Named only where the layer has no other grid installed to answer instead.
                 Err(e @ Error::MissingComponent { .. }) => {
                     if !(v.installed(other) && v.pack.section(other).is_some()) {
@@ -451,7 +457,23 @@ impl Engine {
                 continue;
             };
             let scratch = s.dem.get_or_insert_with(Box::default);
-            if let Some((meters, g)) = dem.height(at, scratch) {
+            let mut bad = None;
+            let found = match &payload {
+                Some(p) => dem.height_checked(at, scratch, &mut |t| match l
+                    .section_bytes(kind, p.start + t.start..p.start + t.end)
+                {
+                    Ok(_) => true,
+                    Err(e) => {
+                        bad = Some(e);
+                        false
+                    }
+                }),
+                None => dem.height(at, scratch),
+            };
+            if let Some(e) = bad {
+                return Err(e);
+            }
+            if let Some((meters, g)) = found {
                 return Ok(Some(Height::of(meters, &g, l.id)));
             }
         }
