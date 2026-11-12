@@ -23,7 +23,7 @@ use crate::record::{self, Point, bools, column, f32s, strings, write_table};
 const COPY_M: f64 = 1.0;
 
 /// Mean Earth radius in metres (IUGG).
-const R_M: f64 = 6_371_008.8;
+pub(crate) const R_M: f64 = 6_371_008.8;
 
 /// Great-circle distance in metres between two grid points.
 pub(crate) fn haversine(a: &Point, b: &Point) -> f64 {

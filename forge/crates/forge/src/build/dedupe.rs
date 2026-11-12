@@ -137,7 +137,7 @@ pub(super) fn absorb(kept: &mut Place, dropped: Place) {
         }
     }
     for n in dropped.names {
-        if !kept.names.iter().any(|m| m.text == n.text) {
+        if !kept.names.iter().any(|m| m.same(&n)) {
             kept.names.push(n);
         }
     }

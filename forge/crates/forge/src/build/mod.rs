@@ -180,6 +180,20 @@ pub(crate) struct PlaceName {
     pub(crate) origin: Origin,
 }
 
+impl PlaceName {
+    /// Whether `other` says the same name: the same text, in the same language or with one of
+    /// them stating none. A Devanagari label shared by Hindi and Nepali is two names, so the
+    /// Nepali one is never lost to whichever came first (D-242).
+    pub(crate) fn same(&self, other: &Self) -> bool {
+        self.is(&other.text, other.lang.as_deref())
+    }
+
+    /// Whether this is `text` in `lang`, as [`same`](Self::same) compares.
+    pub(crate) fn is(&self, text: &str, lang: Option<&str>) -> bool {
+        self.text == text && (lang.is_none() || self.lang.is_none() || self.lang.as_deref() == lang)
+    }
+}
+
 /// One place, before rows are assigned.
 #[derive(Clone, Debug)]
 pub(crate) struct Place {
@@ -395,7 +409,8 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         &out_dir,
     )?;
     let mut summary = header(&a, places.len(), &g.sources, g.tz.as_deref());
-    notes(&mut summary, (held, abroad), unnamed, &g);
+    notes(&mut summary, held, unnamed, &g);
+    summary.push_str(&cluster::abroad_report(&abroad, &out_dir, a.build_name())?);
     summary.push_str(&naming.line());
     summary.push_str(&modelled.report);
     summary.push_str(&admin.line());
@@ -591,7 +606,7 @@ fn notices(lock: &Lock, read: &[&str]) -> Result<String, String> {
 
 /// The summary's notes: postal codes left out, places held at their seed point, left out,
 /// and sources not read.
-fn notes(summary: &mut String, (held, abroad): (usize, usize), unnamed: usize, g: &Gated) {
+fn notes(summary: &mut String, held: usize, unnamed: usize, g: &Gated) {
     let skipped = &g.skipped;
     for n in g.postal.iter().flat_map(|p| &p.notes) {
         let _ = writeln!(*summary, "Postal: {n}.");
@@ -604,12 +619,6 @@ fn notes(summary: &mut String, (held, abroad): (usize, usize), unnamed: usize, g
     }
     if unnamed > 0 {
         let _ = writeln!(*summary, "Left out: {unnamed} places with no usable name.");
-    }
-    if abroad > 0 {
-        let _ = writeln!(
-            *summary,
-            "Left out: {abroad} natural places more than 200 m outside every admin unit (D-201)."
-        );
     }
     if !skipped.is_empty() {
         let _ = writeln!(*summary, "Not read (licence): {}.", skipped.join(", "));
@@ -856,9 +865,25 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::path::Path;
 
-    use super::PlaceName;
+    /// D-242: a Devanagari text shared by Hindi and Nepali is two names; a name with no
+    /// language is the same as any of that text.
+    #[test]
+    fn a_name_is_its_text_and_language() {
+        let n = |text: &str, lang: Option<&str>| PlaceName {
+            text: text.into(),
+            lang: lang.map(Into::into),
+            kind: None,
+            origin: Origin::Unknown,
+        };
+        assert!(!n("कैलाली", Some("hi")).same(&n("कैलाली", Some("ne"))));
+        assert!(n("कैलाली", Some("ne")).same(&n("कैलाली", Some("ne"))));
+        assert!(n("Kailali", None).same(&n("Kailali", Some("en"))));
+        assert!(!n("Kailali", Some("en")).same(&n("Kailāli", Some("en"))));
+    }
+
     use super::naming::{Here, Naming, place_names};
     use super::sources::Rec;
+    use super::{Origin, PlaceName};
     use crate::aliases::rules::{Dropped, Rules};
     use crate::names::Namer;
     use teigeodata_names::PhoneticKey;
@@ -878,7 +903,7 @@ mod tests {
             text: text.into(),
             lang: None,
             kind: Some(teigeodata_format::names::NameType::Alt),
-            origin: crate::build::Origin::Unknown,
+            origin: Origin::Unknown,
         }
     }
 

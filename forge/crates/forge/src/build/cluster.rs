@@ -35,19 +35,25 @@ pub(super) struct Clustered {
     pub(super) unnamed: usize,
     /// Places that kept their seed point because the core point lies outside every admin unit.
     pub(super) held: usize,
-    /// Natural places left out because they lie outside every admin unit (D-201).
-    pub(super) abroad: usize,
+    /// Places left out because they lie outside every admin unit, beyond the border reach
+    /// (D-201, D-239): key, kind, first name, metres outside the country's outline.
+    pub(super) abroad: Vec<(String, PlaceKind, String, f64)>,
     pub(super) naming: Naming,
     pub(super) admin: AdminCounts,
 }
 
 /// How far a summit on the border may lie outside the country's units and still be the
-/// country's (D-201): about 200 m, in 1e-7°.
+/// country's (D-201): about 200 m, in 1e-7°. A summit sits on a ridge the border follows.
 const BORDER_REACH_E7: i32 = 20_000;
 
-/// A place's parent unit: the deepest holding it; a former unit's is its successor, the
-/// current unit one level up. `None` for a natural place across the border, which is the
-/// neighbour's (D-201).
+/// [`BORDER_REACH_E7`] for every other current place (D-239): about 500 m. Boundaries along a
+/// river are coarser than along a ridge: Nepal's border villages on the Mahakali lie up to
+/// 346 m outside its outline, and the mislocated records left out start at 1.3 km.
+const SETTLED_REACH_E7: i32 = 50_000;
+
+/// A place's parent unit: the deepest holding it, or near it on the border; a former unit's is
+/// its successor, the current unit one level up. `None` for a current place across the
+/// border, which is the neighbour's (D-201, D-239).
 #[allow(
     clippy::option_option,
     reason = "outer None: not this country's place; inner: no parent"
@@ -58,32 +64,88 @@ fn parent_of(
     levels: &[Level],
     units: &admins::Units<'_>,
 ) -> Option<Option<String>> {
-    if kind == PlaceKind::Natural {
-        natural_parent(levels, point).map(Some)
-    } else if flags & places::FLAG_FORMER == 0 {
-        Some(deepest(levels, point))
+    let reach = if kind == PlaceKind::Natural {
+        BORDER_REACH_E7
+    } else {
+        SETTLED_REACH_E7
+    };
+    if flags & places::FLAG_FORMER == 0 {
+        border_parent(levels, point, reach).map(Some)
     } else {
         Some(units.successor(level, point))
     }
 }
 
-/// The deepest unit holding a natural place: at its point, else within [`BORDER_REACH_E7`] of
-/// it (a summit on the border line); `None` for one across the border.
-fn natural_parent(levels: &[Level], (lon, lat): (i32, i32)) -> Option<String> {
-    let r = BORDER_REACH_E7;
-    [
-        (0, 0),
-        (r, 0),
-        (-r, 0),
-        (0, r),
-        (0, -r),
-        (r, r),
-        (r, -r),
-        (-r, r),
-        (-r, -r),
-    ]
-    .into_iter()
-    .find_map(|(dx, dy)| deepest(levels, (lon.saturating_add(dx), lat.saturating_add(dy))))
+/// The deepest unit holding a place: at its point, else at a probe within `reach` of it (a
+/// summit or a village on the border line), nearest probes first; `None` for one across the
+/// border.
+fn border_parent(levels: &[Level], (lon, lat): (i32, i32), reach: i32) -> Option<String> {
+    const DIRS: [(i32, i32); 8] = [
+        (1, 0),
+        (-1, 0),
+        (0, 1),
+        (0, -1),
+        (1, 1),
+        (1, -1),
+        (-1, 1),
+        (-1, -1),
+    ];
+    deepest(levels, (lon, lat)).or_else(|| {
+        [reach / 4, reach / 2, reach].into_iter().find_map(|r| {
+            DIRS.iter().find_map(|&(dx, dy)| {
+                deepest(
+                    levels,
+                    (lon.saturating_add(dx * r), lat.saturating_add(dy * r)),
+                )
+            })
+        })
+    })
+}
+
+/// How far `point` lies outside the country, in metres: the coarsest level's units cover it, so
+/// the nearest of their outlines is the border.
+fn outside_m(levels: &[Level], point: (i32, i32)) -> f64 {
+    levels.first().map_or(f64::INFINITY, |l| {
+        l.polys
+            .iter()
+            .map(|p| p.distance_m(point))
+            .fold(f64::INFINITY, f64::min)
+    })
+}
+
+/// Writes `abroad-<build>.tsv` beside the pack, farthest first, and returns the summary line:
+/// the places left out as the neighbour's (D-201, D-239).
+pub(super) fn abroad_report(
+    abroad: &[(String, PlaceKind, String, f64)],
+    out_dir: &Path,
+    build: &str,
+) -> Result<String, String> {
+    use std::fmt::Write as _;
+    let mut rows: Vec<_> = abroad.iter().collect();
+    rows.sort_by(|a, b| b.3.total_cmp(&a.3).then_with(|| a.0.cmp(&b.0)));
+    let mut tsv = String::from(
+        "# Places outside every admin unit, beyond the border reach: the neighbour's (D-201, D-239).\nplace\tkind\tname\tmetres outside\n",
+    );
+    for (key, kind, name, m) in rows {
+        let _ = writeln!(tsv, "{key}\t{kind:?}\t{name}\t{m:.0}");
+    }
+    let file = out_dir.join(format!("abroad-{build}.tsv"));
+    std::fs::write(&file, tsv).map_err(|e| format!("{}: {e}", file.display()))?;
+    if abroad.is_empty() {
+        return Ok(String::new());
+    }
+    let mut by_kind: BTreeMap<String, usize> = BTreeMap::new();
+    for (_, kind, _, _) in abroad {
+        *by_kind
+            .entry(format!("{kind:?}").to_lowercase())
+            .or_default() += 1;
+    }
+    let kinds: Vec<String> = by_kind.iter().map(|(k, n)| format!("{n} {k}")).collect();
+    Ok(format!(
+        "Left out as the neighbour's (D-201, D-239): {} places outside every admin unit beyond the border reach (about 200 m for a summit, 500 m for any other place; {}), listed in `abroad-{build}.tsv`.\n",
+        abroad.len(),
+        kinds.join(", ")
+    ))
 }
 
 /// What became of the clusters of admin records (D-110).
@@ -302,7 +364,7 @@ pub(super) fn cluster_places(
     rules.finish();
     let unit_index = admins::Units::new(&units.places, levels, &rules);
     let mut admin = AdminCounts::default();
-    let (mut out, mut unnamed, mut held, mut abroad) = (Vec::new(), 0_usize, 0_usize, 0_usize);
+    let (mut out, mut unnamed, mut held, mut abroad) = (Vec::new(), 0_usize, 0_usize, Vec::new());
     let mut naming = Naming::default();
     for (
         owner,
@@ -347,7 +409,8 @@ pub(super) fn cluster_places(
             continue;
         };
         let Some(parent) = parent_of((kind, level, flags), point, levels, &unit_index) else {
-            abroad += 1;
+            let name = all.first().map(|n| n.text.clone()).unwrap_or_default();
+            abroad.push((cluster, kind, name, outside_m(levels, point)));
             continue;
         };
         out.push(Place {

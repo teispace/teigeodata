@@ -2,7 +2,11 @@
 //! D-095).
 //!
 //! ```text
-//! forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--split] [--force] [--fetch]
+//! forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry> | --fresh-ids] [--split] [--force] [--fetch]
+//!
+//! Without `--ids`, the build reads the newest registry of the country's builds in its pack
+//! directory (D-240), so IDs stay stable from one run to the next; `--fresh-ids` numbers a
+//! first build on purpose.
 //! ```
 //!
 //! The recipe is `data/countries/<cc>/build.yaml`. The stages are `read` for each points
@@ -668,6 +672,7 @@ fn conflate_stage(
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
     let (cc, pass) = make_args(args)?;
+    let pass = with_registry(root, cc, pass);
     let lite = pass.iter().any(|a| a == "--lite");
     let flag = |name: &str| {
         pass.iter()
@@ -779,8 +784,30 @@ fn split_input(pass: &[String], country: &Path) -> Result<Vec<u8>, String> {
 
 /// The country code and the arguments `make` passes on to `build` (all but `--force` and
 /// `--fetch`); `--release` is required.
+/// `pass` with `--ids` naming the newest ID registry of the country's builds (main or lite) when
+/// none is named (D-240): a build without the last registry numbers every place afresh, and a
+/// place left out then shifts every later ID. `--fresh-ids` asks for a first build.
+fn with_registry(root: &Path, cc: &str, mut pass: Vec<String>) -> Vec<String> {
+    if let Some(i) = pass.iter().position(|a| a == "--fresh-ids") {
+        pass.remove(i);
+        return pass;
+    }
+    if pass.iter().any(|a| a == "--ids") {
+        return pass;
+    }
+    let newest = ["main", "lite"]
+        .into_iter()
+        .map(|b| format!("data/build/pack/{cc}/{cc}-ids-{b}.tsv"))
+        .filter_map(|p| Some((fs::metadata(root.join(&p)).ok()?.modified().ok()?, p)))
+        .max();
+    if let Some((_, p)) = newest {
+        pass.extend(["--ids".to_string(), p]);
+    }
+    pass
+}
+
 fn make_args(args: &[String]) -> Result<(&String, Vec<String>), String> {
-    let usage = "usage: forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry>] [--split] [--force] [--fetch]";
+    let usage = "usage: forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry> | --fresh-ids] [--split] [--force] [--fetch]";
     let cc = args.first().ok_or(usage)?;
     let pass: Vec<String> = args
         .iter()
@@ -842,9 +869,34 @@ fn first_line(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Recipe, key, stage, tile_box};
+    use super::{Recipe, key, stage, tile_box, with_registry};
     use std::cell::Cell;
     use std::fs;
+
+    /// D-240: without `--ids`, the newest registry in the pack directory is the input;
+    /// a named one and `--fresh-ids` win; no registry, no `--ids`.
+    #[test]
+    fn make_reads_the_newest_registry_unless_told() {
+        let root = std::env::temp_dir().join(format!("tgd-make-ids-{}", std::process::id()));
+        let dir = root.join("data/build/pack/zz");
+        fs::create_dir_all(&dir).unwrap();
+        let args = |a: &[&str]| a.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let base = args(&["--release", "1", "--lite"]);
+        assert_eq!(with_registry(&root, "zz", base.clone()), base);
+        fs::write(dir.join("zz-ids-main.tsv"), "").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(dir.join("zz-ids-lite.tsv"), "").unwrap();
+        let got = with_registry(&root, "zz", base.clone());
+        assert_eq!(
+            got.get(3..),
+            Some(&args(&["--ids", "data/build/pack/zz/zz-ids-lite.tsv"])[..])
+        );
+        let named = args(&["--release", "1", "--ids", "mine.tsv"]);
+        assert_eq!(with_registry(&root, "zz", named.clone()), named);
+        let fresh = with_registry(&root, "zz", args(&["--release", "1", "--fresh-ids"]));
+        assert_eq!(fresh, args(&["--release", "1"]));
+        fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn a_recipe_names_every_input_once() {

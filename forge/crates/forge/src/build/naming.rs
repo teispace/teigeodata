@@ -207,9 +207,8 @@ pub(super) fn place_names<'a>(
         kind: None,
         origin,
     }];
-    let mut seen: BTreeSet<String> = BTreeSet::from([canonical]);
     for n in rest {
-        if seen.insert(n.text.clone()) {
+        if !all.iter().any(|m| m.same(&n)) {
             all.push(n);
         }
     }

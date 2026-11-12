@@ -324,7 +324,10 @@ fn upstream_agrees(c: &Correction, places: &[Place], at: usize, guard: &Rec) -> 
         return false;
     };
     match &c.op {
-        Op::AddName { name } => p.names.iter().any(|n| n.text == name.text),
+        Op::AddName { name } => p
+            .names
+            .iter()
+            .any(|n| n.is(&name.text, name.lang.as_deref())),
         Op::RemoveName { text } => !p.names.iter().any(|n| &n.text == text),
         Op::SetPoint { lat, lon } => guard.point == Some(e7(*lat, *lon)),
         Op::SetPopulation { population } => guard.population == Some(*population),

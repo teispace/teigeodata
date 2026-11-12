@@ -448,7 +448,9 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   below it (a point inside each polygon, its parent the unit of the level above), one place
   per conflated cluster (a settlement when any record is a populated place, else a locality,
   else a `natural` place for a summit, hill, volcano or pass, D-201; the parent is the deepest
-  admin unit holding it, and a natural place more than 200 m outside every unit is left out),
+  admin unit holding it, or near it on the border; a current place outside every unit beyond
+  the border reach, 200 m for a natural place and 500 m for any other, is the neighbour's and
+  left out, listed with its distance in `abroad-<build>.tsv`, D-201, D-239),
   and one `timezone_area` place per IANA
   zone: each timezone-boundary-builder zone that meets the country's box, `--tz-first` zones
   first (D-093, D-084); or, from tzdb, the country's one `zone.tab` zone over its admin-0
@@ -485,8 +487,10 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
 - **Same place (D-116).** Same-name settlements and localities within 100 m after the core
   are merged into the one with more records; `merged-<build>.tsv` lists each merge.
 - **Admin records (D-110).** A cluster of admin records only (GeoNames `A.*`) links to the
-  current unit it names (name key and containment, the source's level first, else the nearest
-  unit of that level within 30 km) and gives it its keys and names; a former unit
+  current unit it names (name key and containment, the source's level first, else the named
+  unit whose outline is nearest, within 30 km: of the source's level, or of any level for a
+  record with no class such as a Wikidata item, never for a division, D-239) and gives it its
+  keys and names; a former unit
   (`ADM1H`–`ADM4H`) that links to none becomes an admin place flagged former, without a
   polygon, under its successor one level up; an `ADMD` becomes a locality. The summary counts
   each outcome.
@@ -609,7 +613,10 @@ uncached buildings and DEM): 7 parts, 13.49 MB together for an 11.59 MB country 
 
 ## Run every stage (`make`)
 
-`forge make <cc> --release <v> [--lite] [--key <seed-file>] [--ids <registry>] [--split] [--force] [--fetch]` runs a
+`forge make <cc> --release <v> [--lite] [--key <seed-file>] [--ids <registry> | --fresh-ids] [--split] [--force] [--fetch]`
+reads the newest ID registry of the country's builds in `data/build/pack/<cc>/` when no
+`--ids` is named, so IDs stay stable from one run to the next; `--fresh-ids` numbers a first
+build on purpose (D-240). It runs a
 country's stages from its recipe, `data/countries/<cc>/build.yaml` (checked by
 `cargo xtask check-data`): `read` for each points source, `conflate` over them, `buildings`
 for each building source the build may read, `core`, `topology` for the admin source, `dem`

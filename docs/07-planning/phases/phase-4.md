@@ -349,8 +349,9 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     canonical name transliterated, marked machine, searched apart; 99.0% of Nepal named,
     D-228, 2026-11-12), tier 1 (official names by a reviewed code crosswalk with an alignment
     gate: 715 local levels and 71 districts, D-232, D-234, 2026-11-12); tier 2 is in already
-    (Nepal's Wikidata snapshot carries every language's labels). Open: 6 districts the CBS file
-    loses (Nawalparasi East and West, Rukum East and West, Kailali, Kanchanpur), the 38
+    (Nepal's Wikidata snapshot carries every language's labels); the 6 districts the CBS file
+    loses (Nawalparasi East and West, Rukum East and West, Kailali, Kanchanpur) named from
+    Wikidata once Rukum East and Nawalparasi West link by outline (D-239). Open: the 38
     renamed local levels (no open, current list with Nepali names found on 2026-11-12: the
     open lists predate the renames or have no Nepali), tier 4 for India (Nepal's built, D-236), the `machine_names`
     profile option, a unit's Wikidata or GeoNames Nepali label kept with its type word
@@ -365,7 +366,7 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     1.1% `ne-Deva`, D-227)
 - [x] TG-16: outline tolerance measured (Nepal stays at 20 m), outlines snapped to their level's decimal grid, 64-edge index leaves: `tithipatra` 9.21 MB wire (D-229, D-230)
 - [ ] TG-15: India: research done (D-216, D-217); then towns
-- [x] TG-19: `Near::bearing_deg` and `Engine::mark_inside` (D-223, 2026-11-11); `reverse_in_country`, the border rule (D-237, 2026-11-12); inside a settlement or locality with no outline as the nearest of its kind within 750 m or 700 m (D-238, 2026-11-12, [research](../../02-research/notes/inside-by-radius.md)). Data follow-up: 78 Nepal places whose seed point lies outside every unit, some across the border (Chhipaharmai, tgd:np/141c, falls in India)
+- [x] TG-19: `Near::bearing_deg` and `Engine::mark_inside` (D-223, 2026-11-11); `reverse_in_country`, the border rule (D-237, 2026-11-12); inside a settlement or locality with no outline as the nearest of its kind within 750 m or 700 m (D-238, 2026-11-12, [research](../../02-research/notes/inside-by-radius.md)). Data follow-up done: places outside every unit beyond the border reach are left out (D-239: 10 in Nepal, Chhipaharmai among them)
 - [x] TG-18 and the strict-tier option: the Brahmic search fold of nasal conjuncts, vowel
   length and candra vowels (D-220); the focus point and the strict-tier option, `search_with`
   (D-226); the व/ब variant as a spelling rule (D-233); gate G-golden-tithipatra, 60 cases from
@@ -455,3 +456,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-12 | 4.9c: TG-18 done, gate G-golden-tithipatra; TG-14 tier 4 (donor names) for Nepal; prefix tier from 2 code points | D-236 |
 | 2026-11-12 | 4.9c: TG-19 reopened against the brief's criteria; the border rule built (`reverse_in_country`); inside by a radius open | D-237 |
 | 2026-11-12 | 4.9c: TG-19 done; inside by radius (nearest of its kind within a measured radius), researched against building extents | D-238 |
+| 2026-11-12 | 4.9c first, before phases 5 and 6; the 6 districts named, places across the border left out, `forge make` keeps IDs by default | D-239, D-240, D-241 |

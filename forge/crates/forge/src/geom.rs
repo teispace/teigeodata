@@ -22,6 +22,50 @@ impl Polygon {
         }))
     }
 
+    /// The distance in metres from `p` (lon, lat on the grid) to the polygon, 0 inside: to the
+    /// nearest point of any edge, on the plane tangent at `p` (equirectangular; under 0.5% off
+    /// within 50 km below 80° of latitude). Longitudes wrap, so a polygon across the
+    /// antimeridian measures the short way.
+    pub(crate) fn distance_m(&self, p: (i32, i32)) -> f64 {
+        const TURN: i64 = 3_600_000_000;
+        if self.contains(p.0, p.1) {
+            return 0.0;
+        }
+        let m = crate::links::R_M * 1e-7_f64.to_radians();
+        let k = (f64::from(p.1) * 1e-7).to_radians().cos() * m;
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "a wrapped difference of at most 1.8e9 is exact in f64"
+        )]
+        let xy = |q: (i32, i32)| {
+            let dx = (i64::from(q.0) - i64::from(p.0) + TURN / 2).rem_euclid(TURN) - TURN / 2;
+            (dx as f64 * k, f64::from(q.1 - p.1) * m)
+        };
+        let mut best = f64::INFINITY;
+        for ring in &self.rings {
+            let (Some(&first), Some(&last)) = (ring.first(), ring.last()) else {
+                continue;
+            };
+            let edges = ring
+                .iter()
+                .copied()
+                .zip(ring.iter().copied().skip(1))
+                .chain([(last, first)]);
+            for (a, b) in edges {
+                let ((ax, ay), (bx, by)) = (xy(a), xy(b));
+                let (ex, ey) = (bx - ax, by - ay);
+                let len2 = ex.mul_add(ex, ey * ey);
+                let t = if len2 > 0.0 {
+                    (-(ax.mul_add(ex, ay * ey)) / len2).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                best = best.min(t.mul_add(ex, ax).hypot(t.mul_add(ey, ay)));
+            }
+        }
+        best
+    }
+
     /// Even-odd containment over all rings; on an edge counts as inside.
     pub(crate) fn contains(&self, lon: i32, lat: i32) -> bool {
         let mut inside = false;
@@ -287,6 +331,31 @@ impl GridIndex {
 #[cfg(test)]
 mod tests {
     use super::{GridIndex, Polygon};
+
+    /// `distance_m` is 0 inside, the gap to the nearest edge outside, and wraps longitude.
+    #[test]
+    fn distance_to_an_outline() {
+        // A 0.1° square at the equator: 0.1° of latitude is about 11.1 km.
+        let sq = |x: i32| Polygon {
+            rings: vec![vec![
+                (x, 0),
+                (x + 1_000_000, 0),
+                (x + 1_000_000, 1_000_000),
+                (x, 1_000_000),
+            ]],
+        };
+        let p = sq(0);
+        assert!(p.distance_m((500_000, 500_000)).abs() < f64::EPSILON);
+        let d = p.distance_m((500_000, 2_000_000));
+        assert!((d - 11_119.5).abs() < 20.0, "{d}");
+        // Off a corner: the corner, not an edge's line.
+        let d = p.distance_m((2_000_000, 2_000_000));
+        assert!((d - 15_725.0).abs() < 30.0, "{d}");
+        // Across the antimeridian: 0.05° west of 180° to a square just east of -180°.
+        let east = sq(-1_800_000_000);
+        let d = east.distance_m((1_799_500_000, 500_000));
+        assert!((d - 5_559.7).abs() < 20.0, "{d}");
+    }
 
     #[test]
     fn a_clipped_ring_keeps_containment_inside_the_box() {

@@ -5,8 +5,9 @@
 //! - **Linked:** the cluster names a current unit when one of its names matches one of the
 //!   unit's by fold, join or phonetic key (also romanised), and the unit holds the cluster's
 //!   point, at the source's level first (`GeoNames` `ADM<n>`) and then any level; failing
-//!   that, the nearest unit of the source's level with a matching name within
-//!   [`NEAR_M`]. The unit takes the records' keys (so their IDs resolve to it) and their names,
+//!   that, the matching unit whose outline is nearest the point, within [`NEAR_M`], of the
+//!   source's level, or of any level for a record with no class (a Wikidata item: Nepal's
+//!   newer districts carry points 16–17 km outside their outlines). Never for a division. The unit takes the records' keys (so their IDs resolve to it) and their names,
 //!   under the collision rule of D-060 (Wikidata lists Hetauda as an alias of Makwanpur
 //!   District). A country record (`PCLI`) links to the country.
 //! - **Former:** an unlinked `ADM<n>H` with `n` ≤ [`MAX_FORMER_LEVEL`] becomes a place of its
@@ -24,8 +25,8 @@ use crate::links::haversine_e7;
 
 use super::{Level, Place, PlaceName};
 
-/// The farthest a unit's point may be from a record of its level that names it, when the
-/// record's point is outside the unit.
+/// The farthest a unit's outline may be from a record that names it, when the record's point is
+/// outside the unit.
 pub(super) const NEAR_M: f64 = 30_000.0;
 
 /// The deepest former level kept as places.
@@ -103,6 +104,8 @@ pub(super) struct Units<'a> {
     by_key: HashMap<String, Vec<usize>>,
     /// Unit key → place index.
     index: HashMap<&'a str, usize>,
+    /// Unit key → its outline (level index, polygon index).
+    outline: HashMap<&'a str, (usize, usize)>,
     places: &'a [Place],
     levels: &'a [Level],
 }
@@ -120,9 +123,21 @@ impl<'a> Units<'a> {
             .enumerate()
             .map(|(i, p)| (p.key.as_str(), i))
             .collect();
+        let outline = levels
+            .iter()
+            .enumerate()
+            .flat_map(|(l, level)| {
+                level
+                    .keys
+                    .iter()
+                    .enumerate()
+                    .map(move |(i, k)| (k.as_str(), (l, i)))
+            })
+            .collect();
         Self {
             by_key,
             index,
+            outline,
             places,
             levels,
         }
@@ -160,13 +175,28 @@ impl<'a> Units<'a> {
         if let Some(&i) = holding.first() {
             return Some(i);
         }
-        // The point is off its unit: the nearest named unit of its level.
-        let level = want?;
+        // The point is off its unit: the named unit whose outline is nearest, of the source's
+        // level when it states one; a unit with no outline by its point. A division states no
+        // level but is a village, never a unit off its point: Mahankal, a former village of
+        // Kathmandu, is not Lalitpur's Mahankal 25 km away.
+        if want.is_none() && class != Class::Other {
+            return None;
+        }
         matching
             .iter()
             .filter_map(|&i| Some((i, self.places.get(i)?)))
-            .filter(|(_, p)| p.admin_level == level)
-            .map(|(i, p)| (haversine_e7(point, p.point), i))
+            .filter(|(_, p)| want.is_none_or(|l| p.admin_level == l))
+            .map(|(i, p)| {
+                let d = self
+                    .outline
+                    .get(p.key.as_str())
+                    .and_then(|&(l, j)| self.levels.get(l)?.polys.get(j))
+                    .map_or_else(
+                        || haversine_e7(point, p.point),
+                        |poly| poly.distance_m(point),
+                    );
+                (d, i)
+            })
             .filter(|&(d, _)| d < NEAR_M)
             .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
             .map(|(_, i)| i)
@@ -202,7 +232,7 @@ pub(super) struct Link {
 pub(super) fn apply(place: &mut Place, link: Link) -> usize {
     let before = place.names.len();
     for n in link.names {
-        if !place.names.iter().any(|m| m.text == n.text) {
+        if !place.names.iter().any(|m| m.same(&n)) {
             place.names.push(n);
         }
     }
@@ -219,7 +249,67 @@ pub(super) fn apply(place: &mut Place, link: Link) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::Class;
+    use super::{Class, NEAR_M, Units};
+    use crate::aliases::rules::Rules;
+    use crate::build::{Level, Origin, Place, PlaceName};
+    use crate::geom::{GridIndex, Polygon};
+    use teigeodata_core::PlaceKind;
+
+    /// D-239: a record off its unit's outline links to the named unit whose outline is
+    /// nearest, within `NEAR_M`: of the stated level, or of any level for a record with no class
+    /// (Wikidata); never for a division (a village), nor past `NEAR_M`.
+    #[test]
+    fn a_record_off_its_unit_links_by_the_nearest_outline() {
+        // A 0.1° square unit at level 3, its label point in the middle.
+        let poly = Polygon {
+            rings: vec![vec![
+                (0, 0),
+                (1_000_000, 0),
+                (1_000_000, 1_000_000),
+                (0, 1_000_000),
+            ]],
+        };
+        let level = Level {
+            number: 3,
+            keys: vec!["admin:X1".into()],
+            index: GridIndex::new(std::slice::from_ref(&poly), 1_000_000),
+            polys: vec![poly],
+        };
+        let place = Place {
+            key: "admin:X1".into(),
+            kind: PlaceKind::Admin,
+            admin_level: 3,
+            flags: 0,
+            point: (500_000, 500_000),
+            names: vec![PlaceName {
+                text: "Mahankal".into(),
+                lang: None,
+                kind: None,
+                origin: Origin::Official,
+            }],
+            population: None,
+            rank: 0,
+            parent: None,
+            sources: vec![],
+        };
+        let (places, levels) = ([place], [level]);
+        let mut rules = Rules::new(None, None);
+        rules.add_admin("Mahankal");
+        rules.finish();
+        let units = Units::new(&places, &levels, &rules);
+        // 0.25° north of the square's top edge: about 27.8 km from the outline, 33.4 km from
+        // the label point, past NEAR_M.
+        let off = (500_000, 3_500_000);
+        let find = |class, at| units.find(class, at, &["Mahankal"], &rules);
+        assert_eq!(find(Class::Other, off), Some(0));
+        assert_eq!(find(Class::Current(3), off), Some(0));
+        assert_eq!(find(Class::Current(2), off), None);
+        assert_eq!(find(Class::Division, off), None);
+        // Inside, any class links; past NEAR_M, none.
+        assert_eq!(find(Class::Division, (500_000, 500_000)), Some(0));
+        const { assert!(NEAR_M < 33_000.0) };
+        assert_eq!(find(Class::Other, (500_000, 4_000_000)), None);
+    }
 
     #[test]
     fn classes() {
