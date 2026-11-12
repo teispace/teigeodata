@@ -140,7 +140,7 @@ pub fn open(data: &[u8]) {
     if let Ok(h) = Pack::open_head(data) {
         // A partial install's reads: block lists are checked when asked for, never panic.
         for s in h.sections() {
-            let _ = h.blocks(s.kind());
+            let _ = h.part_blocks(s.kind(), s.part());
         }
     }
     let Ok(p) = Pack::open(data) else { return };
@@ -152,7 +152,10 @@ pub fn open(data: &[u8]) {
     assert_eq!(footer.ok().as_ref().map(|f| &f[..]), data.get(tail..));
     // Every accessor works on an accepted pack.
     for s in p.sections() {
-        assert_eq!(p.section(s.kind()).map(|t| t.bytes()), Some(s.bytes()));
+        assert_eq!(
+            p.part(s.kind(), s.part()).map(|t| t.bytes()),
+            Some(s.bytes())
+        );
         let _ = s.verify();
     }
     let _ = (

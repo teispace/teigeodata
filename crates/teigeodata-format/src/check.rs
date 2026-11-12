@@ -60,7 +60,7 @@ pub fn sections(pack: &Pack<'_>, mut each: impl FnMut(Kind, Result<bool, Error>)
     for s in pack.sections() {
         let kind = s.kind();
         let checked = (|| -> Result<bool, Error> {
-            if let Some(b) = pack.blocks(kind)? {
+            if let Some(b) = pack.part_blocks(kind, s.part())? {
                 b.prove()?;
             }
             match kind {

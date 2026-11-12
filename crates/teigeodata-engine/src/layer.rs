@@ -164,7 +164,8 @@ fn located_blocks<'a>(
     missing: Components,
 ) -> Result<Vec<(Kind, Blocks<'a, 'static>)>, Error> {
     let mut blocks = Vec::new();
-    for s in pack.sections() {
+    // Base parts only: the engine reads no other part yet (ADR-0040, step 2).
+    for s in pack.sections().filter(|s| s.part().is_base()) {
         if Component::of(s.kind()).is_some_and(|c| !missing.contains(c))
             && let Some(b) = pack.locate_blocks(s.kind())?
         {

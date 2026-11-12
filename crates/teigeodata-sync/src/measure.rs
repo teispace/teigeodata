@@ -107,7 +107,9 @@ impl Measured {
         }
         for s in p.sections() {
             if let Some(k) = Component::of(s.kind())
-                && p.blocks(s.kind()).map_err(Error::Pack)?.is_some()
+                && p.part_blocks(s.kind(), s.part())
+                    .map_err(Error::Pack)?
+                    .is_some()
             {
                 m.blocked = Components::of(&[k]).union(m.blocked);
             }

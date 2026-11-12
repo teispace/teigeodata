@@ -329,7 +329,23 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   level and level of detail); tables in [sizes](../../05-data/sizes.md) (2026-11-11)
 - [ ] Everything separable (D-213): names by language and outlines by admin level and level
   of detail as their own components, each sized in the catalog; the profile and the client
-  pick any set
+  pick any set ([research](../../02-research/notes/separable-components.md),
+  [ADR-0040](../../03-decisions/adr/ADR-0040-section-parts.md)). Steps:
+  - [x] 1. Section parts in the format: the table's `part` key, (kind, part) order, block
+    hashes by part, reader and writer refusals; packs without parts unchanged (D-246,
+    2026-11-12)
+  - [ ] 2. Names and search by language: the forge writes NAMES, SEARCH and SUBSTRING parts
+    (base: canonical and undetermined names; a part per language of 16 KiB or more; `*` for
+    the rest); the engine reads every installed part, a row scored once at its best tier;
+    gates: golden lite and G-golden-tithipatra unchanged with every part, English-only
+    installs pass the English cases; `pack-sizes --langs` matches `ne-Deva` by its primary
+    subtag
+  - [ ] 3. Outlines by admin level group: ARCS by the coarsest level using each arc,
+    POLYGONS and POLY_INDEX by level, `ADMIN_REGION` per deepest level; `admin_at` down to
+    level *k* equals the full chain cut at *k* (the G-tz-layer method)
+  - [ ] 4. Levels of detail as parts: ARCS and `ADMIN_REGION` per published level
+  - [ ] 5. The catalog lists each part's wire size; `tgd install np --names en --outlines
+    district@20m`; profiles pick parts; the engine's installed set by part
 - [x] Derive SUBSTRING on the device: `Store::derive` checked against the head's hash, engine feature `derive`; Nepal lite in 0.50 s, byte for byte (D-218, 2026-11-11)
 - [x] TG-12: `forge embed --profile` from `data/embed/<name>.yaml`; `baseline` byte-identical, `tithipatra` 7.32 MB wire, `points-en` 1.17 MB (D-214, 2026-11-11)
 - [x] Nepal in full in the embedded layer: all 95,726 places, IDs kept (D-214). Zone rules: built for the layer's every zone (D-224, 2026-11-11). Zones at a point by the layer's units, no REGION; gate G-tz-layer (D-245, 2026-11-12)
@@ -459,3 +475,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-12 | 4.9c first, before phases 5 and 6; the 6 districts named, places across the border left out, `forge make` keeps IDs by default | D-239, D-240, D-241 |
 | 2026-11-12 | 4.9c: TG-14, a unit's type word cut and read in queries; the 38 renamed local levels named | D-242 to D-244 |
 | 2026-11-12 | 4.9c: zones at a point on the embedded layer by its units, no REGION; gate G-tz-layer | D-245 |
+| 2026-11-12 | 4.9c: everything separable planned in five steps; step 1, section parts in the format | D-246 |

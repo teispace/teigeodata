@@ -59,9 +59,9 @@ HEADER (128 B)                                   offset
   file_len u64                                                84
   reserved[20] (0)                                            92
   head_hash[16]      first 16 bytes of the head digest        112
-SECTION TABLE: section_count × 80 B, kinds strictly increasing
+SECTION TABLE: section_count × 80 B, (kind, part) strictly increasing
   kind u32, encoding u16, flags u16 (0), offset u64, length u64, decoded_length u64,
-  item_count u64, blake3[32], reserved[8] (0)
+  item_count u64, blake3[32], part u32, reserved[4] (0)
 MANIFEST: canonical TLV (below)
 SIGNATURE (signed packs): key_id[8], Ed25519 signature[64]
 ── the head ends; at most 16 KiB ──
@@ -141,6 +141,22 @@ parameters).
 | 22 | TZ_RULES | the rules of the pack's timezones: transitions, local time types, abbreviations, parsed POSIX TZ footers, zone names linked to their areas | `tz-rules` | column table (D-196, [ADR-0039](../03-decisions/adr/ADR-0039-tz-rules.md)): 93 kB for the world's 444 outline zones, 2.5 kB for three; [below](#tz_rules) |
 | 23 | SUBSTRING | word-suffix keys of 3 or more code points → lists of rows by importance; a name from the middle of a word | `substring` | column table (D-199): SEARCH's layout with one map; 19.9 B per place on a GeoNames proxy of Nepal (2.59 MB, 2.5× its SEARCH), [below](#substring) |
 | 24 | DEM_COARSE | a coarse elevation grid for small installs: terrain anywhere at about 15″ | `dem-coarse` | DEM's column table and coder (D-225): block means of the pack's own DEM, [below](#dem) |
+
+### Section parts (ADR-0040)
+
+A kind may appear more than once, each section a **part** of it keyed by the entry's `part`
+(D-246, [ADR-0040](../03-decisions/adr/ADR-0040-section-parts.md),
+[research](../02-research/notes/separable-components.md)). Part 0 is the **base part**: the
+only section of a kind that is not split, and the first of a kind that is. Open refuses a
+table whose (kind, part) pairs do not strictly increase, a part other than 0 of a known kind
+that takes none, and a part that comes without its kind's base part; the writer refuses the
+same. Kinds that take parts: NAMES, SEARCH and SUBSTRING (key: the language's primary subtag
+packed as NAMES' `lang` column packs it, `0x2a` `*` for every language without its own part),
+ARCS (key: admin level group `| lod << 8`), POLYGONS and POLY_INDEX (the group) and
+`ADMIN_REGION` (the deepest level `| lod << 8`). A kind this reader does not know may have
+parts. `Pack::section(kind)` is the base part; `Pack::part(kind, part)` and
+`Pack::parts(kind)` reach the rest. A pack without parts is byte for byte what it was before
+parts existed.
 
 ### Components of a pack
 
@@ -951,7 +967,7 @@ the number of chaining values.
 | Part | Bytes | Content |
 |---|---:|---|
 | header | 16 | `block_log2` u8 (14: 16 KiB), 3 reserved zero bytes, `entries` u32, `cvs` u64 |
-| directory | 16 per entry | `kind` u32, reserved zero u32, `first` u64 (the index of the section's first CV); kinds strictly increasing |
+| directory | 16 per entry | `kind` u32, `part` u32 (ADR-0040; 0 for a base part), `first` u64 (the index of the section's first CV); (kind, part) strictly increasing |
 | chaining values | 32 per block | the BLAKE3 chaining value of each 16 KiB block, the last one short |
 
 - **The list needs no trust root of its own:** the CVs of a section are exactly the leaves of

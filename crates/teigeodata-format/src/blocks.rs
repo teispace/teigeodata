@@ -7,7 +7,7 @@
 //! Layout ([`Encoding::RAW`], little-endian; `item_count` is the number of CVs):
 //! ```text
 //! block_log2 u8 (14), reserved [u8; 3] (0), entries u32, cvs u64
-//! directory [{ kind u32, reserved u32 (0), first u64 }; entries]   kinds increasing
+//! directory [{ kind u32, part u32, first u64 }; entries]   (kind, part) increasing
 //! cvs       [[u8; 32]; cvs]   cvs[first + i] is block i of that section
 //! ```
 //! Canonical: there is a list exactly when some section other than the list is at least
@@ -22,7 +22,7 @@ use blake3::hazmat::{
     ChainingValue, HasherExt, Mode, left_subtree_len, merge_subtrees_non_root, merge_subtrees_root,
 };
 
-use crate::{Encoding, Error, Kind, Section, SectionEntry};
+use crate::{Encoding, Error, Kind, Part, Section, SectionEntry};
 
 /// log₂ of the block length.
 pub const BLOCK_LOG2: u8 = 14;
@@ -143,13 +143,13 @@ impl<'a> List<'a> {
         })
     }
 
-    /// The CVs of section `kind`.
-    fn cvs_of(&self, kind: Kind, length: u64) -> Option<&'a [[u8; 32]]> {
+    /// The CVs of section `kind`, part `part`.
+    fn cvs_of(&self, kind: Kind, part: Part, length: u64) -> Option<&'a [[u8; 32]]> {
         let e = self
             .entries
             .iter()
             .map(|&e| entry(e))
-            .find(|e| e.0 == kind.0)?;
+            .find(|e| (e.0, e.1) == (kind.0, part.0))?;
         let first = usize::try_from(e.2).ok()?;
         let n = usize::try_from(blocks_of(length)).ok()?;
         self.cvs.get(first..first.checked_add(n)?)
@@ -174,7 +174,9 @@ pub(crate) fn check<'a>(
     let mut next = 0_u64;
     for s in sections.filter(|s| covered(s.kind(), s.bytes().len() as u64)) {
         match entries.next() {
-            Some((kind, 0, first)) if kind == s.kind().0 && first == next => {
+            Some((kind, part, first))
+                if (kind, part) == (s.kind().0, s.part().0) && first == next =>
+            {
                 next = next
                     .checked_add(blocks_of(s.bytes().len() as u64))
                     .ok_or(fail("too many blocks"))?;
@@ -221,7 +223,7 @@ pub fn proven_cvs<'a>(
     }
     let parsed = List::parse_body(list, list_entry.encoding, list_entry.item_count)?;
     let cvs = parsed
-        .cvs_of(section.kind, section.length)
+        .cvs_of(section.kind, section.part, section.length)
         .ok_or(fail("the section has no entry"))?;
     if root(cvs, section.length).as_ref() != Some(section.hash) {
         return Err(Error::SectionHash {
@@ -253,7 +255,7 @@ impl<'a> Blocks<'a, '_> {
         }
         let list = List::parse(&list.ok_or(fail("missing"))?)?;
         let cvs = list
-            .cvs_of(section.kind(), len)
+            .cvs_of(section.kind(), section.part(), len)
             .ok_or(fail("the section has no entry"))?;
         Ok(Some(Self {
             section,
@@ -370,16 +372,29 @@ pub fn item_count(list: &[u8]) -> u64 {
 /// [`Error::Write`] if a kind is repeated or there are more than 2³² covered sections.
 #[cfg(feature = "write")]
 pub fn encode(sections: &[(Kind, &[u8])]) -> Result<Option<alloc::vec::Vec<u8>>, Error> {
+    let parts: alloc::vec::Vec<(Kind, Part, &[u8])> =
+        sections.iter().map(|&(k, b)| (k, Part::BASE, b)).collect();
+    encode_parts(&parts)
+}
+
+/// [`encode`] for sections with their parts (ADR-0040).
+///
+/// # Errors
+/// [`Error::Write`] if a kind and part is repeated or there are more than 2³² covered sections.
+#[cfg(feature = "write")]
+pub fn encode_parts(
+    sections: &[(Kind, Part, &[u8])],
+) -> Result<Option<alloc::vec::Vec<u8>>, Error> {
     use alloc::vec::Vec;
-    let mut covered_ones: Vec<(Kind, &[u8])> = sections
+    let mut covered_ones: Vec<(Kind, Part, &[u8])> = sections
         .iter()
         .copied()
-        .filter(|(k, b)| covered(*k, b.len() as u64))
+        .filter(|(k, _, b)| covered(*k, b.len() as u64))
         .collect();
-    covered_ones.sort_by_key(|c| c.0);
+    covered_ones.sort_by_key(|c| (c.0, c.1));
     if covered_ones
         .windows(2)
-        .any(|w| w.first().map(|a| a.0) == w.get(1).map(|b| b.0))
+        .any(|w| w.first().map(|a| (a.0, a.1)) == w.get(1).map(|b| (b.0, b.1)))
     {
         return Err(Error::Write("a section kind was given twice"));
     }
@@ -390,7 +405,7 @@ pub fn encode(sections: &[(Kind, &[u8])]) -> Result<Option<alloc::vec::Vec<u8>>,
         u32::try_from(covered_ones.len()).map_err(|_| Error::Write("too many sections"))?;
     let total: u64 = covered_ones
         .iter()
-        .map(|c| blocks_of(c.1.len() as u64))
+        .map(|c| blocks_of(c.2.len() as u64))
         .sum();
     let mut out = Vec::with_capacity(
         HEADER + covered_ones.len() * ENTRY + 32 * usize::try_from(total).unwrap_or(0),
@@ -399,13 +414,13 @@ pub fn encode(sections: &[(Kind, &[u8])]) -> Result<Option<alloc::vec::Vec<u8>>,
     out.extend_from_slice(&entries.to_le_bytes());
     out.extend_from_slice(&total.to_le_bytes());
     let mut first = 0_u64;
-    for (kind, bytes) in &covered_ones {
+    for (kind, part, bytes) in &covered_ones {
         out.extend_from_slice(&kind.0.to_le_bytes());
-        out.extend_from_slice(&[0; 4]);
+        out.extend_from_slice(&part.0.to_le_bytes());
         out.extend_from_slice(&first.to_le_bytes());
         first += blocks_of(bytes.len() as u64);
     }
-    for (_, bytes) in &covered_ones {
+    for (_, _, bytes) in &covered_ones {
         for (i, block) in bytes.chunks(BLOCK).enumerate() {
             out.extend_from_slice(&leaf(i as u64, block));
         }
@@ -416,23 +431,26 @@ pub fn encode(sections: &[(Kind, &[u8])]) -> Result<Option<alloc::vec::Vec<u8>>,
 /// Proves every entry of a `BLOCK_HASHES` body against the sections' hashes (feature `write`):
 /// the writer's check that the list it is given is the right one. O(blocks) merges.
 #[cfg(feature = "write")]
-pub(crate) fn prove_all(list: &[u8], sections: &[(Kind, u64, [u8; 32])]) -> Result<(), Error> {
+pub(crate) fn prove_all(
+    list: &[u8],
+    sections: &[(Kind, Part, u64, [u8; 32])],
+) -> Result<(), Error> {
     let bad = Error::Write("the block hashes do not match the sections");
     let (&[_, _, _, _, _, _, _, _, ..], rest) = list.split_first_chunk::<HEADER>().ok_or(bad)?;
-    let entries = sections.iter().filter(|s| covered(s.0, s.1)).count();
+    let entries = sections.iter().filter(|s| covered(s.0, s.2)).count();
     let (dir, cvs) = rest.split_at_checked(entries * ENTRY).ok_or(bad)?;
     let cvs = cvs.as_chunks::<32>().0;
-    for (&e, (kind, len, hash)) in dir
+    for (&e, (kind, part, len, hash)) in dir
         .as_chunks::<ENTRY>()
         .0
         .iter()
-        .zip(sections.iter().filter(|s| covered(s.0, s.1)))
+        .zip(sections.iter().filter(|s| covered(s.0, s.2)))
     {
-        let (k, _, first) = entry(e);
+        let (k, p, first) = entry(e);
         let first = usize::try_from(first).map_err(|_| bad)?;
         let n = usize::try_from(blocks_of(*len)).map_err(|_| bad)?;
         let slice = cvs.get(first..first + n).ok_or(bad)?;
-        if k != kind.0 || root(slice, *len).as_ref() != Some(hash) {
+        if (k, p) != (kind.0, part.0) || root(slice, *len).as_ref() != Some(hash) {
             return Err(bad);
         }
     }

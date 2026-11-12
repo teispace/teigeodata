@@ -7,7 +7,7 @@ use crate::layout::{
     ENTRY_LEN, Entry, FOOTER_LEN, Footer, HEAD_MAX, HEADER_HASHED, HEADER_LEN, Header, MAGIC,
     SIGNATURE_LEN, align_up, head_digest, pack_uuid,
 };
-use crate::{Encoding, Error, Kind, Manifest, READER_MAJOR};
+use crate::{Encoding, Error, Kind, Manifest, Part, READER_MAJOR};
 
 /// An open, structurally valid pack, borrowing its bytes.
 #[derive(Debug)]
@@ -35,6 +35,8 @@ pub struct PackHead<'a> {
 pub struct SectionEntry<'a> {
     /// The section's kind.
     pub kind: Kind,
+    /// Its part of the kind (ADR-0040); [`Part::BASE`] for a kind's only section.
+    pub part: Part,
     /// How its bytes are encoded.
     pub encoding: Encoding,
     /// The number of items it holds.
@@ -53,6 +55,7 @@ pub struct SectionEntry<'a> {
 #[derive(Clone, Copy, Debug)]
 pub struct Section<'a> {
     kind: Kind,
+    part: Part,
     encoding: Encoding,
     item_count: u64,
     decoded_length: u64,
@@ -68,6 +71,7 @@ impl<'a> Section<'a> {
     pub const fn unpacked(kind: Kind, item_count: u64, bytes: &'a [u8]) -> Self {
         Self {
             kind,
+            part: Part::BASE,
             encoding: Encoding::TABLE,
             item_count,
             decoded_length: bytes.len() as u64,
@@ -80,6 +84,12 @@ impl<'a> Section<'a> {
     #[must_use]
     pub const fn kind(&self) -> Kind {
         self.kind
+    }
+
+    /// The section's part of its kind (ADR-0040).
+    #[must_use]
+    pub const fn part(&self) -> Part {
+        self.part
     }
 
     /// How the section's bytes are encoded.
@@ -235,7 +245,8 @@ fn check_header(header: &Header, len: u64) -> Result<Parts, Error> {
     })
 }
 
-/// Checks every table entry: kinds strictly increasing, each section at the next 64-byte
+/// Checks every table entry: (kind, part) strictly increasing, a kind's base part first and a
+/// part other than the base only on a kind that takes parts (ADR-0040), each section at the next 64-byte
 /// boundary after the previous one with zero padding, and the footer right after the last.
 /// `bytes` is the file or a prefix of it (the head frame); padding is checked where it reaches.
 fn check_sections(
@@ -245,18 +256,26 @@ fn check_sections(
     footer_start: u64,
 ) -> Result<(), Error> {
     let mut pos = head_end;
-    let mut prev_kind = 0;
+    let (mut prev_kind, mut prev_part) = (0, 0);
     for (i, e) in table.iter().enumerate() {
         let err = |problem| Error::Section {
             index: u32::try_from(i).unwrap_or(u32::MAX),
             problem,
         };
-        let kind = e.kind.get();
-        if kind == 0 || kind <= prev_kind {
-            return Err(err("kinds are not strictly increasing from 1"));
+        let (kind, part) = (e.kind.get(), e.part.get());
+        if kind == 0 || (kind, part) <= (prev_kind, prev_part) {
+            return Err(err(
+                "kinds and parts are not strictly increasing from kind 1",
+            ));
         }
-        if e.flags.get() != 0 || e.reserved != [0; 8] {
+        if e.flags.get() != 0 || e.reserved != [0; 4] {
             return Err(err("reserved flags or bytes are not zero"));
+        }
+        if part != 0 && !Kind(kind).takes_parts() {
+            return Err(err("a part of a kind that takes none"));
+        }
+        if part != 0 && kind != prev_kind {
+            return Err(err("a part comes without its kind's base part"));
         }
         let off = e.offset.get();
         if Some(off) != align_up(pos) {
@@ -279,7 +298,7 @@ fn check_sections(
                 "a raw section's decoded length differs from its length",
             ));
         }
-        prev_kind = kind;
+        (prev_kind, prev_part) = (kind, part);
         pos = end;
     }
     if pos == footer_start {
@@ -364,7 +383,35 @@ impl<'a> Pack<'a> {
         &self,
         kind: Kind,
     ) -> Result<Option<crate::blocks::Blocks<'a, 'static>>, Error> {
-        match self.section(kind) {
+        self.locate_part_blocks(kind, Part::BASE)
+    }
+
+    /// [`Pack::blocks`] of part `part` of a kind (ADR-0040).
+    ///
+    /// # Errors
+    /// As [`Pack::blocks`].
+    pub fn part_blocks(
+        &self,
+        kind: Kind,
+        part: Part,
+    ) -> Result<Option<crate::blocks::Blocks<'a, 'static>>, Error> {
+        let blocks = self.locate_part_blocks(kind, part)?;
+        if let Some(b) = &blocks {
+            b.prove()?;
+        }
+        Ok(blocks)
+    }
+
+    /// [`Pack::locate_blocks`] of part `part` of a kind (ADR-0040).
+    ///
+    /// # Errors
+    /// As [`Pack::locate_blocks`].
+    pub fn locate_part_blocks(
+        &self,
+        kind: Kind,
+        part: Part,
+    ) -> Result<Option<crate::blocks::Blocks<'a, 'static>>, Error> {
+        match self.part(kind, part) {
             Some(s) => crate::blocks::Blocks::locate(s, self.section(Kind::BLOCK_HASHES)),
             None => Ok(None),
         }
@@ -394,6 +441,7 @@ impl<'a> Pack<'a> {
         let end = usize_of(e.offset.saturating_add(e.length)).unwrap_or(usize::MAX);
         Section {
             kind: e.kind,
+            part: e.part,
             encoding: e.encoding,
             item_count: e.item_count,
             decoded_length: e.decoded_length,
@@ -402,15 +450,27 @@ impl<'a> Pack<'a> {
         }
     }
 
-    /// Every section, in kind order.
+    /// Every section, in kind and part order.
     pub fn sections(&self) -> impl ExactSizeIterator<Item = Section<'a>> + '_ {
         self.head.sections().map(|e| self.section_at(e))
     }
 
-    /// The section of this kind, if the pack has one.
+    /// The base part of this kind, if the pack has one: a kind's only section unless it is
+    /// split into parts (ADR-0040).
     #[must_use]
     pub fn section(&self, kind: Kind) -> Option<Section<'a>> {
         self.head.section(kind).map(|e| self.section_at(e))
+    }
+
+    /// The section of this kind and part, if the pack has one.
+    #[must_use]
+    pub fn part(&self, kind: Kind, part: Part) -> Option<Section<'a>> {
+        self.head.part(kind, part).map(|e| self.section_at(e))
+    }
+
+    /// Every part of this kind, the base part first.
+    pub fn parts(&self, kind: Kind) -> impl Iterator<Item = Section<'a>> + '_ {
+        self.head.parts(kind).map(|e| self.section_at(e))
     }
 
     /// The manifest.
@@ -526,6 +586,7 @@ impl<'a> PackHead<'a> {
     fn entry(e: &'a Entry) -> SectionEntry<'a> {
         SectionEntry {
             kind: Kind(e.kind.get()),
+            part: Part(e.part.get()),
             encoding: Encoding(e.encoding.get()),
             item_count: e.item_count.get(),
             decoded_length: e.decoded_length.get(),
@@ -535,18 +596,35 @@ impl<'a> PackHead<'a> {
         }
     }
 
-    /// Every section's entry, in kind order (which is file order).
+    /// Every section's entry, in kind and part order (which is file order).
     pub fn sections(&self) -> impl ExactSizeIterator<Item = SectionEntry<'a>> + '_ {
         self.table.iter().map(Self::entry)
     }
 
-    /// The entry of the section of this kind, if the pack has one.
+    /// The entry of this kind's base part, if the pack has one.
     #[must_use]
     pub fn section(&self, kind: Kind) -> Option<SectionEntry<'a>> {
+        self.part(kind, Part::BASE)
+    }
+
+    /// The entry of the section of this kind and part, if the pack has one: O(log sections).
+    #[must_use]
+    pub fn part(&self, kind: Kind, part: Part) -> Option<SectionEntry<'a>> {
         self.table
-            .binary_search_by_key(&kind.0, |e| e.kind.get())
+            .binary_search_by_key(&(kind.0, part.0), |e| (e.kind.get(), e.part.get()))
             .ok()
             .and_then(|i| self.table.get(i))
+            .map(Self::entry)
+    }
+
+    /// The entries of every part of this kind, the base part first.
+    pub fn parts(&self, kind: Kind) -> impl Iterator<Item = SectionEntry<'a>> + '_ {
+        let start = self.table.partition_point(|e| e.kind.get() < kind.0);
+        self.table
+            .get(start..)
+            .unwrap_or_default()
+            .iter()
+            .take_while(move |e| e.kind.get() == kind.0)
             .map(Self::entry)
     }
 

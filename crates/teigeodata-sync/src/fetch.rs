@@ -452,7 +452,7 @@ fn reuse<F: Read + Write + Seek>(
     let spans: Vec<(Range<u64>, Option<u64>)> = new
         .sections()
         .map(|s| {
-            let same = prev.section(s.kind).filter(|o| {
+            let same = prev.part(s.kind, s.part).filter(|o| {
                 o.hash == s.hash && o.length == s.length && o.offset + o.length <= old_len
             });
             (s.offset..s.offset + s.length, same.map(|o| o.offset))

@@ -58,7 +58,9 @@ pub(crate) struct Entry {
     pub(crate) decoded_length: U64,
     pub(crate) item_count: U64,
     pub(crate) blake3: [u8; 32],
-    pub(crate) reserved: [u8; 8],
+    /// The section's part of its kind (ADR-0040); 0 for the base part.
+    pub(crate) part: U32,
+    pub(crate) reserved: [u8; 4],
 }
 
 /// The 32-byte footer: the magic again, the file length and the head hash.

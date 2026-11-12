@@ -36,7 +36,7 @@ use core::ops::Range;
 
 use teigeodata_format::blocks::{BLOCK, MIN_COVERED, leaf, proven_cvs};
 use teigeodata_format::component::Components;
-use teigeodata_format::{Encoding, Kind, PackHead, SectionEntry};
+use teigeodata_format::{Encoding, Kind, PackHead, Part, SectionEntry};
 
 use crate::Error;
 use crate::catalog::Entry;
@@ -46,6 +46,7 @@ use crate::transport::{Decoder, Fetch, Frame, Frames, SeekTable};
 #[derive(Clone, Debug)]
 struct Section {
     kind: Kind,
+    part: Part,
     encoding: Encoding,
     item_count: u64,
     decoded_length: u64,
@@ -60,6 +61,7 @@ impl Section {
     fn entry(&self) -> SectionEntry<'_> {
         SectionEntry {
             kind: self.kind,
+            part: self.part,
             encoding: self.encoding,
             item_count: self.item_count,
             decoded_length: self.decoded_length,
@@ -233,6 +235,7 @@ impl Install {
             .sections()
             .map(|e| Section {
                 kind: e.kind,
+                part: e.part,
                 encoding: e.encoding,
                 item_count: e.item_count,
                 decoded_length: e.decoded_length,

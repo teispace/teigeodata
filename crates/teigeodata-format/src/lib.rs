@@ -147,6 +147,23 @@ impl Kind {
     /// A coarse elevation grid for small installs (D-225): DEM's layout, about 15″.
     pub const DEM_COARSE: Self = Self(24);
 
+    /// Whether the kind may be split into parts (ADR-0040): names, search and substring keys
+    /// by language, outlines by admin level group and level of detail. A known kind that takes
+    /// none has only its base part; a kind this reader does not know may have parts.
+    #[must_use]
+    pub fn takes_parts(self) -> bool {
+        matches!(
+            self,
+            Self::NAMES
+                | Self::SEARCH
+                | Self::SUBSTRING
+                | Self::ARCS
+                | Self::POLYGONS
+                | Self::POLY_INDEX
+                | Self::ADMIN_REGION
+        ) || self.name().is_none()
+    }
+
     /// This reader's name for the kind, if it knows it.
     #[must_use]
     pub fn name(self) -> Option<&'static str> {
@@ -188,6 +205,54 @@ impl fmt::Display for Kind {
             Some(n) => f.write_str(n),
             None => write!(f, "kind {}", self.0),
         }
+    }
+}
+
+/// Which part of its kind a section is (ADR-0040). A kind may appear more than once in a pack,
+/// each section a part with its own key; the base part, 0, is the only one of a kind that
+/// takes no parts and comes first of its kind. What a key means is fixed per kind: a language
+/// packed as NAMES' `lang` column packs it ([`Part::language`]) for NAMES, SEARCH and
+/// SUBSTRING; an admin level group and a level of detail ([`Part::outline`]) for the outlines.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Part(pub u32);
+
+impl Part {
+    /// The base part: today's single section of a kind.
+    pub const BASE: Self = Self(0);
+    /// The names of every language without a part of its own, keyed `*`.
+    pub const REST: Self = Self(0x2a);
+
+    /// The part of language `tag` (its primary subtag, 2 to 4 ASCII letters, folded to lower
+    /// case and packed little-endian as NAMES' `lang` column); `None` for any other text.
+    #[must_use]
+    pub fn language(tag: &str) -> Option<Self> {
+        let primary = tag.split(['-', '_']).next().unwrap_or_default();
+        if !(2..=4).contains(&primary.len()) || !primary.bytes().all(|b| b.is_ascii_alphabetic()) {
+            return None;
+        }
+        let mut v = 0_u32;
+        for (i, b) in primary.bytes().enumerate() {
+            v |= u32::from(b.to_ascii_lowercase()) << (8 * i);
+        }
+        Some(Self(v))
+    }
+
+    /// The outline part of admin level group `group` at level of detail `lod`.
+    #[must_use]
+    pub const fn outline(group: u8, lod: u8) -> Self {
+        Self(group as u32 | (lod as u32) << 8)
+    }
+
+    /// Whether this is the base part.
+    #[must_use]
+    pub const fn is_base(self) -> bool {
+        self.0 == 0
+    }
+}
+
+impl fmt::Display for Part {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "part {:#x}", self.0)
     }
 }
 
