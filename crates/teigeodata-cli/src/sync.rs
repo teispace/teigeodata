@@ -12,17 +12,19 @@
 //! catalog works offline once refreshed: `catalog`, `find`, `locate` and `status` never touch
 //! the network.
 
+use std::fmt::Write as _;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 use teigeodata_core::E7;
 use teigeodata_engine::{Engine, Layer, LayerOptions, Load, Place};
-use teigeodata_format::component::{Component, Components};
+use teigeodata_format::Part;
+use teigeodata_format::component::{Component, Components, Parts, Selection};
 use teigeodata_sync::catalog::{self, Catalog, Entry};
 use teigeodata_sync::fetch::{Downloads, FetchError, Mirrors, Ureq};
 use teigeodata_sync::refresh::{self, RefreshError};
-use teigeodata_sync::store::{Dir, Health, Store, StoreError};
+use teigeodata_sync::store::{Dir, Health, Record, Store, StoreError};
 use teigeodata_sync::trust::Trusted;
 
 use crate::Fail;
@@ -282,9 +284,98 @@ fn entry_json(store: &Store<Dir>, e: &Entry) -> Value {
         "download": all.wire,
         "disk": all.disk,
         "components": e.sizes.keys().map(|c| c.name()).collect::<Vec<_>>(),
+        "parts": e.parts.iter().map(part_json).collect::<Vec<_>>(),
         "licence": e.licence,
         "state": state(store, e),
     })
+}
+
+/// A catalog part for people and `--json`: its component, bytes, and its language or its
+/// outline's level, level of detail and tolerance.
+fn part_json(p: &catalog::PartSize) -> Value {
+    let (component, download, disk) = (p.component.name(), p.size.wire, p.size.disk);
+    p.part.outline_levels().map_or_else(
+        || json!({"component": component, "language": language(p.part), "download": download, "disk": disk}),
+        |(level, lod)| json!({"component": component, "level": level, "lod": lod, "tolerance_m": p.tolerance_m, "download": download, "disk": disk}),
+    )
+}
+
+/// A names part for people: its language (`ne`), `*` for the rest, `base` for the base.
+fn language(p: Part) -> String {
+    if p.is_base() {
+        return "base".into();
+    }
+    if p == Part::REST {
+        return "*".into();
+    }
+    p.language_code().map_or_else(
+        || format!("{:#x}", p.0),
+        |c| {
+            c.iter()
+                .filter(|&&b| b != 0)
+                .map(|&b| char::from(b))
+                .collect()
+        },
+    )
+}
+
+/// The parts a record holds, for people and `--json`: `null` for every one.
+fn parts_json(p: Parts) -> Value {
+    json!({
+        "languages": p.language_parts().map(|l| l.iter().map(|&x| language(x)).collect::<Vec<_>>()),
+        "outline": p.outline_part().map(|o| o.outline_levels().map_or_else(
+            || json!("base"),
+            |(level, lod)| json!({"level": level, "lod": lod}),
+        )),
+    })
+}
+
+/// The parts a record holds, for people: nothing for every part, else ` names en,*` and
+/// ` outlines to level 1 at lod 2` or ` outlines whole`.
+fn parts_text(p: Parts) -> String {
+    let mut t = String::new();
+    if let Some(l) = p.language_parts() {
+        let l: Vec<String> = l.iter().map(|&x| language(x)).collect();
+        let _ = write!(t, "  names {}", l.join(","));
+    }
+    match p.outline_part().map(Part::outline_levels) {
+        Some(Some((level, lod))) => {
+            let _ = write!(t, "  outlines to level {level} at lod {lod}");
+        }
+        Some(None) => t.push_str("  outlines whole"),
+        None => {}
+    }
+    t
+}
+
+/// What `install` takes of each pack it names: components (every one when empty) and, when
+/// asked, only some languages and one outline part (D-253).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Want {
+    /// The components named.
+    pub(crate) components: Vec<Component>,
+    /// `--names`: the languages besides the base names.
+    pub(crate) languages: Option<Vec<Part>>,
+    /// `--outlines`: the deepest admin level and the tolerance in metres.
+    pub(crate) outline: Option<(u8, u32)>,
+}
+
+impl Want {
+    /// The components: those named, with names and boundaries when languages or an outline
+    /// are asked for, closed by what they need; every one when none is named.
+    fn set(&self) -> Components {
+        if self.components.is_empty() {
+            return Components::all();
+        }
+        let mut set = Components::of(&self.components);
+        if self.languages.is_some() {
+            set = set.union(Components::of(&[Component::Names]));
+        }
+        if self.outline.is_some() {
+            set = set.union(Components::of(&[Component::Boundaries]));
+        }
+        set.closed()
+    }
 }
 
 pub(crate) fn catalog(root: &Path, as_json: bool, out: &mut dyn Write) -> Result<(), Fail> {
@@ -458,12 +549,64 @@ fn catalog_for(s: &mut Opened, paths: &[String]) -> Result<Trusted, Fail> {
     }
 }
 
-/// Installs `path` with `set` (or the installed set, or everything), its dependencies first.
+/// What to install of `entry`: `want` added to what is `installed` (components added, the
+/// parts it names replaced), or what is installed (an update, a dependency), or everything;
+/// closed and resolved on the pack.
+fn selection(
+    entry: &Entry,
+    want: Option<&Want>,
+    installed: Option<&Record>,
+) -> Result<Selection, Fail> {
+    // An install adds components to what is there and replaces the parts it names; `None`
+    // (an update, a dependency) keeps what is there.
+    let set = match (want, installed) {
+        (Some(w), r) => {
+            let mut parts = r.map_or(Parts::ALL, |r| r.parts);
+            if let Some(l) = &w.languages {
+                parts = parts.languages(l).ok_or_else(|| {
+                    Fail::Refused(format!(
+                        "--names: at most {} languages",
+                        teigeodata_format::component::MAX_LANGUAGES
+                    ))
+                })?;
+            }
+            if let Some((level, t)) = w.outline {
+                parts = parts.outline(entry.outline_for(level, t));
+            }
+            Selection {
+                set: r.map_or(w.set(), |r| w.set().union(r.set)),
+                parts,
+            }
+        }
+        (None, Some(r)) => {
+            // An update keeps the outline part, or, when the new release no longer has it,
+            // takes the same levels at full resolution.
+            let mut sel = r.selection();
+            if let Some((level, _)) = r.parts.outline_part().and_then(Part::outline_levels)
+                && !entry
+                    .parts
+                    .iter()
+                    .any(|p| Some(p.part) == r.parts.outline_part())
+            {
+                sel.parts = sel.parts.outline(entry.outline_for(level, 0));
+            }
+            sel
+        }
+        (None, None) => Components::all().into(),
+    };
+    Ok(Selection {
+        parts: entry.resolve(set.parts),
+        ..set.closed()
+    })
+}
+
+/// Installs `path` with `want` added to what is installed (or the installed selection, or
+/// everything), its dependencies first.
 fn install_one(
     s: &mut Opened,
     t: &Trusted,
     path: &str,
-    set: Option<Components>,
+    want: Option<&Want>,
     asked: bool,
     out: &mut dyn Write,
 ) -> Result<(), Fail> {
@@ -474,16 +617,10 @@ fn install_one(
         }
     }
     let installed = s.store.packs().iter().find(|r| r.key() == path).cloned();
-    // An install adds to what is there; `None` (an update, a dependency) keeps it.
-    let set = match (set, installed.as_ref()) {
-        (Some(want), Some(r)) => want.union(r.set),
-        (Some(want), None) => want,
-        (None, Some(r)) => r.set,
-        (None, None) => Components::all(),
-    };
+    let set = selection(&entry, want, installed.as_ref())?;
     if installed
         .as_ref()
-        .is_some_and(|r| r.head == entry.head && r.set == set.closed())
+        .is_some_and(|r| r.head == entry.head && r.selection() == set)
     {
         writeln!(out, "{path} {} is installed", entry.release)?;
         return Ok(());
@@ -551,7 +688,7 @@ fn install_one(
 pub(crate) fn install(
     root: &Path,
     packs: &[String],
-    components: &[Component],
+    want: &Want,
     pin: bool,
     downloads: Option<&Path>,
     out: &mut dyn Write,
@@ -560,14 +697,8 @@ pub(crate) fn install(
     s.downloads = downloads.map(Path::to_path_buf);
     let paths: Vec<String> = packs.iter().map(|p| path_of(p)).collect();
     let t = catalog_for(&mut s, &paths)?;
-    // No components named: the whole pack.
-    let set = Some(if components.is_empty() {
-        Components::all()
-    } else {
-        Components::of(components).closed()
-    });
     for p in &paths {
-        install_one(&mut s, &t, p, set, true, out)?;
+        install_one(&mut s, &t, p, Some(want), true, out)?;
         if pin && s.store.packs().iter().any(|r| r.key() == *p) {
             let (a, c) = split(p);
             s.store.pin(a, c, true)?;
@@ -583,12 +714,7 @@ pub(crate) fn install(
 
 pub(crate) fn update(root: &Path, packs: &[String], out: &mut dyn Write) -> Result<(), Fail> {
     let mut s = Opened::open(root)?;
-    let installed: Vec<String> = s
-        .store
-        .packs()
-        .iter()
-        .map(teigeodata_sync::store::Record::key)
-        .collect();
+    let installed: Vec<String> = s.store.packs().iter().map(Record::key).collect();
     let paths: Vec<String> = if packs.is_empty() {
         installed
     } else {
@@ -694,6 +820,7 @@ pub(crate) fn status(
             "path": r.key(),
             "release": r.release,
             "components": r.set.iter().map(Component::name).collect::<Vec<_>>(),
+            "parts": parts_json(r.parts),
             "bytes": r.pack_len,
             "pinned": r.pinned,
             "asked": r.asked,
@@ -718,10 +845,10 @@ pub(crate) fn status(
             )?,
             None => writeln!(out, "catalog: not refreshed yet")?,
         }
-        for r in &rows {
+        for (r, rec) in rows.iter().zip(&packs) {
             writeln!(
                 out,
-                "{:<28} {:<12} {:>12} bytes  {}{}  {}",
+                "{:<28} {:<12} {:>12} bytes  {}{}  {}{}",
                 field(r, "path").as_str().unwrap_or_default(),
                 field(r, "release").as_str().unwrap_or_default(),
                 field(r, "bytes"),
@@ -739,6 +866,7 @@ pub(crate) fn status(
                         .collect::<Vec<_>>()
                         .join(","))
                     .unwrap_or_default(),
+                parts_text(rec.parts),
             )?;
         }
     }

@@ -37,8 +37,17 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   measured by `Measured::catalog_sizes`; an optional `parts` field of `custom`, so older
   readers ignore it. `Entry::size_of` takes `impl Into<Selection>` and counts only the parts
   held.
+- `Entry::outline_for(level, tolerance_m)`: the outline part with the fewest bytes on the
+  wire that holds the admin units of `level` and coarser within the tolerance (the base when
+  none does, D-254).
 - The store's journal is version 3 when a pack holds some parts only (each record's `parts`),
   so a reader that knows only 2 refuses it; it stays 2 otherwise.
+
+### Command line (`tgd`)
+
+- `tgd install --names LANGS --outlines LEVEL[@Mm]`: install only some languages' names and
+  one outline part (D-254). Each replaces what is installed of its kind. `tgd catalog --json`
+  lists each part (`parts`); `tgd status` shows the installed parts.
 
 ## [0.2.0] - 2026-11-12
 

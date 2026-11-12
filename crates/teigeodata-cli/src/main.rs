@@ -325,6 +325,16 @@ enum Command {
         /// installed (default: the whole pack). Values as for `extract --components`.
         #[arg(long, value_delimiter = ',', value_parser = component)]
         components: Vec<Component>,
+        /// Only the names of these languages (BCP 47, comma-separated, at most 8) besides the
+        /// base names; a language without a part of its own comes with the rest (`*`). Replaces
+        /// the languages installed.
+        #[arg(long, value_delimiter = ',', value_name = "LANGS", value_parser = language)]
+        names: Option<Vec<teigeodata_format::Part>>,
+        /// Only the outlines of admin LEVEL and coarser, simplified by at most M metres
+        /// (`2@20m`; full resolution without `@`): the smallest part the pack has that holds
+        /// them. Replaces the outline installed.
+        #[arg(long, value_name = "LEVEL[@Mm]", value_parser = outlines)]
+        outlines: Option<(u8, u32)>,
         /// Never evict them.
         #[arg(long)]
         pin: bool,
@@ -438,6 +448,32 @@ fn component(s: &str) -> Result<Component, String> {
         let names: Vec<&str> = Component::ALL.iter().map(|c| c.name()).collect();
         format!("unknown component (expected one of {})", names.join(", "))
     })
+}
+
+fn language(s: &str) -> Result<teigeodata_format::Part, String> {
+    teigeodata_format::Part::language(s)
+        .ok_or_else(|| "expected a language tag such as `en` or `ne`".into())
+}
+
+/// `LEVEL[@Mm]`: an admin level and a tolerance in metres (0 without one).
+fn outlines(s: &str) -> Result<(u8, u32), String> {
+    let (level, tol) = s.split_once('@').unwrap_or((s, "0"));
+    let level: u8 = level
+        .parse()
+        .ok()
+        .filter(|&l| l <= teigeodata_format::Part::MAX_OUTLINE_LEVEL)
+        .ok_or_else(|| {
+            format!(
+                "expected an admin level from 0 to {}",
+                teigeodata_format::Part::MAX_OUTLINE_LEVEL
+            )
+        })?;
+    let tol = tol
+        .strip_suffix('m')
+        .unwrap_or(tol)
+        .parse()
+        .map_err(|_| "expected a tolerance in metres such as `20m`".to_owned())?;
+    Ok((level, tol))
 }
 
 /// Why a command failed, and its exit code.
@@ -678,9 +714,18 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
         Command::Install {
             packs,
             components,
+            names,
+            outlines,
             pin,
             downloads,
-        } => sync::install(store, &packs, &components, pin, downloads.as_deref(), out),
+        } => {
+            let want = sync::Want {
+                components,
+                languages: names,
+                outline: outlines,
+            };
+            sync::install(store, &packs, &want, pin, downloads.as_deref(), out)
+        }
         Command::Update { packs } => sync::update(store, &packs, out),
         Command::Remove { pack } => sync::remove(store, &pack, out),
         Command::Pin { pack, off } => sync::pin(store, &pack, !off, out),

@@ -198,6 +198,13 @@ The arc-group design as first written:
   one; the engine reads that one whatever its level and tolerance options say.
 - Measured on Nepal lite: English only keeps every Latin-script class of golden lite and saves
   31% of the names, search and substring wire.
+- **Choose outlines by bytes, not by key** (D-254): a client asks for a level and a tolerance;
+  of the parts that hold it, the smallest on the wire wins, the base included. A part with more
+  levels can be the smaller (it is simplified further), so matching the exact level would
+  fetch more. Levels are numbers on the command line; their local names are country data.
+- **The catalog carries what a choice needs** (D-253): each part's bytes and an outline's
+  tolerance, so a client picks and predicts an install from the signed metadata alone, before
+  any pack byte. Compact arrays keep Nepal lite's 28 parts at 1,484 B per entry.
 
 ## 8. Versions checked
 

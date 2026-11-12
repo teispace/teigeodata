@@ -378,6 +378,30 @@ impl Entry {
         }
     }
 
+    /// The outline part to install for the admin units of `level` and coarser, simplified by
+    /// at most `tolerance_m` metres: of the parts that hold them (the base holds every level
+    /// at full resolution), the one with the fewest bytes on the wire. The base when the pack
+    /// lists no outline parts.
+    #[must_use]
+    pub fn outline_for(&self, level: u8, tolerance_m: u32) -> Part {
+        let listed = self
+            .parts
+            .iter()
+            .filter(|p| p.component == Component::Boundaries);
+        let base = self.sizes.get(&Component::Boundaries).map_or(0, |s| {
+            s.wire
+                .saturating_sub(listed.clone().map(|p| p.size.wire).sum())
+        });
+        listed
+            .filter(|p| {
+                p.tolerance_m <= tolerance_m
+                    && p.part.outline_levels().is_some_and(|(d, _)| d >= level)
+            })
+            .map(|p| (p.size.wire, p.part))
+            .fold((base, Part::BASE), |a, b| if b.0 < a.0 { b } else { a })
+            .1
+    }
+
     /// `parts` on this pack: each language asked for as the part that holds it.
     #[must_use]
     pub fn resolve(&self, parts: Parts) -> Parts {

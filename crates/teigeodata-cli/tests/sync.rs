@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex};
 
 use ed25519_dalek::SigningKey;
 use serde_json::Value;
-use teigeodata_format::{Encoding, Kind, Pack, Tag, Writer};
+use teigeodata_format::{Encoding, Kind, Pack, Part, Tag, Writer};
 use teigeodata_sync::repo::{
     self, Files, RoleKeys, TargetFile, country_role, sign, snapshot_listing, targets,
     targets_delegating, timestamp,
@@ -448,6 +448,132 @@ fn an_update_keeps_the_components_installed() {
         serde_json::json!(["point", "names", "search"])
     );
     assert_eq!(s["packs"][0]["health"], "Good");
+}
+
+/// A Nepal pack whose names and outlines are split into parts (ADR-0040), of incompressible
+/// bodies so the wire bytes are the bodies': names base, `*` and `ne`; outlines whole, to
+/// level 0 and to level 1.
+fn parts_pack() -> Vec<u8> {
+    let body = |seed: u64, n: usize| -> Vec<u8> {
+        let mut x = seed;
+        (0..n)
+            .map(|_| {
+                x = x
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                (x >> 56) as u8
+            })
+            .collect()
+    };
+    let (ids, places) = (body(1, 4_000), body(2, 3_000));
+    let (base, rest, ne) = (body(3, 30_000), body(4, 20_000), body(5, 40_000));
+    let (arcs, to_0, to_1) = (body(6, 200_000), body(7, 10_000), body(8, 50_000));
+    let (ne_key, o0, o1) = (
+        Part::language("ne").unwrap(),
+        Part::outline(0, 0).unwrap(),
+        Part::outline(1, 0).unwrap(),
+    );
+    let mut w = Writer::new("np", "places", "2026.11.0").unwrap();
+    w.manifest(Tag::LICENCE, b"odbl").unwrap();
+    w.pack_parts(
+        &[
+            (Kind::IDMAP, Part::BASE, Encoding::RAW, 1, &ids),
+            (Kind::PLACES, Part::BASE, Encoding::RAW, 1, &places),
+            (Kind::NAMES, Part::BASE, Encoding::RAW, 1, &base),
+            (Kind::NAMES, Part::REST, Encoding::RAW, 1, &rest),
+            (Kind::NAMES, ne_key, Encoding::RAW, 1, &ne),
+            (Kind::ARCS, Part::BASE, Encoding::RAW, 1, &arcs),
+            (Kind::ARCS, o0, Encoding::RAW, 1, &to_0),
+            (Kind::ARCS, o1, Encoding::RAW, 1, &to_1),
+        ],
+        None,
+    )
+    .unwrap()
+}
+
+/// The bytes an install printed it fetched.
+fn fetched(out: &str) -> u64 {
+    let (_, rest) = out.split_once(": ").unwrap();
+    rest.split(' ').next().unwrap().parse().unwrap()
+}
+
+/// `install --names --outlines` (D-253): the catalog lists the parts, an install takes the
+/// languages asked (one without a part of its own comes with `*`) and the smallest outline
+/// part that holds the level; a later install replaces the parts it names and keeps the rest.
+#[test]
+fn an_install_takes_the_languages_and_outlines_asked() {
+    let host: Host = Arc::default();
+    publish(&host, 1, &[parts_pack()]);
+    let url = serve(Arc::clone(&host));
+    let store = store_for("parts", &url);
+    ok(&store, &["refresh", "--countries", "np"]);
+    let c = json(&store, &["catalog", "--json"]);
+    let parts = c[0]["parts"].as_array().unwrap();
+    assert_eq!(parts.len(), 4, "{parts:?}");
+    let size = |pick: &dyn Fn(&Value) -> bool| {
+        parts.iter().find(|p| pick(p)).unwrap()["download"]
+            .as_u64()
+            .unwrap()
+    };
+    let ne = size(&|p| p["language"] == "ne");
+    let to_0 = size(&|p| p["level"] == 0);
+    let whole = c[0]["download"].as_u64().unwrap();
+
+    // English (no part of its own: `*`) and the outlines to level 1: not `ne`, not the
+    // whole outlines, not the outlines to level 0.
+    let out = ok(
+        &store,
+        &["install", "np", "--names", "en", "--outlines", "1"],
+    );
+    let got = fetched(&out);
+    assert!(got + ne + to_0 + 200_000 <= whole, "{got} of {whole}");
+    let s = json(&store, &["status", "--json", "--deep"]);
+    let p = &s["packs"][0];
+    assert_eq!(p["health"], "Good");
+    assert_eq!(p["parts"]["languages"], serde_json::json!(["*"]));
+    assert_eq!(
+        p["parts"]["outline"],
+        serde_json::json!({"level": 1, "lod": 0})
+    );
+    assert!(
+        ok(
+            &store,
+            &["install", "np", "--names", "en", "--outlines", "1@0m"]
+        )
+        .contains("is installed")
+    );
+
+    // Nepali instead: the outline stays. Then level 0: its own, smaller part.
+    ok(&store, &["install", "np", "--names", "ne"]);
+    let s = json(&store, &["status", "--json"]);
+    assert_eq!(
+        s["packs"][0]["parts"]["languages"],
+        serde_json::json!(["ne"])
+    );
+    assert_eq!(s["packs"][0]["parts"]["outline"]["level"], 1);
+    ok(&store, &["install", "np", "--outlines", "0@100m"]);
+    let text = ok(&store, &["status"]);
+    assert!(
+        text.contains("names ne  outlines to level 0 at lod 0"),
+        "{text}"
+    );
+    let s = json(&store, &["status", "--json", "--deep"]);
+    assert_eq!(s["packs"][0]["parts"]["outline"]["level"], 0);
+    assert_eq!(s["packs"][0]["health"], "Good");
+    // Past the deepest part: the whole outlines.
+    ok(&store, &["install", "np", "--outlines", "4"]);
+    let s = json(&store, &["status", "--json"]);
+    assert_eq!(s["packs"][0]["parts"]["outline"], "base");
+
+    // Usage errors exit 2.
+    for bad in [
+        ["--outlines", "x"],
+        ["--outlines", "1@ten"],
+        ["--names", "e"],
+    ] {
+        let o = tgd(&store, &[&["install", "np"][..], &bad[..]].concat());
+        assert_eq!(o.status.code(), Some(2), "{bad:?}");
+    }
 }
 
 /// A partial install takes only its sections' space on disk (D-189): what it never writes is

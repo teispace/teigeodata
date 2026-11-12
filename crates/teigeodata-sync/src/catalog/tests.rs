@@ -102,6 +102,18 @@ fn entry_with_parts() -> Entry {
             size: size(30_000, 40_000),
             tolerance_m: 100,
         },
+        PartSize {
+            component: Component::Boundaries,
+            part: Part::outline(2, 2).unwrap(),
+            size: size(60_000, 80_000),
+            tolerance_m: 20,
+        },
+        PartSize {
+            component: Component::Boundaries,
+            part: Part::outline(1, 0).unwrap(),
+            size: size(100_000, 120_000),
+            tolerance_m: 0,
+        },
     ];
     e.parts.sort_unstable_by_key(|p| (p.component, p.part));
     e
@@ -137,12 +149,12 @@ fn parts_round_trip_and_a_selection_counts_only_its_parts() {
         parts: Parts::ALL.outline(Part::outline(2, 3).unwrap()),
     };
     assert_eq!(e.size_of(b).wire - e.size_of(one).wire, 370_000);
-    // The base outline part alone: everything but the listed part.
+    // The base outline part alone: everything but the listed parts.
     let base = Selection {
         set: b,
         parts: Parts::ALL.outline(Part::BASE),
     };
-    assert_eq!(e.size_of(b).wire - e.size_of(base).wire, 30_000);
+    assert_eq!(e.size_of(b).wire - e.size_of(base).wire, 190_000);
     // A bad part key is refused.
     let t = target({
         let mut c = e.to_custom();
@@ -150,6 +162,21 @@ fn parts_round_trip_and_a_selection_counts_only_its_parts() {
         c
     });
     assert!(Entry::from_target(&e.path(), &t).is_err());
+}
+
+#[test]
+fn the_outline_for_a_level_and_tolerance_is_the_smallest_that_holds_it() {
+    let e = entry_with_parts();
+    let at = |d, lod| Part::outline(d, lod).unwrap();
+    // The base (210,000 B on the wire) holds every level at full resolution.
+    assert_eq!(e.outline_for(2, 100), at(2, 3));
+    assert_eq!(e.outline_for(2, 50), at(2, 2));
+    assert_eq!(e.outline_for(2, 0), Part::BASE);
+    assert_eq!(e.outline_for(3, 100), Part::BASE);
+    assert_eq!(e.outline_for(1, 0), at(1, 0));
+    // A part with more levels wins when it is smaller and within the tolerance.
+    assert_eq!(e.outline_for(1, 20), at(2, 2));
+    assert_eq!(entry().outline_for(0, 100), Part::BASE);
 }
 
 fn target(custom: Value) -> Target {

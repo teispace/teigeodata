@@ -32,6 +32,7 @@ tgd refresh --countries np       # fetch the signed catalog: Nepal's packs, and 
 tgd catalog                      # the packs on offer, from the store alone
 tgd install np                   # the whole pack, its dependencies first
 tgd install np --components search   # or only some components, with what they need
+tgd install np --names en --outlines 2@20m   # English names, outlines to admin level 2 within 20 m
 tgd search Pokhara               # queries without --pack answer over the installed packs
 tgd update                       # new releases, fetching only the frames that changed
 tgd status --deep                # every installed section hashed
@@ -47,6 +48,13 @@ exits 3. Everything else still answers from the store.
 `install` adds components to what is installed. When a component is not installed, a query
 prints its field as null; a query that needs it, such as `tz` without the timezone component,
 is refused.
+
+A pack may split names by language and outlines by admin level and level of detail (parts).
+`--names en,ne` installs the base names and those languages; a language without a part of its
+own comes with the rest (`*`). `--outlines LEVEL[@Mm]` installs the smallest outline part that
+holds the admin units of LEVEL and coarser, simplified by at most M metres (full resolution
+without `@`). Each replaces what is installed of its kind and keeps the rest; `tgd catalog
+--json` lists each part's size, and `tgd status` shows what is installed.
 
 An app whose platform downloads in the background (iOS `URLSession`, Android UIDT jobs, a
 browser worker) installs in passes: `tgd install np --downloads DIR` installs from the files

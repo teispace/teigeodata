@@ -348,9 +348,11 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     Nepal lite every level 0.64 / 0.26 MB wire instead of 3.29 MB; G-outline-parts within
     the tolerance, 0 beyond (D-250, 2026-11-12)
   - [ ] 5. The catalog lists each part's wire size; `tgd install np --names en --outlines
-    district@20m`; profiles pick parts; the engine's installed set by part (done: `Parts`,
+    2@20m` (admin levels by number, world-general); profiles pick parts; the engine's installed
+    set by part (done: `Parts`,
     `LayerOptions::installed_parts`, the English-only gate, D-251; installs and the store by
-    part, D-252; the catalog's per-part sizes and `size_of(selection)`, D-253)
+    part, D-252; the catalog's per-part sizes and `size_of(selection)`, D-253; `tgd install
+    --names --outlines`, D-254)
 - [x] Derive SUBSTRING on the device: `Store::derive` checked against the head's hash, engine feature `derive`; Nepal lite in 0.50 s, byte for byte (D-218, 2026-11-11)
 - [x] TG-12: `forge embed --profile` from `data/embed/<name>.yaml`; `baseline` byte-identical, `tithipatra` 7.32 MB wire, `points-en` 1.17 MB (D-214, 2026-11-11)
 - [x] Nepal in full in the embedded layer: all 95,726 places, IDs kept (D-214). Zone rules: built for the layer's every zone (D-224, 2026-11-11). Zones at a point by the layer's units, no REGION; gate G-tz-layer (D-245, 2026-11-12)
@@ -487,3 +489,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-13 | 4.9c: step 5 split in two; first the part selection (`Parts`) and the engine reading it, gated English-only | D-251 |
 | 2026-11-13 | 4.9c: installs and the store by part; parts kept out of file names; journal version 3 only when needed | D-252 |
 | 2026-11-13 | 4.9c: the catalog lists each part's wire and disk bytes and outline tolerance; `size_of` by selection | D-253 |
+| 2026-11-13 | 4.9c: `tgd install --names --outlines`; outline levels by number, not a country's word for them | D-254 |
