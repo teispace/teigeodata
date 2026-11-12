@@ -23,8 +23,12 @@
 //!
 //! `BLOCK_HASHES` belongs to none: a client fetches it with any section of 1 MiB or more, whose
 //! blocks it verifies (D-078).
+//!
+//! Within a component, [`Parts`] chooses the parts of a split kind (ADR-0040): the languages of
+//! NAMES, SEARCH and SUBSTRING, and the one outline part read. The base part of the names
+//! kinds is always taken.
 
-use crate::Kind;
+use crate::{Kind, Part};
 
 /// A component of a pack.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -255,10 +259,148 @@ impl Components {
     }
 }
 
+/// The most languages a [`Parts`] names.
+pub const MAX_LANGUAGES: usize = 8;
+
+/// Which parts of the split kinds a client takes (ADR-0040, D-251): what an install fetches and
+/// what a layer reads. The default takes every part.
+///
+/// - **Names** (NAMES, SEARCH, SUBSTRING): the base part (canonical names and names with no
+///   language) and, when languages are named, only their parts. A language the pack gives no
+///   part of its own lives in [`Part::REST`]: [`Parts::resolve`] maps it there once the pack's
+///   parts are known.
+/// - **Outlines** (ARCS, `ARCS_OVERVIEW`, POLYGONS, `POLY_INDEX`, `ADMIN_REGION`): every part,
+///   or one, whole for its levels ([`Part::outline`], or the base for every level at full
+///   resolution).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Parts {
+    /// The language parts taken besides the base, `None` for every one.
+    languages: Option<([Part; MAX_LANGUAGES], u8)>,
+    /// The one outline part taken, `None` for every one.
+    outline: Option<Part>,
+}
+
+impl Parts {
+    /// Every part.
+    pub const ALL: Self = Self {
+        languages: None,
+        outline: None,
+    };
+
+    /// Only the base names part and the parts of `languages` (each [`Part::language`] or
+    /// [`Part::REST`]); `None` for more than [`MAX_LANGUAGES`].
+    #[must_use]
+    pub fn languages(self, languages: &[Part]) -> Option<Self> {
+        let mut list = [Part::BASE; MAX_LANGUAGES];
+        for (slot, &p) in list.iter_mut().zip(languages) {
+            *slot = p;
+        }
+        let n = u8::try_from(languages.len())
+            .ok()
+            .filter(|&n| usize::from(n) <= MAX_LANGUAGES)?;
+        Some(Self {
+            languages: Some((list, n)),
+            ..self
+        })
+    }
+
+    /// Only outline part `part`.
+    #[must_use]
+    pub const fn outline(self, part: Part) -> Self {
+        Self {
+            outline: Some(part),
+            ..self
+        }
+    }
+
+    /// The one outline part taken, if one is chosen.
+    #[must_use]
+    pub const fn outline_part(self) -> Option<Part> {
+        self.outline
+    }
+
+    /// The language parts taken besides the base, if languages are chosen.
+    #[must_use]
+    pub fn language_parts(&self) -> Option<&[Part]> {
+        self.languages
+            .as_ref()
+            .map(|(list, n)| list.get(..usize::from(*n)).unwrap_or_default())
+    }
+
+    /// These parts on a pack that `has` a names part or not: each language chosen without a
+    /// part of its own becomes [`Part::REST`] (the base when the pack has no `*` either).
+    #[must_use]
+    pub fn resolve(self, has: impl Fn(Part) -> bool) -> Self {
+        let Some((mut list, n)) = self.languages else {
+            return self;
+        };
+        let has_rest = has(Part::REST);
+        for p in list.iter_mut().take(usize::from(n)) {
+            if !p.is_base() && *p != Part::REST && !has(*p) {
+                *p = if has_rest { Part::REST } else { Part::BASE };
+            }
+        }
+        Self {
+            languages: Some((list, n)),
+            ..self
+        }
+    }
+
+    /// Whether section `kind`, part `part`, is taken.
+    #[must_use]
+    pub fn holds(&self, kind: Kind, part: Part) -> bool {
+        if kind.is_outline() {
+            return self.outline.is_none_or(|o| o == part);
+        }
+        if part.is_base() || !matches!(kind, Kind::NAMES | Kind::SEARCH | Kind::SUBSTRING) {
+            return true;
+        }
+        self.language_parts().is_none_or(|l| l.contains(&part))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Component, Components};
-    use crate::{KINDS, Kind};
+    use super::{Component, Components, MAX_LANGUAGES, Parts};
+    use crate::{KINDS, Kind, Part};
+
+    #[test]
+    fn parts_take_the_languages_and_the_outline_chosen() {
+        let lang = |t| Part::language(t).unwrap();
+        let (ne, en) = (lang("ne"), lang("en"));
+        let all = Parts::default();
+        assert!(all.holds(Kind::NAMES, ne) && all.holds(Kind::ARCS, Part::outline(2, 3).unwrap()));
+        // English only, on a pack whose parts are base, `*` and `ne`: English lives in `*`.
+        let p = Parts::ALL
+            .languages(&[en])
+            .unwrap()
+            .resolve(|q| [Part::BASE, Part::REST, ne].contains(&q));
+        for k in [Kind::NAMES, Kind::SEARCH, Kind::SUBSTRING] {
+            assert!(p.holds(k, Part::BASE) && p.holds(k, Part::REST) && !p.holds(k, ne));
+        }
+        // A pack without `*`: the language has only the base part's names.
+        let p = Parts::ALL
+            .languages(&[en])
+            .unwrap()
+            .resolve(|q| [Part::BASE, ne].contains(&q));
+        assert_eq!(p.language_parts(), Some(&[Part::BASE][..]));
+        assert!(!p.holds(Kind::NAMES, ne));
+        // A language with its own part keeps it.
+        let p = Parts::ALL
+            .languages(&[ne])
+            .unwrap()
+            .resolve(|q| [Part::BASE, Part::REST, ne].contains(&q));
+        assert!(p.holds(Kind::NAMES, ne) && !p.holds(Kind::NAMES, Part::REST));
+        // One outline part: only it, the base included in the choice.
+        let d = Part::outline(2, 2).unwrap();
+        let p = Parts::ALL.outline(d);
+        assert!(p.holds(Kind::ADMIN_REGION, d) && !p.holds(Kind::ADMIN_REGION, Part::BASE));
+        assert!(!p.holds(Kind::ARCS, Part::outline(1, 2).unwrap()));
+        assert!(Parts::ALL.outline(Part::BASE).holds(Kind::ARCS, Part::BASE));
+        // Other kinds take only their base part, always held.
+        assert!(p.holds(Kind::PLACES, Part::BASE));
+        assert!(Parts::ALL.languages(&[en; MAX_LANGUAGES + 1]).is_none());
+    }
 
     #[test]
     fn every_kind_but_block_hashes_has_one_component() {

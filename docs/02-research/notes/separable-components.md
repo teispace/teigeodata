@@ -186,6 +186,19 @@ The arc-group design as first written:
   every place and on a 0.01° grid (the G-tz-layer method); golden and layer gates unchanged.
 - **ARCS_OVERVIEW** follows ARCS's parts, and levels of detail (step 4) add the `lod` byte.
 
+## 7b. Step 5: choosing parts (2026-11-13, D-251)
+
+- **One selection type for every reader** (`component::Parts`), beside `Components`: the engine,
+  the installer and the catalog's size sums take the same value, so what is downloaded is what
+  is read. Fixed size and `Copy` so the no_std installer can hold it.
+- **Languages resolve against the pack**: a client asks for languages, not parts, and a
+  language without its own part lives in `*`. The table names every part, so resolving needs
+  only the head.
+- **One outline part, chosen outright**: parts are whole copies, so a client installs exactly
+  one; the engine reads that one whatever its level and tolerance options say.
+- Measured on Nepal lite: English only keeps every Latin-script class of golden lite and saves
+  31% of the names, search and substring wire.
+
 ## 8. Versions checked
 
 | Thing | Version | Checked on | Where |

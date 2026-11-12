@@ -20,7 +20,7 @@ use teigeodata_format::arcs::ArcChunks;
 #[cfg(feature = "boundaries")]
 use teigeodata_format::arcs::Arcs;
 use teigeodata_format::blocks::{BLOCK, Blocks};
-use teigeodata_format::component::{Component, Components};
+use teigeodata_format::component::{Component, Components, Parts};
 #[cfg(any(feature = "dem", feature = "dem-coarse"))]
 use teigeodata_format::dem::Dem;
 #[cfg(feature = "elevation")]
@@ -109,6 +109,11 @@ pub struct LayerOptions {
     /// them; 0 (the default) for full resolution. Admin units at a point may differ within
     /// the tolerance of a border.
     pub outline_tolerance_m: u32,
+    /// The parts of the split kinds installed or read (ADR-0040, D-251): the languages of the
+    /// names, search and substring sections, and the one outline part. The default reads every
+    /// part. A language without a part of its own reads the pack's `*` part. One outline part
+    /// chosen here is the part read, whatever `outline_level` and `outline_tolerance_m` say.
+    pub installed_parts: Parts,
 }
 
 impl LayerOptions {
@@ -192,9 +197,13 @@ fn located_blocks<'a>(
 fn outline_part(
     pack: &Pack<'_>,
     places: Option<teigeodata_format::Section<'_>>,
-    (level, tolerance_m): OutlinePick,
+    reads: &Reads,
 ) -> Part {
-    let lod = outline_lod(pack, tolerance_m);
+    if let Some(part) = reads.parts.outline_part() {
+        return part;
+    }
+    let level = reads.outline_level;
+    let lod = outline_lod(pack, reads.outline_tolerance_m);
     if level.is_none() && lod == 0 {
         return Part::BASE;
     }
@@ -256,9 +265,25 @@ fn outline_lod(pack: &Pack<'_>, tolerance_m: u32) -> u8 {
         .unwrap_or(0)
 }
 
-/// What [`LayerOptions`] asks of the outlines: the deepest admin level and the tolerance in
-/// metres.
-pub(crate) type OutlinePick = (Option<u8>, u32);
+/// What a layer reads of its pack, from its [`LayerOptions`].
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Reads {
+    pub(crate) installed: Option<Components>,
+    pub(crate) parts: Parts,
+    pub(crate) outline_level: Option<u8>,
+    pub(crate) outline_tolerance_m: u32,
+}
+
+impl From<&LayerOptions> for Reads {
+    fn from(o: &LayerOptions) -> Self {
+        Self {
+            installed: o.installed,
+            parts: o.installed_parts,
+            outline_level: o.outline_level,
+            outline_tolerance_m: o.outline_tolerance_m,
+        }
+    }
+}
 
 /// The zero-copy views of one pack, opened once (structure checks only).
 #[derive(Debug)]
@@ -322,6 +347,8 @@ pub(crate) struct Views<'a> {
     pub(crate) missing: Components,
     /// The part the outline kinds are read from ([`outline_part`]).
     pub(crate) outline: Part,
+    /// The parts of the split kinds read, resolved on the pack.
+    pub(crate) parts: Parts,
 }
 
 impl<'a> Views<'a> {
@@ -330,27 +357,24 @@ impl<'a> Views<'a> {
     /// block-hash list is proved (D-142), and no section of a component outside `installed` is
     /// read.
     #[allow(clippy::too_many_lines, reason = "one view per section kind, in order")]
-    pub(crate) fn open(
-        bytes: &'a [u8],
-        installed: Option<Components>,
-        outlines: OutlinePick,
-    ) -> Result<Self, Error> {
+    pub(crate) fn open(bytes: &'a [u8], reads: Reads) -> Result<Self, Error> {
         // A partial install may have holes, BLOCK_HASHES among them: only the head is read.
-        let pack = match installed {
+        let pack = match reads.installed {
             None => Pack::open(bytes)?,
             Some(_) => Pack::open_head(bytes)?,
         };
-        let missing = missing(&pack, installed)?;
+        let missing = missing(&pack, reads.installed)?;
+        let parts = reads.parts.resolve(|p| pack.part(Kind::NAMES, p).is_some());
         let get = |k| {
             pack.section(k)
                 .filter(|_| Component::of(k).is_none_or(|c| !missing.contains(c)))
         };
         // The outline kinds are read from one part, whole for its levels (ADR-0040).
         #[cfg(any(feature = "boundaries", feature = "admin-index"))]
-        let outline = outline_part(&pack, get(Kind::PLACES), outlines);
+        let outline = outline_part(&pack, get(Kind::PLACES), &reads);
         #[cfg(not(any(feature = "boundaries", feature = "admin-index")))]
         let outline = {
-            let _ = outlines;
+            let _ = (reads.outline_level, reads.outline_tolerance_m);
             Part::BASE
         };
         #[cfg(any(feature = "boundaries", feature = "admin-index"))]
@@ -384,14 +408,16 @@ impl<'a> Views<'a> {
         let redirects = get(Kind::REDIRECTS)
             .map(|s| Redirects::open(&s))
             .transpose()?;
-        // A split kind is read as every part it has (ADR-0040); its component installs them all.
+        // A split kind is read as the parts installed (ADR-0040).
+        #[cfg(feature = "names")]
+        let held = |k: Kind| pack.parts(k).filter(move |s| parts.holds(k, s.part()));
         #[cfg(feature = "names")]
         let names = get(Kind::NAMES)
-            .map(|_| NameSet::open(pack.parts(Kind::NAMES)))
+            .map(|_| NameSet::open(held(Kind::NAMES)))
             .transpose()?;
         #[cfg(feature = "search")]
         let search = get(Kind::SEARCH)
-            .map(|_| SearchSet::open(pack.parts(Kind::SEARCH)))
+            .map(|_| SearchSet::open(held(Kind::SEARCH)))
             .transpose()?;
         #[cfg(feature = "search")]
         let rules = search
@@ -401,7 +427,7 @@ impl<'a> Views<'a> {
             .unwrap_or_default();
         #[cfg(feature = "substring")]
         let substring = get(Kind::SUBSTRING)
-            .map(|_| SearchSet::open(pack.parts(Kind::SUBSTRING)))
+            .map(|_| SearchSet::open(held(Kind::SUBSTRING)))
             .transpose()?;
         let place_index = match (get(Kind::PLACE_INDEX), places) {
             (Some(s), Some(p)) => Some(PlaceIndex::open(&s, p)?),
@@ -484,7 +510,16 @@ impl<'a> Views<'a> {
             blocks,
             missing,
             outline,
+            parts,
         })
+    }
+
+    /// Whether section `s` is read: its kind is installed, and its part ([`Parts::holds`]; the
+    /// one outline part for an outline kind).
+    pub(crate) fn reads(&self, s: &teigeodata_format::Section<'_>) -> bool {
+        self.installed(s.kind())
+            && self.parts.holds(s.kind(), s.part())
+            && (!s.kind().is_outline() || s.part() == self.outline)
     }
 
     /// Whether section `kind` is installed: its component is, or it is `BLOCK_HASHES` and an
@@ -681,11 +716,10 @@ impl Layer {
         options: LayerOptions,
         stamp: Option<FileStamp>,
     ) -> Result<Self, Error> {
-        let outlines = (options.outline_level, options.outline_tolerance_m);
-        let owned = Owned::new(backing, options.installed, outlines)?;
+        let owned = Owned::new(backing, Reads::from(&options))?;
         let v = owned.views();
         if options.verify == Verify::Eager {
-            for s in v.pack.sections().filter(|s| v.installed(s.kind())) {
+            for s in v.pack.sections().filter(|s| v.reads(s)) {
                 s.verify()?;
             }
             for (_, _, b) in &v.blocks {
@@ -878,23 +912,19 @@ impl Layer {
         }
         let v = self.views();
         // Every part of the kind (ADR-0040): by its blocks past 1 MiB, else whole.
-        let ok = v
-            .pack
-            .parts(kind)
-            .filter(|s| !kind.is_outline() || s.part() == v.outline)
-            .all(|s| {
-                match v
-                    .blocks
-                    .iter()
-                    .position(|(k, p, _)| (*k, *p) == (kind, s.part()))
-                {
-                    Some(i) => {
-                        let len = v.blocks.get(i).map_or(0, |(_, _, b)| b.len());
-                        self.verify_blocks(i, 0..len).is_ok()
-                    }
-                    None => s.verify().is_ok(),
+        let ok = v.pack.parts(kind).filter(|s| v.reads(s)).all(|s| {
+            match v
+                .blocks
+                .iter()
+                .position(|(k, p, _)| (*k, *p) == (kind, s.part()))
+            {
+                Some(i) => {
+                    let len = v.blocks.get(i).map_or(0, |(_, _, b)| b.len());
+                    self.verify_blocks(i, 0..len).is_ok()
                 }
-            });
+                None => s.verify().is_ok(),
+            }
+        });
         slot.store(if ok { GOOD } else { BAD }, Atomic::Release);
         if ok {
             Ok(())

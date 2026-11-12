@@ -484,11 +484,21 @@ fn explain(queries: &str, real: impl Fn(&str) -> Vec<(usize, i32)>, recs: &[Rec]
 /// The product's search (`teigeodata-engine`) on the pack: the best 10 rows of a query, with
 /// their scores.
 fn product_search(pack_path: &str) -> Result<impl Fn(&str) -> Vec<(usize, i32)>, String> {
-    let layer = teigeodata_engine::Layer::open(
-        std::path::Path::new(pack_path),
-        teigeodata_engine::LayerOptions::default(),
-    )
-    .map_err(|e| format!("{pack_path}: {e}"))?;
+    // `S3_LANGS=en,hi` reads only those languages' names parts (D-251), as a client that
+    // installed them.
+    let mut options = teigeodata_engine::LayerOptions::default();
+    if let Some(langs) = std::env::var_os("S3_LANGS") {
+        let langs = langs.to_string_lossy().into_owned();
+        let parts: Vec<_> = langs
+            .split(',')
+            .map(|l| teigeodata_format::Part::language(l).ok_or(format!("{l}: not a language")))
+            .collect::<Result<_, _>>()?;
+        options.installed_parts = teigeodata_engine::Parts::ALL
+            .languages(&parts)
+            .ok_or("too many languages")?;
+    }
+    let layer = teigeodata_engine::Layer::open(std::path::Path::new(pack_path), options)
+        .map_err(|e| format!("{pack_path}: {e}"))?;
     let notices = layer.attribution().map_or(0, |a| a.lines().count());
     println!("attribution (D-126): {notices} notices");
     let mut real = teigeodata_engine::Engine::new();

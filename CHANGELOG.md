@@ -11,6 +11,19 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ## [Unreleased]
 
+### Engine (`teigeodata-engine`)
+
+- `LayerOptions::installed_parts` (`Parts`, re-exported): read only some parts of the split
+  kinds, as a client that installed them (D-251). `Parts::ALL.languages(&[en])` reads the
+  base names and the part that holds English (`*` when English has no part of its own);
+  `.outline(part)` reads that outline part alone, whatever `outline_level` and
+  `outline_tolerance_m` say.
+
+### Format (`teigeodata-format`)
+
+- `component::Parts` and `component::MAX_LANGUAGES`: which parts a client takes, with
+  `holds(kind, part)` and `resolve` (D-251).
+
 ## [0.2.0] - 2026-11-12
 
 Packs may now split a section kind into parts (ADR-0040): names and search by language, outlines

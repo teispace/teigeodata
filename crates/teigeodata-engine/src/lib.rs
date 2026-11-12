@@ -76,6 +76,7 @@ pub use query::{Hit, LOCALITY_RADIUS_M, Near, Place, SETTLEMENT_RADIUS_M, Scratc
 pub use search::{Focus, SearchOptions};
 #[cfg(feature = "admin")]
 pub use teigeodata_core::IsoCode;
+pub use teigeodata_format::component::Parts;
 #[cfg(feature = "elevation")]
 pub use teigeodata_format::elevation::HeightSource;
 #[cfg(feature = "names")]
