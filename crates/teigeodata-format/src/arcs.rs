@@ -24,7 +24,7 @@
 //! | 7 | [`CHK_Y`] | per block: latitude, biased | required |
 //! | 8 | [`LEVEL`] | per vertex: the coarsest level of detail that keeps it, 0 to [`PINNED`] | optional, absent = full resolution only |
 //! | 9 | [`TOLERANCE`] | 6 values: the Douglas–Peucker tolerance of levels 1 to 6, centimetres, increasing | with `LEVEL` |
-//! | 10 | [`SCALE`] | per arc: `k`, its deltas are stored ÷ 10^k (a source on a coarser grid) | optional, absent = all 0 |
+//! | 10 | [`SCALE`] | per arc: `k`, its deltas are stored ÷ 10^k (a source on a coarser grid, or an outline snapped to its level's grid) | optional, absent = all 0 |
 //! | 11 | [`FROM`] | one value: the overview's level `f`, 1 to 6 | `ARCS_OVERVIEW` only, required |
 //!
 //! An **overview** ([`Kind::ARCS_OVERVIEW`], D-102) has ARCS's layout and holds, for every arc

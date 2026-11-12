@@ -67,6 +67,59 @@ index.
 As built (D-218): `Store::derive` plus the engine's `derive::substring`, end to end on Nepal
 lite, derived and installed in 0.50 s with the file equal to the shipped pack byte for byte.
 
+### 3.1 Outlines (TG-16), measured 2026-11-12
+
+Ignored tests in `crates/teigeodata-engine/tests/extract.rs`, release build, machine load
+about 30 from other projects. "Changed" is the share of `admin_at` answers that differ from
+the reference, at every place's point and at points within 100 m of every 7th border vertex
+(the worst case).
+
+**Nepal's levels** (`outline_levels_measured`, Nepal lite pack, 95,726 places, 2,315 arcs):
+
+| Level | Tolerance | Vertices | Geometry B | Places changed | Near-border changed |
+|--:|--:|--:|--:|--:|--:|
+| 0 | full | 593,610 | 3,493,864 | 0 | 0 |
+| 1 | 5 m | 302,929 | 2,025,032 | 0.017% | 5.91% |
+| 2 | 20 m | 127,014 | 1,069,572 | 0.081% | 22.73% |
+| 3 | 100 m | 43,404 | 570,048 | 0.362% | 38.75% |
+| 4 | 500 m | 13,268 | 384,408 | 1.846% | 46.23% |
+
+20 m stays: 100 m would save 0.5 MB but move 4.5 times as many places to another unit, and
+a calendar's local festivals follow the municipality.
+
+**Where the bytes were**: in the 10.30 MB layer, ARCS' delta columns were 2.52 of ARCS'
+2.71 MB, and the world part (Natural Earth at its 500 m level, 392,327 vertices) was most
+of them, every vertex stored to 1e-7° (1 cm).
+
+**Decimal snap** (D-229, `two_builds_answer_admin_at_alike`, world part, 75,167 rows):
+
+| Grid | Share of 500 m | Geometry B | Places changed | Near-border changed |
+|---|--:|--:|--:|--:|
+| 1e-7° (as before) | | 3,540,816 | | |
+| 1e-5° (1.1 m) | 0.2% | 3,207,968 | 1 | 1.67% |
+| 1e-4° (11 m) | 2.2% | 2,913,680 | 7 | 15.8% |
+
+Natural Earth draws these borders 0.6–10 km off the ground, so an 11 m move is noise; the 7
+cities sit within 8 m of a border. The guard kept 91 of 17,428 arcs exact. Nepal's 20 m level
+snaps to 1e-6° (11 cm) with no arc kept exact and no answer changed.
+
+**Admin index leaves** (D-230, `region_leaf_sizes_measured`, the snapped layer):
+
+| Leaf edges | ADMIN_REGION B | `admin_at` |
+|--:|--:|--:|
+| 32 | 1,512,860 | 0.59 µs |
+| 48 | 1,224,984 | 0.66 µs |
+| 64 | 1,068,760 | 0.73 µs |
+| 96 | 902,604 | 0.87–1.04 µs |
+
+The 4,096-cell fine grid's size made no difference at this layer's extent.
+
+**Result**: the `tithipatra` layer went from 10.30 MB to 9.21 MB on the wire (boundaries
+2.78 → 2.03 MB, admin index 1.15 → 0.80 MB), and the shipped baseline from 5.91 MB to
+5.00 MB on disk with its zone rules (D-231). Next for outlines: `RUN_X`/`RUN_Y` (593 kB of
+the index) store each run's start to 1e-7° even on snapped arcs; dividing them by the run's
+scale is a format change for later.
+
 ## 4. Options compared
 
 | Option | Wire | First search | Verdict |

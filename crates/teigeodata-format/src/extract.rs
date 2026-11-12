@@ -105,6 +105,7 @@ pub fn rows_with(
             keep,
             lod,
             names,
+            arcs: None,
         }],
         region,
     )
@@ -121,6 +122,28 @@ pub struct Part<'p, 'a> {
     pub lod: u8,
     /// Its name rule; `None` keeps every name and its SEARCH keys as they are.
     pub names: Option<&'p NameRule<'p>>,
+    /// A rewrite of its admin arcs at `lod` before they are encoded; `None` keeps them.
+    pub arcs: Option<&'p ArcRewrite<'p>>,
+}
+
+/// A caller's rewrite of one part's admin arcs, each a run of points on the 1e-7° grid, before
+/// the merge encodes them (TG-16: the forge snaps a coarse part to a decimal grid, so ARCS
+/// stores each arc's deltas ÷ 10^k). The rewrite must keep every arc's ends where the arcs
+/// meet (neighbours share them), at least two points per arc and four per closed arc, and no
+/// crossings: the merge re-encodes what it is given, and the boxes, labels and `ADMIN_REGION`
+/// follow the rewritten points.
+pub struct ArcRewrite<'a> {
+    /// Rewrites the part's arcs in place.
+    pub run: &'a dyn Fn(&mut [Arc]),
+}
+
+/// One arc's points, as an [`ArcRewrite`] sees them.
+pub type Arc = Vec<Point<E7>>;
+
+impl core::fmt::Debug for ArcRewrite<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ArcRewrite").finish_non_exhaustive()
+    }
 }
 
 /// The rows of several packs as one pack (the shipped baseline: the world part and each
@@ -669,6 +692,9 @@ impl Geometry<'_, '_> {
             used.iter()
                 .map(|&a| self.arcs.points(a, false, o.part.lod).collect::<Vec<_>>()),
         );
+        if let Some(rewrite) = o.part.arcs {
+            (rewrite.run)(shapes.points.get_mut(first as usize..).unwrap_or_default());
+        }
         for (p, row, level) in kept {
             let mut refs = Vec::new();
             let mut rect: Option<Rect> = None;

@@ -93,19 +93,20 @@ outlines (4.8 MB), the substring and search indexes (3.7 MB), the point-to-unit 
 
 ## Embedded layers built from profiles
 
-`forge embed --profile <name>` (D-214), lite, 2026-11-11. Per component, `tithipatra`'s wire bytes: point 1,035,391; elevation 229,894; admin 251,730; names 1,103,972; search 2,111,132; timezone 13,564; tz-rules 63,568; boundaries 2,776,845; admin-index 1,146,916.
+`forge embed --profile <name>` (D-214), lite, 2026-11-12, outlines snapped (D-229) and the admin index at 64-edge leaves (D-230). Per component, `tithipatra`'s wire bytes: point 1,035,391; elevation 229,894; admin 251,692; names 1,607,782; search 2,633,040; timezone 13,564; tz-rules 63,543; boundaries 2,025,380; admin-index 803,920; dem-coarse 517,996.
 
 
 | Profile | Rows | Disk | Wire |
 |---|--:|--:|--:|
-| `baseline` (world part and Nepal's slice; today's file, byte for byte) | 39,395 | 5,891,068 | 4,492,597 |
-| `tithipatra` (world part with every city of 5,000, all of Nepal at 20 m; names in Devanagari Nepali, Hindi where Wikidata has no Nepali, and English, Nepal's gaps filled by the transliterator; zone rules for all 376 zones; the coarse DEM) | 170,892 | 15,881,364 | 10,302,696 |
-| `points-en` (points, heights, admin, English names and search; no outlines) | 39,395 | 1,822,396 | 1,172,779 |
+| `baseline` (world part and Nepal's slice, with zone rules; the shipped file, byte for byte, D-231) | 39,395 | 4,999,048 | 3,646,934 |
+| `tithipatra` (world part with every city of 5,000, all of Nepal at 20 m; names in Devanagari Nepali, Hindi where Wikidata has no Nepali, and English, Nepal's gaps filled by the transliterator; zone rules for all 376 zones; the coarse DEM) | 170,892 | 14,705,300 | 9,205,914 |
+| `points-en` (points, heights, admin, English names and search; no outlines) | 39,395 | 1,837,564 | 1,177,509 |
 
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-12 | Outlines snapped to their level's decimal grid and 64-edge index leaves: `tithipatra` 10.30 → 9.21 MB wire, `baseline` 5.91 → 5.00 MB disk with zone rules | D-229 to D-231 |
 | 2026-11-11 | `tithipatra` with zone rules for its 376 zones: +63.6 kB wire | D-224 |
 | 2026-11-11 | `tithipatra` with Wikidata `ne`/`hi` labels on 13,724 world places: 8.69 MB wire (+0.41 MB) | D-221 |
 | 2026-11-12 | `tithipatra` with the coarse DEM (D-225) and transliterated Nepali names for 93,758 Nepal places (D-228): 10.30 MB wire (dem-coarse 518 kB, names 1.61 MB, search 2.63 MB) | D-228 |

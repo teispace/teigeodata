@@ -180,6 +180,7 @@ fn a_merge_answers_as_its_parts_as_layers() {
         keep,
         lod: 0,
         names: None,
+        arcs: None,
     };
     let merged = write(
         &extract::merge(&[part(&a), part(&b)], &Options::default()).unwrap(),
@@ -559,4 +560,221 @@ fn every_section_checks_whole_and_a_mismatch_is_named() {
             assert!(matches!(r, Ok(true)), "{k}: {r:?}");
         }
     }
+}
+
+/// `admin_at`'s rows at each point.
+type Answers = Vec<Vec<u32>>;
+
+/// TG-16: what each level of detail of a real pack's outlines (`TGD_PACK`) costs and changes.
+/// For every level: the geometry sections' bytes, the vertices kept, and the share of
+/// `admin_at` answers that differ from full resolution, at every place's point (where people
+/// ask) and at points within 100 m of a border vertex (the worst case).
+#[test]
+#[ignore = "needs a real pack: TGD_PACK=path/to/pack.tgd"]
+fn outline_levels_measured() {
+    let path = std::env::var("TGD_PACK").expect("TGD_PACK");
+    let bytes = std::fs::read(path).unwrap();
+    let pack = Pack::open(&bytes).unwrap();
+    let places =
+        teigeodata_format::places::Places::open(&pack.section(Kind::PLACES).unwrap()).unwrap();
+    let arcs = Arcs::open(&pack.section(Kind::ARCS).unwrap()).unwrap();
+    let keep: Vec<u32> = (0..places.len() as u32).collect();
+    let n_arcs = pack.section(Kind::ARCS).unwrap().item_count() as usize;
+    let at_places: Vec<_> = (0..places.len())
+        .map(|r| places.point(r).unwrap().to_e7())
+        .collect();
+    // Every 7th full-resolution vertex, moved up to 100 m (about 900 units of 1e-7°) by a
+    // fixed pseudo-random step.
+    let mut seed = 0x9E37_79B9_7F4A_7C15_u64;
+    let mut step = || {
+        seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+        ((seed >> 33) % 1_801) as i32 - 900
+    };
+    let mut near = Vec::new();
+    for a in 0..n_arcs {
+        for v in arcs.points(a, false, 0).step_by(7) {
+            let (dy, dx) = (step(), step());
+            near.extend(teigeodata_core::Point::<teigeodata_core::E7>::from_units(
+                v.lat() + dy,
+                v.lon() + dx,
+            ));
+        }
+    }
+    let answers = |e: &Engine, pts: &[teigeodata_core::Point<teigeodata_core::E7>]| {
+        let mut s = Scratch::default();
+        let mut out = Vec::new();
+        pts.iter()
+            .map(|&p| {
+                e.admin_at(p, &mut s, &mut out).unwrap();
+                let mut rows: Vec<u32> = out.iter().map(|u| u.row).collect();
+                rows.sort_unstable();
+                rows
+            })
+            .collect::<Vec<_>>()
+    };
+    let geometry = [
+        Kind::ARCS,
+        Kind::POLYGONS,
+        Kind::POLY_INDEX,
+        Kind::ADMIN_REGION,
+    ];
+    let mut full: Option<(Answers, Answers)> = None;
+    println!(
+        "{} places, {} arcs, {} near-border points",
+        places.len(),
+        n_arcs,
+        near.len()
+    );
+    println!(
+        "| level | tolerance | vertices | geometry B | places changed | near-border changed |"
+    );
+    for lod in 0..=6_u8 {
+        let Some(tol) = (lod == 0).then_some(0).or_else(|| arcs.tolerance_cm(lod)) else {
+            continue;
+        };
+        let s = extract::rows(&pack, &keep, lod, &Options::default()).unwrap();
+        let geo: usize = s
+            .iter()
+            .filter(|x| geometry.contains(&x.0))
+            .map(|x| x.3.len())
+            .sum();
+        let vertices: usize = (0..n_arcs).map(|a| arcs.count(a, lod)).sum();
+        let e = engine(write(&s, "np-lod"));
+        let (p, n) = (answers(&e, &at_places), answers(&e, &near));
+        let (fp, fn_) = full.get_or_insert_with(|| (p.clone(), n.clone()));
+        let diff = |a: &[Vec<u32>], b: &[Vec<u32>]| {
+            a.iter().zip(b).filter(|(x, y)| x != y).count() as f64 * 100.0 / a.len() as f64
+        };
+        println!(
+            "| {lod} | {} m | {vertices} | {geo} | {:.3}% | {:.2}% |",
+            tol / 100,
+            diff(&p, fp),
+            diff(&n, fn_)
+        );
+    }
+}
+
+/// TG-16: the admin index of a real pack or layer (`TGD_PACK`) rebuilt with each leaf size:
+/// its bytes, and `admin_at`'s time at every 13th place, answers checked equal to the first.
+#[test]
+#[ignore = "needs a real pack: TGD_PACK=path/to/pack.tgd"]
+fn region_leaf_sizes_measured() {
+    let path = std::env::var("TGD_PACK").expect("TGD_PACK");
+    let bytes = std::fs::read(path).unwrap();
+    let pack = Pack::open(&bytes).unwrap();
+    let places =
+        teigeodata_format::places::Places::open(&pack.section(Kind::PLACES).unwrap()).unwrap();
+    let keep: Vec<u32> = (0..places.len() as u32).collect();
+    let pts: Vec<_> = (0..places.len())
+        .step_by(13)
+        .map(|r| places.point(r).unwrap().to_e7())
+        .collect();
+    let mut first: Option<Vec<Vec<u32>>> = None;
+    println!("| leaf_max | fine cells | ADMIN_REGION B | admin_at ns |");
+    for leaf_max in [32, 40, 48, 64, 96] {
+        for fine_cells in [1 << 12] {
+            let o = Options {
+                leaf_max,
+                fine_cells,
+                ..Options::default()
+            };
+            let s = extract::rows(&pack, &keep, 0, &o).unwrap();
+            let e = engine(write(&s, "ab"));
+            let (mut sc, mut out) = (Scratch::default(), Vec::new());
+            let got: Vec<Vec<u32>> = pts
+                .iter()
+                .map(|&p| {
+                    e.admin_at(p, &mut sc, &mut out).unwrap();
+                    out.iter().map(|u| u.row).collect()
+                })
+                .collect();
+            assert_eq!(&got, first.get_or_insert_with(|| got.clone()));
+            let t = std::time::Instant::now();
+            for _ in 0..5 {
+                for &p in &pts {
+                    e.admin_at(p, &mut sc, &mut out).unwrap();
+                }
+            }
+            println!(
+                "| {leaf_max} | {fine_cells} | {} | {:.0} |",
+                s.iter()
+                    .find(|x| x.0 == Kind::ADMIN_REGION)
+                    .unwrap()
+                    .3
+                    .len(),
+                t.elapsed().as_nanos() as f64 / (5 * pts.len()) as f64
+            );
+        }
+    }
+}
+
+/// TG-16: two builds of one pack (`TGD_PACK` and `TGD_PACK_B`, the same rows) answer `admin_at`
+/// alike: the share of different answers at every place of the first and at points within
+/// 100 m of its border vertices, and the geometry sections' bytes of each.
+#[test]
+#[ignore = "needs TGD_PACK and TGD_PACK_B"]
+fn two_builds_answer_admin_at_alike() {
+    let read = |v: &str| std::fs::read(std::env::var(v).expect(v)).unwrap();
+    let (a_bytes, b_bytes) = (read("TGD_PACK"), read("TGD_PACK_B"));
+    let pack = Pack::open(&a_bytes).unwrap();
+    let places =
+        teigeodata_format::places::Places::open(&pack.section(Kind::PLACES).unwrap()).unwrap();
+    let arcs = Arcs::open(&pack.section(Kind::ARCS).unwrap()).unwrap();
+    let n_arcs = pack.section(Kind::ARCS).unwrap().item_count() as usize;
+    let at_places: Vec<_> = (0..places.len())
+        .map(|r| places.point(r).unwrap().to_e7())
+        .collect();
+    let mut seed = 0x9E37_79B9_7F4A_7C15_u64;
+    let mut step = || {
+        seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+        ((seed >> 33) % 1_801) as i32 - 900
+    };
+    let mut near = Vec::new();
+    for a in 0..n_arcs {
+        for v in arcs.points(a, false, 0).step_by(7) {
+            let (dy, dx) = (step(), step());
+            near.extend(teigeodata_core::Point::<teigeodata_core::E7>::from_units(
+                v.lat() + dy,
+                v.lon() + dx,
+            ));
+        }
+    }
+    let geometry = [
+        Kind::ARCS,
+        Kind::POLYGONS,
+        Kind::POLY_INDEX,
+        Kind::ADMIN_REGION,
+    ];
+    let bytes_of = |b: &[u8]| {
+        let p = Pack::open(b).unwrap();
+        geometry
+            .iter()
+            .map(|&k| p.section(k).map_or(0, |s| s.decoded_length()))
+            .sum::<u64>()
+    };
+    let (ga, gb) = (bytes_of(&a_bytes), bytes_of(&b_bytes));
+    let (ea, eb) = (engine(a_bytes), engine(b_bytes));
+    let answers = |e: &Engine, pts: &[teigeodata_core::Point<teigeodata_core::E7>]| {
+        let (mut s, mut out) = (Scratch::default(), Vec::new());
+        pts.iter()
+            .map(|&p| {
+                e.admin_at(p, &mut s, &mut out).unwrap();
+                let mut rows: Vec<u32> = out.iter().map(|u| u.row).collect();
+                rows.sort_unstable();
+                rows
+            })
+            .collect::<Vec<_>>()
+    };
+    let diff = |pts: &[teigeodata_core::Point<teigeodata_core::E7>]| {
+        let (x, y) = (answers(&ea, pts), answers(&eb, pts));
+        x.iter().zip(&y).filter(|(p, q)| p != q).count()
+    };
+    let (dp, dn) = (diff(&at_places), diff(&near));
+    println!(
+        "geometry {ga} B → {gb} B; places changed {dp} of {} ({:.4}%); near-border changed {dn} of {} ({:.3}%)",
+        at_places.len(),
+        dp as f64 * 100.0 / at_places.len() as f64,
+        near.len(),
+        dn as f64 * 100.0 / near.len() as f64
+    );
 }

@@ -123,10 +123,15 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
             keep,
             lod: 0,
             names: None,
+            arcs: None,
         })
         .collect();
-    let sections = extract::merge(&list, &super::baseline::region_options()).map_err(e)?;
-    let out = write(&packs, &sections, (a.key.as_deref(), None), root)?;
+    let mut sections = extract::merge(&list, &super::baseline::region_options()).map_err(e)?;
+    // `timezone` needs `tz-rules` (the format's component rule): every zone's rules, compiled
+    // as a profile's are (D-224), so the shipped baseline equals the `baseline` profile's.
+    let (tzdb, body) = super::embed_profile::tz_rules(root, super::world::DEFAULT_TZ, &sections)?;
+    sections.push(body);
+    let out = write(&packs, &sections, (a.key.as_deref(), Some(&tzdb)), root)?;
     super::baseline::check(&out, rows_of(&sections))?;
     let replaced = check_ids(&packs, &out)?;
     let file = dir.join(format!("baseline-{build}.tgd"));
@@ -376,6 +381,7 @@ mod tests {
                 keep,
                 lod: 0,
                 names: None,
+                arcs: None,
             })
             .collect();
         let sections = extract::merge(&parts, &super::super::baseline::region_options()).unwrap();

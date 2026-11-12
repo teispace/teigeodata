@@ -437,7 +437,7 @@ The item count is the number of arcs; vertices are numbered across all arcs.
 | 6, 7 | CHK_X, CHK_Y | per 128-vertex block: the absolute point of its first vertex | required |
 | 8 | LEVEL | per vertex: the coarsest level of detail that keeps it, 0 to 7; 7 = pinned (arc ends, a closed arc's anchor) | optional |
 | 9 | TOLERANCE | 6 values: the Douglas–Peucker tolerance of levels 1 to 6 in cm, increasing | with LEVEL |
-| 10 | SCALE | per arc: `k`, its deltas stored ÷ 10^k, the largest power of ten dividing them all | optional |
+| 10 | SCALE | per arc: `k`, its deltas stored ÷ 10^k, the largest power of ten dividing them all (a source on a coarse grid, or an outline the forge snapped to its level's grid, D-229) | optional |
 
 - **Reads.** A vertex is one block decode away: a piece of an arc starts from the arc's base or
   from its block's checkpoint, so an arc reads backwards (a ring that walks it reversed) at the

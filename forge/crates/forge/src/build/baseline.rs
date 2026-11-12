@@ -32,12 +32,16 @@ use crate::lock::Lock;
 /// to 1 km keeps world admin 1 within its share of the 8 MB budget).
 const TOLERANCE_M: u32 = 500;
 
-/// The slice's `ADMIN_REGION` index (D-145): a 4,096-cell fine grid instead of the packs' 2^18.
-/// On Nepal's slice at 500 m (2026-11-09) it is 20,516 B instead of 135,832 B, and `admin_at`
-/// takes 281 ns instead of 163 ns: a fallback tier does not need the packs' speed.
+/// The `ADMIN_REGION` index of the embedded tiers (the world part, the baseline, every layer):
+/// a 4,096-cell fine grid instead of the packs' 2^18 (D-145: on Nepal's slice at 500 m,
+/// 2026-11-09, 20,516 B instead of 135,832 B, `admin_at` 281 ns instead of 163 ns), and leaves
+/// of up to 64 edges instead of 32 (D-230: on the `tithipatra` layer, 2026-11-12, 1,068,760 B
+/// instead of 1,512,860 B, `admin_at` about 0.73 µs instead of 0.59 µs). A fallback or
+/// first-launch tier does not need the packs' speed.
 pub(super) fn region_options() -> teigeodata_format::region::Options {
     teigeodata_format::region::Options {
         fine_cells: 1 << 12,
+        leaf_max: 64,
         ..teigeodata_format::region::Options::default()
     }
 }
@@ -260,7 +264,20 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         keep: &keep_name,
         keys: &keys,
     };
-    let sections = extract::rows_with(&pack, &sel.keep, lod, &region_options(), Some(&rule))
+    // The slice's outlines on the decimal grid of their level (TG-16, D-229).
+    let outlines = pack.section(Kind::ARCS).and_then(|s| Arcs::open(&s).ok());
+    let snapper = crate::topo::quantize::Snapper::at(outlines.as_ref(), lod);
+    let sections = snapper
+        .with(|rewrite| {
+            let part = extract::Part {
+                pack: &pack,
+                keep: &sel.keep,
+                lod,
+                names: Some(&rule),
+                arcs: Some(rewrite),
+            };
+            extract::merge(&[part], &region_options())
+        })
         .map_err(|e| e.to_string())?;
     let out = write(&pack, &sections, &a, root)?;
     check(&out, sel.keep.len())?;

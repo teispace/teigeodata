@@ -95,18 +95,8 @@ struct Input {
 
 pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, String> {
     let t = Instant::now();
-    let path = root.join("data/embed").join(format!("{name}.yaml"));
-    let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let p: File = serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
-    let build = match p.build.as_str() {
-        "lite" | "main" => p.build.as_str(),
-        other => {
-            return Err(format!(
-                "{}: build `{other}`, not lite or main",
-                path.display()
-            ));
-        }
-    };
+    let (path, p) = read_profile(root, name)?;
+    let build = p.build.as_str();
     let wanted = components(&p.components).map_err(|e| format!("{}: {e}", path.display()))?;
     let inputs = inputs(root, &p, build)?;
     let packs: Vec<Pack<'_>> = inputs
@@ -157,16 +147,28 @@ pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, 
         .zip(&inputs)
         .map(|(pk, i)| lod_of(pk, i.tolerance_m))
         .collect::<Result<_, _>>()?;
+    // Each part's outlines on the decimal grid its level allows (TG-16, D-229).
+    let snappers = snappers(&packs, &lods);
+    let runs: Vec<_> = snappers
+        .iter()
+        .map(|s| move |a: &mut [Vec<teigeodata_core::Point<teigeodata_core::E7>>]| s.run(a))
+        .collect();
+    let rewrites: Vec<extract::ArcRewrite<'_>> = runs
+        .iter()
+        .map(|r| extract::ArcRewrite { run: r })
+        .collect();
     let list: Vec<Part<'_, '_>> = packs
         .iter()
         .zip(&keeps)
         .zip(&lods)
         .zip(&rules)
-        .map(|(((pack, keep), &lod), rule)| Part {
+        .zip(&rewrites)
+        .map(|((((pack, keep), &lod), rule), rewrite)| Part {
             pack,
             keep,
             lod,
             names: (!langs.is_empty()).then_some(rule),
+            arcs: Some(rewrite),
         })
         .collect();
     let mut sections =
@@ -175,6 +177,13 @@ pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, 
     sections.extend(coarse_terrain(&packs, wanted)?);
     let tzdb = derived(root, &p, wanted, &mut sections)?;
     refuse_missing(&path, &p, &sections)?;
+    let outlines = inputs
+        .iter()
+        .zip(&snappers)
+        .fold(String::new(), |mut o, (i, s)| {
+            let _ = writeln!(o, "- `{}`: {}", i.name, s.report().line(s.k));
+            o
+        });
     finish(
         root,
         name,
@@ -182,8 +191,34 @@ pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, 
         (&inputs, &packs),
         &sections,
         (key, tzdb.as_deref()),
-        t,
+        (t, &outlines),
     )
+}
+
+/// The profile `data/embed/<name>.yaml` and its path; its build is `lite` or `main`.
+fn read_profile(root: &Path, name: &str) -> Result<(std::path::PathBuf, File), String> {
+    let path = root.join("data/embed").join(format!("{name}.yaml"));
+    let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let p: File = serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    match p.build.as_str() {
+        "lite" | "main" => Ok((path, p)),
+        other => Err(format!(
+            "{}: build `{other}`, not lite or main",
+            path.display()
+        )),
+    }
+}
+
+/// Each part's snap at its level of detail (TG-16, D-229).
+fn snappers(packs: &[Pack<'_>], lods: &[u8]) -> Vec<crate::topo::quantize::Snapper> {
+    packs
+        .iter()
+        .zip(lods)
+        .map(|(pk, &lod)| {
+            let arcs = pk.section(Kind::ARCS).and_then(|s| Arcs::open(&s).ok());
+            crate::topo::quantize::Snapper::at(arcs.as_ref(), lod)
+        })
+        .collect()
 }
 
 /// A component the profile names must be in the layer: never silently left out.
@@ -248,7 +283,7 @@ fn derived(
 
 /// `TZ_RULES` for every timezone area of the merged layer (D-224): their zones compiled from
 /// the pinned tzdb release, each linked to its area's row, and G-tzrules run on the section.
-fn tz_rules(
+pub(super) fn tz_rules(
     root: &Path,
     tz: &str,
     sections: &[extract::Body],
@@ -316,7 +351,7 @@ fn finish(
     (inputs, packs): (&[Input], &[Pack<'_>]),
     sections: &[extract::Body],
     key: (Option<&str>, Option<&str>),
-    t: Instant,
+    (t, outlines): (Instant, &str),
 ) -> Result<String, String> {
     let build = p.build.as_str();
     let out = super::embed::write(packs, sections, key, root)?;
@@ -338,6 +373,7 @@ fn finish(
         replaced,
         super::embed::rows_of(sections),
     );
+    let _ = write!(report, "\nOutlines:\n\n{outlines}");
     let names_in = coverage(p, inputs, sections)?;
     if !names_in.is_empty() {
         let _ = write!(

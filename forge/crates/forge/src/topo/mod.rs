@@ -28,6 +28,7 @@
 pub(crate) mod arcs;
 pub(crate) mod measure;
 pub(crate) mod pov;
+pub(crate) mod quantize;
 pub(crate) mod simplify;
 pub(crate) mod snap;
 pub(crate) mod thin;

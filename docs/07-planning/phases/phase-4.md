@@ -357,7 +357,7 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   - [x] a profile's languages are complete: every place of the layer has each, or the build
     names the gap (the layer summary's table per country, 2026-11-12; `tithipatra`: Nepal
     1.1% `ne-Deva`, D-227)
-- [ ] TG-16: outline tolerance measured, Nepal's border exact
+- [x] TG-16: outline tolerance measured (Nepal stays at 20 m), outlines snapped to their level's decimal grid, 64-edge index leaves: `tithipatra` 9.21 MB wire (D-229, D-230)
 - [ ] TG-15: India: research done (D-216, D-217); then towns
 - [x] TG-19: `Near::bearing_deg` and `Engine::mark_inside` (D-223, 2026-11-11)
 - [ ] TG-18 and the strict-tier option. Done: the Brahmic search fold of nasal
@@ -436,3 +436,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-11 | 4.9c: SUBSTRING derived on the device | D-218 |
 | 2026-11-12 | 4.9c: TG-14's transliterator and gate G-xlit built; the CBS code list pinned | D-222 |
 | 2026-11-12 | 4.9c: TG-10 coarse DEM; TG-18 focus and strict order; name origins; Nepal's names filled by transliteration | D-225 to D-228 |
+| 2026-11-12 | 4.9c: TG-16 done; the shipped baseline carries zone rules again | D-229 to D-231 |

@@ -817,7 +817,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         return Err("two places share a key".into());
     }
     let (ids, registries) = allocate(root, &rows, &a, &packs)?;
-    let sections = sections(&places, &rows, &ids, &row_of, &geometry, a.tolerance_m)?;
+    let (sections, snapped) = sections(&places, &rows, &ids, &row_of, &geometry, a.tolerance_m)?;
     let read: Vec<&str> = [&a.admin, &a.admin1, &a.cities, &a.tz]
         .into_iter()
         .chain(&a.labels)
@@ -847,7 +847,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         probes.as_bytes(),
     )?;
     let mut r = format!(
-        "# World baseline ({build})\n\n{} rows outside {}; {} namespaces.\n\n{counts}\n\n\
+        "# World baseline ({build})\n\n{} rows outside {}; {} namespaces.\n\n{counts}\n\n{snapped}\n\n\
          | Section | Bytes |\n|---|---:|\n",
         places.len(),
         if packs.is_empty() {
@@ -1064,7 +1064,7 @@ fn sections(
     row_of: &BTreeMap<&str, u32>,
     geometry: &super::geometry::Geometry,
     tolerance_m: u32,
-) -> Result<Vec<extract::Body>, String> {
+) -> Result<(Vec<extract::Body>, String), String> {
     let e = |e: teigeodata_format::Error| e.to_string();
     let n = places.len() as u64;
     let points: Vec<_> = places
@@ -1133,13 +1133,26 @@ fn sections(
     let arcs = Arcs::open(&pack.section(Kind::ARCS).ok_or("no ARCS")?).map_err(e)?;
     let lod = extract::lod_within(&arcs, tolerance_m.saturating_mul(100));
     let all: Vec<u32> = (0..u32::try_from(n).map_err(|_| "too many rows")?).collect();
-    let mut out = extract::rows(&pack, &all, lod, &super::baseline::region_options()).map_err(e)?;
+    // The outlines on the decimal grid their level allows (TG-16, D-229).
+    let snapper = crate::topo::quantize::Snapper::at(Some(&arcs), lod);
+    let mut out = snapper
+        .with(|rewrite| {
+            let part = extract::Part {
+                pack: &pack,
+                keep: &all,
+                lod,
+                names: None,
+                arcs: Some(rewrite),
+            };
+            extract::merge(&[part], &super::baseline::region_options())
+        })
+        .map_err(e)?;
     // Each place's zone row (D-151); `extract` keeps every row in order.
     let zone_of = zone_rows_of(rows, row_of)?;
     if let Some(body) = teigeodata_format::place_tz::encode(&zone_of).map_err(e)? {
         out.push((Kind::PLACE_TZ, Encoding::TABLE, n, body));
     }
-    Ok(out)
+    Ok((out, snapper.report().line(snapper.k)))
 }
 
 /// Each row's zone as the PLACES row of its zone place.
