@@ -4,8 +4,8 @@ use alloc::vec::Vec;
 use core::ops::Range;
 
 use teigeodata_format::blocks::MIN_COVERED;
-use teigeodata_format::component::{Component, Components};
-use teigeodata_format::{Kind, Pack, PackHead};
+use teigeodata_format::component::{Component, Selection};
+use teigeodata_format::{Kind, Pack, PackHead, Part};
 
 use super::{MAX_FRAME, MAX_FRAMES, MAX_HEAD_FRAME};
 use crate::Error;
@@ -15,6 +15,8 @@ use crate::Error;
 pub struct SectionSpan {
     /// The section's kind.
     pub kind: Kind,
+    /// Its part (ADR-0040).
+    pub part: Part,
     /// Its first byte in the pack.
     pub offset: u64,
     /// Its stored length.
@@ -54,6 +56,7 @@ impl Layout {
             .sections()
             .map(|s| SectionSpan {
                 kind: s.kind,
+                part: s.part,
                 offset: s.offset,
                 len: s.length,
             })
@@ -291,16 +294,16 @@ impl Frames {
         self.plan(&wanted)
     }
 
-    /// The fetches that install `components` (D-133, D-136): the head frame, which every
-    /// install holds; the sections of `components` and everything they need
-    /// ([`Components::closed`]); and `BLOCK_HASHES` when one of those sections is
-    /// [`MIN_COVERED`] or more, whose blocks it verifies. Adding a component later is the plan
-    /// for the new set less the frames already held.
+    /// The fetches that install `want` (D-133, D-136, D-251): the head frame, which every
+    /// install holds; the sections of its components and everything they need, of the parts
+    /// it holds; and `BLOCK_HASHES` when one of those sections is [`MIN_COVERED`] or more,
+    /// whose blocks it verifies. Adding a component later is the plan for the new set less
+    /// the frames already held.
     ///
     /// # Errors
     /// As [`Frames::plan`]; never for a checked layout.
-    pub fn plan_components(&self, components: Components) -> Result<Vec<Fetch>, Error> {
-        let (mut wanted, block_hashes) = self.wanted(components);
+    pub fn plan_components(&self, want: impl Into<Selection>) -> Result<Vec<Fetch>, Error> {
+        let (mut wanted, block_hashes) = self.wanted(want.into());
         wanted.extend(block_hashes);
         // The head: the first frame, up to the first section.
         let head_end = self
@@ -319,8 +322,8 @@ impl Frames {
     ///
     /// # Errors
     /// As [`Frames::plan`]; never for a checked layout.
-    pub fn plan_install(&self, components: Components) -> Result<Vec<Fetch>, Error> {
-        let (wanted, block_hashes) = self.wanted(components);
+    pub fn plan_install(&self, want: impl Into<Selection>) -> Result<Vec<Fetch>, Error> {
+        let (wanted, block_hashes) = self.wanted(want.into());
         let mut out = match block_hashes {
             Some(r) => self.plan(&[r])?,
             None => Vec::new(),
@@ -331,23 +334,19 @@ impl Frames {
 
     /// The sections of `components` and what they need, and `BLOCK_HASHES` apart when one of
     /// them is [`MIN_COVERED`] or more.
-    fn wanted(&self, components: Components) -> (Vec<Range<u64>>, Option<Range<u64>>) {
-        let set = components.closed();
-        let chosen = |k: Kind| Component::of(k).is_some_and(|c| set.contains(c));
+    fn wanted(&self, want: Selection) -> (Vec<Range<u64>>, Option<Range<u64>>) {
+        let want = want.closed();
+        // A kind of no component (`BLOCK_HASHES`, or one this reader does not know) is not.
+        let chosen =
+            |s: &SectionSpan| Component::of(s.kind).is_some() && want.holds(s.kind, s.part);
         let span = |s: &SectionSpan| s.offset..s.offset + s.len;
         let sections = &self.layout.sections;
-        let blocked = sections
-            .iter()
-            .any(|s| chosen(s.kind) && s.len >= MIN_COVERED);
+        let blocked = sections.iter().any(|s| chosen(s) && s.len >= MIN_COVERED);
         let block_hashes = sections
             .iter()
             .find(|s| blocked && s.kind == Kind::BLOCK_HASHES)
             .map(span);
-        let wanted = sections
-            .iter()
-            .filter(|s| chosen(s.kind))
-            .map(span)
-            .collect();
+        let wanted = sections.iter().filter(|s| chosen(s)).map(span).collect();
         (wanted, block_hashes)
     }
 

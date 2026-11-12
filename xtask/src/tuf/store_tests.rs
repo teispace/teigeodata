@@ -647,7 +647,7 @@ fn a_version_1_journal_is_read_and_upgraded() {
     // A journal from a newer version is refused, and nothing is removed.
     let mut f = fs.clone().open("journal").unwrap();
     f.set_len(0).unwrap();
-    f.write_all(b"{\"version\":3,\"packs\":[]}").unwrap();
+    f.write_all(b"{\"version\":4,\"packs\":[]}").unwrap();
     assert!(Store::open(fs.clone()).is_err());
     assert_eq!(fs.clone().list("packs").unwrap().len(), 1);
 }
@@ -743,6 +743,7 @@ fn plan_room_never_removes_what_must_stay() {
                     component: "places".into(),
                     release: "2026.11.0".into(),
                     set: Components::all(),
+                    parts: teigeodata_format::component::Parts::ALL,
                     file: format!("p{i}.tgd"),
                     pack_len: 1 + rng.next(100),
                     head: [0; 16],

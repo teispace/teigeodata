@@ -35,7 +35,7 @@ use alloc::vec::Vec;
 use core::ops::Range;
 
 use teigeodata_format::blocks::{BLOCK, MIN_COVERED, leaf, proven_cvs};
-use teigeodata_format::component::Components;
+use teigeodata_format::component::{Parts, Selection};
 use teigeodata_format::{Encoding, Kind, PackHead, Part, SectionEntry};
 
 use crate::Error;
@@ -112,7 +112,7 @@ pub struct Install {
     address: alloc::string::String,
     component: alloc::string::String,
     release: alloc::string::String,
-    set: Components,
+    set: Selection,
     decoder: Decoder,
     out: Vec<u8>,
     planned: Option<Planned>,
@@ -132,6 +132,9 @@ pub struct Installed {
     pub reused: u64,
     /// The pack's length: the staging file's, once cut to it.
     pub pack_len: u64,
+    /// The parts installed, each language resolved to the part that holds it in this pack
+    /// (D-251).
+    pub parts: Parts,
 }
 
 const fn fail(problem: &'static str) -> Error {
@@ -143,10 +146,12 @@ fn len_of(b: &[u8]) -> u64 {
 }
 
 impl Install {
-    /// An install of `set` (closed over what each component needs) of the pack `entry` names,
-    /// whose transport asset is `asset_len` bytes (the length its TUF target gives).
+    /// An install of `set` (its components closed over what each needs, and the parts it
+    /// holds, D-251) of the pack `entry` names, whose transport asset is `asset_len` bytes (the
+    /// length its TUF target gives). A [`Components`](teigeodata_format::component::Components)
+    /// installs every part.
     #[must_use]
-    pub fn new(entry: &Entry, asset_len: u64, set: Components) -> Self {
+    pub fn new(entry: &Entry, asset_len: u64, set: impl Into<Selection>) -> Self {
         Self {
             asset_len,
             pack_len: entry.pack_length,
@@ -157,7 +162,7 @@ impl Install {
             address: entry.address.clone(),
             component: entry.component.clone(),
             release: entry.release.clone(),
-            set: set.closed(),
+            set: set.into().closed(),
             decoder: Decoder::new(),
             out: Vec::new(),
             planned: None,
@@ -229,6 +234,11 @@ impl Install {
         {
             return Err(fail("the pack is not the one the catalog names"));
         }
+        // The languages asked for, each as the part that holds it in this pack (D-251).
+        self.set.parts = self.set.parts.resolve(|p| {
+            head.sections()
+                .any(|e| e.kind == Kind::NAMES && e.part == p)
+        });
         let frames = table.frames_from_head(self.asset_len, &self.out)?;
         let fetches = frames.plan_install(self.set)?;
         let mut sections: Vec<Section> = head
@@ -478,6 +488,7 @@ impl Install {
             kept: p.kept,
             reused: 0,
             pack_len: self.pack_len,
+            parts: self.set.parts,
         })
     }
 

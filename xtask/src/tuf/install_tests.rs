@@ -7,8 +7,8 @@
 
 use std::ops::Range;
 
-use teigeodata_format::component::{Component, Components};
-use teigeodata_format::{Encoding, Kind, Pack, Tag, Writer};
+use teigeodata_format::component::{Component, Components, Parts, Selection};
+use teigeodata_format::{Encoding, Kind, Pack, Part, Tag, Writer};
 use teigeodata_sync::Error;
 use teigeodata_sync::install::Install;
 use teigeodata_sync::transport::{Fetch, Frames, Layout, SeekTable, encode_table};
@@ -61,7 +61,7 @@ fn install(
     entry: &teigeodata_sync::catalog::Entry,
     asset: &[u8],
     pack_len: usize,
-    set: Components,
+    set: impl Into<Selection>,
 ) -> (Result<teigeodata_sync::install::Installed, Error>, Vec<u8>) {
     let mut staged = vec![0_u8; pack_len];
     let mut put = |off: u64, b: &[u8]| -> Result<(), Error> {
@@ -1021,4 +1021,105 @@ fn a_world_size_install_gathers_a_block_hash_list_of_several_frames() {
     unwritten_from(&mut file, names_at);
     drop(file);
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A pack with NAMES in three parts (base, `*`, `ne`) and ARCS in two (base, the outline part
+/// of level 1 at lod 2), each 1.5 MiB so the large ones are covered by `BLOCK_HASHES`.
+fn split_pack() -> Vec<u8> {
+    // Incompressible: the wire sizes are the bytes.
+    let body = |seed: u64| -> Vec<u8> {
+        let mut x = seed;
+        (0..(3_u32 << 19))
+            .map(|_| {
+                x = x
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                (x >> 56) as u8
+            })
+            .collect()
+    };
+    let (ids, places) = (vec![1_u8; 4_000], vec![2_u8; 3_000]);
+    let (base, rest, ne) = (body(1), body(2), body(3));
+    let (arcs, arcs_1) = (body(4), body(5));
+    let ne_key = Part::language("ne").unwrap();
+    let outline = Part::outline(1, 2).unwrap();
+    let mut w = Writer::new("zz", "places", "2026.11.0").unwrap();
+    w.manifest(Tag::LICENCE, b"odbl").unwrap();
+    w.pack_parts(
+        &[
+            (Kind::IDMAP, Part::BASE, Encoding::RAW, 1, &ids),
+            (Kind::PLACES, Part::BASE, Encoding::RAW, 1, &places),
+            (Kind::NAMES, Part::BASE, Encoding::RAW, 1, &base),
+            (Kind::NAMES, Part::REST, Encoding::RAW, 1, &rest),
+            (Kind::NAMES, ne_key, Encoding::RAW, 1, &ne),
+            (Kind::ARCS, Part::BASE, Encoding::RAW, 1, &arcs),
+            (Kind::ARCS, outline, Encoding::RAW, 1, &arcs_1),
+        ],
+        None,
+    )
+    .unwrap()
+}
+
+#[test]
+fn an_install_of_some_parts_fetches_and_writes_only_those() {
+    let pack = split_pack();
+    let (entry, asset, _) = super::entry_of(&pack).unwrap();
+    let p = Pack::open(&pack).unwrap();
+    let (en, ne) = (Part::language("en").unwrap(), Part::language("ne").unwrap());
+    let outline = Part::outline(1, 2).unwrap();
+    let whole = Selection::from(Components::of(&[Component::Names, Component::Boundaries]));
+    let (all, _) = install(&entry, &asset, pack.len(), whole);
+    let all = all.unwrap();
+    assert_eq!(all.parts, Parts::ALL);
+    // English, which has no part of its own here, and one outline part.
+    let some = Selection {
+        parts: Parts::ALL.languages(&[en]).unwrap().outline(outline),
+        ..whole
+    };
+    let (done, staged) = install(&entry, &asset, pack.len(), some);
+    let done = done.unwrap();
+    assert_eq!(done.parts.language_parts(), Some(&[Part::REST][..]));
+    let s = Pack::open_head(&staged).unwrap();
+    for sec in p.sections().filter(|s| s.kind() != Kind::BLOCK_HASHES) {
+        let got = s.part(sec.kind(), sec.part()).unwrap();
+        let held = done.parts.holds(sec.kind(), sec.part());
+        let want = [
+            (Kind::NAMES, Part::BASE),
+            (Kind::NAMES, Part::REST),
+            (Kind::ARCS, outline),
+            (Kind::IDMAP, Part::BASE),
+            (Kind::PLACES, Part::BASE),
+        ]
+        .contains(&(sec.kind(), sec.part()));
+        assert_eq!(held, want, "{:?} {}", sec.kind(), sec.part());
+        if want {
+            assert_eq!(got.bytes(), sec.bytes(), "{:?} {}", sec.kind(), sec.part());
+        } else {
+            // Never written: the staging file's zeros.
+            assert!(
+                got.bytes().iter().all(|&b| b == 0),
+                "{:?} {}",
+                sec.kind(),
+                sec.part()
+            );
+        }
+    }
+    // Two of the five large sections left out: about 2 × 1.5 MiB less on the wire.
+    assert!(
+        done.fetched + (5 << 19) < all.fetched,
+        "{} vs {}",
+        done.fetched,
+        all.fetched
+    );
+    // `ne` named: its own part, not `*`.
+    let (ne_only, _) = install(
+        &entry,
+        &asset,
+        pack.len(),
+        Selection {
+            parts: Parts::ALL.languages(&[ne]).unwrap(),
+            ..whole
+        },
+    );
+    assert_eq!(ne_only.unwrap().parts.language_parts(), Some(&[ne][..]));
 }

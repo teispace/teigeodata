@@ -143,6 +143,7 @@ fn layout(c: &mut Cursor<'_>) -> Option<Layout> {
         };
         spans.push(SectionSpan {
             kind: Kind(k + 1),
+            part: teigeodata_format::Part::BASE,
             offset: at,
             len,
         });

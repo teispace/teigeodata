@@ -24,7 +24,7 @@ use core::fmt;
 use core::ops::Range;
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use teigeodata_format::component::Components;
+use teigeodata_format::component::Selection;
 use teigeodata_format::{FOOTER_SIZE, PackHead};
 
 use crate::Error;
@@ -201,10 +201,10 @@ pub fn install<T: Transport, F: Read + Write + Seek>(
     url: &str,
     entry: &Entry,
     asset_len: u64,
-    set: Components,
+    set: impl Into<Selection>,
     staging: &mut F,
 ) -> Result<Installed, FetchError> {
-    run(transport, url, entry, asset_len, set, staging, None)
+    run(transport, url, entry, asset_len, set.into(), staging, None)
 }
 
 /// A file the driver reads an earlier release from (D-174).
@@ -229,7 +229,7 @@ fn run<T: Transport, F: Read + Write + Seek>(
     url: &str,
     entry: &Entry,
     asset_len: u64,
-    set: Components,
+    set: Selection,
     staging: &mut F,
     previous: Option<&mut (dyn Previous + '_)>,
 ) -> Result<Installed, FetchError> {
@@ -694,7 +694,7 @@ pub fn install_from<T: Transport, F: Read + Write + Seek>(
     path: &str,
     entry: &Entry,
     asset_len: u64,
-    set: Components,
+    set: impl Into<Selection>,
     staging: &mut F,
 ) -> Result<Installed, FetchError> {
     let asset = Asset {
@@ -702,7 +702,7 @@ pub fn install_from<T: Transport, F: Read + Write + Seek>(
         entry,
         len: asset_len,
     };
-    from_mirrors(transport, mirrors, asset, set, staging, None)
+    from_mirrors(transport, mirrors, asset, set.into(), staging, None)
 }
 
 /// [`install_from`] for an update (D-174): `previous` is the installed release being replaced
@@ -715,18 +715,25 @@ pub fn update_from<T: Transport, F: Read + Write + Seek>(
     transport: &mut T,
     mirrors: &mut Mirrors,
     asset: Asset<'_>,
-    set: Components,
+    set: impl Into<Selection>,
     staging: &mut F,
     previous: &mut dyn Previous,
 ) -> Result<Installed, FetchError> {
-    from_mirrors(transport, mirrors, asset, set, staging, Some(previous))
+    from_mirrors(
+        transport,
+        mirrors,
+        asset,
+        set.into(),
+        staging,
+        Some(previous),
+    )
 }
 
 fn from_mirrors<T: Transport, F: Read + Write + Seek>(
     transport: &mut T,
     mirrors: &mut Mirrors,
     asset: Asset<'_>,
-    set: Components,
+    set: Selection,
     staging: &mut F,
     mut previous: Option<&mut (dyn Previous + '_)>,
 ) -> Result<Installed, FetchError> {

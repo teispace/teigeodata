@@ -359,6 +359,43 @@ impl Parts {
     }
 }
 
+/// What a client installs of a pack: its components and, within them, the parts of the split
+/// kinds (D-251). From a [`Components`] alone it takes every part.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Selection {
+    /// The components.
+    pub set: Components,
+    /// The parts within them.
+    pub parts: Parts,
+}
+
+impl From<Components> for Selection {
+    fn from(set: Components) -> Self {
+        Self {
+            set,
+            parts: Parts::ALL,
+        }
+    }
+}
+
+impl Selection {
+    /// The selection with its components closed under their needs.
+    #[must_use]
+    pub fn closed(self) -> Self {
+        Self {
+            set: self.set.closed(),
+            ..self
+        }
+    }
+
+    /// Whether section `kind`, part `part`, is installed: a section of no component always
+    /// (`BLOCK_HASHES` is the caller's to decide), else its component's and its part's.
+    #[must_use]
+    pub fn holds(&self, kind: Kind, part: Part) -> bool {
+        Component::of(kind).is_none_or(|c| self.set.contains(c)) && self.parts.holds(kind, part)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Component, Components, MAX_LANGUAGES, Parts};

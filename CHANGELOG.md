@@ -23,6 +23,17 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 - `component::Parts` and `component::MAX_LANGUAGES`: which parts a client takes, with
   `holds(kind, part)` and `resolve` (D-251).
+- `component::Selection`: components and parts together, `From<Components>` (D-252).
+
+### Sync (`teigeodata-sync`)
+
+- Installs of some parts (D-252): `Install::new`, `fetch::install`, `install_from`,
+  `update_from` and `Store::install` take `impl Into<Selection>` (a `Components` still installs
+  every part); `Installed::parts` and `Record::parts` hold the parts as resolved on the pack,
+  `Record::selection()` both. `Frames::plan_install` and `plan_components` take a selection;
+  `SectionSpan` has the section's `part`.
+- The store's journal is version 3 when a pack holds some parts only (each record's `parts`),
+  so a reader that knows only 2 refuses it; it stays 2 otherwise.
 
 ## [0.2.0] - 2026-11-12
 

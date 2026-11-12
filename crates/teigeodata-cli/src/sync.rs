@@ -178,7 +178,8 @@ impl Opened {
         )?)
     }
 
-    /// The engine over the installed packs, each opened with its installed components.
+    /// The engine over the installed packs, each opened with its installed components and
+    /// parts.
     pub(crate) fn engine(&self, extra: &[PathBuf]) -> Result<Engine, Fail> {
         let mut e = Engine::new();
         let dir = Dir::new(&self.root).map_err(|x| Fail::of(self.root.display(), x))?;
@@ -186,6 +187,7 @@ impl Opened {
             let path = dir.pack_path(r);
             let options = LayerOptions {
                 installed: Some(r.set),
+                installed_parts: r.parts,
                 ..LayerOptions::default()
             };
             e.add(Layer::open(&path, options).map_err(|x| Fail::of(path.display(), x))?);

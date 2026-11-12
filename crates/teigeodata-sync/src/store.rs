@@ -36,7 +36,7 @@ use core::fmt;
 use std::io::{self, Read, Seek, Write};
 
 use serde_json::{Map, Value};
-use teigeodata_format::component::{Component, Components};
+use teigeodata_format::component::{Component, Components, Parts, Selection};
 use teigeodata_format::{Kind, PackHead, Part, SectionEntry};
 
 /// One installed section a derive reads: its kind, part (ADR-0040), item count and bytes.
@@ -128,6 +128,9 @@ pub struct Record {
     pub release: String,
     /// The components installed (closed under their needs).
     pub set: Components,
+    /// The parts of the split kinds installed, resolved on the pack (D-251); every part when
+    /// the journal says nothing.
+    pub parts: Parts,
     /// Its file in `packs/`.
     pub file: String,
     /// Its length.
@@ -146,6 +149,16 @@ pub struct Record {
 }
 
 impl Record {
+    /// What it holds: its components and parts. A layer opens it with these
+    /// ([`LayerOptions`]'s `installed` and `installed_parts` in the engine).
+    #[must_use]
+    pub const fn selection(&self) -> Selection {
+        Selection {
+            set: self.set,
+            parts: self.parts,
+        }
+    }
+
     /// Its catalog path, `address.component.tgd`: what other packs' `deps` name.
     #[must_use]
     pub fn key(&self) -> String {
@@ -369,6 +382,10 @@ const STAGING: &str = "staging";
 /// The journal's format version: 2 adds the marks, dependencies and last use (D-172); 1 is
 /// read and upgraded on the next commit.
 const VERSION: u64 = 2;
+/// The version of a journal with a pack of some parts only (D-251): 2 plus each record's
+/// `parts`. Written only when a record needs it, so a reader that knows 2 refuses such a
+/// journal instead of reading a hollow part as whole.
+const VERSION_PARTS: u64 = 3;
 
 fn invalid(what: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, what)
@@ -432,7 +449,7 @@ impl<D: Fs> Store<D> {
         &mut self.fs
     }
 
-    /// Installs `set` of the pack `entry` names from `mirrors` (the asset at `path` under each)
+    /// Installs `set` (components, and parts within them: D-251) of the pack `entry` names from `mirrors` (the asset at `path` under each)
     /// and commits it, replacing any installed release or set of the same address and
     /// component. Staging is resumed if an earlier attempt left one, and a replaced release is
     /// read for every frame it holds unchanged (D-174), so an update fetches what changed. On success the new pack is
@@ -450,9 +467,10 @@ impl<D: Fs> Store<D> {
         path: &str,
         entry: &Entry,
         asset_len: u64,
-        set: Components,
+        set: impl Into<Selection>,
     ) -> Result<Installed, FetchError> {
-        let set = set.closed();
+        let want = set.into().closed();
+        let set = want.set;
         let file = pack_name(entry, set)?;
         // Never back to an older release (sync gate 1): the catalog is signed and fresh, but a
         // pack older than the installed one is refused here too.
@@ -486,13 +504,18 @@ impl<D: Fs> Store<D> {
                     entry,
                     len: asset_len,
                 };
-                update_from(transport, mirrors, asset, set, &mut f, old)?
+                update_from(transport, mirrors, asset, want, &mut f, old)?
             }
-            None => install_from(transport, mirrors, path, entry, asset_len, set, &mut f)?,
+            None => install_from(transport, mirrors, path, entry, asset_len, want, &mut f)?,
         };
         drop(previous);
         f.set_len(done.pack_len)?;
-        hollow(&mut f, done.pack_len, set)?;
+        // The parts as the install resolved them on the pack.
+        let want = Selection {
+            set,
+            parts: done.parts,
+        };
+        hollow(&mut f, done.pack_len, want)?;
         f.sync()?;
         drop(f);
         let target = alloc::format!("{PACKS}/{file}");
@@ -512,6 +535,7 @@ impl<D: Fs> Store<D> {
             component: entry.component.clone(),
             release: entry.release.clone(),
             set,
+            parts: done.parts,
             file,
             pack_len: done.pack_len,
             head: entry.head,
@@ -691,11 +715,11 @@ impl<D: Fs> Store<D> {
         if !deep {
             return Ok(Health::Good);
         }
-        let wanted = held(&h, r.set);
+        let wanted = held(&h, r.selection());
         let mut bad = Vec::new();
         let mut buf = alloc::vec![0_u8; CHUNK];
         for s in h.sections() {
-            if !wanted(s.kind) {
+            if !wanted(s.kind, s.part) {
                 continue;
             }
             f.seek(io::SeekFrom::Start(s.offset))?;
@@ -760,34 +784,17 @@ impl<D: Fs> Store<D> {
             .ok_or_else(|| derive("the pack's head does not read"))?;
         let h = PackHead::parse(&head, r.pack_len)
             .map_err(|e| StoreError::Derive(alloc::format!("{e}")))?;
-        let (was, now) = (held(&h, r.set), held(&h, set));
-        if now(Kind::BLOCK_HASHES) && !was(Kind::BLOCK_HASHES) {
+        let grown = Selection {
+            set,
+            parts: r.parts,
+        };
+        let (was, now) = (held(&h, r.selection()), held(&h, grown));
+        if now(Kind::BLOCK_HASHES, Part::BASE) && !was(Kind::BLOCK_HASHES, Part::BASE) {
             return Err(derive(
                 "the pack would need BLOCK_HASHES, which only a download brings",
             ));
         }
-        // The component's sections: one kind, one or more parts (ADR-0040).
-        let mut targets = Vec::new();
-        let mut inputs = Vec::new();
-        for s in h.sections() {
-            match Component::of(s.kind) {
-                Some(c) if c == add => {
-                    if targets
-                        .first()
-                        .is_some_and(|t: &SectionEntry<'_>| t.kind != s.kind)
-                    {
-                        return Err(derive("the component is more than one kind"));
-                    }
-                    targets.push(s);
-                }
-                Some(c) if needs.contains(c) => {
-                    let bytes = read_checked(&mut old, &s)?
-                        .ok_or_else(|| derive("an installed section does not match its hash"))?;
-                    inputs.push((s.kind, s.part, s.item_count, bytes));
-                }
-                _ => {}
-            }
-        }
+        let (targets, inputs) = derive_sections(&h, &r, (add, needs), &mut old)?;
         if targets.is_empty() {
             return Err(derive("the pack has no such section"));
         }
@@ -816,7 +823,7 @@ impl<D: Fs> Store<D> {
             .pack_len
             .saturating_sub(teigeodata_format::FOOTER_SIZE as u64);
         copy_range(&mut old, &mut f, 0, first)?;
-        for s in h.sections().filter(|s| was(s.kind) && s.length > 0) {
+        for s in h.sections().filter(|s| was(s.kind, s.part) && s.length > 0) {
             copy_range(&mut old, &mut f, s.offset, s.length)?;
         }
         copy_range(&mut old, &mut f, footer, r.pack_len - footer)?;
@@ -827,7 +834,7 @@ impl<D: Fs> Store<D> {
                 f.write_all(b)?;
             }
         }
-        hollow(&mut f, r.pack_len, set)?;
+        hollow(&mut f, r.pack_len, grown)?;
         f.sync()?;
         drop(f);
         self.fs
@@ -887,9 +894,17 @@ impl<D: Fs> Store<D> {
                 f.write_all(chunk)?;
             }
         }
-        let done = install_from(transport, mirrors, path, entry, asset_len, r.set, &mut f)?;
+        let done = install_from(
+            transport,
+            mirrors,
+            path,
+            entry,
+            asset_len,
+            r.selection(),
+            &mut f,
+        )?;
         f.set_len(done.pack_len)?;
-        hollow(&mut f, done.pack_len, r.set)?;
+        hollow(&mut f, done.pack_len, r.selection())?;
         f.sync()?;
         drop(f);
         self.fs.rename(&staging, &target)?;
@@ -1059,22 +1074,57 @@ fn render(packs: &[Record]) -> Vec<u8> {
             m.insert("asked".into(), r.asked.into());
             m.insert("pinned".into(), r.pinned.into());
             m.insert("used".into(), r.used.into());
+            if r.parts != Parts::ALL {
+                m.insert("parts".into(), parts_json(r.parts));
+            }
             Value::Object(m)
         })
         .collect();
     let mut top = Map::new();
-    top.insert("version".into(), VERSION.into());
+    let version = if packs.iter().any(|r| r.parts != Parts::ALL) {
+        VERSION_PARTS
+    } else {
+        VERSION
+    };
+    top.insert("version".into(), version.into());
     top.insert("packs".into(), list.into());
     let mut out = serde_json::to_vec(&Value::Object(top)).unwrap_or_default();
     out.push(b'\n');
     out
 }
 
+/// A record's parts in the journal: the language parts' keys (`languages`, absent for every
+/// part) and the outline part's (`outline`, absent for every part).
+fn parts_json(p: Parts) -> Value {
+    let mut m = Map::new();
+    if let Some(l) = p.language_parts() {
+        let keys: Vec<Value> = l.iter().map(|k| k.0.into()).collect();
+        m.insert("languages".into(), keys.into());
+    }
+    if let Some(o) = p.outline_part() {
+        m.insert("outline".into(), o.0.into());
+    }
+    Value::Object(m)
+}
+
+fn parts_of_json(v: &Value) -> Option<Parts> {
+    let key = |k: &Value| k.as_u64().and_then(|k| u32::try_from(k).ok()).map(Part);
+    let mut p = Parts::ALL;
+    if let Some(l) = v.get("languages") {
+        let keys: Vec<Part> = l.as_array()?.iter().map(key).collect::<Option<_>>()?;
+        p = p.languages(&keys)?;
+    }
+    if let Some(o) = v.get("outline") {
+        p = p.outline(key(o)?);
+    }
+    Some(p)
+}
+
 fn parse(bytes: &[u8]) -> io::Result<Vec<Record>> {
     let bad = || invalid("the journal does not parse");
     let v: Value = serde_json::from_slice(bytes).map_err(|_| bad())?;
     let version = v.get("version").and_then(Value::as_u64);
-    if !matches!(version, Some(1 | VERSION)) {
+    if !matches!(version, Some(1 | VERSION | VERSION_PARTS)) {
         return Err(invalid("the journal's version is unknown"));
     }
     let v1 = version == Some(1);
@@ -1112,11 +1162,16 @@ fn parse(bytes: &[u8]) -> io::Result<Vec<Record>> {
                 r.get("used").and_then(Value::as_u64).ok_or_else(bad)?,
             )
         };
+        let parts = match r.get("parts") {
+            None => Parts::ALL,
+            Some(p) => parts_of_json(p).ok_or_else(bad)?,
+        };
         out.push(Record {
             address: text(r, "address").ok_or_else(bad)?,
             component: text(r, "component").ok_or_else(bad)?,
             release: text(r, "release").ok_or_else(bad)?,
             set,
+            parts,
             file: text(r, "file")
                 .filter(|f| !f.contains('/') && !f.starts_with('.'))
                 .ok_or_else(bad)?,
@@ -1179,20 +1234,50 @@ impl StoreFile for std::fs::File {
     }
 }
 
-/// Whether an install of `set` holds section `kind` of the pack `h` heads: its components'
-/// sections, sections of no component, and `BLOCK_HASHES` when it covers one of them.
-fn held(h: &PackHead<'_>, set: Components) -> impl Fn(Kind) -> bool + use<> {
-    let installed = move |kind: Kind| Component::of(kind).is_none_or(|c| set.contains(c));
+/// The sections a derive of `add` writes (one kind, one or more parts, ADR-0040) and the
+/// checked bytes of those it is built from (of `needs`), of the parts `r` holds (D-251).
+fn derive_sections<'h, F: Read + Seek>(
+    h: &'h PackHead<'_>,
+    r: &Record,
+    (add, needs): (Component, Components),
+    old: &mut F,
+) -> Result<(Vec<SectionEntry<'h>>, Vec<DeriveInput>), StoreError> {
+    let derive = |why: &str| StoreError::Derive(why.to_owned());
+    let mut targets: Vec<SectionEntry<'h>> = Vec::new();
+    let mut inputs = Vec::new();
+    for s in h.sections().filter(|s| r.parts.holds(s.kind, s.part)) {
+        match Component::of(s.kind) {
+            Some(c) if c == add => {
+                if targets.first().is_some_and(|t| t.kind != s.kind) {
+                    return Err(derive("the component is more than one kind"));
+                }
+                targets.push(s);
+            }
+            Some(c) if needs.contains(c) => {
+                let bytes = read_checked(old, &s)?
+                    .ok_or_else(|| derive("an installed section does not match its hash"))?;
+                inputs.push((s.kind, s.part, s.item_count, bytes));
+            }
+            _ => {}
+        }
+    }
+    Ok((targets, inputs))
+}
+
+/// Whether an install of `want` holds section `kind`, part `part`, of the pack `h` heads: its
+/// components' sections of the parts it holds, sections of no component, and `BLOCK_HASHES`
+/// when it covers one of them.
+fn held(h: &PackHead<'_>, want: Selection) -> impl Fn(Kind, Part) -> bool + use<> {
     let blocked = h.sections().any(|s| {
-        installed(s.kind)
+        want.holds(s.kind, s.part)
             && s.kind != Kind::BLOCK_HASHES
             && s.length >= teigeodata_format::blocks::MIN_COVERED
     });
-    move |kind| {
+    move |kind, part| {
         if kind == Kind::BLOCK_HASHES {
             blocked
         } else {
-            installed(kind)
+            want.holds(kind, part)
         }
     }
 }
@@ -1200,18 +1285,21 @@ fn held(h: &PackHead<'_>, set: Components) -> impl Fn(Kind) -> bool + use<> {
 /// Punches every range of the staged pack that an install of `set` never writes: the sections
 /// it does not hold and the gaps around them, never the head, a held section or the footer
 /// (D-189). A file whose head does not read is left as it is: the install checked it already.
-fn hollow<F: StoreFile>(f: &mut F, pack_len: u64, set: Components) -> io::Result<()> {
+fn hollow<F: StoreFile>(f: &mut F, pack_len: u64, want: Selection) -> io::Result<()> {
     let Some(head) = crate::fetch::read_head(f, pack_len)? else {
         return Ok(());
     };
     let Ok(h) = PackHead::parse(&head, pack_len) else {
         return Ok(());
     };
-    let wanted = held(&h, set);
+    let wanted = held(&h, want);
     let Some(mut at) = h.sections().next().map(|s| s.offset) else {
         return Ok(());
     };
-    for s in h.sections().filter(|s| wanted(s.kind) && s.length > 0) {
+    for s in h
+        .sections()
+        .filter(|s| wanted(s.kind, s.part) && s.length > 0)
+    {
         if s.offset > at {
             f.punch(at..s.offset)?;
         }
@@ -1412,6 +1500,7 @@ mod derive_tests {
             component: "places".into(),
             release: "2026.11.0".into(),
             set,
+            parts: teigeodata_format::component::Parts::ALL,
             file,
             pack_len: bytes.len() as u64,
             head: [0; 16],
@@ -1423,6 +1512,33 @@ mod derive_tests {
         std::fs::write(root.join(JOURNAL), render(core::slice::from_ref(&r))).unwrap();
         let (st, _) = Store::open(Dir::new(&root).unwrap()).unwrap();
         (root, st, r)
+    }
+
+    #[test]
+    fn a_record_of_some_parts_round_trips_and_raises_the_journal_version() {
+        let (_, _, mut r) = store("parts", &pack());
+        let whole = render(core::slice::from_ref(&r));
+        assert!(
+            core::str::from_utf8(&whole)
+                .unwrap()
+                .contains("\"version\":2")
+        );
+        r.parts = teigeodata_format::component::Parts::ALL
+            .languages(&[Part::REST, Part::language("ne").unwrap()])
+            .unwrap()
+            .outline(Part::outline(2, 3).unwrap());
+        let bytes = render(core::slice::from_ref(&r));
+        assert!(
+            core::str::from_utf8(&bytes)
+                .unwrap()
+                .contains("\"version\":3")
+        );
+        assert_eq!(super::parse(&bytes).unwrap(), [r.clone()]);
+        // A version-2 reader's view: the same records, minus the parts, must not pass as 3.
+        let old = core::str::from_utf8(&bytes)
+            .unwrap()
+            .replace("\"version\":3", "\"version\":9");
+        assert!(super::parse(old.as_bytes()).is_err());
     }
 
     #[test]
