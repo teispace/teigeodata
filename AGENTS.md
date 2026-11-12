@@ -174,6 +174,9 @@ Plain, clear, specific English. One fact, one home: link instead of repeating
 - **Never idle on slow checks.** Nightly jobs (fuzzing, Miri) and long CI runs never block the
   next step: push, keep working, fix a failure when it is found (D-080). Avoid hour-long local
   runs; split slow work into parallel CI jobs and bound it.
+- **Public artifacts name no consumer.** Consumer projects may be private: releases, asset
+  names, release notes, tags and PRs use generic names for what a file holds, never the
+  consumer's name.
 - **Keep `main` current.** Push verified batches regularly, merge finished work into `main`, pull,
   and delete merged or stale branches (local and remote) so `main` is the single source.
 

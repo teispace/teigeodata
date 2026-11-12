@@ -1,7 +1,7 @@
 ---
 title: "Releases and versioning"
 status: accepted
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # Releases and versioning
@@ -54,9 +54,31 @@ built for a release name the reader version they need in the catalog.
 4. Check from a scratch project: `cargo build` with the `git` + `tag` dependency above, then
    open a pack with `Layer::open` and answer a `get`.
 
+## Data
+
+Until the signed catalog is live ([catalog keys](catalog-keys.md): the offline key ceremony
+comes first), data is released by hand as a GitHub pre-release (D-247):
+
+1. Build the packs and layers from a commit on `main` whose CI is green.
+2. Tag `data-YYYY.MM.DD` on that commit: `gh release create data-YYYY.MM.DD --target <sha>
+   --prerelease`.
+3. Attach the `.tgd` files with their summaries and the attribution, renamed where names would
+   clash (`np-summary-lite.md`), plus `SHA256SUMS` (`shasum -a 256`) and `B3SUMS` when `b3sum`
+   is at hand. Never the `.key-*` file or the TSV reports.
+4. The notes say what each file is (rows, wire size), the code commit or tag that reads it
+   (`git` dependency with `rev` or `tag`), the licence with the attribution, that it is outside
+   the signed catalog, and how to verify the checksums.
+5. **Name no consumer.** Consumer projects may be private: assets, summaries and notes use
+   generic names (a profile's layer is published under a name for what it holds, such as
+   `world-np-lite.tgd`), and no gate or doc of a consumer is cited.
+
+The first: [data-2026.11.12](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.12).
+Once the catalog is live, data releases go through it and these pre-releases stop.
+
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-12 | Data releases as GitHub pre-releases until the catalog is live; the first, `data-2026.11.12` | consumers need the data before the key ceremony (D-247) |
 | 2026-11-11 | The bindings' versions are part of a release (they were left at 0.0.0 by v0.1.0) | the parity test failed |
 | 2026-11-11 | First version: one workspace version, SemVer with 0.x rules, `git` tags first | TG-01 (D-198) |
