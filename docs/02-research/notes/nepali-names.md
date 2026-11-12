@@ -473,6 +473,10 @@ build writes yet, and the schema lists its intended values in words only. Propos
   The `cbs` set of gate G-xlit read the same file; its 35 misaligned district rows are now
   left out by ID (a stale ID fails the run), which raised the set from exact 45.28% / folded
   50.31% / CER 0.109 to 45.57% / 50.6% / 0.103 on 795 pairs (2026-11-12).
+- **A preferred spelling over the list's** (D-233): Biratnagar is विराटनगर as the city and
+  the press write it, not CBS's बिराटनगर, which stays as an alternate. The crosswalk entry
+  carries `prefer: { name, source }`; the build refuses one that equals the list or cites
+  nothing.
 - **A town named as its unit** (Jiri in Jiri, Kamalamai in Kamalamai) takes the unit's official
   name too; without it the unit's human name outranked the town's machine one and the golden
   gate lost two native-script hits.

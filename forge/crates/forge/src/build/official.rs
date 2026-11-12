@@ -77,6 +77,18 @@ struct Join {
     /// The unit's name when joined: a unit no longer named so was renamed, and the list's name
     /// may be the old one.
     unit: String,
+    /// A spelling preferred over the list's, with the evidence for it (the unit's own usage, the
+    /// more common one; D-233). The list's spelling stays as an alternate, still searchable.
+    #[serde(default)]
+    prefer: Option<Prefer>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Prefer {
+    name: String,
+    /// Where the preferred spelling is used, so a reviewer can check it.
+    source: String,
 }
 
 fn read_file(root: &Path, cc: &str) -> Result<Option<OfficialFile>, String> {
@@ -203,7 +215,7 @@ pub(super) fn run(
             })
             .collect();
         let mut seen = BTreeSet::new();
-        for (key, Join { code, unit }) in &l.units {
+        for (key, Join { code, unit, prefer }) in &l.units {
             let &i = row_of
                 .get(key.as_str())
                 .ok_or_else(|| format!("{}: crosswalk key {key} is no place", l.source))?;
@@ -222,15 +234,9 @@ pub(super) fn run(
             if !seen.insert(code.as_str()) {
                 return Err(format!("{}: code {code} joined twice", l.source));
             }
-            adds.push((
-                i,
-                PlaceName {
-                    text: cut(name, &l.strip).to_string(),
-                    lang: Some(l.lang.clone()),
-                    kind: Some(NameType::Official),
-                    origin: Origin::Official,
-                },
-            ));
+            let unit_names = joined(cut(name, &l.strip), prefer.as_ref(), &l.lang)
+                .map_err(|e| format!("{}: {key}: {e}", l.source))?;
+            adds.extend(unit_names.into_iter().map(|n| (i, n)));
         }
         let far = if l.latin.is_some() {
             aligned(l, &by_code, &namer)?
@@ -257,11 +263,41 @@ pub(super) fn run(
     Ok(out)
 }
 
+/// A joined unit's names in the order `apply` needs: each is inserted right after the canonical
+/// name, so the last pushed ends up first. With a preferred spelling the list's own becomes an
+/// alternate behind it; the preference must differ from the list and cite a source.
+fn joined(listed: &str, prefer: Option<&Prefer>, lang: &str) -> Result<Vec<PlaceName>, String> {
+    let named = |text: &str, kind| PlaceName {
+        text: text.to_string(),
+        lang: Some(lang.to_string()),
+        kind: Some(kind),
+        origin: Origin::Official,
+    };
+    match prefer {
+        None => Ok(vec![named(listed, NameType::Official)]),
+        Some(Prefer { name, source }) => {
+            if name.trim().is_empty() || source.trim().is_empty() || name == listed {
+                return Err(format!(
+                    "the preferred name must differ from the list's ({listed}) and cite a source"
+                ));
+            }
+            Ok(vec![
+                named(listed, NameType::Alt),
+                named(name, NameType::Official),
+            ])
+        }
+    }
+}
+
 /// The deepest unit above each place that gains an official name and has the place's own
 /// canonical name (Jiri the town in Jiri the municipality): the place takes that name too, so
 /// a town is not left with a machine spelling of its own unit's official one.
 fn same_named(places: &[Place], adds: &[(usize, PlaceName)]) -> Vec<(usize, PlaceName)> {
-    let official: BTreeMap<usize, &PlaceName> = adds.iter().map(|(i, n)| (*i, n)).collect();
+    let official: BTreeMap<usize, &PlaceName> = adds
+        .iter()
+        .filter(|(_, n)| n.kind == Some(NameType::Official))
+        .map(|(i, n)| (*i, n))
+        .collect();
     let by_key: BTreeMap<&str, usize> = places
         .iter()
         .enumerate()
@@ -382,7 +418,7 @@ fn apply(places: &mut [Place], adds: Vec<(usize, PlaceName)>) -> (usize, usize) 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, reason = "tests")]
 mod tests {
-    use super::{Origin, Place, PlaceName, apply, cut, same_named};
+    use super::{Origin, Place, PlaceName, Prefer, apply, cut, joined, same_named};
     use teigeodata_format::names::NameType;
 
     fn unit(names: &[(&str, Option<&str>, Origin)]) -> Place {
@@ -456,6 +492,48 @@ mod tests {
             ]
         );
         assert_eq!(ps[1].names[1].text, "पोखरा");
+    }
+
+    #[test]
+    fn a_preferred_spelling_goes_first_and_the_list_s_stays_as_an_alternate() {
+        let mut ps = vec![unit(&[
+            ("Biratnagar", None, Origin::Official),
+            ("विराटनगर", Some("ne"), Origin::Wikidata),
+        ])];
+        let prefer = |name: &str, source: &str| Prefer {
+            name: name.into(),
+            source: source.into(),
+        };
+        assert!(joined("बिराटनगर", Some(&prefer("बिराटनगर", "x")), "ne").is_err());
+        assert!(joined("बिराटनगर", Some(&prefer("विराटनगर", " ")), "ne").is_err());
+        let adds: Vec<_> = joined("बिराटनगर", Some(&prefer("विराटनगर", "the city")), "ne")
+            .unwrap()
+            .into_iter()
+            .map(|n| (0, n))
+            .collect();
+        // A same-named town gets the preferred spelling only, never the alternate.
+        let mut town = unit(&[("Biratnagar", None, Origin::GeoNames)]);
+        town.key = "geonames:1".into();
+        town.parent = Some("admin:X1".into());
+        ps.push(town);
+        let same = same_named(&ps, &adds);
+        assert_eq!(same.len(), 1);
+        assert_eq!(same[0].1.text, "विराटनगर");
+        apply(&mut ps, adds.into_iter().chain(same).collect());
+        let got: Vec<_> = ps[0]
+            .names
+            .iter()
+            .map(|n| (n.text.as_str(), n.kind))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("Biratnagar", None),
+                ("विराटनगर", Some(NameType::Official)),
+                ("बिराटनगर", Some(NameType::Alt)),
+            ]
+        );
+        assert_eq!(ps[1].names[1].text, "विराटनगर");
     }
 
     #[test]

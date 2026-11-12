@@ -125,7 +125,10 @@ lists:
       "admin:NP0104405": { code: "11111", unit: "Barhadashi" }
       "admin:NP0104406": { code: "11113", unit: "Haldibari" }
       "admin:NP0104407": { code: "11115", unit: "Kachanakawal" }
-      "admin:NP0105101": { code: "11214", unit: "Biratnagar" }
+      # CBS writes बिराटनगर; the metropolitan city's own documents (biratnagarmun.gov.np) and the
+      # national press (Kantipur, Hamro Patro) write विराटनगर, the more used spelling (D-233).
+      "admin:NP0105101": { code: "11214", unit: "Biratnagar",
+        prefer: { name: "विराटनगर", source: "biratnagarmun.gov.np documents; ekantipur.com; hamropatro.com (2026-11-12)" } }
       "admin:NP0105301": { code: "11202", unit: "Letang" }
       "admin:NP0105302": { code: "11204", unit: "Sundarharaicha" }
       "admin:NP0105303": { code: "11205", unit: "Belbari" }
