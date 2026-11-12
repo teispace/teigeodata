@@ -812,6 +812,7 @@ pub fn part_of(lang: Option<Tag>, first: bool, own: &[Part]) -> Part {
 /// their own, and every part that holds a name. The one rule of the forge, an embedded layer
 /// and a reader that needs to know where a language lives; it holds no names, so a writer
 /// builds one part at a time in memory bounded by that part.
+#[cfg(feature = "alloc")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LanguageParts {
     own: alloc::vec::Vec<Part>,
@@ -819,6 +820,7 @@ pub struct LanguageParts {
 }
 
 /// Every name in the base part: a section that is not split.
+#[cfg(feature = "alloc")]
 impl Default for LanguageParts {
     fn default() -> Self {
         Self {
@@ -828,6 +830,7 @@ impl Default for LanguageParts {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl LanguageParts {
     /// The parts of `places`, each place's names as (language, text length), its canonical name
     /// first: a language whose names other than the canonical ones reach [`PART_MIN_TEXT`] gets
@@ -883,11 +886,13 @@ impl LanguageParts {
 
 /// A place's names across the NAMES parts a reader has (ADR-0040): the base part first, whose
 /// first record of a place is its canonical name, then each other part in part order.
+#[cfg(feature = "alloc")]
 #[derive(Clone, Debug, Default)]
 pub struct NameSet<'a> {
     parts: alloc::vec::Vec<Names<'a>>,
 }
 
+#[cfg(feature = "alloc")]
 impl<'a> NameSet<'a> {
     /// The set of `sections`, NAMES parts in table order, the base part first.
     ///

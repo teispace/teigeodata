@@ -466,11 +466,13 @@ impl<'a> Search<'a> {
 
 /// The SEARCH (or SUBSTRING) parts a reader has (ADR-0040): the base part, with the rows'
 /// importance, the query rules and the unit types, then each other part's keys and lists.
+#[cfg(feature = "alloc")]
 #[derive(Clone, Debug, Default)]
 pub struct SearchSet<'a> {
     parts: alloc::vec::Vec<Search<'a>>,
 }
 
+#[cfg(feature = "alloc")]
 impl<'a> SearchSet<'a> {
     /// The set of `sections`, parts of one kind in table order, the base part first.
     ///
