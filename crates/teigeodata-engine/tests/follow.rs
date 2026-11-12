@@ -11,7 +11,7 @@ mod common;
 use std::sync::Arc;
 
 use common::synthetic;
-use teigeodata_engine::{Component, Components, Engine, Layer, LayerOptions, Shared};
+use teigeodata_engine::{Component, Components, Engine, Layer, LayerOptions, Parts, Shared};
 use teigeodata_sync::store::{Dir, Record};
 
 fn record(file: &str, len: usize, set: Components) -> Record {
@@ -20,6 +20,7 @@ fn record(file: &str, len: usize, set: Components) -> Record {
         component: "places".into(),
         release: "2026.11.0".into(),
         set,
+        parts: Parts::ALL,
         file: file.into(),
         pack_len: len as u64,
         head: [0; 16],
