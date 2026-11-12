@@ -71,7 +71,7 @@ pub use query::MAX_COUNTRY_FETCH;
 pub use query::NameInfo;
 #[cfg(any(feature = "dem", feature = "dem-coarse"))]
 pub use query::{Datum, DemSource, Height};
-pub use query::{Hit, Near, Place, Scratch};
+pub use query::{Hit, LOCALITY_RADIUS_M, Near, Place, SETTLEMENT_RADIUS_M, Scratch};
 #[cfg(feature = "search")]
 pub use search::{Focus, SearchOptions};
 #[cfg(feature = "admin")]

@@ -62,7 +62,8 @@ fn the_baseline_answers_the_world() {
 
 /// TG-19: `reverse` gives each answer's bearing from the place to the point, and `mark_inside`
 /// says, for every country and unit among the answers, whether it holds the point, as
-/// `admin_at` does; other places stay `None`.
+/// `admin_at` does, and for settlements and localities by radius (D-238); other places stay
+/// `None`.
 #[test]
 fn reverse_says_bearing_and_inside() {
     let e = Engine::with_baseline().unwrap();
@@ -85,6 +86,19 @@ fn reverse_says_bearing_and_inside() {
         let held = units.iter().any(|u| u.id == n.place.id);
         match n.place.kind {
             Some(PlaceKind::Country | PlaceKind::Admin) => assert_eq!(n.inside, Some(held)),
+            Some(k @ (PlaceKind::Settlement | PlaceKind::Locality)) => {
+                // D-238: inside only the nearest of its kind, within the kind's radius.
+                let nearest = near
+                    .iter()
+                    .filter(|m| m.place.kind == Some(k))
+                    .all(|m| m.meters >= n.meters);
+                let radius = if k == PlaceKind::Settlement {
+                    teigeodata_engine::SETTLEMENT_RADIUS_M
+                } else {
+                    teigeodata_engine::LOCALITY_RADIUS_M
+                };
+                assert_eq!(n.inside, Some(nearest && n.meters <= radius));
+            }
             _ => assert_eq!(n.inside, None),
         }
     }

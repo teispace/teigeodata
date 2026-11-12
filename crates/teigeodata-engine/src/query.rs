@@ -102,6 +102,38 @@ impl Height {
 #[cfg(all(feature = "admin", feature = "admin-index"))]
 pub const MAX_COUNTRY_FETCH: usize = 16_384;
 
+/// How far from a settlement a point still lies inside it, when the point is nearer to it than
+/// to any other settlement (D-238): the 90th-percentile distance from a building to its nearest
+/// settlement, measured on Google's and Microsoft's footprints.
+pub const SETTLEMENT_RADIUS_M: f64 = 750.0;
+
+/// [`SETTLEMENT_RADIUS_M`] for a locality (a tole, a neighbourhood), among localities (D-238).
+pub const LOCALITY_RADIUS_M: f64 = 700.0;
+
+/// Sets [`Near::inside`] for each settlement and locality in `near` with no outline: inside the
+/// nearest of its kind when within that kind's radius, the Voronoi assignment the forge uses
+/// for settlement cores (D-096, D-238). Other places keep their value.
+#[cfg(feature = "admin-index")]
+fn mark_inside_by_radius(near: &mut [Near]) {
+    for (kind, radius) in [
+        (PlaceKind::Settlement, SETTLEMENT_RADIUS_M),
+        (PlaceKind::Locality, LOCALITY_RADIUS_M),
+    ] {
+        let mut nearest: Option<(usize, f64)> = None;
+        for (i, n) in near.iter().enumerate() {
+            if n.place.kind == Some(kind) && nearest.is_none_or(|(_, m)| n.meters < m) {
+                nearest = Some((i, n.meters));
+            }
+        }
+        let inside = nearest.filter(|&(_, m)| m <= radius).map(|(i, _)| i);
+        for (i, n) in near.iter_mut().enumerate() {
+            if n.place.kind == Some(kind) {
+                n.inside = Some(Some(i) == inside);
+            }
+        }
+    }
+}
+
 /// A place near a point, from [`Engine::reverse`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Near {
@@ -112,8 +144,10 @@ pub struct Near {
     /// The initial bearing from the place to the point asked about, in degrees clockwise from
     /// true north, `[0, 360)` (TG-19): "3.2 km at 45° from Pokhara".
     pub bearing_deg: f64,
-    /// Whether the point lies inside the place's outline: `None` as `reverse` answers and for a
-    /// place without an outline; [`Engine::mark_inside`] sets it (TG-19).
+    /// Whether the point lies inside the place: `None` as `reverse` answers;
+    /// [`Engine::mark_inside`] sets it by the outline for a country or unit, by
+    /// [`SETTLEMENT_RADIUS_M`] or [`LOCALITY_RADIUS_M`] for a settlement or locality, and
+    /// leaves it `None` for any other place (TG-19).
     pub inside: Option<bool>,
 }
 
@@ -1113,8 +1147,10 @@ impl Engine {
 
     /// Sets [`Near::inside`] on `near` (as [`reverse`](Self::reverse) answered for `at`): for a
     /// country or an admin unit, whether it holds `at` by the stored outlines, as
-    /// [`admin_at`](Self::admin_at) answers; `None` for every other place, and for all of them
-    /// when no layer's outlines cover `at`. One `admin_at` for the whole answer (TG-19).
+    /// [`admin_at`](Self::admin_at) answers, `None` when no layer's outlines cover `at`; for a
+    /// settlement or locality, whether it is the nearest of its kind in `near` and within
+    /// [`SETTLEMENT_RADIUS_M`] or [`LOCALITY_RADIUS_M`] (D-238); `None` for every other place.
+    /// One `admin_at` for the whole answer (TG-19).
     ///
     /// # Errors
     /// [`Error::Integrity`] if a section it reads is corrupt.
@@ -1138,6 +1174,7 @@ impl Engine {
             let outlined = matches!(n.place.kind, Some(PlaceKind::Country | PlaceKind::Admin));
             n.inside = (covered && outlined).then(|| units.iter().any(|u| u.id == n.place.id));
         }
+        mark_inside_by_radius(near);
         s.units = units;
         Ok(())
     }
@@ -1490,6 +1527,53 @@ mod tests {
         // Zero radius: the point's cell.
         let b = radius_box(at(27.7, 85.3), 0);
         assert!(b.min_lat < 27_700_000 && b.max_lat > 27_700_000);
+    }
+
+    fn near(serial: u64, kind: PlaceKind, meters: f64) -> Near {
+        Near {
+            place: Place {
+                id: PlaceId::new(teigeodata_core::Namespace::WORLD, serial).unwrap(),
+                layer: LayerId(0),
+                row: 0,
+                point: Point::<E6>::from_degrees(0.0, 0.0).unwrap(),
+                kind: Some(kind),
+                admin_level: 0,
+                flags: 0,
+            },
+            meters,
+            bearing_deg: 0.0,
+            inside: None,
+        }
+    }
+
+    /// D-238: a settlement is inside when it is the nearest settlement and within its radius;
+    /// a tole and its village can both hold the point; a farther one, a too-far nearest one and
+    /// a natural feature are not inside, and the answers' order does not matter.
+    #[test]
+    fn inside_by_radius_is_the_nearest_of_its_kind_within_its_radius() {
+        let mut v = [
+            near(1, PlaceKind::Settlement, 400.0),
+            near(2, PlaceKind::Natural, 5.0),
+            near(3, PlaceKind::Settlement, 10.0),
+            near(4, PlaceKind::Locality, 300.0),
+            near(5, PlaceKind::Locality, 200.0),
+        ];
+        mark_inside_by_radius(&mut v);
+        let inside: Vec<_> = v.iter().map(|n| n.inside).collect();
+        assert_eq!(
+            inside,
+            [Some(false), None, Some(true), Some(false), Some(true)]
+        );
+        // The brief's far case: the nearest village 1.9 km away is near, not inside.
+        let mut far = [near(1, PlaceKind::Settlement, 1_900.0)];
+        mark_inside_by_radius(&mut far);
+        assert_eq!(far[0].inside, Some(false));
+        let mut edge = [
+            near(1, PlaceKind::Settlement, SETTLEMENT_RADIUS_M),
+            near(2, PlaceKind::Locality, LOCALITY_RADIUS_M + 1.0),
+        ];
+        mark_inside_by_radius(&mut edge);
+        assert_eq!(edge.map(|n| n.inside), [Some(true), Some(false)]);
     }
 }
 
