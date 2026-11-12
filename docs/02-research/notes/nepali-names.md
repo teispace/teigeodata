@@ -469,7 +469,12 @@ build writes yet, and the schema lists its intended values in words only. Propos
   another district's name (DANG रुपन्देही, BAJHANG सुर्खेत). Romanising each Nepali name and
   comparing it with its own row's English found 35 of 77 rows far, all from row 43, and 3 of
   753 local levels (true differences: K.I. Singh, के.आई.सिं.; Thori, ठोरी (सुवर्णपुर); Rubi
-  Valley, रुबी भ्याली). That check is now a build gate. Only districts 101 to 407 are joined.
+  Valley, रुबी भ्याली). That check is now a build gate. Districts 101 to 407 join by their row;
+  29 of the others take the list's own text from the row it slipped to (D-234): after each split
+  Nawalparasi line the lag grows by one, and romanising every Nepali name of rows 43 to 77 pairs
+  each district with its name, close and mutual. Lost: Nawalparasi East and West (split text),
+  Rukum East and West (their qualifier "(पूर्वी भाग)" romanises too far for the gate), Kailali
+  and Kanchanpur (absent from the file).
   The `cbs` set of gate G-xlit read the same file; its 35 misaligned district rows are now
   left out by ID (a stale ID fails the run), which raised the set from exact 45.28% / folded
   50.31% / CER 0.109 to 45.57% / 50.6% / 0.103 on 795 pairs (2026-11-12).

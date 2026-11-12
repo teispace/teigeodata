@@ -24,7 +24,11 @@ lists:
   # lines, then Nawalparasi West's): from code 408 every row carries another district's name
   # (DANG रुपन्देही, BAJHANG सुर्खेत). Found 2026-11-12 by romanising each Nepali name against
   # its row's English (35 rows far, 0 of the 42 before); the local-level list has no such shift.
-  # Only codes 101 to 407 are joined; the other 35 districts take later tiers.
+  # Codes 101 to 407 join by their row; 29 of the other 35 take their name from a later row,
+  # below. Left to later tiers: Nawalparasi East and West (their text is split over two rows),
+  # Rukum East and West (the list's "रुकुम (पूर्वी भाग)" and "रुकुम (पश्चिम भाग)" are certain by
+  # eye but romanise too far from "Rukum East" for the gate), Kailali and Kanchanpur (their
+  # names are not in the file).
   - source: cbs-np-districts
     code: Code
     name: "जिल्ला"
@@ -73,6 +77,41 @@ lists:
       "admin:NP0440": { code: "407", unit: "Tanahu" }
       "admin:NP0444": { code: "404", unit: "Myagdi" }
       "admin:NP0445": { code: "403", unit: "Mustang" }
+      # Codes 409 to 707: the row's own Nepali name is another district's, so each entry names
+      # the list's text for it, found in a later row (the lag grows by one after each split
+      # Nawalparasi line). Paired 2026-11-12 by romanising every Nepali name of rows 43 to 77
+      # and taking, for each district, the one nearest its English name, kept only when the
+      # match is close (at most 0.45 of the letters differ) and mutual; the build checks that
+      # each text is in the list and romanises near its row's English name.
+      "admin:NP0441": { code: "409", unit: "Syangja", name: "स्याङजा" }
+      "admin:NP0442": { code: "410", unit: "Parbat", name: "पर्वत" }
+      "admin:NP0443": { code: "411", unit: "Baglung", name: "बागलुङ" }
+      "admin:NP0554": { code: "502", unit: "Rolpa", name: "रोल्पा" }
+      "admin:NP0555": { code: "503", unit: "Pyuthan", name: "प्यूठान" }
+      "admin:NP0551": { code: "504", unit: "Gulmi", name: "गुल्मी" }
+      "admin:NP0550": { code: "505", unit: "Arghakhanchi", name: "अर्घाखाँची" }
+      "admin:NP0546": { code: "506", unit: "Palpa", name: "पाल्पा" }
+      "admin:NP0548": { code: "508", unit: "Rupandehi", name: "रुपन्देही" }
+      "admin:NP0549": { code: "509", unit: "Kapilbastu", name: "कपिलवस्तु" }
+      "admin:NP0556": { code: "510", unit: "Dang", name: "दाङ" }
+      "admin:NP0557": { code: "511", unit: "Banke", name: "बाँके" }
+      "admin:NP0558": { code: "512", unit: "Bardiya", name: "बर्दिया" }
+      "admin:NP0662": { code: "601", unit: "Dolpa", name: "डोल्पा" }
+      "admin:NP0665": { code: "602", unit: "Mugu", name: "मुगु" }
+      "admin:NP0666": { code: "603", unit: "Humla", name: "हुम्ला" }
+      "admin:NP0663": { code: "604", unit: "Jumla", name: "जुम्ला" }
+      "admin:NP0664": { code: "605", unit: "Kalikot", name: "कालिकोट" }
+      "admin:NP0661": { code: "606", unit: "Dailekh", name: "दैलेख" }
+      "admin:NP0660": { code: "607", unit: "Jajarkot", name: "जाजरकोट" }
+      "admin:NP0653": { code: "609", unit: "Salyan", name: "सल्यान" }
+      "admin:NP0659": { code: "610", unit: "Surkhet", name: "सुर्खेत" }
+      "admin:NP0768": { code: "701", unit: "Bajura", name: "बाजुरा" }
+      "admin:NP0767": { code: "702", unit: "Bajhang", name: "बझाङ" }
+      "admin:NP0775": { code: "703", unit: "Darchula", name: "दार्चुला" }
+      "admin:NP0774": { code: "704", unit: "Baitadi", name: "बैतडी" }
+      "admin:NP0773": { code: "705", unit: "Dadeldhura", name: "डँडेलधुरा" }
+      "admin:NP0770": { code: "706", unit: "Doti", name: "डोटी" }
+      "admin:NP0769": { code: "707", unit: "Achham", name: "अछाम" }
   # The 753 local levels: CBS, via Open Data Nepal, CC BY. The type word is cut, the list's
   # own spellings of it included (गाउंपालिका, नगरापालिका).
   - source: cbs-np-local-levels

@@ -348,10 +348,13 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     report per step (TG-11's names table). Done: origins in `RULE` (D-227), tier 6 (the
     canonical name transliterated, marked machine, searched apart; 99.0% of Nepal named,
     D-228, 2026-11-12), tier 1 (official names by a reviewed code crosswalk with an alignment
-    gate: 715 local levels and 42 districts, D-232, 2026-11-12); tier 2 is in already (Nepal's
-    Wikidata snapshot carries every language's labels). Open: the 35 districts CBS's file
-    shifts, the 38 renamed local levels (the G-xlit `cbs` set now leaves the shifted rows out), tier 4
-    (donor), the `machine_names` profile option
+    gate: 715 local levels and 71 districts, D-232, D-234, 2026-11-12); tier 2 is in already
+    (Nepal's Wikidata snapshot carries every language's labels). Open: 6 districts the CBS file
+    loses (Nawalparasi East and West, Rukum East and West, Kailali, Kanchanpur), the 38
+    renamed local levels (no open, current list with Nepali names found on 2026-11-12: the
+    open lists predate the renames or have no Nepali), tier 4 (donor), the `machine_names`
+    profile option, a unit's Wikidata or GeoNames Nepali label kept with its type word
+    (नलगाड नगरपालिका; 2 units, and 2 stray GeoNames units at level 3, "Ramechhap District")
   - [x] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
     model trained in the forge on the build's licence class; gate G-xlit with floors
     (`forge xlit-eval ne-Latn-Deva`: cbs 44.7%, wd 36.2% folded; D-222, 2026-11-12). Open: the
@@ -443,3 +446,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-12 | 4.9c: TG-16 done; the shipped baseline carries zone rules again | D-229 to D-231 |
 | 2026-11-12 | 4.9c: TG-14 tier 1, official names joined by code, with an alignment gate | D-232 |
 | 2026-11-12 | 4.9c: TG-18's व/ब variant as a SEARCH spelling rule; Biratnagar's official Nepali name as the city writes it | D-233 |
+| 2026-11-12 | 4.9c: 29 more districts' official names from the misaligned CBS rows, by the list's own text | D-234 |

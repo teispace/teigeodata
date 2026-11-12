@@ -77,6 +77,12 @@ struct Join {
     /// The unit's name when joined: a unit no longer named so was renamed, and the list's name
     /// may be the old one.
     unit: String,
+    /// The list's own text for this unit when the list's row for `code` carries another
+    /// unit's name (a misaligned column): it must occur in the list's name column, so it is
+    /// still the list's spelling, and the alignment gate checks it against the row's Latin
+    /// name.
+    #[serde(default)]
+    name: Option<String>,
     /// A spelling preferred over the list's, with the evidence for it (the unit's own usage, the
     /// more common one; D-233). The list's spelling stays as an alternate, still searchable.
     #[serde(default)]
@@ -215,7 +221,17 @@ pub(super) fn run(
             })
             .collect();
         let mut seen = BTreeSet::new();
-        for (key, Join { code, unit, prefer }) in &l.units {
+        let listed: BTreeSet<&str> = by_code.values().map(|v| v.0).collect();
+        for (
+            key,
+            Join {
+                code,
+                unit,
+                name: own,
+                prefer,
+            },
+        ) in &l.units
+        {
             let &i = row_of
                 .get(key.as_str())
                 .ok_or_else(|| format!("{}: crosswalk key {key} is no place", l.source))?;
@@ -228,9 +244,11 @@ pub(super) fn run(
                     l.source
                 ));
             }
-            let &(name, _) = by_code
+            let &(row, _) = by_code
                 .get(code.as_str())
                 .ok_or_else(|| format!("{}: no code {code} (for {key})", l.source))?;
+            let name = listed_name(row, own.as_deref(), &listed)
+                .map_err(|e| format!("{}: {key}: {e}", l.source))?;
             if !seen.insert(code.as_str()) {
                 return Err(format!("{}: code {code} joined twice", l.source));
             }
@@ -261,6 +279,20 @@ pub(super) fn run(
          municipality: the same name, the same spelling)."
     );
     Ok(out)
+}
+
+/// The list's name for a unit: its row's, or the entry's own when given, which must be one of
+/// the list's names (`listed`), so a misaligned row is mended with the list's text only.
+fn listed_name<'a>(
+    row: &'a str,
+    own: Option<&'a str>,
+    listed: &BTreeSet<&str>,
+) -> Result<&'a str, String> {
+    match own {
+        None => Ok(row),
+        Some(n) if listed.contains(n) => Ok(n),
+        Some(n) => Err(format!("the name {n:?} is not in the list's name column")),
+    }
 }
 
 /// A joined unit's names in the order `apply` needs: each is inserted right after the canonical
@@ -347,9 +379,10 @@ fn aligned(
 ) -> Result<String, String> {
     let mut far = Vec::new();
     for j in l.units.values() {
-        let Some(&(name, latin)) = by_code.get(j.code.as_str()) else {
+        let Some(&(row, latin)) = by_code.get(j.code.as_str()) else {
             continue;
         };
+        let name = j.name.as_deref().unwrap_or(row);
         let lower = latin.to_lowercase();
         let want = letters(cut(&lower, &l.latin_strip));
         let got = letters(&namer.romanise(cut(name, &l.strip)).unwrap_or_default());
@@ -418,7 +451,7 @@ fn apply(places: &mut [Place], adds: Vec<(usize, PlaceName)>) -> (usize, usize) 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, reason = "tests")]
 mod tests {
-    use super::{Origin, Place, PlaceName, Prefer, apply, cut, joined, same_named};
+    use super::{Origin, Place, PlaceName, Prefer, apply, cut, joined, listed_name, same_named};
     use teigeodata_format::names::NameType;
 
     fn unit(names: &[(&str, Option<&str>, Origin)]) -> Place {
@@ -492,6 +525,14 @@ mod tests {
             ]
         );
         assert_eq!(ps[1].names[1].text, "पोखरा");
+    }
+
+    #[test]
+    fn a_mended_row_takes_only_the_list_s_own_text() {
+        let listed = std::collections::BTreeSet::from(["दाङ", "रुपन्देही"]);
+        assert_eq!(listed_name("रुपन्देही", None, &listed), Ok("रुपन्देही"));
+        assert_eq!(listed_name("रुपन्देही", Some("दाङ"), &listed), Ok("दाङ"));
+        assert!(listed_name("रुपन्देही", Some("दांग"), &listed).is_err());
     }
 
     #[test]
