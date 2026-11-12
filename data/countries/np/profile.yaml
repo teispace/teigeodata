@@ -20,6 +20,29 @@ romanise: [ne-Deva]
 # Names in Devanagari for places with none, from the transliterator (D-222, D-228): alt names
 # marked `transliteration`, never canonical.
 transliterate: [ne-Latn-Deva]
+# Names in Devanagari for places with no Nepali one, from related languages' labels (D-236,
+# tier 4 of nepali-names §5.1), before the transliterator: a donor's label is cut of the type
+# words above and below and taken only when it romanises close to the place's Latin name.
+# Order and members by measured agreement with Nepali names people wrote (G-donor, D-236): a
+# donor must write the Nepali name more often than the transliterator does (45.5%). Measured on
+# the lite build of 2026-11-12, the same name / within one edit, places with both: Sanskrit
+# 77% / 83% (87), Awadhi 75% / 86% (102), Doteli 64% / 74% (154). Left out: Maithili 46% / 61%
+# (276), Marathi 36% / 71% (14), Bhojpuri 25% / 47% (138), Hindi 23% / 54% (105), and Newari
+# (new), whose labels are often its own names (ख्वप for Bhaktapur), not spellings.
+name_donors:
+  - to: ne
+    script: Deva
+    from: [sa, awa, dty]
+    # The donors' own type words: district in Hindi, Maithili and Bhojpuri (जिला), Marathi
+    # (जिल्हा), Sanskrit (मण्डलम्, written joined), municipality words as in Nepali.
+    strip: [जिला, जिल्हा, मण्डलम्, मण्डल, नगर निगम, नगरपालिका, गाँउपालिका]
+    # Hindi-style spelling writes a word's final ङ as ंग or ँग (धादिंग, खोटाँग); Nepali as ङ.
+    word_ends:
+      - { text: "ंग", means: "ङ" }
+      - { text: "ँग", means: "ङ" }
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "G-donor on the lite build of 2026-11-12 (nepali-names §5.8): each kept donor writes the Nepali name on 64% to 77% of the places with both, above the transliterator's 45.5%" }
 admin_levels:
   - { level: 1, english: Province, native: [{ lang: ne, script: Deva, text: "प्रदेश" }] }
   - { level: 2, english: District, native: [{ lang: ne, script: Deva, text: "जिल्ला" }] }
@@ -71,5 +94,24 @@ latin_spellings:
     evidence:
       - { kind: usage, detail: "Biratnagar (CBS, COD-AB, the city) is spelled Viratnagar in Hindi-style romanisations; Bishnu/Vishnu, Birgunj/Virgunj alike" }
       - { kind: usage, detail: "Nepali व is read [b] or [w] (nepali-names §3.5); the TG-18 check of 2026-11-11 found viratnagar ranking India's Viratnagar above Biratnagar" }
+  # Nepali फ is romanised "ph" in the names (Phidim, Pharping) and "f" by many who type them; two
+  # edits apart, so the one-edit tier misses it (TG-18: fidim ranked Didim, Turkey, first).
+  - text: f
+    means: ph
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "the MVP's romanisation fold joins ph and f (Tithipatra brief addendum 1 §1.2); Phidim/Fidim, Pharping/Farping, Phaplu/Faplu" }
+  # The long vowels ई and ऊ are typed "ee" and "oo" in informal romanisation, "i" and "u" in the
+  # names (Birgunj, Gulmi): two edits apart.
+  - text: ee
+    means: i
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "the MVP's romanisation fold maps ee to i (Tithipatra brief addendum 1 §1.2); Beerganj/Birganj, Seeta/Sita" }
+  - text: oo
+    means: u
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "the MVP's romanisation fold maps oo to u (Tithipatra brief addendum 1 §1.2); Goolmi/Gulmi, Phoolbari/Phulbari" }
 sources:
   codab: { unit_type_code: { field: adm3_pcode, offset: 6, length: 1 } }

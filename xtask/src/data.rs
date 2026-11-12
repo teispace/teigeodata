@@ -69,6 +69,9 @@ struct Profile {
     /// Spelling conventions of its names in Latin script (D-233).
     #[serde(default)]
     latin_spellings: Vec<Spelling>,
+    /// Related languages whose labels fill missing names, per target (D-236).
+    #[serde(default)]
+    name_donors: Vec<NameDonors>,
     /// Source adapter ID → how that source encodes things for this country.
     #[serde(default)]
     sources: BTreeMap<String, SourceRules>,
@@ -130,6 +133,28 @@ struct Spelling {
     status: Status,
     #[serde(default)]
     evidence: Vec<Evidence>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NameDonors {
+    to: String,
+    script: String,
+    from: Vec<String>,
+    #[serde(default)]
+    strip: Vec<String>,
+    #[serde(default)]
+    word_ends: Vec<WordEnd>,
+    status: Status,
+    #[serde(default)]
+    evidence: Vec<Evidence>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WordEnd {
+    text: String,
+    means: String,
 }
 
 #[derive(Deserialize)]
@@ -411,7 +436,46 @@ fn check_profile(
         term(&format!("droppable suffix `{}`", s.text), s, &mut out);
     }
     check_spellings(&p.latin_spellings, &mut out);
+    check_donors(&p, &mut out);
     out
+}
+
+/// Each donor rule: a target among the profile's languages and scripts, and distinct donor
+/// languages (ISO 639 codes) other than the target, reviewed.
+fn check_donors(p: &Profile, out: &mut Vec<String>) {
+    for d in &p.name_donors {
+        let at = format!("name donors of `{}` in {}", d.to, d.script);
+        if !p.languages.contains(&d.to) || !p.scripts.contains(&d.script) {
+            out.push(format!(
+                "{at}: the target must be one of the profile's languages and scripts"
+            ));
+        }
+        let code =
+            |l: &str| (2..=3).contains(&l.len()) && l.bytes().all(|b| b.is_ascii_lowercase());
+        let distinct: BTreeSet<&str> = d.from.iter().map(String::as_str).collect();
+        if d.from.is_empty()
+            || distinct.len() != d.from.len()
+            || d.from.iter().any(|l| !code(l) || *l == d.to)
+        {
+            out.push(format!(
+                "{at}: donors must be distinct ISO 639 codes other than the target"
+            ));
+        }
+        if d.word_ends
+            .iter()
+            .any(|e| e.text.is_empty() || e.text == e.means || e.text.contains(' '))
+        {
+            out.push(format!(
+                "{at}: a word end and its respelling must differ and hold no space"
+            ));
+        }
+        if d.strip.iter().any(|w| w.trim().is_empty() || w.trim() != w) {
+            out.push(format!(
+                "{at}: type words to strip must be trimmed and not empty"
+            ));
+        }
+        reviewed(&at, d.status, &d.evidence, out);
+    }
 }
 
 /// Each spelling convention: two different runs of lower-case Latin letters, reviewed.
@@ -592,6 +656,7 @@ sources:
     }
 
     #[test]
+    #[allow(clippy::too_many_lines, reason = "one table of cases, one per rule")]
     fn rejects_each_violation() {
         let cases = [
             ("country: NP", "country: IN", "must be `NP`"),
@@ -673,6 +738,16 @@ sources:
                 "scripts: [Deva, Latn]",
                 "scripts: [Deva, Latn]\ntransliterate: [ne-Latn-Deva]",
                 "no profile data/xlit/ne-Latn-Deva.yaml",
+            ),
+            (
+                "scripts: [Deva, Latn]",
+                "scripts: [Deva, Latn]\nname_donors: [{ to: ne, script: Deva, from: [mai, ne], status: proposed }]",
+                "donors must be distinct",
+            ),
+            (
+                "scripts: [Deva, Latn]",
+                "scripts: [Deva, Latn]\nname_donors: [{ to: hi, script: Deva, from: [mai], status: proposed }]",
+                "the target must be",
             ),
             (
                 "name: Nepal",

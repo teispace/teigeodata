@@ -32,7 +32,7 @@ const SCHEMA: &str = "teigeodata/official-names/v1";
 /// [`MAX_FAR`] of its joined rows far. A column shifted against its neighbours makes most rows
 /// far (CBS's district file: 35 of 77, from row 43); real differences are few (its local
 /// levels: 3 of 753, such as K.I. Singh, के.आई.सिं.). Measured 2026-11-12, D-232.
-const FAR: f64 = 0.45;
+pub(super) const FAR: f64 = 0.45;
 const MAX_FAR: f64 = 0.02;
 
 #[derive(Debug, serde::Deserialize)]
@@ -166,7 +166,7 @@ pub(crate) fn csv_columns(path: &Path, cols: &[&str]) -> Result<Vec<Vec<String>>
 
 /// `text` with the longest trailing word of `strip` cut, once (so `उपमहानगरपालिका` is cut
 /// whole, never as `नगरपालिका`), never to nothing.
-fn cut<'t>(text: &'t str, strip: &[String]) -> &'t str {
+pub(super) fn cut<'t>(text: &'t str, strip: &[String]) -> &'t str {
     strip
         .iter()
         .filter(|w| text.ends_with(w.as_str()))
@@ -362,7 +362,7 @@ fn same_named(places: &[Place], adds: &[(usize, PlaceName)]) -> Vec<(usize, Plac
 }
 
 /// Letters only, lower case, accents dropped: what the alignment gate compares.
-fn letters(s: &str) -> Vec<char> {
+pub(super) fn letters(s: &str) -> Vec<char> {
     teigeodata_names::strip_accents(s)
         .chars()
         .filter(char::is_ascii_alphabetic)

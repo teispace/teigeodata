@@ -489,13 +489,58 @@ build writes yet, and the schema lists its intended values in words only. Propos
   the rest alternate names (Newar ख्वप for Bhaktapur, येँ for Kathmandu) or Wikidata's own
   oddities, and the 6 shifted districts.
 
+### 5.8 Tier 4 built: related languages' labels, measured (2026-11-12, D-236)
+
+A place with no Nepali name a person wrote takes a Devanagari label of a related language
+before the transliterator writes one. Countries name the donors per target in `profile.yaml`
+(`name_donors: [{ to, script, from, strip, word_ends }]`, P16). For each label:
+1. cut a trailing bracketed qualifier, then a type word (the profile's admin and unit words and
+   the donors' own, `strip`);
+2. respell word endings (`word_ends`, the donor-to-target pass of §5.2: Hindi-style `ंग` and
+   `ँग` at a word's end are Nepali `ङ`, as in धादिंग, धादिङ);
+3. take it only when it romanises within 0.45 of the place's Latin name, the official names'
+   alignment measure (§5.7).
+
+The name is typed `alt` and marked `donor` (D-227), and is searched in the machine map
+(D-228).
+
+**G-donor**, measured on every build: on the places that have both a Nepali name a person
+wrote and a donor's label, the share where the donor's label (after the steps above) folds to
+the Nepali name. A donor is taken only when it writes the Nepali name more often than the
+transliterator does: G-xlit's `cbs` set measures the transliterator exact at 45.5%, so the
+floor is 50%, judged on 30 places or more. Nepal's lite build, 2026-11-12:
+
+| Donor | Places with both | The same | Within one edit | Verdict |
+|---|--:|--:|--:|---|
+| Sanskrit (sa) | 87 | 77% | 83% | kept |
+| Awadhi (awa) | 102 | 75% | 86% | kept |
+| Doteli (dty) | 154 | 64% | 74% | kept |
+| Maithili (mai) | 276 | 46% | 61% | left out: no better than the transliterator |
+| Marathi (mr) | 14 | 36% | 71% | left out: too few to judge, below the floor |
+| Bhojpuri (bho) | 138 | 25% | 47% | left out |
+| Hindi (hi) | 105 | 23% | 54% | left out (तपलेजुंग, पंचथार for ताप्लेजुङ, पांचथर) |
+| Newari (new) | (not measured) | | | left out: its labels are often its own names (ख्वप for Bhaktapur, द्वाल्खा for Dolakha) |
+
+Before the type words were cut, every donor measured under 50%: districts dominate the pairs,
+and each donor writes its own word for "district" (जिला, जिल्हा, मण्डलम्). The gate reports
+five differing pairs per refused donor, which is how that was found.
+
+Result: 143 places gained a donor name (Sanskrit 7, Awadhi 57, Doteli 79); 130 labels were
+refused as far from the Latin name. Janakpur's settlement, which had no Nepali name, takes
+Awadhi's जनकपुर.
+
+The same change fixed a transliteration gap: a place whose machine output equalled another
+language's label (Janakpur's Awadhi जनकपुर) was skipped and kept no Nepali name. Now only a
+Nepali name of the same text blocks it: 641 more places gained one (92,760 → 93,401).
+
 ## 6. Impact on the plan
 
 - **TG-14:** the chain of §5.1 and the gate of §5.3. Order:
   1. the `read` script-tagging fix;
   2. tiers 1–2 (CBS list, Wikidata);
   3. the transliteration engine with the `ne-Latn-Deva` profile;
-  4. the `hi-ne` donor pass when India lands (TG-15).
+  4. the donor tier: built for Nepal (§5.8, D-236); the `hi-ne` pass for India when India
+     lands (TG-15), where Hindi is measured anew (78.5% folded exact in India, §3.2).
 - **Sources to pin** in `data/sources.lock`:
   - the CBS code list (Open Data Nepal, CC BY): pinned 2026-11-12 (§5.5);
   - Wikidata `ne`/`hi` labels for the world part (QLever snapshot, CC0);

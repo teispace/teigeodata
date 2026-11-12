@@ -39,6 +39,7 @@ mod cluster;
 mod corrections;
 mod dedupe;
 pub(crate) mod dem_coarse;
+mod donor;
 mod elevation;
 pub(crate) mod embed;
 mod embed_profile;
@@ -351,6 +352,13 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         &mut places,
     )?;
     let corrected = corrections::run(root, who, &g.sources, &mut places, &units.levels, &out_dir)?;
+    let donated = donor::run(
+        root,
+        (&a.cc, &profile.romanise),
+        &profile.donors,
+        &profile.type_words,
+        &mut places,
+    )?;
     let transliterated = xlit_fill::run(root, &profile.transliterate, &mut places)?;
     let zones = zone_places(root, &lock, g.tz.as_deref(), coverage, &a)?;
     let rules = tz_rules::compile(root, &lock, g.tz.as_deref(), &zones)?;
@@ -394,6 +402,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     summary.push_str(&dedupe::report(&merged, &out_dir, a.build_name())?);
     summary.push_str(&officials);
     summary.push_str(&corrected);
+    summary.push_str(&donated);
     summary.push_str(&transliterated);
     if let Some(e) = &elevations {
         summary.push_str(&e.summary(&build, &g.sources, &places)?);
@@ -632,6 +641,11 @@ pub(crate) struct Profile {
     pub(crate) romanise: Vec<String>,
     /// The transliteration profiles that fill missing names (`ne-Latn-Deva`, D-228).
     pub(crate) transliterate: Vec<String>,
+    /// The related languages whose labels fill missing names, per target (D-236).
+    pub(crate) donors: Vec<donor::Donors>,
+    /// The native type words of the admin levels and unit types, longest first: cut from a
+    /// donor's label (D-236).
+    pub(crate) type_words: Vec<String>,
     /// The unit types, in profile order: a row's unit type is its position plus 1 (D-120).
     pub(crate) units: Vec<UnitType>,
     /// Per source family (`codab`): where a unit's code holds its unit type.
@@ -649,6 +663,8 @@ pub(crate) struct UnitType {
     pub(crate) level: u8,
     #[serde(default)]
     pub(crate) abbreviations: Vec<Term>,
+    #[serde(default)]
+    pub(crate) native: Vec<NativeWord>,
     /// Per source family, the code of this type.
     #[serde(default)]
     pub(crate) source_codes: BTreeMap<String, String>,
@@ -676,11 +692,28 @@ struct ProfileFile {
     #[serde(default)]
     transliterate: Vec<String>,
     #[serde(default)]
+    name_donors: Vec<donor::Donors>,
+    #[serde(default)]
+    admin_levels: Vec<Labelled>,
+    #[serde(default)]
     unit_types: Vec<UnitType>,
     #[serde(default)]
     sources: BTreeMap<String, SourceRules>,
     #[serde(default)]
     languages: Vec<String>,
+}
+
+/// An admin level or unit type's native names, as the profile states them.
+#[derive(Debug, Default, serde::Deserialize)]
+pub(crate) struct Labelled {
+    #[serde(default)]
+    pub(crate) native: Vec<NativeWord>,
+}
+
+/// A type word in a native script.
+#[derive(Debug, Default, serde::Deserialize)]
+pub(crate) struct NativeWord {
+    pub(crate) text: String,
 }
 
 /// A spelling convention of the profile (D-233): a query may write `text` where the names write
@@ -736,6 +769,19 @@ impl Profile {
             wikidata: p.wikidata,
             romanise: p.romanise,
             transliterate: p.transliterate,
+            donors: p.name_donors,
+            type_words: {
+                let mut w: Vec<String> = p
+                    .admin_levels
+                    .iter()
+                    .flat_map(|l| &l.native)
+                    .chain(p.unit_types.iter().flat_map(|u| &u.native))
+                    .map(|n| n.text.clone())
+                    .collect();
+                w.sort_by_key(|t| std::cmp::Reverse(t.len()));
+                w.dedup();
+                w
+            },
             units: p
                 .unit_types
                 .into_iter()

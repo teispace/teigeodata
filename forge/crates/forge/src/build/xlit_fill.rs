@@ -78,7 +78,9 @@ fn fill(
         if buf.is_empty()
             || script_code(&buf) != Some(script)
             || !super::pack::fits(&buf)
-            || p.names.iter().any(|n| n.text == buf)
+            || p.names
+                .iter()
+                .any(|n| n.text == buf && n.lang.as_deref() == Some(lang))
         {
             continue;
         }
@@ -158,6 +160,22 @@ mod tests {
         assert_eq!(ps[2].names.len(), 3, "a Latin `ne` name is no Nepali name");
         assert_eq!(ps[3].names.len(), 1);
         assert_eq!(ps[4].names.len(), 1);
+    }
+
+    /// Another language's label with the same text does not stand in for a Nepali name: the
+    /// place still gains one (Janakpur's Awadhi जनकपुर left it with none before D-236).
+    #[test]
+    fn another_language_s_equal_label_does_not_block_the_gap() {
+        let mut ps = vec![place(
+            PlaceKind::Settlement,
+            &[("Janakpur", None), ("जनकपुर", Some("awa"))],
+        )];
+        let (added, _) = fill(&mut ps, "ne", "Deva", |_, out| {
+            out.clear();
+            out.push_str("जनकपुर");
+        });
+        assert_eq!(added, 1);
+        assert_eq!(ps[0].names.last().unwrap().lang.as_deref(), Some("ne"));
     }
 
     /// A transliteration is keyed in the machine map only (D-228); a romanised display name,
