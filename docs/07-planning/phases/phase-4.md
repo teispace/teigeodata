@@ -375,7 +375,8 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     (Nepal's Wikidata snapshot carries every language's labels); the 6 districts the CBS file
     loses (Nawalparasi East and West, Rukum East and West, Kailali, Kanchanpur) named from
     Wikidata once Rukum East and Nawalparasi West link by outline (D-239). Open: tier 4
-    for India (Nepal's built, D-236), the `machine_names` profile option. Done: the 38 renamed
+    for India (Nepal's built, D-236). Done: the `machine_names: keep | drop` profile option
+    (D-256, 2026-11-13); the 38 renamed
     local levels take their current Nepali names, the CBS name kept as the former official one
     (D-244); a unit's labels lose their type word and a query may end in one
     (D-243); names distinct by text and language (D-242)
@@ -491,3 +492,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-13 | 4.9c: the catalog lists each part's wire and disk bytes and outline tolerance; `size_of` by selection | D-253 |
 | 2026-11-13 | 4.9c: `tgd install --names --outlines`; outline levels by number, not a country's word for them | D-254 |
 | 2026-11-13 | 4.9c: everything separable done; embed profiles keep cutting at build time (script-level), clients pick parts | D-255 |
+| 2026-11-13 | TG-14: `machine_names: keep \| drop` in embed profiles | D-256 |

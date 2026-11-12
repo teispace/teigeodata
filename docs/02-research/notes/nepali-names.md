@@ -435,7 +435,7 @@ vowels and nasal conjuncts as one. wd folded passes the v1 target (0.40); cbs fo
 does not yet. The floors were raised to these values, rounded down, and a floor set above
 them fails the gate.
 
-### 5.6 The name-origin marker (built 2026-11-12, D-227, except `machine_names`)
+### 5.6 The name-origin marker (built 2026-11-12, D-227; `machine_names` D-256)
 
 NAMES already has an optional per-record column `RULE` (id 9, a `u32`, 0 = none), which no
 build writes yet, and the schema lists its intended values in words only. Proposal:
@@ -449,7 +449,8 @@ build writes yet, and the schema lists its intended values in words only. Propos
   made", for every record. Codes 7 to 9 are machine output.
 - The engine answers `Name::is_machine()`; search and display may rank machine names below
   human ones; an embed profile (`data/embed/<name>.yaml`) gains `machine_names: keep | mark |
-  drop`, so Tithipatra can hide them or show them differently.
+  drop`, so Tithipatra can hide them or show them differently. Built as `keep | drop`
+  (D-256): every kept name already carries its origin, so `mark` would equal `keep`.
 - `forge` writes the code where it adds the name; `check-data`'s golden gate refuses a
   machine name that became canonical (D-215).
 

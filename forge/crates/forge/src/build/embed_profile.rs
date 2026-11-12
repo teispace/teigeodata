@@ -8,6 +8,9 @@
 //! - `languages`: the name languages every place keeps beside its canonical name, each a BCP 47
 //!   language with an optional script (`ne-Deva` keeps Nepali in Devanagari, not a
 //!   romanisation tagged `ne`); empty keeps every name;
+//! - `machine_names`: `keep` (the default) or `drop` the names a program wrote (a
+//!   romanisation, a transliteration or a donor label, D-227) beside the canonical name, which
+//!   is always kept; every kept name carries its origin, so an app can show machine names apart;
 //! - `countries`: per country code, `rows: slice` (the country's baseline slice, `forge
 //!   baseline`) or `rows: all` (every place of its pack, with the pack's IDs, so installing the
 //!   pack later changes nothing a person chose), and an optional outline `tolerance_m`;
@@ -55,6 +58,9 @@ struct File {
     components: Vec<String>,
     #[serde(default)]
     languages: Vec<String>,
+    /// Whether the names a program wrote stay beside the canonical name (D-256).
+    #[serde(default)]
+    machine_names: Machine,
     #[serde(default)]
     countries: BTreeMap<String, Country>,
     /// The world part's city list (`forge world --cities`); the default list when absent.
@@ -75,6 +81,17 @@ struct Country {
     rows: Rows,
     #[serde(default)]
     tolerance_m: Option<u32>,
+}
+
+/// `machine_names`: what becomes of the names a program wrote.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum Machine {
+    /// Kept, marked by their origin.
+    #[default]
+    Keep,
+    /// Left out, but for a canonical name.
+    Drop,
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -123,7 +140,7 @@ pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, 
         })
         .collect::<Result<_, _>>()?;
     let keep_name =
-        |_: u32, i: usize, n: &NameRecord<'_>| i == 0 || langs.iter().any(|w| w.keeps(n));
+        |_: u32, i: usize, n: &NameRecord<'_>| keeps_name(&langs, p.machine_names, i, n);
     let keyers: Vec<Keyer<'_>> = profiles
         .iter()
         .map(|pr| {
@@ -167,7 +184,7 @@ pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, 
             pack,
             keep,
             lod,
-            names: (!langs.is_empty()).then_some(rule),
+            names: (!langs.is_empty() || p.machine_names == Machine::Drop).then_some(rule),
             arcs: Some(rewrite),
         })
         .collect();
@@ -413,6 +430,16 @@ impl Wanted {
     }
 }
 
+/// Whether a place's name record `n`, its `i`th, stays in the layer: the canonical name always;
+/// another when its language is wanted (any, when none is named) and, under `drop`, a person
+/// wrote it.
+fn keeps_name(langs: &[Wanted], machine: Machine, i: usize, n: &NameRecord<'_>) -> bool {
+    i == 0
+        || ((langs.is_empty() || langs.iter().any(|w| w.keeps(n)))
+            && !(machine == Machine::Drop
+                && teigeodata_format::names::Origin::from_code(n.rule).is_machine()))
+}
+
 /// How complete each profile language is: for each country with a pack in the profile, and
 /// for the rest of the layer, the places (timezone areas left out) with a name in it, as a
 /// Markdown table; empty when the profile keeps every name.
@@ -615,10 +642,18 @@ fn report(
         "{rows} rows from {}; {replaced} rows replaced by a later part. Names: {}. \
          Disk {} B; wire {} B of {} kB.\n",
         parts.join(", "),
-        if p.languages.is_empty() {
-            "every name".to_owned()
-        } else {
-            format!("the canonical name plus {}", p.languages.join(", "))
+        match (p.languages.is_empty(), p.machine_names) {
+            (true, Machine::Keep) => "every name".to_owned(),
+            (true, Machine::Drop) => "every name a person wrote".to_owned(),
+            (false, m) => format!(
+                "the canonical name plus {}{}",
+                p.languages.join(", "),
+                if m == Machine::Drop {
+                    ", machine names left out"
+                } else {
+                    ""
+                }
+            ),
         },
         out.len(),
         m.asset,
@@ -646,8 +681,33 @@ fn report(
 
 #[cfg(test)]
 mod tests {
-    use super::language;
-    use teigeodata_format::names::{NameRecord, Tag};
+    use super::{Machine, keeps_name, language};
+    use teigeodata_format::names::{NameRecord, Origin, Tag};
+
+    #[test]
+    fn machine_names_are_kept_or_dropped_but_never_the_canonical_name() {
+        let rec = |origin: Origin| NameRecord {
+            text: "पोखरा",
+            lang: Tag::new("ne"),
+            script: Tag::new("Deva"),
+            rule: origin.code(),
+            ..NameRecord::default()
+        };
+        let (person, machine) = (rec(Origin::Official), rec(Origin::Transliteration));
+        let ne = [language("ne-Deva").unwrap()];
+        for langs in [&ne[..], &[]] {
+            assert!(keeps_name(langs, Machine::Keep, 1, &machine));
+            assert!(!keeps_name(langs, Machine::Drop, 1, &machine));
+            assert!(keeps_name(langs, Machine::Drop, 1, &person));
+            assert!(keeps_name(langs, Machine::Drop, 0, &machine), "canonical");
+        }
+        assert!(!keeps_name(
+            &[language("en").unwrap()],
+            Machine::Keep,
+            1,
+            &person
+        ));
+    }
 
     #[test]
     fn a_language_with_its_script_keeps_only_that_script() {
