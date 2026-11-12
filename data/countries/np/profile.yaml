@@ -60,5 +60,16 @@ unit_types:
 droppable_suffixes:
   # "Janakpurdham" is commonly written "Janakpur".
   - { text: dham, status: proposed }
+# Latin spelling conventions a query may use where the names use another (D-233): Nepali व is
+# written "b" in most romanised names (Biratnagar, Bishnu) and "v" in others and in Hindi-style
+# spellings (Viratnagar, Vishnu). A query's every "v" is also read as "b", matched as loosely as
+# a difference in case, so importance and the focus point decide between such names.
+latin_spellings:
+  - text: v
+    means: b
+    status: accepted
+    evidence:
+      - { kind: usage, detail: "Biratnagar (CBS, COD-AB, the city) is spelled Viratnagar in Hindi-style romanisations; Bishnu/Vishnu, Birgunj/Virgunj alike" }
+      - { kind: usage, detail: "Nepali व is read [b] or [w] (nepali-names §3.5); the TG-18 check of 2026-11-11 found viratnagar ranking India's Viratnagar above Biratnagar" }
 sources:
   codab: { unit_type_code: { field: adm3_pcode, offset: 6, length: 1 } }

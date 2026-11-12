@@ -10,6 +10,7 @@
 //! | 2 | [`Rule::Unit`] | a unit type's abbreviation, folded (`rm`) | one byte: the unit type, 1 to 255 |
 //! | 3 | [`Rule::Drop`] | a droppable suffix, folded (`dham`) | empty |
 //! | 4 | [`Rule::Native`] | a generic term in a native script, folded (`गाउँ` folded) | one Latin spelling, folded (`gaun`) |
+//! | 5 | [`Rule::Spelling`] | a letter run a query may write, folded (`v`) | the run the names write instead, folded (`b`) |
 //!
 //! A unit type is the value of column [`UNIT`](super::UNIT) for the rows of that type. At most
 //! one phonetic entry. Reads never allocate and never panic; [`Rules::check`] proves the layout.
@@ -24,6 +25,8 @@ pub const UNIT: u8 = 2;
 pub const DROP: u8 = 3;
 /// Entry kind: a native generic and one Latin spelling.
 pub const NATIVE: u8 = 4;
+/// Entry kind: a spelling convention, one letter run for another (D-233).
+pub const SPELLING: u8 = 5;
 
 /// One query rule.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,6 +49,15 @@ pub enum Rule<'a> {
         native: &'a str,
         /// One Latin spelling, folded.
         spelling: &'a str,
+    },
+    /// A spelling convention of the country's names: a query may write `from` where the names
+    /// write `to` (Nepali व as "v" in "Viratnagar", the names' "b" in "Biratnagar"). A query
+    /// with every `from` replaced by `to` matches as loosely as one differing in case.
+    Spelling {
+        /// The run a query may write, folded.
+        from: &'a str,
+        /// The run the names write, folded.
+        to: &'a str,
     },
 }
 
@@ -130,6 +142,13 @@ impl<'a> Rules<'a> {
                 NATIVE => {
                     text(b).ok_or(fail("a native rule's spelling is empty or not UTF-8"))?;
                 }
+                SPELLING => {
+                    let to =
+                        text(b).ok_or(fail("a spelling rule's target is empty or not UTF-8"))?;
+                    if Some(to) == text(a) {
+                        return Err(fail("a spelling rule maps a run to itself"));
+                    }
+                }
                 _ => return Err(fail("an unknown rule, or a field where none belongs")),
             }
         }
@@ -182,6 +201,10 @@ impl<'a> Iterator for Iter<'a> {
                         native: a,
                         spelling,
                     },
+                    Err(_) => continue,
+                },
+                (SPELLING, b) => match core::str::from_utf8(b) {
+                    Ok(to) => Rule::Spelling { from: a, to },
                     Err(_) => continue,
                 },
                 _ => continue,
@@ -239,6 +262,14 @@ pub fn encode(rules: &[Rule<'_>]) -> Result<alloc::vec::Vec<u8>, Error> {
                 }
                 put(NATIVE, native.as_bytes(), spelling.as_bytes())?;
             }
+            Rule::Spelling { from, to } => {
+                if to.is_empty() || from == to {
+                    return Err(Error::Write(
+                        "a spelling rule's target is empty or its own run",
+                    ));
+                }
+                put(SPELLING, from.as_bytes(), to.as_bytes())?;
+            }
         }
     }
     out.push(0);
@@ -263,6 +294,7 @@ mod tests {
                 native: "गाउँ",
                 spelling: "gaun",
             },
+            Rule::Spelling { from: "v", to: "b" },
         ];
         let b = encode(&rules).unwrap();
         assert_eq!(b.len() % 4, 0);
@@ -283,6 +315,10 @@ mod tests {
             }])
             .is_err()
         );
+        assert!(encode(&[Rule::Spelling { from: "v", to: "v" }]).is_err());
+        let mut to_itself = encode(&[Rule::Spelling { from: "v", to: "b" }]).unwrap();
+        to_itself[4] = b'v';
+        assert!(Rules::new(&to_itself).check().is_err());
         let mut unknown = b.clone();
         unknown[0] = 9;
         assert!(Rules::new(&unknown).check().is_err());

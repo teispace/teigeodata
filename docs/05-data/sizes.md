@@ -93,14 +93,14 @@ outlines (4.8 MB), the substring and search indexes (3.7 MB), the point-to-unit 
 
 ## Embedded layers built from profiles
 
-`forge embed --profile <name>` (D-214), lite, 2026-11-12, outlines snapped (D-229) and the admin index at 64-edge leaves (D-230), Nepal's official names by code (D-232). Per component, `tithipatra`'s wire bytes: point 1,035,391; elevation 229,894; admin 251,692; names 1,612,345; search 2,630,234; timezone 13,564; tz-rules 63,543; boundaries 2,025,380; admin-index 803,920; dem-coarse 517,996.
+`forge embed --profile <name>` (D-214), lite, 2026-11-12, outlines snapped (D-229) and the admin index at 64-edge leaves (D-230), Nepal's official names by code (D-232) and its spelling rule (D-233). Per component, `tithipatra`'s wire bytes: point 1,035,391; elevation 229,894; admin 251,692; names 1,610,903; search 2,631,666; timezone 13,564; tz-rules 63,543; boundaries 2,025,380; admin-index 803,920; dem-coarse 517,996.
 
 
 | Profile | Rows | Disk | Wire |
 |---|--:|--:|--:|
-| `baseline` (world part and Nepal's slice, with zone rules; the shipped file, byte for byte, D-231) | 39,395 | 4,992,712 | 3,646,448 |
-| `tithipatra` (world part with every city of 5,000, all of Nepal at 20 m; names in Devanagari Nepali, Hindi where Wikidata has no Nepali, and English, Nepal's gaps filled by the transliterator; zone rules for all 376 zones; the coarse DEM) | 170,892 | 14,714,580 | 9,207,753 |
-| `points-en` (points, heights, admin, English names and search; no outlines) | 39,395 | 1,837,692 | 1,177,578 |
+| `baseline` (world part and Nepal's slice, with zone rules; the shipped file, byte for byte, D-231) | 39,395 | 4,993,608 | 3,647,135 |
+| `tithipatra` (world part with every city of 5,000, all of Nepal at 20 m; names in Devanagari Nepali, Hindi where Wikidata has no Nepali, and English, Nepal's gaps filled by the transliterator; zone rules for all 376 zones; the coarse DEM) | 170,892 | 14,706,708 | 9,207,749 |
+| `points-en` (points, heights, admin, English names and search; no outlines) | 39,395 | 1,837,692 | 1,177,583 |
 
 ## Changelog
 

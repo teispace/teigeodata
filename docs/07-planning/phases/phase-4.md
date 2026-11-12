@@ -365,8 +365,9 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 - [x] TG-19: `Near::bearing_deg` and `Engine::mark_inside` (D-223, 2026-11-11)
 - [ ] TG-18 and the strict-tier option. Done: the Brahmic search fold of nasal
   conjuncts, vowel length and candra vowels (D-220, 2026-11-11); the focus point and the
-  strict-tier option, `search_with` (D-226, 2026-11-12). Open: the व/ब variant (`viratnagar`),
-  the MVP's golden cases
+  strict-tier option, `search_with` (D-226, 2026-11-12); the व/ब variant as a spelling
+  convention rule (`viratnagar` finds Biratnagar, first when focused in Nepal; D-233,
+  2026-11-12). Open: the MVP's golden cases
 - [ ] TG-17: phone-class benches with gates
 - [x] TG-10: coarse elevation layer: `DEM_COARSE`, component `dem-coarse`, 15″ at 8 m steps,
   518 kB on the wire for Nepal; `elevation_at` falls back to it; G-dem-coarse (D-225, 2026-11-12)
@@ -441,3 +442,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-12 | 4.9c: TG-10 coarse DEM; TG-18 focus and strict order; name origins; Nepal's names filled by transliteration | D-225 to D-228 |
 | 2026-11-12 | 4.9c: TG-16 done; the shipped baseline carries zone rules again | D-229 to D-231 |
 | 2026-11-12 | 4.9c: TG-14 tier 1, official names joined by code, with an alignment gate | D-232 |
+| 2026-11-12 | 4.9c: TG-18's व/ब variant as a SEARCH spelling rule; Biratnagar's official Nepali name as the city writes it | D-233 |

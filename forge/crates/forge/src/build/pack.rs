@@ -697,7 +697,7 @@ pub(crate) fn substring_keys_of(text: &str, out: &mut dyn FnMut(&str)) {
 }
 
 /// The country's query rules for SEARCH (D-120): its phonetic key, unit-type abbreviations,
-/// droppable suffixes and native generics with each Latin spelling.
+/// droppable suffixes, spelling conventions (D-233) and native generics with each Latin spelling.
 fn query_rules(profile: &Profile) -> Vec<Rule<'_>> {
     let mut rules: Vec<Rule<'_>> = Vec::new();
     if let Some(n) = &profile.phonetic_name {
@@ -713,6 +713,12 @@ fn query_rules(profile: &Profile) -> Vec<Rule<'_>> {
         }
     }
     rules.extend(profile.droppable.iter().map(|d| Rule::Drop(d)));
+    rules.extend(
+        profile
+            .spellings
+            .iter()
+            .map(|(from, to)| Rule::Spelling { from, to }),
+    );
     for (native, spellings) in &profile.native {
         rules.extend(spellings.iter().map(|s| Rule::Native {
             native,

@@ -764,6 +764,7 @@ fn search_case(c: &mut Cursor<'_>, structured: bool) {
             native: &texts[3],
             spelling: "gaun",
         },
+        search::rules::Rule::Spelling { from: "v", to: "b" },
     ];
     let units: Vec<u8> = (0..rows).map(|_| c.u8() % 3).collect();
     let with_rules = c.u8() & 1 == 0;

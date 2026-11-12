@@ -625,6 +625,8 @@ pub(crate) struct Profile {
     pub(crate) phonetic_name: Option<String>,
     /// Folded.
     pub(crate) droppable: Vec<String>,
+    /// Spelling conventions, folded: a run a query may write and the run the names write.
+    pub(crate) spellings: Vec<(String, String)>,
     pub(crate) wikidata: Option<String>,
     /// The romanisation profiles of its names (`ne-Deva`), in order.
     pub(crate) romanise: Vec<String>,
@@ -666,6 +668,8 @@ struct ProfileFile {
     #[serde(default)]
     droppable_suffixes: Vec<Term>,
     #[serde(default)]
+    latin_spellings: Vec<Spelling>,
+    #[serde(default)]
     wikidata: Option<String>,
     #[serde(default)]
     romanise: Vec<String>,
@@ -677,6 +681,14 @@ struct ProfileFile {
     sources: BTreeMap<String, SourceRules>,
     #[serde(default)]
     languages: Vec<String>,
+}
+
+/// A spelling convention of the profile (D-233): a query may write `text` where the names write
+/// `means`.
+#[derive(serde::Deserialize)]
+struct Spelling {
+    text: String,
+    means: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -716,6 +728,11 @@ impl Profile {
             phonetic,
             phonetic_name: p.phonetic_key,
             droppable: p.droppable_suffixes.iter().map(|t| fold(&t.text)).collect(),
+            spellings: p
+                .latin_spellings
+                .iter()
+                .map(|t| (fold(&t.text), fold(&t.means)))
+                .collect(),
             wikidata: p.wikidata,
             romanise: p.romanise,
             transliterate: p.transliterate,

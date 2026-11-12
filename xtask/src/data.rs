@@ -66,6 +66,9 @@ struct Profile {
     unit_types: Vec<UnitType>,
     #[serde(default)]
     droppable_suffixes: Vec<Term>,
+    /// Spelling conventions of its names in Latin script (D-233).
+    #[serde(default)]
+    latin_spellings: Vec<Spelling>,
     /// Source adapter ID → how that source encodes things for this country.
     #[serde(default)]
     sources: BTreeMap<String, SourceRules>,
@@ -113,6 +116,17 @@ struct UnitType {
 #[serde(deny_unknown_fields)]
 struct Term {
     text: String,
+    status: Status,
+    #[serde(default)]
+    evidence: Vec<Evidence>,
+}
+
+/// A spelling convention: a query may write `text` where the names write `means` (`v` for `b`).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Spelling {
+    text: String,
+    means: String,
     status: Status,
     #[serde(default)]
     evidence: Vec<Evidence>,
@@ -396,7 +410,22 @@ fn check_profile(
     for s in &p.droppable_suffixes {
         term(&format!("droppable suffix `{}`", s.text), s, &mut out);
     }
+    check_spellings(&p.latin_spellings, &mut out);
     out
+}
+
+/// Each spelling convention: two different runs of lower-case Latin letters, reviewed.
+fn check_spellings(spellings: &[Spelling], out: &mut Vec<String>) {
+    for s in spellings {
+        let at = format!("latin spelling `{}` for `{}`", s.text, s.means);
+        let letters = |t: &str| !t.is_empty() && t.bytes().all(|b| b.is_ascii_lowercase());
+        if !letters(&s.text) || !letters(&s.means) || s.text == s.means {
+            out.push(format!(
+                "{at}: two different runs of lower-case Latin letters"
+            ));
+        }
+        reviewed(&at, s.status, &s.evidence, out);
+    }
 }
 
 fn check_unit_types(p: &Profile, out: &mut Vec<String>) {
@@ -489,10 +518,15 @@ fn term(at: &str, t: &Term, out: &mut Vec<String>) {
     if t.text.trim().is_empty() || t.text.trim() != t.text {
         out.push(format!("{at}: empty or padded text"));
     }
-    if t.status == Status::Accepted && t.evidence.is_empty() {
+    reviewed(at, t.status, &t.evidence, out);
+}
+
+/// An entry's review: accepted ones carry evidence, each with detail; a maintainer's is dated.
+fn reviewed(at: &str, status: Status, evidence: &[Evidence], out: &mut Vec<String>) {
+    if status == Status::Accepted && evidence.is_empty() {
         out.push(format!("{at}: accepted entries need evidence"));
     }
-    for e in &t.evidence {
+    for e in evidence {
         if e.detail.trim().is_empty() {
             out.push(format!("{at}: evidence without detail"));
         }
@@ -541,6 +575,8 @@ unit_types:
     source_codes: { codab: "3" }
 droppable_suffixes:
   - { text: Dham, status: proposed }
+latin_spellings:
+  - { text: v, means: b, status: proposed }
 sources:
   codab: { unit_type_code: { field: adm3_pcode, offset: 6, length: 1 } }
 "#;
@@ -618,6 +654,21 @@ sources:
                 "need evidence",
             ),
             ("text: \"प्रदेश\"", "text: \"প্রদেশ\"", "outside Deva"),
+            (
+                "{ text: v, means: b,",
+                "{ text: v, means: v,",
+                "two different runs",
+            ),
+            (
+                "{ text: v, means: b,",
+                "{ text: V, means: b,",
+                "two different runs",
+            ),
+            (
+                "{ text: v, means: b, status: proposed }",
+                "{ text: v, means: b, status: accepted }",
+                "need evidence",
+            ),
             (
                 "scripts: [Deva, Latn]",
                 "scripts: [Deva, Latn]\ntransliterate: [ne-Latn-Deva]",

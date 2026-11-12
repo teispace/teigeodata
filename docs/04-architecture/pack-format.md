@@ -302,7 +302,10 @@ A column ID of 0 or above 8 is refused.
 - **RULES** (D-120): entries of a kind byte and two `u8`-length UTF-8 fields, then a zero
   byte, zero-padded to a multiple of 4. Kinds: 1 the phonetic key's name (at most one); 2 a
   unit type's abbreviation and, as one byte from 1, its type; 3 a droppable suffix; 4 a generic
-  term in a native script and one Latin spelling. All text is folded. The reader holds no
+  term in a native script and one Latin spelling; 5 a spelling convention, a letter run a
+  query may write and the different run the names write (`v`, `b`; D-233), tried with every
+  run replaced at once and matched loosely. All text is folded. A layer merged from parts
+  carries the union of their rules, so a part's convention applies to the whole layer. The reader holds no
   country's rules (ADR-0032); `check` proves the layout and that every UNIT value is a type a
   rule names.
 

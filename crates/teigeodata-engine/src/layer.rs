@@ -451,6 +451,8 @@ pub(crate) struct QueryRules<'a> {
     /// Native generics and one Latin spelling each, the longest native first; the spellings
     /// of one native are adjacent.
     pub(crate) natives: Vec<(&'a str, &'a str)>,
+    /// Spelling conventions: a run a query may write and the run the names write (D-233).
+    pub(crate) spellings: Vec<(&'a str, &'a str)>,
 }
 
 #[cfg(feature = "search")]
@@ -463,6 +465,7 @@ impl<'a> QueryRules<'a> {
                 Rule::Unit { abbreviation, unit } => r.units.push((abbreviation, unit)),
                 Rule::Drop(d) => r.drops.push(d),
                 Rule::Native { native, spelling } => r.natives.push((native, spelling)),
+                Rule::Spelling { from, to } => r.spellings.push((from, to)),
             }
         }
         // Stable: equal natives stay adjacent, in stored order.

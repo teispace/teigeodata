@@ -604,8 +604,9 @@ impl Engine {
 }
 
 /// The matches the layer's query rules add (D-120): the phonetic key of the query and of each
-/// form with its native generic replaced by a Latin spelling (also looked up loosely), and the
-/// query without a droppable suffix. The bonuses as in S3 (D-052).
+/// form with its native generic replaced by a Latin spelling (also looked up loosely), the
+/// query with a spelling convention applied (looked up loosely, D-233), and the query without a
+/// droppable suffix. The bonuses as in S3 (D-052).
 fn rule_hits(
     search: &Search<'_>,
     rules: &QueryRules<'_>,
@@ -649,6 +650,20 @@ fn rule_hits(
             form.clear();
             form.push_str(stem);
             form.push_str(spelling);
+            lookup(form, true, rows);
+        }
+    }
+    // Each convention applied to every run it names at once: "vishnu vihar" → "bishnu bihar".
+    for &(from, to) in &rules.spellings {
+        if q.contains(from) {
+            form.clear();
+            let mut last = 0;
+            for (at, _) in q.match_indices(from) {
+                form.push_str(q.get(last..at).unwrap_or_default());
+                form.push_str(to);
+                last = at + from.len();
+            }
+            form.push_str(q.get(last..).unwrap_or_default());
             lookup(form, true, rows);
         }
     }
@@ -801,6 +816,7 @@ mod tests {
         put(EXACT, "rampurayy", 2);
         put(EXACT, "rampurww", 3);
         put(PHONETIC, &key, 4);
+        put(EXACT, "bishnubihar", 5);
         // The shorter native first: the longest the query ends with still wins, and each of its
         // spellings is tried.
         let rules = [
@@ -822,13 +838,14 @@ mod tests {
                 native: "ab",
                 spelling: "ww",
             },
+            Rule::Spelling { from: "v", to: "b" },
         ];
         let extra = search::Extra {
             rules: Some(&rules),
-            units: &[0, 3, 0, 0, 0],
+            units: &[0, 3, 0, 0, 0, 0],
         };
-        let b = search::encode_with(&keys, &[1; 5], &extra).unwrap();
-        let s = Search::open(&Section::unpacked(Kind::SEARCH, 5, &b)).unwrap();
+        let b = search::encode_with(&keys, &[1; 6], &extra).unwrap();
+        let s = Search::open(&Section::unpacked(Kind::SEARCH, 6, &b)).unwrap();
         let r = QueryRules::new(&s);
         assert_eq!(r.unit("rm"), Some(3));
         assert_eq!(r.unit("m"), None);
@@ -844,6 +861,10 @@ mod tests {
         assert_eq!(hits("janakpurdham"), [(0, DROP_BONUS)]);
         assert_eq!(hits("dham"), []);
         assert_eq!(hits("janakpur"), [(4, PHONETIC_BONUS)]);
+        // A spelling convention replaces every run at once, matched loosely (D-233).
+        assert_eq!(hits("vishnu vihar"), [(5, LOOSE_BONUS)]);
+        assert_eq!(hits("vishnubihar"), [(5, LOOSE_BONUS)]);
+        assert_eq!(hits("vishnuvi"), []);
         // A layer without RULES has none.
         let empty = body(&[], 5);
         let plain = Search::open(&Section::unpacked(Kind::SEARCH, 5, &empty)).unwrap();
