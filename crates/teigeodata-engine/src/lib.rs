@@ -65,6 +65,8 @@ pub use layer::{Layer, LayerId, LayerOptions, Load, Verify};
 pub use outline::{Outline, Ring};
 #[cfg(feature = "postal")]
 pub use postal::PostalCode;
+#[cfg(all(feature = "admin", feature = "admin-index"))]
+pub use query::MAX_COUNTRY_FETCH;
 #[cfg(feature = "names")]
 pub use query::NameInfo;
 #[cfg(any(feature = "dem", feature = "dem-coarse"))]

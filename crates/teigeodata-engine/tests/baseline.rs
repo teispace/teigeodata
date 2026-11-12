@@ -92,6 +92,33 @@ fn reverse_says_bearing_and_inside() {
     assert!(near.iter().any(|n| n.inside == Some(false)));
 }
 
+/// TG-19: by Birgunj, inside Nepal, `reverse` names India's Raxaul, the nearest place; kept to
+/// the point's country it names places in Nepal only, nearest first, and a point inside India
+/// still gets Raxaul.
+#[test]
+fn reverse_in_country_stays_on_the_point_s_side_of_the_border() {
+    let e = Engine::with_baseline().unwrap();
+    let mut s = Scratch::default();
+    let (mut near, mut kept) = (Vec::new(), Vec::new());
+    let country = |n: &teigeodata_engine::Near| n.place.id.namespace().country().unwrap();
+    let by_birgunj = Point::<teigeodata_core::E6>::from_degrees(26.985, 84.880).unwrap();
+    e.reverse(by_birgunj, 1, &mut s, &mut near).unwrap();
+    assert_eq!(name(&e, &near[0].place), "Raxaul");
+    e.reverse_in_country(by_birgunj, 5, &mut s, &mut kept)
+        .unwrap();
+    assert_eq!(kept.len(), 5);
+    assert!(
+        kept.iter().all(|n| country(n) == *b"np"),
+        "{:?}",
+        kept.iter().map(|n| name(&e, &n.place)).collect::<Vec<_>>()
+    );
+    assert!(kept.windows(2).all(|w| w[0].meters <= w[1].meters));
+    let in_india = Point::<teigeodata_core::E6>::from_degrees(26.960, 84.850).unwrap();
+    e.reverse_in_country(in_india, 1, &mut s, &mut kept)
+        .unwrap();
+    assert_eq!(name(&e, &kept[0].place), "Raxaul");
+}
+
 /// D-226: a focus point lifts the namesake near it (Hyderabad, Pakistan over Hyderabad,
 /// India), and lifts it less the farther it is; strict order puts an exact match (Rome) above a
 /// more important prefix match (Romania); neither changes which places match.

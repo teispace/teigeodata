@@ -204,7 +204,8 @@ fn main() {
             black_box(e.get(ids[0]).unwrap());
         });
         time(1, &mut || {
-            e.reverse(points[0], 10, &mut s, &mut near).unwrap();
+            e.reverse_in_country(points[0], 10, &mut s, &mut near)
+                .unwrap();
         });
         time(2, &mut || {
             black_box(e.admin_at(points7[0], &mut s, &mut admin).unwrap());
@@ -253,7 +254,8 @@ fn main() {
     let mut pts: Vec<Duration> = (0..n)
         .map(|i| {
             min_of(3, || {
-                e.reverse(points[i], 10, &mut s, &mut near).unwrap();
+                e.reverse_in_country(points[i], 10, &mut s, &mut near)
+                    .unwrap();
                 e.admin_at(points7[i], &mut s, &mut admin).unwrap();
                 black_box(e.tz_at(points7[i]).unwrap());
                 black_box(e.elevation_at(points7[i], &mut s).unwrap());
@@ -295,7 +297,7 @@ fn main() {
         "phone-class bench: {path}, factor {factor} (this machine's core over a low-end phone's); {typed} keystrokes over {} names, {n} points",
         names.len()
     );
-    println!("point query = reverse (10) + admin_at + tz_at + elevation_at\n");
+    println!("point query = reverse_in_country (10) + admin_at + tz_at + elevation_at\n");
     println!("| Measure | Here | Phone estimate | Target |");
     println!("|---|--:|--:|--:|");
     let mut failed = Vec::new();

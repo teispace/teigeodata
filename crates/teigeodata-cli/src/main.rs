@@ -148,6 +148,9 @@ enum Command {
         /// How many.
         #[arg(short, default_value_t = 1)]
         k: usize,
+        /// Only places in the country that holds the point, never across a border (TG-19)
+        #[arg(long)]
+        in_country: bool,
         #[command(flatten)]
         packs: Packs,
         #[command(flatten)]
@@ -536,12 +539,18 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             lat,
             lon,
             k,
+            in_country,
             packs,
             out: o,
         } => query::run(
             store,
             &packs.packs,
-            query::Ask::Reverse { lat, lon, k },
+            query::Ask::Reverse {
+                lat,
+                lon,
+                k,
+                in_country,
+            },
             o.mode(),
             out,
         ),

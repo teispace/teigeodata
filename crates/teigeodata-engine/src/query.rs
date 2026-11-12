@@ -96,6 +96,12 @@ impl Height {
     }
 }
 
+/// The most places [`Engine::reverse_in_country`] asks for while looking for `k` in the
+/// point's country: a point just inside a sparse country beside a dense one walks past the
+/// dense one's places first.
+#[cfg(all(feature = "admin", feature = "admin-index"))]
+pub const MAX_COUNTRY_FETCH: usize = 16_384;
+
 /// A place near a point, from [`Engine::reverse`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Near {
@@ -162,6 +168,9 @@ pub struct Scratch {
     /// The units holding a point, for [`Engine::mark_inside`].
     #[cfg(feature = "admin-index")]
     units: Vec<Place>,
+    /// A place's ancestors, for [`Engine::reverse_in_country`].
+    #[cfg(all(feature = "admin", feature = "admin-index"))]
+    chain: Vec<Place>,
     #[cfg(feature = "search")]
     pub(crate) hits: Vec<HitCand>,
     #[cfg(feature = "search")]
@@ -1131,6 +1140,94 @@ impl Engine {
         }
         s.units = units;
         Ok(())
+    }
+
+    /// [`reverse`](Self::reverse) kept to the country that holds `at` (TG-19): a point inside
+    /// one country never names a place across the border, as the MVP's border rule did (Birgunj,
+    /// not Raxaul; and a point in India not a Nepali village just over the line). A place's
+    /// country is its country ancestor in the hierarchy (or itself), or for a place with no
+    /// parent the country holding its point; a place in no known country is kept.
+    /// Where no installed outline holds `at`, the answer is `reverse`'s. More places are asked
+    /// for, four times as many each round, until `k` in the country are found or the layers run
+    /// out ([`MAX_COUNTRY_FETCH`] at most).
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if a section it reads is corrupt.
+    #[cfg(all(feature = "admin", feature = "admin-index"))]
+    pub fn reverse_in_country(
+        &self,
+        at: Point<E6>,
+        k: usize,
+        s: &mut Scratch,
+        out: &mut Vec<Near>,
+    ) -> Result<(), Error> {
+        let mut units = core::mem::take(&mut s.units);
+        let held = self.admin_at(at.to_e7(), s, &mut units);
+        let country = units
+            .iter()
+            .find(|u| u.kind == Some(PlaceKind::Country))
+            .map(|u| u.id);
+        s.units = units;
+        held?;
+        let Some(country) = country else {
+            return self.reverse(at, k, s, out);
+        };
+        let mut chain = core::mem::take(&mut s.chain);
+        let mut units = core::mem::take(&mut s.units);
+        let mut want = k.saturating_mul(4).max(16);
+        let done = loop {
+            if let Err(e) = self.reverse(at, want, s, out) {
+                break Err(e);
+            }
+            let fetched = out.len();
+            let mut failed = None;
+            out.retain(|n| {
+                if failed.is_some() {
+                    return false;
+                }
+                match self.country_of(&n.place, &mut chain, s, &mut units) {
+                    Ok(c) => c.is_none_or(|c| c == country),
+                    Err(e) => {
+                        failed = Some(e);
+                        false
+                    }
+                }
+            });
+            if let Some(e) = failed {
+                break Err(e);
+            }
+            if out.len() >= k || fetched < want || want >= MAX_COUNTRY_FETCH {
+                out.truncate(k);
+                break Ok(());
+            }
+            want = want.saturating_mul(4).min(MAX_COUNTRY_FETCH);
+        };
+        s.chain = chain;
+        s.units = units;
+        done
+    }
+
+    /// The country `place` lies in: itself when a country, else its nearest country ancestor,
+    /// else (a place with no parent) the country whose outline holds its point; `None` when
+    /// none of these is known.
+    #[cfg(all(feature = "admin", feature = "admin-index"))]
+    fn country_of(
+        &self,
+        place: &Place,
+        chain: &mut Vec<Place>,
+        s: &mut Scratch,
+        units: &mut Vec<Place>,
+    ) -> Result<Option<PlaceId>, Error> {
+        let is_country = |p: &&Place| p.kind == Some(PlaceKind::Country);
+        if place.kind == Some(PlaceKind::Country) {
+            return Ok(Some(place.id));
+        }
+        self.ancestors(place, chain)?;
+        if let Some(c) = chain.iter().find(is_country) {
+            return Ok(Some(c.id));
+        }
+        self.admin_at(place.point.to_e7(), s, units)?;
+        Ok(units.iter().find(is_country).map(|c| c.id))
     }
 
     /// The countries that hold `at` or whose border is within `radius_m` metres of it, into

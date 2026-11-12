@@ -365,7 +365,7 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     1.1% `ne-Deva`, D-227)
 - [x] TG-16: outline tolerance measured (Nepal stays at 20 m), outlines snapped to their level's decimal grid, 64-edge index leaves: `tithipatra` 9.21 MB wire (D-229, D-230)
 - [ ] TG-15: India: research done (D-216, D-217); then towns
-- [x] TG-19: `Near::bearing_deg` and `Engine::mark_inside` (D-223, 2026-11-11)
+- [ ] TG-19: `Near::bearing_deg` and `Engine::mark_inside` (D-223, 2026-11-11); `reverse_in_country`, the border rule (D-237, 2026-11-12). Open: `inside` for a place with no outline, by a radius by kind and size (research first: urban extent against population and kind); 78 Nepal places whose seed point lies outside every unit, some across the border (Chhipaharmai, tgd:np/141c, falls in India)
 - [x] TG-18 and the strict-tier option: the Brahmic search fold of nasal conjuncts, vowel
   length and candra vowels (D-220); the focus point and the strict-tier option, `search_with`
   (D-226); the व/ब variant as a spelling rule (D-233); gate G-golden-tithipatra, 60 cases from
@@ -453,3 +453,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-12 | 4.9c: 29 more districts' official names from the misaligned CBS rows, by the list's own text | D-234 |
 | 2026-11-12 | 4.9c: TG-17 done, the phone-class bench and gate G-phone; faster derive and per-tile DEM checks | D-235 |
 | 2026-11-12 | 4.9c: TG-18 done, gate G-golden-tithipatra; TG-14 tier 4 (donor names) for Nepal; prefix tier from 2 code points | D-236 |
+| 2026-11-12 | 4.9c: TG-19 reopened against the brief's criteria; the border rule built (`reverse_in_country`); inside by a radius open | D-237 |

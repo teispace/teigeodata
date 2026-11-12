@@ -777,6 +777,7 @@ impl Layer {
     ///
     /// # Errors
     /// As [`Layer::ensure`].
+    #[cfg(any(feature = "dem", feature = "dem-coarse"))]
     pub(crate) fn ensure_except(
         &self,
         kind: Kind,

@@ -69,6 +69,7 @@ pub(crate) enum Ask {
         lat: f64,
         lon: f64,
         k: usize,
+        in_country: bool,
     },
     Near {
         id: String,
@@ -96,6 +97,36 @@ pub(crate) enum Ask {
     },
 }
 
+/// The places nearest `at`, each with its distance, bearing and whether it holds `at`; kept to
+/// the country holding `at` when `in_country` (TG-19).
+fn reverse(
+    e: &Engine,
+    s: &mut Scratch,
+    at: Point<E6>,
+    k: usize,
+    in_country: bool,
+) -> Result<Vec<Item>, Fail> {
+    let mut near = Vec::new();
+    if in_country {
+        e.reverse_in_country(at, k, s, &mut near)?;
+    } else {
+        e.reverse(at, k, s, &mut near)?;
+    }
+    e.mark_inside(at, s, &mut near)?;
+    Ok(near
+        .iter()
+        .map(|n| Item {
+            place: n.place,
+            meters: Some(n.meters),
+            bearing: Some(n.bearing_deg),
+            inside: n.inside,
+            score: None,
+            offset: None,
+            all_names: false,
+        })
+        .collect())
+}
+
 pub(crate) fn run(
     store: &std::path::Path,
     packs: &[PathBuf],
@@ -118,23 +149,12 @@ pub(crate) fn run(
             item.all_names = names;
             vec![item]
         }
-        Ask::Reverse { lat, lon, k } => {
-            let mut near = Vec::new();
-            let at = point::<E6>(lat, lon)?;
-            e.reverse(at, k, &mut s, &mut near)?;
-            e.mark_inside(at, &mut s, &mut near)?;
-            near.iter()
-                .map(|n| Item {
-                    place: n.place,
-                    meters: Some(n.meters),
-                    bearing: Some(n.bearing_deg),
-                    inside: n.inside,
-                    score: None,
-                    offset: None,
-                    all_names: false,
-                })
-                .collect()
-        }
+        Ask::Reverse {
+            lat,
+            lon,
+            k,
+            in_country,
+        } => reverse(&e, &mut s, point::<E6>(lat, lon)?, k, in_country)?,
         Ask::Near {
             id: text,
             k,
