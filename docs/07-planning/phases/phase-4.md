@@ -354,8 +354,8 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     Wikidata once Rukum East and Nawalparasi West link by outline (D-239). Open: the 38
     renamed local levels (no open, current list with Nepali names found on 2026-11-12: the
     open lists predate the renames or have no Nepali), tier 4 for India (Nepal's built, D-236), the `machine_names`
-    profile option, a unit's Wikidata or GeoNames Nepali label kept with its type word
-    (नलगाड नगरपालिका; 2 units, and 2 stray GeoNames units at level 3, "Ramechhap District")
+    profile option. Done: a unit's labels lose their type word and a query may end in one
+    (D-243); names distinct by text and language (D-242)
   - [x] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
     model trained in the forge on the build's licence class; gate G-xlit with floors
     (`forge xlit-eval ne-Latn-Deva`: cbs 44.7%, wd 36.2% folded; D-222, 2026-11-12). Open: the

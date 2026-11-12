@@ -18,7 +18,7 @@ use teigeodata_format::places::{self, PlaceColumns, Places};
 use teigeodata_format::postal::{self, Postal};
 use teigeodata_format::redirects::{self, Fate, Redirects};
 use teigeodata_format::region::{self, Options, Region};
-use teigeodata_format::search::rules::Rule;
+use teigeodata_format::search::rules::{LEVEL_WORD, Rule};
 use teigeodata_format::search::{self, EXACT, Maps, Search};
 use teigeodata_format::{Bbox, Encoding, Kind, Pack, Tag, Writer};
 use teigeodata_names::{SearchMap, fold, search_keys, substring_keys};
@@ -703,15 +703,26 @@ fn query_rules(profile: &Profile) -> Vec<Rule<'_>> {
     if let Some(n) = &profile.phonetic_name {
         rules.push(Rule::Phonetic(n));
     }
+    // A query ending in a unit type's abbreviation or its one-word native name ("भक्तपुर
+    // नगरपालिका") names that type; one ending in a level's ("कैलाली जिल्ला") drops it (D-243).
     for (i, u) in profile.units.iter().enumerate() {
-        let Ok(unit) = u8::try_from(i + 1) else { break };
-        for a in &u.abbreviations {
-            rules.push(Rule::Unit {
-                abbreviation: a.folded(),
-                unit,
-            });
+        let Some(unit) = u8::try_from(i + 1).ok().filter(|&u| u < LEVEL_WORD) else {
+            break;
+        };
+        let words = u.abbreviations.iter().map(super::Term::folded).chain(
+            u.native
+                .iter()
+                .map(|n| n.folded.as_str())
+                .filter(|w| !w.is_empty() && !w.contains(' ')),
+        );
+        for abbreviation in words {
+            rules.push(Rule::Unit { abbreviation, unit });
         }
     }
+    rules.extend(profile.level_words.iter().map(|w| Rule::Unit {
+        abbreviation: w,
+        unit: LEVEL_WORD,
+    }));
     rules.extend(profile.droppable.iter().map(|d| Rule::Drop(d)));
     rules.extend(
         profile

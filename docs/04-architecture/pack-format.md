@@ -301,7 +301,9 @@ A column ID of 0 or above 8 is refused.
 
 - **RULES** (D-120): entries of a kind byte and two `u8`-length UTF-8 fields, then a zero
   byte, zero-padded to a multiple of 4. Kinds: 1 the phonetic key's name (at most one); 2 a
-  unit type's abbreviation and, as one byte from 1, its type; 3 a droppable suffix; 4 a generic
+  unit type's abbreviation or one-word native name and, as one byte from 1, its type (255 is
+  a level's type word, `जिल्ला`, which no row carries: a query ending in it drops it and
+  favours no row, D-243); 3 a droppable suffix; 4 a generic
   term in a native script and one Latin spelling; 5 a spelling convention, a letter run a
   query may write and the different run the names write (`v`, `b`; D-233), tried with every
   run replaced at once and matched loosely. All text is folded. A layer merged from parts

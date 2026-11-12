@@ -33,6 +33,8 @@ pub(super) struct Naming {
     pub(super) changed: Vec<(String, String, String, &'static str)>,
     /// Names not taken by the D-060 rules: (place key, record, name, why, what it names).
     pub(super) dropped: BTreeSet<(String, String, String, Dropped, String)>,
+    /// Admin units' names whose trailing type word was cut (D-243).
+    pub(super) type_words_cut: usize,
 }
 
 impl Naming {
@@ -53,6 +55,9 @@ impl Naming {
         ) + &format!(
             "Names with their context (D-202): {} not kept (another of the place's names, or the country's or a unit's name, after a comma or in brackets).\n",
             self.count(Dropped::Qualified)
+        ) + &format!(
+            "Type words (D-243): {} admin unit names lost a trailing type word of the profile (\"कैलाली जिल्ला\" is \"कैलाली\").\n",
+            self.type_words_cut
         )
     }
 
@@ -237,6 +242,48 @@ fn context_names(places: &[Place]) -> BTreeSet<String> {
         .collect()
 }
 
+/// Cuts a trailing type word (`words`: the profile's native names of its admin levels and unit
+/// types, longest first) from each name of an admin unit or country that states a language,
+/// when a space parts it from the name: Wikidata's "कैलाली जिल्ला" is the district "कैलाली", as
+/// the official lists write it (D-243). The canonical name and a name that is only a type word
+/// stay; a name the cut makes equal to another of the place's goes. Counted in `naming`.
+pub(super) fn cut_unit_type_words(places: &mut [Place], words: &[String], naming: &mut Naming) {
+    let cut = |text: &str| -> Option<String> {
+        words.iter().find_map(|w| {
+            let head = text.strip_suffix(w.as_str())?;
+            let bare = head.trim_end();
+            (bare.len() < head.len() && !bare.is_empty()).then(|| bare.to_owned())
+        })
+    };
+    for p in places
+        .iter_mut()
+        .filter(|p| matches!(p.kind, PlaceKind::Admin | PlaceKind::Country))
+    {
+        if !p
+            .names
+            .iter()
+            .skip(1)
+            .any(|n| n.lang.is_some() && cut(&n.text).is_some())
+        {
+            continue;
+        }
+        let mut kept: Vec<PlaceName> = Vec::with_capacity(p.names.len());
+        for (i, mut n) in std::mem::take(&mut p.names).into_iter().enumerate() {
+            if i > 0
+                && n.lang.is_some()
+                && let Some(bare) = cut(&n.text)
+            {
+                n.text = bare;
+                naming.type_words_cut += 1;
+            }
+            if !kept.iter().any(|m| m.same(&n)) {
+                kept.push(n);
+            }
+        }
+        p.names = kept;
+    }
+}
+
 /// Drops the names (never the canonical, the first) that carry their context after a comma or
 /// in brackets: "Chandragiri, Nepal" beside "Chandragiri", or "Bara District, Nepal" where
 /// the text after the last comma is the country's or an admin unit's name. Search reads the
@@ -331,8 +378,67 @@ pub(super) fn display_name(
 
 #[cfg(test)]
 mod qualified_tests {
-    use super::{Naming, Place, PlaceName, drop_qualified, qualified_head};
+    use super::{Naming, Place, PlaceName, cut_unit_type_words, drop_qualified, qualified_head};
     use teigeodata_core::PlaceKind;
+
+    /// D-243: a unit's labelled names lose a trailing type word after a space, longest first;
+    /// the canonical name, a glued word, a name that is only the type word, an unlabelled name
+    /// and a settlement's names stay; a cut that repeats another name of the place goes.
+    #[test]
+    fn a_unit_s_names_lose_their_type_word() {
+        let words: Vec<String> = ["उपमहानगरपालिका", "नगरपालिका", "जिल्ला"]
+            .map(String::from)
+            .to_vec();
+        let named = |key: &str, kind, names: &[(&str, Option<&str>)]| {
+            let mut p = place(key, kind, &[]);
+            p.names = names
+                .iter()
+                .map(|&(t, l)| PlaceName {
+                    text: t.into(),
+                    lang: l.map(Into::into),
+                    kind: None,
+                    origin: crate::build::Origin::Unknown,
+                })
+                .collect();
+            p
+        };
+        let mut places = [
+            named(
+                "admin:a",
+                PlaceKind::Admin,
+                &[
+                    ("Kailali", None),
+                    ("कैलाली जिल्ला", Some("ne")),
+                    ("कैलाली", Some("ne")),
+                    ("धरान उपमहानगरपालिका", Some("ne")),
+                    ("जिल्ला", Some("ne")),
+                    ("भीमनगरपालिका", Some("ne")),
+                    ("सुर्खेत जिल्ला", None),
+                ],
+            ),
+            named(
+                "s",
+                PlaceKind::Settlement,
+                &[("X", None), ("कैलाली जिल्ला", Some("ne"))],
+            ),
+        ];
+        let mut naming = Naming::default();
+        cut_unit_type_words(&mut places, &words, &mut naming);
+        let texts = |p: &Place| p.names.iter().map(|n| n.text.clone()).collect::<Vec<_>>();
+        assert_eq!(
+            texts(&places[0]),
+            [
+                "Kailali",
+                "कैलाली",
+                "धरान",
+                "जिल्ला",
+                "भीमनगरपालिका",
+                "सुर्खेत जिल्ला"
+            ]
+        );
+        assert_eq!(texts(&places[1]), ["X", "कैलाली जिल्ला"]);
+        assert_eq!(naming.type_words_cut, 2);
+    }
 
     fn place(key: &str, kind: PlaceKind, names: &[&str]) -> Place {
         Place {

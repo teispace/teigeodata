@@ -12,10 +12,15 @@
 //! | 4 | [`Rule::Native`] | a generic term in a native script, folded (`गाउँ` folded) | one Latin spelling, folded (`gaun`) |
 //! | 5 | [`Rule::Spelling`] | a letter run a query may write, folded (`v`) | the run the names write instead, folded (`b`) |
 //!
-//! A unit type is the value of column [`UNIT`](super::UNIT) for the rows of that type. At most
-//! one phonetic entry. Reads never allocate and never panic; [`Rules::check`] proves the layout.
+//! A unit type is the value of column [`UNIT`](super::UNIT) for the rows of that type; type
+//! [`LEVEL_WORD`] is a level's type word (`जिल्ला`), which no row carries: a query ending in it
+//! drops it and favours no row (D-243). At most one phonetic entry. Reads never allocate and never panic; [`Rules::check`] proves the layout.
 
 use crate::Error;
+
+/// The unit type of a level's type word: no row carries it, so a query ending in the word drops
+/// it and favours no row (D-243). A profile has at most 254 unit types.
+pub const LEVEL_WORD: u8 = u8::MAX;
 
 /// Entry kind: the phonetic key.
 pub const PHONETIC: u8 = 1;

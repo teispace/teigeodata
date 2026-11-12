@@ -28,6 +28,13 @@
 दिल्ली	tgd:in/207,tgd:in/1xa	1	-	Delhi in Nepali
 न्यूयोर्क	tgd:us/17a,tgd:us/pe	2	-	New York, long ू
 न्युयोर्क	tgd:us/17a,tgd:us/pe	2	-	New York, short ु (vowel length folded, D-220)
+कैलाली जिल्ला	tgd:np/2r9x	1	-	a district with its type word: the word is dropped (D-243)
+पूर्वी रुकुम जिल्ला	tgd:np/1f12	1	-	Rukum East as Wikidata writes it
+गण्डकी प्रदेश	tgd:np/2922	1	-	a province with its level word: the word is dropped (D-243)
+Kailali District	tgd:np/2r9x	1	-	the English level word is dropped too
+Gandaki Province	tgd:np/2922	1	-	the province, not the rural municipality named Gandaki
+भक्तपुर नगरपालिका	tgd:np/23n	1	-	a unit type's word favours that type: the municipality, not the district (D-243)
+पोखरा महानगरपालिका	tgd:np/1xnr,tgd:np/1xhb	1	-	Pokhara Metropolitan City: the unit or the city it is (as np-0089)
 #
 # Latin: case, accents and punctuation.
 kathmandu	tgd:np/2cn,tgd:np/2gm,tgd:np/3c8	1	-	typed in full, Kathmandu first

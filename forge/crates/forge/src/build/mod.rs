@@ -349,6 +349,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     )?;
     admin.added = link_admins(&mut places, std::mem::take(&mut admin.links));
     naming::drop_qualified(&mut places, &mut naming);
+    naming::cut_unit_type_words(&mut places, &profile.type_words, &mut naming);
     let coverage = units.coverage.ok_or("the boundary source has no units")?;
     let modelled = population::run(g.grid.as_slice(), &units.levels, coverage, &mut places)?;
     let out_dir = build.join("pack").join(&a.cc);
@@ -657,6 +658,9 @@ pub(crate) struct Profile {
     pub(crate) type_words: Vec<String>,
     /// The unit types, in profile order: a row's unit type is its position plus 1 (D-120).
     pub(crate) units: Vec<UnitType>,
+    /// The single-word native and English names of the admin levels, folded (`जिल्ला`,
+    /// `district`): a query may end in one, which is not part of the name (D-243).
+    pub(crate) level_words: Vec<String>,
     /// Per source family (`codab`): where a unit's code holds its unit type.
     pub(crate) unit_codes: BTreeMap<String, CodeSlice>,
     /// Native-script generics, folded, each with its Latin spellings, folded.
@@ -715,6 +719,9 @@ struct ProfileFile {
 /// An admin level or unit type's native names, as the profile states them.
 #[derive(Debug, Default, serde::Deserialize)]
 pub(crate) struct Labelled {
+    /// The English name (`District`).
+    #[serde(default)]
+    pub(crate) english: String,
     #[serde(default)]
     pub(crate) native: Vec<NativeWord>,
 }
@@ -723,6 +730,9 @@ pub(crate) struct Labelled {
 #[derive(Debug, Default, serde::Deserialize)]
 pub(crate) struct NativeWord {
     pub(crate) text: String,
+    /// `text` folded, set when the profile is read.
+    #[serde(skip)]
+    pub(crate) folded: String,
 }
 
 /// A spelling convention of the profile (D-233): a query may write `text` where the names write
@@ -791,12 +801,32 @@ impl Profile {
                 w.dedup();
                 w
             },
+            level_words: {
+                let mut w: Vec<String> = p
+                    .admin_levels
+                    .iter()
+                    .flat_map(|l| {
+                        l.native
+                            .iter()
+                            .map(|n| n.text.as_str())
+                            .chain([l.english.as_str()])
+                    })
+                    .filter(|t| !t.is_empty() && !t.contains(char::is_whitespace))
+                    .map(fold)
+                    .collect();
+                w.sort();
+                w.dedup();
+                w
+            },
             units: p
                 .unit_types
                 .into_iter()
                 .map(|mut u| {
                     for a in &mut u.abbreviations {
                         a.folded = fold(&a.text);
+                    }
+                    for n in &mut u.native {
+                        n.folded = fold(&n.text);
                     }
                     u
                 })

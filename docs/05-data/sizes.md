@@ -98,14 +98,15 @@ outlines (4.8 MB), the substring and search indexes (3.7 MB), the point-to-unit 
 
 | Profile | Rows | Disk | Wire |
 |---|--:|--:|--:|
-| `baseline` (world part and Nepal's slice, with zone rules; the shipped file, byte for byte, D-231) | 39,395 | 5,007,816 | 3,649,855 |
-| `tithipatra` (world part with every city of 5,000, all of Nepal at 20 m; names in Devanagari Nepali, Hindi where Wikidata has no Nepali, and English, Nepal's gaps filled by the transliterator; zone rules for all 376 zones; the coarse DEM) | 170,882 | 14,768,896 | 9,233,920 |
-| `points-en` (points, heights, admin, English names and search; no outlines) | 39,395 | 1,838,076 | 1,178,040 |
+| `baseline` (world part and Nepal's slice, with zone rules; the shipped file, byte for byte, D-231) | 39,395 | 5,000,840 | 3,648,133 |
+| `tithipatra` (world part with every city of 5,000, all of Nepal at 20 m; names in Devanagari Nepali, Hindi where Wikidata has no Nepali, and English, Nepal's gaps filled by the transliterator; zone rules for all 376 zones; the coarse DEM) | 170,882 | 14,771,904 | 9,239,494 |
+| `points-en` (points, heights, admin, English names and search; no outlines) | 39,395 | 1,838,332 | 1,178,096 |
 
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-12 | Type words cut from unit names (427 names); type and level words become query rules: `tithipatra` 9,233,920 → 9,239,494 B wire, `baseline` 3,649,855 → 3,648,133 | D-243 |
 | 2026-11-12 | Names kept by text and language (1,328 more places with a Nepali name a person wrote) and 10 places across the border left out: `tithipatra` 9,201,324 → 9,233,920 B wire | D-239, D-242 |
 | 2026-11-12 | Donor names, 641 more transliterated names and three spelling rules: `tithipatra` 9,206,057 → 9,201,324 B wire | D-236 |
 | 2026-11-12 | Outlines snapped to their level's decimal grid and 64-edge index leaves: `tithipatra` 10.30 → 9.21 MB wire, `baseline` 5.91 → 5.00 MB disk with zone rules | D-229 to D-231 |

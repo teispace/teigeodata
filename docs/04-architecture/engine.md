@@ -229,8 +229,9 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 60; loose (spaces removed, with its exact twin) 55; one fuzzy edit 25 (queries of 4 to 63
 characters); prefix 30 for the best 16 prefix matches by importance across all layers
 (queries of 2 characters or more, D-236; a context from 3). A layer's query rules (SEARCH column RULES, D-120), read
-once at open, add: a trailing unit-type abbreviation that some layer names is cut from the name,
-and the rows of that type (column UNIT) gain 20; the query's phonetic key 5; a native generic
+once at open, add: a trailing unit-type abbreviation or type word that some layer names ("Janaki RM",
+"भक्तपुर नगरपालिका", "कैलाली जिल्ला") is cut from the name, and the rows of that type (column
+UNIT) gain 20, none for a level's word (D-243); the query's phonetic key 5; a native generic
 the query ends with, replaced by each of its Latin spellings and looked up loosely, 55; a
 droppable suffix removed, 50 (D-121). The unit bonus does not count towards a strong match.
 With feature `substring` (D-199), a one-word query of 3 or more code points also takes the best
