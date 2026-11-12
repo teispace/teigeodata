@@ -461,7 +461,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "teigeodata-api"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "teigeodata-blob",
  "teigeodata-names",
@@ -469,11 +469,11 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-blob"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "teigeodata-jvm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "jni",
  "teigeodata-api",
@@ -481,7 +481,7 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-names"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "libm",
  "unicode-normalization",
@@ -490,7 +490,7 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-node"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "napi",
  "napi-build",
@@ -500,7 +500,7 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-python"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "pyo3",
  "teigeodata-api",

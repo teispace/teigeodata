@@ -11,6 +11,11 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-12
+
+Packs may now split a section kind into parts (ADR-0040): names and search by language, outlines
+by admin level. Packs built with this version need its readers.
+
 ### Engine (`teigeodata-engine`)
 
 - `LayerOptions::outline_level`: read the outlines of one admin level and the coarser ones,
@@ -99,5 +104,6 @@ The first tagged version. Everything below is new.
 
 None: no version was released before this one.
 
-[Unreleased]: https://github.com/teispace/teigeodata/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/teispace/teigeodata/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/teispace/teigeodata/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/teispace/teigeodata/releases/tag/v0.1.0
