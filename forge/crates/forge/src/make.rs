@@ -618,6 +618,11 @@ fn fetch_inputs(
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default();
+    for id in build::official::sources(root, cc)? {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
     for xlit in build::Profile::read(root, cc)?.transliterate {
         for id in crate::xlit::sources(root, &xlit)? {
             if !ids.contains(&id) {

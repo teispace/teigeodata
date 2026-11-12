@@ -347,8 +347,11 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   - [ ] the chain in the forge, each name's origin in its record (`rule`), with a coverage
     report per step (TG-11's names table). Done: origins in `RULE` (D-227), tier 6 (the
     canonical name transliterated, marked machine, searched apart; 99.0% of Nepal named,
-    D-228, 2026-11-12). Open: tier 1 (CBS official names by code), tier 2 (Wikidata labels
-    of Nepal's places by key), tier 4 (donor), the `machine_names` profile option
+    D-228, 2026-11-12), tier 1 (official names by a reviewed code crosswalk with an alignment
+    gate: 715 local levels and 42 districts, D-232, 2026-11-12); tier 2 is in already (Nepal's
+    Wikidata snapshot carries every language's labels). Open: the 35 districts CBS's file
+    shifts, the 38 renamed local levels (the G-xlit `cbs` set now leaves the shifted rows out), tier 4
+    (donor), the `machine_names` profile option
   - [x] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
     model trained in the forge on the build's licence class; gate G-xlit with floors
     (`forge xlit-eval ne-Latn-Deva`: cbs 44.7%, wd 36.2% folded; D-222, 2026-11-12). Open: the
@@ -437,3 +440,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-12 | 4.9c: TG-14's transliterator and gate G-xlit built; the CBS code list pinned | D-222 |
 | 2026-11-12 | 4.9c: TG-10 coarse DEM; TG-18 focus and strict order; name origins; Nepal's names filled by transliteration | D-225 to D-228 |
 | 2026-11-12 | 4.9c: TG-16 done; the shipped baseline carries zone rules again | D-229 to D-231 |
+| 2026-11-12 | 4.9c: TG-14 tier 1, official names joined by code, with an alignment gate | D-232 |

@@ -438,9 +438,11 @@ queries:
   - id: np-0072
     class: exact_native
     query: "कमलामाई"
-    expect: { "geonames:8410804": 3 }
+    # The unit and its own town share the name; the unit first, as for the Latin query
+    # (graded like np-0245; regraded 2026-11-12 when units gained official names, D-232).
+    expect: { "codab:NP0320301": 3, "geonames:8410804": 2 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate, regraded"
   - id: np-0073
     class: exact_native
     query: "काँकडभिट्टा"
@@ -474,9 +476,11 @@ queries:
   - id: np-0078
     class: exact_native
     query: "जिरी"
-    expect: { "geonames:1283298": 3 }
+    # The unit and its own town share the name; the unit first, as for the Latin query
+    # (graded like np-0245; regraded 2026-11-12 when units gained official names, D-232).
+    expect: { "codab:NP0322302": 3, "geonames:1283298": 2 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate, regraded"
   - id: np-0079
     class: exact_native
     query: "तम्घास"
@@ -510,9 +514,11 @@ queries:
   - id: np-0084
     class: exact_native
     query: "धनकुटा"
-    expect: { "geonames:1283465": 3 }
+    # The unit and its own town share the name; the unit first, as for the Latin query
+    # (graded like np-0245; regraded 2026-11-12 when units gained official names, D-232).
+    expect: { "codab:NP0107303": 3, "codab:NP0107": 2, "geonames:1283465": 2 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate, regraded"
   - id: np-0085
     class: exact_native
     query: "धुलिखेल"
@@ -582,9 +588,11 @@ queries:
   - id: np-0096
     class: exact_native
     query: "भक्तपुर नगरपालिका"
-    expect: { "geonames:12095459": 3 }
+    # "Bhaktapur Municipality": GeoNames gives this alternate to the district (12095459, ADM2);
+    # the place it names is the municipality (corrected 2026-11-12, D-232).
+    expect: { "codab:NP0326303": 3 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate, corrected"
   - id: np-0097
     class: exact_native
     query: "भट्टराई डाँडा"
@@ -612,9 +620,11 @@ queries:
   - id: np-0101
     class: exact_native
     query: "मनाङ"
-    expect: { "geonames:1283076": 3 }
+    # The unit and its own town share the name; the unit first, as for the Latin query
+    # (graded like np-0245; regraded 2026-11-12 when units gained official names, D-232).
+    expect: { "codab:NP0438": 3, "geonames:1283076": 2 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate, regraded"
   - id: np-0102
     class: exact_native
     query: "मर्तादी"

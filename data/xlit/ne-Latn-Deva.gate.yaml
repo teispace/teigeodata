@@ -18,7 +18,12 @@ sets:
   - name: cbs
     parts:
       - { source: cbs-np-local-levels, reader: csv, id: Code, latin: "Local unit", native: "स्थानीय तह" }
-      - { source: cbs-np-districts, reader: csv, id: Code, latin: District, native: "जिल्ला" }
+      # The district file's Devanagari column is misaligned from row 43 (code 408) on: a broken
+      # quoted field ("ूनवलपरासी ((बर्दघाट सुस्ता" for Nawalparasi East), after which names fall
+      # out of order (510 DANG = रुपन्देही, 708 KAILALI = डोटी). Those 35 rows are left out
+      # (D-232, nepali-names.md §5.7).
+      - { source: cbs-np-districts, reader: csv, id: Code, latin: District, native: "जिल्ला",
+          drop: ["408", "409", "410", "411", "501", "502", "503", "504", "505", "506", "507", "508", "509", "510", "511", "512", "601", "602", "603", "604", "605", "606", "607", "608", "609", "610", "701", "702", "703", "704", "705", "706", "707", "708", "709"] }
     # The local-level type word is stripped from both sides (§3.3), the source's misspellings
     # included.
     strip:
@@ -35,7 +40,8 @@ sets:
       native: ["गाउँपालिका", "उपमहानगरपालिका", "महानगरपालिका", "नगरपालिका", "गा.वि.स.", "गाउँ विकास समिति"]
 # Floors, set at the first Rust measurement (2026-11-12: cbs 44.0% / 44.7% / 0.123, wd 36.1% /
 # 36.2% / 0.192), raised on main with the D-220 search fold (2026-11-12: cbs 45.28% / 50.31% /
-# 0.109, wd 37.2% / 42.26% / 0.176); they only rise.
+# 0.109, wd 37.2% / 42.26% / 0.176), raised again with CBS's misaligned district rows left
+# out (2026-11-12: cbs 45.57% / 50.6% / 0.1034); they only rise.
 floors:
-  cbs: { exact: 0.452, folded: 0.503, cer: 0.110 }
+  cbs: { exact: 0.455, folded: 0.506, cer: 0.104 }
   wd: { exact: 0.371, folded: 0.422, cer: 0.177 }

@@ -86,7 +86,7 @@ pub(super) fn admin_places(root: &Path, lock: &Lock, source: &str) -> Result<Uni
                     text: u.name.clone(),
                     lang: None,
                     kind: Some(NameType::Official),
-                    origin: crate::build::Origin::Unknown,
+                    origin: crate::build::Origin::Official,
                 }],
                 population: None,
                 rank: 0,

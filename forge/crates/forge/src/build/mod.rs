@@ -46,6 +46,7 @@ pub(crate) mod geometry;
 mod ids;
 mod iso;
 mod naming;
+pub(crate) mod official;
 mod pack;
 mod population;
 mod postal;
@@ -343,6 +344,12 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         a.release.as_str(),
         a.lite,
     );
+    let officials = official::run(
+        root,
+        &lock,
+        (&a.cc, &g.official, &profile.romanise),
+        &mut places,
+    )?;
     let corrected = corrections::run(root, who, &g.sources, &mut places, &units.levels, &out_dir)?;
     let transliterated = xlit_fill::run(root, &profile.transliterate, &mut places)?;
     let zones = zone_places(root, &lock, g.tz.as_deref(), coverage, &a)?;
@@ -385,6 +392,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     summary.push_str(&modelled.report);
     summary.push_str(&admin.line());
     summary.push_str(&dedupe::report(&merged, &out_dir, a.build_name())?);
+    summary.push_str(&officials);
     summary.push_str(&corrected);
     summary.push_str(&transliterated);
     if let Some(e) = &elevations {
@@ -469,6 +477,8 @@ struct Gated {
     skipped: Vec<String>,
     /// The notices of every source the build reads, one per line, in reading order (D-126).
     attribution: String,
+    /// The official name lists' sources the build may read (D-232).
+    official: Vec<String>,
 }
 
 /// The schedule-time licence gate (G-lic): a source the build may not read is never opened.
@@ -529,6 +539,10 @@ fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
             ));
         }
     }
+    let official = official::sources(root, &a.cc)?
+        .into_iter()
+        .filter_map(|id| allowed(&id).map(|ok| ok.then_some(id)).transpose())
+        .collect::<Result<Vec<_>, _>>()?;
     let attribution = notices(lock, &read)?;
     Ok(Gated {
         sources,
@@ -538,6 +552,7 @@ fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
         grid,
         skipped,
         attribution,
+        official,
     })
 }
 

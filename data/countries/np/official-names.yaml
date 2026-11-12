@@ -1,0 +1,801 @@
+# Official names of Nepal's units, joined by the list's own code (tier 1 of the names chain,
+# nepali-names §5.1, D-232; P16: countries are data). Schema: teigeodata/official-names/v1.
+# `units` is the crosswalk from each unit's key in the build (COD-AB v02 P-code) to the list's
+# code, made on 2026-11-12 by joining names inside each district: 715 of the 753 local levels by
+# the same name, 10 of them the same unit spelled differently (reviewed one by one, noted). Left
+# out: the 38 local levels renamed after the CBS list was made, whose list name is the old one
+# (Pathivara Yangwarak (Taplejung); Barahachhetra (Sunsari); Bhokraha Narsingh (Sunsari);
+# Shahidbhumi (Dhankuta); Mapya Dudhkoshi (Solukhumbu); Thulung Dudhkoshi (Solukhumbu); Diktel
+# Rupakot Majhuwagadhi (Khotang); Rawa Besi (Khotang); Diprung Chuichumma (Khotang); Limchunbung
+# (Udayapur); Rajgadh (Saptari); Janakpurdham (Dhanusa); Likhu Tamakoshi (Ramechhap); Baiteshwor
+# (Dolakha); Myagang (Nuwakot); Aamachhodingmo (Rasuwa); Netrawati Dabjong (Dhading); Barpak
+# Sulikot (Gorkha); Bhimsenthapa (Gorkha); Ngisyang (Manang); Narpa Bhumi (Manang); Pokhara
+# (Kaski); Lo Ghekar Damodarkunda (Mustang); Varagung Muktichhetra (Mustang); Ruruchhetra (Gulmi);
+# Gangadev (Rolpa); Pariwartan (Rolpa); Sunil Smriti (Rolpa); Kumakh (Salyan); Siddha Kumakh
+# (Salyan); Nalgad (Jajarkot); Shuva Kalika (Kalikot); Saipal (Bajhang); Khaptad Chhededaha
+# (Bajura); Jagannath (Bajura); Swamikartik Khapar (Bajura); Bogatan Phudsil (Doti); Dodhara
+# Chandani (Kanchanpur)), and the 22 protected areas, which the list does not have. Their Nepali
+# names come from later tiers. Each entry states the unit's name in COD-AB v02: a later release
+# that renames a unit fails the build, and the crosswalk is reviewed again.
+schema: teigeodata/official-names/v1
+lists:
+  # The districts: CBS, via Open Data Nepal, CC BY. All 77 join by name, but the published
+  # file's Nepali column is shifted from row 43 on (Nawalparasi East's name is split over two
+  # lines, then Nawalparasi West's): from code 408 every row carries another district's name
+  # (DANG रुपन्देही, BAJHANG सुर्खेत). Found 2026-11-12 by romanising each Nepali name against
+  # its row's English (35 rows far, 0 of the 42 before); the local-level list has no such shift.
+  # Only codes 101 to 407 are joined; the other 35 districts take later tiers.
+  - source: cbs-np-districts
+    code: Code
+    name: "जिल्ला"
+    lang: ne
+    latin: District
+    units:
+      "admin:NP0101": { code: "101", unit: "Taplejung" }
+      "admin:NP0102": { code: "109", unit: "Panchthar" }
+      "admin:NP0103": { code: "110", unit: "Ilam" }
+      "admin:NP0104": { code: "111", unit: "Jhapa" }
+      "admin:NP0105": { code: "112", unit: "Morang" }
+      "admin:NP0106": { code: "113", unit: "Sunsari" }
+      "admin:NP0107": { code: "107", unit: "Dhankuta" }
+      "admin:NP0108": { code: "108", unit: "Terhathum" }
+      "admin:NP0109": { code: "102", unit: "Sankhuwasabha" }
+      "admin:NP0110": { code: "106", unit: "Bhojpur" }
+      "admin:NP0111": { code: "103", unit: "Solukhumbu" }
+      "admin:NP0112": { code: "105", unit: "Khotang" }
+      "admin:NP0113": { code: "104", unit: "Okhaldhunga" }
+      "admin:NP0114": { code: "114", unit: "Udayapur" }
+      "admin:NP0215": { code: "201", unit: "Saptari" }
+      "admin:NP0216": { code: "202", unit: "Siraha" }
+      "admin:NP0217": { code: "203", unit: "Dhanusa" }
+      "admin:NP0218": { code: "204", unit: "Mahottari" }
+      "admin:NP0219": { code: "205", unit: "Sarlahi" }
+      "admin:NP0232": { code: "206", unit: "Rautahat" }
+      "admin:NP0233": { code: "207", unit: "Bara" }
+      "admin:NP0234": { code: "208", unit: "Parsa" }
+      "admin:NP0320": { code: "311", unit: "Sindhuli" }
+      "admin:NP0321": { code: "310", unit: "Ramechhap" }
+      "admin:NP0322": { code: "301", unit: "Dolakha" }
+      "admin:NP0323": { code: "302", unit: "Sindhupalchok" }
+      "admin:NP0324": { code: "309", unit: "Kavrepalanchok" }
+      "admin:NP0325": { code: "308", unit: "Lalitpur" }
+      "admin:NP0326": { code: "307", unit: "Bhaktapur" }
+      "admin:NP0327": { code: "306", unit: "Kathmandu" }
+      "admin:NP0328": { code: "305", unit: "Nuwakot" }
+      "admin:NP0329": { code: "303", unit: "Rasuwa" }
+      "admin:NP0330": { code: "304", unit: "Dhading" }
+      "admin:NP0331": { code: "312", unit: "Makwanpur" }
+      "admin:NP0335": { code: "313", unit: "Chitawan" }
+      "admin:NP0436": { code: "401", unit: "Gorkha" }
+      "admin:NP0437": { code: "406", unit: "Lamjung" }
+      "admin:NP0438": { code: "402", unit: "Manang" }
+      "admin:NP0439": { code: "405", unit: "Kaski" }
+      "admin:NP0440": { code: "407", unit: "Tanahu" }
+      "admin:NP0444": { code: "404", unit: "Myagdi" }
+      "admin:NP0445": { code: "403", unit: "Mustang" }
+  # The 753 local levels: CBS, via Open Data Nepal, CC BY. The type word is cut, the list's
+  # own spellings of it included (गाउंपालिका, नगरापालिका).
+  - source: cbs-np-local-levels
+    code: Code
+    name: "स्थानीय तह"
+    lang: ne
+    strip: ["गाउँपालिका", "गाउंपालिका", "उपमहानगरपालिका", "महानगरपालिका", "नगरपालिका", "नगरापालिका"]
+    # The alignment gate compares each romanised name with its row's own English one.
+    latin: "Local unit"
+    latin_strip: ["rural municipality", "sub-metropolitan city", "sub-metropolitian city", "metropolitan city", "metropolitian city", "municipality", "municipaity", "gaunpaika", "gaun palika"]
+    units:
+      "admin:NP0101301": { code: "10106", unit: "Phungling" }
+      "admin:NP0101401": { code: "10101", unit: "Phaktanlung" }
+      "admin:NP0101402": { code: "10102", unit: "Mikwakhola" }
+      "admin:NP0101403": { code: "10108", unit: "Sirijanga" }
+      "admin:NP0101404": { code: "10103", unit: "Meringden" }
+      "admin:NP0101405": { code: "10104", unit: "Maiwakhola" }
+      "admin:NP0101406": { code: "10105", unit: "Aatharai Tribeni" }
+      "admin:NP0101408": { code: "10109", unit: "Sidingba" }
+      "admin:NP0102301": { code: "10904", unit: "Phidim" }
+      "admin:NP0102401": { code: "10902", unit: "Hilihan" }
+      "admin:NP0102402": { code: "10901", unit: "Yangbarak" }
+      "admin:NP0102403": { code: "10903", unit: "Falelung" }
+      "admin:NP0102404": { code: "10906", unit: "Kummayak" }
+      "admin:NP0102405": { code: "10905", unit: "Falgunanda" }
+      "admin:NP0102406": { code: "10907", unit: "Tumbewa" }
+      "admin:NP0102407": { code: "10908", unit: "Miklajung" }
+      "admin:NP0103301": { code: "11004", unit: "Deumai" }
+      "admin:NP0103302": { code: "11003", unit: "Illam" }  # (CBS spells it Ilam)
+      "admin:NP0103303": { code: "11009", unit: "Suryodaya" }
+      "admin:NP0103304": { code: "11008", unit: "Mai" }
+      "admin:NP0103401": { code: "11005", unit: "Fakfokathum" }
+      "admin:NP0103402": { code: "11002", unit: "Sandakpur" }
+      "admin:NP0103403": { code: "11001", unit: "Mai Jogmai" }
+      "admin:NP0103404": { code: "11007", unit: "Chulachuli" }
+      "admin:NP0103405": { code: "11006", unit: "Mangsebung" }
+      "admin:NP0103406": { code: "11010", unit: "Rong" }
+      "admin:NP0104301": { code: "11107", unit: "Damak" }
+      "admin:NP0104302": { code: "11105", unit: "Shivasatakshi" }
+      "admin:NP0104303": { code: "11104", unit: "Kankai" }
+      "admin:NP0104304": { code: "11103", unit: "Arjundhara" }
+      "admin:NP0104305": { code: "11101", unit: "Mechinagar" }
+      "admin:NP0104306": { code: "11108", unit: "Gauradaha" }
+      "admin:NP0104307": { code: "11112", unit: "Birtamod" }
+      "admin:NP0104308": { code: "11114", unit: "Bhadrapur" }
+      "admin:NP0104401": { code: "11106", unit: "Kamal" }
+      "admin:NP0104402": { code: "11102", unit: "Buddhashanti" }
+      "admin:NP0104403": { code: "11109", unit: "Gauriganj" }
+      "admin:NP0104404": { code: "11110", unit: "Jhapa" }
+      "admin:NP0104405": { code: "11111", unit: "Barhadashi" }
+      "admin:NP0104406": { code: "11113", unit: "Haldibari" }
+      "admin:NP0104407": { code: "11115", unit: "Kachanakawal" }
+      "admin:NP0105101": { code: "11214", unit: "Biratnagar" }
+      "admin:NP0105301": { code: "11202", unit: "Letang" }
+      "admin:NP0105302": { code: "11204", unit: "Sundarharaicha" }
+      "admin:NP0105303": { code: "11205", unit: "Belbari" }
+      "admin:NP0105304": { code: "11207", unit: "Pathari Shanishchare" }
+      "admin:NP0105305": { code: "11208", unit: "Urlabari" }
+      "admin:NP0105306": { code: "11211", unit: "Rangeli" }
+      "admin:NP0105307": { code: "11210", unit: "Sunwarshi" }
+      "admin:NP0105308": { code: "11209", unit: "Ratuwamai" }
+      "admin:NP0105401": { code: "11203", unit: "Kerabari" }
+      "admin:NP0105402": { code: "11201", unit: "Miklajung" }
+      "admin:NP0105403": { code: "11206", unit: "Kanepokhari" }
+      "admin:NP0105404": { code: "11213", unit: "Budhiganga" }
+      "admin:NP0105405": { code: "11212", unit: "Gramthan" }
+      "admin:NP0105406": { code: "11215", unit: "Katahari" }
+      "admin:NP0105407": { code: "11217", unit: "Jahada" }
+      "admin:NP0105408": { code: "11216", unit: "Dhanapalthan" }
+      "admin:NP0106201": { code: "11301", unit: "Dharan" }
+      "admin:NP0106202": { code: "11306", unit: "Itahari" }
+      "admin:NP0106302": { code: "11305", unit: "Ramdhuni" }
+      "admin:NP0106303": { code: "11309", unit: "Inaruwa" }
+      "admin:NP0106304": { code: "11307", unit: "Duhabi" }
+      "admin:NP0106401": { code: "11303", unit: "Koshi" }
+      "admin:NP0106403": { code: "11308", unit: "Gadhi" }
+      "admin:NP0106404": { code: "11310", unit: "Harinagar" }  # (CBS spells it Harinagara)
+      "admin:NP0106405": { code: "11311", unit: "Dewangunj" }
+      "admin:NP0106406": { code: "11312", unit: "Barju" }
+      "admin:NP0107301": { code: "10701", unit: "Mahalaxmi" }
+      "admin:NP0107302": { code: "10702", unit: "Pakhribas" }
+      "admin:NP0107303": { code: "10704", unit: "Dhankuta" }
+      "admin:NP0107402": { code: "10703", unit: "Chhathar Jorpati" }
+      "admin:NP0107403": { code: "10706", unit: "Sangurigadhi" }
+      "admin:NP0107404": { code: "10707", unit: "Chaubise" }
+      "admin:NP0108301": { code: "10805", unit: "Laligurans" }
+      "admin:NP0108302": { code: "10804", unit: "Myanglung" }
+      "admin:NP0108401": { code: "10803", unit: "Menchhayayem" }
+      "admin:NP0108402": { code: "10802", unit: "Phedap" }
+      "admin:NP0108403": { code: "10801", unit: "Aatharai" }
+      "admin:NP0108404": { code: "10806", unit: "Chhathar" }
+      "admin:NP0109301": { code: "10206", unit: "Khandabari" }
+      "admin:NP0109302": { code: "10207", unit: "Panchakhapan" }
+      "admin:NP0109303": { code: "10208", unit: "Chainapur" }
+      "admin:NP0109304": { code: "10210", unit: "Dharmadevi" }
+      "admin:NP0109305": { code: "10209", unit: "Madi" }
+      "admin:NP0109401": { code: "10202", unit: "Makalu" }
+      "admin:NP0109402": { code: "10201", unit: "Bhotkhola" }
+      "admin:NP0109403": { code: "10203", unit: "Silichong" }
+      "admin:NP0109404": { code: "10204", unit: "Chichila" }
+      "admin:NP0109405": { code: "10205", unit: "Sabhapokhari" }
+      "admin:NP0110301": { code: "10601", unit: "Shadananda" }
+      "admin:NP0110302": { code: "10604", unit: "Bhojpur" }
+      "admin:NP0110401": { code: "10602", unit: "Salpa Silichho" }
+      "admin:NP0110402": { code: "10603", unit: "Temkemaiyum" }  # (CBS spells it Tyamke Maiyum)
+      "admin:NP0110403": { code: "10605", unit: "Arun" }
+      "admin:NP0110404": { code: "10607", unit: "Ramprasad Rai" }
+      "admin:NP0110405": { code: "10606", unit: "Pauwa Dunma" }
+      "admin:NP0110406": { code: "10609", unit: "Aamchowk" }
+      "admin:NP0110407": { code: "10608", unit: "Hatuwagadhi" }
+      "admin:NP0111301": { code: "10307", unit: "Solu Dhudhakunda" }
+      "admin:NP0111401": { code: "10301", unit: "Khumbu Pasanglhamu" }
+      "admin:NP0111402": { code: "10302", unit: "Mahakulung" }
+      "admin:NP0111403": { code: "10308", unit: "Likhu Pike" }
+      "admin:NP0111405": { code: "10306", unit: "Necha Salyan" }
+      "admin:NP0111407": { code: "10303", unit: "Sotang" }
+      "admin:NP0112301": { code: "10504", unit: "Halesi Tuwachung" }
+      "admin:NP0112401": { code: "10502", unit: "Aiselukharka" }
+      "admin:NP0112402": { code: "10501", unit: "Kepilasgadhi" }
+      "admin:NP0112405": { code: "10506", unit: "Sakela" }
+      "admin:NP0112406": { code: "10508", unit: "Khotehang" }
+      "admin:NP0112407": { code: "10510", unit: "Baraha Pokhari" }
+      "admin:NP0112408": { code: "10509", unit: "Jante Dhunga" }
+      "admin:NP0113301": { code: "10402", unit: "Siddhicharan" }
+      "admin:NP0113401": { code: "10404", unit: "Khiji Demba" }
+      "admin:NP0113402": { code: "10405", unit: "Likhu" }
+      "admin:NP0113403": { code: "10403", unit: "Molung" }
+      "admin:NP0113404": { code: "10406", unit: "Champadevi" }
+      "admin:NP0113405": { code: "10407", unit: "Sunkoshi" }
+      "admin:NP0113406": { code: "10401", unit: "Chishankhu Gadhi" }
+      "admin:NP0113407": { code: "10408", unit: "Manebhanjyang" }
+      "admin:NP0114301": { code: "11407", unit: "Katari" }
+      "admin:NP0114302": { code: "11403", unit: "Triyuga" }
+      "admin:NP0114303": { code: "11402", unit: "Chaudandigadhi" }
+      "admin:NP0114304": { code: "11401", unit: "Belaka" }
+      "admin:NP0114401": { code: "11406", unit: "Tapli" }
+      "admin:NP0114403": { code: "11408", unit: "Udayapurgadhi" }
+      "admin:NP0114404": { code: "11404", unit: "Rautamai" }
+      "admin:NP0215301": { code: "20107", unit: "Surunga" }
+      "admin:NP0215302": { code: "20106", unit: "Khadak" }
+      "admin:NP0215303": { code: "20105", unit: "Shambhunath" }
+      "admin:NP0215304": { code: "20101", unit: "Saptakoshi" }
+      "admin:NP0215305": { code: "20102", unit: "Kanchanrup" }
+      "admin:NP0215306": { code: "20109", unit: "Bode Barsain" }
+      "admin:NP0215307": { code: "20110", unit: "Dakneshwori" }
+      "admin:NP0215308": { code: "20113", unit: "Rajbiraj" }
+      "admin:NP0215309": { code: "20116", unit: "Hanumannagar Kankalini" }
+      "admin:NP0215401": { code: "20104", unit: "Rupani" }
+      "admin:NP0215402": { code: "20103", unit: "Agnisair Krishna Sabaran" }
+      "admin:NP0215403": { code: "20115", unit: "Tirahut" }
+      "admin:NP0215404": { code: "20108", unit: "Balan-Bihul" }
+      "admin:NP0215405": { code: "20114", unit: "Mahadewa" }
+      "admin:NP0215407": { code: "20112", unit: "Bishnupur" }
+      "admin:NP0215408": { code: "20118", unit: "Chhinnamasta" }
+      "admin:NP0215409": { code: "20117", unit: "Tilathi Koiladi" }
+      "admin:NP0216301": { code: "20205", unit: "Karjanha" }
+      "admin:NP0216302": { code: "20204", unit: "Mirchaiya" }
+      "admin:NP0216303": { code: "20203", unit: "Golbazar" }
+      "admin:NP0216304": { code: "20202", unit: "Dhangadhimai" }
+      "admin:NP0216305": { code: "20201", unit: "Lahan" }
+      "admin:NP0216306": { code: "20206", unit: "Kalyanpur" }
+      "admin:NP0216307": { code: "20210", unit: "Sukhipur" }
+      "admin:NP0216308": { code: "20217", unit: "Siraha" }
+      "admin:NP0216401": { code: "20207", unit: "Naraha" }
+      "admin:NP0216402": { code: "20208", unit: "Bishnupur" }
+      "admin:NP0216403": { code: "20209", unit: "Arnama" }
+      "admin:NP0216404": { code: "20216", unit: "Aurahi" }
+      "admin:NP0216405": { code: "20215", unit: "Bariyarpatti" }
+      "admin:NP0216406": { code: "20211", unit: "Laxmipur Patari" }
+      "admin:NP0216407": { code: "20214", unit: "Nawarajpur" }
+      "admin:NP0216408": { code: "20212", unit: "Sakhuwa Nankarkatti" }
+      "admin:NP0216409": { code: "20213", unit: "Bhagawanpur" }
+      "admin:NP0217301": { code: "20303", unit: "Mithila" }
+      "admin:NP0217302": { code: "20301", unit: "Ganeshman Charnath" }
+      "admin:NP0217303": { code: "20305", unit: "Chhireshwornath" }
+      "admin:NP0217304": { code: "20302", unit: "Dhanushadham" }
+      "admin:NP0217305": { code: "20307", unit: "Mithila Bihari" }
+      "admin:NP0217306": { code: "20309", unit: "Sabaila" }
+      "admin:NP0217307": { code: "20308", unit: "Hansapur" }
+      "admin:NP0217308": { code: "20310", unit: "Shahidnagar" }
+      "admin:NP0217309": { code: "20317", unit: "Nagarain" }
+      "admin:NP0217310": { code: "20313", unit: "Bideha" }
+      "admin:NP0217311": { code: "20311", unit: "Kamala" }
+      "admin:NP0217401": { code: "20304", unit: "Bateshwor" }
+      "admin:NP0217402": { code: "20306", unit: "Laxminiya" }
+      "admin:NP0217403": { code: "20314", unit: "Aurahi" }
+      "admin:NP0217404": { code: "20316", unit: "Dhanauji" }
+      "admin:NP0217405": { code: "20318", unit: "Mukhiyapatti Musaharmiya" }
+      "admin:NP0217406": { code: "20312", unit: "Janak Nandini" }
+      "admin:NP0218301": { code: "20401", unit: "Bardibas" }
+      "admin:NP0218302": { code: "20402", unit: "Gaushala" }
+      "admin:NP0218303": { code: "20404", unit: "Aurahi" }
+      "admin:NP0218304": { code: "20405", unit: "Bhangaha" }
+      "admin:NP0218305": { code: "20408", unit: "Ram Gopalpur" }
+      "admin:NP0218306": { code: "20410", unit: "Manara Shisawa" }
+      "admin:NP0218307": { code: "20407", unit: "Balawa" }
+      "admin:NP0218308": { code: "20406", unit: "Loharpatti" }
+      "admin:NP0218309": { code: "20415", unit: "Jaleshwor" }
+      "admin:NP0218310": { code: "20414", unit: "Matihani" }
+      "admin:NP0218401": { code: "20403", unit: "Sonama" }
+      "admin:NP0218402": { code: "20409", unit: "Samsi" }
+      "admin:NP0218403": { code: "20411", unit: "Ekadara" }
+      "admin:NP0218404": { code: "20412", unit: "Mahottari" }
+      "admin:NP0218405": { code: "20413", unit: "Pipara" }
+      "admin:NP0219301": { code: "20503", unit: "Bagmati" }
+      "admin:NP0219302": { code: "20502", unit: "Hariwan" }
+      "admin:NP0219303": { code: "20501", unit: "Lalbandi" }
+      "admin:NP0219304": { code: "20504", unit: "Barahathawa" }
+      "admin:NP0219305": { code: "20505", unit: "Haripur" }
+      "admin:NP0219306": { code: "20506", unit: "Ishworpur" }
+      "admin:NP0219307": { code: "20511", unit: "Kabilashi" }
+      "admin:NP0219308": { code: "20517", unit: "Godaita" }
+      "admin:NP0219309": { code: "20520", unit: "Malangawa" }
+      "admin:NP0219310": { code: "20507", unit: "Haripurwa" }
+      "admin:NP0219311": { code: "20516", unit: "Balara" }
+      "admin:NP0219401": { code: "20513", unit: "Basbariya" }
+      "admin:NP0219402": { code: "20510", unit: "Chandranagar" }
+      "admin:NP0219403": { code: "20514", unit: "Dhanakaul" }
+      "admin:NP0219404": { code: "20512", unit: "Chakraghatta" }
+      "admin:NP0219405": { code: "20515", unit: "Ramnagar" }
+      "admin:NP0219406": { code: "20519", unit: "Kaudena" }
+      "admin:NP0219407": { code: "20509", unit: "Brahmapuri" }
+      "admin:NP0219408": { code: "20518", unit: "Bishnu" }
+      "admin:NP0219409": { code: "20508", unit: "Parsa" }
+      "admin:NP0232301": { code: "20602", unit: "Gujara" }
+      "admin:NP0232302": { code: "20601", unit: "Chandrapur" }
+      "admin:NP0232303": { code: "20603", unit: "Phatuwa Bijayapur" }
+      "admin:NP0232304": { code: "20604", unit: "Katahariya" }
+      "admin:NP0232305": { code: "20605", unit: "Brindaban" }
+      "admin:NP0232306": { code: "20610", unit: "Maulapur" }
+      "admin:NP0232307": { code: "20609", unit: "Dewahi Gonahi" }
+      "admin:NP0232308": { code: "20608", unit: "Garuda" }
+      "admin:NP0232309": { code: "20606", unit: "Gadhimai" }
+      "admin:NP0232310": { code: "20611", unit: "Boudhimai" }
+      "admin:NP0232311": { code: "20607", unit: "Madhav Narayan" }
+      "admin:NP0232312": { code: "20612", unit: "Paroha" }
+      "admin:NP0232313": { code: "20618", unit: "Ishanath" }
+      "admin:NP0232314": { code: "20613", unit: "Rajpur" }
+      "admin:NP0232315": { code: "20617", unit: "Gaur" }
+      "admin:NP0232316": { code: "20616", unit: "Rajdevi" }
+      "admin:NP0232401": { code: "20614", unit: "Yamunamai" }
+      "admin:NP0232402": { code: "20615", unit: "Durga Bhagawati" }
+      "admin:NP0233201": { code: "20703", unit: "Jitpur Simara" }
+      "admin:NP0233202": { code: "20708", unit: "Kalaiya" }
+      "admin:NP0233301": { code: "20701", unit: "Nijagadh" }
+      "admin:NP0233302": { code: "20702", unit: "Kolhabi" }
+      "admin:NP0233303": { code: "20714", unit: "Mahagadhimai" }
+      "admin:NP0233304": { code: "20713", unit: "Pacharauta" }
+      "admin:NP0233305": { code: "20712", unit: "Simroungadh" }
+      "admin:NP0233401": { code: "20704", unit: "Parawanipur" }
+      "admin:NP0233402": { code: "20705", unit: "Prasauni" }
+      "admin:NP0233403": { code: "20709", unit: "Karaiyamai" }
+      "admin:NP0233404": { code: "20706", unit: "Bishrampur" }
+      "admin:NP0233405": { code: "20707", unit: "Pheta" }
+      "admin:NP0233406": { code: "20710", unit: "Baragadhi" }
+      "admin:NP0233407": { code: "20715", unit: "Devtal" }
+      "admin:NP0233408": { code: "20716", unit: "Subarna" }
+      "admin:NP0233409": { code: "20711", unit: "Aadarsha Kotwal" }
+      "admin:NP0234101": { code: "20807", unit: "Birgunj" }
+      "admin:NP0234301": { code: "20809", unit: "Pokhariya" }
+      "admin:NP0234302": { code: "20808", unit: "Bahudarmai" }
+      "admin:NP0234303": { code: "20806", unit: "Parsagadhi" }
+      "admin:NP0234401": { code: "20801", unit: "Thori" }
+      "admin:NP0234402": { code: "20802", unit: "Jirabhawani" }
+      "admin:NP0234403": { code: "20804", unit: "Paterwa Sugauli" }
+      "admin:NP0234404": { code: "20805", unit: "Sakhuwa Prasauni" }
+      "admin:NP0234405": { code: "20803", unit: "Jagarnathpur" }
+      "admin:NP0234406": { code: "20811", unit: "Dhobini" }
+      "admin:NP0234407": { code: "20812", unit: "Chhipaharmai" }
+      "admin:NP0234408": { code: "20810", unit: "Kalikamai" }
+      "admin:NP0234409": { code: "20813", unit: "Pakaha Mainpur" }
+      "admin:NP0234410": { code: "20814", unit: "Bindabasini" }
+      "admin:NP0320301": { code: "31105", unit: "Kamalamai" }
+      "admin:NP0320302": { code: "31101", unit: "Dudhouli" }
+      "admin:NP0320401": { code: "31109", unit: "Hariharpurgaghi" }
+      "admin:NP0320402": { code: "31108", unit: "Marin" }
+      "admin:NP0320403": { code: "31107", unit: "Ghyanglekha" }
+      "admin:NP0320404": { code: "31106", unit: "Sunkoshi" }
+      "admin:NP0320405": { code: "31104", unit: "Golanjor" }
+      "admin:NP0320406": { code: "31103", unit: "Tinpatan" }
+      "admin:NP0320407": { code: "31102", unit: "Phikkal" }
+      "admin:NP0321301": { code: "31005", unit: "Manthali" }
+      "admin:NP0321302": { code: "31004", unit: "Ramechhap" }
+      "admin:NP0321401": { code: "31008", unit: "Sunapati" }
+      "admin:NP0321402": { code: "31007", unit: "Doramba" }
+      "admin:NP0321403": { code: "31002", unit: "Gokulganga" }
+      "admin:NP0321404": { code: "31001", unit: "Umakunda" }
+      "admin:NP0321405": { code: "31006", unit: "Khandadevi" }
+      "admin:NP0322301": { code: "30109", unit: "Bhimeshwor" }
+      "admin:NP0322302": { code: "30105", unit: "Jiri" }
+      "admin:NP0322401": { code: "30102", unit: "Bigu" }
+      "admin:NP0322402": { code: "30101", unit: "Gaurishankar" }
+      "admin:NP0322403": { code: "30103", unit: "Kalinchowk" }
+      "admin:NP0322405": { code: "30108", unit: "Shailung" }
+      "admin:NP0322406": { code: "30107", unit: "Melung" }
+      "admin:NP0322407": { code: "30106", unit: "Tamakoshi" }
+      "admin:NP0323301": { code: "30205", unit: "Melamchi" }  # (CBS spells it Melanchi)
+      "admin:NP0323302": { code: "30207", unit: "Choutara Sangachowkgadhi" }
+      "admin:NP0323303": { code: "30209", unit: "Bahrabise" }
+      "admin:NP0323401": { code: "30204", unit: "Helambu" }
+      "admin:NP0323402": { code: "30203", unit: "Panchpokhari Thangpal" }
+      "admin:NP0323403": { code: "30202", unit: "Jugal" }
+      "admin:NP0323404": { code: "30201", unit: "Bhotekoshi" }
+      "admin:NP0323405": { code: "30206", unit: "Indrawoti" }
+      "admin:NP0323406": { code: "30208", unit: "Balephi" }
+      "admin:NP0323407": { code: "30212", unit: "Sunkoshi" }
+      "admin:NP0323408": { code: "30210", unit: "Tripurasundari" }
+      "admin:NP0323409": { code: "30211", unit: "Lisankhu Pakhar" }
+      "admin:NP0324301": { code: "30903", unit: "Mandan Deupur" }
+      "admin:NP0324302": { code: "30904", unit: "Banepa" }
+      "admin:NP0324303": { code: "30905", unit: "Dhulikhel" }
+      "admin:NP0324304": { code: "30906", unit: "Panchkhal" }
+      "admin:NP0324305": { code: "30909", unit: "Panauti" }
+      "admin:NP0324306": { code: "30908", unit: "Namobuddha" }
+      "admin:NP0324401": { code: "30902", unit: "Bhumlu" }
+      "admin:NP0324402": { code: "30901", unit: "Chauri Deurali" }
+      "admin:NP0324403": { code: "30910", unit: "Bethanchowk" }
+      "admin:NP0324404": { code: "30911", unit: "Roshi" }
+      "admin:NP0324405": { code: "30907", unit: "Temal" }
+      "admin:NP0324406": { code: "30913", unit: "Khanikhola" }
+      "admin:NP0324407": { code: "30912", unit: "Mahabharat" }
+      "admin:NP0325101": { code: "30802", unit: "Lalitpur" }
+      "admin:NP0325301": { code: "30803", unit: "Godawari" }
+      "admin:NP0325302": { code: "30801", unit: "Mahalaxmi" }
+      "admin:NP0325401": { code: "30806", unit: "Bagmati" }
+      "admin:NP0325402": { code: "30804", unit: "Konjyosom" }
+      "admin:NP0325403": { code: "30805", unit: "Mahankal" }
+      "admin:NP0326301": { code: "30703", unit: "Madhyapur Thimi" }
+      "admin:NP0326302": { code: "30701", unit: "Changunarayan" }
+      "admin:NP0326303": { code: "30702", unit: "Bhaktapur" }
+      "admin:NP0326304": { code: "30704", unit: "Suryabinayak" }
+      "admin:NP0327101": { code: "30608", unit: "Kathmandu" }
+      "admin:NP0327301": { code: "30606", unit: "Tarakeshwor" }
+      "admin:NP0327302": { code: "30605", unit: "Tokha" }
+      "admin:NP0327303": { code: "30604", unit: "Budhanilkhantha" }
+      "admin:NP0327304": { code: "30603", unit: "Gokarneshwor" }
+      "admin:NP0327305": { code: "30607", unit: "Nagarjun" }
+      "admin:NP0327306": { code: "30602", unit: "Kageshwori Manahara" }
+      "admin:NP0327307": { code: "30601", unit: "Shankharapur" }
+      "admin:NP0327308": { code: "30610", unit: "Chandragiri" }
+      "admin:NP0327309": { code: "30609", unit: "Kirtipur" }
+      "admin:NP0327310": { code: "30611", unit: "Dakshinkali" }
+      "admin:NP0328301": { code: "30504", unit: "Bidur" }
+      "admin:NP0328302": { code: "30508", unit: "Belkotgadhi" }
+      "admin:NP0328402": { code: "30505", unit: "Kispang" }
+      "admin:NP0328403": { code: "30507", unit: "Tarakeshwor" }
+      "admin:NP0328404": { code: "30503", unit: "Suryagadhi" }
+      "admin:NP0328405": { code: "30502", unit: "Tadi" }
+      "admin:NP0328406": { code: "30509", unit: "Likhu" }
+      "admin:NP0328407": { code: "30510", unit: "Panchakanya" }
+      "admin:NP0328408": { code: "30501", unit: "Dupcheshwor" }
+      "admin:NP0328409": { code: "30512", unit: "Kakani" }
+      "admin:NP0328410": { code: "30511", unit: "Shivapuri" }
+      "admin:NP0329402": { code: "30301", unit: "Gosaikunda" }
+      "admin:NP0329403": { code: "30303", unit: "Uttargaya" }
+      "admin:NP0329404": { code: "30304", unit: "Kalika" }
+      "admin:NP0329405": { code: "30305", unit: "Naukunda" }
+      "admin:NP0330301": { code: "30406", unit: "Nilkhantha" }
+      "admin:NP0330302": { code: "30413", unit: "Dhunibenshi" }
+      "admin:NP0330401": { code: "30401", unit: "Rubi Valley" }
+      "admin:NP0330402": { code: "30403", unit: "Ganga Jamuna" }
+      "admin:NP0330403": { code: "30402", unit: "Khaniyabas" }
+      "admin:NP0330404": { code: "30404", unit: "Tripurasundari" }
+      "admin:NP0330406": { code: "30407", unit: "Jwalamukhi" }
+      "admin:NP0330407": { code: "30408", unit: "Siddhalek" }
+      "admin:NP0330408": { code: "30409", unit: "Benighat Rorang" }
+      "admin:NP0330409": { code: "30410", unit: "Gajuri" }
+      "admin:NP0330410": { code: "30411", unit: "Galchhi" }
+      "admin:NP0330411": { code: "30412", unit: "Thakre" }
+      "admin:NP0331201": { code: "31206", unit: "Hetauda" }
+      "admin:NP0331301": { code: "31202", unit: "Thaha" }
+      "admin:NP0331401": { code: "31205", unit: "Manahari" }
+      "admin:NP0331402": { code: "31204", unit: "Raksirang" }
+      "admin:NP0331403": { code: "31203", unit: "Kailash" }
+      "admin:NP0331404": { code: "31207", unit: "Bhimphedi" }
+      "admin:NP0331405": { code: "31201", unit: "Indrasarowar" }
+      "admin:NP0331406": { code: "31208", unit: "Makawanpurgadhi" }
+      "admin:NP0331407": { code: "31209", unit: "Bakaiya" }
+      "admin:NP0331408": { code: "31210", unit: "Bagmati" }
+      "admin:NP0335101": { code: "31304", unit: "Bharatpur" }
+      "admin:NP0335301": { code: "31302", unit: "Kalika" }
+      "admin:NP0335302": { code: "31305", unit: "Ratnanagar" }
+      "admin:NP0335303": { code: "31306", unit: "Khairahani" }
+      "admin:NP0335304": { code: "31301", unit: "Rapti" }
+      "admin:NP0335305": { code: "31307", unit: "Madi" }
+      "admin:NP0335401": { code: "31303", unit: "Ichchha Kamana" }
+      "admin:NP0436301": { code: "40108", unit: "Palungtar" }
+      "admin:NP0436302": { code: "40109", unit: "Gorkha" }
+      "admin:NP0436401": { code: "40101", unit: "Chumanubri" }
+      "admin:NP0436402": { code: "40102", unit: "Ajirkot" }
+      "admin:NP0436404": { code: "40104", unit: "Dharche" }
+      "admin:NP0436405": { code: "40107", unit: "Siranchowk" }
+      "admin:NP0436406": { code: "40105", unit: "Aarughat" }
+      "admin:NP0436408": { code: "40110", unit: "Shahid Lakhan" }
+      "admin:NP0436409": { code: "40111", unit: "Gandaki" }
+      "admin:NP0437301": { code: "40604", unit: "Madhya Nepal" }
+      "admin:NP0437302": { code: "40605", unit: "Bensishahar" }
+      "admin:NP0437303": { code: "40606", unit: "Sundarbazar" }
+      "admin:NP0437304": { code: "40607", unit: "Rainas" }
+      "admin:NP0437401": { code: "40603", unit: "Kwhola Sothar" }
+      "admin:NP0437402": { code: "40602", unit: "Marshyangdi" }
+      "admin:NP0437403": { code: "40601", unit: "Dordi" }
+      "admin:NP0437404": { code: "40608", unit: "Dudhapokhari" }
+      "admin:NP0438403": { code: "40203", unit: "Chame" }
+      "admin:NP0438404": { code: "40204", unit: "Nason" }  # (CBS spells it Nashong)
+      "admin:NP0439401": { code: "40503", unit: "Annapurna" }
+      "admin:NP0439402": { code: "40502", unit: "Machhapuchchhre" }
+      "admin:NP0439403": { code: "40501", unit: "Madi" }
+      "admin:NP0439404": { code: "40505", unit: "Rupa" }
+      "admin:NP0440301": { code: "40704", unit: "Shuklagandaki" }
+      "admin:NP0440302": { code: "40702", unit: "Byas" }
+      "admin:NP0440303": { code: "40701", unit: "Bhanu" }
+      "admin:NP0440304": { code: "40705", unit: "Bhimad" }
+      "admin:NP0440401": { code: "40703", unit: "Myagde" }
+      "admin:NP0440402": { code: "40706", unit: "Ghiring" }
+      "admin:NP0440403": { code: "40707", unit: "Rhishing" }
+      "admin:NP0440404": { code: "40709", unit: "Bandipur" }
+      "admin:NP0440405": { code: "40710", unit: "Aanbu Khaireni" }
+      "admin:NP0440406": { code: "40708", unit: "Devghat" }
+      "admin:NP0441301": { code: "40901", unit: "Putalibazar" }
+      "admin:NP0441302": { code: "40905", unit: "Bhirkot" }  # (CBS spells it Bhirkot Municipaity)
+      "admin:NP0441303": { code: "40910", unit: "Galyang" }
+      "admin:NP0441304": { code: "40909", unit: "Walling" }
+      "admin:NP0441305": { code: "40908", unit: "Chapakot" }
+      "admin:NP0441401": { code: "40903", unit: "Aandhikhola" }
+      "admin:NP0441402": { code: "40902", unit: "Phedikhola" }
+      "admin:NP0441403": { code: "40904", unit: "Arjun Choupari" }
+      "admin:NP0441404": { code: "40906", unit: "Biruwa" }
+      "admin:NP0441405": { code: "40907", unit: "Harinas" }
+      "admin:NP0441406": { code: "40911", unit: "Kaligandaki" }
+      "admin:NP0442301": { code: "41003", unit: "Kushma" }
+      "admin:NP0442302": { code: "41004", unit: "Phalebas" }
+      "admin:NP0442401": { code: "41002", unit: "Jaljala" }
+      "admin:NP0442402": { code: "41001", unit: "Modi" }
+      "admin:NP0442403": { code: "41006", unit: "Bihadi" }
+      "admin:NP0442404": { code: "41005", unit: "Mahashila" }
+      "admin:NP0442405": { code: "41007", unit: "Paiyu" }
+      "admin:NP0443301": { code: "41105", unit: "Dhorpatan" }
+      "admin:NP0443302": { code: "41108", unit: "Galkot" }
+      "admin:NP0443303": { code: "41101", unit: "Baglung" }
+      "admin:NP0443304": { code: "41110", unit: "Jaimuni" }
+      "admin:NP0443401": { code: "41106", unit: "Nisikhola" }
+      "admin:NP0443402": { code: "41104", unit: "Tamankhola" }
+      "admin:NP0443403": { code: "41107", unit: "Badigad" }
+      "admin:NP0443404": { code: "41103", unit: "Tarakhola" }
+      "admin:NP0443405": { code: "41102", unit: "Kathekhola" }
+      "admin:NP0443406": { code: "41109", unit: "Bareng" }
+      "admin:NP0444301": { code: "40406", unit: "Beni" }
+      "admin:NP0444401": { code: "40403", unit: "Dhawalagiri" }
+      "admin:NP0444402": { code: "40402", unit: "Raghuganga" }
+      "admin:NP0444403": { code: "40401", unit: "Annapurna" }
+      "admin:NP0444404": { code: "40404", unit: "Malika" }
+      "admin:NP0444405": { code: "40405", unit: "Mangala" }
+      "admin:NP0445401": { code: "40304", unit: "Lomanthang" }
+      "admin:NP0445404": { code: "40302", unit: "Gharpajhong" }
+      "admin:NP0445405": { code: "40305", unit: "Thasang" }
+      "admin:NP0447301": { code: "40807", unit: "Madhya Bindu" }
+      "admin:NP0447302": { code: "40806", unit: "Kawasoti" }
+      "admin:NP0447303": { code: "40805", unit: "Devchuli" }
+      "admin:NP0447304": { code: "40801", unit: "Gaidakot" }
+      "admin:NP0447401": { code: "40803", unit: "Baudikali" }  # (CBS spells it Bungdikali)
+      "admin:NP0447402": { code: "40802", unit: "Bulingtar" }
+      "admin:NP0447403": { code: "40804", unit: "Hupsekot" }
+      "admin:NP0447404": { code: "40808", unit: "Binayi Tribeni" }
+      "admin:NP0546301": { code: "50605", unit: "Tansen" }
+      "admin:NP0546302": { code: "50601", unit: "Rampur" }
+      "admin:NP0546401": { code: "50607", unit: "Rainadevi Chhahara" }
+      "admin:NP0546402": { code: "50608", unit: "Tinau" }
+      "admin:NP0546403": { code: "50606", unit: "Ribdikot" }
+      "admin:NP0546404": { code: "50609", unit: "Mathagadhi" }
+      "admin:NP0546405": { code: "50604", unit: "Baganaskali" }
+      "admin:NP0546406": { code: "50602", unit: "Purbakhola" }
+      "admin:NP0546407": { code: "50603", unit: "Rambha" }
+      "admin:NP0546408": { code: "50610", unit: "Nisdi" }
+      "admin:NP0547301": { code: "50702", unit: "Sunawal" }
+      "admin:NP0547302": { code: "50701", unit: "Bardaghat" }
+      "admin:NP0547303": { code: "50703", unit: "Ramgram" }
+      "admin:NP0547401": { code: "50704", unit: "Palhinandan" }
+      "admin:NP0547402": { code: "50705", unit: "Sarawal" }
+      "admin:NP0547403": { code: "50706", unit: "Pratapapur" }
+      "admin:NP0547404": { code: "50707", unit: "Susta" }
+      "admin:NP0548201": { code: "50802", unit: "Butwal" }
+      "admin:NP0548301": { code: "50803", unit: "Sainamaina" }
+      "admin:NP0548302": { code: "50801", unit: "Devdaha" }
+      "admin:NP0548303": { code: "50808", unit: "Tilottama" }
+      "admin:NP0548304": { code: "50813", unit: "Lumbini Sanskritik" }
+      "admin:NP0548305": { code: "50811", unit: "Siddharthanagar" }
+      "admin:NP0548401": { code: "50804", unit: "Kanchan" }
+      "admin:NP0548402": { code: "50806", unit: "Suddhodhan" }
+      "admin:NP0548403": { code: "50805", unit: "Gaidahawa" }
+      "admin:NP0548404": { code: "50807", unit: "Siyari" }
+      "admin:NP0548405": { code: "50812", unit: "Mayadevi" }
+      "admin:NP0548406": { code: "50809", unit: "Om Satiya" }
+      "admin:NP0548407": { code: "50810", unit: "Rohini" }
+      "admin:NP0548408": { code: "50814", unit: "Kotahimai" }
+      "admin:NP0548409": { code: "50815", unit: "Sammarimai" }
+      "admin:NP0548410": { code: "50816", unit: "Marchawari" }
+      "admin:NP0549301": { code: "50903", unit: "Shivaraj" }
+      "admin:NP0549302": { code: "50902", unit: "Buddhabhumi" }
+      "admin:NP0549303": { code: "50901", unit: "Banganga" }
+      "admin:NP0549304": { code: "50905", unit: "Krishnanagar" }
+      "admin:NP0549305": { code: "50906", unit: "Maharajganj" }
+      "admin:NP0549306": { code: "50907", unit: "Kapilbastu" }
+      "admin:NP0549401": { code: "50904", unit: "Bijayanagar" }
+      "admin:NP0549402": { code: "50908", unit: "Yasodhara" }
+      "admin:NP0549403": { code: "50909", unit: "Mayadevi" }
+      "admin:NP0549404": { code: "50910", unit: "Shuddhodhan" }
+      "admin:NP0550301": { code: "50503", unit: "Bhumikasthan" }
+      "admin:NP0550302": { code: "50504", unit: "Sandhikharka" }
+      "admin:NP0550303": { code: "50506", unit: "Shitaganga" }
+      "admin:NP0550401": { code: "50502", unit: "Malarani" }
+      "admin:NP0550402": { code: "50501", unit: "Chhatradev" }
+      "admin:NP0550403": { code: "50505", unit: "Panini" }
+      "admin:NP0551301": { code: "50404", unit: "Musikot" }
+      "admin:NP0551302": { code: "50409", unit: "Resunga" }
+      "admin:NP0551401": { code: "50407", unit: "Madane" }
+      "admin:NP0551402": { code: "50406", unit: "Malika" }
+      "admin:NP0551403": { code: "50408", unit: "Dhurkot" }
+      "admin:NP0551404": { code: "50405", unit: "Isma" }
+      "admin:NP0551405": { code: "50410", unit: "Gulmi Durbar" }  # (CBS spells it Gulmi Durbar Gaunpaika)
+      "admin:NP0551406": { code: "50403", unit: "Chandrakot" }
+      "admin:NP0551407": { code: "50411", unit: "Chhatrakot" }
+      "admin:NP0551409": { code: "50402", unit: "Satyawoti" }
+      "admin:NP0551410": { code: "50401", unit: "Kali Gandaki" }
+      "admin:NP0552401": { code: "50102", unit: "Sisne" }
+      "admin:NP0552402": { code: "50101", unit: "Putha Uttanganga" }
+      "admin:NP0552403": { code: "50103", unit: "Bhoome" }
+      "admin:NP0554301": { code: "50207", unit: "Rolpa" }
+      "admin:NP0554403": { code: "50202", unit: "Thawang" }
+      "admin:NP0554404": { code: "50205", unit: "Madi" }
+      "admin:NP0554405": { code: "50201", unit: "Sunchhahari" }
+      "admin:NP0554406": { code: "50206", unit: "Tribeni" }
+      "admin:NP0554408": { code: "50210", unit: "Lungri" }
+      "admin:NP0554409": { code: "50208", unit: "Runtigadhi" }
+      "admin:NP0555301": { code: "50305", unit: "Sworgadwari" }
+      "admin:NP0555302": { code: "50304", unit: "Pyuthan" }
+      "admin:NP0555401": { code: "50302", unit: "Naubahini" }
+      "admin:NP0555402": { code: "50301", unit: "Gaumukhi" }
+      "admin:NP0555403": { code: "50303", unit: "Jhimaruk" }
+      "admin:NP0555404": { code: "50306", unit: "Mandavi" }
+      "admin:NP0555405": { code: "50307", unit: "Mallarani" }
+      "admin:NP0555406": { code: "50309", unit: "Sarumarani" }
+      "admin:NP0555407": { code: "50308", unit: "Aairawati" }
+      "admin:NP0556201": { code: "51003", unit: "Tulsipur" }
+      "admin:NP0556202": { code: "51002", unit: "Ghorahi" }
+      "admin:NP0556301": { code: "51007", unit: "Lamahi" }
+      "admin:NP0556401": { code: "51005", unit: "Babai" }
+      "admin:NP0556402": { code: "51006", unit: "Dangisharan" }
+      "admin:NP0556403": { code: "51004", unit: "Shantinagar" }
+      "admin:NP0556404": { code: "51010", unit: "Rajpur" }
+      "admin:NP0556405": { code: "51001", unit: "Bangalachuli" }
+      "admin:NP0556406": { code: "51009", unit: "Gadhawa" }
+      "admin:NP0556407": { code: "51008", unit: "Rapti" }
+      "admin:NP0557201": { code: "51106", unit: "Nepalganj" }
+      "admin:NP0557301": { code: "51102", unit: "Kohalpur" }
+      "admin:NP0557401": { code: "51104", unit: "Khajura" }
+      "admin:NP0557402": { code: "51103", unit: "Baijanath" }
+      "admin:NP0557403": { code: "51105", unit: "Janaki" }
+      "admin:NP0557404": { code: "51107", unit: "Duduwa" }
+      "admin:NP0557405": { code: "51101", unit: "Rapti Sonari" }
+      "admin:NP0557406": { code: "51108", unit: "Narainapur" }
+      "admin:NP0558301": { code: "51205", unit: "Rajapur" }
+      "admin:NP0558302": { code: "51206", unit: "Madhuwan" }
+      "admin:NP0558303": { code: "51203", unit: "Thakurbaba" }
+      "admin:NP0558304": { code: "51207", unit: "Gulariya" }
+      "admin:NP0558305": { code: "51202", unit: "Barbardiya" }
+      "admin:NP0558306": { code: "51201", unit: "Bansgadhi" }
+      "admin:NP0558401": { code: "51204", unit: "Geruwa" }
+      "admin:NP0558402": { code: "51208", unit: "Badhaiyatal" }
+      "admin:NP0652301": { code: "60801", unit: "Aathabisakot" }
+      "admin:NP0652302": { code: "60806", unit: "Chaurjahari" }
+      "admin:NP0652303": { code: "60804", unit: "Musikot" }
+      "admin:NP0652401": { code: "60802", unit: "Sanibheri" }
+      "admin:NP0652402": { code: "60803", unit: "Banphikot" }
+      "admin:NP0652403": { code: "60805", unit: "Tribeni" }
+      "admin:NP0653301": { code: "60903", unit: "Banagad Kupinde" }
+      "admin:NP0653302": { code: "60905", unit: "Bagachour" }
+      "admin:NP0653303": { code: "60907", unit: "Sharada" }
+      "admin:NP0653402": { code: "60901", unit: "Darma" }
+      "admin:NP0653404": { code: "60908", unit: "Kalimati" }
+      "admin:NP0653405": { code: "60906", unit: "Chhatreshwori" }
+      "admin:NP0653406": { code: "60909", unit: "Tribeni" }
+      "admin:NP0653407": { code: "60910", unit: "Kapurkot" }
+      "admin:NP0659301": { code: "61008", unit: "Panchapuri" }
+      "admin:NP0659302": { code: "61005", unit: "Bheriganga" }
+      "admin:NP0659303": { code: "61006", unit: "Birendranagar" }
+      "admin:NP0659304": { code: "61003", unit: "Lekabeshi" }
+      "admin:NP0659305": { code: "61004", unit: "Gurbhakot" }
+      "admin:NP0659401": { code: "61009", unit: "Chaukune" }
+      "admin:NP0659402": { code: "61007", unit: "Barahatal" }
+      "admin:NP0659403": { code: "61002", unit: "Chingad" }
+      "admin:NP0659404": { code: "61001", unit: "Simta" }
+      "admin:NP0660301": { code: "60704", unit: "Chhedagad" }
+      "admin:NP0660302": { code: "60706", unit: "Bheri Malika" }
+      "admin:NP0660401": { code: "60703", unit: "Junichande" }
+      "admin:NP0660402": { code: "60702", unit: "Kuse" }
+      "admin:NP0660403": { code: "60701", unit: "Barekot" }
+      "admin:NP0660404": { code: "60705", unit: "Shivalaya" }
+      "admin:NP0661301": { code: "60605", unit: "Aathbis" }
+      "admin:NP0661302": { code: "60606", unit: "Chamunda Bindrasaini" }
+      "admin:NP0661303": { code: "60607", unit: "Dullu" }
+      "admin:NP0661304": { code: "60608", unit: "Narayan" }
+      "admin:NP0661401": { code: "60604", unit: "Thantikandh" }
+      "admin:NP0661402": { code: "60603", unit: "Bhairabi" }
+      "admin:NP0661403": { code: "60602", unit: "Mahabu" }
+      "admin:NP0661404": { code: "60601", unit: "Naumule" }
+      "admin:NP0661405": { code: "60611", unit: "Gurans" }
+      "admin:NP0661406": { code: "60610", unit: "Dungeshwor" }
+      "admin:NP0661407": { code: "60609", unit: "Bhagawatimai" }
+      "admin:NP0662301": { code: "60105", unit: "Tripurasundari" }
+      "admin:NP0662302": { code: "60106", unit: "Thulibheri" }
+      "admin:NP0662401": { code: "60102", unit: "Shey Phoksundo" }
+      "admin:NP0662402": { code: "60103", unit: "Jagadulla" }
+      "admin:NP0662403": { code: "60101", unit: "Dolpo Buddha" }
+      "admin:NP0662404": { code: "60104", unit: "Mudkechula" }
+      "admin:NP0662405": { code: "60107", unit: "Kaike" }
+      "admin:NP0662406": { code: "60108", unit: "Chharka Tangsong" }
+      "admin:NP0663301": { code: "60404", unit: "Chandannath" }
+      "admin:NP0663401": { code: "60402", unit: "Kanaka Sundari" }  # (CBS spells it Kanaka Sundari Gaun Palika)
+      "admin:NP0663402": { code: "60403", unit: "Sinja" }
+      "admin:NP0663403": { code: "60401", unit: "Patarasi" }
+      "admin:NP0663404": { code: "60408", unit: "Hima" }
+      "admin:NP0663405": { code: "60407", unit: "Tila" }
+      "admin:NP0663406": { code: "60406", unit: "Tatopani" }
+      "admin:NP0663407": { code: "60405", unit: "Guthichaur" }
+      "admin:NP0664301": { code: "60503", unit: "Raskot" }
+      "admin:NP0664302": { code: "60506", unit: "Khandachakra" }
+      "admin:NP0664303": { code: "60507", unit: "Tilagupha" }
+      "admin:NP0664401": { code: "60505", unit: "Naraharinath" }
+      "admin:NP0664402": { code: "60504", unit: "Sanni Tribeni" }
+      "admin:NP0664403": { code: "60502", unit: "Pachal Jharana" }
+      "admin:NP0664404": { code: "60501", unit: "Palata" }
+      "admin:NP0664406": { code: "60508", unit: "Mahawai" }
+      "admin:NP0665301": { code: "60202", unit: "Chhayanath Rara" }
+      "admin:NP0665401": { code: "60204", unit: "Khatyad" }
+      "admin:NP0665402": { code: "60203", unit: "Soru" }
+      "admin:NP0665403": { code: "60201", unit: "Mugumakarmarog" }
+      "admin:NP0666401": { code: "60304", unit: "Namkha" }
+      "admin:NP0666402": { code: "60303", unit: "Simkot" }
+      "admin:NP0666403": { code: "60302", unit: "Kharpunath" }
+      "admin:NP0666404": { code: "60305", unit: "Sarkegad" }
+      "admin:NP0666405": { code: "60301", unit: "Chankheli" }
+      "admin:NP0666406": { code: "60307", unit: "Tanjakot" }
+      "admin:NP0666407": { code: "60306", unit: "Adanchuli" }
+      "admin:NP0767301": { code: "70202", unit: "Bungal" }
+      "admin:NP0767302": { code: "70206", unit: "Jayaprithbi" }
+      "admin:NP0767402": { code: "70203", unit: "Surma" }
+      "admin:NP0767403": { code: "70204", unit: "Talkot" }
+      "admin:NP0767404": { code: "70210", unit: "Bitthadchir" }
+      "admin:NP0767405": { code: "70209", unit: "Kedarsyun" }
+      "admin:NP0767406": { code: "70208", unit: "Durgathali" }
+      "admin:NP0767407": { code: "70207", unit: "Chhabis Pathibhara" }
+      "admin:NP0767408": { code: "70205", unit: "Masta" }
+      "admin:NP0767409": { code: "70211", unit: "Thalara" }
+      "admin:NP0767410": { code: "70212", unit: "Khaptad Chhanna" }
+      "admin:NP0768301": { code: "70103", unit: "Budhinanda" }
+      "admin:NP0768302": { code: "70106", unit: "Badimalika" }
+      "admin:NP0768303": { code: "70108", unit: "Budhiganga" }
+      "admin:NP0768304": { code: "70109", unit: "Tribeni" }
+      "admin:NP0768401": { code: "70101", unit: "Himali" }
+      "admin:NP0768402": { code: "70102", unit: "Gaumul" }
+      "admin:NP0769301": { code: "70704", unit: "Sanphebagar" }
+      "admin:NP0769302": { code: "70706", unit: "Mangalsen" }
+      "admin:NP0769303": { code: "70708", unit: "Kamal bazar" }
+      "admin:NP0769304": { code: "70701", unit: "Panchdebal Binayak" }
+      "admin:NP0769401": { code: "70705", unit: "Chaurpati" }
+      "admin:NP0769402": { code: "70703", unit: "Mellekh" }
+      "admin:NP0769403": { code: "70707", unit: "Bannigadhi Jayagadh" }
+      "admin:NP0769404": { code: "70702", unit: "Ramaroshan" }
+      "admin:NP0769405": { code: "70709", unit: "Dhakari" }
+      "admin:NP0769406": { code: "70710", unit: "Turmakhand" }
+      "admin:NP0770301": { code: "70604", unit: "Shikhar" }
+      "admin:NP0770302": { code: "70605", unit: "Dipayal Silgadhi" }
+      "admin:NP0770401": { code: "70603", unit: "Aadarsha" }
+      "admin:NP0770402": { code: "70602", unit: "Sayal" }
+      "admin:NP0770403": { code: "70601", unit: "Purbichouki" }
+      "admin:NP0770404": { code: "70609", unit: "Jorayal" }
+      "admin:NP0770405": { code: "70606", unit: "K.I. Singh" }
+      "admin:NP0770406": { code: "70608", unit: "Badi Kedar" }
+      "admin:NP0771201": { code: "70813", unit: "Dhangadhi" }
+      "admin:NP0771301": { code: "70803", unit: "Godawari" }
+      "admin:NP0771302": { code: "70804", unit: "Gauriganga" }
+      "admin:NP0771303": { code: "70805", unit: "Ghodaghodi" }
+      "admin:NP0771304": { code: "70811", unit: "Bhajani" }
+      "admin:NP0771305": { code: "70810", unit: "Tikapur" }
+      "admin:NP0771306": { code: "70807", unit: "Lamki Chuha" }
+      "admin:NP0771401": { code: "70802", unit: "Chure" }
+      "admin:NP0771402": { code: "70812", unit: "Kailari" }
+      "admin:NP0771403": { code: "70801", unit: "Mohanyal" }
+      "admin:NP0771404": { code: "70809", unit: "Joshipur" }
+      "admin:NP0771405": { code: "70806", unit: "Bardagoriya" }
+      "admin:NP0771406": { code: "70808", unit: "Janaki" }
+      "admin:NP0772302": { code: "70904", unit: "Bhimdatta" }
+      "admin:NP0772303": { code: "70903", unit: "Bedkot" }
+      "admin:NP0772304": { code: "70902", unit: "Shuklaphanta" }
+      "admin:NP0772305": { code: "70901", unit: "Krishnapur" }
+      "admin:NP0772306": { code: "70908", unit: "Belouri" }
+      "admin:NP0772307": { code: "70907", unit: "Punarbas" }
+      "admin:NP0772401": { code: "70909", unit: "Beldandi" }
+      "admin:NP0772402": { code: "70906", unit: "Laljhadi" }
+      "admin:NP0773301": { code: "70505", unit: "Parashuram" }
+      "admin:NP0773302": { code: "70502", unit: "Amargadhi" }
+      "admin:NP0773401": { code: "70504", unit: "Bhageshwor" }
+      "admin:NP0773402": { code: "70503", unit: "Ajayameru" }
+      "admin:NP0773403": { code: "70501", unit: "Nawadurga" }
+      "admin:NP0773404": { code: "70506", unit: "Aalital" }
+      "admin:NP0773405": { code: "70507", unit: "Ganyapdhura" }
+      "admin:NP0774301": { code: "70405", unit: "Dasharathchand" }
+      "admin:NP0774302": { code: "70403", unit: "Puchaundi" }
+      "admin:NP0774303": { code: "70408", unit: "Melauli" }
+      "admin:NP0774304": { code: "70409", unit: "Patan" }  # (CBS spells it Patam)
+      "admin:NP0774401": { code: "70401", unit: "Dilasaini" }
+      "admin:NP0774402": { code: "70402", unit: "Dogada Kedar" }
+      "admin:NP0774403": { code: "70404", unit: "Surnaya" }
+      "admin:NP0774404": { code: "70406", unit: "Pancheshwor" }
+      "admin:NP0774405": { code: "70407", unit: "Shivanath" }
+      "admin:NP0774406": { code: "70410", unit: "Sigas" }
+      "admin:NP0775301": { code: "70303", unit: "Mahakali" }
+      "admin:NP0775302": { code: "70307", unit: "Shailyashikhar" }
+      "admin:NP0775401": { code: "70301", unit: "Byas" }
+      "admin:NP0775402": { code: "70302", unit: "Duhun" }
+      "admin:NP0775403": { code: "70305", unit: "Apihimal" }
+      "admin:NP0775404": { code: "70308", unit: "Malikarjun" }
+      "admin:NP0775405": { code: "70304", unit: "Naugad" }
+      "admin:NP0775406": { code: "70309", unit: "Lekam" }
+      "admin:NP0775407": { code: "70306", unit: "Marma" }

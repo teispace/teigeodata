@@ -92,6 +92,10 @@ struct Part {
     /// `wikidata`: the kinds of item kept (empty: all).
     #[serde(default)]
     kinds: Vec<String>,
+    /// `csv`: IDs of rows left out because the source is wrong there (each must exist, so the
+    /// list cannot go stale unseen).
+    #[serde(default)]
+    drop: Vec<String>,
 }
 
 /// Trailing words stripped from each side (folded Latin; target text).
@@ -665,7 +669,8 @@ pub(crate) fn below(name: &str, s: &Score, f: &Floor) -> Vec<String> {
     out
 }
 
-fn levenshtein(a: &[char], b: &[char]) -> usize {
+/// The edit distance between two strings of characters.
+pub(crate) fn levenshtein(a: &[char], b: &[char]) -> usize {
     let mut prev: Vec<usize> = (0..=b.len()).collect();
     let mut cur = vec![0; b.len() + 1];
     for (i, ca) in a.iter().enumerate() {
@@ -688,42 +693,32 @@ fn levenshtein(a: &[char], b: &[char]) -> usize {
 /// Pairs from a CSV with a header row and no quoted fields.
 fn csv_pairs(path: &Path, source: &str, part: &Part, out: &mut Vec<Pair>) -> Result<(), String> {
     let id_col = part.id.as_deref().ok_or("a csv part needs an id column")?;
-    let file = File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let mut lines = BufReader::new(file).lines();
-    let header = lines
-        .next()
-        .ok_or("empty csv")?
-        .map_err(|e| e.to_string())?;
-    let header = header.trim_start_matches('\u{FEFF}');
-    let cols: Vec<String> = header
-        .split(',')
-        .map(|h| h.trim().nfc().collect())
-        .collect();
-    let col = |name: &str| -> Result<usize, String> {
-        let name: String = name.nfc().collect();
-        cols.iter()
-            .position(|c| *c == name)
-            .ok_or_else(|| format!("{source}: no column {name:?}"))
-    };
-    let (ci, cl, cn) = (col(id_col)?, col(&part.latin)?, col(&part.native)?);
-    for line in lines {
-        let line = line.map_err(|e| e.to_string())?;
-        if line.contains('"') {
-            return Err(format!("{source}: quoted CSV fields are not read"));
+    let rows = crate::build::official::csv_columns(path, &[id_col, &part.latin, &part.native])
+        .map_err(|e| format!("{source}: {e}"))?;
+    let mut unseen: BTreeSet<&str> = part.drop.iter().map(String::as_str).collect();
+    for r in rows {
+        let [id, latin, native] = r.as_slice() else {
+            continue;
+        };
+        if part.drop.contains(id) {
+            unseen.remove(id.as_str());
+            continue;
         }
-        let f: Vec<&str> = line.split(',').map(str::trim).collect();
-        let get = |i: usize| f.get(i).copied().unwrap_or("");
-        if get(ci).is_empty() || get(cl).is_empty() || get(cn).is_empty() {
+        if id.is_empty() || latin.is_empty() || native.is_empty() {
             continue;
         }
         out.push(Pair {
-            id: format!("{source}:{}", get(ci)),
-            latin: get(cl).to_string(),
-            native: get(cn).to_string(),
+            id: format!("{source}:{id}"),
+            latin: latin.clone(),
+            native: native.clone(),
             weight: 1,
         });
     }
-    Ok(())
+    if unseen.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("{source}: dropped IDs not in the file: {unseen:?}"))
+    }
 }
 
 /// The Wikidata item ID (`Q123`) of a reader record ID (`wikidata:Q123`).

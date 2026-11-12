@@ -453,6 +453,33 @@ build writes yet, and the schema lists its intended values in words only. Propos
 - `forge` writes the code where it adds the name; `check-data`'s golden gate refuses a
   machine name that became canonical (D-215).
 
+### 5.7 Tier 1 built: official names by code (2026-11-12, D-232)
+
+- **No code converts.** The units carry COD-AB v02 P-codes (`NP0101401`); the CBS lists use
+  their own codes (`10101`), in another order. The crosswalk
+  (`data/countries/np/official-names.yaml`) was made by joining names inside each district:
+  705 local levels by the same name, 10 more reviewed by hand as the same unit spelled
+  differently (Illam/Ilam, Melamchi/Melanchi, Temkemaiyum/Tyamke Maiyum…). 38 were renamed
+  after the CBS list (Pokhara Lekhnath → Pokhara, Janakpur → Janakpurdham, Duikholi →
+  Gangadev): their CBS name is the old one, so they are left out. The 22 protected areas are
+  not in the list; a first join that did not exclude them matched 4 of them to same-named
+  local levels, wrongly.
+- **CBS's district file is broken.** Its Nepali column is shifted from row 43: Nawalparasi
+  East's name runs over two lines, then Nawalparasi West's, so from code 408 every row carries
+  another district's name (DANG रुपन्देही, BAJHANG सुर्खेत). Romanising each Nepali name and
+  comparing it with its own row's English found 35 of 77 rows far, all from row 43, and 3 of
+  753 local levels (true differences: K.I. Singh, के.आई.सिं.; Thori, ठोरी (सुवर्णपुर); Rubi
+  Valley, रुबी भ्याली). That check is now a build gate. Only districts 101 to 407 are joined.
+  The `cbs` set of gate G-xlit read the same file; its 35 misaligned district rows are now
+  left out by ID (a stale ID fails the run), which raised the set from exact 45.28% / folded
+  50.31% / CER 0.109 to 45.57% / 50.6% / 0.103 on 795 pairs (2026-11-12).
+- **A town named as its unit** (Jiri in Jiri, Kamalamai in Kamalamai) takes the unit's official
+  name too; without it the unit's human name outranked the town's machine one and the golden
+  gate lost two native-script hits.
+- Cross-check with Wikidata's Nepali labels, where a unit has one (53 of 792): 23 identical,
+  the rest alternate names (Newar ख्वप for Bhaktapur, येँ for Kathmandu) or Wikidata's own
+  oddities, and the 6 shifted districts.
+
 ## 6. Impact on the plan
 
 - **TG-14:** the chain of §5.1 and the gate of §5.3. Order:
