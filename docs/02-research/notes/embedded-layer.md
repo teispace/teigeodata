@@ -124,6 +124,18 @@ The 4,096-cell fine grid's size made no difference at this layer's extent.
 the index) store each run's start to 1e-7° even on snapped arcs; dividing them by the run's
 scale is a format change for later.
 
+### 3.2 Zones at a point without REGION (D-245), measured 2026-11-12
+
+A lite build's zone outlines are its countries' admin-0 outlines (D-138), so a REGION in the
+layer would repeat the country outline: 368,538 B on the wire for Nepal, with no new answer.
+The layer answers `tz_at` by the zone of its deepest unit at the point (D-151). Gate
+G-tz-layer (`cargo run --release -p teigeodata-engine --example tz-agree -- <layer> <pack>`)
+compares the two at every place of the pack and on a 0.01° grid over its box. `tithipatra`
+against `np` lite: 427,014 points, 231,477 inside the pack's zones, 9 differ, all within 20 m
+of the border (the layer's tolerance), in 0.9 s. With a 0 m tolerance the 9 fail, and the
+coarse `baseline` layer fails at 140 points. The question reopens for a main-build profile
+with a country whose zone lines cut its units (the USA, with timezone-boundary-builder).
+
 ## 4. Options compared
 
 | Option | Wire | First search | Verdict |

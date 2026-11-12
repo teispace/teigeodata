@@ -332,7 +332,7 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   pick any set
 - [x] Derive SUBSTRING on the device: `Store::derive` checked against the head's hash, engine feature `derive`; Nepal lite in 0.50 s, byte for byte (D-218, 2026-11-11)
 - [x] TG-12: `forge embed --profile` from `data/embed/<name>.yaml`; `baseline` byte-identical, `tithipatra` 7.32 MB wire, `points-en` 1.17 MB (D-214, 2026-11-11)
-- [x] Nepal in full in the embedded layer: all 95,726 places, IDs kept (D-214). Zone rules: built for the layer's every zone (D-224, 2026-11-11). Open: zone outlines (`timezone-index`) in the merge
+- [x] Nepal in full in the embedded layer: all 95,726 places, IDs kept (D-214). Zone rules: built for the layer's every zone (D-224, 2026-11-11). Zones at a point by the layer's units, no REGION; gate G-tz-layer (D-245, 2026-11-12)
 - [x] TG-13: world cities of 5,000 with heights and their source: `forge world --cities
   geonames-cities5000` (69,972 cities), ELEVATION's SOURCE column, `Engine::elevation_source`
   (D-219, 2026-11-11)
@@ -458,3 +458,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-12 | 4.9c: TG-19 done; inside by radius (nearest of its kind within a measured radius), researched against building extents | D-238 |
 | 2026-11-12 | 4.9c first, before phases 5 and 6; the 6 districts named, places across the border left out, `forge make` keeps IDs by default | D-239, D-240, D-241 |
 | 2026-11-12 | 4.9c: TG-14, a unit's type word cut and read in queries; the 38 renamed local levels named | D-242 to D-244 |
+| 2026-11-12 | 4.9c: zones at a point on the embedded layer by its units, no REGION; gate G-tz-layer | D-245 |

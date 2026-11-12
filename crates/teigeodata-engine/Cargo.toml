@@ -207,3 +207,7 @@ print_stdout = "warn"
 print_stderr = "warn"
 indexing_slicing = "warn"
 allow_attributes_without_reason = "warn"
+
+[[example]]
+name = "tz-agree"
+required-features = ["timezone", "timezone-index", "admin-index", "tz-rules"]

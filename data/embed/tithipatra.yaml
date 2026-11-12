@@ -5,7 +5,8 @@ about: >-
   Tithipatra's offline-first layer: the world's countries, first-level units and cities, and
   Nepal in full, named in Nepali and English, with heights, zones, admin units and search.
 build: lite
-# timezone-index (zone outlines for tz_at near zone lines) joins with TG-16, once the merge carries REGION.
+# No timezone-index: tz_at answers by the zone of the deepest unit at the point, equal to Nepal's
+# pack within the 20 m tolerance (D-245, gate G-tz-layer).
 # tz-rules: every zone's UTC offsets and transitions, compiled from the pinned tzdb (D-224).
 components: [point, elevation, dem-coarse, admin, names, search, timezone, tz-rules, boundaries, admin-index]
 # Nepali in Devanagari only: GeoNames tags Survey Department romanisations `ne` (D-215);
