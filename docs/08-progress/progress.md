@@ -17,7 +17,7 @@ A short status. The numbers and evidence live in each phase file and the
 | 1 Core and format | **M1 met** 2026-11-07 (D-080) | [phase 1 §1.6](../07-planning/phases/phase-1.md#16-exit-review) |
 | 2 Indexes | **M2 met** 2026-11-07 (D-087) | [phase 2 §2.4](../07-planning/phases/phase-2.md#24-exit-review) |
 | 3 Forge and Nepal data | in progress: 3.1–3.3 and 3.5 done (3.5 lite codes wait on Q-009); 3.4 DEM and 3.6 names in progress; 3.7–3.8 open | [phase 3](../07-planning/phases/phase-3.md) |
-| 4 Engine, baseline and sync | in progress; now 4.9c, the offline-first embedded layer for Tithipatra (D-213) | [phase 4](../07-planning/phases/phase-4.md) |
+| 4 Engine, baseline and sync | in progress; now 4.9c, the offline-first embedded layer for Tithipatra (D-213); everything separable done (D-255) | [phase 4](../07-planning/phases/phase-4.md) |
 | 5–8 | not started (bindings prototyped in S4, D-065 to D-068) | [roadmap](../07-planning/roadmap.md) |
 
 - **Now (Phase 3):** the Nepal main pack has 100,358 places with heights (D-111), admin
@@ -169,3 +169,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-13 | Installs of some parts (D-252): the installer plans by `Selection`, the store records and hollows by part, journal v3 when needed; the parts test fails on a planner that ignores parts | the catalog's per-part sizes, `tgd install --names --outlines` |
 | 2026-11-13 | The catalog's per-part sizes (D-253): `parts` grouped by component with each outline's tolerance; `Entry::size_of(selection)` equals the bytes an install of those parts fetches; Nepal lite's 28 parts in 1,484 B | `tgd install --names --outlines`, profiles pick parts |
 | 2026-11-13 | `tgd install --names LANGS --outlines LEVEL[@Mm]` (D-254): the smallest outline part that holds the level within the tolerance; `catalog --json` and `status` show parts; the CLI test fails on an installer that ignores `--outlines` | profiles pick parts; then TG-14 India |
+| 2026-11-13 | Everything separable done (D-255): profiles keep their build-time cut (script-level), downloads pick parts | TG-14 (`machine_names`, India tier 4), TG-15 India |
