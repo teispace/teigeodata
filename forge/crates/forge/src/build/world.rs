@@ -824,8 +824,14 @@ fn add_towns(
             let Some(row) = row else { continue };
             row.place.parent = parent.or(row.place.parent.take());
             row.place.sources.push(t.key);
-            if !row.place.names.iter().any(|n| n.same(&name)) {
-                row.place.names.push(name);
+            let local = t.local.map(|(lang, text)| PlaceName {
+                lang: Some(lang),
+                ..official(&text)
+            });
+            for n in std::iter::once(name).chain(local) {
+                if !row.place.names.iter().any(|m| m.same(&n)) {
+                    row.place.names.push(n);
+                }
             }
         }
         report.push_str(&built.report);

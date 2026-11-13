@@ -408,7 +408,9 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   - [ ] 4. The India lite pack: `build.yaml`, Nepal's claim cut (D-217, the claim-area places
     in Nepal's pack), heights from NASADEM over the towns' tiles within the disk budget, Hindi
     names (Wikidata `hi`, LGD's local name where the state's language is Hindi, then the
-    transliterator, marked), the golden set of §5 (`golden-curated.yaml`)
+    transliterator, marked), the golden set of §5 (`golden-curated.yaml`). Done ahead, in the
+    world part: every placed town's LGD name in its state's language (D-263, 1,781 towns, 10
+    languages)
   - [ ] 5. India's towns in the embedded layer: the world part's done (`world_towns: [in]`,
     D-259, wire 9,326,040 B); the pack's rows (`countries: in`) after step 4, sized
   - [ ] 6. Census towns from the Census 2011 town directory (Q-024)
@@ -518,3 +520,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-13 | TG-14: sources pinned, CLDR 49 `ne.xml` names the countries (origin `standard`) | D-257 |
 | 2026-11-13 | TG-15 split into six steps by the town-join measurement: statutory towns from LGD, code-only units, points within the district, census towns on Q-024 | D-258 |
 | 2026-11-13 | TG-15 steps 2–3 in the world part (`--towns`); sub-districts and ISO 3166-2 moved to step 4; world IDs kept from the last registry | D-259, D-260 |
+| 2026-11-13 | TG-15 step 4: towns' own-language names from LGD in the world part, ahead of the pack | D-263 |

@@ -83,6 +83,38 @@ towns:
     - Mahanagar Palika
     - City Corporation
     - Municipality
+  # Each town's name in its state's official language (LGD's own-language column, D-263),
+  # taken only when it is wholly in that language's script and well formed. Languages: each
+  # state's official language under its Official Language Act (Eighth Schedule names, BCP 47
+  # tags with ISO 15924 scripts), checked 2026-11-13 against the scripts LGD's column holds per
+  # state (Tamil 536 in Tamil Nadu, Devanagari 408 in Maharashtra, 261 in Bihar, 224 in
+  # Rajasthan, Telugu 138 in Telangana, Malayalam 93 in Kerala, Gurmukhi 58 in Punjab, ...).
+  # States whose column holds English copies only are listed all the same: the script check
+  # refuses a copy.
+  local:
+    column: local_body_name_local
+    languages:
+      "2": hi-Deva  # Himachal Pradesh
+      "3": pa-Guru  # Punjab
+      "5": hi-Deva  # Uttarakhand
+      "6": hi-Deva  # Haryana
+      "7": hi-Deva  # Delhi
+      "8": hi-Deva  # Rajasthan
+      "9": hi-Deva  # Uttar Pradesh
+      "10": hi-Deva  # Bihar
+      "16": bn-Beng  # Tripura
+      "19": bn-Beng  # West Bengal
+      "20": hi-Deva  # Jharkhand
+      "21": or-Orya  # Odisha
+      "22": hi-Deva  # Chhattisgarh
+      "23": hi-Deva  # Madhya Pradesh
+      "24": gu-Gujr  # Gujarat
+      "27": mr-Deva  # Maharashtra
+      "28": te-Telu  # Andhra Pradesh
+      "29": kn-Knda  # Karnataka
+      "32": ml-Mlym  # Kerala
+      "33": ta-Taml  # Tamil Nadu
+      "36": te-Telu  # Telangana
 points: geonames-in
 # Gate G-town: the share of listed towns placed, at least; a floor that only rises (set at the
 # first build's measured rate, D-259).

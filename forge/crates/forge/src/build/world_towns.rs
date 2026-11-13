@@ -72,6 +72,18 @@ struct TownList {
     coverage: Coverage,
     #[serde(default)]
     strip: Vec<String>,
+    /// Each town's name in its state's own language (D-263).
+    #[serde(default)]
+    local: Option<LocalNames>,
+}
+
+/// A list's own-language name column, and the language of each first-level code's names as a
+/// BCP 47 tag with its script (`hi-Deva`); a code not listed gives no local name.
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LocalNames {
+    column: String,
+    languages: BTreeMap<String, String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -98,6 +110,9 @@ pub(super) struct Town {
     pub(super) key: String,
     /// The list's name, type words cut.
     pub(super) name: String,
+    /// Its name in its state's language, as (language, text), when the list has a well-formed
+    /// one in that language's script (D-263).
+    pub(super) local: Option<(String, String)>,
     /// Its district's row key, when the district is kept.
     pub(super) district: Option<String>,
     /// The Wikidata item of its state's world unit.
@@ -343,20 +358,45 @@ pub(super) fn build(
         },
     )?;
     let mut list: Vec<(String, String, String)> = Vec::new();
-    for_each_row(
-        &path(&f.towns.source)?,
-        &[&f.towns.code, &f.towns.name, &f.towns.state],
-        |r| {
-            if let [code, name, state] = r {
-                list.push((
-                    (*code).into(),
-                    cut_types(name, &f.towns.strip),
-                    (*state).into(),
-                ));
-            }
-            Ok(())
-        },
-    )?;
+    let mut locals: Vec<Option<(String, String)>> = Vec::new();
+    let mut cols = vec![
+        f.towns.code.as_str(),
+        f.towns.name.as_str(),
+        f.towns.state.as_str(),
+    ];
+    if let Some(l) = &f.towns.local {
+        cols.push(&l.column);
+    }
+    // Own-language names that are English copies, and those refused (another script or mixed
+    // scripts).
+    let (mut copies, mut refused) = (0usize, 0usize);
+    for_each_row(&path(&f.towns.source)?, &cols, |r| {
+        if let [code, name, state, rest @ ..] = r {
+            let local = f.towns.local.as_ref().and_then(|l| {
+                let tag = l.languages.get(*state)?;
+                let text = rest.first()?.trim();
+                if text.is_empty() {
+                    return None;
+                }
+                let got = local_name(text, tag);
+                if got.is_none() {
+                    if teigeodata_names::script_code(text) == Some("Latn") {
+                        copies += 1;
+                    } else {
+                        refused += 1;
+                    }
+                }
+                got
+            });
+            list.push((
+                (*code).into(),
+                cut_types(name, &f.towns.strip),
+                (*state).into(),
+            ));
+            locals.push(local);
+        }
+        Ok(())
+    })?;
 
     // The keys towns ask for, then one pass over the dump keeping only those places and the
     // crosswalk's units.
@@ -512,9 +552,11 @@ pub(super) fn build(
     }
     let mut out_t = Vec::new();
     for (t, i) in placed {
-        let (Some(t), Some(city)) = (list.get(t), kept.get(i)) else {
+        let (Some(lt), Some(city)) = (list.get(t), kept.get(i)) else {
             continue;
         };
+        let local = locals.get(t).cloned().flatten();
+        let t = lt;
         let district = cover
             .get(&t.0)
             .and_then(|ds| ds.iter().find(|d| kept_d.contains(d.as_str())))
@@ -522,6 +564,7 @@ pub(super) fn build(
         out_t.push(Town {
             key: format!("{}:{}", f.towns.source, t.0),
             name: t.1.clone(),
+            local,
             district,
             state: f.states.units.get(&t.2).cloned().unwrap_or_default(),
             city: city.clone(),
@@ -556,6 +599,23 @@ pub(super) fn build(
         );
     }
     report.push('\n');
+    if f.towns.local.is_some() {
+        let mut by_lang: BTreeMap<&str, usize> = BTreeMap::new();
+        for t in &out_t {
+            if let Some((l, _)) = &t.local {
+                *by_lang.entry(l.as_str()).or_default() += 1;
+            }
+        }
+        let _ = write!(report, "  Placed towns with an own-language name (D-263):");
+        for (l, k) in &by_lang {
+            let _ = write!(report, " {l} {k},");
+        }
+        let _ = writeln!(
+            report,
+            " of the list: {copies} English copies left out, {refused} refused (another script or \
+             mixed scripts)."
+        );
+    }
     if share(located, n) < f.floor {
         return Err(format!(
             "G-town: {cc}: {located} of {n} towns placed, below the floor {}\n{report}",
@@ -572,6 +632,42 @@ pub(super) fn build(
 #[allow(clippy::cast_precision_loss, reason = "counts far below 2^52")]
 fn share(a: usize, b: usize) -> f64 {
     if b == 0 { 1.0 } else { a as f64 / b as f64 }
+}
+
+/// `text` as a name in `tag` (`hi-Deva`): its language and NFC text, when every letter is
+/// in the tag's script and no two vowel signs stand together; `None` otherwise, never a
+/// guess. A combining mark typed twice or more in a row (`खेेडली`) is one: a repeated
+/// identical vowel sign or anusvara is never a spelling. Two different vowel signs after NFC
+/// (`फलाैदी`, ा then ै drawn to look like ौ) are malformed and refused.
+fn local_name(text: &str, tag: &str) -> Option<(String, String)> {
+    use unicode_normalization::UnicodeNormalization as _;
+    let (lang, script) = tag.split_once('-')?;
+    let mut out = String::with_capacity(text.len());
+    let mut prev = None;
+    for c in text.nfc() {
+        if Some(c) == prev && unicode_normalization::char::is_combining_mark(c) {
+            continue;
+        }
+        out.push(c);
+        prev = Some(c);
+    }
+    let out: String = out.nfc().collect();
+    let mut chars = out.chars().peekable();
+    while let Some(c) = chars.next() {
+        if is_vowel_sign(c) && chars.peek().copied().is_some_and(is_vowel_sign) {
+            return None;
+        }
+    }
+    (teigeodata_names::script_code(&out)? == script).then(|| (lang.to_string(), out))
+}
+
+/// Whether `c` is a dependent vowel sign of a Brahmic script encoded on the ISCII layout
+/// (Devanagari to Malayalam, U+0900 to U+0D7F), where every block puts them at the same
+/// offsets: 0x3E to 0x4C and 0x62 to 0x63. The length marks (0x55 to 0x57) are not counted:
+/// they follow a vowel sign by design.
+const fn is_vowel_sign(c: char) -> bool {
+    let cp = c as u32;
+    cp >= 0x0900 && cp <= 0x0D7F && matches!(cp & 0x7F, 0x3E..=0x4C | 0x62..=0x63)
 }
 
 /// The component-wise median of points.
@@ -644,6 +740,40 @@ mod tests {
             (None, Outcome::Ambiguous)
         );
         assert_eq!(place(&[], &mine, false, &state), (None, Outcome::NoMatch));
+    }
+
+    #[test]
+    fn a_local_name_is_taken_only_in_its_languages_script() {
+        use super::local_name;
+        assert_eq!(
+            local_name("वजीरगंज", "hi-Deva"),
+            Some(("hi".into(), "वजीरगंज".into()))
+        );
+        assert_eq!(
+            local_name("சித்தோடு", "ta-Taml").map(|x| x.0),
+            Some("ta".into())
+        );
+        // A Latin copy, a name in another script and mixed scripts.
+        assert_eq!(local_name("Hilsa", "hi-Deva"), None);
+        assert_eq!(local_name("சித்தோடு", "hi-Deva"), None);
+        assert_eq!(local_name("Laha चोक", "hi-Deva"), None);
+        // A doubled mark is one: LGD's typing slips spell the name once collapsed.
+        assert_eq!(
+            local_name("खेेडली", "hi-Deva").map(|x| x.1),
+            Some("खेडली".into())
+        );
+        assert_eq!(
+            local_name("मालप\u{941}\u{941}\u{941}रा", "hi-Deva").map(|x| x.1),
+            Some("मालपुरा".into())
+        );
+        // ा then ै (drawn to look like ौ) is two vowel signs, malformed: refused, not guessed.
+        assert_eq!(local_name("फला\u{948}\u{948}दी", "hi-Deva"), None);
+        // A two-part vowel NFC composes (Tamil ெ + ா is ொ) is one sign, and fine.
+        assert!(local_name("கொ\u{bb2}\u{bcd}லம\u{bcd}", "ta-Taml").is_some());
+        assert!(local_name("க\u{bc6}\u{bbe}ல", "ta-Taml").is_some());
+        // Brackets and spaces are fine: they belong to no script.
+        assert!(local_name("पानखेड़ी (कालापीपल)", "hi-Deva").is_some());
+        assert_eq!(local_name("वजीरगंज", "hi"), None);
     }
 
     #[test]

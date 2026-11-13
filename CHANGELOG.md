@@ -82,6 +82,9 @@ part. New zone-rule queries (D-262). The pack format is unchanged: data releases
   and refuses to number afresh unless `--fresh-ids` is given (D-260); `forge make` too, and
   every data release carries its ID registries as `ids-<build>.tar.gz`, restored by
   `cargo xtask ids restore` (D-261).
+- India's placed towns carry their official name in their state's language from LGD (1,781
+  towns: Hindi 672, Tamil 474, Marathi 331 and seven more); typed-twice marks are collapsed
+  and malformed vowel pairs refused (D-263).
 
 ## [0.2.0] - 2026-11-12
 
