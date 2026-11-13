@@ -83,7 +83,8 @@ jobs:
           if [ "${{ matrix.build }}" = main ]; then
             forge/target/fast/forge fetch overture-divisions
           fi
-          forge/target/fast/forge world --release "$RELEASE" ${{ matrix.flag }}
+          # A clean checkout holds no registry of a last build: number afresh (D-260).
+          forge/target/fast/forge world --release "$RELEASE" ${{ matrix.flag }} --fresh-ids
           cargo xtask check-pack data/build/baseline/world/world-baseline-${{ matrix.build }}.tgd ${{ matrix.flag }}
       - name: The shipped baseline, one file (D-153; Z1 fails the stage past 8 MB)
         run: |

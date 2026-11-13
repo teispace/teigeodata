@@ -55,6 +55,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 - Countries are named in Nepali from CLDR 49 (`cldr-49-ne`), with CLDR's short and variant
   forms as alternate names: 237 of 248 countries and disputed areas, up from 160 (D-257).
+- India's districts (762) and statutory towns (4,128 of 5,050, each placed within its
+  district) join the world part, from LGD, GeoNames and a Wikidata crosswalk (D-259).
+- The world part keeps its IDs across builds: `forge world` reads the last build's registry
+  and refuses to number afresh unless `--fresh-ids` is given (D-260).
 
 ## [0.2.0] - 2026-11-12
 

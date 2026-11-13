@@ -6,6 +6,7 @@ mod geonames;
 pub(crate) mod natural_earth;
 mod osm;
 pub(crate) mod overture;
+pub(crate) mod table;
 pub(crate) mod wikidata;
 
 use std::path::Path;

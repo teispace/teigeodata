@@ -58,6 +58,7 @@ mod units;
 pub(crate) mod world;
 mod world_labels;
 mod world_overture;
+mod world_towns;
 mod world_tz;
 mod xlit_fill;
 mod zones;

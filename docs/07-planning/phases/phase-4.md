@@ -1,7 +1,7 @@
 ---
 title: "Phase 4: engine, baseline and sync"
 status: draft
-updated: 2026-11-10
+updated: 2026-11-13
 ---
 
 # Phase 4: engine, baseline and sync
@@ -398,18 +398,19 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     the Wikidata crosswalk from LGD district codes to GeoNames (`wikidata-in-district-geonames`,
     a generic query `wikidata-code-geonames.rq` with the code's property as a parameter); all
     seven in the `sources` release (2026-11-13)
-  - [ ] 2. Code-only units in the forge, world-general: an official list's units with their
-    parents by code and no outline, joined to an outline by ISO code where one exists; India's
-    36 states and UTs, 790 districts and 7,112 sub-districts; India's ISO 3166-2 codes
-    (`data/countries/in/iso3166.yaml`) and G-iso on the 36
-  - [ ] 3. Towns: the statutory towns with a point by name within their district (§3.8), no
-    point guessed; a match report per state and gate G-town with a floor, proved by a town
-    planted in the wrong district
+  - [x] 2. Code-only units in the forge, world-general (D-259, 2026-11-13): `forge world
+    --towns in` from `data/countries/in/towns.yaml`; the 36 states and UTs join Natural Earth's
+    units by Wikidata item, 762 of 790 districts kept under them with a point. Revised:
+    sub-districts (no point in a lite source) and ISO 3166-2 with G-iso move to step 4
+  - [x] 3. Towns (D-259): 4,128 of 5,050 statutory towns placed (81.7%) within their district,
+    else their state; a report per outcome; G-town floor 0.81, proved by 0.90; the
+    wrong-district plant fails `world_towns` tests. IDs kept by D-260
   - [ ] 4. The India lite pack: `build.yaml`, Nepal's claim cut (D-217, the claim-area places
     in Nepal's pack), heights from NASADEM over the towns' tiles within the disk budget, Hindi
     names (Wikidata `hi`, LGD's local name where the state's language is Hindi, then the
     transliterator, marked), the golden set of §5 (`golden-curated.yaml`)
-  - [ ] 5. India's towns in the embedded layer (the profile's `countries: in`), sized
+  - [ ] 5. India's towns in the embedded layer: the world part's done (`world_towns: [in]`,
+    D-259, wire 9,326,040 B); the pack's rows (`countries: in`) after step 4, sized
   - [ ] 6. Census towns from the Census 2011 town directory (Q-024)
 - [x] TG-19: `Near::bearing_deg` and `Engine::mark_inside` (D-223, 2026-11-11); `reverse_in_country`, the border rule (D-237, 2026-11-12); inside a settlement or locality with no outline as the nearest of its kind within 750 m or 700 m (D-238, 2026-11-12, [research](../../02-research/notes/inside-by-radius.md)). Data follow-up done: places outside every unit beyond the border reach are left out (D-239: 10 in Nepal, Chhipaharmai among them)
 - [x] TG-18 and the strict-tier option: the Brahmic search fold of nasal conjuncts, vowel
@@ -516,3 +517,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-13 | TG-14: `machine_names: keep \| drop` in embed profiles | D-256 |
 | 2026-11-13 | TG-14: sources pinned, CLDR 49 `ne.xml` names the countries (origin `standard`) | D-257 |
 | 2026-11-13 | TG-15 split into six steps by the town-join measurement: statutory towns from LGD, code-only units, points within the district, census towns on Q-024 | D-258 |
+| 2026-11-13 | TG-15 steps 2–3 in the world part (`--towns`); sub-districts and ISO 3166-2 moved to step 4; world IDs kept from the last registry | D-259, D-260 |

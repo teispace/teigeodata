@@ -17,6 +17,8 @@ world: geonames-cities5000
 # Countries by CLDR's Nepali territory names (D-257), then Nepali labels from Wikidata, then
 # Hindi ones (tagged hi) where Wikidata has no Nepali (D-221).
 world_labels: [cldr-49-ne, wikidata-labels-ne, wikidata-labels-hi]
+# India's districts and statutory towns, each placed by name within its district (D-259).
+world_towns: [in]
 countries:
   np: { rows: all, tolerance_m: 20 }
 wire_kb: 15000

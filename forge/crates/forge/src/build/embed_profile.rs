@@ -69,6 +69,10 @@ struct File {
     /// The world part's label chain (`forge world --labels`, D-221).
     #[serde(default)]
     world_labels: Vec<String>,
+    /// The countries whose districts and towns join the world part (`forge world --towns`,
+    /// D-259).
+    #[serde(default)]
+    world_towns: Vec<String>,
     /// The timezone source whose tzdb release compiles `tz-rules` (D-224); the world part's.
     #[serde(default)]
     tz: Option<String>,
@@ -539,6 +543,7 @@ fn inputs(root: &Path, p: &File, build: &str) -> Result<Vec<Input>, String> {
     let variant = super::world::variant(
         p.world.as_deref().unwrap_or(super::world::DEFAULT_CITIES),
         &p.world_labels,
+        &p.world_towns,
     );
     let world = root.join(format!(
         "data/build/baseline/world/world-baseline-{build}{variant}.tgd"

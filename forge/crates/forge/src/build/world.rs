@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>]
-//!             [--cities <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--ids <dir>] [--key <seed-file>]
+//!             [--cities <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--ids <dir> | --fresh-ids] [--key <seed-file>]
 //! ```
 //!
 //! Rows: one country place per Natural Earth admin-0 feature (Nepal's point of view) that
@@ -27,7 +27,8 @@
 //! `gers:<division ID>`, `wikidata:` and `osm:relation/<id>` for Overture's, and `geonames:`
 //! for cities (a key two
 //! rows share stays with the first of country, city, unit), through one ID registry per namespace
-//! (`world-ids-<build>/<ns>.tsv`, the next build's `--ids`). A country that builds its own
+//! (`world-ids-<build>/<ns>.tsv`, the next build's `--ids`; without `--ids` the last build's
+//! own, and none only with `--fresh-ids`, D-260). A country that builds its own
 //! pack is matched in that pack's registry instead, by its Wikidata ID, so the world's row for
 //! it carries the pack's ID and the pack's slice answers for it (the ID gate: no match fails).
 //!
@@ -65,7 +66,7 @@ use crate::topo::pov;
 use teigeodata_format::elevation::HeightSource;
 
 /// One row of the city list (`GeoNames`' dump columns).
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct City {
     pub(super) id: u64,
     pub(super) name: String,
@@ -87,6 +88,31 @@ pub(super) struct City {
 
 /// Every row of the city list: the `.txt` table inside its zip.
 pub(super) fn read_cities(zip: &Path) -> Result<Vec<City>, String> {
+    let mut out = Vec::new();
+    for_each_record(zip, |r| {
+        out.push(r.city);
+        Ok(())
+    })?;
+    Ok(out)
+}
+
+/// One row of a `GeoNames` dump: the city it reads as, and the columns a town match needs.
+pub(super) struct Record<'l> {
+    pub(super) city: City,
+    /// The feature class (`P` a populated place, `A` an admin unit) and code (`PPLA2`, `ADM2`).
+    pub(super) class: &'l str,
+    pub(super) code: &'l str,
+    pub(super) admin1: &'l str,
+    pub(super) admin2: &'l str,
+    /// `alternatenames`, comma-separated.
+    pub(super) alternates: &'l str,
+}
+
+/// Calls `f` with every row of a `GeoNames` dump (the `.txt` table inside its zip), streamed.
+pub(super) fn for_each_record(
+    zip: &Path,
+    mut f: impl FnMut(Record<'_>) -> Result<(), String>,
+) -> Result<(), String> {
     let file = fs::File::open(zip).map_err(|e| format!("{}: {e}", zip.display()))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("{}: {e}", zip.display()))?;
     let name = archive
@@ -98,26 +124,36 @@ pub(super) fn read_cities(zip: &Path) -> Result<Vec<City>, String> {
     let entry = archive
         .by_name(&name)
         .map_err(|e| format!("{}: {name}: {e}", zip.display()))?;
-    let mut out = Vec::new();
-    for (i, line) in BufReader::new(entry).lines().enumerate() {
-        let line = line.map_err(|e| format!("{name}: {e}"))?;
+    let mut reader = BufReader::with_capacity(1 << 20, entry);
+    let mut line = String::new();
+    let mut i = 0_usize;
+    loop {
+        line.clear();
+        if reader
+            .read_line(&mut line)
+            .map_err(|e| format!("{name}: {e}"))?
+            == 0
+        {
+            return Ok(());
+        }
+        i += 1;
         // geonameid, name, asciiname, alternatenames, lat, lon, class, code, country, cc2,
         // admin1–4, population, elevation, dem, timezone, modified
-        let f: Vec<&str> = line.split('\t').collect();
-        let bad = || format!("{name} line {}: malformed", i + 1);
+        let cols: Vec<&str> = line.trim_end_matches(['\n', '\r']).split('\t').collect();
+        let bad = || format!("{name} line {i}: malformed");
         let [
             id,
             n,
             ascii,
-            _,
+            alternates,
             lat,
             lon,
             class,
             code,
             cc,
             _,
-            _,
-            _,
+            admin1,
+            admin2,
             _,
             _,
             pop,
@@ -125,27 +161,33 @@ pub(super) fn read_cities(zip: &Path) -> Result<Vec<City>, String> {
             dem,
             timezone,
             ..,
-        ] = f[..]
+        ] = cols[..]
         else {
             return Err(bad());
         };
         let deg = |v: &str| v.parse::<f64>().ok().and_then(crate::record::e7);
         let metres = |v: &str| v.parse::<i16>().ok().filter(|&m| m > -1000);
-        out.push(City {
-            id: id.parse().map_err(|_| bad())?,
-            name: n.to_string(),
-            ascii: ascii.to_string(),
-            point: (deg(lon).ok_or_else(bad)?, deg(lat).ok_or_else(bad)?),
-            cc: cc.to_ascii_lowercase(),
-            population: pop.parse().ok().filter(|&p: &i64| p > 0),
-            rank: super::sources::settlement_rank(&format!("{class}.{code}")),
-            elevation: metres(elev)
-                .map(|m| (m, HeightSource::Surveyed))
-                .or_else(|| metres(dem).map(|m| (m, HeightSource::Model))),
-            timezone: timezone.to_string(),
-        });
+        f(Record {
+            city: City {
+                id: id.parse().map_err(|_| bad())?,
+                name: n.to_string(),
+                ascii: ascii.to_string(),
+                point: (deg(lon).ok_or_else(bad)?, deg(lat).ok_or_else(bad)?),
+                cc: cc.to_ascii_lowercase(),
+                population: pop.parse().ok().filter(|&p: &i64| p > 0),
+                rank: super::sources::settlement_rank(&format!("{class}.{code}")),
+                elevation: metres(elev)
+                    .map(|m| (m, HeightSource::Surveyed))
+                    .or_else(|| metres(dem).map(|m| (m, HeightSource::Model))),
+                timezone: timezone.to_string(),
+            },
+            class,
+            code,
+            admin1,
+            admin2,
+            alternates,
+        })?;
     }
-    Ok(out)
 }
 
 /// The finest level of the outlines within this many metres by default (D-144: at 1 km world
@@ -210,15 +252,21 @@ struct Args {
     /// Overture's islets smaller than this are left out; by default the tolerance's square
     /// (`world_overture::Islets`, D-157).
     islet_km2: f64,
+    /// The previous ID registries' directory; the last build's when absent (D-260).
     ids: Option<String>,
+    /// A first build: no previous registry (D-260).
+    fresh_ids: bool,
     key: Option<String>,
     /// Label sources, a chain (D-221).
     labels: Vec<String>,
+    /// Countries whose official districts and towns join the part (D-259).
+    towns: Vec<String>,
 }
 
-/// The file-name part of a world part built from `cities` and the label chain `labels`
-/// (TG-13, D-221): empty for the default list and no labels, so the default file keeps its name.
-pub(crate) fn variant(cities: &str, labels: &[String]) -> String {
+/// The file-name part of a world part built from `cities`, the label chain `labels` and the
+/// towns of `towns` (TG-13, D-221, D-259): empty for the default list and neither, so the
+/// default file keeps its name.
+pub(crate) fn variant(cities: &str, labels: &[String], towns: &[String]) -> String {
     let mut v = String::new();
     if cities != DEFAULT_CITIES {
         v.push('-');
@@ -227,6 +275,10 @@ pub(crate) fn variant(cities: &str, labels: &[String]) -> String {
     for l in labels {
         v.push('-');
         v.push_str(l);
+    }
+    for t in towns {
+        v.push_str("-towns-");
+        v.push_str(t);
     }
     v
 }
@@ -239,7 +291,7 @@ pub(crate) const DEFAULT_TZ: &str = "tzdb-2026f";
 pub(crate) const DEFAULT_CITIES: &str = "geonames-cities15000";
 
 fn parse(args: &[String]) -> Result<Args, String> {
-    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--labels <source>]… [--ids <dir>] [--key <seed-file>]";
+    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--labels <source>]… [--towns <cc>]… [--ids <dir> | --fresh-ids] [--key <seed-file>]";
     let mut a = Args {
         release: String::new(),
         lite: false,
@@ -250,8 +302,10 @@ fn parse(args: &[String]) -> Result<Args, String> {
         tolerance_m: 0,
         islet_km2: -1.0,
         ids: None,
+        fresh_ids: false,
         key: None,
         labels: Vec::new(),
+        towns: Vec::new(),
     };
     let mut it = args.iter();
     while let Some(f) = it.next() {
@@ -278,8 +332,10 @@ fn parse(args: &[String]) -> Result<Args, String> {
                     .ok_or("--islet-km2: km², at least 0")?;
             }
             "--ids" => a.ids = Some(value()?),
+            "--fresh-ids" => a.fresh_ids = true,
             "--key" => a.key = Some(value()?),
             "--labels" => a.labels.push(value()?),
+            "--towns" => a.towns.push(value()?.to_ascii_lowercase()),
             _ => return Err(format!("unknown argument `{f}`; {usage}")),
         }
     }
@@ -623,46 +679,159 @@ fn city_rows(
         .map(|(c, (parent, fell_back))| {
             fallback += usize::from(fell_back && parent.is_some());
             orphans += usize::from(parent.is_none());
-            let mut names = vec![PlaceName {
-                text: c.name.clone(),
-                lang: None,
-                kind: None,
-                origin: crate::build::Origin::Unknown,
-            }];
-            if c.ascii != c.name && !c.ascii.is_empty() {
-                names.push(PlaceName {
-                    text: c.ascii.clone(),
-                    lang: None,
-                    kind: Some(NameType::Alt),
-                    origin: crate::build::Origin::Unknown,
-                });
-            }
-            let key = format!("geonames:{}", c.id);
-            Row {
-                place: Place {
-                    sources: vec![key.clone()],
-                    key,
-                    kind: PlaceKind::Settlement,
-                    admin_level: 0,
-                    flags: 0,
-                    point: c.point,
-                    names,
-                    population: c.population,
-                    rank: c.rank,
-                    parent: unit_of(c.point.0, c.point.1).or_else(|| {
-                        parent
-                            .and_then(|i| countries.get(i))
-                            .map(|p| format!("ne:{}", p.code))
-                    }),
-                },
-                ns: namespace(Some(&c.cc)),
-                elevation: c.elevation,
-                stated_tz: Some(c.timezone),
-                zone: None,
-            }
+            let parent = unit_of(c.point.0, c.point.1).or_else(|| {
+                parent
+                    .and_then(|i| countries.get(i))
+                    .map(|p| format!("ne:{}", p.code))
+            });
+            city_row(c, parent)
         })
         .collect();
     (rows, fallback, orphans)
+}
+
+/// A city's row: its name, then its ASCII spelling when it differs, under `parent`.
+fn city_row(c: City, parent: Option<String>) -> Row {
+    let mut names = vec![PlaceName {
+        text: c.name.clone(),
+        lang: None,
+        kind: None,
+        origin: crate::build::Origin::Unknown,
+    }];
+    if c.ascii != c.name && !c.ascii.is_empty() {
+        names.push(PlaceName {
+            text: c.ascii.clone(),
+            lang: None,
+            kind: Some(NameType::Alt),
+            origin: crate::build::Origin::Unknown,
+        });
+    }
+    let key = format!("geonames:{}", c.id);
+    Row {
+        place: Place {
+            sources: vec![key.clone()],
+            key,
+            kind: PlaceKind::Settlement,
+            admin_level: 0,
+            flags: 0,
+            point: c.point,
+            names,
+            population: c.population,
+            rank: c.rank,
+            parent,
+        },
+        ns: namespace(Some(&c.cc)),
+        elevation: c.elevation,
+        stated_tz: Some(c.timezone),
+        zone: None,
+    }
+}
+
+/// An official name: the list's text, typed and marked official.
+fn official(text: &str) -> PlaceName {
+    PlaceName {
+        text: text.to_string(),
+        lang: None,
+        kind: Some(NameType::Official),
+        origin: crate::build::Origin::Official,
+    }
+}
+
+/// Each `--towns` country's districts and towns (D-259): a district under its state's world
+/// unit, a town under its district (else its state) at the place it was found at; a town whose
+/// place is already a city row joins that row (its key, parent and official name) instead of
+/// adding one. Returns the report's lines.
+fn add_towns(
+    root: &Path,
+    a: &Args,
+    lock: &Lock,
+    countries: &[Country],
+    units: &[WorldUnit],
+    rows: &mut Vec<Row>,
+) -> Result<String, String> {
+    let mut report = String::new();
+    for cc in &a.towns {
+        // The country's units by the Wikidata item they carry, with their outlines.
+        let mine: BTreeMap<&str, (&WorldUnit, Polygon)> = units
+            .iter()
+            .filter(|u| {
+                countries
+                    .get(u.country)
+                    .and_then(|c| c.iso2.as_deref())
+                    .is_some_and(|c| c == cc.as_str())
+            })
+            .flat_map(|u| {
+                u.refs
+                    .iter()
+                    .filter_map(|r| r.strip_prefix("wikidata:"))
+                    .map(move |q| (q, u))
+            })
+            .map(|(q, u)| {
+                (
+                    q,
+                    (
+                        u,
+                        Polygon {
+                            rings: u.rings.clone(),
+                        },
+                    ),
+                )
+            })
+            .collect();
+        let inside = |item: &str, p: (i32, i32)| mine.get(item).map(|u| u.1.contains(p.0, p.1));
+        let built = super::world_towns::build(root, lock, cc, inside)?;
+        let unit_key = |item: &str| mine.get(item).map(|u| u.0.key.clone());
+        let ns = namespace(Some(cc));
+        for d in built.districts {
+            let mut sources = vec![d.key.clone()];
+            sources.extend(d.refs);
+            rows.push(Row {
+                place: Place {
+                    key: d.key,
+                    kind: PlaceKind::Admin,
+                    admin_level: 2,
+                    flags: 0,
+                    point: d.point,
+                    names: vec![official(&d.name)],
+                    population: None,
+                    rank: 0,
+                    parent: unit_key(&d.state),
+                    sources,
+                },
+                ns,
+                elevation: None,
+                stated_tz: None,
+                zone: None,
+            });
+        }
+        let at: BTreeMap<String, usize> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, r)| (r.place.key.clone(), i))
+            .collect();
+        let (mut joined, mut added) = (0, 0);
+        for t in built.towns {
+            let parent = t.district.clone().or_else(|| unit_key(&t.state));
+            let name = official(&t.name);
+            let row = if let Some(&i) = at.get(&format!("geonames:{}", t.city.id)) {
+                joined += 1;
+                rows.get_mut(i)
+            } else {
+                added += 1;
+                rows.push(city_row(t.city, None));
+                rows.last_mut()
+            };
+            let Some(row) = row else { continue };
+            row.place.parent = parent.or(row.place.parent.take());
+            row.place.sources.push(t.key);
+            if !row.place.names.iter().any(|n| n.same(&name)) {
+                row.place.names.push(name);
+            }
+        }
+        report.push_str(&built.report);
+        let _ = writeln!(report, "  {joined} towns joined a city row, {added} added.");
+    }
+    Ok(report)
 }
 
 /// The live serial of `build` holding `key`, if any.
@@ -722,14 +891,32 @@ fn allocate(
         }
         groups.entry(r.ns).or_default().push(i);
     }
+    // D-260: the last build's registries unless others are named; numbering afresh, which
+    // shifts every ID after a new or missing row, only when asked for.
+    let dir = match (&a.ids, a.fresh_ids) {
+        (Some(_), true) => return Err("--ids and --fresh-ids exclude each other".into()),
+        (Some(d), false) => Some(root.join(d)),
+        (None, false) => {
+            let d = root.join(format!("data/build/baseline/world/world-ids-{build}"));
+            if !d.is_dir() {
+                return Err(format!(
+                    "{}: no ID registries of the last build; restore them, name them with \
+                     --ids, or pass --fresh-ids for a first build (D-260)",
+                    d.display()
+                ));
+            }
+            Some(d)
+        }
+        (None, true) => None,
+    };
     let mut registries = BTreeMap::new();
     for (ns, members) in groups {
         let name = ns.country().map_or_else(
             || "world".to_string(),
             |c| String::from_utf8_lossy(&c).into_owned(),
         );
-        let old = match &a.ids {
-            Some(dir) => read_registry(&root.join(dir).join(format!("{name}.tsv")))?,
+        let old = match &dir {
+            Some(dir) => read_registry(&dir.join(format!("{name}.tsv")))?,
             None => Registry::default(),
         };
         let keys: Vec<Vec<String>> = members
@@ -782,9 +969,16 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let a = parse(args)?;
     let build = if a.lite { "lite" } else { "main" };
     let lock = Lock::read(&root.join("data/sources.lock"))?;
+    let town_sources = a
+        .towns
+        .iter()
+        .map(|cc| super::world_towns::sources(root, cc))
+        .collect::<Result<Vec<_>, _>>()?
+        .concat();
     for id in [&a.admin, &a.admin1, &a.cities, &a.tz]
         .into_iter()
         .chain(&a.labels)
+        .chain(&town_sources)
     {
         let s = lock.get(id)?;
         if a.lite && !super::LITE.contains(&s.licence_class.as_str()) {
@@ -821,6 +1015,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let read: Vec<&str> = [&a.admin, &a.admin1, &a.cities, &a.tz]
         .into_iter()
         .chain(&a.labels)
+        .chain(&town_sources)
         .map(String::as_str)
         .collect();
     let notices = super::notices(&lock, &read)?;
@@ -838,7 +1033,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         )?;
     }
     // A city list other than the default is its own world part, named by it (TG-13).
-    let variant = variant(&a.cities, &a.labels);
+    let variant = variant(&a.cities, &a.labels, &a.towns);
     let file = dir.join(format!("world-baseline-{build}{variant}.tgd"));
     crate::make::write_atomic(&file, &out)?;
     let probes = probes(&countries, &ids, &row_of);
@@ -1005,6 +1200,7 @@ fn world_rows(
         })
         .count();
     rows.extend(cities);
+    let towns = add_towns(root, a, lock, countries, &part.units, &mut rows)?;
     let dropped = dedup_keys(&mut rows);
     let chain = super::world_labels::read(root, lock, &a.labels)?;
     let owners = code_owners(&rows);
@@ -1019,7 +1215,7 @@ fn world_rows(
     let counts = format!(
         "- {} countries and disputed areas ({}).\n{}\n- {n_cities} cities ({}): {under_unit} \
          under a unit, {fallback} under the feature of their code, {orphans} with no \
-         country.\n- {dropped} source keys another row already holds dropped.\n{named}{tz_report}",
+         country.\n{towns}- {dropped} source keys another row already holds dropped.\n{named}{tz_report}",
         countries.len(),
         a.admin,
         part.report,

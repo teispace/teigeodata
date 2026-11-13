@@ -1,7 +1,7 @@
 ---
 title: "The forge (data pipeline)"
 status: draft
-updated: 2026-11-11
+updated: 2026-11-13
 ---
 
 # The forge (data pipeline)
@@ -680,8 +680,11 @@ recipe has a `baseline` entry (below).
 ## The world part (`world`)
 
 `forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>]
-[--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--ids <dir>] [--key <seed-file>]` writes `data/build/baseline/world/world-baseline-<build>.tgd`,
-its ID registries `world-ids-<build>/<namespace>.tsv` (the next build's `--ids`),
+[--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--labels <source>]… [--towns <cc>]…
+[--ids <dir> | --fresh-ids] [--key <seed-file>]` writes `data/build/baseline/world/world-baseline-<build>.tgd`,
+its ID registries `world-ids-<build>/<namespace>.tsv` (the next build's input: without `--ids`
+the stage reads them and fails when they are missing, unless `--fresh-ids` asks for a first
+build, D-260),
 `summary-<build>.md` (D-147) and `world-probes-<build>.tsv`, the locator's border probes: about
 100,000 source vertices at full resolution, every k-th of every feature, each with its
 feature's ID (D-149). Defaults: `ne-admin0-nep`, `geonames-cities15000`, `tzdb-2026f`;
