@@ -491,3 +491,124 @@ used_by = "forge world --labels (TG-14, D-221)"
 attribution = "Wikidata (https://www.wikidata.org), CC0 1.0"
 query = "forge/queries/wikidata-labels.rq"
 query_params = { LANG = "hi" }
+
+[[source]]
+id = "lgd-in-states"
+title = "LGD: India's 36 states and union territories with their LGD and Census codes (Parquet, daily LGD mirror)"
+kind = "http"
+url = "https://github.com/ramSeraph/opendata/releases/download/lgd-parquet-latest/states.2026-11-12.f266902f935d8f73.parquet"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "LGD report observed 2026-11-12 (mirror release lgd-parquet-latest; its .json beside the file records LGD's headers and the same SHA-256)"
+retrieved = "2026-11-13"
+sha256 = "3a760944dab3b3ff8f22daf8c2e0ee40812bb75e3120daa12d00b9935d3567fa"
+size = 2495
+licence = "LGD copyright policy: reproduction free of charge with the source acknowledged, accurately and not in a misleading context (lgdirectory.gov.in, read 2026-11-11); the mirror (ramSeraph/opendata) is transport only"
+licence_class = "godl"
+countries = ["IN"]
+used_by = "TG-15 India: units by code and statutory towns (D-258)"
+attribution = "Local Government Directory, Ministry of Panchayati Raj, Government of India (https://lgdirectory.gov.in)"
+
+[[source]]
+id = "lgd-in-districts"
+title = "LGD: India's 790 districts with their state and Census codes (Parquet, daily LGD mirror)"
+kind = "http"
+url = "https://github.com/ramSeraph/opendata/releases/download/lgd-parquet-latest/districts.2026-11-12.21b9a610c65bdd21.parquet"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "LGD report observed 2026-11-12 (mirror release lgd-parquet-latest; its .json beside the file records LGD's headers and the same SHA-256)"
+retrieved = "2026-11-13"
+sha256 = "8edd1bf95e5bfeec468c23075cc60360cab2b55d955a60e2e330462cfe84b97f"
+size = 10426
+licence = "LGD copyright policy: reproduction free of charge with the source acknowledged, accurately and not in a misleading context (lgdirectory.gov.in, read 2026-11-11); the mirror (ramSeraph/opendata) is transport only"
+licence_class = "godl"
+countries = ["IN"]
+used_by = "TG-15 India: units by code and statutory towns (D-258)"
+attribution = "Local Government Directory, Ministry of Panchayati Raj, Government of India (https://lgdirectory.gov.in)"
+
+[[source]]
+id = "lgd-in-subdistricts"
+title = "LGD: India's 7,112 sub-districts with their district and Census codes (Parquet, daily LGD mirror)"
+kind = "http"
+url = "https://github.com/ramSeraph/opendata/releases/download/lgd-parquet-latest/subdistricts.2026-11-12.5b048fde2f5e2115.parquet"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "LGD report observed 2026-11-12 (mirror release lgd-parquet-latest; its .json beside the file records LGD's headers and the same SHA-256)"
+retrieved = "2026-11-13"
+sha256 = "b4ef56dd0a3c98bada804a99fd83a827819f47b931a022949a293af5787cd52e"
+size = 85255
+licence = "LGD copyright policy: reproduction free of charge with the source acknowledged, accurately and not in a misleading context (lgdirectory.gov.in, read 2026-11-11); the mirror (ramSeraph/opendata) is transport only"
+licence_class = "godl"
+countries = ["IN"]
+used_by = "TG-15 India: units by code and statutory towns (D-258)"
+attribution = "Local Government Directory, Ministry of Panchayati Raj, Government of India (https://lgdirectory.gov.in)"
+
+[[source]]
+id = "lgd-in-urban-bodies"
+title = "LGD: India's 5,050 urban local bodies (statutory towns): names in English and the state's language, type, Census 2011 code (Parquet, daily LGD mirror)"
+kind = "http"
+url = "https://github.com/ramSeraph/opendata/releases/download/lgd-parquet-latest/urban_local_bodies.2026-11-12.e8deb348d470ed9f.parquet"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "LGD report observed 2026-11-12 (mirror release lgd-parquet-latest; its .json beside the file records LGD's headers and the same SHA-256)"
+retrieved = "2026-11-13"
+sha256 = "68fb622bc73eaa73a5da74bdd0ec6262ddf41ad924bbb0d1d8dd0def2a564303"
+size = 93618
+licence = "LGD copyright policy: reproduction free of charge with the source acknowledged, accurately and not in a misleading context (lgdirectory.gov.in, read 2026-11-11); the mirror (ramSeraph/opendata) is transport only"
+licence_class = "godl"
+countries = ["IN"]
+used_by = "TG-15 India: units by code and statutory towns (D-258)"
+attribution = "Local Government Directory, Ministry of Panchayati Raj, Government of India (https://lgdirectory.gov.in)"
+
+[[source]]
+id = "lgd-in-urban-coverage"
+title = "LGD: The districts, sub-districts and villages each urban local body covers (Parquet, daily LGD mirror)"
+kind = "http"
+url = "https://github.com/ramSeraph/opendata/releases/download/lgd-parquet-latest/statewise_ulbs_coverage.2026-11-12.85cc0638d99c82a4.parquet"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "LGD report observed 2026-11-12 (mirror release lgd-parquet-latest; its .json beside the file records LGD's headers and the same SHA-256)"
+retrieved = "2026-11-13"
+sha256 = "636fb95fcf7c5518f0c85e2f150269f22256d7a1bca8f46a253378f6a86c8703"
+size = 489857
+licence = "LGD copyright policy: reproduction free of charge with the source acknowledged, accurately and not in a misleading context (lgdirectory.gov.in, read 2026-11-11); the mirror (ramSeraph/opendata) is transport only"
+licence_class = "godl"
+countries = ["IN"]
+used_by = "TG-15 India: units by code and statutory towns (D-258)"
+attribution = "Local Government Directory, Ministry of Panchayati Raj, Government of India (https://lgdirectory.gov.in)"
+
+[[source]]
+id = "geonames-in"
+title = "GeoNames India dump (IN.zip)"
+kind = "http"
+url = "https://download.geonames.org/export/dump/IN.zip"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "daily dump of 2026-11-12"
+retrieved = "2026-11-13"
+sha256 = "fa6d874bafba6600c56065fda4ed0977b95df237d0b6674097983d378327183d"
+size = 15755152
+licence = "CC-BY-4.0"
+licence_class = "cc-by"
+countries = ["IN"]
+used_by = "TG-15 India: town points (D-258)"
+attribution = "GeoNames (https://www.geonames.org), CC BY 4.0"
+
+[[source]]
+id = "wikidata-in-district-geonames"
+title = "Wikidata items with an LGD district code (P12746) and their GeoNames IDs (QLever snapshot)"
+kind = "sparql"
+url = "https://qlever.dev/api/wikidata"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "QLever Wikidata snapshot"
+retrieved = "2026-11-13"
+sha256 = "f7d157ee0bca9774ecfb9aeec88e5800786b1f757a523cc1c7bb0f5a5e8a5a80"
+size = 44716
+licence = "CC0-1.0"
+licence_class = "cc0"
+countries = ["IN"]
+used_by = "TG-15 India: LGD districts to GeoNames ADM2 (D-258)"
+attribution = "Wikidata (https://www.wikidata.org), CC0 1.0"
+query = "forge/queries/wikidata-code-geonames.rq"
+query_params = { CODE = "wdt:P12746" }

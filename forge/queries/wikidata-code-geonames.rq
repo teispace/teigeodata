@@ -1,0 +1,10 @@
+# Each Wikidata item carrying an official code, with the code and the item's GeoNames IDs: a
+# crosswalk from a country's official unit codes to GeoNames' units (TG-15, D-258). World-
+# general: {{CODE}} is the code's property from the source's `query_params` (India's LGD
+# district code is wdt:P12746). One row per item, code and GeoNames ID, sorted.
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+SELECT DISTINCT ?item ?code ?gn WHERE {
+  ?item {{CODE}} ?code .
+  OPTIONAL { ?item wdt:P1566 ?gn }
+}
+ORDER BY ?code ?item ?gn

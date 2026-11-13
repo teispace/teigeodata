@@ -392,12 +392,16 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     1.1% `ne-Deva`, D-227)
 - [x] TG-16: outline tolerance measured (Nepal stays at 20 m), outlines snapped to their level's decimal grid, 64-edge index leaves: `tithipatra` 9.21 MB wire (D-229, D-230)
 - [ ] TG-15: India: research done (D-216, D-217), revised by measurement (D-258). Steps:
-  - [ ] 1. Sources pinned: LGD mirror files (states, districts, sub-districts, urban local
-    bodies, their coverage), GeoNames `IN` with its alternate names, the Wikidata district
-    crosswalk (`P12746`, `P1566`), and India's ISO 3166-2 codes (`data/countries/in/iso3166.yaml`)
+  - [x] 1. Sources pinned and mirrored: LGD's states, districts, sub-districts, urban local
+    bodies and their coverage (`lgd-in-*`, Parquet, hashes equal to the mirror's own
+    metadata), GeoNames `IN` (`geonames-in`; the world alternate names are pinned already),
+    the Wikidata crosswalk from LGD district codes to GeoNames (`wikidata-in-district-geonames`,
+    a generic query `wikidata-code-geonames.rq` with the code's property as a parameter); all
+    seven in the `sources` release (2026-11-13)
   - [ ] 2. Code-only units in the forge, world-general: an official list's units with their
     parents by code and no outline, joined to an outline by ISO code where one exists; India's
-    36 states and UTs, 790 districts and 7,112 sub-districts; G-iso on the 36 codes
+    36 states and UTs, 790 districts and 7,112 sub-districts; India's ISO 3166-2 codes
+    (`data/countries/in/iso3166.yaml`) and G-iso on the 36
   - [ ] 3. Towns: the statutory towns with a point by name within their district (§3.8), no
     point guessed; a match report per state and gate G-town with a floor, proved by a town
     planted in the wrong district
