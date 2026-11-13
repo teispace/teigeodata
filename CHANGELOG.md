@@ -11,6 +11,24 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-13
+
+Clients may install some parts of a pack (D-251 to D-254): some languages' names, one outline
+part. New zone-rule queries (D-262). The pack format is unchanged: data releases read by
+`0.2.0` read here too.
+
+### Breaking
+
+- Public structs gained fields, so a struct literal without `..Default::default()` no longer
+  compiles: `LayerOptions::installed_parts`; in `teigeodata-sync`, `Entry::parts`,
+  `Installed::parts`, `Record::parts` and `SectionSpan::part`.
+- `teigeodata-sync` methods that took `Components` take `impl Into<Selection>`
+  (`Install::new`, `Entry::size_of`, `Frames::plan_install`, `plan_components` and the
+  install functions); a `Components` value still works, a closure or turbofish naming the
+  old type does not.
+- The store's journal is version 3 when a pack holds some parts only; `0.2.0` refuses such a
+  store.
+
 ### Engine (`teigeodata-engine`)
 
 - `LayerOptions::installed_parts` (`Parts`, re-exported): read only some parts of the split
@@ -162,6 +180,7 @@ The first tagged version. Everything below is new.
 
 None: no version was released before this one.
 
-[Unreleased]: https://github.com/teispace/teigeodata/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/teispace/teigeodata/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/teispace/teigeodata/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/teispace/teigeodata/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/teispace/teigeodata/releases/tag/v0.1.0
