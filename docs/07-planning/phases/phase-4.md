@@ -365,8 +365,10 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   - [x] World places: Wikidata `ne`, then `hi`, labels by `wikidata:`/`geonames:` key,
     `forge world --labels`, two pinned CC0 sources; 13,724 world places named (D-221,
     2026-11-11)
-  - [ ] sources pinned: the CBS code list (official names), Wikidata labels for Nepal's
-    places by key, CLDR 49 `ne.xml` for country names
+  - [x] sources pinned: the CBS code list (official names, D-232), Wikidata labels for
+    Nepal's places by key (`wikidata-np`) and the world's (`wikidata-labels-ne`, `-hi`), CLDR
+    49 `ne.xml` for country names, first in the label chain, its short and variant forms kept
+    (`cldr-49-ne`, origin `standard`; 237 of 248 countries named, D-257, 2026-11-13)
   - [ ] the chain in the forge, each name's origin in its record (`rule`), with a coverage
     report per step (TG-11's names table). Done: origins in `RULE` (D-227), tier 6 (the
     canonical name transliterated, marked machine, searched apart; 99.0% of Nepal named,
@@ -493,3 +495,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-13 | 4.9c: `tgd install --names --outlines`; outline levels by number, not a country's word for them | D-254 |
 | 2026-11-13 | 4.9c: everything separable done; embed profiles keep cutting at build time (script-level), clients pick parts | D-255 |
 | 2026-11-13 | TG-14: `machine_names: keep \| drop` in embed profiles | D-256 |
+| 2026-11-13 | TG-14: sources pinned, CLDR 49 `ne.xml` names the countries (origin `standard`) | D-257 |

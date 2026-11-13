@@ -92,3 +92,10 @@ dubai	tgd:ae/2f,tgd:ae/2g	1	-	Dubai
 tokyo	tgd:jp/p7,tgd:jp/rb	1	-	Tokyo
 new york	tgd:us/17a,tgd:us/pe	2	-	New York
 rome	tgd:it/md	1	strict	strict tier order: the exact Rome before Romania (D-226)
+#
+# Countries by their Nepali names: CLDR's territory names and short forms (D-257).
+अमेरिका	tgd:us/5pb	1	-	CLDR's short form of the United States
+संयुक्त राज्य	tgd:us/5pb	1	-	CLDR's name of the United States
+युके	tgd:gb/1pv	1	-	CLDR's short form of the United Kingdom
+चीन	tgd:cn/1nq	1	-	China
+नेपाल	tgd:np/1wmc	1	-	Nepal

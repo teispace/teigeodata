@@ -442,6 +442,20 @@ countries = ["*"]
 used_by = "the main build's world admin 0 and 1 (D-155)"
 attribution = "© OpenStreetMap contributors, under the Open Database License 1.0 (https://www.openstreetmap.org/copyright); Overture Maps Foundation (https://overturemaps.org)"
 [[source]]
+id = "cldr-49-ne"
+title = "Unicode CLDR 49 Nepali locale data (common/main/ne.xml): territory names"
+kind = "http"
+url = "https://raw.githubusercontent.com/unicode-org/cldr/release-49/common/main/ne.xml"
+version = "49 (tag release-49, 2026-10-21)"
+retrieved = "2026-11-13"
+sha256 = "f61ea56ce8a6a8fd85fa906784e9c3d6cce5270cac409448834bba9a9576499c"
+size = 496479
+licence = "Unicode-3.0"
+licence_class = "cc-by"
+countries = ["*"]
+used_by = "forge world --labels: Nepali country names, before Wikidata's (TG-14, D-257)"
+attribution = "Unicode CLDR (https://cldr.unicode.org), Copyright © 1991-2026 Unicode, Inc., under the Unicode License v3"
+[[source]]
 id = "wikidata-labels-ne"
 title = "Wikidata Nepali labels of every item with a coordinate, with GeoNames IDs (QLever snapshot)"
 kind = "sparql"

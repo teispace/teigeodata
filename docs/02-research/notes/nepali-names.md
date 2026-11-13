@@ -557,9 +557,11 @@ Nepali name of the same text blocks it: 641 more places gained one (92,760 → 9
      lands (TG-15), where Hindi is measured anew (78.5% folded exact in India, §3.2).
 - **Sources to pin** in `data/sources.lock`:
   - the CBS code list (Open Data Nepal, CC BY): pinned 2026-11-12 (§5.5);
-  - Wikidata `ne`/`hi` labels for the world part (QLever snapshot, CC0);
-  - CLDR 49 `ne.xml`;
-  - GeoNames `cities5000` (TG-13).
+  - Wikidata `ne`/`hi` labels for the world part (QLever snapshot, CC0): pinned (D-221);
+  - CLDR 49 `ne.xml`: pinned 2026-11-13 as `cldr-49-ne` (D-257). Lesson: Natural Earth gives
+    some territories their sovereign's ISO code (Clipperton `FR`, the Coral Sea Islands `AU`),
+    so a name keyed by code goes only to the code's most populous country row;
+  - GeoNames `cities5000` (TG-13): pinned (D-219).
 - **Schema:** `rule` gains `transliteration` and `donor`; GeoNames romanisations become
   `ne-Latn`.
 - **Decision to record:** the chain, the rule that machine names are never canonical, and the

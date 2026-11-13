@@ -24,6 +24,8 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - `component::Parts` and `component::MAX_LANGUAGES`: which parts a client takes, with
   `holds(kind, part)` and `resolve` (D-251).
 - `component::Selection`: components and parts together, `From<Components>` (D-252).
+- `names::Origin::Standard` (code 10): a name from a standard's locale data, such as CLDR's
+  territory names (D-257). Older readers read it as `Other(10)`.
 
 ### Sync (`teigeodata-sync`)
 
@@ -48,6 +50,11 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - `tgd install --names LANGS --outlines LEVEL[@Mm]`: install only some languages' names and
   one outline part (D-254). Each replaces what is installed of its kind. `tgd catalog --json`
   lists each part (`parts`); `tgd status` shows the installed parts.
+
+### Data
+
+- Countries are named in Nepali from CLDR 49 (`cldr-49-ne`), with CLDR's short and variant
+  forms as alternate names: 237 of 248 countries and disputed areas, up from 160 (D-257).
 
 ## [0.2.0] - 2026-11-12
 

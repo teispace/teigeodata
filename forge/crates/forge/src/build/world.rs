@@ -1007,7 +1007,14 @@ fn world_rows(
     rows.extend(cities);
     let dropped = dedup_keys(&mut rows);
     let chain = super::world_labels::read(root, lock, &a.labels)?;
-    let named = super::world_labels::apply(&chain, rows.iter_mut().map(|r| &mut r.place));
+    let owners = code_owners(&rows);
+    let named = super::world_labels::apply(
+        &chain,
+        rows.iter_mut().enumerate().map(|(i, r)| {
+            let iso = r.ns.country().filter(|c| owners.get(c) == Some(&Some(i)));
+            (&mut r.place, iso)
+        }),
+    );
     let tz_report = zone_rows(root, a, lock, countries, &mut rows)?;
     let counts = format!(
         "- {} countries and disputed areas ({}).\n{}\n- {n_cities} cities ({}): {under_unit} \
@@ -1019,6 +1026,32 @@ fn world_rows(
         a.cities,
     );
     Ok((rows, geometry, counts))
+}
+
+/// The country row that owns each ISO 3166-1 code, as names keyed by code are joined (D-257):
+/// the most populous country row with that code; `None` when two tie, so a territory that
+/// carries its sovereign's code (Clipperton under `fr`, the Coral Sea Islands under `au`) never
+/// takes the sovereign's name.
+fn code_owners(rows: &[Row]) -> BTreeMap<[u8; 2], Option<usize>> {
+    let mut best: BTreeMap<[u8; 2], (i64, Option<usize>)> = BTreeMap::new();
+    for (i, r) in rows.iter().enumerate() {
+        let Some(code) =
+            r.ns.country()
+                .filter(|_| r.place.kind == PlaceKind::Country)
+        else {
+            continue;
+        };
+        let pop = r.place.population.unwrap_or(0);
+        match best.get_mut(&code) {
+            None => {
+                best.insert(code, (pop, Some(i)));
+            }
+            Some(b) if pop > b.0 => *b = (pop, Some(i)),
+            Some(b) if pop == b.0 => b.1 = None,
+            Some(_) => {}
+        }
+    }
+    best.into_iter().map(|(c, (_, i))| (c, i)).collect()
 }
 
 /// About this many border probes are written (D-149).
@@ -1300,4 +1333,51 @@ fn verify(bytes: &[u8], places: &[&Place]) -> Result<(), String> {
         &teigeodata_format::search::Search::open(&sec(Kind::SEARCH)?).map_err(e)?,
         &place_index::PlaceIndex::open(&sec(Kind::PLACE_INDEX)?, pl).map_err(e)?,
     )
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, reason = "tests")]
+mod tests {
+    use super::{Row, code_owners, namespace};
+    use crate::build::Place;
+    use teigeodata_core::PlaceKind;
+
+    fn row(cc: &str, kind: PlaceKind, population: Option<i64>) -> Row {
+        Row {
+            place: Place {
+                key: format!("ne:{cc}"),
+                kind,
+                admin_level: 0,
+                flags: 0,
+                point: (0, 0),
+                names: Vec::new(),
+                population,
+                rank: 0,
+                parent: None,
+                sources: Vec::new(),
+            },
+            ns: namespace(Some(cc)),
+            elevation: None,
+            stated_tz: None,
+            zone: None,
+        }
+    }
+
+    /// D-257: a code's names go to its most populous country row, never to a territory that
+    /// carries its sovereign's code, to no unit, and to no row when two tie.
+    #[test]
+    fn a_code_belongs_to_its_most_populous_country_row() {
+        let rows = [
+            row("fr", PlaceKind::Country, Some(0)),
+            row("fr", PlaceKind::Country, Some(67_000_000)),
+            row("np", PlaceKind::Country, Some(30_000_000)),
+            row("np", PlaceKind::Admin, Some(90_000_000)),
+            row("xk", PlaceKind::Country, None),
+            row("xk", PlaceKind::Country, None),
+        ];
+        let o = code_owners(&rows);
+        assert_eq!(o.get(b"fr"), Some(&Some(1)));
+        assert_eq!(o.get(b"np"), Some(&Some(2)));
+        assert_eq!(o.get(b"xk"), Some(&None));
+    }
 }

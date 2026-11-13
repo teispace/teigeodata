@@ -93,19 +93,20 @@ outlines (4.8 MB), the substring and search indexes (3.7 MB), the point-to-unit 
 
 ## Embedded layers built from profiles
 
-`forge embed --profile <name>` (D-214), lite, 2026-11-12, outlines snapped (D-229) and the admin index at 64-edge leaves (D-230), Nepal's official names by code (D-232) and its spelling rule (D-233), 71 districts' official names (D-234), donor names and the f/ph, ee/i, oo/u spelling rules (D-236), names kept by text and language and places across the border left out (D-239, D-242). Per component, `tithipatra`'s wire bytes: point 1,034,731; elevation 229,462; admin 251,017; names 1,615,705; search 2,654,926; timezone 13,497; tz-rules 63,545; boundaries 2,025,385; admin-index 803,920; dem-coarse 517,805.
+`forge embed --profile <name>` (D-214), lite, 2026-11-12, outlines snapped (D-229) and the admin index at 64-edge leaves (D-230), Nepal's official names by code (D-232) and its spelling rule (D-233), 71 districts' official names (D-234), donor names and the f/ph, ee/i, oo/u spelling rules (D-236), names kept by text and language and places across the border left out (D-239, D-242), countries named by CLDR (D-257). Per component, `tithipatra`'s wire bytes: point 1,034,731; elevation 229,462; admin 251,017; names 1,615,705; search 2,654,926; timezone 13,497; tz-rules 63,545; boundaries 2,025,385; admin-index 803,920; dem-coarse 517,805.
 
 
 | Profile | Rows | Disk | Wire |
 |---|--:|--:|--:|
 | `baseline` (world part and Nepal's slice, with zone rules; the shipped file, byte for byte, D-231) | 39,395 | 5,000,520 | 3,648,016 |
-| `tithipatra` (world part with every city of 5,000, all of Nepal at 20 m; names in Devanagari Nepali, Hindi where Wikidata has no Nepali, and English, Nepal's gaps filled by the transliterator; zone rules for all 376 zones; the coarse DEM) | 170,882 | 14,794,944 | 9,240,237 |
+| `tithipatra` (world part with every city of 5,000, all of Nepal at 20 m; names in Devanagari Nepali, Hindi where Wikidata has no Nepali, and English, Nepal's gaps filled by the transliterator; zone rules for all 376 zones; the coarse DEM) | 170,882 | 14,811,136 | 9,240,708 |
 | `points-en` (points, heights, admin, English names and search; no outlines) | 39,395 | 1,838,332 | 1,178,096 |
 
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-13 | Countries named in Nepali by CLDR 49 with their short and variant forms (237 of 248, from 160): `tithipatra` 9,240,757 → 9,240,708 B wire | D-257 |
 | 2026-11-12 | The 38 renamed local levels' current Nepali names, the old ones kept as former official: `tithipatra` 9,239,494 → 9,240,237 B wire | D-244 |
 | 2026-11-12 | Type words cut from unit names (427 names); type and level words become query rules: `tithipatra` 9,233,920 → 9,239,494 B wire, `baseline` 3,649,855 → 3,648,133 | D-243 |
 | 2026-11-12 | Names kept by text and language (1,328 more places with a Nepali name a person wrote) and 10 places across the border left out: `tithipatra` 9,201,324 → 9,233,920 B wire | D-239, D-242 |
