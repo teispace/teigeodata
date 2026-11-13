@@ -73,7 +73,7 @@ a list of name records:
 | `script` | ISO 15924 | `Latn`, `Deva`, … |
 | `type` | enum | `official`, `local`, `alt`, `colloquial`, `historical`, `former_official` |
 | `valid_from`, `valid_to` | date | For historical and former names |
-| `rule` | enum | How the name was made, for every name (D-227): 0 unknown, 1 official, 2 signage, 3 lexicon, 4 osm_majority, 5 geonames, 6 wikidata, 7 romanisation, 8 transliteration, 9 donor. Codes 7 to 9 are machine output (`Origin::is_machine`); an unknown code reads as other. Stable once released |
+| `rule` | enum | How the name was made, for every name (D-227): 0 unknown, 1 official, 2 signage, 3 lexicon, 4 osm_majority, 5 geonames, 6 wikidata, 7 romanisation, 8 transliteration, 9 donor, 10 standard (a standard's locale data, such as CLDR; D-257). Codes 7 to 9 are machine output (`Origin::is_machine`); an unknown code reads as other. Stable once released |
 
 Every losing spelling is kept as an `alt` name, so search still finds it.
 

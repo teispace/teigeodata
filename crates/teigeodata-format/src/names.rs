@@ -149,6 +149,8 @@ pub enum Origin {
     Transliteration,
     /// A related language's label, respelled: machine output.
     Donor,
+    /// A standard's locale data, such as CLDR's territory names.
+    Standard,
     /// A code this reader does not know.
     Other(u32),
 }
@@ -168,6 +170,7 @@ impl Origin {
             Self::Romanisation => 7,
             Self::Transliteration => 8,
             Self::Donor => 9,
+            Self::Standard => 10,
             Self::Other(c) => c,
         }
     }
@@ -186,6 +189,7 @@ impl Origin {
             7 => Self::Romanisation,
             8 => Self::Transliteration,
             9 => Self::Donor,
+            10 => Self::Standard,
             c => Self::Other(c),
         }
     }
@@ -204,6 +208,7 @@ impl Origin {
             Self::Romanisation => "romanisation",
             Self::Transliteration => "transliteration",
             Self::Donor => "donor",
+            Self::Standard => "standard",
             Self::Other(_) => "other",
         }
     }
