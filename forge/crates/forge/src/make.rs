@@ -5,8 +5,9 @@
 //! forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry> | --fresh-ids] [--split] [--force] [--fetch]
 //!
 //! Without `--ids`, the build reads the newest registry of the country's builds in its pack
-//! directory (D-240), so IDs stay stable from one run to the next; `--fresh-ids` numbers a
-//! first build on purpose.
+//! directory (D-240), so IDs stay stable from one run to the next, and fails when there is
+//! none (D-261: `cargo xtask ids restore` puts the released ones back); `--fresh-ids` numbers
+//! a first build on purpose.
 //! ```
 //!
 //! The recipe is `data/countries/<cc>/build.yaml`. The stages are `read` for each points
@@ -672,7 +673,7 @@ fn conflate_stage(
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
     let (cc, pass) = make_args(args)?;
-    let pass = with_registry(root, cc, pass);
+    let pass = with_registry(root, cc, pass)?;
     let lite = pass.iter().any(|a| a == "--lite");
     let flag = |name: &str| {
         pass.iter()
@@ -786,24 +787,29 @@ fn split_input(pass: &[String], country: &Path) -> Result<Vec<u8>, String> {
 /// `--fetch`); `--release` is required.
 /// `pass` with `--ids` naming the newest ID registry of the country's builds (main or lite) when
 /// none is named (D-240): a build without the last registry numbers every place afresh, and a
-/// place left out then shifts every later ID. `--fresh-ids` asks for a first build.
-fn with_registry(root: &Path, cc: &str, mut pass: Vec<String>) -> Vec<String> {
+/// place left out then shifts every later ID. `--fresh-ids` asks for a first build; with
+/// neither and no registry, the build is refused (D-261), never numbered afresh unasked.
+fn with_registry(root: &Path, cc: &str, mut pass: Vec<String>) -> Result<Vec<String>, String> {
     if let Some(i) = pass.iter().position(|a| a == "--fresh-ids") {
         pass.remove(i);
-        return pass;
+        return Ok(pass);
     }
     if pass.iter().any(|a| a == "--ids") {
-        return pass;
+        return Ok(pass);
     }
     let newest = ["main", "lite"]
         .into_iter()
         .map(|b| format!("data/build/pack/{cc}/{cc}-ids-{b}.tsv"))
         .filter_map(|p| Some((fs::metadata(root.join(&p)).ok()?.modified().ok()?, p)))
         .max();
-    if let Some((_, p)) = newest {
-        pass.extend(["--ids".to_string(), p]);
-    }
-    pass
+    let (_, p) = newest.ok_or_else(|| {
+        format!(
+            "{cc}: no ID registry in data/build/pack/{cc}/: run `cargo xtask ids restore`, name \
+             one with --ids, or pass --fresh-ids for a first build (D-261)"
+        )
+    })?;
+    pass.extend(["--ids".to_string(), p]);
+    Ok(pass)
 }
 
 fn make_args(args: &[String]) -> Result<(&String, Vec<String>), String> {
@@ -874,7 +880,7 @@ mod tests {
     use std::fs;
 
     /// D-240: without `--ids`, the newest registry in the pack directory is the input;
-    /// a named one and `--fresh-ids` win; no registry, no `--ids`.
+    /// a named one and `--fresh-ids` win; no registry is refused (D-261).
     #[test]
     fn make_reads_the_newest_registry_unless_told() {
         let root = std::env::temp_dir().join(format!("tgd-make-ids-{}", std::process::id()));
@@ -882,18 +888,19 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let args = |a: &[&str]| a.iter().map(ToString::to_string).collect::<Vec<_>>();
         let base = args(&["--release", "1", "--lite"]);
-        assert_eq!(with_registry(&root, "zz", base.clone()), base);
+        let none = with_registry(&root, "zz", base.clone()).unwrap_err();
+        assert!(none.contains("--fresh-ids"), "{none}");
         fs::write(dir.join("zz-ids-main.tsv"), "").unwrap();
         std::thread::sleep(std::time::Duration::from_millis(20));
         fs::write(dir.join("zz-ids-lite.tsv"), "").unwrap();
-        let got = with_registry(&root, "zz", base.clone());
+        let got = with_registry(&root, "zz", base.clone()).unwrap();
         assert_eq!(
             got.get(3..),
             Some(&args(&["--ids", "data/build/pack/zz/zz-ids-lite.tsv"])[..])
         );
         let named = args(&["--release", "1", "--ids", "mine.tsv"]);
-        assert_eq!(with_registry(&root, "zz", named.clone()), named);
-        let fresh = with_registry(&root, "zz", args(&["--release", "1", "--fresh-ids"]));
+        assert_eq!(with_registry(&root, "zz", named.clone()).unwrap(), named);
+        let fresh = with_registry(&root, "zz", args(&["--release", "1", "--fresh-ids"])).unwrap();
         assert_eq!(fresh, args(&["--release", "1"]));
         fs::remove_dir_all(&root).unwrap();
     }

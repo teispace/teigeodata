@@ -15,6 +15,7 @@ mod corrections;
 mod data;
 mod docs;
 mod golden;
+mod ids;
 mod iso3166;
 mod lexicon;
 mod mirror;
@@ -63,6 +64,11 @@ Tasks:
   mirror [<id>…]    Upload the stored bytes of pinned sources (every source with a
                     mirror_url when none are named) to the content-addressed release
                     `sources`, one asset per file named by its SHA-256 (D-127); needs `gh`.
+  ids save <build> <out> | ids restore [<tag>] [--build <build>] [--force]
+                    The ID registries kept with the data releases (D-261): save writes
+                    the world part's and every pack's into one archive; restore puts a
+                    release's back (the newest data release's by default), keeping a
+                    local one that differs unless --force; needs `gh`.
   tuf <command>     The catalog repository (D-163): keygen, pubkey, root, sign,
                     release, timestamp, verify; `cargo xtask tuf` lists them.
   clean [--all]     Free disk: incremental caches and scratch of both workspaces (built
@@ -95,6 +101,7 @@ fn main() -> ExitCode {
         "pack-sizes" => report(breakdown::run(rest)),
         "check-workspace" => report(workspace::check(&root)),
         "mirror" => report(mirror::run(&root, rest)),
+        "ids" => report(ids::run(&root, rest)),
         "tuf" => report(tuf::run(rest)),
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
         "sizes" => {

@@ -55,8 +55,22 @@ jobs:
         run: |
           cargo build --manifest-path forge/Cargo.toml --profile fast --bin forge --locked
           cargo build --release -p spike-s3-search --bin pack-eval --locked
+      - name: ID registries of the last data release (D-261)
+        # The published IDs: the build keeps them. A build no release has carried yet numbers
+        # afresh, and says so; any other failure stops the job.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if out=$(cargo xtask ids restore --build ${{ matrix.build }} 2>&1); then
+            echo "$out"; echo "IDS=" >> "$GITHUB_ENV"
+          else
+            echo "$out"
+            echo "$out" | grep -q 'no data release carries' || exit 1
+            echo "::notice::no released ${{ matrix.build }} registry: numbering afresh"
+            echo "IDS=--fresh-ids" >> "$GITHUB_ENV"
+          fi
       - name: Fetch and build
-        run: forge/target/fast/forge make ${{ matrix.cc }} --release "$RELEASE" ${{ matrix.flag }} --fetch
+        run: forge/target/fast/forge make ${{ matrix.cc }} --release "$RELEASE" ${{ matrix.flag }} ${IDS:+"$IDS"} --fetch
       - name: G-det (the build stage again, byte for byte)
         run: |
           dir=data/build/pack/${{ matrix.cc }}
@@ -83,8 +97,8 @@ jobs:
           if [ "${{ matrix.build }}" = main ]; then
             forge/target/fast/forge fetch overture-divisions
           fi
-          # A clean checkout holds no registry of a last build: number afresh (D-260).
-          forge/target/fast/forge world --release "$RELEASE" ${{ matrix.flag }} --fresh-ids
+          # The released registries when there are any, else a first build (D-260, D-261).
+          forge/target/fast/forge world --release "$RELEASE" ${{ matrix.flag }} ${IDS:+"$IDS"}
           cargo xtask check-pack data/build/baseline/world/world-baseline-${{ matrix.build }}.tgd ${{ matrix.flag }}
       - name: The shipped baseline, one file (D-153; Z1 fails the stage past 8 MB)
         run: |

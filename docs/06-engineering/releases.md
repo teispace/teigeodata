@@ -61,10 +61,12 @@ comes first), data is released by hand as a GitHub pre-release (D-247):
 
 1. Build the packs and layers from a commit on `main` whose CI is green.
 2. Tag `data-YYYY.MM.DD` on that commit: `gh release create data-YYYY.MM.DD --target <sha>
-   --prerelease`.
+   --prerelease`; a second release on one day is `data-YYYY.MM.DD.2`, then `.3` (D-261).
 3. Attach the `.tgd` files with their summaries and the attribution, renamed where names would
    clash (`np-summary-lite.md`), plus `SHA256SUMS` (`shasum -a 256`) and `B3SUMS` when `b3sum`
-   is at hand. Never the `.key-*` file or the TSV reports.
+   is at hand. Never the `.key-*` file or the TSV reports. Always `ids-<build>.tar.gz`
+   (`cargo xtask ids save <build> <file>`): the ID registries the files were numbered with, so
+   the next build keeps every published ID (D-261; `cargo xtask ids restore` puts them back).
 4. The notes say what each file is (rows, wire size), the code commit or tag that reads it
    (`git` dependency with `rev` or `tag`), the licence with the attribution, that it is outside
    the signed catalog, and how to verify the checksums.

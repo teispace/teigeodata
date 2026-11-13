@@ -900,8 +900,8 @@ fn allocate(
             let d = root.join(format!("data/build/baseline/world/world-ids-{build}"));
             if !d.is_dir() {
                 return Err(format!(
-                    "{}: no ID registries of the last build; restore them, name them with \
-                     --ids, or pass --fresh-ids for a first build (D-260)",
+                    "{}: no ID registries of the last build: run `cargo xtask ids restore`, \
+                     name them with --ids, or pass --fresh-ids for a first build (D-260)",
                     d.display()
                 ));
             }

@@ -227,7 +227,7 @@ fn assets(root: &Path) -> Result<BTreeSet<String>, String> {
         .collect())
 }
 
-fn gh(root: &Path, args: &[&str]) -> Result<(), String> {
+pub(crate) fn gh(root: &Path, args: &[&str]) -> Result<(), String> {
     let status = Command::new("gh")
         .args(args)
         .current_dir(root)

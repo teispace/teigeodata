@@ -615,8 +615,9 @@ uncached buildings and DEM): 7 parts, 13.49 MB together for an 11.59 MB country 
 
 `forge make <cc> --release <v> [--lite] [--key <seed-file>] [--ids <registry> | --fresh-ids] [--split] [--force] [--fetch]`
 reads the newest ID registry of the country's builds in `data/build/pack/<cc>/` when no
-`--ids` is named, so IDs stay stable from one run to the next; `--fresh-ids` numbers a first
-build on purpose (D-240). It runs a
+`--ids` is named, so IDs stay stable from one run to the next, and refuses to run with none
+(`cargo xtask ids restore` puts the released ones back); `--fresh-ids` numbers a first build
+on purpose (D-240, D-261). It runs a
 country's stages from its recipe, `data/countries/<cc>/build.yaml` (checked by
 `cargo xtask check-data`): `read` for each points source, `conflate` over them, `buildings`
 for each building source the build may read, `core`, `topology` for the admin source, `dem`
