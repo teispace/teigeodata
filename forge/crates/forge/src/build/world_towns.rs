@@ -75,6 +75,19 @@ struct TownList {
     /// Each town's name in its state's own language (D-263).
     #[serde(default)]
     local: Option<LocalNames>,
+    /// Each town's settlement rank by its body type (D-264).
+    rank: Ranks,
+}
+
+/// A list's settlement ranks (`sources::settlement_rank`): `default` for every listed town,
+/// `by_type` for the body types (in `column`) that are cities.
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Ranks {
+    column: String,
+    default: u8,
+    #[serde(default)]
+    by_type: BTreeMap<String, u8>,
 }
 
 /// A list's own-language name column, and the language of each first-level code's names as a
@@ -113,6 +126,8 @@ pub(super) struct Town {
     /// Its name in its state's language, as (language, text), when the list has a well-formed
     /// one in that language's script (D-263).
     pub(super) local: Option<(String, String)>,
+    /// Its settlement rank as the list states it (D-264): a statutory town is at least a town.
+    pub(super) rank: u8,
     /// Its district's row key, when the district is kept.
     pub(super) district: Option<String>,
     /// The Wikidata item of its state's world unit.
@@ -359,10 +374,12 @@ pub(super) fn build(
     )?;
     let mut list: Vec<(String, String, String)> = Vec::new();
     let mut locals: Vec<Option<(String, String)>> = Vec::new();
+    let mut ranks: Vec<u8> = Vec::new();
     let mut cols = vec![
         f.towns.code.as_str(),
         f.towns.name.as_str(),
         f.towns.state.as_str(),
+        f.towns.rank.column.as_str(),
     ];
     if let Some(l) = &f.towns.local {
         cols.push(&l.column);
@@ -371,7 +388,7 @@ pub(super) fn build(
     // scripts).
     let (mut copies, mut refused) = (0usize, 0usize);
     for_each_row(&path(&f.towns.source)?, &cols, |r| {
-        if let [code, name, state, rest @ ..] = r {
+        if let [code, name, state, kind, rest @ ..] = r {
             let local = f.towns.local.as_ref().and_then(|l| {
                 let tag = l.languages.get(*state)?;
                 let text = rest.first()?.trim();
@@ -394,6 +411,14 @@ pub(super) fn build(
                 (*state).into(),
             ));
             locals.push(local);
+            ranks.push(
+                f.towns
+                    .rank
+                    .by_type
+                    .get(*kind)
+                    .copied()
+                    .unwrap_or(f.towns.rank.default),
+            );
         }
         Ok(())
     })?;
@@ -556,6 +581,7 @@ pub(super) fn build(
             continue;
         };
         let local = locals.get(t).cloned().flatten();
+        let rank = ranks.get(t).copied().unwrap_or(f.towns.rank.default);
         let t = lt;
         let district = cover
             .get(&t.0)
@@ -565,6 +591,7 @@ pub(super) fn build(
             key: format!("{}:{}", f.towns.source, t.0),
             name: t.1.clone(),
             local,
+            rank,
             district,
             state: f.states.units.get(&t.2).cloned().unwrap_or_default(),
             city: city.clone(),

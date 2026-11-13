@@ -11,6 +11,17 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ## [Unreleased]
 
+### Added
+
+- `forge world --alternates <source>`: each city's GeoNames alternate names in the part's
+  languages, historical and colloquial ones included (Bombay, Madras, Benares; D-265).
+
+### Changed
+
+- A second-level unit ranks just below a city of its own name that it holds, as a first-level
+  one did ("Varanasi" gives the city, then the district); India's municipal corporations
+  rank as cities (D-264).
+
 ## [0.3.0] - 2026-11-13
 
 Clients may install some parts of a pack (D-251 to D-254): some languages' names, one outline

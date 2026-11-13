@@ -116,14 +116,70 @@ fn main_row(line: &str, ids: &mut BTreeSet<u64>, out: &mut Output) {
     }
 }
 
-/// alternateNameId, geonameid, isolanguage, name, isPreferredName, isShortName, isColloquial,
-/// isHistoric, from, to.
+/// One row of `alternateNamesV2.txt`: alternateNameId, geonameid, isolanguage, name,
+/// isPreferredName, isShortName, isColloquial, isHistoric, from, to.
+pub(crate) struct Alternate<'l> {
+    pub(crate) gid: u64,
+    /// An ISO 639 code, a pseudo-language (`link`, `wkdt`, `iata`, `post`…) or empty.
+    pub(crate) lang: &'l str,
+    pub(crate) text: &'l str,
+    pub(crate) kind: AltKind,
+}
+
+/// What an alternate name is, by its flags: the first of historic, colloquial, short and
+/// preferred that is set.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AltKind {
+    Historic,
+    Colloquial,
+    Short,
+    Preferred,
+    Plain,
+}
+
+impl<'l> Alternate<'l> {
+    /// The row of `line`, `None` when its place ID is not a number.
+    pub(crate) fn parse(line: &'l str) -> Option<Self> {
+        let [_, gid, lang, text, preferred, short, colloquial, historic] = fields::<8>(line);
+        Some(Self {
+            gid: gid.parse().ok()?,
+            lang,
+            text,
+            kind: if historic == "1" {
+                AltKind::Historic
+            } else if colloquial == "1" {
+                AltKind::Colloquial
+            } else if short == "1" {
+                AltKind::Short
+            } else if preferred == "1" {
+                AltKind::Preferred
+            } else {
+                AltKind::Plain
+            },
+        })
+    }
+}
+
+/// Calls `f` with every row of an `alternateNamesV2.zip`, streamed.
+pub(crate) fn for_each_alternate(
+    zip: &Path,
+    mut f: impl FnMut(&Alternate<'_>),
+) -> Result<(), String> {
+    for_each_line(zip, "alternateNamesV2.txt", |line| {
+        if let Some(a) = Alternate::parse(line) {
+            f(&a);
+        }
+    })
+}
+
 fn alternate_row(line: &str, ids: &BTreeSet<u64>, out: &mut Output) {
-    let [_, gid, lang, text, preferred, short, colloquial, historic] = fields::<8>(line);
-    let Ok(gid) = gid.parse::<u64>() else { return };
-    if !ids.contains(&gid) {
+    let Some(a) = Alternate::parse(line) else {
+        return;
+    };
+    if !ids.contains(&a.gid) {
         return;
     }
+    let (gid, lang, text) = (a.gid, a.lang, a.text);
     let id = format!("geonames:{gid}");
     let same_as = |target: String| Link {
         id: id.clone(),
@@ -148,16 +204,12 @@ fn alternate_row(line: &str, ids: &BTreeSet<u64>, out: &mut Output) {
         "post" | "icao" | "faac" | "tcid" | "unlc" | "fr_1793" => return,
         _ => {}
     }
-    let kind = if historic == "1" {
-        "old"
-    } else if colloquial == "1" {
-        "colloquial"
-    } else if short == "1" {
-        "short"
-    } else if preferred == "1" {
-        "official"
-    } else {
-        "alternate"
+    let kind = match a.kind {
+        AltKind::Historic => "old",
+        AltKind::Colloquial => "colloquial",
+        AltKind::Short => "short",
+        AltKind::Preferred => "official",
+        AltKind::Plain => "alternate",
     };
     out.names.push(Name {
         id,

@@ -110,7 +110,7 @@ fn importance(p: &Place) -> u8 {
     u8::try_from((base + pop).min(255)).unwrap_or(u8::MAX)
 }
 
-/// Whether `p` is a city whose name its first-level unit may share ([`below_their_city`]).
+/// Whether `p` is a city whose name a unit holding it may share ([`below_their_city`]).
 fn is_city(p: &Place) -> bool {
     p.kind == PlaceKind::Settlement && p.rank >= CITY_RANK && p.flags & places::FLAG_FORMER == 0
 }
@@ -140,11 +140,14 @@ fn city_keys<'m>(rows: &[&Place], maps: &'m [Maps]) -> BTreeMap<&'m str, BTreeSe
     out
 }
 
-/// A first-level unit ranks just below a city of its own name that it holds (D-158): a search
-/// for "Tokyo", "Berlin" or "Seoul" means the city first, then the region (the order of the
-/// major geocoders); a region's base importance (90) is above a capital's (54 plus population).
-/// A lower unit is left alone: a municipality or district is often the city itself, its
-/// point source a duplicate (Nepal's golden set wants the municipality for "Damak" and
+/// A first- or second-level unit ranks just below a city of its own name that it holds (D-158,
+/// D-264): a search for "Tokyo", "Berlin" or "Seoul" means the city first, then the region,
+/// and one for "Varanasi" or "Los Angeles" the city, then the district or county (the order of
+/// the major geocoders); a region's base importance (90) and a district's (70) are above a
+/// city's (44 plus population). Only a city counts, never a town: a town's rank often comes
+/// from a stale seat code (Nepal's golden set wants district "Nuwakot", not the old seat of
+/// that name). A lower unit is left alone: a municipality is often the city itself, its point
+/// source a duplicate (Nepal's golden set wants the municipality for "Damak" and
 /// "Kamalamai"). A city is a settlement of rank [`CITY_RANK`] or more; "its own name" is a
 /// shared exact search key; "holds" is the parent chain.
 fn below_their_city<'s>(
@@ -172,7 +175,7 @@ fn below_their_city<'s>(
                 };
                 let unit = rows
                     .get(a)
-                    .filter(|p| p.kind == PlaceKind::Admin && p.admin_level == 1);
+                    .filter(|p| p.kind == PlaceKind::Admin && matches!(p.admin_level, 1 | 2));
                 if unit.is_some()
                     && set.contains(&u32::try_from(a).unwrap_or(u32::MAX))
                     && let Some(i) = importance.get_mut(a)
@@ -1539,7 +1542,9 @@ mod tests {
     fn a_unit_ranks_below_the_city_of_its_name_inside_it() {
         // Region "Tokyo" holds district "Shinjuku", which holds the capital "Tokyo"; region
         // "Kyoto" holds a town "Kyoto"; region "Osaka" does not hold the city "Osaka";
-        // municipality "Damak" holds the city "Damak" (a lower unit is left alone).
+        // municipality "Damak" holds the city "Damak" (a lower unit is left alone); district
+        // "Varanasi" holds the city "Varanasi" (D-264), and district "Hilsa" holds a town
+        // "Hilsa" (a town is no city).
         let keyed = |key: &str, mut p: Place, parent: Option<&str>| {
             p.key = key.into();
             p.parent = parent.map(Into::into);
@@ -1579,6 +1584,18 @@ mod tests {
                 place(PlaceKind::Settlement, 0, 3, Some(2_700_000)),
                 None,
             ),
+            keyed("d:varanasi", place(PlaceKind::Admin, 2, 0, None), None),
+            keyed(
+                "c:varanasi",
+                place(PlaceKind::Settlement, 0, 3, Some(120_000)),
+                Some("d:varanasi"),
+            ),
+            keyed("d:hilsa", place(PlaceKind::Admin, 2, 0, None), None),
+            keyed(
+                "c:hilsa",
+                place(PlaceKind::Settlement, 0, 2, Some(50_000)),
+                Some("d:hilsa"),
+            ),
         ];
         let refs: Vec<&Place> = rows.iter().collect();
         let exact: BTreeMap<String, BTreeSet<u32>> = [
@@ -1587,6 +1604,8 @@ mod tests {
             ("kyoto", vec![3, 4]),
             ("damak", vec![6, 7]),
             ("osaka", vec![5, 8]),
+            ("varanasi", vec![9, 10]),
+            ("hilsa", vec![11, 12]),
         ]
         .into_iter()
         .map(|(k, v)| (k.to_string(), v.into_iter().collect()))
@@ -1599,11 +1618,21 @@ mod tests {
         );
         let mut after = before.clone();
         below_their_city(&refs, exact.values(), &mut after);
+        assert!(
+            before[9] > before[10],
+            "the district first without the rule"
+        );
         assert_eq!(after[0], before[2] - 1, "the region just below its capital");
+        assert_eq!(after[9], before[10] - 1, "the district just below its city");
         assert_eq!(
-            after[1..],
-            before[1..],
+            after[1..9],
+            before[1..9],
             "the rest unchanged (a town, a city outside, a municipality)"
+        );
+        assert_eq!(
+            after[10..],
+            before[10..],
+            "the city, a town's district and the town"
         );
     }
 

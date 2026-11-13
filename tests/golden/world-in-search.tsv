@@ -1,0 +1,62 @@
+# India's search on the world part (TG-15 step 4, india-sources §5): the cases a lite layer
+# with India's cities and towns can answer. Expected places are §5's GeoNames IDs (the
+# 2026-11-11 dump), turned into stable IDs by the world registry (`world-ids-lite/in.tsv`).
+# Run: cargo run --release -p teigeodata-engine --all-features --example golden --
+#   tests/golden/world-in-search.tsv data/build/baseline/world/world-baseline-lite-<variant>-towns-in.tgd
+# Columns (tab-separated): query, expected IDs (any passes), worst passing rank, options, note.
+#
+# Exact Latin, large cities: rank 1.
+Varanasi	tgd:in/1cd	1	-	geonames 1253405
+Lucknow	tgd:in/2dj	1	-	geonames 1264733
+Patna	tgd:in/163	1	-	geonames 1260086
+Kanpur	tgd:in/2cm	1	-	geonames 1267995
+Mumbai	tgd:in/74	1	-	geonames 1275339
+Kolkata	tgd:in/3s4	1	-	geonames 1275004
+Chennai	tgd:in/5gt	1	-	geonames 1264527
+Bengaluru	tgd:in/4kr	1	-	geonames 1277333
+Hyderabad	tgd:in/32j	1	-	geonames 1269843
+Jaipur	tgd:in/25f	1	-	geonames 1269515
+# Devanagari (Hindi): rank 1.
+वाराणसी	tgd:in/1cd	1	-	Varanasi
+लखनऊ	tgd:in/2dj	1	-	Lucknow
+पटना	tgd:in/163	1	-	Patna
+प्रयागराज	tgd:in/1d6	1	-	Prayagraj, geonames 1278994
+भोपाल	tgd:in/2r9	1	-	Bhopal, geonames 1275841
+देहरादून	tgd:in/1k8	1	-	Dehradun, geonames 1273313
+रांची	tgd:in/3j0	1	-	Ranchi, geonames 1258526, anusvara
+राँची	tgd:in/3j0	1	-	Ranchi, chandrabindu variant
+# Historical or renamed: rank 3.
+Benares	tgd:in/1cd	3	-	Varanasi
+Kashi	tgd:in/1cd	3	-	Varanasi
+Allahabad	tgd:in/1d6	3	-	Prayagraj
+Bombay	tgd:in/74	3	-	Mumbai
+Madras	tgd:in/5gt	3	-	Chennai
+Calcutta	tgd:in/3s4	3	-	Kolkata
+Gurgaon	tgd:in/1x1	3	-	Gurugram, geonames 1270642
+Trivandrum	tgd:in/62z	3	-	Thiruvananthapuram, geonames 1254163
+Port Blair	tgd:in/47p	3	-	geonames 1259385
+# Known gaps, not yet cases: Banaras (Varanasi), Baroda (Vadodara) and Poona (Pune) are in
+# GeoNames' alternate names only without a language, which the part leaves out as noise
+# (D-265); a sourced per-country list of former names would answer them. `Var` puts Varanasi
+# 20th: a first-level unit's importance (base 90) is above a city of 1.2 million's (74), so
+# Var, Varese and Vårdö (450 people) come first (Q-026).
+Sri Vijaya Puram	tgd:in/47p	3	-	Port Blair's 2024 name
+# Homonyms across states: the larger at rank 1, the other in the top 5.
+Raipur	tgd:in/2hh	1	-	Chhattisgarh, geonames 1258980
+Raipur	tgd:in/nq	5	-	the other Raipur, geonames 1258972
+Udaipur	tgd:in/me	1	-	Rajasthan, geonames 1253986
+Udaipur	tgd:in/3w5	5	-	Tripura, geonames 1253987
+Gorakhpur	tgd:in/1e8	1	-	Uttar Pradesh, geonames 1270927
+Gorakhpur	tgd:in/1s2	5	-	Haryana, geonames 1270926
+Aurangabad	tgd:in/2zc	1	-	Maharashtra, geonames 1278149
+Bilaspur	tgd:in/10v	5	-	Himachal Pradesh, geonames 1275631
+# Small towns (5,000 to 50,000): rank 5.
+Raxaul	tgd:in/18a	5	-	geonames 1258294
+Jogbani	tgd:in/11n	5	-	geonames 1268855
+Nautanwa	tgd:in/18p	5	-	geonames 1261672
+Banbasa	tgd:in/1fk	5	-	geonames 7117985
+Kavaratti	tgd:in/681	5	-	geonames 1267390
+Kargil	tgd:in/11a	5	-	geonames 1267776
+Leh	tgd:in/119	5	-	geonames 1264976
+# Prefixes of three code points: rank 5.
+वारा	tgd:in/1cd	5	-	Varanasi

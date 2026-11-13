@@ -2,7 +2,7 @@
 //! ([`crate::record`]) under `data/build/read/<source-id>/`.
 
 pub(crate) mod boundaries;
-mod geonames;
+pub(crate) mod geonames;
 pub(crate) mod natural_earth;
 mod osm;
 pub(crate) mod overture;

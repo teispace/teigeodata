@@ -41,7 +41,7 @@
 //! finest level within the tolerance with the baseline's region index
 //! (`teigeodata_format::extract`). Output: `data/build/baseline/world/`.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write as _;
 use std::fs;
 use std::io::{BufRead, BufReader};
@@ -52,6 +52,8 @@ use rayon::prelude::*;
 use teigeodata_core::{Namespace, PlaceId, PlaceKind, hilbert};
 use teigeodata_format::arcs::Arcs;
 use teigeodata_format::names::NameType;
+
+use crate::read::geonames::{AltKind, for_each_alternate};
 use teigeodata_format::{
     Encoding, Kind, Pack, Tag, Writer, extract, hierarchy, idmap, place_index,
 };
@@ -261,16 +263,27 @@ struct Args {
     labels: Vec<String>,
     /// Countries whose official districts and towns join the part (D-259).
     towns: Vec<String>,
+    /// A `GeoNames` alternate-names source: each city's [`UNIT_LANGS`] names (D-265).
+    alternates: Option<String>,
 }
 
-/// The file-name part of a world part built from `cities`, the label chain `labels` and the
-/// towns of `towns` (TG-13, D-221, D-259): empty for the default list and neither, so the
-/// default file keeps its name.
-pub(crate) fn variant(cities: &str, labels: &[String], towns: &[String]) -> String {
+/// The file-name part of a world part built from `cities`, its `alternates`, the label chain
+/// `labels` and the towns of `towns` (TG-13, D-221, D-259, D-265): empty for the default list
+/// and none of them, so the default file keeps its name.
+pub(crate) fn variant(
+    cities: &str,
+    alternates: Option<&str>,
+    labels: &[String],
+    towns: &[String],
+) -> String {
     let mut v = String::new();
     if cities != DEFAULT_CITIES {
         v.push('-');
         v.push_str(cities);
+    }
+    if let Some(a) = alternates {
+        v.push('-');
+        v.push_str(a);
     }
     for l in labels {
         v.push('-');
@@ -291,7 +304,7 @@ pub(crate) const DEFAULT_TZ: &str = "tzdb-2026f";
 pub(crate) const DEFAULT_CITIES: &str = "geonames-cities15000";
 
 fn parse(args: &[String]) -> Result<Args, String> {
-    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--labels <source>]… [--towns <cc>]… [--ids <dir> | --fresh-ids] [--key <seed-file>]";
+    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--alternates <source>] [--labels <source>]… [--towns <cc>]… [--ids <dir> | --fresh-ids] [--key <seed-file>]";
     let mut a = Args {
         release: String::new(),
         lite: false,
@@ -306,6 +319,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
         key: None,
         labels: Vec::new(),
         towns: Vec::new(),
+        alternates: None,
     };
     let mut it = args.iter();
     while let Some(f) = it.next() {
@@ -335,6 +349,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
             "--fresh-ids" => a.fresh_ids = true,
             "--key" => a.key = Some(value()?),
             "--labels" => a.labels.push(value()?),
+            "--alternates" => a.alternates = Some(value()?),
             "--towns" => a.towns.push(value()?.to_ascii_lowercase()),
             _ => return Err(format!("unknown argument `{f}`; {usage}")),
         }
@@ -737,6 +752,64 @@ fn official(text: &str) -> PlaceName {
     }
 }
 
+/// Each city's `GeoNames` alternate names in the part's languages `langs` ([`UNIT_LANGS`] and
+/// each label source's, D-265): current, historical and colloquial (`Bombay`, `Madras`,
+/// `Benares`, `देहरादून`), so a search by a former, everyday or own-script name finds the
+/// city. Names with no language are left out: measured on the cities of 5,000, 71,199 of them
+/// (774 kB) against 3,578 English ones (38 kB), and they mix scripts, languages and region
+/// names under a city. Returns the report's line.
+fn add_alternates(
+    root: &Path,
+    a: &Args,
+    lock: &Lock,
+    langs: &BTreeSet<&str>,
+    rows: &mut [Row],
+) -> Result<String, String> {
+    let Some(source) = &a.alternates else {
+        return Ok(String::new());
+    };
+    let at: HashMap<u64, usize> = rows
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.place.kind == PlaceKind::Settlement)
+        .filter_map(|(i, r)| {
+            r.place
+                .key
+                .strip_prefix("geonames:")
+                .and_then(|g| g.parse().ok())
+                .map(|g| (g, i))
+        })
+        .collect();
+    let (mut added, mut places) = (0usize, BTreeSet::new());
+    for_each_alternate(&lock.path(root, source)?, |alt| {
+        let (Some(&i), true) = (at.get(&alt.gid), langs.contains(alt.lang)) else {
+            return;
+        };
+        let Some(row) = rows.get_mut(i) else { return };
+        if !super::pack::fits(alt.text) || row.place.names.iter().any(|n| n.text == alt.text) {
+            return;
+        }
+        let kind = match alt.kind {
+            AltKind::Historic => NameType::Historical,
+            AltKind::Colloquial => NameType::Colloquial,
+            AltKind::Short | AltKind::Preferred | AltKind::Plain => NameType::Alt,
+        };
+        row.place.names.push(PlaceName {
+            text: alt.text.to_string(),
+            lang: Some(alt.lang.to_string()),
+            kind: Some(kind),
+            origin: crate::build::Origin::GeoNames,
+        });
+        added += 1;
+        places.insert(i);
+    })?;
+    Ok(format!(
+        "- {added} alternate names on {} cities from {source} ({}, D-265).\n",
+        places.len(),
+        langs.iter().copied().collect::<Vec<_>>().join(", ")
+    ))
+}
+
 /// Each `--towns` country's districts and towns (D-259): a district under its state's world
 /// unit, a town under its district (else its state) at the place it was found at; a town whose
 /// place is already a city row joins that row (its key, parent and official name) instead of
@@ -824,6 +897,7 @@ fn add_towns(
             let Some(row) = row else { continue };
             row.place.parent = parent.or(row.place.parent.take());
             row.place.sources.push(t.key);
+            row.place.rank = row.place.rank.max(t.rank);
             let local = t.local.map(|(lang, text)| PlaceName {
                 lang: Some(lang),
                 ..official(&text)
@@ -983,6 +1057,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         .concat();
     for id in [&a.admin, &a.admin1, &a.cities, &a.tz]
         .into_iter()
+        .chain(&a.alternates)
         .chain(&a.labels)
         .chain(&town_sources)
     {
@@ -1020,6 +1095,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let (sections, snapped) = sections(&places, &rows, &ids, &row_of, &geometry, a.tolerance_m)?;
     let read: Vec<&str> = [&a.admin, &a.admin1, &a.cities, &a.tz]
         .into_iter()
+        .chain(&a.alternates)
         .chain(&a.labels)
         .chain(&town_sources)
         .map(String::as_str)
@@ -1039,7 +1115,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         )?;
     }
     // A city list other than the default is its own world part, named by it (TG-13).
-    let variant = variant(&a.cities, &a.labels, &a.towns);
+    let variant = variant(&a.cities, a.alternates.as_deref(), &a.labels, &a.towns);
     let file = dir.join(format!("world-baseline-{build}{variant}.tgd"));
     crate::make::write_atomic(&file, &out)?;
     let probes = probes(&countries, &ids, &row_of);
@@ -1207,8 +1283,13 @@ fn world_rows(
         .count();
     rows.extend(cities);
     let towns = add_towns(root, a, lock, countries, &part.units, &mut rows)?;
-    let dropped = dedup_keys(&mut rows);
     let chain = super::world_labels::read(root, lock, &a.labels)?;
+    let langs: BTreeSet<&str> = UNIT_LANGS
+        .into_iter()
+        .chain(chain.iter().map(super::world_labels::Labels::lang))
+        .collect();
+    let alternates = add_alternates(root, a, lock, &langs, &mut rows)?;
+    let dropped = dedup_keys(&mut rows);
     let owners = code_owners(&rows);
     let named = super::world_labels::apply(
         &chain,
@@ -1221,7 +1302,7 @@ fn world_rows(
     let counts = format!(
         "- {} countries and disputed areas ({}).\n{}\n- {n_cities} cities ({}): {under_unit} \
          under a unit, {fallback} under the feature of their code, {orphans} with no \
-         country.\n{towns}- {dropped} source keys another row already holds dropped.\n{named}{tz_report}",
+         country.\n{towns}{alternates}- {dropped} source keys another row already holds dropped.\n{named}{tz_report}",
         countries.len(),
         a.admin,
         part.report,

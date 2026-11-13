@@ -91,6 +91,13 @@ towns:
   # Rajasthan, Telugu 138 in Telangana, Malayalam 93 in Kerala, Gurmukhi 58 in Punjab, ...).
   # States whose column holds English copies only are listed all the same: the script check
   # refuses a copy.
+  # Settlement rank (D-264): a statutory town is a town (2), a municipal corporation a city
+  # (3). LGD's body types: 4 is the Municipal Corporation (all 276 checked are Nagar Nigam
+  # cities: Varanasi, Lucknow, Gorakhpur, Deoghar), 21 the New Delhi Municipal Council.
+  rank:
+    column: local_body_type_code
+    default: 2
+    by_type: { "4": 3, "21": 3 }
   local:
     column: local_body_name_local
     languages:

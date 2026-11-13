@@ -38,6 +38,13 @@ pub(super) struct Labels {
     alts: HashMap<String, Vec<String>>,
 }
 
+impl Labels {
+    /// The source's language.
+    pub(super) fn lang(&self) -> &str {
+        &self.lang
+    }
+}
+
 /// Reads each source, in the chain's order: a SPARQL snapshot of Wikidata labels, or a CLDR
 /// locale file (an `http` source whose URL ends in `.xml`).
 pub(super) fn read(root: &Path, lock: &Lock, ids: &[String]) -> Result<Vec<Labels>, String> {

@@ -521,3 +521,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-13 | TG-15 split into six steps by the town-join measurement: statutory towns from LGD, code-only units, points within the district, census towns on Q-024 | D-258 |
 | 2026-11-13 | TG-15 steps 2–3 in the world part (`--towns`); sub-districts and ISO 3166-2 moved to step 4; world IDs kept from the last registry | D-259, D-260 |
 | 2026-11-13 | TG-15 step 4: towns' own-language names from LGD in the world part, ahead of the pack | D-263 |
+| 2026-11-13 | TG-15 step 4: city-first for districts, alternate names in the part's languages; India golden 44/44 | D-264, D-265 |

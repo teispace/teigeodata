@@ -14,6 +14,9 @@ components: [point, elevation, dem-coarse, admin, names, search, timezone, tz-ru
 languages: [ne-Deva, hi-Deva, en]
 # Every city of 5,000 or more (TG-13), each with a height and its source.
 world: geonames-cities5000
+# Their English alternate names, current, historical and colloquial (Bombay, Madras, Benares;
+# D-265).
+world_alternates: geonames-alternate-names
 # Countries by CLDR's Nepali territory names (D-257), then Nepali labels from Wikidata, then
 # Hindi ones (tagged hi) where Wikidata has no Nepali (D-221).
 world_labels: [cldr-49-ne, wikidata-labels-ne, wikidata-labels-hi]

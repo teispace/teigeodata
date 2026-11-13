@@ -681,7 +681,8 @@ recipe has a `baseline` entry (below).
 ## The world part (`world`)
 
 `forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>]
-[--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--labels <source>]… [--towns <cc>]…
+[--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--alternates <source>] [--labels <source>]…
+[--towns <cc>]…
 [--ids <dir> | --fresh-ids] [--key <seed-file>]` writes `data/build/baseline/world/world-baseline-<build>.tgd`,
 its ID registries `world-ids-<build>/<namespace>.tsv` (the next build's input: without `--ids`
 the stage reads them and fails when they are missing, unless `--fresh-ids` asks for a first
@@ -692,6 +693,9 @@ feature's ID (D-149). Defaults: `ne-admin0-nep`, `geonames-cities15000`, `tzdb-2
 admin 1 `overture-divisions` for main (D-155) and `ne-admin1` for lite; tolerance 2 km from
 Overture (D-157), else 1 km; islets the tolerance's square.
 
+- **Alternate names** (`--alternates`, D-265). Each city's GeoNames alternate names in the
+  part's languages (English and each label source's), as historical, colloquial or alternate
+  names; untagged ones are left out. The file name gains `-<source>`.
 - **Rows.** One country place per admin-0 feature (names from `NAME` and its 26 `NAME_<XX>`
   columns, population, the cartographers' label point when it is inside the feature, else the
   topology's), one level-1 unit per admin-1 piece (its source name and English, D-150), and

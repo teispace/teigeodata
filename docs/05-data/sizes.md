@@ -99,7 +99,7 @@ outlines (4.8 MB), the substring and search indexes (3.7 MB), the point-to-unit 
 | Profile | Rows | Disk | Wire |
 |---|--:|--:|--:|
 | `baseline` (world part and Nepal's slice, with zone rules; the shipped file, byte for byte, D-231) | 39,395 | 5,000,520 | 3,648,016 |
-| `tithipatra` (world part with every city of 5,000 and India's districts and statutory towns, all of Nepal at 20 m; names in Devanagari Nepali, Hindi where Wikidata has no Nepali, and English, Nepal's gaps filled by the transliterator; zone rules for all 376 zones; the coarse DEM) | 172,339 | 14,936,960 | 9,331,161 |
+| `tithipatra` (world part with every city of 5,000 and India's districts and statutory towns, all of Nepal at 20 m; names in Devanagari Nepali, Hindi where Wikidata has no Nepali, and English, with each city's GeoNames alternate names in those languages (D-265), Nepal's gaps filled by the transliterator; zone rules for all 376 zones; the coarse DEM) | 172,339 | 15,207,232 | 9,476,053 |
 | `points-en` (points, heights, admin, English names and search; no outlines) | 39,395 | 1,838,332 | 1,178,096 |
 
 ## Changelog
