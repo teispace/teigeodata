@@ -1,7 +1,7 @@
 ---
 title: "India data sources"
 status: research
-updated: 2026-11-11
+updated: 2026-11-13
 owner: teigeodata maintainers
 revisit: 2027-05-11
 ---
@@ -372,6 +372,48 @@ Join to LGD by state code: LGD has 36 states and UTs, which matches. LGD's state
 (Census-style, e.g. Telangana 36, Ladakh 37, DNHDD 38) are not ISO codes. The mapping lives
 in `data/countries/in/iso3166.yaml`. ISO has no district codes; districts carry LGD codes.
 
+### 3.8 The town join, measured (2026-11-13)
+
+Measured on the LGD mirror of 2026-11-12 (`urban_local_bodies` 5,050 rows,
+`statewise_ulbs_coverage` 5,098 bodies, `villages` 677,660 rows, `districts` 790), GeoNames
+`IN.zip` of 2026-11-12 and QLever's Wikidata. Scripts were throwaway; the numbers go into the
+forge's own report when the stage is built.
+
+- **Census towns are not in LGD.** A census town is a village-range code the Census calls
+  urban. LGD files 22,486 inhabited villages as `Urban`, and all but 74 of them lie inside an
+  urban local body (the villages a statutory town covers). So LGD gives the **statutory towns
+  only**; census towns need the Census 2011 town directory, whose data.gov.in API takes a key
+  (Q-024).
+- **Each urban body's district is known.** `statewise_ulbs_coverage` maps every body to its
+  district(s), sub-district(s) and villages (27 bodies span two districts). LGD's urban body
+  file itself has only the state.
+- **Districts link to GeoNames through Wikidata.** Items with an LGD district code (`P12746`)
+  carry a GeoNames ID (`P1566`) for 662 of 790 districts, 652 of them a GeoNames `ADM2`: an
+  exact crosswalk. 334 body-district links more match by state and district name; 330 have
+  neither (districts made after GeoNames' list).
+- **Wikidata does not link the bodies.** Only 101 of the 5,050 bodies have an item with
+  `P6425`, 7 with a GeoNames ID: `P6425` is mostly on panchayats. No help for points.
+- **Points by name within the district** (GeoNames populated places, type words such as
+  "Municipal Council" stripped):
+
+  | Match | Exact name key | Phonetic key |
+  |---|--:|--:|
+  | one place in the body's district | 3,592 (71.1%) | 3,946 (78.1%) |
+  | one place in the state, no district link | 230 (4.6%) | 203 (4.0%) |
+  | ambiguous, or only outside the district | 260 (5.1%) | 497 (9.8%) |
+  | no name match | 968 (19.2%) | 404 (8.0%) |
+
+  The phonetic key (aspirates folded, vowels after the first letter dropped, doubles
+  collapsed) finds Mahabubnagar (Mahbubnagar) and Tadipatri (Tādpatri). The misses left are
+  compound names ("Chamoli Gopeshwar", "S.A.S.Nagar - Mohali", "Sirhind Fatehgarh Sahib"),
+  which match on one of their parts, and bodies whose GeoNames place is missing. Ambiguity is
+  mostly a town and its own suburb or bazaar of the same name in one district, broken by
+  population and the seat class (`PPLA*`).
+- **So the research's ≥ 95% gate is out of reach in lite with these sources**: about 82% of
+  statutory towns take a point without a guess, perhaps 88–90% with compound names and the
+  population tie-break. Lite reports the rest and leaves them out (no point is guessed, §5);
+  main adds OSM `place=*` and keeps the 95% target.
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
@@ -540,7 +582,8 @@ substring 19–20 B.
 |---|---|---|---|
 | LGD (live counts) | 36 / 790 / 7,112 / 677,660 / 5,050 | 2026-11-11 | lgdirectory.gov.in home page |
 | LGD copyright policy, terms | as served | 2026-11-11 | `copyRightPolicy.do`, `termsconditions.do` |
-| LGD daily mirror | observed 2026-11-11 (villages 7,991,034 B, sha256 `397ca8e9…`) | 2026-11-11 | ramseraph.github.io/opendata/lgd `metadata.json` |
+| LGD daily mirror | observed 2026-11-12 (urban bodies 93,618 B, sha256 `68fb622b…`; coverage 489,857 B) | 2026-11-13 | GitHub release `lgd-parquet-latest` of ramSeraph/opendata |
+| LGD daily mirror (first look) | observed 2026-11-11 (villages 7,991,034 B, sha256 `397ca8e9…`) | 2026-11-11 | ramseraph.github.io/opendata/lgd `metadata.json` |
 | GeoNames IN dump | Last-Modified 2026-11-11 02:43 GMT, 15,755,091 B | 2026-11-11 | download.geonames.org |
 | GeoNames alternate names IN | 1,371,333 B | 2026-11-11 | download.geonames.org |
 | Wikidata | live counts | 2026-11-11 | query-main.wikidata.org |

@@ -172,3 +172,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-13 | Everything separable done (D-255): profiles keep their build-time cut (script-level), downloads pick parts | TG-14 (`machine_names`, India tier 4), TG-15 India |
 | 2026-11-13 | `machine_names: keep \| drop` (D-256): `tithipatra` with `drop` 8.29 MB wire instead of 9.24, Nepal's `ne-Deva` 3.7% instead of 99.9%; `keep` byte-identical | TG-14 tier 4 for India, TG-15 India |
 | 2026-11-13 | TG-14 sources pinned: CLDR 49 `ne.xml` names 237 of 248 countries in Nepali, short forms as alternates, a code only on its most populous country row; origin 10 `standard` (D-257) | TG-14 tier 4 for India, TG-15 India |
+| 2026-11-13 | TG-15 measured and planned (D-258): LGD gives statutory towns with districts, census towns need the Census directory (Q-024); 78% of towns take a point in their district by a phonetic name key | TG-15 step 1: sources pinned |
