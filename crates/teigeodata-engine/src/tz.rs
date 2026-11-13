@@ -1,5 +1,6 @@
 //! Zone rules (D-196, TG-03): the UTC offset in force in a timezone at an instant, the
-//! offsets a civil time may have there, and the tzdb release, from the packs' `TZ_RULES`
+//! offsets a civil time may have there, the zones held and where each one's rules start
+//! (D-262), and the tzdb release, from the packs' `TZ_RULES`
 //! ([ADR-0039]). The rules are read in place: no query allocates or parses text.
 //!
 //! [ADR-0039]: https://github.com/teispace/teigeodata/blob/main/docs/03-decisions/adr/ADR-0039-tz-rules.md
@@ -8,7 +9,7 @@
 use teigeodata_core::{E7, Point};
 use teigeodata_format::Kind;
 use teigeodata_format::Tag;
-use teigeodata_format::tz_rules::{Civil, Local, LocalType, Zone};
+use teigeodata_format::tz_rules::{Civil, Local, LocalType, MIN_UNIX, Zone};
 
 use crate::{Engine, Error, LayerId, Place};
 
@@ -107,6 +108,43 @@ impl Engine {
     /// not a date of the years ±9,999.
     pub fn tz_local_candidates(&self, zone: &str, civil: Civil) -> Result<Option<Local>, Error> {
         self.rules_zone(zone, |z, _| Ok(z.local(civil)?))
+    }
+
+    /// Every zone name (tzdb names and links) the layers' rules hold, in byte order, each once
+    /// (D-262): the zones [`tz_offset_at`](Self::tz_offset_at) answers.
+    ///
+    /// # Errors
+    /// [`Error::MissingComponent`] (`tz-rules`) if no installed layer has rules and one has
+    /// rules that were not installed.
+    pub fn tz_zones(&self) -> Result<Vec<&str>, Error> {
+        let mut out: Vec<&str> = Vec::new();
+        for l in &self.layers {
+            if let Some(rules) = &l.views().tz_rules {
+                out.extend(rules.names());
+            }
+        }
+        if out.is_empty() {
+            for l in &self.layers {
+                if !l.views().installed(Kind::TZ_RULES) {
+                    l.ensure(Kind::TZ_RULES)?;
+                }
+            }
+        }
+        out.sort_unstable();
+        out.dedup();
+        Ok(out)
+    }
+
+    /// The earliest instant `zone`'s rules cover, in Unix seconds (D-262), from the layer
+    /// [`tz_offset_at`](Self::tz_offset_at) reads: its first transition, before which tzdb
+    /// knows only local mean time, so an app may refuse an earlier instant rather than guess;
+    /// [`MIN_UNIX`] (year −9,999) for a zone with no transitions, whose rules hold for all
+    /// time. `None` where no layer holds the zone.
+    ///
+    /// # Errors
+    /// As [`tz_offset_at`](Self::tz_offset_at).
+    pub fn tz_rules_start(&self, zone: &str) -> Result<Option<i64>, Error> {
+        self.rules_zone(zone, |z, _| Ok(z.first_transition()?.unwrap_or(MIN_UNIX)))
     }
 
     /// The tzdb release (`2026f`) of the first layer by precedence that has zone rules, from

@@ -1093,6 +1093,19 @@ impl<'r> Zone<'r> {
         }
     }
 
+    /// The instant of its first stored transition, `None` when it has none (its footer, or its
+    /// one type, holds for all time). Before it, tzdb gives only the local mean time stub
+    /// ([`LocalType::before_first`]).
+    ///
+    /// # Errors
+    /// [`Error::Payload`] on broken data.
+    pub fn first_transition(&self) -> Result<Option<i64>, Error> {
+        if self.trans.0 == self.trans.1 {
+            return Ok(None);
+        }
+        self.rules.time(self.trans.0).map(Some)
+    }
+
     /// The stored transitions with the type each starts, in time order (the footer's are not
     /// listed); ends early at broken data.
     pub fn transitions(&self) -> impl Iterator<Item = (i64, LocalType<'r>)> + '_ {

@@ -219,6 +219,9 @@ fn the_first_layer_holding_the_zone_answers() {
     let i = e.tz_offset_at("Asia/Kolkata", 0).unwrap().unwrap();
     assert_eq!((i.seconds, i.abbr(), i.layer), (19_800, "IST", ids[1]));
     assert_eq!(e.tz_version(), Some("2026f"));
+    // D-262: every layer's zones, each once, in byte order.
+    assert_eq!(e.tz_zones().unwrap(), ["Asia/Kathmandu", "Asia/Kolkata"]);
+    assert_eq!(Engine::new().tz_zones().unwrap(), Vec::<&str>::new());
     // A layer without rules has no version to give.
     assert_eq!(Engine::new().tz_version(), None);
 }
@@ -236,6 +239,7 @@ fn rules_not_installed_are_named_not_skipped() {
         other => panic!("rules not installed answered {other:?}"),
     }
     assert_eq!(e.tz_version(), None);
+    assert!(matches!(e.tz_zones(), Err(Error::MissingComponent { .. })));
     // Installed, it answers.
     let mut e = Engine::new();
     e.add(layer(bytes, Some(Components::of(&[Component::TzRules]))));
@@ -292,4 +296,35 @@ fn a_point_gets_its_areas_zone_and_offset() {
             .unwrap(),
         None
     );
+}
+
+/// D-262: a zone's rules start at its first transition (before it, only tzdb's local mean time
+/// stub); a zone with none holds for all time; an unknown zone has no start.
+#[test]
+fn rules_start_at_the_first_transition() {
+    let (ktm, utc) = (kathmandu(), fixed(0, "UTC"));
+    let mut e = Engine::new();
+    e.add(layer(
+        rules_pack(
+            "np",
+            &[("Asia/Kathmandu", &ktm), ("Etc/UTC", &utc)],
+            Some("2026f"),
+        ),
+        None,
+    ));
+    assert_eq!(
+        e.tz_rules_start("Asia/Kathmandu").unwrap(),
+        Some(-1_577_923_200)
+    );
+    assert_eq!(
+        e.tz_rules_start("Etc/UTC").unwrap(),
+        Some(tz_rules::MIN_UNIX)
+    );
+    assert_eq!(e.tz_rules_start("Mars/Olympus").unwrap(), None);
+    // Before the start, the offset is the stub's (LMT), which is why an app refuses it.
+    let lmt = e
+        .tz_offset_at("Asia/Kathmandu", -1_577_923_201)
+        .unwrap()
+        .unwrap();
+    assert_eq!(lmt.abbr(), "LMT");
 }

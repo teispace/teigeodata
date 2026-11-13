@@ -18,6 +18,8 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   base names and the part that holds English (`*` when English has no part of its own);
   `.outline(part)` reads that outline part alone, whatever `outline_level` and
   `outline_tolerance_m` say.
+- `Engine::tz_zones` (the zone names the rules hold) and `Engine::tz_rules_start` (the
+  earliest instant a zone's rules cover, its first transition) (D-262).
 
 ### Format (`teigeodata-format`)
 
@@ -26,6 +28,7 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - `component::Selection`: components and parts together, `From<Components>` (D-252).
 - `names::Origin::Standard` (code 10): a name from a standard's locale data, such as CLDR's
   territory names (D-257). Older readers read it as `Other(10)`.
+- `tz_rules::Zone::first_transition` (D-262).
 
 ### Sync (`teigeodata-sync`)
 
