@@ -81,7 +81,9 @@ jobs:
           # The host is musl, so no --target. crt-static off: a musl cdylib links the C library
           # dynamically, as the programs that load it do.
           docker run --rm -v "$PWD:/w" -w /w alpine:3.23 sh -euc '
-            apk add --no-cache build-base curl pkgconf cmake
+            apk add --no-cache build-base curl pkgconf cmake git
+            # The checkout belongs to the runner user; the ABI gate reads it with git.
+            git config --global --add safe.directory /w
             curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
             . "$HOME/.cargo/env"
             rustup toolchain install
