@@ -44,3 +44,11 @@ allow_attributes_without_reason = "warn"
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+# Shipped shims (the JAR and the AAR, D-288): as the main workspace's `dist`, so a panic is
+# caught at the boundary, not an abort of the host.
+[profile.dist]
+inherits = "release"
+lto = "fat"
+panic = "unwind"
+strip = "symbols"

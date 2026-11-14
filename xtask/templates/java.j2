@@ -10,7 +10,7 @@ package org.teispace.teigeodata;
  */
 public final class TeiGeodata {
     static {
-        System.loadLibrary("teigeodata_jvm");
+        NativeLoader.load();
     }
 
     private TeiGeodata() {}

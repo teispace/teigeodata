@@ -53,6 +53,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - An install whose catalog refresh fails, when the stored catalog lacks the pack, fails with
   `Network` (the cause) instead of `Refused` (D-282).
 - IDL: an options record must be the last parameter, so every language can default it.
+- The JVM binding's packages (D-288): `cargo xtask package-jvm` makes the Android AAR (arm64-v8a,
+  armeabi-v7a, x86_64; minSdk 24; 64-bit libraries checked for 16 KB pages) and the desktop JAR,
+  whose `NativeLoader` extracts its platform's library when `java.library.path` has none;
+  parity runs from the JAR and on an Android emulator; `jvm.yml` builds six desktop platforms.
 - The Swift package's XCFramework (D-287): `cargo xtask package-swift [--test]` builds a
   static `CTeiGeodata.xcframework` (iOS, the iOS simulators, macOS) and tests the Swift
   binding against it on macOS and an iOS simulator; a privacy manifest; `Package.swift` gains

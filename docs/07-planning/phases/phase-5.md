@@ -84,25 +84,30 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   drift check, symbol visibility; each proven on a planted break
   ([research](../../02-research/notes/c-abi-gates.md), D-285: `cargo xtask abi`, on the full
   and the lite library in CI). Done 2026-11-14
-- [ ] Packaging: shared and static libraries per platform, the header, pkg-config and CMake
+- [x] Packaging: shared and static libraries per platform, the header, pkg-config and CMake
   config, on GitHub Releases. Built ([research](../../02-research/notes/c-packaging.md),
   D-286): `crates/teigeodata-c` (`libteigeodata`, its install name and soname), `cargo xtask
   package-c` with an own-name check and a pkg-config and CMake smoke test, full and lite;
-  `c-package.yml` on six targets attaches the archives to a `v*` release. Done when that
-  workflow is green on all six
+  `c-package.yml` on six targets attaches the archives to a `v*` release. Done 2026-11-14
+  (green on all six)
 
 ### 5.3 Swift
-- [ ] Wrapper generated over the C ABI; an XCFramework as a SwiftPM `binaryTarget`; the
+- [x] Wrapper generated over the C ABI; an XCFramework as a SwiftPM `binaryTarget`; the
   privacy manifest; iOS, macOS and the simulators in CI. Built
   ([research](../../02-research/notes/swift-xcframework.md), D-287): `cargo xtask
   package-swift --test` (static `CTeiGeodata.xcframework`, iOS 15 and macOS 12, parity on
   macOS and an iOS simulator), `PrivacyInfo.xcprivacy` (file timestamps), `Package.swift`'s
-  XCFramework mode, `apple.yml`. Done when that workflow is green; the root `Package.swift`
-  with the release URL comes with 5.10
+  XCFramework mode, `apple.yml`. Done 2026-11-14 (green, simulator included); the root
+  `Package.swift` with the release URL comes with 5.10
 
 ### 5.4 Android and the JVM
 - [ ] One generated JNI layer: the AAR (cargo-ndk, the 16 KB ELF gate in CI) and the desktop
-  JAR with native libraries per OS and architecture; `noCompress` for bundled packs
+  JAR with native libraries per OS and architecture; `noCompress` for bundled packs. Built
+  ([research](../../02-research/notes/jvm-android-packaging.md), D-288): `cargo xtask
+  package-jvm` (the AAR, minSdk 24, 16 KB checked; the JAR with `NativeLoader` extracting
+  its library; parity from the JAR and on an emulator through `app_process`), `jvm.yml` on
+  six desktop platforms and Android. Done when that workflow is green. `noCompress` for
+  bundled packs is the app's Gradle setting, documented with the packs' guide
 
 ### 5.5 Dart and Flutter
 - [ ] Generated `@Native` bindings with `NativeFinalizer`; a build hook that downloads verified
@@ -139,6 +144,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | 5.4: the AAR, the desktop JAR, the 16 KB gate (D-288); 5.2 and 5.3 green in CI | plan |
 | 2026-11-14 | 5.3: the XCFramework, the privacy manifest, simulator parity (D-287) | plan |
 | 2026-11-14 | 5.2: C packaging (D-286), the header's feature guards | plan |
 | 2026-11-14 | 5.2: the ABI and symbol gates (D-285); 5.1 done with the zone rules (D-284) | plan |

@@ -22,6 +22,7 @@ mod lexicon;
 mod mirror;
 mod pack;
 mod package_c;
+mod package_jvm;
 mod package_swift;
 mod postal;
 mod recipe;
@@ -70,6 +71,12 @@ Tasks:
                     files, checks the exports and archives it under target/package/;
                     --smoke builds and runs bindings/c/parity.c through pkg-config and
                     CMake against the staged package.
+  package-jvm [--android] [--desktop [--natives <dir>] [--test]] [--android-test]
+                    The JVM binding as it ships (D-288): --android builds the JNI library
+                    for arm64-v8a, armeabi-v7a and x86_64 (cargo-ndk, API 24), checks 16 KB
+                    alignment and makes target/jvm/teigeodata-<v>.aar; --desktop makes the
+                    JAR with the host's library and those under --natives, --test runs the
+                    parity checks from it; --android-test runs them on a running emulator.
   package-swift [--test] [--simulator <name>]
                     The XCFramework the Swift package ships (D-287): teigeodata-c's static
                     library for iOS, the iOS simulators and macOS, joined, as
@@ -121,6 +128,7 @@ fn main() -> ExitCode {
         "check-data" => report(data::check(&root)),
         "check-pack" => report(pack::run(&root, rest)),
         "package-c" => report(package_c::run(&root, rest)),
+        "package-jvm" => report(package_jvm::run(&root, rest)),
         "package-swift" => report(package_swift::run(&root, rest)),
         "pack-sizes" => report(breakdown::run(rest)),
         "check-workspace" => report(workspace::check(&root)),
