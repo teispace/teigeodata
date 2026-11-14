@@ -17,6 +17,7 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   `bindings/parity.json` and requires every language's parity suite to fail on it; C and C++
   read the values from the generated `bindings/c/parity_data.h`. The suites check the values
   the gate found unchecked (column names, `get`'s longitude, `dst`, error codes).
+- `bindings/bench.sh` measures a 1,000-row query decoded in every language (D-301).
 - The .NET binding, NuGet package `Teispace.TeiGeodata` (`net10.0`, D-298): the whole API as
   source-generated, blittable P/Invoke (NativeAOT and trimming safe), `SafeHandle` handles,
   `…Async` forms of the blocking store calls, `Job.ProgressAsync` and a cancellable

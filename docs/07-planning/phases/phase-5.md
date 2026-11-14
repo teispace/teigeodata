@@ -164,8 +164,10 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   `parity.json` in Python, Node.js, Go, the JVM, Swift, Dart, C and C++; every mutant fails
   except 23 allow-listed inputs no check can observe; `parity-mutants.yml` runs it, `fast-check`
   a sample. .NET is out while parked (D-299)
-- [ ] The X benchmarks: call overhead, a 1,000-row search end to end and blob decoding per
-  language, against the Rust engine
+- [x] The X benchmarks: call overhead, a 1,000-row search end to end and blob decoding per
+  language, against the Rust engine ([results](../../02-research/benches/phase-5-bindings.md),
+  D-301): the 1,000-row query is 657 µs in Rust and 675–739 µs in every language but Python
+  (874 µs)
 
 ### 5.10 Release pipeline
 - [ ] Per-ecosystem publish jobs with provenance on every artifact; the dry run on GitHub (S9).
@@ -201,3 +203,4 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 | 2026-11-14 | 5.0 done: the threading contract (D-274), S2 (D-275) | research |
 | 2026-11-14 | Phase 5 drafted from the bindings research and spike S4 | Phase 4's open items wait on the maintainer or a future release |
 | 2026-11-14 | 5.9 parity gate done (D-300): the suites gained the checks the planted values showed missing; C and C++ read `parity_data.h` | plan |
+| 2026-11-14 | 5.9 done: the 1,000-row query is a radius query (text search returns a few dozen best hits), decoded in each language (D-301) | plan |

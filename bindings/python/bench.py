@@ -1,10 +1,14 @@
 """The binding benchmark's Python rows (docs/02-research/benches/s4-bindings.md): best of five
-rounds, ns per call. Run from bindings/python after building the module."""
+rounds, ns per call. Run from bindings/python after building the module. With
+TEIGEODATA_BENCH_PACK naming a pack, the fifth case runs the 1,000-row query on it and decodes
+it with the package's `Reader`."""
 
+import os
 import struct
 import time
 
 import teigeodata as tg
+from teigeodata.blob import Reader
 
 
 def best(n: int, f) -> float:
@@ -32,3 +36,17 @@ row("noop", best(1_000_000, tg.noop))
 row("fold", best(1_000_000, lambda: tg.fold("Kathmandu")))
 row("sample_rows(1000)+sum", best(10_000, lambda: lat_sum(tg.sample_rows(1000))))
 row("callback", best(100, lambda: tg.progress(1000, lambda s: True)) / 1000)
+
+pack = os.environ.get("TEIGEODATA_BENCH_PACK")
+if pack:
+    engine = tg.Engine()
+    engine.open_file(pack)
+
+    def radius() -> tuple[int, float]:
+        r = Reader(engine.within_radius(27.7, 85.3, 50_000.0, 1000))
+        return sum(len(n or "") for n in r.strings("name")), sum(r.numbers("lat"))
+
+    if Reader(engine.within_radius(27.7, 85.3, 50_000.0, 1000)).rows == 1000:
+        row("radius(1000)+decode", best(50, radius))
+    else:
+        print(f"python: {pack}: the query does not return 1,000 rows")
