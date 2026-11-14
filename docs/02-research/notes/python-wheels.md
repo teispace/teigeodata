@@ -67,6 +67,12 @@ Measured 2026-11-14 on this Mac (M-series):
 - **`collections.abc.Buffer` is 3.12.** The stub imports it by version (type checkers carry
   `typing_extensions`); `blob.py` imports it only for annotations.
 - **maturin adds a CycloneDX SBOM** to the wheel (`dist-info/sboms/`).
+- **abi3audit 0.0.26 does not know PEP 793's `PyModExport_<module>`** and fails the abi3t
+  wheel on it under `--strict` (CI, 2026-11-14). The cp315t audit is
+  `bindings/python/tools/abi3t_audit.py`: abi3audit's report, that one symbol allowed,
+  anything else a failure. Drop it once abi3audit knows abi3t.
+- **cibuildwheel targets macOS 10.9 by default; Rust's x86_64 floor is 10.12**, so delocate
+  refused the x86_64 wheel. `MACOSX_DEPLOYMENT_TARGET = "10.12"` (arm64 starts at 11.0).
 - **PEP 639 forbids `..` in `license-files`**, so the workflow copies `LICENSE` and `NOTICE`
   into the package folder (gitignored) and checks every wheel holds both.
 
