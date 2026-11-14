@@ -32,6 +32,20 @@ fn throw(env: &mut Env<'_>, e: &teigeodata_api::Error) -> jni::errors::Result<()
     env.throw_new(class, JNIString::from(e.message.as_str()))
 }
 
+/// The handle a Java object holds, borrowed for one call.
+///
+/// # Safety
+///
+/// `handle` is 0 or a live handle of type `T` made by this library and not freed during the
+/// call.
+unsafe fn handle_ref<'a, T>(handle: jlong, name: &str) -> Result<&'a T, teigeodata_api::Error> {
+    // SAFETY: the caller's contract above.
+    unsafe { (handle as *const T).as_ref() }.ok_or_else(|| teigeodata_api::Error {
+        code: ErrorCode::InvalidArgument,
+        message: format!("{name} is closed"),
+    })
+}
+
 /// A Java `long` that must fit the Rust parameter type.
 fn narrow<T: TryFrom<i64>>(name: &str, v: jlong) -> Result<T, teigeodata_api::Error> {
     T::try_from(v).map_err(|_| teigeodata_api::Error {
@@ -39,11 +53,11 @@ fn narrow<T: TryFrom<i64>>(name: &str, v: jlong) -> Result<T, teigeodata_api::Er
         message: format!("{name} is {v}, outside its range"),
     })
 }
-{% macro jty(t) %}{% if t == "bool" %}jni::sys::jboolean{% elif t == "i32" %}jni::sys::jint{% elif t == "f64" %}jni::sys::jdouble{% elif t == "str" %}JString<'caller>{% elif t == "callback" %}JObject<'caller>{% else %}jlong{% endif %}{% endmacro %}
+{% macro jty(t) %}{% if t == "bool" %}jni::sys::jboolean{% elif t == "i32" %}jni::sys::jint{% elif t == "f64" %}jni::sys::jdouble{% elif t == "str" %}JString<'caller>{% elif t == "bytes" %}JByteArray<'caller>{% elif t == "callback" %}JObject<'caller>{% else %}jlong{% endif %}{% endmacro %}
 {% macro rty(t) %}{% if t == "string" %}JString<'caller>{% elif t == "blob" %}JByteArray<'caller>{% elif t == "void" %}(){% else %}{{ jty(t) }}{% endif %}{% endmacro %}
 {% macro sig(t) %}{% if t == "bool" %}Z{% elif t == "i32" %}I{% elif t == "f64" %}D{% else %}J{% endif %}{% endmacro %}
 {% macro jval(t, v) %}{% if t == "bool" %}jni::JValue::Bool({{ v }}){% elif t == "i32" %}jni::JValue::Int({{ v }}){% elif t == "f64" %}jni::JValue::Double({{ v }}){% elif t == "u64" %}jni::JValue::Long({{ v }}.cast_signed()){% else %}jni::JValue::Long(i64::from({{ v }})){% endif %}{% endmacro %}
-{% for f in functions %}
+{% macro jnifn(f, owner, symbol) %}
 {% set cbs = f.params | selectattr("ty", "eq", "callback") | list %}
 {% set cb = cbs[0] if cbs else none %}
 
@@ -51,9 +65,12 @@ fn narrow<T: TryFrom<i64>>(name: &str, v: jlong) -> Result<T, teigeodata_api::Er
 /// {{ line }}
 {% endfor %}
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_{{ f.name | camel | replace("_", "_1") }}<'caller>(
+pub extern "system" fn {{ symbol }}<'caller>(
     mut unowned: EnvUnowned<'caller>,
     _class: JClass<'caller>,
+{% if f.receiver %}
+    handle: jlong,
+{% endif %}
 {% for p in f.params %}
     {{ p.name }}: {{ jty(p.ty) }},
 {% endfor %}
@@ -62,12 +79,25 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_{{ f.name | camel
     unowned
         .with_env(|env| -> jni::errors::Result<{{ rty(f.returns) }}> {
             let result = (|| -> Result<_, teigeodata_api::Error> {
+{% if f.receiver %}
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::{{ owner.name }}>(handle, "handle") }?;
+{% endif %}
 {% for p in f.params %}
 {% if p.ty == "str" %}
                 let {{ p.name }} = {{ p.name }}.try_to_string(env).map_err(|e| teigeodata_api::Error {
                     code: ErrorCode::InvalidArgument,
                     message: format!("{{ p.name }}: {e}"),
                 })?;
+{% elif p.ty == "bytes" %}
+                let {{ p.name }} = env.convert_byte_array(&{{ p.name }}).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("{{ p.name }}: {e}"),
+                })?;
+{% elif p.ty == "handle" %}
+                // SAFETY: as for `handle`: the caller's live handle of this type.
+                let {{ p.name }} = unsafe { handle_ref::<teigeodata_api::{{ p.handle }}>({{ p.name }}, "{{ p.name }}") }?;
 {% elif p.ty in ["u32", "u64"] %}
                 let {{ p.name }}: {{ p.ty }} = narrow("{{ p.name }}", {{ p.name }})?;
 {% endif %}
@@ -111,7 +141,7 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_{{ f.name | camel
                     .unwrap_or(false)
                 };
 {% endif %}
-                {% if not f.fallible %}Ok({% endif %}teigeodata_api::{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% elif p.ty == "str" %}&{{ p.name }}{% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% if not f.fallible %}){% endif %}
+                {% if not f.fallible %}Ok({% endif %}{% if f.receiver %}this.{% elif owner %}teigeodata_api::{{ owner.name }}::{% else %}teigeodata_api::{% endif %}{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% elif p.ty in ["str", "bytes"] %}&{{ p.name }}{% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% if not f.fallible %}){% endif %}
             })();
 {% if cb %}
             if env.exception_check() {
@@ -127,6 +157,8 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_{{ f.name | camel
                 Ok(value) => Ok(jlong::from(value)),
 {% elif f.returns == "u64" %}
                 Ok(value) => Ok(jlong::try_from(value).unwrap_or(jlong::MAX)),
+{% elif f.returns == "handle" %}
+                Ok(value) => Ok(Box::into_raw(Box::new(value)) as jlong),
 {% elif f.returns == "void" %}
                 Ok(()) => Ok(()),
 {% else %}
@@ -137,4 +169,28 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_{{ f.name | camel
         })
         .resolve::<ThrowRuntimeExAndDefault>()
 }
+{% endmacro %}
+{% for f in functions %}
+{{ jnifn(f, none, "Java_org_teispace_teigeodata_TeiGeodata_" ~ (f.name | camel | replace("_", "_1"))) }}
+{%- endfor %}
+{% for h in handles %}
+
+/// Frees a `{{ h.name }}` handle (0 does nothing); the Java class calls it once, with no call
+/// in flight.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024{{ h.name }}_nativeFree<'caller>(
+    _unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) {
+    if handle != 0 {
+        // SAFETY: a handle made by `Box::into_raw` in this library, freed once by its owner.
+        let owned = unsafe { Box::from_raw(handle as *mut teigeodata_api::{{ h.name }}) };
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || drop(owned)));
+    }
+}
+{% for f in h.methods %}
+{{ jnifn(f, h, "Java_org_teispace_teigeodata_TeiGeodata_00024" ~ h.name ~ "_native" ~ (f.name | pascal | replace("_", "_1"))) }}
+{%- endfor %}
 {% endfor %}
+

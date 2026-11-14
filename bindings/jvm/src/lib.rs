@@ -36,6 +36,20 @@ fn throw(env: &mut Env<'_>, e: &teigeodata_api::Error) -> jni::errors::Result<()
     env.throw_new(class, JNIString::from(e.message.as_str()))
 }
 
+/// The handle a Java object holds, borrowed for one call.
+///
+/// # Safety
+///
+/// `handle` is 0 or a live handle of type `T` made by this library and not freed during the
+/// call.
+unsafe fn handle_ref<'a, T>(handle: jlong, name: &str) -> Result<&'a T, teigeodata_api::Error> {
+    // SAFETY: the caller's contract above.
+    unsafe { (handle as *const T).as_ref() }.ok_or_else(|| teigeodata_api::Error {
+        code: ErrorCode::InvalidArgument,
+        message: format!("{name} is closed"),
+    })
+}
+
 /// A Java `long` that must fit the Rust parameter type.
 fn narrow<T: TryFrom<i64>>(name: &str, v: jlong) -> Result<T, teigeodata_api::Error> {
     T::try_from(v).map_err(|_| teigeodata_api::Error {
@@ -215,6 +229,271 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_distanceM<'caller
             })();
             match result {
                 Ok(value) => Ok(value),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Frees a `Engine` handle (0 does nothing); the Java class calls it once, with no call
+/// in flight.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeFree<'caller>(
+    _unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) {
+    if handle != 0 {
+        // SAFETY: a handle made by `Box::into_raw` in this library, freed once by its owner.
+        let owned = unsafe { Box::from_raw(handle as *mut teigeodata_api::Engine) };
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || drop(owned)));
+    }
+}
+
+/// An engine with no packs.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeNew<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result =
+                (|| -> Result<_, teigeodata_api::Error> { Ok(teigeodata_api::Engine::new()) })();
+            match result {
+                Ok(value) => Ok(Box::into_raw(Box::new(value)) as jlong),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+///
+/// # Errors
+///
+/// `ErrorCode::Io` if the file cannot be read, `ErrorCode::Corrupt` if it is not a
+/// valid pack.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeOpenFile<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    path: JString<'caller>,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let path = path.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("path: {e}"),
+                })?;
+                this.open_file(&path)
+            })();
+            match result {
+                Ok(value) => Ok(jlong::from(value)),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Adds a pack from its bytes (copied). Returns the number of packs.
+///
+/// # Errors
+///
+/// `ErrorCode::Corrupt` if the bytes are not a valid pack.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeOpenBytes<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    bytes: JByteArray<'caller>,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let bytes = env
+                    .convert_byte_array(&bytes)
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: format!("bytes: {e}"),
+                    })?;
+                this.open_bytes(&bytes)
+            })();
+            match result {
+                Ok(value) => Ok(jlong::from(value)),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The number of packs.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeLayers<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                Ok(this.layers())
+            })();
+            match result {
+                Ok(value) => Ok(jlong::from(value)),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The place with this ID (`tgd:np/1`), or no row; a retired ID gives its survivor.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+/// section read is corrupt.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeGet<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    id: JString<'caller>,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let id = id.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("id: {e}"),
+                })?;
+                this.get(&id)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
+/// parent first. The `score` column compares only within one query.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+/// `ErrorCode::Corrupt` if a section read is corrupt.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeSearch<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    query: JString<'caller>,
+    limit: jlong,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let query = query
+                    .try_to_string(env)
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: format!("query: {e}"),
+                    })?;
+                let limit: u32 = narrow("limit", limit)?;
+                this.search(&query, limit)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The places nearest the point, nearest first, at most `limit`, with `meters` and
+/// `bearing` (degrees from north) to each.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a point off the globe or a `limit` above
+/// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeReverse<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    lat: jni::sys::jdouble,
+    lon: jni::sys::jdouble,
+    limit: jlong,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let limit: u32 = narrow("limit", limit)?;
+                this.reverse(lat, lon, limit)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The admin units holding the point, country first.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+/// section read is corrupt.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeAdminAt<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    lat: jni::sys::jdouble,
+    lon: jni::sys::jdouble,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                this.admin_at(lat, lon)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
                 Err(e) => throw(env, &e).map(|()| Default::default()),
             }
         })

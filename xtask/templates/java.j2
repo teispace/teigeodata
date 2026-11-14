@@ -19,7 +19,16 @@ public final class TeiGeodata {
     /** {{ c.doc | join(" ") }} */
     public static final long {{ c.name }} = {{ c.value }}L;
 {% endfor %}
-{% macro jty(t) %}{% if t == "bool" %}boolean{% elif t == "i32" %}int{% elif t == "f64" %}double{% elif t in ["str", "string"] %}String{% elif t == "blob" %}byte[]{% elif t == "void" %}void{% else %}long{% endif %}{% endmacro %}
+{% macro jty(t) %}{% if t == "bool" %}boolean{% elif t == "i32" %}int{% elif t == "f64" %}double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}byte[]{% elif t == "void" %}void{% else %}long{% endif %}{% endmacro %}
+{% macro pty(p) %}{% if p.ty == "callback" %}Callback{{ p.callback.id | pascal }}{% elif p.ty == "handle" %}{{ p.handle }}{% else %}{{ jty(p.ty) }}{% endif %}{% endmacro %}
+{% macro javadoc(lines, indent) %}
+{{ indent }}/**
+{% for line in lines %}
+{{ indent }} *{% if line %} {{ line | replace("<", "&lt;") | replace(">", "&gt;") }}{% endif %}
+
+{% endfor %}
+{{ indent }} */
+{% endmacro %}
 {% for cb in callbacks %}
 
     /** A callback taking {{ cb.args | join(", ") }}; return {@code false} to cancel. */
@@ -38,5 +47,90 @@ public final class TeiGeodata {
 {% endfor %}
      */
     public static native {{ jty(f.returns) }} {{ f.name | camel }}({% for p in f.params %}{% if p.ty == "callback" %}Callback{{ p.callback.id | pascal }}{% else %}{{ jty(p.ty) }}{% endif %} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %});
+{% endfor %}
+{% if handles %}
+
+    /** Frees handles whose owner was never closed and is unreachable. */
+    private static final java.lang.ref.Cleaner CLEANER = java.lang.ref.Cleaner.create();
+{% endif %}
+{% for h in handles %}
+
+{{ javadoc(h.doc, "    ") -}}
+    public static final class {{ h.name }} implements AutoCloseable {
+        private final long handle;
+        private final java.lang.ref.Cleaner.Cleanable cleanable;
+        /** Calls hold a read lock; {@link #close} takes the write lock, so it waits for them. */
+        private final java.util.concurrent.locks.StampedLock lock = new java.util.concurrent.locks.StampedLock();
+        private boolean closed;
+
+        private {{ h.name }}(long handle) {
+            this.handle = handle;
+            this.cleanable = CLEANER.register(this, new Free(handle));
+        }
+
+        /** Frees the native handle; a static class, so it holds no reference to its owner. */
+        private static final class Free implements Runnable {
+            private final long handle;
+
+            Free(long handle) {
+                this.handle = handle;
+            }
+
+            @Override
+            public void run() {
+                nativeFree(handle);
+            }
+        }
+
+        /** Frees the native side now; later calls throw {@link IllegalStateException}. */
+        @Override
+        public void close() {
+            long stamp = lock.writeLock();
+            try {
+                if (!closed) {
+                    closed = true;
+                    cleanable.clean();
+                }
+            } finally {
+                lock.unlockWrite(stamp);
+            }
+        }
+
+        private long enter() {
+            long stamp = lock.readLock();
+            if (closed) {
+                lock.unlockRead(stamp);
+                throw new IllegalStateException("{{ h.name }} is closed");
+            }
+            return stamp;
+        }
+
+        private static native void nativeFree(long handle);
+{% for f in h.methods %}
+
+{{ javadoc(f.doc, "        ") -}}
+{% if f.name == "new" and f.returns_handle == h.name %}
+        public {{ h.name }}({% for p in f.params %}{{ pty(p) }} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) {
+            this(nativeNew({% for p in f.params %}{{ p.name | camel }}{% if p.ty == "handle" %}.handle{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}));
+        }
+{% elif not f.receiver %}
+        public static {% if f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ jty(f.returns) }}{% endif %} {{ f.name | camel }}({% for p in f.params %}{{ pty(p) }} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) {
+            {% if f.returns == "handle" %}return new {{ f.returns_handle }}({% elif f.returns != "void" %}return {% endif %}native{{ f.name | pascal }}({% for p in f.params %}{{ p.name | camel }}{% if p.ty == "handle" %}.handle{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% if f.returns == "handle" %}){% endif %};
+        }
+{% else %}
+        public {% if f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ jty(f.returns) }}{% endif %} {{ f.name | camel }}({% for p in f.params %}{{ pty(p) }} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) {
+            long stamp = enter();
+            try {
+                {% if f.returns == "handle" %}return new {{ f.returns_handle }}({% elif f.returns != "void" %}return {% endif %}native{{ f.name | pascal }}(handle{% for p in f.params %}, {{ p.name | camel }}{% if p.ty == "handle" %}.handle{% endif %}{% endfor %}){% if f.returns == "handle" %}){% endif %};
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+{% endif %}
+
+        private static native {% if f.returns == "handle" %}long{% else %}{{ jty(f.returns) }}{% endif %} native{{ f.name | pascal }}({% if f.receiver %}long handle{% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty == "handle" %}long{% else %}{{ pty(p) }}{% endif %} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %});
+{% endfor %}
+    }
 {% endfor %}
 }

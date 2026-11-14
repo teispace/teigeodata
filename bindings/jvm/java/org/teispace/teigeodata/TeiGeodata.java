@@ -75,4 +75,213 @@ public final class TeiGeodata {
      * -180..=180, or any value is not finite.
      */
     public static native double distanceM(double lat1, double lon1, double lat2, double lon2);
+
+    /** Frees handles whose owner was never closed and is unreachable. */
+    private static final java.lang.ref.Cleaner CLEANER = java.lang.ref.Cleaner.create();
+
+    /**
+     * Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
+     * answers from any number of threads at once, and adding a pack publishes a new snapshot
+     * while queries go on.
+     *
+     * Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`,
+     * `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search
+     * and `meters` and `bearing` for a reverse lookup.
+     */
+public static final class Engine implements AutoCloseable {
+        private final long handle;
+        private final java.lang.ref.Cleaner.Cleanable cleanable;
+        /** Calls hold a read lock; {@link #close} takes the write lock, so it waits for them. */
+        private final java.util.concurrent.locks.StampedLock lock = new java.util.concurrent.locks.StampedLock();
+        private boolean closed;
+
+        private Engine(long handle) {
+            this.handle = handle;
+            this.cleanable = CLEANER.register(this, new Free(handle));
+        }
+
+        /** Frees the native handle; a static class, so it holds no reference to its owner. */
+        private static final class Free implements Runnable {
+            private final long handle;
+
+            Free(long handle) {
+                this.handle = handle;
+            }
+
+            @Override
+            public void run() {
+                nativeFree(handle);
+            }
+        }
+
+        /** Frees the native side now; later calls throw {@link IllegalStateException}. */
+        @Override
+        public void close() {
+            long stamp = lock.writeLock();
+            try {
+                if (!closed) {
+                    closed = true;
+                    cleanable.clean();
+                }
+            } finally {
+                lock.unlockWrite(stamp);
+            }
+        }
+
+        private long enter() {
+            long stamp = lock.readLock();
+            if (closed) {
+                lock.unlockRead(stamp);
+                throw new IllegalStateException("Engine is closed");
+            }
+            return stamp;
+        }
+
+        private static native void nativeFree(long handle);
+
+        /**
+         * An engine with no packs.
+         */
+        public Engine() {
+            this(nativeNew());
+        }
+
+        private static native long nativeNew();
+
+        /**
+         * Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+         *
+         * # Errors
+         *
+         * `ErrorCode::Io` if the file cannot be read, `ErrorCode::Corrupt` if it is not a
+         * valid pack.
+         */
+        public long openFile(String path) {
+            long stamp = enter();
+            try {
+return nativeOpenFile(handle, path);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native long nativeOpenFile(long handle, String path);
+
+        /**
+         * Adds a pack from its bytes (copied). Returns the number of packs.
+         *
+         * # Errors
+         *
+         * `ErrorCode::Corrupt` if the bytes are not a valid pack.
+         */
+        public long openBytes(byte[] bytes) {
+            long stamp = enter();
+            try {
+return nativeOpenBytes(handle, bytes);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native long nativeOpenBytes(long handle, byte[] bytes);
+
+        /**
+         * The number of packs.
+         */
+        public long layers() {
+            long stamp = enter();
+            try {
+return nativeLayers(handle);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native long nativeLayers(long handle);
+
+        /**
+         * The place with this ID (`tgd:np/1`), or no row; a retired ID gives its survivor.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+         * section read is corrupt.
+         */
+        public byte[] get(String id) {
+            long stamp = enter();
+            try {
+return nativeGet(handle, id);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeGet(long handle, String id);
+
+        /**
+         * Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
+         * parent first. The `score` column compares only within one query.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+         * `ErrorCode::Corrupt` if a section read is corrupt.
+         */
+        public byte[] search(String query, long limit) {
+            long stamp = enter();
+            try {
+return nativeSearch(handle, query, limit);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeSearch(long handle, String query, long limit);
+
+        /**
+         * The places nearest the point, nearest first, at most `limit`, with `meters` and
+         * `bearing` (degrees from north) to each.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` for a point off the globe or a `limit` above
+         * `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+         */
+        public byte[] reverse(double lat, double lon, long limit) {
+            long stamp = enter();
+            try {
+return nativeReverse(handle, lat, lon, limit);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeReverse(long handle, double lat, double lon, long limit);
+
+        /**
+         * The admin units holding the point, country first.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+         * section read is corrupt.
+         */
+        public byte[] adminAt(double lat, double lon) {
+            long stamp = enter();
+            try {
+return nativeAdminAt(handle, lat, lon);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeAdminAt(long handle, double lat, double lon);
+    }
 }

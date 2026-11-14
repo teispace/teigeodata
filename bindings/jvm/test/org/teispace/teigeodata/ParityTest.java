@@ -65,10 +65,75 @@ public final class ParityTest {
         } catch (IllegalStateException caught) {
             check(caught == boom, "callback exception is rethrown unchanged");
         }
+        engine((Map<?, ?>) p.get("engine"), Path.of(args[0]).toAbsolutePath().getParent());
         System.out.println("jvm parity ok");
     }
 
-    /** A fixed-width column of a v0 blob, viewed in place (no copy). */
+    /** The engine handle on the fixture pack (parity.json, "engine"). */
+    static void engine(Map<?, ?> p, Path dir) {
+        TeiGeodata.Engine engine = new TeiGeodata.Engine();
+        {
+            check(engine.openFile(dir.resolve((String) p.get("fixture")).toString()) == 1, "open");
+            Map<?, ?> g = (Map<?, ?>) p.get("get");
+            byte[] got = engine.get((String) g.get("id"));
+            check(strings(got, "name").equals(List.of(g.get("name"))), "get name");
+            check(strings(got, "kind").equals(List.of(g.get("kind"))), "get kind");
+            check(column(got, "lat").getDouble() == ((Number) g.get("lat")).doubleValue(), "get lat");
+            Map<?, ?> q = (Map<?, ?>) p.get("search");
+            byte[] hits = engine.search((String) q.get("query"), ((Number) q.get("limit")).longValue());
+            check(strings(hits, "id").get(0).equals(q.get("first_id")), "search");
+            Map<?, ?> r = (Map<?, ?>) p.get("reverse");
+            byte[] near = engine.reverse(((Number) r.get("lat")).doubleValue(), ((Number) r.get("lon")).doubleValue(),
+                    ((Number) r.get("limit")).longValue());
+            check(strings(near, "id").equals(r.get("ids")), "reverse " + strings(near, "id"));
+            double m = column(near, "meters").getDouble();
+            check(Math.abs(m - ((Number) r.get("first_meters")).doubleValue()) < 0.1, "meters " + m);
+            Map<?, ?> a = (Map<?, ?>) p.get("admin_at");
+            byte[] units = engine.adminAt(((Number) a.get("lat")).doubleValue(), ((Number) a.get("lon")).doubleValue());
+            check(strings(units, "id").equals(a.get("ids")), "admin_at");
+            expect(TeiGeodataException.InvalidArgument.class, () -> engine.get((String) p.get("bad_id")), "not a place ID");
+            expect(TeiGeodataException.Io.class, () -> engine.openFile("/nonexistent.tgd"), "");
+            expect(TeiGeodataException.Corrupt.class, () -> engine.openBytes("not a pack".getBytes(StandardCharsets.UTF_8)), "");
+            check(engine.layers() == 1, "layers");
+            engine.close();
+            engine.close(); // idempotent
+            try {
+                engine.layers();
+                check(false, "a closed engine answered");
+            } catch (IllegalStateException expected) {
+                // closed
+            }
+        }
+    }
+
+    /** A string column (UTF-8 or a dictionary) of a v1 blob, null rows as null. */
+    static List<String> strings(byte[] blob, String name) {
+        ByteBuffer b = ByteBuffer.wrap(blob).order(ByteOrder.LITTLE_ENDIAN);
+        int rows = b.getInt(4), columns = b.getInt(8);
+        for (int i = 0; i < columns; i++) {
+            int d = 16 + 40 * i;
+            if (!new String(blob, d, 16, StandardCharsets.UTF_8).replace("\0", "").equals(name)) continue;
+            int type = b.getInt(d + 16), at = b.getInt(d + 20), aux = b.getInt(d + 28), nulls = b.getInt(d + 36);
+            List<String> out = new ArrayList<>();
+            for (int r = 0; r < rows; r++) {
+                if (nulls != 0 && ((blob[nulls + (r >> 3)] >> (r & 7)) & 1) == 0) {
+                    out.add(null);
+                } else if (type == 7) {
+                    int s0 = b.getInt(at + 4 * r), s1 = b.getInt(at + 4 * r + 4);
+                    out.add(new String(blob, aux + s0, s1 - s0, StandardCharsets.UTF_8));
+                } else {
+                    int code = type == 11 ? Short.toUnsignedInt(b.getShort(at + 2 * r)) : b.getInt(at + 4 * r);
+                    int count = b.getInt(aux), base = aux + 8 + 4 * count;
+                    int s0 = b.getInt(aux + 4 + 4 * code), s1 = b.getInt(aux + 8 + 4 * code);
+                    out.add(new String(blob, base + s0, s1 - s0, StandardCharsets.UTF_8));
+                }
+            }
+            return out;
+        }
+        throw new AssertionError("no column " + name);
+    }
+
+    /** A fixed-width column of a blob, viewed in place (no copy). */
     static ByteBuffer column(byte[] blob, String name) {
         ByteBuffer b = ByteBuffer.wrap(blob).order(ByteOrder.LITTLE_ENDIAN);
         check(new String(blob, 0, 4, StandardCharsets.US_ASCII).equals("TGB1"), "magic");
