@@ -432,6 +432,61 @@ int32_t tg_engine_postal_at(const tg_engine *handle, double lat, double lon, tg_
 int32_t tg_engine_tz_at(const tg_engine *handle, double lat, double lon, tg_bytes *out);
 
 /*
+ * The UTC offset in force in `zone` (a tzdb name or link, `Asia/Kathmandu`) at
+ * `unix_seconds`, from the first layer whose zone rules hold the zone: one row with
+ * `seconds` east of UTC, `dst` (1 when tzdb counts it as daylight saving time) and
+ * `abbr` (`+0545`, `EDT`); no row where no layer holds the zone.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` for an instant outside the years ±9,999;
+ * `ErrorCode::MissingComponent` if the rules that would hold the zone were not
+ * installed; `ErrorCode::Corrupt` if they are corrupt.
+ */
+int32_t tg_engine_tz_offset_at(const tg_engine *handle, const uint8_t *zone, size_t zone_len, int64_t unix_seconds, tg_bytes *out);
+
+/*
+ * The offsets a civil time may have in `zone`: one row with `kind` (`unique`, `gap` for
+ * a time a transition skips, `overlap` for one that happens twice), `before` and `after`
+ * in seconds east of UTC (the offsets before and after the transition: for an overlap
+ * the earlier and the later instant's; for a unique time both the same); no row where no
+ * layer holds the zone.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` for a date that is not one of the years ±9,999 or a time
+ * out of range; otherwise as `Engine::tz_offset_at`.
+ */
+int32_t tg_engine_tz_local(const tg_engine *handle, const uint8_t *zone, size_t zone_len, int32_t year, uint32_t month, uint32_t day, uint32_t hour, uint32_t minute, uint32_t second, tg_bytes *out);
+
+/*
+ * Every zone name (tzdb names and links) the layers' zone rules hold, in byte order:
+ * one `zone` column.
+ *
+ * # Errors
+ *
+ * `ErrorCode::MissingComponent` if no installed layer has rules and one has rules that
+ * were not installed.
+ */
+int32_t tg_engine_tz_zones(const tg_engine *handle, tg_bytes *out);
+
+/*
+ * The earliest instant `zone`'s rules cover, in Unix seconds: one `unix` row (its first
+ * transition, before which tzdb knows only local mean time; the year −9,999 for a zone
+ * that never changed); no row where no layer holds the zone.
+ *
+ * # Errors
+ *
+ * As `Engine::tz_offset_at`.
+ */
+int32_t tg_engine_tz_rules_start(const tg_engine *handle, const uint8_t *zone, size_t zone_len, tg_bytes *out);
+
+/*
+ * The tzdb release (`2026f`) of the first layer with zone rules; empty without rules.
+ */
+int32_t tg_engine_tz_version(const tg_engine *handle, tg_bytes *out);
+
+/*
  * The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
  *
  * # Errors

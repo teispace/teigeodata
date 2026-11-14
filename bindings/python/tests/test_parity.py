@@ -226,6 +226,33 @@ class Engine(unittest.TestCase):
         self.assertEqual(errors, [])
 
 
+class Tz(unittest.TestCase):
+    """The zone rules (parity.json, tz) on the rules-only fixture."""
+
+    def test_tz(self) -> None:
+        p = PARITY["tz"]
+        engine = tg.Engine()
+        engine.open_file(str(pathlib.Path(__file__).parents[2] / p["fixture"]))
+        self.assertEqual(engine.tz_version(), p["version"])
+        self.assertEqual(Blob(engine.tz_zones()).strings("zone"), p["zones"])
+        o = p["offset"]
+        got = Blob(engine.tz_offset_at(o["zone"], o["unix"]))
+        self.assertEqual(list(got.numbers("seconds")), [o["seconds"]])
+        self.assertEqual(list(got.numbers("dst")), [o["dst"]])
+        self.assertEqual(got.strings("abbr"), [o["abbr"]])
+        for kind in ("gap", "overlap"):
+            c = p[kind]
+            got = Blob(engine.tz_local(c["zone"], *c["civil"]))
+            self.assertEqual(got.strings("kind"), [kind])
+            self.assertEqual(list(got.numbers("before")), [c["before"]])
+            self.assertEqual(list(got.numbers("after")), [c["after"]])
+        s = p["start"]
+        self.assertEqual(list(Blob(engine.tz_rules_start(s["zone"])).numbers("unix")), [s["unix"]])
+        self.assertEqual(Blob(engine.tz_offset_at(p["unknown"], 0)).rows, 0)
+        with self.assertRaises(tg.InvalidArgumentError):
+            engine.tz_local(o["zone"], 2024, 13, 1, 0, 0, 0)
+
+
 class Store(unittest.TestCase):
     """The store (parity.json, store): the fixture root, a mirror that refuses connections."""
 

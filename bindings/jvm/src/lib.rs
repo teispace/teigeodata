@@ -9,10 +9,12 @@
 )]
 #![allow(
     clippy::redundant_closure_call,
+    clippy::too_many_arguments,
     clippy::default_trait_access,
     clippy::unit_arg,
     clippy::semicolon_if_nothing_returned,
-    reason = "one generated shape for every function: a fallible body, then a default on error"
+    reason = "one generated shape for every function: a fallible body, then a default on \
+              error; signatures are the API's plus the JNI environment"
 )]
 
 use jni::objects::{JByteArray, JClass, JObject, JString};
@@ -1169,6 +1171,188 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
             })();
             match result {
                 Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The UTC offset in force in `zone` (a tzdb name or link, `Asia/Kathmandu`) at
+/// `unix_seconds`, from the first layer whose zone rules hold the zone: one row with
+/// `seconds` east of UTC, `dst` (1 when tzdb counts it as daylight saving time) and
+/// `abbr` (`+0545`, `EDT`); no row where no layer holds the zone.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for an instant outside the years ±9,999;
+/// `ErrorCode::MissingComponent` if the rules that would hold the zone were not
+/// installed; `ErrorCode::Corrupt` if they are corrupt.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeTzOffsetAt<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    zone: JString<'caller>,
+    unix_seconds: jlong,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let zone = zone.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("zone: {e}"),
+                })?;
+                this.tz_offset_at(&zone, unix_seconds)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The offsets a civil time may have in `zone`: one row with `kind` (`unique`, `gap` for
+/// a time a transition skips, `overlap` for one that happens twice), `before` and `after`
+/// in seconds east of UTC (the offsets before and after the transition: for an overlap
+/// the earlier and the later instant's; for a unique time both the same); no row where no
+/// layer holds the zone.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a date that is not one of the years ±9,999 or a time
+/// out of range; otherwise as `Engine::tz_offset_at`.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeTzLocal<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    zone: JString<'caller>,
+    year: jni::sys::jint,
+    month: jlong,
+    day: jlong,
+    hour: jlong,
+    minute: jlong,
+    second: jlong,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let zone = zone.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("zone: {e}"),
+                })?;
+                let month: u32 = narrow("month", month)?;
+                let day: u32 = narrow("day", day)?;
+                let hour: u32 = narrow("hour", hour)?;
+                let minute: u32 = narrow("minute", minute)?;
+                let second: u32 = narrow("second", second)?;
+                this.tz_local(&zone, year, month, day, hour, minute, second)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Every zone name (tzdb names and links) the layers' zone rules hold, in byte order:
+/// one `zone` column.
+///
+/// # Errors
+///
+/// `ErrorCode::MissingComponent` if no installed layer has rules and one has rules that
+/// were not installed.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeTzZones<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                this.tz_zones()
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The earliest instant `zone`'s rules cover, in Unix seconds: one `unix` row (its first
+/// transition, before which tzdb knows only local mean time; the year −9,999 for a zone
+/// that never changed); no row where no layer holds the zone.
+///
+/// # Errors
+///
+/// As `Engine::tz_offset_at`.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeTzRulesStart<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    zone: JString<'caller>,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let zone = zone.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("zone: {e}"),
+                })?;
+                this.tz_rules_start(&zone)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The tzdb release (`2026f`) of the first layer with zone rules; empty without rules.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeTzVersion<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) -> JString<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JString<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                Ok(this.tz_version())
+            })();
+            match result {
+                Ok(value) => env.new_string(value),
                 Err(e) => throw(env, &e).map(|()| Default::default()),
             }
         })

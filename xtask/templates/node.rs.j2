@@ -8,12 +8,13 @@
 )]
 #![allow(
     clippy::needless_pass_by_value,
+    clippy::too_many_arguments,
     clippy::must_use_candidate,
     clippy::unreadable_literal,
     clippy::new_without_default,
     reason = "exports called from JavaScript: napi-rs takes owned arguments, results are used \
               by the caller, constants are copied from the IDL, a JavaScript class has no \
-              `Default`"
+              `Default`, signatures are the API's"
 )]
 
 use napi::bindgen_prelude::{Buffer, Function};

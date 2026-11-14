@@ -28,6 +28,8 @@ TypedData column(Uint8List blob, String name) {
     final at = view.getUint32(d + 20, Endian.little);
     final len = view.getUint32(d + 24, Endian.little);
     return switch (type) {
+      1 => blob.buffer.asInt32List(blob.offsetInBytes + at, len ~/ 4),
+      3 => blob.buffer.asInt64List(blob.offsetInBytes + at, len ~/ 8),
       5 => blob.buffer.asFloat32List(blob.offsetInBytes + at, len ~/ 4),
       6 => blob.buffer.asFloat64List(blob.offsetInBytes + at, len ~/ 8),
       _ => blob.buffer.asUint32List(blob.offsetInBytes + at, len ~/ 4),
@@ -236,6 +238,30 @@ void main() {
     expect(engine.layers, throwsStateError);
     // An engine never closed is freed by its finalizer.
     Engine(tg).openBytes(File('../${e['fixture']}').readAsBytesSync());
+  });
+
+  test('zone rules', () {
+    final p = parity['tz'] as Map<String, dynamic>;
+    final engine = Engine(tg);
+    addTearDown(engine.close);
+    engine.openFile('../${p['fixture']}');
+    expect(engine.tzVersion(), p['version']);
+    expect(strings(engine.tzZones(), 'zone'), p['zones']);
+    final o = p['offset'] as Map<String, dynamic>;
+    final got = engine.tzOffsetAt(o['zone'] as String, o['unix'] as int);
+    expect(column(got, 'seconds'), [o['seconds']]);
+    expect(strings(got, 'abbr'), [o['abbr']]);
+    for (final kind in ['gap', 'overlap']) {
+      final c = p[kind] as Map<String, dynamic>;
+      final v = (c['civil'] as List).cast<int>();
+      final l = engine.tzLocal(c['zone'] as String, v[0], v[1], v[2], v[3], v[4], v[5]);
+      expect(strings(l, 'kind'), [kind]);
+      expect([...column(l, 'before') as List<int>, ...column(l, 'after') as List<int>], [c['before'], c['after']]);
+    }
+    final st = p['start'] as Map<String, dynamic>;
+    expect(column(engine.tzRulesStart(st['zone'] as String), 'unix'), [st['unix']]);
+    expect(strings(engine.tzOffsetAt(p['unknown'] as String, 0), 'abbr'), isEmpty);
+    expect(() => engine.tzLocal(o['zone'] as String, 2024, 13, 1, 0, 0, 0), throwsA(isA<InvalidArgumentException>()));
   });
 
   test('store', () {

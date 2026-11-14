@@ -282,3 +282,24 @@ test("a job's progress iterates, and an AbortSignal cancels it", async () => {
     rmSync(d, { recursive: true, force: true });
   }
 });
+
+test("zone rules on the rules-only fixture", () => {
+  const p = parity.tz;
+  const engine = new tg.Engine();
+  engine.openFile(join(__dirname, "../..", p.fixture));
+  assert.equal(engine.tzVersion(), p.version);
+  assert.deepEqual(strings(engine.tzZones(), "zone"), p.zones);
+  const o = p.offset;
+  const got = engine.tzOffsetAt(o.zone, o.unix);
+  assert.deepEqual([...numbers(got, "seconds")], [o.seconds]);
+  assert.deepEqual(strings(got, "abbr"), [o.abbr]);
+  for (const kind of ["gap", "overlap"]) {
+    const c = p[kind];
+    const l = engine.tzLocal(c.zone, ...c.civil);
+    assert.deepEqual(strings(l, "kind"), [kind]);
+    assert.deepEqual([...numbers(l, "before"), ...numbers(l, "after")], [c.before, c.after]);
+  }
+  assert.deepEqual([...numbers(engine.tzRulesStart(p.start.zone), "unix")], [BigInt(p.start.unix)]);
+  assert.equal(strings(engine.tzOffsetAt(p.unknown, 0), "abbr").length, 0);
+  assert.throws(() => engine.tzLocal(o.zone, 2024, 13, 1, 0, 0, 0), { code: "InvalidArgument" });
+});

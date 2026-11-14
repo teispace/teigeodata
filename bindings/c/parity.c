@@ -212,6 +212,22 @@ int main(void) {
     tg_engine_free(engine);
     tg_engine_free(NULL);
 
+    /* The zone rules (parity.json, tz) on the rules-only fixture. */
+    tg_engine *rules = NULL;
+    CHECK(tg_engine_new(&rules) == TG_OK);
+    const char *tz_path = "bindings/fixtures/tz.tgd", *ny = "America/New_York";
+    uint32_t tz_layer = 0;
+    CHECK(tg_engine_open_file(rules, (const uint8_t *)tz_path, strlen(tz_path), &tz_layer) == TG_OK);
+    tg_bytes version = {0};
+    CHECK(tg_engine_tz_version(rules, &version) == TG_OK && version.len == 5 && memcmp(version.ptr, "2026f", 5) == 0);
+    tg_bytes_free(version);
+    CHECK(tg_engine_tz_offset_at(rules, (const uint8_t *)ny, strlen(ny), 1719835200, &out) == TG_OK && blob_rows(out) == 1 && str_is(out, "abbr", 0, "EDT"));
+    tg_bytes_free(out);
+    CHECK(tg_engine_tz_local(rules, (const uint8_t *)ny, strlen(ny), 2024, 3, 10, 2, 30, 0, &out) == TG_OK && str_is(out, "kind", 0, "gap"));
+    tg_bytes_free(out);
+    CHECK(tg_engine_tz_local(rules, (const uint8_t *)ny, strlen(ny), 2024, 13, 1, 0, 0, 0, &out) == TG_ERROR_INVALID_ARGUMENT);
+    tg_engine_free(rules);
+
     /* The store (parity.json, store): the fixture root, a mirror that refuses connections. */
     FILE *rf = fopen("bindings/fixtures/store-root.json", "rb");
     CHECK(rf != NULL);

@@ -40,7 +40,9 @@ use std::sync::Arc;
 pub use teigeodata_blob::Blob;
 use teigeodata_blob::Column;
 use teigeodata_core::{E6, E7, PlaceId, Point};
-use teigeodata_engine::{Hit, Layer, LayerOptions, Near, Place, PostalCode, Scratch, Shared};
+use teigeodata_engine::{
+    Civil, Hit, Layer, LayerOptions, Local, Near, Place, PostalCode, Scratch, Shared,
+};
 use teigeodata_format::Part;
 use teigeodata_format::component::{Component, Components, MAX_LANGUAGES, Parts};
 
@@ -710,6 +712,129 @@ impl Engine {
         Places::of(&engine, area)?.blob()
     }
 
+    /// The UTC offset in force in `zone` (a tzdb name or link, `Asia/Kathmandu`) at
+    /// `unix_seconds`, from the first layer whose zone rules hold the zone: one row with
+    /// `seconds` east of UTC, `dst` (1 when tzdb counts it as daylight saving time) and
+    /// `abbr` (`+0545`, `EDT`); no row where no layer holds the zone.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] for an instant outside the years ±9,999;
+    /// [`ErrorCode::MissingComponent`] if the rules that would hold the zone were not
+    /// installed; [`ErrorCode::Corrupt`] if they are corrupt.
+    pub fn tz_offset_at(&self, zone: &str, unix_seconds: i64) -> Result<Blob> {
+        let engine = self.shared.load();
+        let found = engine.tz_offset_at(zone, unix_seconds).map_err(instant)?;
+        let (seconds, dst, abbr) = found.as_ref().map_or((&[][..], &[][..], vec![]), |o| {
+            (
+                core::slice::from_ref(&o.seconds),
+                if o.is_dst { &[1_u8][..] } else { &[0_u8][..] },
+                vec![o.abbr()],
+            )
+        });
+        table(&[
+            ("seconds", Column::I32(seconds)),
+            ("dst", Column::U8(dst)),
+            ("abbr", Column::Dict(&abbr)),
+        ])
+    }
+
+    /// The offsets a civil time may have in `zone`: one row with `kind` (`unique`, `gap` for
+    /// a time a transition skips, `overlap` for one that happens twice), `before` and `after`
+    /// in seconds east of UTC (the offsets before and after the transition: for an overlap
+    /// the earlier and the later instant's; for a unique time both the same); no row where no
+    /// layer holds the zone.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] for a date that is not one of the years ±9,999 or a time
+    /// out of range; otherwise as [`Engine::tz_offset_at`].
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "a civil time, field by field, the same in every language"
+    )]
+    pub fn tz_local(
+        &self,
+        zone: &str,
+        year: i32,
+        month: u32,
+        day: u32,
+        hour: u32,
+        minute: u32,
+        second: u32,
+    ) -> Result<Blob> {
+        let field = |v: u32, max: u32, what: &str| {
+            u8::try_from(v)
+                .ok()
+                .filter(|&v| u32::from(v) <= max)
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InvalidArgument,
+                        format!("{what} {v} is out of range"),
+                    )
+                })
+        };
+        let civil = Civil {
+            year,
+            month: field(month, 12, "month")?,
+            day: field(day, 31, "day")?,
+            hour: field(hour, 23, "hour")?,
+            minute: field(minute, 59, "minute")?,
+            second: field(second, 59, "second")?,
+        };
+        let engine = self.shared.load();
+        let found = engine.tz_local_candidates(zone, civil).map_err(instant)?;
+        let (kind, before, after) = match found {
+            None => (vec![], vec![], vec![]),
+            Some(Local::Unique(o)) => (vec!["unique"], vec![o], vec![o]),
+            Some(Local::Gap { before, after }) => (vec!["gap"], vec![before], vec![after]),
+            Some(Local::Overlap { earlier, later }) => {
+                (vec!["overlap"], vec![earlier], vec![later])
+            }
+        };
+        table(&[
+            ("kind", Column::Dict(&kind)),
+            ("before", Column::I32(&before)),
+            ("after", Column::I32(&after)),
+        ])
+    }
+
+    /// Every zone name (tzdb names and links) the layers' zone rules hold, in byte order:
+    /// one `zone` column.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::MissingComponent`] if no installed layer has rules and one has rules that
+    /// were not installed.
+    pub fn tz_zones(&self) -> Result<Blob> {
+        let engine = self.shared.load();
+        let zones = engine.tz_zones()?;
+        table(&[("zone", Column::Utf8(&zones))])
+    }
+
+    /// The earliest instant `zone`'s rules cover, in Unix seconds: one `unix` row (its first
+    /// transition, before which tzdb knows only local mean time; the year −9,999 for a zone
+    /// that never changed); no row where no layer holds the zone.
+    ///
+    /// # Errors
+    ///
+    /// As [`Engine::tz_offset_at`].
+    pub fn tz_rules_start(&self, zone: &str) -> Result<Blob> {
+        let engine = self.shared.load();
+        let start = engine.tz_rules_start(zone)?;
+        table(&[("unix", Column::I64(start.as_slice()))])
+    }
+
+    /// The tzdb release (`2026f`) of the first layer with zone rules; empty without rules.
+    #[must_use]
+    pub fn tz_version(&self) -> String {
+        self.shared
+            .load()
+            .tz_version()
+            .unwrap_or_default()
+            .to_owned()
+    }
+
     /// The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
     ///
     /// # Errors
@@ -726,6 +851,22 @@ impl Engine {
         let engine = self.shared.load();
         let place = engine.by_iso(code)?;
         Places::of(&engine, place)?.blob()
+    }
+}
+
+/// A blob of `columns`.
+fn table(columns: &[(&str, Column<'_>)]) -> Result<Blob> {
+    Blob::encode(columns).map_err(|e| Error::new(ErrorCode::Internal, e.to_string()))
+}
+
+/// An engine error from a zone rules query: a `Format` error there is an instant or date out
+/// of the supported years, the caller's argument.
+fn instant(e: teigeodata_engine::Error) -> Error {
+    match e {
+        teigeodata_engine::Error::Format(_) => {
+            Error::new(ErrorCode::InvalidArgument, e.to_string())
+        }
+        e => e.into(),
     }
 }
 

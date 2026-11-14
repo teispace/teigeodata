@@ -66,6 +66,7 @@ public final class ParityTest {
             check(caught == boom, "callback exception is rethrown unchanged");
         }
         engine((Map<?, ?>) p.get("engine"), Path.of(args[0]).toAbsolutePath().getParent());
+        tz((Map<?, ?>) p.get("tz"), Path.of(args[0]).toAbsolutePath().getParent());
         store((Map<?, ?>) p.get("store"), Path.of(args[0]).toAbsolutePath().getParent());
         System.out.println("jvm parity ok");
     }
@@ -188,6 +189,33 @@ public final class ParityTest {
         accept.setDaemon(true);
         accept.start();
         return "http://127.0.0.1:" + server.getLocalPort() + "/";
+    }
+
+    /** The zone rules (parity.json, "tz") on the rules-only fixture. */
+    static void tz(Map<?, ?> p, Path dir) {
+        try (TeiGeodata.Engine engine = new TeiGeodata.Engine()) {
+            engine.openFile(dir.resolve((String) p.get("fixture")).toString());
+            check(engine.tzVersion().equals(p.get("version")), "tz version");
+            check(strings(engine.tzZones(), "zone").equals(p.get("zones")), "tz zones");
+            Map<?, ?> o = (Map<?, ?>) p.get("offset");
+            byte[] got = engine.tzOffsetAt((String) o.get("zone"), ((Number) o.get("unix")).longValue());
+            check(column(got, "seconds").getInt() == ((Number) o.get("seconds")).intValue(), "tz offset");
+            check(strings(got, "abbr").equals(List.of(o.get("abbr"))), "tz abbr");
+            for (String kind : List.of("gap", "overlap")) {
+                Map<?, ?> c = (Map<?, ?>) p.get(kind);
+                List<?> v = (List<?>) c.get("civil");
+                byte[] l = engine.tzLocal((String) c.get("zone"), ((Number) v.get(0)).intValue(), ((Number) v.get(1)).longValue(),
+                        ((Number) v.get(2)).longValue(), ((Number) v.get(3)).longValue(), ((Number) v.get(4)).longValue(),
+                        ((Number) v.get(5)).longValue());
+                check(strings(l, "kind").equals(List.of(kind)), "tz " + kind);
+                check(column(l, "before").getInt() == ((Number) c.get("before")).intValue(), kind + " before");
+                check(column(l, "after").getInt() == ((Number) c.get("after")).intValue(), kind + " after");
+            }
+            Map<?, ?> st = (Map<?, ?>) p.get("start");
+            check(column(engine.tzRulesStart((String) st.get("zone")), "unix").getLong() == ((Number) st.get("unix")).longValue(), "tz start");
+            check(strings(engine.tzOffsetAt((String) p.get("unknown"), 0), "abbr").isEmpty(), "unknown zone");
+            expect(TeiGeodataException.InvalidArgument.class, () -> engine.tzLocal((String) o.get("zone"), 2024, 13, 1, 0, 0, 0), "month");
+        }
     }
 
     /** The engine handle on the fixture pack (parity.json, "engine"). */

@@ -9,10 +9,12 @@
 )]
 #![allow(
     clippy::redundant_closure_call,
+    clippy::too_many_arguments,
     clippy::default_trait_access,
     clippy::unit_arg,
     clippy::semicolon_if_nothing_returned,
-    reason = "one generated shape for every function: a fallible body, then a default on error"
+    reason = "one generated shape for every function: a fallible body, then a default on \
+              error; signatures are the API's plus the JNI environment"
 )]
 
 use jni::objects::{JByteArray, JClass, JObject, JString};

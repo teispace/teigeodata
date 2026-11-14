@@ -145,6 +145,32 @@ do {
 } catch {
     check(error.code == .cancelled && error.message == g["cancelled_message"] as! String, "\(error)")
 }
+// The zone rules (parity.json, tz) on the rules-only fixture.
+do {
+    let t = p["tz"] as! [String: Any]
+    let base = URL(fileURLWithPath: path).deletingLastPathComponent()
+    let engine = Engine()
+    _ = try engine.openFile(base.appendingPathComponent(t["fixture"] as! String).path)
+    check(engine.tzVersion() == t["version"] as! String, "tz version")
+    check(strings(try engine.tzZones(), "zone") == (t["zones"] as! [String]), "tz zones")
+    let o = t["offset"] as! [String: Any]
+    let got = try engine.tzOffsetAt(o["zone"] as! String, unixSeconds: Int64(o["unix"] as! Int))
+    check(column(got, "seconds", as: Int32.self) == [Int32(o["seconds"] as! Int)], "tz offset")
+    check(strings(got, "abbr") == [o["abbr"] as? String], "tz abbr")
+    for kind in ["gap", "overlap"] {
+        let c = t[kind] as! [String: Any], v = (c["civil"] as! [Int])
+        let l = try engine.tzLocal(c["zone"] as! String, year: Int32(v[0]), month: UInt32(v[1]), day: UInt32(v[2]),
+                                   hour: UInt32(v[3]), minute: UInt32(v[4]), second: UInt32(v[5]))
+        check(strings(l, "kind") == [kind], "tz \(kind)")
+        check(column(l, "before", as: Int32.self) + column(l, "after", as: Int32.self)
+              == [Int32(c["before"] as! Int), Int32(c["after"] as! Int)], "\(kind) offsets")
+    }
+    let st = t["start"] as! [String: Any]
+    check(column(try engine.tzRulesStart(st["zone"] as! String), "unix", as: Int64.self) == [Int64(st["unix"] as! Int)], "tz start")
+    check(strings(try engine.tzOffsetAt(t["unknown"] as! String, unixSeconds: 0), "abbr").isEmpty, "unknown zone")
+    expect(.invalidArgument) { _ = try engine.tzLocal(o["zone"] as! String, year: 2024, month: 13, day: 1, hour: 0, minute: 0, second: 0) }
+}
+
 // The engine handle on the fixture pack (parity.json, "engine").
 let e = p["engine"] as! [String: Any]
 let dir = URL(fileURLWithPath: path).deletingLastPathComponent()

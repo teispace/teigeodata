@@ -6,7 +6,9 @@
 )]
 #![allow(
     clippy::missing_safety_doc,
-    reason = "the safety contract is common to every function and documented in lib.rs"
+    clippy::too_many_arguments,
+    reason = "the safety contract is common to every function and documented in lib.rs; \
+              each signature is the API's, field by field"
 )]
 #![allow(
     clippy::unreadable_literal,
@@ -994,6 +996,141 @@ pub unsafe extern "C" fn tg_engine_tz_at(
         let this = unsafe { abi::handle(handle, "handle") }?;
         let value = this.0.tz_at(lat, lon)?;
         let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The UTC offset in force in `zone` (a tzdb name or link, `Asia/Kathmandu`) at
+/// `unix_seconds`, from the first layer whose zone rules hold the zone: one row with
+/// `seconds` east of UTC, `dst` (1 when tzdb counts it as daylight saving time) and
+/// `abbr` (`+0545`, `EDT`); no row where no layer holds the zone.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for an instant outside the years ±9,999;
+/// `ErrorCode::MissingComponent` if the rules that would hold the zone were not
+/// installed; `ErrorCode::Corrupt` if they are corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_tz_offset_at(
+    handle: *const TgEngine,
+    zone: *const u8,
+    zone_len: usize,
+    unix_seconds: i64,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `zone_len` readable bytes (or null and 0).
+        let zone = unsafe { abi::str_arg(zone, zone_len, "zone") }?;
+        let value = this.0.tz_offset_at(zone, unix_seconds)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The offsets a civil time may have in `zone`: one row with `kind` (`unique`, `gap` for
+/// a time a transition skips, `overlap` for one that happens twice), `before` and `after`
+/// in seconds east of UTC (the offsets before and after the transition: for an overlap
+/// the earlier and the later instant's; for a unique time both the same); no row where no
+/// layer holds the zone.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a date that is not one of the years ±9,999 or a time
+/// out of range; otherwise as `Engine::tz_offset_at`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_tz_local(
+    handle: *const TgEngine,
+    zone: *const u8,
+    zone_len: usize,
+    year: i32,
+    month: u32,
+    day: u32,
+    hour: u32,
+    minute: u32,
+    second: u32,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `zone_len` readable bytes (or null and 0).
+        let zone = unsafe { abi::str_arg(zone, zone_len, "zone") }?;
+        let value = this
+            .0
+            .tz_local(zone, year, month, day, hour, minute, second)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Every zone name (tzdb names and links) the layers' zone rules hold, in byte order:
+/// one `zone` column.
+///
+/// # Errors
+///
+/// `ErrorCode::MissingComponent` if no installed layer has rules and one has rules that
+/// were not installed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_tz_zones(handle: *const TgEngine, out: *mut TgBytes) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.tz_zones()?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The earliest instant `zone`'s rules cover, in Unix seconds: one `unix` row (its first
+/// transition, before which tzdb knows only local mean time; the year −9,999 for a zone
+/// that never changed); no row where no layer holds the zone.
+///
+/// # Errors
+///
+/// As `Engine::tz_offset_at`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_tz_rules_start(
+    handle: *const TgEngine,
+    zone: *const u8,
+    zone_len: usize,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `zone_len` readable bytes (or null and 0).
+        let zone = unsafe { abi::str_arg(zone, zone_len, "zone") }?;
+        let value = this.0.tz_rules_start(zone)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The tzdb release (`2026f`) of the first layer with zone rules; empty without rules.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_tz_version(handle: *const TgEngine, out: *mut TgBytes) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.tz_version();
+        let value = TgBytes::from_vec(value.into_bytes());
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };
         Ok(())

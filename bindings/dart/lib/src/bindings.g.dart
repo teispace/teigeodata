@@ -323,6 +323,11 @@ final class TeiGeodata {
         _enginePostalCodesOfNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_postal_codes_of', isLeaf: true),
         _enginePostalAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_postal_at', isLeaf: true),
         _engineTzAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_tz_at', isLeaf: true),
+        _engineTzOffsetAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Int64, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>)>('tg_engine_tz_offset_at', isLeaf: true),
+        _engineTzLocalNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Int32, Uint32, Uint32, Uint32, Uint32, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, int, int, int, int, int, int, Pointer<TgBytes>)>('tg_engine_tz_local', isLeaf: true),
+        _engineTzZonesNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<TgBytes>)>('tg_engine_tz_zones', isLeaf: true),
+        _engineTzRulesStartNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_tz_rules_start', isLeaf: true),
+        _engineTzVersionNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<TgBytes>)>('tg_engine_tz_version', isLeaf: true),
         _engineByIsoNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_by_iso', isLeaf: true),
         _storeFree = lib.lookup<NativeFunction<Void Function(Pointer<Void>)>>('tg_store_free'),
         _storeCreateNative = lib.lookupFunction<Int32 Function(Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_create'),
@@ -392,6 +397,11 @@ final class TeiGeodata {
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _enginePostalCodesOfNative;
   final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _enginePostalAtNative;
   final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _engineTzAtNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>) _engineTzOffsetAtNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, int, int, int, int, int, int, Pointer<TgBytes>) _engineTzLocalNative;
+  final int Function(Pointer<Void>, Pointer<TgBytes>) _engineTzZonesNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineTzRulesStartNative;
+  final int Function(Pointer<Void>, Pointer<TgBytes>) _engineTzVersionNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineByIsoNative;
   final Pointer<NativeFunction<Void Function(Pointer<Void>)>> _storeFree;
   late final NativeFinalizer _storeFinalizer;
@@ -752,6 +762,39 @@ final class TeiGeodata {
     final status = _engineTzAtNative(handle, lat, lon, _bytes);
     _check(status);
     return _takeBlob();
+  }
+
+  Uint8List _engineTzOffsetAt(Pointer<Void> handle, String zone, int unixSeconds) {
+    final zoneLen = _utf8(zone);
+    final status = _engineTzOffsetAtNative(handle, _input, zoneLen, unixSeconds, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _engineTzLocal(Pointer<Void> handle, String zone, int year, int month, int day, int hour, int minute, int second) {
+    final zoneLen = _utf8(zone);
+    final status = _engineTzLocalNative(handle, _input, zoneLen, year, month, day, hour, minute, second, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _engineTzZones(Pointer<Void> handle) {
+    final status = _engineTzZonesNative(handle, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _engineTzRulesStart(Pointer<Void> handle, String zone) {
+    final zoneLen = _utf8(zone);
+    final status = _engineTzRulesStartNative(handle, _input, zoneLen, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  String _engineTzVersion(Pointer<Void> handle) {
+    final status = _engineTzVersionNative(handle, _bytes);
+    _check(status);
+    return _takeString();
   }
 
   Uint8List _engineByIso(Pointer<Void> handle, String code) {
@@ -1178,6 +1221,51 @@ final class Engine implements Finalizable {
   /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
   /// section read is corrupt.
   Uint8List tzAt(double lat, double lon) => _lib._engineTzAt(_live, lat, lon);
+
+  /// The UTC offset in force in `zone` (a tzdb name or link, `Asia/Kathmandu`) at
+  /// `unix_seconds`, from the first layer whose zone rules hold the zone: one row with
+  /// `seconds` east of UTC, `dst` (1 when tzdb counts it as daylight saving time) and
+  /// `abbr` (`+0545`, `EDT`); no row where no layer holds the zone.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` for an instant outside the years ±9,999;
+  /// `ErrorCode::MissingComponent` if the rules that would hold the zone were not
+  /// installed; `ErrorCode::Corrupt` if they are corrupt.
+  Uint8List tzOffsetAt(String zone, int unixSeconds) => _lib._engineTzOffsetAt(_live, zone, unixSeconds);
+
+  /// The offsets a civil time may have in `zone`: one row with `kind` (`unique`, `gap` for
+  /// a time a transition skips, `overlap` for one that happens twice), `before` and `after`
+  /// in seconds east of UTC (the offsets before and after the transition: for an overlap
+  /// the earlier and the later instant's; for a unique time both the same); no row where no
+  /// layer holds the zone.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` for a date that is not one of the years ±9,999 or a time
+  /// out of range; otherwise as `Engine::tz_offset_at`.
+  Uint8List tzLocal(String zone, int year, int month, int day, int hour, int minute, int second) => _lib._engineTzLocal(_live, zone, year, month, day, hour, minute, second);
+
+  /// Every zone name (tzdb names and links) the layers' zone rules hold, in byte order:
+  /// one `zone` column.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::MissingComponent` if no installed layer has rules and one has rules that
+  /// were not installed.
+  Uint8List tzZones() => _lib._engineTzZones(_live);
+
+  /// The earliest instant `zone`'s rules cover, in Unix seconds: one `unix` row (its first
+  /// transition, before which tzdb knows only local mean time; the year −9,999 for a zone
+  /// that never changed); no row where no layer holds the zone.
+  ///
+  /// # Errors
+  ///
+  /// As `Engine::tz_offset_at`.
+  Uint8List tzRulesStart(String zone) => _lib._engineTzRulesStart(_live, zone);
+
+  /// The tzdb release (`2026f`) of the first layer with zone rules; empty without rules.
+  String tzVersion() => _lib._engineTzVersion(_live);
 
   /// The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
   ///

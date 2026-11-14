@@ -449,6 +449,61 @@ class Engine:
         section read is corrupt.
         """
 
+    def tz_offset_at(self, zone: str, unix_seconds: int) -> bytes:
+        """
+        The UTC offset in force in `zone` (a tzdb name or link, `Asia/Kathmandu`) at
+        `unix_seconds`, from the first layer whose zone rules hold the zone: one row with
+        `seconds` east of UTC, `dst` (1 when tzdb counts it as daylight saving time) and
+        `abbr` (`+0545`, `EDT`); no row where no layer holds the zone.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` for an instant outside the years ±9,999;
+        `ErrorCode::MissingComponent` if the rules that would hold the zone were not
+        installed; `ErrorCode::Corrupt` if they are corrupt.
+        """
+
+    def tz_local(self, zone: str, year: int, month: int, day: int, hour: int, minute: int, second: int) -> bytes:
+        """
+        The offsets a civil time may have in `zone`: one row with `kind` (`unique`, `gap` for
+        a time a transition skips, `overlap` for one that happens twice), `before` and `after`
+        in seconds east of UTC (the offsets before and after the transition: for an overlap
+        the earlier and the later instant's; for a unique time both the same); no row where no
+        layer holds the zone.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` for a date that is not one of the years ±9,999 or a time
+        out of range; otherwise as `Engine::tz_offset_at`.
+        """
+
+    def tz_zones(self) -> bytes:
+        """
+        Every zone name (tzdb names and links) the layers' zone rules hold, in byte order:
+        one `zone` column.
+
+        # Errors
+
+        `ErrorCode::MissingComponent` if no installed layer has rules and one has rules that
+        were not installed.
+        """
+
+    def tz_rules_start(self, zone: str) -> bytes:
+        """
+        The earliest instant `zone`'s rules cover, in Unix seconds: one `unix` row (its first
+        transition, before which tzdb knows only local mean time; the year −9,999 for a zone
+        that never changed); no row where no layer holds the zone.
+
+        # Errors
+
+        As `Engine::tz_offset_at`.
+        """
+
+    def tz_version(self) -> str:
+        """
+        The tzdb release (`2026f`) of the first layer with zone rules; empty without rules.
+        """
+
     def by_iso(self, code: str) -> bytes:
         """
         The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.

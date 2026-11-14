@@ -43,7 +43,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   the decision recorded (done 2026-11-14: [S2](../../02-research/benches/bindings-s2-result-format.md), our blob as v1 with nulls and dictionaries, D-275; v1 built the same day)
 
 ### 5.1 The API surface
-- [ ] `teigeodata-api` over the engine: open layers (bytes and files, components, parts),
+- [x] `teigeodata-api` over the engine: open layers (bytes and files, components, parts),
   `get`, `search` and its options, `reverse`, `near`, `within_radius`, `admin_at`, `tz_at`
   and `tz_of`, the zone rules, `elevation_at`, `iso_code` and `by_iso`, postal codes,
   `parent`, `ancestors`, `children`; every result as a blob, every error typed.
@@ -53,7 +53,10 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   options as a record),
   `reverse`, `admin_at`, `parent`, `ancestors`, `children`, `nearby`, `within_radius`, `tz_at`,
   `by_iso`, `elevation_at`, `postal_lookup`, `postal_prefix`, `postal_codes_of` and
-  `postal_at`, in every language, checked on `bindings/fixtures/synth.tgd`
+  `postal_at`, in every language, checked on `bindings/fixtures/synth.tgd`; `tz_of` and
+  `iso_code` as every place row's `tz` and `iso` columns; the zone rules (`tz_offset_at`,
+  `tz_local`, `tz_zones`, `tz_rules_start`, `tz_version`) on `bindings/fixtures/tz.tgd`
+  (D-284). Done 2026-11-14
 - [x] `teigeodata-api` over sync: the store (init, refresh, catalog, find, locate, install,
   update, remove, pin, repair, status) as jobs with progress callbacks and cancellation
   ([research](../../02-research/notes/store-api.md)). Done so far: the policy moved from the

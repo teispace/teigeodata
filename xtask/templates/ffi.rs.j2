@@ -6,7 +6,9 @@
 )]
 #![allow(
     clippy::missing_safety_doc,
-    reason = "the safety contract is common to every function and documented in lib.rs"
+    clippy::too_many_arguments,
+    reason = "the safety contract is common to every function and documented in lib.rs; \
+              each signature is the API's, field by field"
 )]
 #![allow(clippy::unreadable_literal, reason = "constants are copied from the IDL")]
 

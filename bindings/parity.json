@@ -104,5 +104,15 @@
     "elevation_at": {"fixture": "fixtures/dem.tgd", "lat": 27.84, "lon": 76.01, "meters": 1008.0, "source": "copernicus-glo30"},
     "bad_id": "not an id",
     "bad_iso": "not a code"
+  },
+  "tz": {
+    "fixture": "fixtures/tz.tgd",
+    "version": "2026f",
+    "zones": ["America/New_York", "Asia/Kathmandu"],
+    "offset": {"zone": "America/New_York", "unix": 1719835200, "seconds": -14400, "dst": 1, "abbr": "EDT"},
+    "gap": {"zone": "America/New_York", "civil": [2024, 3, 10, 2, 30, 0], "before": -18000, "after": -14400},
+    "overlap": {"zone": "America/New_York", "civil": [2024, 11, 3, 1, 30, 0], "before": -14400, "after": -18000},
+    "start": {"zone": "Asia/Kathmandu", "unix": -1577923200},
+    "unknown": "Europe/Nowhere"
   }
 }

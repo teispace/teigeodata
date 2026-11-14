@@ -8,7 +8,9 @@
 #![allow(
     clippy::unreadable_literal,
     clippy::elidable_lifetime_names,
-    reason = "uniform generated code: constants copied from the IDL, explicit lifetimes"
+    clippy::too_many_arguments,
+    reason = "uniform generated code: constants copied from the IDL, explicit lifetimes, the \
+              API's signatures"
 )]
 
 use pyo3::create_exception;
@@ -713,6 +715,82 @@ impl Engine {
         let value = py.detach(|| self.0.tz_at(lat, lon));
         let value = value.map_err(error)?;
         Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// The UTC offset in force in `zone` (a tzdb name or link, `Asia/Kathmandu`) at
+    /// `unix_seconds`, from the first layer whose zone rules hold the zone: one row with
+    /// `seconds` east of UTC, `dst` (1 when tzdb counts it as daylight saving time) and
+    /// `abbr` (`+0545`, `EDT`); no row where no layer holds the zone.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for an instant outside the years ±9,999;
+    /// `ErrorCode::MissingComponent` if the rules that would hold the zone were not
+    /// installed; `ErrorCode::Corrupt` if they are corrupt.
+    fn tz_offset_at<'py>(
+        &self,
+        py: Python<'py>,
+        zone: &str,
+        unix_seconds: i64,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.tz_offset_at(zone, unix_seconds));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// The offsets a civil time may have in `zone`: one row with `kind` (`unique`, `gap` for
+    /// a time a transition skips, `overlap` for one that happens twice), `before` and `after`
+    /// in seconds east of UTC (the offsets before and after the transition: for an overlap
+    /// the earlier and the later instant's; for a unique time both the same); no row where no
+    /// layer holds the zone.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a date that is not one of the years ±9,999 or a time
+    /// out of range; otherwise as `Engine::tz_offset_at`.
+    fn tz_local<'py>(
+        &self,
+        py: Python<'py>,
+        zone: &str,
+        year: i32,
+        month: u32,
+        day: u32,
+        hour: u32,
+        minute: u32,
+        second: u32,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| {
+            self.0
+                .tz_local(zone, year, month, day, hour, minute, second)
+        });
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// Every zone name (tzdb names and links) the layers' zone rules hold, in byte order:
+    /// one `zone` column.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::MissingComponent` if no installed layer has rules and one has rules that
+    /// were not installed.
+    fn tz_zones<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.tz_zones());
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// The earliest instant `zone`'s rules cover, in Unix seconds: one `unix` row (its first
+    /// transition, before which tzdb knows only local mean time; the year −9,999 for a zone
+    /// that never changed); no row where no layer holds the zone.
+    ///
+    /// # Errors
+    ///
+    /// As `Engine::tz_offset_at`.
+    fn tz_rules_start<'py>(&self, py: Python<'py>, zone: &str) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.tz_rules_start(zone));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// The tzdb release (`2026f`) of the first layer with zone rules; empty without rules.
+    fn tz_version<'py>(&self, py: Python<'py>) -> String {
+        py.detach(|| self.0.tz_version())
     }
     /// The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
     ///

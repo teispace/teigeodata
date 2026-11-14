@@ -8,7 +8,9 @@
 #![allow(
     clippy::unreadable_literal,
     clippy::elidable_lifetime_names,
-    reason = "uniform generated code: constants copied from the IDL, explicit lifetimes"
+    clippy::too_many_arguments,
+    reason = "uniform generated code: constants copied from the IDL, explicit lifetimes, the \
+              API's signatures"
 )]
 
 use pyo3::create_exception;

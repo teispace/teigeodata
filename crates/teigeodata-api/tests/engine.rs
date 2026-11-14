@@ -327,6 +327,212 @@ fn the_dem_fixture_is_current_and_answers_heights() {
     assert_eq!(e.code, ErrorCode::InvalidArgument);
 }
 
+/// `bindings/fixtures/tz.tgd`: zone rules only, tzdb `2026f`: Kathmandu as tzdb has it (LMT,
+/// +0530 from 1920, +0545 from 1986) and New York from its footer (US rules since 2007).
+fn tz_fixture() -> Vec<u8> {
+    use teigeodata_format::tz_rules::{self, TypeRow, ZoneInput, ZoneRules};
+    use teigeodata_format::{Encoding, Kind, Tag, Writer};
+    let t = |offset, is_dst, abbr: &str| TypeRow {
+        offset,
+        is_dst,
+        abbr: abbr.into(),
+    };
+    let kathmandu = ZoneRules {
+        version: 2,
+        transitions: vec![(-1_577_923_200, 1), (504_901_800, 2)],
+        types: vec![
+            t(20_476, false, "LMT"),
+            t(19_800, false, "+0530"),
+            t(20_700, false, "+0545"),
+        ],
+        footer: tz_rules::parse_footer("<+0545>-5:45").unwrap(),
+        first_abbr: 0,
+    };
+    let new_york = ZoneRules {
+        version: 2,
+        transitions: Vec::new(),
+        types: vec![t(-18_000, false, "EST")],
+        footer: tz_rules::parse_footer("EST5EDT,M3.2.0,M11.1.0").unwrap(),
+        first_abbr: 0,
+    };
+    let zones = [
+        ZoneInput {
+            name: "America/New_York",
+            rules: &new_york,
+            place: None,
+        },
+        ZoneInput {
+            name: "Asia/Kathmandu",
+            rules: &kathmandu,
+            place: None,
+        },
+    ];
+    let body = tz_rules::encode(&zones, false).unwrap();
+    let mut w = Writer::new("tz", "places", "2026.11.0").unwrap();
+    w.manifest(Tag::TZDB, b"2026f").unwrap();
+    w.pack(&[(Kind::TZ_RULES, Encoding::TABLE, 2, &body)], None)
+        .unwrap()
+}
+
+fn i64s(blob: &Blob, name: &str) -> Vec<i64> {
+    let r = Reader::new(blob.as_bytes()).unwrap();
+    match r.column(name) {
+        Some(View::I32(v)) => v.i32s().map(i64::from).collect(),
+        Some(View::I64(v)) => v.i64s().collect(),
+        Some(View::U8(v)) => v.u8s().map(i64::from).collect(),
+        _ => panic!("{name} is not an integer column"),
+    }
+}
+
+/// The zone rules through the handle: offsets at an instant, a civil time's offsets (unique,
+/// a gap, an overlap), the zones, where rules start and the tzdb release; an unknown zone
+/// has no row and a bad date is the caller's error.
+#[test]
+fn the_tz_fixture_is_current_and_answers_zone_rules() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../bindings/fixtures/tz.tgd"
+    );
+    let bytes = tz_fixture();
+    if std::env::var_os("TEIGEODATA_WRITE_FIXTURE").is_some() {
+        std::fs::write(path, &bytes).unwrap();
+    }
+    assert!(std::fs::read(path).unwrap() == bytes, "{path} is stale");
+    let engine = Engine::new();
+    assert_eq!(engine.tz_version(), "");
+    engine.open_bytes(&bytes).unwrap();
+    assert_eq!(engine.tz_version(), "2026f");
+    assert_eq!(
+        strings(&engine.tz_zones().unwrap(), "zone"),
+        [
+            Some("America/New_York".to_owned()),
+            Some("Asia/Kathmandu".to_owned())
+        ]
+    );
+
+    let at = |zone, unix| {
+        let o = engine.tz_offset_at(zone, unix).unwrap();
+        (i64s(&o, "seconds"), i64s(&o, "dst"), strings(&o, "abbr"))
+    };
+    let one = |abbr: &str| vec![Some(abbr.to_owned())];
+    assert_eq!(
+        at("Asia/Kathmandu", 0),
+        (vec![19_800], vec![0], one("+0530"))
+    );
+    assert_eq!(
+        at("Asia/Kathmandu", 1_700_000_000),
+        (vec![20_700], vec![0], one("+0545"))
+    );
+    // 2024-07-01 12:00 UTC: summer time in New York.
+    assert_eq!(
+        at("America/New_York", 1_719_835_200),
+        (vec![-14_400], vec![1], one("EDT"))
+    );
+    assert_eq!(at("Europe/Nowhere", 0), (vec![], vec![], vec![]));
+    assert_eq!(
+        engine
+            .tz_offset_at("Asia/Kathmandu", i64::MAX)
+            .unwrap_err()
+            .code,
+        ErrorCode::InvalidArgument
+    );
+
+    let local = |zone, y, mo, d, h, mi| {
+        let l = engine.tz_local(zone, y, mo, d, h, mi, 0).unwrap();
+        (strings(&l, "kind"), i64s(&l, "before"), i64s(&l, "after"))
+    };
+    let kind = |k: &str| vec![Some(k.to_owned())];
+    assert_eq!(
+        local("Asia/Kathmandu", 2026, 1, 1, 9, 0),
+        (kind("unique"), vec![20_700], vec![20_700])
+    );
+    assert_eq!(
+        local("America/New_York", 2024, 3, 10, 2, 30),
+        (kind("gap"), vec![-18_000], vec![-14_400])
+    );
+    assert_eq!(
+        local("America/New_York", 2024, 11, 3, 1, 30),
+        (kind("overlap"), vec![-14_400], vec![-18_000])
+    );
+    assert_eq!(
+        local("Europe/Nowhere", 2024, 1, 1, 0, 0),
+        (vec![], vec![], vec![])
+    );
+    for (mo, d, h) in [(13, 1, 0), (2, 30, 0), (1, 1, 24), (0, 1, 0)] {
+        let e = engine
+            .tz_local("Asia/Kathmandu", 2024, mo, d, h, 0, 0)
+            .unwrap_err();
+        assert_eq!(e.code, ErrorCode::InvalidArgument, "{mo}-{d} {h}h");
+    }
+
+    let start = |zone| i64s(&engine.tz_rules_start(zone).unwrap(), "unix");
+    assert_eq!(start("Asia/Kathmandu"), [-1_577_923_200]);
+    assert_eq!(
+        start("America/New_York"),
+        [teigeodata_format::tz_rules::MIN_UNIX]
+    );
+    assert_eq!(start("Europe/Nowhere"), Vec::<i64>::new());
+}
+
+/// The `tz` section of `bindings/parity.json` holds what Rust answers on `tz.tgd`.
+#[test]
+fn the_tz_parity_matches_rust() {
+    let parity: serde_json::Value =
+        serde_json::from_str(include_str!("../../../bindings/parity.json")).unwrap();
+    let p = &parity["tz"];
+    let s = |v: &serde_json::Value| v.as_str().unwrap().to_owned();
+    let n = |v: &serde_json::Value| v.as_i64().unwrap();
+    let engine = Engine::new();
+    engine
+        .open_bytes(
+            &std::fs::read(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../bindings/fixtures/tz.tgd"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+    assert_eq!(p["fixture"], "fixtures/tz.tgd");
+    assert_eq!(engine.tz_version(), s(&p["version"]));
+    let zones: Vec<Option<String>> = p["zones"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|z| Some(s(z)))
+        .collect();
+    assert_eq!(strings(&engine.tz_zones().unwrap(), "zone"), zones);
+    let o = &p["offset"];
+    let got = engine.tz_offset_at(&s(&o["zone"]), n(&o["unix"])).unwrap();
+    assert_eq!(i64s(&got, "seconds"), [n(&o["seconds"])]);
+    assert_eq!(i64s(&got, "dst"), [n(&o["dst"])]);
+    assert_eq!(strings(&got, "abbr"), [Some(s(&o["abbr"]))]);
+    for kind in ["gap", "overlap"] {
+        let c = &p[kind];
+        let v: Vec<i64> = c["civil"].as_array().unwrap().iter().map(n).collect();
+        let u = |i: usize| u32::try_from(v[i]).unwrap();
+        let got = engine
+            .tz_local(
+                &s(&c["zone"]),
+                i32::try_from(v[0]).unwrap(),
+                u(1),
+                u(2),
+                u(3),
+                u(4),
+                u(5),
+            )
+            .unwrap();
+        assert_eq!(strings(&got, "kind"), [Some(kind.to_owned())]);
+        assert_eq!(i64s(&got, "before"), [n(&c["before"])]);
+        assert_eq!(i64s(&got, "after"), [n(&c["after"])]);
+    }
+    let st = &p["start"];
+    assert_eq!(
+        i64s(&engine.tz_rules_start(&s(&st["zone"])).unwrap(), "unix"),
+        [n(&st["unix"])]
+    );
+    assert_eq!(rows(&engine.tz_offset_at(&s(&p["unknown"]), 0).unwrap()), 0);
+}
+
 /// The engine section of `bindings/parity.json`, which every language checks, holds what Rust
 /// answers on the fixture.
 #[test]

@@ -53,6 +53,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - An install whose catalog refresh fails, when the stored catalog lacks the pack, fails with
   `Network` (the cause) instead of `Refused` (D-282).
 - IDL: an options record must be the last parameter, so every language can default it.
+- The zone rules in every language (D-284): `Engine::tz_offset_at` (offset, DST flag and
+  abbreviation at an instant), `tz_local` (a civil time's offsets: unique, a gap or an
+  overlap), `tz_zones`, `tz_rules_start` and `tz_version`; parity on a rules-only fixture.
 - A job's idioms in each language, from the IDL's `# Job` contract (IDL format 7): a
   progress stream (Swift `progress`, JVM `onProgress`, Node `progress()`, Dart `progress()`,
   Python `teigeodata.aio.progress`), and cancel through the language's own cancellation
