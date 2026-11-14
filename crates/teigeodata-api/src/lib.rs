@@ -26,7 +26,8 @@
 //! [ADR-0016]: https://github.com/teispace/teigeodata/blob/main/docs/03-decisions/adr/ADR-0016-bindings.md
 //!
 //! ```
-//! assert_eq!(teigeodata_api::fold("São Paulo"), "sao paulo");
+//! # #[cfg(feature = "search")]
+//! assert_eq!(teigeodata_api::fold("São Paulo").unwrap(), "sao paulo");
 //! ```
 //!
 //! **Components** (D-137, D-291): a Cargo feature per pack component, all in `components`
@@ -1483,9 +1484,20 @@ pub fn noop() {}
 
 /// The search fold of a name: NFKD, lower case, optional accents dropped by script, spaces
 /// collapsed, recomposed to NFC. The same fold the forge and the search index use.
-#[must_use]
-pub fn fold(text: &str) -> String {
-    teigeodata_names::fold(text)
+///
+/// # Errors
+///
+/// [`ErrorCode::MissingComponent`] in a build without `search`, whose Unicode tables it uses
+/// (D-292).
+pub fn fold(text: &str) -> Result<String> {
+    #[cfg(feature = "search")]
+    {
+        Ok(teigeodata_names::fold(text))
+    }
+    #[cfg(not(feature = "search"))]
+    {
+        Err(not_built(Component::Search).into())
+    }
 }
 
 /// Builds `rows` deterministic sample places as a blob with the columns `id` (`u32`), `lat`
@@ -1638,9 +1650,13 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "search")]
     fn fold_is_the_names_fold() {
-        assert_eq!(fold("  Lahachowk  BAZAR "), "lahachowk bazar");
-        assert_eq!(fold("São Paulo"), teigeodata_names::fold("São Paulo"));
+        assert_eq!(fold("  Lahachowk  BAZAR ").unwrap(), "lahachowk bazar");
+        assert_eq!(
+            fold("São Paulo").unwrap(),
+            teigeodata_names::fold("São Paulo")
+        );
     }
 
     #[test]
@@ -1706,7 +1722,10 @@ mod tests {
         assert_eq!(parity["version"], version());
         assert_eq!(parity["components"], super::components());
         for case in parity["fold"].as_array().unwrap() {
-            assert_eq!(fold(case[0].as_str().unwrap()), case[1].as_str().unwrap());
+            assert_eq!(
+                fold(case[0].as_str().unwrap()).unwrap(),
+                case[1].as_str().unwrap()
+            );
         }
         let rows = &parity["sample_rows"];
         let blob = sample_rows(u32::try_from(rows["rows"].as_u64().unwrap()).unwrap()).unwrap();

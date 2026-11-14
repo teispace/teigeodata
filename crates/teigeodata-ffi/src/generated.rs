@@ -287,13 +287,18 @@ pub unsafe extern "C" fn tg_noop() -> i32 {
 
 /// The search fold of a name: NFKD, lower case, optional accents dropped by script, spaces
 /// collapsed, recomposed to NFC. The same fold the forge and the search index use.
+///
+/// # Errors
+///
+/// `ErrorCode::MissingComponent` in a build without `search`, whose Unicode tables it uses
+/// (D-292).
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_fold(text: *const u8, text_len: usize, out: *mut TgBytes) -> i32 {
     abi::call(|| {
         let out = abi::out(out)?;
         // SAFETY: the caller passes `text_len` readable bytes (or null and 0).
         let text = unsafe { abi::str_arg(text, text_len, "text") }?;
-        let value = teigeodata_api::fold(text);
+        let value = teigeodata_api::fold(text)?;
         let value = TgBytes::from_vec(value.into_bytes());
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };

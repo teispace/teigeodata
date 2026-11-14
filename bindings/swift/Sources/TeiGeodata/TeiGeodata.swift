@@ -234,11 +234,16 @@ public enum TeiGeodata {
 
     /// The search fold of a name: NFKD, lower case, optional accents dropped by script, spaces
     /// collapsed, recomposed to NFC. The same fold the forge and the search index use.
-    public static func fold(_ text: String) -> String {
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::MissingComponent` in a build without `search`, whose Unicode tables it uses
+    /// (D-292).
+    public static func fold(_ text: String) throws(TeiGeodataError) -> String {
         var out = tg_bytes()
         var text = text
         let status = text.withUTF8 { textBytes in tg_fold(textBytes.baseAddress, textBytes.count, &out) }
-        expectOK(status)
+        try check(status)
         return takeString(out)
     }
 

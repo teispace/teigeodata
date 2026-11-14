@@ -28,7 +28,7 @@ func row(_ c: String, _ ns: Double) {
     print("swift".padding(toLength: 10, withPad: " ", startingAt: 0), c.padding(toLength: 22, withPad: " ", startingAt: 0), String(format: "%10.1f ns", ns))
 }
 row("noop", best(10_000_000) { TeiGeodata.noop() })
-row("fold", best(1_000_000) { sink += Double(TeiGeodata.fold("Kathmandu").utf8.count) })
+row("fold", best(1_000_000) { sink += Double(try! TeiGeodata.fold("Kathmandu").utf8.count) })
 row("sample_rows(1000)+sum", best(10_000) { sink += latSum(try! TeiGeodata.sampleRows(1000)) })
 row("callback", best(1_000) { sink += Double(try! TeiGeodata.progress(1000) { _ in true }) } / 1000)
 if sink == 42 { print() }

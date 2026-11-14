@@ -153,6 +153,11 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_noop<'caller>(
 
 /// The search fold of a name: NFKD, lower case, optional accents dropped by script, spaces
 /// collapsed, recomposed to NFC. The same fold the forge and the search index use.
+///
+/// # Errors
+///
+/// `ErrorCode::MissingComponent` in a build without `search`, whose Unicode tables it uses
+/// (D-292).
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_fold<'caller>(
     mut unowned: EnvUnowned<'caller>,
@@ -166,7 +171,7 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_fold<'caller>(
                     code: ErrorCode::InvalidArgument,
                     message: format!("text: {e}"),
                 })?;
-                Ok(teigeodata_api::fold(&text))
+                teigeodata_api::fold(&text)
             })();
             match result {
                 Ok(value) => env.new_string(value),

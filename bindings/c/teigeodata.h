@@ -171,6 +171,11 @@ int32_t tg_noop(void);
 /*
  * The search fold of a name: NFKD, lower case, optional accents dropped by script, spaces
  * collapsed, recomposed to NFC. The same fold the forge and the search index use.
+ *
+ * # Errors
+ *
+ * `ErrorCode::MissingComponent` in a build without `search`, whose Unicode tables it uses
+ * (D-292).
  */
 int32_t tg_fold(const uint8_t *text, size_t text_len, tg_bytes *out);
 

@@ -127,6 +127,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Breaking
 
+- `fold` can fail: in a build without the `search` component it throws (returns)
+  `MissingComponent`, as its Unicode tables belong to search (D-292). Swift calls it with
+  `try`; the other languages throw unchecked, as from any other fallible call.
 - Python: blob results are `teigeodata.Blob`, lent without a copy through the buffer
   protocol, not `bytes` (`bytes(blob)` copies); the reader `teigeodata.blob.Blob` is now
   `teigeodata.blob.Reader` and reads any buffer; CPython 3.11 is the oldest supported (3.10

@@ -137,9 +137,16 @@ pub fn noop() {
 
 /// The search fold of a name: NFKD, lower case, optional accents dropped by script, spaces
 /// collapsed, recomposed to NFC. The same fold the forge and the search index use.
+///
+/// # Errors
+///
+/// `ErrorCode::MissingComponent` in a build without `search`, whose Unicode tables it uses
+/// (D-292).
 #[napi]
-pub fn fold(text: String) -> String {
-    teigeodata_api::fold(&text)
+pub fn fold(text: String) -> napi::Result<String, Code> {
+    let value = teigeodata_api::fold(&text);
+    let value = value.map_err(error)?;
+    Ok(value)
 }
 
 /// Builds `rows` deterministic sample places as a blob with the columns `id` (`u32`), `lat`

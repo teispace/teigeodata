@@ -599,6 +599,11 @@ final class TeiGeodata {
 
   /// The search fold of a name: NFKD, lower case, optional accents dropped by script, spaces
   /// collapsed, recomposed to NFC. The same fold the forge and the search index use.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::MissingComponent` in a build without `search`, whose Unicode tables it uses
+  /// (D-292).
   String fold(String text) {
     final textLen = _utf8(text);
     final status = _tgFold(_input, textLen, _bytes);

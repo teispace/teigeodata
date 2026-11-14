@@ -85,6 +85,13 @@ fn every_query_answers_as_an_absent_component() {
     answers(&built, "admin", "children", e.children(country));
     answers(&built, "admin", "by_iso", e.by_iso("NP"));
     answers(&built, "search", "search", e.search("Synthland", 3));
+    match teigeodata_api::fold("Lahachowk") {
+        Ok(f) => assert!(built.contains(&"search") && f == "lahachowk", "fold: {f}"),
+        Err(e) => assert!(
+            !built.contains(&"search") && e.code == ErrorCode::MissingComponent,
+            "fold: {e}"
+        ),
+    }
     answers(&built, "admin-index", "admin_at", e.admin_at(27.5, 85.5));
     // The fixture has no zone rules: with `tz-rules` built that is no rows, not an error.
     match e.tz_zones() {

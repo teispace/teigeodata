@@ -44,7 +44,7 @@ fn main() {
         "rust",
         "fold",
         best(1_000_000, || {
-            black_box(teigeodata_api::fold(black_box("Kathmandu")));
+            let _ = black_box(teigeodata_api::fold(black_box("Kathmandu")));
         }),
     );
     row(

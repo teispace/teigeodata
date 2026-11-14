@@ -117,7 +117,7 @@ public func runParity(_ path: String) async throws {
     check(TeiGeodata.components() == p["components"] as! String, "components")
     TeiGeodata.noop()
     for case let pair as [String] in p["fold"] as! [Any] {
-        check(TeiGeodata.fold(pair[0]) == pair[1], "fold \(pair[0])")
+        check(try TeiGeodata.fold(pair[0]) == pair[1], "fold \(pair[0])")
     }
     let s = p["sample_rows"] as! [String: Any]
     let blob = try TeiGeodata.sampleRows(UInt32(s["rows"] as! Int))
