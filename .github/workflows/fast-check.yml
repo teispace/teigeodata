@@ -134,12 +134,15 @@ jobs:
           cp target/release/libteigeodata_node.so node/teigeodata.node
       - name: ABI gates (D-285)
         run: cargo xtask abi --lib target/release/libteigeodata_ffi.so
-      - name: C
+      - name: C and C++
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           cc -std=c11 -Wall -Wextra -Werror -pedantic bindings/c/parity.c -Ibindings/c \
             -Ltarget/release -lteigeodata_ffi -Wl,-rpath,"$PWD/target/release" -o target/c-parity
           target/c-parity
+          c++ -std=c++17 -Wall -Wextra -Werror -pedantic -Wconversion bindings/c/parity.cpp -Ibindings/c \
+            -Ltarget/release -lteigeodata_ffi -Wl,-rpath,"$PWD/target/release" -o target/cpp-parity
+          target/cpp-parity
           echo '#include "teigeodata.h"' | c++ -x c++ -std=c++17 -Wall -Wextra -Werror -fsyntax-only -Ibindings/c -
       - name: Python
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

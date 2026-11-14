@@ -13,6 +13,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Added
 
+- `teigeodata.hpp`, a header-only C++17 wrapper of the C library, in the C package
+  (D-295): owning handles, `Blob`, exceptions with the stable error codes.
+- The C package for Linux musl (x64 and arm64).
 - The Node.js packages: `@teispace/teigeodata` with a prebuilt addon per platform
   (`@teispace/teigeodata-<platform>`, macOS, Linux glibc and musl, Windows, x64 and arm64), npm
   installing only the one a machine needs; CommonJS and ES module entries; Node.js 22 and later;

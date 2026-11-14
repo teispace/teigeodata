@@ -37,6 +37,11 @@ const TARGETS: &[Target] = &[
         rustfmt: false,
     },
     Target {
+        template: "cpp.hpp.j2",
+        output: "bindings/c/teigeodata.hpp",
+        rustfmt: false,
+    },
+    Target {
         template: "python.rs.j2",
         output: "bindings/python/src/lib.rs",
         rustfmt: true,

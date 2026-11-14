@@ -5,6 +5,7 @@
 //!
 //! ```text
 //! include/teigeodata.h                  the generated header (lite: its features set to 0)
+//! include/teigeodata.hpp                the generated C++17 wrapper over it (5.8d)
 //! lib/libteigeodata.so.<abi>, .so       ELF: the shared library and its link name
 //! lib/libteigeodata.dylib               Apple: install name @rpath/libteigeodata.dylib
 //! bin/teigeodata.dll, lib/teigeodata.dll.lib, lib/teigeodata.lib    Windows
@@ -16,14 +17,15 @@
 //!
 //! then archives it (`.tar.gz`, `.zip` for Windows) and checks the shared library's exports
 //! (`cargo xtask abi --lib`). `--smoke` builds `bindings/c/parity.c` against the staged
-//! package through `pkg-config` (shared and static) and through `CMake` (both targets), and runs
-//! each.
+//! package through `pkg-config` (shared and static) and through `CMake` (both targets), and
+//! `bindings/c/parity.cpp` through `CMake` (shared), and runs each.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const HEADER: &str = "bindings/c/teigeodata.h";
+const CPP_HEADER: &str = "bindings/c/teigeodata.hpp";
 
 /// The kind of library files a target produces.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -156,6 +158,7 @@ fn stage_files(
         header = header.replace(on, "#define TEIGEODATA_FEATURE_STORE 0");
     }
     std::fs::write(include.join("teigeodata.h"), header).map_err(|e| io(&include, e))?;
+    copy(&plan.root.join(CPP_HEADER), &include.join("teigeodata.hpp"))?;
     for file in ["LICENSE", "NOTICE"] {
         copy(&plan.root.join(file), &stage.join(file))?;
     }
@@ -528,6 +531,9 @@ fn smoke(plan: &Plan, os: Os, stage: &Path) -> Result<String, Vec<String>> {
     let parity = dir.join("parity.c");
     std::fs::copy(plan.root.join("bindings/c/parity.c"), &parity)
         .map_err(|e| vec![format!("parity.c: {e}")])?;
+    let parity_cpp = dir.join("parity.cpp");
+    std::fs::copy(plan.root.join("bindings/c/parity.cpp"), &parity_cpp)
+        .map_err(|e| vec![format!("parity.cpp: {e}")])?;
     let mut done = Vec::new();
 
     if os != Os::Windows {
@@ -555,18 +561,41 @@ fn smoke(plan: &Plan, os: Os, stage: &Path) -> Result<String, Vec<String>> {
         }
     }
 
+    done.extend(cmake_smoke(plan, os, stage, &dir, &parity, &parity_cpp)?);
+    let _ = std::fs::remove_dir_all(&dir);
+    Ok(format!(
+        "smoke: parity.c and parity.cpp passed through {}",
+        done.join(", ")
+    ))
+}
+
+/// The `CMake` half of the smoke test: `parity.c` against both targets, `parity.cpp` against the
+/// shared one; the names of the runs that passed.
+fn cmake_smoke(
+    plan: &Plan,
+    os: Os,
+    stage: &Path,
+    dir: &Path,
+    parity: &Path,
+    parity_cpp: &Path,
+) -> Result<Vec<String>, Vec<String>> {
+    let mut done = Vec::new();
     let project = dir.join("cmake");
     std::fs::create_dir_all(&project).map_err(|e| vec![format!("{}: {e}", project.display())])?;
     let lists = format!(
         "cmake_minimum_required(VERSION 3.16)\n\
-         project(smoke C)\n\
+         project(smoke C CXX)\n\
          find_package(teigeodata {version} REQUIRED CONFIG)\n\
          add_executable(smoke_shared \"{p}\")\n\
          target_link_libraries(smoke_shared PRIVATE teigeodata::teigeodata)\n\
          add_executable(smoke_static \"{p}\")\n\
-         target_link_libraries(smoke_static PRIVATE teigeodata::static)\n",
+         target_link_libraries(smoke_static PRIVATE teigeodata::static)\n\
+         add_executable(smoke_cpp \"{cpp}\")\n\
+         target_compile_features(smoke_cpp PRIVATE cxx_std_17)\n\
+         target_link_libraries(smoke_cpp PRIVATE teigeodata::teigeodata)\n",
         version = version(&plan.root)?,
         p = parity.display().to_string().replace('\\', "/"),
+        cpp = parity_cpp.display().to_string().replace('\\', "/"),
     );
     std::fs::write(project.join("CMakeLists.txt"), lists)
         .map_err(|e| vec![format!("CMakeLists.txt: {e}")])?;
@@ -596,7 +625,7 @@ fn smoke(plan: &Plan, os: Os, stage: &Path) -> Result<String, Vec<String>> {
             "Release",
         ],
     )?;
-    for exe in ["smoke_shared", "smoke_static"] {
+    for exe in ["smoke_shared", "smoke_static", "smoke_cpp"] {
         let mut path = build.join(exe);
         if os == Os::Windows {
             path = build.join("Release").join(format!("{exe}.exe"));
@@ -609,11 +638,7 @@ fn smoke(plan: &Plan, os: Os, stage: &Path) -> Result<String, Vec<String>> {
         run_exe(&plan.root, &path)?;
         done.push(format!("cmake {exe}"));
     }
-    let _ = std::fs::remove_dir_all(&dir);
-    Ok(format!(
-        "smoke: parity.c passed through {}",
-        done.join(", ")
-    ))
+    Ok(done)
 }
 
 fn sh(root: &Path, script: &str, env: &[(&str, &Path)]) -> Result<(), Vec<String>> {
