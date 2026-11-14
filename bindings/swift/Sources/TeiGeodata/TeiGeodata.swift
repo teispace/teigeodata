@@ -648,6 +648,11 @@ public final class Store: @unchecked Sendable {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     public static func create(_ root: String, repo: String, assets: String, trustedRoot: Data) throws(TeiGeodataError) -> Store {
         var out: OpaquePointer?
         var root = root
@@ -663,6 +668,11 @@ public final class Store: @unchecked Sendable {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     public static func open(_ root: String) throws(TeiGeodataError) -> Store {
         var out: OpaquePointer?
         var root = root
@@ -685,6 +695,11 @@ public final class Store: @unchecked Sendable {
     /// # Errors
     ///
     /// `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     public func catalog() throws(TeiGeodataError) -> Data {
         var out = tg_bytes()
         let status = withExtendedLifetime(self) { tg_store_catalog(raw, &out) }
@@ -697,6 +712,11 @@ public final class Store: @unchecked Sendable {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if a pack cannot be read.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     public func status(_ deep: Bool) throws(TeiGeodataError) -> Data {
         var out = tg_bytes()
         let status = withExtendedLifetime(self) { tg_store_status(raw, deep, &out) }
@@ -709,6 +729,11 @@ public final class Store: @unchecked Sendable {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if it is not installed.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     public func pin(_ pack: String, on: Bool) throws(TeiGeodataError) {
         var pack = pack
         let status = withExtendedLifetime(self) { pack.withUTF8 { packBytes in tg_store_pin(raw, packBytes.baseAddress, packBytes.count, on) } }
@@ -720,6 +745,11 @@ public final class Store: @unchecked Sendable {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if one is not installed or another pack needs it.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     public func remove(_ pack: String) throws(TeiGeodataError) -> Data {
         var out = tg_bytes()
         var pack = pack
@@ -736,6 +766,11 @@ public final class Store: @unchecked Sendable {
     ///
     /// `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
     /// `ErrorCode::Refused` if the stored catalog no longer verifies.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     public func find(_ engine: Engine, query: String, limit: UInt32) throws(TeiGeodataError) -> Data {
         var out = tg_bytes()
         var query = query
@@ -751,6 +786,11 @@ public final class Store: @unchecked Sendable {
     ///
     /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
     /// the stored catalog no longer verifies.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     public func locate(_ engine: Engine, lat: Double, lon: Double, radiusM: UInt32) throws(TeiGeodataError) -> Data {
         var out = tg_bytes()
         let status = withExtendedLifetime(self) { withExtendedLifetime(engine) { tg_store_locate(raw, engine.raw, lat, lon, radiusM, &out) } }
@@ -764,6 +804,11 @@ public final class Store: @unchecked Sendable {
     /// # Errors
     ///
     /// `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     public func engine() throws(TeiGeodataError) -> Engine {
         var out: OpaquePointer?
         let status = withExtendedLifetime(self) { tg_store_engine(raw, &out) }
@@ -834,6 +879,11 @@ public final class Job: @unchecked Sendable {
     /// Waits until the progress moves past `seq` (from `seq`), the job ends, or
     /// `timeout_ms` passes; returns the sequence then. Polling with the last one returned
     /// sees every change.
+    ///
+    /// # Blocks
+    ///
+    /// Until the job moves or ends: call it off a UI thread, or use the language's
+    /// asynchronous form.
     public func waitProgress(_ seq: UInt64, timeoutMs: UInt32) -> UInt64 {
         var out: UInt64 = 0
         let status = withExtendedLifetime(self) { tg_job_wait_progress(raw, seq, timeoutMs, &out) }
@@ -887,6 +937,11 @@ public final class Job: @unchecked Sendable {
     ///
     /// The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
     /// or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+    ///
+    /// # Blocks
+    ///
+    /// Until the job moves or ends: call it off a UI thread, or use the language's
+    /// asynchronous form.
     public func result() throws(TeiGeodataError) -> Data {
         var out = tg_bytes()
         let status = withExtendedLifetime(self) { tg_job_result(raw, &out) }

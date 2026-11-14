@@ -89,6 +89,7 @@
       "params": [],
       "returns": "string",
       "fallible": false,
+      "blocks": false,
       "feature": null
     },
     {
@@ -100,6 +101,7 @@
       "params": [],
       "returns": "void",
       "fallible": false,
+      "blocks": false,
       "feature": null
     },
     {
@@ -117,6 +119,7 @@
       ],
       "returns": "string",
       "fallible": false,
+      "blocks": false,
       "feature": null
     },
     {
@@ -139,6 +142,7 @@
       ],
       "returns": "blob",
       "fallible": true,
+      "blocks": false,
       "feature": null
     },
     {
@@ -171,6 +175,7 @@
       ],
       "returns": "u32",
       "fallible": true,
+      "blocks": false,
       "feature": null
     },
     {
@@ -205,6 +210,7 @@
       ],
       "returns": "f64",
       "fallible": true,
+      "blocks": false,
       "feature": null
     }
   ],
@@ -232,6 +238,7 @@
           "returns": "handle",
           "returns_handle": "Engine",
           "fallible": false,
+          "blocks": false,
           "feature": null
         },
         {
@@ -254,6 +261,7 @@
           ],
           "returns": "u32",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -281,6 +289,7 @@
           ],
           "returns": "u32",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -302,6 +311,7 @@
           ],
           "returns": "u32",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -329,6 +339,7 @@
           ],
           "returns": "u32",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -346,6 +357,7 @@
           ],
           "returns": "bool",
           "fallible": false,
+          "blocks": false,
           "feature": null
         },
         {
@@ -357,6 +369,7 @@
           "params": [],
           "returns": "u32",
           "fallible": false,
+          "blocks": false,
           "feature": null
         },
         {
@@ -378,6 +391,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -400,6 +414,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -421,6 +436,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -441,6 +457,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -467,6 +484,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -493,6 +511,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -525,6 +544,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -555,6 +575,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -590,6 +611,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -615,6 +637,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -643,6 +666,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -671,6 +695,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -701,6 +726,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -722,6 +748,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -749,6 +776,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -775,6 +803,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         },
         {
@@ -796,6 +825,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": false,
           "feature": null
         }
       ],
@@ -834,7 +864,12 @@
             "",
             "# Errors",
             "",
-            "`ErrorCode::Refused` if the root does not verify or the store cannot be written."
+            "`ErrorCode::Refused` if the root does not verify or the store cannot be written.",
+            "",
+            "# Blocks",
+            "",
+            "While a job of this store runs, and on the disk: call it off a UI thread, or use the",
+            "language's asynchronous form."
           ],
           "receiver": false,
           "params": [
@@ -858,6 +893,7 @@
           "returns": "handle",
           "returns_handle": "Store",
           "fallible": true,
+          "blocks": true,
           "feature": "store"
         },
         {
@@ -867,7 +903,12 @@
             "",
             "# Errors",
             "",
-            "`ErrorCode::Refused` if it is not a store or its journal cannot be read."
+            "`ErrorCode::Refused` if it is not a store or its journal cannot be read.",
+            "",
+            "# Blocks",
+            "",
+            "While a job of this store runs, and on the disk: call it off a UI thread, or use the",
+            "language's asynchronous form."
           ],
           "receiver": false,
           "params": [
@@ -879,6 +920,7 @@
           "returns": "handle",
           "returns_handle": "Store",
           "fallible": true,
+          "blocks": true,
           "feature": "store"
         },
         {
@@ -891,6 +933,7 @@
           "params": [],
           "returns": "string",
           "fallible": false,
+          "blocks": false,
           "feature": "store"
         },
         {
@@ -900,12 +943,18 @@
             "",
             "# Errors",
             "",
-            "`ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies."
+            "`ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.",
+            "",
+            "# Blocks",
+            "",
+            "While a job of this store runs, and on the disk: call it off a UI thread, or use the",
+            "language's asynchronous form."
           ],
           "receiver": true,
           "params": [],
           "returns": "blob",
           "fallible": true,
+          "blocks": true,
           "feature": "store"
         },
         {
@@ -915,7 +964,12 @@
             "",
             "# Errors",
             "",
-            "`ErrorCode::Refused` if a pack cannot be read."
+            "`ErrorCode::Refused` if a pack cannot be read.",
+            "",
+            "# Blocks",
+            "",
+            "While a job of this store runs, and on the disk: call it off a UI thread, or use the",
+            "language's asynchronous form."
           ],
           "receiver": true,
           "params": [
@@ -926,6 +980,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": true,
           "feature": "store"
         },
         {
@@ -935,7 +990,12 @@
             "",
             "# Errors",
             "",
-            "`ErrorCode::Refused` if it is not installed."
+            "`ErrorCode::Refused` if it is not installed.",
+            "",
+            "# Blocks",
+            "",
+            "While a job of this store runs, and on the disk: call it off a UI thread, or use the",
+            "language's asynchronous form."
           ],
           "receiver": true,
           "params": [
@@ -950,6 +1010,7 @@
           ],
           "returns": "void",
           "fallible": true,
+          "blocks": true,
           "feature": "store"
         },
         {
@@ -959,7 +1020,12 @@
             "",
             "# Errors",
             "",
-            "`ErrorCode::Refused` if one is not installed or another pack needs it."
+            "`ErrorCode::Refused` if one is not installed or another pack needs it.",
+            "",
+            "# Blocks",
+            "",
+            "While a job of this store runs, and on the disk: call it off a UI thread, or use the",
+            "language's asynchronous form."
           ],
           "receiver": true,
           "params": [
@@ -970,6 +1036,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": true,
           "feature": "store"
         },
         {
@@ -982,7 +1049,12 @@
             "# Errors",
             "",
             "`ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;",
-            "`ErrorCode::Refused` if the stored catalog no longer verifies."
+            "`ErrorCode::Refused` if the stored catalog no longer verifies.",
+            "",
+            "# Blocks",
+            "",
+            "While a job of this store runs, and on the disk: call it off a UI thread, or use the",
+            "language's asynchronous form."
           ],
           "receiver": true,
           "params": [
@@ -1002,6 +1074,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": true,
           "feature": "store"
         },
         {
@@ -1013,7 +1086,12 @@
             "# Errors",
             "",
             "`ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if",
-            "the stored catalog no longer verifies."
+            "the stored catalog no longer verifies.",
+            "",
+            "# Blocks",
+            "",
+            "While a job of this store runs, and on the disk: call it off a UI thread, or use the",
+            "language's asynchronous form."
           ],
           "receiver": true,
           "params": [
@@ -1037,6 +1115,7 @@
           ],
           "returns": "blob",
           "fallible": true,
+          "blocks": true,
           "feature": "store"
         },
         {
@@ -1047,13 +1126,19 @@
             "",
             "# Errors",
             "",
-            "`ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened."
+            "`ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.",
+            "",
+            "# Blocks",
+            "",
+            "While a job of this store runs, and on the disk: call it off a UI thread, or use the",
+            "language's asynchronous form."
           ],
           "receiver": true,
           "params": [],
           "returns": "handle",
           "returns_handle": "Engine",
           "fallible": true,
+          "blocks": true,
           "feature": "store"
         },
         {
@@ -1072,6 +1157,7 @@
           "returns": "handle",
           "returns_handle": "Job",
           "fallible": false,
+          "blocks": false,
           "feature": "store"
         },
         {
@@ -1101,6 +1187,7 @@
           "returns": "handle",
           "returns_handle": "Job",
           "fallible": true,
+          "blocks": false,
           "feature": "store"
         },
         {
@@ -1119,6 +1206,7 @@
           "returns": "handle",
           "returns_handle": "Job",
           "fallible": false,
+          "blocks": false,
           "feature": "store"
         },
         {
@@ -1136,6 +1224,7 @@
           "returns": "handle",
           "returns_handle": "Job",
           "fallible": false,
+          "blocks": false,
           "feature": "store"
         }
       ],
@@ -1154,7 +1243,12 @@
           "doc": [
             "Waits until the progress moves past `seq` (from `seq`), the job ends, or",
             "`timeout_ms` passes; returns the sequence then. Polling with the last one returned",
-            "sees every change."
+            "sees every change.",
+            "",
+            "# Blocks",
+            "",
+            "Until the job moves or ends: call it off a UI thread, or use the language's",
+            "asynchronous form."
           ],
           "receiver": true,
           "params": [
@@ -1169,6 +1263,7 @@
           ],
           "returns": "u64",
           "fallible": false,
+          "blocks": true,
           "feature": "store"
         },
         {
@@ -1180,6 +1275,7 @@
           "params": [],
           "returns": "u64",
           "fallible": false,
+          "blocks": false,
           "feature": "store"
         },
         {
@@ -1191,6 +1287,7 @@
           "params": [],
           "returns": "u64",
           "fallible": false,
+          "blocks": false,
           "feature": "store"
         },
         {
@@ -1203,6 +1300,7 @@
           "params": [],
           "returns": "u64",
           "fallible": false,
+          "blocks": false,
           "feature": "store"
         },
         {
@@ -1214,6 +1312,7 @@
           "params": [],
           "returns": "bool",
           "fallible": false,
+          "blocks": false,
           "feature": "store"
         },
         {
@@ -1226,6 +1325,7 @@
           "params": [],
           "returns": "void",
           "fallible": false,
+          "blocks": false,
           "feature": "store"
         },
         {
@@ -1236,12 +1336,18 @@
             "# Errors",
             "",
             "The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,",
-            "or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs."
+            "or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.",
+            "",
+            "# Blocks",
+            "",
+            "Until the job moves or ends: call it off a UI thread, or use the language's",
+            "asynchronous form."
           ],
           "receiver": true,
           "params": [],
           "returns": "blob",
           "fallible": true,
+          "blocks": true,
           "feature": "store"
         }
       ],

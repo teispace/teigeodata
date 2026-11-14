@@ -17,6 +17,8 @@
 )]
 
 use napi::bindgen_prelude::{Buffer, Function};
+use std::sync::Arc;
+
 {% if callbacks %}
 use napi::{Env, Error, JsError, Status};
 {% else %}
@@ -151,7 +153,7 @@ pub fn {{ f.name }}(
 {% if f.returns == "blob" %}
     Buffer::from({{ call }}.into_vec())
 {% elif f.returns == "handle" %}
-    {{ f.returns_handle }}({{ call }})
+    {{ f.returns_handle }}(Arc::new({{ call }}))
 {% elif f.returns == "u64" %}
     number({{ call }})
 {% else %}
@@ -170,12 +172,71 @@ pub fn {{ f.name }}(
 {% elif f.fallible %}
     let value = value.map_err(error)?;
 {% endif %}
-    Ok({% if f.returns == "void" and f.fallible %}()){% else %}{% if f.returns == "blob" %}Buffer::from(value.into_vec()){% elif f.returns == "handle" %}{{ f.returns_handle }}(value){% elif f.returns == "u64" %}number(value){% else %}value{% endif %}){% endif %}
+    Ok({% if f.returns == "void" and f.fallible %}()){% else %}{% if f.returns == "blob" %}Buffer::from(value.into_vec()){% elif f.returns == "handle" %}{{ f.returns_handle }}(Arc::new(value)){% elif f.returns == "u64" %}number(value){% else %}value{% endif %}){% endif %}
 {% endif %}
+}
+{% endmacro %}
+{#
+  The asynchronous form of a function that blocks (`# Blocks`): the same call on a thread of
+  its own (a job's wait may last minutes, so not on libuv's few pool threads), settling a
+  Promise on the JavaScript thread; a failure rejects with the same coded `Error`.
+#}
+{% macro jsasync(f, owner) %}
+
+/// As `{{ f.name | camel }}`, without blocking: a `Promise` of its result.
+///
+/// # Errors
+///
+/// The `Promise` rejects with the call's error; this throws only if no thread can start.
+{% if f.feature and not owner %}
+#[cfg(feature = "{{ f.feature }}")]
+{% endif %}
+#[napi]
+pub fn {{ f.name }}_async{% if f.receiver %}<'env>{% endif %}(
+{% if f.receiver %}
+    &self,
+{% endif %}
+    env: &{% if f.receiver %}'env {% endif %}{{ "Env" if callbacks else "napi::Env" }},
+{% for p in f.params %}
+    {{ p.name }}: {{ jsty(p) }},
+{% endfor %}
+) -> napi::Result<napi::bindgen_prelude::Object<'{{ "env" if f.receiver else "_" }}>> {
+{% if f.receiver %}
+    let this = Arc::clone(&self.0);
+{% endif %}
+{% for p in f.params %}
+{% if p.ty == "bytes" %}
+    let {{ p.name }} = {{ p.name }}.to_vec();
+{% elif p.ty == "handle" %}
+    let {{ p.name }} = Arc::clone(&{{ p.name }}.0);
+{% elif p.ty == "record" %}
+    let {{ p.name }}: teigeodata_api::{{ p.record }} = {{ p.name }}.unwrap_or_default().into();
+{% elif p.ty == "u64" %}
+    let {{ p.name }} = u64_of({{ p.name }});
+{% endif %}
+{% endfor %}
+    let (deferred, promise) = env.create_deferred()?;
+    std::thread::Builder::new()
+        .name("teigeodata-async".into())
+        .spawn(move || {
+            let value = {% if f.receiver %}this.{% elif owner %}teigeodata_api::{{ owner.name }}::{% else %}teigeodata_api::{% endif %}{{ f.name }}({% for p in f.params %}{% if p.ty in ["str", "bytes", "record", "handle"] %}&{% endif %}{{ p.name }}{% if not loop.last %}, {% endif %}{% endfor %});
+{% if not f.fallible %}
+            let value: Result<_, teigeodata_api::Error> = Ok(value);
+{% endif %}
+            deferred.resolve(move |env| match value {
+                Ok(value) => Ok({% if f.returns == "blob" %}Buffer::from(value.into_vec()){% elif f.returns == "handle" %}{{ f.returns_handle }}(Arc::new(value)){% elif f.returns == "u64" %}number(value){% else %}value{% endif %}),
+                Err(e) => Err(Error::from({{ "JsError" if callbacks else "napi::JsError" }}::from(error(e)).into_unknown(env))),
+            });
+        })
+        .map_err(|e| Error::new(Status::GenericFailure, format!("no thread for the call: {e}")))?;
+    Ok(promise)
 }
 {% endmacro %}
 {% for f in functions %}
 {{ jsfn(f, none) }}
+{%- endfor %}
+{% for f in functions if f.blocks %}
+{{ jsasync(f, none) }}
 {%- endfor %}
 {% for e in enums %}
 
@@ -253,7 +314,7 @@ impl From<{{ r.name }}> for teigeodata_api::{{ r.name }} {
 {% endif %}
 #[napi]
 #[derive(Debug)]
-pub struct {{ h.name }}(teigeodata_api::{{ h.name }});
+pub struct {{ h.name }}(Arc<teigeodata_api::{{ h.name }}>);
 
 {% if h.feature %}
 #[cfg(feature = "{{ h.feature }}")]
@@ -262,6 +323,9 @@ pub struct {{ h.name }}(teigeodata_api::{{ h.name }});
 impl {{ h.name }} {
 {% for f in h.methods %}
 {{ jsfn(f, h) | indent(4) }}
+{%- endfor %}
+{% for f in h.methods if f.blocks %}
+{{ jsasync(f, h) | indent(4) }}
 {%- endfor %}
 }
 {% endfor %}

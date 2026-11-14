@@ -451,8 +451,16 @@ export class Store {
    * # Errors
    *
    * `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+   *
+   * # Blocks
+   *
+   * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+   * language's asynchronous form.
    */
   static create(root: string, repo: string, assets: string, trustedRoot: Buffer): Store;
+
+  /** As `create`, without blocking: a `Promise` of its result. */
+  static createAsync(root: string, repo: string, assets: string, trustedRoot: Buffer): Promise<Store>;
 
   /**
    * Opens the store at `root`, finishing or undoing an install a crash cut short.
@@ -460,8 +468,16 @@ export class Store {
    * # Errors
    *
    * `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+   *
+   * # Blocks
+   *
+   * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+   * language's asynchronous form.
    */
   static open(root: string): Store;
+
+  /** As `open`, without blocking: a `Promise` of its result. */
+  static openAsync(root: string): Promise<Store>;
 
   /**
    * The packs found damaged when the store was opened, comma-separated; empty when none.
@@ -475,8 +491,16 @@ export class Store {
    * # Errors
    *
    * `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+   *
+   * # Blocks
+   *
+   * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+   * language's asynchronous form.
    */
   catalog(): Buffer;
+
+  /** As `catalog`, without blocking: a `Promise` of its result. */
+  catalogAsync(): Promise<Buffer>;
 
   /**
    * Each installed pack and its health, from a full check of every byte when `deep`.
@@ -484,8 +508,16 @@ export class Store {
    * # Errors
    *
    * `ErrorCode::Refused` if a pack cannot be read.
+   *
+   * # Blocks
+   *
+   * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+   * language's asynchronous form.
    */
   status(deep: boolean): Buffer;
+
+  /** As `status`, without blocking: a `Promise` of its result. */
+  statusAsync(deep: boolean): Promise<Buffer>;
 
   /**
    * Pins the pack (kept when room is made), or unpins it.
@@ -493,8 +525,16 @@ export class Store {
    * # Errors
    *
    * `ErrorCode::Refused` if it is not installed.
+   *
+   * # Blocks
+   *
+   * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+   * language's asynchronous form.
    */
   pin(pack: string, on: boolean): void;
+
+  /** As `pin`, without blocking: a `Promise` of its result. */
+  pinAsync(pack: string, on: boolean): Promise<void>;
 
   /**
    * Removes the packs and the dependencies nothing else needs; returns what was removed.
@@ -502,8 +542,16 @@ export class Store {
    * # Errors
    *
    * `ErrorCode::Refused` if one is not installed or another pack needs it.
+   *
+   * # Blocks
+   *
+   * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+   * language's asynchronous form.
    */
   remove(pack: string): Buffer;
+
+  /** As `remove`, without blocking: a `Promise` of its result. */
+  removeAsync(pack: string): Promise<Buffer>;
 
   /**
    * The places named `query` in `engine` (one over a world pack the app ships, the
@@ -514,8 +562,16 @@ export class Store {
    *
    * `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
    * `ErrorCode::Refused` if the stored catalog no longer verifies.
+   *
+   * # Blocks
+   *
+   * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+   * language's asynchronous form.
    */
   find(engine: Engine, query: string, limit: number): Buffer;
+
+  /** As `find`, without blocking: a `Promise` of its result. */
+  findAsync(engine: Engine, query: string, limit: number): Promise<Buffer>;
 
   /**
    * The countries within `radius_m` metres of a point in `engine`, each with the catalog's
@@ -525,8 +581,16 @@ export class Store {
    *
    * `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
    * the stored catalog no longer verifies.
+   *
+   * # Blocks
+   *
+   * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+   * language's asynchronous form.
    */
   locate(engine: Engine, lat: number, lon: number, radiusM: number): Buffer;
+
+  /** As `locate`, without blocking: a `Promise` of its result. */
+  locateAsync(engine: Engine, lat: number, lon: number, radiusM: number): Promise<Buffer>;
 
   /**
    * An engine over the installed packs, each opened with the components and languages
@@ -535,8 +599,16 @@ export class Store {
    * # Errors
    *
    * `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+   *
+   * # Blocks
+   *
+   * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+   * language's asynchronous form.
    */
   engine(): Engine;
+
+  /** As `engine`, without blocking: a `Promise` of its result. */
+  engineAsync(): Promise<Engine>;
 
   /**
    * Refreshes the catalog for the countries (comma-separated ISO codes) and every country
@@ -577,8 +649,16 @@ export class Job {
    * Waits until the progress moves past `seq` (from `seq`), the job ends, or
    * `timeout_ms` passes; returns the sequence then. Polling with the last one returned
    * sees every change.
+   *
+   * # Blocks
+   *
+   * Until the job moves or ends: call it off a UI thread, or use the language's
+   * asynchronous form.
    */
   waitProgress(seq: number, timeoutMs: number): number;
+
+  /** As `waitProgress`, without blocking: a `Promise` of its result. */
+  waitProgressAsync(seq: number, timeoutMs: number): Promise<number>;
 
   /**
    * The progress's sequence number: it moves on with every change.
@@ -614,6 +694,14 @@ export class Job {
    *
    * The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
    * or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+   *
+   * # Blocks
+   *
+   * Until the job moves or ends: call it off a UI thread, or use the language's
+   * asynchronous form.
    */
   result(): Buffer;
+
+  /** As `result`, without blocking: a `Promise` of its result. */
+  resultAsync(): Promise<Buffer>;
 }

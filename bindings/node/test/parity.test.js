@@ -199,3 +199,38 @@ test("store", () => {
     rmSync(d, { recursive: true, force: true });
   }
 });
+
+test("store calls that block have Promise forms that keep the event loop free", async () => {
+  // The mirror is a server in this process: a blocking call would stop it from answering.
+  const http = require("node:http");
+  const { mkdtempSync, rmSync } = require("node:fs");
+  const { tmpdir } = require("node:os");
+  const s = parity.store;
+  const root = readFileSync(join(__dirname, "../..", s.root));
+  let asked = 0;
+  const server = http.createServer((req, res) => {
+    asked++;
+    setTimeout(() => res.writeHead(404).end(), 50);
+  });
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  const mirror = `http://127.0.0.1:${server.address().port}/`;
+  const d = mkdtempSync(join(tmpdir(), "tg-store-async-"));
+  try {
+    const store = await tg.Store.createAsync(join(d, "s"), mirror, mirror, root);
+    assert.ok(store instanceof tg.Store);
+    assert.ok((await tg.Store.openAsync(join(d, "s"))) instanceof tg.Store);
+    await assert.rejects(tg.Store.openAsync(join(d, "missing")), { code: "Refused" });
+    assert.equal(strings(await store.statusAsync(false), "path").length, 0);
+    const engine = await store.engineAsync();
+    assert.equal(engine.layers(), 0);
+    assert.equal(strings(await store.findAsync(engine, s.pack, 3), "name").length, 0);
+    await assert.rejects(store.findAsync(engine, s.pack, 10001), { code: "InvalidArgument" });
+    const job = store.refresh(s.pack);
+    await assert.rejects(job.resultAsync(), (e) => e.code === "Network" || e.code === "Refused");
+    assert.ok(asked > 0, "the mirror in this process answered while the job ran");
+    assert.equal(await job.waitProgressAsync(job.seq(), 60000), job.seq());
+  } finally {
+    server.close();
+    rmSync(d, { recursive: true, force: true });
+  }
+});

@@ -455,6 +455,11 @@ void tg_store_free(tg_store *handle);
  * # Errors
  *
  * `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+ *
+ * # Blocks
+ *
+ * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+ * language's asynchronous form.
  */
 int32_t tg_store_create(const uint8_t *root, size_t root_len, const uint8_t *repo, size_t repo_len, const uint8_t *assets, size_t assets_len, const uint8_t *trusted_root, size_t trusted_root_len, tg_store **out);
 
@@ -464,6 +469,11 @@ int32_t tg_store_create(const uint8_t *root, size_t root_len, const uint8_t *rep
  * # Errors
  *
  * `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+ *
+ * # Blocks
+ *
+ * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+ * language's asynchronous form.
  */
 int32_t tg_store_open(const uint8_t *root, size_t root_len, tg_store **out);
 
@@ -479,6 +489,11 @@ int32_t tg_store_damaged(const tg_store *handle, tg_bytes *out);
  * # Errors
  *
  * `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+ *
+ * # Blocks
+ *
+ * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+ * language's asynchronous form.
  */
 int32_t tg_store_catalog(const tg_store *handle, tg_bytes *out);
 
@@ -488,6 +503,11 @@ int32_t tg_store_catalog(const tg_store *handle, tg_bytes *out);
  * # Errors
  *
  * `ErrorCode::Refused` if a pack cannot be read.
+ *
+ * # Blocks
+ *
+ * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+ * language's asynchronous form.
  */
 int32_t tg_store_status(const tg_store *handle, bool deep, tg_bytes *out);
 
@@ -497,6 +517,11 @@ int32_t tg_store_status(const tg_store *handle, bool deep, tg_bytes *out);
  * # Errors
  *
  * `ErrorCode::Refused` if it is not installed.
+ *
+ * # Blocks
+ *
+ * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+ * language's asynchronous form.
  */
 int32_t tg_store_pin(const tg_store *handle, const uint8_t *pack, size_t pack_len, bool on);
 
@@ -506,6 +531,11 @@ int32_t tg_store_pin(const tg_store *handle, const uint8_t *pack, size_t pack_le
  * # Errors
  *
  * `ErrorCode::Refused` if one is not installed or another pack needs it.
+ *
+ * # Blocks
+ *
+ * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+ * language's asynchronous form.
  */
 int32_t tg_store_remove(const tg_store *handle, const uint8_t *pack, size_t pack_len, tg_bytes *out);
 
@@ -518,6 +548,11 @@ int32_t tg_store_remove(const tg_store *handle, const uint8_t *pack, size_t pack
  *
  * `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
  * `ErrorCode::Refused` if the stored catalog no longer verifies.
+ *
+ * # Blocks
+ *
+ * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+ * language's asynchronous form.
  */
 int32_t tg_store_find(const tg_store *handle, const tg_engine *engine, const uint8_t *query, size_t query_len, uint32_t limit, tg_bytes *out);
 
@@ -529,6 +564,11 @@ int32_t tg_store_find(const tg_store *handle, const tg_engine *engine, const uin
  *
  * `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
  * the stored catalog no longer verifies.
+ *
+ * # Blocks
+ *
+ * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+ * language's asynchronous form.
  */
 int32_t tg_store_locate(const tg_store *handle, const tg_engine *engine, double lat, double lon, uint32_t radius_m, tg_bytes *out);
 
@@ -539,6 +579,11 @@ int32_t tg_store_locate(const tg_store *handle, const tg_engine *engine, double 
  * # Errors
  *
  * `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+ *
+ * # Blocks
+ *
+ * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+ * language's asynchronous form.
  */
 int32_t tg_store_engine(const tg_store *handle, tg_engine **out);
 
@@ -580,6 +625,11 @@ void tg_job_free(tg_job *handle);
  * Waits until the progress moves past `seq` (from `seq`), the job ends, or
  * `timeout_ms` passes; returns the sequence then. Polling with the last one returned
  * sees every change.
+ *
+ * # Blocks
+ *
+ * Until the job moves or ends: call it off a UI thread, or use the language's
+ * asynchronous form.
  */
 int32_t tg_job_wait_progress(const tg_job *handle, uint64_t seq, uint32_t timeout_ms, uint64_t *out);
 
@@ -617,6 +667,11 @@ int32_t tg_job_cancel(const tg_job *handle);
  *
  * The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
  * or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+ *
+ * # Blocks
+ *
+ * Until the job moves or ends: call it off a UI thread, or use the language's
+ * asynchronous form.
  */
 int32_t tg_job_result(const tg_job *handle, tg_bytes *out);
 

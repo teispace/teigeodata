@@ -1232,6 +1232,11 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_native
 /// # Errors
 ///
 /// `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeCreate<'caller>(
@@ -1280,6 +1285,11 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_native
 /// # Errors
 ///
 /// `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeOpen<'caller>(
@@ -1334,6 +1344,11 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_native
 /// # Errors
 ///
 /// `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeCatalog<'caller>(
@@ -1362,6 +1377,11 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_native
 /// # Errors
 ///
 /// `ErrorCode::Refused` if a pack cannot be read.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeStatus<'caller>(
@@ -1391,6 +1411,11 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_native
 /// # Errors
 ///
 /// `ErrorCode::Refused` if it is not installed.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativePin<'caller>(
@@ -1425,6 +1450,11 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_native
 /// # Errors
 ///
 /// `ErrorCode::Refused` if one is not installed or another pack needs it.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeRemove<'caller>(
@@ -1461,6 +1491,11 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_native
 ///
 /// `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
 /// `ErrorCode::Refused` if the stored catalog no longer verifies.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeFind<'caller>(
@@ -1503,6 +1538,11 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_native
 ///
 /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
 /// the stored catalog no longer verifies.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeLocate<'caller>(
@@ -1539,6 +1579,11 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_native
 /// # Errors
 ///
 /// `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeEngine<'caller>(
@@ -1743,6 +1788,11 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Job_nativeFr
 /// Waits until the progress moves past `seq` (from `seq`), the job ends, or
 /// `timeout_ms` passes; returns the sequence then. Polling with the last one returned
 /// sees every change.
+///
+/// # Blocks
+///
+/// Until the job moves or ends: call it off a UI thread, or use the language's
+/// asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Job_nativeWaitProgress<
@@ -1902,6 +1952,11 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Job_nativeCa
 ///
 /// The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
 /// or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+///
+/// # Blocks
+///
+/// Until the job moves or ends: call it off a UI thread, or use the language's
+/// asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Job_nativeResult<'caller>(

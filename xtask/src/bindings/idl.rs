@@ -60,6 +60,9 @@ pub(crate) struct Function {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) returns_handle: Option<String>,
     pub(crate) fallible: bool,
+    /// Its documentation has a `# Blocks` section: it may wait (for a job, or for a store a job
+    /// holds), so each language also offers it off the caller's thread (bindings §6).
+    pub(crate) blocks: bool,
     /// The Cargo feature it needs (`#[cfg(feature = "store")]`, or its handle's); every
     /// generated Rust layer gates it the same way.
     pub(crate) feature: Option<String>,
@@ -680,6 +683,14 @@ fn function(
     if params.iter().filter(|p| p.ty == Ty::Callback).count() > 1 {
         return Err(at(sig.span(), &format!("`{name}`: at most one callback")));
     }
+    let doc = docs(attrs);
+    let blocks = doc.iter().any(|l| l == "# Blocks");
+    if blocks && params.iter().any(|p| p.ty == Ty::Callback) {
+        return Err(at(
+            sig.span(),
+            &format!("`{name}`: a function that blocks takes no callback (it runs elsewhere)"),
+        ));
+    }
     let (returns, returns_handle, fallible) = match &sig.output {
         ReturnType::Default => (Ty::Void, None, false),
         ReturnType::Type(_, ty) => result_ty(ty, owner, &names.handles).ok_or_else(|| {
@@ -691,7 +702,8 @@ fn function(
     };
     Ok(Function {
         name,
-        doc: docs(attrs),
+        doc,
+        blocks,
         receiver,
         params,
         returns,
@@ -875,6 +887,12 @@ pub const MAX: u32 = 1_000;
 pub fn fold(text: &str) -> String { String::new() }
 pub fn run(n: u32, on: &mut dyn FnMut(u32) -> bool) -> Result<u32> { Ok(n) }
 pub fn noop() {}
+/// Waits.
+///
+/// # Blocks
+///
+/// Until it is done.
+pub fn slow() {}
 fn private(x: Vec<u8>) {}
 /// Options.
 #[derive(Clone, Default)]
@@ -909,7 +927,9 @@ impl Engine {
     fn extracts_the_surface() {
         let idl = extract(API).unwrap();
         let names: Vec<_> = idl.functions.iter().map(|f| f.name.as_str()).collect();
-        assert_eq!(names, ["fold", "run", "noop"]);
+        assert_eq!(names, ["fold", "run", "noop", "slow"]);
+        let blocks: Vec<_> = idl.functions.iter().map(|f| f.blocks).collect();
+        assert_eq!(blocks, [false, false, false, true]);
         let fold = &idl.functions[0];
         assert_eq!(fold.doc, ["Folds `text`; see the note."]);
         assert_eq!(
@@ -1021,6 +1041,7 @@ impl Engine {
             "#[derive(Default)] pub enum E { A = 0, #[default] B = 1 }",
             "#[derive(Default)] pub enum E {}",
             "#[cfg(test)] pub struct S { x: u32 }",
+            "/// # Blocks\npub fn f(a: &mut dyn FnMut(u32) -> bool) {}",
             "#[cfg(feature = \"a\")] #[cfg(feature = \"b\")] pub struct S { x: u32 }",
         ] {
             let src = format!("{API}\n{bad}");

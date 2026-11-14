@@ -1171,6 +1171,11 @@ final class Store implements Finalizable {
   /// # Errors
   ///
   /// `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+  ///
+  /// # Blocks
+  ///
+  /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+  /// language's asynchronous form.
   static Store create(TeiGeodata lib, String root, String repo, String assets, Uint8List trustedRoot) => lib._storeCreate(root, repo, assets, trustedRoot);
 
   /// Opens the store at `root`, finishing or undoing an install a crash cut short.
@@ -1178,6 +1183,11 @@ final class Store implements Finalizable {
   /// # Errors
   ///
   /// `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+  ///
+  /// # Blocks
+  ///
+  /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+  /// language's asynchronous form.
   static Store open(TeiGeodata lib, String root) => lib._storeOpen(root);
 
   /// The packs found damaged when the store was opened, comma-separated; empty when none.
@@ -1189,6 +1199,11 @@ final class Store implements Finalizable {
   /// # Errors
   ///
   /// `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+  ///
+  /// # Blocks
+  ///
+  /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+  /// language's asynchronous form.
   Uint8List catalog() => _lib._storeCatalog(_live);
 
   /// Each installed pack and its health, from a full check of every byte when `deep`.
@@ -1196,6 +1211,11 @@ final class Store implements Finalizable {
   /// # Errors
   ///
   /// `ErrorCode::Refused` if a pack cannot be read.
+  ///
+  /// # Blocks
+  ///
+  /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+  /// language's asynchronous form.
   Uint8List status(bool deep) => _lib._storeStatus(_live, deep);
 
   /// Pins the pack (kept when room is made), or unpins it.
@@ -1203,6 +1223,11 @@ final class Store implements Finalizable {
   /// # Errors
   ///
   /// `ErrorCode::Refused` if it is not installed.
+  ///
+  /// # Blocks
+  ///
+  /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+  /// language's asynchronous form.
   void pin(String pack, bool on) => _lib._storePin(_live, pack, on);
 
   /// Removes the packs and the dependencies nothing else needs; returns what was removed.
@@ -1210,6 +1235,11 @@ final class Store implements Finalizable {
   /// # Errors
   ///
   /// `ErrorCode::Refused` if one is not installed or another pack needs it.
+  ///
+  /// # Blocks
+  ///
+  /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+  /// language's asynchronous form.
   Uint8List remove(String pack) => _lib._storeRemove(_live, pack);
 
   /// The places named `query` in `engine` (one over a world pack the app ships, the
@@ -1220,6 +1250,11 @@ final class Store implements Finalizable {
   ///
   /// `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
   /// `ErrorCode::Refused` if the stored catalog no longer verifies.
+  ///
+  /// # Blocks
+  ///
+  /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+  /// language's asynchronous form.
   Uint8List find(Engine engine, String query, int limit) => _lib._storeFind(_live, engine, query, limit);
 
   /// The countries within `radius_m` metres of a point in `engine`, each with the catalog's
@@ -1229,6 +1264,11 @@ final class Store implements Finalizable {
   ///
   /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
   /// the stored catalog no longer verifies.
+  ///
+  /// # Blocks
+  ///
+  /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+  /// language's asynchronous form.
   Uint8List locate(Engine engine, double lat, double lon, int radiusM) => _lib._storeLocate(_live, engine, lat, lon, radiusM);
 
   /// An engine over the installed packs, each opened with the components and languages
@@ -1237,6 +1277,11 @@ final class Store implements Finalizable {
   /// # Errors
   ///
   /// `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+  ///
+  /// # Blocks
+  ///
+  /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+  /// language's asynchronous form.
   Engine engine() => _lib._storeEngine(_live);
 
   /// Refreshes the catalog for the countries (comma-separated ISO codes) and every country
@@ -1286,6 +1331,11 @@ final class Job implements Finalizable {
   /// Waits until the progress moves past `seq` (from `seq`), the job ends, or
   /// `timeout_ms` passes; returns the sequence then. Polling with the last one returned
   /// sees every change.
+  ///
+  /// # Blocks
+  ///
+  /// Until the job moves or ends: call it off a UI thread, or use the language's
+  /// asynchronous form.
   int waitProgress(int seq, int timeoutMs) => _lib._jobWaitProgress(_live, seq, timeoutMs);
 
   /// The progress's sequence number: it moves on with every change.
@@ -1311,5 +1361,10 @@ final class Job implements Finalizable {
   ///
   /// The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
   /// or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+  ///
+  /// # Blocks
+  ///
+  /// Until the job moves or ends: call it off a UI thread, or use the language's
+  /// asynchronous form.
   Uint8List result() => _lib._jobResult(_live);
 }

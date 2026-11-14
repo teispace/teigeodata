@@ -17,6 +17,8 @@
 )]
 
 use napi::bindgen_prelude::{Buffer, Function};
+use std::sync::Arc;
+
 use napi::{Env, Error, JsError, Status};
 use napi_derive::napi;
 use teigeodata_api::ErrorCode;
@@ -358,14 +360,14 @@ impl From<InstallOptions> for teigeodata_api::InstallOptions {
 /// and `meters` and `bearing` for a reverse lookup.
 #[napi]
 #[derive(Debug)]
-pub struct Engine(teigeodata_api::Engine);
+pub struct Engine(Arc<teigeodata_api::Engine>);
 
 #[napi]
 impl Engine {
     /// An engine with no packs.
     #[napi(constructor)]
     pub fn new() -> Engine {
-        Engine(teigeodata_api::Engine::new())
+        Engine(Arc::new(teigeodata_api::Engine::new()))
     }
     /// Opens the pack at `path` (memory-mapped) and adds it. Returns its layer ID, for
     /// `remove`: unique in this engine, counting up from 0.
@@ -702,7 +704,7 @@ impl Engine {
 #[cfg(feature = "store")]
 #[napi]
 #[derive(Debug)]
-pub struct Store(teigeodata_api::Store);
+pub struct Store(Arc<teigeodata_api::Store>);
 
 #[cfg(feature = "store")]
 #[napi]
@@ -715,6 +717,11 @@ impl Store {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     #[napi(factory)]
     pub fn create(
         root: String,
@@ -724,18 +731,23 @@ impl Store {
     ) -> napi::Result<Store, Code> {
         let value = teigeodata_api::Store::create(&root, &repo, &assets, &trusted_root);
         let value = value.map_err(error)?;
-        Ok(Store(value))
+        Ok(Store(Arc::new(value)))
     }
     /// Opens the store at `root`, finishing or undoing an install a crash cut short.
     ///
     /// # Errors
     ///
     /// `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     #[napi(factory)]
     pub fn open(root: String) -> napi::Result<Store, Code> {
         let value = teigeodata_api::Store::open(&root);
         let value = value.map_err(error)?;
-        Ok(Store(value))
+        Ok(Store(Arc::new(value)))
     }
     /// The packs found damaged when the store was opened, comma-separated; empty when none.
     /// `repair` fetches what they lack.
@@ -748,6 +760,11 @@ impl Store {
     /// # Errors
     ///
     /// `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     #[napi]
     pub fn catalog(&self) -> napi::Result<Buffer, Code> {
         let value = self.0.catalog();
@@ -759,6 +776,11 @@ impl Store {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if a pack cannot be read.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     #[napi]
     pub fn status(&self, deep: bool) -> napi::Result<Buffer, Code> {
         let value = self.0.status(deep);
@@ -770,6 +792,11 @@ impl Store {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if it is not installed.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     #[napi]
     pub fn pin(&self, pack: String, on: bool) -> napi::Result<(), Code> {
         let value = self.0.pin(&pack, on);
@@ -781,6 +808,11 @@ impl Store {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if one is not installed or another pack needs it.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     #[napi]
     pub fn remove(&self, pack: String) -> napi::Result<Buffer, Code> {
         let value = self.0.remove(&pack);
@@ -795,6 +827,11 @@ impl Store {
     ///
     /// `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
     /// `ErrorCode::Refused` if the stored catalog no longer verifies.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     #[napi]
     pub fn find(&self, engine: &Engine, query: String, limit: u32) -> napi::Result<Buffer, Code> {
         let value = self.0.find(&engine.0, &query, limit);
@@ -808,6 +845,11 @@ impl Store {
     ///
     /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
     /// the stored catalog no longer verifies.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     #[napi]
     pub fn locate(
         &self,
@@ -826,17 +868,22 @@ impl Store {
     /// # Errors
     ///
     /// `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     #[napi]
     pub fn engine(&self) -> napi::Result<Engine, Code> {
         let value = self.0.engine();
         let value = value.map_err(error)?;
-        Ok(Engine(value))
+        Ok(Engine(Arc::new(value)))
     }
     /// Refreshes the catalog for the countries (comma-separated ISO codes) and every country
     /// installed. Fails with `ErrorCode::Network` or `ErrorCode::Refused`.
     #[napi]
     pub fn refresh(&self, countries: String) -> Job {
-        Job(self.0.refresh(&countries))
+        Job(Arc::new(self.0.refresh(&countries)))
     }
     /// Installs the packs with `options`, dependencies first, refreshing the catalog for their
     /// countries. Cancelled, it leaves the store as it was; the packs installed before the
@@ -854,18 +901,291 @@ impl Store {
     ) -> napi::Result<Job, Code> {
         let value = self.0.install(&packs, &options.unwrap_or_default().into());
         let value = value.map_err(error)?;
-        Ok(Job(value))
+        Ok(Job(Arc::new(value)))
     }
     /// Updates the packs (every installed one when empty) to the catalog's releases, keeping
     /// the components and languages installed.
     #[napi]
     pub fn update(&self, packs: String) -> Job {
-        Job(self.0.update(&packs))
+        Job(Arc::new(self.0.update(&packs)))
     }
     /// Checks the pack in full and, unless it is whole, fetches what it lacks.
     #[napi]
     pub fn repair(&self, pack: String) -> Job {
-        Job(self.0.repair(&pack))
+        Job(Arc::new(self.0.repair(&pack)))
+    }
+    /// As `create`, without blocking: a `Promise` of its result.
+    ///
+    /// # Errors
+    ///
+    /// The `Promise` rejects with the call's error; this throws only if no thread can start.
+    #[napi]
+    pub fn create_async(
+        env: &Env,
+        root: String,
+        repo: String,
+        assets: String,
+        trusted_root: Buffer,
+    ) -> napi::Result<napi::bindgen_prelude::Object<'_>> {
+        let trusted_root = trusted_root.to_vec();
+        let (deferred, promise) = env.create_deferred()?;
+        std::thread::Builder::new()
+            .name("teigeodata-async".into())
+            .spawn(move || {
+                let value = teigeodata_api::Store::create(&root, &repo, &assets, &trusted_root);
+                deferred.resolve(move |env| match value {
+                    Ok(value) => Ok(Store(Arc::new(value))),
+                    Err(e) => Err(Error::from(JsError::from(error(e)).into_unknown(env))),
+                });
+            })
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("no thread for the call: {e}"),
+                )
+            })?;
+        Ok(promise)
+    }
+    /// As `open`, without blocking: a `Promise` of its result.
+    ///
+    /// # Errors
+    ///
+    /// The `Promise` rejects with the call's error; this throws only if no thread can start.
+    #[napi]
+    pub fn open_async(env: &Env, root: String) -> napi::Result<napi::bindgen_prelude::Object<'_>> {
+        let (deferred, promise) = env.create_deferred()?;
+        std::thread::Builder::new()
+            .name("teigeodata-async".into())
+            .spawn(move || {
+                let value = teigeodata_api::Store::open(&root);
+                deferred.resolve(move |env| match value {
+                    Ok(value) => Ok(Store(Arc::new(value))),
+                    Err(e) => Err(Error::from(JsError::from(error(e)).into_unknown(env))),
+                });
+            })
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("no thread for the call: {e}"),
+                )
+            })?;
+        Ok(promise)
+    }
+    /// As `catalog`, without blocking: a `Promise` of its result.
+    ///
+    /// # Errors
+    ///
+    /// The `Promise` rejects with the call's error; this throws only if no thread can start.
+    #[napi]
+    pub fn catalog_async<'env>(
+        &self,
+        env: &'env Env,
+    ) -> napi::Result<napi::bindgen_prelude::Object<'env>> {
+        let this = Arc::clone(&self.0);
+        let (deferred, promise) = env.create_deferred()?;
+        std::thread::Builder::new()
+            .name("teigeodata-async".into())
+            .spawn(move || {
+                let value = this.catalog();
+                deferred.resolve(move |env| match value {
+                    Ok(value) => Ok(Buffer::from(value.into_vec())),
+                    Err(e) => Err(Error::from(JsError::from(error(e)).into_unknown(env))),
+                });
+            })
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("no thread for the call: {e}"),
+                )
+            })?;
+        Ok(promise)
+    }
+    /// As `status`, without blocking: a `Promise` of its result.
+    ///
+    /// # Errors
+    ///
+    /// The `Promise` rejects with the call's error; this throws only if no thread can start.
+    #[napi]
+    pub fn status_async<'env>(
+        &self,
+        env: &'env Env,
+        deep: bool,
+    ) -> napi::Result<napi::bindgen_prelude::Object<'env>> {
+        let this = Arc::clone(&self.0);
+        let (deferred, promise) = env.create_deferred()?;
+        std::thread::Builder::new()
+            .name("teigeodata-async".into())
+            .spawn(move || {
+                let value = this.status(deep);
+                deferred.resolve(move |env| match value {
+                    Ok(value) => Ok(Buffer::from(value.into_vec())),
+                    Err(e) => Err(Error::from(JsError::from(error(e)).into_unknown(env))),
+                });
+            })
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("no thread for the call: {e}"),
+                )
+            })?;
+        Ok(promise)
+    }
+    /// As `pin`, without blocking: a `Promise` of its result.
+    ///
+    /// # Errors
+    ///
+    /// The `Promise` rejects with the call's error; this throws only if no thread can start.
+    #[napi]
+    pub fn pin_async<'env>(
+        &self,
+        env: &'env Env,
+        pack: String,
+        on: bool,
+    ) -> napi::Result<napi::bindgen_prelude::Object<'env>> {
+        let this = Arc::clone(&self.0);
+        let (deferred, promise) = env.create_deferred()?;
+        std::thread::Builder::new()
+            .name("teigeodata-async".into())
+            .spawn(move || {
+                let value = this.pin(&pack, on);
+                deferred.resolve(move |env| match value {
+                    Ok(value) => Ok(value),
+                    Err(e) => Err(Error::from(JsError::from(error(e)).into_unknown(env))),
+                });
+            })
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("no thread for the call: {e}"),
+                )
+            })?;
+        Ok(promise)
+    }
+    /// As `remove`, without blocking: a `Promise` of its result.
+    ///
+    /// # Errors
+    ///
+    /// The `Promise` rejects with the call's error; this throws only if no thread can start.
+    #[napi]
+    pub fn remove_async<'env>(
+        &self,
+        env: &'env Env,
+        pack: String,
+    ) -> napi::Result<napi::bindgen_prelude::Object<'env>> {
+        let this = Arc::clone(&self.0);
+        let (deferred, promise) = env.create_deferred()?;
+        std::thread::Builder::new()
+            .name("teigeodata-async".into())
+            .spawn(move || {
+                let value = this.remove(&pack);
+                deferred.resolve(move |env| match value {
+                    Ok(value) => Ok(Buffer::from(value.into_vec())),
+                    Err(e) => Err(Error::from(JsError::from(error(e)).into_unknown(env))),
+                });
+            })
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("no thread for the call: {e}"),
+                )
+            })?;
+        Ok(promise)
+    }
+    /// As `find`, without blocking: a `Promise` of its result.
+    ///
+    /// # Errors
+    ///
+    /// The `Promise` rejects with the call's error; this throws only if no thread can start.
+    #[napi]
+    pub fn find_async<'env>(
+        &self,
+        env: &'env Env,
+        engine: &Engine,
+        query: String,
+        limit: u32,
+    ) -> napi::Result<napi::bindgen_prelude::Object<'env>> {
+        let this = Arc::clone(&self.0);
+        let engine = Arc::clone(&engine.0);
+        let (deferred, promise) = env.create_deferred()?;
+        std::thread::Builder::new()
+            .name("teigeodata-async".into())
+            .spawn(move || {
+                let value = this.find(&engine, &query, limit);
+                deferred.resolve(move |env| match value {
+                    Ok(value) => Ok(Buffer::from(value.into_vec())),
+                    Err(e) => Err(Error::from(JsError::from(error(e)).into_unknown(env))),
+                });
+            })
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("no thread for the call: {e}"),
+                )
+            })?;
+        Ok(promise)
+    }
+    /// As `locate`, without blocking: a `Promise` of its result.
+    ///
+    /// # Errors
+    ///
+    /// The `Promise` rejects with the call's error; this throws only if no thread can start.
+    #[napi]
+    pub fn locate_async<'env>(
+        &self,
+        env: &'env Env,
+        engine: &Engine,
+        lat: f64,
+        lon: f64,
+        radius_m: u32,
+    ) -> napi::Result<napi::bindgen_prelude::Object<'env>> {
+        let this = Arc::clone(&self.0);
+        let engine = Arc::clone(&engine.0);
+        let (deferred, promise) = env.create_deferred()?;
+        std::thread::Builder::new()
+            .name("teigeodata-async".into())
+            .spawn(move || {
+                let value = this.locate(&engine, lat, lon, radius_m);
+                deferred.resolve(move |env| match value {
+                    Ok(value) => Ok(Buffer::from(value.into_vec())),
+                    Err(e) => Err(Error::from(JsError::from(error(e)).into_unknown(env))),
+                });
+            })
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("no thread for the call: {e}"),
+                )
+            })?;
+        Ok(promise)
+    }
+    /// As `engine`, without blocking: a `Promise` of its result.
+    ///
+    /// # Errors
+    ///
+    /// The `Promise` rejects with the call's error; this throws only if no thread can start.
+    #[napi]
+    pub fn engine_async<'env>(
+        &self,
+        env: &'env Env,
+    ) -> napi::Result<napi::bindgen_prelude::Object<'env>> {
+        let this = Arc::clone(&self.0);
+        let (deferred, promise) = env.create_deferred()?;
+        std::thread::Builder::new()
+            .name("teigeodata-async".into())
+            .spawn(move || {
+                let value = this.engine();
+                deferred.resolve(move |env| match value {
+                    Ok(value) => Ok(Engine(Arc::new(value))),
+                    Err(e) => Err(Error::from(JsError::from(error(e)).into_unknown(env))),
+                });
+            })
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("no thread for the call: {e}"),
+                )
+            })?;
+        Ok(promise)
     }
 }
 
@@ -874,7 +1194,7 @@ impl Store {
 #[cfg(feature = "store")]
 #[napi]
 #[derive(Debug)]
-pub struct Job(teigeodata_api::Job);
+pub struct Job(Arc<teigeodata_api::Job>);
 
 #[cfg(feature = "store")]
 #[napi]
@@ -882,6 +1202,11 @@ impl Job {
     /// Waits until the progress moves past `seq` (from `seq`), the job ends, or
     /// `timeout_ms` passes; returns the sequence then. Polling with the last one returned
     /// sees every change.
+    ///
+    /// # Blocks
+    ///
+    /// Until the job moves or ends: call it off a UI thread, or use the language's
+    /// asynchronous form.
     #[napi]
     pub fn wait_progress(&self, seq: f64, timeout_ms: u32) -> f64 {
         number(self.0.wait_progress(u64_of(seq), timeout_ms))
@@ -919,10 +1244,77 @@ impl Job {
     ///
     /// The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
     /// or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+    ///
+    /// # Blocks
+    ///
+    /// Until the job moves or ends: call it off a UI thread, or use the language's
+    /// asynchronous form.
     #[napi]
     pub fn result(&self) -> napi::Result<Buffer, Code> {
         let value = self.0.result();
         let value = value.map_err(error)?;
         Ok(Buffer::from(value.into_vec()))
+    }
+    /// As `waitProgress`, without blocking: a `Promise` of its result.
+    ///
+    /// # Errors
+    ///
+    /// The `Promise` rejects with the call's error; this throws only if no thread can start.
+    #[napi]
+    pub fn wait_progress_async<'env>(
+        &self,
+        env: &'env Env,
+        seq: f64,
+        timeout_ms: u32,
+    ) -> napi::Result<napi::bindgen_prelude::Object<'env>> {
+        let this = Arc::clone(&self.0);
+        let seq = u64_of(seq);
+        let (deferred, promise) = env.create_deferred()?;
+        std::thread::Builder::new()
+            .name("teigeodata-async".into())
+            .spawn(move || {
+                let value = this.wait_progress(seq, timeout_ms);
+                let value: Result<_, teigeodata_api::Error> = Ok(value);
+                deferred.resolve(move |env| match value {
+                    Ok(value) => Ok(number(value)),
+                    Err(e) => Err(Error::from(JsError::from(error(e)).into_unknown(env))),
+                });
+            })
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("no thread for the call: {e}"),
+                )
+            })?;
+        Ok(promise)
+    }
+    /// As `result`, without blocking: a `Promise` of its result.
+    ///
+    /// # Errors
+    ///
+    /// The `Promise` rejects with the call's error; this throws only if no thread can start.
+    #[napi]
+    pub fn result_async<'env>(
+        &self,
+        env: &'env Env,
+    ) -> napi::Result<napi::bindgen_prelude::Object<'env>> {
+        let this = Arc::clone(&self.0);
+        let (deferred, promise) = env.create_deferred()?;
+        std::thread::Builder::new()
+            .name("teigeodata-async".into())
+            .spawn(move || {
+                let value = this.result();
+                deferred.resolve(move |env| match value {
+                    Ok(value) => Ok(Buffer::from(value.into_vec())),
+                    Err(e) => Err(Error::from(JsError::from(error(e)).into_unknown(env))),
+                });
+            })
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("no thread for the call: {e}"),
+                )
+            })?;
+        Ok(promise)
     }
 }

@@ -83,9 +83,11 @@ and drops it.
   an install.
 - Platform downloads (D-184) stay a CLI and platform flow; the API does not expose the pending
   ranges yet (5.1 left).
-- `result` and `wait_progress` block the calling thread. On Node's main thread and Dart's UI
-  isolate an app must call them off the event loop until each language's idiomatic layer
-  (bindings §6: a `Promise` over an `AsyncTask`, a helper isolate) exists.
+- `result` and `wait_progress` block the calling thread. Node has `…Async` forms (D-280); on
+  Dart's UI isolate, Swift's main actor, the JVM and Python an app calls them off the UI
+  thread until each language's asynchronous form exists (same `blocks` flag).
+- A cancel ends at the next request or chunk; a silent host is bounded by the transport's
+  timeouts (30 s to the head, 60 s between reads, D-280).
 
 ## 8. Versions checked
 

@@ -44,6 +44,11 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   `done_bytes`, `total_bytes`, `is_ended`, `cancel` and `result`. A cancelled install leaves
   the store as it was.
 - Error codes `Network` (7) and `Refused` (8) (D-279).
+- Node: every call that blocks (the store's, a job's `waitProgress` and `result`) has a
+  `…Async` form returning a `Promise` (D-280); the IDL marks such calls `blocks` from a
+  `# Blocks` documentation section.
+- `teigeodata_sync::fetch::Ureq::with_timeouts`, and a 30 s timeout for a response's head:
+  a host that accepts and never answers no longer holds a download forever (D-280).
 - IDL format 6: a handle, record or function may carry `#[cfg(feature = "…")]`; every
   generated Rust layer gates it the same way. The `store` feature (on by default) of
   `teigeodata-api`, `teigeodata-ffi` and the Python, Node and JVM crates holds the store;

@@ -864,6 +864,11 @@ public static final class Store implements AutoCloseable {
          * # Errors
          *
          * `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+         *
+         * # Blocks
+         *
+         * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+         * language's asynchronous form.
          */
         public static Store create(String root, String repo, String assets, byte[] trustedRoot) {
             return new Store(nativeCreate(root, repo, assets, trustedRoot));
@@ -877,6 +882,11 @@ public static final class Store implements AutoCloseable {
          * # Errors
          *
          * `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+         *
+         * # Blocks
+         *
+         * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+         * language's asynchronous form.
          */
         public static Store open(String root) {
             return new Store(nativeOpen(root));
@@ -906,6 +916,11 @@ public static final class Store implements AutoCloseable {
          * # Errors
          *
          * `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+         *
+         * # Blocks
+         *
+         * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+         * language's asynchronous form.
          */
         public byte[] catalog() {
             long stamp = enter();
@@ -925,6 +940,11 @@ public static final class Store implements AutoCloseable {
          * # Errors
          *
          * `ErrorCode::Refused` if a pack cannot be read.
+         *
+         * # Blocks
+         *
+         * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+         * language's asynchronous form.
          */
         public byte[] status(boolean deep) {
             long stamp = enter();
@@ -944,6 +964,11 @@ public static final class Store implements AutoCloseable {
          * # Errors
          *
          * `ErrorCode::Refused` if it is not installed.
+         *
+         * # Blocks
+         *
+         * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+         * language's asynchronous form.
          */
         public void pin(String pack, boolean on) {
             long stamp = enter();
@@ -963,6 +988,11 @@ public static final class Store implements AutoCloseable {
          * # Errors
          *
          * `ErrorCode::Refused` if one is not installed or another pack needs it.
+         *
+         * # Blocks
+         *
+         * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+         * language's asynchronous form.
          */
         public byte[] remove(String pack) {
             long stamp = enter();
@@ -985,6 +1015,11 @@ public static final class Store implements AutoCloseable {
          *
          * `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
          * `ErrorCode::Refused` if the stored catalog no longer verifies.
+         *
+         * # Blocks
+         *
+         * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+         * language's asynchronous form.
          */
         public byte[] find(Engine engine, String query, long limit) {
             long stamp = enter();
@@ -1006,6 +1041,11 @@ public static final class Store implements AutoCloseable {
          *
          * `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
          * the stored catalog no longer verifies.
+         *
+         * # Blocks
+         *
+         * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+         * language's asynchronous form.
          */
         public byte[] locate(Engine engine, double lat, double lon, long radiusM) {
             long stamp = enter();
@@ -1026,6 +1066,11 @@ public static final class Store implements AutoCloseable {
          * # Errors
          *
          * `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+         *
+         * # Blocks
+         *
+         * While a job of this store runs, and on the disk: call it off a UI thread, or use the
+         * language's asynchronous form.
          */
         public Engine engine() {
             long stamp = enter();
@@ -1169,6 +1214,11 @@ public static final class Job implements AutoCloseable {
          * Waits until the progress moves past `seq` (from `seq`), the job ends, or
          * `timeout_ms` passes; returns the sequence then. Polling with the last one returned
          * sees every change.
+         *
+         * # Blocks
+         *
+         * Until the job moves or ends: call it off a UI thread, or use the language's
+         * asynchronous form.
          */
         public long waitProgress(long seq, long timeoutMs) {
             long stamp = enter();
@@ -1266,6 +1316,11 @@ public static final class Job implements AutoCloseable {
          *
          * The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
          * or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+         *
+         * # Blocks
+         *
+         * Until the job moves or ends: call it off a UI thread, or use the language's
+         * asynchronous form.
          */
         public byte[] result() {
             long stamp = enter();

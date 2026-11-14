@@ -62,8 +62,9 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   in every language (D-279: `create`, `open`, `catalog`, `status`, `pin`, `remove`, `engine`,
   `find`, `locate`;
   `refresh`, `install`, `update`, `repair` as jobs with progress, wait, cancel and result),
-  behind the default `store` feature. Left: the platform downloads pass (D-184), and each
-  language's idiomatic awaiting over the job (bindings §6)
+  behind the default `store` feature; Node's `Promise` forms of every blocking call (D-280).
+  Left: the platform downloads pass (D-184), and the asynchronous forms in Swift, the JVM,
+  Dart and Python (bindings §6)
 - [ ] The IDL extended for what the surface needs (handles, enums, options structs, jobs), with
   a schema version; the drift check covers every generated file. Done so far: format 2 with
   handles, methods, `&[u8]` and handle parameters; format 3 with records of scalar fields

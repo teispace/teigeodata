@@ -1066,6 +1066,11 @@ pub unsafe extern "C" fn tg_store_free(handle: *mut TgStore) {
 /// # Errors
 ///
 /// `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_store_create(
@@ -1103,6 +1108,11 @@ pub unsafe extern "C" fn tg_store_create(
 /// # Errors
 ///
 /// `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_store_open(
@@ -1144,6 +1154,11 @@ pub unsafe extern "C" fn tg_store_damaged(handle: *const TgStore, out: *mut TgBy
 /// # Errors
 ///
 /// `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_store_catalog(handle: *const TgStore, out: *mut TgBytes) -> i32 {
@@ -1164,6 +1179,11 @@ pub unsafe extern "C" fn tg_store_catalog(handle: *const TgStore, out: *mut TgBy
 /// # Errors
 ///
 /// `ErrorCode::Refused` if a pack cannot be read.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_store_status(
@@ -1188,6 +1208,11 @@ pub unsafe extern "C" fn tg_store_status(
 /// # Errors
 ///
 /// `ErrorCode::Refused` if it is not installed.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_store_pin(
@@ -1211,6 +1236,11 @@ pub unsafe extern "C" fn tg_store_pin(
 /// # Errors
 ///
 /// `ErrorCode::Refused` if one is not installed or another pack needs it.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_store_remove(
@@ -1241,6 +1271,11 @@ pub unsafe extern "C" fn tg_store_remove(
 ///
 /// `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
 /// `ErrorCode::Refused` if the stored catalog no longer verifies.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_store_find(
@@ -1274,6 +1309,11 @@ pub unsafe extern "C" fn tg_store_find(
 ///
 /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
 /// the stored catalog no longer verifies.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_store_locate(
@@ -1304,6 +1344,11 @@ pub unsafe extern "C" fn tg_store_locate(
 /// # Errors
 ///
 /// `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+///
+/// # Blocks
+///
+/// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+/// language's asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_store_engine(handle: *const TgStore, out: *mut *mut TgEngine) -> i32 {
@@ -1447,6 +1492,11 @@ pub unsafe extern "C" fn tg_job_free(handle: *mut TgJob) {
 /// Waits until the progress moves past `seq` (from `seq`), the job ends, or
 /// `timeout_ms` passes; returns the sequence then. Polling with the last one returned
 /// sees every change.
+///
+/// # Blocks
+///
+/// Until the job moves or ends: call it off a UI thread, or use the language's
+/// asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_job_wait_progress(
@@ -1546,6 +1596,11 @@ pub unsafe extern "C" fn tg_job_cancel(handle: *const TgJob) -> i32 {
 ///
 /// The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
 /// or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+///
+/// # Blocks
+///
+/// Until the job moves or ends: call it off a UI thread, or use the language's
+/// asynchronous form.
 #[cfg(feature = "store")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_job_result(handle: *const TgJob, out: *mut TgBytes) -> i32 {

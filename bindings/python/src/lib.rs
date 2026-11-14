@@ -760,6 +760,11 @@ impl Store {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     #[staticmethod]
     fn create(root: &str, repo: &str, assets: &str, trusted_root: &[u8]) -> PyResult<Store> {
         let value = teigeodata_api::Store::create(root, repo, assets, trusted_root);
@@ -771,6 +776,11 @@ impl Store {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     #[staticmethod]
     fn open(root: &str) -> PyResult<Store> {
         let value = teigeodata_api::Store::open(root);
@@ -787,6 +797,11 @@ impl Store {
     /// # Errors
     ///
     /// `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     fn catalog<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let value = py.detach(|| self.0.catalog());
         let value = value.map_err(error)?;
@@ -797,6 +812,11 @@ impl Store {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if a pack cannot be read.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     fn status<'py>(&self, py: Python<'py>, deep: bool) -> PyResult<Bound<'py, PyBytes>> {
         let value = py.detach(|| self.0.status(deep));
         let value = value.map_err(error)?;
@@ -807,6 +827,11 @@ impl Store {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if it is not installed.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     fn pin<'py>(&self, py: Python<'py>, pack: &str, on: bool) -> PyResult<()> {
         let value = py.detach(|| self.0.pin(pack, on));
         value.map_err(error)?;
@@ -817,6 +842,11 @@ impl Store {
     /// # Errors
     ///
     /// `ErrorCode::Refused` if one is not installed or another pack needs it.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     fn remove<'py>(&self, py: Python<'py>, pack: &str) -> PyResult<Bound<'py, PyBytes>> {
         let value = py.detach(|| self.0.remove(pack));
         let value = value.map_err(error)?;
@@ -830,6 +860,11 @@ impl Store {
     ///
     /// `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
     /// `ErrorCode::Refused` if the stored catalog no longer verifies.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     fn find<'py>(
         &self,
         py: Python<'py>,
@@ -849,6 +884,11 @@ impl Store {
     ///
     /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
     /// the stored catalog no longer verifies.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     fn locate<'py>(
         &self,
         py: Python<'py>,
@@ -868,6 +908,11 @@ impl Store {
     /// # Errors
     ///
     /// `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     fn engine<'py>(&self, py: Python<'py>) -> PyResult<Engine> {
         let value = py.detach(|| self.0.engine());
         let value = value.map_err(error)?;
@@ -921,6 +966,11 @@ impl Job {
     /// Waits until the progress moves past `seq` (from `seq`), the job ends, or
     /// `timeout_ms` passes; returns the sequence then. Polling with the last one returned
     /// sees every change.
+    ///
+    /// # Blocks
+    ///
+    /// Until the job moves or ends: call it off a UI thread, or use the language's
+    /// asynchronous form.
     fn wait_progress<'py>(&self, py: Python<'py>, seq: u64, timeout_ms: u32) -> u64 {
         py.detach(|| self.0.wait_progress(seq, timeout_ms))
     }
@@ -952,6 +1002,11 @@ impl Job {
     ///
     /// The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
     /// or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+    ///
+    /// # Blocks
+    ///
+    /// Until the job moves or ends: call it off a UI thread, or use the language's
+    /// asynchronous form.
     fn result<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let value = py.detach(|| self.0.result());
         let value = value.map_err(error)?;

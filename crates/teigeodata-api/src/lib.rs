@@ -826,6 +826,11 @@ impl Store {
     /// # Errors
     ///
     /// [`ErrorCode::Refused`] if the root does not verify or the store cannot be written.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     pub fn create(root: &str, repo: &str, assets: &str, trusted_root: &[u8]) -> Result<Self> {
         let list = |s: &str| -> Vec<String> {
             s.split(',')
@@ -843,6 +848,11 @@ impl Store {
     /// # Errors
     ///
     /// [`ErrorCode::Refused`] if it is not a store or its journal cannot be read.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     pub fn open(root: &str) -> Result<Self> {
         Ok(Self {
             inner: Arc::new(store::Inner::open(root)?),
@@ -861,6 +871,11 @@ impl Store {
     /// # Errors
     ///
     /// [`ErrorCode::Refused`] before a refresh, or if the stored catalog no longer verifies.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     pub fn catalog(&self) -> Result<Blob> {
         store::catalog(&mut self.inner.client())
     }
@@ -870,6 +885,11 @@ impl Store {
     /// # Errors
     ///
     /// [`ErrorCode::Refused`] if a pack cannot be read.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     pub fn status(&self, deep: bool) -> Result<Blob> {
         store::status(&mut self.inner.client(), deep)
     }
@@ -879,6 +899,11 @@ impl Store {
     /// # Errors
     ///
     /// [`ErrorCode::Refused`] if it is not installed.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     pub fn pin(&self, pack: &str, on: bool) -> Result<()> {
         let mut c = self.inner.client();
         for p in store::paths(pack) {
@@ -892,6 +917,11 @@ impl Store {
     /// # Errors
     ///
     /// [`ErrorCode::Refused`] if one is not installed or another pack needs it.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     pub fn remove(&self, pack: &str) -> Result<Blob> {
         let mut c = self.inner.client();
         let mut gone = Vec::new();
@@ -909,6 +939,11 @@ impl Store {
     ///
     /// [`ErrorCode::InvalidArgument`] for a limit above [`LIMIT_MAX`];
     /// [`ErrorCode::Refused`] if the stored catalog no longer verifies.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     pub fn find(&self, engine: &Engine, query: &str, limit: u32) -> Result<Blob> {
         let limit = crate::limit(limit)?;
         store::find(
@@ -926,6 +961,11 @@ impl Store {
     ///
     /// [`ErrorCode::InvalidArgument`] for a point off the globe; [`ErrorCode::Refused`] if
     /// the stored catalog no longer verifies.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     pub fn locate(&self, engine: &Engine, lat: f64, lon: f64, radius_m: u32) -> Result<Blob> {
         let at = point(lat, lon)?;
         store::locate(
@@ -942,6 +982,11 @@ impl Store {
     /// # Errors
     ///
     /// [`ErrorCode::Io`] or [`ErrorCode::Corrupt`] if a pack cannot be opened.
+    ///
+    /// # Blocks
+    ///
+    /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
+    /// language's asynchronous form.
     pub fn engine(&self) -> Result<Engine> {
         store::engine(&self.inner.client())
     }
@@ -1022,6 +1067,11 @@ impl Job {
     /// Waits until the progress moves past `seq` (from [`seq`](Self::seq)), the job ends, or
     /// `timeout_ms` passes; returns the sequence then. Polling with the last one returned
     /// sees every change.
+    ///
+    /// # Blocks
+    ///
+    /// Until the job moves or ends: call it off a UI thread, or use the language's
+    /// asynchronous form.
     #[must_use]
     pub fn wait_progress(&self, seq: u64, timeout_ms: u32) -> u64 {
         self.inner
@@ -1070,6 +1120,11 @@ impl Job {
     ///
     /// The job's: [`ErrorCode::Network`], [`ErrorCode::Refused`], [`ErrorCode::Cancelled`],
     /// or [`ErrorCode::Io`] and [`ErrorCode::Corrupt`] for an engine's packs.
+    ///
+    /// # Blocks
+    ///
+    /// Until the job moves or ends: call it off a UI thread, or use the language's
+    /// asynchronous form.
     pub fn result(&self) -> Result<Blob> {
         self.inner.result()
     }

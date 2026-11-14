@@ -817,15 +817,33 @@ impl Default for Ureq {
 
 #[cfg(feature = "http")]
 impl Ureq {
-    /// A transport with a 30 s connect and 60 s per-read timeout, and statuses as values (so a
-    /// 200 answer to a ranged request is seen and refused).
+    /// A transport with a 30 s connect, 30 s response-head and 60 s per-read timeout, and
+    /// statuses as values (so a 200 answer to a ranged request is seen and refused).
     #[must_use]
     pub fn new() -> Self {
         use core::time::Duration;
+        Self::with_timeouts(
+            Duration::from_secs(30),
+            Duration::from_secs(30),
+            Duration::from_secs(60),
+        )
+    }
+
+    /// [`Ureq::new`] with its timeouts: to connect, to receive a response's head, and between
+    /// two reads of its body. The head timeout bounds a host that accepts and never answers;
+    /// a job's cancel ends at the next chunk, so these bound how long a cancel can wait on a
+    /// silent host.
+    #[must_use]
+    pub fn with_timeouts(
+        connect: core::time::Duration,
+        head: core::time::Duration,
+        read: core::time::Duration,
+    ) -> Self {
         let config = ureq::Agent::config_builder()
             .http_status_as_error(false)
-            .timeout_connect(Some(Duration::from_secs(30)))
-            .timeout_recv_body(Some(Duration::from_secs(60)))
+            .timeout_connect(Some(connect))
+            .timeout_recv_response(Some(head))
+            .timeout_recv_body(Some(read))
             .user_agent(concat!("teigeodata/", env!("CARGO_PKG_VERSION")))
             .build();
         Self {
@@ -1038,6 +1056,35 @@ mod tests {
         g.extend_from_slice(&(!crc).to_le_bytes());
         g.extend_from_slice(&u32::from(len).to_le_bytes());
         g
+    }
+
+    /// A host that accepts and never answers fails at the head timeout, not never.
+    #[cfg(feature = "http")]
+    #[test]
+    fn a_silent_host_times_out() {
+        use super::{Transport, Ureq};
+        use core::time::Duration;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = alloc::format!("http://{}/x", listener.local_addr().unwrap());
+        let held = std::thread::spawn(move || {
+            // Hold the connection open, unanswered, until the client gives up.
+            let (mut c, _) = listener.accept().unwrap();
+            let mut sink = [0_u8; 1024];
+            while std::io::Read::read(&mut c, &mut sink).is_ok_and(|n| n > 0) {}
+        });
+        let mut t = Ureq::with_timeouts(
+            Duration::from_secs(5),
+            Duration::from_millis(300),
+            Duration::from_secs(5),
+        );
+        let at = std::time::Instant::now();
+        let mut out = Vec::new();
+        assert!(matches!(
+            t.get(&url, 0..10, &mut out),
+            Err(FetchError::Transport(_))
+        ));
+        assert!(at.elapsed() < Duration::from_secs(3), "{:?}", at.elapsed());
+        held.join().unwrap();
     }
 
     #[cfg(feature = "http")]

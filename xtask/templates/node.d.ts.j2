@@ -36,6 +36,10 @@ export interface {{ r.name }} {
 
 {{ doc(f.doc, "") -}}
 export function {{ f.name | camel }}({{ params(f) }}): {{ tsty(f.returns, f.returns_handle) }};
+{% if f.blocks %}
+/** As `{{ f.name | camel }}`, without blocking: a `Promise` of its result. */
+export function {{ f.name | camel }}Async({{ params(f) }}): Promise<{{ tsty(f.returns, f.returns_handle) }}>;
+{% endif %}
 {% endfor %}
 {% for h in handles %}
 
@@ -50,6 +54,11 @@ export class {{ h.name }} {
   constructor({{ params(f) }});
 {% else %}
   {{ "static " if not f.receiver else "" }}{{ f.name | camel }}({{ params(f) }}): {{ tsty(f.returns, f.returns_handle) }};
+{% if f.blocks %}
+
+  /** As `{{ f.name | camel }}`, without blocking: a `Promise` of its result. */
+  {{ "static " if not f.receiver else "" }}{{ f.name | camel }}Async({{ params(f) }}): Promise<{{ tsty(f.returns, f.returns_handle) }}>;
+{% endif %}
 {% endif %}
 {% endfor %}
 }

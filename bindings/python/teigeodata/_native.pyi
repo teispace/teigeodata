@@ -491,6 +491,11 @@ class Store:
         # Errors
 
         `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+
+        # Blocks
+
+        While a job of this store runs, and on the disk: call it off a UI thread, or use the
+        language's asynchronous form.
         """
 
     @staticmethod
@@ -501,6 +506,11 @@ class Store:
         # Errors
 
         `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+
+        # Blocks
+
+        While a job of this store runs, and on the disk: call it off a UI thread, or use the
+        language's asynchronous form.
         """
 
     def damaged(self) -> str:
@@ -516,6 +526,11 @@ class Store:
         # Errors
 
         `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+
+        # Blocks
+
+        While a job of this store runs, and on the disk: call it off a UI thread, or use the
+        language's asynchronous form.
         """
 
     def status(self, deep: bool) -> bytes:
@@ -525,6 +540,11 @@ class Store:
         # Errors
 
         `ErrorCode::Refused` if a pack cannot be read.
+
+        # Blocks
+
+        While a job of this store runs, and on the disk: call it off a UI thread, or use the
+        language's asynchronous form.
         """
 
     def pin(self, pack: str, on: bool) -> None:
@@ -534,6 +554,11 @@ class Store:
         # Errors
 
         `ErrorCode::Refused` if it is not installed.
+
+        # Blocks
+
+        While a job of this store runs, and on the disk: call it off a UI thread, or use the
+        language's asynchronous form.
         """
 
     def remove(self, pack: str) -> bytes:
@@ -543,6 +568,11 @@ class Store:
         # Errors
 
         `ErrorCode::Refused` if one is not installed or another pack needs it.
+
+        # Blocks
+
+        While a job of this store runs, and on the disk: call it off a UI thread, or use the
+        language's asynchronous form.
         """
 
     def find(self, engine: Engine, query: str, limit: int) -> bytes:
@@ -555,6 +585,11 @@ class Store:
 
         `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
         `ErrorCode::Refused` if the stored catalog no longer verifies.
+
+        # Blocks
+
+        While a job of this store runs, and on the disk: call it off a UI thread, or use the
+        language's asynchronous form.
         """
 
     def locate(self, engine: Engine, lat: float, lon: float, radius_m: int) -> bytes:
@@ -566,6 +601,11 @@ class Store:
 
         `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
         the stored catalog no longer verifies.
+
+        # Blocks
+
+        While a job of this store runs, and on the disk: call it off a UI thread, or use the
+        language's asynchronous form.
         """
 
     def engine(self) -> Engine:
@@ -576,6 +616,11 @@ class Store:
         # Errors
 
         `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+
+        # Blocks
+
+        While a job of this store runs, and on the disk: call it off a UI thread, or use the
+        language's asynchronous form.
         """
 
     def refresh(self, countries: str) -> Job:
@@ -618,6 +663,11 @@ class Job:
         Waits until the progress moves past `seq` (from `seq`), the job ends, or
         `timeout_ms` passes; returns the sequence then. Polling with the last one returned
         sees every change.
+
+        # Blocks
+
+        Until the job moves or ends: call it off a UI thread, or use the language's
+        asynchronous form.
         """
 
     def seq(self) -> int:
@@ -655,4 +705,9 @@ class Job:
 
         The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
         or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+
+        # Blocks
+
+        Until the job moves or ends: call it off a UI thread, or use the language's
+        asynchronous form.
         """
