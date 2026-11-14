@@ -41,6 +41,9 @@ jobs:
           - { os: macos-latest, target: x86_64-apple-darwin }
           - { os: windows-latest, target: x86_64-pc-windows-msvc }
           - { os: windows-11-arm, target: aarch64-pc-windows-msvc }
+          # musl: built and smoke-tested in Alpine 3.23 (5.8a).
+          - { os: ubuntu-24.04, target: x86_64-unknown-linux-musl, alpine: true }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, alpine: true }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     steps:
@@ -50,23 +53,41 @@ jobs:
           fetch-depth: 0
           filter: blob:none
       - name: Toolchain (from rust-toolchain.toml)
+        if: ${{ !matrix.alpine }}
         shell: bash
         run: |
           rustup show active-toolchain || rustup toolchain install
           rustup target add ${{ matrix.target }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: ${{ !matrix.alpine }}
         with:
           key: ${{ matrix.target }}
       - name: Release gate (a tag's version covers its ABI changes)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && !matrix.alpine }}
         shell: bash
         run: |
           prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${GITHUB_REF_NAME}^")
           cargo xtask abi --since "$prev" --release
       - name: Full package
+        if: ${{ !matrix.alpine }}
         run: cargo xtask package-c --target ${{ matrix.target }} --smoke
       - name: Lite package
+        if: ${{ !matrix.alpine }}
         run: cargo xtask package-c --target ${{ matrix.target }} --lite --smoke
+      - name: Full and lite packages (Alpine, musl)
+        if: ${{ matrix.alpine }}
+        run: |
+          # The host is musl, so no --target. crt-static off: a musl cdylib links the C library
+          # dynamically, as the programs that load it do.
+          docker run --rm -v "$PWD:/w" -w /w alpine:3.23 sh -euc '
+            apk add --no-cache build-base curl pkgconf cmake
+            curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+            . "$HOME/.cargo/env"
+            rustup toolchain install
+            export RUSTFLAGS="-C target-feature=-crt-static"
+            cargo xtask package-c --smoke
+            cargo xtask package-c --lite --smoke'
+          ls -l target/package
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: teigeodata-c-${{ matrix.target }}
