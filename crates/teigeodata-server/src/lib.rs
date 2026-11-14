@@ -8,9 +8,12 @@
 //! - [`output`]: the one mapping from a place to each output (ADR-0038) and the attribution of
 //!   the packs that answered (D-032).
 //! - [`seams`]: who is asking, may they, how much they used, open by default (ADR-0025).
+//! - `http` (feature `http`): the HTTP server over axum (D-309).
 //!
 //! [D-310]: https://github.com/teispace/teigeodata/blob/main/docs/03-decisions/log.md
 
+#[cfg(feature = "http")]
+pub mod http;
 pub mod output;
 pub mod packs;
 pub mod query;

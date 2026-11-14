@@ -12,6 +12,11 @@ keywords.workspace = true
 categories = ["science::geo", "command-line-utilities"]
 readme = "README.md"
 
+[features]
+default = ["serve"]
+# `tgd serve`, the HTTP server (phase 6.2); its size is measured in phase 6.4.
+serve = ["teigeodata-server/http", "dep:tokio"]
+
 [[bin]]
 name = "tgd"
 path = "src/main.rs"
@@ -24,8 +29,9 @@ teigeodata-engine = { workspace = true, features = ["catalog"] }
 teigeodata-sync = { workspace = true, features = ["client"] }
 # The writer for `extract`, BLOBS decoding and signatures for `verify`.
 teigeodata-format = { workspace = true, features = ["write", "zstd", "signature"] }
-# The outputs, shared with the servers (ADR-0038, phase 6).
+# The request core, shared with the servers (ADR-0038, phase 6); its HTTP server for `serve`.
 teigeodata-server.workspace = true
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "signal"], optional = true }
 # clap derive (D-178): help, suggestions, uniform usage errors and completions.
 clap = { version = "4.6.7", features = ["derive", "env"] }
 clap_complete = "4.6.11"

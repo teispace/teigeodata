@@ -366,7 +366,17 @@ pub fn attribution(engine: &Engine) -> Option<String> {
 /// what an answer carries. `None` for an answer with no place, or from layers with no notices.
 #[must_use]
 pub fn attribution_of(engine: &Engine, items: &[Item]) -> Option<String> {
-    let mut ids: Vec<LayerId> = items.iter().map(|i| i.place.layer).collect();
+    attribution_layers(engine, items.iter().map(|i| i.place.layer))
+}
+
+/// The attribution of the layers `layers`, each once, in the engine's order: for an answer
+/// that is not a list of places (a height, postal codes).
+#[must_use]
+pub fn attribution_layers(
+    engine: &Engine,
+    layers: impl IntoIterator<Item = LayerId>,
+) -> Option<String> {
+    let mut ids: Vec<LayerId> = layers.into_iter().collect();
     ids.sort_unstable();
     ids.dedup();
     notices(ids.into_iter().filter_map(|id| engine.layer(id)))

@@ -42,11 +42,13 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
   used (ADR-0025) (2026-11-15, D-311)
 
 ### 6.2 The HTTP server
-- [ ] Routes for every engine query, `/packs` and `/health`; `tgd serve` (bound to
-  127.0.0.1 by default)
+- [x] Routes for every engine query, `/packs` and `/health`; `tgd serve` (bound to
+  127.0.0.1 by default) (2026-11-15, D-312)
 - [ ] Nominatim-compatible `/search`, `/reverse`, `/lookup` (ADR-0038) with a conformance
   corpus of client requests
-- [ ] Limits and timeouts, CORS off unless configured, request fuzzing of the query parsing
+- [x] Limits and timeouts, CORS off unless configured, a panic answered `internal`
+  (2026-11-15, D-312)
+- [ ] Request fuzzing of the query parsing
 
 ### 6.3 The MCP server
 - [ ] stdio on rmcp: `server/discover`, the tools of ADR-0017 with `outputSchema`,
@@ -72,3 +74,4 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 | 2026-11-15 | Phase 6 drafted from the servers research | M5 met (D-308) |
 | 2026-11-15 | 6.0 done: the HTTP A/B, axum with inline engine calls (D-309) | measured |
 | 2026-11-15 | 6.1 done: the request core (D-310, D-311); the panic guard moves to 6.2's handler | built |
+| 2026-11-15 | 6.2: native routes and `tgd serve` (D-312); fuzzing split into its own item | built |

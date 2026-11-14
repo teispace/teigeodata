@@ -20,6 +20,8 @@ mod export;
 mod extract;
 mod pack;
 mod query;
+#[cfg(feature = "serve")]
+mod serve;
 mod sync;
 
 use std::fmt;
@@ -259,6 +261,25 @@ enum Command {
         /// Print a JSON array of `{"scheme", "code", "kind", "id", "name", …}`.
         #[arg(long)]
         json: bool,
+    },
+    /// Serve the packs over HTTP: every query as a `GET` route under `/v1/`, with `/packs` and
+    /// `/health`; follows the store's installed packs as they change.
+    #[cfg(feature = "serve")]
+    Serve {
+        /// The address to listen on; port 0 picks a free one.
+        #[arg(long, default_value = "127.0.0.1:8080", value_name = "ADDR:PORT")]
+        listen: std::net::SocketAddr,
+        /// An origin browsers may call from (CORS); repeat for several. None by default.
+        #[arg(long = "cors-origin", value_name = "ORIGIN")]
+        cors: Vec<String>,
+        /// Seconds between reads of the store's journal; 0 never follows.
+        #[arg(long, default_value_t = 5, value_name = "SECONDS")]
+        follow: u64,
+        /// Seconds a request may take before it is answered `unavailable`.
+        #[arg(long, default_value_t = 10, value_name = "SECONDS")]
+        timeout: u64,
+        #[command(flatten)]
+        packs: Packs,
     },
     /// Set up the store: the catalog's mirrors and its trusted root.
     Init {
@@ -714,6 +735,24 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             };
             query::postal(store, &packs.packs, &ask, json, out)
         }
+        #[cfg(feature = "serve")]
+        Command::Serve {
+            listen,
+            cors,
+            follow,
+            timeout,
+            packs,
+        } => serve::run(
+            store,
+            &packs.packs,
+            &serve::Options {
+                listen,
+                cors,
+                follow_secs: follow,
+                timeout_secs: timeout,
+            },
+            out,
+        ),
         Command::Init { repo, assets, root } => sync::init(store, &repo, &assets, &root, out),
         Command::Refresh { countries } => sync::refresh(store, &countries, out),
         Command::Catalog { json } => sync::catalog(store, json, out),
