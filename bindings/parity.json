@@ -37,7 +37,16 @@
     "Internal": 3,
     "Io": 4,
     "Corrupt": 5,
-    "MissingComponent": 6
+    "MissingComponent": 6,
+    "Network": 7,
+    "Refused": 8
+  },
+  "store": {
+    "about": "A store set up with fixtures/store-root.json and a mirror that refuses connections (teigeodata-api's tests check this against Rust)",
+    "root": "fixtures/store-root.json",
+    "mirror": "http://127.0.0.1:1/",
+    "pack": "np",
+    "bad_components": "pointy"
   },
   "engine": {
     "about": "Queries on bindings/fixtures/synth.tgd, the engine's synthetic pack (teigeodata-api's tests keep it current)",

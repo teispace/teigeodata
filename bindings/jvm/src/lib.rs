@@ -35,6 +35,8 @@ fn throw(env: &mut Env<'_>, e: &teigeodata_api::Error) -> jni::errors::Result<()
         ErrorCode::MissingComponent => {
             jni_str!("org/teispace/teigeodata/TeiGeodataException$MissingComponent")
         }
+        ErrorCode::Network => jni_str!("org/teispace/teigeodata/TeiGeodataException$Network"),
+        ErrorCode::Refused => jni_str!("org/teispace/teigeodata/TeiGeodataException$Refused"),
     };
     env.throw_new(class, JNIString::from(e.message.as_str()))
 }
@@ -1197,6 +1199,643 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
                     message: format!("code: {e}"),
                 })?;
                 this.by_iso(&code)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Frees a `Store` handle (0 does nothing); the Java class calls it once, with no call
+/// in flight.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeFree<'caller>(
+    _unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) {
+    if handle != 0 {
+        // SAFETY: a handle made by `Box::into_raw` in this library, freed once by its owner.
+        let owned = unsafe { Box::from_raw(handle as *mut teigeodata_api::Store) };
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || drop(owned)));
+    }
+}
+
+/// Sets up a store at `root` and opens it: the metadata mirrors `repo` and asset mirrors
+/// `assets` (comma-separated URLs), and `trusted_root`, the catalog's root metadata, which
+/// becomes its trust anchor once it verifies by itself. A store set up before is set up
+/// again with these.
+///
+/// # Errors
+///
+/// `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeCreate<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    root: JString<'caller>,
+    repo: JString<'caller>,
+    assets: JString<'caller>,
+    trusted_root: JByteArray<'caller>,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                let root = root.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("root: {e}"),
+                })?;
+                let repo = repo.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("repo: {e}"),
+                })?;
+                let assets = assets
+                    .try_to_string(env)
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: format!("assets: {e}"),
+                    })?;
+                let trusted_root =
+                    env.convert_byte_array(&trusted_root)
+                        .map_err(|e| teigeodata_api::Error {
+                            code: ErrorCode::InvalidArgument,
+                            message: format!("trusted_root: {e}"),
+                        })?;
+                teigeodata_api::Store::create(&root, &repo, &assets, &trusted_root)
+            })();
+            match result {
+                Ok(value) => Ok(Box::into_raw(Box::new(value)) as jlong),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Opens the store at `root`, finishing or undoing an install a crash cut short.
+///
+/// # Errors
+///
+/// `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeOpen<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    root: JString<'caller>,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                let root = root.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("root: {e}"),
+                })?;
+                teigeodata_api::Store::open(&root)
+            })();
+            match result {
+                Ok(value) => Ok(Box::into_raw(Box::new(value)) as jlong),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The packs found damaged when the store was opened, comma-separated; empty when none.
+/// `repair` fetches what they lack.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeDamaged<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) -> JString<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JString<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Store>(handle, "handle") }?;
+                Ok(this.damaged())
+            })();
+            match result {
+                Ok(value) => env.new_string(value),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The verified catalog as stored, one row per pack, with its state against the store.
+///
+/// # Errors
+///
+/// `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeCatalog<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Store>(handle, "handle") }?;
+                this.catalog()
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Each installed pack and its health, from a full check of every byte when `deep`.
+///
+/// # Errors
+///
+/// `ErrorCode::Refused` if a pack cannot be read.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeStatus<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    deep: jni::sys::jboolean,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Store>(handle, "handle") }?;
+                this.status(deep)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Pins the pack (kept when room is made), or unpins it.
+///
+/// # Errors
+///
+/// `ErrorCode::Refused` if it is not installed.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativePin<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    pack: JString<'caller>,
+    on: jni::sys::jboolean,
+) {
+    unowned
+        .with_env(|env| -> jni::errors::Result<()> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Store>(handle, "handle") }?;
+                let pack = pack.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("pack: {e}"),
+                })?;
+                this.pin(&pack, on)
+            })();
+            match result {
+                Ok(()) => Ok(()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Removes the packs and the dependencies nothing else needs; returns what was removed.
+///
+/// # Errors
+///
+/// `ErrorCode::Refused` if one is not installed or another pack needs it.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeRemove<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    pack: JString<'caller>,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Store>(handle, "handle") }?;
+                let pack = pack.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("pack: {e}"),
+                })?;
+                this.remove(&pack)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// An engine over the installed packs, each opened with the components and languages
+/// installed.
+///
+/// # Errors
+///
+/// `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeEngine<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Store>(handle, "handle") }?;
+                this.engine()
+            })();
+            match result {
+                Ok(value) => Ok(Box::into_raw(Box::new(value)) as jlong),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Refreshes the catalog for the countries (comma-separated ISO codes) and every country
+/// installed. Fails with `ErrorCode::Network` or `ErrorCode::Refused`.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeRefresh<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    countries: JString<'caller>,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Store>(handle, "handle") }?;
+                let countries =
+                    countries
+                        .try_to_string(env)
+                        .map_err(|e| teigeodata_api::Error {
+                            code: ErrorCode::InvalidArgument,
+                            message: format!("countries: {e}"),
+                        })?;
+                Ok(this.refresh(&countries))
+            })();
+            match result {
+                Ok(value) => Ok(Box::into_raw(Box::new(value)) as jlong),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Installs the packs with `options`, dependencies first, refreshing the catalog for their
+/// countries. Cancelled, it leaves the store as it was; the packs installed before the
+/// one cut stay installed.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for an unknown component or language tag, more than 8
+/// languages, or an outline level above 255; the job's own errors are the job's.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeInstall<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    packs: JString<'caller>,
+    options_components: JString<'caller>,
+    options_languages: JString<'caller>,
+    options_has_outline_level: jni::sys::jboolean,
+    options_outline_level: jlong,
+    options_outline_tolerance_m: jlong,
+    options_pin: jni::sys::jboolean,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Store>(handle, "handle") }?;
+                let packs = packs
+                    .try_to_string(env)
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: format!("packs: {e}"),
+                    })?;
+                let options = teigeodata_api::InstallOptions {
+                    components: options_components.try_to_string(env).map_err(|e| {
+                        teigeodata_api::Error {
+                            code: ErrorCode::InvalidArgument,
+                            message: format!("components: {e}"),
+                        }
+                    })?,
+                    languages: options_languages.try_to_string(env).map_err(|e| {
+                        teigeodata_api::Error {
+                            code: ErrorCode::InvalidArgument,
+                            message: format!("languages: {e}"),
+                        }
+                    })?,
+                    outline_level: if options_has_outline_level {
+                        Some(narrow::<u32>("outline_level", options_outline_level)?)
+                    } else {
+                        None
+                    },
+                    outline_tolerance_m: narrow::<u32>(
+                        "outline_tolerance_m",
+                        options_outline_tolerance_m,
+                    )?,
+                    pin: options_pin,
+                };
+                this.install(&packs, &options)
+            })();
+            match result {
+                Ok(value) => Ok(Box::into_raw(Box::new(value)) as jlong),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Updates the packs (every installed one when empty) to the catalog's releases, keeping
+/// the components and languages installed.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeUpdate<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    packs: JString<'caller>,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Store>(handle, "handle") }?;
+                let packs = packs
+                    .try_to_string(env)
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: format!("packs: {e}"),
+                    })?;
+                Ok(this.update(&packs))
+            })();
+            match result {
+                Ok(value) => Ok(Box::into_raw(Box::new(value)) as jlong),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Checks the pack in full and, unless it is whole, fetches what it lacks.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeRepair<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    pack: JString<'caller>,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Store>(handle, "handle") }?;
+                let pack = pack.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("pack: {e}"),
+                })?;
+                Ok(this.repair(&pack))
+            })();
+            match result {
+                Ok(value) => Ok(Box::into_raw(Box::new(value)) as jlong),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Frees a `Job` handle (0 does nothing); the Java class calls it once, with no call
+/// in flight.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Job_nativeFree<'caller>(
+    _unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) {
+    if handle != 0 {
+        // SAFETY: a handle made by `Box::into_raw` in this library, freed once by its owner.
+        let owned = unsafe { Box::from_raw(handle as *mut teigeodata_api::Job) };
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || drop(owned)));
+    }
+}
+
+/// Waits until the progress moves past `seq` (from `seq`), the job ends, or
+/// `timeout_ms` passes; returns the sequence then. Polling with the last one returned
+/// sees every change.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Job_nativeWaitProgress<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    seq: jlong,
+    timeout_ms: jlong,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Job>(handle, "handle") }?;
+                let seq: u64 = narrow("seq", seq)?;
+                let timeout_ms: u32 = narrow("timeout_ms", timeout_ms)?;
+                Ok(this.wait_progress(seq, timeout_ms))
+            })();
+            match result {
+                Ok(value) => Ok(jlong::try_from(value).unwrap_or(jlong::MAX)),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The progress's sequence number: it moves on with every change.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Job_nativeSeq<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Job>(handle, "handle") }?;
+                Ok(this.seq())
+            })();
+            match result {
+                Ok(value) => Ok(jlong::try_from(value).unwrap_or(jlong::MAX)),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Bytes received so far.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Job_nativeDoneBytes<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Job>(handle, "handle") }?;
+                Ok(this.done_bytes())
+            })();
+            match result {
+                Ok(value) => Ok(jlong::try_from(value).unwrap_or(jlong::MAX)),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Bytes expected, from the catalog's sizes: never below the bytes received, and equal
+/// to them once the job ends.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Job_nativeTotalBytes<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Job>(handle, "handle") }?;
+                Ok(this.total_bytes())
+            })();
+            match result {
+                Ok(value) => Ok(jlong::try_from(value).unwrap_or(jlong::MAX)),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Whether the job has ended (done, failed or cancelled); its result is then ready.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Job_nativeIsEnded<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) -> jni::sys::jboolean {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jni::sys::jboolean> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Job>(handle, "handle") }?;
+                Ok(this.is_ended())
+            })();
+            match result {
+                Ok(value) => Ok(value),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Asks the job to stop at its next request or chunk; it then fails with
+/// `ErrorCode::Cancelled` and leaves the store as it was.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Job_nativeCancel<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) {
+    unowned
+        .with_env(|env| -> jni::errors::Result<()> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Job>(handle, "handle") }?;
+                Ok(this.cancel())
+            })();
+            match result {
+                Ok(()) => Ok(()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The job's result, waiting for it to end.
+///
+/// # Errors
+///
+/// The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
+/// or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Job_nativeResult<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Job>(handle, "handle") }?;
+                this.result()
             })();
             match result {
                 Ok(value) => env.byte_array_from_slice(value.as_bytes()),

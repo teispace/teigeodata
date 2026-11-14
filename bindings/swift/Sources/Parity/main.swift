@@ -201,4 +201,29 @@ do {
     }
     check(names == Array(repeating: get["name"] as? String, count: 4), "tasks \(names)")
 }
+// The store (parity.json, store): the fixture root, a mirror that refuses connections.
+do {
+    let st = p["store"] as! [String: Any]
+    let base = URL(fileURLWithPath: path).deletingLastPathComponent()
+    let root = try Data(contentsOf: base.appendingPathComponent(st["root"] as! String))
+    let mirror = st["mirror"] as! String, pack = st["pack"] as! String
+    let d = FileManager.default.temporaryDirectory.appendingPathComponent("tg-store-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: d) }
+    expect(.refused) { _ = try Store.open(d.appendingPathComponent("missing").path) }
+    expect(.refused) { _ = try Store.create(d.appendingPathComponent("bad").path, repo: mirror, assets: mirror, trustedRoot: Data("{}".utf8)) }
+    _ = try Store.create(d.appendingPathComponent("s").path, repo: mirror, assets: mirror, trustedRoot: root)
+    let store = try Store.open(d.appendingPathComponent("s").path)
+    check(store.damaged().isEmpty, "damaged")
+    check(strings(try store.catalog(), "path").isEmpty, "empty catalog")
+    check(strings(try store.status(false), "path").isEmpty, "empty status")
+    check(try store.engine().layers() == 0, "no layers")
+    expect(.invalidArgument) { _ = try store.install(pack, options: InstallOptions(components: st["bad_components"] as! String)) }
+    expect(.refused) { _ = try store.remove(pack) }
+    let job = store.refresh(pack)
+    expect(.network) { _ = try job.result() }
+    check(job.isEnded(), "ended")
+    check(job.waitProgress(job.seq(), timeoutMs: 60_000) == job.seq(), "wait on an ended job")
+    check(job.doneBytes() == job.totalBytes(), "done at total")
+    job.cancel()
+}
 print("swift parity ok")

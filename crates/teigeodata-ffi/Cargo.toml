@@ -13,6 +13,12 @@ publish.workspace = true
 # cdylib for Swift, Dart and C callers; staticlib for static linking; lib for the ABI tests.
 crate-type = ["cdylib", "staticlib", "lib"]
 
+[features]
+default = ["store"]
+# The store (`Store`, `Job`) in the C ABI; without it the HTTP and TLS stack is left out
+# (teigeodata-api's `store` feature).
+store = ["teigeodata-api/store"]
+
 [dependencies]
 teigeodata-api.workspace = true
 

@@ -30,6 +30,11 @@ pub const TG_ERROR_CORRUPT: i32 = 5;
 /// The query needs a component of a pack that is not installed: install it, or ask a
 /// pack that has it.
 pub const TG_ERROR_MISSING_COMPONENT: i32 = 6;
+/// The network failed: no mirror answered, or the connection broke. Try again later.
+pub const TG_ERROR_NETWORK: i32 = 7;
+/// The store refused: the catalog did not verify, a pack is not in it or not installed,
+/// a pack another needs, or the store's files cannot be written.
+pub const TG_ERROR_REFUSED: i32 = 8;
 /// Most rows `sample_rows` builds in one call.
 pub const TG_SAMPLE_ROWS_MAX: u32 = 1000000;
 /// Most places one query returns.
@@ -183,6 +188,60 @@ impl TgOpenOptions {
             // SAFETY: the caller's contract above.
             languages: unsafe { abi::str_arg(self.languages, self.languages_len, "languages") }?
                 .to_owned(),
+        })
+    }
+}
+
+/// What `Store::install` takes of each pack. Every field's zero value is its default
+/// (D-276): the whole pack.
+///
+/// Passed by `const` pointer; null is every field's default (D-276).
+#[cfg(feature = "store")]
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct TgInstallOptions {
+    /// The components, by name and comma-separated (`point,names,search`); what they need is
+    /// added. Empty for every component.
+    /// UTF-8, `components_len` bytes; null only with length 0 (empty).
+    pub components: *const u8,
+    /// The length of `components` in bytes.
+    pub components_len: usize,
+    /// The languages besides the base names, as comma-separated BCP 47 tags (`en,ne`), at
+    /// most 8. Empty for every language.
+    /// UTF-8, `languages_len` bytes; null only with length 0 (empty).
+    pub languages: *const u8,
+    /// The length of `languages` in bytes.
+    pub languages_len: usize,
+    /// Whether `outline_level` is set.
+    pub has_outline_level: bool,
+    /// The deepest admin level of the one outline part installed; `None` for every outline.
+    pub outline_level: u32,
+    /// The tolerance in metres of that outline part; 0 is full resolution.
+    pub outline_tolerance_m: u32,
+    /// Keeps the packs when room is made.
+    pub pin: bool,
+}
+
+#[cfg(feature = "store")]
+impl TgInstallOptions {
+    /// The API record, checked.
+    ///
+    /// # Safety
+    ///
+    /// Each text field points to its length in readable bytes, or is null with length 0.
+    unsafe fn api(self) -> Result<teigeodata_api::InstallOptions, teigeodata_api::Error> {
+        Ok(teigeodata_api::InstallOptions {
+            // SAFETY: the caller's contract above.
+            components: unsafe {
+                abi::str_arg(self.components, self.components_len, "components")
+            }?
+            .to_owned(),
+            // SAFETY: the caller's contract above.
+            languages: unsafe { abi::str_arg(self.languages, self.languages_len, "languages") }?
+                .to_owned(),
+            outline_level: self.has_outline_level.then_some(self.outline_level),
+            outline_tolerance_m: self.outline_tolerance_m,
+            pin: self.pin,
         })
     }
 }
@@ -961,6 +1020,472 @@ pub unsafe extern "C" fn tg_engine_by_iso(
         // SAFETY: the caller passes `code_len` readable bytes (or null and 0).
         let code = unsafe { abi::str_arg(code, code_len, "code") }?;
         let value = this.0.by_iso(code)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// A store of installed packs in one directory: its signed catalog, its packs and their
+/// journal (D-171), shared by every language and the command line (research note
+/// store-api). Long work runs as a `Job` on a thread of its own; one store runs its jobs
+/// one at a time, and its other calls wait for the job running.
+///
+/// Packs are named as catalog paths (`np.places.tgd`) or short (`np`, `np.dem`), several
+/// comma-separated. Results are blobs:
+/// - `catalog`: `path`, `release`, `download`, `disk`, `components`,
+///   `licence`, `state` (`available`, `installed` or `update`);
+/// - `status`: `path`, `release`, `bytes`, `pinned`, `asked`, `health`
+///   (`good`, `length`, `head`, `footer` or `sections`), `components`;
+/// - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;
+/// - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;
+///   `remove`: `path`, `release`.
+///
+/// Opaque at the C ABI: made by its constructors, freed once with `tg_store_free`.
+#[cfg(feature = "store")]
+#[derive(Debug)]
+pub struct TgStore(teigeodata_api::Store);
+
+/// Frees a `Store` handle. Null does nothing. No call on it may be in flight (D-274).
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_free(handle: *mut TgStore) {
+    // SAFETY: a handle from this library, freed once.
+    unsafe { abi::free(handle) };
+}
+
+/// Sets up a store at `root` and opens it: the metadata mirrors `repo` and asset mirrors
+/// `assets` (comma-separated URLs), and `trusted_root`, the catalog's root metadata, which
+/// becomes its trust anchor once it verifies by itself. A store set up before is set up
+/// again with these.
+///
+/// # Errors
+///
+/// `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_create(
+    root: *const u8,
+    root_len: usize,
+    repo: *const u8,
+    repo_len: usize,
+    assets: *const u8,
+    assets_len: usize,
+    trusted_root: *const u8,
+    trusted_root_len: usize,
+    out: *mut *mut TgStore,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: the caller passes `root_len` readable bytes (or null and 0).
+        let root = unsafe { abi::str_arg(root, root_len, "root") }?;
+        // SAFETY: the caller passes `repo_len` readable bytes (or null and 0).
+        let repo = unsafe { abi::str_arg(repo, repo_len, "repo") }?;
+        // SAFETY: the caller passes `assets_len` readable bytes (or null and 0).
+        let assets = unsafe { abi::str_arg(assets, assets_len, "assets") }?;
+        // SAFETY: the caller passes `trusted_root_len` readable bytes (or null and 0).
+        let trusted_root =
+            unsafe { abi::bytes_arg(trusted_root, trusted_root_len, "trusted_root") }?;
+        let value = teigeodata_api::Store::create(root, repo, assets, trusted_root)?;
+        let value = Box::into_raw(Box::new(TgStore(value)));
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Opens the store at `root`, finishing or undoing an install a crash cut short.
+///
+/// # Errors
+///
+/// `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_open(
+    root: *const u8,
+    root_len: usize,
+    out: *mut *mut TgStore,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: the caller passes `root_len` readable bytes (or null and 0).
+        let root = unsafe { abi::str_arg(root, root_len, "root") }?;
+        let value = teigeodata_api::Store::open(root)?;
+        let value = Box::into_raw(Box::new(TgStore(value)));
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The packs found damaged when the store was opened, comma-separated; empty when none.
+/// `repair` fetches what they lack.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_damaged(handle: *const TgStore, out: *mut TgBytes) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.damaged();
+        let value = TgBytes::from_vec(value.into_bytes());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The verified catalog as stored, one row per pack, with its state against the store.
+///
+/// # Errors
+///
+/// `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_catalog(handle: *const TgStore, out: *mut TgBytes) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.catalog()?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Each installed pack and its health, from a full check of every byte when `deep`.
+///
+/// # Errors
+///
+/// `ErrorCode::Refused` if a pack cannot be read.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_status(
+    handle: *const TgStore,
+    deep: bool,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.status(deep)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Pins the pack (kept when room is made), or unpins it.
+///
+/// # Errors
+///
+/// `ErrorCode::Refused` if it is not installed.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_pin(
+    handle: *const TgStore,
+    pack: *const u8,
+    pack_len: usize,
+    on: bool,
+) -> i32 {
+    abi::call(|| {
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `pack_len` readable bytes (or null and 0).
+        let pack = unsafe { abi::str_arg(pack, pack_len, "pack") }?;
+        this.0.pin(pack, on)?;
+        Ok(())
+    })
+}
+
+/// Removes the packs and the dependencies nothing else needs; returns what was removed.
+///
+/// # Errors
+///
+/// `ErrorCode::Refused` if one is not installed or another pack needs it.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_remove(
+    handle: *const TgStore,
+    pack: *const u8,
+    pack_len: usize,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `pack_len` readable bytes (or null and 0).
+        let pack = unsafe { abi::str_arg(pack, pack_len, "pack") }?;
+        let value = this.0.remove(pack)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// An engine over the installed packs, each opened with the components and languages
+/// installed.
+///
+/// # Errors
+///
+/// `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_engine(handle: *const TgStore, out: *mut *mut TgEngine) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.engine()?;
+        let value = Box::into_raw(Box::new(TgEngine(value)));
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Refreshes the catalog for the countries (comma-separated ISO codes) and every country
+/// installed. Fails with `ErrorCode::Network` or `ErrorCode::Refused`.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_refresh(
+    handle: *const TgStore,
+    countries: *const u8,
+    countries_len: usize,
+    out: *mut *mut TgJob,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `countries_len` readable bytes (or null and 0).
+        let countries = unsafe { abi::str_arg(countries, countries_len, "countries") }?;
+        let value = this.0.refresh(countries);
+        let value = Box::into_raw(Box::new(TgJob(value)));
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Installs the packs with `options`, dependencies first, refreshing the catalog for their
+/// countries. Cancelled, it leaves the store as it was; the packs installed before the
+/// one cut stay installed.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for an unknown component or language tag, more than 8
+/// languages, or an outline level above 255; the job's own errors are the job's.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_install(
+    handle: *const TgStore,
+    packs: *const u8,
+    packs_len: usize,
+    options: *const TgInstallOptions,
+    out: *mut *mut TgJob,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `packs_len` readable bytes (or null and 0).
+        let packs = unsafe { abi::str_arg(packs, packs_len, "packs") }?;
+        // SAFETY: the caller passes a readable record whose text fields point to their
+        // lengths, or null for the defaults.
+        let options = match unsafe { abi::record(options) } {
+            // SAFETY: as above, its text fields point to their lengths.
+            Some(r) => unsafe { r.api() }?,
+            None => teigeodata_api::InstallOptions::default(),
+        };
+        let value = this.0.install(packs, &options)?;
+        let value = Box::into_raw(Box::new(TgJob(value)));
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Updates the packs (every installed one when empty) to the catalog's releases, keeping
+/// the components and languages installed.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_update(
+    handle: *const TgStore,
+    packs: *const u8,
+    packs_len: usize,
+    out: *mut *mut TgJob,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `packs_len` readable bytes (or null and 0).
+        let packs = unsafe { abi::str_arg(packs, packs_len, "packs") }?;
+        let value = this.0.update(packs);
+        let value = Box::into_raw(Box::new(TgJob(value)));
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Checks the pack in full and, unless it is whole, fetches what it lacks.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_repair(
+    handle: *const TgStore,
+    pack: *const u8,
+    pack_len: usize,
+    out: *mut *mut TgJob,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `pack_len` readable bytes (or null and 0).
+        let pack = unsafe { abi::str_arg(pack, pack_len, "pack") }?;
+        let value = this.0.repair(pack);
+        let value = Box::into_raw(Box::new(TgJob(value)));
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the
+/// next change, a cancel, and its result.
+///
+/// Opaque at the C ABI: made by its constructors, freed once with `tg_job_free`.
+#[cfg(feature = "store")]
+#[derive(Debug)]
+pub struct TgJob(teigeodata_api::Job);
+
+/// Frees a `Job` handle. Null does nothing. No call on it may be in flight (D-274).
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_job_free(handle: *mut TgJob) {
+    // SAFETY: a handle from this library, freed once.
+    unsafe { abi::free(handle) };
+}
+
+/// Waits until the progress moves past `seq` (from `seq`), the job ends, or
+/// `timeout_ms` passes; returns the sequence then. Polling with the last one returned
+/// sees every change.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_job_wait_progress(
+    handle: *const TgJob,
+    seq: u64,
+    timeout_ms: u32,
+    out: *mut u64,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.wait_progress(seq, timeout_ms);
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The progress's sequence number: it moves on with every change.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_job_seq(handle: *const TgJob, out: *mut u64) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.seq();
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Bytes received so far.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_job_done_bytes(handle: *const TgJob, out: *mut u64) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.done_bytes();
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Bytes expected, from the catalog's sizes: never below the bytes received, and equal
+/// to them once the job ends.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_job_total_bytes(handle: *const TgJob, out: *mut u64) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.total_bytes();
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Whether the job has ended (done, failed or cancelled); its result is then ready.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_job_is_ended(handle: *const TgJob, out: *mut bool) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.is_ended();
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Asks the job to stop at its next request or chunk; it then fails with
+/// `ErrorCode::Cancelled` and leaves the store as it was.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_job_cancel(handle: *const TgJob) -> i32 {
+    abi::call(|| {
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        this.0.cancel();
+        Ok(())
+    })
+}
+
+/// The job's result, waiting for it to end.
+///
+/// # Errors
+///
+/// The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
+/// or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_job_result(handle: *const TgJob, out: *mut TgBytes) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.result()?;
         let value = TgBytes::from_vec(value.into_vec());
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };

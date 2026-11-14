@@ -69,13 +69,23 @@ Phase 5.1's sync item is built in three commits: (1) the client moved into `teig
 the CLI on top; (2) jobs, progress and cancel in the client; (3) the `Store` and `Job` handles
 in `teigeodata-api` and every binding.
 
+Built as planned (D-279), with three findings: the names `init` and `wait` collide with
+Swift's initialiser and Java's `Object.wait`, so the API says `create` (which also opens) and
+`wait_progress`; the HTTP and TLS stack more than triples the C library (949 KB to 3.1 MB,
+`dist`), so the store is a default-on feature that the IDL carries to every generated layer;
+and the transport had never used the platform verifier it linked, so it keeps Mozilla's roots
+and drops it.
+
 ## 7. Risks and open items
 
 - A job's thread holds the store lock; a second job waits. A long install blocks `status`
   until it ends: acceptable for v1 (the engine stays free), revisit if apps need status during
   an install.
-- Platform downloads (D-184) stay a CLI and platform flow; the API exposes the pending ranges
-  as the CLI does.
+- Platform downloads (D-184) stay a CLI and platform flow; the API does not expose the pending
+  ranges yet (5.1 left).
+- `result` and `wait_progress` block the calling thread. On Node's main thread and Dart's UI
+  isolate an app must call them off the event loop until each language's idiomatic layer
+  (bindings §6: a `Promise` over an `AsyncTask`, a helper isolate) exists.
 
 ## 8. Versions checked
 

@@ -25,6 +25,12 @@ class CorruptError(TeiGeodataError):
 class MissingComponentError(TeiGeodataError):
     """The query needs a component of a pack that is not installed: install it, or ask a pack that has it."""
 
+class NetworkError(TeiGeodataError):
+    """The network failed: no mirror answered, or the connection broke. Try again later."""
+
+class RefusedError(TeiGeodataError):
+    """The store refused: the catalog did not verify, a pack is not in it or not installed, a pack another needs, or the store's files cannot be written."""
+
 SAMPLE_ROWS_MAX: int
 """Most rows `sample_rows` builds in one call."""
 
@@ -167,6 +173,34 @@ class OpenOptions:
     @property
     def languages(self) -> str:
         """The languages whose names and search sections are read, as comma-separated BCP 47 tags (`en,ne`), at most 8; a language without a part of its own reads the pack's shared part. Empty reads every language."""
+
+class InstallOptions:
+    """
+    What `Store::install` takes of each pack. Every field's zero value is its default
+    (D-276): the whole pack.
+    """
+
+    def __init__(self, *, components: str = "", languages: str = "", outline_level: int | None = None, outline_tolerance_m: int = 0, pin: bool = False) -> None: ...
+
+    @property
+    def components(self) -> str:
+        """The components, by name and comma-separated (`point,names,search`); what they need is added. Empty for every component."""
+
+    @property
+    def languages(self) -> str:
+        """The languages besides the base names, as comma-separated BCP 47 tags (`en,ne`), at most 8. Empty for every language."""
+
+    @property
+    def outline_level(self) -> int | None:
+        """The deepest admin level of the one outline part installed; `None` for every outline."""
+
+    @property
+    def outline_tolerance_m(self) -> int:
+        """The tolerance in metres of that outline part; 0 is full resolution."""
+
+    @property
+    def pin(self) -> bool:
+        """Keeps the packs when room is made."""
 
 class Engine:
     """
@@ -423,4 +457,176 @@ class Engine:
 
         `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
         `ErrorCode::Corrupt` if a section read is corrupt.
+        """
+
+class Store:
+    """
+    A store of installed packs in one directory: its signed catalog, its packs and their
+    journal (D-171), shared by every language and the command line (research note
+    store-api). Long work runs as a `Job` on a thread of its own; one store runs its jobs
+    one at a time, and its other calls wait for the job running.
+
+    Packs are named as catalog paths (`np.places.tgd`) or short (`np`, `np.dem`), several
+    comma-separated. Results are blobs:
+    - `catalog`: `path`, `release`, `download`, `disk`, `components`,
+      `licence`, `state` (`available`, `installed` or `update`);
+    - `status`: `path`, `release`, `bytes`, `pinned`, `asked`, `health`
+      (`good`, `length`, `head`, `footer` or `sections`), `components`;
+    - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;
+    - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;
+      `remove`: `path`, `release`.
+    """
+
+    @staticmethod
+    def create(root: str, repo: str, assets: str, trusted_root: bytes) -> Store:
+        """
+        Sets up a store at `root` and opens it: the metadata mirrors `repo` and asset mirrors
+        `assets` (comma-separated URLs), and `trusted_root`, the catalog's root metadata, which
+        becomes its trust anchor once it verifies by itself. A store set up before is set up
+        again with these.
+
+        # Errors
+
+        `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+        """
+
+    @staticmethod
+    def open(root: str) -> Store:
+        """
+        Opens the store at `root`, finishing or undoing an install a crash cut short.
+
+        # Errors
+
+        `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+        """
+
+    def damaged(self) -> str:
+        """
+        The packs found damaged when the store was opened, comma-separated; empty when none.
+        `repair` fetches what they lack.
+        """
+
+    def catalog(self) -> bytes:
+        """
+        The verified catalog as stored, one row per pack, with its state against the store.
+
+        # Errors
+
+        `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+        """
+
+    def status(self, deep: bool) -> bytes:
+        """
+        Each installed pack and its health, from a full check of every byte when `deep`.
+
+        # Errors
+
+        `ErrorCode::Refused` if a pack cannot be read.
+        """
+
+    def pin(self, pack: str, on: bool) -> None:
+        """
+        Pins the pack (kept when room is made), or unpins it.
+
+        # Errors
+
+        `ErrorCode::Refused` if it is not installed.
+        """
+
+    def remove(self, pack: str) -> bytes:
+        """
+        Removes the packs and the dependencies nothing else needs; returns what was removed.
+
+        # Errors
+
+        `ErrorCode::Refused` if one is not installed or another pack needs it.
+        """
+
+    def engine(self) -> Engine:
+        """
+        An engine over the installed packs, each opened with the components and languages
+        installed.
+
+        # Errors
+
+        `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+        """
+
+    def refresh(self, countries: str) -> Job:
+        """
+        Refreshes the catalog for the countries (comma-separated ISO codes) and every country
+        installed. Fails with `ErrorCode::Network` or `ErrorCode::Refused`.
+        """
+
+    def install(self, packs: str, options: InstallOptions) -> Job:
+        """
+        Installs the packs with `options`, dependencies first, refreshing the catalog for their
+        countries. Cancelled, it leaves the store as it was; the packs installed before the
+        one cut stay installed.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` for an unknown component or language tag, more than 8
+        languages, or an outline level above 255; the job's own errors are the job's.
+        """
+
+    def update(self, packs: str) -> Job:
+        """
+        Updates the packs (every installed one when empty) to the catalog's releases, keeping
+        the components and languages installed.
+        """
+
+    def repair(self, pack: str) -> Job:
+        """
+        Checks the pack in full and, unless it is whole, fetches what it lacks.
+        """
+
+class Job:
+    """
+    A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the
+    next change, a cancel, and its result.
+    """
+
+    def wait_progress(self, seq: int, timeout_ms: int) -> int:
+        """
+        Waits until the progress moves past `seq` (from `seq`), the job ends, or
+        `timeout_ms` passes; returns the sequence then. Polling with the last one returned
+        sees every change.
+        """
+
+    def seq(self) -> int:
+        """
+        The progress's sequence number: it moves on with every change.
+        """
+
+    def done_bytes(self) -> int:
+        """
+        Bytes received so far.
+        """
+
+    def total_bytes(self) -> int:
+        """
+        Bytes expected, from the catalog's sizes: never below the bytes received, and equal
+        to them once the job ends.
+        """
+
+    def is_ended(self) -> bool:
+        """
+        Whether the job has ended (done, failed or cancelled); its result is then ready.
+        """
+
+    def cancel(self) -> None:
+        """
+        Asks the job to stop at its next request or chunk; it then fails with
+        `ErrorCode::Cancelled` and leaves the store as it was.
+        """
+
+    def result(self) -> bytes:
+        """
+        The job's result, waiting for it to end.
+
+        # Errors
+
+        The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
+        or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
         """

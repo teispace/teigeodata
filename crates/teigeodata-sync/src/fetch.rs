@@ -800,7 +800,7 @@ const fn too_large() -> FetchError {
     FetchError::Response("a frame too large for this platform")
 }
 
-/// The default transport (feature `http`): `ureq` over rustls with the platform's trust store,
+/// The default transport (feature `http`): `ureq` over rustls with Mozilla's roots (D-279),
 /// HTTP/1.1, redirects followed with the `Range` header kept (GitHub's asset host redirects).
 #[cfg(feature = "http")]
 #[derive(Clone, Debug)]

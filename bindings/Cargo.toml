@@ -15,7 +15,7 @@ rust-version = "1.99"
 publish = false
 
 [workspace.dependencies]
-teigeodata-api = { version = "0.3.1", path = "../crates/teigeodata-api" }
+teigeodata-api = { version = "0.3.1", path = "../crates/teigeodata-api", default-features = false }
 
 # The main workspace's lint table with `unsafe_code` lowered from forbid to deny: the
 # generated shim modules allow it with a reason. `cargo xtask check-workspace` keeps every

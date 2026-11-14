@@ -14,6 +14,12 @@ crate-type = ["cdylib"]
 test = false
 doctest = false
 
+[features]
+default = ["store"]
+# The store (`Store`, `Job`) in the addon; without it the HTTP and TLS stack is left out
+# (teigeodata-api's `store` feature).
+store = ["teigeodata-api/store"]
+
 [dependencies]
 teigeodata-api.workspace = true
 napi = { version = "3.16.2", default-features = false, features = ["napi4"] }

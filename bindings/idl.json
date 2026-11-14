@@ -1,5 +1,5 @@
 {
-  "format": 5,
+  "format": 6,
   "source": "crates/teigeodata-api/src/lib.rs",
   "error_codes": [
     {
@@ -44,6 +44,21 @@
         "The query needs a component of a pack that is not installed: install it, or ask a",
         "pack that has it."
       ]
+    },
+    {
+      "name": "Network",
+      "value": 7,
+      "doc": [
+        "The network failed: no mirror answered, or the connection broke. Try again later."
+      ]
+    },
+    {
+      "name": "Refused",
+      "value": 8,
+      "doc": [
+        "The store refused: the catalog did not verify, a pack is not in it or not installed,",
+        "a pack another needs, or the store's files cannot be written."
+      ]
     }
   ],
   "constants": [
@@ -73,7 +88,8 @@
       "receiver": false,
       "params": [],
       "returns": "string",
-      "fallible": false
+      "fallible": false,
+      "feature": null
     },
     {
       "name": "noop",
@@ -83,7 +99,8 @@
       "receiver": false,
       "params": [],
       "returns": "void",
-      "fallible": false
+      "fallible": false,
+      "feature": null
     },
     {
       "name": "fold",
@@ -99,7 +116,8 @@
         }
       ],
       "returns": "string",
-      "fallible": false
+      "fallible": false,
+      "feature": null
     },
     {
       "name": "sample_rows",
@@ -120,7 +138,8 @@
         }
       ],
       "returns": "blob",
-      "fallible": true
+      "fallible": true,
+      "feature": null
     },
     {
       "name": "progress",
@@ -151,7 +170,8 @@
         }
       ],
       "returns": "u32",
-      "fallible": true
+      "fallible": true,
+      "feature": null
     },
     {
       "name": "distance_m",
@@ -184,7 +204,8 @@
         }
       ],
       "returns": "f64",
-      "fallible": true
+      "fallible": true,
+      "feature": null
     }
   ],
   "handles": [
@@ -210,7 +231,8 @@
           "params": [],
           "returns": "handle",
           "returns_handle": "Engine",
-          "fallible": false
+          "fallible": false,
+          "feature": null
         },
         {
           "name": "open_file",
@@ -231,7 +253,8 @@
             }
           ],
           "returns": "u32",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "open_file_with",
@@ -257,7 +280,8 @@
             }
           ],
           "returns": "u32",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "open_bytes",
@@ -277,7 +301,8 @@
             }
           ],
           "returns": "u32",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "open_bytes_with",
@@ -303,7 +328,8 @@
             }
           ],
           "returns": "u32",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "remove",
@@ -319,7 +345,8 @@
             }
           ],
           "returns": "bool",
-          "fallible": false
+          "fallible": false,
+          "feature": null
         },
         {
           "name": "layers",
@@ -329,7 +356,8 @@
           "receiver": true,
           "params": [],
           "returns": "u32",
-          "fallible": false
+          "fallible": false,
+          "feature": null
         },
         {
           "name": "get",
@@ -349,7 +377,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "parent",
@@ -370,7 +399,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "ancestors",
@@ -390,7 +420,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "children",
@@ -409,7 +440,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "nearby",
@@ -434,7 +466,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "search",
@@ -459,7 +492,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "search_with",
@@ -490,7 +524,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "reverse",
@@ -519,7 +554,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "within_radius",
@@ -553,7 +589,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "admin_at",
@@ -577,7 +614,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "elevation_at",
@@ -604,7 +642,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "postal_lookup",
@@ -631,7 +670,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "postal_prefix",
@@ -660,7 +700,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "postal_codes_of",
@@ -680,7 +721,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "postal_at",
@@ -706,7 +748,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "tz_at",
@@ -731,7 +774,8 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         },
         {
           "name": "by_iso",
@@ -751,9 +795,387 @@
             }
           ],
           "returns": "blob",
-          "fallible": true
+          "fallible": true,
+          "feature": null
         }
-      ]
+      ],
+      "feature": null
+    },
+    {
+      "name": "Store",
+      "snake": "store",
+      "doc": [
+        "A store of installed packs in one directory: its signed catalog, its packs and their",
+        "journal (D-171), shared by every language and the command line (research note",
+        "store-api). Long work runs as a `Job` on a thread of its own; one store runs its jobs",
+        "one at a time, and its other calls wait for the job running.",
+        "",
+        "Packs are named as catalog paths (`np.places.tgd`) or short (`np`, `np.dem`), several",
+        "comma-separated. Results are blobs:",
+        "- `catalog`: `path`, `release`, `download`, `disk`, `components`,",
+        "  `licence`, `state` (`available`, `installed` or `update`);",
+        "- `status`: `path`, `release`, `bytes`, `pinned`, `asked`, `health`",
+        "  (`good`, `length`, `head`, `footer` or `sections`), `components`;",
+        "- an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;",
+        "- a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;",
+        "  `remove`: `path`, `release`."
+      ],
+      "methods": [
+        {
+          "name": "create",
+          "doc": [
+            "Sets up a store at `root` and opens it: the metadata mirrors `repo` and asset mirrors",
+            "`assets` (comma-separated URLs), and `trusted_root`, the catalog's root metadata, which",
+            "becomes its trust anchor once it verifies by itself. A store set up before is set up",
+            "again with these.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::Refused` if the root does not verify or the store cannot be written."
+          ],
+          "receiver": false,
+          "params": [
+            {
+              "name": "root",
+              "ty": "str"
+            },
+            {
+              "name": "repo",
+              "ty": "str"
+            },
+            {
+              "name": "assets",
+              "ty": "str"
+            },
+            {
+              "name": "trusted_root",
+              "ty": "bytes"
+            }
+          ],
+          "returns": "handle",
+          "returns_handle": "Store",
+          "fallible": true,
+          "feature": "store"
+        },
+        {
+          "name": "open",
+          "doc": [
+            "Opens the store at `root`, finishing or undoing an install a crash cut short.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::Refused` if it is not a store or its journal cannot be read."
+          ],
+          "receiver": false,
+          "params": [
+            {
+              "name": "root",
+              "ty": "str"
+            }
+          ],
+          "returns": "handle",
+          "returns_handle": "Store",
+          "fallible": true,
+          "feature": "store"
+        },
+        {
+          "name": "damaged",
+          "doc": [
+            "The packs found damaged when the store was opened, comma-separated; empty when none.",
+            "`repair` fetches what they lack."
+          ],
+          "receiver": true,
+          "params": [],
+          "returns": "string",
+          "fallible": false,
+          "feature": "store"
+        },
+        {
+          "name": "catalog",
+          "doc": [
+            "The verified catalog as stored, one row per pack, with its state against the store.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies."
+          ],
+          "receiver": true,
+          "params": [],
+          "returns": "blob",
+          "fallible": true,
+          "feature": "store"
+        },
+        {
+          "name": "status",
+          "doc": [
+            "Each installed pack and its health, from a full check of every byte when `deep`.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::Refused` if a pack cannot be read."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "deep",
+              "ty": "bool"
+            }
+          ],
+          "returns": "blob",
+          "fallible": true,
+          "feature": "store"
+        },
+        {
+          "name": "pin",
+          "doc": [
+            "Pins the pack (kept when room is made), or unpins it.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::Refused` if it is not installed."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "pack",
+              "ty": "str"
+            },
+            {
+              "name": "on",
+              "ty": "bool"
+            }
+          ],
+          "returns": "void",
+          "fallible": true,
+          "feature": "store"
+        },
+        {
+          "name": "remove",
+          "doc": [
+            "Removes the packs and the dependencies nothing else needs; returns what was removed.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::Refused` if one is not installed or another pack needs it."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "pack",
+              "ty": "str"
+            }
+          ],
+          "returns": "blob",
+          "fallible": true,
+          "feature": "store"
+        },
+        {
+          "name": "engine",
+          "doc": [
+            "An engine over the installed packs, each opened with the components and languages",
+            "installed.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened."
+          ],
+          "receiver": true,
+          "params": [],
+          "returns": "handle",
+          "returns_handle": "Engine",
+          "fallible": true,
+          "feature": "store"
+        },
+        {
+          "name": "refresh",
+          "doc": [
+            "Refreshes the catalog for the countries (comma-separated ISO codes) and every country",
+            "installed. Fails with `ErrorCode::Network` or `ErrorCode::Refused`."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "countries",
+              "ty": "str"
+            }
+          ],
+          "returns": "handle",
+          "returns_handle": "Job",
+          "fallible": false,
+          "feature": "store"
+        },
+        {
+          "name": "install",
+          "doc": [
+            "Installs the packs with `options`, dependencies first, refreshing the catalog for their",
+            "countries. Cancelled, it leaves the store as it was; the packs installed before the",
+            "one cut stay installed.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::InvalidArgument` for an unknown component or language tag, more than 8",
+            "languages, or an outline level above 255; the job's own errors are the job's."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "packs",
+              "ty": "str"
+            },
+            {
+              "name": "options",
+              "ty": "record",
+              "record": "InstallOptions"
+            }
+          ],
+          "returns": "handle",
+          "returns_handle": "Job",
+          "fallible": true,
+          "feature": "store"
+        },
+        {
+          "name": "update",
+          "doc": [
+            "Updates the packs (every installed one when empty) to the catalog's releases, keeping",
+            "the components and languages installed."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "packs",
+              "ty": "str"
+            }
+          ],
+          "returns": "handle",
+          "returns_handle": "Job",
+          "fallible": false,
+          "feature": "store"
+        },
+        {
+          "name": "repair",
+          "doc": [
+            "Checks the pack in full and, unless it is whole, fetches what it lacks."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "pack",
+              "ty": "str"
+            }
+          ],
+          "returns": "handle",
+          "returns_handle": "Job",
+          "fallible": false,
+          "feature": "store"
+        }
+      ],
+      "feature": "store"
+    },
+    {
+      "name": "Job",
+      "snake": "job",
+      "doc": [
+        "A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the",
+        "next change, a cancel, and its result."
+      ],
+      "methods": [
+        {
+          "name": "wait_progress",
+          "doc": [
+            "Waits until the progress moves past `seq` (from `seq`), the job ends, or",
+            "`timeout_ms` passes; returns the sequence then. Polling with the last one returned",
+            "sees every change."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "seq",
+              "ty": "u64"
+            },
+            {
+              "name": "timeout_ms",
+              "ty": "u32"
+            }
+          ],
+          "returns": "u64",
+          "fallible": false,
+          "feature": "store"
+        },
+        {
+          "name": "seq",
+          "doc": [
+            "The progress's sequence number: it moves on with every change."
+          ],
+          "receiver": true,
+          "params": [],
+          "returns": "u64",
+          "fallible": false,
+          "feature": "store"
+        },
+        {
+          "name": "done_bytes",
+          "doc": [
+            "Bytes received so far."
+          ],
+          "receiver": true,
+          "params": [],
+          "returns": "u64",
+          "fallible": false,
+          "feature": "store"
+        },
+        {
+          "name": "total_bytes",
+          "doc": [
+            "Bytes expected, from the catalog's sizes: never below the bytes received, and equal",
+            "to them once the job ends."
+          ],
+          "receiver": true,
+          "params": [],
+          "returns": "u64",
+          "fallible": false,
+          "feature": "store"
+        },
+        {
+          "name": "is_ended",
+          "doc": [
+            "Whether the job has ended (done, failed or cancelled); its result is then ready."
+          ],
+          "receiver": true,
+          "params": [],
+          "returns": "bool",
+          "fallible": false,
+          "feature": "store"
+        },
+        {
+          "name": "cancel",
+          "doc": [
+            "Asks the job to stop at its next request or chunk; it then fails with",
+            "`ErrorCode::Cancelled` and leaves the store as it was."
+          ],
+          "receiver": true,
+          "params": [],
+          "returns": "void",
+          "fallible": false,
+          "feature": "store"
+        },
+        {
+          "name": "result",
+          "doc": [
+            "The job's result, waiting for it to end.",
+            "",
+            "# Errors",
+            "",
+            "The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,",
+            "or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs."
+          ],
+          "receiver": true,
+          "params": [],
+          "returns": "blob",
+          "fallible": true,
+          "feature": "store"
+        }
+      ],
+      "feature": "store"
     }
   ],
   "records": [
@@ -801,7 +1223,8 @@
           ]
         }
       ],
-      "copy": true
+      "copy": true,
+      "feature": null
     },
     {
       "name": "OpenOptions",
@@ -878,7 +1301,62 @@
           ]
         }
       ],
-      "copy": false
+      "copy": false,
+      "feature": null
+    },
+    {
+      "name": "InstallOptions",
+      "snake": "install_options",
+      "doc": [
+        "What `Store::install` takes of each pack. Every field's zero value is its default",
+        "(D-276): the whole pack."
+      ],
+      "fields": [
+        {
+          "name": "components",
+          "ty": "str",
+          "optional": false,
+          "doc": [
+            "The components, by name and comma-separated (`point,names,search`); what they need is",
+            "added. Empty for every component."
+          ]
+        },
+        {
+          "name": "languages",
+          "ty": "str",
+          "optional": false,
+          "doc": [
+            "The languages besides the base names, as comma-separated BCP 47 tags (`en,ne`), at",
+            "most 8. Empty for every language."
+          ]
+        },
+        {
+          "name": "outline_level",
+          "ty": "u32",
+          "optional": true,
+          "doc": [
+            "The deepest admin level of the one outline part installed; `None` for every outline."
+          ]
+        },
+        {
+          "name": "outline_tolerance_m",
+          "ty": "u32",
+          "optional": false,
+          "doc": [
+            "The tolerance in metres of that outline part; 0 is full resolution."
+          ]
+        },
+        {
+          "name": "pin",
+          "ty": "bool",
+          "optional": false,
+          "doc": [
+            "Keeps the packs when room is made."
+          ]
+        }
+      ],
+      "copy": false,
+      "feature": "store"
     }
   ],
   "enums": [

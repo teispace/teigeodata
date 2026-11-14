@@ -225,5 +225,39 @@ class Engine(unittest.TestCase):
             t.join()
         self.assertEqual(errors, [])
 
+
+class Store(unittest.TestCase):
+    """The store (parity.json, store): the fixture root, a mirror that refuses connections."""
+
+    def test_store(self) -> None:
+        import tempfile
+
+        p = PARITY["store"]
+        root = (pathlib.Path(__file__).parents[2] / p["root"]).read_bytes()
+        mirror, pack = p["mirror"], p["pack"]
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(tg.RefusedError):
+                tg.Store.open(f"{d}/missing")
+            with self.assertRaises(tg.RefusedError):
+                tg.Store.create(f"{d}/bad", mirror, mirror, b"{}")
+            tg.Store.create(f"{d}/s", mirror, mirror, root)
+            store = tg.Store.open(f"{d}/s")
+            self.assertEqual(store.damaged(), "")
+            self.assertEqual(Blob(store.catalog()).rows, 0)
+            self.assertEqual(Blob(store.status(False)).rows, 0)
+            self.assertEqual(store.engine().layers(), 0)
+            with self.assertRaises(tg.InvalidArgumentError):
+                store.install(pack, tg.InstallOptions(components=p["bad_components"]))
+            with self.assertRaises(tg.RefusedError):
+                store.remove(pack)
+            job = store.refresh(pack)
+            with self.assertRaises(tg.NetworkError):
+                job.result()
+            self.assertTrue(job.is_ended())
+            self.assertEqual(job.wait_progress(job.seq(), 60_000), job.seq())
+            self.assertEqual(job.done_bytes(), job.total_bytes())
+            job.cancel()
+            self.assertEqual(PARITY["error_codes"]["Network"], 7)
+
 if __name__ == "__main__":
     unittest.main()

@@ -22,15 +22,13 @@ allow = [
 ]
 # tzf-rs's data crate is ODbL. It is a benchmark rival in spike S2 only (publish = false) and
 # never ships or feeds a pack. Any new use needs its own decision (ADR-0030).
-# webpki-roots is Mozilla's CA root bundle (CDLA-Permissive-2.0, a permissive data licence),
-# pulled in by the forge's HTTPS client. It reaches the forge only, never a runtime crate.
-# webpki-root-certs is the same bundle, pulled in by rustls-platform-verifier for the
-# `teigeodata-sync` feature `http` (D-168). It ships in binaries with that feature: their
-# third-party notices carry the CDLA-Permissive-2.0 text, as the licence asks of shared data.
+# webpki-roots is Mozilla's CA root bundle (CDLA-Permissive-2.0, a permissive data licence):
+# the roots the `teigeodata-sync` feature `http` verifies TLS with (D-168, D-279), and the
+# forge's HTTPS client's. It ships in binaries with that feature: their third-party notices
+# carry the CDLA-Permissive-2.0 text, as the licence asks of shared data.
 exceptions = [
   { crate = "tzf-dist", allow = ["ODbL-1.0"] },
   { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
-  { crate = "webpki-root-certs", allow = ["CDLA-Permissive-2.0"] },
 ]
 
 [bans]

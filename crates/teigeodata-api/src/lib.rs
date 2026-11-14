@@ -30,8 +30,12 @@
 //! ```
 
 mod places;
+#[cfg(feature = "store")]
+mod store;
 
 use std::cell::RefCell;
+#[cfg(feature = "store")]
+use std::sync::Arc;
 
 pub use teigeodata_blob::Blob;
 use teigeodata_blob::Column;
@@ -59,6 +63,11 @@ pub enum ErrorCode {
     /// The query needs a component of a pack that is not installed: install it, or ask a
     /// pack that has it.
     MissingComponent = 6,
+    /// The network failed: no mirror answered, or the connection broke. Try again later.
+    Network = 7,
+    /// The store refused: the catalog did not verify, a pack is not in it or not installed,
+    /// a pack another needs, or the store's files cannot be written.
+    Refused = 8,
 }
 
 /// A failed call: a stable code and a message for people.
@@ -757,6 +766,275 @@ fn near_blob(engine: &teigeodata_engine::Engine, near: &[Near]) -> Result<Blob> 
         near.iter().map(|n| n.bearing_deg).collect(),
     ));
     out.blob()
+}
+
+/// What [`Store::install`] takes of each pack. Every field's zero value is its default
+/// (D-276): the whole pack.
+#[cfg(feature = "store")]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InstallOptions {
+    /// The components, by name and comma-separated (`point,names,search`); what they need is
+    /// added. Empty for every component.
+    pub components: String,
+    /// The languages besides the base names, as comma-separated BCP 47 tags (`en,ne`), at
+    /// most 8. Empty for every language.
+    pub languages: String,
+    /// The deepest admin level of the one outline part installed; `None` for every outline.
+    pub outline_level: Option<u32>,
+    /// The tolerance in metres of that outline part; 0 is full resolution.
+    pub outline_tolerance_m: u32,
+    /// Keeps the packs when room is made.
+    pub pin: bool,
+}
+
+/// A store of installed packs in one directory: its signed catalog, its packs and their
+/// journal (D-171), shared by every language and the command line (research note
+/// store-api). Long work runs as a [`Job`] on a thread of its own; one store runs its jobs
+/// one at a time, and its other calls wait for the job running.
+///
+/// Packs are named as catalog paths (`np.places.tgd`) or short (`np`, `np.dem`), several
+/// comma-separated. Results are blobs:
+/// - [`catalog`](Self::catalog): `path`, `release`, `download`, `disk`, `components`,
+///   `licence`, `state` (`available`, `installed` or `update`);
+/// - [`status`](Self::status): `path`, `release`, `bytes`, `pinned`, `asked`, `health`
+///   (`good`, `length`, `head`, `footer` or `sections`), `components`;
+/// - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;
+/// - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;
+///   [`remove`](Self::remove): `path`, `release`.
+#[cfg(feature = "store")]
+pub struct Store {
+    inner: Arc<store::Inner>,
+}
+
+#[cfg(feature = "store")]
+impl core::fmt::Debug for Store {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Store").finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "store")]
+impl Store {
+    /// Sets up a store at `root` and opens it: the metadata mirrors `repo` and asset mirrors
+    /// `assets` (comma-separated URLs), and `trusted_root`, the catalog's root metadata, which
+    /// becomes its trust anchor once it verifies by itself. A store set up before is set up
+    /// again with these.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::Refused`] if the root does not verify or the store cannot be written.
+    pub fn create(root: &str, repo: &str, assets: &str, trusted_root: &[u8]) -> Result<Self> {
+        let list = |s: &str| -> Vec<String> {
+            s.split(',')
+                .map(str::trim)
+                .filter(|x| !x.is_empty())
+                .map(str::to_owned)
+                .collect()
+        };
+        teigeodata_sync::client::init(root.as_ref(), &list(repo), &list(assets), trusted_root)?;
+        Self::open(root)
+    }
+
+    /// Opens the store at `root`, finishing or undoing an install a crash cut short.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::Refused`] if it is not a store or its journal cannot be read.
+    pub fn open(root: &str) -> Result<Self> {
+        Ok(Self {
+            inner: Arc::new(store::Inner::open(root)?),
+        })
+    }
+
+    /// The packs found damaged when the store was opened, comma-separated; empty when none.
+    /// [`repair`](Self::repair) fetches what they lack.
+    #[must_use]
+    pub fn damaged(&self) -> String {
+        self.inner.damaged.clone()
+    }
+
+    /// The verified catalog as stored, one row per pack, with its state against the store.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::Refused`] before a refresh, or if the stored catalog no longer verifies.
+    pub fn catalog(&self) -> Result<Blob> {
+        store::catalog(&mut self.inner.client())
+    }
+
+    /// Each installed pack and its health, from a full check of every byte when `deep`.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::Refused`] if a pack cannot be read.
+    pub fn status(&self, deep: bool) -> Result<Blob> {
+        store::status(&mut self.inner.client(), deep)
+    }
+
+    /// Pins the pack (kept when room is made), or unpins it.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::Refused`] if it is not installed.
+    pub fn pin(&self, pack: &str, on: bool) -> Result<()> {
+        let mut c = self.inner.client();
+        for p in store::paths(pack) {
+            c.pin(&p, on)?;
+        }
+        Ok(())
+    }
+
+    /// Removes the packs and the dependencies nothing else needs; returns what was removed.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::Refused`] if one is not installed or another pack needs it.
+    pub fn remove(&self, pack: &str) -> Result<Blob> {
+        let mut c = self.inner.client();
+        let mut gone = Vec::new();
+        for p in store::paths(pack) {
+            gone.extend(c.remove(&p)?);
+        }
+        store::removed(&gone)
+    }
+
+    /// An engine over the installed packs, each opened with the components and languages
+    /// installed.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::Io`] or [`ErrorCode::Corrupt`] if a pack cannot be opened.
+    pub fn engine(&self) -> Result<Engine> {
+        store::engine(&self.inner.client())
+    }
+
+    /// Refreshes the catalog for the countries (comma-separated ISO codes) and every country
+    /// installed. Fails with [`ErrorCode::Network`] or [`ErrorCode::Refused`].
+    #[must_use]
+    pub fn refresh(&self, countries: &str) -> Job {
+        let countries: Vec<String> = countries
+            .split(',')
+            .map(str::trim)
+            .filter(|c| !c.is_empty())
+            .map(str::to_owned)
+            .collect();
+        self.job(move |c| store::refresh(c, &countries))
+    }
+
+    /// Installs the packs with `options`, dependencies first, refreshing the catalog for their
+    /// countries. Cancelled, it leaves the store as it was; the packs installed before the
+    /// one cut stay installed.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] for an unknown component or language tag, more than 8
+    /// languages, or an outline level above 255; the job's own errors are the job's.
+    pub fn install(&self, packs: &str, options: &InstallOptions) -> Result<Job> {
+        let paths = store::paths(packs);
+        let want = store::want(options)?;
+        let pin = options.pin;
+        Ok(self.job(move |c| store::done(&c.install(&paths, &want, pin, None)?.done)))
+    }
+
+    /// Updates the packs (every installed one when empty) to the catalog's releases, keeping
+    /// the components and languages installed.
+    #[must_use]
+    pub fn update(&self, packs: &str) -> Job {
+        let paths = store::paths(packs);
+        self.job(move |c| store::done(&c.update(&paths)?))
+    }
+
+    /// Checks the pack in full and, unless it is whole, fetches what it lacks.
+    #[must_use]
+    pub fn repair(&self, pack: &str) -> Job {
+        let path = teigeodata_sync::client::path_of(pack.trim());
+        self.job(move |c| store::repaired(c, &path))
+    }
+
+    fn job(
+        &self,
+        work: impl FnOnce(&mut teigeodata_sync::client::Client<store::Net>) -> Result<Blob>
+        + Send
+        + 'static,
+    ) -> Job {
+        Job {
+            inner: store::spawn(self.inner.clone(), work),
+        }
+    }
+}
+
+/// A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the
+/// next change, a cancel, and its result.
+#[cfg(feature = "store")]
+pub struct Job {
+    inner: Arc<store::JobInner>,
+}
+
+#[cfg(feature = "store")]
+impl core::fmt::Debug for Job {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Job")
+            .field("progress", &self.inner.watch.progress())
+            .finish()
+    }
+}
+
+#[cfg(feature = "store")]
+impl Job {
+    /// Waits until the progress moves past `seq` (from [`seq`](Self::seq)), the job ends, or
+    /// `timeout_ms` passes; returns the sequence then. Polling with the last one returned
+    /// sees every change.
+    #[must_use]
+    pub fn wait_progress(&self, seq: u64, timeout_ms: u32) -> u64 {
+        self.inner
+            .watch
+            .wait(
+                seq,
+                core::time::Duration::from_millis(u64::from(timeout_ms)),
+            )
+            .seq
+    }
+
+    /// The progress's sequence number: it moves on with every change.
+    #[must_use]
+    pub fn seq(&self) -> u64 {
+        self.inner.watch.progress().seq
+    }
+
+    /// Bytes received so far.
+    #[must_use]
+    pub fn done_bytes(&self) -> u64 {
+        self.inner.watch.progress().done
+    }
+
+    /// Bytes expected, from the catalog's sizes: never below the bytes received, and equal
+    /// to them once the job ends.
+    #[must_use]
+    pub fn total_bytes(&self) -> u64 {
+        self.inner.watch.progress().total
+    }
+
+    /// Whether the job has ended (done, failed or cancelled); its result is then ready.
+    #[must_use]
+    pub fn is_ended(&self) -> bool {
+        self.inner.watch.progress().ended
+    }
+
+    /// Asks the job to stop at its next request or chunk; it then fails with
+    /// [`ErrorCode::Cancelled`] and leaves the store as it was.
+    pub fn cancel(&self) {
+        self.inner.watch.cancel();
+    }
+
+    /// The job's result, waiting for it to end.
+    ///
+    /// # Errors
+    ///
+    /// The job's: [`ErrorCode::Network`], [`ErrorCode::Refused`], [`ErrorCode::Cancelled`],
+    /// or [`ErrorCode::Io`] and [`ErrorCode::Corrupt`] for an engine's packs.
+    pub fn result(&self) -> Result<Blob> {
+        self.inner.result()
+    }
 }
 
 /// The library version, from its package metadata.

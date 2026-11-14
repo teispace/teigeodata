@@ -52,6 +52,9 @@ fn error(e: teigeodata_api::Error) -> PyErr {
 /// {{ line }}
 {% endfor %}
 {% if not owner %}
+{% if f.feature %}
+#[cfg(feature = "{{ f.feature }}")]
+{% endif %}
 #[pyfunction]
 {% elif f.name == "new" and f.returns == "handle" and f.returns_handle == owner.name %}
 #[new]
@@ -111,10 +114,15 @@ fn {{ f.name }}{% if py %}<'py>{% endif %}(
         return Err(e);
     }
 {% endif %}
+{% if f.fallible and f.returns == "void" %}
+    value.map_err(error)?;
+    Ok(())
+{% else %}
 {% if f.fallible %}
     let value = value.map_err(error)?;
 {% endif %}
     Ok({% if f.returns == "blob" %}PyBytes::new(py, value.as_bytes()){% elif f.returns == "handle" %}{{ f.returns_handle }}(value){% else %}value{% endif %})
+{% endif %}
 {% endif %}
 }
 {% endmacro %}
@@ -157,6 +165,9 @@ impl From<{{ e.name }}> for teigeodata_api::{{ e.name }} {
 {% for line in r.doc %}
 /// {{ line }}
 {% endfor %}
+{% if r.feature %}
+#[cfg(feature = "{{ r.feature }}")]
+{% endif %}
 #[pyclass(frozen, get_all, module = "teigeodata")]
 #[derive(Clone, {% if r.copy %}Copy, {% endif %}Debug, Default)]
 pub struct {{ r.name }} {
@@ -168,6 +179,9 @@ pub struct {{ r.name }} {
 {% endfor %}
 }
 
+{% if r.feature %}
+#[cfg(feature = "{{ r.feature }}")]
+{% endif %}
 #[pymethods]
 impl {{ r.name }} {
     /// Keyword arguments only; each left out is its zero value, the default (D-276).
@@ -186,6 +200,9 @@ impl {{ r.name }} {
     }
 }
 
+{% if r.feature %}
+#[cfg(feature = "{{ r.feature }}")]
+{% endif %}
 impl From<{{ r.name }}> for teigeodata_api::{{ r.name }} {
     fn from(r: {{ r.name }}) -> Self {
         Self {
@@ -201,10 +218,16 @@ impl From<{{ r.name }}> for teigeodata_api::{{ r.name }} {
 {% for line in h.doc %}
 /// {{ line }}
 {% endfor %}
+{% if h.feature %}
+#[cfg(feature = "{{ h.feature }}")]
+{% endif %}
 #[pyclass(frozen, module = "teigeodata")]
 #[derive(Debug)]
 pub struct {{ h.name }}(teigeodata_api::{{ h.name }});
 
+{% if h.feature %}
+#[cfg(feature = "{{ h.feature }}")]
+{% endif %}
 #[pymethods]
 impl {{ h.name }} {
 {% for f in h.methods %}
@@ -222,19 +245,24 @@ mod _native {
 {% for c in error_codes %}
         {{ c.name }}Error,
 {% endfor %}
-{% for f in functions %}
+{% for f in functions if not f.feature %}
         {{ f.name }},
 {% endfor %}
-{% for h in handles %}
+{% for h in handles if not h.feature %}
         {{ h.name }},
 {% endfor %}
-{% for r in records %}
+{% for r in records if not r.feature %}
         {{ r.name }},
 {% endfor %}
 {% for e in enums %}
         {{ e.name }},
 {% endfor %}
     };
+{% for x in (functions + handles + records) if x.feature %}
+    #[cfg(feature = "{{ x.feature }}")]
+    #[pymodule_export]
+    use super::{{ x.name }};
+{% endfor %}
 {% for c in constants %}
 
     {% for line in c.doc %}

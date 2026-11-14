@@ -64,6 +64,13 @@ the file, line and column.
   JVM a call holds a read lock, so `close` waits for the calls in flight.
 - A callback returning `false` cancels with `Cancelled`. An exception thrown inside a callback
   cancels the call and reaches the caller unchanged (Python, Node, JVM, Dart).
+- A handle, record or function marked `#[cfg(feature = "x")]` (IDL format 6; a method takes
+  its handle's) is gated the same way in every generated Rust layer (the C ABI, Python, Node,
+  JNI); an ungated item may not use a gated type. The foreign layers (header, Swift, Dart,
+  Java, typings) always declare it: a library built without the feature lacks those symbols.
+  The `store` feature (on by default) holds `Store`, `Job` and `InstallOptions` (D-279).
+- Names avoid every language's reserved members: no `init` (Swift's initialiser) and no
+  `wait` (Java's `Object.wait`).
 
 ## 3. Results: the blob
 
@@ -132,11 +139,14 @@ still runs on the caller's thread before the call returns.
 
 | Method | Does |
 |---|---|
-| `state()` | running, done, failed or cancelled, without blocking |
-| `progress()` | a snapshot `(done, total, seq)` in bytes, updated per frame |
-| `wait(seq, timeout_ms)` | blocks until `seq` moves on or the job ends, or the timeout passes |
+| `is_ended()` | whether it has ended (done, failed or cancelled), without blocking |
+| `seq()`, `done_bytes()`, `total_bytes()` | the progress in bytes, updated per frame; `total` never falls below `done` and equals it once the job ends |
+| `wait_progress(seq, timeout_ms)` | blocks until the sequence moves past `seq` or the job ends, or the timeout passes; returns the sequence then |
 | `cancel()` | sets a flag checked before every request and frame; the job ends `Cancelled` and leaves the journal as it was (an install commits last) |
-| `result()` | the job's value or its typed error; errors of a job come from here, never from the thread-local `tg_last_error` |
+| `result()` | waits for the end, then the job's blob or its typed error; errors of a job come from here, never from the thread-local `tg_last_error` |
+
+The generated layer of every language exposes these methods as they are (phase 5.1, D-279);
+the idiomatic awaiting in the table below is a thin hand-written layer over them, built next.
 
 Progress reaches a language by **waiting, not by callback**: the language calls `wait` on a
 thread it owns and delivers each new snapshot to the user by its own rules. Cancellation is by
@@ -159,6 +169,7 @@ second job waits for the first.
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | §2: features (IDL format 6), reserved names; §6: the job's methods as built | D-279 |
 | 2026-11-14 | §2: text fields in records (IDL format 5) | D-276 |
 | 2026-11-14 | §2: enums (IDL format 4) | D-277 |
 | 2026-11-14 | §2: records (IDL format 3) | D-276 |

@@ -34,6 +34,10 @@ extern "C" {
 #define TG_ERROR_CORRUPT 5
 /* The query needs a component of a pack that is not installed: install it, or ask a pack that has it. */
 #define TG_ERROR_MISSING_COMPONENT 6
+/* The network failed: no mirror answered, or the connection broke. Try again later. */
+#define TG_ERROR_NETWORK 7
+/* The store refused: the catalog did not verify, a pack is not in it or not installed, a pack another needs, or the store's files cannot be written. */
+#define TG_ERROR_REFUSED 8
 /* Most rows `sample_rows` builds in one call. */
 #define TG_SAMPLE_ROWS_MAX 1000000u
 /* Most places one query returns. */
@@ -48,6 +52,11 @@ typedef struct tg_bytes {
 
 /* A callback taking u32; return false to cancel. */
 typedef bool (*tg_callback_u32)(void *ctx, uint32_t a0);
+
+/* The handles, opaque, declared first: a method of one may return another. */
+typedef struct tg_engine tg_engine;
+typedef struct tg_store tg_store;
+typedef struct tg_job tg_job;
 
 
 /* When a pack's sections are verified against their hashes. A uint32_t field holds one of these. */
@@ -106,6 +115,26 @@ typedef struct tg_open_options {
     size_t languages_len;
 } tg_open_options;
 
+/* What `Store::install` takes of each pack. Every field's zero value is its default (D-276): the whole pack. Pass NULL for the defaults. */
+typedef struct tg_install_options {
+    /* The components, by name and comma-separated (`point,names,search`); what they need is added. Empty for every component. UTF-8; NULL only with length 0 (empty). */
+    const uint8_t *components;
+    /* The length of components in bytes. */
+    size_t components_len;
+    /* The languages besides the base names, as comma-separated BCP 47 tags (`en,ne`), at most 8. Empty for every language. UTF-8; NULL only with length 0 (empty). */
+    const uint8_t *languages;
+    /* The length of languages in bytes. */
+    size_t languages_len;
+    /* Whether outline_level is set. */
+    bool has_outline_level;
+    /* The deepest admin level of the one outline part installed; `None` for every outline. */
+    uint32_t outline_level;
+    /* The tolerance in metres of that outline part; 0 is full resolution. */
+    uint32_t outline_tolerance_m;
+    /* Keeps the packs when room is made. */
+    bool pin;
+} tg_install_options;
+
 /* Frees a buffer returned by any function. Freeing a zeroed buffer does nothing. */
 void tg_bytes_free(tg_bytes bytes);
 
@@ -162,7 +191,6 @@ int32_t tg_progress(uint32_t steps, tg_callback_u32 on_step, void *on_step_ctx, 
 int32_t tg_distance_m(double lat1, double lon1, double lat2, double lon2, double *out);
 
 /* Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine answers from any number of threads at once, and adding a pack publishes a new snapshot while queries go on.  Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search and `meters` and `bearing` for a reverse lookup. */
-typedef struct tg_engine tg_engine;
 
 /* Frees a handle. NULL does nothing. No call on it may be in flight. */
 void tg_engine_free(tg_engine *handle);
@@ -412,6 +440,162 @@ int32_t tg_engine_tz_at(const tg_engine *handle, double lat, double lon, tg_byte
  * `ErrorCode::Corrupt` if a section read is corrupt.
  */
 int32_t tg_engine_by_iso(const tg_engine *handle, const uint8_t *code, size_t code_len, tg_bytes *out);
+
+/* A store of installed packs in one directory: its signed catalog, its packs and their journal (D-171), shared by every language and the command line (research note store-api). Long work runs as a `Job` on a thread of its own; one store runs its jobs one at a time, and its other calls wait for the job running.  Packs are named as catalog paths (`np.places.tgd`) or short (`np`, `np.dem`), several comma-separated. Results are blobs: - `catalog`: `path`, `release`, `download`, `disk`, `components`,   `licence`, `state` (`available`, `installed` or `update`); - `status`: `path`, `release`, `bytes`, `pinned`, `asked`, `health`   (`good`, `length`, `head`, `footer` or `sections`), `components`; - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`; - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;   `remove`: `path`, `release`. */
+
+/* Frees a handle. NULL does nothing. No call on it may be in flight. */
+void tg_store_free(tg_store *handle);
+
+/*
+ * Sets up a store at `root` and opens it: the metadata mirrors `repo` and asset mirrors
+ * `assets` (comma-separated URLs), and `trusted_root`, the catalog's root metadata, which
+ * becomes its trust anchor once it verifies by itself. A store set up before is set up
+ * again with these.
+ *
+ * # Errors
+ *
+ * `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+ */
+int32_t tg_store_create(const uint8_t *root, size_t root_len, const uint8_t *repo, size_t repo_len, const uint8_t *assets, size_t assets_len, const uint8_t *trusted_root, size_t trusted_root_len, tg_store **out);
+
+/*
+ * Opens the store at `root`, finishing or undoing an install a crash cut short.
+ *
+ * # Errors
+ *
+ * `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+ */
+int32_t tg_store_open(const uint8_t *root, size_t root_len, tg_store **out);
+
+/*
+ * The packs found damaged when the store was opened, comma-separated; empty when none.
+ * `repair` fetches what they lack.
+ */
+int32_t tg_store_damaged(const tg_store *handle, tg_bytes *out);
+
+/*
+ * The verified catalog as stored, one row per pack, with its state against the store.
+ *
+ * # Errors
+ *
+ * `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+ */
+int32_t tg_store_catalog(const tg_store *handle, tg_bytes *out);
+
+/*
+ * Each installed pack and its health, from a full check of every byte when `deep`.
+ *
+ * # Errors
+ *
+ * `ErrorCode::Refused` if a pack cannot be read.
+ */
+int32_t tg_store_status(const tg_store *handle, bool deep, tg_bytes *out);
+
+/*
+ * Pins the pack (kept when room is made), or unpins it.
+ *
+ * # Errors
+ *
+ * `ErrorCode::Refused` if it is not installed.
+ */
+int32_t tg_store_pin(const tg_store *handle, const uint8_t *pack, size_t pack_len, bool on);
+
+/*
+ * Removes the packs and the dependencies nothing else needs; returns what was removed.
+ *
+ * # Errors
+ *
+ * `ErrorCode::Refused` if one is not installed or another pack needs it.
+ */
+int32_t tg_store_remove(const tg_store *handle, const uint8_t *pack, size_t pack_len, tg_bytes *out);
+
+/*
+ * An engine over the installed packs, each opened with the components and languages
+ * installed.
+ *
+ * # Errors
+ *
+ * `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+ */
+int32_t tg_store_engine(const tg_store *handle, tg_engine **out);
+
+/*
+ * Refreshes the catalog for the countries (comma-separated ISO codes) and every country
+ * installed. Fails with `ErrorCode::Network` or `ErrorCode::Refused`.
+ */
+int32_t tg_store_refresh(const tg_store *handle, const uint8_t *countries, size_t countries_len, tg_job **out);
+
+/*
+ * Installs the packs with `options`, dependencies first, refreshing the catalog for their
+ * countries. Cancelled, it leaves the store as it was; the packs installed before the
+ * one cut stay installed.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` for an unknown component or language tag, more than 8
+ * languages, or an outline level above 255; the job's own errors are the job's.
+ */
+int32_t tg_store_install(const tg_store *handle, const uint8_t *packs, size_t packs_len, const tg_install_options *options, tg_job **out);
+
+/*
+ * Updates the packs (every installed one when empty) to the catalog's releases, keeping
+ * the components and languages installed.
+ */
+int32_t tg_store_update(const tg_store *handle, const uint8_t *packs, size_t packs_len, tg_job **out);
+
+/*
+ * Checks the pack in full and, unless it is whole, fetches what it lacks.
+ */
+int32_t tg_store_repair(const tg_store *handle, const uint8_t *pack, size_t pack_len, tg_job **out);
+
+/* A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the next change, a cancel, and its result. */
+
+/* Frees a handle. NULL does nothing. No call on it may be in flight. */
+void tg_job_free(tg_job *handle);
+
+/*
+ * Waits until the progress moves past `seq` (from `seq`), the job ends, or
+ * `timeout_ms` passes; returns the sequence then. Polling with the last one returned
+ * sees every change.
+ */
+int32_t tg_job_wait_progress(const tg_job *handle, uint64_t seq, uint32_t timeout_ms, uint64_t *out);
+
+/*
+ * The progress's sequence number: it moves on with every change.
+ */
+int32_t tg_job_seq(const tg_job *handle, uint64_t *out);
+
+/*
+ * Bytes received so far.
+ */
+int32_t tg_job_done_bytes(const tg_job *handle, uint64_t *out);
+
+/*
+ * Bytes expected, from the catalog's sizes: never below the bytes received, and equal
+ * to them once the job ends.
+ */
+int32_t tg_job_total_bytes(const tg_job *handle, uint64_t *out);
+
+/*
+ * Whether the job has ended (done, failed or cancelled); its result is then ready.
+ */
+int32_t tg_job_is_ended(const tg_job *handle, bool *out);
+
+/*
+ * Asks the job to stop at its next request or chunk; it then fails with
+ * `ErrorCode::Cancelled` and leaves the store as it was.
+ */
+int32_t tg_job_cancel(const tg_job *handle);
+
+/*
+ * The job's result, waiting for it to end.
+ *
+ * # Errors
+ *
+ * The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
+ * or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+ */
+int32_t tg_job_result(const tg_job *handle, tg_bytes *out);
 
 #ifdef __cplusplus
 }

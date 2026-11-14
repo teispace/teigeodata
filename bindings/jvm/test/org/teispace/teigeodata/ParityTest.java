@@ -66,7 +66,36 @@ public final class ParityTest {
             check(caught == boom, "callback exception is rethrown unchanged");
         }
         engine((Map<?, ?>) p.get("engine"), Path.of(args[0]).toAbsolutePath().getParent());
+        store((Map<?, ?>) p.get("store"), Path.of(args[0]).toAbsolutePath().getParent());
         System.out.println("jvm parity ok");
+    }
+
+    /** The store (parity.json, "store"): the fixture root, a mirror that refuses connections. */
+    static void store(Map<?, ?> s, Path dir) throws java.io.IOException {
+        byte[] root = Files.readAllBytes(dir.resolve((String) s.get("root")));
+        String mirror = (String) s.get("mirror"), pack = (String) s.get("pack");
+        Path d = Files.createTempDirectory("tg-store-");
+        expect(TeiGeodataException.Refused.class, () -> TeiGeodata.Store.open(d.resolve("missing").toString()), "");
+        expect(TeiGeodataException.Refused.class, () -> TeiGeodata.Store.create(d.resolve("bad").toString(), mirror, mirror, "{}".getBytes()), "");
+        TeiGeodata.Store.create(d.resolve("s").toString(), mirror, mirror, root).close();
+        try (TeiGeodata.Store store = TeiGeodata.Store.open(d.resolve("s").toString())) {
+            check(store.damaged().isEmpty(), "damaged");
+            check(strings(store.catalog(), "path").isEmpty(), "empty catalog");
+            check(strings(store.status(false), "path").isEmpty(), "empty status");
+            try (TeiGeodata.Engine engine = store.engine()) {
+                check(engine.layers() == 0, "no layers");
+            }
+            expect(TeiGeodataException.InvalidArgument.class,
+                    () -> store.install(pack, TeiGeodata.InstallOptions.DEFAULTS.withComponents((String) s.get("bad_components"))), "component");
+            expect(TeiGeodataException.Refused.class, () -> store.remove(pack), "");
+            try (TeiGeodata.Job job = store.refresh(pack)) {
+                expect(TeiGeodataException.Network.class, job::result, "");
+                check(job.isEnded(), "ended");
+                check(job.waitProgress(job.seq(), 60_000) == job.seq(), "wait on an ended job");
+                check(job.doneBytes() == job.totalBytes(), "done at total");
+                job.cancel();
+            }
+        }
     }
 
     /** The engine handle on the fixture pack (parity.json, "engine"). */

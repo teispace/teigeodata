@@ -165,3 +165,32 @@ test("engine handle on the fixture", () => {
   assert.equal(engine.remove(1), false);
   assert.equal(engine.layers(), 1);
 });
+
+test("store", () => {
+  // The store (parity.json, store): the fixture root, a mirror that refuses connections.
+  const { mkdtempSync, rmSync } = require("node:fs");
+  const { tmpdir } = require("node:os");
+  const s = parity.store;
+  const root = readFileSync(join(__dirname, "../..", s.root));
+  const d = mkdtempSync(join(tmpdir(), "tg-store-"));
+  try {
+    assert.throws(() => tg.Store.open(join(d, "missing")), { code: "Refused" });
+    assert.throws(() => tg.Store.create(join(d, "bad"), s.mirror, s.mirror, Buffer.from("{}")), { code: "Refused" });
+    tg.Store.create(join(d, "s"), s.mirror, s.mirror, root);
+    const store = tg.Store.open(join(d, "s"));
+    assert.equal(store.damaged(), "");
+    assert.equal(strings(store.catalog(), "path").length, 0);
+    assert.equal(strings(store.status(false), "path").length, 0);
+    assert.equal(store.engine().layers(), 0);
+    assert.throws(() => store.install(s.pack, { components: s.bad_components }), { code: "InvalidArgument" });
+    assert.throws(() => store.remove(s.pack), { code: "Refused" });
+    const job = store.refresh(s.pack);
+    assert.throws(() => job.result(), { code: "Network" });
+    assert.equal(job.isEnded(), true);
+    assert.equal(job.waitProgress(job.seq(), 60000), job.seq());
+    assert.equal(job.doneBytes(), job.totalBytes());
+    job.cancel();
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});

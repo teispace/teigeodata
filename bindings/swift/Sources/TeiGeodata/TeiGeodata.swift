@@ -18,6 +18,10 @@ public struct TeiGeodataError: Error, Equatable, CustomStringConvertible {
         case `corrupt` = 5
         /// The query needs a component of a pack that is not installed: install it, or ask a pack that has it.
         case `missingComponent` = 6
+        /// The network failed: no mirror answered, or the connection broke. Try again later.
+        case `network` = 7
+        /// The store refused: the catalog did not verify, a pack is not in it or not installed, a pack another needs, or the store's files cannot be written.
+        case `refused` = 8
     }
 
     public let code: Code
@@ -145,6 +149,36 @@ public struct OpenOptions: Sendable, Equatable {
     /// The C struct, its text pointing into the given UTF-8 bytes, alive for the call.
     fileprivate func native(_ componentsBytes: UnsafeBufferPointer<UInt8>, _ languagesBytes: UnsafeBufferPointer<UInt8>) -> tg_open_options {
         tg_open_options(priority: priority, verify: verify.rawValue, load: load.rawValue, has_outline_level: outlineLevel != nil, outline_level: outlineLevel ?? 0, outline_tolerance_m: outlineToleranceM, components: componentsBytes.baseAddress, components_len: componentsBytes.count, languages: languagesBytes.baseAddress, languages_len: languagesBytes.count)
+    }
+}
+
+/// What `Store::install` takes of each pack. Every field's zero value is its default
+/// (D-276): the whole pack.
+public struct InstallOptions: Sendable, Equatable {
+    /// The components, by name and comma-separated (`point,names,search`); what they need is
+    /// added. Empty for every component.
+    public var components: String
+    /// The languages besides the base names, as comma-separated BCP 47 tags (`en,ne`), at
+    /// most 8. Empty for every language.
+    public var languages: String
+    /// The deepest admin level of the one outline part installed; `None` for every outline.
+    public var outlineLevel: UInt32?
+    /// The tolerance in metres of that outline part; 0 is full resolution.
+    public var outlineToleranceM: UInt32
+    /// Keeps the packs when room is made.
+    public var pin: Bool
+
+    public init(components: String = "", languages: String = "", outlineLevel: UInt32? = nil, outlineToleranceM: UInt32 = 0, pin: Bool = false) {
+        self.components = components
+        self.languages = languages
+        self.outlineLevel = outlineLevel
+        self.outlineToleranceM = outlineToleranceM
+        self.pin = pin
+    }
+
+    /// The C struct, its text pointing into the given UTF-8 bytes, alive for the call.
+    fileprivate func native(_ componentsBytes: UnsafeBufferPointer<UInt8>, _ languagesBytes: UnsafeBufferPointer<UInt8>) -> tg_install_options {
+        tg_install_options(components: componentsBytes.baseAddress, components_len: componentsBytes.count, languages: languagesBytes.baseAddress, languages_len: languagesBytes.count, has_outline_level: outlineLevel != nil, outline_level: outlineLevel ?? 0, outline_tolerance_m: outlineToleranceM, pin: pin)
     }
 }
 
@@ -574,6 +608,255 @@ public final class Engine: @unchecked Sendable {
         var out = tg_bytes()
         var code = code
         let status = withExtendedLifetime(self) { code.withUTF8 { codeBytes in tg_engine_by_iso(raw, codeBytes.baseAddress, codeBytes.count, &out) } }
+        try check(status)
+        return takeData(out)
+    }
+}
+
+/// A store of installed packs in one directory: its signed catalog, its packs and their
+/// journal (D-171), shared by every language and the command line (research note
+/// store-api). Long work runs as a `Job` on a thread of its own; one store runs its jobs
+/// one at a time, and its other calls wait for the job running.
+///
+/// Packs are named as catalog paths (`np.places.tgd`) or short (`np`, `np.dem`), several
+/// comma-separated. Results are blobs:
+/// - `catalog`: `path`, `release`, `download`, `disk`, `components`,
+///   `licence`, `state` (`available`, `installed` or `update`);
+/// - `status`: `path`, `release`, `bytes`, `pinned`, `asked`, `health`
+///   (`good`, `length`, `head`, `footer` or `sections`), `components`;
+/// - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;
+/// - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;
+///   `remove`: `path`, `release`.
+///
+/// Sendable: every call is safe from any thread at once (D-274). The handle is freed when the
+/// last reference goes.
+public final class Store: @unchecked Sendable {
+    fileprivate let raw: OpaquePointer
+
+    fileprivate init(raw: OpaquePointer) { self.raw = raw }
+
+    deinit { tg_store_free(raw) }
+
+    /// Sets up a store at `root` and opens it: the metadata mirrors `repo` and asset mirrors
+    /// `assets` (comma-separated URLs), and `trusted_root`, the catalog's root metadata, which
+    /// becomes its trust anchor once it verifies by itself. A store set up before is set up
+    /// again with these.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+    public static func create(_ root: String, repo: String, assets: String, trustedRoot: Data) throws(TeiGeodataError) -> Store {
+        var out: OpaquePointer?
+        var root = root
+        var repo = repo
+        var assets = assets
+        let status = root.withUTF8 { rootBytes in repo.withUTF8 { repoBytes in assets.withUTF8 { assetsBytes in trustedRoot.withUnsafeBytes { trustedRootBytes in tg_store_create(rootBytes.baseAddress, rootBytes.count, repoBytes.baseAddress, repoBytes.count, assetsBytes.baseAddress, assetsBytes.count, trustedRootBytes.baseAddress?.assumingMemoryBound(to: UInt8.self), trustedRootBytes.count, &out) } } } }
+        try check(status)
+        return Store(raw: out!)
+    }
+
+    /// Opens the store at `root`, finishing or undoing an install a crash cut short.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+    public static func open(_ root: String) throws(TeiGeodataError) -> Store {
+        var out: OpaquePointer?
+        var root = root
+        let status = root.withUTF8 { rootBytes in tg_store_open(rootBytes.baseAddress, rootBytes.count, &out) }
+        try check(status)
+        return Store(raw: out!)
+    }
+
+    /// The packs found damaged when the store was opened, comma-separated; empty when none.
+    /// `repair` fetches what they lack.
+    public func damaged() -> String {
+        var out = tg_bytes()
+        let status = withExtendedLifetime(self) { tg_store_damaged(raw, &out) }
+        expectOK(status)
+        return takeString(out)
+    }
+
+    /// The verified catalog as stored, one row per pack, with its state against the store.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+    public func catalog() throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        let status = withExtendedLifetime(self) { tg_store_catalog(raw, &out) }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// Each installed pack and its health, from a full check of every byte when `deep`.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Refused` if a pack cannot be read.
+    public func status(_ deep: Bool) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        let status = withExtendedLifetime(self) { tg_store_status(raw, deep, &out) }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// Pins the pack (kept when room is made), or unpins it.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Refused` if it is not installed.
+    public func pin(_ pack: String, on: Bool) throws(TeiGeodataError) {
+        var pack = pack
+        let status = withExtendedLifetime(self) { pack.withUTF8 { packBytes in tg_store_pin(raw, packBytes.baseAddress, packBytes.count, on) } }
+        try check(status)
+    }
+
+    /// Removes the packs and the dependencies nothing else needs; returns what was removed.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Refused` if one is not installed or another pack needs it.
+    public func remove(_ pack: String) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var pack = pack
+        let status = withExtendedLifetime(self) { pack.withUTF8 { packBytes in tg_store_remove(raw, packBytes.baseAddress, packBytes.count, &out) } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// An engine over the installed packs, each opened with the components and languages
+    /// installed.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+    public func engine() throws(TeiGeodataError) -> Engine {
+        var out: OpaquePointer?
+        let status = withExtendedLifetime(self) { tg_store_engine(raw, &out) }
+        try check(status)
+        return Engine(raw: out!)
+    }
+
+    /// Refreshes the catalog for the countries (comma-separated ISO codes) and every country
+    /// installed. Fails with `ErrorCode::Network` or `ErrorCode::Refused`.
+    public func refresh(_ countries: String) -> Job {
+        var out: OpaquePointer?
+        var countries = countries
+        let status = withExtendedLifetime(self) { countries.withUTF8 { countriesBytes in tg_store_refresh(raw, countriesBytes.baseAddress, countriesBytes.count, &out) } }
+        expectOK(status)
+        return Job(raw: out!)
+    }
+
+    /// Installs the packs with `options`, dependencies first, refreshing the catalog for their
+    /// countries. Cancelled, it leaves the store as it was; the packs installed before the
+    /// one cut stay installed.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for an unknown component or language tag, more than 8
+    /// languages, or an outline level above 255; the job's own errors are the job's.
+    public func install(_ packs: String, options: InstallOptions = .init()) throws(TeiGeodataError) -> Job {
+        var out: OpaquePointer?
+        var packs = packs
+        var optionsComponents = options.components
+        var optionsLanguages = options.languages
+        let status = withExtendedLifetime(self) { packs.withUTF8 { packsBytes in optionsComponents.withUTF8 { optionsComponentsBytes in optionsLanguages.withUTF8 { optionsLanguagesBytes in withUnsafePointer(to: options.native(optionsComponentsBytes, optionsLanguagesBytes)) { optionsPtr in tg_store_install(raw, packsBytes.baseAddress, packsBytes.count, optionsPtr, &out) } } } } }
+        try check(status)
+        return Job(raw: out!)
+    }
+
+    /// Updates the packs (every installed one when empty) to the catalog's releases, keeping
+    /// the components and languages installed.
+    public func update(_ packs: String) -> Job {
+        var out: OpaquePointer?
+        var packs = packs
+        let status = withExtendedLifetime(self) { packs.withUTF8 { packsBytes in tg_store_update(raw, packsBytes.baseAddress, packsBytes.count, &out) } }
+        expectOK(status)
+        return Job(raw: out!)
+    }
+
+    /// Checks the pack in full and, unless it is whole, fetches what it lacks.
+    public func repair(_ pack: String) -> Job {
+        var out: OpaquePointer?
+        var pack = pack
+        let status = withExtendedLifetime(self) { pack.withUTF8 { packBytes in tg_store_repair(raw, packBytes.baseAddress, packBytes.count, &out) } }
+        expectOK(status)
+        return Job(raw: out!)
+    }
+}
+
+/// A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the
+/// next change, a cancel, and its result.
+///
+/// Sendable: every call is safe from any thread at once (D-274). The handle is freed when the
+/// last reference goes.
+public final class Job: @unchecked Sendable {
+    fileprivate let raw: OpaquePointer
+
+    fileprivate init(raw: OpaquePointer) { self.raw = raw }
+
+    deinit { tg_job_free(raw) }
+
+    /// Waits until the progress moves past `seq` (from `seq`), the job ends, or
+    /// `timeout_ms` passes; returns the sequence then. Polling with the last one returned
+    /// sees every change.
+    public func waitProgress(_ seq: UInt64, timeoutMs: UInt32) -> UInt64 {
+        var out: UInt64 = 0
+        let status = withExtendedLifetime(self) { tg_job_wait_progress(raw, seq, timeoutMs, &out) }
+        expectOK(status)
+        return out
+    }
+
+    /// The progress's sequence number: it moves on with every change.
+    public func seq() -> UInt64 {
+        var out: UInt64 = 0
+        let status = withExtendedLifetime(self) { tg_job_seq(raw, &out) }
+        expectOK(status)
+        return out
+    }
+
+    /// Bytes received so far.
+    public func doneBytes() -> UInt64 {
+        var out: UInt64 = 0
+        let status = withExtendedLifetime(self) { tg_job_done_bytes(raw, &out) }
+        expectOK(status)
+        return out
+    }
+
+    /// Bytes expected, from the catalog's sizes: never below the bytes received, and equal
+    /// to them once the job ends.
+    public func totalBytes() -> UInt64 {
+        var out: UInt64 = 0
+        let status = withExtendedLifetime(self) { tg_job_total_bytes(raw, &out) }
+        expectOK(status)
+        return out
+    }
+
+    /// Whether the job has ended (done, failed or cancelled); its result is then ready.
+    public func isEnded() -> Bool {
+        var out: Bool = false
+        let status = withExtendedLifetime(self) { tg_job_is_ended(raw, &out) }
+        expectOK(status)
+        return out
+    }
+
+    /// Asks the job to stop at its next request or chunk; it then fails with
+    /// `ErrorCode::Cancelled` and leaves the store as it was.
+    public func cancel() {
+        let status = withExtendedLifetime(self) { tg_job_cancel(raw) }
+        expectOK(status)
+    }
+
+    /// The job's result, waiting for it to end.
+    ///
+    /// # Errors
+    ///
+    /// The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
+    /// or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+    public func result() throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        let status = withExtendedLifetime(self) { tg_job_result(raw, &out) }
         try check(status)
         return takeData(out)
     }

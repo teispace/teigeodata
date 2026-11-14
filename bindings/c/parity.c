@@ -212,6 +212,45 @@ int main(void) {
     tg_engine_free(engine);
     tg_engine_free(NULL);
 
+    /* The store (parity.json, store): the fixture root, a mirror that refuses connections. */
+    FILE *rf = fopen("bindings/fixtures/store-root.json", "rb");
+    CHECK(rf != NULL);
+    static uint8_t root[1 << 16];
+    size_t root_len = fread(root, 1, sizeof root, rf);
+    fclose(rf);
+    const char *mirror = "http://127.0.0.1:1/", *missing = "target/c-store-missing";
+    const char *bad_dir = "target/c-store-bad", *dir = "target/c-store", *np = "np";
+    tg_store *store = NULL;
+    CHECK(tg_store_open((const uint8_t *)missing, strlen(missing), &store) == TG_ERROR_REFUSED);
+    CHECK(tg_store_create((const uint8_t *)bad_dir, strlen(bad_dir), (const uint8_t *)mirror, strlen(mirror), (const uint8_t *)mirror, strlen(mirror), (const uint8_t *)"{}", 2, &store) == TG_ERROR_REFUSED);
+    CHECK(tg_store_create((const uint8_t *)dir, strlen(dir), (const uint8_t *)mirror, strlen(mirror), (const uint8_t *)mirror, strlen(mirror), root, root_len, &store) == TG_OK);
+    tg_store_free(store);
+    CHECK(tg_store_open((const uint8_t *)dir, strlen(dir), &store) == TG_OK);
+    CHECK(tg_store_damaged(store, &out) == TG_OK && out.len == 0);
+    tg_bytes_free(out);
+    CHECK(tg_store_catalog(store, &out) == TG_OK && blob_rows(out) == 0);
+    tg_bytes_free(out);
+    CHECK(tg_store_status(store, false, &out) == TG_OK && blob_rows(out) == 0);
+    tg_bytes_free(out);
+    tg_engine *installed = NULL;
+    CHECK(tg_store_engine(store, &installed) == TG_OK);
+    CHECK(tg_engine_layers(installed, &layers) == TG_OK && layers == 0);
+    tg_engine_free(installed);
+    tg_job *job = NULL;
+    tg_install_options wrong = {.components = (const uint8_t *)pointy, .components_len = strlen(pointy)};
+    CHECK(tg_store_install(store, (const uint8_t *)np, strlen(np), &wrong, &job) == TG_ERROR_INVALID_ARGUMENT);
+    CHECK(tg_store_remove(store, (const uint8_t *)np, strlen(np), &out) == TG_ERROR_REFUSED);
+    CHECK(tg_store_refresh(store, (const uint8_t *)np, strlen(np), &job) == TG_OK);
+    CHECK(tg_job_result(job, &out) == TG_ERROR_NETWORK);
+    bool ended = false;
+    CHECK(tg_job_is_ended(job, &ended) == TG_OK && ended);
+    uint64_t seq = 0, next = 0, done = 0, total = 1;
+    CHECK(tg_job_seq(job, &seq) == TG_OK && tg_job_wait_progress(job, seq, 60000, &next) == TG_OK && next == seq);
+    CHECK(tg_job_done_bytes(job, &done) == TG_OK && tg_job_total_bytes(job, &total) == TG_OK && done == total);
+    CHECK(tg_job_cancel(job) == TG_OK);
+    tg_job_free(job);
+    tg_store_free(store);
+
     if (failures == 0) puts("c parity ok");
     return failures != 0;
 }

@@ -15,11 +15,25 @@ teigeodata-core.workspace = true
 teigeodata-engine.workspace = true
 teigeodata-format.workspace = true
 teigeodata-names.workspace = true
+teigeodata-sync = { workspace = true, features = ["client"], optional = true }
+
+[features]
+default = ["store"]
+# The store (`Store`, `Job`): the signed catalog, installs over HTTPS and the journal. Its
+# HTTP and TLS stack is most of the library's size: the C ABI is 949,456 B (467 KB gzipped)
+# without it and 3,123,168 B (1.64 MB gzipped) with it (`dist` profile, aarch64-apple-darwin,
+# 2026-11-14, D-279). An app that only reads the packs it ships leaves it out.
+store = ["dep:teigeodata-sync"]
 
 [dev-dependencies]
 serde_json = "1.0.154"
 # The engine's test packs (`tests/engine.rs` includes its `tests/common`).
 teigeodata-format = { workspace = true, features = ["write", "spatial"] }
+# A repository written as a release writes it, for the store's tests (`tests/store.rs`
+# includes `teigeodata-sync/tests/support`).
+ed25519-dalek = { version = "3.0.0", default-features = false }
+teigeodata-sync = { workspace = true, features = ["client", "repo", "write"] }
+zstd = { version = "0.14.3", default-features = false }
 
 [lints]
 workspace = true

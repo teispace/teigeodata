@@ -79,6 +79,9 @@ fn {{ e.snake }}_of(value: jni::sys::jint, field: &str) -> Result<teigeodata_api
 {% for line in f.doc %}
 /// {{ line }}
 {% endfor %}
+{% if f.feature %}
+#[cfg(feature = "{{ f.feature }}")]
+{% endif %}
 #[unsafe(no_mangle)]
 pub extern "system" fn {{ symbol }}<'caller>(
     mut unowned: EnvUnowned<'caller>,
@@ -211,6 +214,9 @@ pub extern "system" fn {{ symbol }}<'caller>(
 
 /// Frees a `{{ h.name }}` handle (0 does nothing); the Java class calls it once, with no call
 /// in flight.
+{% if h.feature %}
+#[cfg(feature = "{{ h.feature }}")]
+{% endif %}
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024{{ h.name }}_nativeFree<'caller>(
     _unowned: EnvUnowned<'caller>,

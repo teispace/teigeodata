@@ -58,12 +58,17 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   update, remove, pin, repair, status) as jobs with progress callbacks and cancellation
   ([research](../../02-research/notes/store-api.md)). Done so far: the policy moved from the
   command line into `teigeodata_sync::client`, the CLI on top (its tests unchanged); progress
-  and cancel as a watched transport (`teigeodata_sync::watch`)
+  and cancel as a watched transport (`teigeodata_sync::watch`); the `Store` and `Job` handles
+  in every language (D-279: `create`, `open`, `catalog`, `status`, `pin`, `remove`, `engine`;
+  `refresh`, `install`, `update`, `repair` as jobs with progress, wait, cancel and result),
+  behind the default `store` feature. Left: `find` and `locate`, the platform downloads pass
+  (D-184), and each language's idiomatic awaiting over the job (bindings §6)
 - [ ] The IDL extended for what the surface needs (handles, enums, options structs, jobs), with
   a schema version; the drift check covers every generated file. Done so far: format 2 with
   handles, methods, `&[u8]` and handle parameters; format 3 with records of scalar fields
   (D-276), the C header check comparing struct fields; format 4 with enums (D-277); format 5 with
-  text fields in records. Left: jobs
+  text fields in records; format 6 with `cfg(feature)` gates (D-279). Left: nothing for jobs
+  (they are handles)
 
 ### 5.2 The C ABI and its gates
 - [ ] Generated `teigeodata-ffi` and `teigeodata.h` for the whole surface: opaque handles,
@@ -116,6 +121,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | 5.1: the store and its jobs in every language, the `store` feature (IDL format 6, D-279) | plan |
 | 2026-11-14 | 5.1: text fields in records (IDL format 5), components and languages to open, `MissingComponent` (D-278) | plan |
 | 2026-11-14 | 5.1: enums (IDL format 4, D-277), `OpenOptions` | plan |
 | 2026-11-14 | 5.1: options records (IDL format 3, D-276), `search_with` | plan |

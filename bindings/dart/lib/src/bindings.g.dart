@@ -34,6 +34,8 @@ sealed class TeiGeodataException implements Exception {
         4 => IoException(message),
         5 => CorruptException(message),
         6 => MissingComponentException(message),
+        7 => NetworkException(message),
+        8 => RefusedException(message),
         _ => InternalException(message),
       };
 }
@@ -66,6 +68,16 @@ final class CorruptException extends TeiGeodataException {
 /// The query needs a component of a pack that is not installed: install it, or ask a pack that has it.
 final class MissingComponentException extends TeiGeodataException {
   const MissingComponentException(String message) : super(6, message);
+}
+
+/// The network failed: no mirror answered, or the connection broke. Try again later.
+final class NetworkException extends TeiGeodataException {
+  const NetworkException(String message) : super(7, message);
+}
+
+/// The store refused: the catalog did not verify, a pack is not in it or not installed, a pack another needs, or the store's files cannot be written.
+final class RefusedException extends TeiGeodataException {
+  const RefusedException(String message) : super(8, message);
 }
 
 /// The C callback `tg_callback_u32`.
@@ -220,6 +232,58 @@ final class _TgOpenOptions extends Struct {
   external int languagesLen;
 }
 
+/// What `Store::install` takes of each pack. Every field's zero value is its default
+/// (D-276): the whole pack.
+final class InstallOptions {
+  const InstallOptions({ this.components = '', this.languages = '', this.outlineLevel, this.outlineToleranceM = 0, this.pin = false });
+
+  /// The components, by name and comma-separated (`point,names,search`); what they need is
+  /// added. Empty for every component.
+  final String components;
+
+  /// The languages besides the base names, as comma-separated BCP 47 tags (`en,ne`), at
+  /// most 8. Empty for every language.
+  final String languages;
+
+  /// The deepest admin level of the one outline part installed; `None` for every outline.
+  final int? outlineLevel;
+
+  /// The tolerance in metres of that outline part; 0 is full resolution.
+  final int outlineToleranceM;
+
+  /// Keeps the packs when room is made.
+  final bool pin;
+
+  void _write(_TgInstallOptions to, Pointer<Uint8> componentsAt, int componentsLen, Pointer<Uint8> languagesAt, int languagesLen) {
+    to.components = componentsAt;
+    to.componentsLen = componentsLen;
+    to.languages = languagesAt;
+    to.languagesLen = languagesLen;
+    to.hasOutlineLevel = outlineLevel != null;
+    to.outlineLevel = outlineLevel ?? 0;
+    to.outlineToleranceM = outlineToleranceM;
+    to.pin = pin;
+  }
+}
+
+/// The C struct `tg_install_options`.
+final class _TgInstallOptions extends Struct {
+  external Pointer<Uint8> components;
+  @Size()
+  external int componentsLen;
+  external Pointer<Uint8> languages;
+  @Size()
+  external int languagesLen;
+  @Bool()
+  external bool hasOutlineLevel;
+  @Uint32()
+  external int outlineLevel;
+  @Uint32()
+  external int outlineToleranceM;
+  @Bool()
+  external bool pin;
+}
+
 /// The teigeodata library, loaded from a path. One instance per isolate; calls are
 /// synchronous. Functions without callbacks are leaf calls (the cheapest kind).
 final class TeiGeodata {
@@ -256,8 +320,31 @@ final class TeiGeodata {
         _enginePostalCodesOfNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_postal_codes_of', isLeaf: true),
         _enginePostalAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_postal_at', isLeaf: true),
         _engineTzAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_tz_at', isLeaf: true),
-        _engineByIsoNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_by_iso', isLeaf: true) {
+        _engineByIsoNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_by_iso', isLeaf: true),
+        _storeFree = lib.lookup<NativeFunction<Void Function(Pointer<Void>)>>('tg_store_free'),
+        _storeCreateNative = lib.lookupFunction<Int32 Function(Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_create', isLeaf: true),
+        _storeOpenNative = lib.lookupFunction<Int32 Function(Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_open', isLeaf: true),
+        _storeDamagedNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<TgBytes>)>('tg_store_damaged', isLeaf: true),
+        _storeCatalogNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<TgBytes>)>('tg_store_catalog', isLeaf: true),
+        _storeStatusNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Bool, Pointer<TgBytes>), int Function(Pointer<Void>, bool, Pointer<TgBytes>)>('tg_store_status', isLeaf: true),
+        _storePinNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Bool), int Function(Pointer<Void>, Pointer<Uint8>, int, bool)>('tg_store_pin', isLeaf: true),
+        _storeRemoveNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_store_remove', isLeaf: true),
+        _storeEngineNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Pointer<Void>>)>('tg_store_engine', isLeaf: true),
+        _storeRefreshNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_refresh', isLeaf: true),
+        _storeInstallNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>)>('tg_store_install', isLeaf: true),
+        _storeUpdateNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_update', isLeaf: true),
+        _storeRepairNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_repair', isLeaf: true),
+        _jobFree = lib.lookup<NativeFunction<Void Function(Pointer<Void>)>>('tg_job_free'),
+        _jobWaitProgressNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Uint64, Uint32, Pointer<Uint64>), int Function(Pointer<Void>, int, int, Pointer<Uint64>)>('tg_job_wait_progress', isLeaf: true),
+        _jobSeqNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint64>), int Function(Pointer<Void>, Pointer<Uint64>)>('tg_job_seq', isLeaf: true),
+        _jobDoneBytesNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint64>), int Function(Pointer<Void>, Pointer<Uint64>)>('tg_job_done_bytes', isLeaf: true),
+        _jobTotalBytesNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint64>), int Function(Pointer<Void>, Pointer<Uint64>)>('tg_job_total_bytes', isLeaf: true),
+        _jobIsEndedNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Bool>), int Function(Pointer<Void>, Pointer<Bool>)>('tg_job_is_ended', isLeaf: true),
+        _jobCancelNative = lib.lookupFunction<Int32 Function(Pointer<Void>), int Function(Pointer<Void>)>('tg_job_cancel', isLeaf: true),
+        _jobResultNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<TgBytes>)>('tg_job_result', isLeaf: true) {
     _engineFinalizer = NativeFinalizer(_engineFree.cast());
+    _storeFinalizer = NativeFinalizer(_storeFree.cast());
+    _jobFinalizer = NativeFinalizer(_jobFree.cast());
   }
 
   /// Opens the library at [path] (for example `libteigeodata_ffi.dylib`).
@@ -297,12 +384,36 @@ final class TeiGeodata {
   final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _enginePostalAtNative;
   final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _engineTzAtNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineByIsoNative;
+  final Pointer<NativeFunction<Void Function(Pointer<Void>)>> _storeFree;
+  late final NativeFinalizer _storeFinalizer;
+  final int Function(Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Pointer<Void>>) _storeCreateNative;
+  final int Function(Pointer<Uint8>, int, Pointer<Pointer<Void>>) _storeOpenNative;
+  final int Function(Pointer<Void>, Pointer<TgBytes>) _storeDamagedNative;
+  final int Function(Pointer<Void>, Pointer<TgBytes>) _storeCatalogNative;
+  final int Function(Pointer<Void>, bool, Pointer<TgBytes>) _storeStatusNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, bool) _storePinNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _storeRemoveNative;
+  final int Function(Pointer<Void>, Pointer<Pointer<Void>>) _storeEngineNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>) _storeRefreshNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>) _storeInstallNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>) _storeUpdateNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>) _storeRepairNative;
+  final Pointer<NativeFunction<Void Function(Pointer<Void>)>> _jobFree;
+  late final NativeFinalizer _jobFinalizer;
+  final int Function(Pointer<Void>, int, int, Pointer<Uint64>) _jobWaitProgressNative;
+  final int Function(Pointer<Void>, Pointer<Uint64>) _jobSeqNative;
+  final int Function(Pointer<Void>, Pointer<Uint64>) _jobDoneBytesNative;
+  final int Function(Pointer<Void>, Pointer<Uint64>) _jobTotalBytesNative;
+  final int Function(Pointer<Void>, Pointer<Bool>) _jobIsEndedNative;
+  final int Function(Pointer<Void>) _jobCancelNative;
+  final int Function(Pointer<Void>, Pointer<TgBytes>) _jobResultNative;
 
   // Scratch memory reused by every call: the output slots and a growing input buffer.
   final Pointer<TgBytes> _bytes = calloc<TgBytes>();
   final Pointer<Uint64> _word = calloc<Uint64>();
   final Pointer<_TgSearchOptions> _searchOptions = calloc<_TgSearchOptions>();
   final Pointer<_TgOpenOptions> _openOptions = calloc<_TgOpenOptions>();
+  final Pointer<_TgInstallOptions> _installOptions = calloc<_TgInstallOptions>();
   Pointer<Uint8> _input = nullptr;
   int _inputCap = 0;
 
@@ -318,6 +429,7 @@ final class TeiGeodata {
     calloc.free(_word);
     calloc.free(_searchOptions);
     calloc.free(_openOptions);
+    calloc.free(_installOptions);
     if (_inputCap > 0) malloc.free(_input);
   }
 
@@ -636,6 +748,139 @@ final class TeiGeodata {
     _check(status);
     return _takeBlob();
   }
+
+  Store _storeCreate(String root, String repo, String assets, Uint8List trustedRoot) {
+    final rootAt = 0;
+    final rootLen = _utf8(root, rootAt);
+    final repoAt = rootAt + rootLen;
+    final repoLen = _utf8(repo, repoAt);
+    final assetsAt = repoAt + repoLen;
+    final assetsLen = _utf8(assets, assetsAt);
+    final trustedRootAt = assetsAt + assetsLen;
+    final trustedRootLen = _copy(trustedRoot, trustedRootAt);
+    final status = _storeCreateNative(_input + rootAt, rootLen, _input + repoAt, repoLen, _input + assetsAt, assetsLen, _input + trustedRootAt, trustedRootLen, _word.cast());
+    _check(status);
+    return Store._(this, _word.cast<Pointer<Void>>().value);
+  }
+
+  Store _storeOpen(String root) {
+    final rootLen = _utf8(root);
+    final status = _storeOpenNative(_input, rootLen, _word.cast());
+    _check(status);
+    return Store._(this, _word.cast<Pointer<Void>>().value);
+  }
+
+  String _storeDamaged(Pointer<Void> handle) {
+    final status = _storeDamagedNative(handle, _bytes);
+    _check(status);
+    return _takeString();
+  }
+
+  Uint8List _storeCatalog(Pointer<Void> handle) {
+    final status = _storeCatalogNative(handle, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _storeStatus(Pointer<Void> handle, bool deep) {
+    final status = _storeStatusNative(handle, deep, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  void _storePin(Pointer<Void> handle, String pack, bool on) {
+    final packLen = _utf8(pack);
+    final status = _storePinNative(handle, _input, packLen, on);
+    _check(status);
+  }
+
+  Uint8List _storeRemove(Pointer<Void> handle, String pack) {
+    final packLen = _utf8(pack);
+    final status = _storeRemoveNative(handle, _input, packLen, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Engine _storeEngine(Pointer<Void> handle) {
+    final status = _storeEngineNative(handle, _word.cast());
+    _check(status);
+    return Engine._(this, _word.cast<Pointer<Void>>().value);
+  }
+
+  Job _storeRefresh(Pointer<Void> handle, String countries) {
+    final countriesLen = _utf8(countries);
+    final status = _storeRefreshNative(handle, _input, countriesLen, _word.cast());
+    _check(status);
+    return Job._(this, _word.cast<Pointer<Void>>().value);
+  }
+
+  Job _storeInstall(Pointer<Void> handle, String packs, InstallOptions options) {
+    final packsAt = 0;
+    final packsLen = _utf8(packs, packsAt);
+    final optionsComponentsAt = packsAt + packsLen;
+    final optionsComponentsLen = _utf8(options.components, optionsComponentsAt);
+    final optionsLanguagesAt = optionsComponentsAt + optionsComponentsLen;
+    final optionsLanguagesLen = _utf8(options.languages, optionsLanguagesAt);
+    options._write(_installOptions.ref, _input + optionsComponentsAt, optionsComponentsLen, _input + optionsLanguagesAt, optionsLanguagesLen);
+    final status = _storeInstallNative(handle, _input, packsLen, _installOptions, _word.cast());
+    _check(status);
+    return Job._(this, _word.cast<Pointer<Void>>().value);
+  }
+
+  Job _storeUpdate(Pointer<Void> handle, String packs) {
+    final packsLen = _utf8(packs);
+    final status = _storeUpdateNative(handle, _input, packsLen, _word.cast());
+    _check(status);
+    return Job._(this, _word.cast<Pointer<Void>>().value);
+  }
+
+  Job _storeRepair(Pointer<Void> handle, String pack) {
+    final packLen = _utf8(pack);
+    final status = _storeRepairNative(handle, _input, packLen, _word.cast());
+    _check(status);
+    return Job._(this, _word.cast<Pointer<Void>>().value);
+  }
+
+  int _jobWaitProgress(Pointer<Void> handle, int seq, int timeoutMs) {
+    final status = _jobWaitProgressNative(handle, seq, timeoutMs, _word.cast());
+    _check(status);
+    return _word.cast<Uint64>().value;
+  }
+
+  int _jobSeq(Pointer<Void> handle) {
+    final status = _jobSeqNative(handle, _word.cast());
+    _check(status);
+    return _word.cast<Uint64>().value;
+  }
+
+  int _jobDoneBytes(Pointer<Void> handle) {
+    final status = _jobDoneBytesNative(handle, _word.cast());
+    _check(status);
+    return _word.cast<Uint64>().value;
+  }
+
+  int _jobTotalBytes(Pointer<Void> handle) {
+    final status = _jobTotalBytesNative(handle, _word.cast());
+    _check(status);
+    return _word.cast<Uint64>().value;
+  }
+
+  bool _jobIsEnded(Pointer<Void> handle) {
+    final status = _jobIsEndedNative(handle, _word.cast());
+    _check(status);
+    return _word.cast<Bool>().value;
+  }
+
+  void _jobCancel(Pointer<Void> handle) {
+    final status = _jobCancelNative(handle);
+    _check(status);
+  }
+
+  Uint8List _jobResult(Pointer<Void> handle) {
+    final status = _jobResultNative(handle, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
 }
 
 /// Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
@@ -862,4 +1107,170 @@ final class Engine implements Finalizable {
   /// `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
   /// `ErrorCode::Corrupt` if a section read is corrupt.
   Uint8List byIso(String code) => _lib._engineByIso(_live, code);
+}
+
+/// A store of installed packs in one directory: its signed catalog, its packs and their
+/// journal (D-171), shared by every language and the command line (research note
+/// store-api). Long work runs as a `Job` on a thread of its own; one store runs its jobs
+/// one at a time, and its other calls wait for the job running.
+///
+/// Packs are named as catalog paths (`np.places.tgd`) or short (`np`, `np.dem`), several
+/// comma-separated. Results are blobs:
+/// - `catalog`: `path`, `release`, `download`, `disk`, `components`,
+///   `licence`, `state` (`available`, `installed` or `update`);
+/// - `status`: `path`, `release`, `bytes`, `pinned`, `asked`, `health`
+///   (`good`, `length`, `head`, `footer` or `sections`), `components`;
+/// - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;
+/// - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;
+///   `remove`: `path`, `release`.
+///
+/// Freed by [close], or when collected if never closed. Use it on the isolate that made it.
+final class Store implements Finalizable {
+  Store._(this._lib, this._handle) {
+    _lib._storeFinalizer.attach(this, _handle, detach: this);
+  }
+
+  final TeiGeodata _lib;
+  Pointer<Void> _handle;
+
+  Pointer<Void> get _live => _handle == nullptr ? throw StateError('Store is closed') : _handle;
+
+  /// Frees the handle now; later calls throw a [StateError]. Closing twice does nothing.
+  void close() {
+    if (_handle == nullptr) return;
+    _lib._storeFinalizer.detach(this);
+    _lib._storeFree.asFunction<void Function(Pointer<Void>)>(isLeaf: true)(_handle);
+    _handle = nullptr;
+  }
+
+  /// Sets up a store at `root` and opens it: the metadata mirrors `repo` and asset mirrors
+  /// `assets` (comma-separated URLs), and `trusted_root`, the catalog's root metadata, which
+  /// becomes its trust anchor once it verifies by itself. A store set up before is set up
+  /// again with these.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+  static Store create(TeiGeodata lib, String root, String repo, String assets, Uint8List trustedRoot) => lib._storeCreate(root, repo, assets, trustedRoot);
+
+  /// Opens the store at `root`, finishing or undoing an install a crash cut short.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+  static Store open(TeiGeodata lib, String root) => lib._storeOpen(root);
+
+  /// The packs found damaged when the store was opened, comma-separated; empty when none.
+  /// `repair` fetches what they lack.
+  String damaged() => _lib._storeDamaged(_live);
+
+  /// The verified catalog as stored, one row per pack, with its state against the store.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+  Uint8List catalog() => _lib._storeCatalog(_live);
+
+  /// Each installed pack and its health, from a full check of every byte when `deep`.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::Refused` if a pack cannot be read.
+  Uint8List status(bool deep) => _lib._storeStatus(_live, deep);
+
+  /// Pins the pack (kept when room is made), or unpins it.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::Refused` if it is not installed.
+  void pin(String pack, bool on) => _lib._storePin(_live, pack, on);
+
+  /// Removes the packs and the dependencies nothing else needs; returns what was removed.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::Refused` if one is not installed or another pack needs it.
+  Uint8List remove(String pack) => _lib._storeRemove(_live, pack);
+
+  /// An engine over the installed packs, each opened with the components and languages
+  /// installed.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+  Engine engine() => _lib._storeEngine(_live);
+
+  /// Refreshes the catalog for the countries (comma-separated ISO codes) and every country
+  /// installed. Fails with `ErrorCode::Network` or `ErrorCode::Refused`.
+  Job refresh(String countries) => _lib._storeRefresh(_live, countries);
+
+  /// Installs the packs with `options`, dependencies first, refreshing the catalog for their
+  /// countries. Cancelled, it leaves the store as it was; the packs installed before the
+  /// one cut stay installed.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` for an unknown component or language tag, more than 8
+  /// languages, or an outline level above 255; the job's own errors are the job's.
+  Job install(String packs, InstallOptions options) => _lib._storeInstall(_live, packs, options);
+
+  /// Updates the packs (every installed one when empty) to the catalog's releases, keeping
+  /// the components and languages installed.
+  Job update(String packs) => _lib._storeUpdate(_live, packs);
+
+  /// Checks the pack in full and, unless it is whole, fetches what it lacks.
+  Job repair(String pack) => _lib._storeRepair(_live, pack);
+}
+
+/// A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the
+/// next change, a cancel, and its result.
+///
+/// Freed by [close], or when collected if never closed. Use it on the isolate that made it.
+final class Job implements Finalizable {
+  Job._(this._lib, this._handle) {
+    _lib._jobFinalizer.attach(this, _handle, detach: this);
+  }
+
+  final TeiGeodata _lib;
+  Pointer<Void> _handle;
+
+  Pointer<Void> get _live => _handle == nullptr ? throw StateError('Job is closed') : _handle;
+
+  /// Frees the handle now; later calls throw a [StateError]. Closing twice does nothing.
+  void close() {
+    if (_handle == nullptr) return;
+    _lib._jobFinalizer.detach(this);
+    _lib._jobFree.asFunction<void Function(Pointer<Void>)>(isLeaf: true)(_handle);
+    _handle = nullptr;
+  }
+
+  /// Waits until the progress moves past `seq` (from `seq`), the job ends, or
+  /// `timeout_ms` passes; returns the sequence then. Polling with the last one returned
+  /// sees every change.
+  int waitProgress(int seq, int timeoutMs) => _lib._jobWaitProgress(_live, seq, timeoutMs);
+
+  /// The progress's sequence number: it moves on with every change.
+  int seq() => _lib._jobSeq(_live);
+
+  /// Bytes received so far.
+  int doneBytes() => _lib._jobDoneBytes(_live);
+
+  /// Bytes expected, from the catalog's sizes: never below the bytes received, and equal
+  /// to them once the job ends.
+  int totalBytes() => _lib._jobTotalBytes(_live);
+
+  /// Whether the job has ended (done, failed or cancelled); its result is then ready.
+  bool isEnded() => _lib._jobIsEnded(_live);
+
+  /// Asks the job to stop at its next request or chunk; it then fails with
+  /// `ErrorCode::Cancelled` and leaves the store as it was.
+  void cancel() => _lib._jobCancel(_live);
+
+  /// The job's result, waiting for it to end.
+  ///
+  /// # Errors
+  ///
+  /// The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
+  /// or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+  Uint8List result() => _lib._jobResult(_live);
 }

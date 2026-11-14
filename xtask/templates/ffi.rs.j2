@@ -62,6 +62,9 @@ fn {{ e.snake }}_of(value: u32, field: &str) -> Result<teigeodata_api::{{ e.name
 {% endfor %}
 ///
 /// Passed by `const` pointer; null is every field's default (D-276).
+{% if r.feature %}
+#[cfg(feature = "{{ r.feature }}")]
+{% endif %}
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Tg{{ r.name }} {
@@ -84,6 +87,9 @@ pub struct Tg{{ r.name }} {
 {% endfor %}
 }
 
+{% if r.feature %}
+#[cfg(feature = "{{ r.feature }}")]
+{% endif %}
 impl Tg{{ r.name }} {
     /// The API record, checked.
     ///
@@ -115,6 +121,9 @@ impl Tg{{ r.name }} {
 {% for line in f.doc %}
 /// {{ line }}
 {% endfor %}
+{% if f.feature %}
+#[cfg(feature = "{{ f.feature }}")]
+{% endif %}
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn {{ symbol }}(
 {% if f.receiver %}
@@ -197,10 +206,16 @@ pub unsafe extern "C" fn {{ symbol }}(
 {% endfor %}
 ///
 /// Opaque at the C ABI: made by its constructors, freed once with `tg_{{ h.snake }}_free`.
+{% if h.feature %}
+#[cfg(feature = "{{ h.feature }}")]
+{% endif %}
 #[derive(Debug)]
 pub struct Tg{{ h.name }}(teigeodata_api::{{ h.name }});
 
 /// Frees a `{{ h.name }}` handle. Null does nothing. No call on it may be in flight (D-274).
+{% if h.feature %}
+#[cfg(feature = "{{ h.feature }}")]
+{% endif %}
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_{{ h.snake }}_free(handle: *mut Tg{{ h.name }}) {
     // SAFETY: a handle from this library, freed once.

@@ -59,6 +59,18 @@ create_exception!(
     TeiGeodataError,
     "The query needs a component of a pack that is not installed: install it, or ask a pack that has it."
 );
+create_exception!(
+    teigeodata,
+    NetworkError,
+    TeiGeodataError,
+    "The network failed: no mirror answered, or the connection broke. Try again later."
+);
+create_exception!(
+    teigeodata,
+    RefusedError,
+    TeiGeodataError,
+    "The store refused: the catalog did not verify, a pack is not in it or not installed, a pack another needs, or the store's files cannot be written."
+);
 
 fn error(e: teigeodata_api::Error) -> PyErr {
     match e.code {
@@ -68,6 +80,8 @@ fn error(e: teigeodata_api::Error) -> PyErr {
         ErrorCode::Io => IoError::new_err(e.message),
         ErrorCode::Corrupt => CorruptError::new_err(e.message),
         ErrorCode::MissingComponent => MissingComponentError::new_err(e.message),
+        ErrorCode::Network => NetworkError::new_err(e.message),
+        ErrorCode::Refused => RefusedError::new_err(e.message),
     }
 }
 
@@ -316,6 +330,66 @@ impl From<OpenOptions> for teigeodata_api::OpenOptions {
             outline_tolerance_m: r.outline_tolerance_m,
             components: r.components,
             languages: r.languages,
+        }
+    }
+}
+
+/// What `Store::install` takes of each pack. Every field's zero value is its default
+/// (D-276): the whole pack.
+#[cfg(feature = "store")]
+#[pyclass(frozen, get_all, module = "teigeodata")]
+#[derive(Clone, Debug, Default)]
+pub struct InstallOptions {
+    /// The components, by name and comma-separated (`point,names,search`); what they need is
+    /// added. Empty for every component.
+    components: String,
+    /// The languages besides the base names, as comma-separated BCP 47 tags (`en,ne`), at
+    /// most 8. Empty for every language.
+    languages: String,
+    /// The deepest admin level of the one outline part installed; `None` for every outline.
+    outline_level: Option<u32>,
+    /// The tolerance in metres of that outline part; 0 is full resolution.
+    outline_tolerance_m: u32,
+    /// Keeps the packs when room is made.
+    pin: bool,
+}
+
+#[cfg(feature = "store")]
+#[pymethods]
+impl InstallOptions {
+    /// Keyword arguments only; each left out is its zero value, the default (D-276).
+    #[new]
+    #[pyo3(signature = (*, components=String::new(), languages=String::new(), outline_level=None, outline_tolerance_m=0, pin=false))]
+    fn new(
+        components: String,
+        languages: String,
+        outline_level: Option<u32>,
+        outline_tolerance_m: u32,
+        pin: bool,
+    ) -> Self {
+        Self {
+            components,
+            languages,
+            outline_level,
+            outline_tolerance_m,
+            pin,
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{self:?}")
+    }
+}
+
+#[cfg(feature = "store")]
+impl From<InstallOptions> for teigeodata_api::InstallOptions {
+    fn from(r: InstallOptions) -> Self {
+        Self {
+            components: r.components,
+            languages: r.languages,
+            outline_level: r.outline_level,
+            outline_tolerance_m: r.outline_tolerance_m,
+            pin: r.pin,
         }
     }
 }
@@ -653,14 +727,212 @@ impl Engine {
     }
 }
 
+/// A store of installed packs in one directory: its signed catalog, its packs and their
+/// journal (D-171), shared by every language and the command line (research note
+/// store-api). Long work runs as a `Job` on a thread of its own; one store runs its jobs
+/// one at a time, and its other calls wait for the job running.
+///
+/// Packs are named as catalog paths (`np.places.tgd`) or short (`np`, `np.dem`), several
+/// comma-separated. Results are blobs:
+/// - `catalog`: `path`, `release`, `download`, `disk`, `components`,
+///   `licence`, `state` (`available`, `installed` or `update`);
+/// - `status`: `path`, `release`, `bytes`, `pinned`, `asked`, `health`
+///   (`good`, `length`, `head`, `footer` or `sections`), `components`;
+/// - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;
+/// - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;
+///   `remove`: `path`, `release`.
+#[cfg(feature = "store")]
+#[pyclass(frozen, module = "teigeodata")]
+#[derive(Debug)]
+pub struct Store(teigeodata_api::Store);
+
+#[cfg(feature = "store")]
+#[pymethods]
+impl Store {
+    /// Sets up a store at `root` and opens it: the metadata mirrors `repo` and asset mirrors
+    /// `assets` (comma-separated URLs), and `trusted_root`, the catalog's root metadata, which
+    /// becomes its trust anchor once it verifies by itself. A store set up before is set up
+    /// again with these.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Refused` if the root does not verify or the store cannot be written.
+    #[staticmethod]
+    fn create(root: &str, repo: &str, assets: &str, trusted_root: &[u8]) -> PyResult<Store> {
+        let value = teigeodata_api::Store::create(root, repo, assets, trusted_root);
+        let value = value.map_err(error)?;
+        Ok(Store(value))
+    }
+    /// Opens the store at `root`, finishing or undoing an install a crash cut short.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Refused` if it is not a store or its journal cannot be read.
+    #[staticmethod]
+    fn open(root: &str) -> PyResult<Store> {
+        let value = teigeodata_api::Store::open(root);
+        let value = value.map_err(error)?;
+        Ok(Store(value))
+    }
+    /// The packs found damaged when the store was opened, comma-separated; empty when none.
+    /// `repair` fetches what they lack.
+    fn damaged<'py>(&self, py: Python<'py>) -> String {
+        py.detach(|| self.0.damaged())
+    }
+    /// The verified catalog as stored, one row per pack, with its state against the store.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Refused` before a refresh, or if the stored catalog no longer verifies.
+    fn catalog<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.catalog());
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// Each installed pack and its health, from a full check of every byte when `deep`.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Refused` if a pack cannot be read.
+    fn status<'py>(&self, py: Python<'py>, deep: bool) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.status(deep));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// Pins the pack (kept when room is made), or unpins it.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Refused` if it is not installed.
+    fn pin<'py>(&self, py: Python<'py>, pack: &str, on: bool) -> PyResult<()> {
+        let value = py.detach(|| self.0.pin(pack, on));
+        value.map_err(error)?;
+        Ok(())
+    }
+    /// Removes the packs and the dependencies nothing else needs; returns what was removed.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Refused` if one is not installed or another pack needs it.
+    fn remove<'py>(&self, py: Python<'py>, pack: &str) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.remove(pack));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// An engine over the installed packs, each opened with the components and languages
+    /// installed.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Io` or `ErrorCode::Corrupt` if a pack cannot be opened.
+    fn engine<'py>(&self, py: Python<'py>) -> PyResult<Engine> {
+        let value = py.detach(|| self.0.engine());
+        let value = value.map_err(error)?;
+        Ok(Engine(value))
+    }
+    /// Refreshes the catalog for the countries (comma-separated ISO codes) and every country
+    /// installed. Fails with `ErrorCode::Network` or `ErrorCode::Refused`.
+    fn refresh<'py>(&self, py: Python<'py>, countries: &str) -> Job {
+        Job(py.detach(|| self.0.refresh(countries)))
+    }
+    /// Installs the packs with `options`, dependencies first, refreshing the catalog for their
+    /// countries. Cancelled, it leaves the store as it was; the packs installed before the
+    /// one cut stay installed.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for an unknown component or language tag, more than 8
+    /// languages, or an outline level above 255; the job's own errors are the job's.
+    fn install<'py>(
+        &self,
+        py: Python<'py>,
+        packs: &str,
+        options: &Bound<'_, InstallOptions>,
+    ) -> PyResult<Job> {
+        let options = &teigeodata_api::InstallOptions::from(options.get().clone());
+        let value = py.detach(|| self.0.install(packs, options));
+        let value = value.map_err(error)?;
+        Ok(Job(value))
+    }
+    /// Updates the packs (every installed one when empty) to the catalog's releases, keeping
+    /// the components and languages installed.
+    fn update<'py>(&self, py: Python<'py>, packs: &str) -> Job {
+        Job(py.detach(|| self.0.update(packs)))
+    }
+    /// Checks the pack in full and, unless it is whole, fetches what it lacks.
+    fn repair<'py>(&self, py: Python<'py>, pack: &str) -> Job {
+        Job(py.detach(|| self.0.repair(pack)))
+    }
+}
+
+/// A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the
+/// next change, a cancel, and its result.
+#[cfg(feature = "store")]
+#[pyclass(frozen, module = "teigeodata")]
+#[derive(Debug)]
+pub struct Job(teigeodata_api::Job);
+
+#[cfg(feature = "store")]
+#[pymethods]
+impl Job {
+    /// Waits until the progress moves past `seq` (from `seq`), the job ends, or
+    /// `timeout_ms` passes; returns the sequence then. Polling with the last one returned
+    /// sees every change.
+    fn wait_progress<'py>(&self, py: Python<'py>, seq: u64, timeout_ms: u32) -> u64 {
+        py.detach(|| self.0.wait_progress(seq, timeout_ms))
+    }
+    /// The progress's sequence number: it moves on with every change.
+    fn seq<'py>(&self, py: Python<'py>) -> u64 {
+        py.detach(|| self.0.seq())
+    }
+    /// Bytes received so far.
+    fn done_bytes<'py>(&self, py: Python<'py>) -> u64 {
+        py.detach(|| self.0.done_bytes())
+    }
+    /// Bytes expected, from the catalog's sizes: never below the bytes received, and equal
+    /// to them once the job ends.
+    fn total_bytes<'py>(&self, py: Python<'py>) -> u64 {
+        py.detach(|| self.0.total_bytes())
+    }
+    /// Whether the job has ended (done, failed or cancelled); its result is then ready.
+    fn is_ended<'py>(&self, py: Python<'py>) -> bool {
+        py.detach(|| self.0.is_ended())
+    }
+    /// Asks the job to stop at its next request or chunk; it then fails with
+    /// `ErrorCode::Cancelled` and leaves the store as it was.
+    fn cancel<'py>(&self, py: Python<'py>) {
+        py.detach(|| self.0.cancel());
+    }
+    /// The job's result, waiting for it to end.
+    ///
+    /// # Errors
+    ///
+    /// The job's: `ErrorCode::Network`, `ErrorCode::Refused`, `ErrorCode::Cancelled`,
+    /// or `ErrorCode::Io` and `ErrorCode::Corrupt` for an engine's packs.
+    fn result<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.result());
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+}
+
 /// The native part of the `teigeodata` package.
 #[pymodule(gil_used = false)]
 mod _native {
+    #[cfg(feature = "store")]
+    #[pymodule_export]
+    use super::InstallOptions;
+    #[cfg(feature = "store")]
+    #[pymodule_export]
+    use super::Job;
+    #[cfg(feature = "store")]
+    #[pymodule_export]
+    use super::Store;
     #[pymodule_export]
     use super::{
         CancelledError, CorruptError, Engine, InternalError, InvalidArgumentError, IoError, Load,
-        MissingComponentError, OpenOptions, SearchOptions, TeiGeodataError, Verify, distance_m,
-        fold, noop, progress, sample_rows, version,
+        MissingComponentError, NetworkError, OpenOptions, RefusedError, SearchOptions,
+        TeiGeodataError, Verify, distance_m, fold, noop, progress, sample_rows, version,
     };
 
     /// Most rows `sample_rows` builds in one call.

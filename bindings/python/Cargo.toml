@@ -14,8 +14,14 @@ crate-type = ["cdylib"]
 test = false
 doctest = false
 
+[features]
+default = ["store"]
+# The store (`Store`, `Job`) in the module; without it the HTTP and TLS stack is left out
+# (teigeodata-api's `store` feature).
+store = ["teigeodata-api/store"]
+
 [dependencies]
-teigeodata-api.workspace = true 
+teigeodata-api.workspace = true
 pyo3 = { version = "0.30.1", features = ["abi3-py310"] }
 
 [lints]

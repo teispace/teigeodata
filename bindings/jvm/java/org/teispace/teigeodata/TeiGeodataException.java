@@ -72,4 +72,22 @@ public class TeiGeodataException extends RuntimeException {
             super(6, message);
         }
     }
+
+    /** The network failed: no mirror answered, or the connection broke. Try again later. Code 7. */
+    public static final class Network extends TeiGeodataException {
+        private static final long serialVersionUID = 1L;
+
+        Network(String message) {
+            super(7, message);
+        }
+    }
+
+    /** The store refused: the catalog did not verify, a pack is not in it or not installed, a pack another needs, or the store's files cannot be written. Code 8. */
+    public static final class Refused extends TeiGeodataException {
+        private static final long serialVersionUID = 1L;
+
+        Refused(String message) {
+            super(8, message);
+        }
+    }
 }

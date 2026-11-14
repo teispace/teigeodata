@@ -21,7 +21,7 @@ members = [
 ]
 
 [workspace.dependencies]
-teigeodata-api = { version = "0.3.1", path = "crates/teigeodata-api" }
+teigeodata-api = { version = "0.3.1", path = "crates/teigeodata-api", default-features = false }
 teigeodata-blob = { version = "0.3.1", path = "crates/teigeodata-blob" }
 teigeodata-core = { version = "0.3.1", path = "crates/teigeodata-core" }
 teigeodata-engine = { version = "0.3.1", path = "crates/teigeodata-engine" }

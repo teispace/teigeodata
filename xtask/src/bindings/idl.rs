@@ -9,7 +9,7 @@ use syn::spanned::Spanned;
 use syn::{Attribute, Expr, FnArg, GenericArgument, Item, Lit, Pat, PathArguments, ReturnType};
 
 /// Version of the IDL format itself.
-pub(crate) const FORMAT: u32 = 5;
+pub(crate) const FORMAT: u32 = 6;
 
 /// The extracted surface.
 #[derive(Debug, Serialize)]
@@ -60,6 +60,9 @@ pub(crate) struct Function {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) returns_handle: Option<String>,
     pub(crate) fallible: bool,
+    /// The Cargo feature it needs (`#[cfg(feature = "store")]`, or its handle's); every
+    /// generated Rust layer gates it the same way.
+    pub(crate) feature: Option<String>,
 }
 
 /// One parameter. `callback` is set when `ty` is [`Ty::Callback`], `handle` when it is
@@ -87,6 +90,8 @@ pub(crate) struct Record {
     pub(crate) fields: Vec<Field>,
     /// No text field: the record is `Copy` in every shim.
     pub(crate) copy: bool,
+    /// The Cargo feature it needs, as [`Function::feature`].
+    pub(crate) feature: Option<String>,
 }
 
 /// One field of a record: a scalar, an `Option` of one (`optional`), an enum, or text (`str`,
@@ -129,6 +134,8 @@ pub(crate) struct Handle {
     pub(crate) snake: String,
     pub(crate) doc: Vec<String>,
     pub(crate) methods: Vec<Function>,
+    /// The Cargo feature it and its methods need, as [`Function::feature`].
+    pub(crate) feature: Option<String>,
 }
 
 /// A callback's signature: scalar arguments, a `bool` result (`false` cancels). `id` names the
@@ -254,12 +261,16 @@ pub(crate) fn extract(source: &str) -> Result<Idl, Vec<String>> {
                     Err(p) => problems.push(p),
                 }
             } else {
-                idl.handles.push(Handle {
-                    snake: snake(&name),
-                    name,
-                    doc: docs(&s.attrs),
-                    methods: Vec::new(),
-                });
+                match feature(&s.attrs) {
+                    Ok(feature) => idl.handles.push(Handle {
+                        snake: snake(&name),
+                        name,
+                        doc: docs(&s.attrs),
+                        methods: Vec::new(),
+                        feature,
+                    }),
+                    Err(p) => problems.push(p),
+                }
             }
         }
     }
@@ -274,6 +285,9 @@ pub(crate) fn extract(source: &str) -> Result<Idl, Vec<String>> {
             }
             Item::Impl(i) if i.trait_.is_none() => methods(i, &names).map(|(owner, mut m)| {
                 if let Some(h) = idl.handles.iter_mut().find(|h| h.name == owner) {
+                    for f in &mut m {
+                        f.feature = f.feature.take().or_else(|| h.feature.clone());
+                    }
                     h.methods.append(&mut m);
                 }
             }),
@@ -287,18 +301,8 @@ pub(crate) fn extract(source: &str) -> Result<Idl, Vec<String>> {
             problems.push(p);
         }
     }
-    let all = idl
-        .functions
-        .iter()
-        .chain(idl.handles.iter().flat_map(|h| &h.methods));
-    for cb in all
-        .flat_map(|f| &f.params)
-        .filter_map(|p| p.callback.as_ref())
-    {
-        if !idl.callbacks.contains(cb) {
-            idl.callbacks.push(cb.clone());
-        }
-    }
+    idl.callbacks = callbacks(&idl);
+    problems.extend(gates(&idl));
     if idl.error_codes.is_empty() {
         problems.push("no `ErrorCode` enum".into());
     }
@@ -363,7 +367,88 @@ fn record(s: &syn::ItemStruct, enums: &[String]) -> Result<Record, String> {
         doc: docs(&s.attrs),
         copy: fields.iter().all(|f| f.ty != Ty::Str),
         fields,
+        feature: feature(&s.attrs)?,
     })
+}
+
+/// The Cargo feature an item needs: `#[cfg(feature = "name")]`, the one form of `cfg` a
+/// boundary item may carry.
+fn feature(attrs: &[Attribute]) -> Result<Option<String>, String> {
+    let mut out = None;
+    for a in attrs.iter().filter(|a| a.path().is_ident("cfg")) {
+        let name = a
+            .parse_args::<syn::MetaNameValue>()
+            .ok()
+            .filter(|m| m.path.is_ident("feature") && out.is_none())
+            .and_then(|m| match m.value {
+                Expr::Lit(syn::ExprLit {
+                    lit: Lit::Str(s), ..
+                }) => Some(s.value()),
+                _ => None,
+            })
+            .ok_or_else(|| at(a.span(), "only one `#[cfg(feature = \"..\")]` crosses"))?;
+        out = Some(name);
+    }
+    Ok(out)
+}
+
+/// Each callback signature the functions use, once, in order.
+fn callbacks(idl: &Idl) -> Vec<Callback> {
+    let mut out: Vec<Callback> = Vec::new();
+    let all = idl
+        .functions
+        .iter()
+        .chain(idl.handles.iter().flat_map(|h| &h.methods));
+    for cb in all
+        .flat_map(|f| &f.params)
+        .filter_map(|p| p.callback.as_ref())
+    {
+        if !out.contains(cb) {
+            out.push(cb.clone());
+        }
+    }
+    out
+}
+
+/// An item without a feature may not use a type that has one: it would not build without it.
+fn gates(idl: &Idl) -> Vec<String> {
+    let gated = |name: &str| {
+        idl.handles
+            .iter()
+            .find(|h| h.name == name)
+            .map(|h| &h.feature)
+            .or_else(|| {
+                idl.records
+                    .iter()
+                    .find(|r| r.name == name)
+                    .map(|r| &r.feature)
+            })
+            .cloned()
+            .flatten()
+    };
+    let all = idl
+        .functions
+        .iter()
+        .chain(idl.handles.iter().flat_map(|h| &h.methods));
+    let mut problems = Vec::new();
+    for f in all {
+        let used = f
+            .params
+            .iter()
+            .filter_map(|p| p.handle.as_deref().or(p.record.as_deref()))
+            .chain(f.returns_handle.as_deref());
+        for ty in used {
+            if let Some(need) = gated(ty)
+                && f.feature.as_ref() != Some(&need)
+            {
+                problems.push(format!(
+                    "`{}` uses `{ty}`, which needs feature `{need}`: gate it the same way",
+                    f.name
+                ));
+            }
+        }
+    }
+    problems
 }
 
 fn derives_default(attrs: &[Attribute]) -> bool {
@@ -612,6 +697,7 @@ fn function(
         returns,
         returns_handle,
         fallible,
+        feature: feature(attrs)?,
     })
 }
 
@@ -934,10 +1020,45 @@ impl Engine {
             "#[derive(Default)] pub enum E { #[default] A = 0, B(u32) = 1 }",
             "#[derive(Default)] pub enum E { A = 0, #[default] B = 1 }",
             "#[derive(Default)] pub enum E {}",
+            "#[cfg(test)] pub struct S { x: u32 }",
+            "#[cfg(feature = \"a\")] #[cfg(feature = \"b\")] pub struct S { x: u32 }",
         ] {
             let src = format!("{API}\n{bad}");
             let err = extract(&src).unwrap_err();
             assert!(err[0].contains("lib.rs:"), "{bad}: {err:?}");
+        }
+    }
+
+    #[test]
+    fn features_gate_handles_records_and_methods() {
+        let src = format!(
+            "{API}\n#[cfg(feature = \"store\")] pub struct S {{ x: u32 }}\n\
+             #[cfg(feature = \"store\")] #[derive(Default)] pub struct O {{ pub n: u32 }}\n\
+             impl S {{ pub fn open() -> Result<S> {{ todo!() }} pub fn go(&self, o: &O) {{}} }}"
+        );
+        let idl = extract(&src).unwrap();
+        let s = idl.handles.iter().find(|h| h.name == "S").unwrap();
+        assert_eq!(s.feature.as_deref(), Some("store"));
+        assert_eq!(s.methods.len(), 2);
+        assert!(
+            s.methods
+                .iter()
+                .all(|m| m.feature.as_deref() == Some("store"))
+        );
+        let o = idl.records.iter().find(|r| r.name == "O").unwrap();
+        assert_eq!(o.feature.as_deref(), Some("store"));
+        assert!(idl.functions.iter().all(|f| f.feature.is_none()));
+        // An ungated function may not use a gated type: it would not build without it.
+        for (leak, ty) in [
+            ("pub fn leak(s: &S) {}", "S"),
+            ("pub fn leak(o: &O) {}", "O"),
+        ] {
+            let err = extract(&format!("{src}\n{leak}")).unwrap_err();
+            assert!(
+                err.iter()
+                    .any(|e| e.contains(&format!("`leak` uses `{ty}`"))),
+                "{err:?}"
+            );
         }
     }
 

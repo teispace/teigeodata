@@ -36,8 +36,22 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   most 8), for packs installed in part or read in some languages only.
 - Error code `MissingComponent` (6, D-278): a query needs a component the pack was opened
   without; before, this was `InvalidArgument`.
+- The `Store` and `Job` handles in every binding (D-279, research note store-api): `create`,
+  `open`, `catalog`, `status`, `pin`, `remove`, `engine` (an engine over the installed packs),
+  and `refresh`, `install` (with `InstallOptions`: components, languages, outline, pin),
+  `update` and `repair` as jobs on a thread of their own, with `wait_progress`, `seq`,
+  `done_bytes`, `total_bytes`, `is_ended`, `cancel` and `result`. A cancelled install leaves
+  the store as it was.
+- Error codes `Network` (7) and `Refused` (8) (D-279).
+- IDL format 6: a handle, record or function may carry `#[cfg(feature = "…")]`; every
+  generated Rust layer gates it the same way. The `store` feature (on by default) of
+  `teigeodata-api`, `teigeodata-ffi` and the Python, Node and JVM crates holds the store;
+  without it the C library is 949 KB instead of 3.1 MB (D-279).
 
 ### Changed
+
+- The `http` transport verifies TLS with Mozilla's roots (`webpki-roots`), as it always did:
+  the unused `rustls-platform-verifier` is dropped (D-279 amends D-168).
 
 - The store's policy (init, refresh, install with dependencies and selections, update,
   remove, pin, repair, status) moved from the command line into `teigeodata_sync::client`

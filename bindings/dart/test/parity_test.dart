@@ -237,4 +237,39 @@ void main() {
     // An engine never closed is freed by its finalizer.
     Engine(tg).openBytes(File('../${e['fixture']}').readAsBytesSync());
   });
+
+  test('store', () {
+    // The store (parity.json, store): the fixture root, a mirror that refuses connections.
+    final st = parity['store'] as Map<String, dynamic>;
+    final root = File('../${st['root']}').readAsBytesSync();
+    final mirror = st['mirror'] as String, pack = st['pack'] as String;
+    final d = Directory.systemTemp.createTempSync('tg-store-');
+    addTearDown(() => d.deleteSync(recursive: true));
+    expect(() => Store.open(tg, '${d.path}/missing'), throwsA(isA<RefusedException>()));
+    expect(
+      () => Store.create(tg, '${d.path}/bad', mirror, mirror, Uint8List.fromList(utf8.encode('{}'))),
+      throwsA(isA<RefusedException>()),
+    );
+    Store.create(tg, '${d.path}/s', mirror, mirror, root).close();
+    final store = Store.open(tg, '${d.path}/s');
+    addTearDown(store.close);
+    expect(store.damaged(), '');
+    expect(strings(store.catalog(), 'path'), isEmpty);
+    expect(strings(store.status(false), 'path'), isEmpty);
+    final engine = store.engine();
+    expect(engine.layers(), 0);
+    engine.close();
+    expect(
+      () => store.install(pack, InstallOptions(components: st['bad_components'] as String)),
+      throwsA(isA<InvalidArgumentException>()),
+    );
+    expect(() => store.remove(pack), throwsA(isA<RefusedException>()));
+    final job = store.refresh(pack);
+    addTearDown(job.close);
+    expect(job.result, throwsA(isA<NetworkException>()));
+    expect(job.isEnded(), isTrue);
+    expect(job.waitProgress(job.seq(), 60000), job.seq());
+    expect(job.doneBytes(), job.totalBytes());
+    job.cancel();
+  });
 }

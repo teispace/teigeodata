@@ -45,6 +45,11 @@ typedef struct tg_bytes {
 typedef bool (*tg_callback_{{ cb.id }})(void *ctx{% for a in cb.args %}, {{ cty(a) }} a{{ loop.index0 }}{% endfor %});
 {% endfor %}
 
+/* The handles, opaque, declared first: a method of one may return another. */
+{% for h in handles %}
+typedef struct tg_{{ h.snake }} tg_{{ h.snake }};
+{% endfor %}
+
 {% for e in enums %}
 
 /* {{ e.doc | join(" ") }} A uint32_t field holds one of these. */
@@ -101,7 +106,6 @@ int32_t {{ symbol }}(
 {% for h in handles %}
 
 /* {{ h.doc | join(" ") }} */
-typedef struct tg_{{ h.snake }} tg_{{ h.snake }};
 
 /* Frees a handle. NULL does nothing. No call on it may be in flight. */
 void tg_{{ h.snake }}_free(tg_{{ h.snake }} *handle);

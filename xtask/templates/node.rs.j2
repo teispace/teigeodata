@@ -73,8 +73,30 @@ fn error(e: teigeodata_api::Error) -> Error<Code> {
 #[napi]
 pub const {{ c.name }}: {{ c.ty }} = {{ c.value }};
 {% endfor %}
-{% macro jsty(p) %}{% if p.ty == "str" %}String{% elif p.ty == "bytes" %}Buffer{% elif p.ty == "handle" %}&{{ p.handle }}{% elif p.ty == "record" %}Option<{{ p.record }}>{% else %}{{ p.ty }}{% endif %}{% endmacro %}
-{% macro rty(f) %}{% if f.returns == "blob" %}Buffer{% elif f.returns == "string" %}String{% elif f.returns == "void" %}(){% elif f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ f.returns }}{% endif %}{% endmacro %}
+/// A JavaScript number as a `u64`: exact up to 2^53; a negative number or NaN reads 0.
+#[allow(
+    dead_code,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a float to integer cast saturates in Rust; byte counts and sequences stay below \
+              2^53; unused when the functions taking a u64 are gated off"
+)]
+const fn u64_of(n: f64) -> u64 {
+    n as u64
+}
+
+/// A `u64` as a JavaScript number: exact up to 2^53, which byte counts and sequences stay below.
+#[allow(
+    dead_code,
+    clippy::cast_precision_loss,
+    reason = "byte counts and sequences stay below 2^53; unused when the functions returning \
+              a u64 are gated off"
+)]
+const fn number(n: u64) -> f64 {
+    n as f64
+}
+{% macro jsty(p) %}{% if p.ty == "str" %}String{% elif p.ty == "bytes" %}Buffer{% elif p.ty == "handle" %}&{{ p.handle }}{% elif p.ty == "record" %}Option<{{ p.record }}>{% elif p.ty == "u64" %}f64{% else %}{{ p.ty }}{% endif %}{% endmacro %}
+{% macro rty(f) %}{% if f.returns == "blob" %}Buffer{% elif f.returns == "string" %}String{% elif f.returns == "void" %}(){% elif f.returns == "handle" %}{{ f.returns_handle }}{% elif f.returns == "u64" %}f64{% else %}{{ f.returns }}{% endif %}{% endmacro %}
 {#
   One export: a free function (`owner` none), a method (`f.receiver`), the constructor (an
   associated `new` returning the handle) or a factory (another associated function).
@@ -87,6 +109,9 @@ pub const {{ c.name }}: {{ c.ty }} = {{ c.value }};
 {% for line in f.doc %}
 /// {{ line }}
 {% endfor %}
+{% if f.feature and not owner %}
+#[cfg(feature = "{{ f.feature }}")]
+{% endif %}
 {% if owner and f.name == "new" and f.returns_handle == owner.name %}
 #[napi(constructor)]
 {% elif owner and not f.receiver and f.returns == "handle" %}
@@ -121,12 +146,14 @@ pub fn {{ f.name }}(
     };
 {% endif %}
 {% set target %}{% if f.receiver %}self.0.{% elif owner %}teigeodata_api::{{ owner.name }}::{% else %}teigeodata_api::{% endif %}{% endset %}
-{% set call %}{{ target }}{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% elif p.ty in ["str", "bytes"] %}&{{ p.name }}{% elif p.ty == "handle" %}&{{ p.name }}.0{% elif p.ty == "record" %}&{{ p.name }}.unwrap_or_default().into(){% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% endset %}
+{% set call %}{{ target }}{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% elif p.ty in ["str", "bytes"] %}&{{ p.name }}{% elif p.ty == "handle" %}&{{ p.name }}.0{% elif p.ty == "record" %}&{{ p.name }}.unwrap_or_default().into(){% elif p.ty == "u64" %}u64_of({{ p.name }}){% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% endset %}
 {% if not wrap %}
 {% if f.returns == "blob" %}
     Buffer::from({{ call }}.into_vec())
 {% elif f.returns == "handle" %}
     {{ f.returns_handle }}({{ call }})
+{% elif f.returns == "u64" %}
+    number({{ call }})
 {% else %}
     {{ call }}{% if f.returns == "void" %};{% endif %}
 
@@ -138,10 +165,12 @@ pub fn {{ f.name }}(
         return Err(rethrow(env, e));
     }
 {% endif %}
-{% if f.fallible %}
+{% if f.fallible and f.returns == "void" %}
+    value.map_err(error)?;
+{% elif f.fallible %}
     let value = value.map_err(error)?;
 {% endif %}
-    Ok({% if f.returns == "blob" %}Buffer::from(value.into_vec()){% elif f.returns == "handle" %}{{ f.returns_handle }}(value){% else %}value{% endif %})
+    Ok({% if f.returns == "void" and f.fallible %}()){% else %}{% if f.returns == "blob" %}Buffer::from(value.into_vec()){% elif f.returns == "handle" %}{{ f.returns_handle }}(value){% elif f.returns == "u64" %}number(value){% else %}value{% endif %}){% endif %}
 {% endif %}
 }
 {% endmacro %}
@@ -187,6 +216,9 @@ impl From<{{ e.name }}> for teigeodata_api::{{ e.name }} {
 {% endfor %}
 ///
 /// A plain object; every field may be left out, for its zero value (D-276).
+{% if r.feature %}
+#[cfg(feature = "{{ r.feature }}")]
+{% endif %}
 #[napi(object)]
 #[derive(Clone, {% if r.copy %}Copy, {% endif %}Debug, Default)]
 pub struct {{ r.name }} {
@@ -198,6 +230,9 @@ pub struct {{ r.name }} {
 {% endfor %}
 }
 
+{% if r.feature %}
+#[cfg(feature = "{{ r.feature }}")]
+{% endif %}
 impl From<{{ r.name }}> for teigeodata_api::{{ r.name }} {
     fn from(r: {{ r.name }}) -> Self {
         Self {
@@ -213,10 +248,16 @@ impl From<{{ r.name }}> for teigeodata_api::{{ r.name }} {
 {% for line in h.doc %}
 /// {{ line }}
 {% endfor %}
+{% if h.feature %}
+#[cfg(feature = "{{ h.feature }}")]
+{% endif %}
 #[napi]
 #[derive(Debug)]
 pub struct {{ h.name }}(teigeodata_api::{{ h.name }});
 
+{% if h.feature %}
+#[cfg(feature = "{{ h.feature }}")]
+{% endif %}
 #[napi]
 impl {{ h.name }} {
 {% for f in h.methods %}
