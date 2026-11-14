@@ -1,11 +1,11 @@
 # The JVM binding as it ships (phase 5.4, D-288): the desktop JAR with the native library of
 # six platforms, tested from the JAR on each OS that can run it, and the Android AAR (16 KB
-# aligned, NDK r30), tested on emulators at API 24 (its minSdk) and 35. On a `v*` tag both are attached to the release.
+# aligned, NDK r30), tested on emulators at API 24 (its minSdk) and 35. A release (release.yml)
+# calls this workflow and publishes both.
 name: jvm
 
 on:
   push:
-    tags: ["v*"]
     branches: [main]
     paths:
       - crates/teigeodata-api/**
@@ -18,12 +18,16 @@ on:
       - xtask/templates/jni.rs.j2
       - .github/workflows/jvm.yml
   workflow_dispatch:
+  # release.yml builds a release with this workflow and publishes what it uploads.
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: jvm-${{ github.ref }}
+  # Called from release.yml, `github.workflow` is the caller's: a release never cancels a
+  # push run, nor a push run a release.
+  group: ${{ github.workflow }}-jvm-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -171,21 +175,3 @@ jobs:
           path: target/jvm/teigeodata-*.aar
           if-no-files-found: error
           retention-days: 14
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [jar, android]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: teigeodata-*
-          path: dist
-          merge-multiple: true
-      - name: Attach to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" ./dist/teigeodata-* --clobber --repo "$GITHUB_REPOSITORY"

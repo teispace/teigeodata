@@ -1,7 +1,7 @@
 ---
 title: "Releases and versioning"
 status: accepted
-updated: 2026-11-14
+updated: 2026-11-15
 ---
 
 # Releases and versioning
@@ -53,7 +53,12 @@ built for a release name the reader version they need in the catalog.
    workspace with a lockfile (`git ls-files '*Cargo.lock'`: the root, `bindings/`, `forge/`,
    `fuzz/`, `tools/size-probe/`, `tools/tough-oracle/`; CI builds each with `--locked`); commit
    `chore(repo): release vX.Y.Z`.
-3. Tag `vX.Y.Z` (annotated) on that commit and push the tag.
+3. Push, then run the `release` workflow on that commit: first as a dry run
+   (`gh workflow run release.yml`), then for real
+   (`gh workflow run release.yml -f dry_run=false`, approved in the `release` environment). It
+   builds every artifact as CI does, adds an SBOM per crate and `SHA256SUMS`, attests them,
+   verifies every attestation, tags `vX.Y.Z`, and publishes the release with every file
+   (D-302). Check one: `gh attestation verify <file> --repo teispace/teigeodata`.
 4. Check from a scratch project: `cargo build` with the `git` + `tag` dependency above, then
    open a pack with `Layer::open` and answer a `get`.
 
@@ -84,6 +89,7 @@ Once the catalog is live, data releases go through it and these pre-releases sto
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-15 | The `release` workflow tags and publishes a release with SBOMs, checksums and attestations; the build workflows no longer run on tags | phase 5.10a (D-302) |
 | 2026-11-12 | Data releases as GitHub pre-releases until the catalog is live; the first, `data-2026.11.12` | consumers need the data before the key ceremony (D-247) |
 | 2026-11-11 | The bindings' versions are part of a release (they were left at 0.0.0 by v0.1.0) | the parity test failed |
 | 2026-11-11 | First version: one workspace version, SemVer with 0.x rules, `git` tags first | TG-01 (D-198) |

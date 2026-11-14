@@ -1,0 +1,249 @@
+# A release (phase 5.10, docs/02-research/notes/release-pipeline.md): the build workflows,
+# called as they run in CI, then every file they built gathered, given SBOMs and SHA256SUMS,
+# and attested (SLSA build provenance through Sigstore), each attestation verified. Run by hand;
+# `dry_run` (the default) stops before anything leaves the repository.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build, attest and check everything, publish nothing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # The version every artifact carries: the workspace's, which each binding's parity test
+  # checks against its own.
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - id: v
+        run: |
+          v=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
+          test -n "$v"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
+            echo "::warning::v$v is already tagged: a real release needs a version bump first"
+            test "${{ inputs.dry_run }}" = true
+          fi
+
+  c:
+    needs: version
+    uses: ./.github/workflows/c-package.yml
+    with:
+      release: true
+  apple:
+    needs: version
+    uses: ./.github/workflows/apple.yml
+  jvm:
+    needs: version
+    uses: ./.github/workflows/jvm.yml
+  python:
+    needs: version
+    uses: ./.github/workflows/python.yml
+  node:
+    needs: version
+    uses: ./.github/workflows/node.yml
+  wasm:
+    needs: version
+    uses: ./.github/workflows/wasm.yml
+
+  # Every file of the release in one place, with its SBOMs and checksums, attested and verified.
+  assemble:
+    needs: [version, c, apple, jvm, python, node, wasm]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
+        with:
+          tool: cargo-cyclonedx@0.5.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: The C archives
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: teigeodata-c-*
+          path: dist
+          merge-multiple: true
+      - name: The XCFramework
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: teigeodata-xcframework
+          path: dist
+      - name: The JAR and the AAR
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          # teigeodata-jar and teigeodata-aar
+          pattern: teigeodata-?ar
+          path: dist
+          merge-multiple: true
+      - name: The wheels
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: python-wheels-*
+          path: dist
+          merge-multiple: true
+      - name: The Node.js packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: node-packages
+          path: npm/node
+      - name: The WebAssembly packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wasm-packages
+          path: npm/wasm
+      - name: Pack the npm packages
+        run: |
+          for d in npm/node/*/ npm/wasm/*/; do (cd "$d" && npm pack --pack-destination "$GITHUB_WORKSPACE/dist"); done
+      - name: The release has every artifact, each of this version
+        run: |
+          cd dist
+          ls -l
+          for f in "teigeodata-c-$VERSION-"* CTeiGeodata.xcframework.zip CTeiGeodata.xcframework.zip.checksum \
+                   teigeodata-*"$VERSION"*.jar teigeodata-*"$VERSION"*.aar "teigeodata-$VERSION-"*.whl \
+                   "teispace-teigeodata-$VERSION.tgz" "teispace-teigeodata-wasm-$VERSION.tgz"; do
+            compgen -G "$f" >/dev/null || { echo "::error::missing: $f"; exit 1; }
+          done
+      - name: SBOMs (CycloneDX) of every crate the artifacts are built from
+        run: |
+          mkdir -p dist/sbom
+          cargo cyclonedx --format json --all-features
+          (cd bindings && cargo cyclonedx --format json --all-features)
+          # One SBOM per crate, written beside its Cargo.toml; published under the crate's name.
+          sbom() {
+            set -- "$1"/*.cdx.json "$2"
+            test "$#" -eq 2 && test -f "$1" || { echo "::error::no single SBOM for $2"; exit 1; }
+            cp "$1" "dist/sbom/$2.cdx.json"
+          }
+          for c in teigeodata-c teigeodata-api teigeodata-engine teigeodata-sync teigeodata-cli; do
+            sbom "crates/$c" "$c"
+          done
+          for c in python node jvm wasm; do
+            sbom "bindings/$c" "teigeodata-$c"
+          done
+          ls -l dist/sbom
+      - name: Checksums
+        run: |
+          cd dist
+          sums=$(find . -type f | sed 's|^\./||' | sort | xargs sha256sum)
+          echo "$sums" > SHA256SUMS
+          cat SHA256SUMS
+      - name: Build provenance of every file
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*
+            dist/sbom/*
+      - name: The C library's SBOM, attested for its archives and the XCFramework
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: |
+            dist/teigeodata-c-*
+            dist/CTeiGeodata.xcframework.zip
+          sbom-path: dist/sbom/teigeodata-c.cdx.json
+      - name: The JVM binding's SBOM, attested for the JAR and the AAR
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: |
+            dist/*.jar
+            dist/*.aar
+          sbom-path: dist/sbom/teigeodata-jvm.cdx.json
+      - name: The Node.js binding's SBOM, attested for its package
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: dist/teispace-teigeodata-${{ env.VERSION }}.tgz
+          sbom-path: dist/sbom/teigeodata-node.cdx.json
+      - name: The WebAssembly binding's SBOM, attested for its packages
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: dist/teispace-teigeodata-wasm-*.tgz
+          sbom-path: dist/sbom/teigeodata-wasm.cdx.json
+      - name: Every attestation verifies
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          n=0
+          for f in * sbom/*; do
+            [ -f "$f" ] || continue
+            gh attestation verify "$f" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" >/dev/null
+            n=$((n + 1))
+          done
+          echo "verified: $n files"
+          set -- teigeodata-c-"$VERSION"-*
+          gh attestation verify "$1" --repo "$GITHUB_REPOSITORY" \
+            --predicate-type https://cyclonedx.org/bom >/dev/null
+          echo "verified: the C library's SBOM attestation"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ env.VERSION }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 30
+
+  # A real run: the tag on the dispatched commit, a draft release with every file, then published
+  # (assets can be added to an immutable release only while it is a draft). The registries and
+  # the Swift release commit follow in 5.10b and 5.10c.
+  github-release:
+    if: ${{ !inputs.dry_run }}
+    needs: [version, assemble]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-${{ env.VERSION }}
+          path: dist
+      - name: The release notes, from the changelog
+        run: |
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "::error::CHANGELOG.md has no section for $VERSION"; exit 1; }
+      - name: Draft, upload, publish
+        run: |
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --draft \
+            --title "v$VERSION" --notes-file notes.md
+          mapfile -t files < <(find dist -type f | sort)
+          gh release upload "v$VERSION" -- "${files[@]}"
+          gh release edit "v$VERSION" --draft=false
+          gh release view "v$VERSION"

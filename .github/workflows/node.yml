@@ -2,12 +2,12 @@
 # platforms and tested on each (Node.js 22, the oldest supported line), the main package and
 # a platform package per addon assembled by `cargo xtask package-node`, then installed on each
 # platform as npm would (by `os`, `cpu` and `libc`) and tested from the installed package
-# (Node.js 26, the newest). On a `v*` tag the packed packages are attached to the release.
+# (Node.js 26, the newest). A release (release.yml) calls this workflow and publishes the
+# packages it uploads.
 name: node
 
 on:
   push:
-    tags: ["v*"]
     branches: [main]
     paths:
       - crates/teigeodata-api/**
@@ -21,12 +21,16 @@ on:
       - xtask/templates/node*
       - .github/workflows/node.yml
   workflow_dispatch:
+  # release.yml builds a release with this workflow and publishes what it uploads.
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: node-${{ github.ref }}
+  # Called from release.yml, `github.workflow` is the caller's: a release never cancels a
+  # push run, nor a push run a release.
+  group: ${{ github.workflow }}-node-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -167,25 +171,3 @@ jobs:
       - name: Installed as npm would, then parity (Alpine, musl)
         if: ${{ matrix.alpine }}
         run: docker run --rm -v "$PWD:/w" -w /w node:26-alpine3.24 node bindings/node/test/install.mjs target/node
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: install
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: node-packages
-          path: node
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-      - name: Pack and attach to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for d in node/*/; do (cd "$d" && npm pack --pack-destination ..); done
-          gh release upload "$GITHUB_REF_NAME" node/*.tgz --clobber --repo "$GITHUB_REPOSITORY"

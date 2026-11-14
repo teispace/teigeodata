@@ -1,12 +1,11 @@
 # The WebAssembly packages (phase 5.7, D-293): each variant (a set of components, D-291) built
 # by `cargo xtask package-wasm`, its module held to its budget, and the parity checks run from
 # the built package on Node.js (every supported line), Bun, Deno, Chromium, Firefox, WebKit
-# and workerd. On a `v*` tag the packages are attached to the release (npm publishing: 5.10).
+# and workerd. A release (release.yml) calls this workflow and publishes the packages it uploads.
 name: wasm
 
 on:
   push:
-    tags: ["v*"]
     branches: [main]
     paths:
       - crates/teigeodata-api/**
@@ -24,12 +23,16 @@ on:
       - xtask/templates/wasm*
       - .github/workflows/wasm.yml
   workflow_dispatch:
+  # release.yml builds a release with this workflow and publishes what it uploads.
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: wasm-${{ github.ref }}
+  # Called from release.yml, `github.workflow` is the caller's: a release never cancels a
+  # push run, nor a push run a release.
+  group: ${{ github.workflow }}-wasm-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -144,25 +147,3 @@ jobs:
       - name: Parity from each package in workerd
         run: |
           for v in full lookup; do node bindings/wasm/test/workerd.mjs "target/wasm/$v" bindings/parity.json; done
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [node, browsers, workerd]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: wasm-packages
-          path: wasm
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-      - name: Pack and attach to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for v in full lookup; do (cd "wasm/$v" && npm pack --pack-destination ..); done
-          gh release upload "$GITHUB_REF_NAME" wasm/*.tgz --clobber --repo "$GITHUB_REPOSITORY"
