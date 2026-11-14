@@ -79,11 +79,14 @@ impl JobInner {
         }
     }
 
+    /// Stores the result and ends the watch as one step under the result's lock: a caller that
+    /// sees the job ended finds its result, and one that gets the result sees the job ended.
     fn finish(&self, r: Result<Blob>) {
-        *lock(&self.result) = Some(r);
-        self.ended.notify_all();
-        // After the result: a caller that sees the job ended finds its result.
+        let mut slot = lock(&self.result);
+        *slot = Some(r);
         self.watch.end();
+        drop(slot);
+        self.ended.notify_all();
     }
 }
 

@@ -477,6 +477,12 @@ fn the_store_parity_matches_rust() {
         ErrorCode::InvalidArgument
     );
     assert_eq!(store.remove(&pack).unwrap_err().code, ErrorCode::Refused);
+    // A job whose result is out has ended, every time: the result and the end are one step.
+    for _ in 0..200 {
+        let job = store.refresh(&pack);
+        assert_eq!(job.result().unwrap_err().code, ErrorCode::Network);
+        assert!(job.is_ended());
+    }
     let job = store.refresh(&pack);
     assert_eq!(job.result().unwrap_err().code, ErrorCode::Network);
     assert!(job.is_ended());
