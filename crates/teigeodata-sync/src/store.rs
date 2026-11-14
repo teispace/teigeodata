@@ -438,6 +438,20 @@ impl<D: Fs> Store<D> {
         &self.packs
     }
 
+    /// The packs the journal lists now, read without opening the store: nothing is recovered,
+    /// created or removed, so a reader beside the process that installs (a server following
+    /// the store, D-172) never disturbs an install in progress. The journal is replaced whole
+    /// by a rename, so a read sees one committed version.
+    ///
+    /// # Errors
+    /// The file system's, or [`io::ErrorKind::InvalidData`] for a journal that does not parse.
+    pub fn read_packs(fs: &mut D) -> io::Result<Vec<Record>> {
+        match fs.read(JOURNAL)? {
+            Some(bytes) => parse(&bytes),
+            None => Ok(Vec::new()),
+        }
+    }
+
     /// The path of an installed pack's file, relative to the root.
     #[must_use]
     pub fn path_of(record: &Record) -> String {
@@ -1402,7 +1416,9 @@ mod derive_tests {
     use teigeodata_format::search::{self, Search};
     use teigeodata_format::{Encoding, Kind, Pack, Part, Section, Writer};
 
-    use super::{DeriveInput, Dir, JOURNAL, PACKS, Record, Store, StoreError, render, set_tag};
+    use super::{
+        DeriveInput, Dir, JOURNAL, JOURNAL_TMP, PACKS, Record, Store, StoreError, render, set_tag,
+    };
 
     /// Every suffix of 3 or more bytes of a lowercase ASCII name: the test's key rule.
     fn keys(text: &str, out: &mut dyn FnMut(&str)) {
@@ -1539,6 +1555,33 @@ mod derive_tests {
             .unwrap()
             .replace("\"version\":3", "\"version\":9");
         assert!(super::parse(old.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn reading_the_packs_touches_nothing() {
+        let (root, st, r) = store("read", &pack());
+        drop(st);
+        // What an install in progress leaves: a staged journal and a pack not yet listed.
+        std::fs::write(root.join(JOURNAL_TMP), b"half").unwrap();
+        std::fs::write(root.join(PACKS).join("new.tgd"), b"partial").unwrap();
+        let mut dir = Dir::new(&root).unwrap();
+        assert_eq!(Store::read_packs(&mut dir).unwrap(), [r]);
+        assert!(root.join(JOURNAL_TMP).exists(), "the staged journal stays");
+        assert!(
+            root.join(PACKS).join("new.tgd").exists(),
+            "the unlisted pack stays"
+        );
+        std::fs::remove_file(root.join(JOURNAL)).unwrap();
+        assert!(
+            Store::read_packs(&mut dir).unwrap().is_empty(),
+            "no journal, no packs"
+        );
+        std::fs::write(root.join(JOURNAL), b"{").unwrap();
+        assert_eq!(
+            Store::read_packs(&mut dir).unwrap_err().kind(),
+            std::io::ErrorKind::InvalidData
+        );
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

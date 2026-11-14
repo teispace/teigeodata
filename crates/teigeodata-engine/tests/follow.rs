@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use common::synthetic;
 use teigeodata_engine::{Component, Components, Engine, Layer, LayerOptions, Parts, Shared};
+use teigeodata_format::Part;
 use teigeodata_sync::store::{Dir, Record};
 
 fn record(file: &str, len: usize, set: Components) -> Record {
@@ -49,7 +50,15 @@ fn the_engine_follows_the_journal() {
             .unwrap()
     };
     let all = Components::all().closed();
-    let pa = record("a.tgd", parts[0].len(), all);
+    // A holds some parts only (D-251): one language of the names and the coarsest outline.
+    let some = Parts::ALL
+        .languages(&[Part::REST, Part::language("ne").unwrap()])
+        .unwrap()
+        .outline(Part::outline(2, 3).unwrap());
+    let pa = Record {
+        parts: some,
+        ..record("a.tgd", parts[0].len(), all)
+    };
     let pb = record("b.tgd", parts[1].len(), all);
     std::fs::write(dir.pack_path(&pa), &parts[0]).unwrap();
     std::fs::write(dir.pack_path(&pb), &parts[1]).unwrap();
@@ -68,6 +77,17 @@ fn the_engine_follows_the_journal() {
     assert!(got.closed.is_empty() && got.failed.is_empty());
     assert_eq!(shared.load().layers().len(), 3);
     assert!(shared.load().get(in_part(0)).unwrap().is_some());
+    let opened = shared.load();
+    let a = opened
+        .layers()
+        .find(|l| l.path() == Some(dir.pack_path(&pa).as_path()))
+        .unwrap();
+    assert_eq!(
+        a.options().installed_parts,
+        some,
+        "opened with its installed parts"
+    );
+    drop(opened);
 
     // The same journal again: nothing changes and nothing is published.
     let before = shared.current();

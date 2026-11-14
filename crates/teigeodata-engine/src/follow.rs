@@ -1,7 +1,7 @@
 //! The snapshot swap on install (D-172): the engine follows the store's journal.
 //!
 //! [`Engine::follow`] opens each pack the journal lists that is not open yet, with the
-//! component set it was installed with, drops each open layer from the store's `packs/`
+//! component set and the parts it was installed with, drops each open layer from the store's `packs/`
 //! directory that the journal no longer lists, and reopens one whose file was replaced (a
 //! repair). [`Shared::follow`](crate::Shared::follow) does
 //! it on the next engine and publishes once: queries already running keep the old layers
@@ -57,6 +57,7 @@ impl Engine {
             }
             let opts = LayerOptions {
                 installed: Some(r.set),
+                installed_parts: r.parts,
                 ..options
             };
             match Layer::open(&path, opts) {
