@@ -29,7 +29,7 @@ After v1.0, coverage grows by data waves.
 
 | Wave | Coverage | Notes |
 |---|---|---|
-| W1 | India | per state, tiled; village/town level |
+| W1 | India | per state, tiled; village/town level. The lite town level comes early, for the embedded layer: TG-15 (D-216, D-258) |
 | W2 | South Asia | Bangladesh, Bhutan, Sri Lanka, Pakistan, Maldives, Afghanistan |
 | W3 | Asia | |
 | W4 | USA | strong public-domain sources; lite build at full quality expected |
@@ -52,3 +52,4 @@ parallel lanes: research notes, docs, one heavy build lane, one test or benchmar
 | 2026-11-07 | M1 met; Phase 2 next, research first | D-080 |
 | 2026-11-07 | Phase 2 file; M2 no longer lists ID maps | D-081; done in B5 (D-075) |
 | 2026-11-09 | Phase 4 file drafted with its research notes | research first ([AGENTS.md](../../AGENTS.md) §4) |
+| 2026-11-14 | W1 notes TG-15, India's lite town level built before v1.0 for the embedded layer | the roadmap still placed all of India after v1.0 (D-216) |

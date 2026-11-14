@@ -1,0 +1,17 @@
+# Wikidata aliases in one language of every item with a GeoNames ID and a population (forge
+# `world --aliases`, D-268): a place's other names, former and everyday ones among them. World-
+# general: {{LANG}} is the BCP 47 code from the source's `query_params`. Dropped here as no
+# name: under 4 characters, starting in lower case (codes such as `th`), or inverted with a
+# comma (`Lanka, Sri`). The item is a bare `Q…` string, which keeps the snapshot to one
+# response (the full IRI on every row made it time out).
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+SELECT DISTINCT ?q ?gn ?text WHERE {
+  ?item wdt:P1566 ?gn .
+  ?item wdt:P1082 [] .
+  ?item skos:altLabel ?a . FILTER(LANG(?a) = "{{LANG}}")
+  BIND(STR(?a) AS ?text)
+  FILTER(STRLEN(?text) >= 4 && REGEX(?text, "^[^a-z]") && !CONTAINS(?text, ","))
+  BIND(STRAFTER(STR(?item), "http://www.wikidata.org/entity/") AS ?q)
+}
+ORDER BY ?q ?gn ?text

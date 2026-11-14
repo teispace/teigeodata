@@ -512,6 +512,25 @@ query = "forge/queries/wikidata-labels.rq"
 query_params = { LANG = "hi" }
 
 [[source]]
+id = "wikidata-aliases-en"
+title = "Wikidata English aliases of every item with a GeoNames ID and a population (QLever snapshot)"
+kind = "sparql"
+url = "https://qlever.dev/api/wikidata"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "QLever Wikidata snapshot"
+retrieved = "2026-11-14"
+sha256 = "053ec85f398309fcd4475dd7d6d0baacb43d254570569e871c20bcea084c83a3"
+size = 4575551
+licence = "CC0-1.0"
+licence_class = "cc0"
+countries = ["*"]
+used_by = "forge world --aliases (D-268)"
+attribution = "Wikidata (https://www.wikidata.org), CC0 1.0"
+query = "forge/queries/wikidata-aliases.rq"
+query_params = { LANG = "en" }
+
+[[source]]
 id = "lgd-in-states"
 title = "LGD: India's 36 states and union territories with their LGD and Census codes (Parquet, daily LGD mirror)"
 kind = "http"

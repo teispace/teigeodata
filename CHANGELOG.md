@@ -20,7 +20,14 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   (`wikidata-unit-population`; `--no-populations` leaves it out), and places a city outside
   every unit's outline in the nearest unit of its country within 10 km (D-266).
 
+- `forge world --aliases <source>` (profile `world_aliases`): every country, unit and city
+  takes its Wikidata aliases, so Poona, Simla, Tanjore, Peking and Ceylon find their place
+  (D-268).
+
 ### Changed
+
+- A substring match of 3 or 4 characters weighs less than a longer one, so a short query
+  finds a city by its start before a country by a run inside one of its names (D-269).
 
 - Search importance is one scale for countries, regions and cities (D-266): a region or a
   country weighs its people as a city does, so "Var" finds Varanasi and "Cal" California

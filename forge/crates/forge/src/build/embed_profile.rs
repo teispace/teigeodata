@@ -72,6 +72,9 @@ struct File {
     /// The world part's alternate-names source (`forge world --alternates`, D-265).
     #[serde(default)]
     world_alternates: Option<String>,
+    /// The world part's alias sources (`forge world --aliases`, D-268).
+    #[serde(default)]
+    world_aliases: Vec<String>,
     /// The world part's unit-population source, when not the default (`forge world
     /// --populations`, D-266).
     #[serde(default)]
@@ -547,14 +550,20 @@ fn components(names: &[String]) -> Result<Components, String> {
 /// The world part, then each country by code, as the profile cuts it.
 fn inputs(root: &Path, p: &File, build: &str) -> Result<Vec<Input>, String> {
     let read = |f: &Path| fs::read(f).map_err(|e| format!("{}: {e}", f.display()));
+    let extra: Vec<&str> = p
+        .world_alternates
+        .iter()
+        .chain(
+            p.world_populations
+                .iter()
+                .filter(|s| *s != super::world::DEFAULT_POPULATIONS),
+        )
+        .chain(&p.world_aliases)
+        .map(String::as_str)
+        .collect();
     let variant = super::world::variant(
         p.world.as_deref().unwrap_or(super::world::DEFAULT_CITIES),
-        [
-            p.world_alternates.as_deref(),
-            p.world_populations
-                .as_deref()
-                .filter(|s| *s != super::world::DEFAULT_POPULATIONS),
-        ],
+        &extra,
         &p.world_labels,
         &p.world_towns,
     );

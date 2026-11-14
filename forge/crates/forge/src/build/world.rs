@@ -269,51 +269,46 @@ struct Args {
     alternates: Option<String>,
     /// A Wikidata snapshot of units' populations (D-266).
     populations: Option<String>,
+    /// Wikidata alias snapshots, one language each: every row's other names (D-268).
+    aliases: Vec<String>,
 }
 
 impl Args {
     /// This part's file-name part ([`variant`]).
     fn variant(&self) -> String {
-        variant(
-            &self.cities,
-            [
-                self.alternates.as_deref(),
+        let extra: Vec<&str> = self
+            .alternates
+            .iter()
+            .chain(
                 self.populations
-                    .as_deref()
+                    .iter()
                     .filter(|p| *p != DEFAULT_POPULATIONS),
-            ],
-            &self.labels,
-            &self.towns,
-        )
+            )
+            .chain(&self.aliases)
+            .map(String::as_str)
+            .collect();
+        variant(&self.cities, &extra, &self.labels, &self.towns)
     }
 
     /// The name this part holds its serials under in the shared registries (D-267): the build
     /// for the default rows, else the build and what adds rows (the city list, the towns), so
     /// one part never retires the serials only another part holds.
     fn holder(&self, build: &str) -> String {
-        format!(
-            "{build}{}",
-            variant(&self.cities, [None, None], &[], &self.towns)
-        )
+        format!("{build}{}", variant(&self.cities, &[], &[], &self.towns))
     }
 }
 
 /// The file-name part of a world part built from `cities`, the `extra` sources (alternate
-/// names, unit populations), the label chain `labels` and the towns of `towns` (TG-13, D-221,
-/// D-259, D-265, D-266): empty for the default list and none of them, so the default file keeps
-/// its name.
-pub(crate) fn variant(
-    cities: &str,
-    extra: [Option<&str>; 2],
-    labels: &[String],
-    towns: &[String],
-) -> String {
+/// names, unit populations other than the default, aliases), the label chain `labels` and the
+/// towns of `towns` (TG-13, D-221, D-259, D-265, D-266, D-268): empty for the default list and
+/// none of them, so the default file keeps its name.
+pub(crate) fn variant(cities: &str, extra: &[&str], labels: &[String], towns: &[String]) -> String {
     let mut v = String::new();
     if cities != DEFAULT_CITIES {
         v.push('-');
         v.push_str(cities);
     }
-    for s in extra.into_iter().flatten() {
+    for s in extra {
         v.push('-');
         v.push_str(s);
     }
@@ -344,7 +339,7 @@ pub(crate) const DEFAULT_CITIES: &str = "geonames-cities15000";
 pub(crate) const DEFAULT_POPULATIONS: &str = "wikidata-unit-population";
 
 fn parse(args: &[String]) -> Result<Args, String> {
-    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--alternates <source>] [--populations <source> | --no-populations] [--labels <source>]… [--towns <cc>]… [--ids <dir> | --fresh-ids] [--key <seed-file>]";
+    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--alternates <source>] [--populations <source> | --no-populations] [--aliases <source>]… [--labels <source>]… [--towns <cc>]… [--ids <dir> | --fresh-ids] [--key <seed-file>]";
     let mut a = Args {
         release: String::new(),
         lite: false,
@@ -361,6 +356,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
         labels: Vec::new(),
         towns: Vec::new(),
         alternates: None,
+        aliases: Vec::new(),
         populations: Some(DEFAULT_POPULATIONS.into()),
     };
     let mut it = args.iter();
@@ -393,6 +389,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
             "--key" => a.key = Some(value()?),
             "--labels" => a.labels.push(value()?),
             "--alternates" => a.alternates = Some(value()?),
+            "--aliases" => a.aliases.push(value()?),
             "--populations" => a.populations = Some(value()?),
             "--no-populations" => a.populations = None,
             "--towns" => a.towns.push(value()?.to_ascii_lowercase()),
@@ -1161,6 +1158,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         .into_iter()
         .chain(&a.alternates)
         .chain(&a.populations)
+        .chain(&a.aliases)
         .chain(&a.labels)
         .chain(&town_sources)
         .map(String::as_str)
@@ -1405,12 +1403,32 @@ fn world_rows(
             (&mut r.place, iso)
         }),
     );
+    let mut aliases = String::new();
+    for source in &a.aliases {
+        let lang = lock
+            .get(source)?
+            .query_params
+            .get("LANG")
+            .ok_or_else(|| format!("{source}: an alias source names its LANG"))?;
+        let snapshot = super::world_aliases::read(&lock.path(root, source)?)
+            .map_err(|e| format!("{source}: {e}"))?;
+        let mut places: Vec<_> = rows
+            .iter_mut()
+            .map(|r| (&mut r.place, r.ns.country()))
+            .collect();
+        aliases.push_str(&super::world_aliases::apply(
+            source,
+            lang,
+            &snapshot,
+            &mut places,
+        ));
+    }
     let tz_report = zone_rows(root, a, lock, countries, &mut rows)?;
     let counts = format!(
         "- {} countries and disputed areas ({}).\n{}\n- {n_cities} cities ({}): {under_unit} \
          under a unit ({near} in the nearest within 10 km), {fallback} under the feature of \
          their code, {orphans} with no \
-         country.\n{towns}{alternates}{populations}- {dropped} source keys another row already holds dropped.\n{named}{tz_report}",
+         country.\n{towns}{alternates}{populations}- {dropped} source keys another row already holds dropped.\n{named}{aliases}{tz_report}",
         countries.len(),
         a.admin,
         part.report,
