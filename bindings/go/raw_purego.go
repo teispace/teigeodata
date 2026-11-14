@@ -114,8 +114,13 @@ func rawLoad(path string) error {
 	}
 	bind(lib, &pBytesFree, "tg_bytes_free")
 	bind(lib, &pLastError, "tg_last_error")
-	cbU32 = purego.NewCallback(func(ctx uintptr, a0 uint32) bool {
-		return callbackU32(ctx, a0)
+	// Every argument and the result uintptr-sized, as Windows callbacks require; each argument
+	// is narrowed to its C type, and the C bool is the low byte of the result.
+	cbU32 = purego.NewCallback(func(ctx uintptr, a0 uintptr) uintptr {
+		if callbackU32(ctx, uint32(a0)) {
+			return 1
+		}
+		return 0
 	})
 	bind(lib, &pVersion, "tg_version")
 	bind(lib, &pComponents, "tg_components")
