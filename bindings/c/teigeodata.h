@@ -47,6 +47,25 @@ typedef struct tg_bytes {
 /* A callback taking u32; return false to cancel. */
 typedef bool (*tg_callback_u32)(void *ctx, uint32_t a0);
 
+
+/* How `Engine::search_with` ranks (D-226). Every field's zero value is its default (D-276). Pass NULL for the defaults. */
+typedef struct tg_search_options {
+    /* Whether focus_lat is set. */
+    bool has_focus_lat;
+    /* Prefer places near this latitude (with `focus_lon`): the user's location, or a point in their home country with a wide scale. */
+    double focus_lat;
+    /* Whether focus_lon is set. */
+    bool has_focus_lon;
+    /* The focus longitude; set with `focus_lat` or not at all. */
+    double focus_lon;
+    /* Whether focus_scale_m is set. */
+    bool has_focus_scale_m;
+    /* The distance in metres at which the focus gain halves (a place at the focus gains 30, one scale away 15); `None` is 50 km. */
+    double focus_scale_m;
+    /* Rank by match tier first (exact, loose, prefix, one edit, substring, two edits, phonetic), then importance and focus, instead of one additive score. */
+    bool strict;
+} tg_search_options;
+
 /* Frees a buffer returned by any function. Freeing a zeroed buffer does nothing. */
 void tg_bytes_free(tg_bytes bytes);
 
@@ -206,6 +225,18 @@ int32_t tg_engine_nearby(const tg_engine *handle, const uint8_t *id, size_t id_l
  * `ErrorCode::Corrupt` if a section read is corrupt.
  */
 int32_t tg_engine_search(const tg_engine *handle, const uint8_t *query, size_t query_len, uint32_t limit, tg_bytes *out);
+
+/*
+ * `search` ranked by `options`: near a focus point, or in strict match
+ * order.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`, the focus is off the
+ * globe or has one coordinate only, or its scale is not positive;
+ * `ErrorCode::Corrupt` if a section read is corrupt.
+ */
+int32_t tg_engine_search_with(const tg_engine *handle, const uint8_t *query, size_t query_len, uint32_t limit, const tg_search_options *options, tg_bytes *out);
 
 /*
  * The places nearest the point, nearest first, at most `limit`, with `meters` and

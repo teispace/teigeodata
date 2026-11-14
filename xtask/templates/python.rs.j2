@@ -34,7 +34,7 @@ fn error(e: teigeodata_api::Error) -> PyErr {
 {% endfor %}
     }
 }
-{% macro pyty(p) %}{% if p.ty == "bool" %}bool{% elif p.ty == "str" %}&str{% elif p.ty == "bytes" %}&[u8]{% elif p.ty == "callback" %}&Bound<'_, PyAny>{% elif p.ty == "handle" %}&Bound<'_, {{ p.handle }}>{% else %}{{ p.ty }}{% endif %}{% endmacro %}
+{% macro pyty(p) %}{% if p.ty == "bool" %}bool{% elif p.ty == "str" %}&str{% elif p.ty == "bytes" %}&[u8]{% elif p.ty == "callback" %}&Bound<'_, PyAny>{% elif p.ty == "handle" %}&Bound<'_, {{ p.handle }}>{% elif p.ty == "record" %}&Bound<'_, {{ p.record }}>{% else %}{{ p.ty }}{% endif %}{% endmacro %}
 {% macro rty(f) %}{% if f.returns == "blob" %}Bound<'py, PyBytes>{% elif f.returns == "string" %}String{% elif f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ f.returns }}{% endif %}{% endmacro %}
 {#
   One function: free (`owner` none), a method (`f.receiver`) or an associated function of a
@@ -87,6 +87,9 @@ fn {{ f.name }}{% if py %}<'py>{% endif %}(
 {% for p in f.params if p.ty == "handle" %}
     let {{ p.name }} = &{{ p.name }}.get().0;
 {% endfor %}
+{% for p in f.params if p.ty == "record" %}
+    let {{ p.name }} = &teigeodata_api::{{ p.record }}::from(*{{ p.name }}.get());
+{% endfor %}
 {% set target %}{% if f.receiver %}self.0.{% elif owner %}teigeodata_api::{{ owner.name }}::{% else %}teigeodata_api::{% endif %}{% endset %}
 {% set call %}{{ target }}{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% endset %}
 {% set expr %}{% if detach %}py.detach(|| {{ call }}){% else %}{{ call }}{% endif %}{% endset %}
@@ -117,6 +120,50 @@ fn {{ f.name }}{% if py %}<'py>{% endif %}(
 {% for f in functions %}
 {{ pyfn(f, none) }}
 {%- endfor %}
+{% for r in records %}
+
+{% for line in r.doc %}
+/// {{ line }}
+{% endfor %}
+#[pyclass(frozen, get_all, module = "teigeodata")]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct {{ r.name }} {
+{% for f in r.fields %}
+{% for line in f.doc %}
+    /// {{ line }}
+{% endfor %}
+    {{ f.name }}: {% if f.optional %}Option<{{ f.ty }}>{% else %}{{ f.ty }}{% endif %},
+{% endfor %}
+}
+
+#[pymethods]
+impl {{ r.name }} {
+    /// Keyword arguments only; each left out is its zero value, the default (D-276).
+    #[new]
+    #[pyo3(signature = (*, {% for f in r.fields %}{{ f.name }}={% if f.optional %}None{% elif f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}))]
+    const fn new({% for f in r.fields %}{{ f.name }}: {% if f.optional %}Option<{{ f.ty }}>{% else %}{{ f.ty }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}) -> Self {
+        Self {
+{% for f in r.fields %}
+            {{ f.name }},
+{% endfor %}
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{self:?}")
+    }
+}
+
+impl From<{{ r.name }}> for teigeodata_api::{{ r.name }} {
+    fn from(r: {{ r.name }}) -> Self {
+        Self {
+{% for f in r.fields %}
+            {{ f.name }}: r.{{ f.name }},
+{% endfor %}
+        }
+    }
+}
+{% endfor %}
 {% for h in handles %}
 
 {% for line in h.doc %}
@@ -148,6 +195,9 @@ mod _native {
 {% endfor %}
 {% for h in handles %}
         {{ h.name }},
+{% endfor %}
+{% for r in records %}
+        {{ r.name }},
 {% endfor %}
     };
 {% for c in constants %}

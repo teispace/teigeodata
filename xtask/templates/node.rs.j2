@@ -73,7 +73,7 @@ fn error(e: teigeodata_api::Error) -> Error<Code> {
 #[napi]
 pub const {{ c.name }}: {{ c.ty }} = {{ c.value }};
 {% endfor %}
-{% macro jsty(p) %}{% if p.ty == "str" %}String{% elif p.ty == "bytes" %}Buffer{% elif p.ty == "handle" %}&{{ p.handle }}{% else %}{{ p.ty }}{% endif %}{% endmacro %}
+{% macro jsty(p) %}{% if p.ty == "str" %}String{% elif p.ty == "bytes" %}Buffer{% elif p.ty == "handle" %}&{{ p.handle }}{% elif p.ty == "record" %}Option<{{ p.record }}>{% else %}{{ p.ty }}{% endif %}{% endmacro %}
 {% macro rty(f) %}{% if f.returns == "blob" %}Buffer{% elif f.returns == "string" %}String{% elif f.returns == "void" %}(){% elif f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ f.returns }}{% endif %}{% endmacro %}
 {#
   One export: a free function (`owner` none), a method (`f.receiver`), the constructor (an
@@ -121,7 +121,7 @@ pub fn {{ f.name }}(
     };
 {% endif %}
 {% set target %}{% if f.receiver %}self.0.{% elif owner %}teigeodata_api::{{ owner.name }}::{% else %}teigeodata_api::{% endif %}{% endset %}
-{% set call %}{{ target }}{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% elif p.ty in ["str", "bytes"] %}&{{ p.name }}{% elif p.ty == "handle" %}&{{ p.name }}.0{% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% endset %}
+{% set call %}{{ target }}{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% elif p.ty in ["str", "bytes"] %}&{{ p.name }}{% elif p.ty == "handle" %}&{{ p.name }}.0{% elif p.ty == "record" %}&{{ p.name }}.unwrap_or_default().into(){% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% endset %}
 {% if not wrap %}
 {% if f.returns == "blob" %}
     Buffer::from({{ call }}.into_vec())
@@ -148,6 +148,34 @@ pub fn {{ f.name }}(
 {% for f in functions %}
 {{ jsfn(f, none) }}
 {%- endfor %}
+{% for r in records %}
+
+{% for line in r.doc %}
+/// {{ line }}
+{% endfor %}
+///
+/// A plain object; every field may be left out, for its zero value (D-276).
+#[napi(object)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct {{ r.name }} {
+{% for f in r.fields %}
+{% for line in f.doc %}
+    /// {{ line }}
+{% endfor %}
+    pub {{ f.name }}: Option<{{ f.ty }}>,
+{% endfor %}
+}
+
+impl From<{{ r.name }}> for teigeodata_api::{{ r.name }} {
+    fn from(r: {{ r.name }}) -> Self {
+        Self {
+{% for f in r.fields %}
+            {{ f.name }}: r.{{ f.name }}{% if not f.optional %}.unwrap_or_default(){% endif %},
+{% endfor %}
+        }
+    }
+}
+{% endfor %}
 {% for h in handles %}
 
 {% for line in h.doc %}

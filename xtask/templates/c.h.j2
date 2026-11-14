@@ -45,6 +45,21 @@ typedef struct tg_bytes {
 typedef bool (*tg_callback_{{ cb.id }})(void *ctx{% for a in cb.args %}, {{ cty(a) }} a{{ loop.index0 }}{% endfor %});
 {% endfor %}
 
+{% for r in records %}
+
+/* {{ r.doc | join(" ") }} Pass NULL for the defaults. */
+typedef struct tg_{{ r.snake }} {
+{% for f in r.fields %}
+{% if f.optional %}
+    /* Whether {{ f.name }} is set. */
+    bool has_{{ f.name }};
+{% endif %}
+    /* {{ f.doc | join(" ") }} */
+    {{ cty(f.ty) }} {{ f.name }};
+{% endfor %}
+} tg_{{ r.snake }};
+{% endfor %}
+
 /* Frees a buffer returned by any function. Freeing a zeroed buffer does nothing. */
 void tg_bytes_free(tg_bytes bytes);
 
@@ -62,7 +77,7 @@ int32_t tg_last_error(tg_bytes *message);
 int32_t {{ symbol }}(
 {%- if f.receiver %}const tg_{{ owner.snake }} *handle{% if f.params or f.returns != "void" %}, {% endif %}{% endif -%}
 {%- for p in f.params -%}
-{% if p.ty in ["str", "bytes"] %}const uint8_t *{{ p.name }}, size_t {{ p.name }}_len{% elif p.ty == "callback" %}tg_callback_{{ p.callback.id }} {{ p.name }}, void *{{ p.name }}_ctx{% elif p.ty == "handle" %}const tg_{{ p.handle | snake }} *{{ p.name }}{% else %}{{ cty(p.ty) }} {{ p.name }}{% endif %}{% if not loop.last or f.returns != "void" %}, {% endif %}
+{% if p.ty in ["str", "bytes"] %}const uint8_t *{{ p.name }}, size_t {{ p.name }}_len{% elif p.ty == "callback" %}tg_callback_{{ p.callback.id }} {{ p.name }}, void *{{ p.name }}_ctx{% elif p.ty == "handle" %}const tg_{{ p.handle | snake }} *{{ p.name }}{% elif p.ty == "record" %}const tg_{{ p.record | snake }} *{{ p.name }}{% else %}{{ cty(p.ty) }} {{ p.name }}{% endif %}{% if not loop.last or f.returns != "void" %}, {% endif %}
 {%- endfor -%}
 {% if f.returns in ["string", "blob"] %}tg_bytes *out{% elif f.returns == "handle" %}tg_{{ f.returns_handle | snake }} **out{% elif f.returns != "void" %}{{ cty(f.returns) }} *out{% elif not f.params and not f.receiver %}void{% endif %});
 {% endmacro %}

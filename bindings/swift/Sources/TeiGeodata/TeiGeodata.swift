@@ -56,6 +56,34 @@ private final class CallbackU32 {
     init(_ call: @escaping (UInt32) -> Bool) { self.call = call }
 }
 
+/// How `Engine::search_with` ranks (D-226). Every field's zero value is its default
+/// (D-276).
+public struct SearchOptions: Sendable, Equatable {
+    /// Prefer places near this latitude (with `focus_lon`): the user's location, or a point
+    /// in their home country with a wide scale.
+    public var focusLat: Double?
+    /// The focus longitude; set with `focus_lat` or not at all.
+    public var focusLon: Double?
+    /// The distance in metres at which the focus gain halves (a place at the focus gains 30,
+    /// one scale away 15); `None` is 50 km.
+    public var focusScaleM: Double?
+    /// Rank by match tier first (exact, loose, prefix, one edit, substring, two edits,
+    /// phonetic), then importance and focus, instead of one additive score.
+    public var strict: Bool
+
+    public init(focusLat: Double? = nil, focusLon: Double? = nil, focusScaleM: Double? = nil, strict: Bool = false) {
+        self.focusLat = focusLat
+        self.focusLon = focusLon
+        self.focusScaleM = focusScaleM
+        self.strict = strict
+    }
+
+    /// The C struct.
+    fileprivate var native: tg_search_options {
+        tg_search_options(has_focus_lat: focusLat != nil, focus_lat: focusLat ?? 0, has_focus_lon: focusLon != nil, focus_lon: focusLon ?? 0, has_focus_scale_m: focusScaleM != nil, focus_scale_m: focusScaleM ?? 0, strict: strict)
+    }
+}
+
 /// teigeodata: accurate, offline places. Every function is generated from the Rust API.
 public enum TeiGeodata {
     /// Most rows `sample_rows` builds in one call.
@@ -284,6 +312,22 @@ public final class Engine: @unchecked Sendable {
         var out = tg_bytes()
         var query = query
         let status = withExtendedLifetime(self) { query.withUTF8 { queryBytes in tg_engine_search(raw, queryBytes.baseAddress, queryBytes.count, limit, &out) } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// `search` ranked by `options`: near a focus point, or in strict match
+    /// order.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`, the focus is off the
+    /// globe or has one coordinate only, or its scale is not positive;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    public func searchWith(_ query: String, limit: UInt32, options: SearchOptions = .init()) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var query = query
+        let status = withExtendedLifetime(self) { query.withUTF8 { queryBytes in withUnsafePointer(to: options.native) { optionsPtr in tg_engine_search_with(raw, queryBytes.baseAddress, queryBytes.count, limit, optionsPtr, &out) } } }
         try check(status)
         return takeData(out)
     }

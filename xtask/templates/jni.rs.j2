@@ -72,7 +72,16 @@ pub extern "system" fn {{ symbol }}<'caller>(
     handle: jlong,
 {% endif %}
 {% for p in f.params %}
+{% if p.ty == "record" %}
+{% for g in records | selectattr("name", "eq", p.record) | map(attribute="fields") | first %}
+{% if g.optional %}
+    {{ p.name }}_has_{{ g.name }}: jni::sys::jboolean,
+{% endif %}
+    {{ p.name }}_{{ g.name }}: {{ jty(g.ty) }},
+{% endfor %}
+{% else %}
     {{ p.name }}: {{ jty(p.ty) }},
+{% endif %}
 {% endfor %}
 )
 {%- if f.returns != "void" %} -> {{ rty(f.returns) }}{% endif %} {
@@ -100,6 +109,13 @@ pub extern "system" fn {{ symbol }}<'caller>(
                 let {{ p.name }} = unsafe { handle_ref::<teigeodata_api::{{ p.handle }}>({{ p.name }}, "{{ p.name }}") }?;
 {% elif p.ty in ["u32", "u64"] %}
                 let {{ p.name }}: {{ p.ty }} = narrow("{{ p.name }}", {{ p.name }})?;
+{% elif p.ty == "record" %}
+                let {{ p.name }} = teigeodata_api::{{ p.record }} {
+{% for g in records | selectattr("name", "eq", p.record) | map(attribute="fields") | first %}
+{% set v %}{% if g.ty in ["u32", "u64"] %}narrow::<{{ g.ty }}>("{{ g.name }}", {{ p.name }}_{{ g.name }})?{% else %}{{ p.name }}_{{ g.name }}{% endif %}{% endset %}
+                    {{ g.name }}: {% if g.optional %}if {{ p.name }}_has_{{ g.name }} { Some({{ v }}) } else { None }{% else %}{{ v }}{% endif %},
+{% endfor %}
+                };
 {% endif %}
 {% endfor %}
 {% if cb %}
@@ -141,7 +157,7 @@ pub extern "system" fn {{ symbol }}<'caller>(
                     .unwrap_or(false)
                 };
 {% endif %}
-                {% if not f.fallible %}Ok({% endif %}{% if f.receiver %}this.{% elif owner %}teigeodata_api::{{ owner.name }}::{% else %}teigeodata_api::{% endif %}{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% elif p.ty in ["str", "bytes"] %}&{{ p.name }}{% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% if not f.fallible %}){% endif %}
+                {% if not f.fallible %}Ok({% endif %}{% if f.receiver %}this.{% elif owner %}teigeodata_api::{{ owner.name }}::{% else %}teigeodata_api::{% endif %}{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% elif p.ty in ["str", "bytes", "record"] %}&{{ p.name }}{% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% if not f.fallible %}){% endif %}
             })();
 {% if cb %}
             if env.exception_check() {

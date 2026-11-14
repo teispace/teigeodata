@@ -48,7 +48,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   and `tz_of`, the zone rules, `elevation_at`, `iso_code` and `by_iso`, postal codes,
   `parent`, `ancestors`, `children`; every result as a blob, every error typed.
   Done so far: the `Engine` handle with `open_file`, `open_bytes` (each giving a layer ID),
-  `remove`, `layers`, `get`, `search`,
+  `remove`, `layers`, `get`, `search`, `search_with` (focus options as a record),
   `reverse`, `admin_at`, `parent`, `ancestors`, `children`, `nearby`, `within_radius`, `tz_at`,
   `by_iso`, `elevation_at`, `postal_lookup`, `postal_prefix`, `postal_codes_of` and
   `postal_at`, in every language, checked on `bindings/fixtures/synth.tgd`
@@ -56,7 +56,8 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   update, remove, pin, repair, status) as jobs with progress callbacks and cancellation
 - [ ] The IDL extended for what the surface needs (handles, enums, options structs, jobs), with
   a schema version; the drift check covers every generated file. Done so far: format 2 with
-  handles, methods, `&[u8]` and handle parameters
+  handles, methods, `&[u8]` and handle parameters; format 3 with records of scalar fields
+  (D-276), the C header check comparing struct fields
 
 ### 5.2 The C ABI and its gates
 - [ ] Generated `teigeodata-ffi` and `teigeodata.h` for the whole surface: opaque handles,
@@ -109,6 +110,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | 5.1: options records (IDL format 3, D-276), `search_with` | plan |
 | 2026-11-14 | 5.1 started: the `Engine` handle in every language, IDL format 2 | plan |
 | 2026-11-14 | 5.0 done: the threading contract (D-274), S2 (D-275) | research |
 | 2026-11-14 | Phase 5 drafted from the bindings research and spike S4 | Phase 4's open items wait on the maintainer or a future release |

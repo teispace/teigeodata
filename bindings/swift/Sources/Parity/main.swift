@@ -150,6 +150,12 @@ do {
     expect(.invalidArgument) { _ = try engine.byIso(e["bad_iso"] as! String) }
     expect(.invalidArgument) { _ = try engine.withinRadius(wl, lon: wo, meters: -1, limit: 1) }
     let strs = { (v: Any?) in (v as! [String]).map { Optional($0) } }
+    let sw = e["search_with"] as! [String: Any]
+    let focus = SearchOptions(focusLat: sw["focus_lat"] as? Double, focusLon: sw["focus_lon"] as? Double, focusScaleM: sw["focus_scale_m"] as? Double)
+    let swLimit = UInt32(sw["limit"] as! Int)
+    check(strings(try engine.searchWith(sw["query"] as! String, limit: swLimit, options: focus), "id") == strs(sw["ids"]), "search_with")
+    check(strings(try engine.searchWith(sw["query"] as! String, limit: swLimit), "id") != strs(sw["ids"]), "search_with defaults")
+    expect(.invalidArgument) { _ = try engine.searchWith("x", limit: 1, options: SearchOptions(focusLat: 1)) }
     let pl = e["postal_lookup"] as! [String: Any]
     let hit = try engine.postalLookup(pl["code"] as! String, scheme: pl["scheme"] as! String)
     check(strings(hit, "postal") == strs(pl["postal"]) && strings(hit, "id") == strs(pl["ids"]), "postal_lookup")

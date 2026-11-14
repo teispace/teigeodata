@@ -137,6 +137,59 @@ fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> PyResult<f64> {
     Ok(value)
 }
 
+/// How `Engine::search_with` ranks (D-226). Every field's zero value is its default
+/// (D-276).
+#[pyclass(frozen, get_all, module = "teigeodata")]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SearchOptions {
+    /// Prefer places near this latitude (with `focus_lon`): the user's location, or a point
+    /// in their home country with a wide scale.
+    focus_lat: Option<f64>,
+    /// The focus longitude; set with `focus_lat` or not at all.
+    focus_lon: Option<f64>,
+    /// The distance in metres at which the focus gain halves (a place at the focus gains 30,
+    /// one scale away 15); `None` is 50 km.
+    focus_scale_m: Option<f64>,
+    /// Rank by match tier first (exact, loose, prefix, one edit, substring, two edits,
+    /// phonetic), then importance and focus, instead of one additive score.
+    strict: bool,
+}
+
+#[pymethods]
+impl SearchOptions {
+    /// Keyword arguments only; each left out is its zero value, the default (D-276).
+    #[new]
+    #[pyo3(signature = (*, focus_lat=None, focus_lon=None, focus_scale_m=None, strict=false))]
+    const fn new(
+        focus_lat: Option<f64>,
+        focus_lon: Option<f64>,
+        focus_scale_m: Option<f64>,
+        strict: bool,
+    ) -> Self {
+        Self {
+            focus_lat,
+            focus_lon,
+            focus_scale_m,
+            strict,
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{self:?}")
+    }
+}
+
+impl From<SearchOptions> for teigeodata_api::SearchOptions {
+    fn from(r: SearchOptions) -> Self {
+        Self {
+            focus_lat: r.focus_lat,
+            focus_lon: r.focus_lon,
+            focus_scale_m: r.focus_scale_m,
+            strict: r.strict,
+        }
+    }
+}
+
 /// Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
 /// answers from any number of threads at once, and adding a pack publishes a new snapshot
 /// while queries go on.
@@ -257,6 +310,26 @@ impl Engine {
         limit: u32,
     ) -> PyResult<Bound<'py, PyBytes>> {
         let value = py.detach(|| self.0.search(query, limit));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// `search` ranked by `options`: near a focus point, or in strict match
+    /// order.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`, the focus is off the
+    /// globe or has one coordinate only, or its scale is not positive;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    fn search_with<'py>(
+        &self,
+        py: Python<'py>,
+        query: &str,
+        limit: u32,
+        options: &Bound<'_, SearchOptions>,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let options = &teigeodata_api::SearchOptions::from(*options.get());
+        let value = py.detach(|| self.0.search_with(query, limit, options));
         let value = value.map_err(error)?;
         Ok(PyBytes::new(py, value.as_bytes()))
     }
@@ -420,7 +493,7 @@ mod _native {
     #[pymodule_export]
     use super::{
         CancelledError, CorruptError, Engine, InternalError, InvalidArgumentError, IoError,
-        TeiGeodataError, distance_m, fold, noop, progress, sample_rows, version,
+        SearchOptions, TeiGeodataError, distance_m, fold, noop, progress, sample_rows, version,
     };
 
     /// Most rows `sample_rows` builds in one call.

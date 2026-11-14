@@ -8,7 +8,8 @@ export type ErrorCode = {% for c in error_codes %}"{{ c.name }}"{% if not loop.l
 export const {{ c.name }}: number;
 {% endfor %}
 {% macro tsty(t, h) %}{% if t == "bool" %}boolean{% elif t in ["str", "string"] %}string{% elif t in ["blob", "bytes"] %}Buffer{% elif t == "void" %}void{% elif t == "handle" %}{{ h }}{% else %}number{% endif %}{% endmacro %}
-{% macro params(f) %}{% for p in f.params %}{{ p.name | camel }}: {% if p.ty == "callback" %}({% for a in p.callback.args %}a{{ loop.index0 }}: {{ tsty(a, none) }}{% if not loop.last %}, {% endif %}{% endfor %}) => boolean{% else %}{{ tsty(p.ty, p.handle) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endmacro %}
+{#- A record parameter may be left out, for the defaults. #}
+{% macro params(f) %}{% for p in f.params %}{{ p.name | camel }}{% if p.ty == "record" %}?{% endif %}: {% if p.ty == "record" %}{{ p.record }}{% elif p.ty == "callback" %}({% for a in p.callback.args %}a{{ loop.index0 }}: {{ tsty(a, none) }}{% if not loop.last %}, {% endif %}{% endfor %}) => boolean{% else %}{{ tsty(p.ty, p.handle) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endmacro %}
 {% macro doc(lines, indent) %}
 {{ indent }}/**
 {% for line in lines %}
@@ -17,6 +18,15 @@ export const {{ c.name }}: number;
 {% endfor %}
 {{ indent }} */
 {% endmacro %}
+{% for r in records %}
+
+{{ doc(r.doc, "") -}}
+export interface {{ r.name }} {
+{% for f in r.fields %}
+{{ doc(f.doc, "  ") }}  {{ f.name | camel }}?: {{ tsty(f.ty, none) }};
+{% endfor %}
+}
+{% endfor %}
 {% for f in functions %}
 
 {{ doc(f.doc, "") -}}

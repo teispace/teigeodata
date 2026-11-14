@@ -124,6 +124,11 @@ test("engine handle on the fixture", () => {
   assert.deepEqual(strings(engine.byIso(p.by_iso.code), "id"), [p.by_iso.id]);
   assert.throws(() => engine.byIso(p.bad_iso), { code: "InvalidArgument" });
   assert.throws(() => engine.withinRadius(w.lat, w.lon, -1, 1), { code: "InvalidArgument" });
+  const sw = p.search_with;
+  const focus = { focusLat: sw.focus_lat, focusLon: sw.focus_lon, focusScaleM: sw.focus_scale_m };
+  assert.deepEqual(strings(engine.searchWith(sw.query, sw.limit, focus), "id"), sw.ids);
+  assert.notDeepEqual(strings(engine.searchWith(sw.query, sw.limit), "id"), sw.ids);
+  assert.throws(() => engine.searchWith(sw.query, 1, { focusLat: 1 }), { code: "InvalidArgument" });
   const pl = p.postal_lookup;
   const hit = engine.postalLookup(pl.code, pl.scheme);
   assert.deepEqual([strings(hit, "postal"), strings(hit, "id")], [pl.postal, pl.ids]);

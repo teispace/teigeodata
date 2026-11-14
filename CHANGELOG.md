@@ -24,6 +24,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   engine is safe from many threads at once (D-274).
 - Error codes `Io` (4) and `Corrupt` (5).
 - IDL format 2: handles with methods, `&[u8]` parameters, handle parameters and results.
+- IDL format 3: options records (D-276), plain structs of scalar and optional scalar fields
+  whose defaults are their zero values. `SearchOptions` (a focus point and scale, `strict`)
+  and `Engine::search_with` use them in every binding; leaving the options out (C `NULL`)
+  means the defaults.
 
 ### Breaking
 

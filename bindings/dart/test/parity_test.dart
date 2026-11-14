@@ -170,6 +170,18 @@ void main() {
     expect(strings(engine.byIso(iso['code'] as String), 'id'), [iso['id']]);
     expect(() => engine.byIso(e['bad_iso'] as String), throwsA(isA<InvalidArgumentException>()));
     expect(() => engine.withinRadius(wl, wo, -1, 1), throwsA(isA<InvalidArgumentException>()));
+    final sw = e['search_with'] as Map<String, dynamic>;
+    final focus = SearchOptions(
+      focusLat: sw['focus_lat'] as double,
+      focusLon: sw['focus_lon'] as double,
+      focusScaleM: sw['focus_scale_m'] as double,
+    );
+    expect(strings(engine.searchWith(sw['query'] as String, sw['limit'] as int, focus), 'id'), sw['ids']);
+    expect(strings(engine.searchWith(sw['query'] as String, sw['limit'] as int, const SearchOptions()), 'id'), isNot(sw['ids']));
+    expect(
+      () => engine.searchWith('x', 1, const SearchOptions(focusLat: 1)),
+      throwsA(isA<InvalidArgumentException>()),
+    );
     final pl = e['postal_lookup'] as Map<String, dynamic>;
     final hit = engine.postalLookup(pl['code'] as String, pl['scheme'] as String);
     expect([strings(hit, 'postal'), strings(hit, 'id')], [pl['postal'], pl['ids']]);

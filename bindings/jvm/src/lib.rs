@@ -600,6 +600,72 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
         .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// `search` ranked by `options`: near a focus point, or in strict match
+/// order.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`, the focus is off the
+/// globe or has one coordinate only, or its scale is not positive;
+/// `ErrorCode::Corrupt` if a section read is corrupt.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeSearchWith<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    query: JString<'caller>,
+    limit: jlong,
+    options_has_focus_lat: jni::sys::jboolean,
+    options_focus_lat: jni::sys::jdouble,
+    options_has_focus_lon: jni::sys::jboolean,
+    options_focus_lon: jni::sys::jdouble,
+    options_has_focus_scale_m: jni::sys::jboolean,
+    options_focus_scale_m: jni::sys::jdouble,
+    options_strict: jni::sys::jboolean,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let query = query
+                    .try_to_string(env)
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: format!("query: {e}"),
+                    })?;
+                let limit: u32 = narrow("limit", limit)?;
+                let options = teigeodata_api::SearchOptions {
+                    focus_lat: if options_has_focus_lat {
+                        Some(options_focus_lat)
+                    } else {
+                        None
+                    },
+                    focus_lon: if options_has_focus_lon {
+                        Some(options_focus_lon)
+                    } else {
+                        None
+                    },
+                    focus_scale_m: if options_has_focus_scale_m {
+                        Some(options_focus_scale_m)
+                    } else {
+                        None
+                    },
+                    strict: options_strict,
+                };
+                this.search_with(&query, limit, &options)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 /// The places nearest the point, nearest first, at most `limit`, with `meters` and
 /// `bearing` (degrees from north) to each.
 ///

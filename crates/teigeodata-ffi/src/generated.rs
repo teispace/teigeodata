@@ -35,6 +35,43 @@ pub const TG_LIMIT_MAX: u32 = 10000;
 /// A callback taking `u32`; return `false` to cancel.
 pub type TgCallbackU32 = Option<unsafe extern "C" fn(ctx: Ctx, a0: u32) -> bool>;
 
+/// How `Engine::search_with` ranks (D-226). Every field's zero value is its default
+/// (D-276).
+///
+/// Passed by `const` pointer; null is every field's default (D-276).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TgSearchOptions {
+    /// Whether `focus_lat` is set.
+    pub has_focus_lat: bool,
+    /// Prefer places near this latitude (with `focus_lon`): the user's location, or a point
+    /// in their home country with a wide scale.
+    pub focus_lat: f64,
+    /// Whether `focus_lon` is set.
+    pub has_focus_lon: bool,
+    /// The focus longitude; set with `focus_lat` or not at all.
+    pub focus_lon: f64,
+    /// Whether `focus_scale_m` is set.
+    pub has_focus_scale_m: bool,
+    /// The distance in metres at which the focus gain halves (a place at the focus gains 30,
+    /// one scale away 15); `None` is 50 km.
+    pub focus_scale_m: f64,
+    /// Rank by match tier first (exact, loose, prefix, one edit, substring, two edits,
+    /// phonetic), then importance and focus, instead of one additive score.
+    pub strict: bool,
+}
+
+impl From<TgSearchOptions> for teigeodata_api::SearchOptions {
+    fn from(r: TgSearchOptions) -> Self {
+        Self {
+            focus_lat: r.has_focus_lat.then_some(r.focus_lat),
+            focus_lon: r.has_focus_lon.then_some(r.focus_lon),
+            focus_scale_m: r.has_focus_scale_m.then_some(r.focus_scale_m),
+            strict: r.strict,
+        }
+    }
+}
+
 /// The library version, from its package metadata.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_version(out: *mut TgBytes) -> i32 {
@@ -418,6 +455,39 @@ pub unsafe extern "C" fn tg_engine_search(
         // SAFETY: the caller passes `query_len` readable bytes (or null and 0).
         let query = unsafe { abi::str_arg(query, query_len, "query") }?;
         let value = this.0.search(query, limit)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// `search` ranked by `options`: near a focus point, or in strict match
+/// order.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`, the focus is off the
+/// globe or has one coordinate only, or its scale is not positive;
+/// `ErrorCode::Corrupt` if a section read is corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_search_with(
+    handle: *const TgEngine,
+    query: *const u8,
+    query_len: usize,
+    limit: u32,
+    options: *const TgSearchOptions,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `query_len` readable bytes (or null and 0).
+        let query = unsafe { abi::str_arg(query, query_len, "query") }?;
+        // SAFETY: the caller passes a readable record, or null for the defaults.
+        let options = teigeodata_api::SearchOptions::from(unsafe { abi::record(options) });
+        let value = this.0.search_with(query, limit, &options)?;
         let value = TgBytes::from_vec(value.into_vec());
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };

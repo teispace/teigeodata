@@ -17,7 +17,7 @@ mod common;
 use std::sync::Arc;
 
 use common::synthetic;
-use teigeodata_api::{Blob, Engine, ErrorCode, LIMIT_MAX};
+use teigeodata_api::{Blob, Engine, ErrorCode, LIMIT_MAX, SearchOptions};
 use teigeodata_blob::{Reader, View};
 
 fn strings(blob: &Blob, name: &str) -> Vec<Option<String>> {
@@ -363,6 +363,25 @@ fn the_parity_file_matches_rust() {
         .unwrap();
     assert_eq!(strings(&hits, "id")[0], Some(s(&q["first_id"])));
 
+    let w = &p["search_with"];
+    let options = SearchOptions {
+        focus_lat: Some(n(&w["focus_lat"])),
+        focus_lon: Some(n(&w["focus_lon"])),
+        focus_scale_m: Some(n(&w["focus_scale_m"])),
+        strict: false,
+    };
+    let limit = w["limit"].as_u64().unwrap() as u32;
+    let got = engine
+        .search_with(&s(&w["query"]), limit, &options)
+        .unwrap();
+    assert_eq!(strings(&got, "id"), ids(&w["ids"]));
+    let plain = engine.search(&s(&w["query"]), limit).unwrap();
+    assert_ne!(
+        strings(&plain, "id"),
+        ids(&w["ids"]),
+        "the focus must matter"
+    );
+
     let v = &p["reverse"];
     let near = engine
         .reverse(
@@ -556,4 +575,73 @@ fn packs_are_removed_by_their_layer_id() {
     assert!(engine.remove(other) && engine.remove(2));
     assert_eq!(engine.layers(), 0);
     assert_eq!(rows(&engine.get(&id).unwrap()), 0);
+}
+
+#[test]
+fn a_focus_ranks_the_nearest_of_same_named_places_first() {
+    let (engine, model) = open();
+    // A name several places share: the focus at each of them puts that one first.
+    let mut rows_of = std::collections::BTreeMap::<&str, Vec<usize>>::new();
+    for (row, names) in model.names.iter().enumerate() {
+        if let Some(n) = names.first() {
+            rows_of.entry(n.text.as_str()).or_default().push(row);
+        }
+    }
+    let (shared, rows_named) = rows_of.into_iter().find(|(_, r)| r.len() > 1).unwrap();
+    let shared = shared.to_owned();
+    let same: Vec<String> = rows_named
+        .iter()
+        .map(|&r| model.ids[r].to_string())
+        .collect();
+    let rank = |b: &Blob, id: &str| {
+        strings(b, "id")
+            .iter()
+            .position(|x| x.as_deref() == Some(id))
+    };
+    let base = engine.search(&shared, 50).unwrap();
+    let mut lifted = 0;
+    for id in &same {
+        let row = model.ids.iter().position(|p| p.to_string() == *id).unwrap();
+        let options = SearchOptions {
+            focus_lat: Some(model.points[row].lat_degrees()),
+            focus_lon: Some(model.points[row].lon_degrees()),
+            focus_scale_m: Some(1_000.0),
+            strict: false,
+        };
+        let got = engine.search_with(&shared, 50, &options).unwrap();
+        let (before, after) = (rank(&base, id).unwrap(), rank(&got, id).unwrap());
+        assert!(
+            after <= before,
+            "{shared}: {id} fell from {before} to {after}"
+        );
+        lifted += usize::from(after < before);
+    }
+    assert!(lifted > 0, "a focus lifted none of {same:?}");
+    let strict = SearchOptions {
+        strict: true,
+        ..SearchOptions::default()
+    };
+    assert!(rows(&engine.search_with(&shared, 5, &strict).unwrap()) >= 2);
+    let bad = |o: SearchOptions| engine.search_with("x", 1, &o).unwrap_err().code;
+    let half = SearchOptions {
+        focus_lat: Some(1.0),
+        ..SearchOptions::default()
+    };
+    assert_eq!(bad(half), ErrorCode::InvalidArgument);
+    let zero = SearchOptions {
+        focus_scale_m: Some(0.0),
+        ..SearchOptions {
+            focus_lon: Some(1.0),
+            ..half
+        }
+    };
+    assert_eq!(bad(zero), ErrorCode::InvalidArgument);
+    let off = SearchOptions {
+        focus_lat: Some(91.0),
+        ..SearchOptions {
+            focus_lon: Some(1.0),
+            ..half
+        }
+    };
+    assert_eq!(bad(off), ErrorCode::InvalidArgument);
 }

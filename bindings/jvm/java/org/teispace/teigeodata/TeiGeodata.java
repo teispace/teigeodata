@@ -76,6 +76,40 @@ public final class TeiGeodata {
      */
     public static native double distanceM(double lat1, double lon1, double lat2, double lon2);
 
+    /**
+     * How `Engine::search_with` ranks (D-226). Every field's zero value is its default
+     * (D-276).
+     *
+     * @param focusLat Prefer places near this latitude (with `focus_lon`): the user's location, or a point in their home country with a wide scale. (null: unset)
+     * @param focusLon The focus longitude; set with `focus_lat` or not at all. (null: unset)
+     * @param focusScaleM The distance in metres at which the focus gain halves (a place at the focus gains 30, one scale away 15); `None` is 50 km. (null: unset)
+     * @param strict Rank by match tier first (exact, loose, prefix, one edit, substring, two edits, phonetic), then importance and focus, instead of one additive score.
+     */
+    public record SearchOptions(Double focusLat, Double focusLon, Double focusScaleM, boolean strict) {
+        /** Every field at its zero value: the defaults (D-276). */
+        public static final SearchOptions DEFAULTS = new SearchOptions(null, null, null, false);
+
+        /** A copy with {@code focusLat} set. */
+        public SearchOptions withFocusLat(Double focusLat) {
+            return new SearchOptions(focusLat, focusLon, focusScaleM, strict);
+        }
+
+        /** A copy with {@code focusLon} set. */
+        public SearchOptions withFocusLon(Double focusLon) {
+            return new SearchOptions(focusLat, focusLon, focusScaleM, strict);
+        }
+
+        /** A copy with {@code focusScaleM} set. */
+        public SearchOptions withFocusScaleM(Double focusScaleM) {
+            return new SearchOptions(focusLat, focusLon, focusScaleM, strict);
+        }
+
+        /** A copy with {@code strict} set. */
+        public SearchOptions withStrict(boolean strict) {
+            return new SearchOptions(focusLat, focusLon, focusScaleM, strict);
+        }
+    }
+
     /** Frees handles whose owner was never closed and is unreachable. */
     private static final java.lang.ref.Cleaner CLEANER = java.lang.ref.Cleaner.create();
 
@@ -160,7 +194,7 @@ public static final class Engine implements AutoCloseable {
         public long openFile(String path) {
             long stamp = enter();
             try {
-return nativeOpenFile(handle, path);
+                return nativeOpenFile(handle, path);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -180,7 +214,7 @@ return nativeOpenFile(handle, path);
         public long openBytes(byte[] bytes) {
             long stamp = enter();
             try {
-return nativeOpenBytes(handle, bytes);
+                return nativeOpenBytes(handle, bytes);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -196,7 +230,7 @@ return nativeOpenBytes(handle, bytes);
         public boolean remove(long layer) {
             long stamp = enter();
             try {
-return nativeRemove(handle, layer);
+                return nativeRemove(handle, layer);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -211,7 +245,7 @@ return nativeRemove(handle, layer);
         public long layers() {
             long stamp = enter();
             try {
-return nativeLayers(handle);
+                return nativeLayers(handle);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -231,7 +265,7 @@ return nativeLayers(handle);
         public byte[] get(String id) {
             long stamp = enter();
             try {
-return nativeGet(handle, id);
+                return nativeGet(handle, id);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -252,7 +286,7 @@ return nativeGet(handle, id);
         public byte[] parent(String id) {
             long stamp = enter();
             try {
-return nativeParent(handle, id);
+                return nativeParent(handle, id);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -272,7 +306,7 @@ return nativeParent(handle, id);
         public byte[] ancestors(String id) {
             long stamp = enter();
             try {
-return nativeAncestors(handle, id);
+                return nativeAncestors(handle, id);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -291,7 +325,7 @@ return nativeAncestors(handle, id);
         public byte[] children(String id) {
             long stamp = enter();
             try {
-return nativeChildren(handle, id);
+                return nativeChildren(handle, id);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -312,7 +346,7 @@ return nativeChildren(handle, id);
         public byte[] nearby(String id, long limit) {
             long stamp = enter();
             try {
-return nativeNearby(handle, id, limit);
+                return nativeNearby(handle, id, limit);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -333,7 +367,7 @@ return nativeNearby(handle, id, limit);
         public byte[] search(String query, long limit) {
             long stamp = enter();
             try {
-return nativeSearch(handle, query, limit);
+                return nativeSearch(handle, query, limit);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -341,6 +375,29 @@ return nativeSearch(handle, query, limit);
         }
 
         private static native byte[] nativeSearch(long handle, String query, long limit);
+
+        /**
+         * `search` ranked by `options`: near a focus point, or in strict match
+         * order.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`, the focus is off the
+         * globe or has one coordinate only, or its scale is not positive;
+         * `ErrorCode::Corrupt` if a section read is corrupt.
+         */
+        public byte[] searchWith(String query, long limit, SearchOptions options) {
+            SearchOptions options$ = options != null ? options : SearchOptions.DEFAULTS;
+            long stamp = enter();
+            try {
+                return nativeSearchWith(handle, query, limit, options$.focusLat() != null, options$.focusLat() != null ? options$.focusLat() : 0, options$.focusLon() != null, options$.focusLon() != null ? options$.focusLon() : 0, options$.focusScaleM() != null, options$.focusScaleM() != null ? options$.focusScaleM() : 0, options$.strict());
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeSearchWith(long handle, String query, long limit, boolean optionsHasFocusLat, double optionsFocusLat, boolean optionsHasFocusLon, double optionsFocusLon, boolean optionsHasFocusScaleM, double optionsFocusScaleM, boolean optionsStrict);
 
         /**
          * The places nearest the point, nearest first, at most `limit`, with `meters` and
@@ -354,7 +411,7 @@ return nativeSearch(handle, query, limit);
         public byte[] reverse(double lat, double lon, long limit) {
             long stamp = enter();
             try {
-return nativeReverse(handle, lat, lon, limit);
+                return nativeReverse(handle, lat, lon, limit);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -376,7 +433,7 @@ return nativeReverse(handle, lat, lon, limit);
         public byte[] withinRadius(double lat, double lon, double meters, long limit) {
             long stamp = enter();
             try {
-return nativeWithinRadius(handle, lat, lon, meters, limit);
+                return nativeWithinRadius(handle, lat, lon, meters, limit);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -396,7 +453,7 @@ return nativeWithinRadius(handle, lat, lon, meters, limit);
         public byte[] adminAt(double lat, double lon) {
             long stamp = enter();
             try {
-return nativeAdminAt(handle, lat, lon);
+                return nativeAdminAt(handle, lat, lon);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -419,7 +476,7 @@ return nativeAdminAt(handle, lat, lon);
         public byte[] elevationAt(double lat, double lon) {
             long stamp = enter();
             try {
-return nativeElevationAt(handle, lat, lon);
+                return nativeElevationAt(handle, lat, lon);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -442,7 +499,7 @@ return nativeElevationAt(handle, lat, lon);
         public byte[] postalLookup(String code, String scheme) {
             long stamp = enter();
             try {
-return nativePostalLookup(handle, code, scheme);
+                return nativePostalLookup(handle, code, scheme);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -463,7 +520,7 @@ return nativePostalLookup(handle, code, scheme);
         public byte[] postalPrefix(String input, String scheme, long limit) {
             long stamp = enter();
             try {
-return nativePostalPrefix(handle, input, scheme, limit);
+                return nativePostalPrefix(handle, input, scheme, limit);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -483,7 +540,7 @@ return nativePostalPrefix(handle, input, scheme, limit);
         public byte[] postalCodesOf(String id) {
             long stamp = enter();
             try {
-return nativePostalCodesOf(handle, id);
+                return nativePostalCodesOf(handle, id);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -505,7 +562,7 @@ return nativePostalCodesOf(handle, id);
         public byte[] postalAt(double lat, double lon) {
             long stamp = enter();
             try {
-return nativePostalAt(handle, lat, lon);
+                return nativePostalAt(handle, lat, lon);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -526,7 +583,7 @@ return nativePostalAt(handle, lat, lon);
         public byte[] tzAt(double lat, double lon) {
             long stamp = enter();
             try {
-return nativeTzAt(handle, lat, lon);
+                return nativeTzAt(handle, lat, lon);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -546,7 +603,7 @@ return nativeTzAt(handle, lat, lon);
         public byte[] byIso(String code) {
             long stamp = enter();
             try {
-return nativeByIso(handle, code);
+                return nativeByIso(handle, code);
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);

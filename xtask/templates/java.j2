@@ -20,7 +20,15 @@ public final class TeiGeodata {
     public static final long {{ c.name }} = {{ c.value }}L;
 {% endfor %}
 {% macro jty(t) %}{% if t == "bool" %}boolean{% elif t == "i32" %}int{% elif t == "f64" %}double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}byte[]{% elif t == "void" %}void{% else %}long{% endif %}{% endmacro %}
-{% macro pty(p) %}{% if p.ty == "callback" %}Callback{{ p.callback.id | pascal }}{% elif p.ty == "handle" %}{{ p.handle }}{% else %}{{ jty(p.ty) }}{% endif %}{% endmacro %}
+{% macro pty(p) %}{% if p.ty == "callback" %}Callback{{ p.callback.id | pascal }}{% elif p.ty == "handle" %}{{ p.handle }}{% elif p.ty == "record" %}{{ p.record }}{% else %}{{ jty(p.ty) }}{% endif %}{% endmacro %}
+{#- A record field's Java type: boxed when optional (null is unset). #}
+{% macro fty(f) %}{% if not f.optional %}{{ jty(f.ty) }}{% elif f.ty == "bool" %}Boolean{% elif f.ty == "i32" %}Integer{% elif f.ty == "f64" %}Double{% else %}Long{% endif %}{% endmacro %}
+{#- A call argument; a record is flattened into its fields, `has` before each optional one. #}
+{% macro arg(p) %}{% if p.ty == "handle" %}{{ p.name | camel }}.handle{% elif p.ty == "record" %}{% for f in records | selectattr("name", "eq", p.record) | map(attribute="fields") | first %}{% set v = (p.name | camel) ~ "$." ~ (f.name | camel) ~ "()" %}{% if f.optional %}{{ v }} != null, {{ v }} != null ? {{ v }} : {% if f.ty == "bool" %}false{% else %}0{% endif %}{% else %}{{ v }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}{{ p.name | camel }}{% endif %}{% endmacro %}
+{% macro native_param(p) %}{% if p.ty == "handle" %}long {{ p.name | camel }}{% elif p.ty == "record" %}{% for f in records | selectattr("name", "eq", p.record) | map(attribute="fields") | first %}{% if f.optional %}boolean {{ p.name | camel }}Has{{ f.name | pascal }}, {% endif %}{{ jty(f.ty) }} {{ p.name | camel }}{{ f.name | pascal }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}{{ pty(p) }} {{ p.name | camel }}{% endif %}{% endmacro %}
+{% macro defaults(f) %}{% for p in f.params if p.ty == "record" %}
+            {{ p.record }} {{ p.name | camel }}$ = {{ p.name | camel }} != null ? {{ p.name | camel }} : {{ p.record }}.DEFAULTS;
+{% endfor %}{% endmacro %}
 {% macro javadoc(lines, indent) %}
 {{ indent }}/**
 {% for line in lines %}
@@ -47,6 +55,31 @@ public final class TeiGeodata {
 {% endfor %}
      */
     public static native {{ jty(f.returns) }} {{ f.name | camel }}({% for p in f.params %}{% if p.ty == "callback" %}Callback{{ p.callback.id | pascal }}{% else %}{{ jty(p.ty) }}{% endif %} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %});
+{% endfor %}
+{% for r in records %}
+
+    /**
+{% for line in r.doc %}
+     *{% if line %} {{ line | replace("<", "&lt;") | replace(">", "&gt;") }}{% endif %}
+
+{% endfor %}
+     *
+{% for f in r.fields %}
+     * @param {{ f.name | camel }} {{ f.doc | join(" ") | replace("<", "&lt;") | replace(">", "&gt;") }}{% if f.optional %} (null: unset){% endif %}
+
+{% endfor %}
+     */
+    public record {{ r.name }}({% for f in r.fields %}{{ fty(f) }} {{ f.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) {
+        /** Every field at its zero value: the defaults (D-276). */
+        public static final {{ r.name }} DEFAULTS = new {{ r.name }}({% for f in r.fields %}{% if f.optional %}null{% elif f.ty == "bool" %}false{% else %}0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %});
+{% for f in r.fields %}
+
+        /** A copy with {@code {{ f.name | camel }}} set. */
+        public {{ r.name }} with{{ f.name | pascal }}({{ fty(f) }} {{ f.name | camel }}) {
+            return new {{ r.name }}({% for g in r.fields %}{{ g.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %});
+        }
+{% endfor %}
+    }
 {% endfor %}
 {% if handles %}
 
@@ -111,17 +144,17 @@ public final class TeiGeodata {
 {{ javadoc(f.doc, "        ") -}}
 {% if f.name == "new" and f.returns_handle == h.name %}
         public {{ h.name }}({% for p in f.params %}{{ pty(p) }} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) {
-            this(nativeNew({% for p in f.params %}{{ p.name | camel }}{% if p.ty == "handle" %}.handle{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}));
+            this(nativeNew({% for p in f.params %}{{ arg(p) }}{% if not loop.last %}, {% endif %}{% endfor %}));
         }
 {% elif not f.receiver %}
         public static {% if f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ jty(f.returns) }}{% endif %} {{ f.name | camel }}({% for p in f.params %}{{ pty(p) }} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) {
-            {% if f.returns == "handle" %}return new {{ f.returns_handle }}({% elif f.returns != "void" %}return {% endif %}native{{ f.name | pascal }}({% for p in f.params %}{{ p.name | camel }}{% if p.ty == "handle" %}.handle{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% if f.returns == "handle" %}){% endif %};
+{{ defaults(f) }}            {{ ("return new " ~ f.returns_handle ~ "(") if f.returns == "handle" else ("return " if f.returns != "void" else "") }}native{{ f.name | pascal }}({% for p in f.params %}{{ arg(p) }}{% if not loop.last %}, {% endif %}{% endfor %}){% if f.returns == "handle" %}){% endif %};
         }
 {% else %}
         public {% if f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ jty(f.returns) }}{% endif %} {{ f.name | camel }}({% for p in f.params %}{{ pty(p) }} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) {
-            long stamp = enter();
+{{ defaults(f) }}            long stamp = enter();
             try {
-                {% if f.returns == "handle" %}return new {{ f.returns_handle }}({% elif f.returns != "void" %}return {% endif %}native{{ f.name | pascal }}(handle{% for p in f.params %}, {{ p.name | camel }}{% if p.ty == "handle" %}.handle{% endif %}{% endfor %}){% if f.returns == "handle" %}){% endif %};
+                {{ ("return new " ~ f.returns_handle ~ "(") if f.returns == "handle" else ("return " if f.returns != "void" else "") }}native{{ f.name | pascal }}(handle{% for p in f.params %}, {{ arg(p) }}{% endfor %}){% if f.returns == "handle" %}){% endif %};
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
@@ -129,7 +162,7 @@ public final class TeiGeodata {
         }
 {% endif %}
 
-        private static native {% if f.returns == "handle" %}long{% else %}{{ jty(f.returns) }}{% endif %} native{{ f.name | pascal }}({% if f.receiver %}long handle{% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty == "handle" %}long{% else %}{{ pty(p) }}{% endif %} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %});
+        private static native {% if f.returns == "handle" %}long{% else %}{{ jty(f.returns) }}{% endif %} native{{ f.name | pascal }}({% if f.receiver %}long handle{% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{{ native_param(p) }}{% if not loop.last %}, {% endif %}{% endfor %});
 {% endfor %}
     }
 {% endfor %}

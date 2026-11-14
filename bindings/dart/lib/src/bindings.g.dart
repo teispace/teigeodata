@@ -65,6 +65,55 @@ final class CorruptException extends TeiGeodataException {
 /// The C callback `tg_callback_u32`.
 typedef CallbackU32 = Bool Function(Pointer<Void>, Uint32);
 
+/// How `Engine::search_with` ranks (D-226). Every field's zero value is its default
+/// (D-276).
+final class SearchOptions {
+  const SearchOptions({ this.focusLat, this.focusLon, this.focusScaleM, this.strict = false });
+
+  /// Prefer places near this latitude (with `focus_lon`): the user's location, or a point
+  /// in their home country with a wide scale.
+  final double? focusLat;
+
+  /// The focus longitude; set with `focus_lat` or not at all.
+  final double? focusLon;
+
+  /// The distance in metres at which the focus gain halves (a place at the focus gains 30,
+  /// one scale away 15); `None` is 50 km.
+  final double? focusScaleM;
+
+  /// Rank by match tier first (exact, loose, prefix, one edit, substring, two edits,
+  /// phonetic), then importance and focus, instead of one additive score.
+  final bool strict;
+
+  void _write(_TgSearchOptions to) {
+    to.hasFocusLat = focusLat != null;
+    to.focusLat = focusLat ?? 0.0;
+    to.hasFocusLon = focusLon != null;
+    to.focusLon = focusLon ?? 0.0;
+    to.hasFocusScaleM = focusScaleM != null;
+    to.focusScaleM = focusScaleM ?? 0.0;
+    to.strict = strict;
+  }
+}
+
+/// The C struct `tg_search_options`.
+final class _TgSearchOptions extends Struct {
+  @Bool()
+  external bool hasFocusLat;
+  @Double()
+  external double focusLat;
+  @Bool()
+  external bool hasFocusLon;
+  @Double()
+  external double focusLon;
+  @Bool()
+  external bool hasFocusScaleM;
+  @Double()
+  external double focusScaleM;
+  @Bool()
+  external bool strict;
+}
+
 /// The teigeodata library, loaded from a path. One instance per isolate; calls are
 /// synchronous. Functions without callbacks are leaf calls (the cheapest kind).
 final class TeiGeodata {
@@ -89,6 +138,7 @@ final class TeiGeodata {
         _engineChildrenNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_children', isLeaf: true),
         _engineNearbyNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>)>('tg_engine_nearby', isLeaf: true),
         _engineSearchNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>)>('tg_engine_search', isLeaf: true),
+        _engineSearchWithNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Uint32, Pointer<_TgSearchOptions>, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<_TgSearchOptions>, Pointer<TgBytes>)>('tg_engine_search_with', isLeaf: true),
         _engineReverseNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, int, Pointer<TgBytes>)>('tg_engine_reverse', isLeaf: true),
         _engineWithinRadiusNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Double, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, double, int, Pointer<TgBytes>)>('tg_engine_within_radius', isLeaf: true),
         _engineAdminAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_admin_at', isLeaf: true),
@@ -126,6 +176,7 @@ final class TeiGeodata {
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineChildrenNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>) _engineNearbyNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>) _engineSearchNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<_TgSearchOptions>, Pointer<TgBytes>) _engineSearchWithNative;
   final int Function(Pointer<Void>, double, double, int, Pointer<TgBytes>) _engineReverseNative;
   final int Function(Pointer<Void>, double, double, double, int, Pointer<TgBytes>) _engineWithinRadiusNative;
   final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _engineAdminAtNative;
@@ -140,6 +191,7 @@ final class TeiGeodata {
   // Scratch memory reused by every call: the output slots and a growing input buffer.
   final Pointer<TgBytes> _bytes = calloc<TgBytes>();
   final Pointer<Uint64> _word = calloc<Uint64>();
+  final Pointer<_TgSearchOptions> _searchOptions = calloc<_TgSearchOptions>();
   Pointer<Uint8> _input = nullptr;
   int _inputCap = 0;
 
@@ -153,6 +205,7 @@ final class TeiGeodata {
   void close() {
     calloc.free(_bytes);
     calloc.free(_word);
+    calloc.free(_searchOptions);
     if (_inputCap > 0) malloc.free(_input);
   }
 
@@ -368,6 +421,14 @@ final class TeiGeodata {
     return _takeBlob();
   }
 
+  Uint8List _engineSearchWith(Pointer<Void> handle, String query, int limit, SearchOptions options) {
+    final queryLen = _utf8(query);
+    options._write(_searchOptions.ref);
+    final status = _engineSearchWithNative(handle, _input, queryLen, limit, _searchOptions, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
   Uint8List _engineReverse(Pointer<Void> handle, double lat, double lon, int limit) {
     final status = _engineReverseNative(handle, lat, lon, limit, _bytes);
     _check(status);
@@ -542,6 +603,16 @@ final class Engine implements Finalizable {
   /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
   /// `ErrorCode::Corrupt` if a section read is corrupt.
   Uint8List search(String query, int limit) => _lib._engineSearch(_live, query, limit);
+
+  /// `search` ranked by `options`: near a focus point, or in strict match
+  /// order.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`, the focus is off the
+  /// globe or has one coordinate only, or its scale is not positive;
+  /// `ErrorCode::Corrupt` if a section read is corrupt.
+  Uint8List searchWith(String query, int limit, SearchOptions options) => _lib._engineSearchWith(_live, query, limit, options);
 
   /// The places nearest the point, nearest first, at most `limit`, with `meters` and
   /// `bearing` (degrees from north) to each.

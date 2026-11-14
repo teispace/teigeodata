@@ -75,6 +75,30 @@ def distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     -180..=180, or any value is not finite.
     """
 
+class SearchOptions:
+    """
+    How `Engine::search_with` ranks (D-226). Every field's zero value is its default
+    (D-276).
+    """
+
+    def __init__(self, *, focus_lat: float | None = None, focus_lon: float | None = None, focus_scale_m: float | None = None, strict: bool = False) -> None: ...
+
+    @property
+    def focus_lat(self) -> float | None:
+        """Prefer places near this latitude (with `focus_lon`): the user's location, or a point in their home country with a wide scale."""
+
+    @property
+    def focus_lon(self) -> float | None:
+        """The focus longitude; set with `focus_lat` or not at all."""
+
+    @property
+    def focus_scale_m(self) -> float | None:
+        """The distance in metres at which the focus gain halves (a place at the focus gains 30, one scale away 15); `None` is 50 km."""
+
+    @property
+    def strict(self) -> bool:
+        """Rank by match tier first (exact, loose, prefix, one edit, substring, two edits, phonetic), then importance and focus, instead of one additive score."""
+
 class Engine:
     """
     Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
@@ -182,6 +206,18 @@ class Engine:
         # Errors
 
         `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+        `ErrorCode::Corrupt` if a section read is corrupt.
+        """
+
+    def search_with(self, query: str, limit: int, options: SearchOptions) -> bytes:
+        """
+        `search` ranked by `options`: near a focus point, or in strict match
+        order.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`, the focus is off the
+        globe or has one coordinate only, or its scale is not positive;
         `ErrorCode::Corrupt` if a section read is corrupt.
         """
 

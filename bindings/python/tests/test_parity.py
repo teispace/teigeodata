@@ -116,6 +116,19 @@ class Engine(unittest.TestCase):
         units = Blob(self.engine.admin_at(a["lat"], a["lon"]))
         self.assertEqual(units.strings("id"), a["ids"])
 
+    def test_search_options(self) -> None:
+        w = self.p["search_with"]
+        options = tg.SearchOptions(focus_lat=w["focus_lat"], focus_lon=w["focus_lon"], focus_scale_m=w["focus_scale_m"])
+        self.assertEqual((options.focus_lat, options.strict), (w["focus_lat"], False))
+        got = Blob(self.engine.search_with(w["query"], w["limit"], options))
+        self.assertEqual(got.strings("id"), w["ids"])
+        plain = Blob(self.engine.search_with(w["query"], w["limit"], tg.SearchOptions()))
+        self.assertNotEqual(plain.strings("id"), w["ids"])
+        with self.assertRaises(tg.InvalidArgumentError):
+            self.engine.search_with(w["query"], 1, tg.SearchOptions(focus_lat=1.0))
+        with self.assertRaises(TypeError):
+            tg.SearchOptions(1.0)  # keyword arguments only
+
     def test_postal(self) -> None:
         e, p = self.engine, self.p
         c = p["postal_lookup"]

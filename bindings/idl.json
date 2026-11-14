@@ -1,5 +1,5 @@
 {
-  "format": 2,
+  "format": 3,
   "source": "crates/teigeodata-api/src/lib.rs",
   "error_codes": [
     {
@@ -402,6 +402,37 @@
           "fallible": true
         },
         {
+          "name": "search_with",
+          "doc": [
+            "`search` ranked by `options`: near a focus point, or in strict match",
+            "order.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`, the focus is off the",
+            "globe or has one coordinate only, or its scale is not positive;",
+            "`ErrorCode::Corrupt` if a section read is corrupt."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "query",
+              "ty": "str"
+            },
+            {
+              "name": "limit",
+              "ty": "u32"
+            },
+            {
+              "name": "options",
+              "ty": "record",
+              "record": "SearchOptions"
+            }
+          ],
+          "returns": "blob",
+          "fallible": true
+        },
+        {
           "name": "reverse",
           "doc": [
             "The places nearest the point, nearest first, at most `limit`, with `meters` and",
@@ -661,6 +692,53 @@
           ],
           "returns": "blob",
           "fallible": true
+        }
+      ]
+    }
+  ],
+  "records": [
+    {
+      "name": "SearchOptions",
+      "snake": "search_options",
+      "doc": [
+        "How `Engine::search_with` ranks (D-226). Every field's zero value is its default",
+        "(D-276)."
+      ],
+      "fields": [
+        {
+          "name": "focus_lat",
+          "ty": "f64",
+          "optional": true,
+          "doc": [
+            "Prefer places near this latitude (with `focus_lon`): the user's location, or a point",
+            "in their home country with a wide scale."
+          ]
+        },
+        {
+          "name": "focus_lon",
+          "ty": "f64",
+          "optional": true,
+          "doc": [
+            "The focus longitude; set with `focus_lat` or not at all."
+          ]
+        },
+        {
+          "name": "focus_scale_m",
+          "ty": "f64",
+          "optional": true,
+          "doc": [
+            "The distance in metres at which the focus gain halves (a place at the focus gains 30,",
+            "one scale away 15); `None` is 50 km."
+          ]
+        },
+        {
+          "name": "strict",
+          "ty": "bool",
+          "optional": false,
+          "doc": [
+            "Rank by match tier first (exact, loose, prefix, one edit, substring, two edits,",
+            "phonetic), then importance and focus, instead of one additive score."
+          ]
         }
       ]
     }

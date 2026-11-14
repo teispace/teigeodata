@@ -142,6 +142,16 @@ int main(void) {
     tg_bytes_free(out);
     CHECK(tg_engine_by_iso(engine, (const uint8_t *)"np", 2, &out) == TG_OK && str_is(out, "id", 0, id));
     tg_bytes_free(out);
+    const char *lalek = "Lalek";
+    tg_search_options focus = {.has_focus_lat = true, .focus_lat = 26.80005, .has_focus_lon = true, .focus_lon = 87.087849, .has_focus_scale_m = true, .focus_scale_m = 1000.0};
+    CHECK(tg_engine_search_with(engine, (const uint8_t *)lalek, strlen(lalek), 3, &focus, &out) == TG_OK);
+    CHECK(blob_rows(out) == 3 && str_is(out, "id", 1, "tgd:np/tv88y0"));
+    tg_bytes_free(out);
+    CHECK(tg_engine_search_with(engine, (const uint8_t *)lalek, strlen(lalek), 3, NULL, &out) == TG_OK);
+    CHECK(blob_rows(out) == 3 && !str_is(out, "id", 1, "tgd:np/tv88y0"));
+    tg_bytes_free(out);
+    tg_search_options half = {.has_focus_lat = true, .focus_lat = 1.0};
+    CHECK(tg_engine_search_with(engine, (const uint8_t *)lalek, strlen(lalek), 3, &half, &out) == TG_ERROR_INVALID_ARGUMENT);
     const char *postal = "106-01";
     CHECK(tg_engine_postal_lookup(engine, (const uint8_t *)postal, strlen(postal), (const uint8_t *)"np", 2, &out) == TG_OK);
     CHECK(blob_rows(out) == 1 && str_is(out, "postal", 0, "10601") && str_is(out, "id", 0, "tgd:np/vasbex"));

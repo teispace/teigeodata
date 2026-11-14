@@ -108,6 +108,16 @@ public final class ParityTest {
             check(strings(engine.byIso((String) iso.get("code")), "id").equals(List.of(iso.get("id"))), "by_iso");
             expect(TeiGeodataException.InvalidArgument.class, () -> engine.byIso((String) p.get("bad_iso")), "ISO 3166");
             expect(TeiGeodataException.InvalidArgument.class, () -> engine.withinRadius(wl, wo, -1, 1), "radius");
+            Map<?, ?> sw = (Map<?, ?>) p.get("search_with");
+            TeiGeodata.SearchOptions focus = TeiGeodata.SearchOptions.DEFAULTS
+                    .withFocusLat(((Number) sw.get("focus_lat")).doubleValue())
+                    .withFocusLon(((Number) sw.get("focus_lon")).doubleValue())
+                    .withFocusScaleM(((Number) sw.get("focus_scale_m")).doubleValue());
+            long swLimit = ((Number) sw.get("limit")).longValue();
+            check(strings(engine.searchWith((String) sw.get("query"), swLimit, focus), "id").equals(sw.get("ids")), "search_with");
+            check(!strings(engine.searchWith((String) sw.get("query"), swLimit, null), "id").equals(sw.get("ids")), "search_with defaults");
+            expect(TeiGeodataException.InvalidArgument.class,
+                    () -> engine.searchWith("x", 1, TeiGeodata.SearchOptions.DEFAULTS.withFocusLat(1.0)), "focus");
             Map<?, ?> pl = (Map<?, ?>) p.get("postal_lookup");
             byte[] hit = engine.postalLookup((String) pl.get("code"), (String) pl.get("scheme"));
             check(strings(hit, "postal").equals(pl.get("postal")) && strings(hit, "id").equals(pl.get("ids")), "postal_lookup");

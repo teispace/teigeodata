@@ -42,13 +42,13 @@ final class {{ c.name }}Exception extends TeiGeodataException {
 }
 {% endfor %}
 {% macro nty(t) %}{% if t == "bool" %}Bool{% elif t == "i32" %}Int32{% elif t == "u32" %}Uint32{% elif t == "i64" %}Int64{% elif t == "u64" %}Uint64{% elif t == "f64" %}Double{% endif %}{% endmacro %}
-{% macro dty(t, h) %}{% if t == "bool" %}bool{% elif t == "f64" %}double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}Uint8List{% elif t == "handle" %}{{ h }}{% elif t == "void" %}void{% else %}int{% endif %}{% endmacro %}
+{% macro dty(t, h) %}{% if t == "bool" %}bool{% elif t == "f64" %}double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}Uint8List{% elif t in ["handle", "record"] %}{{ h }}{% elif t == "void" %}void{% else %}int{% endif %}{% endmacro %}
 {#- The native signature: `n` is nty for the C side or dty for the Dart side. #}
-{% macro sig(f, c) %}{% if f.receiver %}Pointer<Void>{% if f.params or f.returns != "void" %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty in ["str", "bytes"] %}Pointer<Uint8>, {% if c %}Size{% else %}int{% endif %}{% elif p.ty == "handle" %}Pointer<Void>{% elif p.ty == "callback" %}Pointer<NativeFunction<Callback{{ p.callback.id | pascal }}>>, Pointer<Void>{% elif c %}{{ nty(p.ty) }}{% else %}{{ dty(p.ty) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}Pointer<TgBytes>{% elif f.returns == "handle" %}Pointer<Pointer<Void>>{% else %}Pointer<{{ nty(f.returns) }}>{% endif %}{% endif %}{% endmacro %}
+{% macro sig(f, c) %}{% if f.receiver %}Pointer<Void>{% if f.params or f.returns != "void" %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty in ["str", "bytes"] %}Pointer<Uint8>, {% if c %}Size{% else %}int{% endif %}{% elif p.ty == "handle" %}Pointer<Void>{% elif p.ty == "record" %}Pointer<_Tg{{ p.record }}>{% elif p.ty == "callback" %}Pointer<NativeFunction<Callback{{ p.callback.id | pascal }}>>, Pointer<Void>{% elif c %}{{ nty(p.ty) }}{% else %}{{ dty(p.ty) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}Pointer<TgBytes>{% elif f.returns == "handle" %}Pointer<Pointer<Void>>{% else %}Pointer<{{ nty(f.returns) }}>{% endif %}{% endif %}{% endmacro %}
 {% macro lookup(f, field, symbol) %}
         {{ field }} = lib.lookupFunction<Int32 Function({{ sig(f, true) }}), int Function({{ sig(f, false) }})>('{{ symbol }}'{% if not (f.params | selectattr("ty", "eq", "callback") | list) %}, isLeaf: true{% endif %}){% endmacro %}
-{% macro dparams(f) %}{% for p in f.params %}{% if p.ty == "callback" %}bool Function({% for a in p.callback.args %}{{ dty(a) }}{% if not loop.last %}, {% endif %}{% endfor %}) {{ p.name | camel }}{% else %}{{ dty(p.ty, p.handle) }} {{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endmacro %}
-{% macro args(f) %}{% if f.receiver %}handle{% if f.params or f.returns != "void" %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty in ["str", "bytes"] %}{% if f.params | selectattr("ty", "in", ["str", "bytes"]) | list | length > 1 %}_input + {{ p.name | camel }}At{% else %}_input{% endif %}, {{ p.name | camel }}Len{% elif p.ty == "handle" %}{{ p.name | camel }}._live{% elif p.ty == "callback" %}callable.nativeFunction, nullptr{% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}_bytes{% else %}_word.cast(){% endif %}{% endif %}{% endmacro %}
+{% macro dparams(f) %}{% for p in f.params %}{% if p.ty == "callback" %}bool Function({% for a in p.callback.args %}{{ dty(a) }}{% if not loop.last %}, {% endif %}{% endfor %}) {{ p.name | camel }}{% else %}{{ dty(p.ty, p.record if p.ty == "record" else p.handle) }} {{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endmacro %}
+{% macro args(f) %}{% if f.receiver %}handle{% if f.params or f.returns != "void" %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty in ["str", "bytes"] %}{% if f.params | selectattr("ty", "in", ["str", "bytes"]) | list | length > 1 %}_input + {{ p.name | camel }}At{% else %}_input{% endif %}, {{ p.name | camel }}Len{% elif p.ty == "handle" %}{{ p.name | camel }}._live{% elif p.ty == "record" %}_{{ p.record | camel_lower }}{% elif p.ty == "callback" %}callable.nativeFunction, nullptr{% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}_bytes{% else %}_word.cast(){% endif %}{% endif %}{% endmacro %}
 {#- A call through the scratch memory: a public function, or (with `owner`) the private half
     of a handle's method. #}
 {% macro call(f, name, native, owner) %}
@@ -71,6 +71,9 @@ final class {{ c.name }}Exception extends TeiGeodataException {
 {% endif %}
 {% set ns.prev = p.name | camel %}
     final {{ p.name | camel }}Len = {% if p.ty == "str" %}_utf8{% else %}_copy{% endif %}({{ p.name | camel }}{% if strs | length > 1 %}, {{ p.name | camel }}At{% endif %});
+{% endfor %}
+{% for p in f.params if p.ty == "record" %}
+    {{ p.name | camel }}._write(_{{ p.record | camel_lower }}.ref);
 {% endfor %}
 {% if cb %}
     Object? raised;
@@ -115,6 +118,47 @@ final class {{ c.name }}Exception extends TeiGeodataException {
 typedef Callback{{ cb.id | pascal }} = Bool Function(Pointer<Void>{% for a in cb.args %}, {{ nty(a) }}{% endfor %});
 {% endfor %}
 
+{% for r in records %}
+{% for line in r.doc %}
+///{% if line %} {{ line }}{% endif %}
+
+{% endfor %}
+final class {{ r.name }} {
+  const {{ r.name }}({ {% for f in r.fields %}this.{{ f.name | camel }}{% if not f.optional %} = {% if f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %} });
+{% for f in r.fields %}
+
+{% for line in f.doc %}
+  ///{% if line %} {{ line }}{% endif %}
+
+{% endfor %}
+  final {{ dty(f.ty) }}{% if f.optional %}?{% endif %} {{ f.name | camel }};
+{% endfor %}
+
+  void _write(_Tg{{ r.name }} to) {
+{% for f in r.fields %}
+{% if f.optional %}
+    to.has{{ f.name | pascal }} = {{ f.name | camel }} != null;
+    to.{{ f.name | camel }} = {{ f.name | camel }} ?? {% if f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %};
+{% else %}
+    to.{{ f.name | camel }} = {{ f.name | camel }};
+{% endif %}
+{% endfor %}
+  }
+}
+
+/// The C struct `tg_{{ r.snake }}`.
+final class _Tg{{ r.name }} extends Struct {
+{% for f in r.fields %}
+{% if f.optional %}
+  @Bool()
+  external bool has{{ f.name | pascal }};
+{% endif %}
+  @{{ nty(f.ty) }}()
+  external {{ dty(f.ty) }} {{ f.name | camel }};
+{% endfor %}
+}
+
+{% endfor %}
 /// The teigeodata library, loaded from a path. One instance per isolate; calls are
 /// synchronous. Functions without callbacks are leaf calls (the cheapest kind).
 final class TeiGeodata {
@@ -148,6 +192,9 @@ final class TeiGeodata {
   // Scratch memory reused by every call: the output slots and a growing input buffer.
   final Pointer<TgBytes> _bytes = calloc<TgBytes>();
   final Pointer<Uint64> _word = calloc<Uint64>();
+{% for r in records %}
+  final Pointer<_Tg{{ r.name }}> _{{ r.name | camel_lower }} = calloc<_Tg{{ r.name }}>();
+{% endfor %}
   Pointer<Uint8> _input = nullptr;
   int _inputCap = 0;
 {% for c in constants %}
@@ -160,6 +207,9 @@ final class TeiGeodata {
   void close() {
     calloc.free(_bytes);
     calloc.free(_word);
+{% for r in records %}
+    calloc.free(_{{ r.name | camel_lower }});
+{% endfor %}
     if (_inputCap > 0) malloc.free(_input);
   }
 

@@ -43,8 +43,8 @@ private func takeData(_ bytes: tg_bytes) -> Data {
     guard let ptr = bytes.ptr else { return Data() }
     return Data(bytesNoCopy: ptr, count: bytes.len, deallocator: .custom { _, _ in tg_bytes_free(bytes) })
 }
-{% macro swty(t, h) %}{% if t == "bool" %}Bool{% elif t == "i32" %}Int32{% elif t == "u32" %}UInt32{% elif t == "i64" %}Int64{% elif t == "u64" %}UInt64{% elif t == "f64" %}Double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}Data{% elif t == "handle" %}{{ h }}{% else %}Void{% endif %}{% endmacro %}
-{% macro signature(f) %}({% for p in f.params %}{% if loop.first %}_ {% endif %}{{ p.name | camel }}: {% if p.ty == "callback" %}({% for a in p.callback.args %}{{ swty(a) }}{% if not loop.last %}, {% endif %}{% endfor %}) -> Bool{% else %}{{ swty(p.ty, p.handle) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% if f.fallible %} throws(TeiGeodataError){% endif %}{% endmacro %}
+{% macro swty(t, h) %}{% if t == "bool" %}Bool{% elif t == "i32" %}Int32{% elif t == "u32" %}UInt32{% elif t == "i64" %}Int64{% elif t == "u64" %}UInt64{% elif t == "f64" %}Double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}Data{% elif t in ["handle", "record"] %}{{ h }}{% else %}Void{% endif %}{% endmacro %}
+{% macro signature(f) %}({% for p in f.params %}{% if loop.first %}_ {% endif %}{{ p.name | camel }}: {% if p.ty == "callback" %}({% for a in p.callback.args %}{{ swty(a) }}{% if not loop.last %}, {% endif %}{% endfor %}) -> Bool{% elif p.ty == "record" %}{{ p.record }} = .init(){% else %}{{ swty(p.ty, p.handle) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% if f.fallible %} throws(TeiGeodataError){% endif %}{% endmacro %}
 {#- The body of a call: `owner` is the handle a method belongs to (none for a function); a
     handle's constructor (`init`) stores the new pointer instead of returning it. #}
 {% macro body(f, owner, init) %}
@@ -61,10 +61,10 @@ private func takeData(_ bytes: tg_bytes) -> Data {
 {% for p in f.params if p.ty == "str" %}
         var {{ p.name | camel }} = {{ p.name | camel }}
 {% endfor %}
-{% set args %}{% if f.receiver %}raw{% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty == "str" %}{{ p.name | camel }}Bytes.baseAddress, {{ p.name | camel }}Bytes.count{% elif p.ty == "bytes" %}{{ p.name | camel }}Bytes.baseAddress?.assumingMemoryBound(to: UInt8.self), {{ p.name | camel }}Bytes.count{% elif p.ty == "handle" %}{{ p.name | camel }}.raw{% elif p.ty == "callback" %}{ ctx, {% for a in p.callback.args %}a{{ loop.index0 }}{% if not loop.last %}, {% endif %}{% endfor %} in Unmanaged<Callback{{ p.callback.id | pascal }}>.fromOpaque(ctx!).takeUnretainedValue().call({% for a in p.callback.args %}a{{ loop.index0 }}{% if not loop.last %}, {% endif %}{% endfor %}) }, Unmanaged.passUnretained(box).toOpaque(){% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params or f.receiver %}, {% endif %}&out{% endif %}{% endset %}
+{% set args %}{% if f.receiver %}raw{% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty == "str" %}{{ p.name | camel }}Bytes.baseAddress, {{ p.name | camel }}Bytes.count{% elif p.ty == "bytes" %}{{ p.name | camel }}Bytes.baseAddress?.assumingMemoryBound(to: UInt8.self), {{ p.name | camel }}Bytes.count{% elif p.ty == "handle" %}{{ p.name | camel }}.raw{% elif p.ty == "record" %}{{ p.name | camel }}Ptr{% elif p.ty == "callback" %}{ ctx, {% for a in p.callback.args %}a{{ loop.index0 }}{% if not loop.last %}, {% endif %}{% endfor %} in Unmanaged<Callback{{ p.callback.id | pascal }}>.fromOpaque(ctx!).takeUnretainedValue().call({% for a in p.callback.args %}a{{ loop.index0 }}{% if not loop.last %}, {% endif %}{% endfor %}) }, Unmanaged.passUnretained(box).toOpaque(){% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params or f.receiver %}, {% endif %}&out{% endif %}{% endset %}
 {#- Each string, byte or handle argument stays alive and in place for the call. #}
-{% set open %}{% if f.receiver %}withExtendedLifetime(self) { {% endif %}{% for p in f.params %}{% if p.ty == "str" %}{{ p.name | camel }}.withUTF8 { {{ p.name | camel }}Bytes in {% elif p.ty == "bytes" %}{{ p.name | camel }}.withUnsafeBytes { {{ p.name | camel }}Bytes in {% elif p.ty == "handle" %}withExtendedLifetime({{ p.name | camel }}) { {% endif %}{% endfor %}{% endset %}
-{% set close %}{% for p in f.params if p.ty in ["str", "bytes", "handle"] %} }{% endfor %}{% if f.receiver %} }{% endif %}{% endset %}
+{% set open %}{% if f.receiver %}withExtendedLifetime(self) { {% endif %}{% for p in f.params %}{% if p.ty == "str" %}{{ p.name | camel }}.withUTF8 { {{ p.name | camel }}Bytes in {% elif p.ty == "bytes" %}{{ p.name | camel }}.withUnsafeBytes { {{ p.name | camel }}Bytes in {% elif p.ty == "handle" %}withExtendedLifetime({{ p.name | camel }}) { {% elif p.ty == "record" %}withUnsafePointer(to: {{ p.name | camel }}.native) { {{ p.name | camel }}Ptr in {% endif %}{% endfor %}{% endset %}
+{% set close %}{% for p in f.params if p.ty in ["str", "bytes", "handle", "record"] %} }{% endfor %}{% if f.receiver %} }{% endif %}{% endset %}
 {% set call %}tg_{% if owner %}{{ owner.snake }}_{% endif %}{{ f.name }}({{ args }}){% endset %}
 {% if cb %}
         let status = withoutActuallyEscaping({{ cb.name | camel }}) { f in
@@ -106,6 +106,27 @@ private final class Callback{{ cb.id | pascal }} {
 }
 {% endfor %}
 
+{% for r in records %}
+{{ doc(r.doc) | replace("    ///", "///") -}}
+public struct {{ r.name }}: Sendable, Equatable {
+{% for f in r.fields %}
+{{ doc(f.doc) }}    public var {{ f.name | camel }}: {{ swty(f.ty) }}{% if f.optional %}?{% endif %}
+
+{% endfor %}
+
+    public init({% for f in r.fields %}{{ f.name | camel }}: {{ swty(f.ty) }}{% if f.optional %}? = nil{% elif f.ty == "bool" %} = false{% else %} = 0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}) {
+{% for f in r.fields %}
+        self.{{ f.name | camel }} = {{ f.name | camel }}
+{% endfor %}
+    }
+
+    /// The C struct.
+    fileprivate var native: tg_{{ r.snake }} {
+        tg_{{ r.snake }}({% for f in r.fields %}{% if f.optional %}has_{{ f.name }}: {{ f.name | camel }} != nil, {{ f.name }}: {{ f.name | camel }} ?? {% if f.ty == "bool" %}false{% else %}0{% endif %}{% else %}{{ f.name }}: {{ f.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %})
+    }
+}
+
+{% endfor %}
 /// teigeodata: accurate, offline places. Every function is generated from the Rust API.
 public enum TeiGeodata {
 {% for c in constants %}

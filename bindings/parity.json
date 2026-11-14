@@ -54,6 +54,11 @@
       "limit": 3,
       "first_id": "tgd:np/18n8a6"
     },
+    "search_with": {
+      "about": "a focus point lifts the second Lalek; without it the order differs",
+      "query": "Lalek", "limit": 3, "focus_lat": 26.80005, "focus_lon": 87.087849, "focus_scale_m": 1000.0,
+      "ids": ["tgd:np/crb9gc", "tgd:np/tv88y0", "tgd:np/zrxdjz"]
+    },
     "reverse": {
       "lat": 27.5,
       "lon": 85.5,

@@ -10,6 +10,32 @@ export const SAMPLE_ROWS_MAX: number;
 export const LIMIT_MAX: number;
 
 /**
+ * How `Engine::search_with` ranks (D-226). Every field's zero value is its default
+ * (D-276).
+ */
+export interface SearchOptions {
+  /**
+   * Prefer places near this latitude (with `focus_lon`): the user's location, or a point
+   * in their home country with a wide scale.
+   */
+  focusLat?: number;
+  /**
+   * The focus longitude; set with `focus_lat` or not at all.
+   */
+  focusLon?: number;
+  /**
+   * The distance in metres at which the focus gain halves (a place at the focus gains 30,
+   * one scale away 15); `None` is 50 km.
+   */
+  focusScaleM?: number;
+  /**
+   * Rank by match tier first (exact, loose, prefix, one edit, substring, two edits,
+   * phonetic), then importance and focus, instead of one additive score.
+   */
+  strict?: boolean;
+}
+
+/**
  * The library version, from its package metadata.
  */
 export function version(): string;
@@ -165,6 +191,18 @@ export class Engine {
    * `ErrorCode::Corrupt` if a section read is corrupt.
    */
   search(query: string, limit: number): Buffer;
+
+  /**
+   * `search` ranked by `options`: near a focus point, or in strict match
+   * order.
+   *
+   * # Errors
+   *
+   * `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`, the focus is off the
+   * globe or has one coordinate only, or its scale is not positive;
+   * `ErrorCode::Corrupt` if a section read is corrupt.
+   */
+  searchWith(query: string, limit: number, options?: SearchOptions): Buffer;
 
   /**
    * The places nearest the point, nearest first, at most `limit`, with `meters` and

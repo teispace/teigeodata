@@ -58,8 +58,9 @@ fn compare(
     }
 }
 
-/// Every `tg_` function, `tg_callback_` typedef and `TG_` constant, keyed by name, as one
-/// normalised line: comments dropped, whitespace collapsed, Rust type names mapped to C.
+/// Every `tg_` function, `tg_callback_` typedef, `TG_` constant and struct with a body (its
+/// fields in order), keyed by name, as one normalised line: comments dropped, whitespace
+/// collapsed, Rust type names mapped to C.
 fn declarations(header: &str) -> BTreeMap<String, String> {
     let mut text = String::with_capacity(header.len());
     let mut rest = header;
@@ -73,6 +74,38 @@ fn declarations(header: &str) -> BTreeMap<String, String> {
     }
     text.push_str(rest);
     let mut out = BTreeMap::new();
+    // Structs with a body: `typedef struct name { fields } name;`, named by the alias after the
+    // body (cbindgen leaves the tag out); an opaque one has no body.
+    let mut rest = text.as_str();
+    while let Some(at) = rest.find("typedef struct ") {
+        let after = rest.get(at + "typedef struct ".len()..).unwrap_or_default();
+        let (Some(open), Some(semi)) = (after.find('{'), after.find(';')) else {
+            break;
+        };
+        if semi < open {
+            rest = after.get(semi..).unwrap_or_default();
+            continue;
+        }
+        let close = after.find('}').unwrap_or(after.len());
+        let alias = after.get(close + 1..).unwrap_or_default();
+        let name = normalise(
+            alias
+                .get(..alias.find(';').unwrap_or(0))
+                .unwrap_or_default(),
+        );
+        let fields: Vec<String> = after
+            .get(open + 1..close)
+            .unwrap_or_default()
+            .split(';')
+            .map(normalise)
+            .filter(|f| !f.is_empty())
+            .collect();
+        out.insert(
+            format!("struct {name}"),
+            format!("struct {name} {{ {}; }}", fields.join("; ")),
+        );
+        rest = after.get(close..).unwrap_or_default();
+    }
     for line in text.lines() {
         let words: Vec<&str> = line.split_whitespace().collect();
         if let ["#define", name, value] = words.as_slice()
@@ -184,14 +217,29 @@ fn normalise(stmt: &str) -> String {
 mod tests {
     use super::{compare, declarations};
 
-    const OURS: &str = "/* doc */\n#define TG_MAX 10u\ntypedef bool (*tg_callback_u32)(void *ctx, uint32_t a0);\nint32_t tg_f(const uint8_t *text, size_t text_len,\n    tg_bytes *out);\nint32_t tg_noop(void);\n";
-    const THEIRS: &str = "#define TG_MAX 10\ntypedef bool (*TgCallbackU32)(Ctx ctx, uint32_t a0);\n/**\n * doc\n */\nint32_t tg_f(const uint8_t *text, size_t text_len, TgBytes *out);\nint32_t tg_noop(void);\n";
+    const OURS: &str = "/* doc */\ntypedef struct tg_engine tg_engine;\ntypedef struct tg_opts {\n    /* Set. */\n    bool has_x;\n    double x;\n} tg_opts;\n#define TG_MAX 10u\ntypedef bool (*tg_callback_u32)(void *ctx, uint32_t a0);\nint32_t tg_f(const uint8_t *text, size_t text_len,\n    tg_bytes *out);\nint32_t tg_noop(void);\n";
+    const THEIRS: &str = "typedef struct TgEngine TgEngine;\ntypedef struct {\n  bool has_x;\n  double x;\n} TgOpts;\n#define TG_MAX 10\ntypedef bool (*TgCallbackU32)(Ctx ctx, uint32_t a0);\n/**\n * doc\n */\nint32_t tg_f(const uint8_t *text, size_t text_len, TgBytes *out);\nint32_t tg_noop(void);\n";
 
     #[test]
     fn same_declarations_by_two_routes_match() {
         let (a, b) = (declarations(OURS), declarations(THEIRS));
-        assert_eq!(a.len(), 4, "{a:?}");
+        assert_eq!(a.len(), 5, "{a:?}");
         assert_eq!(compare(&a, &b), Ok(()));
+    }
+
+    #[test]
+    fn a_changed_struct_field_is_reported() {
+        for (from, to) in [
+            ("double x;", "float x;"),
+            ("bool has_x;\n", ""),
+            ("has_x", "has_y"),
+        ] {
+            let ours = OURS.replace(from, to);
+            assert!(
+                compare(&declarations(&ours), &declarations(THEIRS)).is_err(),
+                "{from} -> {to}"
+            );
+        }
     }
 
     #[test]

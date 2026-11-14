@@ -150,6 +150,37 @@ pub fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> napi::Result<f6
     Ok(value)
 }
 
+/// How `Engine::search_with` ranks (D-226). Every field's zero value is its default
+/// (D-276).
+///
+/// A plain object; every field may be left out, for its zero value (D-276).
+#[napi(object)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SearchOptions {
+    /// Prefer places near this latitude (with `focus_lon`): the user's location, or a point
+    /// in their home country with a wide scale.
+    pub focus_lat: Option<f64>,
+    /// The focus longitude; set with `focus_lat` or not at all.
+    pub focus_lon: Option<f64>,
+    /// The distance in metres at which the focus gain halves (a place at the focus gains 30,
+    /// one scale away 15); `None` is 50 km.
+    pub focus_scale_m: Option<f64>,
+    /// Rank by match tier first (exact, loose, prefix, one edit, substring, two edits,
+    /// phonetic), then importance and focus, instead of one additive score.
+    pub strict: Option<bool>,
+}
+
+impl From<SearchOptions> for teigeodata_api::SearchOptions {
+    fn from(r: SearchOptions) -> Self {
+        Self {
+            focus_lat: r.focus_lat,
+            focus_lon: r.focus_lon,
+            focus_scale_m: r.focus_scale_m,
+            strict: r.strict.unwrap_or_default(),
+        }
+    }
+}
+
 /// Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
 /// answers from any number of threads at once, and adding a pack publishes a new snapshot
 /// while queries go on.
@@ -275,6 +306,27 @@ impl Engine {
     #[napi]
     pub fn search(&self, query: String, limit: u32) -> napi::Result<Buffer, Code> {
         let value = self.0.search(&query, limit);
+        let value = value.map_err(error)?;
+        Ok(Buffer::from(value.into_vec()))
+    }
+    /// `search` ranked by `options`: near a focus point, or in strict match
+    /// order.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`, the focus is off the
+    /// globe or has one coordinate only, or its scale is not positive;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    #[napi]
+    pub fn search_with(
+        &self,
+        query: String,
+        limit: u32,
+        options: Option<SearchOptions>,
+    ) -> napi::Result<Buffer, Code> {
+        let value = self
+            .0
+            .search_with(&query, limit, &options.unwrap_or_default().into());
         let value = value.map_err(error)?;
         Ok(Buffer::from(value.into_vec()))
     }

@@ -99,6 +99,53 @@ pub const SAMPLE_ROWS_MAX: u32 = 1_000_000;
 /// Most places one query returns.
 pub const LIMIT_MAX: u32 = 10_000;
 
+/// How [`Engine::search_with`] ranks (D-226). Every field's zero value is its default
+/// (D-276).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct SearchOptions {
+    /// Prefer places near this latitude (with `focus_lon`): the user's location, or a point
+    /// in their home country with a wide scale.
+    pub focus_lat: Option<f64>,
+    /// The focus longitude; set with `focus_lat` or not at all.
+    pub focus_lon: Option<f64>,
+    /// The distance in metres at which the focus gain halves (a place at the focus gains 30,
+    /// one scale away 15); `None` is 50 km.
+    pub focus_scale_m: Option<f64>,
+    /// Rank by match tier first (exact, loose, prefix, one edit, substring, two edits,
+    /// phonetic), then importance and focus, instead of one additive score.
+    pub strict: bool,
+}
+
+impl SearchOptions {
+    /// The engine's options, checked.
+    fn engine(&self) -> Result<teigeodata_engine::SearchOptions> {
+        let mut out = teigeodata_engine::SearchOptions::default().with_strict(self.strict);
+        match (self.focus_lat, self.focus_lon) {
+            (None, None) if self.focus_scale_m.is_none() => {}
+            (Some(lat), Some(lon)) => {
+                let mut focus = teigeodata_engine::Focus::new(point::<E6>(lat, lon)?);
+                if let Some(scale) = self.focus_scale_m {
+                    if !(scale.is_finite() && scale > 0.0) {
+                        return Err(Error::new(
+                            ErrorCode::InvalidArgument,
+                            format!("focus scale is {scale} m; it must be positive"),
+                        ));
+                    }
+                    focus.scale_m = scale;
+                }
+                out = out.with_focus(focus);
+            }
+            _ => {
+                return Err(Error::new(
+                    ErrorCode::InvalidArgument,
+                    "a focus needs both focus_lat and focus_lon",
+                ));
+            }
+        }
+        Ok(out)
+    }
+}
+
 /// Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
 /// answers from any number of threads at once, and adding a pack publishes a new snapshot
 /// while queries go on.
@@ -308,11 +355,23 @@ impl Engine {
     /// [`ErrorCode::InvalidArgument`] if `limit` exceeds [`LIMIT_MAX`];
     /// [`ErrorCode::Corrupt`] if a section read is corrupt.
     pub fn search(&self, query: &str, limit: u32) -> Result<Blob> {
-        let k = self::limit(limit)?;
+        self.search_with(query, limit, &SearchOptions::default())
+    }
+
+    /// [`search`](Self::search) ranked by `options`: near a focus point, or in strict match
+    /// order.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] if `limit` exceeds [`LIMIT_MAX`], the focus is off the
+    /// globe or has one coordinate only, or its scale is not positive;
+    /// [`ErrorCode::Corrupt`] if a section read is corrupt.
+    pub fn search_with(&self, query: &str, limit: u32, options: &SearchOptions) -> Result<Blob> {
+        let (k, opts) = (self::limit(limit)?, options.engine()?);
         let engine = self.shared.load();
         BUFFERS.with_borrow_mut(|b| {
             let Buffers { scratch, hits, .. } = b;
-            engine.search(query, k, scratch, hits)?;
+            engine.search_with(query, k, &opts, scratch, hits)?;
             let mut out = Places::of(&engine, hits.iter().map(|h| h.place))?;
             out.score = Some(hits.iter().map(|h| h.score).collect());
             out.blob()
