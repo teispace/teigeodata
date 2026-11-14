@@ -288,5 +288,65 @@ class Store(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             asyncio.run(run(d))
 
+    def test_job_progress_and_cancel(self) -> None:
+        """On a host that trickles, progress moves and cancelling the awaiting task cancels the
+        job at once (`teigeodata.aio`)."""
+        import asyncio
+        import http.server
+        import tempfile
+        import threading
+        import time
+
+        from teigeodata import aio
+
+        class Trickle(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                self.send_response(200)
+                self.send_header("Content-Length", "1000")
+                self.end_headers()
+                try:
+                    for _ in range(1000):
+                        self.wfile.write(b" ")
+                        self.wfile.flush()
+                        time.sleep(0.02)
+                except OSError:
+                    pass
+
+            def log_message(self, *args: object) -> None:
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Trickle)
+        server.daemon_threads = True
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        slow = f"http://127.0.0.1:{server.server_address[1]}/"
+        p = PARITY["store"]
+        root = (pathlib.Path(__file__).parents[2] / p["root"]).read_bytes()
+
+        async def run(d: str) -> None:
+            quick = tg.Store.create(f"{d}/q", p["mirror"], p["mirror"], root).refresh(p["pack"])
+            seen = [x async for x in aio.progress(quick)]
+            self.assertEqual(seen[-1][0], seen[-1][1], "progress ends at the total")
+
+            job = tg.Store.create(f"{d}/s", slow, slow, root).refresh(p["pack"])
+            waiting = asyncio.ensure_future(aio.result(job))
+            moves = 0
+            async for _ in aio.progress(job):
+                moves += 1
+                if moves == 3:
+                    break
+            self.assertEqual(moves, 3, "progress moves")
+            at = time.monotonic()
+            waiting.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await waiting
+            self.assertLess(time.monotonic() - at, 2, "the cancel ends the job at once")
+            self.assertTrue(job.is_ended())
+            with self.assertRaises(tg.CancelledError):
+                job.result()
+
+        with tempfile.TemporaryDirectory() as d:
+            asyncio.run(run(d))
+
 if __name__ == "__main__":
     unittest.main()

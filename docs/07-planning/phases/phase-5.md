@@ -54,7 +54,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   `reverse`, `admin_at`, `parent`, `ancestors`, `children`, `nearby`, `within_radius`, `tz_at`,
   `by_iso`, `elevation_at`, `postal_lookup`, `postal_prefix`, `postal_codes_of` and
   `postal_at`, in every language, checked on `bindings/fixtures/synth.tgd`
-- [ ] `teigeodata-api` over sync: the store (init, refresh, catalog, find, locate, install,
+- [x] `teigeodata-api` over sync: the store (init, refresh, catalog, find, locate, install,
   update, remove, pin, repair, status) as jobs with progress callbacks and cancellation
   ([research](../../02-research/notes/store-api.md)). Done so far: the policy moved from the
   command line into `teigeodata_sync::client`, the CLI on top (its tests unchanged); progress
@@ -64,13 +64,13 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   `refresh`, `install`, `update`, `repair` as jobs with progress, wait, cancel and result),
   behind the default `store` feature; the asynchronous form of every blocking call in every
   language (D-280, D-281); the platform downloads pass as `install_pass` (D-184, D-282).
-  Left: progress streams and task cancellation over the asynchronous forms (bindings §6)
-- [ ] The IDL extended for what the surface needs (handles, enums, options structs, jobs), with
+  A job's progress stream and cancel in every language (D-283). Done 2026-11-14
+- [x] The IDL extended for what the surface needs (handles, enums, options structs, jobs), with
   a schema version; the drift check covers every generated file. Done so far: format 2 with
   handles, methods, `&[u8]` and handle parameters; format 3 with records of scalar fields
   (D-276), the C header check comparing struct fields; format 4 with enums (D-277); format 5 with
-  text fields in records; format 6 with `cfg(feature)` gates (D-279). Left: nothing for jobs
-  (they are handles)
+  text fields in records; format 6 with `cfg(feature)` gates (D-279); format 7 with blocking
+  calls (D-280) and the checked `# Job` contract (D-283). Done 2026-11-14
 
 ### 5.2 The C ABI and its gates
 - [ ] Generated `teigeodata-ffi` and `teigeodata.h` for the whole surface: opaque handles,

@@ -86,7 +86,8 @@ and drops it.
   means installed. Three passes for a first install, as in the CLI (D-282).
 - `result` and `wait_progress` block the calling thread. Every language has a non-blocking
   form of each blocking call: `…Async` in Node (D-280), Swift, the JVM and Dart, and
-  `asyncio.to_thread` in Python (D-281).
+  `asyncio.to_thread` in Python (D-281). A `# Job` handle also has a progress stream and is
+  cancelled by its language's own cancellation (D-283).
 - A cancel ends at the next request or chunk; a silent host is bounded by the transport's
   timeouts (30 s to the head, 60 s between reads, D-280).
 

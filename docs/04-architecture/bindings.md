@@ -161,11 +161,11 @@ second job waits for the first.
 | Runtime | Handle lifetime | A job awaited as | Notes |
 |---|---|---|---|
 | C/C++ | explicit `free` | `wait` in a loop | none |
-| Swift 6 | `final class`, `deinit` frees; `Sendable` (checked by the handle's `Sync`) | `<name>Async`, an `async throws(TeiGeodataError)` function: the call on a detached `Thread` (never on the cooperative pool, which must not block) resumes a continuation with a typed `Result` (D-281); progress by awaiting `waitProgressAsync` | Task cancellation calls `cancel` (left) |
-| Kotlin/Java | `AutoCloseable` plus a `Cleaner`; a call holds a use count, `close` waits for it | `<name>Async` returning a `CompletableFuture` on a cached pool of daemon threads (not the common pool, which a long wait would starve); a failure completes it exceptionally with the coded exception (D-281); Kotlin `suspend` over it | JVM threads are already attached; Rust attaches none |
-| Dart/Flutter | `NativeFinalizer` plus `close()`; an asynchronous call holds the handle, and `close()` during one frees it when the call ends | `<name>Async` returning a `Future`: `Isolate.run` opens the library again by path and calls with the handle's address, so blocking FFI never blocks the calling isolate (D-281) | leaf calls for queries |
-| Python | object owns the handle, freed on drop | the call releases the GIL, so `await asyncio.to_thread(job.result)` is its asynchronous form (D-281) | `gil_used = false` for free-threaded builds, proven by a stress test |
-| Node | `napi` finalizer plus `close()` | `<name>Async` returning a `Promise`, the call on a thread of its own (not the libuv pool, which a long wait would starve; D-280); progress by awaiting `waitProgressAsync` | queries synchronous on the main thread |
+| Swift 6 | `final class`, `deinit` frees; `Sendable` (checked by the handle's `Sync`) | `<name>Async`, an `async throws(TeiGeodataError)` function: the call on a detached `Thread` (never on the cooperative pool, which must not block) resumes a continuation with a typed `Result` (D-281); `job.progress`, an `AsyncStream` of `(done, total)` (D-283) | cancelling the task awaiting `resultAsync` cancels the job (D-283) |
+| Kotlin/Java | `AutoCloseable` plus a `Cleaner`; a call holds a use count, `close` waits for it | `<name>Async` returning a `CompletableFuture` on a cached pool of daemon threads (not the common pool, which a long wait would starve); a failure completes it exceptionally with the coded exception (D-281); `job.onProgress(listener)`, and `resultAsync().cancel()` cancels the job (D-283); Kotlin `suspend` over it | JVM threads are already attached; Rust attaches none |
+| Dart/Flutter | `NativeFinalizer` plus `close()`; an asynchronous call holds the handle, and `close()` during one frees it when the call ends | `<name>Async` returning a `Future`: `Isolate.run` opens the library again by path and calls with the handle's address, so blocking FFI never blocks the calling isolate (D-281); `job.progress()`, a `Stream` (D-283) | leaf calls for queries, never for a call that blocks: a blocking leaf call holds every isolate of the group from a safepoint (D-283) |
+| Python | object owns the handle, freed on drop | the call releases the GIL, so `await asyncio.to_thread(...)` is its asynchronous form (D-281); `teigeodata.aio.result(job)` cancels the job when its task is cancelled, `teigeodata.aio.progress(job)` iterates (D-283) | `gil_used = false` for free-threaded builds, proven by a stress test |
+| Node | `napi` finalizer plus `close()` | `<name>Async` returning a `Promise`, the call on a thread of its own (not the libuv pool, which a long wait would starve; D-280); `for await (const p of job.progress())`, and `resultAsync(signal)` cancels the job on abort (D-283) | queries synchronous on the main thread |
 | .NET | `SafeHandle` (its use count prevents a free during a call) | `Task` with `TaskCreationOptions.LongRunning`; `IProgress<T>` | `CancellationToken` calls `cancel` |
 | Go | `runtime.AddCleanup` plus `Close()` | a goroutine calling `wait`; a channel of progress | `context.Context` calls `cancel` |
 | WASM (browser) | `FinalizationRegistry` plus `free()` | no threads: jobs are written in JS over `fetch`, feeding the same verifier and installer step by step | queries synchronous |
@@ -174,6 +174,7 @@ second job waits for the first.
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | §6: a job's progress and cancel in each language; Dart's blocking calls not leaf | D-283 |
 | 2026-11-14 | §2, §6: the asynchronous forms in Swift, the JVM, Dart and Python as built | D-281 |
 | 2026-11-14 | §2: calls that block; §6: Node's Promise forms as built | D-280 |
 | 2026-11-14 | §2: features (IDL format 6), reserved names; §6: the job's methods as built | D-279 |

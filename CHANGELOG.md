@@ -53,6 +53,11 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - An install whose catalog refresh fails, when the stored catalog lacks the pack, fails with
   `Network` (the cause) instead of `Refused` (D-282).
 - IDL: an options record must be the last parameter, so every language can default it.
+- A job's idioms in each language, from the IDL's `# Job` contract (IDL format 7): a
+  progress stream (Swift `progress`, JVM `onProgress`, Node `progress()`, Dart `progress()`,
+  Python `teigeodata.aio.progress`), and cancel through the language's own cancellation
+  (Swift task cancellation, JVM `future.cancel`, Node `AbortSignal`, Python task
+  cancellation via `teigeodata.aio.result`) (D-283).
 - Swift, the JVM and Dart: the same `…Async` forms, as an `async throws` function, a
   `CompletableFuture` and a `Future` run on a helper isolate; in Dart a handle closed during
   one is freed when it ends. Python awaits them with `asyncio.to_thread` (D-281).
@@ -64,6 +69,12 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   without it the C library is 949 KB instead of 3.1 MB (D-279).
 
 ### Changed
+
+- A cancel stops a metadata download at its next chunk, and its bytes count as progress:
+  `Transport::fetch_streamed` (the `http` transport reads in 16 KiB chunks); before, a slow
+  host held a refresh until its body ended (D-283).
+- Dart: calls that block are no longer leaf calls; a leaf call blocking in a helper isolate
+  kept every isolate of the group from a safepoint and stalled them (D-283).
 
 - The `http` transport verifies TLS with Mozilla's roots (`webpki-roots`), as it always did:
   the unused `rustls-platform-verifier` is dropped (D-279 amends D-168).
