@@ -49,10 +49,10 @@ call (ADR-0012).
 - [x] Search parity with the spike: the country's query rules in the pack (D-120) and scored
   by the engine. Done 2026-11-09 (D-121): Nepal recall@1 0.797 against the spike's 0.801,
   recall@5 0.932 for both, p50 6.7 µs against 7.2 µs
-- [ ] The golden gate on the product's search in CI (with step 3.7). Written (D-128):
+- [x] The golden gate on the product's search in CI (with step 3.7). Written (D-128):
   `pack-eval` with `S3_GATE` fails when any class loses a hit against
-  `tests/golden/<cc>-baseline-<build>.tsv`; the `data-build` workflow runs it once the mirror
-  exists
+  `tests/golden/<cc>-baseline-<build>.tsv`; the `data-build` workflow runs it on both builds
+  (green 2026-11-11, run of `9014c16`, weekly and on dispatch)
 - [x] Radius queries (`within_radius`, `nearby`) and `parent`/`ancestors`/`children` in a
   place's own pack (D-140, 2026-11-09): Nepal `within_radius` 1 km 2.8 µs, 10 km 12.0 µs;
   `reverse` on 3 layers 23.3 → 16.0 µs
