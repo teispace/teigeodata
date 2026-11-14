@@ -9,7 +9,7 @@ use syn::spanned::Spanned;
 use syn::{Attribute, Expr, FnArg, GenericArgument, Item, Lit, Pat, PathArguments, ReturnType};
 
 /// Version of the IDL format itself.
-pub(crate) const FORMAT: u32 = 3;
+pub(crate) const FORMAT: u32 = 4;
 
 /// The extracted surface.
 #[derive(Debug, Serialize)]
@@ -23,6 +23,8 @@ pub(crate) struct Idl {
     pub(crate) handles: Vec<Handle>,
     /// Plain data passed by value, options mostly (D-276).
     pub(crate) records: Vec<Record>,
+    /// Closed sets of named values, for record fields (D-277).
+    pub(crate) enums: Vec<Enum>,
     /// Every distinct callback signature, for the targets that declare one type per signature.
     pub(crate) callbacks: Vec<Callback>,
 }
@@ -85,12 +87,34 @@ pub(crate) struct Record {
     pub(crate) fields: Vec<Field>,
 }
 
-/// One field of a record: a scalar, or an `Option` of one (`optional`).
+/// One field of a record: a scalar, an `Option` of one (`optional`), or an enum.
 #[derive(Debug, Serialize)]
 pub(crate) struct Field {
     pub(crate) name: String,
     pub(crate) ty: Ty,
     pub(crate) optional: bool,
+    /// The enum type, when `ty` is [`Ty::Enum`].
+    #[serde(rename = "enum", skip_serializing_if = "Option::is_none")]
+    pub(crate) enum_name: Option<String>,
+    pub(crate) doc: Vec<String>,
+}
+
+/// A `pub enum` of unit variants with explicit values from 0, and `#[derive(Default)]` with
+/// `#[default]` on the variant valued 0, so a zeroed record holds its default (D-277).
+#[derive(Debug, Serialize)]
+pub(crate) struct Enum {
+    pub(crate) name: String,
+    pub(crate) snake: String,
+    pub(crate) doc: Vec<String>,
+    pub(crate) variants: Vec<Variant>,
+}
+
+/// One variant of an [`Enum`]; `snake` is its name in `snake_case` (`lazy`).
+#[derive(Debug, Serialize)]
+pub(crate) struct Variant {
+    pub(crate) name: String,
+    pub(crate) snake: String,
+    pub(crate) value: i64,
     pub(crate) doc: Vec<String>,
 }
 
@@ -138,6 +162,8 @@ pub(crate) enum Ty {
     Callback,
     /// A record, `&Name` in.
     Record,
+    /// An enum, as a record field.
+    Enum,
 }
 
 impl Ty {
@@ -169,6 +195,7 @@ impl Ty {
             Self::Blob => "blob",
             Self::Callback => "callback",
             Self::Record => "record",
+            Self::Enum => "enum",
         }
     }
 
@@ -191,9 +218,23 @@ pub(crate) fn extract(source: &str) -> Result<Idl, Vec<String>> {
         functions: Vec::new(),
         handles: Vec::new(),
         records: Vec::new(),
+        enums: Vec::new(),
         callbacks: Vec::new(),
     };
     let mut problems = Vec::new();
+    // Enums first, so a record's field may name one.
+    for item in &file.items {
+        if let Item::Enum(e) = item
+            && is_pub(&e.vis)
+            && e.ident != "ErrorCode"
+        {
+            match enumeration(e) {
+                Ok(e) => idl.enums.push(e),
+                Err(p) => problems.push(p),
+            }
+        }
+    }
+    let enums: Vec<String> = idl.enums.iter().map(|e| e.name.clone()).collect();
     // Handle and record types first, so a signature anywhere may name any of them.
     for item in &file.items {
         if let Item::Struct(s) = item
@@ -205,7 +246,7 @@ pub(crate) fn extract(source: &str) -> Result<Idl, Vec<String>> {
             if !s.generics.params.is_empty() {
                 problems.push(at(s.span(), &format!("`{name}`: no generics")));
             } else if public > 0 {
-                match record(s) {
+                match record(s, &enums) {
                     Ok(r) => idl.records.push(r),
                     Err(p) => problems.push(p),
                 }
@@ -236,9 +277,6 @@ pub(crate) fn extract(source: &str) -> Result<Idl, Vec<String>> {
             Item::Const(c) if is_pub(&c.vis) => constant(c).map(|c| idl.constants.push(c)),
             Item::Enum(e) if e.ident == "ErrorCode" => {
                 codes(e).map(|mut c| idl.error_codes.append(&mut c))
-            }
-            Item::Enum(e) if is_pub(&e.vis) => {
-                Err(at(e.span(), "only `ErrorCode` may be a public enum"))
             }
             _ => Ok(()),
         };
@@ -276,16 +314,9 @@ struct Names {
 
 /// A record (D-276): `pub` named fields only, each a scalar or an `Option` of one, and
 /// `#[derive(Default)]` so each defaults to its zero value.
-fn record(s: &syn::ItemStruct) -> Result<Record, String> {
+fn record(s: &syn::ItemStruct, enums: &[String]) -> Result<Record, String> {
     let name = s.ident.to_string();
-    let derives_default = s.attrs.iter().any(|a| {
-        a.path().is_ident("derive")
-            && a.parse_args_with(
-                syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
-            )
-            .is_ok_and(|paths| paths.iter().any(|p| p.is_ident("Default")))
-    });
-    if !derives_default {
+    if !derives_default(&s.attrs) {
         return Err(at(
             s.span(),
             &format!("`{name}`: a record derives `Default` (D-276)"),
@@ -299,16 +330,26 @@ fn record(s: &syn::ItemStruct) -> Result<Record, String> {
                 &format!("`{name}`: a record's fields are named and `pub`"),
             ));
         };
-        let (ty, optional) = field_ty(&f.ty).ok_or_else(|| {
-            at(
-                f.ty.span(),
-                &format!("`{name}.{id}`: a record field is a scalar or an `Option` of one"),
-            )
-        })?;
+        let enum_name = ident(&f.ty)
+            .filter(|(seg, n)| matches!(seg.arguments, PathArguments::None) && enums.contains(n))
+            .map(|(_, n)| n);
+        let (ty, optional) = if enum_name.is_some() {
+            (Ty::Enum, false)
+        } else {
+            field_ty(&f.ty).ok_or_else(|| {
+                at(
+                    f.ty.span(),
+                    &format!(
+                        "`{name}.{id}`: a record field is a scalar, an `Option` of one, or an enum"
+                    ),
+                )
+            })?
+        };
         fields.push(Field {
             name: id.to_string(),
             ty,
             optional,
+            enum_name,
             doc: docs(&f.attrs),
         });
     }
@@ -317,6 +358,62 @@ fn record(s: &syn::ItemStruct) -> Result<Record, String> {
         name,
         doc: docs(&s.attrs),
         fields,
+    })
+}
+
+fn derives_default(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|a| {
+        a.path().is_ident("derive")
+            && a.parse_args_with(
+                syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
+            )
+            .is_ok_and(|paths| paths.iter().any(|p| p.is_ident("Default")))
+    })
+}
+
+/// An enum (D-277): unit variants, each with an explicit value, the values 0, 1, 2 … in order
+/// (so a new variant is appended, and a value never changes meaning), `#[default]` on 0.
+fn enumeration(e: &syn::ItemEnum) -> Result<Enum, String> {
+    let name = e.ident.to_string();
+    if !e.generics.params.is_empty() || !derives_default(&e.attrs) {
+        return Err(at(
+            e.span(),
+            &format!("`{name}`: an enum has no generics and derives `Default` (D-277)"),
+        ));
+    }
+    let mut variants = Vec::new();
+    for (i, v) in e.variants.iter().enumerate() {
+        let value = v.discriminant.as_ref().and_then(|(_, d)| int(d));
+        let is_default = v.attrs.iter().any(|a| a.path().is_ident("default"));
+        let fine = matches!(v.fields, syn::Fields::Unit)
+            && value == i64::try_from(i).ok()
+            && is_default == (i == 0);
+        if !fine {
+            return Err(at(
+                v.span(),
+                &format!(
+                    "`{name}::{}`: a unit variant valued {i}, `#[default]` only on the one \
+                     valued 0 (D-277)",
+                    v.ident
+                ),
+            ));
+        }
+        let vname = v.ident.to_string();
+        variants.push(Variant {
+            snake: snake(&vname),
+            name: vname,
+            value: value.unwrap_or_default(),
+            doc: docs(&v.attrs),
+        });
+    }
+    if variants.is_empty() {
+        return Err(at(e.span(), &format!("`{name}`: an enum has variants")));
+    }
+    Ok(Enum {
+        snake: snake(&name),
+        name,
+        doc: docs(&e.attrs),
+        variants,
     })
 }
 
@@ -693,6 +790,15 @@ pub struct Opts {
     /// Near here.
     pub lat: Option<f64>,
     pub strict: bool,
+    pub mode: Mode,
+}
+/// How.
+#[derive(Clone, Copy, Default)]
+pub enum Mode {
+    /// Slow.
+    #[default]
+    Slow = 0,
+    FastPath = 1,
 }
 /// An engine.
 pub struct Engine { inner: u32 }
@@ -758,8 +864,30 @@ impl Engine {
             .iter()
             .map(|f| (f.name.as_str(), f.ty, f.optional))
             .collect();
-        assert_eq!(f, [("lat", Ty::F64, true), ("strict", Ty::Bool, false)]);
+        assert_eq!(
+            f,
+            [
+                ("lat", Ty::F64, true),
+                ("strict", Ty::Bool, false),
+                ("mode", Ty::Enum, false)
+            ]
+        );
         assert_eq!(r.fields[0].doc, ["Near here."]);
+        assert_eq!(r.fields[2].enum_name.as_deref(), Some("Mode"));
+        let mode = &idl.enums[0];
+        let variants: Vec<_> = mode
+            .variants
+            .iter()
+            .map(|v| (v.name.as_str(), v.snake.as_str(), v.value))
+            .collect();
+        assert_eq!(
+            variants,
+            [("Slow", "slow", 0), ("FastPath", "fast_path", 1)]
+        );
+        assert_eq!(
+            (mode.doc.as_slice(), mode.snake.as_str()),
+            (["How.".to_owned()].as_slice(), "mode")
+        );
     }
 
     #[test]
@@ -786,6 +914,15 @@ impl Engine {
             "#[derive(Default)] pub struct S { pub x: u32, y: u32 }",
             "#[derive(Default)] pub struct S { pub x: Option<Vec<u8>> }",
             "#[derive(Default)] pub struct S { pub x: Option<f32> }",
+            "#[derive(Default)] pub struct S { pub x: Option<Mode> }",
+            "pub enum E { #[default] A = 0 }",
+            "#[derive(Default)] pub enum E { A = 0 }",
+            "#[derive(Default)] pub enum E { #[default] A = 1 }",
+            "#[derive(Default)] pub enum E { #[default] A = 0, B = 2 }",
+            "#[derive(Default)] pub enum E { #[default] A = 0, B }",
+            "#[derive(Default)] pub enum E { #[default] A = 0, B(u32) = 1 }",
+            "#[derive(Default)] pub enum E { A = 0, #[default] B = 1 }",
+            "#[derive(Default)] pub enum E {}",
         ] {
             let src = format!("{API}\n{bad}");
             let err = extract(&src).unwrap_err();

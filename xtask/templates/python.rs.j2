@@ -120,6 +120,37 @@ fn {{ f.name }}{% if py %}<'py>{% endif %}(
 {% for f in functions %}
 {{ pyfn(f, none) }}
 {%- endfor %}
+{% for e in enums %}
+
+{% for line in e.doc %}
+/// {{ line }}
+{% endfor %}
+#[pyclass(eq, eq_int, frozen, from_py_object, module = "teigeodata")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum {{ e.name }} {
+{% for v in e.variants %}
+{% for line in v.doc %}
+    /// {{ line }}
+{% endfor %}
+{% if loop.first %}
+    #[default]
+{% endif %}
+    #[pyo3(name = "{{ v.snake | upper }}")]
+    {{ v.name }} = {{ v.value }},
+{% endfor %}
+}
+
+impl From<{{ e.name }}> for teigeodata_api::{{ e.name }} {
+    fn from(e: {{ e.name }}) -> Self {
+        match e {
+{% for v in e.variants %}
+            {{ e.name }}::{{ v.name }} => Self::{{ v.name }},
+{% endfor %}
+        }
+    }
+}
+{% endfor %}
+{% macro fty(f) %}{% if f.ty == "enum" %}{{ f.enum }}{% elif f.optional %}Option<{{ f.ty }}>{% else %}{{ f.ty }}{% endif %}{% endmacro %}
 {% for r in records %}
 
 {% for line in r.doc %}
@@ -132,7 +163,7 @@ pub struct {{ r.name }} {
 {% for line in f.doc %}
     /// {{ line }}
 {% endfor %}
-    {{ f.name }}: {% if f.optional %}Option<{{ f.ty }}>{% else %}{{ f.ty }}{% endif %},
+    {{ f.name }}: {{ fty(f) }},
 {% endfor %}
 }
 
@@ -140,8 +171,8 @@ pub struct {{ r.name }} {
 impl {{ r.name }} {
     /// Keyword arguments only; each left out is its zero value, the default (D-276).
     #[new]
-    #[pyo3(signature = (*, {% for f in r.fields %}{{ f.name }}={% if f.optional %}None{% elif f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}))]
-    const fn new({% for f in r.fields %}{{ f.name }}: {% if f.optional %}Option<{{ f.ty }}>{% else %}{{ f.ty }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}) -> Self {
+    #[pyo3(signature = (*, {% for f in r.fields %}{{ f.name }}={% if f.optional %}None{% elif f.ty == "enum" %}{{ f.enum }}::{{ (enums | selectattr("name", "eq", f.enum) | first).variants[0].name }}{% elif f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}))]
+    const fn new({% for f in r.fields %}{{ f.name }}: {{ fty(f) }}{% if not loop.last %}, {% endif %}{% endfor %}) -> Self {
         Self {
 {% for f in r.fields %}
             {{ f.name }},
@@ -158,7 +189,7 @@ impl From<{{ r.name }}> for teigeodata_api::{{ r.name }} {
     fn from(r: {{ r.name }}) -> Self {
         Self {
 {% for f in r.fields %}
-            {{ f.name }}: r.{{ f.name }},
+            {{ f.name }}: r.{{ f.name }}{% if f.ty == "enum" %}.into(){% endif %},
 {% endfor %}
         }
     }
@@ -198,6 +229,9 @@ mod _native {
 {% endfor %}
 {% for r in records %}
         {{ r.name }},
+{% endfor %}
+{% for e in enums %}
+        {{ e.name }},
 {% endfor %}
     };
 {% for c in constants %}

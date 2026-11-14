@@ -59,6 +59,10 @@
       "query": "Lalek", "limit": 3, "focus_lat": 26.80005, "focus_lon": 87.087849, "focus_scale_m": 1000.0,
       "ids": ["tgd:np/crb9gc", "tgd:np/tv88y0", "tgd:np/zrxdjz"]
     },
+    "open_with": {
+      "about": "flip the byte at corrupt_at (inside the ELEVATION section): eager verification refuses the pack, lazy opens it; verify 99 and outline level 256 are invalid",
+      "corrupt_at": 173392, "bad_verify": 99, "bad_outline_level": 256
+    },
     "reverse": {
       "lat": 27.5,
       "lon": 85.5,

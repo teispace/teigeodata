@@ -35,6 +35,45 @@ pub const TG_LIMIT_MAX: u32 = 10000;
 /// A callback taking `u32`; return `false` to cancel.
 pub type TgCallbackU32 = Option<unsafe extern "C" fn(ctx: Ctx, a0: u32) -> bool>;
 
+/// When a pack's sections are verified against their hashes.
+///
+/// A `u32` at the C ABI, one of the `TG_VERIFY_*` values (D-277).
+/// On first use: each section, or each 16 KiB block of a large one, is checked the first
+/// time a query reads it. Opening costs only the head checks.
+pub const TG_VERIFY_LAZY: u32 = 0;
+/// Every section when the pack opens.
+pub const TG_VERIFY_EAGER: u32 = 1;
+/// Never: only for bytes already verified, by the store's installer for instance.
+pub const TG_VERIFY_TRUSTED: u32 = 2;
+
+/// The `Verify` of a `TG_VERIFY_*` value; another value is an invalid argument.
+fn verify_of(value: u32, field: &str) -> Result<teigeodata_api::Verify, teigeodata_api::Error> {
+    match value {
+        0 => Ok(teigeodata_api::Verify::Lazy),
+        1 => Ok(teigeodata_api::Verify::Eager),
+        2 => Ok(teigeodata_api::Verify::Trusted),
+        _ => Err(abi::invalid(format!("{field} is {value}, not a Verify"))),
+    }
+}
+
+/// How a pack file is loaded.
+///
+/// A `u32` at the C ABI, one of the `TG_LOAD_*` values (D-277).
+/// Map the file into memory where the platform can, read it otherwise. The file must not
+/// be written over while it is open.
+pub const TG_LOAD_MAP: u32 = 0;
+/// Read the whole file into memory: for files the application does not own.
+pub const TG_LOAD_READ: u32 = 1;
+
+/// The `Load` of a `TG_LOAD_*` value; another value is an invalid argument.
+fn load_of(value: u32, field: &str) -> Result<teigeodata_api::Load, teigeodata_api::Error> {
+    match value {
+        0 => Ok(teigeodata_api::Load::Map),
+        1 => Ok(teigeodata_api::Load::Read),
+        _ => Err(abi::invalid(format!("{field} is {value}, not a Load"))),
+    }
+}
+
 /// How `Engine::search_with` ranks (D-226). Every field's zero value is its default
 /// (D-276).
 ///
@@ -61,14 +100,55 @@ pub struct TgSearchOptions {
     pub strict: bool,
 }
 
-impl From<TgSearchOptions> for teigeodata_api::SearchOptions {
-    fn from(r: TgSearchOptions) -> Self {
-        Self {
+impl TryFrom<TgSearchOptions> for teigeodata_api::SearchOptions {
+    type Error = teigeodata_api::Error;
+
+    fn try_from(r: TgSearchOptions) -> Result<Self, Self::Error> {
+        Ok(Self {
             focus_lat: r.has_focus_lat.then_some(r.focus_lat),
             focus_lon: r.has_focus_lon.then_some(r.focus_lon),
             focus_scale_m: r.has_focus_scale_m.then_some(r.focus_scale_m),
             strict: r.strict,
-        }
+        })
+    }
+}
+
+/// How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's
+/// zero value is its default (D-276).
+///
+/// Passed by `const` pointer; null is every field's default (D-276).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TgOpenOptions {
+    /// Precedence over the other packs: a higher one wins where packs disagree (default 0).
+    pub priority: i32,
+    /// When sections are verified.
+    pub verify: u32,
+    /// How a file is loaded; ignored for bytes.
+    pub load: u32,
+    /// Whether `outline_level` is set.
+    pub has_outline_level: bool,
+    /// The deepest admin level whose outlines are read, in a pack that splits its outlines by
+    /// level: admin units below it are not found at a point, and their outlines are not
+    /// loaded. `None` reads every level.
+    pub outline_level: u32,
+    /// The largest simplification of the outlines read, in metres, when the pack has coarser
+    /// outlines; 0 is full resolution. Admin units at a point may then differ within that
+    /// distance of a border.
+    pub outline_tolerance_m: u32,
+}
+
+impl TryFrom<TgOpenOptions> for teigeodata_api::OpenOptions {
+    type Error = teigeodata_api::Error;
+
+    fn try_from(r: TgOpenOptions) -> Result<Self, Self::Error> {
+        Ok(Self {
+            priority: r.priority,
+            verify: verify_of(r.verify, "verify")?,
+            load: load_of(r.load, "load")?,
+            outline_level: r.has_outline_level.then_some(r.outline_level),
+            outline_tolerance_m: r.outline_tolerance_m,
+        })
     }
 }
 
@@ -237,6 +317,36 @@ pub unsafe extern "C" fn tg_engine_open_file(
     })
 }
 
+/// Opens the pack at `path` with these options and adds it. Returns its layer ID, as
+/// `open_file`.
+///
+/// # Errors
+///
+/// As `open_file`, and `ErrorCode::InvalidArgument` for an outline
+/// level above 255.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_open_file_with(
+    handle: *const TgEngine,
+    path: *const u8,
+    path_len: usize,
+    options: *const TgOpenOptions,
+    out: *mut u32,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `path_len` readable bytes (or null and 0).
+        let path = unsafe { abi::str_arg(path, path_len, "path") }?;
+        // SAFETY: the caller passes a readable record, or null for the defaults.
+        let options = teigeodata_api::OpenOptions::try_from(unsafe { abi::record(options) })?;
+        let value = this.0.open_file_with(path, &options)?;
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
 /// Adds a pack from its bytes (copied). Returns its layer ID, as
 /// `open_file`.
 ///
@@ -257,6 +367,36 @@ pub unsafe extern "C" fn tg_engine_open_bytes(
         // SAFETY: the caller passes `bytes_len` readable bytes (or null and 0).
         let bytes = unsafe { abi::bytes_arg(bytes, bytes_len, "bytes") }?;
         let value = this.0.open_bytes(bytes)?;
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Adds a pack from its bytes (copied) with these options. Returns its layer ID, as
+/// `open_file`.
+///
+/// # Errors
+///
+/// As `open_bytes`, and `ErrorCode::InvalidArgument` for an outline
+/// level above 255.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_open_bytes_with(
+    handle: *const TgEngine,
+    bytes: *const u8,
+    bytes_len: usize,
+    options: *const TgOpenOptions,
+    out: *mut u32,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `bytes_len` readable bytes (or null and 0).
+        let bytes = unsafe { abi::bytes_arg(bytes, bytes_len, "bytes") }?;
+        // SAFETY: the caller passes a readable record, or null for the defaults.
+        let options = teigeodata_api::OpenOptions::try_from(unsafe { abi::record(options) })?;
+        let value = this.0.open_bytes_with(bytes, &options)?;
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };
         Ok(())
@@ -486,7 +626,7 @@ pub unsafe extern "C" fn tg_engine_search_with(
         // SAFETY: the caller passes `query_len` readable bytes (or null and 0).
         let query = unsafe { abi::str_arg(query, query_len, "query") }?;
         // SAFETY: the caller passes a readable record, or null for the defaults.
-        let options = teigeodata_api::SearchOptions::from(unsafe { abi::record(options) });
+        let options = teigeodata_api::SearchOptions::try_from(unsafe { abi::record(options) })?;
         let value = this.0.search_with(query, limit, &options)?;
         let value = TgBytes::from_vec(value.into_vec());
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.

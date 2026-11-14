@@ -18,12 +18,17 @@ export const {{ c.name }}: number;
 {% endfor %}
 {{ indent }} */
 {% endmacro %}
+{% for e in enums %}
+
+{{ doc(e.doc, "") -}}
+export type {{ e.name }} = {% for v in e.variants %}"{{ v.snake }}"{% if not loop.last %} | {% endif %}{% endfor %};
+{% endfor %}
 {% for r in records %}
 
 {{ doc(r.doc, "") -}}
 export interface {{ r.name }} {
 {% for f in r.fields %}
-{{ doc(f.doc, "  ") }}  {{ f.name | camel }}?: {{ tsty(f.ty, none) }};
+{{ doc(f.doc, "  ") }}  {{ f.name | camel }}?: {{ f.enum if f.ty == "enum" else tsty(f.ty, none) }};
 {% endfor %}
 }
 {% endfor %}

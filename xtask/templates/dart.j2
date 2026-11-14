@@ -118,20 +118,41 @@ final class {{ c.name }}Exception extends TeiGeodataException {
 typedef Callback{{ cb.id | pascal }} = Bool Function(Pointer<Void>{% for a in cb.args %}, {{ nty(a) }}{% endfor %});
 {% endfor %}
 
+{% for e in enums %}
+{% for line in e.doc %}
+///{% if line %} {{ line }}{% endif %}
+
+{% endfor %}
+enum {{ e.name }} {
+{% for v in e.variants %}
+{% for line in v.doc %}
+  ///{% if line %} {{ line }}{% endif %}
+
+{% endfor %}
+  {{ v.snake | camel }}({{ v.value }}){{ ";" if loop.last else "," }}
+{% endfor %}
+
+  const {{ e.name }}(this.value);
+
+  /// The value at the native boundary (D-277).
+  final int value;
+}
+
+{% endfor %}
 {% for r in records %}
 {% for line in r.doc %}
 ///{% if line %} {{ line }}{% endif %}
 
 {% endfor %}
 final class {{ r.name }} {
-  const {{ r.name }}({ {% for f in r.fields %}this.{{ f.name | camel }}{% if not f.optional %} = {% if f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %} });
+  const {{ r.name }}({ {% for f in r.fields %}this.{{ f.name | camel }}{% if not f.optional %} = {% if f.ty == "enum" %}{{ f.enum }}.{{ (enums | selectattr("name", "eq", f.enum) | first).variants[0].snake | camel }}{% elif f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %} });
 {% for f in r.fields %}
 
 {% for line in f.doc %}
   ///{% if line %} {{ line }}{% endif %}
 
 {% endfor %}
-  final {{ dty(f.ty) }}{% if f.optional %}?{% endif %} {{ f.name | camel }};
+  final {{ f.enum if f.ty == "enum" else dty(f.ty) }}{% if f.optional %}?{% endif %} {{ f.name | camel }};
 {% endfor %}
 
   void _write(_Tg{{ r.name }} to) {
@@ -140,7 +161,7 @@ final class {{ r.name }} {
     to.has{{ f.name | pascal }} = {{ f.name | camel }} != null;
     to.{{ f.name | camel }} = {{ f.name | camel }} ?? {% if f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %};
 {% else %}
-    to.{{ f.name | camel }} = {{ f.name | camel }};
+    to.{{ f.name | camel }} = {{ f.name | camel }}{% if f.ty == "enum" %}.value{% endif %};
 {% endif %}
 {% endfor %}
   }
@@ -153,7 +174,7 @@ final class _Tg{{ r.name }} extends Struct {
   @Bool()
   external bool has{{ f.name | pascal }};
 {% endif %}
-  @{{ nty(f.ty) }}()
+  @{{ "Uint32" if f.ty == "enum" else nty(f.ty) }}()
   external {{ dty(f.ty) }} {{ f.name | camel }};
 {% endfor %}
 }

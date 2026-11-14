@@ -150,6 +150,60 @@ pub fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> napi::Result<f6
     Ok(value)
 }
 
+/// When a pack's sections are verified against their hashes.
+///
+/// A string in JavaScript: `"lazy"`, `"eager"`, `"trusted"` (D-277).
+#[napi(string_enum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Verify {
+    /// On first use: each section, or each 16 KiB block of a large one, is checked the first
+    /// time a query reads it. Opening costs only the head checks.
+    #[default]
+    #[napi(value = "lazy")]
+    Lazy,
+    /// Every section when the pack opens.
+    #[napi(value = "eager")]
+    Eager,
+    /// Never: only for bytes already verified, by the store's installer for instance.
+    #[napi(value = "trusted")]
+    Trusted,
+}
+
+impl From<Verify> for teigeodata_api::Verify {
+    fn from(e: Verify) -> Self {
+        match e {
+            Verify::Lazy => Self::Lazy,
+            Verify::Eager => Self::Eager,
+            Verify::Trusted => Self::Trusted,
+        }
+    }
+}
+
+/// How a pack file is loaded.
+///
+/// A string in JavaScript: `"map"`, `"read"` (D-277).
+#[napi(string_enum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Load {
+    /// Map the file into memory where the platform can, read it otherwise. The file must not
+    /// be written over while it is open.
+    #[default]
+    #[napi(value = "map")]
+    Map,
+    /// Read the whole file into memory: for files the application does not own.
+    #[napi(value = "read")]
+    Read,
+}
+
+impl From<Load> for teigeodata_api::Load {
+    fn from(e: Load) -> Self {
+        match e {
+            Load::Map => Self::Map,
+            Load::Read => Self::Read,
+        }
+    }
+}
+
 /// How `Engine::search_with` ranks (D-226). Every field's zero value is its default
 /// (D-276).
 ///
@@ -177,6 +231,41 @@ impl From<SearchOptions> for teigeodata_api::SearchOptions {
             focus_lon: r.focus_lon,
             focus_scale_m: r.focus_scale_m,
             strict: r.strict.unwrap_or_default(),
+        }
+    }
+}
+
+/// How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's
+/// zero value is its default (D-276).
+///
+/// A plain object; every field may be left out, for its zero value (D-276).
+#[napi(object)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct OpenOptions {
+    /// Precedence over the other packs: a higher one wins where packs disagree (default 0).
+    pub priority: Option<i32>,
+    /// When sections are verified.
+    pub verify: Option<Verify>,
+    /// How a file is loaded; ignored for bytes.
+    pub load: Option<Load>,
+    /// The deepest admin level whose outlines are read, in a pack that splits its outlines by
+    /// level: admin units below it are not found at a point, and their outlines are not
+    /// loaded. `None` reads every level.
+    pub outline_level: Option<u32>,
+    /// The largest simplification of the outlines read, in metres, when the pack has coarser
+    /// outlines; 0 is full resolution. Admin units at a point may then differ within that
+    /// distance of a border.
+    pub outline_tolerance_m: Option<u32>,
+}
+
+impl From<OpenOptions> for teigeodata_api::OpenOptions {
+    fn from(r: OpenOptions) -> Self {
+        Self {
+            priority: r.priority.unwrap_or_default(),
+            verify: r.verify.unwrap_or_default().into(),
+            load: r.load.unwrap_or_default().into(),
+            outline_level: r.outline_level,
+            outline_tolerance_m: r.outline_tolerance_m.unwrap_or_default(),
         }
     }
 }
@@ -212,6 +301,25 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(value)
     }
+    /// Opens the pack at `path` with these options and adds it. Returns its layer ID, as
+    /// `open_file`.
+    ///
+    /// # Errors
+    ///
+    /// As `open_file`, and `ErrorCode::InvalidArgument` for an outline
+    /// level above 255.
+    #[napi]
+    pub fn open_file_with(
+        &self,
+        path: String,
+        options: Option<OpenOptions>,
+    ) -> napi::Result<u32, Code> {
+        let value = self
+            .0
+            .open_file_with(&path, &options.unwrap_or_default().into());
+        let value = value.map_err(error)?;
+        Ok(value)
+    }
     /// Adds a pack from its bytes (copied). Returns its layer ID, as
     /// `open_file`.
     ///
@@ -221,6 +329,25 @@ impl Engine {
     #[napi]
     pub fn open_bytes(&self, bytes: Buffer) -> napi::Result<u32, Code> {
         let value = self.0.open_bytes(&bytes);
+        let value = value.map_err(error)?;
+        Ok(value)
+    }
+    /// Adds a pack from its bytes (copied) with these options. Returns its layer ID, as
+    /// `open_file`.
+    ///
+    /// # Errors
+    ///
+    /// As `open_bytes`, and `ErrorCode::InvalidArgument` for an outline
+    /// level above 255.
+    #[napi]
+    pub fn open_bytes_with(
+        &self,
+        bytes: Buffer,
+        options: Option<OpenOptions>,
+    ) -> napi::Result<u32, Code> {
+        let value = self
+            .0
+            .open_bytes_with(&bytes, &options.unwrap_or_default().into());
         let value = value.map_err(error)?;
         Ok(value)
     }

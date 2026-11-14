@@ -2,6 +2,7 @@
 """Type stubs for the native part of teigeodata."""
 
 from collections.abc import Callable
+from typing import ClassVar
 
 class TeiGeodataError(Exception):
     """A failed teigeodata call."""
@@ -15,7 +16,7 @@ class {{ c.name }}Error(TeiGeodataError):
 {{ c.name }}: int
 """{{ c.doc | join(' ') }}"""
 {% endfor %}
-{% macro pyty(t, cb, h) %}{% if t == "bool" %}bool{% elif t == "f64" %}float{% elif t in ["str", "string"] %}str{% elif t in ["blob", "bytes"] %}bytes{% elif t == "void" %}None{% elif t in ["handle", "record"] %}{{ h }}{% elif t == "callback" %}Callable[[{% for a in cb.args %}{{ pyty(a, none, none) }}{% if not loop.last %}, {% endif %}{% endfor %}], bool]{% else %}int{% endif %}{% endmacro %}
+{% macro pyty(t, cb, h) %}{% if t == "bool" %}bool{% elif t == "f64" %}float{% elif t in ["str", "string"] %}str{% elif t in ["blob", "bytes"] %}bytes{% elif t == "void" %}None{% elif t in ["handle", "record", "enum"] %}{{ h }}{% elif t == "callback" %}Callable[[{% for a in cb.args %}{{ pyty(a, none, none) }}{% if not loop.last %}, {% endif %}{% endfor %}], bool]{% else %}int{% endif %}{% endmacro %}
 {% macro stub(f, owner, indent) %}
 {% if owner and not f.receiver and not f.name == "new" %}
 {{ indent }}@staticmethod
@@ -32,6 +33,23 @@ class {{ c.name }}Error(TeiGeodataError):
 
 {{ stub(f, none, "") }}
 {%- endfor %}
+{% for e in enums %}
+
+class {{ e.name }}:
+    """
+{% for line in e.doc %}
+{% if line %}    {{ line }}{% endif %}
+
+{% endfor %}
+    """
+{% for v in e.variants %}
+
+    {{ v.snake | upper }}: ClassVar[{{ e.name }}]
+    """{{ v.doc | join(" ") }}"""
+{% endfor %}
+
+    def __int__(self) -> int: ...
+{% endfor %}
 {% for r in records %}
 
 class {{ r.name }}:
@@ -42,11 +60,11 @@ class {{ r.name }}:
 {% endfor %}
     """
 
-    def __init__(self, *, {% for f in r.fields %}{{ f.name }}: {{ pyty(f.ty, none, none) }}{% if f.optional %} | None = None{% elif f.ty == "bool" %} = False{% elif f.ty == "f64" %} = 0.0{% else %} = 0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}) -> None: ...
+    def __init__(self, *, {% for f in r.fields %}{{ f.name }}: {{ pyty(f.ty, none, f.enum) }}{% if f.optional %} | None = None{% elif f.ty == "enum" %} = ...{% elif f.ty == "bool" %} = False{% elif f.ty == "f64" %} = 0.0{% else %} = 0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}) -> None: ...
 {% for f in r.fields %}
 
     @property
-    def {{ f.name }}(self) -> {{ pyty(f.ty, none, none) }}{% if f.optional %} | None{% endif %}:
+    def {{ f.name }}(self) -> {{ pyty(f.ty, none, f.enum) }}{% if f.optional %} | None{% endif %}:
         """{{ f.doc | join(" ") }}"""
 {% endfor %}
 {% endfor %}

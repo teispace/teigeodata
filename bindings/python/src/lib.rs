@@ -137,6 +137,56 @@ fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> PyResult<f64> {
     Ok(value)
 }
 
+/// When a pack's sections are verified against their hashes.
+#[pyclass(eq, eq_int, frozen, from_py_object, module = "teigeodata")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Verify {
+    /// On first use: each section, or each 16 KiB block of a large one, is checked the first
+    /// time a query reads it. Opening costs only the head checks.
+    #[default]
+    #[pyo3(name = "LAZY")]
+    Lazy = 0,
+    /// Every section when the pack opens.
+    #[pyo3(name = "EAGER")]
+    Eager = 1,
+    /// Never: only for bytes already verified, by the store's installer for instance.
+    #[pyo3(name = "TRUSTED")]
+    Trusted = 2,
+}
+
+impl From<Verify> for teigeodata_api::Verify {
+    fn from(e: Verify) -> Self {
+        match e {
+            Verify::Lazy => Self::Lazy,
+            Verify::Eager => Self::Eager,
+            Verify::Trusted => Self::Trusted,
+        }
+    }
+}
+
+/// How a pack file is loaded.
+#[pyclass(eq, eq_int, frozen, from_py_object, module = "teigeodata")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Load {
+    /// Map the file into memory where the platform can, read it otherwise. The file must not
+    /// be written over while it is open.
+    #[default]
+    #[pyo3(name = "MAP")]
+    Map = 0,
+    /// Read the whole file into memory: for files the application does not own.
+    #[pyo3(name = "READ")]
+    Read = 1,
+}
+
+impl From<Load> for teigeodata_api::Load {
+    fn from(e: Load) -> Self {
+        match e {
+            Load::Map => Self::Map,
+            Load::Read => Self::Read,
+        }
+    }
+}
+
 /// How `Engine::search_with` ranks (D-226). Every field's zero value is its default
 /// (D-276).
 #[pyclass(frozen, get_all, module = "teigeodata")]
@@ -190,6 +240,65 @@ impl From<SearchOptions> for teigeodata_api::SearchOptions {
     }
 }
 
+/// How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's
+/// zero value is its default (D-276).
+#[pyclass(frozen, get_all, module = "teigeodata")]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct OpenOptions {
+    /// Precedence over the other packs: a higher one wins where packs disagree (default 0).
+    priority: i32,
+    /// When sections are verified.
+    verify: Verify,
+    /// How a file is loaded; ignored for bytes.
+    load: Load,
+    /// The deepest admin level whose outlines are read, in a pack that splits its outlines by
+    /// level: admin units below it are not found at a point, and their outlines are not
+    /// loaded. `None` reads every level.
+    outline_level: Option<u32>,
+    /// The largest simplification of the outlines read, in metres, when the pack has coarser
+    /// outlines; 0 is full resolution. Admin units at a point may then differ within that
+    /// distance of a border.
+    outline_tolerance_m: u32,
+}
+
+#[pymethods]
+impl OpenOptions {
+    /// Keyword arguments only; each left out is its zero value, the default (D-276).
+    #[new]
+    #[pyo3(signature = (*, priority=0, verify=Verify::Lazy, load=Load::Map, outline_level=None, outline_tolerance_m=0))]
+    const fn new(
+        priority: i32,
+        verify: Verify,
+        load: Load,
+        outline_level: Option<u32>,
+        outline_tolerance_m: u32,
+    ) -> Self {
+        Self {
+            priority,
+            verify,
+            load,
+            outline_level,
+            outline_tolerance_m,
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{self:?}")
+    }
+}
+
+impl From<OpenOptions> for teigeodata_api::OpenOptions {
+    fn from(r: OpenOptions) -> Self {
+        Self {
+            priority: r.priority,
+            verify: r.verify.into(),
+            load: r.load.into(),
+            outline_level: r.outline_level,
+            outline_tolerance_m: r.outline_tolerance_m,
+        }
+    }
+}
+
 /// Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
 /// answers from any number of threads at once, and adding a pack publishes a new snapshot
 /// while queries go on.
@@ -220,6 +329,24 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(value)
     }
+    /// Opens the pack at `path` with these options and adds it. Returns its layer ID, as
+    /// `open_file`.
+    ///
+    /// # Errors
+    ///
+    /// As `open_file`, and `ErrorCode::InvalidArgument` for an outline
+    /// level above 255.
+    fn open_file_with<'py>(
+        &self,
+        py: Python<'py>,
+        path: &str,
+        options: &Bound<'_, OpenOptions>,
+    ) -> PyResult<u32> {
+        let options = &teigeodata_api::OpenOptions::from(*options.get());
+        let value = py.detach(|| self.0.open_file_with(path, options));
+        let value = value.map_err(error)?;
+        Ok(value)
+    }
     /// Adds a pack from its bytes (copied). Returns its layer ID, as
     /// `open_file`.
     ///
@@ -228,6 +355,24 @@ impl Engine {
     /// `ErrorCode::Corrupt` if the bytes are not a valid pack.
     fn open_bytes<'py>(&self, py: Python<'py>, bytes: &[u8]) -> PyResult<u32> {
         let value = py.detach(|| self.0.open_bytes(bytes));
+        let value = value.map_err(error)?;
+        Ok(value)
+    }
+    /// Adds a pack from its bytes (copied) with these options. Returns its layer ID, as
+    /// `open_file`.
+    ///
+    /// # Errors
+    ///
+    /// As `open_bytes`, and `ErrorCode::InvalidArgument` for an outline
+    /// level above 255.
+    fn open_bytes_with<'py>(
+        &self,
+        py: Python<'py>,
+        bytes: &[u8],
+        options: &Bound<'_, OpenOptions>,
+    ) -> PyResult<u32> {
+        let options = &teigeodata_api::OpenOptions::from(*options.get());
+        let value = py.detach(|| self.0.open_bytes_with(bytes, options));
         let value = value.map_err(error)?;
         Ok(value)
     }
@@ -492,8 +637,9 @@ impl Engine {
 mod _native {
     #[pymodule_export]
     use super::{
-        CancelledError, CorruptError, Engine, InternalError, InvalidArgumentError, IoError,
-        SearchOptions, TeiGeodataError, distance_m, fold, noop, progress, sample_rows, version,
+        CancelledError, CorruptError, Engine, InternalError, InvalidArgumentError, IoError, Load,
+        OpenOptions, SearchOptions, TeiGeodataError, Verify, distance_m, fold, noop, progress,
+        sample_rows, version,
     };
 
     /// Most rows `sample_rows` builds in one call.

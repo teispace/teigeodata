@@ -156,6 +156,16 @@ do {
     check(strings(try engine.searchWith(sw["query"] as! String, limit: swLimit, options: focus), "id") == strs(sw["ids"]), "search_with")
     check(strings(try engine.searchWith(sw["query"] as! String, limit: swLimit), "id") != strs(sw["ids"]), "search_with defaults")
     expect(.invalidArgument) { _ = try engine.searchWith("x", limit: 1, options: SearchOptions(focusLat: 1)) }
+    let ow = e["open_with"] as! [String: Any]
+    let fixture = dir.appendingPathComponent(e["fixture"] as! String).path
+    var bad = try Data(contentsOf: URL(fileURLWithPath: fixture))
+    bad[ow["corrupt_at"] as! Int] ^= 0xff
+    let scratch = Engine()
+    expect(.corrupt) { _ = try scratch.openBytesWith(bad, options: OpenOptions(verify: .eager)) }
+    check(try scratch.openBytesWith(bad) == 0, "lazy")
+    let every = OpenOptions(priority: 2, verify: .eager, load: .read, outlineLevel: 1)
+    check(try scratch.openFileWith(fixture, options: every) == 1, "open_file_with")
+    expect(.invalidArgument) { _ = try scratch.openFileWith(fixture, options: OpenOptions(outlineLevel: UInt32(ow["bad_outline_level"] as! Int))) }
     let pl = e["postal_lookup"] as! [String: Any]
     let hit = try engine.postalLookup(pl["code"] as! String, scheme: pl["scheme"] as! String)
     check(strings(hit, "postal") == strs(pl["postal"]) && strings(hit, "id") == strs(pl["ids"]), "postal_lookup")

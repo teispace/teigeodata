@@ -65,6 +65,36 @@ final class CorruptException extends TeiGeodataException {
 /// The C callback `tg_callback_u32`.
 typedef CallbackU32 = Bool Function(Pointer<Void>, Uint32);
 
+/// When a pack's sections are verified against their hashes.
+enum Verify {
+  /// On first use: each section, or each 16 KiB block of a large one, is checked the first
+  /// time a query reads it. Opening costs only the head checks.
+  lazy(0),
+  /// Every section when the pack opens.
+  eager(1),
+  /// Never: only for bytes already verified, by the store's installer for instance.
+  trusted(2);
+
+  const Verify(this.value);
+
+  /// The value at the native boundary (D-277).
+  final int value;
+}
+
+/// How a pack file is loaded.
+enum Load {
+  /// Map the file into memory where the platform can, read it otherwise. The file must not
+  /// be written over while it is open.
+  map(0),
+  /// Read the whole file into memory: for files the application does not own.
+  read(1);
+
+  const Load(this.value);
+
+  /// The value at the native boundary (D-277).
+  final int value;
+}
+
 /// How `Engine::search_with` ranks (D-226). Every field's zero value is its default
 /// (D-276).
 final class SearchOptions {
@@ -114,6 +144,56 @@ final class _TgSearchOptions extends Struct {
   external bool strict;
 }
 
+/// How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's
+/// zero value is its default (D-276).
+final class OpenOptions {
+  const OpenOptions({ this.priority = 0, this.verify = Verify.lazy, this.load = Load.map, this.outlineLevel, this.outlineToleranceM = 0 });
+
+  /// Precedence over the other packs: a higher one wins where packs disagree (default 0).
+  final int priority;
+
+  /// When sections are verified.
+  final Verify verify;
+
+  /// How a file is loaded; ignored for bytes.
+  final Load load;
+
+  /// The deepest admin level whose outlines are read, in a pack that splits its outlines by
+  /// level: admin units below it are not found at a point, and their outlines are not
+  /// loaded. `None` reads every level.
+  final int? outlineLevel;
+
+  /// The largest simplification of the outlines read, in metres, when the pack has coarser
+  /// outlines; 0 is full resolution. Admin units at a point may then differ within that
+  /// distance of a border.
+  final int outlineToleranceM;
+
+  void _write(_TgOpenOptions to) {
+    to.priority = priority;
+    to.verify = verify.value;
+    to.load = load.value;
+    to.hasOutlineLevel = outlineLevel != null;
+    to.outlineLevel = outlineLevel ?? 0;
+    to.outlineToleranceM = outlineToleranceM;
+  }
+}
+
+/// The C struct `tg_open_options`.
+final class _TgOpenOptions extends Struct {
+  @Int32()
+  external int priority;
+  @Uint32()
+  external int verify;
+  @Uint32()
+  external int load;
+  @Bool()
+  external bool hasOutlineLevel;
+  @Uint32()
+  external int outlineLevel;
+  @Uint32()
+  external int outlineToleranceM;
+}
+
 /// The teigeodata library, loaded from a path. One instance per isolate; calls are
 /// synchronous. Functions without callbacks are leaf calls (the cheapest kind).
 final class TeiGeodata {
@@ -129,7 +209,9 @@ final class TeiGeodata {
         _engineFree = lib.lookup<NativeFunction<Void Function(Pointer<Void>)>>('tg_engine_free'),
         _engineNewNative = lib.lookupFunction<Int32 Function(Pointer<Pointer<Void>>), int Function(Pointer<Pointer<Void>>)>('tg_engine_new', isLeaf: true),
         _engineOpenFileNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint32>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>)>('tg_engine_open_file', isLeaf: true),
+        _engineOpenFileWithNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<_TgOpenOptions>, Pointer<Uint32>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<_TgOpenOptions>, Pointer<Uint32>)>('tg_engine_open_file_with', isLeaf: true),
         _engineOpenBytesNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint32>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>)>('tg_engine_open_bytes', isLeaf: true),
+        _engineOpenBytesWithNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<_TgOpenOptions>, Pointer<Uint32>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<_TgOpenOptions>, Pointer<Uint32>)>('tg_engine_open_bytes_with', isLeaf: true),
         _engineRemoveNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Uint32, Pointer<Bool>), int Function(Pointer<Void>, int, Pointer<Bool>)>('tg_engine_remove', isLeaf: true),
         _engineLayersNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint32>), int Function(Pointer<Void>, Pointer<Uint32>)>('tg_engine_layers', isLeaf: true),
         _engineGetNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_get', isLeaf: true),
@@ -167,7 +249,9 @@ final class TeiGeodata {
   late final NativeFinalizer _engineFinalizer;
   final int Function(Pointer<Pointer<Void>>) _engineNewNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>) _engineOpenFileNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<_TgOpenOptions>, Pointer<Uint32>) _engineOpenFileWithNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>) _engineOpenBytesNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<_TgOpenOptions>, Pointer<Uint32>) _engineOpenBytesWithNative;
   final int Function(Pointer<Void>, int, Pointer<Bool>) _engineRemoveNative;
   final int Function(Pointer<Void>, Pointer<Uint32>) _engineLayersNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineGetNative;
@@ -192,6 +276,7 @@ final class TeiGeodata {
   final Pointer<TgBytes> _bytes = calloc<TgBytes>();
   final Pointer<Uint64> _word = calloc<Uint64>();
   final Pointer<_TgSearchOptions> _searchOptions = calloc<_TgSearchOptions>();
+  final Pointer<_TgOpenOptions> _openOptions = calloc<_TgOpenOptions>();
   Pointer<Uint8> _input = nullptr;
   int _inputCap = 0;
 
@@ -206,6 +291,7 @@ final class TeiGeodata {
     calloc.free(_bytes);
     calloc.free(_word);
     calloc.free(_searchOptions);
+    calloc.free(_openOptions);
     if (_inputCap > 0) malloc.free(_input);
   }
 
@@ -360,9 +446,25 @@ final class TeiGeodata {
     return _word.cast<Uint32>().value;
   }
 
+  int _engineOpenFileWith(Pointer<Void> handle, String path, OpenOptions options) {
+    final pathLen = _utf8(path);
+    options._write(_openOptions.ref);
+    final status = _engineOpenFileWithNative(handle, _input, pathLen, _openOptions, _word.cast());
+    _check(status);
+    return _word.cast<Uint32>().value;
+  }
+
   int _engineOpenBytes(Pointer<Void> handle, Uint8List bytes) {
     final bytesLen = _copy(bytes);
     final status = _engineOpenBytesNative(handle, _input, bytesLen, _word.cast());
+    _check(status);
+    return _word.cast<Uint32>().value;
+  }
+
+  int _engineOpenBytesWith(Pointer<Void> handle, Uint8List bytes, OpenOptions options) {
+    final bytesLen = _copy(bytes);
+    options._write(_openOptions.ref);
+    final status = _engineOpenBytesWithNative(handle, _input, bytesLen, _openOptions, _word.cast());
     _check(status);
     return _word.cast<Uint32>().value;
   }
@@ -539,6 +641,15 @@ final class Engine implements Finalizable {
   /// valid pack.
   int openFile(String path) => _lib._engineOpenFile(_live, path);
 
+  /// Opens the pack at `path` with these options and adds it. Returns its layer ID, as
+  /// `open_file`.
+  ///
+  /// # Errors
+  ///
+  /// As `open_file`, and `ErrorCode::InvalidArgument` for an outline
+  /// level above 255.
+  int openFileWith(String path, OpenOptions options) => _lib._engineOpenFileWith(_live, path, options);
+
   /// Adds a pack from its bytes (copied). Returns its layer ID, as
   /// `open_file`.
   ///
@@ -546,6 +657,15 @@ final class Engine implements Finalizable {
   ///
   /// `ErrorCode::Corrupt` if the bytes are not a valid pack.
   int openBytes(Uint8List bytes) => _lib._engineOpenBytes(_live, bytes);
+
+  /// Adds a pack from its bytes (copied) with these options. Returns its layer ID, as
+  /// `open_file`.
+  ///
+  /// # Errors
+  ///
+  /// As `open_bytes`, and `ErrorCode::InvalidArgument` for an outline
+  /// level above 255.
+  int openBytesWith(Uint8List bytes, OpenOptions options) => _lib._engineOpenBytesWith(_live, bytes, options);
 
   /// Removes the pack with this layer ID; false if no pack has it. Queries already running
   /// finish on the snapshot they started with; the pack's memory is released after them.

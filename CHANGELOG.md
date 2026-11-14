@@ -28,6 +28,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   whose defaults are their zero values. `SearchOptions` (a focus point and scale, `strict`)
   and `Engine::search_with` use them in every binding; leaving the options out (C `NULL`)
   means the defaults.
+- IDL format 4: enums (D-277), each its language's own enum. `OpenOptions` (priority,
+  `Verify` lazy/eager/trusted, `Load` map/read, outline level and tolerance) with
+  `Engine::open_file_with` and `open_bytes_with` in every binding.
 
 ### Breaking
 

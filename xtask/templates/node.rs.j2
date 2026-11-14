@@ -148,6 +148,38 @@ pub fn {{ f.name }}(
 {% for f in functions %}
 {{ jsfn(f, none) }}
 {%- endfor %}
+{% for e in enums %}
+
+{% for line in e.doc %}
+/// {{ line }}
+{% endfor %}
+///
+/// A string in JavaScript: {% for v in e.variants %}`"{{ v.snake }}"`{% if not loop.last %}, {% endif %}{% endfor %} (D-277).
+#[napi(string_enum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum {{ e.name }} {
+{% for v in e.variants %}
+{% for line in v.doc %}
+    /// {{ line }}
+{% endfor %}
+{% if loop.first %}
+    #[default]
+{% endif %}
+    #[napi(value = "{{ v.snake }}")]
+    {{ v.name }},
+{% endfor %}
+}
+
+impl From<{{ e.name }}> for teigeodata_api::{{ e.name }} {
+    fn from(e: {{ e.name }}) -> Self {
+        match e {
+{% for v in e.variants %}
+            {{ e.name }}::{{ v.name }} => Self::{{ v.name }},
+{% endfor %}
+        }
+    }
+}
+{% endfor %}
 {% for r in records %}
 
 {% for line in r.doc %}
@@ -162,7 +194,7 @@ pub struct {{ r.name }} {
 {% for line in f.doc %}
     /// {{ line }}
 {% endfor %}
-    pub {{ f.name }}: Option<{{ f.ty }}>,
+    pub {{ f.name }}: Option<{% if f.ty == "enum" %}{{ f.enum }}{% else %}{{ f.ty }}{% endif %}>,
 {% endfor %}
 }
 
@@ -170,7 +202,7 @@ impl From<{{ r.name }}> for teigeodata_api::{{ r.name }} {
     fn from(r: {{ r.name }}) -> Self {
         Self {
 {% for f in r.fields %}
-            {{ f.name }}: r.{{ f.name }}{% if not f.optional %}.unwrap_or_default(){% endif %},
+            {{ f.name }}: r.{{ f.name }}{% if not f.optional %}.unwrap_or_default(){% endif %}{% if f.ty == "enum" %}.into(){% endif %},
 {% endfor %}
         }
     }

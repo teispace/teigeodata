@@ -56,6 +56,26 @@ private final class CallbackU32 {
     init(_ call: @escaping (UInt32) -> Bool) { self.call = call }
 }
 
+/// When a pack's sections are verified against their hashes.
+public enum Verify: UInt32, Sendable {
+    /// On first use: each section, or each 16 KiB block of a large one, is checked the first
+    /// time a query reads it. Opening costs only the head checks.
+    case lazy = 0
+    /// Every section when the pack opens.
+    case eager = 1
+    /// Never: only for bytes already verified, by the store's installer for instance.
+    case trusted = 2
+}
+
+/// How a pack file is loaded.
+public enum Load: UInt32, Sendable {
+    /// Map the file into memory where the platform can, read it otherwise. The file must not
+    /// be written over while it is open.
+    case map = 0
+    /// Read the whole file into memory: for files the application does not own.
+    case read = 1
+}
+
 /// How `Engine::search_with` ranks (D-226). Every field's zero value is its default
 /// (D-276).
 public struct SearchOptions: Sendable, Equatable {
@@ -81,6 +101,38 @@ public struct SearchOptions: Sendable, Equatable {
     /// The C struct.
     fileprivate var native: tg_search_options {
         tg_search_options(has_focus_lat: focusLat != nil, focus_lat: focusLat ?? 0, has_focus_lon: focusLon != nil, focus_lon: focusLon ?? 0, has_focus_scale_m: focusScaleM != nil, focus_scale_m: focusScaleM ?? 0, strict: strict)
+    }
+}
+
+/// How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's
+/// zero value is its default (D-276).
+public struct OpenOptions: Sendable, Equatable {
+    /// Precedence over the other packs: a higher one wins where packs disagree (default 0).
+    public var priority: Int32
+    /// When sections are verified.
+    public var verify: Verify
+    /// How a file is loaded; ignored for bytes.
+    public var load: Load
+    /// The deepest admin level whose outlines are read, in a pack that splits its outlines by
+    /// level: admin units below it are not found at a point, and their outlines are not
+    /// loaded. `None` reads every level.
+    public var outlineLevel: UInt32?
+    /// The largest simplification of the outlines read, in metres, when the pack has coarser
+    /// outlines; 0 is full resolution. Admin units at a point may then differ within that
+    /// distance of a border.
+    public var outlineToleranceM: UInt32
+
+    public init(priority: Int32 = 0, verify: Verify = .lazy, load: Load = .map, outlineLevel: UInt32? = nil, outlineToleranceM: UInt32 = 0) {
+        self.priority = priority
+        self.verify = verify
+        self.load = load
+        self.outlineLevel = outlineLevel
+        self.outlineToleranceM = outlineToleranceM
+    }
+
+    /// The C struct.
+    fileprivate var native: tg_open_options {
+        tg_open_options(priority: priority, verify: verify.rawValue, load: load.rawValue, has_outline_level: outlineLevel != nil, outline_level: outlineLevel ?? 0, outline_tolerance_m: outlineToleranceM)
     }
 }
 
@@ -200,6 +252,21 @@ public final class Engine: @unchecked Sendable {
         return out
     }
 
+    /// Opens the pack at `path` with these options and adds it. Returns its layer ID, as
+    /// `open_file`.
+    ///
+    /// # Errors
+    ///
+    /// As `open_file`, and `ErrorCode::InvalidArgument` for an outline
+    /// level above 255.
+    public func openFileWith(_ path: String, options: OpenOptions = .init()) throws(TeiGeodataError) -> UInt32 {
+        var out: UInt32 = 0
+        var path = path
+        let status = withExtendedLifetime(self) { path.withUTF8 { pathBytes in withUnsafePointer(to: options.native) { optionsPtr in tg_engine_open_file_with(raw, pathBytes.baseAddress, pathBytes.count, optionsPtr, &out) } } }
+        try check(status)
+        return out
+    }
+
     /// Adds a pack from its bytes (copied). Returns its layer ID, as
     /// `open_file`.
     ///
@@ -209,6 +276,20 @@ public final class Engine: @unchecked Sendable {
     public func openBytes(_ bytes: Data) throws(TeiGeodataError) -> UInt32 {
         var out: UInt32 = 0
         let status = withExtendedLifetime(self) { bytes.withUnsafeBytes { bytesBytes in tg_engine_open_bytes(raw, bytesBytes.baseAddress?.assumingMemoryBound(to: UInt8.self), bytesBytes.count, &out) } }
+        try check(status)
+        return out
+    }
+
+    /// Adds a pack from its bytes (copied) with these options. Returns its layer ID, as
+    /// `open_file`.
+    ///
+    /// # Errors
+    ///
+    /// As `open_bytes`, and `ErrorCode::InvalidArgument` for an outline
+    /// level above 255.
+    public func openBytesWith(_ bytes: Data, options: OpenOptions = .init()) throws(TeiGeodataError) -> UInt32 {
+        var out: UInt32 = 0
+        let status = withExtendedLifetime(self) { bytes.withUnsafeBytes { bytesBytes in withUnsafePointer(to: options.native) { optionsPtr in tg_engine_open_bytes_with(raw, bytesBytes.baseAddress?.assumingMemoryBound(to: UInt8.self), bytesBytes.count, optionsPtr, &out) } } }
         try check(status)
         return out
     }

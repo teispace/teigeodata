@@ -17,7 +17,9 @@ mod common;
 use std::sync::Arc;
 
 use common::synthetic;
-use teigeodata_api::{Blob, Engine, ErrorCode, LIMIT_MAX, SearchOptions};
+use teigeodata_api::{
+    Blob, Engine, ErrorCode, LIMIT_MAX, Load, OpenOptions, SearchOptions, Verify,
+};
 use teigeodata_blob::{Reader, View};
 
 fn strings(blob: &Blob, name: &str) -> Vec<Option<String>> {
@@ -382,6 +384,36 @@ fn the_parity_file_matches_rust() {
         "the focus must matter"
     );
 
+    // Open options: a flipped section byte, found at open by eager verification only.
+    let o = &p["open_with"];
+    let good = std::fs::read(&path).unwrap();
+    let at = {
+        let pack = teigeodata_format::Pack::open(&good).unwrap();
+        let section = pack.section(teigeodata_format::Kind::ELEVATION).unwrap();
+        section.bytes().as_ptr() as usize - good.as_ptr() as usize + section.bytes().len() / 2
+    };
+    assert_eq!(o["corrupt_at"].as_u64(), Some(at as u64), "corrupt_at");
+    let mut bad = good;
+    bad[at] ^= 0xff;
+    let eager = OpenOptions {
+        verify: Verify::Eager,
+        ..OpenOptions::default()
+    };
+    let scratch = Engine::new();
+    assert_eq!(
+        scratch.open_bytes_with(&bad, &eager).unwrap_err().code,
+        ErrorCode::Corrupt
+    );
+    assert_eq!(scratch.open_bytes(&bad), Ok(0));
+    let deep = OpenOptions {
+        outline_level: Some(u32::try_from(o["bad_outline_level"].as_u64().unwrap()).unwrap()),
+        ..OpenOptions::default()
+    };
+    assert_eq!(
+        scratch.open_file_with(&path, &deep).unwrap_err().code,
+        ErrorCode::InvalidArgument
+    );
+
     let v = &p["reverse"];
     let near = engine
         .reverse(
@@ -644,4 +676,58 @@ fn a_focus_ranks_the_nearest_of_same_named_places_first() {
         }
     };
     assert_eq!(bad(off), ErrorCode::InvalidArgument);
+}
+
+#[test]
+fn open_options_choose_verification_and_outline_levels() {
+    let model = synthetic(60, 5);
+    let good = model.encode();
+    // One flipped byte inside the elevation section: found at open only when verifying
+    // eagerly; a lazy open checks it the first time a query reads it.
+    let at = {
+        let pack = teigeodata_format::Pack::open(&good).unwrap();
+        let section = pack.section(teigeodata_format::Kind::ELEVATION).unwrap();
+        section.bytes().as_ptr() as usize - good.as_ptr() as usize + section.bytes().len() / 2
+    };
+    let mut bad = good.clone();
+    bad[at] ^= 0xff;
+    let engine = Engine::new();
+    let eager = OpenOptions {
+        verify: Verify::Eager,
+        ..OpenOptions::default()
+    };
+    assert_eq!(
+        engine.open_bytes_with(&bad, &eager).unwrap_err().code,
+        ErrorCode::Corrupt
+    );
+    assert_eq!(engine.open_bytes(&bad), Ok(0));
+    assert_eq!(engine.open_bytes_with(&good, &eager), Ok(1));
+
+    // A pack that does not split its outlines by level reads them all, whatever the level
+    // (the engine's outline tests cover packs that do).
+    let p = model.points[model.points.len() - 1];
+    let (lat, lon) = (p.lat_degrees(), p.lon_degrees());
+    let every = Engine::new();
+    every.open_bytes(&good).unwrap();
+    let top = Engine::new();
+    let level0 = OpenOptions {
+        outline_level: Some(0),
+        outline_tolerance_m: 1000,
+        load: Load::Read,
+        ..OpenOptions::default()
+    };
+    top.open_bytes_with(&good, &level0).unwrap();
+    assert_eq!(
+        every.admin_at(lat, lon).unwrap().as_bytes(),
+        top.admin_at(lat, lon).unwrap().as_bytes()
+    );
+
+    let deep = OpenOptions {
+        outline_level: Some(256),
+        ..OpenOptions::default()
+    };
+    assert_eq!(
+        top.open_bytes_with(&good, &deep).unwrap_err().code,
+        ErrorCode::InvalidArgument
+    );
 }

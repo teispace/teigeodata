@@ -19,12 +19,12 @@ public final class TeiGeodata {
     /** {{ c.doc | join(" ") }} */
     public static final long {{ c.name }} = {{ c.value }}L;
 {% endfor %}
-{% macro jty(t) %}{% if t == "bool" %}boolean{% elif t == "i32" %}int{% elif t == "f64" %}double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}byte[]{% elif t == "void" %}void{% else %}long{% endif %}{% endmacro %}
+{% macro jty(t) %}{% if t == "bool" %}boolean{% elif t == "i32" %}int{% elif t == "f64" %}double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}byte[]{% elif t == "void" %}void{% elif t == "enum" %}int{% else %}long{% endif %}{% endmacro %}
 {% macro pty(p) %}{% if p.ty == "callback" %}Callback{{ p.callback.id | pascal }}{% elif p.ty == "handle" %}{{ p.handle }}{% elif p.ty == "record" %}{{ p.record }}{% else %}{{ jty(p.ty) }}{% endif %}{% endmacro %}
 {#- A record field's Java type: boxed when optional (null is unset). #}
-{% macro fty(f) %}{% if not f.optional %}{{ jty(f.ty) }}{% elif f.ty == "bool" %}Boolean{% elif f.ty == "i32" %}Integer{% elif f.ty == "f64" %}Double{% else %}Long{% endif %}{% endmacro %}
+{% macro fty(f) %}{% if f.ty == "enum" %}{{ f.enum }}{% elif not f.optional %}{{ jty(f.ty) }}{% elif f.ty == "bool" %}Boolean{% elif f.ty == "i32" %}Integer{% elif f.ty == "f64" %}Double{% else %}Long{% endif %}{% endmacro %}
 {#- A call argument; a record is flattened into its fields, `has` before each optional one. #}
-{% macro arg(p) %}{% if p.ty == "handle" %}{{ p.name | camel }}.handle{% elif p.ty == "record" %}{% for f in records | selectattr("name", "eq", p.record) | map(attribute="fields") | first %}{% set v = (p.name | camel) ~ "$." ~ (f.name | camel) ~ "()" %}{% if f.optional %}{{ v }} != null, {{ v }} != null ? {{ v }} : {% if f.ty == "bool" %}false{% else %}0{% endif %}{% else %}{{ v }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}{{ p.name | camel }}{% endif %}{% endmacro %}
+{% macro arg(p) %}{% if p.ty == "handle" %}{{ p.name | camel }}.handle{% elif p.ty == "record" %}{% for f in records | selectattr("name", "eq", p.record) | map(attribute="fields") | first %}{% set v = (p.name | camel) ~ "$." ~ (f.name | camel) ~ "()" %}{% if f.optional %}{{ v }} != null, {{ v }} != null ? {{ v }} : {% if f.ty == "bool" %}false{% else %}0{% endif %}{% elif f.ty == "enum" %}{{ v }} != null ? {{ v }}.value : 0{% else %}{{ v }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}{{ p.name | camel }}{% endif %}{% endmacro %}
 {% macro native_param(p) %}{% if p.ty == "handle" %}long {{ p.name | camel }}{% elif p.ty == "record" %}{% for f in records | selectattr("name", "eq", p.record) | map(attribute="fields") | first %}{% if f.optional %}boolean {{ p.name | camel }}Has{{ f.name | pascal }}, {% endif %}{{ jty(f.ty) }} {{ p.name | camel }}{{ f.name | pascal }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}{{ pty(p) }} {{ p.name | camel }}{% endif %}{% endmacro %}
 {% macro defaults(f) %}{% for p in f.params if p.ty == "record" %}
             {{ p.record }} {{ p.name | camel }}$ = {{ p.name | camel }} != null ? {{ p.name | camel }} : {{ p.record }}.DEFAULTS;
@@ -56,6 +56,28 @@ public final class TeiGeodata {
      */
     public static native {{ jty(f.returns) }} {{ f.name | camel }}({% for p in f.params %}{% if p.ty == "callback" %}Callback{{ p.callback.id | pascal }}{% else %}{{ jty(p.ty) }}{% endif %} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %});
 {% endfor %}
+{% for e in enums %}
+
+    /**
+{% for line in e.doc %}
+     *{% if line %} {{ line | replace("<", "&lt;") | replace(">", "&gt;") }}{% endif %}
+
+{% endfor %}
+     */
+    public enum {{ e.name }} {
+{% for v in e.variants %}
+        /** {{ v.doc | join(" ") | replace("<", "&lt;") | replace(">", "&gt;") }} */
+        {{ v.snake | upper }}({{ v.value }}){{ ";" if loop.last else "," }}
+{% endfor %}
+
+        /** The value at the native boundary (D-277). */
+        final int value;
+
+        {{ e.name }}(int value) {
+            this.value = value;
+        }
+    }
+{% endfor %}
 {% for r in records %}
 
     /**
@@ -65,13 +87,13 @@ public final class TeiGeodata {
 {% endfor %}
      *
 {% for f in r.fields %}
-     * @param {{ f.name | camel }} {{ f.doc | join(" ") | replace("<", "&lt;") | replace(">", "&gt;") }}{% if f.optional %} (null: unset){% endif %}
+     * @param {{ f.name | camel }} {{ f.doc | join(" ") | replace("<", "&lt;") | replace(">", "&gt;") }}{% if f.optional %} (null: unset){% elif f.ty == "enum" %} (null: the default){% endif %}
 
 {% endfor %}
      */
     public record {{ r.name }}({% for f in r.fields %}{{ fty(f) }} {{ f.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) {
         /** Every field at its zero value: the defaults (D-276). */
-        public static final {{ r.name }} DEFAULTS = new {{ r.name }}({% for f in r.fields %}{% if f.optional %}null{% elif f.ty == "bool" %}false{% else %}0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %});
+        public static final {{ r.name }} DEFAULTS = new {{ r.name }}({% for f in r.fields %}{% if f.optional %}null{% elif f.ty == "enum" %}{{ f.enum }}.{{ (enums | selectattr("name", "eq", f.enum) | first).variants[0].snake | upper }}{% elif f.ty == "bool" %}false{% else %}0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %});
 {% for f in r.fields %}
 
         /** A copy with {@code {{ f.name | camel }}} set. */

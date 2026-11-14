@@ -1,5 +1,5 @@
 {
-  "format": 3,
+  "format": 4,
   "source": "crates/teigeodata-api/src/lib.rs",
   "error_codes": [
     {
@@ -226,6 +226,32 @@
           "fallible": true
         },
         {
+          "name": "open_file_with",
+          "doc": [
+            "Opens the pack at `path` with these options and adds it. Returns its layer ID, as",
+            "`open_file`.",
+            "",
+            "# Errors",
+            "",
+            "As `open_file`, and `ErrorCode::InvalidArgument` for an outline",
+            "level above 255."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "path",
+              "ty": "str"
+            },
+            {
+              "name": "options",
+              "ty": "record",
+              "record": "OpenOptions"
+            }
+          ],
+          "returns": "u32",
+          "fallible": true
+        },
+        {
           "name": "open_bytes",
           "doc": [
             "Adds a pack from its bytes (copied). Returns its layer ID, as",
@@ -240,6 +266,32 @@
             {
               "name": "bytes",
               "ty": "bytes"
+            }
+          ],
+          "returns": "u32",
+          "fallible": true
+        },
+        {
+          "name": "open_bytes_with",
+          "doc": [
+            "Adds a pack from its bytes (copied) with these options. Returns its layer ID, as",
+            "`open_file`.",
+            "",
+            "# Errors",
+            "",
+            "As `open_bytes`, and `ErrorCode::InvalidArgument` for an outline",
+            "level above 255."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "bytes",
+              "ty": "bytes"
+            },
+            {
+              "name": "options",
+              "ty": "record",
+              "record": "OpenOptions"
             }
           ],
           "returns": "u32",
@@ -738,6 +790,124 @@
           "doc": [
             "Rank by match tier first (exact, loose, prefix, one edit, substring, two edits,",
             "phonetic), then importance and focus, instead of one additive score."
+          ]
+        }
+      ]
+    },
+    {
+      "name": "OpenOptions",
+      "snake": "open_options",
+      "doc": [
+        "How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's",
+        "zero value is its default (D-276)."
+      ],
+      "fields": [
+        {
+          "name": "priority",
+          "ty": "i32",
+          "optional": false,
+          "doc": [
+            "Precedence over the other packs: a higher one wins where packs disagree (default 0)."
+          ]
+        },
+        {
+          "name": "verify",
+          "ty": "enum",
+          "optional": false,
+          "enum": "Verify",
+          "doc": [
+            "When sections are verified."
+          ]
+        },
+        {
+          "name": "load",
+          "ty": "enum",
+          "optional": false,
+          "enum": "Load",
+          "doc": [
+            "How a file is loaded; ignored for bytes."
+          ]
+        },
+        {
+          "name": "outline_level",
+          "ty": "u32",
+          "optional": true,
+          "doc": [
+            "The deepest admin level whose outlines are read, in a pack that splits its outlines by",
+            "level: admin units below it are not found at a point, and their outlines are not",
+            "loaded. `None` reads every level."
+          ]
+        },
+        {
+          "name": "outline_tolerance_m",
+          "ty": "u32",
+          "optional": false,
+          "doc": [
+            "The largest simplification of the outlines read, in metres, when the pack has coarser",
+            "outlines; 0 is full resolution. Admin units at a point may then differ within that",
+            "distance of a border."
+          ]
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "name": "Verify",
+      "snake": "verify",
+      "doc": [
+        "When a pack's sections are verified against their hashes."
+      ],
+      "variants": [
+        {
+          "name": "Lazy",
+          "snake": "lazy",
+          "value": 0,
+          "doc": [
+            "On first use: each section, or each 16 KiB block of a large one, is checked the first",
+            "time a query reads it. Opening costs only the head checks."
+          ]
+        },
+        {
+          "name": "Eager",
+          "snake": "eager",
+          "value": 1,
+          "doc": [
+            "Every section when the pack opens."
+          ]
+        },
+        {
+          "name": "Trusted",
+          "snake": "trusted",
+          "value": 2,
+          "doc": [
+            "Never: only for bytes already verified, by the store's installer for instance."
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Load",
+      "snake": "load",
+      "doc": [
+        "How a pack file is loaded."
+      ],
+      "variants": [
+        {
+          "name": "Map",
+          "snake": "map",
+          "value": 0,
+          "doc": [
+            "Map the file into memory where the platform can, read it otherwise. The file must not",
+            "be written over while it is open."
+          ]
+        },
+        {
+          "name": "Read",
+          "snake": "read",
+          "value": 1,
+          "doc": [
+            "Read the whole file into memory: for files the application does not own."
           ]
         }
       ]

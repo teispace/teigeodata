@@ -129,6 +129,22 @@ class Engine(unittest.TestCase):
         with self.assertRaises(TypeError):
             tg.SearchOptions(1.0)  # keyword arguments only
 
+    def test_open_options(self) -> None:
+        o = self.p["open_with"]
+        bad = bytearray(pathlib.Path(FIXTURE).read_bytes())
+        bad[o["corrupt_at"]] ^= 0xFF
+        engine = tg.Engine()
+        with self.assertRaises(tg.CorruptError):
+            engine.open_bytes_with(bytes(bad), tg.OpenOptions(verify=tg.Verify.EAGER))
+        self.assertEqual(engine.open_bytes_with(bytes(bad), tg.OpenOptions()), 0)
+        every = tg.OpenOptions(verify=tg.Verify.EAGER, load=tg.Load.READ, priority=2, outline_level=1)
+        self.assertEqual((every.verify, every.load, int(tg.Verify.TRUSTED)), (tg.Verify.EAGER, tg.Load.READ, 2))
+        self.assertEqual(engine.open_file_with(FIXTURE, every), 1)
+        with self.assertRaises(tg.InvalidArgumentError):
+            engine.open_file_with(FIXTURE, tg.OpenOptions(outline_level=o["bad_outline_level"]))
+        with self.assertRaises(TypeError):
+            tg.OpenOptions(verify=1)  # an enum, not its value
+
     def test_postal(self) -> None:
         e, p = self.engine, self.p
         c = p["postal_lookup"]

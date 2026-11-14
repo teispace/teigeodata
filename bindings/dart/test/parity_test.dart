@@ -182,6 +182,23 @@ void main() {
       () => engine.searchWith('x', 1, const SearchOptions(focusLat: 1)),
       throwsA(isA<InvalidArgumentException>()),
     );
+    final ow = e['open_with'] as Map<String, dynamic>;
+    final fixture = '../${e['fixture']}';
+    final bad = File(fixture).readAsBytesSync();
+    bad[ow['corrupt_at'] as int] ^= 0xff;
+    final scratch = Engine(tg);
+    expect(
+      () => scratch.openBytesWith(bad, const OpenOptions(verify: Verify.eager)),
+      throwsA(isA<CorruptException>()),
+    );
+    expect(scratch.openBytesWith(bad, const OpenOptions()), 0);
+    const every = OpenOptions(priority: 2, verify: Verify.eager, load: Load.read, outlineLevel: 1);
+    expect(scratch.openFileWith(fixture, every), 1);
+    expect(
+      () => scratch.openFileWith(fixture, OpenOptions(outlineLevel: ow['bad_outline_level'] as int)),
+      throwsA(isA<InvalidArgumentException>()),
+    );
+    scratch.close();
     final pl = e['postal_lookup'] as Map<String, dynamic>;
     final hit = engine.postalLookup(pl['code'] as String, pl['scheme'] as String);
     expect([strings(hit, 'postal'), strings(hit, 'id')], [pl['postal'], pl['ids']]);

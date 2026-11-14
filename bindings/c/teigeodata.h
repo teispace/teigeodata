@@ -48,6 +48,20 @@ typedef struct tg_bytes {
 typedef bool (*tg_callback_u32)(void *ctx, uint32_t a0);
 
 
+/* When a pack's sections are verified against their hashes. A uint32_t field holds one of these. */
+/* On first use: each section, or each 16 KiB block of a large one, is checked the first time a query reads it. Opening costs only the head checks. */
+#define TG_VERIFY_LAZY 0u
+/* Every section when the pack opens. */
+#define TG_VERIFY_EAGER 1u
+/* Never: only for bytes already verified, by the store's installer for instance. */
+#define TG_VERIFY_TRUSTED 2u
+
+/* How a pack file is loaded. A uint32_t field holds one of these. */
+/* Map the file into memory where the platform can, read it otherwise. The file must not be written over while it is open. */
+#define TG_LOAD_MAP 0u
+/* Read the whole file into memory: for files the application does not own. */
+#define TG_LOAD_READ 1u
+
 /* How `Engine::search_with` ranks (D-226). Every field's zero value is its default (D-276). Pass NULL for the defaults. */
 typedef struct tg_search_options {
     /* Whether focus_lat is set. */
@@ -65,6 +79,22 @@ typedef struct tg_search_options {
     /* Rank by match tier first (exact, loose, prefix, one edit, substring, two edits, phonetic), then importance and focus, instead of one additive score. */
     bool strict;
 } tg_search_options;
+
+/* How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's zero value is its default (D-276). Pass NULL for the defaults. */
+typedef struct tg_open_options {
+    /* Precedence over the other packs: a higher one wins where packs disagree (default 0). */
+    int32_t priority;
+    /* When sections are verified. A TG_VERIFY_* value. */
+    uint32_t verify;
+    /* How a file is loaded; ignored for bytes. A TG_LOAD_* value. */
+    uint32_t load;
+    /* Whether outline_level is set. */
+    bool has_outline_level;
+    /* The deepest admin level whose outlines are read, in a pack that splits its outlines by level: admin units below it are not found at a point, and their outlines are not loaded. `None` reads every level. */
+    uint32_t outline_level;
+    /* The largest simplification of the outlines read, in metres, when the pack has coarser outlines; 0 is full resolution. Admin units at a point may then differ within that distance of a border. */
+    uint32_t outline_tolerance_m;
+} tg_open_options;
 
 /* Frees a buffer returned by any function. Freeing a zeroed buffer does nothing. */
 void tg_bytes_free(tg_bytes bytes);
@@ -144,6 +174,17 @@ int32_t tg_engine_new(tg_engine **out);
 int32_t tg_engine_open_file(const tg_engine *handle, const uint8_t *path, size_t path_len, uint32_t *out);
 
 /*
+ * Opens the pack at `path` with these options and adds it. Returns its layer ID, as
+ * `open_file`.
+ *
+ * # Errors
+ *
+ * As `open_file`, and `ErrorCode::InvalidArgument` for an outline
+ * level above 255.
+ */
+int32_t tg_engine_open_file_with(const tg_engine *handle, const uint8_t *path, size_t path_len, const tg_open_options *options, uint32_t *out);
+
+/*
  * Adds a pack from its bytes (copied). Returns its layer ID, as
  * `open_file`.
  *
@@ -152,6 +193,17 @@ int32_t tg_engine_open_file(const tg_engine *handle, const uint8_t *path, size_t
  * `ErrorCode::Corrupt` if the bytes are not a valid pack.
  */
 int32_t tg_engine_open_bytes(const tg_engine *handle, const uint8_t *bytes, size_t bytes_len, uint32_t *out);
+
+/*
+ * Adds a pack from its bytes (copied) with these options. Returns its layer ID, as
+ * `open_file`.
+ *
+ * # Errors
+ *
+ * As `open_bytes`, and `ErrorCode::InvalidArgument` for an outline
+ * level above 255.
+ */
+int32_t tg_engine_open_bytes_with(const tg_engine *handle, const uint8_t *bytes, size_t bytes_len, const tg_open_options *options, uint32_t *out);
 
 /*
  * Removes the pack with this layer ID; false if no pack has it. Queries already running

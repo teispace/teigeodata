@@ -83,7 +83,7 @@ pub unsafe extern "C" fn tg_last_error(message: *mut TgBytes) -> i32 {
     e.code as i32
 }
 
-fn invalid(message: String) -> Error {
+pub(crate) fn invalid(message: String) -> Error {
     Error {
         code: ErrorCode::InvalidArgument,
         message,

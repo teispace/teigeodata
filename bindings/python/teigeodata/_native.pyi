@@ -2,6 +2,7 @@
 """Type stubs for the native part of teigeodata."""
 
 from collections.abc import Callable
+from typing import ClassVar
 
 class TeiGeodataError(Exception):
     """A failed teigeodata call."""
@@ -75,6 +76,35 @@ def distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     -180..=180, or any value is not finite.
     """
 
+class Verify:
+    """
+    When a pack's sections are verified against their hashes.
+    """
+
+    LAZY: ClassVar[Verify]
+    """On first use: each section, or each 16 KiB block of a large one, is checked the first time a query reads it. Opening costs only the head checks."""
+
+    EAGER: ClassVar[Verify]
+    """Every section when the pack opens."""
+
+    TRUSTED: ClassVar[Verify]
+    """Never: only for bytes already verified, by the store's installer for instance."""
+
+    def __int__(self) -> int: ...
+
+class Load:
+    """
+    How a pack file is loaded.
+    """
+
+    MAP: ClassVar[Load]
+    """Map the file into memory where the platform can, read it otherwise. The file must not be written over while it is open."""
+
+    READ: ClassVar[Load]
+    """Read the whole file into memory: for files the application does not own."""
+
+    def __int__(self) -> int: ...
+
 class SearchOptions:
     """
     How `Engine::search_with` ranks (D-226). Every field's zero value is its default
@@ -98,6 +128,34 @@ class SearchOptions:
     @property
     def strict(self) -> bool:
         """Rank by match tier first (exact, loose, prefix, one edit, substring, two edits, phonetic), then importance and focus, instead of one additive score."""
+
+class OpenOptions:
+    """
+    How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's
+    zero value is its default (D-276).
+    """
+
+    def __init__(self, *, priority: int = 0, verify: Verify = ..., load: Load = ..., outline_level: int | None = None, outline_tolerance_m: int = 0) -> None: ...
+
+    @property
+    def priority(self) -> int:
+        """Precedence over the other packs: a higher one wins where packs disagree (default 0)."""
+
+    @property
+    def verify(self) -> Verify:
+        """When sections are verified."""
+
+    @property
+    def load(self) -> Load:
+        """How a file is loaded; ignored for bytes."""
+
+    @property
+    def outline_level(self) -> int | None:
+        """The deepest admin level whose outlines are read, in a pack that splits its outlines by level: admin units below it are not found at a point, and their outlines are not loaded. `None` reads every level."""
+
+    @property
+    def outline_tolerance_m(self) -> int:
+        """The largest simplification of the outlines read, in metres, when the pack has coarser outlines; 0 is full resolution. Admin units at a point may then differ within that distance of a border."""
 
 class Engine:
     """
@@ -126,6 +184,17 @@ class Engine:
         valid pack.
         """
 
+    def open_file_with(self, path: str, options: OpenOptions) -> int:
+        """
+        Opens the pack at `path` with these options and adds it. Returns its layer ID, as
+        `open_file`.
+
+        # Errors
+
+        As `open_file`, and `ErrorCode::InvalidArgument` for an outline
+        level above 255.
+        """
+
     def open_bytes(self, bytes: bytes) -> int:
         """
         Adds a pack from its bytes (copied). Returns its layer ID, as
@@ -134,6 +203,17 @@ class Engine:
         # Errors
 
         `ErrorCode::Corrupt` if the bytes are not a valid pack.
+        """
+
+    def open_bytes_with(self, bytes: bytes, options: OpenOptions) -> int:
+        """
+        Adds a pack from its bytes (copied) with these options. Returns its layer ID, as
+        `open_file`.
+
+        # Errors
+
+        As `open_bytes`, and `ErrorCode::InvalidArgument` for an outline
+        level above 255.
         """
 
     def remove(self, layer: int) -> bool:

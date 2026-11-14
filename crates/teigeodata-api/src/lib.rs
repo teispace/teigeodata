@@ -15,6 +15,11 @@
 //! **Handles** (D-274) are public structs with private fields; their `impl`'s `pub fn`s take
 //! `&self` or no receiver, so each handle is `Send + Sync` and callable from any thread.
 //!
+//! **Records** (D-276) are public structs with only public fields, each a scalar, an `Option`
+//! of one, or an enum, deriving `Default` so that every field's default is its zero value;
+//! they are passed by reference (`&SearchOptions`). **Enums** (D-277) have unit variants
+//! valued 0, 1, 2 … in order, `#[default]` on the one valued 0.
+//!
 //! The extractor rejects anything else with the line number.
 //!
 //! [ADR-0016]: https://github.com/teispace/teigeodata/blob/main/docs/03-decisions/adr/ADR-0016-bindings.md
@@ -146,6 +151,80 @@ impl SearchOptions {
     }
 }
 
+/// When a pack's sections are verified against their hashes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Verify {
+    /// On first use: each section, or each 16 KiB block of a large one, is checked the first
+    /// time a query reads it. Opening costs only the head checks.
+    #[default]
+    Lazy = 0,
+    /// Every section when the pack opens.
+    Eager = 1,
+    /// Never: only for bytes already verified, by the store's installer for instance.
+    Trusted = 2,
+}
+
+/// How a pack file is loaded.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Load {
+    /// Map the file into memory where the platform can, read it otherwise. The file must not
+    /// be written over while it is open.
+    #[default]
+    Map = 0,
+    /// Read the whole file into memory: for files the application does not own.
+    Read = 1,
+}
+
+/// How [`Engine::open_file_with`] and [`Engine::open_bytes_with`] open a pack. Every field's
+/// zero value is its default (D-276).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct OpenOptions {
+    /// Precedence over the other packs: a higher one wins where packs disagree (default 0).
+    pub priority: i32,
+    /// When sections are verified.
+    pub verify: Verify,
+    /// How a file is loaded; ignored for bytes.
+    pub load: Load,
+    /// The deepest admin level whose outlines are read, in a pack that splits its outlines by
+    /// level: admin units below it are not found at a point, and their outlines are not
+    /// loaded. `None` reads every level.
+    pub outline_level: Option<u32>,
+    /// The largest simplification of the outlines read, in metres, when the pack has coarser
+    /// outlines; 0 is full resolution. Admin units at a point may then differ within that
+    /// distance of a border.
+    pub outline_tolerance_m: u32,
+}
+
+impl OpenOptions {
+    /// The engine's options, checked.
+    fn layer(&self) -> Result<LayerOptions> {
+        let outline_level = match self.outline_level {
+            None => None,
+            Some(level) => Some(u8::try_from(level).map_err(|_| {
+                Error::new(
+                    ErrorCode::InvalidArgument,
+                    format!("outline level {level} is above 255"),
+                )
+            })?),
+        };
+        Ok(LayerOptions {
+            priority: self.priority,
+            verify: match self.verify {
+                Verify::Lazy => teigeodata_engine::Verify::Lazy,
+                Verify::Eager => teigeodata_engine::Verify::Eager,
+                Verify::Trusted => teigeodata_engine::Verify::Trusted,
+            },
+            load: match self.load {
+                Load::Map => teigeodata_engine::Load::Map,
+                Load::Read => teigeodata_engine::Load::Read,
+            },
+            outline_level,
+            outline_tolerance_m: self.outline_tolerance_m,
+            ..LayerOptions::default()
+        })
+    }
+}
+
 /// Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
 /// answers from any number of threads at once, and adding a pack publishes a new snapshot
 /// while queries go on.
@@ -222,7 +301,18 @@ impl Engine {
     /// [`ErrorCode::Io`] if the file cannot be read, [`ErrorCode::Corrupt`] if it is not a
     /// valid pack.
     pub fn open_file(&self, path: &str) -> Result<u32> {
-        let layer = Layer::open(path, LayerOptions::default())?;
+        self.open_file_with(path, &OpenOptions::default())
+    }
+
+    /// Opens the pack at `path` with these options and adds it. Returns its layer ID, as
+    /// [`open_file`](Self::open_file).
+    ///
+    /// # Errors
+    ///
+    /// As [`open_file`](Self::open_file), and [`ErrorCode::InvalidArgument`] for an outline
+    /// level above 255.
+    pub fn open_file_with(&self, path: &str, options: &OpenOptions) -> Result<u32> {
+        let layer = Layer::open(path, options.layer()?)?;
         Ok(self.add(layer))
     }
 
@@ -233,7 +323,18 @@ impl Engine {
     ///
     /// [`ErrorCode::Corrupt`] if the bytes are not a valid pack.
     pub fn open_bytes(&self, bytes: &[u8]) -> Result<u32> {
-        let layer = Layer::from_bytes(bytes, LayerOptions::default())?;
+        self.open_bytes_with(bytes, &OpenOptions::default())
+    }
+
+    /// Adds a pack from its bytes (copied) with these options. Returns its layer ID, as
+    /// [`open_file`](Self::open_file).
+    ///
+    /// # Errors
+    ///
+    /// As [`open_bytes`](Self::open_bytes), and [`ErrorCode::InvalidArgument`] for an outline
+    /// level above 255.
+    pub fn open_bytes_with(&self, bytes: &[u8], options: &OpenOptions) -> Result<u32> {
+        let layer = Layer::from_bytes(bytes, options.layer()?)?;
         Ok(self.add(layer))
     }
 

@@ -31,6 +31,30 @@ pub const TG_{{ c.name }}: {{ c.ty }} = {{ c.value }};
 /// A callback taking `{{ cb.args | join(", ") }}`; return `false` to cancel.
 pub type TgCallback{{ cb.id | pascal }} = Option<unsafe extern "C" fn(ctx: Ctx{% for a in cb.args %}, a{{ loop.index0 }}: {{ a }}{% endfor %}) -> bool>;
 {% endfor %}
+{% for e in enums %}
+
+{% for line in e.doc %}
+/// {{ line }}
+{% endfor %}
+///
+/// A `u32` at the C ABI, one of the `TG_{{ e.snake | upper }}_*` values (D-277).
+{% for v in e.variants %}
+{% for line in v.doc %}
+/// {{ line }}
+{% endfor %}
+pub const TG_{{ e.snake | upper }}_{{ v.snake | upper }}: u32 = {{ v.value }};
+{% endfor %}
+
+/// The `{{ e.name }}` of a `TG_{{ e.snake | upper }}_*` value; another value is an invalid argument.
+fn {{ e.snake }}_of(value: u32, field: &str) -> Result<teigeodata_api::{{ e.name }}, teigeodata_api::Error> {
+    match value {
+{% for v in e.variants %}
+        {{ v.value }} => Ok(teigeodata_api::{{ e.name }}::{{ v.name }}),
+{% endfor %}
+        _ => Err(abi::invalid(format!("{field} is {value}, not a {{ e.name }}"))),
+    }
+}
+{% endfor %}
 {% for r in records %}
 
 {% for line in r.doc %}
@@ -49,17 +73,19 @@ pub struct Tg{{ r.name }} {
 {% for line in f.doc %}
     /// {{ line }}
 {% endfor %}
-    pub {{ f.name }}: {{ f.ty }},
+    pub {{ f.name }}: {% if f.ty == "enum" %}u32{% else %}{{ f.ty }}{% endif %},
 {% endfor %}
 }
 
-impl From<Tg{{ r.name }}> for teigeodata_api::{{ r.name }} {
-    fn from(r: Tg{{ r.name }}) -> Self {
-        Self {
+impl TryFrom<Tg{{ r.name }}> for teigeodata_api::{{ r.name }} {
+    type Error = teigeodata_api::Error;
+
+    fn try_from(r: Tg{{ r.name }}) -> Result<Self, Self::Error> {
+        Ok(Self {
 {% for f in r.fields %}
-            {{ f.name }}: {% if f.optional %}r.has_{{ f.name }}.then_some(r.{{ f.name }}){% else %}r.{{ f.name }}{% endif %},
+            {{ f.name }}: {% if f.optional %}r.has_{{ f.name }}.then_some(r.{{ f.name }}){% elif f.ty == "enum" %}{{ f.enum | snake }}_of(r.{{ f.name }}, "{{ f.name }}")?{% else %}r.{{ f.name }}{% endif %},
 {% endfor %}
-        }
+        })
     }
 }
 {% endfor %}
@@ -112,7 +138,7 @@ pub unsafe extern "C" fn {{ symbol }}(
         let {{ p.name }} = &unsafe { abi::handle({{ p.name }}, "{{ p.name }}") }?.0;
 {% elif p.ty == "record" %}
         // SAFETY: the caller passes a readable record, or null for the defaults.
-        let {{ p.name }} = teigeodata_api::{{ p.record }}::from(unsafe { abi::record({{ p.name }}) });
+        let {{ p.name }} = teigeodata_api::{{ p.record }}::try_from(unsafe { abi::record({{ p.name }}) })?;
 {% elif p.ty == "callback" %}
         let {{ p.name }}_fn = abi::callback({{ p.name }}, "{{ p.name }}")?;
         // SAFETY: the caller's function, called with the caller's context, on this thread.

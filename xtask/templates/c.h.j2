@@ -45,6 +45,14 @@ typedef struct tg_bytes {
 typedef bool (*tg_callback_{{ cb.id }})(void *ctx{% for a in cb.args %}, {{ cty(a) }} a{{ loop.index0 }}{% endfor %});
 {% endfor %}
 
+{% for e in enums %}
+
+/* {{ e.doc | join(" ") }} A uint32_t field holds one of these. */
+{% for v in e.variants %}
+/* {{ v.doc | join(" ") }} */
+#define TG_{{ e.snake | upper }}_{{ v.snake | upper }} {{ v.value }}u
+{% endfor %}
+{% endfor %}
 {% for r in records %}
 
 /* {{ r.doc | join(" ") }} Pass NULL for the defaults. */
@@ -54,8 +62,8 @@ typedef struct tg_{{ r.snake }} {
     /* Whether {{ f.name }} is set. */
     bool has_{{ f.name }};
 {% endif %}
-    /* {{ f.doc | join(" ") }} */
-    {{ cty(f.ty) }} {{ f.name }};
+    /* {{ f.doc | join(" ") }}{% if f.ty == "enum" %} A TG_{{ f.enum | snake | upper }}_* value.{% endif %} */
+    {{ "uint32_t" if f.ty == "enum" else cty(f.ty) }} {{ f.name }};
 {% endfor %}
 } tg_{{ r.snake }};
 {% endfor %}

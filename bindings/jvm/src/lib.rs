@@ -58,6 +58,37 @@ fn narrow<T: TryFrom<i64>>(name: &str, v: jlong) -> Result<T, teigeodata_api::Er
     })
 }
 
+/// The `Verify` of the Java enum's value; another value is an invalid argument.
+fn verify_of(
+    value: jni::sys::jint,
+    field: &str,
+) -> Result<teigeodata_api::Verify, teigeodata_api::Error> {
+    match value {
+        0 => Ok(teigeodata_api::Verify::Lazy),
+        1 => Ok(teigeodata_api::Verify::Eager),
+        2 => Ok(teigeodata_api::Verify::Trusted),
+        _ => Err(teigeodata_api::Error {
+            code: ErrorCode::InvalidArgument,
+            message: format!("{field} is {value}, not a Verify"),
+        }),
+    }
+}
+
+/// The `Load` of the Java enum's value; another value is an invalid argument.
+fn load_of(
+    value: jni::sys::jint,
+    field: &str,
+) -> Result<teigeodata_api::Load, teigeodata_api::Error> {
+    match value {
+        0 => Ok(teigeodata_api::Load::Map),
+        1 => Ok(teigeodata_api::Load::Read),
+        _ => Err(teigeodata_api::Error {
+            code: ErrorCode::InvalidArgument,
+            message: format!("{field} is {value}, not a Load"),
+        }),
+    }
+}
+
 /// The library version, from its package metadata.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_version<'caller>(
@@ -304,6 +335,62 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
         .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// Opens the pack at `path` with these options and adds it. Returns its layer ID, as
+/// `open_file`.
+///
+/// # Errors
+///
+/// As `open_file`, and `ErrorCode::InvalidArgument` for an outline
+/// level above 255.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeOpenFileWith<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    path: JString<'caller>,
+    options_priority: jni::sys::jint,
+    options_verify: jni::sys::jint,
+    options_load: jni::sys::jint,
+    options_has_outline_level: jni::sys::jboolean,
+    options_outline_level: jlong,
+    options_outline_tolerance_m: jlong,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let path = path.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("path: {e}"),
+                })?;
+                let options = teigeodata_api::OpenOptions {
+                    priority: options_priority,
+                    verify: verify_of(options_verify, "verify")?,
+                    load: load_of(options_load, "load")?,
+                    outline_level: if options_has_outline_level {
+                        Some(narrow::<u32>("outline_level", options_outline_level)?)
+                    } else {
+                        None
+                    },
+                    outline_tolerance_m: narrow::<u32>(
+                        "outline_tolerance_m",
+                        options_outline_tolerance_m,
+                    )?,
+                };
+                this.open_file_with(&path, &options)
+            })();
+            match result {
+                Ok(value) => Ok(jlong::from(value)),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 /// Adds a pack from its bytes (copied). Returns its layer ID, as
 /// `open_file`.
 ///
@@ -332,6 +419,64 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
                         message: format!("bytes: {e}"),
                     })?;
                 this.open_bytes(&bytes)
+            })();
+            match result {
+                Ok(value) => Ok(jlong::from(value)),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Adds a pack from its bytes (copied) with these options. Returns its layer ID, as
+/// `open_file`.
+///
+/// # Errors
+///
+/// As `open_bytes`, and `ErrorCode::InvalidArgument` for an outline
+/// level above 255.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeOpenBytesWith<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    bytes: JByteArray<'caller>,
+    options_priority: jni::sys::jint,
+    options_verify: jni::sys::jint,
+    options_load: jni::sys::jint,
+    options_has_outline_level: jni::sys::jboolean,
+    options_outline_level: jlong,
+    options_outline_tolerance_m: jlong,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let bytes = env
+                    .convert_byte_array(&bytes)
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: format!("bytes: {e}"),
+                    })?;
+                let options = teigeodata_api::OpenOptions {
+                    priority: options_priority,
+                    verify: verify_of(options_verify, "verify")?,
+                    load: load_of(options_load, "load")?,
+                    outline_level: if options_has_outline_level {
+                        Some(narrow::<u32>("outline_level", options_outline_level)?)
+                    } else {
+                        None
+                    },
+                    outline_tolerance_m: narrow::<u32>(
+                        "outline_tolerance_m",
+                        options_outline_tolerance_m,
+                    )?,
+                };
+                this.open_bytes_with(&bytes, &options)
             })();
             match result {
                 Ok(value) => Ok(jlong::from(value)),

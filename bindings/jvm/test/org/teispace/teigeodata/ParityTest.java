@@ -70,7 +70,7 @@ public final class ParityTest {
     }
 
     /** The engine handle on the fixture pack (parity.json, "engine"). */
-    static void engine(Map<?, ?> p, Path dir) {
+    static void engine(Map<?, ?> p, Path dir) throws java.io.IOException {
         TeiGeodata.Engine engine = new TeiGeodata.Engine();
         {
             check(engine.openFile(dir.resolve((String) p.get("fixture")).toString()) == 0, "open");
@@ -118,6 +118,21 @@ public final class ParityTest {
             check(!strings(engine.searchWith((String) sw.get("query"), swLimit, null), "id").equals(sw.get("ids")), "search_with defaults");
             expect(TeiGeodataException.InvalidArgument.class,
                     () -> engine.searchWith("x", 1, TeiGeodata.SearchOptions.DEFAULTS.withFocusLat(1.0)), "focus");
+            Map<?, ?> ow = (Map<?, ?>) p.get("open_with");
+            Path fixture = dir.resolve((String) p.get("fixture"));
+            byte[] bad = Files.readAllBytes(fixture);
+            bad[((Number) ow.get("corrupt_at")).intValue()] ^= (byte) 0xff;
+            try (TeiGeodata.Engine scratch = new TeiGeodata.Engine()) {
+                TeiGeodata.OpenOptions eager = TeiGeodata.OpenOptions.DEFAULTS.withVerify(TeiGeodata.Verify.EAGER);
+                expect(TeiGeodataException.Corrupt.class, () -> scratch.openBytesWith(bad, eager), "corrupted");
+                check(scratch.openBytesWith(bad, null) == 0, "lazy");
+                TeiGeodata.OpenOptions every = eager.withLoad(TeiGeodata.Load.READ).withPriority(2).withOutlineLevel(1L);
+                check(scratch.openFileWith(fixture.toString(), every) == 1, "open_file_with");
+                check(scratch.openFileWith(fixture.toString(), new TeiGeodata.OpenOptions(0, null, null, null, 0)) == 2, "null enums");
+                long deep = ((Number) ow.get("bad_outline_level")).longValue();
+                expect(TeiGeodataException.InvalidArgument.class,
+                        () -> scratch.openFileWith(fixture.toString(), TeiGeodata.OpenOptions.DEFAULTS.withOutlineLevel(deep)), "outline level");
+            }
             Map<?, ?> pl = (Map<?, ?>) p.get("postal_lookup");
             byte[] hit = engine.postalLookup((String) pl.get("code"), (String) pl.get("scheme"));
             check(strings(hit, "postal").equals(pl.get("postal")) && strings(hit, "id").equals(pl.get("ids")), "postal_lookup");

@@ -53,7 +53,22 @@ fn narrow<T: TryFrom<i64>>(name: &str, v: jlong) -> Result<T, teigeodata_api::Er
         message: format!("{name} is {v}, outside its range"),
     })
 }
-{% macro jty(t) %}{% if t == "bool" %}jni::sys::jboolean{% elif t == "i32" %}jni::sys::jint{% elif t == "f64" %}jni::sys::jdouble{% elif t == "str" %}JString<'caller>{% elif t == "bytes" %}JByteArray<'caller>{% elif t == "callback" %}JObject<'caller>{% else %}jlong{% endif %}{% endmacro %}
+{% for e in enums %}
+
+/// The `{{ e.name }}` of the Java enum's value; another value is an invalid argument.
+fn {{ e.snake }}_of(value: jni::sys::jint, field: &str) -> Result<teigeodata_api::{{ e.name }}, teigeodata_api::Error> {
+    match value {
+{% for v in e.variants %}
+        {{ v.value }} => Ok(teigeodata_api::{{ e.name }}::{{ v.name }}),
+{% endfor %}
+        _ => Err(teigeodata_api::Error {
+            code: ErrorCode::InvalidArgument,
+            message: format!("{field} is {value}, not a {{ e.name }}"),
+        }),
+    }
+}
+{% endfor %}
+{% macro jty(t) %}{% if t == "bool" %}jni::sys::jboolean{% elif t == "i32" %}jni::sys::jint{% elif t == "f64" %}jni::sys::jdouble{% elif t == "str" %}JString<'caller>{% elif t == "bytes" %}JByteArray<'caller>{% elif t == "callback" %}JObject<'caller>{% elif t == "enum" %}jni::sys::jint{% else %}jlong{% endif %}{% endmacro %}
 {% macro rty(t) %}{% if t == "string" %}JString<'caller>{% elif t == "blob" %}JByteArray<'caller>{% elif t == "void" %}(){% else %}{{ jty(t) }}{% endif %}{% endmacro %}
 {% macro sig(t) %}{% if t == "bool" %}Z{% elif t == "i32" %}I{% elif t == "f64" %}D{% else %}J{% endif %}{% endmacro %}
 {% macro jval(t, v) %}{% if t == "bool" %}jni::JValue::Bool({{ v }}){% elif t == "i32" %}jni::JValue::Int({{ v }}){% elif t == "f64" %}jni::JValue::Double({{ v }}){% elif t == "u64" %}jni::JValue::Long({{ v }}.cast_signed()){% else %}jni::JValue::Long(i64::from({{ v }})){% endif %}{% endmacro %}
@@ -112,7 +127,7 @@ pub extern "system" fn {{ symbol }}<'caller>(
 {% elif p.ty == "record" %}
                 let {{ p.name }} = teigeodata_api::{{ p.record }} {
 {% for g in records | selectattr("name", "eq", p.record) | map(attribute="fields") | first %}
-{% set v %}{% if g.ty in ["u32", "u64"] %}narrow::<{{ g.ty }}>("{{ g.name }}", {{ p.name }}_{{ g.name }})?{% else %}{{ p.name }}_{{ g.name }}{% endif %}{% endset %}
+{% set v %}{% if g.ty == "enum" %}{{ g.enum | snake }}_of({{ p.name }}_{{ g.name }}, "{{ g.name }}")?{% elif g.ty in ["u32", "u64"] %}narrow::<{{ g.ty }}>("{{ g.name }}", {{ p.name }}_{{ g.name }})?{% else %}{{ p.name }}_{{ g.name }}{% endif %}{% endset %}
                     {{ g.name }}: {% if g.optional %}if {{ p.name }}_has_{{ g.name }} { Some({{ v }}) } else { None }{% else %}{{ v }}{% endif %},
 {% endfor %}
                 };

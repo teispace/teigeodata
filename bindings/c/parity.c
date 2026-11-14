@@ -152,6 +152,26 @@ int main(void) {
     tg_bytes_free(out);
     tg_search_options half = {.has_focus_lat = true, .focus_lat = 1.0};
     CHECK(tg_engine_search_with(engine, (const uint8_t *)lalek, strlen(lalek), 3, &half, &out) == TG_ERROR_INVALID_ARGUMENT);
+    /* Open options: the byte at 173392 (parity.json, open_with) lies inside a section. */
+    FILE *f = fopen(path, "rb");
+    CHECK(f != NULL);
+    static uint8_t pack[1 << 20];
+    size_t pack_len = fread(pack, 1, sizeof pack, f);
+    fclose(f);
+    CHECK(pack_len > 173392 && pack_len < sizeof pack);
+    pack[173392] ^= 0xff;
+    tg_engine *scratch = NULL;
+    CHECK(tg_engine_new(&scratch) == TG_OK);
+    tg_open_options eager = {.verify = TG_VERIFY_EAGER};
+    CHECK(tg_engine_open_bytes_with(scratch, pack, pack_len, &eager, &layers) == TG_ERROR_CORRUPT);
+    CHECK(tg_engine_open_bytes_with(scratch, pack, pack_len, NULL, &layers) == TG_OK && layers == 0);
+    tg_open_options every = {.priority = 2, .verify = TG_VERIFY_EAGER, .load = TG_LOAD_READ, .has_outline_level = true, .outline_level = 1};
+    CHECK(tg_engine_open_file_with(scratch, (const uint8_t *)path, strlen(path), &every, &layers) == TG_OK && layers == 1);
+    tg_open_options odd = {.verify = 99};
+    CHECK(tg_engine_open_file_with(scratch, (const uint8_t *)path, strlen(path), &odd, &layers) == TG_ERROR_INVALID_ARGUMENT);
+    tg_open_options deep = {.has_outline_level = true, .outline_level = 256};
+    CHECK(tg_engine_open_file_with(scratch, (const uint8_t *)path, strlen(path), &deep, &layers) == TG_ERROR_INVALID_ARGUMENT);
+    tg_engine_free(scratch);
     const char *postal = "106-01";
     CHECK(tg_engine_postal_lookup(engine, (const uint8_t *)postal, strlen(postal), (const uint8_t *)"np", 2, &out) == TG_OK);
     CHECK(blob_rows(out) == 1 && str_is(out, "postal", 0, "10601") && str_is(out, "id", 0, "tgd:np/vasbex"));

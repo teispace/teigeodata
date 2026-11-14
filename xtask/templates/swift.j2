@@ -106,15 +106,24 @@ private final class Callback{{ cb.id | pascal }} {
 }
 {% endfor %}
 
+{% for e in enums %}
+{{ doc(e.doc) | replace("    ///", "///") -}}
+public enum {{ e.name }}: UInt32, Sendable {
+{% for v in e.variants %}
+{{ doc(v.doc) }}    case {{ v.snake | camel }} = {{ v.value }}
+{% endfor %}
+}
+
+{% endfor %}
 {% for r in records %}
 {{ doc(r.doc) | replace("    ///", "///") -}}
 public struct {{ r.name }}: Sendable, Equatable {
 {% for f in r.fields %}
-{{ doc(f.doc) }}    public var {{ f.name | camel }}: {{ swty(f.ty) }}{% if f.optional %}?{% endif %}
+{{ doc(f.doc) }}    public var {{ f.name | camel }}: {{ f.enum if f.ty == "enum" else swty(f.ty) }}{% if f.optional %}?{% endif %}
 
 {% endfor %}
 
-    public init({% for f in r.fields %}{{ f.name | camel }}: {{ swty(f.ty) }}{% if f.optional %}? = nil{% elif f.ty == "bool" %} = false{% else %} = 0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}) {
+    public init({% for f in r.fields %}{{ f.name | camel }}: {{ f.enum if f.ty == "enum" else swty(f.ty) }}{% if f.optional %}? = nil{% elif f.ty == "enum" %} = .{{ (enums | selectattr("name", "eq", f.enum) | first).variants[0].snake | camel }}{% elif f.ty == "bool" %} = false{% else %} = 0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}) {
 {% for f in r.fields %}
         self.{{ f.name | camel }} = {{ f.name | camel }}
 {% endfor %}
@@ -122,7 +131,7 @@ public struct {{ r.name }}: Sendable, Equatable {
 
     /// The C struct.
     fileprivate var native: tg_{{ r.snake }} {
-        tg_{{ r.snake }}({% for f in r.fields %}{% if f.optional %}has_{{ f.name }}: {{ f.name | camel }} != nil, {{ f.name }}: {{ f.name | camel }} ?? {% if f.ty == "bool" %}false{% else %}0{% endif %}{% else %}{{ f.name }}: {{ f.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %})
+        tg_{{ r.snake }}({% for f in r.fields %}{% if f.optional %}has_{{ f.name }}: {{ f.name | camel }} != nil, {{ f.name }}: {{ f.name | camel }} ?? {% if f.ty == "bool" %}false{% else %}0{% endif %}{% else %}{{ f.name }}: {{ f.name | camel }}{% if f.ty == "enum" %}.rawValue{% endif %}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %})
     }
 }
 

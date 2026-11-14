@@ -77,6 +77,42 @@ public final class TeiGeodata {
     public static native double distanceM(double lat1, double lon1, double lat2, double lon2);
 
     /**
+     * When a pack's sections are verified against their hashes.
+     */
+    public enum Verify {
+        /** On first use: each section, or each 16 KiB block of a large one, is checked the first time a query reads it. Opening costs only the head checks. */
+        LAZY(0),
+        /** Every section when the pack opens. */
+        EAGER(1),
+        /** Never: only for bytes already verified, by the store's installer for instance. */
+        TRUSTED(2);
+
+        /** The value at the native boundary (D-277). */
+        final int value;
+
+        Verify(int value) {
+            this.value = value;
+        }
+    }
+
+    /**
+     * How a pack file is loaded.
+     */
+    public enum Load {
+        /** Map the file into memory where the platform can, read it otherwise. The file must not be written over while it is open. */
+        MAP(0),
+        /** Read the whole file into memory: for files the application does not own. */
+        READ(1);
+
+        /** The value at the native boundary (D-277). */
+        final int value;
+
+        Load(int value) {
+            this.value = value;
+        }
+    }
+
+    /**
      * How `Engine::search_with` ranks (D-226). Every field's zero value is its default
      * (D-276).
      *
@@ -107,6 +143,46 @@ public final class TeiGeodata {
         /** A copy with {@code strict} set. */
         public SearchOptions withStrict(boolean strict) {
             return new SearchOptions(focusLat, focusLon, focusScaleM, strict);
+        }
+    }
+
+    /**
+     * How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's
+     * zero value is its default (D-276).
+     *
+     * @param priority Precedence over the other packs: a higher one wins where packs disagree (default 0).
+     * @param verify When sections are verified. (null: the default)
+     * @param load How a file is loaded; ignored for bytes. (null: the default)
+     * @param outlineLevel The deepest admin level whose outlines are read, in a pack that splits its outlines by level: admin units below it are not found at a point, and their outlines are not loaded. `None` reads every level. (null: unset)
+     * @param outlineToleranceM The largest simplification of the outlines read, in metres, when the pack has coarser outlines; 0 is full resolution. Admin units at a point may then differ within that distance of a border.
+     */
+    public record OpenOptions(int priority, Verify verify, Load load, Long outlineLevel, long outlineToleranceM) {
+        /** Every field at its zero value: the defaults (D-276). */
+        public static final OpenOptions DEFAULTS = new OpenOptions(0, Verify.LAZY, Load.MAP, null, 0);
+
+        /** A copy with {@code priority} set. */
+        public OpenOptions withPriority(int priority) {
+            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM);
+        }
+
+        /** A copy with {@code verify} set. */
+        public OpenOptions withVerify(Verify verify) {
+            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM);
+        }
+
+        /** A copy with {@code load} set. */
+        public OpenOptions withLoad(Load load) {
+            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM);
+        }
+
+        /** A copy with {@code outlineLevel} set. */
+        public OpenOptions withOutlineLevel(Long outlineLevel) {
+            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM);
+        }
+
+        /** A copy with {@code outlineToleranceM} set. */
+        public OpenOptions withOutlineToleranceM(long outlineToleranceM) {
+            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM);
         }
     }
 
@@ -204,6 +280,28 @@ public static final class Engine implements AutoCloseable {
         private static native long nativeOpenFile(long handle, String path);
 
         /**
+         * Opens the pack at `path` with these options and adds it. Returns its layer ID, as
+         * `open_file`.
+         *
+         * # Errors
+         *
+         * As `open_file`, and `ErrorCode::InvalidArgument` for an outline
+         * level above 255.
+         */
+        public long openFileWith(String path, OpenOptions options) {
+            OpenOptions options$ = options != null ? options : OpenOptions.DEFAULTS;
+            long stamp = enter();
+            try {
+                return nativeOpenFileWith(handle, path, options$.priority(), options$.verify() != null ? options$.verify().value : 0, options$.load() != null ? options$.load().value : 0, options$.outlineLevel() != null, options$.outlineLevel() != null ? options$.outlineLevel() : 0, options$.outlineToleranceM());
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native long nativeOpenFileWith(long handle, String path, int optionsPriority, int optionsVerify, int optionsLoad, boolean optionsHasOutlineLevel, long optionsOutlineLevel, long optionsOutlineToleranceM);
+
+        /**
          * Adds a pack from its bytes (copied). Returns its layer ID, as
          * `open_file`.
          *
@@ -222,6 +320,28 @@ public static final class Engine implements AutoCloseable {
         }
 
         private static native long nativeOpenBytes(long handle, byte[] bytes);
+
+        /**
+         * Adds a pack from its bytes (copied) with these options. Returns its layer ID, as
+         * `open_file`.
+         *
+         * # Errors
+         *
+         * As `open_bytes`, and `ErrorCode::InvalidArgument` for an outline
+         * level above 255.
+         */
+        public long openBytesWith(byte[] bytes, OpenOptions options) {
+            OpenOptions options$ = options != null ? options : OpenOptions.DEFAULTS;
+            long stamp = enter();
+            try {
+                return nativeOpenBytesWith(handle, bytes, options$.priority(), options$.verify() != null ? options$.verify().value : 0, options$.load() != null ? options$.load().value : 0, options$.outlineLevel() != null, options$.outlineLevel() != null ? options$.outlineLevel() : 0, options$.outlineToleranceM());
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native long nativeOpenBytesWith(long handle, byte[] bytes, int optionsPriority, int optionsVerify, int optionsLoad, boolean optionsHasOutlineLevel, long optionsOutlineLevel, long optionsOutlineToleranceM);
 
         /**
          * Removes the pack with this layer ID; false if no pack has it. Queries already running

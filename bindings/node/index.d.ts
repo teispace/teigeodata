@@ -10,6 +10,16 @@ export const SAMPLE_ROWS_MAX: number;
 export const LIMIT_MAX: number;
 
 /**
+ * When a pack's sections are verified against their hashes.
+ */
+export type Verify = "lazy" | "eager" | "trusted";
+
+/**
+ * How a pack file is loaded.
+ */
+export type Load = "map" | "read";
+
+/**
  * How `Engine::search_with` ranks (D-226). Every field's zero value is its default
  * (D-276).
  */
@@ -33,6 +43,37 @@ export interface SearchOptions {
    * phonetic), then importance and focus, instead of one additive score.
    */
   strict?: boolean;
+}
+
+/**
+ * How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's
+ * zero value is its default (D-276).
+ */
+export interface OpenOptions {
+  /**
+   * Precedence over the other packs: a higher one wins where packs disagree (default 0).
+   */
+  priority?: number;
+  /**
+   * When sections are verified.
+   */
+  verify?: Verify;
+  /**
+   * How a file is loaded; ignored for bytes.
+   */
+  load?: Load;
+  /**
+   * The deepest admin level whose outlines are read, in a pack that splits its outlines by
+   * level: admin units below it are not found at a point, and their outlines are not
+   * loaded. `None` reads every level.
+   */
+  outlineLevel?: number;
+  /**
+   * The largest simplification of the outlines read, in metres, when the pack has coarser
+   * outlines; 0 is full resolution. Admin units at a point may then differ within that
+   * distance of a border.
+   */
+  outlineToleranceM?: number;
 }
 
 /**
@@ -110,6 +151,17 @@ export class Engine {
   openFile(path: string): number;
 
   /**
+   * Opens the pack at `path` with these options and adds it. Returns its layer ID, as
+   * `open_file`.
+   *
+   * # Errors
+   *
+   * As `open_file`, and `ErrorCode::InvalidArgument` for an outline
+   * level above 255.
+   */
+  openFileWith(path: string, options?: OpenOptions): number;
+
+  /**
    * Adds a pack from its bytes (copied). Returns its layer ID, as
    * `open_file`.
    *
@@ -118,6 +170,17 @@ export class Engine {
    * `ErrorCode::Corrupt` if the bytes are not a valid pack.
    */
   openBytes(bytes: Buffer): number;
+
+  /**
+   * Adds a pack from its bytes (copied) with these options. Returns its layer ID, as
+   * `open_file`.
+   *
+   * # Errors
+   *
+   * As `open_bytes`, and `ErrorCode::InvalidArgument` for an outline
+   * level above 255.
+   */
+  openBytesWith(bytes: Buffer, options?: OpenOptions): number;
 
   /**
    * Removes the pack with this layer ID; false if no pack has it. Queries already running

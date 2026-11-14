@@ -129,6 +129,16 @@ test("engine handle on the fixture", () => {
   assert.deepEqual(strings(engine.searchWith(sw.query, sw.limit, focus), "id"), sw.ids);
   assert.notDeepEqual(strings(engine.searchWith(sw.query, sw.limit), "id"), sw.ids);
   assert.throws(() => engine.searchWith(sw.query, 1, { focusLat: 1 }), { code: "InvalidArgument" });
+  const ow = p.open_with;
+  const fixture = join(__dirname, "../..", p.fixture);
+  const bad = readFileSync(fixture);
+  bad[ow.corrupt_at] ^= 0xff;
+  const scratch = new tg.Engine();
+  assert.throws(() => scratch.openBytesWith(bad, { verify: "eager" }), { code: "Corrupt" });
+  assert.equal(scratch.openBytesWith(bad), 0);
+  assert.equal(scratch.openFileWith(fixture, { verify: "eager", load: "read", priority: 2, outlineLevel: 1 }), 1);
+  assert.throws(() => scratch.openFileWith(fixture, { outlineLevel: ow.bad_outline_level }), { code: "InvalidArgument" });
+  assert.throws(() => scratch.openFileWith(fixture, { verify: "sometimes" }));
   const pl = p.postal_lookup;
   const hit = engine.postalLookup(pl.code, pl.scheme);
   assert.deepEqual([strings(hit, "postal"), strings(hit, "id")], [pl.postal, pl.ids]);
