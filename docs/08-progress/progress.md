@@ -19,7 +19,7 @@ A short status. The numbers and evidence live in each phase file and the
 | 3 Forge and Nepal data | in progress: 3.1–3.3 and 3.5 done (3.5 lite codes wait on Q-009); 3.4 DEM and 3.6 names in progress; 3.7–3.8 open | [phase 3](../07-planning/phases/phase-3.md) |
 | 4 Engine, baseline and sync | in progress: what remains waits on the maintainer (the key ceremony, Q-024) or on a release that changes records (4.7, gate 11, D-273) | [phase 4](../07-planning/phases/phase-4.md) |
 | 5 Boundary and bindings | **M5 met** 2026-11-15 (D-308); open, not blocking: 5.5d (Dart static linking), 5.10c (the first real release, on the maintainer's setup), the APK path of D-306 on a real APK | [phase 5 §5.11](../07-planning/phases/phase-5.md#511-exit-review) |
-| 6 Servers | next: its research (MCP server, HTTP server) | [roadmap](../07-planning/roadmap.md) |
+| 6 Servers | in progress: 6.0 research done ([servers](../02-research/notes/servers.md)); the HTTP A/B next | [phase 6](../07-planning/phases/phase-6.md) |
 | 7–8 | not started | [roadmap](../07-planning/roadmap.md) |
 
 - **Now (Phase 3):** the Nepal main pack has 100,358 places with heights (D-111), admin
