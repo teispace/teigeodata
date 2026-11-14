@@ -12,9 +12,14 @@
 //!
 //! [D-310]: https://github.com/teispace/teigeodata/blob/main/docs/03-decisions/log.md
 
+/// The fuzz harness of the query parsing.
+#[cfg(feature = "fuzz")]
+pub mod fuzz;
 #[cfg(feature = "http")]
 pub mod http;
 pub mod output;
 pub mod packs;
+#[cfg(any(feature = "http", feature = "fuzz"))]
+mod params;
 pub mod query;
 pub mod seams;

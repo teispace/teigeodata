@@ -48,7 +48,7 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
   corpus of client requests
 - [x] Limits and timeouts, CORS off unless configured, a panic answered `internal`
   (2026-11-15, D-312)
-- [ ] Request fuzzing of the query parsing
+- [x] Request fuzzing of the query parsing (2026-11-15, D-313)
 
 ### 6.3 The MCP server
 - [ ] stdio on rmcp: `server/discover`, the tools of ADR-0017 with `outputSchema`,

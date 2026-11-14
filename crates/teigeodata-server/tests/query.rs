@@ -207,6 +207,8 @@ fn every_failure_has_its_code_and_hides_server_paths() {
     );
     assert!(!x.message.contains("secret-place"), "{}", x.message);
     assert!(x.cause.is_some(), "the cause stays for the server's log");
+    // A mapped pack cannot be removed on Windows.
+    drop(e);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

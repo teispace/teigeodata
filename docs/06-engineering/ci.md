@@ -67,7 +67,9 @@ fuzzing time per target as an input).
   `cargo test` runs on seeded inputs on every PR (D-072, `crates/teigeodata-format/tests/fuzz.rs`):
   `open`, `round_trip`, `mutate`, `manifest`, `sections`, `bitpack`, `table` and `bits`, all in
   `teigeodata_format::fuzz`; `transport_table`, `transport_asset` and `transport_frame` in
-  `teigeodata_sync::fuzz` (D-112, `crates/teigeodata-sync/tests/fuzz.rs`). The corpus of each target is restored from the Actions cache, minimised
+  `teigeodata_sync::fuzz` (D-112, `crates/teigeodata-sync/tests/fuzz.rs`); `server_query` in
+  `teigeodata_server::fuzz` (D-313, `crates/teigeodata-server/tests/fuzz.rs`, run by fast-check's
+  `check` job). The corpus of each target is restored from the Actions cache, minimised
   with `cargo fuzz cmin` and saved again; a crash fails the job and uploads its input.
 - **miri**: ten parallel jobs under `cargo miri nextest` (core lib; format lib in three
   parts; format `open`; format `fuzz` in four parts and sync `fuzz`, one seeded input per harness,

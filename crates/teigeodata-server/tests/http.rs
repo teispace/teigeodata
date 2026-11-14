@@ -127,6 +127,7 @@ async fn every_route_answers_with_its_attribution() {
         (s, &j["packs"][0]["attribution"]),
         (StatusCode::OK, &Value::from(NOTICE))
     );
+    drop(app); // A mapped pack cannot be removed on Windows.
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -160,6 +161,7 @@ async fn every_failure_answers_its_code_and_status() {
             "{uri}: {j}"
         );
     }
+    drop(app);
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -216,6 +218,7 @@ async fn the_seams_gate_and_meter_and_a_panic_is_answered() {
         (1, 2),
         "only the answered request is metered, with its results"
     );
+    drop(app);
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -236,5 +239,6 @@ async fn cors_is_off_unless_configured() {
     assert_eq!(cors, "https://app.example");
     let (_, _, cors) = call(&configured, "/health", Some("https://other.example")).await;
     assert_eq!(cors, "");
+    drop((open, configured));
     std::fs::remove_dir_all(dir).unwrap();
 }

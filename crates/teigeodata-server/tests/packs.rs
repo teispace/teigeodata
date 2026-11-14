@@ -112,5 +112,7 @@ fn the_pack_set_follows_the_store_and_keeps_its_files() {
         Packs::open(&[root.join("missing.tgd")], None),
         Err(PackError::Pack(..))
     ));
+    // A mapped pack cannot be removed on Windows.
+    drop((packs, files));
     std::fs::remove_dir_all(&root).unwrap();
 }

@@ -18,15 +18,18 @@ teigeodata-engine = { workspace = true, features = ["store"] }
 teigeodata-sync = { workspace = true, features = ["store"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+# The routes' query strings (`params`, shared with the fuzz harness).
+form_urlencoded = { version = "1.2.2", optional = true }
 # The HTTP server (feature `http`, D-309).
 axum = { version = "0.8.9", default-features = false, features = ["http1", "http2", "tokio", "query"], optional = true }
-form_urlencoded = { version = "1.2.2", optional = true }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "time", "macros"], optional = true }
 tower-http = { version = "0.7.1", features = ["catch-panic", "cors", "timeout"], optional = true }
 
 [features]
 # The HTTP server over axum: `http::router` and `http::serve`.
 http = ["dep:axum", "dep:form_urlencoded", "dep:tokio", "dep:tower-http"]
+# The fuzz harness of the query parsing (`fuzz::query_string`).
+fuzz = ["dep:form_urlencoded"]
 
 [dev-dependencies]
 # The engine's test model (`../teigeodata-engine/tests/common`) writes its packs.
@@ -35,6 +38,10 @@ teigeodata-names.workspace = true
 # The HTTP tests drive the router in process.
 tokio = { version = "1.54.1", features = ["rt", "macros"] }
 tower = { version = "0.5.3", default-features = false, features = ["util"] }
+
+[[test]]
+name = "fuzz"
+required-features = ["fuzz"]
 
 [[test]]
 name = "http"

@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [open, round_trip, mutate, manifest, sections, bitpack, table, bits, transport_table, transport_asset, transport_frame]
+        target: [open, round_trip, mutate, manifest, sections, bitpack, table, bits, transport_table, transport_asset, transport_frame, server_query]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Nightly toolchain and cargo-fuzz
