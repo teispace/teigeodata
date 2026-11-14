@@ -184,3 +184,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-14 | D-270: TG-15 step 4 re-scoped to India's town-level quality in the world part (the pack moves to W1 with villages). D-271: ISO 3166 codes on every world part, Wikidata P300 checked against CLDR 49: 237 countries, 4,071 of 4,567 units (89.1%), India's 2023 codes current; layer wire +0.17%, no place changed |
 | 2026-11-14 | TG-15 step 4 done: India's golden set 47/47 (Banaras, Poona, `Var` added), world 72/72; Nepali names outside Nepal capped by Wikidata (1,745 places named) |
 | 2026-11-14 | D-272: Q-027 closed, no weighting by name language (layers choose their languages); `Istan` fixed by D-269, `Tor` differs only on the 26-language baseline |
+| 2026-11-14 | Data release `data-2026.11.14.3` from `eb8ab5c`: ISO codes in the layer, baseline and points layer (only `ISO_CODES` changed, every ID kept), verified from a fresh download |
