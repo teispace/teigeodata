@@ -145,16 +145,17 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
     `node.yml` is green on all eight platforms
 
 ### 5.8 .NET, Go and C/C++
-- [ ] .NET over the C ABI with source-generated P/Invoke, NativeAOT-safe, as a NuGet package;
+- [x] .NET over the C ABI with source-generated P/Invoke, NativeAOT-safe, as a NuGet package;
   Go over cgo through pointers it loads, purego without cgo (D-296), the library from the C package; C/C++
   examples ([research](../../02-research/notes/dotnet-go-packaging.md)):
   - [x] 5.8a the C package's musl targets (`linux-musl` x64 and arm64), built in Alpine
   - [x] 5.8b Go: S1 done (D-296); the generated binding (cgo and purego layers), its loader,
     `fetch`, parity, benchmarks and fuzzing (D-297); `go.yml` green on Linux glibc and musl
     (purego too), macOS, Windows x64 and arm64
-  - [ ] 5.8c .NET: the generated `LibraryImport` binding, its runtime, `BlobReader` and the
-    parity program built (D-298); done when `dotnet.yml` is green (JIT and NativeAOT on every
-    RID) and `cargo xtask package-dotnet --test` passes from the `.nupkg`
+  - [x] 5.8c .NET: the generated `LibraryImport` binding, its runtime, `BlobReader` and the
+    parity program (D-298); `dotnet.yml` green on seven RIDs under the JIT and NativeAOT, and
+    `cargo xtask package-dotnet --test` passes from the `.nupkg`; further .NET work is parked
+    by the maintainer (D-299: no local SDK)
   - [x] 5.8d the generated C++17 wrapper, its example and test
 
 ### 5.9 Parity and benchmarks
@@ -180,6 +181,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 | 2026-11-14 | 5.8 in sub-steps; Go defaults to purego with the library from the C package, cgo by build tag (research) | plan |
 | 2026-11-14 | 5.4 done (`jvm` green with Android API 24 and 35); 5.7 done (`node` green on eight platforms, `wasm` green); 5.8d built (D-295) | plan |
 | 2026-11-14 | 5.8b: S1 measured; Go defaults to cgo through loaded pointers, purego only without cgo (D-296), reversing the research's first pick | plan |
+| 2026-11-14 | 5.8 done: 5.8c green (`dotnet`), further .NET work parked (D-299) | plan |
 | 2026-11-14 | 5.8b done (`go` green); 5.8c built (D-298): blobs are managed `byte[]` like Go's, the parity checks a console program run under the JIT and NativeAOT | plan |
 | 2026-11-14 | 5.8b built (D-297): blobs are Go-owned `[]byte`, not lent, so a column view cannot dangle; the prebuilt download moved to its own package so programs link no HTTP client unless they ask | plan |
 | 2026-11-14 | 5.6: abi3 floor 3.11, abi3t, the lent `Blob`, wheels by cibuildwheel (D-290) | plan |
