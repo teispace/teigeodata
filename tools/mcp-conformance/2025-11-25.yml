@@ -1,0 +1,36 @@
+# Scenarios `tgd serve` is expected to fail under a 2025-11-25 client (D-319). The suite
+# fails on any other failure and on a listed scenario that passes. Each failing or warning
+# check is listed exactly in 2025-11-25.checks, which the workflow also gates.
+server:
+  # The SDK reference fixture's tools (`test_simple_text`, `test_image_content`, ...), which a
+  # product server does not have.
+  - tools-call-simple-text
+  - tools-call-image
+  - tools-call-audio
+  - tools-call-embedded-resource
+  - tools-call-mixed-content
+  - tools-call-with-logging
+  - tools-call-error
+  - tools-call-with-progress
+  - tools-call-sampling
+  - tools-call-elicitation
+  - json-schema-2020-12
+  - elicitation-sep1034-defaults
+  - elicitation-sep1330-enums
+  # The fixture's resources (`test://static-text`, ...) and subscriptions, not declared.
+  - resources-read-text
+  - resources-read-binary
+  - resources-templates-read
+  - resources-subscribe
+  - resources-unsubscribe
+  # Prompts, completions and logging are not declared: their methods are not found.
+  - prompts-list
+  - prompts-get-simple
+  - prompts-get-with-args
+  - prompts-get-embedded-resource
+  - prompts-get-with-image
+  - completion-complete
+  - logging-set-level
+  # Sessions: the server is stateless for every revision (D-316), so these warn.
+  - server-sse-polling
+  - server-sse-multiple-streams

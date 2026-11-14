@@ -59,6 +59,11 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   2025-11-25 client on stdio), else the download must fit `max_bytes` (100 MB by default). On
   for `tgd mcp` (`--no-install` leaves it out), opt-in for `tgd serve` (`--allow-install`)
   (D-318).
+- The official MCP conformance suite runs in CI against `tgd serve` for 2025-11-25 and
+  2026-07-28 clients, every check gated against a reasoned baseline (D-319). It found, now
+  fixed: `/mcp` on loopback accepts the server's own origin; `prompts/list` and
+  `completion/complete` answer method not found (neither is declared); a missing resource's
+  error carries `data.uri` (SEP-2164).
 - `tgd serve` answers MCP at `/mcp` (stateless Streamable HTTP), refusing a foreign `Host`
   on loopback and any browser origin not configured with `--cors-origin` (D-316).
 - `Store::read_packs`: the packs the journal lists, read without opening the store, so a reader

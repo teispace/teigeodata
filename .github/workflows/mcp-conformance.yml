@@ -1,0 +1,90 @@
+# The official MCP conformance suite against `tgd serve`'s `/mcp` (phase 6.3, D-319), for
+# 2025-11-25 and 2026-07-28 clients. Scenarios that need the SDK reference fixture's tools,
+# resources and prompts are listed, with reasons, in `tools/mcp-conformance/`; the suite fails
+# on any other failure and on a listed scenario that passes, so the lists cannot go stale.
+name: mcp-conformance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - crates/teigeodata-server/**
+      - crates/teigeodata-cli/**
+      - crates/teigeodata-engine/**
+      - Cargo.lock
+      - tools/mcp-conformance/**
+      - .github/workflows/mcp-conformance.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # The referee, pinned: the npm `alpha` line is the one that speaks 2026-07-28.
+  CONFORMANCE: "@modelcontextprotocol/conformance@0.2.0-alpha.12"
+
+jobs:
+  server:
+    name: Server (${{ matrix.version }})
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["2025-11-25", "2026-07-28"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: mcp-conformance
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: Build tgd
+        run: cargo build --locked -p teigeodata-cli
+      - name: Serve the fixture pack
+        run: |
+          ./target/debug/tgd --store "$RUNNER_TEMP/store" serve \
+            --pack bindings/fixtures/synth.tgd --listen 127.0.0.1:8001 > "$RUNNER_TEMP/serve.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            grep -q "serving on" "$RUNNER_TEMP/serve.log" && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/serve.log"
+          exit 1
+      - name: Run the server suite
+        run: |
+          npx -y "$CONFORMANCE" server \
+            --url http://127.0.0.1:8001/mcp \
+            --suite all \
+            --spec-version "${{ matrix.version }}" \
+            --expected-failures "tools/mcp-conformance/${{ matrix.version }}.yml" \
+            -o "conformance-results/${{ matrix.version }}"
+      - name: Every check not passed is the one expected
+        if: ${{ !cancelled() }}
+        run: |
+          # `<scenario>: <check>` for each failure or warning, against the checked-in list: a
+          # baselined scenario cannot hide a regression in its other checks, and a check that
+          # starts passing must leave the list.
+          for f in conformance-results/*/*/checks.json; do
+            s=$(basename "$(dirname "$f")" | sed -E 's/^server-//; s/-[0-9]{4}-[0-9]{2}-[0-9]{2}T.*$//')
+            jq -r --arg s "$s" '.[] | select(.status == "FAILURE" or .status == "WARNING")
+              | "\($s): \(.name)"' "$f"
+          done | LC_ALL=C sort -u > "$RUNNER_TEMP/checks"
+          expected="tools/mcp-conformance/${{ matrix.version }}.checks"
+          if ! diff -u "$expected" "$RUNNER_TEMP/checks"; then
+            echo "::error::the checks not passed differ from $expected (diff above: + is new)"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: conformance-${{ matrix.version }}
+          path: conformance-results/

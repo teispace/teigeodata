@@ -68,7 +68,8 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
   (2026-07-28) or `elicitation/create` (2025-11-25 on stdio), `max_bytes` otherwise; on for
   `tgd mcp` (`--no-install` leaves it out), opt-in for `tgd serve` (`--allow-install`)
   (D-318; 2026-11-15)
-- [ ] The MCP conformance suite in CI for 2026-07-28 and 2025-11-25 clients
+- [x] The MCP conformance suite in CI for 2026-07-28 and 2025-11-25 clients, check by check
+  against a baseline of the scenarios that need the SDK fixture ([research](../../02-research/notes/mcp-conformance.md), D-319; 2026-11-15)
 
 ### 6.4 Load, safety and size
 - [ ] Load tests with the numbers gated (requests per second, p99, footprint bounded under
@@ -92,3 +93,4 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 | 2026-11-15 | 6.3: coverage and downloads researched ([note](../../02-research/notes/mcp-downloads.md)); one job registry answers both `tasks/get` and `install_status`; install opt-in on HTTP (D-318) | planned |
 | 2026-11-15 | 6.3: `coverage` built: `tgd locate`, `/v1/coverage` and the MCP tool share one function and a read-only catalog read (D-318) | built |
 | 2026-11-15 | 6.3: downloads built: `install` and `install_status` over one job registry, as a task or a handle; the size confirmed by MRTR, by `elicitation/create` on stdio (`Mcp::duplex`), else `max_bytes`; `tgd mcp --no-install`, `tgd serve --allow-install` (D-318) | built |
+| 2026-11-15 | 6.3: the MCP conformance suite in CI for both revisions; its first run found three defects, fixed (own origin, undeclared methods, `data.uri`) (D-319) | built |

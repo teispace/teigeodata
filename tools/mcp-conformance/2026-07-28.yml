@@ -1,0 +1,43 @@
+# Scenarios `tgd serve` is expected to fail under a 2026-07-28 client (D-319). The suite
+# fails on any other failure and on a listed scenario that passes. Each failing or warning
+# check is listed exactly in 2026-07-28.checks, which the workflow also gates.
+server:
+  # Its diagnostic checks need the fixture's `test_missing_capability`, `test_streaming_elicitation`
+  # and `test_logging_tool`; every other check of the scenario must pass (2026-07-28.checks).
+  - server-stateless
+  # The SDK reference fixture's tools, which a product server does not have.
+  - tools-call-simple-text
+  - tools-call-image
+  - tools-call-audio
+  - tools-call-embedded-resource
+  - tools-call-mixed-content
+  - tools-call-error
+  - tools-call-with-progress
+  - json-schema-2020-12
+  - http-custom-header-server-validation
+  - input-required-result-basic-elicitation
+  - input-required-result-basic-sampling
+  - input-required-result-basic-list-roots
+  - input-required-result-request-state
+  - input-required-result-multiple-input-requests
+  - input-required-result-multi-round
+  - input-required-result-missing-input-response
+  - input-required-result-non-tool-request
+  - input-required-result-result-type
+  - input-required-result-tampered-state
+  - input-required-result-capability-check
+  - input-required-result-ignore-extra-params
+  # The fixture's resources (`test://static-text`, ...).
+  - resources-read-text
+  - resources-read-binary
+  - resources-templates-read
+  # Prompts and completions are not declared: their methods are not found.
+  - prompts-list
+  - prompts-get-simple
+  - prompts-get-with-args
+  - prompts-get-embedded-resource
+  - prompts-get-with-image
+  - completion-complete
+  # Calls `prompts/list` whatever the server declares; its other checks must pass
+  # (2026-07-28.checks).
+  - caching
