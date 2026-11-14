@@ -335,6 +335,7 @@ final class TeiGeodata {
         _storeEngineNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Pointer<Void>>)>('tg_store_engine', isLeaf: true),
         _storeRefreshNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_refresh', isLeaf: true),
         _storeInstallNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>)>('tg_store_install', isLeaf: true),
+        _storeInstallPassNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>)>('tg_store_install_pass', isLeaf: true),
         _storeUpdateNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_update', isLeaf: true),
         _storeRepairNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_repair', isLeaf: true),
         _jobFree = lib.lookup<NativeFunction<Void Function(Pointer<Void>)>>('tg_job_free'),
@@ -404,6 +405,7 @@ final class TeiGeodata {
   final int Function(Pointer<Void>, Pointer<Pointer<Void>>) _storeEngineNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>) _storeRefreshNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>) _storeInstallNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>) _storeInstallPassNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>) _storeUpdateNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>) _storeRepairNative;
   final Pointer<NativeFunction<Void Function(Pointer<Void>)>> _jobFree;
@@ -844,6 +846,21 @@ final class TeiGeodata {
     final optionsLanguagesLen = _utf8(options.languages, optionsLanguagesAt);
     options._write(_installOptions.ref, _input + optionsComponentsAt, optionsComponentsLen, _input + optionsLanguagesAt, optionsLanguagesLen);
     final status = _storeInstallNative(handle, _input, packsLen, _installOptions, _word.cast());
+    _check(status);
+    return Job._(this, _word.cast<Pointer<Void>>().value);
+  }
+
+  Job _storeInstallPass(Pointer<Void> handle, String packs, String dir, InstallOptions options) {
+    final packsAt = 0;
+    final packsLen = _utf8(packs, packsAt);
+    final dirAt = packsAt + packsLen;
+    final dirLen = _utf8(dir, dirAt);
+    final optionsComponentsAt = dirAt + dirLen;
+    final optionsComponentsLen = _utf8(options.components, optionsComponentsAt);
+    final optionsLanguagesAt = optionsComponentsAt + optionsComponentsLen;
+    final optionsLanguagesLen = _utf8(options.languages, optionsLanguagesAt);
+    options._write(_installOptions.ref, _input + optionsComponentsAt, optionsComponentsLen, _input + optionsLanguagesAt, optionsLanguagesLen);
+    final status = _storeInstallPassNative(handle, _input + packsAt, packsLen, _input + dirAt, dirLen, _installOptions, _word.cast());
     _check(status);
     return Job._(this, _word.cast<Pointer<Void>>().value);
   }
@@ -1460,6 +1477,22 @@ final class Store implements Finalizable {
   /// `ErrorCode::InvalidArgument` for an unknown component or language tag, more than 8
   /// languages, or an outline level above 255; the job's own errors are the job's.
   Job install(String packs, InstallOptions options) => _lib._storeInstall(_live, packs, options);
+
+  /// One pass of an install whose bytes a platform's own download service fetches (D-184),
+  /// for downloads that must go on while the app is suspended. The pass reads each asset's
+  /// ranges from files under `dir`, checks every byte as from any host, and its result lists
+  /// what is still missing, one row per range: `pack`, `urls` (the asset on each mirror, one
+  /// per line), `length` (the asset's), `start` and `end` (the range, end exclusive) and
+  /// `file`, where to save those bytes. Fetch every listed range (an HTTP `Range` request
+  /// for `bytes=start-(end-1)`), then run the pass again; a result with no rows means the
+  /// packs are installed and their files under `dir` removed. A first install takes three
+  /// passes.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` as for `Store::install`, or for an empty `dir`; the
+  /// job's own errors are the job's.
+  Job installPass(String packs, String dir, InstallOptions options) => _lib._storeInstallPass(_live, packs, dir, options);
 
   /// Updates the packs (every installed one when empty) to the catalog's releases, keeping
   /// the components and languages installed.

@@ -277,6 +277,11 @@ fn the_network_and_a_store_not_set_up_have_their_codes() {
         run(&store.refresh("np")).unwrap_err().code,
         ErrorCode::Network
     );
+    // An install falls back to the stored catalog, which lacks the pack: the network is the
+    // cause, not the pack.
+    let e = run(&store.install("np", &InstallOptions::default()).unwrap()).unwrap_err();
+    assert_eq!(e.code, ErrorCode::Network, "{e:?}");
+    assert!(e.message.contains("not in the stored catalog"), "{e:?}");
 }
 
 #[test]
@@ -319,6 +324,69 @@ fn a_cancelled_install_leaves_the_store_as_it_was() {
     let d = run(&store.install("np", &InstallOptions::default()).unwrap()).unwrap();
     assert_eq!(u64s(&d, "changed"), [1]);
     assert_eq!(strings(&store.status(true).unwrap(), "health"), ["good"]);
+}
+
+/// A platform's loop over `install_pass` (D-184): each pass lists the ranges to fetch, the
+/// "platform" saves them (here from the host's files) where the rows say, and passes again
+/// until a pass lists nothing.
+#[test]
+fn a_platform_installs_through_passes() {
+    let host: Host = Arc::default();
+    publish(&host, 1, &[pack("2026.11.0", false)]);
+    let url = serve(Arc::clone(&host));
+    let (store, root) = store_for("passes", &url);
+    let dl = root.parent().unwrap().join("dl");
+    let dls = dl.to_str().unwrap();
+    let e = store
+        .install_pass("np", "", &InstallOptions::default())
+        .unwrap_err();
+    assert_eq!(e.code, ErrorCode::InvalidArgument);
+
+    let mut passes = 0;
+    loop {
+        passes += 1;
+        assert!(passes <= 4, "at most three passes");
+        let need = run(&store
+            .install_pass("np", dls, &InstallOptions::default())
+            .unwrap())
+        .unwrap();
+        let files = strings(&need, "file");
+        if files.is_empty() {
+            break;
+        }
+        assert_eq!(strings(&need, "pack")[0], "np.places.tgd");
+        let (urls, len) = (strings(&need, "urls"), u64s(&need, "length"));
+        let (start, end) = (u64s(&need, "start"), u64s(&need, "end"));
+        for i in 0..files.len() {
+            let u = urls[i].lines().next().unwrap();
+            let path = u.strip_prefix(&format!("{url}/")).unwrap();
+            let bytes = host.lock().unwrap()[path].clone();
+            assert_eq!(len[i], bytes.len() as u64, "the asset's length");
+            assert!(
+                start[i] < end[i] && end[i] <= len[i],
+                "a range within the asset"
+            );
+            let file = Path::new(&files[i]);
+            assert!(
+                file.starts_with(&dl),
+                "{file:?} under the downloads directory"
+            );
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            let part = &bytes[usize::try_from(start[i]).unwrap()..usize::try_from(end[i]).unwrap()];
+            std::fs::write(file, part).unwrap();
+        }
+    }
+    assert_eq!(passes, 3, "table and head, the frames, done");
+    assert_eq!(strings(&store.status(true).unwrap(), "health"), ["good"]);
+    assert!(
+        std::fs::read_dir(&dl).unwrap().next().is_none(),
+        "the downloaded files are removed once installed"
+    );
+    let engine = store.engine().unwrap();
+    assert_eq!(
+        strings(&store.find(&engine, "Ritarra", 1).unwrap(), "name"),
+        ["Ritarra"]
+    );
 }
 
 #[test]

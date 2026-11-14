@@ -63,8 +63,8 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   `find`, `locate`;
   `refresh`, `install`, `update`, `repair` as jobs with progress, wait, cancel and result),
   behind the default `store` feature; the asynchronous form of every blocking call in every
-  language (D-280, D-281). Left: the platform downloads pass (D-184), and progress streams
-  and task cancellation over the asynchronous forms (bindings §6)
+  language (D-280, D-281); the platform downloads pass as `install_pass` (D-184, D-282).
+  Left: progress streams and task cancellation over the asynchronous forms (bindings §6)
 - [ ] The IDL extended for what the surface needs (handles, enums, options structs, jobs), with
   a schema version; the drift check covers every generated file. Done so far: format 2 with
   handles, methods, `&[u8]` and handle parameters; format 3 with records of scalar fields

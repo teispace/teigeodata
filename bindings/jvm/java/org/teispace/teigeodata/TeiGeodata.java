@@ -1209,6 +1209,35 @@ public static final class Store implements AutoCloseable {
         private static native long nativeInstall(long handle, String packs, String optionsComponents, String optionsLanguages, boolean optionsHasOutlineLevel, long optionsOutlineLevel, long optionsOutlineToleranceM, boolean optionsPin);
 
         /**
+         * One pass of an install whose bytes a platform's own download service fetches (D-184),
+         * for downloads that must go on while the app is suspended. The pass reads each asset's
+         * ranges from files under `dir`, checks every byte as from any host, and its result lists
+         * what is still missing, one row per range: `pack`, `urls` (the asset on each mirror, one
+         * per line), `length` (the asset's), `start` and `end` (the range, end exclusive) and
+         * `file`, where to save those bytes. Fetch every listed range (an HTTP `Range` request
+         * for `bytes=start-(end-1)`), then run the pass again; a result with no rows means the
+         * packs are installed and their files under `dir` removed. A first install takes three
+         * passes.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` as for `Store::install`, or for an empty `dir`; the
+         * job's own errors are the job's.
+         */
+        public Job installPass(String packs, String dir, InstallOptions options) {
+            InstallOptions options$ = options != null ? options : InstallOptions.DEFAULTS;
+            long stamp = enter();
+            try {
+                return new Job(nativeInstallPass(handle, packs, dir, options$.components() != null ? options$.components() : "", options$.languages() != null ? options$.languages() : "", options$.outlineLevel() != null, options$.outlineLevel() != null ? options$.outlineLevel() : 0, options$.outlineToleranceM(), options$.pin()));
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native long nativeInstallPass(long handle, String packs, String dir, String optionsComponents, String optionsLanguages, boolean optionsHasOutlineLevel, long optionsOutlineLevel, long optionsOutlineToleranceM, boolean optionsPin);
+
+        /**
          * Updates the packs (every installed one when empty) to the catalog's releases, keeping
          * the components and languages installed.
          */

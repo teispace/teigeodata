@@ -1019,6 +1019,33 @@ impl Store {
         Ok(self.job(move |c| store::done(&c.install(&paths, &want, pin, None)?.done)))
     }
 
+    /// One pass of an install whose bytes a platform's own download service fetches (D-184),
+    /// for downloads that must go on while the app is suspended. The pass reads each asset's
+    /// ranges from files under `dir`, checks every byte as from any host, and its result lists
+    /// what is still missing, one row per range: `pack`, `urls` (the asset on each mirror, one
+    /// per line), `length` (the asset's), `start` and `end` (the range, end exclusive) and
+    /// `file`, where to save those bytes. Fetch every listed range (an HTTP `Range` request
+    /// for `bytes=start-(end-1)`), then run the pass again; a result with no rows means the
+    /// packs are installed and their files under `dir` removed. A first install takes three
+    /// passes.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] as for [`Store::install`], or for an empty `dir`; the
+    /// job's own errors are the job's.
+    pub fn install_pass(&self, packs: &str, dir: &str, options: &InstallOptions) -> Result<Job> {
+        if dir.is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidArgument,
+                "the downloads directory is empty",
+            ));
+        }
+        let paths = store::paths(packs);
+        let want = store::want(options)?;
+        let (pin, dir) = (options.pin, std::path::PathBuf::from(dir));
+        Ok(self.job(move |c| store::pending(&c.install(&paths, &want, pin, Some(&dir))?.pending)))
+    }
+
     /// Updates the packs (every installed one when empty) to the catalog's releases, keeping
     /// the components and languages installed.
     #[must_use]

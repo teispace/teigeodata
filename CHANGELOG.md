@@ -47,6 +47,12 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - Node: every call that blocks (the store's, a job's `waitProgress` and `result`) has a
   `…Async` form returning a `Promise` (D-280); the IDL marks such calls `blocks` from a
   `# Blocks` documentation section.
+- `Store::install_pass` in every language: one pass of an install whose bytes a platform's
+  download service fetches; its result lists each missing range and the file to save it as
+  (D-282).
+- An install whose catalog refresh fails, when the stored catalog lacks the pack, fails with
+  `Network` (the cause) instead of `Refused` (D-282).
+- IDL: an options record must be the last parameter, so every language can default it.
 - Swift, the JVM and Dart: the same `…Async` forms, as an `async throws` function, a
   `CompletableFuture` and a `Future` run on a helper isolate; in Dart a handle closed during
   one is freed when it ends. Python awaits them with `asyncio.to_thread` (D-281).

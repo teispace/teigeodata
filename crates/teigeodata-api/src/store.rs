@@ -10,8 +10,8 @@ use teigeodata_engine::{Layer, LayerOptions};
 use teigeodata_format::Part;
 use teigeodata_format::component::{Component, Components};
 use teigeodata_sync::catalog::Catalog;
-use teigeodata_sync::client::{self, Client, ClientError, Done, Want};
-use teigeodata_sync::fetch::Ureq;
+use teigeodata_sync::client::{self, Client, ClientError, Done, Pending, Want};
+use teigeodata_sync::fetch::{Downloads, Ureq};
 use teigeodata_sync::store::{Health, Record};
 use teigeodata_sync::watch::{Watch, Watched};
 
@@ -275,6 +275,47 @@ pub(crate) fn done(rows: &[Done]) -> Result<Blob> {
         ("reused", Column::U64(&reused)),
         ("kept", Column::U64(&kept)),
         ("changed", Column::U8(&changed)),
+    ])
+}
+
+/// What a platform still has to download after a pass (D-184): one row per missing range of
+/// an asset, with the file to save it as. No rows: the pass installed every pack.
+pub(crate) fn pending(packs: &[Pending]) -> Result<Blob> {
+    let rows = packs.iter().map(|p| p.ranges.len()).sum();
+    let urls: Vec<String> = packs.iter().map(|p| p.urls.join("\n")).collect();
+    let (mut pack, mut url, mut length) = (
+        Vec::with_capacity(rows),
+        Vec::with_capacity(rows),
+        Vec::with_capacity(rows),
+    );
+    let (mut start, mut end, mut file) = (
+        Vec::with_capacity(rows),
+        Vec::with_capacity(rows),
+        Vec::with_capacity(rows),
+    );
+    for (p, u) in packs.iter().zip(&urls) {
+        for r in &p.ranges {
+            pack.push(p.pack.as_str());
+            url.push(u.as_str());
+            length.push(p.length);
+            start.push(r.start);
+            end.push(r.end);
+            file.push(
+                p.dir
+                    .join(Downloads::name(r))
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+        }
+    }
+    let file: Vec<&str> = file.iter().map(String::as_str).collect();
+    blob(&[
+        ("pack", Column::Dict(&pack)),
+        ("urls", Column::Dict(&url)),
+        ("length", Column::U64(&length)),
+        ("start", Column::U64(&start)),
+        ("end", Column::U64(&end)),
+        ("file", Column::Utf8(&file)),
     ])
 }
 

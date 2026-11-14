@@ -92,6 +92,10 @@ public final class ParityTest {
             expect(TeiGeodataException.InvalidArgument.class,
                     () -> store.install(pack, TeiGeodata.InstallOptions.DEFAULTS.withComponents((String) s.get("bad_components"))), "component");
             expect(TeiGeodataException.Refused.class, () -> store.remove(pack), "");
+            expect(TeiGeodataException.InvalidArgument.class, () -> store.installPass(pack, "", null), "downloads");
+            try (TeiGeodata.Job job = store.installPass(pack, d.resolve("dl").toString(), null)) {
+                expect(TeiGeodataException.Network.class, job::result, "");
+            }
             try (TeiGeodata.Job job = store.refresh(pack)) {
                 expect(TeiGeodataException.Network.class, job::result, "");
                 check(job.isEnded(), "ended");

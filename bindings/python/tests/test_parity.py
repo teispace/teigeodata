@@ -257,6 +257,10 @@ class Store(unittest.TestCase):
                 store.install(pack, tg.InstallOptions(components=p["bad_components"]))
             with self.assertRaises(tg.RefusedError):
                 store.remove(pack)
+            with self.assertRaises(tg.InvalidArgumentError):
+                store.install_pass(pack, "", tg.InstallOptions())
+            with self.assertRaises(tg.NetworkError):
+                store.install_pass(pack, f"{d}/dl", tg.InstallOptions()).result()
             job = store.refresh(pack)
             with self.assertRaises(tg.NetworkError):
                 job.result()

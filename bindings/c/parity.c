@@ -246,6 +246,13 @@ int main(void) {
     tg_install_options wrong = {.components = (const uint8_t *)pointy, .components_len = strlen(pointy)};
     CHECK(tg_store_install(store, (const uint8_t *)np, strlen(np), &wrong, &job) == TG_ERROR_INVALID_ARGUMENT);
     CHECK(tg_store_remove(store, (const uint8_t *)np, strlen(np), &out) == TG_ERROR_REFUSED);
+    // A platform's pass (D-184) needs a downloads directory; with one, the catalog's refresh
+    // fails on the refusing mirror.
+    const char *dl = "target/c-store-dl";
+    CHECK(tg_store_install_pass(store, (const uint8_t *)np, strlen(np), (const uint8_t *)"", 0, NULL, &job) == TG_ERROR_INVALID_ARGUMENT);
+    CHECK(tg_store_install_pass(store, (const uint8_t *)np, strlen(np), (const uint8_t *)dl, strlen(dl), NULL, &job) == TG_OK);
+    CHECK(tg_job_result(job, &out) == TG_ERROR_NETWORK);
+    tg_job_free(job);
     CHECK(tg_store_refresh(store, (const uint8_t *)np, strlen(np), &job) == TG_OK);
     CHECK(tg_job_result(job, &out) == TG_ERROR_NETWORK);
     bool ended = false;

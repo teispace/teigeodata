@@ -189,6 +189,8 @@ test("store", () => {
     assert.throws(() => store.locate(engine, 91, 0, 1000), { code: "InvalidArgument" });
     assert.throws(() => store.install(s.pack, { components: s.bad_components }), { code: "InvalidArgument" });
     assert.throws(() => store.remove(s.pack), { code: "Refused" });
+    assert.throws(() => store.installPass(s.pack, ""), { code: "InvalidArgument" });
+    assert.throws(() => store.installPass(s.pack, join(d, "dl")).result(), { code: "Network" });
     const job = store.refresh(s.pack);
     assert.throws(() => job.result(), { code: "Network" });
     assert.equal(job.isEnded(), true);

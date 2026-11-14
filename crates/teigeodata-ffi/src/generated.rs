@@ -1426,6 +1426,54 @@ pub unsafe extern "C" fn tg_store_install(
     })
 }
 
+/// One pass of an install whose bytes a platform's own download service fetches (D-184),
+/// for downloads that must go on while the app is suspended. The pass reads each asset's
+/// ranges from files under `dir`, checks every byte as from any host, and its result lists
+/// what is still missing, one row per range: `pack`, `urls` (the asset on each mirror, one
+/// per line), `length` (the asset's), `start` and `end` (the range, end exclusive) and
+/// `file`, where to save those bytes. Fetch every listed range (an HTTP `Range` request
+/// for `bytes=start-(end-1)`), then run the pass again; a result with no rows means the
+/// packs are installed and their files under `dir` removed. A first install takes three
+/// passes.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` as for `Store::install`, or for an empty `dir`; the
+/// job's own errors are the job's.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_install_pass(
+    handle: *const TgStore,
+    packs: *const u8,
+    packs_len: usize,
+    dir: *const u8,
+    dir_len: usize,
+    options: *const TgInstallOptions,
+    out: *mut *mut TgJob,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `packs_len` readable bytes (or null and 0).
+        let packs = unsafe { abi::str_arg(packs, packs_len, "packs") }?;
+        // SAFETY: the caller passes `dir_len` readable bytes (or null and 0).
+        let dir = unsafe { abi::str_arg(dir, dir_len, "dir") }?;
+        // SAFETY: the caller passes a readable record whose text fields point to their
+        // lengths, or null for the defaults.
+        let options = match unsafe { abi::record(options) } {
+            // SAFETY: as above, its text fields point to their lengths.
+            Some(r) => unsafe { r.api() }?,
+            None => teigeodata_api::InstallOptions::default(),
+        };
+        let value = this.0.install_pass(packs, dir, &options)?;
+        let value = Box::into_raw(Box::new(TgJob(value)));
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
 /// Updates the packs (every installed one when empty) to the catalog's releases, keeping
 /// the components and languages installed.
 #[cfg(feature = "store")]

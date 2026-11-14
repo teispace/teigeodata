@@ -1708,6 +1708,87 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_native
         .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// One pass of an install whose bytes a platform's own download service fetches (D-184),
+/// for downloads that must go on while the app is suspended. The pass reads each asset's
+/// ranges from files under `dir`, checks every byte as from any host, and its result lists
+/// what is still missing, one row per range: `pack`, `urls` (the asset on each mirror, one
+/// per line), `length` (the asset's), `start` and `end` (the range, end exclusive) and
+/// `file`, where to save those bytes. Fetch every listed range (an HTTP `Range` request
+/// for `bytes=start-(end-1)`), then run the pass again; a result with no rows means the
+/// packs are installed and their files under `dir` removed. A first install takes three
+/// passes.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` as for `Store::install`, or for an empty `dir`; the
+/// job's own errors are the job's.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeInstallPass<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    packs: JString<'caller>,
+    dir: JString<'caller>,
+    options_components: JString<'caller>,
+    options_languages: JString<'caller>,
+    options_has_outline_level: jni::sys::jboolean,
+    options_outline_level: jlong,
+    options_outline_tolerance_m: jlong,
+    options_pin: jni::sys::jboolean,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Store>(handle, "handle") }?;
+                let packs = packs
+                    .try_to_string(env)
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: format!("packs: {e}"),
+                    })?;
+                let dir = dir.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("dir: {e}"),
+                })?;
+                let options = teigeodata_api::InstallOptions {
+                    components: options_components.try_to_string(env).map_err(|e| {
+                        teigeodata_api::Error {
+                            code: ErrorCode::InvalidArgument,
+                            message: format!("components: {e}"),
+                        }
+                    })?,
+                    languages: options_languages.try_to_string(env).map_err(|e| {
+                        teigeodata_api::Error {
+                            code: ErrorCode::InvalidArgument,
+                            message: format!("languages: {e}"),
+                        }
+                    })?,
+                    outline_level: if options_has_outline_level {
+                        Some(narrow::<u32>("outline_level", options_outline_level)?)
+                    } else {
+                        None
+                    },
+                    outline_tolerance_m: narrow::<u32>(
+                        "outline_tolerance_m",
+                        options_outline_tolerance_m,
+                    )?,
+                    pin: options_pin,
+                };
+                this.install_pass(&packs, &dir, &options)
+            })();
+            match result {
+                Ok(value) => Ok(Box::into_raw(Box::new(value)) as jlong),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 /// Updates the packs (every installed one when empty) to the catalog's releases, keeping
 /// the components and languages installed.
 #[cfg(feature = "store")]

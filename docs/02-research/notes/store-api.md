@@ -81,8 +81,9 @@ and drops it.
 - A job's thread holds the store lock; a second job waits. A long install blocks `status`
   until it ends: acceptable for v1 (the engine stays free), revisit if apps need status during
   an install.
-- Platform downloads (D-184) stay a CLI and platform flow; the API does not expose the pending
-  ranges yet (5.1 left).
+- Platform downloads (D-184): `Store::install_pass(packs, dir, options)` is a job whose
+  result lists each missing range (`pack`, `urls`, `length`, `start`, `end`, `file`); no rows
+  means installed. Three passes for a first install, as in the CLI (D-282).
 - `result` and `wait_progress` block the calling thread. Every language has a non-blocking
   form of each blocking call: `…Async` in Node (D-280), Swift, the JVM and Dart, and
   `asyncio.to_thread` in Python (D-281).

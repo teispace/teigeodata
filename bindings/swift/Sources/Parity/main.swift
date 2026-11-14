@@ -224,6 +224,8 @@ do {
     expect(.invalidArgument) { _ = try store.locate(installed, lat: 91, lon: 0, radiusM: 1000) }
     expect(.invalidArgument) { _ = try store.install(pack, options: InstallOptions(components: st["bad_components"] as! String)) }
     expect(.refused) { _ = try store.remove(pack) }
+    expect(.invalidArgument) { _ = try store.installPass(pack, dir: "") }
+    expect(.network) { _ = try store.installPass(pack, dir: d.appendingPathComponent("dl").path).result() }
     let job = store.refresh(pack)
     expect(.network) { _ = try job.result() }
     check(job.isEnded(), "ended")

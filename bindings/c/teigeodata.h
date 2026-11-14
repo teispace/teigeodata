@@ -606,6 +606,24 @@ int32_t tg_store_refresh(const tg_store *handle, const uint8_t *countries, size_
 int32_t tg_store_install(const tg_store *handle, const uint8_t *packs, size_t packs_len, const tg_install_options *options, tg_job **out);
 
 /*
+ * One pass of an install whose bytes a platform's own download service fetches (D-184),
+ * for downloads that must go on while the app is suspended. The pass reads each asset's
+ * ranges from files under `dir`, checks every byte as from any host, and its result lists
+ * what is still missing, one row per range: `pack`, `urls` (the asset on each mirror, one
+ * per line), `length` (the asset's), `start` and `end` (the range, end exclusive) and
+ * `file`, where to save those bytes. Fetch every listed range (an HTTP `Range` request
+ * for `bytes=start-(end-1)`), then run the pass again; a result with no rows means the
+ * packs are installed and their files under `dir` removed. A first install takes three
+ * passes.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` as for `Store::install`, or for an empty `dir`; the
+ * job's own errors are the job's.
+ */
+int32_t tg_store_install_pass(const tg_store *handle, const uint8_t *packs, size_t packs_len, const uint8_t *dir, size_t dir_len, const tg_install_options *options, tg_job **out);
+
+/*
  * Updates the packs (every installed one when empty) to the catalog's releases, keeping
  * the components and languages installed.
  */

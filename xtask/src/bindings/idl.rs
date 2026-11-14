@@ -683,6 +683,14 @@ fn function(
     if params.iter().filter(|p| p.ty == Ty::Callback).count() > 1 {
         return Err(at(sig.span(), &format!("`{name}`: at most one callback")));
     }
+    // Bindings default an options record when it is left out, which only a last parameter can
+    // be in every language (TypeScript, Swift, Python).
+    if params.iter().rev().skip(1).any(|p| p.ty == Ty::Record) {
+        return Err(at(
+            sig.span(),
+            &format!("`{name}`: an options record is the last parameter"),
+        ));
+    }
     let doc = docs(attrs);
     let blocks = doc.iter().any(|l| l == "# Blocks");
     if blocks && params.iter().any(|p| p.ty == Ty::Callback) {
@@ -1042,6 +1050,7 @@ impl Engine {
             "#[derive(Default)] pub enum E {}",
             "#[cfg(test)] pub struct S { x: u32 }",
             "/// # Blocks\npub fn f(a: &mut dyn FnMut(u32) -> bool) {}",
+            "#[derive(Default)] pub struct O { pub n: u32 }\npub fn f(o: &O, a: u32) {}",
             "#[cfg(feature = \"a\")] #[cfg(feature = \"b\")] pub struct S { x: u32 }",
         ] {
             let src = format!("{API}\n{bad}");

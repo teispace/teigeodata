@@ -268,6 +268,8 @@ void main() {
       throwsA(isA<InvalidArgumentException>()),
     );
     expect(() => store.remove(pack), throwsA(isA<RefusedException>()));
+    expect(() => store.installPass(pack, '', InstallOptions()), throwsA(isA<InvalidArgumentException>()));
+    expect(store.installPass(pack, '${d.path}/dl', InstallOptions()).result, throwsA(isA<NetworkException>()));
     final job = store.refresh(pack);
     addTearDown(job.close);
     expect(job.result, throwsA(isA<NetworkException>()));
