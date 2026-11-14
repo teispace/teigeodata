@@ -34,25 +34,41 @@ fn error(e: teigeodata_api::Error) -> PyErr {
 {% endfor %}
     }
 }
-{% macro pyty(t) %}{% if t == "bool" %}bool{% elif t == "str" %}&str{% elif t == "callback" %}&Bound<'_, PyAny>{% else %}{{ t }}{% endif %}{% endmacro %}
-{% for f in functions %}
+{% macro pyty(p) %}{% if p.ty == "bool" %}bool{% elif p.ty == "str" %}&str{% elif p.ty == "bytes" %}&[u8]{% elif p.ty == "callback" %}&Bound<'_, PyAny>{% elif p.ty == "handle" %}&Bound<'_, {{ p.handle }}>{% else %}{{ p.ty }}{% endif %}{% endmacro %}
+{% macro rty(f) %}{% if f.returns == "blob" %}Bound<'py, PyBytes>{% elif f.returns == "string" %}String{% elif f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ f.returns }}{% endif %}{% endmacro %}
+{#
+  One function: free (`owner` none), a method (`f.receiver`) or an associated function of a
+  handle. A method without a callback releases the GIL while Rust runs (D-274), so other
+  Python threads go on; a callback needs the GIL, so its call keeps it.
+#}
+{% macro pyfn(f, owner) %}
+{% set cbs = f.params | selectattr("ty", "eq", "callback") | list %}
+{% set cb = cbs[0] if cbs else none %}
+{% set detach = f.receiver and not cb %}
+{% set wrap = f.fallible or cb %}
+{% set py = f.returns == "blob" or detach %}
 
 {% for line in f.doc %}
 /// {{ line }}
 {% endfor %}
+{% if not owner %}
 #[pyfunction]
-{% set cbs = f.params | selectattr("ty", "eq", "callback") | list %}
-{% set cb = cbs[0] if cbs else none %}
-{% set wrap = f.fallible or cb %}
-{% macro rty(t) %}{% if t == "blob" %}Bound<'py, PyBytes>{% elif t == "string" %}String{% else %}{{ t }}{% endif %}{% endmacro %}
-fn {{ f.name }}{% if f.returns == "blob" %}<'py>{% endif %}(
-{% if f.returns == "blob" %}
+{% elif f.name == "new" and f.returns == "handle" and f.returns_handle == owner.name %}
+#[new]
+{% elif not f.receiver %}
+#[staticmethod]
+{% endif %}
+fn {{ f.name }}{% if py %}<'py>{% endif %}(
+{% if f.receiver %}
+    &self,
+{% endif %}
+{% if py %}
     py: Python<'py>,
 {% endif %}
 {% for p in f.params %}
-    {{ p.name }}: {{ pyty(p.ty) }},
+    {{ p.name }}: {{ pyty(p) }},
 {% endfor %}
-){% if wrap %} -> PyResult<{% if f.returns == "void" %}(){% else %}{{ rty(f.returns) }}{% endif %}>{% elif f.returns != "void" %} -> {{ rty(f.returns) }}{% endif %} {
+){% if wrap %} -> PyResult<{% if f.returns == "void" %}(){% else %}{{ rty(f) }}{% endif %}>{% elif f.returns != "void" %} -> {{ rty(f) }}{% endif %} {
 {% if cb %}
     // A Python exception inside the callback cancels the call and is raised in place of the
     // cancellation error.
@@ -68,14 +84,24 @@ fn {{ f.name }}{% if f.returns == "blob" %}<'py>{% endif %}(
         }
     };
 {% endif %}
-{% set call %}teigeodata_api::{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% endset %}
-{% if f.returns == "void" and not wrap %}
-    {{ call }};
-{% elif not wrap %}
-    {% if f.returns == "blob" %}PyBytes::new(py, {{ call }}.as_bytes()){% else %}{{ call }}{% endif %}
-
+{% for p in f.params if p.ty == "handle" %}
+    let {{ p.name }} = &{{ p.name }}.get().0;
+{% endfor %}
+{% set target %}{% if f.receiver %}self.0.{% elif owner %}teigeodata_api::{{ owner.name }}::{% else %}teigeodata_api::{% endif %}{% endset %}
+{% set call %}{{ target }}{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% endset %}
+{% set expr %}{% if detach %}py.detach(|| {{ call }}){% else %}{{ call }}{% endif %}{% endset %}
+{% if not wrap %}
+{% if f.returns == "void" %}
+    {{ expr }};
+{% elif f.returns == "blob" %}
+    PyBytes::new(py, {{ expr }}.as_bytes())
+{% elif f.returns == "handle" %}
+    {{ f.returns_handle }}({{ expr }})
 {% else %}
-    let value = {{ call }};
+    {{ expr }}
+{% endif %}
+{% else %}
+    let value = {{ expr }};
 {% if cb %}
     if let Some(e) = raised {
         return Err(e);
@@ -84,13 +110,27 @@ fn {{ f.name }}{% if f.returns == "blob" %}<'py>{% endif %}(
 {% if f.fallible %}
     let value = value.map_err(error)?;
 {% endif %}
-{% set out %}{% if f.returns == "blob" %}PyBytes::new(py, value.as_bytes()){% else %}value{% endif %}{% endset %}
-{% if wrap %}
-    Ok({{ out }})
-{% else %}
-    {{ out }}
+    Ok({% if f.returns == "blob" %}PyBytes::new(py, value.as_bytes()){% elif f.returns == "handle" %}{{ f.returns_handle }}(value){% else %}value{% endif %})
 {% endif %}
-{% endif %}
+}
+{% endmacro %}
+{% for f in functions %}
+{{ pyfn(f, none) }}
+{%- endfor %}
+{% for h in handles %}
+
+{% for line in h.doc %}
+/// {{ line }}
+{% endfor %}
+#[pyclass(frozen, module = "teigeodata")]
+#[derive(Debug)]
+pub struct {{ h.name }}(teigeodata_api::{{ h.name }});
+
+#[pymethods]
+impl {{ h.name }} {
+{% for f in h.methods %}
+{{ pyfn(f, h) | indent(4) }}
+{%- endfor %}
 }
 {% endfor %}
 
@@ -105,6 +145,9 @@ mod _native {
 {% endfor %}
 {% for f in functions %}
         {{ f.name }},
+{% endfor %}
+{% for h in handles %}
+        {{ h.name }},
 {% endfor %}
     };
 {% for c in constants %}

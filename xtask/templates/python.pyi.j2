@@ -15,13 +15,34 @@ class {{ c.name }}Error(TeiGeodataError):
 {{ c.name }}: int
 """{{ c.doc | join(' ') }}"""
 {% endfor %}
-{% macro pyty(t, cb) %}{% if t == "bool" %}bool{% elif t == "f64" %}float{% elif t in ["str", "string"] %}str{% elif t == "blob" %}bytes{% elif t == "void" %}None{% elif t == "callback" %}Callable[[{% for a in cb.args %}{{ pyty(a, none) }}{% if not loop.last %}, {% endif %}{% endfor %}], bool]{% else %}int{% endif %}{% endmacro %}
+{% macro pyty(t, cb, h) %}{% if t == "bool" %}bool{% elif t == "f64" %}float{% elif t in ["str", "string"] %}str{% elif t in ["blob", "bytes"] %}bytes{% elif t == "void" %}None{% elif t == "handle" %}{{ h }}{% elif t == "callback" %}Callable[[{% for a in cb.args %}{{ pyty(a, none, none) }}{% if not loop.last %}, {% endif %}{% endfor %}], bool]{% else %}int{% endif %}{% endmacro %}
+{% macro stub(f, owner, indent) %}
+{% if owner and not f.receiver and not f.name == "new" %}
+{{ indent }}@staticmethod
+{% endif %}
+{{ indent }}def {% if owner and f.name == "new" %}__init__{% else %}{{ f.name }}{% endif %}({% if f.receiver or (owner and f.name == "new") %}self{% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{{ p.name }}: {{ pyty(p.ty, p.callback, p.handle) }}{% if not loop.last %}, {% endif %}{% endfor %}) -> {% if owner and f.name == "new" %}None{% else %}{{ pyty(f.returns, none, f.returns_handle) }}{% endif %}:
+{{ indent }}    """
+{% for line in f.doc %}
+{% if line %}{{ indent }}    {{ line }}{% endif %}
+
+{% endfor %}
+{{ indent }}    """
+{% endmacro %}
 {% for f in functions %}
 
-def {{ f.name }}({% for p in f.params %}{{ p.name }}: {{ pyty(p.ty, p.callback) }}{% if not loop.last %}, {% endif %}{% endfor %}) -> {{ pyty(f.returns, none) }}:
+{{ stub(f, none, "") }}
+{%- endfor %}
+{% for h in handles %}
+
+class {{ h.name }}:
     """
-{% for line in f.doc %}
-    {{ line }}
+{% for line in h.doc %}
+{% if line %}    {{ line }}{% endif %}
+
 {% endfor %}
     """
+{% for f in h.methods %}
+
+{{ stub(f, h, "    ") }}
+{%- endfor %}
 {% endfor %}

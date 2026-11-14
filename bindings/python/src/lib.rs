@@ -137,12 +137,114 @@ fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> PyResult<f64> {
     Ok(value)
 }
 
+/// Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
+/// answers from any number of threads at once, and adding a pack publishes a new snapshot
+/// while queries go on.
+///
+/// Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`,
+/// `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search
+/// and `meters` and `bearing` for a reverse lookup.
+#[pyclass(frozen, module = "teigeodata")]
+#[derive(Debug)]
+pub struct Engine(teigeodata_api::Engine);
+
+#[pymethods]
+impl Engine {
+    /// An engine with no packs.
+    #[new]
+    fn new() -> Engine {
+        Engine(teigeodata_api::Engine::new())
+    }
+    /// Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Io` if the file cannot be read, `ErrorCode::Corrupt` if it is not a
+    /// valid pack.
+    fn open_file<'py>(&self, py: Python<'py>, path: &str) -> PyResult<u32> {
+        let value = py.detach(|| self.0.open_file(path));
+        let value = value.map_err(error)?;
+        Ok(value)
+    }
+    /// Adds a pack from its bytes (copied). Returns the number of packs.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Corrupt` if the bytes are not a valid pack.
+    fn open_bytes<'py>(&self, py: Python<'py>, bytes: &[u8]) -> PyResult<u32> {
+        let value = py.detach(|| self.0.open_bytes(bytes));
+        let value = value.map_err(error)?;
+        Ok(value)
+    }
+    /// The number of packs.
+    fn layers<'py>(&self, py: Python<'py>) -> u32 {
+        py.detach(|| self.0.layers())
+    }
+    /// The place with this ID (`tgd:np/1`), or no row; a retired ID gives its survivor.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    fn get<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.get(id));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
+    /// parent first. The `score` column compares only within one query.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    fn search<'py>(
+        &self,
+        py: Python<'py>,
+        query: &str,
+        limit: u32,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.search(query, limit));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// The places nearest the point, nearest first, at most `limit`, with `meters` and
+    /// `bearing` (degrees from north) to each.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe or a `limit` above
+    /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+    fn reverse<'py>(
+        &self,
+        py: Python<'py>,
+        lat: f64,
+        lon: f64,
+        limit: u32,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.reverse(lat, lon, limit));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// The admin units holding the point, country first.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    fn admin_at<'py>(&self, py: Python<'py>, lat: f64, lon: f64) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.admin_at(lat, lon));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+}
+
 /// The native part of the `teigeodata` package.
 #[pymodule(gil_used = false)]
 mod _native {
     #[pymodule_export]
     use super::{
-        CancelledError, CorruptError, InternalError, InvalidArgumentError, IoError,
+        CancelledError, CorruptError, Engine, InternalError, InvalidArgumentError, IoError,
         TeiGeodataError, distance_m, fold, noop, progress, sample_rows, version,
     };
 

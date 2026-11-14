@@ -48,9 +48,9 @@ def sample_rows(rows: int) -> bytes:
     Builds `rows` deterministic sample places as a blob with the columns `id` (`u32`), `lat`
     and `lon` (`f64`, degrees), `elevation` (`f32`, metres) and `name` (UTF-8). Exercises the
     result path of every binding.
-    
+
     # Errors
-    
+
     `ErrorCode::InvalidArgument` if `rows` exceeds `SAMPLE_ROWS_MAX`.
     """
 
@@ -58,9 +58,9 @@ def progress(steps: int, on_step: Callable[[int], bool]) -> int:
     """
     Calls `on_step` once per step with the step number, from 1 to `steps`, on the calling
     thread, and returns the number of steps run. Exercises callbacks in every binding.
-    
+
     # Errors
-    
+
     `ErrorCode::Cancelled` if `on_step` returns `false`.
     """
 
@@ -68,9 +68,91 @@ def distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
     Great-circle distance in metres between two points in degrees, by the haversine formula on
     the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
-    
+
     # Errors
-    
+
     `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
     -180..=180, or any value is not finite.
     """
+
+class Engine:
+    """
+    Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
+    answers from any number of threads at once, and adding a pack publishes a new snapshot
+    while queries go on.
+
+    Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`,
+    `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search
+    and `meters` and `bearing` for a reverse lookup.
+    """
+
+    def __init__(self) -> None:
+        """
+        An engine with no packs.
+        """
+
+    def open_file(self, path: str) -> int:
+        """
+        Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+
+        # Errors
+
+        `ErrorCode::Io` if the file cannot be read, `ErrorCode::Corrupt` if it is not a
+        valid pack.
+        """
+
+    def open_bytes(self, bytes: bytes) -> int:
+        """
+        Adds a pack from its bytes (copied). Returns the number of packs.
+
+        # Errors
+
+        `ErrorCode::Corrupt` if the bytes are not a valid pack.
+        """
+
+    def layers(self) -> int:
+        """
+        The number of packs.
+        """
+
+    def get(self, id: str) -> bytes:
+        """
+        The place with this ID (`tgd:np/1`), or no row; a retired ID gives its survivor.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+        section read is corrupt.
+        """
+
+    def search(self, query: str, limit: int) -> bytes:
+        """
+        Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
+        parent first. The `score` column compares only within one query.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+        `ErrorCode::Corrupt` if a section read is corrupt.
+        """
+
+    def reverse(self, lat: float, lon: float, limit: int) -> bytes:
+        """
+        The places nearest the point, nearest first, at most `limit`, with `meters` and
+        `bearing` (degrees from north) to each.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` for a point off the globe or a `limit` above
+        `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+        """
+
+    def admin_at(self, lat: float, lon: float) -> bytes:
+        """
+        The admin units holding the point, country first.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+        section read is corrupt.
+        """

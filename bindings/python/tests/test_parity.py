@@ -7,12 +7,13 @@ import struct
 import unittest
 
 import teigeodata as tg
+from teigeodata.blob import Blob
 
 PARITY = json.loads((pathlib.Path(__file__).parents[2] / "parity.json").read_text("utf-8"))
 
 
 def column(blob: bytes, name: str) -> memoryview:
-    """A fixed-width column of a v0 blob, viewed in place (no copy)."""
+    """A fixed-width column of a blob, viewed in place (no copy)."""
     assert blob[:4] == b"TGB1"
     rows, cols, total = struct.unpack_from("<III", blob, 4)
     assert total == len(blob)
@@ -80,6 +81,70 @@ class Parity(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "boom at 1"):
             tg.progress(5, boom)
 
+
+
+FIXTURE = str(pathlib.Path(__file__).parents[2] / PARITY["engine"]["fixture"])
+
+
+class Engine(unittest.TestCase):
+    """The engine handle on the fixture pack (parity.json, "engine")."""
+
+    def setUp(self) -> None:
+        self.engine = tg.Engine()
+        self.assertEqual(self.engine.open_file(FIXTURE), 1)
+        self.p = PARITY["engine"]
+
+    def test_get(self) -> None:
+        g = self.p["get"]
+        b = Blob(self.engine.get(g["id"]))
+        self.assertEqual(b.columns, self.p["columns"])
+        self.assertEqual(b.rows, 1)
+        self.assertEqual(b.strings("name"), [g["name"]])
+        self.assertEqual(b.strings("kind"), [g["kind"]])
+        self.assertEqual(list(b.numbers("lat")), [g["lat"]])
+        self.assertEqual(list(b.numbers("lon")), [g["lon"]])
+
+    def test_queries(self) -> None:
+        q = self.p["search"]
+        hits = Blob(self.engine.search(q["query"], q["limit"]))
+        self.assertEqual(hits.strings("id")[0], q["first_id"])
+        r = self.p["reverse"]
+        near = Blob(self.engine.reverse(r["lat"], r["lon"], r["limit"]))
+        self.assertEqual(near.strings("id"), r["ids"])
+        self.assertAlmostEqual(near.numbers("meters")[0], r["first_meters"], delta=0.1)
+        a = self.p["admin_at"]
+        units = Blob(self.engine.admin_at(a["lat"], a["lon"]))
+        self.assertEqual(units.strings("id"), a["ids"])
+
+    def test_errors(self) -> None:
+        with self.assertRaises(tg.InvalidArgumentError):
+            self.engine.get(self.p["bad_id"])
+        with self.assertRaises(tg.IoError):
+            self.engine.open_file("/nonexistent.tgd")
+        with self.assertRaises(tg.CorruptError):
+            self.engine.open_bytes(b"not a pack")
+        self.assertEqual(self.engine.layers(), 1)
+
+    def test_threads(self) -> None:
+        """Queries from threads at once: the GIL is released while Rust runs (D-274)."""
+        import threading
+
+        errors: list[BaseException] = []
+
+        def work() -> None:
+            try:
+                for _ in range(50):
+                    b = Blob(self.engine.get(self.p["get"]["id"]))
+                    assert b.strings("name") == [self.p["get"]["name"]]
+            except BaseException as e:  # noqa: BLE001
+                errors.append(e)
+
+        threads = [threading.Thread(target=work) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(errors, [])
 
 if __name__ == "__main__":
     unittest.main()
