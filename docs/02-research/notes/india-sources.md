@@ -1,7 +1,7 @@
 ---
 title: "India data sources"
 status: research
-updated: 2026-11-13
+updated: 2026-11-14
 owner: teigeodata maintainers
 revisit: 2027-05-11
 ---
@@ -492,6 +492,22 @@ Scoring:
   place left in India.
 
 That is 50 entries in all.
+
+### 5.1 Step 4 as built in the world part (2026-11-14, D-270, D-271)
+
+- **Codes:** every state and UT carries its current ISO 3166-2 code (`IN-OD`, `IN-UK`,
+  `IN-CG`, `IN-TS`, `IN-UP`, `IN-DL`); the pre-2023 codes answer nothing (D-271, gated in
+  `the_world_part_carries_current_iso_codes`).
+- **Names:** the layer's Nepali names outside Nepal are capped by the source, not the join:
+  Wikidata has 11,870 items with a Nepali label and a coordinate world-wide, 6,692 of them with
+  a GeoNames ID (QLever, 2026-11-14), and the part names 1,745 places from them; Hindi names
+  11,131 places. A transliterated Nepali name for foreign places stays out (tier 6 is trained
+  on Nepal's names; machine names are a profile option, D-256).
+- **Golden set:** `tests/golden/world-in-search.tsv` holds the table's search classes that a
+  lite world part can answer, 47 of 47 (Banaras, Poona and `Var` added by D-268 and D-269);
+  Baroda stays a sourced gap (Wikidata files only "Baroda district", and a Rajasthan town is
+  named Baroda). Codes are gated in the engine's world tests; the perspective class in Nepal's
+  layer gates; census towns wait for step 6 (Q-024).
 
 ## 6. Impact on the plan
 

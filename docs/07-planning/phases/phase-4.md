@@ -405,15 +405,15 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   - [x] 3. Towns (D-259): 4,128 of 5,050 statutory towns placed (81.7%) within their district,
     else their state; a report per outcome; G-town floor 0.81, proved by 0.90; the
     wrong-district plant fails `world_towns` tests. IDs kept by D-260
-  - [ ] 4. India's town-level quality in the world part (re-scoped by D-270; the pack, with
+  - [x] 4. India's town-level quality in the world part (re-scoped by D-270; the pack, with
     villages, moves to W1): every placed town's LGD name in its state's language (done,
     D-263, 1,781 towns, 10 languages); ISO 3166-2 codes on the world's first-level units,
     current by Wikidata P300 and checked against CLDR's validity list (done, D-271, 4,071 of
-    4,567 units); name
-    completeness in the layer's languages, measured against Wikidata's labels; India's golden
-    set of the research §5 (`golden-curated.yaml`)
-  - [ ] 5. India's towns in the embedded layer: the world part's done (`world_towns: [in]`,
-    D-259, wire 9,326,040 B); the pack's rows (`countries: in`) after step 4, sized
+    4,567 units); name completeness measured (capped by Wikidata's Nepali labels: 1,745 places, research §5.1);
+    India's golden set, 47 of 47 (`tests/golden/world-in-search.tsv`, 2026-11-14)
+  - [x] 5. India's towns in the embedded layer: the world part's (`world_towns: [in]`,
+    D-259, wire 9,326,040 B); the pack's rows (`countries: in`) move to W1 with the pack
+    (D-270)
   - [ ] 6. Census towns from the Census 2011 town directory (Q-024)
 - [x] TG-19: `Near::bearing_deg` and `Engine::mark_inside` (D-223, 2026-11-11); `reverse_in_country`, the border rule (D-237, 2026-11-12); inside a settlement or locality with no outline as the nearest of its kind within 750 m or 700 m (D-238, 2026-11-12, [research](../../02-research/notes/inside-by-radius.md)). Data follow-up done: places outside every unit beyond the border reach are left out (D-239: 10 in Nepal, Chhipaharmai among them)
 - [x] TG-18 and the strict-tier option: the Brahmic search fold of nasal conjuncts, vowel
@@ -526,3 +526,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-14 | Q-026: one importance scale, unit populations from Wikidata, a country before its namesakes, coastal cities in their unit; the world golden set | D-266 |
 | 2026-11-14 | TG-15 step 4 re-scoped to the world part (codes, names, golden set); the India pack moves to W1 with its villages | D-270 |
 | 2026-11-14 | TG-15 step 4: ISO 3166 codes on every world part | D-271 |
+| 2026-11-14 | TG-15 step 4 done: codes, names measured, India's golden set 47/47 | D-270, D-271 |

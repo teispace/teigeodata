@@ -35,11 +35,11 @@ Calcutta	tgd:in/3s4	3	-	Kolkata
 Gurgaon	tgd:in/1x1	3	-	Gurugram, geonames 1270642
 Trivandrum	tgd:in/62z	3	-	Thiruvananthapuram, geonames 1254163
 Port Blair	tgd:in/47p	3	-	geonames 1259385
-# Known gaps, not yet cases: Banaras (Varanasi), Baroda (Vadodara) and Poona (Pune) are in
-# GeoNames' alternate names only without a language, which the part leaves out as noise
-# (D-265); a sourced per-country list of former names would answer them. `Var` puts Varanasi
-# 20th: a first-level unit's importance (base 90) is above a city of 1.2 million's (74), so
-# Var, Varese and Vårdö (450 people) come first (Q-026).
+Banaras	tgd:in/1cd	3	-	Varanasi, a Wikidata alias (D-268)
+Poona	tgd:in/2w	3	-	Pune, geonames 1259229, a Wikidata alias (D-268)
+# A known gap, not yet a case: Baroda (Vadodara). Wikidata files it only as "Baroda district"
+# on the district, GeoNames only without a language (D-265), and a town named Baroda in
+# Rajasthan takes the exact match.
 Sri Vijaya Puram	tgd:in/47p	3	-	Port Blair's 2024 name
 # Homonyms across states: the larger at rank 1, the other in the top 5.
 Raipur	tgd:in/2hh	1	-	Chhattisgarh, geonames 1258980
@@ -60,3 +60,4 @@ Kargil	tgd:in/11a	5	-	geonames 1267776
 Leh	tgd:in/119	5	-	geonames 1264976
 # Prefixes of three code points: rank 5.
 वारा	tgd:in/1cd	5	-	Varanasi
+Var	tgd:in/1cd	5	-	Varanasi, a 3-letter prefix (D-269)
