@@ -43,7 +43,60 @@ private func takeData(_ bytes: tg_bytes) -> Data {
     guard let ptr = bytes.ptr else { return Data() }
     return Data(bytesNoCopy: ptr, count: bytes.len, deallocator: .custom { _, _ in tg_bytes_free(bytes) })
 }
-{% macro swty(t) %}{% if t == "bool" %}Bool{% elif t == "i32" %}Int32{% elif t == "u32" %}UInt32{% elif t == "i64" %}Int64{% elif t == "u64" %}UInt64{% elif t == "f64" %}Double{% elif t in ["str", "string"] %}String{% elif t == "blob" %}Data{% else %}Void{% endif %}{% endmacro %}
+{% macro swty(t, h) %}{% if t == "bool" %}Bool{% elif t == "i32" %}Int32{% elif t == "u32" %}UInt32{% elif t == "i64" %}Int64{% elif t == "u64" %}UInt64{% elif t == "f64" %}Double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}Data{% elif t == "handle" %}{{ h }}{% else %}Void{% endif %}{% endmacro %}
+{% macro signature(f) %}({% for p in f.params %}{% if loop.first %}_ {% endif %}{{ p.name | camel }}: {% if p.ty == "callback" %}({% for a in p.callback.args %}{{ swty(a) }}{% if not loop.last %}, {% endif %}{% endfor %}) -> Bool{% else %}{{ swty(p.ty, p.handle) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% if f.fallible %} throws(TeiGeodataError){% endif %}{% endmacro %}
+{#- The body of a call: `owner` is the handle a method belongs to (none for a function); a
+    handle's constructor (`init`) stores the new pointer instead of returning it. #}
+{% macro body(f, owner, init) %}
+{% set cbs = f.params | selectattr("ty", "eq", "callback") | list %}
+{% set cb = cbs[0] if cbs else none %}
+{% if f.returns in ["string", "blob"] %}
+        var out = tg_bytes()
+{% elif f.returns == "handle" %}
+        var out: OpaquePointer?
+{% elif f.returns != "void" %}
+        var out: {{ swty(f.returns) }} = {% if f.returns == "bool" %}false{% else %}0{% endif %}
+
+{% endif %}
+{% for p in f.params if p.ty == "str" %}
+        var {{ p.name | camel }} = {{ p.name | camel }}
+{% endfor %}
+{% set args %}{% if f.receiver %}raw{% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty == "str" %}{{ p.name | camel }}Bytes.baseAddress, {{ p.name | camel }}Bytes.count{% elif p.ty == "bytes" %}{{ p.name | camel }}Bytes.baseAddress?.assumingMemoryBound(to: UInt8.self), {{ p.name | camel }}Bytes.count{% elif p.ty == "handle" %}{{ p.name | camel }}.raw{% elif p.ty == "callback" %}{ ctx, {% for a in p.callback.args %}a{{ loop.index0 }}{% if not loop.last %}, {% endif %}{% endfor %} in Unmanaged<Callback{{ p.callback.id | pascal }}>.fromOpaque(ctx!).takeUnretainedValue().call({% for a in p.callback.args %}a{{ loop.index0 }}{% if not loop.last %}, {% endif %}{% endfor %}) }, Unmanaged.passUnretained(box).toOpaque(){% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params or f.receiver %}, {% endif %}&out{% endif %}{% endset %}
+{#- Each string, byte or handle argument stays alive and in place for the call. #}
+{% set open %}{% if f.receiver %}withExtendedLifetime(self) { {% endif %}{% for p in f.params %}{% if p.ty == "str" %}{{ p.name | camel }}.withUTF8 { {{ p.name | camel }}Bytes in {% elif p.ty == "bytes" %}{{ p.name | camel }}.withUnsafeBytes { {{ p.name | camel }}Bytes in {% elif p.ty == "handle" %}withExtendedLifetime({{ p.name | camel }}) { {% endif %}{% endfor %}{% endset %}
+{% set close %}{% for p in f.params if p.ty in ["str", "bytes", "handle"] %} }{% endfor %}{% if f.receiver %} }{% endif %}{% endset %}
+{% set call %}tg_{% if owner %}{{ owner.snake }}_{% endif %}{{ f.name }}({{ args }}){% endset %}
+{% if cb %}
+        let status = withoutActuallyEscaping({{ cb.name | camel }}) { f in
+            let box = Callback{{ cb.callback.id | pascal }}(f)
+            return withExtendedLifetime(box) { {{ open }}{{ call }}{{ close }} }
+        }
+{% else %}
+        let status = {{ open }}{{ call }}{{ close }}
+{% endif %}
+{% if f.fallible %}
+        try check(status)
+{% else %}
+        expectOK(status)
+{% endif %}
+{% if init %}
+        raw = out!
+{% elif f.returns == "string" %}
+        return takeString(out)
+{% elif f.returns == "blob" %}
+        return takeData(out)
+{% elif f.returns == "handle" %}
+        return {{ f.returns_handle }}(raw: out!)
+{% elif f.returns != "void" %}
+        return out
+{% endif %}
+{% endmacro %}
+{% macro doc(lines) %}
+{% for line in lines %}
+    ///{% if line %} {{ line }}{% endif %}
+
+{% endfor %}
+{% endmacro %}
 {% for cb in callbacks %}
 
 /// Holds a Swift closure for the C callback `tg_callback_{{ cb.id }}`.
@@ -60,48 +113,33 @@ public enum TeiGeodata {
     public static let {{ c.name | camel_lower }}: {{ swty(c.ty) }} = {{ c.value }}
 {% endfor %}
 {% for f in functions %}
-{% set cbs = f.params | selectattr("ty", "eq", "callback") | list %}
-{% set cb = cbs[0] if cbs else none %}
 
-{% for line in f.doc %}
-    ///{% if line %} {{ line }}{% endif %}
-
-{% endfor %}
-    public static func {{ f.name | camel }}({% for p in f.params %}{% if loop.first %}_ {% endif %}{{ p.name | camel }}: {% if p.ty == "callback" %}({% for a in p.callback.args %}{{ swty(a) }}{% if not loop.last %}, {% endif %}{% endfor %}) -> Bool{% else %}{{ swty(p.ty) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% if f.fallible %} throws(TeiGeodataError){% endif %}{% if f.returns != "void" %} -> {{ swty(f.returns) }}{% endif %} {
-{% if f.returns in ["string", "blob"] %}
-        var out = tg_bytes()
-{% elif f.returns != "void" %}
-        var out: {{ swty(f.returns) }} = {% if f.returns == "bool" %}false{% else %}0{% endif %}
-
-{% endif %}
-{% set outarg %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}&out{% endif %}{% endset %}
-{% set args %}{% for p in f.params %}{% if p.ty == "str" %}{{ p.name | camel }}Bytes.baseAddress, {{ p.name | camel }}Bytes.count{% elif p.ty == "callback" %}{ ctx, {% for a in p.callback.args %}a{{ loop.index0 }}{% if not loop.last %}, {% endif %}{% endfor %} in Unmanaged<Callback{{ p.callback.id | pascal }}>.fromOpaque(ctx!).takeUnretainedValue().call({% for a in p.callback.args %}a{{ loop.index0 }}{% if not loop.last %}, {% endif %}{% endfor %}) }, Unmanaged.passUnretained(box).toOpaque(){% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{{ outarg }}{% endset %}
-{% for p in f.params if p.ty == "str" %}
-        var {{ p.name | camel }} = {{ p.name | camel }}
-{% endfor %}
-{% if cb %}
-        let status = withoutActuallyEscaping({{ cb.name | camel }}) { f in
-            let box = Callback{{ cb.callback.id | pascal }}(f)
-            return withExtendedLifetime(box) { tg_{{ f.name }}({{ args }}) }
-        }
-{% elif f.params | selectattr("ty", "eq", "str") | list %}
-{% set s = (f.params | selectattr("ty", "eq", "str") | first).name | camel %}
-        let status = {{ s }}.withUTF8 { {{ s }}Bytes in tg_{{ f.name }}({{ args }}) }
-{% else %}
-        let status = tg_{{ f.name }}({{ args }})
-{% endif %}
-{% if f.fallible %}
-        try check(status)
-{% else %}
-        expectOK(status)
-{% endif %}
-{% if f.returns == "string" %}
-        return takeString(out)
-{% elif f.returns == "blob" %}
-        return takeData(out)
-{% elif f.returns != "void" %}
-        return out
-{% endif %}
-    }
+{{ doc(f.doc) }}    public static func {{ f.name | camel }}{{ signature(f) }}{% if f.returns != "void" %} -> {{ swty(f.returns, f.returns_handle) }}{% endif %} {
+{{ body(f, none, false) }}    }
 {% endfor %}
 }
+{% for h in handles %}
+
+{{ doc(h.doc) | replace("    ///", "///") -}}
+///
+/// Sendable: every call is safe from any thread at once (D-274). The handle is freed when the
+/// last reference goes.
+public final class {{ h.name }}: @unchecked Sendable {
+    fileprivate let raw: OpaquePointer
+
+    fileprivate init(raw: OpaquePointer) { self.raw = raw }
+
+    deinit { tg_{{ h.snake }}_free(raw) }
+{% for f in h.methods %}
+
+{{ doc(f.doc) -}}
+{% if f.name == "new" and f.returns_handle == h.name %}
+    public init{{ signature(f) }} {
+{{ body(f, h, true) }}    }
+{% else %}
+    public {% if not f.receiver %}static {% endif %}func {{ f.name | camel }}{{ signature(f) }}{% if f.returns != "void" %} -> {{ swty(f.returns, f.returns_handle) }}{% endif %} {
+{{ body(f, h, false) }}    }
+{% endif %}
+{% endfor %}
+}
+{% endfor %}

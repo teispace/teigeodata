@@ -131,3 +131,119 @@ public enum TeiGeodata {
         return out
     }
 }
+
+/// Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
+/// answers from any number of threads at once, and adding a pack publishes a new snapshot
+/// while queries go on.
+///
+/// Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`,
+/// `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search
+/// and `meters` and `bearing` for a reverse lookup.
+///
+/// Sendable: every call is safe from any thread at once (D-274). The handle is freed when the
+/// last reference goes.
+public final class Engine: @unchecked Sendable {
+    fileprivate let raw: OpaquePointer
+
+    fileprivate init(raw: OpaquePointer) { self.raw = raw }
+
+    deinit { tg_engine_free(raw) }
+
+    /// An engine with no packs.
+    public init() {
+        var out: OpaquePointer?
+        let status = tg_engine_new(&out)
+        expectOK(status)
+        raw = out!
+    }
+
+    /// Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Io` if the file cannot be read, `ErrorCode::Corrupt` if it is not a
+    /// valid pack.
+    public func openFile(_ path: String) throws(TeiGeodataError) -> UInt32 {
+        var out: UInt32 = 0
+        var path = path
+        let status = withExtendedLifetime(self) { path.withUTF8 { pathBytes in tg_engine_open_file(raw, pathBytes.baseAddress, pathBytes.count, &out) } }
+        try check(status)
+        return out
+    }
+
+    /// Adds a pack from its bytes (copied). Returns the number of packs.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Corrupt` if the bytes are not a valid pack.
+    public func openBytes(_ bytes: Data) throws(TeiGeodataError) -> UInt32 {
+        var out: UInt32 = 0
+        let status = withExtendedLifetime(self) { bytes.withUnsafeBytes { bytesBytes in tg_engine_open_bytes(raw, bytesBytes.baseAddress?.assumingMemoryBound(to: UInt8.self), bytesBytes.count, &out) } }
+        try check(status)
+        return out
+    }
+
+    /// The number of packs.
+    public func layers() -> UInt32 {
+        var out: UInt32 = 0
+        let status = withExtendedLifetime(self) { tg_engine_layers(raw, &out) }
+        expectOK(status)
+        return out
+    }
+
+    /// The place with this ID (`tgd:np/1`), or no row; a retired ID gives its survivor.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    public func get(_ id: String) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var id = id
+        let status = withExtendedLifetime(self) { id.withUTF8 { idBytes in tg_engine_get(raw, idBytes.baseAddress, idBytes.count, &out) } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
+    /// parent first. The `score` column compares only within one query.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    public func search(_ query: String, limit: UInt32) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var query = query
+        let status = withExtendedLifetime(self) { query.withUTF8 { queryBytes in tg_engine_search(raw, queryBytes.baseAddress, queryBytes.count, limit, &out) } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// The places nearest the point, nearest first, at most `limit`, with `meters` and
+    /// `bearing` (degrees from north) to each.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe or a `limit` above
+    /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+    public func reverse(_ lat: Double, lon: Double, limit: UInt32) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        let status = withExtendedLifetime(self) { tg_engine_reverse(raw, lat, lon, limit, &out) }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// The admin units holding the point, country first.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    public func adminAt(_ lat: Double, lon: Double) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        let status = withExtendedLifetime(self) { tg_engine_admin_at(raw, lat, lon, &out) }
+        try check(status)
+        return takeData(out)
+    }
+}

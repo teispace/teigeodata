@@ -10,7 +10,7 @@ func check(_ ok: Bool, _ what: @autoclosure () -> String) {
     }
 }
 
-/// A fixed-width column of a v0 blob, read in place.
+/// A fixed-width column of a v1 blob, read in place.
 func column<T: FixedWidthInteger>(_ blob: Data, _ name: String, as _: T.Type) -> [T] {
     blob.withUnsafeBytes { raw -> [T] in
         let u32 = { (at: Int) in UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: at, as: UInt32.self)) }
@@ -26,6 +26,40 @@ func column<T: FixedWidthInteger>(_ blob: Data, _ name: String, as _: T.Type) ->
         }
         check(false, "no column \(name)")
         return []
+    }
+}
+
+/// A string column (UTF-8 or a dictionary) of a v1 blob, null rows as nil.
+func strings(_ blob: Data, _ name: String) -> [String?] {
+    blob.withUnsafeBytes { raw -> [String?] in
+        let u32 = { (at: Int) in Int(UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: at, as: UInt32.self))) }
+        let text = { (at: Int, end: Int) in String(decoding: raw[at..<end], as: UTF8.self) }
+        let rows = u32(4)
+        for i in 0..<u32(8) {
+            let d = 16 + 40 * i
+            guard String(decoding: raw[d..<d + 16].prefix { $0 != 0 }, as: UTF8.self) == name else { continue }
+            let type = u32(d + 16), at = u32(d + 20), aux = u32(d + 28), nulls = u32(d + 36)
+            return (0..<rows).map { r -> String? in
+                if nulls != 0 && (raw[nulls + r >> 3] >> (r & 7)) & 1 == 0 { return nil }
+                if type == 7 { return text(aux + u32(at + 4 * r), aux + u32(at + 4 * r + 4)) }
+                let code = type == 11
+                    ? Int(UInt16(littleEndian: raw.loadUnaligned(fromByteOffset: at + 2 * r, as: UInt16.self)))
+                    : u32(at + 4 * r)
+                let base = aux + 8 + 4 * u32(aux)
+                return text(base + u32(aux + 4 + 4 * code), base + u32(aux + 8 + 4 * code))
+            }
+        }
+        check(false, "no column \(name)")
+        return []
+    }
+}
+
+func expect(_ code: TeiGeodataError.Code, _ call: () throws -> Void) {
+    do {
+        try call()
+        check(false, "no error, expected \(code)")
+    } catch {
+        check((error as? TeiGeodataError)?.code == code, "\(error), expected \(code)")
     }
 }
 
@@ -74,5 +108,41 @@ do {
     check(false, "no cancellation")
 } catch {
     check(error.code == .cancelled && error.message == g["cancelled_message"] as! String, "\(error)")
+}
+// The engine handle on the fixture pack (parity.json, "engine").
+let e = p["engine"] as! [String: Any]
+let dir = URL(fileURLWithPath: path).deletingLastPathComponent()
+do {
+    let engine = Engine()
+    check(try engine.openFile(dir.appendingPathComponent(e["fixture"] as! String).path) == 1, "open")
+    let get = e["get"] as! [String: Any]
+    let row = try engine.get(get["id"] as! String)
+    check(strings(row, "name") == [get["name"] as? String], "get name")
+    check(strings(row, "kind") == [get["kind"] as? String], "get kind")
+    check(column(row, "lat", as: UInt64.self).map { Double(bitPattern: $0) } == [get["lat"] as! Double], "get lat")
+    let q = e["search"] as! [String: Any]
+    let hits = try engine.search(q["query"] as! String, limit: UInt32(q["limit"] as! Int))
+    check(strings(hits, "id").first == q["first_id"] as? String, "search")
+    let r = e["reverse"] as! [String: Any]
+    let near = try engine.reverse(r["lat"] as! Double, lon: r["lon"] as! Double, limit: UInt32(r["limit"] as! Int))
+    check(strings(near, "id") == (r["ids"] as! [String]).map { $0 }, "reverse \(strings(near, "id"))")
+    let m = Double(bitPattern: column(near, "meters", as: UInt64.self)[0])
+    check(abs(m - (r["first_meters"] as! Double)) < 0.1, "meters \(m)")
+    let a = e["admin_at"] as! [String: Any]
+    let units = try engine.adminAt(a["lat"] as! Double, lon: a["lon"] as! Double)
+    check(strings(units, "id") == (a["ids"] as! [String]).map { $0 }, "admin_at")
+    expect(.invalidArgument) { _ = try engine.get(e["bad_id"] as! String) }
+    expect(.io) { _ = try engine.openFile("/nonexistent.tgd") }
+    expect(.corrupt) { _ = try engine.openBytes(Data("not a pack".utf8)) }
+    check(engine.layers() == 1, "layers")
+    // Sendable: four tasks query one engine at once.
+    let id = get["id"] as! String
+    let names = await withTaskGroup(of: [String?].self) { group in
+        for _ in 0..<4 { group.addTask { (try? strings(engine.get(id), "name")) ?? [] } }
+        var all: [String?] = []
+        for await names in group { all += names }
+        return all
+    }
+    check(names == Array(repeating: get["name"] as? String, count: 4), "tasks \(names)")
 }
 print("swift parity ok")
