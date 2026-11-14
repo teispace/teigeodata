@@ -99,6 +99,16 @@ public final class ParityTest {
                 check(job.doneBytes() == job.totalBytes(), "done at total");
                 job.cancel();
             }
+            // The asynchronous forms run off the calling thread and carry the same error code.
+            check(strings(store.statusAsync(false).join(), "path").isEmpty(), "status async");
+            try (TeiGeodata.Job job = store.refresh(pack)) {
+                try {
+                    job.resultAsync().join();
+                    throw new AssertionError("result async: no error");
+                } catch (java.util.concurrent.CompletionException e) {
+                    check(e.getCause() instanceof TeiGeodataException.Network, "result async: " + e.getCause());
+                }
+            }
         }
     }
 

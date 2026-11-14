@@ -242,6 +242,19 @@ public final class TeiGeodata {
     private static final java.lang.ref.Cleaner CLEANER = java.lang.ref.Cleaner.create();
 
     /**
+     * Runs the asynchronous forms ({@code ...Async}) of calls that block. Daemon threads made on
+     * demand and dropped after a minute idle, so a waiting call never holds up the common pool
+     * and an idle program keeps no thread.
+     */
+    private static final java.util.concurrent.ExecutorService ASYNC =
+            java.util.concurrent.Executors.newCachedThreadPool(
+                    task -> {
+                        Thread t = new Thread(task, "teigeodata-async");
+                        t.setDaemon(true);
+                        return t;
+                    });
+
+    /**
      * Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
      * answers from any number of threads at once, and adding a pack publishes a new snapshot
      * while queries go on.
@@ -874,6 +887,14 @@ public static final class Store implements AutoCloseable {
             return new Store(nativeCreate(root, repo, assets, trustedRoot));
         }
 
+
+        /**
+         * {@link #create} on a background thread. The future completes with its
+         * result, or exceptionally with its {@link TeiGeodataException}.
+         */
+        public static java.util.concurrent.CompletableFuture<Store> createAsync(String root, String repo, String assets, byte[] trustedRoot) {
+            return java.util.concurrent.CompletableFuture.supplyAsync(() -> create(root, repo, assets, trustedRoot), ASYNC);
+        }
         private static native long nativeCreate(String root, String repo, String assets, byte[] trustedRoot);
 
         /**
@@ -892,6 +913,14 @@ public static final class Store implements AutoCloseable {
             return new Store(nativeOpen(root));
         }
 
+
+        /**
+         * {@link #open} on a background thread. The future completes with its
+         * result, or exceptionally with its {@link TeiGeodataException}.
+         */
+        public static java.util.concurrent.CompletableFuture<Store> openAsync(String root) {
+            return java.util.concurrent.CompletableFuture.supplyAsync(() -> open(root), ASYNC);
+        }
         private static native long nativeOpen(String root);
 
         /**
@@ -932,6 +961,14 @@ public static final class Store implements AutoCloseable {
             }
         }
 
+
+        /**
+         * {@link #catalog} on a background thread. The future completes with its
+         * result, or exceptionally with its {@link TeiGeodataException}.
+         */
+        public java.util.concurrent.CompletableFuture<byte[]> catalogAsync() {
+            return java.util.concurrent.CompletableFuture.supplyAsync(() -> catalog(), ASYNC);
+        }
         private static native byte[] nativeCatalog(long handle);
 
         /**
@@ -956,6 +993,14 @@ public static final class Store implements AutoCloseable {
             }
         }
 
+
+        /**
+         * {@link #status} on a background thread. The future completes with its
+         * result, or exceptionally with its {@link TeiGeodataException}.
+         */
+        public java.util.concurrent.CompletableFuture<byte[]> statusAsync(boolean deep) {
+            return java.util.concurrent.CompletableFuture.supplyAsync(() -> status(deep), ASYNC);
+        }
         private static native byte[] nativeStatus(long handle, boolean deep);
 
         /**
@@ -980,6 +1025,14 @@ public static final class Store implements AutoCloseable {
             }
         }
 
+
+        /**
+         * {@link #pin} on a background thread. The future completes with its
+         * result, or exceptionally with its {@link TeiGeodataException}.
+         */
+        public java.util.concurrent.CompletableFuture<Void> pinAsync(String pack, boolean on) {
+            return java.util.concurrent.CompletableFuture.runAsync(() -> pin(pack, on), ASYNC);
+        }
         private static native void nativePin(long handle, String pack, boolean on);
 
         /**
@@ -1004,6 +1057,14 @@ public static final class Store implements AutoCloseable {
             }
         }
 
+
+        /**
+         * {@link #remove} on a background thread. The future completes with its
+         * result, or exceptionally with its {@link TeiGeodataException}.
+         */
+        public java.util.concurrent.CompletableFuture<byte[]> removeAsync(String pack) {
+            return java.util.concurrent.CompletableFuture.supplyAsync(() -> remove(pack), ASYNC);
+        }
         private static native byte[] nativeRemove(long handle, String pack);
 
         /**
@@ -1031,6 +1092,14 @@ public static final class Store implements AutoCloseable {
             }
         }
 
+
+        /**
+         * {@link #find} on a background thread. The future completes with its
+         * result, or exceptionally with its {@link TeiGeodataException}.
+         */
+        public java.util.concurrent.CompletableFuture<byte[]> findAsync(Engine engine, String query, long limit) {
+            return java.util.concurrent.CompletableFuture.supplyAsync(() -> find(engine, query, limit), ASYNC);
+        }
         private static native byte[] nativeFind(long handle, long engine, String query, long limit);
 
         /**
@@ -1057,6 +1126,14 @@ public static final class Store implements AutoCloseable {
             }
         }
 
+
+        /**
+         * {@link #locate} on a background thread. The future completes with its
+         * result, or exceptionally with its {@link TeiGeodataException}.
+         */
+        public java.util.concurrent.CompletableFuture<byte[]> locateAsync(Engine engine, double lat, double lon, long radiusM) {
+            return java.util.concurrent.CompletableFuture.supplyAsync(() -> locate(engine, lat, lon, radiusM), ASYNC);
+        }
         private static native byte[] nativeLocate(long handle, long engine, double lat, double lon, long radiusM);
 
         /**
@@ -1082,6 +1159,14 @@ public static final class Store implements AutoCloseable {
             }
         }
 
+
+        /**
+         * {@link #engine} on a background thread. The future completes with its
+         * result, or exceptionally with its {@link TeiGeodataException}.
+         */
+        public java.util.concurrent.CompletableFuture<Engine> engineAsync() {
+            return java.util.concurrent.CompletableFuture.supplyAsync(() -> engine(), ASYNC);
+        }
         private static native long nativeEngine(long handle);
 
         /**
@@ -1230,6 +1315,14 @@ public static final class Job implements AutoCloseable {
             }
         }
 
+
+        /**
+         * {@link #waitProgress} on a background thread. The future completes with its
+         * result, or exceptionally with its {@link TeiGeodataException}.
+         */
+        public java.util.concurrent.CompletableFuture<Long> waitProgressAsync(long seq, long timeoutMs) {
+            return java.util.concurrent.CompletableFuture.supplyAsync(() -> waitProgress(seq, timeoutMs), ASYNC);
+        }
         private static native long nativeWaitProgress(long handle, long seq, long timeoutMs);
 
         /**
@@ -1332,6 +1425,14 @@ public static final class Job implements AutoCloseable {
             }
         }
 
+
+        /**
+         * {@link #result} on a background thread. The future completes with its
+         * result, or exceptionally with its {@link TeiGeodataException}.
+         */
+        public java.util.concurrent.CompletableFuture<byte[]> resultAsync() {
+            return java.util.concurrent.CompletableFuture.supplyAsync(() -> result(), ASYNC);
+        }
         private static native byte[] nativeResult(long handle);
     }
 }

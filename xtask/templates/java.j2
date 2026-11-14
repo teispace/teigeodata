@@ -20,6 +20,8 @@ public final class TeiGeodata {
     public static final long {{ c.name }} = {{ c.value }}L;
 {% endfor %}
 {% macro jty(t) %}{% if t == "bool" %}boolean{% elif t == "i32" %}int{% elif t == "f64" %}double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}byte[]{% elif t == "void" %}void{% elif t == "enum" %}int{% else %}long{% endif %}{% endmacro %}
+{#- A return type boxed for a generic, such as {@code CompletableFuture<T>}. #}
+{% macro bty(f) %}{% if f.returns == "handle" %}{{ f.returns_handle }}{% elif f.returns == "bool" %}Boolean{% elif f.returns == "i32" %}Integer{% elif f.returns == "f64" %}Double{% elif f.returns == "void" %}Void{% elif f.returns in ["str", "string", "blob", "bytes", "enum"] %}{{ jty(f.returns) }}{% else %}Long{% endif %}{% endmacro %}
 {% macro pty(p) %}{% if p.ty == "callback" %}Callback{{ p.callback.id | pascal }}{% elif p.ty == "handle" %}{{ p.handle }}{% elif p.ty == "record" %}{{ p.record }}{% else %}{{ jty(p.ty) }}{% endif %}{% endmacro %}
 {#- A record field's Java type: boxed when optional (null is unset). #}
 {% macro fty(f) %}{% if f.ty == "enum" %}{{ f.enum }}{% elif f.ty == "str" %}String{% elif not f.optional %}{{ jty(f.ty) }}{% elif f.ty == "bool" %}Boolean{% elif f.ty == "i32" %}Integer{% elif f.ty == "f64" %}Double{% else %}Long{% endif %}{% endmacro %}
@@ -108,6 +110,23 @@ public final class TeiGeodata {
     /** Frees handles whose owner was never closed and is unreachable. */
     private static final java.lang.ref.Cleaner CLEANER = java.lang.ref.Cleaner.create();
 {% endif %}
+{% set ns = namespace(blocks=false) %}
+{% for h in handles %}{% for f in h.methods if f.blocks %}{% set ns.blocks = true %}{% endfor %}{% endfor %}
+{% if ns.blocks %}
+
+    /**
+     * Runs the asynchronous forms ({@code ...Async}) of calls that block. Daemon threads made on
+     * demand and dropped after a minute idle, so a waiting call never holds up the common pool
+     * and an idle program keeps no thread.
+     */
+    private static final java.util.concurrent.ExecutorService ASYNC =
+            java.util.concurrent.Executors.newCachedThreadPool(
+                    task -> {
+                        Thread t = new Thread(task, "teigeodata-async");
+                        t.setDaemon(true);
+                        return t;
+                    });
+{% endif %}
 {% for h in handles %}
 
 {{ javadoc(h.doc, "    ") -}}
@@ -184,6 +203,16 @@ public final class TeiGeodata {
         }
 {% endif %}
 
+{% if f.blocks %}
+
+        /**
+         * {@link #{{ f.name | camel }}} on a background thread. The future completes with its
+         * result, or exceptionally with its {@link TeiGeodataException}.
+         */
+        public {% if not f.receiver %}static {% endif %}java.util.concurrent.CompletableFuture<{{ bty(f) }}> {{ f.name | camel }}Async({% for p in f.params %}{{ pty(p) }} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) {
+            return java.util.concurrent.CompletableFuture.{% if f.returns == "void" %}runAsync{% else %}supplyAsync{% endif %}(() -> {{ f.name | camel }}({% for p in f.params %}{{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}), ASYNC);
+        }
+{% endif %}
         private static native {% if f.returns == "handle" %}long{% else %}{{ jty(f.returns) }}{% endif %} native{{ f.name | pascal }}({% if f.receiver %}long handle{% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{{ native_param(p) }}{% if not loop.last %}, {% endif %}{% endfor %});
 {% endfor %}
     }
