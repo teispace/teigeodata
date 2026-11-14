@@ -152,7 +152,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   - [ ] 5.8b Go: S1 (purego against cgo, musl), the generated binding, its loader, `go.yml`
   - [ ] 5.8c .NET: the generated `LibraryImport` binding, `cargo xtask package-dotnet`, tested
     from the `.nupkg` on every RID and NativeAOT
-  - [ ] 5.8d the generated C++17 wrapper, its example and test
+  - [x] 5.8d the generated C++17 wrapper, its example and test
 
 ### 5.9 Parity and benchmarks
 - [ ] One parity suite of golden vectors run in every language in CI, proven to fail on a
