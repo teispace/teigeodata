@@ -27,6 +27,15 @@ rstar = "0.14.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 tzf-rs = { version = "=2.3.0", default-features = false }
+# The phase 6.0 HTTP A/B (examples/http-ab.rs): axum against bare hyper over the engine.
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "query"] }
+bytes = "1.12.1"
+form_urlencoded = "1.2.2"
+http-body-util = "0.1.5"
+hyper = { version = "1.12.0", features = ["server", "http1"] }
+hyper-util = { version = "0.1.21", features = ["tokio", "server-auto", "http1"] }
+teigeodata-engine = { workspace = true }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net"] }
 # Instruction counts under Callgrind (the `counts` bench; it runs on Linux, with Valgrind).
 gungraun = "0.20.0"
 

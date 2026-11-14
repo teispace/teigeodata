@@ -23,6 +23,12 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | binaryen (wasm-opt) | version_133 | 2026-11-14 | GitHub releases (CI checks its SHA-256) | 2026-12-06 |
 | js-sys | 0.3.107 | 2026-11-14 | crates.io | 2026-12-14 |
 | twiggy (WebAssembly size profiles) | 0.8.0 | 2026-11-14 | crates.io | 2027-02-14 |
+| axum (servers, D-309) | 0.8.9 | 2026-11-15 | crates.io | 2026-12-15 |
+| hyper / hyper-util | 1.12.0 / 0.1.21 | 2026-11-15 | crates.io | 2026-12-15 |
+| tokio | 1.54.1 | 2026-11-15 | crates.io | 2026-12-15 |
+| tower-http | 0.7.1 | 2026-11-15 | crates.io | 2026-12-15 |
+| rmcp (MCP 2026-07-28, pin `=`) | 3.10.0 | 2026-11-15 | crates.io, GitHub releases | weekly |
+| oha (load generator) | 1.17.0 | 2026-11-15 | crates.io | 2027-02-15 |
 | Playwright (browser parity, `bindings/wasm/test`) | 1.65.1 | 2026-11-14 | npm | 2026-12-14 |
 | Miniflare (workerd parity, `bindings/wasm/test`) | 4.20260730.0 | 2026-11-14 | npm | 2026-12-14 |
 | Bun (WebAssembly parity in CI) | 1.4.4 | 2026-11-14 | GitHub releases | 2026-12-14 |

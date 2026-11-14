@@ -23,9 +23,10 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 
 ### 6.0 Research and the A/B
 - [x] The servers note: versions live, options, what is ours (2026-11-15)
-- [ ] The HTTP A/B: `get` and `search` on axum and on bare hyper, at 1, 16 and 64
+- [x] The HTTP A/B: `get` and `search` on axum and on bare hyper, at 1, 16 and 64
   connections (requests per second, p50, p99, peak footprint), and inline engine calls
-  against `spawn_blocking`; the stack chosen and recorded
+  against `spawn_blocking`; the stack chosen and recorded (2026-11-15, D-309: axum, engine
+  calls inline; [servers §5.1](../../02-research/notes/servers.md#51-the-ab-measured-2026-11-15))
 
 ### 6.1 The request core (`teigeodata-server`)
 - [ ] The pack set: files or a store, served through `Shared` snapshots that follow updates
@@ -67,3 +68,4 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-15 | Phase 6 drafted from the servers research | M5 met (D-308) |
+| 2026-11-15 | 6.0 done: the HTTP A/B, axum with inline engine calls (D-309) | measured |

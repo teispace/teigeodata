@@ -1,6 +1,6 @@
 ---
 title: "Servers: the MCP server and the HTTP server (phase 6)"
-status: research
+status: accepted
 updated: 2026-11-15
 owner: maintainer's agents
 revisit: 2027-02-15
@@ -27,12 +27,11 @@ and which choices still need a measurement before code.
   revision exists, checked 2026-11-15), on **`rmcp` 3.10.0**. stdio first, then stateless
   Streamable HTTP mounted in the same HTTP server (rmcp's server transport is a `tower`
   service). The tool, resource and output rules of the bindings note §3.13 stand.
-- **HTTP stack:** decided by an A/B measurement before the server is written (§5): `axum`
-  0.8.9 over hyper 1.12 against bare `hyper` with a hand router. Both use tokio and serve
-  rmcp's `tower` service. axum is the default if the overhead is within noise.
-- **Engine calls** take microseconds: run inline on the runtime's worker, not through
-  `spawn_blocking`, unless the A/B shows otherwise; the store's network work stays in its
-  own jobs (D-274).
+- **HTTP stack: axum** 0.8.9 over hyper 1.12 (measured, §5.1: within the noise of bare
+  hyper, with routing and `tower-http` limits built in). It serves rmcp's `tower` service.
+- **Engine calls run inline** on the runtime's worker (measured, §5.1: 1.4 to 1.9 times the
+  throughput of `spawn_blocking`, a far shorter p99, 60% of the footprint); the store's
+  network work stays in its own jobs (D-274).
 - **Secure by default:** bind 127.0.0.1, `Origin` checked (MCP requires it), CORS off unless
   configured, request size, query length, `limit` and time bounded, no panic reaches a
   client (a 500 with an error code).
@@ -74,8 +73,8 @@ serving while packs update. Attribution per pack is in the pack's notices (D-126
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
 |---|---|---|---|---|---|
-| axum 0.8 on hyper 1 | Routing and extractors, `tower-http` middleware (limits, timeouts, CORS), the most used Rust web stack, mounts rmcp's service directly | One more layer of dependencies | MIT | 0.8.9 | Default; A/B pending |
-| Bare hyper 1 with a hand router | Fewest dependencies, nothing between the socket and the engine | Limits, timeouts and routing written by us | MIT | 1.12.0 | The A/B's other arm |
+| axum 0.8 on hyper 1 | Routing and extractors, `tower-http` middleware (limits, timeouts, CORS), the most used Rust web stack, mounts rmcp's service directly | One more layer of dependencies | MIT | 0.8.9 | **Chosen** (within noise of hyper, §5.1) |
+| Bare hyper 1 with a hand router | Fewest dependencies, nothing between the socket and the engine | Limits, timeouts and routing written by us | MIT | 1.12.0 | Measured equal; rejected for the code it needs |
 | actix-web 4 | Fast, mature | Not `tower`: rmcp's transport needs an adapter; a second runtime model | MIT/Apache-2.0 | 4.19.0 | Rejected |
 | rmcp for MCP | The official SDK, tracks 2026-07-28, conformance work | Weekly releases, API churn | Apache-2.0 | 3.10.0 | Chosen (ADR-0028) |
 | Our own MCP layer | No churn | Re-implements a moving protocol | n/a | n/a | Rejected |
@@ -91,6 +90,53 @@ serving while packs update. Attribution per pack is in the pack's notices (D-126
 - **Signed cursors:** a stateless cursor is the query and its offset, signed with a key the
   server makes at start (an HMAC; rmcp's `request-state` feature does the same for its own
   state), so paging keeps the protocol stateless.
+
+### 5.1 The A/B, measured (2026-11-15)
+
+`crates/teigeodata-bench/examples/http-ab.rs` on the Nepal lite pack (87 MB, mapped), `oha`
+1.17.0 on the same machine (Apple M-series, 10 cores, shared: load average 12 to 18 during
+the runs), 8 s per point after a 2 s warm-up, two rounds interleaved. Search is
+`q=Pokhara&limit=10`; place is one `get`. Requests per second, latency p50 / p99:
+
+| Arm | search c=1 | search c=16 | search c=64 | place c=16 | footprint |
+|---|---|---|---|---|---|
+| axum, inline (round 2) | 13,827, 68 / 136 µs | 86,955, 170 / 494 µs | 103,941, 599 / 1,294 µs | 116,884, 130 / 253 µs | 6.3 MB |
+| hyper, inline (round 2) | 13,967, 65 / 166 µs | 93,082, 163 / 365 µs | 94,434, 638 / 1,599 µs | 116,965, 128 / 294 µs | 5.9 MB |
+| axum, `spawn_blocking` (round 2) | 12,330, 79 / 108 µs | 63,369, 230 / 637 µs | 69,146, 658 / 5,475 µs | 63,191, 218 / 760 µs | 9.8 MB |
+| hyper, `spawn_blocking` (round 2) | 11,742, 79 / 194 µs | 53,724, 254 / 1,106 µs | 66,751, 571 / 7,731 µs | 59,332, 219 / 1,092 µs | 12 MB |
+
+Round 1 agreed except for axum inline at c=1 (9,108 req/s, p99 945 µs: a load spike from
+another project's build). Round 1 as printed by the harness's script:
+
+```text
+r1 axum inline search c=1 rps=9108 p50=71.0us p99=945.4us ok=1.0000
+r1 axum inline search c=16 rps=74729 p50=179.5us p99=673.8us ok=1.0000
+r1 axum inline search c=64 rps=77174 p50=738.5us p99=2649.5us ok=1.0000
+r1 axum inline place c=16 rps=115235 p50=130.5us p99=289.2us ok=1.0000
+r1 axum inline footprint: 6288 KB
+r1 hyper inline search c=1 rps=15083 p50=64.2us p99=98.5us ok=1.0000
+r1 hyper inline search c=16 rps=89424 p50=168.1us p99=411.2us ok=1.0000
+r1 hyper inline search c=64 rps=105953 p50=587.7us p99=1264.4us ok=1.0000
+r1 hyper inline place c=16 rps=118481 p50=129.9us p99=233.0us ok=1.0000
+r1 hyper inline footprint: 5888 KB
+r1 axum blocking search c=1 rps=12312 p50=78.1us p99=173.8us ok=1.0000
+r1 axum blocking search c=16 rps=61945 p50=232.4us p99=689.6us ok=1.0000
+r1 axum blocking search c=64 rps=75211 p50=660.4us p99=4642.9us ok=1.0000
+r1 axum blocking place c=16 rps=63673 p50=220.9us p99=686.2us ok=1.0000
+r1 axum blocking footprint: 9937 KB
+r1 hyper blocking search c=1 rps=12597 p50=77.2us p99=106.0us ok=1.0000
+r1 hyper blocking search c=16 rps=63204 p50=229.7us p99=659.0us ok=1.0000
+r1 hyper blocking search c=64 rps=77880 p50=594.6us p99=5299.5us ok=1.0000
+r1 hyper blocking place c=16 rps=62811 p50=216.1us p99=799.8us ok=1.0000
+r1 hyper blocking footprint: 9457 KB
+```
+
+- **Inline engine calls win:** 1.4 to 1.9 times the requests of `spawn_blocking`, a p99 at
+  64 connections a third to a fifth as long, and about 60% of the footprint. Engine queries
+  take microseconds; a hop to the blocking pool costs more than the query.
+- **axum and bare hyper are within the noise:** axum 7% behind at c=16 and 10% ahead at
+  c=64 in round 2, equal on `get`; 0.4 MB more footprint. axum is chosen: its routing,
+  extractors and `tower-http` limits are what we would otherwise write.
 
 ## 6. Impact on the plan
 
@@ -123,6 +169,7 @@ serving while packs update. Attribution per pack is in the pack's notices (D-126
 | tokio | 1.54.1 | 2026-11-15 | crates.io |
 | schemars | 1.2.3 | 2026-11-15 | crates.io |
 | actix-web | 4.19.0 | 2026-11-15 | crates.io |
+| oha (load generator) | 1.17.0 | 2026-11-15 | crates.io |
 | Nominatim | 5.3.3 (2026-10-14) | 2026-11-15 | GitHub releases, PyPI `nominatim-api` |
 
 ## 9. Sources
