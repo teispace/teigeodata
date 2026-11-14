@@ -1,9 +1,9 @@
-# The language shims that call teigeodata-api directly (PyO3, napi-rs, JNI). A separate
+# The language shims that call teigeodata-api directly (PyO3, napi-rs, JNI, wasm-bindgen). A separate
 # workspace, like the forge (ADR-0001), so their dependencies never reach the runtime graph.
 # The C, Swift and Dart layers use the C ABI crate in the main workspace instead.
 [workspace]
 resolver = "3"
-members = ["python", "node", "jvm"]
+members = ["python", "node", "jvm", "wasm"]
 
 [workspace.package]
 version = "0.3.1"
@@ -52,3 +52,13 @@ inherits = "release"
 lto = "fat"
 panic = "unwind"
 strip = "symbols"
+
+# The WebAssembly module (5.7): smallest code; a panic aborts (wasm32 has no unwinding on
+# stable), which the API avoids by design.
+[profile.wasm]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = false

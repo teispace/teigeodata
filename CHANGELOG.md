@@ -13,6 +13,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Added
 
+- The WebAssembly packages `@teispace/teigeodata-wasm` (every component) and
+  `@teispace/teigeodata-wasm-lookup` (no search): one ES module for browsers, Deno, Bun,
+  Node.js and Workers, the `Engine` over pack bytes, built and size-checked by
+  `cargo xtask package-wasm` (D-293).
 - `components()` in every binding: the components the build answers. `teigeodata-api` has a
   Cargo feature per pack component, all in `components` (default); a build without one keeps
   every function and answers as a layer installed without it (D-291).

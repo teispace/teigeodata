@@ -19,8 +19,14 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | DCO | 1.1 | 2026-11-06 | developercertificate.org | — |
 | napi / napi-derive / napi-build (napi-rs) | 3.16.2 / 3.7.1 / 2.6.0 | 2026-11-14 | crates.io | 2026-12-14 |
 | @napi-rs/cli | 3.10.12 | 2026-11-14 | npm | 2026-12-06 |
-| wasm-bindgen | 0.2.130 | 2026-11-14 | crates.io | 2026-12-06 |
-| binaryen (wasm-opt) | version_133 | 2026-11-06 | GitHub releases | 2026-12-06 |
+| wasm-bindgen (crate pinned `=`, CLI the same) | 0.2.130 | 2026-11-14 | crates.io | 2026-12-06 |
+| binaryen (wasm-opt) | version_133 | 2026-11-14 | GitHub releases (CI checks its SHA-256) | 2026-12-06 |
+| js-sys | 0.3.107 | 2026-11-14 | crates.io | 2026-12-14 |
+| twiggy (WebAssembly size profiles) | 0.8.0 | 2026-11-14 | crates.io | 2027-02-14 |
+| Playwright (browser parity, `bindings/wasm/test`) | 1.65.1 | 2026-11-14 | npm | 2026-12-14 |
+| Miniflare (workerd parity, `bindings/wasm/test`) | 4.20260730.0 | 2026-11-14 | npm | 2026-12-14 |
+| Bun (WebAssembly parity in CI) | 1.4.4 | 2026-11-14 | GitHub releases | 2026-12-14 |
+| Deno (WebAssembly parity in CI) | 2.9.8 | 2026-11-14 | GitHub releases | 2026-12-14 |
 | PyO3 | 0.30.1 | 2026-11-14 | crates.io | 2026-12-14 |
 | maturin | 1.16.0 | 2026-11-14 | PyPI | 2026-12-06 |
 | cibuildwheel | 4.3.5 | 2026-11-14 | PyPI | 2026-12-06 |

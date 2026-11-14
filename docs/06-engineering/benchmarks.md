@@ -116,7 +116,7 @@ packet loss; a host that ignores `If-Range`; a mirror that returns bad bytes.
 |---|---|
 | Z1 | Pack bytes per country, per component (points, names, polygons per LOD, tz, DEM, search) and per field |
 | Z2 | Library bytes per target (Linux, macOS, Windows, Android ABIs, iOS, WASM) and per feature set: minimal (lookup only), tz only, search only, full. `cargo xtask sizes` (`tools/size-probe`, a std baseline subtracted) |
-| Z3 | WASM after `wasm-opt`, raw and Brotli |
+| Z3 | WASM after `wasm-opt`, raw and Brotli; each npm variant's module held to its gzip budget by `cargo xtask package-wasm` (D-293) |
 | Z4 | Binding package size (wheel, npm, AAR, XCFramework, pub, NuGet, Go module) |
 | Z5 | Tree-shaking proof: an app using only timezone lookup contains no search or polygon code (symbol diff) |
 

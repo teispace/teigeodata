@@ -120,6 +120,12 @@ fn every_query_answers_as_an_absent_component() {
     // Arguments are still checked first.
     let bad = e.search("x", teigeodata_api::LIMIT_MAX + 1).unwrap_err();
     assert_eq!(bad.code, ErrorCode::InvalidArgument);
+    let half = teigeodata_api::SearchOptions {
+        focus_lat: Some(27.0),
+        ..teigeodata_api::SearchOptions::default()
+    };
+    let bad = e.search_with("x", 1, &half).unwrap_err();
+    assert_eq!(bad.code, ErrorCode::InvalidArgument);
     let bad = e.elevation_at(91.0, 0.0).unwrap_err();
     assert_eq!(bad.code, ErrorCode::InvalidArgument);
 }

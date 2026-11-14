@@ -180,31 +180,37 @@ pub struct SearchOptions {
 }
 
 impl SearchOptions {
+    /// The focus point and its scale, checked: `None` without a focus.
+    fn focus(&self) -> Result<Option<(Point<E6>, Option<f64>)>> {
+        match (self.focus_lat, self.focus_lon) {
+            (None, None) if self.focus_scale_m.is_none() => Ok(None),
+            (Some(lat), Some(lon)) => {
+                let at = point::<E6>(lat, lon)?;
+                match self.focus_scale_m {
+                    Some(scale) if !(scale.is_finite() && scale > 0.0) => Err(Error::new(
+                        ErrorCode::InvalidArgument,
+                        format!("focus scale is {scale} m; it must be positive"),
+                    )),
+                    scale => Ok(Some((at, scale))),
+                }
+            }
+            _ => Err(Error::new(
+                ErrorCode::InvalidArgument,
+                "a focus needs both focus_lat and focus_lon",
+            )),
+        }
+    }
+
     /// The engine's options, checked.
     #[cfg(feature = "search")]
     fn engine(&self) -> Result<teigeodata_engine::SearchOptions> {
         let mut out = teigeodata_engine::SearchOptions::default().with_strict(self.strict);
-        match (self.focus_lat, self.focus_lon) {
-            (None, None) if self.focus_scale_m.is_none() => {}
-            (Some(lat), Some(lon)) => {
-                let mut focus = teigeodata_engine::Focus::new(point::<E6>(lat, lon)?);
-                if let Some(scale) = self.focus_scale_m {
-                    if !(scale.is_finite() && scale > 0.0) {
-                        return Err(Error::new(
-                            ErrorCode::InvalidArgument,
-                            format!("focus scale is {scale} m; it must be positive"),
-                        ));
-                    }
-                    focus.scale_m = scale;
-                }
-                out = out.with_focus(focus);
+        if let Some((at, scale)) = self.focus()? {
+            let mut focus = teigeodata_engine::Focus::new(at);
+            if let Some(scale) = scale {
+                focus.scale_m = scale;
             }
-            _ => {
-                return Err(Error::new(
-                    ErrorCode::InvalidArgument,
-                    "a focus needs both focus_lat and focus_lon",
-                ));
-            }
+            out = out.with_focus(focus);
         }
         Ok(out)
     }
@@ -594,6 +600,7 @@ impl Engine {
         #[cfg(not(feature = "search"))]
         {
             self::limit(limit)?;
+            options.focus()?;
             Err(not_built(Component::Search).into())
         }
     }

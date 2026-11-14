@@ -1,0 +1,10 @@
+{
+  "name": "teigeodata-wasm-tests",
+  "private": true,
+  "description": "Runners for the WebAssembly parity checks in browsers (Playwright) and Workers (Miniflare, which runs workerd).",
+  "type": "module",
+  "devDependencies": {
+    "miniflare": "4.20260730.0",
+    "playwright": "1.65.1"
+  }
+}

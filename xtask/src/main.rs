@@ -25,6 +25,7 @@ mod pack;
 mod package_c;
 mod package_jvm;
 mod package_swift;
+mod package_wasm;
 mod postal;
 mod recipe;
 mod romanise;
@@ -83,6 +84,12 @@ Tasks:
                     alignment and makes target/jvm/teigeodata-<v>.aar; --desktop makes the
                     JAR with the host's library and those under --natives, --test runs the
                     parity checks from it; --android-test runs them on a running emulator.
+  package-wasm [--variant full|lookup] [--test]
+                    The WebAssembly npm packages (D-293): each variant (a set of
+                    components, D-291) built, through wasm-bindgen --target web and
+                    wasm-opt -Oz, with the per-host entries, under target/wasm/<variant>/;
+                    fails when the gzipped module is over the variant's budget; --test runs
+                    the parity checks from the package on Node.js, Bun and Deno.
   package-swift [--test] [--simulator <name>]
                     The XCFramework the Swift package ships (D-287): teigeodata-c's static
                     library for iOS, the iOS simulators and macOS, joined, as
@@ -136,6 +143,7 @@ fn main() -> ExitCode {
         "package-c" => report(package_c::run(&root, rest)),
         "flutter-check" => report(flutter_check::run(&root, rest)),
         "package-jvm" => report(package_jvm::run(&root, rest)),
+        "package-wasm" => report(package_wasm::run(&root, rest)),
         "package-swift" => report(package_swift::run(&root, rest)),
         "pack-sizes" => report(breakdown::run(rest)),
         "check-workspace" => report(workspace::check(&root)),
