@@ -1,6 +1,6 @@
 # The JVM binding as it ships (phase 5.4, D-288): the desktop JAR with the native library of
 # six platforms, tested from the JAR on each OS that can run it, and the Android AAR (16 KB
-# aligned, NDK r30), tested on an emulator. On a `v*` tag both are attached to the release.
+# aligned, NDK r30), tested on emulators at API 24 (its minSdk) and 35. On a `v*` tag both are attached to the release.
 name: jvm
 
 on:
@@ -116,6 +116,13 @@ jobs:
           retention-days: 14
 
   android:
+    strategy:
+      fail-fast: false
+      matrix:
+        # The minSdk, so nothing newer creeps into the library or its Java (D-288), and a
+        # current release.
+        api: [24, 35]
+    name: android (API ${{ matrix.api }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -148,16 +155,17 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Parity on an emulator (API 35, x86_64)
+      - name: Parity on an emulator (x86_64)
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
-          api-level: 35
+          api-level: ${{ matrix.api }}
           arch: x86_64
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: cargo xtask package-jvm --android-test
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - if: ${{ matrix.api == 35 }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: teigeodata-aar
           path: target/jvm/teigeodata-*.aar

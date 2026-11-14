@@ -1,14 +1,11 @@
 // Hand-written (not generated): how the JVM binding finds its native library (D-288).
 package org.teispace.teigeodata;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
+import java.io.OutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Locale;
@@ -18,7 +15,8 @@ import java.util.Locale;
  * {@code jniLibs} are on it, and a desktop caller that set it), else from the JAR's
  * {@code META-INF/native/<os>-<arch>/}, extracted once into a folder named by the library's
  * SHA-256, so JVMs share one copy, an upgrade gets its own, and a loaded DLL that Windows keeps
- * locked is never overwritten.
+ * locked is never overwritten. It uses {@code java.io} only: the class ships in the Android
+ * library too, whose oldest supported API (24) has no {@code java.nio.file}.
  */
 final class NativeLoader {
     private static final String NAME = "teigeodata_jvm";
@@ -44,33 +42,35 @@ final class NativeLoader {
             } catch (IOException e) {
                 throw linkError("reading " + resource, e);
             }
-            System.load(extract(bytes, file).toString());
+            System.load(extract(bytes, file).getPath());
         }
     }
 
     /** The library's bytes at {@code <tmp>/teigeodata-<sha256>/<file>}, written once. */
-    private static Path extract(byte[] bytes, String file) {
+    private static File extract(byte[] bytes, String file) {
         try {
             String hash = hex(MessageDigest.getInstance("SHA-256").digest(bytes)).substring(0, 32);
-            Path dir = Paths.get(System.getProperty("java.io.tmpdir"), "teigeodata-" + hash);
-            Path target = dir.resolve(file);
-            if (Files.isRegularFile(target) && Files.size(target) == bytes.length) {
-                return target.toAbsolutePath();
+            File dir = new File(System.getProperty("java.io.tmpdir"), "teigeodata-" + hash);
+            File target = new File(dir, file);
+            if (target.isFile() && target.length() == bytes.length) {
+                return target.getAbsoluteFile();
             }
-            Files.createDirectories(dir);
-            // Written beside it and moved into place: another JVM never loads a partial file.
-            Path partial = Files.createTempFile(dir, file, ".part");
-            Files.write(partial, bytes);
-            try {
-                Files.move(partial, target, StandardCopyOption.ATOMIC_MOVE);
-            } catch (FileAlreadyExistsException | AtomicMoveNotSupportedException raced) {
-                // Another JVM placed it first (or the move cannot be atomic): use what is there.
-                if (!Files.isRegularFile(target)) {
-                    Files.move(partial, target, StandardCopyOption.REPLACE_EXISTING);
+            if (!dir.isDirectory() && !dir.mkdirs() && !dir.isDirectory()) {
+                throw new IOException("cannot make " + dir);
+            }
+            // Written beside it and renamed into place: another JVM never loads a partial file.
+            File partial = File.createTempFile(file, ".part", dir);
+            try (OutputStream out = new FileOutputStream(partial)) {
+                out.write(bytes);
+            }
+            if (!partial.renameTo(target)) {
+                // Windows will not rename over a file: another JVM placed it first, so use it.
+                partial.delete();
+                if (!target.isFile() || target.length() != bytes.length) {
+                    throw new IOException("cannot move " + partial + " to " + target);
                 }
-                Files.deleteIfExists(partial);
             }
-            return target.toAbsolutePath();
+            return target.getAbsoluteFile();
         } catch (IOException | NoSuchAlgorithmException e) {
             throw linkError("extracting " + file, e);
         }

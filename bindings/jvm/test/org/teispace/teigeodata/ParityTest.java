@@ -3,9 +3,13 @@ package org.teispace.teigeodata;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,7 +22,7 @@ public final class ParityTest {
     private ParityTest() {}
 
     public static void main(String[] args) throws Exception {
-        Map<?, ?> p = (Map<?, ?>) new Json(Files.readString(Path.of(args[0]))).value();
+        Map<?, ?> p = (Map<?, ?>) new Json(new String(read(new File(args[0])), StandardCharsets.UTF_8)).value();
         step("loaded parity.json");
         check(TeiGeodata.version().equals(p.get("version")), "version");
         TeiGeodata.noop();
@@ -53,7 +57,7 @@ public final class ParityTest {
         expect(TeiGeodataException.InvalidArgument.class, () -> TeiGeodata.distanceM(n(bad, 0), n(bad, 1), n(bad, 2), n(bad, 3)), "within");
 
         List<Long> seen = new ArrayList<>();
-        check(TeiGeodata.progress(3, step -> seen.add(step)) == 3 && seen.equals(List.of(1L, 2L, 3L)), "progress");
+        check(TeiGeodata.progress(3, step -> seen.add(step)) == 3 && seen.equals(Arrays.asList(1L, 2L, 3L)), "progress");
         Map<?, ?> g = (Map<?, ?>) p.get("progress");
         long after = ((Number) g.get("cancel_after")).longValue();
         TeiGeodataException ex = expect(TeiGeodataException.Cancelled.class,
@@ -68,13 +72,31 @@ public final class ParityTest {
             check(caught == boom, "callback exception is rethrown unchanged");
         }
         step("errors, distance, callbacks");
-        engine((Map<?, ?>) p.get("engine"), Path.of(args[0]).toAbsolutePath().getParent());
+        engine((Map<?, ?>) p.get("engine"), new File(args[0]).getAbsoluteFile().getParentFile());
         step("engine");
-        tz((Map<?, ?>) p.get("tz"), Path.of(args[0]).toAbsolutePath().getParent());
+        tz((Map<?, ?>) p.get("tz"), new File(args[0]).getAbsoluteFile().getParentFile());
         step("zone rules");
-        store((Map<?, ?>) p.get("store"), Path.of(args[0]).toAbsolutePath().getParent());
+        store((Map<?, ?>) p.get("store"), new File(args[0]).getAbsoluteFile().getParentFile());
         step("store");
         System.out.println("jvm parity ok");
+    }
+
+    /** All of a file (java.io, so the test runs on Android's oldest supported API, 24). */
+    static byte[] read(File f) throws IOException {
+        try (InputStream in = new FileInputStream(f)) {
+            byte[] out = new byte[(int) f.length()];
+            int at = 0;
+            for (int n; at < out.length && (n = in.read(out, at, out.length - at)) > 0; ) at += n;
+            if (at != out.length) throw new IOException("short read of " + f);
+            return out;
+        }
+    }
+
+    /** A new empty folder under java.io.tmpdir. */
+    static File tempDir(String prefix) throws IOException {
+        File d = File.createTempFile(prefix, "");
+        if (!d.delete() || !d.mkdir()) throw new IOException("cannot make " + d);
+        return d;
     }
 
     /** A section passed: on stderr, so a run that dies shows how far it got. */
@@ -83,14 +105,14 @@ public final class ParityTest {
     }
 
     /** The store (parity.json, "store"): the fixture root, a mirror that refuses connections. */
-    static void store(Map<?, ?> s, Path dir) throws java.io.IOException {
-        byte[] root = Files.readAllBytes(dir.resolve((String) s.get("root")));
+    static void store(Map<?, ?> s, File dir) throws java.io.IOException {
+        byte[] root = read(new File(dir, (String) s.get("root")));
         String mirror = (String) s.get("mirror"), pack = (String) s.get("pack");
-        Path d = Files.createTempDirectory("tg-store-");
-        expect(TeiGeodataException.Refused.class, () -> TeiGeodata.Store.open(d.resolve("missing").toString()), "");
-        expect(TeiGeodataException.Refused.class, () -> TeiGeodata.Store.create(d.resolve("bad").toString(), mirror, mirror, "{}".getBytes()), "");
-        TeiGeodata.Store.create(d.resolve("s").toString(), mirror, mirror, root).close();
-        try (TeiGeodata.Store store = TeiGeodata.Store.open(d.resolve("s").toString())) {
+        File d = tempDir("tg-store-");
+        expect(TeiGeodataException.Refused.class, () -> TeiGeodata.Store.open(new File(d, "missing").toString()), "");
+        expect(TeiGeodataException.Refused.class, () -> TeiGeodata.Store.create(new File(d, "bad").toString(), mirror, mirror, "{}".getBytes()), "");
+        TeiGeodata.Store.create(new File(d, "s").toString(), mirror, mirror, root).close();
+        try (TeiGeodata.Store store = TeiGeodata.Store.open(new File(d, "s").toString())) {
             check(store.damaged().isEmpty(), "damaged");
             check(strings(store.catalog(), "path").isEmpty(), "empty catalog");
             check(strings(store.status(false), "path").isEmpty(), "empty status");
@@ -105,7 +127,7 @@ public final class ParityTest {
                     () -> store.install(pack, TeiGeodata.InstallOptions.DEFAULTS.withComponents((String) s.get("bad_components"))), "component");
             expect(TeiGeodataException.Refused.class, () -> store.remove(pack), "");
             expect(TeiGeodataException.InvalidArgument.class, () -> store.installPass(pack, "", null), "downloads");
-            try (TeiGeodata.Job job = store.installPass(pack, d.resolve("dl").toString(), null)) {
+            try (TeiGeodata.Job job = store.installPass(pack, new File(d, "dl").toString(), null)) {
                 expect(TeiGeodataException.Network.class, job::result, "");
             }
             try (TeiGeodata.Job job = store.refresh(pack)) {
@@ -137,7 +159,7 @@ public final class ParityTest {
         }
         // On a host that trickles, progress moves, and cancelling the future cancels the job.
         String slow = trickle();
-        try (TeiGeodata.Store store = TeiGeodata.Store.create(d.resolve("slow").toString(), slow, slow, root);
+        try (TeiGeodata.Store store = TeiGeodata.Store.create(new File(d, "slow").toString(), slow, slow, root);
                 TeiGeodata.Job job = store.refresh((String) s.get("pack"))) {
             var future = job.resultAsync();
             var moved = new java.util.concurrent.CountDownLatch(3);
@@ -203,22 +225,22 @@ public final class ParityTest {
     }
 
     /** The zone rules (parity.json, "tz") on the rules-only fixture. */
-    static void tz(Map<?, ?> p, Path dir) {
+    static void tz(Map<?, ?> p, File dir) {
         try (TeiGeodata.Engine engine = new TeiGeodata.Engine()) {
-            engine.openFile(dir.resolve((String) p.get("fixture")).toString());
+            engine.openFile(new File(dir, (String) p.get("fixture")).toString());
             check(engine.tzVersion().equals(p.get("version")), "tz version");
             check(strings(engine.tzZones(), "zone").equals(p.get("zones")), "tz zones");
             Map<?, ?> o = (Map<?, ?>) p.get("offset");
             byte[] got = engine.tzOffsetAt((String) o.get("zone"), ((Number) o.get("unix")).longValue());
             check(column(got, "seconds").getInt() == ((Number) o.get("seconds")).intValue(), "tz offset");
-            check(strings(got, "abbr").equals(List.of(o.get("abbr"))), "tz abbr");
-            for (String kind : List.of("gap", "overlap")) {
+            check(strings(got, "abbr").equals(Collections.singletonList(o.get("abbr"))), "tz abbr");
+            for (String kind : Arrays.asList("gap", "overlap")) {
                 Map<?, ?> c = (Map<?, ?>) p.get(kind);
                 List<?> v = (List<?>) c.get("civil");
                 byte[] l = engine.tzLocal((String) c.get("zone"), ((Number) v.get(0)).intValue(), ((Number) v.get(1)).longValue(),
                         ((Number) v.get(2)).longValue(), ((Number) v.get(3)).longValue(), ((Number) v.get(4)).longValue(),
                         ((Number) v.get(5)).longValue());
-                check(strings(l, "kind").equals(List.of(kind)), "tz " + kind);
+                check(strings(l, "kind").equals(Collections.singletonList(kind)), "tz " + kind);
                 check(column(l, "before").getInt() == ((Number) c.get("before")).intValue(), kind + " before");
                 check(column(l, "after").getInt() == ((Number) c.get("after")).intValue(), kind + " after");
             }
@@ -230,14 +252,14 @@ public final class ParityTest {
     }
 
     /** The engine handle on the fixture pack (parity.json, "engine"). */
-    static void engine(Map<?, ?> p, Path dir) throws java.io.IOException {
+    static void engine(Map<?, ?> p, File dir) throws java.io.IOException {
         TeiGeodata.Engine engine = new TeiGeodata.Engine();
         {
-            check(engine.openFile(dir.resolve((String) p.get("fixture")).toString()) == 0, "open");
+            check(engine.openFile(new File(dir, (String) p.get("fixture")).toString()) == 0, "open");
             Map<?, ?> g = (Map<?, ?>) p.get("get");
             byte[] got = engine.get((String) g.get("id"));
-            check(strings(got, "name").equals(List.of(g.get("name"))), "get name");
-            check(strings(got, "kind").equals(List.of(g.get("kind"))), "get kind");
+            check(strings(got, "name").equals(Collections.singletonList(g.get("name"))), "get name");
+            check(strings(got, "kind").equals(Collections.singletonList(g.get("kind"))), "get kind");
             check(column(got, "lat").getDouble() == ((Number) g.get("lat")).doubleValue(), "get lat");
             Map<?, ?> q = (Map<?, ?>) p.get("search");
             byte[] hits = engine.search((String) q.get("query"), ((Number) q.get("limit")).longValue());
@@ -263,9 +285,9 @@ public final class ParityTest {
                     ((Number) w.get("limit")).longValue()), "id").equals(w.get("ids")), "within_radius");
             Map<?, ?> tz = (Map<?, ?>) p.get("tz_at");
             check(strings(engine.tzAt(((Number) tz.get("lat")).doubleValue(), ((Number) tz.get("lon")).doubleValue()), "tz")
-                    .equals(List.of(tz.get("tz"))), "tz_at");
+                    .equals(Collections.singletonList(tz.get("tz"))), "tz_at");
             Map<?, ?> iso = (Map<?, ?>) p.get("by_iso");
-            check(strings(engine.byIso((String) iso.get("code")), "id").equals(List.of(iso.get("id"))), "by_iso");
+            check(strings(engine.byIso((String) iso.get("code")), "id").equals(Collections.singletonList(iso.get("id"))), "by_iso");
             expect(TeiGeodataException.InvalidArgument.class, () -> engine.byIso((String) p.get("bad_iso")), "ISO 3166");
             expect(TeiGeodataException.InvalidArgument.class, () -> engine.withinRadius(wl, wo, -1, 1), "radius");
             Map<?, ?> sw = (Map<?, ?>) p.get("search_with");
@@ -279,8 +301,8 @@ public final class ParityTest {
             expect(TeiGeodataException.InvalidArgument.class,
                     () -> engine.searchWith("x", 1, TeiGeodata.SearchOptions.DEFAULTS.withFocusLat(1.0)), "focus");
             Map<?, ?> ow = (Map<?, ?>) p.get("open_with");
-            Path fixture = dir.resolve((String) p.get("fixture"));
-            byte[] bad = Files.readAllBytes(fixture);
+            File fixture = new File(dir, (String) p.get("fixture"));
+            byte[] bad = read(fixture);
             bad[((Number) ow.get("corrupt_at")).intValue()] ^= (byte) 0xff;
             try (TeiGeodata.Engine scratch = new TeiGeodata.Engine()) {
                 TeiGeodata.OpenOptions eager = TeiGeodata.OpenOptions.DEFAULTS.withVerify(TeiGeodata.Verify.EAGER);
@@ -318,10 +340,10 @@ public final class ParityTest {
             expect(TeiGeodataException.Corrupt.class, () -> engine.openBytes("not a pack".getBytes(StandardCharsets.UTF_8)), "");
             check(engine.layers() == 1, "layers");
             Map<?, ?> h = (Map<?, ?>) p.get("elevation_at");
-            check(engine.openFile(dir.resolve((String) h.get("fixture")).toString()) == 1, "open dem");
+            check(engine.openFile(new File(dir, (String) h.get("fixture")).toString()) == 1, "open dem");
             byte[] height = engine.elevationAt(((Number) h.get("lat")).doubleValue(), ((Number) h.get("lon")).doubleValue());
             check(column(height, "meters").getDouble() == ((Number) h.get("meters")).doubleValue(), "meters");
-            check(strings(height, "source").equals(List.of(h.get("source"))), "source");
+            check(strings(height, "source").equals(Collections.singletonList(h.get("source"))), "source");
             check(engine.remove(1) && !engine.remove(1) && engine.layers() == 1, "remove");
             engine.close();
             engine.close(); // idempotent
