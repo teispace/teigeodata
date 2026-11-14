@@ -2,6 +2,13 @@
 // against Rust). Run: swift run -c release Parity ../parity.json
 import Foundation
 import TeiGeodata
+#if canImport(Glibc)
+import Glibc
+/// Glibc imports `SOCK_STREAM` as an enum, Darwin as an `Int32`.
+let streamSocket = Int32(SOCK_STREAM.rawValue)
+#else
+let streamSocket = SOCK_STREAM
+#endif
 
 func check(_ ok: Bool, _ what: @autoclosure () -> String) {
     if !ok {
@@ -10,11 +17,13 @@ func check(_ ok: Bool, _ what: @autoclosure () -> String) {
     }
 }
 
-/// A fixed-width column of a v1 blob, read in place.
 /// A host on localhost that answers every request with a body of a byte every 20 ms: a job
 /// on it runs, its progress moving, until it is cancelled.
 func trickle() -> String {
-    let fd = socket(AF_INET, SOCK_STREAM, 0)
+    // A write to a socket the client closed raises SIGPIPE; ignore it on every platform
+    // (Linux has no `SO_NOSIGPIPE`), so the write fails instead.
+    signal(SIGPIPE, SIG_IGN)
+    let fd = socket(AF_INET, streamSocket, 0)
     var addr = sockaddr_in()
     addr.sin_family = sa_family_t(AF_INET)
     addr.sin_addr.s_addr = inet_addr("127.0.0.1")
@@ -29,8 +38,6 @@ func trickle() -> String {
     Thread.detachNewThread {
         while case let c = accept(fd, nil, nil), c >= 0 {
             Thread.detachNewThread {
-                var one: Int32 = 1
-                setsockopt(c, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
                 var request = [UInt8](repeating: 0, count: 4096)
                 _ = read(c, &request, request.count)
                 let head = Array("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n".utf8)
@@ -47,6 +54,7 @@ func trickle() -> String {
     return "http://127.0.0.1:\(UInt16(bigEndian: addr.sin_port))/"
 }
 
+/// A fixed-width column of a v1 blob, read in place.
 func column<T: FixedWidthInteger>(_ blob: Data, _ name: String, as _: T.Type) -> [T] {
     blob.withUnsafeBytes { raw -> [T] in
         let u32 = { (at: Int) in UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: at, as: UInt32.self)) }
