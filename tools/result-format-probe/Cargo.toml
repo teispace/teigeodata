@@ -1,0 +1,39 @@
+# S2 result-format probe (docs/02-research/benches/bindings-s2-result-format.md): one real 10,000-row
+# result as blob v0, Arrow IPC and FlatBuffers rows; `bench` times them, the cdylib per feature
+# measures what each adds to a library. Its own workspace, like tools/size-probe.
+[package]
+name = "s2-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+members = ["."]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+blob = []
+arrow = ["dep:arrow-array", "dep:arrow-ipc", "dep:arrow-schema", "dep:arrow-buffer"]
+fb = ["dep:flatbuffers"]
+
+[dependencies]
+teigeodata-blob = { path = "../../crates/teigeodata-blob" }
+arrow-array = { version = "60.1.0", optional = true, default-features = false }
+arrow-ipc = { version = "60.1.0", optional = true, default-features = false }
+arrow-schema = { version = "60.1.0", optional = true, default-features = false }
+arrow-buffer = { version = "60.1.0", optional = true, default-features = false }
+flatbuffers = { version = "25.12.19", optional = true }
+serde_json = { version = "1", optional = true }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[[bin]]
+name = "bench"
+required-features = ["blob", "arrow", "fb", "serde_json"]

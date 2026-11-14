@@ -68,8 +68,9 @@ A result with rows crosses as one blob (`teigeodata-blob`, format v0, D-068):
 Columns are typed (`i32`, `u32`, `i64`, `u64`, `f32`, `f64`, UTF-8 with Arrow-style offsets), so
 every language views a column in place: a `Float64Array`, a `memoryview`, a `Float64List`. The
 Rust reader validates every offset, length, alignment and string before it returns a view; a test
-flips every byte of a blob and truncates it at every length. The result-format spike may replace
-v0.
+flips every byte of a blob and truncates it at every length. Spike S2 kept the format and
+extends it to v1 (D-275, [S2](../02-research/benches/bindings-s2-result-format.md)): a null
+bitmap per column, dictionary-encoded strings and narrow integers.
 
 ## 4. Adding a function
 
@@ -147,5 +148,6 @@ second job waits for the first.
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | §3: blob v1 planned | S2, D-275 |
 | 2026-11-14 | §6: handles, threads and jobs | phase 5.0, D-274 |
 | 2026-11-07 | First version, from spike S4 | [S4](../02-research/benches/s4-bindings.md) |

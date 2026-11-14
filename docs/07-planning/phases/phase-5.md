@@ -38,9 +38,9 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 - [x] The threading and async contract written down (done 2026-11-14, D-274, [bindings §6](../../04-architecture/bindings.md#6-handles-threads-and-jobs-d-274)) per runtime (Dart isolates, the Node event
   loop, the GIL and free-threaded Python, JNI attach, Swift 6 `Sendable`, .NET, Go): which
   calls block, which run as jobs, how callbacks cross threads (the note's §7)
-- [ ] S2, the result format: blob v0 against Arrow C Data and FlatBuffers on real query
+- [x] S2, the result format: blob v0 against Arrow C Data and FlatBuffers on real query
   results (10,000 rows in each language: decode time, allocations, size, schema evolution);
-  the decision recorded
+  the decision recorded (done 2026-11-14: [S2](../../02-research/benches/bindings-s2-result-format.md), our blob as v1 with nulls and dictionaries, D-275)
 
 ### 5.1 The API surface
 - [ ] `teigeodata-api` over the engine: open layers (bytes and files, components, parts),
@@ -103,4 +103,5 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | 5.0 done: the threading contract (D-274), S2 (D-275) | research |
 | 2026-11-14 | Phase 5 drafted from the bindings research and spike S4 | Phase 4's open items wait on the maintainer or a future release |
