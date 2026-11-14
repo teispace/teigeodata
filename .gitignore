@@ -8,6 +8,7 @@
 /data/build/
 *.tgd
 !/fixtures/**/*.tgd
+!/bindings/fixtures/*.tgd
 node_modules/
 .next/
 /site/out/
