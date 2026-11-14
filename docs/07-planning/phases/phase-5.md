@@ -184,6 +184,10 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
     and iOS included; `release-pin` and the Dart and Go downloads proven on a mirror; the Maven
     bundle; green on GitHub pending)
   - [ ] 5.10c the real path behind the `release` environment, and the maintainer's runbook
+    (built, D-305: the release commit and tags pushed atomically with a deploy key so the tag
+    starts `pub.yml`, every registry publish idempotent, the Maven signing proven with a
+    throwaway key; [runbook](../../06-engineering/release-runbook.md). The first real release
+    waits on the maintainer's setup)
 
 ### 5.11 Exit review
 - [ ] M5 criteria met, each with its evidence; progress updated

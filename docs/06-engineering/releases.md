@@ -61,7 +61,9 @@ built for a release name the reader version they need in the catalog.
    verifies every attestation, tags `vX.Y.Z`, and publishes the release with every file
    (D-302). The release also carries each library alone for the Dart hook and Go, pinned by
    the release commit with the root `Package.swift` (D-304), and every registry's own check
-   runs first. Check one: `gh attestation verify <file> --repo teispace/teigeodata`.
+   runs first. Check one: `gh attestation verify <file> --repo teispace/teigeodata`. The
+   registries, their one-time setup and the checks after a release:
+   [the runbook](release-runbook.md) (D-305).
 4. Check from a scratch project: `cargo build` with the `git` + `tag` dependency above, then
    open a pack with `Layer::open` and answer a `get`.
 

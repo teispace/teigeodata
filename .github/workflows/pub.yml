@@ -1,0 +1,42 @@
+# The Dart package to pub.dev (phase 5.10, D-305). pub.dev's automated publishing accepts only a
+# run started by pushing a tag that matches its pattern (`v{{version}}`), so this runs on the tag
+# `release.yml` pushes with its deploy key (a tag pushed with the workflow token would start no
+# workflow). The tagged commit is the release commit: its prebuilt hashes are pinned.
+name: pub
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pub-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+      # pub.dev's OIDC token; setup-dart exchanges it.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+      - name: The tag is the package's version, its hashes pinned
+        working-directory: bindings/dart
+        run: |
+          v=$(sed -n 's/^version: //p' pubspec.yaml)
+          test "v$v" = "$GITHUB_REF_NAME"
+          grep -q "'x86_64-unknown-linux-gnu': '" hook/src/prebuilt_hashes.dart
+      - name: Publish (a version already there is skipped)
+        working-directory: bindings/dart
+        run: |
+          v=$(sed -n 's/^version: //p' pubspec.yaml)
+          code=$(curl -s -o /dev/null -w '%{http_code}' "https://pub.dev/api/packages/teigeodata/versions/$v")
+          if [ "$code" = 200 ]; then echo "teigeodata $v: already published"; exit 0; fi
+          dart pub publish --force

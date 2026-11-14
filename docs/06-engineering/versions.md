@@ -1,7 +1,7 @@
 ---
 title: "Versions register"
 status: living
-updated: 2026-11-14
+updated: 2026-11-15
 ---
 
 # Versions register
@@ -30,6 +30,13 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | PyO3 | 0.30.1 | 2026-11-14 | crates.io | 2026-12-14 |
 | maturin | 1.16.0 | 2026-11-14 | PyPI | 2026-12-06 |
 | cibuildwheel | 4.3.5 | 2026-11-14 | PyPI | 2026-12-06 |
+| cargo-cyclonedx (release SBOMs) | 0.5.10 | 2026-11-14 | GitHub releases | 2027-02-14 |
+| actions/attest-build-provenance / attest-sbom | v4.2.2 / v4.1.0 | 2026-11-14 | GitHub releases | 2027-02-14 |
+| rust-lang/crates-io-auth-action | v1.0.6 | 2026-11-15 | GitHub tags | 2027-02-15 |
+| pypa/gh-action-pypi-publish | v1.14.3 | 2026-11-15 | GitHub tags | 2027-02-15 |
+| twine (release check) | 7.0.0 | 2026-11-15 | PyPI | 2027-02-15 |
+| npm CLI (trusted publishing needs 11.5.1+) | 12.2.2 | 2026-11-15 | npm | 2027-02-15 |
+| md-5 / sha1 (Maven checksums) | 0.11.0 / 0.11.0 | 2026-11-15 | crates.io | 2027-02-15 |
 | jni (crate) | 0.22.4 | 2026-11-14 | crates.io | 2026-12-07 |
 | cargo-ndk | 4.1.2 | 2026-11-14 | crates.io | 2026-12-06 |
 | Android NDK | r30 | 2026-11-06 | developer.android.com | 2026-12-06 |

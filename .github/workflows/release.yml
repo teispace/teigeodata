@@ -227,43 +227,6 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  # A real run: the tag on the dispatched commit, a draft release with every file, then published
-  # (assets can be added to an immutable release only while it is a draft). The registries and
-  # the Swift release commit follow in 5.10b and 5.10c.
-  github-release:
-    if: ${{ !inputs.dry_run }}
-    needs: [version, assemble, packages]
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: release
-    permissions:
-      contents: write
-    env:
-      VERSION: ${{ needs.version.outputs.version }}
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: release-${{ env.VERSION }}
-          path: dist
-      - name: The release notes, from the changelog
-        run: |
-          awk -v v="$VERSION" '
-            $0 ~ "^## \\[" v "\\]" { on = 1; next }
-            on && /^## \[/ { exit }
-            on { print }
-          ' CHANGELOG.md > notes.md
-          test -s notes.md || { echo "::error::CHANGELOG.md has no section for $VERSION"; exit 1; }
-      - name: Draft, upload, publish
-        run: |
-          gh release create "v$VERSION" --target "$GITHUB_SHA" --draft \
-            --title "v$VERSION" --notes-file notes.md
-          mapfile -t files < <(find dist -type f | sort)
-          gh release upload "v$VERSION" -- "${files[@]}"
-          gh release edit "v$VERSION" --draft=false
-          gh release view "v$VERSION"
-
   # The release commit and each registry's own check of what it would publish (D-304). The
   # commit pins the prebuilt files into the Dart hook, the Go loader and the root
   # Package.swift; a dry run makes it locally and pushes nothing.
@@ -289,6 +252,8 @@ jobs:
             commit -s -q -m "chore(repo): release v$VERSION"
           git show --stat HEAD
           cargo xtask release-pin "$RUNNER_TEMP/dist" --check
+          # The commit travels to the publishing job as a bundle on top of the dispatched one.
+          git bundle create "$RUNNER_TEMP/release.bundle" "$GITHUB_SHA..HEAD"
       - name: Swift (the released Package.swift)
         run: swift package dump-package > /dev/null
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -325,6 +290,72 @@ jobs:
           path: target/jvm/central-bundle.zip
           if-no-files-found: error
           retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-commit-${{ env.VERSION }}
+          path: ${{ runner.temp }}/release.bundle
+          if-no-files-found: error
+          retention-days: 30
+
+  # ---- A real run (dry_run off), each job approved in the `release` environment ----
+  #
+  # The release commit on `main` and the tags `vX.Y.Z` (Swift, pub.dev) and
+  # `bindings/go/vX.Y.Z` (Go), pushed with the deploy key so the tag push starts `pub.yml`; then
+  # a draft release with every file, published (an immutable release takes assets only as a
+  # draft). `main` must still be the dispatched commit, or the push is refused and nothing is
+  # published.
+  github-release:
+    if: ${{ !inputs.dry_run }}
+    needs: [version, assemble, packages]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+          fetch-depth: 0
+          filter: blob:none
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-${{ env.VERSION }}
+          path: dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-commit-${{ env.VERSION }}
+          path: ${{ runner.temp }}
+      - name: The release commit and its tags
+        run: |
+          git bundle verify "$RUNNER_TEMP/release.bundle"
+          git fetch -q "$RUNNER_TEMP/release.bundle" HEAD
+          commit=$(git rev-parse FETCH_HEAD)
+          test "$(git rev-parse "$commit^")" = "$GITHUB_SHA"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "v$VERSION" "$commit"
+          git tag -a "bindings/go/v$VERSION" -m "bindings/go v$VERSION" "$commit"
+          # One push: main moves only if it is still the dispatched commit (no force).
+          git push --atomic origin "$commit:refs/heads/main" "v$VERSION" "bindings/go/v$VERSION"
+      - name: The release notes, from the changelog
+        run: |
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "::error::CHANGELOG.md has no section for $VERSION"; exit 1; }
+      - name: Draft, upload, publish
+        run: |
+          gh release create "v$VERSION" --verify-tag --draft --title "v$VERSION" --notes-file notes.md
+          mapfile -t files < <(find dist -type f | sort)
+          gh release upload "v$VERSION" -- "${files[@]}"
+          gh release edit "v$VERSION" --draft=false
+          gh release view "v$VERSION"
 
   # The crates: the stable surface and what it needs (D-303), in dependency order. A dry run
   # packages and builds each against the others as packaged; a real run publishes through
@@ -348,8 +379,160 @@ jobs:
       - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
         if: ${{ !inputs.dry_run }}
         id: auth
-      - name: Publish
+      - name: Publish (in dependency order; a version already there is skipped, so a re-run resumes)
         if: ${{ !inputs.dry_run }}
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-        run: cargo publish --workspace --locked
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          for c in core blob names format sync engine api cli; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -A "teigeodata-release" \
+              "https://crates.io/api/v1/crates/teigeodata-$c/$VERSION")
+            if [ "$code" = 200 ]; then echo "teigeodata-$c $VERSION: already published"; continue; fi
+            cargo publish --locked -p "teigeodata-$c"
+          done
+
+  # npm through trusted publishing (provenance is published with it).
+  npm:
+    if: ${{ !inputs.dry_run }}
+    needs: [version, github-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-${{ env.VERSION }}
+          path: dist
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          registry-url: https://registry.npmjs.org
+      - name: npm 11.5.1 or later (trusted publishing)
+        run: |
+          node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a==11&&(b>5||(b==5&&c>=1)))?0:1)' "$(npm --version)" \
+            || npm install -g npm@12.2.2
+          npm --version
+      - name: Publish (a version already there is skipped)
+        run: |
+          for p in dist/teispace-*.tgz; do
+            name=$(tar -xzOf "$p" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0)).name')
+            if npm view "$name@$VERSION" version >/dev/null 2>&1; then echo "$name@$VERSION: already published"; continue; fi
+            npm publish --access public "$p"
+          done
+
+  # PyPI through trusted publishing, with PEP 740 attestations (only from a top-level workflow).
+  pypi:
+    if: ${{ !inputs.dry_run }}
+    needs: [version, github-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-${{ env.VERSION }}
+          path: ${{ runner.temp }}/all
+      - name: The wheels alone
+        run: mkdir -p wheels && cp "$RUNNER_TEMP"/all/*.whl wheels/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: wheels/
+          skip-existing: true
+
+  # Maven Central: no OIDC, so a Portal user token and a GPG key, secrets of the `release`
+  # environment. The bundle is signed, uploaded, validated and published by the Portal.
+  maven:
+    if: ${{ !inputs.dry_run }}
+    needs: [version, github-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: release
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v${{ env.VERSION }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-${{ env.VERSION }}
+          path: ${{ runner.temp }}/dist
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+      - name: Already on Maven Central?
+        id: there
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            "https://repo1.maven.org/maven2/com/teispace/teigeodata/$VERSION/teigeodata-$VERSION.pom")
+          echo "published=$([ "$code" = 200 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: The signed bundle
+        if: ${{ steps.there.outputs.published == 'false' }}
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          # Any long option may stand in gpg.conf: the passphrase is read from a file only the
+          # runner user can read, removed after signing.
+          umask 077
+          printf '%s' "$GPG_PASSPHRASE" > "$RUNNER_TEMP/gpg-pass"
+          printf 'pinentry-mode loopback\npassphrase-file %s\n' "$RUNNER_TEMP/gpg-pass" > ~/.gnupg/gpg.conf
+          cargo xtask package-jvm --maven "$RUNNER_TEMP/dist" --sign
+          rm -f ~/.gnupg/gpg.conf "$RUNNER_TEMP/gpg-pass"
+          find target/jvm/maven -name '*.asc' | wc -l
+      - name: Upload, then wait until the Portal publishes it
+        if: ${{ steps.there.outputs.published == 'false' }}
+        env:
+          USER: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          TOKEN: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
+        run: |
+          auth="Authorization: Bearer $(printf '%s:%s' "$USER" "$TOKEN" | base64 -w0)"
+          api=https://central.sonatype.com/api/v1/publisher
+          id=$(curl -sSf -X POST -H "$auth" -F bundle=@target/jvm/central-bundle.zip \
+            "$api/upload?publishingType=AUTOMATIC&name=teigeodata-$VERSION")
+          echo "deployment $id"
+          for _ in $(seq 1 80); do
+            state=$(curl -sSf -X POST -H "$auth" "$api/status?id=$id" | jq -r .deploymentState)
+            echo "$state"
+            case "$state" in
+              PUBLISHING|PUBLISHED) exit 0 ;;
+              FAILED) curl -sS -X POST -H "$auth" "$api/status?id=$id" | jq .errors; exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "::error::the deployment did not reach PUBLISHING in 40 minutes"; exit 1
+
+  # Go: the module is the tag; asking the proxy for it makes it available at once.
+  go:
+    if: ${{ !inputs.dry_run }}
+    needs: [version, github-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.x"
+          cache: false
+      - name: The module on the Go proxy
+        run: GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod go list -m "github.com/teispace/teigeodata/bindings/go@v$VERSION"

@@ -36,6 +36,7 @@ and checked again before each workflow change.
 (`tests/world.rs` on the built files: cities under their country, the slice's IDs, the border
 probes, `missing_packs`; D-147, D-149) and the golden gate (`pack-eval` with `S3_GATE`); reports as artifacts. Later: sharded tiles and a final verify-sign-publish job | per shard ≤ 3 h |
 | `release` | by hand (`dry_run` by default) | the ABI release gate (a warning in a dry run); calls `c-package`, `apple`, `jvm`, `python`, `node` and `wasm`; gathers their files with a CycloneDX SBOM per crate and `SHA256SUMS`, attests build provenance and the SBOMs (Sigstore) and verifies every attestation (D-302); makes the release commit (`cargo xtask release-pin`) and runs each registry's check: Swift, Go, `dart pub publish --dry-run`, `npm publish --dry-run`, `twine check --strict`, the Maven bundle, `cargo publish --workspace --dry-run` (D-303, D-304); a real run tags `vX.Y.Z`, drafts the release, uploads and publishes it | ≤ 100 min |
+| `pub` | a `v*` tag pushed by `release` (its deploy key) | the tag checked against the pubspec and the pinned hashes; `dart pub publish` through pub.dev's OIDC (D-305) | ≤ 15 min |
 | `docs` | push to `main` | the Fumadocs site with generated pages, to GitHub Pages | ≤ 10 min |
 
 Workflows are added when the code they test exists. `fast-check` exists from Phase 0; `nightly`
