@@ -42,9 +42,68 @@ final class {{ c.name }}Exception extends TeiGeodataException {
 }
 {% endfor %}
 {% macro nty(t) %}{% if t == "bool" %}Bool{% elif t == "i32" %}Int32{% elif t == "u32" %}Uint32{% elif t == "i64" %}Int64{% elif t == "u64" %}Uint64{% elif t == "f64" %}Double{% endif %}{% endmacro %}
-{% macro dty(t) %}{% if t == "bool" %}bool{% elif t == "f64" %}double{% elif t in ["str", "string"] %}String{% elif t == "blob" %}Uint8List{% elif t == "void" %}void{% else %}int{% endif %}{% endmacro %}
-{% macro cparams(f) %}{% for p in f.params %}{% if p.ty == "str" %}Pointer<Uint8>, Size{% elif p.ty == "callback" %}Pointer<NativeFunction<Callback{{ p.callback.id | pascal }}>>, Pointer<Void>{% else %}{{ nty(p.ty) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}Pointer<TgBytes>{% else %}Pointer<{{ nty(f.returns) }}>{% endif %}{% endif %}{% endmacro %}
-{% macro dparams(f) %}{% for p in f.params %}{% if p.ty == "str" %}Pointer<Uint8>, int{% elif p.ty == "callback" %}Pointer<NativeFunction<Callback{{ p.callback.id | pascal }}>>, Pointer<Void>{% else %}{{ dty(p.ty) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}Pointer<TgBytes>{% else %}Pointer<{{ nty(f.returns) }}>{% endif %}{% endif %}{% endmacro %}
+{% macro dty(t, h) %}{% if t == "bool" %}bool{% elif t == "f64" %}double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}Uint8List{% elif t == "handle" %}{{ h }}{% elif t == "void" %}void{% else %}int{% endif %}{% endmacro %}
+{#- The native signature: `n` is nty for the C side or dty for the Dart side. #}
+{% macro sig(f, c) %}{% if f.receiver %}Pointer<Void>{% if f.params or f.returns != "void" %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty in ["str", "bytes"] %}Pointer<Uint8>, {% if c %}Size{% else %}int{% endif %}{% elif p.ty == "handle" %}Pointer<Void>{% elif p.ty == "callback" %}Pointer<NativeFunction<Callback{{ p.callback.id | pascal }}>>, Pointer<Void>{% elif c %}{{ nty(p.ty) }}{% else %}{{ dty(p.ty) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}Pointer<TgBytes>{% elif f.returns == "handle" %}Pointer<Pointer<Void>>{% else %}Pointer<{{ nty(f.returns) }}>{% endif %}{% endif %}{% endmacro %}
+{% macro lookup(f, field, symbol) %}
+        {{ field }} = lib.lookupFunction<Int32 Function({{ sig(f, true) }}), int Function({{ sig(f, false) }})>('{{ symbol }}'{% if not (f.params | selectattr("ty", "eq", "callback") | list) %}, isLeaf: true{% endif %}){% endmacro %}
+{% macro dparams(f) %}{% for p in f.params %}{% if p.ty == "callback" %}bool Function({% for a in p.callback.args %}{{ dty(a) }}{% if not loop.last %}, {% endif %}{% endfor %}) {{ p.name | camel }}{% else %}{{ dty(p.ty, p.handle) }} {{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endmacro %}
+{% macro args(f) %}{% if f.receiver %}handle{% if f.params or f.returns != "void" %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty in ["str", "bytes"] %}_input, {{ p.name | camel }}Len{% elif p.ty == "handle" %}{{ p.name | camel }}._live{% elif p.ty == "callback" %}callable.nativeFunction, nullptr{% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}_bytes{% else %}_word.cast(){% endif %}{% endif %}{% endmacro %}
+{#- A call through the scratch memory: a public function, or (with `owner`) the private half
+    of a handle's method. #}
+{% macro call(f, name, native, owner) %}
+{% set cbs = f.params | selectattr("ty", "eq", "callback") | list %}
+{% set cb = cbs[0] if cbs else none %}
+{% set strs = f.params | selectattr("ty", "in", ["str", "bytes"]) | list %}
+{% if strs | length > 1 %}{{ raise("dart: one string or bytes parameter per function, for now") }}{% endif %}
+
+{% if not owner %}
+{% for line in f.doc %}
+  ///{% if line %} {{ line }}{% endif %}
+
+{% endfor %}
+{% endif %}
+  {{ dty(f.returns, f.returns_handle) }} {{ name }}({% if f.receiver %}Pointer<Void> handle{% if f.params %}, {% endif %}{% endif %}{{ dparams(f) }}) {
+{% for p in strs %}
+    final {{ p.name | camel }}Len = {% if p.ty == "str" %}_utf8{% else %}_copy{% endif %}({{ p.name | camel }});
+{% endfor %}
+{% if cb %}
+    Object? raised;
+    StackTrace? trace;
+    final callable = NativeCallable<Callback{{ cb.callback.id | pascal }}>.isolateLocal(
+      (Pointer<Void> _{% for a in cb.callback.args %}, {{ dty(a) }} a{{ loop.index0 }}{% endfor %}) {
+        try {
+          return {{ cb.name | camel }}({% for a in cb.callback.args %}a{{ loop.index0 }}{% if not loop.last %}, {% endif %}{% endfor %});
+        } catch (e, s) {
+          raised = e;
+          trace = s;
+          return false;
+        }
+      },
+      exceptionalReturn: false,
+    );
+    final int status;
+    try {
+      status = {{ native }}({{ args(f) }});
+    } finally {
+      callable.close();
+    }
+    if (raised != null) Error.throwWithStackTrace(raised!, trace!);
+{% else %}
+    final status = {{ native }}({{ args(f) }});
+{% endif %}
+    _check(status);
+{% if f.returns == "string" %}
+    return _takeString();
+{% elif f.returns == "blob" %}
+    return _takeBlob();
+{% elif f.returns == "handle" %}
+    return {{ f.returns_handle }}._(this, _word.cast<Pointer<Void>>().value);
+{% elif f.returns != "void" %}
+    return _word.cast<{{ nty(f.returns) }}>().value;
+{% endif %}
+  }
+{% endmacro %}
 {% for cb in callbacks %}
 
 /// The C callback `tg_callback_{{ cb.id }}`.
@@ -57,8 +116,13 @@ final class TeiGeodata {
   TeiGeodata._(DynamicLibrary lib)
       : _free = lib.lookupFunction<Void Function(TgBytes), void Function(TgBytes)>('tg_bytes_free', isLeaf: true),
         _lastError = lib.lookupFunction<Int32 Function(Pointer<TgBytes>), int Function(Pointer<TgBytes>)>('tg_last_error', isLeaf: true){% for f in functions %},
-{% set leaf = not (f.params | selectattr("ty", "eq", "callback") | list) %}
-        _{{ f.name | camel }} = lib.lookupFunction<Int32 Function({{ cparams(f) }}), int Function({{ dparams(f) }})>('tg_{{ f.name }}'{% if leaf %}, isLeaf: true{% endif %}){% endfor %};
+{{ lookup(f, "_" ~ (f.name | camel), "tg_" ~ f.name) }}{% endfor %}{% for h in handles %},
+        _{{ h.snake | camel }}Free = lib.lookup<NativeFunction<Void Function(Pointer<Void>)>>('tg_{{ h.snake }}_free'){% for f in h.methods %},
+{{ lookup(f, "_" ~ (h.snake | camel) ~ (f.name | pascal) ~ "Native", "tg_" ~ h.snake ~ "_" ~ f.name) }}{% endfor %}{% endfor %} {
+{% for h in handles %}
+    _{{ h.snake | camel }}Finalizer = NativeFinalizer(_{{ h.snake | camel }}Free.cast());
+{% endfor %}
+  }
 
   /// Opens the library at [path] (for example `libteigeodata_ffi.dylib`).
   factory TeiGeodata.open(String path) => TeiGeodata._(DynamicLibrary.open(path));
@@ -66,7 +130,14 @@ final class TeiGeodata {
   final void Function(TgBytes) _free;
   final int Function(Pointer<TgBytes>) _lastError;
 {% for f in functions %}
-  final int Function({{ dparams(f) }}) _{{ f.name | camel }};
+  final int Function({{ sig(f, false) }}) _{{ f.name | camel }};
+{% endfor %}
+{% for h in handles %}
+  final Pointer<NativeFunction<Void Function(Pointer<Void>)>> _{{ h.snake | camel }}Free;
+  late final NativeFinalizer _{{ h.snake | camel }}Finalizer;
+{% for f in h.methods %}
+  final int Function({{ sig(f, false) }}) _{{ h.snake | camel }}{{ f.name | pascal }}Native;
+{% endfor %}
 {% endfor %}
 
   // Scratch memory reused by every call: the output slots and a growing input buffer.
@@ -101,6 +172,13 @@ final class TeiGeodata {
     return n;
   }
 
+  /// [bytes] in the scratch buffer; returns their length.
+  int _copy(Uint8List bytes) {
+    if (bytes.length > _inputCap) _grow(bytes.length);
+    _input.asTypedList(bytes.length).setAll(0, bytes);
+    return bytes.length;
+  }
+
   int _utf8Slow(String text, Uint8List dst) {
     final bytes = utf8.encode(text);
     dst.setRange(0, bytes.length, bytes);
@@ -133,52 +211,52 @@ final class TeiGeodata {
     return out;
   }
 {% for f in functions %}
-{% set cbs = f.params | selectattr("ty", "eq", "callback") | list %}
-{% set cb = cbs[0] if cbs else none %}
-{% set strs = f.params | selectattr("ty", "eq", "str") | list %}
-{% if strs | length > 1 %}{{ raise("dart: one string parameter per function, for now") }}{% endif %}
+{{ call(f, f.name | camel, "_" ~ (f.name | camel), none) }}{% endfor %}
+{% for h in handles %}
+{% for f in h.methods %}
+{{ call(f, "_" ~ (h.snake | camel) ~ (f.name | pascal), "_" ~ (h.snake | camel) ~ (f.name | pascal) ~ "Native", h) }}{% endfor %}
+{% endfor %}
+}
+{% for h in handles %}
+
+{% for line in h.doc %}
+///{% if line %} {{ line }}{% endif %}
+
+{% endfor %}
+///
+/// Freed by [close], or when collected if never closed. Use it on the isolate that made it.
+final class {{ h.name }} implements Finalizable {
+  {{ h.name }}._(this._lib, this._handle) {
+    _lib._{{ h.snake | camel }}Finalizer.attach(this, _handle, detach: this);
+  }
+
+  final TeiGeodata _lib;
+  Pointer<Void> _handle;
+
+  Pointer<Void> get _live => _handle == nullptr ? throw StateError('{{ h.name }} is closed') : _handle;
+
+  /// Frees the handle now; later calls throw a [StateError]. Closing twice does nothing.
+  void close() {
+    if (_handle == nullptr) return;
+    _lib._{{ h.snake | camel }}Finalizer.detach(this);
+    _lib._{{ h.snake | camel }}Free.asFunction<void Function(Pointer<Void>)>(isLeaf: true)(_handle);
+    _handle = nullptr;
+  }
+{% for f in h.methods %}
 
 {% for line in f.doc %}
   ///{% if line %} {{ line }}{% endif %}
 
 {% endfor %}
-  {{ dty(f.returns) }} {{ f.name | camel }}({% for p in f.params %}{% if p.ty == "callback" %}bool Function({% for a in p.callback.args %}{{ dty(a) }}{% if not loop.last %}, {% endif %}{% endfor %}) {{ p.name | camel }}{% else %}{{ dty(p.ty) }} {{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}) {
-{% for p in strs %}
-    final {{ p.name | camel }}Len = _utf8({{ p.name | camel }});
-{% endfor %}
-{% if cb %}
-    Object? raised;
-    StackTrace? trace;
-    final callable = NativeCallable<Callback{{ cb.callback.id | pascal }}>.isolateLocal(
-      (Pointer<Void> _{% for a in cb.callback.args %}, {{ dty(a) }} a{{ loop.index0 }}{% endfor %}) {
-        try {
-          return {{ cb.name | camel }}({% for a in cb.callback.args %}a{{ loop.index0 }}{% if not loop.last %}, {% endif %}{% endfor %});
-        } catch (e, s) {
-          raised = e;
-          trace = s;
-          return false;
-        }
-      },
-      exceptionalReturn: false,
-    );
-    final int status;
-    try {
-      status = _{{ f.name | camel }}({% for p in f.params %}{% if p.ty == "str" %}_input, {{ p.name | camel }}Len{% elif p.ty == "callback" %}callable.nativeFunction, nullptr{% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}, {% if f.returns in ["string", "blob"] %}_bytes{% else %}_word.cast(){% endif %}{% endif %});
-    } finally {
-      callable.close();
-    }
-    if (raised != null) Error.throwWithStackTrace(raised!, trace!);
+{% set fwd %}{% if f.receiver %}_live{% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}{% endset %}
+{% set impl %}_lib._{{ h.snake | camel }}{{ f.name | pascal }}({{ fwd }}){% endset %}
+{% if f.name == "new" and f.returns_handle == h.name %}
+  factory {{ h.name }}(TeiGeodata lib{% if f.params %}, {{ dparams(f) }}{% endif %}) => lib._{{ h.snake | camel }}New({{ fwd }});
+{% elif f.receiver %}
+  {{ dty(f.returns, f.returns_handle) }} {{ f.name | camel }}({{ dparams(f) }}) => {{ impl }};
 {% else %}
-    final status = _{{ f.name | camel }}({% for p in f.params %}{% if p.ty == "str" %}_input, {{ p.name | camel }}Len{% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}_bytes{% else %}_word.cast(){% endif %}{% endif %});
+  static {{ dty(f.returns, f.returns_handle) }} {{ f.name | camel }}(TeiGeodata lib{% if f.params %}, {{ dparams(f) }}{% endif %}) => lib._{{ h.snake | camel }}{{ f.name | pascal }}({{ fwd }});
 {% endif %}
-    _check(status);
-{% if f.returns == "string" %}
-    return _takeString();
-{% elif f.returns == "blob" %}
-    return _takeBlob();
-{% elif f.returns != "void" %}
-    return _word.cast<{{ nty(f.returns) }}>().value;
-{% endif %}
-  }
 {% endfor %}
 }
+{% endfor %}

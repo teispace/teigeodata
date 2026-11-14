@@ -76,7 +76,18 @@ final class TeiGeodata {
         _fold = lib.lookupFunction<Int32 Function(Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_fold', isLeaf: true),
         _sampleRows = lib.lookupFunction<Int32 Function(Uint32, Pointer<TgBytes>), int Function(int, Pointer<TgBytes>)>('tg_sample_rows', isLeaf: true),
         _progress = lib.lookupFunction<Int32 Function(Uint32, Pointer<NativeFunction<CallbackU32>>, Pointer<Void>, Pointer<Uint32>), int Function(int, Pointer<NativeFunction<CallbackU32>>, Pointer<Void>, Pointer<Uint32>)>('tg_progress'),
-        _distanceM = lib.lookupFunction<Int32 Function(Double, Double, Double, Double, Pointer<Double>), int Function(double, double, double, double, Pointer<Double>)>('tg_distance_m', isLeaf: true);
+        _distanceM = lib.lookupFunction<Int32 Function(Double, Double, Double, Double, Pointer<Double>), int Function(double, double, double, double, Pointer<Double>)>('tg_distance_m', isLeaf: true),
+        _engineFree = lib.lookup<NativeFunction<Void Function(Pointer<Void>)>>('tg_engine_free'),
+        _engineNewNative = lib.lookupFunction<Int32 Function(Pointer<Pointer<Void>>), int Function(Pointer<Pointer<Void>>)>('tg_engine_new', isLeaf: true),
+        _engineOpenFileNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint32>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>)>('tg_engine_open_file', isLeaf: true),
+        _engineOpenBytesNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint32>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>)>('tg_engine_open_bytes', isLeaf: true),
+        _engineLayersNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint32>), int Function(Pointer<Void>, Pointer<Uint32>)>('tg_engine_layers', isLeaf: true),
+        _engineGetNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_get', isLeaf: true),
+        _engineSearchNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>)>('tg_engine_search', isLeaf: true),
+        _engineReverseNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, int, Pointer<TgBytes>)>('tg_engine_reverse', isLeaf: true),
+        _engineAdminAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_admin_at', isLeaf: true) {
+    _engineFinalizer = NativeFinalizer(_engineFree.cast());
+  }
 
   /// Opens the library at [path] (for example `libteigeodata_ffi.dylib`).
   factory TeiGeodata.open(String path) => TeiGeodata._(DynamicLibrary.open(path));
@@ -89,6 +100,16 @@ final class TeiGeodata {
   final int Function(int, Pointer<TgBytes>) _sampleRows;
   final int Function(int, Pointer<NativeFunction<CallbackU32>>, Pointer<Void>, Pointer<Uint32>) _progress;
   final int Function(double, double, double, double, Pointer<Double>) _distanceM;
+  final Pointer<NativeFunction<Void Function(Pointer<Void>)>> _engineFree;
+  late final NativeFinalizer _engineFinalizer;
+  final int Function(Pointer<Pointer<Void>>) _engineNewNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>) _engineOpenFileNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>) _engineOpenBytesNative;
+  final int Function(Pointer<Void>, Pointer<Uint32>) _engineLayersNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineGetNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>) _engineSearchNative;
+  final int Function(Pointer<Void>, double, double, int, Pointer<TgBytes>) _engineReverseNative;
+  final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _engineAdminAtNative;
 
   // Scratch memory reused by every call: the output slots and a growing input buffer.
   final Pointer<TgBytes> _bytes = calloc<TgBytes>();
@@ -121,6 +142,13 @@ final class TeiGeodata {
       dst[i] = u;
     }
     return n;
+  }
+
+  /// [bytes] in the scratch buffer; returns their length.
+  int _copy(Uint8List bytes) {
+    if (bytes.length > _inputCap) _grow(bytes.length);
+    _input.asTypedList(bytes.length).setAll(0, bytes);
+    return bytes.length;
   }
 
   int _utf8Slow(String text, Uint8List dst) {
@@ -234,4 +262,139 @@ final class TeiGeodata {
     _check(status);
     return _word.cast<Double>().value;
   }
+
+  Engine _engineNew() {
+    final status = _engineNewNative(_word.cast());
+    _check(status);
+    return Engine._(this, _word.cast<Pointer<Void>>().value);
+  }
+
+  int _engineOpenFile(Pointer<Void> handle, String path) {
+    final pathLen = _utf8(path);
+    final status = _engineOpenFileNative(handle, _input, pathLen, _word.cast());
+    _check(status);
+    return _word.cast<Uint32>().value;
+  }
+
+  int _engineOpenBytes(Pointer<Void> handle, Uint8List bytes) {
+    final bytesLen = _copy(bytes);
+    final status = _engineOpenBytesNative(handle, _input, bytesLen, _word.cast());
+    _check(status);
+    return _word.cast<Uint32>().value;
+  }
+
+  int _engineLayers(Pointer<Void> handle) {
+    final status = _engineLayersNative(handle, _word.cast());
+    _check(status);
+    return _word.cast<Uint32>().value;
+  }
+
+  Uint8List _engineGet(Pointer<Void> handle, String id) {
+    final idLen = _utf8(id);
+    final status = _engineGetNative(handle, _input, idLen, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _engineSearch(Pointer<Void> handle, String query, int limit) {
+    final queryLen = _utf8(query);
+    final status = _engineSearchNative(handle, _input, queryLen, limit, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _engineReverse(Pointer<Void> handle, double lat, double lon, int limit) {
+    final status = _engineReverseNative(handle, lat, lon, limit, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _engineAdminAt(Pointer<Void> handle, double lat, double lon) {
+    final status = _engineAdminAtNative(handle, lat, lon, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+}
+
+/// Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
+/// answers from any number of threads at once, and adding a pack publishes a new snapshot
+/// while queries go on.
+///
+/// Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`,
+/// `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search
+/// and `meters` and `bearing` for a reverse lookup.
+///
+/// Freed by [close], or when collected if never closed. Use it on the isolate that made it.
+final class Engine implements Finalizable {
+  Engine._(this._lib, this._handle) {
+    _lib._engineFinalizer.attach(this, _handle, detach: this);
+  }
+
+  final TeiGeodata _lib;
+  Pointer<Void> _handle;
+
+  Pointer<Void> get _live => _handle == nullptr ? throw StateError('Engine is closed') : _handle;
+
+  /// Frees the handle now; later calls throw a [StateError]. Closing twice does nothing.
+  void close() {
+    if (_handle == nullptr) return;
+    _lib._engineFinalizer.detach(this);
+    _lib._engineFree.asFunction<void Function(Pointer<Void>)>(isLeaf: true)(_handle);
+    _handle = nullptr;
+  }
+
+  /// An engine with no packs.
+  factory Engine(TeiGeodata lib) => lib._engineNew();
+
+  /// Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::Io` if the file cannot be read, `ErrorCode::Corrupt` if it is not a
+  /// valid pack.
+  int openFile(String path) => _lib._engineOpenFile(_live, path);
+
+  /// Adds a pack from its bytes (copied). Returns the number of packs.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::Corrupt` if the bytes are not a valid pack.
+  int openBytes(Uint8List bytes) => _lib._engineOpenBytes(_live, bytes);
+
+  /// The number of packs.
+  int layers() => _lib._engineLayers(_live);
+
+  /// The place with this ID (`tgd:np/1`), or no row; a retired ID gives its survivor.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+  /// section read is corrupt.
+  Uint8List get(String id) => _lib._engineGet(_live, id);
+
+  /// Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
+  /// parent first. The `score` column compares only within one query.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+  /// `ErrorCode::Corrupt` if a section read is corrupt.
+  Uint8List search(String query, int limit) => _lib._engineSearch(_live, query, limit);
+
+  /// The places nearest the point, nearest first, at most `limit`, with `meters` and
+  /// `bearing` (degrees from north) to each.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` for a point off the globe or a `limit` above
+  /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+  Uint8List reverse(double lat, double lon, int limit) => _lib._engineReverse(_live, lat, lon, limit);
+
+  /// The admin units holding the point, country first.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+  /// section read is corrupt.
+  Uint8List adminAt(double lat, double lon) => _lib._engineAdminAt(_live, lat, lon);
 }

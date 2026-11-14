@@ -16,7 +16,7 @@ String libraryPath() {
   return '../../target/release/$name';
 }
 
-/// A fixed-width column of a v0 blob, viewed in place.
+/// A fixed-width column of a v1 blob, viewed in place.
 TypedData column(Uint8List blob, String name) {
   final view = ByteData.sublistView(blob);
   expect(ascii.decode(blob.sublist(0, 4)), 'TGB1');
@@ -32,6 +32,33 @@ TypedData column(Uint8List blob, String name) {
       6 => blob.buffer.asFloat64List(blob.offsetInBytes + at, len ~/ 8),
       _ => blob.buffer.asUint32List(blob.offsetInBytes + at, len ~/ 4),
     };
+  }
+  throw StateError('no column $name');
+}
+
+/// A string column (UTF-8 or a dictionary) of a v1 blob, null rows as null.
+List<String?> strings(Uint8List blob, String name) {
+  final v = ByteData.sublistView(blob);
+  int u32(int at) => v.getUint32(at, Endian.little);
+  String text(int at, int end) => utf8.decode(blob.sublist(at, end));
+  final rows = u32(4);
+  for (var i = 0; i < u32(8); i++) {
+    final d = 16 + 40 * i;
+    if (utf8.decode(blob.sublist(d, d + 16).takeWhile((b) => b != 0).toList()) != name) continue;
+    final (type, at, aux, nulls) = (u32(d + 16), u32(d + 20), u32(d + 28), u32(d + 36));
+    return [
+      for (var r = 0; r < rows; r++)
+        if (nulls != 0 && (blob[nulls + (r >> 3)] >> (r & 7)) & 1 == 0)
+          null
+        else if (type == 7)
+          text(aux + u32(at + 4 * r), aux + u32(at + 4 * r + 4))
+        else
+          (() {
+            final code = type == 11 ? v.getUint16(at + 2 * r, Endian.little) : u32(at + 4 * r);
+            final base = aux + 8 + 4 * u32(aux);
+            return text(base + u32(aux + 4 + 4 * code), base + u32(aux + 8 + 4 * code));
+          })(),
+    ];
   }
   throw StateError('no column $name');
 }
@@ -105,5 +132,33 @@ void main() {
     );
     final boom = StateError('boom');
     expect(() => tg.progress(5, (_) => throw boom), throwsA(same(boom)));
+  });
+
+  test('engine handle on the fixture pack', () {
+    final e = parity['engine'] as Map<String, dynamic>;
+    final engine = Engine(tg);
+    expect(engine.openFile('../${e['fixture']}'), 1);
+    final g = e['get'] as Map<String, dynamic>;
+    final row = engine.get(g['id'] as String);
+    expect(strings(row, 'name'), [g['name']]);
+    expect(strings(row, 'kind'), [g['kind']]);
+    expect((column(row, 'lat') as Float64List).single, g['lat']);
+    final q = e['search'] as Map<String, dynamic>;
+    expect(strings(engine.search(q['query'] as String, q['limit'] as int), 'id').first, q['first_id']);
+    final r = e['reverse'] as Map<String, dynamic>;
+    final near = engine.reverse(r['lat'] as double, r['lon'] as double, r['limit'] as int);
+    expect(strings(near, 'id'), r['ids']);
+    expect((column(near, 'meters') as Float64List).first, closeTo(r['first_meters'] as double, 0.1));
+    final a = e['admin_at'] as Map<String, dynamic>;
+    expect(strings(engine.adminAt(a['lat'] as double, a['lon'] as double), 'id'), a['ids']);
+    expect(() => engine.get(e['bad_id'] as String), throwsA(isA<InvalidArgumentException>()));
+    expect(() => engine.openFile('/nonexistent.tgd'), throwsA(isA<IoException>()));
+    expect(() => engine.openBytes(Uint8List.fromList(utf8.encode('not a pack'))), throwsA(isA<CorruptException>()));
+    expect(engine.layers(), 1);
+    engine.close();
+    engine.close(); // idempotent
+    expect(engine.layers, throwsStateError);
+    // An engine never closed is freed by its finalizer.
+    Engine(tg).openBytes(File('../${e['fixture']}').readAsBytesSync());
   });
 }
