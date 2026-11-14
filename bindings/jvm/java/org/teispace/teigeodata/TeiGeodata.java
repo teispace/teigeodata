@@ -348,7 +348,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeOpenFile(handle, path);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -370,7 +370,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeOpenFileWith(handle, path, options$.priority(), options$.verify() != null ? options$.verify().value : 0, options$.load() != null ? options$.load().value : 0, options$.outlineLevel() != null, options$.outlineLevel() != null ? options$.outlineLevel() : 0, options$.outlineToleranceM(), options$.components() != null ? options$.components() : "", options$.languages() != null ? options$.languages() : "");
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -390,7 +390,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeOpenBytes(handle, bytes);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -412,7 +412,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeOpenBytesWith(handle, bytes, options$.priority(), options$.verify() != null ? options$.verify().value : 0, options$.load() != null ? options$.load().value : 0, options$.outlineLevel() != null, options$.outlineLevel() != null ? options$.outlineLevel() : 0, options$.outlineToleranceM(), options$.components() != null ? options$.components() : "", options$.languages() != null ? options$.languages() : "");
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -428,7 +428,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeRemove(handle, layer);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -443,7 +443,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeLayers(handle);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -463,7 +463,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeGet(handle, id);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -484,7 +484,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeParent(handle, id);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -504,7 +504,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeAncestors(handle, id);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -523,7 +523,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeChildren(handle, id);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -544,7 +544,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeNearby(handle, id, limit);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -565,7 +565,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeSearch(handle, query, limit);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -588,7 +588,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeSearchWith(handle, query, limit, options$.focusLat() != null, options$.focusLat() != null ? options$.focusLat() : 0, options$.focusLon() != null, options$.focusLon() != null ? options$.focusLon() : 0, options$.focusScaleM() != null, options$.focusScaleM() != null ? options$.focusScaleM() : 0, options$.strict());
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -609,7 +609,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeReverse(handle, lat, lon, limit);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -631,7 +631,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeWithinRadius(handle, lat, lon, meters, limit);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -651,7 +651,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeAdminAt(handle, lat, lon);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -674,7 +674,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeElevationAt(handle, lat, lon);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -697,7 +697,7 @@ public static final class Engine implements AutoCloseable {
                 return nativePostalLookup(handle, code, scheme);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -718,7 +718,7 @@ public static final class Engine implements AutoCloseable {
                 return nativePostalPrefix(handle, input, scheme, limit);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -738,7 +738,7 @@ public static final class Engine implements AutoCloseable {
                 return nativePostalCodesOf(handle, id);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -760,7 +760,7 @@ public static final class Engine implements AutoCloseable {
                 return nativePostalAt(handle, lat, lon);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -781,7 +781,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeTzAt(handle, lat, lon);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -805,7 +805,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeTzOffsetAt(handle, zone, unixSeconds);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -829,7 +829,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeTzLocal(handle, zone, year, month, day, hour, minute, second);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -850,7 +850,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeTzZones(handle);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -871,7 +871,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeTzRulesStart(handle, zone);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -886,7 +886,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeTzVersion(handle);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -906,7 +906,7 @@ public static final class Engine implements AutoCloseable {
                 return nativeByIso(handle, code);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1049,7 +1049,7 @@ public static final class Store implements AutoCloseable {
                 return nativeDamaged(handle);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1073,7 +1073,7 @@ public static final class Store implements AutoCloseable {
                 return nativeCatalog(handle);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1105,7 +1105,7 @@ public static final class Store implements AutoCloseable {
                 return nativeStatus(handle, deep);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1137,7 +1137,7 @@ public static final class Store implements AutoCloseable {
                 nativePin(handle, pack, on);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1169,7 +1169,7 @@ public static final class Store implements AutoCloseable {
                 return nativeRemove(handle, pack);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1204,7 +1204,7 @@ public static final class Store implements AutoCloseable {
                 return nativeFind(handle, engine.handle, query, limit);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1238,7 +1238,7 @@ public static final class Store implements AutoCloseable {
                 return nativeLocate(handle, engine.handle, lat, lon, radiusM);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1271,7 +1271,7 @@ public static final class Store implements AutoCloseable {
                 return new Engine(nativeEngine(handle));
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1295,7 +1295,7 @@ public static final class Store implements AutoCloseable {
                 return new Job(nativeRefresh(handle, countries));
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1318,7 +1318,7 @@ public static final class Store implements AutoCloseable {
                 return new Job(nativeInstall(handle, packs, options$.components() != null ? options$.components() : "", options$.languages() != null ? options$.languages() : "", options$.outlineLevel() != null, options$.outlineLevel() != null ? options$.outlineLevel() : 0, options$.outlineToleranceM(), options$.pin()));
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1347,7 +1347,7 @@ public static final class Store implements AutoCloseable {
                 return new Job(nativeInstallPass(handle, packs, dir, options$.components() != null ? options$.components() : "", options$.languages() != null ? options$.languages() : "", options$.outlineLevel() != null, options$.outlineLevel() != null ? options$.outlineLevel() : 0, options$.outlineToleranceM(), options$.pin()));
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1363,7 +1363,7 @@ public static final class Store implements AutoCloseable {
                 return new Job(nativeUpdate(handle, packs));
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1378,7 +1378,7 @@ public static final class Store implements AutoCloseable {
                 return new Job(nativeRepair(handle, pack));
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1462,7 +1462,7 @@ public static final class Job implements AutoCloseable {
                 return nativeWaitProgress(handle, seq, timeoutMs);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1485,7 +1485,7 @@ public static final class Job implements AutoCloseable {
                 return nativeSeq(handle);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1500,7 +1500,7 @@ public static final class Job implements AutoCloseable {
                 return nativeDoneBytes(handle);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1516,7 +1516,7 @@ public static final class Job implements AutoCloseable {
                 return nativeTotalBytes(handle);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1531,7 +1531,7 @@ public static final class Job implements AutoCloseable {
                 return nativeIsEnded(handle);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1547,7 +1547,7 @@ public static final class Job implements AutoCloseable {
                 nativeCancel(handle);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 
@@ -1572,7 +1572,7 @@ public static final class Job implements AutoCloseable {
                 return nativeResult(handle);
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 

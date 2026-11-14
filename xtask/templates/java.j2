@@ -194,7 +194,7 @@ public final class TeiGeodata {
                 {{ ("return new " ~ f.returns_handle ~ "(") if f.returns == "handle" else ("return " if f.returns != "void" else "") }}native{{ f.name | pascal }}(handle{% for p in f.params %}, {{ arg(p) }}{% endfor %}){% if f.returns == "handle" %}){% endif %};
             } finally {
                 lock.unlockRead(stamp);
-                java.lang.ref.Reference.reachabilityFence(this);
+                NativeCleaner.fence(this);
             }
         }
 {% endif %}

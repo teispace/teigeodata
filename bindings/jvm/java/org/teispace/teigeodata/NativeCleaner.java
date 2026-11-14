@@ -25,7 +25,37 @@ final class NativeCleaner {
         drain.start();
     }
 
+    /** Whether {@code Reference.reachabilityFence} exists: Java 9 and Android API 28. */
+    private static final boolean HAS_FENCE = hasFence();
+
+    /** Written by {@link #fence} where the JDK's fence is missing. */
+    @SuppressWarnings("unused")
+    private static volatile Object sink;
+
     private NativeCleaner() {}
+
+    /**
+     * Keeps {@code owner} reachable until this call, so its action cannot free a handle a
+     * native call is still using. Android before API 28 has no {@code reachabilityFence}; there
+     * a volatile write of the owner, which the compiler must perform, does the same.
+     */
+    static void fence(Object owner) {
+        if (HAS_FENCE) {
+            java.lang.ref.Reference.reachabilityFence(owner);
+        } else {
+            sink = owner;
+            sink = null;
+        }
+    }
+
+    private static boolean hasFence() {
+        try {
+            java.lang.ref.Reference.class.getMethod("reachabilityFence", Object.class);
+            return true;
+        } catch (NoSuchMethodException e) {
+            return false;
+        }
+    }
 
     /** Runs {@code action} once {@code owner} is unreachable, unless cleaned first. */
     static Cleanable register(Object owner, Runnable action) {
