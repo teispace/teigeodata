@@ -40,7 +40,8 @@ jobs:
           - { os: macos-latest, platform: macos-aarch64, file: libteigeodata_jvm.dylib }
           - { os: macos-latest, platform: macos-x86_64, file: libteigeodata_jvm.dylib, cross: x86_64-apple-darwin }
           - { os: windows-latest, platform: windows-x86_64, file: teigeodata_jvm.dll }
-          - { os: windows-11-arm, platform: windows-aarch64, file: teigeodata_jvm.dll }
+          # Temurin has no Java 25 for Windows on ARM64; Microsoft's build does.
+          - { os: windows-11-arm, platform: windows-aarch64, file: teigeodata_jvm.dll, jdk: microsoft }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     steps:
@@ -58,7 +59,7 @@ jobs:
             bindings -> target
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
-          distribution: temurin
+          distribution: ${{ matrix.jdk || 'temurin' }}
           java-version: "25"
       - name: The JAR with this platform's library, tested from the JAR
         if: ${{ !matrix.cross }}
