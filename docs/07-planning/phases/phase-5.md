@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: boundary and bindings"
-status: draft
+status: accepted
 updated: 2026-11-15
 ---
 
@@ -199,12 +199,50 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
     waits on the maintainer's setup)
 
 ### 5.11 Exit review
-- [ ] M5 criteria met, each with its evidence; progress updated
+- [x] M5 criteria met (2026-11-15, D-308), each against the [roadmap](../roadmap.md):
+  - **C ABI:** generated from the IDL, its gates (the header against the last release and
+    against cbindgen, exported symbols against the header, D-285) and the C package for
+    every target, glibc and musl (D-286, 5.8a); `c-package` green (run 43629180971);
+  - **IDL and generators:** `teigeodata-api` is the hand-written surface, `cargo xtask
+    bindings` generates 26 files from it, `--check` fails on drift (5.1, D-276 to D-284);
+    `fast-check` green (run 43629180996);
+  - **every binding with its packaging**, each installed from its own package format and
+    green in CI at `eea3f7a`:
+    - Swift: the XCFramework with its privacy manifest (D-287), `apple` (43629180914);
+    - Kotlin and Java: the AAR (16 KB pages, API 24 and 35) and the desktop JAR (D-288),
+      `jvm` (43629180891);
+    - Dart and Flutter: the build hook with pinned prebuilt libraries (D-289), `flutter` on
+      macOS, the iOS simulator, Linux, Windows and Android (43629181008); the web over the
+      WebAssembly module under dart2js and dart2wasm (D-307, `wasm` job `dart-web`);
+    - Python: abi3 and abi3t wheels (D-290), `python` (43629181038);
+    - Node.js: eight platform packages (D-294), `node` (43629180913);
+    - the browser and other WebAssembly hosts: two variants within budget, parity on Node.js,
+      Bun, Deno, Chromium, Firefox, WebKit and workerd (D-293), `wasm` (43629181077);
+    - C++ (D-295), Go (D-297), `go` (43629180907); .NET (D-298), `dotnet` (43629181010);
+    - Android `noCompress` for bundled packs: `open_file_range` opens a pack inside the APK in
+      place, in every language but WebAssembly (D-306, [bindings §7](../../04-architecture/bindings.md#7-packs-shipped-inside-an-app-d-306));
+  - **the parity gate:** every value of `parity.json` planted in each language and killed
+    (D-300), `parity-mutants` green (43629180949);
+  - **the X benchmarks:** call overhead, the 1,000-row query end to end and blob decoding in
+    every language (D-301);
+  - **the release path** (5.10): the dry run green on GitHub (run 43629194780: 52 jobs, every
+    registry's check, 79 files' attestations verified).
+- [x] Not blocking M5, recorded:
+  - 5.5d tree-shaking waits on Dart linking code assets statically (recheck 2027-01-15);
+  - 5.10c, the first real release, waits on the maintainer's registry setup
+    ([runbook](../../06-engineering/release-runbook.md));
+  - the APK path of D-306 (`/proc/self/fd` of an `AssetFileDescriptor`) is not yet run inside
+    a real APK here: the engine side (a pack at an odd offset of another file) passes in every
+    language; an APK harness is an open item;
+  - further .NET work is parked (D-299).
+- [x] Progress updated; Phase 6 starts with its research
+- [ ] Maintainer review: asynchronous, does not block Phase 6 (as D-069, D-080 and D-087)
 
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-15 | 5.11: M5 met (D-308) | exit review |
 | 2026-11-15 | 5.10a and 5.10b done: the release dry run green (run 43629194780) | plan |
 | 2026-11-15 | 5.5e done: Dart on the web over the WebAssembly module (D-307) | plan |
 | 2026-11-14 | 5.7: the API per component (D-291), `fold` with `search` (D-292), the WebAssembly packages (D-293) | plan |
