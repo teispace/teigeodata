@@ -175,10 +175,27 @@ impl<T: Transport> Transport for Watched<T> {
     }
 
     fn fetch(&mut self, url: &str, max: u64, out: &mut Vec<u8>) -> Result<(), FetchError> {
+        self.fetch_streamed(url, max, out, &mut |_| Ok(()))
+    }
+
+    fn fetch_streamed(
+        &mut self,
+        url: &str,
+        max: u64,
+        out: &mut Vec<u8>,
+        on_chunk: &mut dyn FnMut(usize) -> Result<(), FetchError>,
+    ) -> Result<(), FetchError> {
         self.check()?;
-        self.inner.fetch(url, max, out)?;
-        self.add(out.len());
-        Ok(())
+        let watch = self.watch.clone();
+        self.inner.fetch_streamed(url, max, out, &mut |n| {
+            if let Some(w) = &watch {
+                if w.is_cancelled() {
+                    return Err(FetchError::Cancelled);
+                }
+                w.add(n as u64);
+            }
+            on_chunk(n)
+        })
     }
 
     fn expect(&mut self, bytes: u64) {

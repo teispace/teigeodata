@@ -78,6 +78,24 @@ pub trait Transport {
     /// request failed.
     fn fetch(&mut self, url: &str, max: u64, out: &mut Vec<u8>) -> Result<(), FetchError>;
 
+    /// [`Transport::fetch`], calling `on_chunk` with the length of each chunk as it arrives,
+    /// so a watcher counts progress and a cancel stops a slow body at its next chunk; an
+    /// error from `on_chunk` ends the fetch with it. The default fetches the whole file and
+    /// reports it once; a transport that can stream overrides it.
+    ///
+    /// # Errors
+    /// As [`Transport::fetch`], and `on_chunk`'s.
+    fn fetch_streamed(
+        &mut self,
+        url: &str,
+        max: u64,
+        out: &mut Vec<u8>,
+        on_chunk: &mut dyn FnMut(usize) -> Result<(), FetchError>,
+    ) -> Result<(), FetchError> {
+        self.fetch(url, max, out)?;
+        on_chunk(out.len())
+    }
+
     /// The work about to start expects about `bytes` from the host (the catalog's wire size),
     /// for a transport that reports progress. The default ignores it.
     fn expect(&mut self, bytes: u64) {
@@ -943,6 +961,16 @@ impl Transport for Ureq {
     }
 
     fn fetch(&mut self, url: &str, max: u64, out: &mut Vec<u8>) -> Result<(), FetchError> {
+        self.fetch_streamed(url, max, out, &mut |_| Ok(()))
+    }
+
+    fn fetch_streamed(
+        &mut self,
+        url: &str,
+        max: u64,
+        out: &mut Vec<u8>,
+        on_chunk: &mut dyn FnMut(usize) -> Result<(), FetchError>,
+    ) -> Result<(), FetchError> {
         use std::io::Read;
         out.clear();
         // No `Accept-Encoding` override: ureq asks for gzip and decodes it (feature `gzip`).
@@ -955,14 +983,23 @@ impl Transport for Ureq {
         if status != 200 {
             return Err(FetchError::Status(status));
         }
-        r.body_mut()
-            .as_reader()
-            .take(max.saturating_add(1))
-            .read_to_end(out)
-            .map_err(|e| FetchError::Transport(alloc::format!("{e}")))?;
-        if out.len() as u64 > max {
-            out.clear();
-            return Err(FetchError::Response("longer than allowed"));
+        // Read in chunks, so a cancel or a watcher sees each one; one more byte than `max`
+        // tells a body that is too long.
+        let mut body = r.body_mut().as_reader().take(max.saturating_add(1));
+        let mut chunk = [0_u8; 16 * 1024];
+        loop {
+            let n = match body.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => n,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(FetchError::Transport(alloc::format!("{e}"))),
+            };
+            out.extend_from_slice(chunk.get(..n).unwrap_or_default());
+            if out.len() as u64 > max {
+                out.clear();
+                return Err(FetchError::Response("longer than allowed"));
+            }
+            on_chunk(n)?;
         }
         Ok(())
     }
@@ -1085,6 +1122,56 @@ mod tests {
         ));
         assert!(at.elapsed() < Duration::from_secs(3), "{:?}", at.elapsed());
         held.join().unwrap();
+    }
+
+    /// A metadata host that trickles its body: a watched fetch counts each chunk and a cancel
+    /// stops it at the next one, not when the body ends.
+    #[cfg(all(feature = "http", feature = "client"))]
+    #[test]
+    fn a_cancel_stops_a_trickling_metadata_fetch() {
+        use super::{Transport, Ureq};
+        use crate::watch::{Watch, Watched};
+        use alloc::sync::Arc;
+        use core::time::Duration;
+        use std::io::Write;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = alloc::format!("http://{}/root.json", listener.local_addr().unwrap());
+        let host = std::thread::spawn(move || {
+            let (mut c, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 4096];
+            let _ = std::io::Read::read(&mut c, &mut request);
+            let _ = c.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n");
+            // A byte every 20 ms: 20 s for the whole body.
+            for _ in 0..1000 {
+                if c.write_all(b" ").and_then(|()| c.flush()).is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        });
+        let watch = Arc::new(Watch::new());
+        let mut t = Watched::new(Ureq::new());
+        t.watch(Some(Arc::clone(&watch)));
+        let canceller = {
+            let watch = Arc::clone(&watch);
+            std::thread::spawn(move || {
+                // Cancel once a few bytes have come.
+                let mut seq = 0;
+                while watch.progress().done < 3 {
+                    seq = watch.wait(seq, Duration::from_secs(5)).seq;
+                }
+                watch.cancel();
+            })
+        };
+        let at = std::time::Instant::now();
+        let mut out = Vec::new();
+        let got = t.fetch(&url, 1 << 20, &mut out);
+        assert!(matches!(got, Err(FetchError::Cancelled)), "{got:?}");
+        assert!(at.elapsed() < Duration::from_secs(5), "{:?}", at.elapsed());
+        assert!(watch.progress().done >= 3, "the chunks were counted");
+        canceller.join().unwrap();
+        drop(t);
+        host.join().unwrap();
     }
 
     #[cfg(feature = "http")]
