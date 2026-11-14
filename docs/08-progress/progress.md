@@ -17,8 +17,9 @@ A short status. The numbers and evidence live in each phase file and the
 | 1 Core and format | **M1 met** 2026-11-07 (D-080) | [phase 1 §1.6](../07-planning/phases/phase-1.md#16-exit-review) |
 | 2 Indexes | **M2 met** 2026-11-07 (D-087) | [phase 2 §2.4](../07-planning/phases/phase-2.md#24-exit-review) |
 | 3 Forge and Nepal data | in progress: 3.1–3.3 and 3.5 done (3.5 lite codes wait on Q-009); 3.4 DEM and 3.6 names in progress; 3.7–3.8 open | [phase 3](../07-planning/phases/phase-3.md) |
-| 4 Engine, baseline and sync | in progress; now 4.9c, the offline-first embedded layer for Tithipatra (D-213); everything separable done (D-255) | [phase 4](../07-planning/phases/phase-4.md) |
-| 5–8 | not started (bindings prototyped in S4, D-065 to D-068) | [roadmap](../07-planning/roadmap.md) |
+| 4 Engine, baseline and sync | in progress: what remains waits on the maintainer (the key ceremony, Q-024) or on a release that changes records (4.7, gate 11, D-273) | [phase 4](../07-planning/phases/phase-4.md) |
+| 5 Boundary and bindings | drafted 2026-11-14, next: 5.0 research refresh, then the API surface (bindings prototyped in S4, D-065 to D-068) | [phase 5](../07-planning/phases/phase-5.md) |
+| 6–8 | not started | [roadmap](../07-planning/roadmap.md) |
 
 - **Now (Phase 3):** the Nepal main pack has 100,358 places with heights (D-111), admin
   records linked (D-110), same-place merges (D-116), the first corrections (D-117), modelled
@@ -185,3 +186,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-14 | TG-15 step 4 done: India's golden set 47/47 (Banaras, Poona, `Var` added), world 72/72; Nepali names outside Nepal capped by Wikidata (1,745 places named) |
 | 2026-11-14 | D-272: Q-027 closed, no weighting by name language (layers choose their languages); `Istan` fixed by D-269, `Tor` differs only on the 26-language baseline |
 | 2026-11-14 | Data release `data-2026.11.14.3` from `eb8ab5c`: ISO codes in the layer, baseline and points layer (only `ISO_CODES` changed, every ID kept), verified from a fresh download |
+| 2026-11-14 | D-273: the first real release pair measured (section re-download 11.4 % of the asset); `delta_measure` and `columns` tools; Phase 5 drafted; v0.3.1 prepared |
