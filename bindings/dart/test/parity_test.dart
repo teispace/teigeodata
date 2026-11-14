@@ -1,20 +1,11 @@
 // Parity: the Dart binding gives the results bindings/parity.json expects (checked there
-// against Rust). Build the C ABI first: cargo build --release -p teigeodata-ffi.
+// against Rust). `dart test` builds the library through the package's build hook.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:teigeodata/teigeodata.dart';
 import 'package:test/test.dart';
-
-String libraryPath() {
-  final name = Platform.isMacOS
-      ? 'libteigeodata_ffi.dylib'
-      : Platform.isWindows
-      ? 'teigeodata_ffi.dll'
-      : 'libteigeodata_ffi.so';
-  return '../../target/release/$name';
-}
 
 /// A fixed-width column of a v1 blob, viewed in place.
 TypedData column(Uint8List blob, String name) {
@@ -67,7 +58,7 @@ List<String?> strings(Uint8List blob, String name) {
 
 void main() {
   final parity = jsonDecode(File('../parity.json').readAsStringSync()) as Map<String, dynamic>;
-  final tg = TeiGeodata.open(libraryPath());
+  final tg = TeiGeodata();
   tearDownAll(tg.close);
 
   test('version and noop', () {
@@ -146,11 +137,17 @@ void main() {
     expect(strings(row, 'kind'), [g['kind']]);
     expect((column(row, 'lat') as Float64List).single, g['lat']);
     final q = e['search'] as Map<String, dynamic>;
-    expect(strings(engine.search(q['query'] as String, q['limit'] as int), 'id').first, q['first_id']);
+    expect(
+      strings(engine.search(q['query'] as String, q['limit'] as int), 'id').first,
+      q['first_id'],
+    );
     final r = e['reverse'] as Map<String, dynamic>;
     final near = engine.reverse(r['lat'] as double, r['lon'] as double, r['limit'] as int);
     expect(strings(near, 'id'), r['ids']);
-    expect((column(near, 'meters') as Float64List).first, closeTo(r['first_meters'] as double, 0.1));
+    expect(
+      (column(near, 'meters') as Float64List).first,
+      closeTo(r['first_meters'] as double, 0.1),
+    );
     final a = e['admin_at'] as Map<String, dynamic>;
     expect(strings(engine.adminAt(a['lat'] as double, a['lon'] as double), 'id'), a['ids']);
     for (final (method, call) in [
@@ -165,7 +162,10 @@ void main() {
     expect(strings(engine.nearby(nb['id'] as String, nb['limit'] as int), 'id'), nb['ids']);
     final w = e['within_radius'] as Map<String, dynamic>;
     final (wl, wo) = (w['lat'] as double, w['lon'] as double);
-    expect(strings(engine.withinRadius(wl, wo, w['meters'] as double, w['limit'] as int), 'id'), w['ids']);
+    expect(
+      strings(engine.withinRadius(wl, wo, w['meters'] as double, w['limit'] as int), 'id'),
+      w['ids'],
+    );
     final tz = e['tz_at'] as Map<String, dynamic>;
     expect(strings(engine.tzAt(tz['lat'] as double, tz['lon'] as double), 'tz'), [tz['tz']]);
     final iso = e['by_iso'] as Map<String, dynamic>;
@@ -178,8 +178,17 @@ void main() {
       focusLon: sw['focus_lon'] as double,
       focusScaleM: sw['focus_scale_m'] as double,
     );
-    expect(strings(engine.searchWith(sw['query'] as String, sw['limit'] as int, focus), 'id'), sw['ids']);
-    expect(strings(engine.searchWith(sw['query'] as String, sw['limit'] as int, const SearchOptions()), 'id'), isNot(sw['ids']));
+    expect(
+      strings(engine.searchWith(sw['query'] as String, sw['limit'] as int, focus), 'id'),
+      sw['ids'],
+    );
+    expect(
+      strings(
+        engine.searchWith(sw['query'] as String, sw['limit'] as int, const SearchOptions()),
+        'id',
+      ),
+      isNot(sw['ids']),
+    );
     expect(
       () => engine.searchWith('x', 1, const SearchOptions(focusLat: 1)),
       throwsA(isA<InvalidArgumentException>()),
@@ -197,12 +206,16 @@ void main() {
     const every = OpenOptions(priority: 2, verify: Verify.eager, load: Load.read, outlineLevel: 1);
     expect(scratch.openFileWith(fixture, every), 1);
     expect(
-      () => scratch.openFileWith(fixture, OpenOptions(outlineLevel: ow['bad_outline_level'] as int)),
+      () =>
+          scratch.openFileWith(fixture, OpenOptions(outlineLevel: ow['bad_outline_level'] as int)),
       throwsA(isA<InvalidArgumentException>()),
     );
     scratch.close();
     final points = Engine(tg);
-    points.openFileWith(fixture, OpenOptions(components: ow['components'] as String, languages: ow['languages'] as String));
+    points.openFileWith(
+      fixture,
+      OpenOptions(components: ow['components'] as String, languages: ow['languages'] as String),
+    );
     expect(strings(points.get((e['get'] as Map<String, dynamic>)['id'] as String), 'id').length, 1);
     expect(() => points.search('Synthland', 1), throwsA(isA<MissingComponentException>()));
     expect(
@@ -215,7 +228,10 @@ void main() {
     expect([strings(hit, 'postal'), strings(hit, 'id')], [pl['postal'], pl['ids']]);
     final pp = e['postal_prefix'] as Map<String, dynamic>;
     expect(
-      strings(engine.postalPrefix(pp['input'] as String, pp['scheme'] as String, pp['limit'] as int), 'postal'),
+      strings(
+        engine.postalPrefix(pp['input'] as String, pp['scheme'] as String, pp['limit'] as int),
+        'postal',
+      ),
       pp['postal'],
     );
     final pa = e['postal_at'] as Map<String, dynamic>;
@@ -225,7 +241,10 @@ void main() {
     expect(strings(engine.postalCodesOf(po['id'] as String), 'postal'), po['postal']);
     expect(() => engine.get(e['bad_id'] as String), throwsA(isA<InvalidArgumentException>()));
     expect(() => engine.openFile('/nonexistent.tgd'), throwsA(isA<IoException>()));
-    expect(() => engine.openBytes(Uint8List.fromList(utf8.encode('not a pack'))), throwsA(isA<CorruptException>()));
+    expect(
+      () => engine.openBytes(Uint8List.fromList(utf8.encode('not a pack'))),
+      throwsA(isA<CorruptException>()),
+    );
     expect(engine.layers(), 1);
     final h = e['elevation_at'] as Map<String, dynamic>;
     expect(engine.openFile('../${h['fixture']}'), 1);
@@ -256,12 +275,18 @@ void main() {
       final v = (c['civil'] as List).cast<int>();
       final l = engine.tzLocal(c['zone'] as String, v[0], v[1], v[2], v[3], v[4], v[5]);
       expect(strings(l, 'kind'), [kind]);
-      expect([...column(l, 'before') as List<int>, ...column(l, 'after') as List<int>], [c['before'], c['after']]);
+      expect(
+        [...column(l, 'before') as List<int>, ...column(l, 'after') as List<int>],
+        [c['before'], c['after']],
+      );
     }
     final st = p['start'] as Map<String, dynamic>;
     expect(column(engine.tzRulesStart(st['zone'] as String), 'unix'), [st['unix']]);
     expect(strings(engine.tzOffsetAt(p['unknown'] as String, 0), 'abbr'), isEmpty);
-    expect(() => engine.tzLocal(o['zone'] as String, 2024, 13, 1, 0, 0, 0), throwsA(isA<InvalidArgumentException>()));
+    expect(
+      () => engine.tzLocal(o['zone'] as String, 2024, 13, 1, 0, 0, 0),
+      throwsA(isA<InvalidArgumentException>()),
+    );
   });
 
   test('store', () {
@@ -273,7 +298,8 @@ void main() {
     addTearDown(() => d.deleteSync(recursive: true));
     expect(() => Store.open(tg, '${d.path}/missing'), throwsA(isA<RefusedException>()));
     expect(
-      () => Store.create(tg, '${d.path}/bad', mirror, mirror, Uint8List.fromList(utf8.encode('{}'))),
+      () =>
+          Store.create(tg, '${d.path}/bad', mirror, mirror, Uint8List.fromList(utf8.encode('{}'))),
       throwsA(isA<RefusedException>()),
     );
     Store.create(tg, '${d.path}/s', mirror, mirror, root).close();
@@ -294,8 +320,14 @@ void main() {
       throwsA(isA<InvalidArgumentException>()),
     );
     expect(() => store.remove(pack), throwsA(isA<RefusedException>()));
-    expect(() => store.installPass(pack, '', InstallOptions()), throwsA(isA<InvalidArgumentException>()));
-    expect(store.installPass(pack, '${d.path}/dl', InstallOptions()).result, throwsA(isA<NetworkException>()));
+    expect(
+      () => store.installPass(pack, '', InstallOptions()),
+      throwsA(isA<InvalidArgumentException>()),
+    );
+    expect(
+      store.installPass(pack, '${d.path}/dl', InstallOptions()).result,
+      throwsA(isA<NetworkException>()),
+    );
     final job = store.refresh(pack);
     addTearDown(job.close);
     expect(job.result, throwsA(isA<NetworkException>()));
@@ -320,7 +352,10 @@ void main() {
     final engine = await store.engineAsync();
     addTearDown(engine.close);
     expect(strings(await store.findAsync(engine, pack, 3), 'name'), isEmpty);
-    await expectLater(store.findAsync(engine, pack, 10001), throwsA(isA<InvalidArgumentException>()));
+    await expectLater(
+      store.findAsync(engine, pack, 10001),
+      throwsA(isA<InvalidArgumentException>()),
+    );
     final job = store.refresh(pack);
     final result = job.resultAsync();
     // Closed while the call runs: freed when it ends, not under it.

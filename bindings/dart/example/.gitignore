@@ -1,0 +1,8 @@
+# Only pubspec.yaml, analysis_options.yaml, lib/ and integration_test/ are kept: the rest is
+# made by `flutter create .` when the example is built (cargo xtask flutter-check).
+/*
+!/.gitignore
+!/pubspec.yaml
+!/analysis_options.yaml
+!/lib/
+!/integration_test/

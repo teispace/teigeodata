@@ -1,0 +1,7 @@
+# The repository writes Dart at 100 columns, like its Rust.
+analyzer:
+  exclude:
+    # A Flutter package, analysed on its own (cargo xtask flutter-check).
+    - example/**
+formatter:
+  page_width: 100

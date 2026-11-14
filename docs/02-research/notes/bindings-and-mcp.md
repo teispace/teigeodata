@@ -104,6 +104,7 @@ This note feeds the bindings ADR, the boundary-crate architecture page, the rele
 - Hook limits: hooks run semi-hermetically (most env vars stripped), can only output assets in their own package, and hook dependencies must be normal `dependencies`.
 - `@Native` external functions resolve against the hook-provided code asset, so no `DynamicLibrary.open` per OS is needed. Use `NativeFinalizer` to release handles and the columnar blob, and `NativeCallable.listener` for callbacks from Rust threads.
 - `native_toolchain_rust` 1.0.7 (pub.dev, verified publisher gsconrad.com, 2026-09-10) builds Rust in a hook on Android, iOS, Linux, macOS and Windows. It needs rustup and a pinned `rust-toolchain.toml`. Third-party, single maintainer: **use it only as a fallback.** Our default hook downloads prebuilt, checksummed binaries from GitHub Releases, so app developers do not need Rust installed.
+- **Superseded in part (2026-11-14):** the source fallback is our own hook, not `native_toolchain_rust`, which links Android at API 35; see the [Dart build hooks note](dart-build-hooks.md) (D-289).
 - `flutter_rust_bridge` 2.13.0 now ships hook integration (`flutter_rust_bridge_hooks` in beta), but it imposes its own wire format and is Dart-only. Not chosen.
 
 ### 3.5 Python

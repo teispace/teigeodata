@@ -1,6 +1,5 @@
 // The binding benchmark's Dart rows (docs/02-research/benches/s4-bindings.md).
-// Run: dart compile exe bench/bench.dart -o ../../target/dart-bench && ../../target/dart-bench
-import 'dart:io';
+// Run: dart build cli -t bench/bench.dart -o ../../target/dart-bench && ../../target/dart-bench/bundle/bin/bench
 import 'dart:typed_data';
 
 import 'package:teigeodata/teigeodata.dart';
@@ -30,10 +29,10 @@ double latSum(Uint8List blob) {
 }
 
 void main() {
-  final lib = Platform.isMacOS ? 'libteigeodata_ffi.dylib' : 'libteigeodata_ffi.so';
-  final tg = TeiGeodata.open('${File(Platform.resolvedExecutable).parent.path}/release/$lib');
+  final tg = TeiGeodata();
   var sink = 0.0;
-  void row(String c, double ns) => print('${'dart'.padRight(10)} ${c.padRight(22)} ${ns.toStringAsFixed(1).padLeft(10)} ns');
+  void row(String c, double ns) =>
+      print('${'dart'.padRight(10)} ${c.padRight(22)} ${ns.toStringAsFixed(1).padLeft(10)} ns');
   row('noop', best(10000000, tg.noop));
   row('fold', best(1000000, () => sink += tg.fold('Kathmandu').length));
   row('sample_rows(1000)+sum', best(10000, () => sink += latSum(tg.sampleRows(1000))));

@@ -1,0 +1,24 @@
+name: teigeodata_example
+description: The Flutter check of the teigeodata package on every platform it ships to.
+publish_to: none
+version: 0.3.1
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  teigeodata:
+    path: ..
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+
+flutter:
+  config:
+    # Apple plugins through SwiftPM, not CocoaPods (trunk read-only from 2026-12-02).
+    enable-swift-package-manager: true

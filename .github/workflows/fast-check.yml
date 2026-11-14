@@ -158,7 +158,9 @@ jobs:
         run: |
           dart pub get
           dart analyze --fatal-infos
-          LD_LIBRARY_PATH="$GITHUB_WORKSPACE/target/release" dart test
+          dart format --set-exit-if-changed hook test bench
+          # The build hook builds teigeodata-c from this checkout (D-289).
+          dart test
       - name: Swift
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         working-directory: bindings/swift

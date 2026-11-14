@@ -5,10 +5,14 @@ publish_to: none
 repository: https://github.com/teispace/teigeodata
 
 environment:
-  sdk: ^3.9.0
+  # Build hooks are stable from Dart 3.10 (Flutter 3.38).
+  sdk: ^3.10.0
 
 dependencies:
+  code_assets: ^2.2.0
+  crypto: ^3.0.8
   ffi: ^2.2.0
+  hooks: ^2.2.0
 
 dev_dependencies:
   test: ^1.26.0

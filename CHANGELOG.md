@@ -53,6 +53,12 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - An install whose catalog refresh fails, when the stored catalog lacks the pack, fails with
   `Network` (the cause) instead of `Refused` (D-282).
 - IDL: an options record must be the last parameter, so every language can default it.
+- The Dart package's build hook (D-289): Dart and Flutter apps get the native library with no
+  manual step, built from a checkout (`hooks.user_defines.teigeodata.source`, or in the
+  repository) or downloaded from the release and checked against its pinned SHA-256; a given
+  file (`library:`) overrides both. `cargo xtask flutter-check` runs the example app's
+  integration test on the desktop, an iOS simulator or a device; `flutter.yml` covers macOS,
+  iOS, Linux, Windows and Android.
 - The JVM binding's packages (D-288): `cargo xtask package-jvm` makes the Android AAR (arm64-v8a,
   armeabi-v7a, x86_64; minSdk 24; 64-bit libraries checked for 16 KB pages) and the desktop JAR,
   whose `NativeLoader` extracts its platform's library when `java.library.path` has none;
@@ -91,6 +97,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - A cancel stops a metadata download at its next chunk, and its bytes count as progress:
   `Transport::fetch_streamed` (the `http` transport reads in 16 KiB chunks); before, a slow
   host held a refresh until its body ended (D-283).
+- The C library's Apple builds leave header room for a rewritten install name
+  (`-headerpad_max_install_names`), as Dart, Flutter and other packagers rewrite it (D-289).
+- The JVM binding keeps to Android API 24: `NativeLoader` uses `java.io` (Android has
+  `java.nio.file` from API 26), and parity runs on API 24 and API 35 emulators (D-288).
 - Dart: calls that block are no longer leaf calls; a leaf call blocking in a helper isolate
   kept every isolate of the group from a safepoint and stalled them (D-283).
 
@@ -108,6 +118,8 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Breaking
 
+- Dart: the bindings are `@Native` functions of the package's code asset (D-289).
+  `TeiGeodata.open(path)` is gone; use `TeiGeodata()`. The SDK floor is Dart 3.10.
 - Blobs start with the magic `TGB1` instead of `TGB0`. A binding or caller that checks the
   magic compares with `TGB1` (or accepts both); the layout of the v0 types is unchanged.
 

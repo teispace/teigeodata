@@ -15,6 +15,7 @@ mod commit;
 mod corrections;
 mod data;
 mod docs;
+mod flutter_check;
 mod golden;
 mod ids;
 mod iso3166;
@@ -65,6 +66,11 @@ Tasks:
                     each section's size; G-wire: the transport asset's bytes per
                     component add up, and each fits the country's wire_kb (D-135);
                     --dump writes each section's bytes to <dir>.
+  flutter-check [--device <id> | --ios]
+                    The Dart package in a Flutter app (D-289): makes the platform folders of
+                    bindings/dart/example, analyses it and runs its integration test on the
+                    host's desktop, the given device, or (--ios) the first iPhone simulator,
+                    booted for the run and shut down after it.
   package-c [--target <triple>] [--lite] [--out <dir>] [--smoke]
                     The C library as it ships (D-286): builds teigeodata-c (dist profile),
                     stages the header, shared and static libraries, pkg-config and CMake
@@ -128,6 +134,7 @@ fn main() -> ExitCode {
         "check-data" => report(data::check(&root)),
         "check-pack" => report(pack::run(&root, rest)),
         "package-c" => report(package_c::run(&root, rest)),
+        "flutter-check" => report(flutter_check::run(&root, rest)),
         "package-jvm" => report(package_jvm::run(&root, rest)),
         "package-swift" => report(package_swift::run(&root, rest)),
         "pack-sizes" => report(breakdown::run(rest)),

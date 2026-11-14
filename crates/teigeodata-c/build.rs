@@ -2,7 +2,8 @@
 //! `@rpath/libteigeodata.dylib` on Apple platforms, so an app or framework finds it beside
 //! itself; `libteigeodata.so.<abi>` on ELF, where `<abi>` changes only with a breaking release
 //! (`0.<minor>` before 1.0, `<major>` after; `cargo xtask abi` names those releases). Android
-//! loads libraries by their file name, so its soname is unversioned.
+//! loads libraries by their file name, so its soname is unversioned. Apple builds leave header
+//! room for packagers to rewrite the name.
 
 fn main() {
     let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
@@ -17,6 +18,10 @@ fn main() {
     match os.as_str() {
         "macos" | "ios" | "tvos" | "watchos" | "visionos" => {
             println!("cargo::rustc-cdylib-link-arg=-Wl,-install_name,@rpath/libteigeodata.dylib");
+            // Room for a longer name: packagers rewrite it (Dart's build hooks and Flutter set
+            // an absolute path or a framework's), which `install_name_tool` can do only into
+            // padding left at link time.
+            println!("cargo::rustc-cdylib-link-arg=-Wl,-headerpad_max_install_names");
         }
         "android" => println!("cargo::rustc-cdylib-link-arg=-Wl,-soname,libteigeodata.so"),
         "linux" | "freebsd" | "netbsd" | "openbsd" | "dragonfly" | "illumos" | "solaris" => {

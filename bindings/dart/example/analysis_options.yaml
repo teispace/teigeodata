@@ -1,0 +1,11 @@
+# The repository writes Dart at 100 columns, like its Rust.
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - macos/**
+    - windows/**
+    - linux/**
+formatter:
+  page_width: 100

@@ -113,6 +113,15 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 - [ ] Generated `@Native` bindings with `NativeFinalizer`; a build hook that downloads verified
   prebuilt libraries, building from source as the fallback; Android, iOS, macOS, Windows,
   Linux, and the web through the WASM build
+  ([research](../../02-research/notes/dart-build-hooks.md), D-289):
+  - [x] 5.5a `@Native` bindings and the hook building `teigeodata-c` from source; `dart test`
+    runs parity through it
+  - [x] 5.5b the prebuilt download, pinned by SHA-256, proven on a local mirror; the hashes
+    and assets come with the release pipeline (5.10)
+  - [ ] 5.5c `cargo xtask flutter-check` on macOS and the iOS simulator (passing here);
+    done when `flutter.yml` is green on Linux, Windows and Android too
+  - [ ] 5.5d link-hook tree-shaking, when Dart links code assets statically
+  - [ ] the web, with the WASM build (5.7)
 
 ### 5.6 Python
 - [ ] Generated PyO3 module; abi3 wheels (3.10 and later) and abi3t for free-threaded
@@ -144,6 +153,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | 5.5: `@Native` bindings, the build hook, `flutter-check` (D-289) | plan |
 | 2026-11-14 | 5.4: the AAR, the desktop JAR, the 16 KB gate (D-288); 5.2 and 5.3 green in CI | plan |
 | 2026-11-14 | 5.3: the XCFramework, the privacy manifest, simulator parity (D-287) | plan |
 | 2026-11-14 | 5.2: C packaging (D-286), the header's feature guards | plan |
