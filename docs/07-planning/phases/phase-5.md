@@ -76,10 +76,14 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   calls (D-280) and the checked `# Job` contract (D-283). Done 2026-11-14
 
 ### 5.2 The C ABI and its gates
-- [ ] Generated `teigeodata-ffi` and `teigeodata.h` for the whole surface: opaque handles,
-  ownership rules, no panic across the boundary, the last-error accessor
-- [ ] Gates: ABI compatibility against the last release, the header against cbindgen, the
+- [x] Generated `teigeodata-ffi` and `teigeodata.h` for the whole surface: opaque handles,
+  ownership rules, no panic across the boundary, the last-error accessor. Built through 5.1:
+  every generated function runs in `abi::call` or `abi::free`, which catch a panic
+  (`TG_ERROR_INTERNAL`); `tg_last_error` per thread. Done 2026-11-14
+- [x] Gates: ABI compatibility against the last release, the header against cbindgen, the
   drift check, symbol visibility; each proven on a planted break
+  ([research](../../02-research/notes/c-abi-gates.md), D-285: `cargo xtask abi`, on the full
+  and the lite library in CI). Done 2026-11-14
 - [ ] Packaging: shared and static libraries per platform, the header, pkg-config and CMake
   config, on GitHub Releases
 
@@ -126,6 +130,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | 5.2: the ABI and symbol gates (D-285); 5.1 done with the zone rules (D-284) | plan |
 | 2026-11-14 | 5.1: the store and its jobs in every language, the `store` feature (IDL format 6, D-279) | plan |
 | 2026-11-14 | 5.1: text fields in records (IDL format 5), components and languages to open, `MissingComponent` (D-278) | plan |
 | 2026-11-14 | 5.1: enums (IDL format 4, D-277), `OpenOptions` | plan |

@@ -32,7 +32,10 @@ xtask/templates/*.j2                  one minijinja template per generated file
     strings and buffers never pass through C.
 - **Generated files are checked in** and formatted (`rustfmt` for Rust). `cargo xtask bindings
   --check` fails on any drift, and compares the header with cbindgen's reading of the ABI
-  crate, which is an independent check of the header. Both run in CI's `bindings` job.
+  crate, which is an independent check of the header. Both run in CI's `bindings` job, with
+  `cargo xtask abi` (D-285): the header's declarations against the last release's (a removed
+  or changed one is a break, and the report names the lowest next version) and the symbols a
+  built library exports against the header's functions.
 - **The shims are their own Cargo workspace** (`bindings/Cargo.toml`), like the forge, so PyO3,
   napi-rs and jni never enter the runtime dependency graph (D-067).
 

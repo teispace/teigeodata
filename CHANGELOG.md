@@ -53,6 +53,8 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - An install whose catalog refresh fails, when the stored catalog lacks the pack, fails with
   `Network` (the cause) instead of `Refused` (D-282).
 - IDL: an options record must be the last parameter, so every language can default it.
+- `cargo xtask abi` (D-285): the C ABI's compatibility with the last release and the symbols
+  the built library exports, on the full and the lite library in CI.
 - The zone rules in every language (D-284): `Engine::tz_offset_at` (offset, DST flag and
   abbreviation at an instant), `tz_local` (a civil time's offsets: unique, a gap or an
   overlap), `tz_zones`, `tz_rules_start` and `tz_version`; parity on a rules-only fixture.

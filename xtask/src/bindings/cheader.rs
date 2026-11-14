@@ -61,7 +61,7 @@ fn compare(
 /// Every `tg_` function, `tg_callback_` typedef, `TG_` constant and struct with a body (its
 /// fields in order), keyed by name, as one normalised line: comments dropped, whitespace
 /// collapsed, Rust type names mapped to C.
-fn declarations(header: &str) -> BTreeMap<String, String> {
+pub(crate) fn declarations(header: &str) -> BTreeMap<String, String> {
     let mut text = String::with_capacity(header.len());
     let mut rest = header;
     // Drop comments.

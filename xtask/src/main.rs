@@ -7,6 +7,7 @@
     reason = "a command-line tool reports on stdout and stderr"
 )]
 
+mod abi;
 mod bindings;
 mod breakdown;
 mod clean;
@@ -38,6 +39,12 @@ const HELP: &str = "\
 cargo xtask <task>
 
 Tasks:
+  abi [--since <tag>] [--release] [--lib <path> [--lite]]
+                    The C ABI's gates (D-285): the header's declarations against the last
+                    release's (or <tag>'s), naming the lowest next version; --release fails
+                    when the workspace's version is lower. --lib checks that a built shared
+                    library exports exactly the header's functions (--lite: without the
+                    store's).
   bindings [--check]
                     Extract the IDL from crates/teigeodata-api into bindings/idl.json and
                     generate every binding layer from it; --check fails on any drift.
@@ -86,6 +93,7 @@ fn main() -> ExitCode {
     let task = args.first().map_or("help", String::as_str);
     let rest = args.get(1..).unwrap_or_default();
     match task {
+        "abi" => report(abi::run(&root, rest)),
         "bindings" => report(bindings::run(&root, rest.iter().any(|a| a == "--check"))),
         "check-docs" => report(docs::check(&root)),
         "check-commit" => {

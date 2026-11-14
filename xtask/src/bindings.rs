@@ -5,7 +5,7 @@
 //! difference, so a change to the API that was not regenerated, or a hand edit to a generated
 //! file, fails CI. It also compares the header with cbindgen's reading of the ABI crate.
 
-mod cheader;
+pub(crate) mod cheader;
 mod idl;
 
 use std::fs;

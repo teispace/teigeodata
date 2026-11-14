@@ -93,6 +93,11 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The ABI gate reads the last release's header: full history and tags, blobs on
+          # demand.
+          fetch-depth: 0
+          filter: blob:none
       - name: Toolchain (from rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -123,6 +128,8 @@ jobs:
           cargo build --release --locked -p teigeodata-node -p teigeodata-jvm
           cp target/release/libteigeodata_python.so python/teigeodata/_native.abi3.so
           cp target/release/libteigeodata_node.so node/teigeodata.node
+      - name: ABI gates (D-285)
+        run: cargo xtask abi --lib target/release/libteigeodata_ffi.so
       - name: C
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
@@ -158,6 +165,11 @@ jobs:
         run: |
           swift --version
           swift run -c release Parity ../parity.json
+      - name: Lite library symbols (D-285)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          cargo build --release --locked -p teigeodata-ffi --lib --no-default-features
+          cargo xtask abi --lib target/release/libteigeodata_ffi.so --lite
 
   deny:
     runs-on: ubuntu-latest
