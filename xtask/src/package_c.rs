@@ -189,6 +189,11 @@ fn stage_files(
         }
     };
     let native = native_static_libs(plan)?;
+    let bundled = if os == Os::Windows {
+        bundle_import_libs(plan, &native, &lib)?
+    } else {
+        Vec::new()
+    };
     std::fs::write(
         pkgconfig.join("teigeodata.pc"),
         pc_file(version, &native, plan.lite),
@@ -200,7 +205,15 @@ fn stage_files(
         .unwrap_or_default();
     std::fs::write(
         cmake.join("teigeodataConfig.cmake"),
-        cmake_config(os, &shared_rel, static_lib, implib, &native, plan.lite),
+        cmake_config(
+            os,
+            &shared_rel,
+            static_lib,
+            implib,
+            &native,
+            &bundled,
+            plan.lite,
+        ),
     )
     .map_err(|e| io(&cmake, e))?;
     std::fs::write(
@@ -254,6 +267,8 @@ fn native_static_libs(plan: &Plan) -> Result<Vec<String>, Vec<String>> {
     let mut cmd = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()));
     cmd.current_dir(&plan.root).args([
         "rustc",
+        "--color",
+        "never",
         "--locked",
         "--profile",
         "dist",
@@ -278,7 +293,80 @@ fn native_static_libs(plan: &Plan) -> Result<Vec<String>, Vec<String>> {
         .lines()
         .find_map(|l| l.split("native-static-libs:").nth(1))
         .ok_or_else(|| vec![format!("rustc gave no native-static-libs:\n{text}")])?;
-    Ok(line.split_whitespace().map(str::to_owned).collect())
+    Ok(line.split_whitespace().map(strip_ansi).collect())
+}
+
+/// A word without terminal colour codes (`ESC [ … m`), which a coloured note may carry even
+/// with `--color never` set by a parent's environment.
+fn strip_ansi(word: &str) -> String {
+    let mut out = String::with_capacity(word.len());
+    let mut chars = word.chars();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            for c in chars.by_ref() {
+                if c.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// The import libraries of the `windows-targets` crates (`windows.0.52.0.lib`) that the static
+/// library names: they live in a crate's `lib/` folder, not on a user's machine, so the
+/// package carries them. Returns their file names, copied into `lib`.
+fn bundle_import_libs(
+    plan: &Plan,
+    native: &[String],
+    lib: &Path,
+) -> Result<Vec<String>, Vec<String>> {
+    let wanted: Vec<&String> = native
+        .iter()
+        .filter(|l| {
+            l.starts_with("windows.")
+                && Path::new(l.as_str())
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("lib"))
+        })
+        .collect();
+    if wanted.is_empty() {
+        return Ok(Vec::new());
+    }
+    let out = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
+        .current_dir(&plan.root)
+        .args(["metadata", "--format-version", "1", "--locked"])
+        .output()
+        .map_err(|e| vec![format!("cargo metadata: {e}")])?;
+    let meta: serde_json::Value =
+        serde_json::from_slice(&out.stdout).map_err(|e| vec![format!("cargo metadata: {e}")])?;
+    let dirs: Vec<PathBuf> = meta
+        .get("packages")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|p| {
+            p.get("name")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|n| n.starts_with("windows_") && n.ends_with("_msvc"))
+        })
+        .filter_map(|p| p.get("manifest_path").and_then(serde_json::Value::as_str))
+        .filter_map(|m| Path::new(m).parent().map(|d| d.join("lib")))
+        .collect();
+    let mut copied = Vec::new();
+    for name in wanted {
+        let from = dirs
+            .iter()
+            .map(|d| d.join(name))
+            .find(|f| f.is_file())
+            .ok_or_else(|| vec![format!("no crate holds {name} for {}", plan.triple)])?;
+        std::fs::copy(&from, lib.join(name))
+            .map_err(|e| vec![format!("{}: {e}", from.display())])?;
+        copied.push(name.clone());
+    }
+    Ok(copied)
 }
 
 fn pc_file(version: &str, native: &[String], lite: bool) -> String {
@@ -307,6 +395,7 @@ fn cmake_config(
     static_lib: &str,
     implib: Option<&str>,
     native: &[String],
+    bundled: &[String],
     lite: bool,
 ) -> String {
     // rustc names system libraries for a linker command line; CMake takes them bare or as
@@ -316,6 +405,9 @@ fn cmake_config(
         // MSVC's `/defaultlib:msvcrt` names the C runtime, which CMake links already.
         .filter(|l| !l.starts_with('/'))
         .map(|l| {
+            if bundled.contains(l) {
+                return format!("${{_tg_prefix}}/lib/{l}");
+            }
             l.strip_prefix("-l")
                 .map_or_else(|| l.clone(), str::to_owned)
         })
@@ -540,7 +632,7 @@ fn sh(root: &Path, script: &str, env: &[(&str, &Path)]) -> Result<(), Vec<String
     }
 }
 
-fn command(root: &Path, program: &str, args: &[&str]) -> Result<(), Vec<String>> {
+pub(crate) fn command(root: &Path, program: &str, args: &[&str]) -> Result<(), Vec<String>> {
     let out = Command::new(program)
         .current_dir(root)
         .args(args)
@@ -623,7 +715,7 @@ fn last_tag(root: &Path) -> Result<String, Vec<String>> {
     }
 }
 
-fn version(root: &Path) -> Result<String, Vec<String>> {
+pub(crate) fn version(root: &Path) -> Result<String, Vec<String>> {
     let text = std::fs::read_to_string(root.join("Cargo.toml"))
         .map_err(|e| vec![format!("Cargo.toml: {e}")])?;
     text.lines()
@@ -640,6 +732,13 @@ mod tests {
     fn the_abi_suffix_changes_only_with_a_break() {
         assert_eq!(abi_suffix("0.3.1"), "0.3");
         assert_eq!(abi_suffix("1.4.2"), "1");
+    }
+
+    #[test]
+    fn colour_codes_are_stripped() {
+        assert_eq!(strip_ansi("m\u{1b}[0m"), "m");
+        assert_eq!(strip_ansi("\u{1b}[1m-lc"), "-lc");
+        assert_eq!(strip_ansi("-liconv"), "-liconv");
     }
 
     #[test]

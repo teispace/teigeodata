@@ -23,7 +23,7 @@ default = ["store"]
 store = ["teigeodata-ffi/store"]
 
 [dependencies]
-teigeodata-ffi = { path = "../teigeodata-ffi", default-features = false }
+teigeodata-ffi.workspace = true
 
 [lints]
 workspace = true
