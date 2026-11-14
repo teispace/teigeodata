@@ -54,12 +54,27 @@ export class {{ h.name }} {
   constructor({{ params(f) }});
 {% else %}
   {{ "static " if not f.receiver else "" }}{{ f.name | camel }}({{ params(f) }}): {{ tsty(f.returns, f.returns_handle) }};
-{% if f.blocks %}
+{% if f.blocks and h.job and f.name == "result" %}
+
+  /**
+   * As `result`, without blocking: a `Promise` of its result. When `signal` aborts, the job
+   * is cancelled and the promise rejects with code `Cancelled`.
+   */
+  resultAsync(signal?: AbortSignal): Promise<{{ tsty(f.returns, f.returns_handle) }}>;
+{% elif f.blocks %}
 
   /** As `{{ f.name | camel }}`, without blocking: a `Promise` of its result. */
   {{ "static " if not f.receiver else "" }}{{ f.name | camel }}Async({{ params(f) }}): Promise<{{ tsty(f.returns, f.returns_handle) }}>;
 {% endif %}
 {% endif %}
 {% endfor %}
+{% if h.job %}
+
+  /**
+   * The job's progress in bytes: now, then at each change, ending when the job ends (the last
+   * at its total). Leaving the loop stops the waiting, not the job.
+   */
+  progress(): AsyncIterableIterator<{ done: number; total: number }>;
+{% endif %}
 }
 {% endfor %}

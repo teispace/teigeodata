@@ -725,6 +725,15 @@ export class Job {
    */
   result(): Buffer;
 
-  /** As `result`, without blocking: a `Promise` of its result. */
-  resultAsync(): Promise<Buffer>;
+  /**
+   * As `result`, without blocking: a `Promise` of its result. When `signal` aborts, the job
+   * is cancelled and the promise rejects with code `Cancelled`.
+   */
+  resultAsync(signal?: AbortSignal): Promise<Buffer>;
+
+  /**
+   * The job's progress in bytes: now, then at each change, ending when the job ends (the last
+   * at its total). Leaving the loop stops the waiting, not the job.
+   */
+  progress(): AsyncIterableIterator<{ done: number; total: number }>;
 }

@@ -236,3 +236,49 @@ test("store calls that block have Promise forms that keep the event loop free", 
     rmSync(d, { recursive: true, force: true });
   }
 });
+
+test("a job's progress iterates, and an AbortSignal cancels it", async () => {
+  // A mirror in this process that trickles a byte every 20 ms: the job runs until cancelled.
+  const http = require("node:http");
+  const { mkdtempSync, rmSync } = require("node:fs");
+  const { tmpdir } = require("node:os");
+  const s = parity.store;
+  const root = readFileSync(join(__dirname, "../..", s.root));
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { "Content-Length": 1000 });
+    let sent = 0;
+    const tick = setInterval(() => {
+      if (sent++ === 1000 || res.destroyed) return clearInterval(tick);
+      res.write(" ");
+    }, 20);
+    res.on("close", () => clearInterval(tick));
+  });
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  const mirror = `http://127.0.0.1:${server.address().port}/`;
+  const d = mkdtempSync(join(tmpdir(), "tg-store-progress-"));
+  try {
+    // Progress ends with the job, at its total.
+    const quick = tg.Store.create(join(d, "q"), s.mirror, s.mirror, root).refresh(s.pack);
+    let last;
+    for await (const p of quick.progress()) last = p;
+    assert.equal(last.done, last.total);
+
+    const job = tg.Store.create(join(d, "s"), mirror, mirror, root).refresh(s.pack);
+    const abort = new AbortController();
+    const result = job.resultAsync(abort.signal);
+    let moves = 0;
+    for await (const p of job.progress()) {
+      if (++moves === 3) break;
+    }
+    assert.equal(moves, 3, "progress moves");
+    const at = Date.now();
+    abort.abort();
+    await assert.rejects(result, { code: "Cancelled" });
+    assert.ok(Date.now() - at < 2000, "the abort ends the job at once");
+    assert.equal(job.isEnded(), true);
+  } finally {
+    server.closeAllConnections();
+    server.close();
+    rmSync(d, { recursive: true, force: true });
+  }
+});
