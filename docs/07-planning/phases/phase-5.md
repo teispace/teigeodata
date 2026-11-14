@@ -172,7 +172,14 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 ### 5.10 Release pipeline
 - [ ] Per-ecosystem publish jobs with provenance on every artifact; the dry run on GitHub (S9).
   Publishing itself needs the maintainer's accounts and namespaces (`com.teispace`, npm
-  `@teispace`, PyPI, pub.dev, NuGet)
+  `@teispace`, PyPI, pub.dev, NuGet). [Research](../../02-research/notes/release-pipeline.md):
+  one `release.yml` calling the build workflows, registry steps in its own jobs
+  - [ ] 5.10a the build workflows callable (`workflow_call`, artifacts); `release.yml`
+    assembles them with `SHA256SUMS`, SBOMs and attestations; the dry run green on GitHub and
+    every attestation verified
+  - [ ] 5.10b each registry's job in dry-run form: the publishable crates, npm, PyPI, pub.dev,
+    the Maven bundle, the release `Package.swift` and the Go tag
+  - [ ] 5.10c the real path behind the `release` environment, and the maintainer's runbook
 
 ### 5.11 Exit review
 - [ ] M5 criteria met, each with its evidence; progress updated
@@ -204,3 +211,4 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 | 2026-11-14 | Phase 5 drafted from the bindings research and spike S4 | Phase 4's open items wait on the maintainer or a future release |
 | 2026-11-14 | 5.9 parity gate done (D-300): the suites gained the checks the planted values showed missing; C and C++ read `parity_data.h` | plan |
 | 2026-11-14 | 5.9 done: the 1,000-row query is a radius query (text search returns a few dozen best hits), decoded in each language (D-301) | plan |
+| 2026-11-14 | 5.10 in three sub-steps after research: one `release.yml` calls the build workflows; trusted publishing where a registry has it; the workflow makes the release commit for SwiftPM's checksum | plan |
