@@ -122,6 +122,16 @@ const TARGETS: &[Target] = &[
         fmt: Fmt::None,
     },
     Target {
+        template: "dart_types.j2",
+        output: "bindings/dart/lib/src/types.g.dart",
+        fmt: Fmt::None,
+    },
+    Target {
+        template: "dart_web.j2",
+        output: "bindings/dart/lib/src/bindings_web.g.dart",
+        fmt: Fmt::None,
+    },
+    Target {
         template: "go.j2",
         output: "bindings/go/teigeodata.go",
         fmt: Fmt::Go,

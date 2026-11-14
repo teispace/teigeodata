@@ -13,6 +13,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Added
 
+- The Dart package runs on the web, compiled by dart2js or dart2wasm, over the WebAssembly
+  module, with the classes it has natively (D-307). `TeiGeodata.init()` loads the module once
+  on the web and returns at once natively; the web opens packs from their bytes.
 - `Engine::open_file_range(path, offset, length)` (and `_with`) in every language but
   WebAssembly: opens a pack stored whole inside another file, such as an uncompressed asset of
   an Android APK (`noCompress`), mapped in place (D-306).

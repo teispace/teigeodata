@@ -124,7 +124,9 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   - [ ] 5.5d link-hook tree-shaking, when Dart links code assets statically (checked
     2026-11-15: Dart 3.15's changelog and `code_assets` 2.2.0 still have no static linking;
     recheck 2027-01-15; until then the lite library is the small variant)
-  - [ ] the web, with the WASM build (5.7)
+  - [x] 5.5e the web, with the WASM build (5.7): a generated `dart:js_interop` layer, parity
+    under dart2js and dart2wasm in Chrome ([research](../../02-research/notes/dart-web.md),
+    D-307)
 
 ### 5.6 Python
 - [x] Generated PyO3 module; abi3 wheels (3.11 and later; 3.10 is past its end of life and
@@ -199,6 +201,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-15 | 5.5e done: Dart on the web over the WebAssembly module (D-307) | plan |
 | 2026-11-14 | 5.7: the API per component (D-291), `fold` with `search` (D-292), the WebAssembly packages (D-293) | plan |
 | 2026-11-14 | 5.7c: the Node.js packages in the napi-rs layout, an ES module entry, musl in Alpine (D-294) | plan |
 | 2026-11-14 | 5.8 in sub-steps; Go defaults to purego with the library from the C package, cgo by build tag (research) | plan |

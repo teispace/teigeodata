@@ -1,7 +1,9 @@
 # The WebAssembly packages (phase 5.7, D-293): each variant (a set of components, D-291) built
 # by `cargo xtask package-wasm`, its module held to its budget, and the parity checks run from
 # the built package on Node.js (every supported line), Bun, Deno, Chromium, Firefox, WebKit
-# and workerd. A release (release.yml) calls this workflow and publishes the packages it uploads.
+# and workerd; and the Dart package's web layer on the full package, compiled by dart2js and
+# dart2wasm, in Chrome. A release (release.yml) calls this workflow and publishes the packages
+# it uploads.
 name: wasm
 
 on:
@@ -21,6 +23,11 @@ on:
       - bindings/fixtures/**
       - xtask/src/package_wasm.rs
       - xtask/templates/wasm*
+      # The Dart package's web layer runs on these packages (job dart-web).
+      - bindings/dart/lib/**
+      - bindings/dart/test/**
+      - bindings/dart/pubspec.yaml
+      - xtask/templates/dart*
       - .github/workflows/wasm.yml
   workflow_dispatch:
   # release.yml builds a release with this workflow and publishes what it uploads.
@@ -126,6 +133,24 @@ jobs:
       - name: Parity from each package in each browser
         run: |
           for v in full lookup; do node bindings/wasm/test/browser.mjs "target/wasm/$v" bindings/parity.json; done
+
+  dart-web:
+    name: Dart on the web (dart2js, dart2wasm)
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wasm-packages
+          path: target/wasm
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+      - name: Parity in Chrome, from the full package
+        working-directory: bindings/dart
+        run: |
+          dart pub get
+          dart test -p chrome --compiler dart2js,dart2wasm test/web_parity_test.dart
 
   workerd:
     name: Workers (workerd)

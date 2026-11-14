@@ -12,6 +12,8 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
+import 'types.g.dart';
+
 /// An owned buffer from the library (`tg_bytes`).
 final class TgBytes extends Struct {
   external Pointer<Uint8> ptr;
@@ -21,123 +23,10 @@ final class TgBytes extends Struct {
   external int cap;
 }
 
-/// A failed teigeodata call. Each code has its own subclass.
-sealed class TeiGeodataException implements Exception {
-  const TeiGeodataException(this.code, this.message);
-
-  /// The stable error code, the same in every language.
-  final int code;
-  final String message;
-
-  @override
-  String toString() => '$runtimeType: $message';
-
-  static TeiGeodataException _of(int code, String message) => switch (code) {
-        1 => InvalidArgumentException(message),
-        2 => CancelledException(message),
-        3 => InternalException(message),
-        4 => IoException(message),
-        5 => CorruptException(message),
-        6 => MissingComponentException(message),
-        7 => NetworkException(message),
-        8 => RefusedException(message),
-        _ => InternalException(message),
-      };
-}
-
-/// An argument is outside its documented range.
-final class InvalidArgumentException extends TeiGeodataException {
-  const InvalidArgumentException(String message) : super(1, message);
-}
-
-/// A callback asked to stop.
-final class CancelledException extends TeiGeodataException {
-  const CancelledException(String message) : super(2, message);
-}
-
-/// A bug inside teigeodata (a panic caught at the boundary, or a broken invariant).
-final class InternalException extends TeiGeodataException {
-  const InternalException(String message) : super(3, message);
-}
-
-/// A file could not be read.
-final class IoException extends TeiGeodataException {
-  const IoException(String message) : super(4, message);
-}
-
-/// The bytes are not a valid pack, or a section does not match its hash.
-final class CorruptException extends TeiGeodataException {
-  const CorruptException(String message) : super(5, message);
-}
-
-/// The query needs a component of a pack that is not installed: install it, or ask a pack that has it.
-final class MissingComponentException extends TeiGeodataException {
-  const MissingComponentException(String message) : super(6, message);
-}
-
-/// The network failed: no mirror answered, or the connection broke. Try again later.
-final class NetworkException extends TeiGeodataException {
-  const NetworkException(String message) : super(7, message);
-}
-
-/// The store refused: the catalog did not verify, a pack is not in it or not installed, a pack another needs, or the store's files cannot be written.
-final class RefusedException extends TeiGeodataException {
-  const RefusedException(String message) : super(8, message);
-}
 
 /// The C callback `tg_callback_u32`.
 typedef CallbackU32 = Bool Function(Pointer<Void>, Uint32);
-
-/// When a pack's sections are verified against their hashes.
-enum Verify {
-  /// On first use: each section, or each 16 KiB block of a large one, is checked the first
-  /// time a query reads it. Opening costs only the head checks.
-  lazy(0),
-  /// Every section when the pack opens.
-  eager(1),
-  /// Never: only for bytes already verified, by the store's installer for instance.
-  trusted(2);
-
-  const Verify(this.value);
-
-  /// The value at the native boundary (D-277).
-  final int value;
-}
-
-/// How a pack file is loaded.
-enum Load {
-  /// Map the file into memory where the platform can, read it otherwise. The file must not
-  /// be written over while it is open.
-  map(0),
-  /// Read the whole file into memory: for files the application does not own.
-  read(1);
-
-  const Load(this.value);
-
-  /// The value at the native boundary (D-277).
-  final int value;
-}
-
-/// How `Engine::search_with` ranks (D-226). Every field's zero value is its default
-/// (D-276).
-final class SearchOptions {
-  const SearchOptions({ this.focusLat, this.focusLon, this.focusScaleM, this.strict = false });
-
-  /// Prefer places near this latitude (with `focus_lon`): the user's location, or a point
-  /// in their home country with a wide scale.
-  final double? focusLat;
-
-  /// The focus longitude; set with `focus_lat` or not at all.
-  final double? focusLon;
-
-  /// The distance in metres at which the focus gain halves (a place at the focus gains 30,
-  /// one scale away 15); `None` is 50 km.
-  final double? focusScaleM;
-
-  /// Rank by match tier first (exact, loose, prefix, one edit, substring, two edits,
-  /// phonetic), then importance and focus, instead of one additive score.
-  final bool strict;
-
+extension on SearchOptions {
   void _write(_TgSearchOptions to) {
     to.hasFocusLat = focusLat != null;
     to.focusLat = focusLat ?? 0.0;
@@ -167,40 +56,7 @@ final class _TgSearchOptions extends Struct {
   external bool strict;
 }
 
-/// How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's
-/// zero value is its default (D-276).
-final class OpenOptions {
-  const OpenOptions({ this.priority = 0, this.verify = Verify.lazy, this.load = Load.map, this.outlineLevel, this.outlineToleranceM = 0, this.components = '', this.languages = '' });
-
-  /// Precedence over the other packs: a higher one wins where packs disagree (default 0).
-  final int priority;
-
-  /// When sections are verified.
-  final Verify verify;
-
-  /// How a file is loaded; ignored for bytes.
-  final Load load;
-
-  /// The deepest admin level whose outlines are read, in a pack that splits its outlines by
-  /// level: admin units below it are not found at a point, and their outlines are not
-  /// loaded. `None` reads every level.
-  final int? outlineLevel;
-
-  /// The largest simplification of the outlines read, in metres, when the pack has coarser
-  /// outlines; 0 is full resolution. Admin units at a point may then differ within that
-  /// distance of a border.
-  final int outlineToleranceM;
-
-  /// The components the pack holds, by name and comma-separated (`point,names,search`), for
-  /// a pack installed in part; what they need is added. Empty for a whole pack. A query
-  /// that needs a component left out answers nothing, or `MissingComponent` where it cannot.
-  final String components;
-
-  /// The languages whose names and search sections are read, as comma-separated BCP 47
-  /// tags (`en,ne`), at most 8; a language without a part of its own reads the pack's
-  /// shared part. Empty reads every language.
-  final String languages;
-
+extension on OpenOptions {
   void _write(_TgOpenOptions to, Pointer<Uint8> componentsAt, int componentsLen, Pointer<Uint8> languagesAt, int languagesLen) {
     to.priority = priority;
     to.verify = verify.value;
@@ -237,28 +93,7 @@ final class _TgOpenOptions extends Struct {
   external int languagesLen;
 }
 
-/// What `Store::install` takes of each pack. Every field's zero value is its default
-/// (D-276): the whole pack.
-final class InstallOptions {
-  const InstallOptions({ this.components = '', this.languages = '', this.outlineLevel, this.outlineToleranceM = 0, this.pin = false });
-
-  /// The components, by name and comma-separated (`point,names,search`); what they need is
-  /// added. Empty for every component.
-  final String components;
-
-  /// The languages besides the base names, as comma-separated BCP 47 tags (`en,ne`), at
-  /// most 8. Empty for every language.
-  final String languages;
-
-  /// The deepest admin level of the one outline part installed; `None` for every outline.
-  final int? outlineLevel;
-
-  /// The tolerance in metres of that outline part; 0 is full resolution.
-  final int outlineToleranceM;
-
-  /// Keeps the packs when room is made.
-  final bool pin;
-
+extension on InstallOptions {
   void _write(_TgInstallOptions to, Pointer<Uint8> componentsAt, int componentsLen, Pointer<Uint8> languagesAt, int languagesLen) {
     to.components = componentsAt;
     to.componentsLen = componentsLen;
@@ -498,6 +333,10 @@ external int _tgJobResult(Pointer<Void> self, Pointer<TgBytes> out);
 final class TeiGeodata {
   TeiGeodata();
 
+  /// Natively there is nothing to load: it returns at once. On the web it loads the
+  /// WebAssembly module; portable code awaits it before the first instance on every platform.
+  static Future<void> init({Uri? module}) async {}
+
   // Scratch memory reused by every call: the output slots and a growing input buffer.
   final Pointer<TgBytes> _bytes = calloc<TgBytes>();
   final Pointer<Uint64> _word = calloc<Uint64>();
@@ -564,7 +403,7 @@ final class TeiGeodata {
   void _check(int status) {
     if (status == 0) return;
     final code = _tgLastError(_bytes);
-    throw TeiGeodataException._of(code, _takeString());
+    throw exceptionOf(code, _takeString());
   }
 
   String _takeString() {

@@ -21,6 +21,8 @@ xtask/templates/*.j2                  one minijinja template per generated file
         ├─ c.h.j2         → bindings/c/teigeodata.h                  its header
         ├─ swift.j2       → bindings/swift/Sources/TeiGeodata/…      over the C ABI
         ├─ dart.j2        → bindings/dart/lib/src/bindings.g.dart    over the C ABI
+        ├─ dart_web.j2    → bindings/dart/lib/src/bindings_web.g.dart over the WASM module (§8)
+        ├─ dart_types.j2  → bindings/dart/lib/src/types.g.dart       what both Dart layers share
         ├─ python.rs.j2   → bindings/python/src/lib.rs (+ .pyi)      PyO3, calls the API
         ├─ node.rs.j2     → bindings/node/src/lib.rs (+ .d.ts)       napi-rs, calls the API
         └─ jni.rs.j2, java*.j2 → bindings/jvm/…                      JNI + Java, calls the API
@@ -207,10 +209,38 @@ exactly one pack (`Corrupt`: the header names the pack's length). The parity sui
 `bindings/fixtures/embedded.bin`, a pack at an odd offset between filler bytes, in every
 language.
 
+## 8. Dart on the web (D-307)
+
+The Dart package runs in a browser, compiled by dart2js or dart2wasm (Flutter web uses
+either), on the WebAssembly build: `bindings_web.g.dart`, generated from the same IDL, gives
+the native layer's classes over `@teispace/teigeodata-wasm`, and `package:teigeodata` exports
+it in place of the native layer where `dart:js_interop` exists. The errors, enums and option
+records are one definition for both (`types.g.dart`), so one app's code compiles everywhere:
+
+```dart
+await TeiGeodata.init(); // the web: loads the module once; natively: returns at once
+final engine = Engine(TeiGeodata());
+engine.openBytes(packBytes); // on the web, from fetch or OPFS
+```
+
+- **Serving the module:** the app serves the files of the npm package
+  `@teispace/teigeodata-wasm` (`index.js`, `teigeodata_wasm.js`, `teigeodata_wasm_bg.wasm`)
+  together, by default in `teigeodata_wasm/` beside the page (in Flutter, `web/teigeodata_wasm/`),
+  or names their place: `TeiGeodata.init(module: Uri.parse('/assets/tg/index.js'))`. The
+  `.wasm` file is served as `application/wasm`. Nothing is fetched from anywhere else.
+- **What the web leaves out**, as the module does: `openFile*`, the store and its jobs. Packs
+  open from their bytes.
+- **Errors:** the module's `Error` (its `code` the error code's name) becomes the exception of
+  that code; a callback's exception is rethrown unchanged.
+- **Blobs:** a result is a `Uint8List` view of the module's copy (no second copy). dart2js has
+  no `Int64List` or `getInt64`: read a 64-bit column from its two 32-bit halves (exact to
+  2^53).
+
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-15 | §8: Dart on the web | D-307, M5 |
 | 2026-11-15 | §7: packs shipped inside an app; `open_file_range` | D-306, M5 |
 | 2026-11-14 | §6: a job's progress and cancel in each language; Dart's blocking calls not leaf | D-283 |
 | 2026-11-14 | §2, §6: the asynchronous forms in Swift, the JVM, Dart and Python as built | D-281 |

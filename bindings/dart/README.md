@@ -8,9 +8,9 @@ reads on the device.
 dart pub add teigeodata
 ```
 
-Dart 3.10 or later (Flutter 3.38 or later), on Android, iOS, macOS, Linux and Windows. The
-package's build hook supplies the native library: the release's prebuilt library for the
-target, checked against the SHA-256 this version pins, or a library you build or name:
+Dart 3.10 or later (Flutter 3.38 or later), on Android, iOS, macOS, Linux, Windows and the web.
+Natively, the package's build hook supplies the library: the release's prebuilt library for
+the target, checked against the SHA-256 this version pins, or a library you build or name:
 
 ```yaml
 # pubspec.yaml of your app
@@ -25,11 +25,19 @@ hooks:
 ```dart
 import 'package:teigeodata/teigeodata.dart';
 
+await TeiGeodata.init(); // loads the WebAssembly module on the web; nothing to do natively
 final tg = TeiGeodata();
 final engine = Engine(tg);
 engine.openFile('np.tgd');
 final blob = engine.search('Kathmandu', 5); // a TGB1 result blob
 ```
+
+**On the web** (dart2js or dart2wasm) the same classes run on the WebAssembly build. Serve the
+files of the npm package `@teispace/teigeodata-wasm` (`index.js`, `teigeodata_wasm.js`,
+`teigeodata_wasm_bg.wasm`) in `teigeodata_wasm/` beside the page (in Flutter,
+`web/teigeodata_wasm/`), or pass their place to `TeiGeodata.init(module: ...)`. The web opens
+packs from their bytes (`openBytes`); the store and `openFile` need a file system and are
+native only.
 
 Queries return their rows as one columnar blob (`TGB1`), read in place:
 [the format](https://github.com/teispace/teigeodata/blob/main/docs/04-architecture/bindings.md).

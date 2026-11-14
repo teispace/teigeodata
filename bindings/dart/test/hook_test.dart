@@ -1,4 +1,7 @@
 // The build hook's own logic, without a build.
+@TestOn('vm')
+library;
+
 import 'package:test/test.dart';
 
 import '../hook/build.dart';

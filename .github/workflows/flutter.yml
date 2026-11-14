@@ -12,7 +12,7 @@ on:
       - crates/teigeodata-c/**
       - bindings/dart/**
       - xtask/src/flutter_check.rs
-      - xtask/templates/dart.j2
+      - xtask/templates/dart*
       - .github/workflows/flutter.yml
   workflow_dispatch:
 

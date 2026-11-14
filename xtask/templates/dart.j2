@@ -12,6 +12,8 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
+import 'types.g.dart';
+
 /// An owned buffer from the library (`tg_bytes`).
 final class TgBytes extends Struct {
   external Pointer<Uint8> ptr;
@@ -21,31 +23,6 @@ final class TgBytes extends Struct {
   external int cap;
 }
 
-/// A failed teigeodata call. Each code has its own subclass.
-sealed class TeiGeodataException implements Exception {
-  const TeiGeodataException(this.code, this.message);
-
-  /// The stable error code, the same in every language.
-  final int code;
-  final String message;
-
-  @override
-  String toString() => '$runtimeType: $message';
-
-  static TeiGeodataException _of(int code, String message) => switch (code) {
-{% for c in error_codes %}
-        {{ c.value }} => {{ c.name }}Exception(message),
-{% endfor %}
-        _ => InternalException(message),
-      };
-}
-{% for c in error_codes %}
-
-/// {{ c.doc | join(" ") }}
-final class {{ c.name }}Exception extends TeiGeodataException {
-  const {{ c.name }}Exception(String message) : super({{ c.value }}, message);
-}
-{% endfor %}
 {% macro nty(t) %}{% if t == "bool" %}Bool{% elif t == "i32" %}Int32{% elif t == "u32" %}Uint32{% elif t == "i64" %}Int64{% elif t == "u64" %}Uint64{% elif t == "f64" %}Double{% endif %}{% endmacro %}
 {% macro dty(t, h) %}{% if t == "bool" %}bool{% elif t == "f64" %}double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}Uint8List{% elif t in ["handle", "record"] %}{{ h }}{% elif t == "void" %}void{% else %}int{% endif %}{% endmacro %}
 {#- The native signature: `n` is nty for the C side or dty for the Dart side. #}
@@ -147,44 +124,8 @@ external int {{ name }}({{ named(f) }});
 /// The C callback `tg_callback_{{ cb.id }}`.
 typedef Callback{{ cb.id | pascal }} = Bool Function(Pointer<Void>{% for a in cb.args %}, {{ nty(a) }}{% endfor %});
 {% endfor %}
-
-{% for e in enums %}
-{% for line in e.doc %}
-///{% if line %} {{ line }}{% endif %}
-
-{% endfor %}
-enum {{ e.name }} {
-{% for v in e.variants %}
-{% for line in v.doc %}
-  ///{% if line %} {{ line }}{% endif %}
-
-{% endfor %}
-  {{ v.snake | camel }}({{ v.value }}){{ ";" if loop.last else "," }}
-{% endfor %}
-
-  const {{ e.name }}(this.value);
-
-  /// The value at the native boundary (D-277).
-  final int value;
-}
-
-{% endfor %}
 {% for r in records %}
-{% for line in r.doc %}
-///{% if line %} {{ line }}{% endif %}
-
-{% endfor %}
-final class {{ r.name }} {
-  const {{ r.name }}({ {% for f in r.fields %}this.{{ f.name | camel }}{% if not f.optional %} = {% if f.ty == "str" %}''{% elif f.ty == "enum" %}{{ f.enum }}.{{ (enums | selectattr("name", "eq", f.enum) | first).variants[0].snake | camel }}{% elif f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %} });
-{% for f in r.fields %}
-
-{% for line in f.doc %}
-  ///{% if line %} {{ line }}{% endif %}
-
-{% endfor %}
-  final {{ f.enum if f.ty == "enum" else dty(f.ty) }}{% if f.optional %}?{% endif %} {{ f.name | camel }};
-{% endfor %}
-
+extension on {{ r.name }} {
   void _write(_Tg{{ r.name }} to{% for f in r.fields if f.ty == "str" %}, Pointer<Uint8> {{ f.name | camel }}At, int {{ f.name | camel }}Len{% endfor %}) {
 {% for f in r.fields %}
 {% if f.ty == "str" %}
@@ -247,6 +188,10 @@ final _{{ h.snake | camel }}Finalizer = NativeFinalizer(Native.addressOf<NativeF
 /// isolate. Calls are synchronous; a handle's `...Async` methods run on a helper isolate.
 final class TeiGeodata {
   TeiGeodata();
+
+  /// Natively there is nothing to load: it returns at once. On the web it loads the
+  /// WebAssembly module; portable code awaits it before the first instance on every platform.
+  static Future<void> init({Uri? module}) async {}
 
   // Scratch memory reused by every call: the output slots and a growing input buffer.
   final Pointer<TgBytes> _bytes = calloc<TgBytes>();
@@ -313,7 +258,7 @@ final class TeiGeodata {
   void _check(int status) {
     if (status == 0) return;
     final code = _tgLastError(_bytes);
-    throw TeiGeodataException._of(code, _takeString());
+    throw exceptionOf(code, _takeString());
   }
 
   String _takeString() {
