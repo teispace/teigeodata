@@ -148,6 +148,47 @@ int32_t tg_engine_layers(const tg_engine *handle, uint32_t *out);
 int32_t tg_engine_get(const tg_engine *handle, const uint8_t *id, size_t id_len, tg_bytes *out);
 
 /*
+ * The place's parent as the packs answer for it (one row), or no row for a root or an
+ * unknown ID.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+ * section read is corrupt.
+ */
+int32_t tg_engine_parent(const tg_engine *handle, const uint8_t *id, size_t id_len, tg_bytes *out);
+
+/*
+ * The place's ancestors, parent first up to the country; no rows for a root or an
+ * unknown ID.
+ *
+ * # Errors
+ *
+ * As `parent`.
+ */
+int32_t tg_engine_ancestors(const tg_engine *handle, const uint8_t *id, size_t id_len, tg_bytes *out);
+
+/*
+ * The place's children, by ID; no rows for a leaf or an unknown ID.
+ *
+ * # Errors
+ *
+ * As `parent`.
+ */
+int32_t tg_engine_children(const tg_engine *handle, const uint8_t *id, size_t id_len, tg_bytes *out);
+
+/*
+ * The places nearest the place with this ID, not counting it, nearest first, at most
+ * `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` if `id` is not a place ID or `limit` exceeds
+ * `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+ */
+int32_t tg_engine_nearby(const tg_engine *handle, const uint8_t *id, size_t id_len, uint32_t limit, tg_bytes *out);
+
+/*
  * Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
  * parent first. The `score` column compares only within one query.
  *
@@ -170,6 +211,18 @@ int32_t tg_engine_search(const tg_engine *handle, const uint8_t *query, size_t q
 int32_t tg_engine_reverse(const tg_engine *handle, double lat, double lon, uint32_t limit, tg_bytes *out);
 
 /*
+ * The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+ * with `meters` and `bearing` to each.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite
+ * radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
+ * corrupt.
+ */
+int32_t tg_engine_within_radius(const tg_engine *handle, double lat, double lon, double meters, uint32_t limit, tg_bytes *out);
+
+/*
  * The admin units holding the point, country first.
  *
  * # Errors
@@ -178,6 +231,27 @@ int32_t tg_engine_reverse(const tg_engine *handle, double lat, double lon, uint3
  * section read is corrupt.
  */
 int32_t tg_engine_admin_at(const tg_engine *handle, double lat, double lon, tg_bytes *out);
+
+/*
+ * The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
+ * row where no pack answers.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+ * section read is corrupt.
+ */
+int32_t tg_engine_tz_at(const tg_engine *handle, double lat, double lon, tg_bytes *out);
+
+/*
+ * The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
+ * `ErrorCode::Corrupt` if a section read is corrupt.
+ */
+int32_t tg_engine_by_iso(const tg_engine *handle, const uint8_t *code, size_t code_len, tg_bytes *out);
 
 #ifdef __cplusplus
 }

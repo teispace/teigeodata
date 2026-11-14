@@ -91,6 +91,23 @@ public final class ParityTest {
             Map<?, ?> a = (Map<?, ?>) p.get("admin_at");
             byte[] units = engine.adminAt(((Number) a.get("lat")).doubleValue(), ((Number) a.get("lon")).doubleValue());
             check(strings(units, "id").equals(a.get("ids")), "admin_at");
+            Map<?, ?> pa = (Map<?, ?>) p.get("parent"), an = (Map<?, ?>) p.get("ancestors"), ch = (Map<?, ?>) p.get("children");
+            check(strings(engine.parent((String) pa.get("id")), "id").equals(pa.get("ids")), "parent");
+            check(strings(engine.ancestors((String) an.get("id")), "id").equals(an.get("ids")), "ancestors");
+            check(strings(engine.children((String) ch.get("id")), "id").equals(ch.get("ids")), "children");
+            Map<?, ?> nb = (Map<?, ?>) p.get("nearby");
+            check(strings(engine.nearby((String) nb.get("id"), ((Number) nb.get("limit")).longValue()), "id").equals(nb.get("ids")), "nearby");
+            Map<?, ?> w = (Map<?, ?>) p.get("within_radius");
+            double wl = ((Number) w.get("lat")).doubleValue(), wo = ((Number) w.get("lon")).doubleValue();
+            check(strings(engine.withinRadius(wl, wo, ((Number) w.get("meters")).doubleValue(),
+                    ((Number) w.get("limit")).longValue()), "id").equals(w.get("ids")), "within_radius");
+            Map<?, ?> tz = (Map<?, ?>) p.get("tz_at");
+            check(strings(engine.tzAt(((Number) tz.get("lat")).doubleValue(), ((Number) tz.get("lon")).doubleValue()), "tz")
+                    .equals(List.of(tz.get("tz"))), "tz_at");
+            Map<?, ?> iso = (Map<?, ?>) p.get("by_iso");
+            check(strings(engine.byIso((String) iso.get("code")), "id").equals(List.of(iso.get("id"))), "by_iso");
+            expect(TeiGeodataException.InvalidArgument.class, () -> engine.byIso((String) p.get("bad_iso")), "ISO 3166");
+            expect(TeiGeodataException.InvalidArgument.class, () -> engine.withinRadius(wl, wo, -1, 1), "radius");
             expect(TeiGeodataException.InvalidArgument.class, () -> engine.get((String) p.get("bad_id")), "not a place ID");
             expect(TeiGeodataException.Io.class, () -> engine.openFile("/nonexistent.tgd"), "");
             expect(TeiGeodataException.Corrupt.class, () -> engine.openBytes("not a pack".getBytes(StandardCharsets.UTF_8)), "");

@@ -55,6 +55,14 @@ fn country(model: &common::Model) -> usize {
         .unwrap()
 }
 
+/// The bindings' fixture model: the synthetic country, coded `NP`.
+fn fixture() -> common::Model {
+    let mut model = synthetic(60, 5);
+    let row = u32::try_from(country(&model)).unwrap();
+    model.iso = vec![(row, "NP".parse().unwrap())];
+    model
+}
+
 fn open() -> (Engine, common::Model) {
     let model = synthetic(400, 11);
     let engine = Engine::new();
@@ -199,7 +207,7 @@ fn the_bindings_fixture_is_current() {
         env!("CARGO_MANIFEST_DIR"),
         "/../../bindings/fixtures/synth.tgd"
     );
-    let bytes = synthetic(60, 5).encode();
+    let bytes = fixture().encode();
     if std::env::var_os("TEIGEODATA_WRITE_FIXTURE").is_some() {
         std::fs::create_dir_all(std::path::Path::new(path).parent().unwrap()).unwrap();
         std::fs::write(path, &bytes).unwrap();
@@ -264,9 +272,95 @@ fn the_parity_file_matches_rust() {
     let units = engine.admin_at(n(&a["lat"]), n(&a["lon"])).unwrap();
     assert_eq!(strings(&units, "id"), ids(&a["ids"]));
 
+    for (method, call) in [
+        (
+            "parent",
+            Engine::parent as fn(&Engine, &str) -> teigeodata_api::Result<Blob>,
+        ),
+        ("ancestors", Engine::ancestors),
+        ("children", Engine::children),
+    ] {
+        let c = &p[method];
+        let got = call(&engine, &s(&c["id"])).unwrap();
+        assert_eq!(strings(&got, "id"), ids(&c["ids"]), "{method}");
+    }
+    let c = &p["nearby"];
+    let got = engine
+        .nearby(&s(&c["id"]), c["limit"].as_u64().unwrap() as u32)
+        .unwrap();
+    assert_eq!(strings(&got, "id"), ids(&c["ids"]));
+    let c = &p["within_radius"];
+    let got = engine
+        .within_radius(
+            n(&c["lat"]),
+            n(&c["lon"]),
+            n(&c["meters"]),
+            c["limit"].as_u64().unwrap() as u32,
+        )
+        .unwrap();
+    assert_eq!(strings(&got, "id"), ids(&c["ids"]));
+    let c = &p["tz_at"];
+    let got = engine.tz_at(n(&c["lat"]), n(&c["lon"])).unwrap();
+    assert_eq!(strings(&got, "tz"), [Some(s(&c["tz"]))]);
+    let c = &p["by_iso"];
+    let got = engine.by_iso(&s(&c["code"])).unwrap();
+    assert_eq!(strings(&got, "id"), [Some(s(&c["id"]))]);
+    assert_eq!(strings(&got, "iso"), [Some(s(&c["code"]).to_uppercase())]);
+    let e = engine.by_iso(&s(&p["bad_iso"])).unwrap_err();
+    assert_eq!(e.code, ErrorCode::InvalidArgument);
+
     let e = engine.get(&s(&p["bad_id"])).unwrap_err();
     assert_eq!(e.code, ErrorCode::InvalidArgument);
     for (name, code) in [("Io", ErrorCode::Io), ("Corrupt", ErrorCode::Corrupt)] {
         assert_eq!(parity["error_codes"][name], code as i32);
     }
+}
+
+#[test]
+fn the_place_graph_radius_zone_and_codes() {
+    let (engine, model) = open();
+    let country = model.ids[country(&model)].to_string();
+    let children = strings(&engine.children(&country).unwrap(), "id");
+    assert_eq!(children.len(), 8, "{children:?}");
+    // Every child's parent is the country, and its ancestors end there.
+    for child in children.iter().flatten() {
+        assert_eq!(
+            strings(&engine.parent(child).unwrap(), "id"),
+            [Some(country.clone())]
+        );
+        let up = strings(&engine.ancestors(child).unwrap(), "id");
+        assert_eq!(up.last(), Some(&Some(country.clone())));
+    }
+    assert_eq!(
+        rows(&engine.parent(&country).unwrap()),
+        0,
+        "a root has no parent"
+    );
+    assert_eq!(rows(&engine.ancestors("tgd:np/zzzzzz").unwrap()), 0);
+    assert_eq!(rows(&engine.children("tgd:np/zzzzzz").unwrap()), 0);
+
+    // nearby never answers the place itself; within_radius is reverse with a cap.
+    let some = model.ids[model.ids.len() - 1].to_string();
+    let near = strings(&engine.nearby(&some, 5).unwrap(), "id");
+    assert_eq!(near.len(), 5);
+    assert!(!near.contains(&Some(some.clone())));
+    let p = model.points[model.points.len() - 1];
+    let (lat, lon) = (p.lat_degrees(), p.lon_degrees());
+    let all = f64s(&engine.reverse(lat, lon, 50).unwrap(), "meters");
+    let cap = all[10];
+    let within = f64s(&engine.within_radius(lat, lon, cap, 50).unwrap(), "meters");
+    assert!(
+        within.len() >= 11 && within.iter().all(|m| *m <= cap),
+        "{within:?}"
+    );
+    assert_eq!(rows(&engine.within_radius(lat, lon, 0.0, 5).unwrap()), 1);
+    for bad in [-1.0, f64::NAN, f64::INFINITY] {
+        let e = engine.within_radius(lat, lon, bad, 5).unwrap_err();
+        assert_eq!(e.code, ErrorCode::InvalidArgument, "{bad}");
+    }
+
+    let zone = engine.tz_at(lat, lon).unwrap();
+    assert_eq!(rows(&zone), 1);
+    assert!(strings(&zone, "tz")[0].is_some());
+    assert_eq!(rows(&engine.by_iso("FR").unwrap()), 0);
 }

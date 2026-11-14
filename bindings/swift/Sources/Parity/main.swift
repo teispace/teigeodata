@@ -131,6 +131,24 @@ do {
     let a = e["admin_at"] as! [String: Any]
     let units = try engine.adminAt(a["lat"] as! Double, lon: a["lon"] as! Double)
     check(strings(units, "id") == (a["ids"] as! [String]).map { $0 }, "admin_at")
+    let graph: [(String, (String) throws -> Data)] = [
+        ("parent", { try engine.parent($0) }), ("ancestors", { try engine.ancestors($0) }), ("children", { try engine.children($0) }),
+    ]
+    for (method, call) in graph {
+        let m = e[method] as! [String: Any]
+        check(strings(try call(m["id"] as! String), "id") == (m["ids"] as! [String]).map { $0 }, method)
+    }
+    let nb = e["nearby"] as! [String: Any]
+    check(strings(try engine.nearby(nb["id"] as! String, limit: UInt32(nb["limit"] as! Int)), "id") == (nb["ids"] as! [String]).map { $0 }, "nearby")
+    let w = e["within_radius"] as! [String: Any]
+    let (wl, wo) = (w["lat"] as! Double, w["lon"] as! Double)
+    check(strings(try engine.withinRadius(wl, lon: wo, meters: w["meters"] as! Double, limit: UInt32(w["limit"] as! Int)), "id") == (w["ids"] as! [String]).map { $0 }, "within_radius")
+    let tz = e["tz_at"] as! [String: Any]
+    check(strings(try engine.tzAt(tz["lat"] as! Double, lon: tz["lon"] as! Double), "tz") == [tz["tz"] as? String], "tz_at")
+    let iso = e["by_iso"] as! [String: Any]
+    check(strings(try engine.byIso(iso["code"] as! String), "id") == [iso["id"] as? String], "by_iso")
+    expect(.invalidArgument) { _ = try engine.byIso(e["bad_iso"] as! String) }
+    expect(.invalidArgument) { _ = try engine.withinRadius(wl, lon: wo, meters: -1, limit: 1) }
     expect(.invalidArgument) { _ = try engine.get(e["bad_id"] as! String) }
     expect(.io) { _ = try engine.openFile("/nonexistent.tgd") }
     expect(.corrupt) { _ = try engine.openBytes(Data("not a pack".utf8)) }

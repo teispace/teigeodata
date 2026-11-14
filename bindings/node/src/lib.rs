@@ -208,6 +208,55 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(Buffer::from(value.into_vec()))
     }
+    /// The place's parent as the packs answer for it (one row), or no row for a root or an
+    /// unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    #[napi]
+    pub fn parent(&self, id: String) -> napi::Result<Buffer, Code> {
+        let value = self.0.parent(&id);
+        let value = value.map_err(error)?;
+        Ok(Buffer::from(value.into_vec()))
+    }
+    /// The place's ancestors, parent first up to the country; no rows for a root or an
+    /// unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// As `parent`.
+    #[napi]
+    pub fn ancestors(&self, id: String) -> napi::Result<Buffer, Code> {
+        let value = self.0.ancestors(&id);
+        let value = value.map_err(error)?;
+        Ok(Buffer::from(value.into_vec()))
+    }
+    /// The place's children, by ID; no rows for a leaf or an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// As `parent`.
+    #[napi]
+    pub fn children(&self, id: String) -> napi::Result<Buffer, Code> {
+        let value = self.0.children(&id);
+        let value = value.map_err(error)?;
+        Ok(Buffer::from(value.into_vec()))
+    }
+    /// The places nearest the place with this ID, not counting it, nearest first, at most
+    /// `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID or `limit` exceeds
+    /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+    #[napi]
+    pub fn nearby(&self, id: String, limit: u32) -> napi::Result<Buffer, Code> {
+        let value = self.0.nearby(&id, limit);
+        let value = value.map_err(error)?;
+        Ok(Buffer::from(value.into_vec()))
+    }
     /// Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
     /// parent first. The `score` column compares only within one query.
     ///
@@ -234,6 +283,26 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(Buffer::from(value.into_vec()))
     }
+    /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+    /// with `meters` and `bearing` to each.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite
+    /// radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
+    /// corrupt.
+    #[napi]
+    pub fn within_radius(
+        &self,
+        lat: f64,
+        lon: f64,
+        meters: f64,
+        limit: u32,
+    ) -> napi::Result<Buffer, Code> {
+        let value = self.0.within_radius(lat, lon, meters, limit);
+        let value = value.map_err(error)?;
+        Ok(Buffer::from(value.into_vec()))
+    }
     /// The admin units holding the point, country first.
     ///
     /// # Errors
@@ -243,6 +312,31 @@ impl Engine {
     #[napi]
     pub fn admin_at(&self, lat: f64, lon: f64) -> napi::Result<Buffer, Code> {
         let value = self.0.admin_at(lat, lon);
+        let value = value.map_err(error)?;
+        Ok(Buffer::from(value.into_vec()))
+    }
+    /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
+    /// row where no pack answers.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    #[napi]
+    pub fn tz_at(&self, lat: f64, lon: f64) -> napi::Result<Buffer, Code> {
+        let value = self.0.tz_at(lat, lon);
+        let value = value.map_err(error)?;
+        Ok(Buffer::from(value.into_vec()))
+    }
+    /// The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    #[napi]
+    pub fn by_iso(&self, code: String) -> napi::Result<Buffer, Code> {
+        let value = self.0.by_iso(&code);
         let value = value.map_err(error)?;
         Ok(Buffer::from(value.into_vec()))
     }

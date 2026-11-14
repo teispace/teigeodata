@@ -191,6 +191,51 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(PyBytes::new(py, value.as_bytes()))
     }
+    /// The place's parent as the packs answer for it (one row), or no row for a root or an
+    /// unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    fn parent<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.parent(id));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// The place's ancestors, parent first up to the country; no rows for a root or an
+    /// unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// As `parent`.
+    fn ancestors<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.ancestors(id));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// The place's children, by ID; no rows for a leaf or an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// As `parent`.
+    fn children<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.children(id));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// The places nearest the place with this ID, not counting it, nearest first, at most
+    /// `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID or `limit` exceeds
+    /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+    fn nearby<'py>(&self, py: Python<'py>, id: &str, limit: u32) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.nearby(id, limit));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
     /// Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
     /// parent first. The `score` column compares only within one query.
     ///
@@ -226,6 +271,26 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(PyBytes::new(py, value.as_bytes()))
     }
+    /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+    /// with `meters` and `bearing` to each.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite
+    /// radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
+    /// corrupt.
+    fn within_radius<'py>(
+        &self,
+        py: Python<'py>,
+        lat: f64,
+        lon: f64,
+        meters: f64,
+        limit: u32,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.within_radius(lat, lon, meters, limit));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
     /// The admin units holding the point, country first.
     ///
     /// # Errors
@@ -234,6 +299,29 @@ impl Engine {
     /// section read is corrupt.
     fn admin_at<'py>(&self, py: Python<'py>, lat: f64, lon: f64) -> PyResult<Bound<'py, PyBytes>> {
         let value = py.detach(|| self.0.admin_at(lat, lon));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
+    /// row where no pack answers.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    fn tz_at<'py>(&self, py: Python<'py>, lat: f64, lon: f64) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.tz_at(lat, lon));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    fn by_iso<'py>(&self, py: Python<'py>, code: &str) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.by_iso(code));
         let value = value.map_err(error)?;
         Ok(PyBytes::new(py, value.as_bytes()))
     }

@@ -83,9 +83,16 @@ final class TeiGeodata {
         _engineOpenBytesNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint32>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>)>('tg_engine_open_bytes', isLeaf: true),
         _engineLayersNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint32>), int Function(Pointer<Void>, Pointer<Uint32>)>('tg_engine_layers', isLeaf: true),
         _engineGetNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_get', isLeaf: true),
+        _engineParentNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_parent', isLeaf: true),
+        _engineAncestorsNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_ancestors', isLeaf: true),
+        _engineChildrenNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_children', isLeaf: true),
+        _engineNearbyNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>)>('tg_engine_nearby', isLeaf: true),
         _engineSearchNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>)>('tg_engine_search', isLeaf: true),
         _engineReverseNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, int, Pointer<TgBytes>)>('tg_engine_reverse', isLeaf: true),
-        _engineAdminAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_admin_at', isLeaf: true) {
+        _engineWithinRadiusNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Double, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, double, int, Pointer<TgBytes>)>('tg_engine_within_radius', isLeaf: true),
+        _engineAdminAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_admin_at', isLeaf: true),
+        _engineTzAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_tz_at', isLeaf: true),
+        _engineByIsoNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_by_iso', isLeaf: true) {
     _engineFinalizer = NativeFinalizer(_engineFree.cast());
   }
 
@@ -107,9 +114,16 @@ final class TeiGeodata {
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>) _engineOpenBytesNative;
   final int Function(Pointer<Void>, Pointer<Uint32>) _engineLayersNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineGetNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineParentNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineAncestorsNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineChildrenNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>) _engineNearbyNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>) _engineSearchNative;
   final int Function(Pointer<Void>, double, double, int, Pointer<TgBytes>) _engineReverseNative;
+  final int Function(Pointer<Void>, double, double, double, int, Pointer<TgBytes>) _engineWithinRadiusNative;
   final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _engineAdminAtNative;
+  final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _engineTzAtNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineByIsoNative;
 
   // Scratch memory reused by every call: the output slots and a growing input buffer.
   final Pointer<TgBytes> _bytes = calloc<TgBytes>();
@@ -296,6 +310,34 @@ final class TeiGeodata {
     return _takeBlob();
   }
 
+  Uint8List _engineParent(Pointer<Void> handle, String id) {
+    final idLen = _utf8(id);
+    final status = _engineParentNative(handle, _input, idLen, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _engineAncestors(Pointer<Void> handle, String id) {
+    final idLen = _utf8(id);
+    final status = _engineAncestorsNative(handle, _input, idLen, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _engineChildren(Pointer<Void> handle, String id) {
+    final idLen = _utf8(id);
+    final status = _engineChildrenNative(handle, _input, idLen, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _engineNearby(Pointer<Void> handle, String id, int limit) {
+    final idLen = _utf8(id);
+    final status = _engineNearbyNative(handle, _input, idLen, limit, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
   Uint8List _engineSearch(Pointer<Void> handle, String query, int limit) {
     final queryLen = _utf8(query);
     final status = _engineSearchNative(handle, _input, queryLen, limit, _bytes);
@@ -309,8 +351,27 @@ final class TeiGeodata {
     return _takeBlob();
   }
 
+  Uint8List _engineWithinRadius(Pointer<Void> handle, double lat, double lon, double meters, int limit) {
+    final status = _engineWithinRadiusNative(handle, lat, lon, meters, limit, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
   Uint8List _engineAdminAt(Pointer<Void> handle, double lat, double lon) {
     final status = _engineAdminAtNative(handle, lat, lon, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _engineTzAt(Pointer<Void> handle, double lat, double lon) {
+    final status = _engineTzAtNative(handle, lat, lon, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _engineByIso(Pointer<Void> handle, String code) {
+    final codeLen = _utf8(code);
+    final status = _engineByIsoNative(handle, _input, codeLen, _bytes);
     _check(status);
     return _takeBlob();
   }
@@ -372,6 +433,39 @@ final class Engine implements Finalizable {
   /// section read is corrupt.
   Uint8List get(String id) => _lib._engineGet(_live, id);
 
+  /// The place's parent as the packs answer for it (one row), or no row for a root or an
+  /// unknown ID.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+  /// section read is corrupt.
+  Uint8List parent(String id) => _lib._engineParent(_live, id);
+
+  /// The place's ancestors, parent first up to the country; no rows for a root or an
+  /// unknown ID.
+  ///
+  /// # Errors
+  ///
+  /// As `parent`.
+  Uint8List ancestors(String id) => _lib._engineAncestors(_live, id);
+
+  /// The place's children, by ID; no rows for a leaf or an unknown ID.
+  ///
+  /// # Errors
+  ///
+  /// As `parent`.
+  Uint8List children(String id) => _lib._engineChildren(_live, id);
+
+  /// The places nearest the place with this ID, not counting it, nearest first, at most
+  /// `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if `id` is not a place ID or `limit` exceeds
+  /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+  Uint8List nearby(String id, int limit) => _lib._engineNearby(_live, id, limit);
+
   /// Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
   /// parent first. The `score` column compares only within one query.
   ///
@@ -390,6 +484,16 @@ final class Engine implements Finalizable {
   /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
   Uint8List reverse(double lat, double lon, int limit) => _lib._engineReverse(_live, lat, lon, limit);
 
+  /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+  /// with `meters` and `bearing` to each.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite
+  /// radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
+  /// corrupt.
+  Uint8List withinRadius(double lat, double lon, double meters, int limit) => _lib._engineWithinRadius(_live, lat, lon, meters, limit);
+
   /// The admin units holding the point, country first.
   ///
   /// # Errors
@@ -397,4 +501,21 @@ final class Engine implements Finalizable {
   /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
   /// section read is corrupt.
   Uint8List adminAt(double lat, double lon) => _lib._engineAdminAt(_live, lat, lon);
+
+  /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
+  /// row where no pack answers.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+  /// section read is corrupt.
+  Uint8List tzAt(double lat, double lon) => _lib._engineTzAt(_live, lat, lon);
+
+  /// The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
+  /// `ErrorCode::Corrupt` if a section read is corrupt.
+  Uint8List byIso(String code) => _lib._engineByIso(_live, code);
 }

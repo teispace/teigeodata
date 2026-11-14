@@ -265,6 +265,116 @@ pub unsafe extern "C" fn tg_engine_get(
     })
 }
 
+/// The place's parent as the packs answer for it (one row), or no row for a root or an
+/// unknown ID.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+/// section read is corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_parent(
+    handle: *const TgEngine,
+    id: *const u8,
+    id_len: usize,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `id_len` readable bytes (or null and 0).
+        let id = unsafe { abi::str_arg(id, id_len, "id") }?;
+        let value = this.0.parent(id)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The place's ancestors, parent first up to the country; no rows for a root or an
+/// unknown ID.
+///
+/// # Errors
+///
+/// As `parent`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_ancestors(
+    handle: *const TgEngine,
+    id: *const u8,
+    id_len: usize,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `id_len` readable bytes (or null and 0).
+        let id = unsafe { abi::str_arg(id, id_len, "id") }?;
+        let value = this.0.ancestors(id)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The place's children, by ID; no rows for a leaf or an unknown ID.
+///
+/// # Errors
+///
+/// As `parent`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_children(
+    handle: *const TgEngine,
+    id: *const u8,
+    id_len: usize,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `id_len` readable bytes (or null and 0).
+        let id = unsafe { abi::str_arg(id, id_len, "id") }?;
+        let value = this.0.children(id)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The places nearest the place with this ID, not counting it, nearest first, at most
+/// `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if `id` is not a place ID or `limit` exceeds
+/// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_nearby(
+    handle: *const TgEngine,
+    id: *const u8,
+    id_len: usize,
+    limit: u32,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `id_len` readable bytes (or null and 0).
+        let id = unsafe { abi::str_arg(id, id_len, "id") }?;
+        let value = this.0.nearby(id, limit)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
 /// Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
 /// parent first. The `score` column compares only within one query.
 ///
@@ -321,6 +431,35 @@ pub unsafe extern "C" fn tg_engine_reverse(
     })
 }
 
+/// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+/// with `meters` and `bearing` to each.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite
+/// radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
+/// corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_within_radius(
+    handle: *const TgEngine,
+    lat: f64,
+    lon: f64,
+    meters: f64,
+    limit: u32,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.within_radius(lat, lon, meters, limit)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
 /// The admin units holding the point, country first.
 ///
 /// # Errors
@@ -339,6 +478,59 @@ pub unsafe extern "C" fn tg_engine_admin_at(
         // SAFETY: a live handle from this library, or null (rejected).
         let this = unsafe { abi::handle(handle, "handle") }?;
         let value = this.0.admin_at(lat, lon)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
+/// row where no pack answers.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+/// section read is corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_tz_at(
+    handle: *const TgEngine,
+    lat: f64,
+    lon: f64,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.tz_at(lat, lon)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
+/// `ErrorCode::Corrupt` if a section read is corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_by_iso(
+    handle: *const TgEngine,
+    code: *const u8,
+    code_len: usize,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `code_len` readable bytes (or null and 0).
+        let code = unsafe { abi::str_arg(code, code_len, "code") }?;
+        let value = this.0.by_iso(code)?;
         let value = TgBytes::from_vec(value.into_vec());
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };

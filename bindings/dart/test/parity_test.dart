@@ -151,6 +151,25 @@ void main() {
     expect((column(near, 'meters') as Float64List).first, closeTo(r['first_meters'] as double, 0.1));
     final a = e['admin_at'] as Map<String, dynamic>;
     expect(strings(engine.adminAt(a['lat'] as double, a['lon'] as double), 'id'), a['ids']);
+    for (final (method, call) in [
+      ('parent', engine.parent),
+      ('ancestors', engine.ancestors),
+      ('children', engine.children),
+    ]) {
+      final m = e[method] as Map<String, dynamic>;
+      expect(strings(call(m['id'] as String), 'id'), m['ids'], reason: method);
+    }
+    final nb = e['nearby'] as Map<String, dynamic>;
+    expect(strings(engine.nearby(nb['id'] as String, nb['limit'] as int), 'id'), nb['ids']);
+    final w = e['within_radius'] as Map<String, dynamic>;
+    final (wl, wo) = (w['lat'] as double, w['lon'] as double);
+    expect(strings(engine.withinRadius(wl, wo, w['meters'] as double, w['limit'] as int), 'id'), w['ids']);
+    final tz = e['tz_at'] as Map<String, dynamic>;
+    expect(strings(engine.tzAt(tz['lat'] as double, tz['lon'] as double), 'tz'), [tz['tz']]);
+    final iso = e['by_iso'] as Map<String, dynamic>;
+    expect(strings(engine.byIso(iso['code'] as String), 'id'), [iso['id']]);
+    expect(() => engine.byIso(e['bad_iso'] as String), throwsA(isA<InvalidArgumentException>()));
+    expect(() => engine.withinRadius(wl, wo, -1, 1), throwsA(isA<InvalidArgumentException>()));
     expect(() => engine.get(e['bad_id'] as String), throwsA(isA<InvalidArgumentException>()));
     expect(() => engine.openFile('/nonexistent.tgd'), throwsA(isA<IoException>()));
     expect(() => engine.openBytes(Uint8List.fromList(utf8.encode('not a pack'))), throwsA(isA<CorruptException>()));

@@ -223,6 +223,87 @@ return nativeGet(handle, id);
         private static native byte[] nativeGet(long handle, String id);
 
         /**
+         * The place's parent as the packs answer for it (one row), or no row for a root or an
+         * unknown ID.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+         * section read is corrupt.
+         */
+        public byte[] parent(String id) {
+            long stamp = enter();
+            try {
+return nativeParent(handle, id);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeParent(long handle, String id);
+
+        /**
+         * The place's ancestors, parent first up to the country; no rows for a root or an
+         * unknown ID.
+         *
+         * # Errors
+         *
+         * As `parent`.
+         */
+        public byte[] ancestors(String id) {
+            long stamp = enter();
+            try {
+return nativeAncestors(handle, id);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeAncestors(long handle, String id);
+
+        /**
+         * The place's children, by ID; no rows for a leaf or an unknown ID.
+         *
+         * # Errors
+         *
+         * As `parent`.
+         */
+        public byte[] children(String id) {
+            long stamp = enter();
+            try {
+return nativeChildren(handle, id);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeChildren(long handle, String id);
+
+        /**
+         * The places nearest the place with this ID, not counting it, nearest first, at most
+         * `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` if `id` is not a place ID or `limit` exceeds
+         * `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+         */
+        public byte[] nearby(String id, long limit) {
+            long stamp = enter();
+            try {
+return nativeNearby(handle, id, limit);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeNearby(long handle, String id, long limit);
+
+        /**
          * Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
          * parent first. The `score` column compares only within one query.
          *
@@ -265,6 +346,28 @@ return nativeReverse(handle, lat, lon, limit);
         private static native byte[] nativeReverse(long handle, double lat, double lon, long limit);
 
         /**
+         * The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+         * with `meters` and `bearing` to each.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite
+         * radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
+         * corrupt.
+         */
+        public byte[] withinRadius(double lat, double lon, double meters, long limit) {
+            long stamp = enter();
+            try {
+return nativeWithinRadius(handle, lat, lon, meters, limit);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeWithinRadius(long handle, double lat, double lon, double meters, long limit);
+
+        /**
          * The admin units holding the point, country first.
          *
          * # Errors
@@ -283,5 +386,46 @@ return nativeAdminAt(handle, lat, lon);
         }
 
         private static native byte[] nativeAdminAt(long handle, double lat, double lon);
+
+        /**
+         * The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
+         * row where no pack answers.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+         * section read is corrupt.
+         */
+        public byte[] tzAt(double lat, double lon) {
+            long stamp = enter();
+            try {
+return nativeTzAt(handle, lat, lon);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeTzAt(long handle, double lat, double lon);
+
+        /**
+         * The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
+         * `ErrorCode::Corrupt` if a section read is corrupt.
+         */
+        public byte[] byIso(String code) {
+            long stamp = enter();
+            try {
+return nativeByIso(handle, code);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeByIso(long handle, String code);
     }
 }

@@ -66,6 +66,17 @@
       "lon": 85.5,
       "ids": ["tgd:np/18n8a6", "tgd:np/avwsr1"]
     },
-    "bad_id": "not an id"
+    "parent": {"id": "tgd:np/avwsr1", "ids": ["tgd:np/18n8a6"]},
+    "ancestors": {"id": "tgd:np/sx2ze9", "ids": ["tgd:np/avwsr1", "tgd:np/18n8a6"]},
+    "children": {
+      "id": "tgd:np/18n8a6",
+      "ids": ["tgd:np/159047", "tgd:np/322axb", "tgd:np/apsxrd", "tgd:np/avwsr1", "tgd:np/gnm8s2", "tgd:np/qz1beh", "tgd:np/vasbex", "tgd:np/y02ha8"]
+    },
+    "nearby": {"id": "tgd:np/sx2ze9", "limit": 2, "ids": ["tgd:np/kv9ac7", "tgd:np/6xhf5q"]},
+    "within_radius": {"lat": 27.5, "lon": 85.5, "meters": 20000.0, "limit": 10, "ids": ["tgd:np/sx2ze9"]},
+    "tz_at": {"lat": 27.5, "lon": 85.5, "tz": "Zone 1"},
+    "by_iso": {"code": "np", "id": "tgd:np/18n8a6"},
+    "bad_id": "not an id",
+    "bad_iso": "not a code"
   }
 }

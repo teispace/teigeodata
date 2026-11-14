@@ -205,6 +205,63 @@ public final class Engine: @unchecked Sendable {
         return takeData(out)
     }
 
+    /// The place's parent as the packs answer for it (one row), or no row for a root or an
+    /// unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    public func parent(_ id: String) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var id = id
+        let status = withExtendedLifetime(self) { id.withUTF8 { idBytes in tg_engine_parent(raw, idBytes.baseAddress, idBytes.count, &out) } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// The place's ancestors, parent first up to the country; no rows for a root or an
+    /// unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// As `parent`.
+    public func ancestors(_ id: String) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var id = id
+        let status = withExtendedLifetime(self) { id.withUTF8 { idBytes in tg_engine_ancestors(raw, idBytes.baseAddress, idBytes.count, &out) } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// The place's children, by ID; no rows for a leaf or an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// As `parent`.
+    public func children(_ id: String) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var id = id
+        let status = withExtendedLifetime(self) { id.withUTF8 { idBytes in tg_engine_children(raw, idBytes.baseAddress, idBytes.count, &out) } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// The places nearest the place with this ID, not counting it, nearest first, at most
+    /// `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID or `limit` exceeds
+    /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+    public func nearby(_ id: String, limit: UInt32) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var id = id
+        let status = withExtendedLifetime(self) { id.withUTF8 { idBytes in tg_engine_nearby(raw, idBytes.baseAddress, idBytes.count, limit, &out) } }
+        try check(status)
+        return takeData(out)
+    }
+
     /// Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
     /// parent first. The `score` column compares only within one query.
     ///
@@ -234,6 +291,21 @@ public final class Engine: @unchecked Sendable {
         return takeData(out)
     }
 
+    /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+    /// with `meters` and `bearing` to each.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite
+    /// radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
+    /// corrupt.
+    public func withinRadius(_ lat: Double, lon: Double, meters: Double, limit: UInt32) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        let status = withExtendedLifetime(self) { tg_engine_within_radius(raw, lat, lon, meters, limit, &out) }
+        try check(status)
+        return takeData(out)
+    }
+
     /// The admin units holding the point, country first.
     ///
     /// # Errors
@@ -243,6 +315,34 @@ public final class Engine: @unchecked Sendable {
     public func adminAt(_ lat: Double, lon: Double) throws(TeiGeodataError) -> Data {
         var out = tg_bytes()
         let status = withExtendedLifetime(self) { tg_engine_admin_at(raw, lat, lon, &out) }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
+    /// row where no pack answers.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    public func tzAt(_ lat: Double, lon: Double) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        let status = withExtendedLifetime(self) { tg_engine_tz_at(raw, lat, lon, &out) }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    public func byIso(_ code: String) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var code = code
+        let status = withExtendedLifetime(self) { code.withUTF8 { codeBytes in tg_engine_by_iso(raw, codeBytes.baseAddress, codeBytes.count, &out) } }
         try check(status)
         return takeData(out)
     }

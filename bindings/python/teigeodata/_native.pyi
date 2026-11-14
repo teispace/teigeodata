@@ -125,6 +125,47 @@ class Engine:
         section read is corrupt.
         """
 
+    def parent(self, id: str) -> bytes:
+        """
+        The place's parent as the packs answer for it (one row), or no row for a root or an
+        unknown ID.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+        section read is corrupt.
+        """
+
+    def ancestors(self, id: str) -> bytes:
+        """
+        The place's ancestors, parent first up to the country; no rows for a root or an
+        unknown ID.
+
+        # Errors
+
+        As `parent`.
+        """
+
+    def children(self, id: str) -> bytes:
+        """
+        The place's children, by ID; no rows for a leaf or an unknown ID.
+
+        # Errors
+
+        As `parent`.
+        """
+
+    def nearby(self, id: str, limit: int) -> bytes:
+        """
+        The places nearest the place with this ID, not counting it, nearest first, at most
+        `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` if `id` is not a place ID or `limit` exceeds
+        `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+        """
+
     def search(self, query: str, limit: int) -> bytes:
         """
         Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
@@ -147,6 +188,18 @@ class Engine:
         `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
         """
 
+    def within_radius(self, lat: float, lon: float, meters: float, limit: int) -> bytes:
+        """
+        The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+        with `meters` and `bearing` to each.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite
+        radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
+        corrupt.
+        """
+
     def admin_at(self, lat: float, lon: float) -> bytes:
         """
         The admin units holding the point, country first.
@@ -155,4 +208,25 @@ class Engine:
 
         `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
         section read is corrupt.
+        """
+
+    def tz_at(self, lat: float, lon: float) -> bytes:
+        """
+        The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
+        row where no pack answers.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+        section read is corrupt.
+        """
+
+    def by_iso(self, code: str) -> bytes:
+        """
+        The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
+        `ErrorCode::Corrupt` if a section read is corrupt.
         """

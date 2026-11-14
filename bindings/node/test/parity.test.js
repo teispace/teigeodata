@@ -114,6 +114,16 @@ test("engine handle on the fixture", () => {
   assert.deepEqual(strings(near, "id"), p.reverse.ids);
   assert.ok(Math.abs(numbers(near, "meters")[0] - p.reverse.first_meters) < 0.1);
   assert.deepEqual(strings(engine.adminAt(p.admin_at.lat, p.admin_at.lon), "id"), p.admin_at.ids);
+  for (const method of ["parent", "ancestors", "children"]) {
+    assert.deepEqual(strings(engine[method](p[method].id), "id"), p[method].ids, method);
+  }
+  assert.deepEqual(strings(engine.nearby(p.nearby.id, p.nearby.limit), "id"), p.nearby.ids);
+  const w = p.within_radius;
+  assert.deepEqual(strings(engine.withinRadius(w.lat, w.lon, w.meters, w.limit), "id"), w.ids);
+  assert.deepEqual(strings(engine.tzAt(p.tz_at.lat, p.tz_at.lon), "tz"), [p.tz_at.tz]);
+  assert.deepEqual(strings(engine.byIso(p.by_iso.code), "id"), [p.by_iso.id]);
+  assert.throws(() => engine.byIso(p.bad_iso), { code: "InvalidArgument" });
+  assert.throws(() => engine.withinRadius(w.lat, w.lon, -1, 1), { code: "InvalidArgument" });
   assert.throws(() => engine.get(p.bad_id), { code: "InvalidArgument" });
   assert.throws(() => engine.openFile("/nonexistent.tgd"), { code: "Io" });
   assert.throws(() => engine.openBytes(Buffer.from("not a pack")), { code: "Corrupt" });

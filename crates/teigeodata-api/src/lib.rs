@@ -207,15 +207,87 @@ impl Engine {
     /// [`ErrorCode::InvalidArgument`] if `id` is not a place ID; [`ErrorCode::Corrupt`] if a
     /// section read is corrupt.
     pub fn get(&self, id: &str) -> Result<Blob> {
-        let id: PlaceId = id.parse().map_err(|e| {
-            Error::new(
-                ErrorCode::InvalidArgument,
-                format!("{id:?} is not a place ID: {e}"),
-            )
-        })?;
+        let id = place_id(id)?;
         let engine = self.shared.load();
         let place = engine.get(id)?;
         Places::of(&engine, place)?.blob()
+    }
+
+    /// The place's parent as the packs answer for it (one row), or no row for a root or an
+    /// unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] if `id` is not a place ID; [`ErrorCode::Corrupt`] if a
+    /// section read is corrupt.
+    pub fn parent(&self, id: &str) -> Result<Blob> {
+        let id = place_id(id)?;
+        let engine = self.shared.load();
+        let parent = match engine.get(id)? {
+            Some(p) => engine.parent(&p)?,
+            None => None,
+        };
+        Places::of(&engine, parent)?.blob()
+    }
+
+    /// The place's ancestors, parent first up to the country; no rows for a root or an
+    /// unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// As [`parent`](Self::parent).
+    pub fn ancestors(&self, id: &str) -> Result<Blob> {
+        self.related(id, teigeodata_engine::Engine::ancestors)
+    }
+
+    /// The place's children, by ID; no rows for a leaf or an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// As [`parent`](Self::parent).
+    pub fn children(&self, id: &str) -> Result<Blob> {
+        self.related(id, teigeodata_engine::Engine::children)
+    }
+
+    /// `ancestors` and `children`: the places `walk` gives for the place with this ID.
+    fn related(
+        &self,
+        id: &str,
+        walk: fn(
+            &teigeodata_engine::Engine,
+            &Place,
+            &mut Vec<Place>,
+        ) -> core::result::Result<(), teigeodata_engine::Error>,
+    ) -> Result<Blob> {
+        let id = place_id(id)?;
+        let engine = self.shared.load();
+        BUFFERS.with_borrow_mut(|b| {
+            b.units.clear();
+            if let Some(p) = engine.get(id)? {
+                walk(&engine, &p, &mut b.units)?;
+            }
+            Places::of(&engine, b.units.iter().copied())?.blob()
+        })
+    }
+
+    /// The places nearest the place with this ID, not counting it, nearest first, at most
+    /// `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] if `id` is not a place ID or `limit` exceeds
+    /// [`LIMIT_MAX`]; [`ErrorCode::Corrupt`] if a section read is corrupt.
+    pub fn nearby(&self, id: &str, limit: u32) -> Result<Blob> {
+        let (id, k) = (place_id(id)?, self::limit(limit)?);
+        let engine = self.shared.load();
+        BUFFERS.with_borrow_mut(|b| {
+            let Buffers { scratch, near, .. } = b;
+            near.clear();
+            if let Some(p) = engine.get(id)? {
+                engine.nearby(&p, k, scratch, near)?;
+            }
+            near_blob(&engine, near)
+        })
     }
 
     /// Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
@@ -250,12 +322,31 @@ impl Engine {
         BUFFERS.with_borrow_mut(|b| {
             let Buffers { scratch, near, .. } = b;
             engine.reverse(at, k, scratch, near)?;
-            let mut out = Places::of(&engine, near.iter().map(|n| n.place))?;
-            out.near = Some((
-                near.iter().map(|n| n.meters).collect(),
-                near.iter().map(|n| n.bearing_deg).collect(),
+            near_blob(&engine, near)
+        })
+    }
+
+    /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+    /// with `meters` and `bearing` to each.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] for a point off the globe, a negative or non-finite
+    /// radius, or a `limit` above [`LIMIT_MAX`]; [`ErrorCode::Corrupt`] if a section read is
+    /// corrupt.
+    pub fn within_radius(&self, lat: f64, lon: f64, meters: f64, limit: u32) -> Result<Blob> {
+        let (k, at) = (self::limit(limit)?, point::<E6>(lat, lon)?);
+        if !(meters.is_finite() && meters >= 0.0) {
+            return Err(Error::new(
+                ErrorCode::InvalidArgument,
+                format!("radius is {meters} m; it must be finite and not negative"),
             ));
-            out.blob()
+        }
+        let engine = self.shared.load();
+        BUFFERS.with_borrow_mut(|b| {
+            let Buffers { scratch, near, .. } = b;
+            engine.within_radius(at, meters, k, scratch, near)?;
+            near_blob(&engine, near)
         })
     }
 
@@ -274,6 +365,57 @@ impl Engine {
             Places::of(&engine, units.iter().copied())?.blob()
         })
     }
+
+    /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
+    /// row where no pack answers.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] for a point off the globe; [`ErrorCode::Corrupt`] if a
+    /// section read is corrupt.
+    pub fn tz_at(&self, lat: f64, lon: f64) -> Result<Blob> {
+        let at = point::<E7>(lat, lon)?;
+        let engine = self.shared.load();
+        let area = engine.tz_at(at)?;
+        Places::of(&engine, area)?.blob()
+    }
+
+    /// The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] if `code` is not an ISO 3166 code;
+    /// [`ErrorCode::Corrupt`] if a section read is corrupt.
+    pub fn by_iso(&self, code: &str) -> Result<Blob> {
+        let code: teigeodata_core::IsoCode = code.parse().map_err(|e| {
+            Error::new(
+                ErrorCode::InvalidArgument,
+                format!("{code:?} is not an ISO 3166 code: {e}"),
+            )
+        })?;
+        let engine = self.shared.load();
+        let place = engine.by_iso(code)?;
+        Places::of(&engine, place)?.blob()
+    }
+}
+
+fn place_id(id: &str) -> Result<PlaceId> {
+    id.parse().map_err(|e| {
+        Error::new(
+            ErrorCode::InvalidArgument,
+            format!("{id:?} is not a place ID: {e}"),
+        )
+    })
+}
+
+/// A blob of `near`'s places with their `meters` and `bearing`.
+fn near_blob(engine: &teigeodata_engine::Engine, near: &[Near]) -> Result<Blob> {
+    let mut out = Places::of(engine, near.iter().map(|n| n.place))?;
+    out.near = Some((
+        near.iter().map(|n| n.meters).collect(),
+        near.iter().map(|n| n.bearing_deg).collect(),
+    ));
+    out.blob()
 }
 
 /// The library version, from its package metadata.

@@ -116,6 +116,25 @@ class Engine(unittest.TestCase):
         units = Blob(self.engine.admin_at(a["lat"], a["lon"]))
         self.assertEqual(units.strings("id"), a["ids"])
 
+    def test_graph_radius_zone_and_codes(self) -> None:
+        e, p = self.engine, self.p
+        for method in ("parent", "ancestors", "children"):
+            got = Blob(getattr(e, method)(p[method]["id"]))
+            self.assertEqual(got.strings("id"), p[method]["ids"], method)
+        n = p["nearby"]
+        self.assertEqual(Blob(e.nearby(n["id"], n["limit"])).strings("id"), n["ids"])
+        w = p["within_radius"]
+        got = Blob(e.within_radius(w["lat"], w["lon"], w["meters"], w["limit"]))
+        self.assertEqual(got.strings("id"), w["ids"])
+        t = p["tz_at"]
+        self.assertEqual(Blob(e.tz_at(t["lat"], t["lon"])).strings("tz"), [t["tz"]])
+        i = p["by_iso"]
+        self.assertEqual(Blob(e.by_iso(i["code"])).strings("id"), [i["id"]])
+        with self.assertRaises(tg.InvalidArgumentError):
+            e.by_iso(p["bad_iso"])
+        with self.assertRaises(tg.InvalidArgumentError):
+            e.within_radius(w["lat"], w["lon"], -1.0, 1)
+
     def test_errors(self) -> None:
         with self.assertRaises(tg.InvalidArgumentError):
             self.engine.get(self.p["bad_id"])
