@@ -186,4 +186,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-14 | TG-15 step 4 done: India's golden set 47/47 (Banaras, Poona, `Var` added), world 72/72; Nepali names outside Nepal capped by Wikidata (1,745 places named) |
 | 2026-11-14 | D-272: Q-027 closed, no weighting by name language (layers choose their languages); `Istan` fixed by D-269, `Tor` differs only on the 26-language baseline |
 | 2026-11-14 | Data release `data-2026.11.14.3` from `eb8ab5c`: ISO codes in the layer, baseline and points layer (only `ISO_CODES` changed, every ID kept), verified from a fresh download |
-| 2026-11-14 | D-273: the first real release pair measured (section re-download 11.4 % of the asset); `delta_measure` and `columns` tools; Phase 5 drafted; v0.3.1 prepared |
+| 2026-11-14 | D-273: the first real release pair measured (section re-download 11.4 % of the asset); `delta_measure` and `columns` tools; Phase 5 drafted; `v0.3.1` tagged on `2af7b81` (CI green, checked from a scratch project: `by_iso(IN-OD)` on the released baseline) |
