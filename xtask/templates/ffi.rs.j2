@@ -31,47 +31,64 @@ pub const TG_{{ c.name }}: {{ c.ty }} = {{ c.value }};
 /// A callback taking `{{ cb.args | join(", ") }}`; return `false` to cancel.
 pub type TgCallback{{ cb.id | pascal }} = Option<unsafe extern "C" fn(ctx: Ctx{% for a in cb.args %}, a{{ loop.index0 }}: {{ a }}{% endfor %}) -> bool>;
 {% endfor %}
-{% for f in functions %}
+{% macro export(f, symbol, owner) %}
 
 {% for line in f.doc %}
 /// {{ line }}
 {% endfor %}
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn tg_{{ f.name }}(
+pub unsafe extern "C" fn {{ symbol }}(
+{% if f.receiver %}
+    handle: *const Tg{{ owner.name }},
+{% endif %}
 {% for p in f.params %}
-{% if p.ty == "str" %}
+{% if p.ty in ["str", "bytes"] %}
     {{ p.name }}: *const u8,
     {{ p.name }}_len: usize,
 {% elif p.ty == "callback" %}
     {{ p.name }}: TgCallback{{ p.callback.id | pascal }},
     {{ p.name }}_ctx: Ctx,
+{% elif p.ty == "handle" %}
+    {{ p.name }}: *const Tg{{ p.handle }},
 {% else %}
     {{ p.name }}: {{ p.ty }},
 {% endif %}
 {% endfor %}
 {% if f.returns != "void" %}
-    out: *mut {% if f.returns in ["string", "blob"] %}TgBytes{% else %}{{ f.returns }}{% endif %},
+    out: *mut {% if f.returns in ["string", "blob"] %}TgBytes{% elif f.returns == "handle" %}*mut Tg{{ f.returns_handle }}{% else %}{{ f.returns }}{% endif %},
 {% endif %}
 ) -> i32 {
     abi::call(|| {
 {% if f.returns != "void" %}
         let out = abi::out(out)?;
 {% endif %}
+{% if f.receiver %}
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+{% endif %}
 {% for p in f.params %}
 {% if p.ty == "str" %}
         // SAFETY: the caller passes `{{ p.name }}_len` readable bytes (or null and 0).
         let {{ p.name }} = unsafe { abi::str_arg({{ p.name }}, {{ p.name }}_len, "{{ p.name }}") }?;
+{% elif p.ty == "bytes" %}
+        // SAFETY: the caller passes `{{ p.name }}_len` readable bytes (or null and 0).
+        let {{ p.name }} = unsafe { abi::bytes_arg({{ p.name }}, {{ p.name }}_len, "{{ p.name }}") }?;
+{% elif p.ty == "handle" %}
+        // SAFETY: a live handle from this library, or null (rejected).
+        let {{ p.name }} = &unsafe { abi::handle({{ p.name }}, "{{ p.name }}") }?.0;
 {% elif p.ty == "callback" %}
         let {{ p.name }}_fn = abi::callback({{ p.name }}, "{{ p.name }}")?;
         // SAFETY: the caller's function, called with the caller's context, on this thread.
         let mut {{ p.name }} = |{% for a in p.callback.args %}a{{ loop.index0 }}: {{ a }}{% if not loop.last %}, {% endif %}{% endfor %}| unsafe { {{ p.name }}_fn({{ p.name }}_ctx{% for a in p.callback.args %}, a{{ loop.index0 }}{% endfor %}) };
 {% endif %}
 {% endfor %}
-        {% if f.returns != "void" %}let value = {% endif %}teigeodata_api::{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {% endif %}{{ p.name }}{% if not loop.last %}, {% endif %}{% endfor %}){% if f.fallible %}?{% endif %};
+        {% if f.returns != "void" %}let value = {% endif %}{% if f.receiver %}this.0.{% elif owner %}teigeodata_api::{{ owner.name }}::{% else %}teigeodata_api::{% endif %}{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {% endif %}{{ p.name }}{% if not loop.last %}, {% endif %}{% endfor %}){% if f.fallible %}?{% endif %};
 {% if f.returns == "string" %}
         let value = TgBytes::from_vec(value.into_bytes());
 {% elif f.returns == "blob" %}
         let value = TgBytes::from_vec(value.into_vec());
+{% elif f.returns == "handle" %}
+        let value = Box::into_raw(Box::new(Tg{{ f.returns_handle }}(value)));
 {% endif %}
 {% if f.returns != "void" %}
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
@@ -80,4 +97,27 @@ pub unsafe extern "C" fn tg_{{ f.name }}(
         Ok(())
     })
 }
+{% endmacro %}
+{% for f in functions %}
+{{ export(f, "tg_" ~ f.name, none) }}
+{% endfor %}
+{% for h in handles %}
+
+{% for line in h.doc %}
+/// {{ line }}
+{% endfor %}
+///
+/// Opaque at the C ABI: made by its constructors, freed once with `tg_{{ h.snake }}_free`.
+#[derive(Debug)]
+pub struct Tg{{ h.name }}(teigeodata_api::{{ h.name }});
+
+/// Frees a `{{ h.name }}` handle. Null does nothing. No call on it may be in flight (D-274).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_{{ h.snake }}_free(handle: *mut Tg{{ h.name }}) {
+    // SAFETY: a handle from this library, freed once.
+    unsafe { abi::free(handle) };
+}
+{% for f in h.methods %}
+{{ export(f, "tg_" ~ h.snake ~ "_" ~ f.name, h) }}
+{% endfor %}
 {% endfor %}

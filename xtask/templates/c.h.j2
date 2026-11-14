@@ -3,8 +3,11 @@
  * The C ABI of teigeodata. Every function returns TG_OK or a TG_ERROR_* code; on failure,
  * tg_last_error gives the message on the same thread. Outputs are written through the last
  * pointer argument, only on success. Strings in are UTF-8 pointer and length pairs (NULL only
- * with length 0). Strings and blobs out are tg_bytes owned by the caller: free each with
- * tg_bytes_free. Callbacks run on the calling thread before the function returns.
+ * with length 0), and so are bytes in. Strings and blobs out are tg_bytes owned by the caller:
+ * free each with tg_bytes_free. Callbacks run on the calling thread before the function
+ * returns. A handle (tg_engine) is made by its constructor and freed once with its _free
+ * function; its methods may run on any thread at once, but none may be in flight when it is
+ * freed.
  */
 #ifndef TEIGEODATA_H
 #define TEIGEODATA_H
@@ -48,7 +51,7 @@ void tg_bytes_free(tg_bytes bytes);
 /* The code of the last failure on this thread (0 if none) and its message, which the caller
  * frees. Reading clears it. message may be NULL. */
 int32_t tg_last_error(tg_bytes *message);
-{% for f in functions %}
+{% macro decl(f, symbol, owner) %}
 
 /*
 {% for line in f.doc %}
@@ -56,11 +59,26 @@ int32_t tg_last_error(tg_bytes *message);
 
 {% endfor %}
  */
-int32_t tg_{{ f.name }}(
+int32_t {{ symbol }}(
+{%- if f.receiver %}const tg_{{ owner.snake }} *handle{% if f.params or f.returns != "void" %}, {% endif %}{% endif -%}
 {%- for p in f.params -%}
-{% if p.ty == "str" %}const uint8_t *{{ p.name }}, size_t {{ p.name }}_len{% elif p.ty == "callback" %}tg_callback_{{ p.callback.id }} {{ p.name }}, void *{{ p.name }}_ctx{% else %}{{ cty(p.ty) }} {{ p.name }}{% endif %}{% if not loop.last or f.returns != "void" %}, {% endif %}
+{% if p.ty in ["str", "bytes"] %}const uint8_t *{{ p.name }}, size_t {{ p.name }}_len{% elif p.ty == "callback" %}tg_callback_{{ p.callback.id }} {{ p.name }}, void *{{ p.name }}_ctx{% elif p.ty == "handle" %}const tg_{{ p.handle | snake }} *{{ p.name }}{% else %}{{ cty(p.ty) }} {{ p.name }}{% endif %}{% if not loop.last or f.returns != "void" %}, {% endif %}
 {%- endfor -%}
-{% if f.returns in ["string", "blob"] %}tg_bytes *out{% elif f.returns != "void" %}{{ cty(f.returns) }} *out{% elif not f.params %}void{% endif %});
+{% if f.returns in ["string", "blob"] %}tg_bytes *out{% elif f.returns == "handle" %}tg_{{ f.returns_handle | snake }} **out{% elif f.returns != "void" %}{{ cty(f.returns) }} *out{% elif not f.params and not f.receiver %}void{% endif %});
+{% endmacro %}
+{% for f in functions %}
+{{ decl(f, "tg_" ~ f.name, none) }}
+{%- endfor %}
+{% for h in handles %}
+
+/* {{ h.doc | join(" ") }} */
+typedef struct tg_{{ h.snake }} tg_{{ h.snake }};
+
+/* Frees a handle. NULL does nothing. No call on it may be in flight. */
+void tg_{{ h.snake }}_free(tg_{{ h.snake }} *handle);
+{% for f in h.methods %}
+{{ decl(f, "tg_" ~ h.snake ~ "_" ~ f.name, h) }}
+{%- endfor %}
 {% endfor %}
 
 #ifdef __cplusplus

@@ -125,7 +125,38 @@ fn normalise(stmt: &str) -> String {
     ] {
         s = s.replace(from, to);
     }
-    s = s.replace("Ctx ", "void *").replace("TgBytes", "tg_bytes");
+    s = s.replace("Ctx ", "void *");
+    // cbindgen names our Rust types (`TgBytes`, a handle's `TgEngine`); the header uses their
+    // C names (`tg_bytes`, `tg_engine`). Callback types are mapped below.
+    let mut from = 0;
+    while let Some(at) = s.get(from..).and_then(|t| t.find("Tg")).map(|i| i + from) {
+        let tail = s.get(at + 2..).unwrap_or_default();
+        let id: String = tail
+            .chars()
+            .take_while(char::is_ascii_alphanumeric)
+            .collect();
+        let starts_word = at == 0
+            || !s
+                .get(..at)
+                .is_some_and(|h| h.ends_with(|c: char| c.is_alphanumeric() || c == '_'));
+        if id.starts_with("Callback") || id.is_empty() || !starts_word {
+            from = at + 2;
+            continue;
+        }
+        let snake = id.chars().fold(String::new(), |mut acc, c| {
+            if c.is_uppercase() && !acc.is_empty() {
+                acc.push('_');
+            }
+            acc.extend(c.to_lowercase());
+            acc
+        });
+        s = format!(
+            "{}tg_{snake}{}",
+            s.get(..at).unwrap_or_default(),
+            tail.get(id.len()..).unwrap_or_default()
+        );
+        from = at + 3 + snake.len();
+    }
     s = s.replace("(void)", "()").replace("()", "(void)");
     while let Some(at) = s.find("TgCallback") {
         let tail = s.get(at + "TgCallback".len()..).unwrap_or_default();

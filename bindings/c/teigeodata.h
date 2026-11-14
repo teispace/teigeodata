@@ -3,8 +3,11 @@
  * The C ABI of teigeodata. Every function returns TG_OK or a TG_ERROR_* code; on failure,
  * tg_last_error gives the message on the same thread. Outputs are written through the last
  * pointer argument, only on success. Strings in are UTF-8 pointer and length pairs (NULL only
- * with length 0). Strings and blobs out are tg_bytes owned by the caller: free each with
- * tg_bytes_free. Callbacks run on the calling thread before the function returns.
+ * with length 0), and so are bytes in. Strings and blobs out are tg_bytes owned by the caller:
+ * free each with tg_bytes_free. Callbacks run on the calling thread before the function
+ * returns. A handle (tg_engine) is made by its constructor and freed once with its _free
+ * function; its methods may run on any thread at once, but none may be in flight when it is
+ * freed.
  */
 #ifndef TEIGEODATA_H
 #define TEIGEODATA_H
@@ -98,6 +101,83 @@ int32_t tg_progress(uint32_t steps, tg_callback_u32 on_step, void *on_step_ctx, 
  * -180..=180, or any value is not finite.
  */
 int32_t tg_distance_m(double lat1, double lon1, double lat2, double lon2, double *out);
+
+/* Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine answers from any number of threads at once, and adding a pack publishes a new snapshot while queries go on.  Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search and `meters` and `bearing` for a reverse lookup. */
+typedef struct tg_engine tg_engine;
+
+/* Frees a handle. NULL does nothing. No call on it may be in flight. */
+void tg_engine_free(tg_engine *handle);
+
+/*
+ * An engine with no packs.
+ */
+int32_t tg_engine_new(tg_engine **out);
+
+/*
+ * Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+ *
+ * # Errors
+ *
+ * `ErrorCode::Io` if the file cannot be read, `ErrorCode::Corrupt` if it is not a
+ * valid pack.
+ */
+int32_t tg_engine_open_file(const tg_engine *handle, const uint8_t *path, size_t path_len, uint32_t *out);
+
+/*
+ * Adds a pack from its bytes (copied). Returns the number of packs.
+ *
+ * # Errors
+ *
+ * `ErrorCode::Corrupt` if the bytes are not a valid pack.
+ */
+int32_t tg_engine_open_bytes(const tg_engine *handle, const uint8_t *bytes, size_t bytes_len, uint32_t *out);
+
+/*
+ * The number of packs.
+ */
+int32_t tg_engine_layers(const tg_engine *handle, uint32_t *out);
+
+/*
+ * The place with this ID (`tgd:np/1`), or no row; a retired ID gives its survivor.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+ * section read is corrupt.
+ */
+int32_t tg_engine_get(const tg_engine *handle, const uint8_t *id, size_t id_len, tg_bytes *out);
+
+/*
+ * Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
+ * parent first. The `score` column compares only within one query.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+ * `ErrorCode::Corrupt` if a section read is corrupt.
+ */
+int32_t tg_engine_search(const tg_engine *handle, const uint8_t *query, size_t query_len, uint32_t limit, tg_bytes *out);
+
+/*
+ * The places nearest the point, nearest first, at most `limit`, with `meters` and
+ * `bearing` (degrees from north) to each.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` for a point off the globe or a `limit` above
+ * `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+ */
+int32_t tg_engine_reverse(const tg_engine *handle, double lat, double lon, uint32_t limit, tg_bytes *out);
+
+/*
+ * The admin units holding the point, country first.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+ * section read is corrupt.
+ */
+int32_t tg_engine_admin_at(const tg_engine *handle, double lat, double lon, tg_bytes *out);
 
 #ifdef __cplusplus
 }

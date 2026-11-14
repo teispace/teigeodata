@@ -31,5 +31,41 @@
     "metres": 142393.9132189373,
     "out_of_range": [91.0, 0.0, 0.0, 0.0]
   },
-  "error_codes": {"InvalidArgument": 1, "Cancelled": 2, "Internal": 3}
+  "error_codes": {
+    "InvalidArgument": 1,
+    "Cancelled": 2,
+    "Internal": 3,
+    "Io": 4,
+    "Corrupt": 5
+  },
+  "engine": {
+    "about": "Queries on bindings/fixtures/synth.tgd, the engine's synthetic pack (teigeodata-api's tests keep it current)",
+    "fixture": "fixtures/synth.tgd",
+    "columns": ["id", "name", "kind", "level", "lat", "lon", "elevation", "parent", "tz", "iso"],
+    "get": {
+      "id": "tgd:np/18n8a6",
+      "name": "Synthland",
+      "kind": "country",
+      "lat": 28.0,
+      "lon": 84.0
+    },
+    "search": {
+      "query": "Synthland",
+      "limit": 3,
+      "first_id": "tgd:np/18n8a6"
+    },
+    "reverse": {
+      "lat": 27.5,
+      "lon": 85.5,
+      "limit": 3,
+      "ids": ["tgd:np/sx2ze9", "tgd:np/kv9ac7", "tgd:np/6xhf5q"],
+      "first_meters": 9755.3
+    },
+    "admin_at": {
+      "lat": 27.5,
+      "lon": 85.5,
+      "ids": ["tgd:np/18n8a6", "tgd:np/avwsr1"]
+    },
+    "bad_id": "not an id"
+  }
 }

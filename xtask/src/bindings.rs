@@ -196,6 +196,11 @@ fn camel_lower(s: &str) -> String {
     camel(&snake)
 }
 
+/// `CamelCase` to `snake_case`.
+fn snake(s: &str) -> String {
+    screaming(s).to_lowercase()
+}
+
 /// `CamelCase` to `SCREAMING_SNAKE_CASE`.
 fn screaming(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 4);
@@ -221,6 +226,7 @@ fn environment(root: &Path) -> Result<Environment<'static>, String> {
     env.add_filter("camel", |s: &str| camel(s));
     env.add_filter("pascal", |s: &str| pascal(s));
     env.add_filter("screaming", |s: &str| screaming(s));
+    env.add_filter("snake", |s: &str| snake(s));
     env.add_filter("camel_lower", |s: &str| camel_lower(s));
     let dir = root.join("xtask/templates");
     let entries = fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -272,6 +278,7 @@ mod tests {
         assert_eq!(pascal("sample_rows"), "SampleRows");
         assert_eq!(pascal("InvalidArgument"), "InvalidArgument");
         assert_eq!(screaming("InvalidArgument"), "INVALID_ARGUMENT");
+        assert_eq!(super::snake("PlaceEngine"), "place_engine");
         assert_eq!(camel_lower("SAMPLE_ROWS_MAX"), "sampleRowsMax");
         assert_eq!(camel_lower("InvalidArgument"), "invalidArgument");
         assert_eq!(camel_lower("MAX"), "max");

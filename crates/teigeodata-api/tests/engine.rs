@@ -5,6 +5,8 @@
     clippy::unwrap_used,
     clippy::indexing_slicing,
     clippy::panic,
+    clippy::cast_possible_truncation,
+    clippy::many_single_char_names,
     reason = "tests: failures panic with their message"
 )]
 
@@ -187,4 +189,84 @@ fn many_threads_query_while_packs_are_added() {
 fn the_handle_is_send_and_sync() {
     fn check<T: Send + Sync>() {}
     check::<Engine>();
+}
+
+/// `bindings/fixtures/synth.tgd`, the pack every language's parity test opens, is the
+/// synthetic model's, byte for byte; `TEIGEODATA_WRITE_FIXTURE=1` rewrites it.
+#[test]
+fn the_bindings_fixture_is_current() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../bindings/fixtures/synth.tgd"
+    );
+    let bytes = synthetic(60, 5).encode();
+    if std::env::var_os("TEIGEODATA_WRITE_FIXTURE").is_some() {
+        std::fs::create_dir_all(std::path::Path::new(path).parent().unwrap()).unwrap();
+        std::fs::write(path, &bytes).unwrap();
+    }
+    let on_disk = std::fs::read(path).unwrap();
+    assert!(
+        on_disk == bytes,
+        "{path} is stale: rerun with TEIGEODATA_WRITE_FIXTURE=1"
+    );
+}
+
+/// The engine section of `bindings/parity.json`, which every language checks, holds what Rust
+/// answers on the fixture.
+#[test]
+fn the_parity_file_matches_rust() {
+    let parity: serde_json::Value =
+        serde_json::from_str(include_str!("../../../bindings/parity.json")).unwrap();
+    let p = &parity["engine"];
+    let s = |v: &serde_json::Value| v.as_str().unwrap().to_owned();
+    let n = |v: &serde_json::Value| v.as_f64().unwrap();
+    let ids = |v: &serde_json::Value| -> Vec<Option<String>> {
+        v.as_array().unwrap().iter().map(|x| Some(s(x))).collect()
+    };
+    let engine = Engine::new();
+    let path = format!(
+        "{}/../../bindings/{}",
+        env!("CARGO_MANIFEST_DIR"),
+        s(&p["fixture"])
+    );
+    assert_eq!(engine.open_file(&path), Ok(1));
+
+    let g = &p["get"];
+    let blob = engine.get(&s(&g["id"])).unwrap();
+    let r = Reader::new(blob.as_bytes()).unwrap();
+    assert_eq!(
+        serde_json::json!(r.names().collect::<Vec<_>>()),
+        p["columns"]
+    );
+    assert_eq!(strings(&blob, "name"), [Some(s(&g["name"]))]);
+    assert_eq!(strings(&blob, "kind"), [Some(s(&g["kind"]))]);
+    assert_eq!(f64s(&blob, "lat"), [n(&g["lat"])]);
+    assert_eq!(f64s(&blob, "lon"), [n(&g["lon"])]);
+
+    let q = &p["search"];
+    let hits = engine
+        .search(&s(&q["query"]), q["limit"].as_u64().unwrap() as u32)
+        .unwrap();
+    assert_eq!(strings(&hits, "id")[0], Some(s(&q["first_id"])));
+
+    let v = &p["reverse"];
+    let near = engine
+        .reverse(
+            n(&v["lat"]),
+            n(&v["lon"]),
+            v["limit"].as_u64().unwrap() as u32,
+        )
+        .unwrap();
+    assert_eq!(strings(&near, "id"), ids(&v["ids"]));
+    assert!((f64s(&near, "meters")[0] - n(&v["first_meters"])).abs() < 0.1);
+
+    let a = &p["admin_at"];
+    let units = engine.admin_at(n(&a["lat"]), n(&a["lon"])).unwrap();
+    assert_eq!(strings(&units, "id"), ids(&a["ids"]));
+
+    let e = engine.get(&s(&p["bad_id"])).unwrap_err();
+    assert_eq!(e.code, ErrorCode::InvalidArgument);
+    for (name, code) in [("Io", ErrorCode::Io), ("Corrupt", ErrorCode::Corrupt)] {
+        assert_eq!(parity["error_codes"][name], code as i32);
+    }
 }

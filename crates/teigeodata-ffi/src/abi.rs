@@ -127,6 +127,50 @@ pub(crate) unsafe fn str_arg<'a>(ptr: *const u8, len: usize, name: &str) -> Resu
 }
 
 /// Checks an output pointer before any work is done.
+/// Bytes in: `len` readable bytes at `ptr` (null only with 0).
+///
+/// # Safety
+///
+/// `ptr` points to `len` readable bytes that stay valid and unchanged during the call.
+pub(crate) unsafe fn bytes_arg<'a>(
+    ptr: *const u8,
+    len: usize,
+    name: &str,
+) -> Result<&'a [u8], Error> {
+    if len == 0 {
+        return Ok(&[]);
+    }
+    if ptr.is_null() {
+        return Err(invalid(format!("{name} is null with length {len}")));
+    }
+    // SAFETY: the caller's contract above.
+    Ok(unsafe { core::slice::from_raw_parts(ptr, len) })
+}
+
+/// A handle argument, borrowed for the call.
+///
+/// # Safety
+///
+/// `ptr` is null or a live handle of type `T` made by this library and not yet freed.
+pub(crate) unsafe fn handle<'a, T>(ptr: *const T, name: &str) -> Result<&'a T, Error> {
+    // SAFETY: the caller's contract above.
+    unsafe { ptr.as_ref() }.ok_or_else(|| invalid(format!("{name} is null")))
+}
+
+/// Frees a handle made with `Box::into_raw`; null does nothing. A panic in its drop stops
+/// here.
+///
+/// # Safety
+///
+/// `ptr` is null or a handle of type `T` made by this library, freed once.
+pub(crate) unsafe fn free<T>(ptr: *mut T) {
+    if !ptr.is_null() {
+        // SAFETY: the caller's contract above.
+        let owned = unsafe { Box::from_raw(ptr) };
+        let _ = catch_unwind(AssertUnwindSafe(move || drop(owned)));
+    }
+}
+
 pub(crate) fn out<T>(ptr: *mut T) -> Result<*mut T, Error> {
     if ptr.is_null() {
         Err(invalid("the output pointer is null".into()))
