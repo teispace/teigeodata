@@ -124,7 +124,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   - [ ] the web, with the WASM build (5.7)
 
 ### 5.6 Python
-- [ ] Generated PyO3 module; abi3 wheels (3.11 and later; 3.10 is past its end of life and
+- [x] Generated PyO3 module; abi3 wheels (3.11 and later; 3.10 is past its end of life and
   lacks the buffer protocol in the limited API, D-290) and abi3t for free-threaded builds;
   the blob through the buffer protocol; a free-threading stress test. Built
   ([research](../../02-research/notes/python-wheels.md), D-290): `teigeodata.Blob` lends its
@@ -148,7 +148,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 - [ ] .NET over the C ABI with source-generated P/Invoke, NativeAOT-safe, as a NuGet package;
   Go over purego by default and cgo by build tag, the library from the C package; C/C++
   examples ([research](../../02-research/notes/dotnet-go-packaging.md)):
-  - [ ] 5.8a the C package's musl targets (`linux-musl` x64 and arm64), built in Alpine
+  - [x] 5.8a the C package's musl targets (`linux-musl` x64 and arm64), built in Alpine
   - [ ] 5.8b Go: S1 (purego against cgo, musl), the generated binding, its loader, `go.yml`
   - [ ] 5.8c .NET: the generated `LibraryImport` binding, `cargo xtask package-dotnet`, tested
     from the `.nupkg` on every RID and NativeAOT
