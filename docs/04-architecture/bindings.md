@@ -73,7 +73,9 @@ the file, line and column.
   `wait` (Java's `Object.wait`).
 - A function whose documentation has a `# Blocks` section may wait (for a job, or for a store
   a job holds); the IDL marks it `blocks`, it takes no callback, and each language also offers
-  it without blocking: in Node, `<name>Async` returning a `Promise` (D-280).
+  it without blocking: `<name>Async` returning a `Promise` (Node), a `CompletableFuture`
+  (JVM) or a `Future` (Dart), an `async` function (Swift); Python's is
+  `asyncio.to_thread(<name>, ...)`, since the call already releases the GIL (D-280, D-281).
 
 ## 3. Results: the blob
 
@@ -159,10 +161,10 @@ second job waits for the first.
 | Runtime | Handle lifetime | A job awaited as | Notes |
 |---|---|---|---|
 | C/C++ | explicit `free` | `wait` in a loop | none |
-| Swift 6 | `final class`, `deinit` frees; `Sendable` (checked by the handle's `Sync`) | `async` function; `wait` on a detached thread resumes a continuation; an `AsyncStream` of progress | Task cancellation calls `cancel` |
-| Kotlin/Java | `AutoCloseable` plus a `Cleaner`; a call holds a use count, `close` waits for it | `CompletableFuture`, progress through a listener on an executor; Kotlin `suspend` over it | JVM threads are already attached; Rust attaches none |
-| Dart/Flutter | `NativeFinalizer` plus `close()` | `Future` and a `Stream` from a helper isolate that calls `wait` (blocking FFI there never blocks the UI isolate) | `@Native` leaf calls for queries |
-| Python | object owns the handle, freed on drop | `wait` with the GIL released; an `asyncio` wrapper runs it in the default executor | queries release the GIL only above a size threshold; `gil_used = false` for free-threaded builds, proven by a stress test |
+| Swift 6 | `final class`, `deinit` frees; `Sendable` (checked by the handle's `Sync`) | `<name>Async`, an `async throws(TeiGeodataError)` function: the call on a detached `Thread` (never on the cooperative pool, which must not block) resumes a continuation with a typed `Result` (D-281); progress by awaiting `waitProgressAsync` | Task cancellation calls `cancel` (left) |
+| Kotlin/Java | `AutoCloseable` plus a `Cleaner`; a call holds a use count, `close` waits for it | `<name>Async` returning a `CompletableFuture` on a cached pool of daemon threads (not the common pool, which a long wait would starve); a failure completes it exceptionally with the coded exception (D-281); Kotlin `suspend` over it | JVM threads are already attached; Rust attaches none |
+| Dart/Flutter | `NativeFinalizer` plus `close()`; an asynchronous call holds the handle, and `close()` during one frees it when the call ends | `<name>Async` returning a `Future`: `Isolate.run` opens the library again by path and calls with the handle's address, so blocking FFI never blocks the calling isolate (D-281) | leaf calls for queries |
+| Python | object owns the handle, freed on drop | the call releases the GIL, so `await asyncio.to_thread(job.result)` is its asynchronous form (D-281) | `gil_used = false` for free-threaded builds, proven by a stress test |
 | Node | `napi` finalizer plus `close()` | `<name>Async` returning a `Promise`, the call on a thread of its own (not the libuv pool, which a long wait would starve; D-280); progress by awaiting `waitProgressAsync` | queries synchronous on the main thread |
 | .NET | `SafeHandle` (its use count prevents a free during a call) | `Task` with `TaskCreationOptions.LongRunning`; `IProgress<T>` | `CancellationToken` calls `cancel` |
 | Go | `runtime.AddCleanup` plus `Close()` | a goroutine calling `wait`; a channel of progress | `context.Context` calls `cancel` |
@@ -172,6 +174,7 @@ second job waits for the first.
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | §2, §6: the asynchronous forms in Swift, the JVM, Dart and Python as built | D-281 |
 | 2026-11-14 | §2: calls that block; §6: Node's Promise forms as built | D-280 |
 | 2026-11-14 | §2: features (IDL format 6), reserved names; §6: the job's methods as built | D-279 |
 | 2026-11-14 | §2: text fields in records (IDL format 5) | D-276 |

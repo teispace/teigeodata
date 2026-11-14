@@ -47,6 +47,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - Node: every call that blocks (the store's, a job's `waitProgress` and `result`) has a
   `…Async` form returning a `Promise` (D-280); the IDL marks such calls `blocks` from a
   `# Blocks` documentation section.
+- Swift, the JVM and Dart: the same `…Async` forms, as an `async throws` function, a
+  `CompletableFuture` and a `Future` run on a helper isolate; in Dart a handle closed during
+  one is freed when it ends. Python awaits them with `asyncio.to_thread` (D-281).
 - `teigeodata_sync::fetch::Ureq::with_timeouts`, and a 30 s timeout for a response's head:
   a host that accepts and never answers no longer holds a download forever (D-280).
 - IDL format 6: a handle, record or function may carry `#[cfg(feature = "…")]`; every

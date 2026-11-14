@@ -3,6 +3,7 @@
 
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -206,10 +207,18 @@ final class _Tg{{ r.name }} extends Struct {
 }
 
 {% endfor %}
+{#- Handles an asynchronous call holds (its receiver, a handle argument), lends to the helper
+    isolate (a handle argument) or makes there. #}
+{% set ns_async = namespace(held=[], lent=[], made=[]) %}
+{% for h in handles %}{% for f in h.methods if f.blocks %}
+{% if f.receiver %}{% set ns_async.held = ns_async.held + [h.name] %}{% endif %}
+{% for p in f.params if p.ty == "handle" %}{% set ns_async.held = ns_async.held + [p.handle] %}{% set ns_async.lent = ns_async.lent + [p.handle] %}{% endfor %}
+{% if f.returns == "handle" %}{% set ns_async.made = ns_async.made + [f.returns_handle] %}{% endif %}
+{% endfor %}{% endfor %}
 /// The teigeodata library, loaded from a path. One instance per isolate; calls are
 /// synchronous. Functions without callbacks are leaf calls (the cheapest kind).
 final class TeiGeodata {
-  TeiGeodata._(DynamicLibrary lib)
+  TeiGeodata._(DynamicLibrary lib, this._path)
       : _free = lib.lookupFunction<Void Function(TgBytes), void Function(TgBytes)>('tg_bytes_free', isLeaf: true),
         _lastError = lib.lookupFunction<Int32 Function(Pointer<TgBytes>), int Function(Pointer<TgBytes>)>('tg_last_error', isLeaf: true){% for f in functions %},
 {{ lookup(f, "_" ~ (f.name | camel), "tg_" ~ f.name) }}{% endfor %}{% for h in handles %},
@@ -221,7 +230,10 @@ final class TeiGeodata {
   }
 
   /// Opens the library at [path] (for example `libteigeodata_ffi.dylib`).
-  factory TeiGeodata.open(String path) => TeiGeodata._(DynamicLibrary.open(path));
+  factory TeiGeodata.open(String path) => TeiGeodata._(DynamicLibrary.open(path), path);
+
+  /// Where the library was opened from: a helper isolate opens it again (`...Async`).
+  final String _path;
 
   final void Function(TgBytes) _free;
   final int Function(Pointer<TgBytes>) _lastError;
@@ -337,18 +349,70 @@ final class {{ h.name }} implements Finalizable {
     _lib._{{ h.snake | camel }}Finalizer.attach(this, _handle, detach: this);
   }
 
+{% if h.name in ns_async.lent %}
+
+  /// A handle borrowed by a helper isolate: never freed there.
+  {{ h.name }}._borrow(this._lib, this._handle);
+{% endif %}
+
   final TeiGeodata _lib;
   Pointer<Void> _handle;
+{% if h.name in ns_async.held %}
+
+  // Asynchronous calls still using the handle, and the handle closed while they run: it is
+  // freed when the last of them ends.
+  int _pending = 0;
+  Pointer<Void> _closed = nullptr;
+{% endif %}
 
   Pointer<Void> get _live => _handle == nullptr ? throw StateError('{{ h.name }} is closed') : _handle;
 
-  /// Frees the handle now; later calls throw a [StateError]. Closing twice does nothing.
+  /// Frees the handle now; later calls throw a [StateError]. Closing twice does nothing.{% if h.name in ns_async.held %} An
+  /// asynchronous call still running keeps it until it ends.{% endif %}
+
   void close() {
     if (_handle == nullptr) return;
     _lib._{{ h.snake | camel }}Finalizer.detach(this);
-    _lib._{{ h.snake | camel }}Free.asFunction<void Function(Pointer<Void>)>(isLeaf: true)(_handle);
+{% if h.name in ns_async.held %}
+    if (_pending > 0) {
+      _closed = _handle;
+    } else {
+      _free(_handle);
+    }
+{% else %}
+    _free(_handle);
+{% endif %}
     _handle = nullptr;
   }
+
+  void _free(Pointer<Void> handle) =>
+      _lib._{{ h.snake | camel }}Free.asFunction<void Function(Pointer<Void>)>(isLeaf: true)(handle);
+{% if h.name in ns_async.held %}
+
+  /// The handle's address for a helper isolate; it stays open until [_unhold].
+  int _hold() {
+    final address = _live.address;
+    _pending++;
+    return address;
+  }
+
+  void _unhold() {
+    if (--_pending == 0 && _closed != nullptr) {
+      _free(_closed);
+      _closed = nullptr;
+    }
+  }
+{% endif %}
+{% if h.name in ns_async.made %}
+
+  /// Hands the handle over to another isolate: its address, no longer freed here.
+  int _take() {
+    _lib._{{ h.snake | camel }}Finalizer.detach(this);
+    final address = _handle.address;
+    _handle = nullptr;
+    return address;
+  }
+{% endif %}
 {% for f in h.methods %}
 
 {% for line in f.doc %}
@@ -364,6 +428,51 @@ final class {{ h.name }} implements Finalizable {
 {% else %}
   static {{ dty(f.returns, f.returns_handle) }} {{ f.name | camel }}(TeiGeodata lib{% if f.params %}, {{ dparams(f) }}{% endif %}) => lib._{{ h.snake | camel }}{{ f.name | pascal }}({{ fwd }});
 {% endif %}
+{% if f.blocks %}
+{% set hps = f.params | selectattr("ty", "eq", "handle") | list %}
+{% set off %}_{{ h.snake | camel }}{{ f.name | pascal }}Off({% if f.receiver %}lib._path, self{% else %}lib._path{% endif %}{% for p in f.params %}, {% if p.ty == "handle" %}{{ p.name | camel }}At{% else %}{{ p.name | camel }}{% endif %}{% endfor %}){% if f.returns == "handle" %}.then((address) => {{ f.returns_handle }}._(lib, Pointer.fromAddress(address))){% endif %}{% endset %}
+
+  /// [{{ f.name | camel }}] on a helper isolate, so it never blocks this one.
+{% if f.receiver %}
+  Future<{{ dty(f.returns, f.returns_handle) }}> {{ f.name | camel }}Async({{ dparams(f) }}) {
+    // Every handle is checked open before any is held.
+    _live;
+{% for p in hps %}
+    {{ p.name | camel }}._live;
+{% endfor %}
+    final lib = _lib, self = _hold();
+{% for p in hps %}
+    final {{ p.name | camel }}At = {{ p.name | camel }}._hold();
+{% endfor %}
+    return {{ off }}.whenComplete(() {
+      _unhold();
+{% for p in hps %}
+      {{ p.name | camel }}._unhold();
+{% endfor %}
+    });
+  }
+{% else %}
+  static Future<{{ dty(f.returns, f.returns_handle) }}> {{ f.name | camel }}Async(TeiGeodata lib{% if f.params %}, {{ dparams(f) }}{% endif %}) =>
+      {{ off }};
+{% endif %}
+{% endif %}
 {% endfor %}
 }
 {% endfor %}
+{% for h in handles %}
+{% for f in h.methods if f.blocks %}
+
+/// The body of `{{ h.name }}.{{ f.name | camel }}Async`, run on a helper isolate. A top-level
+/// function, so the closure sent there holds only its arguments.
+Future<{% if f.returns == "handle" %}int{% else %}{{ dty(f.returns, f.returns_handle) }}{% endif %}> _{{ h.snake | camel }}{{ f.name | pascal }}Off(String path{% if f.receiver %}, int handle{% endif %}{% for p in f.params %}, {% if p.ty == "handle" %}int {{ p.name | camel }}{% else %}{{ dty(p.ty, p.record if p.ty == "record" else p.handle) }} {{ p.name | camel }}{% endif %}{% endfor %}) =>
+    Isolate.run(() {
+      final lib = TeiGeodata.open(path);
+      try {
+        return lib._{{ h.snake | camel }}{{ f.name | pascal }}({% if f.receiver %}Pointer.fromAddress(handle){% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty == "handle" %}{{ p.handle }}._borrow(lib, Pointer.fromAddress({{ p.name | camel }})){% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% if f.returns == "handle" %}._take(){% endif %};
+      } finally {
+        lib.close();
+      }
+    });
+{% endfor %}
+{% endfor %}
+

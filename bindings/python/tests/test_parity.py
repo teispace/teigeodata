@@ -266,5 +266,23 @@ class Store(unittest.TestCase):
             job.cancel()
             self.assertEqual(PARITY["error_codes"]["Network"], 7)
 
+    def test_store_asyncio(self) -> None:
+        """A call that blocks releases the GIL, so `asyncio.to_thread` is its asynchronous form."""
+        import asyncio
+        import tempfile
+
+        p = PARITY["store"]
+        root = (pathlib.Path(__file__).parents[2] / p["root"]).read_bytes()
+
+        async def run(d: str) -> None:
+            store = await asyncio.to_thread(tg.Store.create, f"{d}/s", p["mirror"], p["mirror"], root)
+            self.assertEqual(Blob(await asyncio.to_thread(store.status, False)).rows, 0)
+            job = store.refresh(p["pack"])
+            with self.assertRaises(tg.NetworkError):
+                await asyncio.to_thread(job.result)
+
+        with tempfile.TemporaryDirectory() as d:
+            asyncio.run(run(d))
+
 if __name__ == "__main__":
     unittest.main()

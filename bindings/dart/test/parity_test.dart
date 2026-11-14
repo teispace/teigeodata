@@ -276,4 +276,28 @@ void main() {
     expect(job.doneBytes(), job.totalBytes());
     job.cancel();
   });
+
+  test('store async', () async {
+    // The asynchronous forms run on a helper isolate and carry the same error codes.
+    final st = parity['store'] as Map<String, dynamic>;
+    final root = File('../${st['root']}').readAsBytesSync();
+    final mirror = st['mirror'] as String, pack = st['pack'] as String;
+    final d = Directory.systemTemp.createTempSync('tg-store-');
+    addTearDown(() => d.deleteSync(recursive: true));
+    await expectLater(Store.openAsync(tg, '${d.path}/missing'), throwsA(isA<RefusedException>()));
+    (await Store.createAsync(tg, '${d.path}/s', mirror, mirror, root)).close();
+    final store = await Store.openAsync(tg, '${d.path}/s');
+    addTearDown(store.close);
+    expect(strings(await store.statusAsync(false), 'path'), isEmpty);
+    final engine = await store.engineAsync();
+    addTearDown(engine.close);
+    expect(strings(await store.findAsync(engine, pack, 3), 'name'), isEmpty);
+    await expectLater(store.findAsync(engine, pack, 10001), throwsA(isA<InvalidArgumentException>()));
+    final job = store.refresh(pack);
+    final result = job.resultAsync();
+    // Closed while the call runs: freed when it ends, not under it.
+    job.close();
+    await expectLater(result, throwsA(isA<NetworkException>()));
+    expect(job.isEnded, throwsStateError);
+  });
 }

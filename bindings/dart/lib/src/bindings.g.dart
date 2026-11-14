@@ -3,6 +3,7 @@
 
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -287,7 +288,7 @@ final class _TgInstallOptions extends Struct {
 /// The teigeodata library, loaded from a path. One instance per isolate; calls are
 /// synchronous. Functions without callbacks are leaf calls (the cheapest kind).
 final class TeiGeodata {
-  TeiGeodata._(DynamicLibrary lib)
+  TeiGeodata._(DynamicLibrary lib, this._path)
       : _free = lib.lookupFunction<Void Function(TgBytes), void Function(TgBytes)>('tg_bytes_free', isLeaf: true),
         _lastError = lib.lookupFunction<Int32 Function(Pointer<TgBytes>), int Function(Pointer<TgBytes>)>('tg_last_error', isLeaf: true),
         _version = lib.lookupFunction<Int32 Function(Pointer<TgBytes>), int Function(Pointer<TgBytes>)>('tg_version', isLeaf: true),
@@ -350,7 +351,10 @@ final class TeiGeodata {
   }
 
   /// Opens the library at [path] (for example `libteigeodata_ffi.dylib`).
-  factory TeiGeodata.open(String path) => TeiGeodata._(DynamicLibrary.open(path));
+  factory TeiGeodata.open(String path) => TeiGeodata._(DynamicLibrary.open(path), path);
+
+  /// Where the library was opened from: a helper isolate opens it again (`...Async`).
+  final String _path;
 
   final void Function(TgBytes) _free;
   final int Function(Pointer<TgBytes>) _lastError;
@@ -914,17 +918,56 @@ final class Engine implements Finalizable {
     _lib._engineFinalizer.attach(this, _handle, detach: this);
   }
 
+
+  /// A handle borrowed by a helper isolate: never freed there.
+  Engine._borrow(this._lib, this._handle);
+
   final TeiGeodata _lib;
   Pointer<Void> _handle;
 
+  // Asynchronous calls still using the handle, and the handle closed while they run: it is
+  // freed when the last of them ends.
+  int _pending = 0;
+  Pointer<Void> _closed = nullptr;
+
   Pointer<Void> get _live => _handle == nullptr ? throw StateError('Engine is closed') : _handle;
 
-  /// Frees the handle now; later calls throw a [StateError]. Closing twice does nothing.
+  /// Frees the handle now; later calls throw a [StateError]. Closing twice does nothing. An
+  /// asynchronous call still running keeps it until it ends.
   void close() {
     if (_handle == nullptr) return;
     _lib._engineFinalizer.detach(this);
-    _lib._engineFree.asFunction<void Function(Pointer<Void>)>(isLeaf: true)(_handle);
+    if (_pending > 0) {
+      _closed = _handle;
+    } else {
+      _free(_handle);
+    }
     _handle = nullptr;
+  }
+
+  void _free(Pointer<Void> handle) =>
+      _lib._engineFree.asFunction<void Function(Pointer<Void>)>(isLeaf: true)(handle);
+
+  /// The handle's address for a helper isolate; it stays open until [_unhold].
+  int _hold() {
+    final address = _live.address;
+    _pending++;
+    return address;
+  }
+
+  void _unhold() {
+    if (--_pending == 0 && _closed != nullptr) {
+      _free(_closed);
+      _closed = nullptr;
+    }
+  }
+
+  /// Hands the handle over to another isolate: its address, no longer freed here.
+  int _take() {
+    _lib._engineFinalizer.detach(this);
+    final address = _handle.address;
+    _handle = nullptr;
+    return address;
   }
 
   /// An engine with no packs.
@@ -1150,17 +1193,53 @@ final class Store implements Finalizable {
     _lib._storeFinalizer.attach(this, _handle, detach: this);
   }
 
+
   final TeiGeodata _lib;
   Pointer<Void> _handle;
 
+  // Asynchronous calls still using the handle, and the handle closed while they run: it is
+  // freed when the last of them ends.
+  int _pending = 0;
+  Pointer<Void> _closed = nullptr;
+
   Pointer<Void> get _live => _handle == nullptr ? throw StateError('Store is closed') : _handle;
 
-  /// Frees the handle now; later calls throw a [StateError]. Closing twice does nothing.
+  /// Frees the handle now; later calls throw a [StateError]. Closing twice does nothing. An
+  /// asynchronous call still running keeps it until it ends.
   void close() {
     if (_handle == nullptr) return;
     _lib._storeFinalizer.detach(this);
-    _lib._storeFree.asFunction<void Function(Pointer<Void>)>(isLeaf: true)(_handle);
+    if (_pending > 0) {
+      _closed = _handle;
+    } else {
+      _free(_handle);
+    }
     _handle = nullptr;
+  }
+
+  void _free(Pointer<Void> handle) =>
+      _lib._storeFree.asFunction<void Function(Pointer<Void>)>(isLeaf: true)(handle);
+
+  /// The handle's address for a helper isolate; it stays open until [_unhold].
+  int _hold() {
+    final address = _live.address;
+    _pending++;
+    return address;
+  }
+
+  void _unhold() {
+    if (--_pending == 0 && _closed != nullptr) {
+      _free(_closed);
+      _closed = nullptr;
+    }
+  }
+
+  /// Hands the handle over to another isolate: its address, no longer freed here.
+  int _take() {
+    _lib._storeFinalizer.detach(this);
+    final address = _handle.address;
+    _handle = nullptr;
+    return address;
   }
 
   /// Sets up a store at `root` and opens it: the metadata mirrors `repo` and asset mirrors
@@ -1178,6 +1257,10 @@ final class Store implements Finalizable {
   /// language's asynchronous form.
   static Store create(TeiGeodata lib, String root, String repo, String assets, Uint8List trustedRoot) => lib._storeCreate(root, repo, assets, trustedRoot);
 
+  /// [create] on a helper isolate, so it never blocks this one.
+  static Future<Store> createAsync(TeiGeodata lib, String root, String repo, String assets, Uint8List trustedRoot) =>
+      _storeCreateOff(lib._path, root, repo, assets, trustedRoot).then((address) => Store._(lib, Pointer.fromAddress(address)));
+
   /// Opens the store at `root`, finishing or undoing an install a crash cut short.
   ///
   /// # Errors
@@ -1189,6 +1272,10 @@ final class Store implements Finalizable {
   /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
   /// language's asynchronous form.
   static Store open(TeiGeodata lib, String root) => lib._storeOpen(root);
+
+  /// [open] on a helper isolate, so it never blocks this one.
+  static Future<Store> openAsync(TeiGeodata lib, String root) =>
+      _storeOpenOff(lib._path, root).then((address) => Store._(lib, Pointer.fromAddress(address)));
 
   /// The packs found damaged when the store was opened, comma-separated; empty when none.
   /// `repair` fetches what they lack.
@@ -1206,6 +1293,16 @@ final class Store implements Finalizable {
   /// language's asynchronous form.
   Uint8List catalog() => _lib._storeCatalog(_live);
 
+  /// [catalog] on a helper isolate, so it never blocks this one.
+  Future<Uint8List> catalogAsync() {
+    // Every handle is checked open before any is held.
+    _live;
+    final lib = _lib, self = _hold();
+    return _storeCatalogOff(lib._path, self).whenComplete(() {
+      _unhold();
+    });
+  }
+
   /// Each installed pack and its health, from a full check of every byte when `deep`.
   ///
   /// # Errors
@@ -1217,6 +1314,16 @@ final class Store implements Finalizable {
   /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
   /// language's asynchronous form.
   Uint8List status(bool deep) => _lib._storeStatus(_live, deep);
+
+  /// [status] on a helper isolate, so it never blocks this one.
+  Future<Uint8List> statusAsync(bool deep) {
+    // Every handle is checked open before any is held.
+    _live;
+    final lib = _lib, self = _hold();
+    return _storeStatusOff(lib._path, self, deep).whenComplete(() {
+      _unhold();
+    });
+  }
 
   /// Pins the pack (kept when room is made), or unpins it.
   ///
@@ -1230,6 +1337,16 @@ final class Store implements Finalizable {
   /// language's asynchronous form.
   void pin(String pack, bool on) => _lib._storePin(_live, pack, on);
 
+  /// [pin] on a helper isolate, so it never blocks this one.
+  Future<void> pinAsync(String pack, bool on) {
+    // Every handle is checked open before any is held.
+    _live;
+    final lib = _lib, self = _hold();
+    return _storePinOff(lib._path, self, pack, on).whenComplete(() {
+      _unhold();
+    });
+  }
+
   /// Removes the packs and the dependencies nothing else needs; returns what was removed.
   ///
   /// # Errors
@@ -1241,6 +1358,16 @@ final class Store implements Finalizable {
   /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
   /// language's asynchronous form.
   Uint8List remove(String pack) => _lib._storeRemove(_live, pack);
+
+  /// [remove] on a helper isolate, so it never blocks this one.
+  Future<Uint8List> removeAsync(String pack) {
+    // Every handle is checked open before any is held.
+    _live;
+    final lib = _lib, self = _hold();
+    return _storeRemoveOff(lib._path, self, pack).whenComplete(() {
+      _unhold();
+    });
+  }
 
   /// The places named `query` in `engine` (one over a world pack the app ships, the
   /// installed packs, or both), best first, each with the catalog's packs that cover it: what
@@ -1257,6 +1384,19 @@ final class Store implements Finalizable {
   /// language's asynchronous form.
   Uint8List find(Engine engine, String query, int limit) => _lib._storeFind(_live, engine, query, limit);
 
+  /// [find] on a helper isolate, so it never blocks this one.
+  Future<Uint8List> findAsync(Engine engine, String query, int limit) {
+    // Every handle is checked open before any is held.
+    _live;
+    engine._live;
+    final lib = _lib, self = _hold();
+    final engineAt = engine._hold();
+    return _storeFindOff(lib._path, self, engineAt, query, limit).whenComplete(() {
+      _unhold();
+      engine._unhold();
+    });
+  }
+
   /// The countries within `radius_m` metres of a point in `engine`, each with the catalog's
   /// packs that cover the point: what to install for where the user stands.
   ///
@@ -1271,6 +1411,19 @@ final class Store implements Finalizable {
   /// language's asynchronous form.
   Uint8List locate(Engine engine, double lat, double lon, int radiusM) => _lib._storeLocate(_live, engine, lat, lon, radiusM);
 
+  /// [locate] on a helper isolate, so it never blocks this one.
+  Future<Uint8List> locateAsync(Engine engine, double lat, double lon, int radiusM) {
+    // Every handle is checked open before any is held.
+    _live;
+    engine._live;
+    final lib = _lib, self = _hold();
+    final engineAt = engine._hold();
+    return _storeLocateOff(lib._path, self, engineAt, lat, lon, radiusM).whenComplete(() {
+      _unhold();
+      engine._unhold();
+    });
+  }
+
   /// An engine over the installed packs, each opened with the components and languages
   /// installed.
   ///
@@ -1283,6 +1436,16 @@ final class Store implements Finalizable {
   /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
   /// language's asynchronous form.
   Engine engine() => _lib._storeEngine(_live);
+
+  /// [engine] on a helper isolate, so it never blocks this one.
+  Future<Engine> engineAsync() {
+    // Every handle is checked open before any is held.
+    _live;
+    final lib = _lib, self = _hold();
+    return _storeEngineOff(lib._path, self).then((address) => Engine._(lib, Pointer.fromAddress(address))).whenComplete(() {
+      _unhold();
+    });
+  }
 
   /// Refreshes the catalog for the countries (comma-separated ISO codes) and every country
   /// installed. Fails with `ErrorCode::Network` or `ErrorCode::Refused`.
@@ -1315,17 +1478,45 @@ final class Job implements Finalizable {
     _lib._jobFinalizer.attach(this, _handle, detach: this);
   }
 
+
   final TeiGeodata _lib;
   Pointer<Void> _handle;
 
+  // Asynchronous calls still using the handle, and the handle closed while they run: it is
+  // freed when the last of them ends.
+  int _pending = 0;
+  Pointer<Void> _closed = nullptr;
+
   Pointer<Void> get _live => _handle == nullptr ? throw StateError('Job is closed') : _handle;
 
-  /// Frees the handle now; later calls throw a [StateError]. Closing twice does nothing.
+  /// Frees the handle now; later calls throw a [StateError]. Closing twice does nothing. An
+  /// asynchronous call still running keeps it until it ends.
   void close() {
     if (_handle == nullptr) return;
     _lib._jobFinalizer.detach(this);
-    _lib._jobFree.asFunction<void Function(Pointer<Void>)>(isLeaf: true)(_handle);
+    if (_pending > 0) {
+      _closed = _handle;
+    } else {
+      _free(_handle);
+    }
     _handle = nullptr;
+  }
+
+  void _free(Pointer<Void> handle) =>
+      _lib._jobFree.asFunction<void Function(Pointer<Void>)>(isLeaf: true)(handle);
+
+  /// The handle's address for a helper isolate; it stays open until [_unhold].
+  int _hold() {
+    final address = _live.address;
+    _pending++;
+    return address;
+  }
+
+  void _unhold() {
+    if (--_pending == 0 && _closed != nullptr) {
+      _free(_closed);
+      _closed = nullptr;
+    }
   }
 
   /// Waits until the progress moves past `seq` (from `seq`), the job ends, or
@@ -1337,6 +1528,16 @@ final class Job implements Finalizable {
   /// Until the job moves or ends: call it off a UI thread, or use the language's
   /// asynchronous form.
   int waitProgress(int seq, int timeoutMs) => _lib._jobWaitProgress(_live, seq, timeoutMs);
+
+  /// [waitProgress] on a helper isolate, so it never blocks this one.
+  Future<int> waitProgressAsync(int seq, int timeoutMs) {
+    // Every handle is checked open before any is held.
+    _live;
+    final lib = _lib, self = _hold();
+    return _jobWaitProgressOff(lib._path, self, seq, timeoutMs).whenComplete(() {
+      _unhold();
+    });
+  }
 
   /// The progress's sequence number: it moves on with every change.
   int seq() => _lib._jobSeq(_live);
@@ -1367,4 +1568,147 @@ final class Job implements Finalizable {
   /// Until the job moves or ends: call it off a UI thread, or use the language's
   /// asynchronous form.
   Uint8List result() => _lib._jobResult(_live);
+
+  /// [result] on a helper isolate, so it never blocks this one.
+  Future<Uint8List> resultAsync() {
+    // Every handle is checked open before any is held.
+    _live;
+    final lib = _lib, self = _hold();
+    return _jobResultOff(lib._path, self).whenComplete(() {
+      _unhold();
+    });
+  }
 }
+
+/// The body of `Store.createAsync`, run on a helper isolate. A top-level
+/// function, so the closure sent there holds only its arguments.
+Future<int> _storeCreateOff(String path, String root, String repo, String assets, Uint8List trustedRoot) =>
+    Isolate.run(() {
+      final lib = TeiGeodata.open(path);
+      try {
+        return lib._storeCreate(root, repo, assets, trustedRoot)._take();
+      } finally {
+        lib.close();
+      }
+    });
+
+/// The body of `Store.openAsync`, run on a helper isolate. A top-level
+/// function, so the closure sent there holds only its arguments.
+Future<int> _storeOpenOff(String path, String root) =>
+    Isolate.run(() {
+      final lib = TeiGeodata.open(path);
+      try {
+        return lib._storeOpen(root)._take();
+      } finally {
+        lib.close();
+      }
+    });
+
+/// The body of `Store.catalogAsync`, run on a helper isolate. A top-level
+/// function, so the closure sent there holds only its arguments.
+Future<Uint8List> _storeCatalogOff(String path, int handle) =>
+    Isolate.run(() {
+      final lib = TeiGeodata.open(path);
+      try {
+        return lib._storeCatalog(Pointer.fromAddress(handle));
+      } finally {
+        lib.close();
+      }
+    });
+
+/// The body of `Store.statusAsync`, run on a helper isolate. A top-level
+/// function, so the closure sent there holds only its arguments.
+Future<Uint8List> _storeStatusOff(String path, int handle, bool deep) =>
+    Isolate.run(() {
+      final lib = TeiGeodata.open(path);
+      try {
+        return lib._storeStatus(Pointer.fromAddress(handle), deep);
+      } finally {
+        lib.close();
+      }
+    });
+
+/// The body of `Store.pinAsync`, run on a helper isolate. A top-level
+/// function, so the closure sent there holds only its arguments.
+Future<void> _storePinOff(String path, int handle, String pack, bool on) =>
+    Isolate.run(() {
+      final lib = TeiGeodata.open(path);
+      try {
+        return lib._storePin(Pointer.fromAddress(handle), pack, on);
+      } finally {
+        lib.close();
+      }
+    });
+
+/// The body of `Store.removeAsync`, run on a helper isolate. A top-level
+/// function, so the closure sent there holds only its arguments.
+Future<Uint8List> _storeRemoveOff(String path, int handle, String pack) =>
+    Isolate.run(() {
+      final lib = TeiGeodata.open(path);
+      try {
+        return lib._storeRemove(Pointer.fromAddress(handle), pack);
+      } finally {
+        lib.close();
+      }
+    });
+
+/// The body of `Store.findAsync`, run on a helper isolate. A top-level
+/// function, so the closure sent there holds only its arguments.
+Future<Uint8List> _storeFindOff(String path, int handle, int engine, String query, int limit) =>
+    Isolate.run(() {
+      final lib = TeiGeodata.open(path);
+      try {
+        return lib._storeFind(Pointer.fromAddress(handle), Engine._borrow(lib, Pointer.fromAddress(engine)), query, limit);
+      } finally {
+        lib.close();
+      }
+    });
+
+/// The body of `Store.locateAsync`, run on a helper isolate. A top-level
+/// function, so the closure sent there holds only its arguments.
+Future<Uint8List> _storeLocateOff(String path, int handle, int engine, double lat, double lon, int radiusM) =>
+    Isolate.run(() {
+      final lib = TeiGeodata.open(path);
+      try {
+        return lib._storeLocate(Pointer.fromAddress(handle), Engine._borrow(lib, Pointer.fromAddress(engine)), lat, lon, radiusM);
+      } finally {
+        lib.close();
+      }
+    });
+
+/// The body of `Store.engineAsync`, run on a helper isolate. A top-level
+/// function, so the closure sent there holds only its arguments.
+Future<int> _storeEngineOff(String path, int handle) =>
+    Isolate.run(() {
+      final lib = TeiGeodata.open(path);
+      try {
+        return lib._storeEngine(Pointer.fromAddress(handle))._take();
+      } finally {
+        lib.close();
+      }
+    });
+
+/// The body of `Job.waitProgressAsync`, run on a helper isolate. A top-level
+/// function, so the closure sent there holds only its arguments.
+Future<int> _jobWaitProgressOff(String path, int handle, int seq, int timeoutMs) =>
+    Isolate.run(() {
+      final lib = TeiGeodata.open(path);
+      try {
+        return lib._jobWaitProgress(Pointer.fromAddress(handle), seq, timeoutMs);
+      } finally {
+        lib.close();
+      }
+    });
+
+/// The body of `Job.resultAsync`, run on a helper isolate. A top-level
+/// function, so the closure sent there holds only its arguments.
+Future<Uint8List> _jobResultOff(String path, int handle) =>
+    Isolate.run(() {
+      final lib = TeiGeodata.open(path);
+      try {
+        return lib._jobResult(Pointer.fromAddress(handle));
+      } finally {
+        lib.close();
+      }
+    });
+
