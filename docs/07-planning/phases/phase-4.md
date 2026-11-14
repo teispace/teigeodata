@@ -405,12 +405,12 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   - [x] 3. Towns (D-259): 4,128 of 5,050 statutory towns placed (81.7%) within their district,
     else their state; a report per outcome; G-town floor 0.81, proved by 0.90; the
     wrong-district plant fails `world_towns` tests. IDs kept by D-260
-  - [ ] 4. The India lite pack: `build.yaml`, Nepal's claim cut (D-217, the claim-area places
-    in Nepal's pack), heights from NASADEM over the towns' tiles within the disk budget, Hindi
-    names (Wikidata `hi`, LGD's local name where the state's language is Hindi, then the
-    transliterator, marked), the golden set of §5 (`golden-curated.yaml`). Done ahead, in the
-    world part: every placed town's LGD name in its state's language (D-263, 1,781 towns, 10
-    languages)
+  - [ ] 4. India's town-level quality in the world part (re-scoped by D-270; the pack, with
+    villages, moves to W1): every placed town's LGD name in its state's language (done,
+    D-263, 1,781 towns, 10 languages); ISO 3166-2 codes on the world's first-level units,
+    current by Wikidata P300 and checked against CLDR's validity list (G-iso); name
+    completeness in the layer's languages, measured against Wikidata's labels; India's golden
+    set of the research §5 (`golden-curated.yaml`)
   - [ ] 5. India's towns in the embedded layer: the world part's done (`world_towns: [in]`,
     D-259, wire 9,326,040 B); the pack's rows (`countries: in`) after step 4, sized
   - [ ] 6. Census towns from the Census 2011 town directory (Q-024)
@@ -523,3 +523,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-13 | TG-15 step 4: towns' own-language names from LGD in the world part, ahead of the pack | D-263 |
 | 2026-11-13 | TG-15 step 4: city-first for districts, alternate names in the part's languages; India golden 44/44 | D-264, D-265 |
 | 2026-11-14 | Q-026: one importance scale, unit populations from Wikidata, a country before its namesakes, coastal cities in their unit; the world golden set | D-266 |
+| 2026-11-14 | TG-15 step 4 re-scoped to the world part (codes, names, golden set); the India pack moves to W1 with its villages | D-270 |
