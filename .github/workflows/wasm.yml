@@ -149,7 +149,7 @@ jobs:
       - name: Parity in Chrome, from the full package
         working-directory: bindings/dart
         run: |
-          dart pub get
+          dart pub get --no-example
           dart test -p chrome --compiler dart2js,dart2wasm test/web_parity_test.dart
 
   workerd:

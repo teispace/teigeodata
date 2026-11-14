@@ -10,7 +10,9 @@ import 'package:stream_channel/stream_channel.dart';
 const _types = {'.js': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json'};
 
 Future<void> hybridMain(StreamChannel<Object?> channel) async {
-  final pkg = Directory(Platform.environment['TEIGEODATA_WASM'] ?? '../../target/wasm/full').absolute;
+  final pkg = Directory(
+    Platform.environment['TEIGEODATA_WASM'] ?? '../../target/wasm/full',
+  ).absolute;
   if (!File('${pkg.path}/index.js').existsSync()) {
     channel.sink.add({'error': 'no WebAssembly package at ${pkg.path}: cargo xtask package-wasm'});
     return;
@@ -34,7 +36,9 @@ Future<void> hybridMain(StreamChannel<Object?> channel) async {
     await response.addStream(file.openRead());
     await response.close();
   });
-  final text = File(Platform.environment['TEIGEODATA_PARITY'] ?? '../parity.json').readAsStringSync();
+  final text = File(
+    Platform.environment['TEIGEODATA_PARITY'] ?? '../parity.json',
+  ).readAsStringSync();
   final parity = jsonDecode(text) as Map<String, dynamic>;
   final engine = parity['engine'] as Map<String, dynamic>;
   final files = {

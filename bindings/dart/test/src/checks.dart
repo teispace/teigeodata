@@ -250,8 +250,7 @@ void checks(
     const every = OpenOptions(priority: 2, verify: Verify.eager, load: Load.read, outlineLevel: 1);
     expect(open(scratch, fixture, every), 1);
     expect(
-      () =>
-          open(scratch, fixture, OpenOptions(outlineLevel: ow['bad_outline_level'] as int)),
+      () => open(scratch, fixture, OpenOptions(outlineLevel: ow['bad_outline_level'] as int)),
       throwsA(isA<InvalidArgumentException>()),
     );
     scratch.close();
