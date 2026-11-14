@@ -118,7 +118,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
     runs parity through it
   - [x] 5.5b the prebuilt download, pinned by SHA-256, proven on a local mirror; the hashes
     and assets come with the release pipeline (5.10)
-  - [ ] 5.5c `cargo xtask flutter-check` on macOS and the iOS simulator (passing here);
+  - [x] 5.5c `cargo xtask flutter-check` on macOS and the iOS simulator (passing here);
     done when `flutter.yml` is green on Linux, Windows and Android too
   - [ ] 5.5d link-hook tree-shaking, when Dart links code assets statically
   - [ ] the web, with the WASM build (5.7)
