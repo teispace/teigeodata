@@ -83,6 +83,14 @@ public enum Load: UInt32, Sendable {
 }
 
 
+/// Set once a progress stream's consumer stops.
+private final class StopFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stopped = false
+    var isSet: Bool { lock.withLock { stopped } }
+    func set() { lock.withLock { stopped = true } }
+}
+
 /// Runs a call that blocks (`# Blocks`) on a thread of its own and resumes the caller when it
 /// ends, so it never holds a thread of Swift's cooperative pool, which must not block.
 private func detached<T: Sendable, E: Error>(
@@ -676,7 +684,7 @@ public final class Store: @unchecked Sendable {
 
     /// ``create(_:repo:assets:trustedRoot:)`` on a thread of its own; awaiting it never blocks the caller's thread.
     public static func createAsync(_ root: String, repo: String, assets: String, trustedRoot: Data) async throws(TeiGeodataError) -> Store {
-try await detached { () throws(TeiGeodataError) in try Store.create(root, repo: repo, assets: assets, trustedRoot: trustedRoot) }
+        try await detached { () throws(TeiGeodataError) in try Store.create(root, repo: repo, assets: assets, trustedRoot: trustedRoot) }
     }
 
     /// Opens the store at `root`, finishing or undoing an install a crash cut short.
@@ -699,7 +707,7 @@ try await detached { () throws(TeiGeodataError) in try Store.create(root, repo: 
 
     /// ``open(_:)`` on a thread of its own; awaiting it never blocks the caller's thread.
     public static func openAsync(_ root: String) async throws(TeiGeodataError) -> Store {
-try await detached { () throws(TeiGeodataError) in try Store.open(root) }
+        try await detached { () throws(TeiGeodataError) in try Store.open(root) }
     }
 
     /// The packs found damaged when the store was opened, comma-separated; empty when none.
@@ -730,7 +738,7 @@ try await detached { () throws(TeiGeodataError) in try Store.open(root) }
 
     /// ``catalog()`` on a thread of its own; awaiting it never blocks the caller's thread.
     public func catalogAsync() async throws(TeiGeodataError) -> Data {
-try await detached { () throws(TeiGeodataError) in try self.catalog() }
+        try await detached { () throws(TeiGeodataError) in try self.catalog() }
     }
 
     /// Each installed pack and its health, from a full check of every byte when `deep`.
@@ -752,7 +760,7 @@ try await detached { () throws(TeiGeodataError) in try self.catalog() }
 
     /// ``status(_:)`` on a thread of its own; awaiting it never blocks the caller's thread.
     public func statusAsync(_ deep: Bool) async throws(TeiGeodataError) -> Data {
-try await detached { () throws(TeiGeodataError) in try self.status(deep) }
+        try await detached { () throws(TeiGeodataError) in try self.status(deep) }
     }
 
     /// Pins the pack (kept when room is made), or unpins it.
@@ -773,7 +781,7 @@ try await detached { () throws(TeiGeodataError) in try self.status(deep) }
 
     /// ``pin(_:on:)`` on a thread of its own; awaiting it never blocks the caller's thread.
     public func pinAsync(_ pack: String, on: Bool) async throws(TeiGeodataError) {
-try await detached { () throws(TeiGeodataError) in try self.pin(pack, on: on) }
+        try await detached { () throws(TeiGeodataError) in try self.pin(pack, on: on) }
     }
 
     /// Removes the packs and the dependencies nothing else needs; returns what was removed.
@@ -796,7 +804,7 @@ try await detached { () throws(TeiGeodataError) in try self.pin(pack, on: on) }
 
     /// ``remove(_:)`` on a thread of its own; awaiting it never blocks the caller's thread.
     public func removeAsync(_ pack: String) async throws(TeiGeodataError) -> Data {
-try await detached { () throws(TeiGeodataError) in try self.remove(pack) }
+        try await detached { () throws(TeiGeodataError) in try self.remove(pack) }
     }
 
     /// The places named `query` in `engine` (one over a world pack the app ships, the
@@ -822,7 +830,7 @@ try await detached { () throws(TeiGeodataError) in try self.remove(pack) }
 
     /// ``find(_:query:limit:)`` on a thread of its own; awaiting it never blocks the caller's thread.
     public func findAsync(_ engine: Engine, query: String, limit: UInt32) async throws(TeiGeodataError) -> Data {
-try await detached { () throws(TeiGeodataError) in try self.find(engine, query: query, limit: limit) }
+        try await detached { () throws(TeiGeodataError) in try self.find(engine, query: query, limit: limit) }
     }
 
     /// The countries within `radius_m` metres of a point in `engine`, each with the catalog's
@@ -846,7 +854,7 @@ try await detached { () throws(TeiGeodataError) in try self.find(engine, query: 
 
     /// ``locate(_:lat:lon:radiusM:)`` on a thread of its own; awaiting it never blocks the caller's thread.
     public func locateAsync(_ engine: Engine, lat: Double, lon: Double, radiusM: UInt32) async throws(TeiGeodataError) -> Data {
-try await detached { () throws(TeiGeodataError) in try self.locate(engine, lat: lat, lon: lon, radiusM: radiusM) }
+        try await detached { () throws(TeiGeodataError) in try self.locate(engine, lat: lat, lon: lon, radiusM: radiusM) }
     }
 
     /// An engine over the installed packs, each opened with the components and languages
@@ -869,7 +877,7 @@ try await detached { () throws(TeiGeodataError) in try self.locate(engine, lat: 
 
     /// ``engine()`` on a thread of its own; awaiting it never blocks the caller's thread.
     public func engineAsync() async throws(TeiGeodataError) -> Engine {
-try await detached { () throws(TeiGeodataError) in try self.engine() }
+        try await detached { () throws(TeiGeodataError) in try self.engine() }
     }
 
     /// Refreshes the catalog for the countries (comma-separated ISO codes) and every country
@@ -948,6 +956,11 @@ try await detached { () throws(TeiGeodataError) in try self.engine() }
 /// A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the
 /// next change, a cancel, and its result.
 ///
+/// # Job
+///
+/// Each language builds its own idioms on these methods: a stream of progress, and the
+/// awaited result cancelling the job when the caller's task is cancelled.
+///
 /// Sendable: every call is safe from any thread at once (D-274). The handle is freed when the
 /// last reference goes.
 public final class Job: @unchecked Sendable {
@@ -974,7 +987,7 @@ public final class Job: @unchecked Sendable {
 
     /// ``waitProgress(_:timeoutMs:)`` on a thread of its own; awaiting it never blocks the caller's thread.
     public func waitProgressAsync(_ seq: UInt64, timeoutMs: UInt32) async -> UInt64 {
-await detached { self.waitProgress(seq, timeoutMs: timeoutMs) }
+        await detached { self.waitProgress(seq, timeoutMs: timeoutMs) }
     }
 
     /// The progress's sequence number: it moves on with every change.
@@ -1037,6 +1050,39 @@ await detached { self.waitProgress(seq, timeoutMs: timeoutMs) }
 
     /// ``result()`` on a thread of its own; awaiting it never blocks the caller's thread.
     public func resultAsync() async throws(TeiGeodataError) -> Data {
-try await detached { () throws(TeiGeodataError) in try self.result() }
+        // The caller's task cancelled cancels the job; the result is then `.cancelled`.
+        // (Its error is carried out as a typed `Result`: the handler throws untyped.)
+        let outcome = await withTaskCancellationHandler {
+            do throws(TeiGeodataError) {
+                return Result<Data, TeiGeodataError>.success(try await detached { () throws(TeiGeodataError) in try self.result() })
+            } catch {
+                return .failure(error)
+            }
+        } onCancel: {
+            self.cancel()
+        }
+        return try outcome.get()
+    }
+
+    /// The job's progress, `(done, total)` bytes: now, then at each change, ending once the
+    /// job ends or the consumer stops. A thread of its own waits for the changes.
+    public var progress: AsyncStream<(done: UInt64, total: UInt64)> {
+        AsyncStream { out in
+            let stop = StopFlag()
+            out.onTermination = { _ in stop.set() }
+            Thread.detachNewThread {
+                var seq = self.seq()
+                out.yield((self.doneBytes(), self.totalBytes()))
+                while !stop.isSet && !self.isEnded() {
+                    let next = self.waitProgress(seq, timeoutMs: 250)
+                    if next != seq {
+                        seq = next
+                        out.yield((self.doneBytes(), self.totalBytes()))
+                    }
+                }
+                if self.isEnded() { out.yield((self.doneBytes(), self.totalBytes())) }
+                out.finish()
+            }
+        }
     }
 }

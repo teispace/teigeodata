@@ -9,7 +9,7 @@ use syn::spanned::Spanned;
 use syn::{Attribute, Expr, FnArg, GenericArgument, Item, Lit, Pat, PathArguments, ReturnType};
 
 /// Version of the IDL format itself.
-pub(crate) const FORMAT: u32 = 6;
+pub(crate) const FORMAT: u32 = 7;
 
 /// The extracted surface.
 #[derive(Debug, Serialize)]
@@ -139,7 +139,22 @@ pub(crate) struct Handle {
     pub(crate) methods: Vec<Function>,
     /// The Cargo feature it and its methods need, as [`Function::feature`].
     pub(crate) feature: Option<String>,
+    /// Its documentation has a `# Job` section: it has the job contract ([`JOB`]), on which
+    /// each language builds its idioms (a progress stream, cancel from the caller's own
+    /// cancellation; bindings §6).
+    pub(crate) job: bool,
 }
+
+/// The methods a `# Job` handle has: name, parameters, result, fallible, blocks.
+const JOB: [(&str, &[Ty], Ty, bool, bool); 7] = [
+    ("wait_progress", &[Ty::U64, Ty::U32], Ty::U64, false, true),
+    ("seq", &[], Ty::U64, false, false),
+    ("done_bytes", &[], Ty::U64, false, false),
+    ("total_bytes", &[], Ty::U64, false, false),
+    ("is_ended", &[], Ty::Bool, false, false),
+    ("cancel", &[], Ty::Void, false, false),
+    ("result", &[], Ty::Blob, true, true),
+];
 
 /// A callback's signature: scalar arguments, a `bool` result (`false` cancels). `id` names the
 /// signature (`u32`, `u32_f64`), so targets can declare one type per signature.
@@ -265,13 +280,17 @@ pub(crate) fn extract(source: &str) -> Result<Idl, Vec<String>> {
                 }
             } else {
                 match feature(&s.attrs) {
-                    Ok(feature) => idl.handles.push(Handle {
-                        snake: snake(&name),
-                        name,
-                        doc: docs(&s.attrs),
-                        methods: Vec::new(),
-                        feature,
-                    }),
+                    Ok(feature) => {
+                        let doc = docs(&s.attrs);
+                        idl.handles.push(Handle {
+                            snake: snake(&name),
+                            name,
+                            job: doc.iter().any(|l| l == "# Job"),
+                            doc,
+                            methods: Vec::new(),
+                            feature,
+                        });
+                    }
                     Err(p) => problems.push(p),
                 }
             }
@@ -306,6 +325,7 @@ pub(crate) fn extract(source: &str) -> Result<Idl, Vec<String>> {
     }
     idl.callbacks = callbacks(&idl);
     problems.extend(gates(&idl));
+    problems.extend(jobs(&idl));
     if idl.error_codes.is_empty() {
         problems.push("no `ErrorCode` enum".into());
     }
@@ -414,6 +434,32 @@ fn callbacks(idl: &Idl) -> Vec<Callback> {
 }
 
 /// An item without a feature may not use a type that has one: it would not build without it.
+/// Each `# Job` handle that lacks a method of the job contract, or has it with another
+/// signature.
+fn jobs(idl: &Idl) -> Vec<String> {
+    let mut problems = Vec::new();
+    for h in idl.handles.iter().filter(|h| h.job) {
+        for (name, params, returns, fallible, blocks) in JOB {
+            let ok = h.methods.iter().any(|f| {
+                f.name == name
+                    && f.receiver
+                    && f.params.iter().map(|p| p.ty).eq(params.iter().copied())
+                    && f.returns == returns
+                    && f.fallible == fallible
+                    && f.blocks == blocks
+            });
+            if !ok {
+                problems.push(format!(
+                    "`{}` is a `# Job` but lacks `{name}` as the job contract has it \
+                     ({params:?} -> {returns:?}, fallible {fallible}, blocks {blocks})",
+                    h.name
+                ));
+            }
+        }
+    }
+    problems
+}
+
 fn gates(idl: &Idl) -> Vec<String> {
     let gated = |name: &str| {
         idl.handles
@@ -1056,6 +1102,25 @@ impl Engine {
             let src = format!("{API}\n{bad}");
             let err = extract(&src).unwrap_err();
             assert!(err[0].contains("lib.rs:"), "{bad}: {err:?}");
+        }
+    }
+
+    #[test]
+    fn a_job_has_the_job_contract() {
+        const JOB_SRC: &str = "/// Work.\n///\n/// # Job\npub struct J { x: u32 }\nimpl J {\n\
+            /// # Blocks\npub fn wait_progress(&self, seq: u64, timeout_ms: u32) -> u64 { 0 }\n\
+            pub fn seq(&self) -> u64 { 0 }\npub fn done_bytes(&self) -> u64 { 0 }\n\
+            pub fn total_bytes(&self) -> u64 { 0 }\npub fn is_ended(&self) -> bool { true }\n\
+            pub fn cancel(&self) {}\n/// # Blocks\npub fn result(&self) -> Result<Blob> { todo!() }\n}";
+        let idl = extract(&format!("{API}\n{JOB_SRC}")).unwrap();
+        assert!(idl.handles.iter().any(|h| h.name == "J" && h.job));
+        for broken in [
+            JOB_SRC.replace("pub fn cancel(&self) {}", ""),
+            JOB_SRC.replace("timeout_ms: u32", "timeout_ms: u64"),
+            JOB_SRC.replacen("/// # Blocks\npub fn result", "pub fn result", 1),
+        ] {
+            let err = extract(&format!("{API}\n{broken}")).unwrap_err();
+            assert!(err.iter().any(|e| e.contains("job contract")), "{err:?}");
         }
     }
 

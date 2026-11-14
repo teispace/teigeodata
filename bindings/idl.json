@@ -1,5 +1,5 @@
 {
-  "format": 6,
+  "format": 7,
   "source": "crates/teigeodata-api/src/lib.rs",
   "error_codes": [
     {
@@ -829,7 +829,8 @@
           "feature": null
         }
       ],
-      "feature": null
+      "feature": null,
+      "job": false
     },
     {
       "name": "Store",
@@ -1268,14 +1269,20 @@
           "feature": "store"
         }
       ],
-      "feature": "store"
+      "feature": "store",
+      "job": false
     },
     {
       "name": "Job",
       "snake": "job",
       "doc": [
         "A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the",
-        "next change, a cancel, and its result."
+        "next change, a cancel, and its result.",
+        "",
+        "# Job",
+        "",
+        "Each language builds its own idioms on these methods: a stream of progress, and the",
+        "awaited result cancelling the job when the caller's task is cancelled."
       ],
       "methods": [
         {
@@ -1391,7 +1398,8 @@
           "feature": "store"
         }
       ],
-      "feature": "store"
+      "feature": "store",
+      "job": true
     }
   ],
   "records": [

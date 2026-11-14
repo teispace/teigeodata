@@ -1524,6 +1524,11 @@ pub unsafe extern "C" fn tg_store_repair(
 /// A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the
 /// next change, a cancel, and its result.
 ///
+/// # Job
+///
+/// Each language builds its own idioms on these methods: a stream of progress, and the
+/// awaited result cancelling the job when the caller's task is cancelled.
+///
 /// Opaque at the C ABI: made by its constructors, freed once with `tg_job_free`.
 #[cfg(feature = "store")]
 #[derive(Debug)]

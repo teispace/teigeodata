@@ -11,6 +11,42 @@ func check(_ ok: Bool, _ what: @autoclosure () -> String) {
 }
 
 /// A fixed-width column of a v1 blob, read in place.
+/// A host on localhost that answers every request with a body of a byte every 20 ms: a job
+/// on it runs, its progress moving, until it is cancelled.
+func trickle() -> String {
+    let fd = socket(AF_INET, SOCK_STREAM, 0)
+    var addr = sockaddr_in()
+    addr.sin_family = sa_family_t(AF_INET)
+    addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+    var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+    withUnsafeMutablePointer(to: &addr) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+            _ = bind(fd, $0, len)
+            _ = getsockname(fd, $0, &len)
+        }
+    }
+    listen(fd, 16)
+    Thread.detachNewThread {
+        while case let c = accept(fd, nil, nil), c >= 0 {
+            Thread.detachNewThread {
+                var one: Int32 = 1
+                setsockopt(c, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
+                var request = [UInt8](repeating: 0, count: 4096)
+                _ = read(c, &request, request.count)
+                let head = Array("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n".utf8)
+                _ = head.withUnsafeBytes { write(c, $0.baseAddress, $0.count) }
+                for _ in 0..<1000 {
+                    var byte: UInt8 = 0x20
+                    if write(c, &byte, 1) != 1 { break }
+                    usleep(20_000)
+                }
+                close(c)
+            }
+        }
+    }
+    return "http://127.0.0.1:\(UInt16(bigEndian: addr.sin_port))/"
+}
+
 func column<T: FixedWidthInteger>(_ blob: Data, _ name: String, as _: T.Type) -> [T] {
     blob.withUnsafeBytes { raw -> [T] in
         let u32 = { (at: Int) in UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: at, as: UInt32.self)) }
@@ -240,5 +276,30 @@ do {
     } catch {
         check(error.code == .network, "result async: \(error)")
     }
+    // Progress ends with the job, at its total.
+    var last: (done: UInt64, total: UInt64)? = nil
+    for await p in store.refresh(pack).progress { last = p }
+    check(last.map { $0.done == $0.total } == true, "progress ends at the total: \(String(describing: last))")
+    // On a host that trickles, progress moves, and cancelling the awaiting task cancels the job.
+    let slow = trickle()
+    let slowStore = try Store.create(d.appendingPathComponent("slow").path, repo: slow, assets: slow, trustedRoot: root)
+    let slowJob = slowStore.refresh(pack)
+    let waiting = Task { try await slowJob.resultAsync() }
+    var moves = 0
+    for await _ in slowJob.progress {
+        moves += 1
+        if moves == 3 { break }
+    }
+    check(moves == 3, "progress moves")
+    let at = Date()
+    waiting.cancel()
+    do {
+        _ = try await waiting.value
+        check(false, "a cancelled task: no error")
+    } catch {
+        check((error as? TeiGeodataError)?.code == .cancelled, "a cancelled task: \(error)")
+    }
+    check(Date().timeIntervalSince(at) < 2, "the cancel ends the job at once")
+    check(slowJob.isEnded(), "ended")
 }
 print("swift parity ok")

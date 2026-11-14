@@ -121,6 +121,14 @@ public enum {{ e.name }}: UInt32, Sendable {
 
 {% endfor %}
 
+/// Set once a progress stream's consumer stops.
+private final class StopFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stopped = false
+    var isSet: Bool { lock.withLock { stopped } }
+    func set() { lock.withLock { stopped = true } }
+}
+
 /// Runs a call that blocks (`# Blocks`) on a thread of its own and resumes the caller when it
 /// ends, so it never holds a thread of Swift's cooperative pool, which must not block.
 private func detached<T: Sendable, E: Error>(
@@ -189,10 +197,50 @@ public final class {{ h.name }}: @unchecked Sendable {
 
     /// ``{{ f.name | camel }}{% if f.params %}({% for p in f.params %}{% if loop.first %}_{% else %}{{ p.name | camel }}{% endif %}:{% endfor %}){% else %}(){% endif %}`` on a thread of its own; awaiting it never blocks the caller's thread.
     public {% if not f.receiver %}static {% endif %}func {{ f.name | camel }}Async{{ signature(f) | replace(") throws(", ") async throws(") }}{% if not f.fallible %} async{% endif %}{% if f.returns != "void" %} -> {{ swty(f.returns, f.returns_handle) }}{% endif %} {
-        {% if f.fallible %}try {% endif %}await detached { {% if f.fallible %}() throws(TeiGeodataError) in try {% endif %}{% if f.receiver %}self{% else %}{{ h.name }}{% endif %}.{{ f.name | camel }}({% for p in f.params %}{% if not loop.first %}{{ p.name | camel }}: {% endif %}{{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) }
+{% set run %}{% if f.fallible %}try {% endif %}await detached { {% if f.fallible %}() throws(TeiGeodataError) in try {% endif %}{% if f.receiver %}self{% else %}{{ h.name }}{% endif %}.{{ f.name | camel }}({% for p in f.params %}{% if not loop.first %}{{ p.name | camel }}: {% endif %}{{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) }{% endset %}
+{% if h.job and f.name == "result" %}
+        // The caller's task cancelled cancels the job; the result is then `.cancelled`.
+        // (Its error is carried out as a typed `Result`: the handler throws untyped.)
+        let outcome = await withTaskCancellationHandler {
+            do throws(TeiGeodataError) {
+                return Result<{{ swty(f.returns, f.returns_handle) }}, TeiGeodataError>.success({{ run }})
+            } catch {
+                return .failure(error)
+            }
+        } onCancel: {
+            self.cancel()
+        }
+        return try outcome.get()
+{% else %}
+        {{ run }}
+{% endif %}
     }
 {% endif %}
 {% endif %}
 {% endfor %}
+{% if h.job %}
+
+    /// The job's progress, `(done, total)` bytes: now, then at each change, ending once the
+    /// job ends or the consumer stops. A thread of its own waits for the changes.
+    public var progress: AsyncStream<(done: UInt64, total: UInt64)> {
+        AsyncStream { out in
+            let stop = StopFlag()
+            out.onTermination = { _ in stop.set() }
+            Thread.detachNewThread {
+                var seq = self.seq()
+                out.yield((self.doneBytes(), self.totalBytes()))
+                while !stop.isSet && !self.isEnded() {
+                    let next = self.waitProgress(seq, timeoutMs: 250)
+                    if next != seq {
+                        seq = next
+                        out.yield((self.doneBytes(), self.totalBytes()))
+                    }
+                }
+                if self.isEnded() { out.yield((self.doneBytes(), self.totalBytes())) }
+                out.finish()
+            }
+        }
+    }
+{% endif %}
 }
 {% endfor %}

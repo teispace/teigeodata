@@ -1505,6 +1505,11 @@ final class Store implements Finalizable {
 /// A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the
 /// next change, a cancel, and its result.
 ///
+/// # Job
+///
+/// Each language builds its own idioms on these methods: a stream of progress, and the
+/// awaited result cancelling the job when the caller's task is cancelled.
+///
 /// Freed by [close], or when collected if never closed. Use it on the isolate that made it.
 final class Job implements Finalizable {
   Job._(this._lib, this._handle) {

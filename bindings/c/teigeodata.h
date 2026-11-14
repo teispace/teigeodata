@@ -634,7 +634,7 @@ int32_t tg_store_update(const tg_store *handle, const uint8_t *packs, size_t pac
  */
 int32_t tg_store_repair(const tg_store *handle, const uint8_t *pack, size_t pack_len, tg_job **out);
 
-/* A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the next change, a cancel, and its result. */
+/* A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the next change, a cancel, and its result.  # Job  Each language builds its own idioms on these methods: a stream of progress, and the awaited result cancelling the job when the caller's task is cancelled. */
 
 /* Frees a handle. NULL does nothing. No call on it may be in flight. */
 void tg_job_free(tg_job *handle);

@@ -1272,6 +1272,11 @@ public static final class Store implements AutoCloseable {
     /**
      * A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the
      * next change, a cancel, and its result.
+     *
+     * # Job
+     *
+     * Each language builds its own idioms on these methods: a stream of progress, and the
+     * awaited result cancelling the job when the caller's task is cancelled.
      */
 public static final class Job implements AutoCloseable {
         private final long handle;
@@ -1460,8 +1465,56 @@ public static final class Job implements AutoCloseable {
          * result, or exceptionally with its {@link TeiGeodataException}.
          */
         public java.util.concurrent.CompletableFuture<byte[]> resultAsync() {
-            return java.util.concurrent.CompletableFuture.supplyAsync(() -> result(), ASYNC);
+            // Cancelling the future cancels the job.
+            java.util.concurrent.CompletableFuture<byte[]> future = new java.util.concurrent.CompletableFuture<>() {
+                @Override
+                public boolean cancel(boolean mayInterruptIfRunning) {
+                    try {
+                        Job.this.cancel();
+                    } catch (IllegalStateException closed) {
+                        // Closed: nothing runs to cancel.
+                    }
+                    return super.cancel(mayInterruptIfRunning);
+                }
+            };
+            ASYNC.execute(() -> {
+                try {
+                    future.complete(result());
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            });
+            return future;
         }
         private static native byte[] nativeResult(long handle);
+
+        /**
+         * Calls {@code listener} with the job's progress, {@code (done, total)} bytes: now, then
+         * at each change, on a background thread, until the job ends (the last call is at its
+         * total). The future completes then; cancelling it stops the calls, not the job.
+         */
+        public java.util.concurrent.CompletableFuture<Void> onProgress(java.util.function.BiConsumer<Long, Long> listener) {
+            java.util.concurrent.CompletableFuture<Void> future = new java.util.concurrent.CompletableFuture<>();
+            ASYNC.execute(() -> {
+                try {
+                    long seq = seq();
+                    listener.accept(doneBytes(), totalBytes());
+                    while (!future.isDone() && !isEnded()) {
+                        long next = waitProgress(seq, 250);
+                        if (next != seq) {
+                            seq = next;
+                            listener.accept(doneBytes(), totalBytes());
+                        }
+                    }
+                    if (!future.isDone()) {
+                        listener.accept(doneBytes(), totalBytes());
+                    }
+                    future.complete(null);
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            });
+            return future;
+        }
     }
 }

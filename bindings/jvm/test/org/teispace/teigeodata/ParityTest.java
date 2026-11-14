@@ -113,7 +113,81 @@ public final class ParityTest {
                     check(e.getCause() instanceof TeiGeodataException.Network, "result async: " + e.getCause());
                 }
             }
+            // Progress ends with the job, at its total.
+            try (TeiGeodata.Job job = store.refresh(pack)) {
+                long[] last = {-1, -2};
+                job.onProgress((done, total) -> {
+                    last[0] = done;
+                    last[1] = total;
+                }).join();
+                check(last[0] == last[1], "progress ends at the total");
+            }
         }
+        // On a host that trickles, progress moves, and cancelling the future cancels the job.
+        String slow = trickle();
+        try (TeiGeodata.Store store = TeiGeodata.Store.create(d.resolve("slow").toString(), slow, slow, root);
+                TeiGeodata.Job job = store.refresh((String) s.get("pack"))) {
+            var future = job.resultAsync();
+            var moved = new java.util.concurrent.CountDownLatch(3);
+            var listening = job.onProgress((done, total) -> moved.countDown());
+            try {
+                check(moved.await(10, java.util.concurrent.TimeUnit.SECONDS), "progress moves");
+            } catch (InterruptedException e) {
+                throw new AssertionError(e);
+            }
+            long at = System.nanoTime();
+            future.cancel(false);
+            check(waitEnded(job), "the cancel ends the job");
+            check(System.nanoTime() - at < 2_000_000_000L, "at once");
+            expect(TeiGeodataException.Cancelled.class, job::result, "");
+            listening.join();
+        }
+    }
+
+    /** Waits up to two seconds for {@code job} to end. */
+    static boolean waitEnded(TeiGeodata.Job job) {
+        long seq = job.seq();
+        for (int i = 0; i < 20 && !job.isEnded(); i++) {
+            seq = job.waitProgress(seq, 100);
+        }
+        return job.isEnded();
+    }
+
+    /**
+     * A host on localhost that answers every request with a body of a byte every 20 ms: a job
+     * on it runs, its progress moving, until it is cancelled.
+     */
+    static String trickle() throws java.io.IOException {
+        java.net.ServerSocket server = new java.net.ServerSocket(0, 16, java.net.InetAddress.getLoopbackAddress());
+        Thread accept = new Thread(() -> {
+            while (true) {
+                java.net.Socket c;
+                try {
+                    c = server.accept();
+                } catch (java.io.IOException e) {
+                    return;
+                }
+                Thread t = new Thread(() -> {
+                    try (c) {
+                        c.getInputStream().read(new byte[4096]);
+                        var out = c.getOutputStream();
+                        out.write("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n".getBytes());
+                        for (int i = 0; i < 1000; i++) {
+                            out.write(' ');
+                            out.flush();
+                            Thread.sleep(20);
+                        }
+                    } catch (Exception gone) {
+                        // The client went away.
+                    }
+                });
+                t.setDaemon(true);
+                t.start();
+            }
+        });
+        accept.setDaemon(true);
+        accept.start();
+        return "http://127.0.0.1:" + server.getLocalPort() + "/";
     }
 
     /** The engine handle on the fixture pack (parity.json, "engine"). */

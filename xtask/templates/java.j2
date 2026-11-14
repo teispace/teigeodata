@@ -210,11 +210,65 @@ public final class TeiGeodata {
          * result, or exceptionally with its {@link TeiGeodataException}.
          */
         public {% if not f.receiver %}static {% endif %}java.util.concurrent.CompletableFuture<{{ bty(f) }}> {{ f.name | camel }}Async({% for p in f.params %}{{ pty(p) }} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) {
+{% if h.job and f.name == "result" %}
+            // Cancelling the future cancels the job.
+            java.util.concurrent.CompletableFuture<{{ bty(f) }}> future = new java.util.concurrent.CompletableFuture<>() {
+                @Override
+                public boolean cancel(boolean mayInterruptIfRunning) {
+                    try {
+                        {{ h.name }}.this.cancel();
+                    } catch (IllegalStateException closed) {
+                        // Closed: nothing runs to cancel.
+                    }
+                    return super.cancel(mayInterruptIfRunning);
+                }
+            };
+            ASYNC.execute(() -> {
+                try {
+                    future.complete(result());
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            });
+            return future;
+{% else %}
             return java.util.concurrent.CompletableFuture.{% if f.returns == "void" %}runAsync{% else %}supplyAsync{% endif %}(() -> {{ f.name | camel }}({% for p in f.params %}{{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}), ASYNC);
+{% endif %}
         }
 {% endif %}
         private static native {% if f.returns == "handle" %}long{% else %}{{ jty(f.returns) }}{% endif %} native{{ f.name | pascal }}({% if f.receiver %}long handle{% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{{ native_param(p) }}{% if not loop.last %}, {% endif %}{% endfor %});
 {% endfor %}
+{% if h.job %}
+
+        /**
+         * Calls {@code listener} with the job's progress, {@code (done, total)} bytes: now, then
+         * at each change, on a background thread, until the job ends (the last call is at its
+         * total). The future completes then; cancelling it stops the calls, not the job.
+         */
+        public java.util.concurrent.CompletableFuture<Void> onProgress(java.util.function.BiConsumer<Long, Long> listener) {
+            java.util.concurrent.CompletableFuture<Void> future = new java.util.concurrent.CompletableFuture<>();
+            ASYNC.execute(() -> {
+                try {
+                    long seq = seq();
+                    listener.accept(doneBytes(), totalBytes());
+                    while (!future.isDone() && !isEnded()) {
+                        long next = waitProgress(seq, 250);
+                        if (next != seq) {
+                            seq = next;
+                            listener.accept(doneBytes(), totalBytes());
+                        }
+                    }
+                    if (!future.isDone()) {
+                        listener.accept(doneBytes(), totalBytes());
+                    }
+                    future.complete(null);
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            });
+            return future;
+        }
+{% endif %}
     }
 {% endfor %}
 }
