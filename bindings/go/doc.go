@@ -31,5 +31,10 @@
 //	if errors.Is(err, teigeodata.CodeMissingComponent) { ... }
 //
 // Handles (Engine, Store, Job) may be used from any goroutine at once. Close frees one at
-// once; otherwise it is freed when unreachable.
+// once; otherwise it is freed when unreachable. A call that blocks (the store's, a job's
+// result) blocks only its goroutine; a job reports progress with
+//
+//	for p := range job.Progress(ctx) { ... }
+//
+// and Wait(ctx) cancels it when ctx is done.
 package teigeodata

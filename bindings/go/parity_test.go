@@ -8,6 +8,7 @@ package teigeodata_test
 // and the same with CGO_ENABLED=0 for the purego layer.
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"math"
@@ -628,7 +629,8 @@ func TestStore(t *testing.T) {
 	job.Cancel()
 }
 
-// A job's progress moves while a mirror trickles bytes, and Cancel ends it at once.
+// A job's progress moves while a mirror trickles bytes, and a context cancelled during Wait
+// ends the job at once (D-283).
 func TestJobCancel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", "1000")
@@ -649,20 +651,43 @@ func TestJobCancel(t *testing.T) {
 	defer server.CloseClientConnections()
 	store := openStore(t, server.URL+"/")
 	defer store.Close()
+
+	// Progress ends with the job, at its total.
+	quick := openStore(t, parity.Store.Mirror).Refresh(parity.Store.Pack)
+	var last tg.JobProgress
+	for p := range quick.Progress(context.Background()) {
+		last = p
+	}
+	if last.Done != last.Total || !quick.IsEnded() {
+		t.Fatal("progress ended at", last)
+	}
+	quick.Close()
+
 	job := store.Refresh(parity.Store.Pack)
 	defer job.Close()
-	seq := job.Seq()
-	for moves := 0; moves < 3; moves++ {
-		next := job.WaitProgress(seq, 10000)
-		if next == seq {
-			t.Fatal("no progress in 10 s")
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		_, err := job.Wait(ctx)
+		result <- err
+	}()
+	moves := 0
+	for range job.Progress(context.Background()) {
+		if moves++; moves == 3 {
+			break
 		}
-		seq = next
+	}
+	if moves != 3 {
+		t.Fatal("progress moved", moves, "times")
 	}
 	at := time.Now()
-	job.Cancel()
-	_, err := job.Result()
-	wantCode(t, err, tg.CodeCancelled)
+	cancel()
+	select {
+	case err := <-result:
+		wantCode(t, err, tg.CodeCancelled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the cancel did not end the job")
+	}
 	if time.Since(at) > 2*time.Second || !job.IsEnded() {
 		t.Fatal("cancel took", time.Since(at))
 	}

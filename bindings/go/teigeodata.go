@@ -3,6 +3,8 @@
 package teigeodata
 
 import (
+	"context"
+	"iter"
 	"runtime"
 	"sync"
 	"unsafe"
@@ -1524,4 +1526,56 @@ func (h *Job) Result() ([]byte, error) {
 		return nil, newError(status, &msg, "tg_job_result")
 	}
 	return takeBytes(out), nil
+}
+
+// Progress yields the job's progress now and each time it moves, until it ends, ctx is
+// done or the loop stops:
+//
+//	for p := range job.Progress(ctx) {
+//		fmt.Println(p.Done, "of", p.Total)
+//	}
+func (h *Job) Progress(ctx context.Context) iter.Seq[JobProgress] {
+	return func(yield func(JobProgress) bool) {
+		seq := h.Seq()
+		last := JobProgress{Done: h.DoneBytes(), Total: h.TotalBytes()}
+		if !yield(last) {
+			return
+		}
+		for !h.IsEnded() {
+			if ctx.Err() != nil {
+				return
+			}
+			if next := h.WaitProgress(seq, 250); next != seq {
+				seq = next
+				last = JobProgress{Done: h.DoneBytes(), Total: h.TotalBytes()}
+				if !yield(last) {
+					return
+				}
+			}
+		}
+		if end := (JobProgress{Done: h.DoneBytes(), Total: h.TotalBytes()}); end != last {
+			yield(end)
+		}
+	}
+}
+
+// Wait waits for the job's result, cancelling it if ctx is done first (the result is then
+// CodeCancelled).
+func (h *Job) Wait(ctx context.Context) ([]byte, error) {
+	stop := context.AfterFunc(ctx, func() {
+		handle := h.acquire()
+		defer h.release()
+		if handle != 0 {
+			var msg tgBytes
+			_ = rawJobCancel(handle, &msg)
+		}
+	})
+	defer stop()
+	return h.Result()
+}
+
+// JobProgress is a job's bytes done and bytes expected.
+type JobProgress struct {
+	Done  uint64
+	Total uint64
 }
