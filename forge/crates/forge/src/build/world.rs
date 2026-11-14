@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>]
-//!             [--cities <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--ids <dir> | --fresh-ids] [--key <seed-file>]
+//!             [--cities <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--ids <dir> | --fresh-ids] [--allow-retire] [--key <seed-file>]
 //! ```
 //!
 //! Rows: one country place per Natural Earth admin-0 feature (Nepal's point of view) that
@@ -258,6 +258,8 @@ struct Args {
     ids: Option<String>,
     /// A first build: no previous registry (D-260).
     fresh_ids: bool,
+    /// Lets the build retire more than [`RETIRE_MAX`] of the serials its part held (D-267).
+    allow_retire: bool,
     key: Option<String>,
     /// Label sources, a chain (D-221).
     labels: Vec<String>,
@@ -265,14 +267,44 @@ struct Args {
     towns: Vec<String>,
     /// A `GeoNames` alternate-names source: each city's [`UNIT_LANGS`] names (D-265).
     alternates: Option<String>,
+    /// A Wikidata snapshot of units' populations (D-266).
+    populations: Option<String>,
 }
 
-/// The file-name part of a world part built from `cities`, its `alternates`, the label chain
-/// `labels` and the towns of `towns` (TG-13, D-221, D-259, D-265): empty for the default list
-/// and none of them, so the default file keeps its name.
+impl Args {
+    /// This part's file-name part ([`variant`]).
+    fn variant(&self) -> String {
+        variant(
+            &self.cities,
+            [
+                self.alternates.as_deref(),
+                self.populations
+                    .as_deref()
+                    .filter(|p| *p != DEFAULT_POPULATIONS),
+            ],
+            &self.labels,
+            &self.towns,
+        )
+    }
+
+    /// The name this part holds its serials under in the shared registries (D-267): the build
+    /// for the default rows, else the build and what adds rows (the city list, the towns), so
+    /// one part never retires the serials only another part holds.
+    fn holder(&self, build: &str) -> String {
+        format!(
+            "{build}{}",
+            variant(&self.cities, [None, None], &[], &self.towns)
+        )
+    }
+}
+
+/// The file-name part of a world part built from `cities`, the `extra` sources (alternate
+/// names, unit populations), the label chain `labels` and the towns of `towns` (TG-13, D-221,
+/// D-259, D-265, D-266): empty for the default list and none of them, so the default file keeps
+/// its name.
 pub(crate) fn variant(
     cities: &str,
-    alternates: Option<&str>,
+    extra: [Option<&str>; 2],
     labels: &[String],
     towns: &[String],
 ) -> String {
@@ -281,9 +313,9 @@ pub(crate) fn variant(
         v.push('-');
         v.push_str(cities);
     }
-    if let Some(a) = alternates {
+    for s in extra.into_iter().flatten() {
         v.push('-');
-        v.push_str(a);
+        v.push_str(s);
     }
     for l in labels {
         v.push('-');
@@ -299,12 +331,20 @@ pub(crate) fn variant(
 /// The default timezone source of the world part, and of a profile's `tz-rules` (D-224).
 pub(crate) const DEFAULT_TZ: &str = "tzdb-2026f";
 
+/// The share of its part's serials a world build may retire without `--allow-retire` (D-267).
+const RETIRE_MAX: f64 = 0.01;
+
 /// The default city list; another (`--cities geonames-cities5000`) writes its own world part,
 /// `world-baseline-<build>-<source>.tgd` (TG-13).
 pub(crate) const DEFAULT_CITIES: &str = "geonames-cities15000";
 
+/// The units' populations every world part takes unless `--no-populations` (D-266): importance
+/// weighs a unit's people as a city's, so a part without them ranks units by their level's
+/// typical count alone.
+pub(crate) const DEFAULT_POPULATIONS: &str = "wikidata-unit-population";
+
 fn parse(args: &[String]) -> Result<Args, String> {
-    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--alternates <source>] [--labels <source>]… [--towns <cc>]… [--ids <dir> | --fresh-ids] [--key <seed-file>]";
+    let usage = "usage: forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>] [--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--alternates <source>] [--populations <source> | --no-populations] [--labels <source>]… [--towns <cc>]… [--ids <dir> | --fresh-ids] [--key <seed-file>]";
     let mut a = Args {
         release: String::new(),
         lite: false,
@@ -316,10 +356,12 @@ fn parse(args: &[String]) -> Result<Args, String> {
         islet_km2: -1.0,
         ids: None,
         fresh_ids: false,
+        allow_retire: false,
         key: None,
         labels: Vec::new(),
         towns: Vec::new(),
         alternates: None,
+        populations: Some(DEFAULT_POPULATIONS.into()),
     };
     let mut it = args.iter();
     while let Some(f) = it.next() {
@@ -347,9 +389,12 @@ fn parse(args: &[String]) -> Result<Args, String> {
             }
             "--ids" => a.ids = Some(value()?),
             "--fresh-ids" => a.fresh_ids = true,
+            "--allow-retire" => a.allow_retire = true,
             "--key" => a.key = Some(value()?),
             "--labels" => a.labels.push(value()?),
             "--alternates" => a.alternates = Some(value()?),
+            "--populations" => a.populations = Some(value()?),
+            "--no-populations" => a.populations = None,
             "--towns" => a.towns.push(value()?.to_ascii_lowercase()),
             _ => return Err(format!("unknown argument `{f}`; {usage}")),
         }
@@ -637,14 +682,21 @@ fn dedup_keys(rows: &mut [Row]) -> usize {
     dropped
 }
 
-/// The city rows outside `skip`, each under the unit that contains it, else the feature. Returns them and how
-/// many fell back to the feature of their code, and how many have no parent at all.
+/// How far outside its country's units a city may lie and still be placed in the nearest one:
+/// a coastal city's point is often just past an outline simplified at 1–2 km (Lagos, on the
+/// lagoon's shore, D-266).
+const NEAR_UNIT_M: f64 = 10_000.0;
+
+/// The city rows outside `skip`, each under the unit that contains it, else the nearest unit of
+/// its country within [`NEAR_UNIT_M`], else the feature. Returns them, how many fell back to
+/// the feature of their code, how many have no parent at all, and how many were placed in a
+/// nearest unit.
 fn city_rows(
     cities: Vec<City>,
     countries: &[Country],
     units: &[WorldUnit],
     skip: &BTreeSet<String>,
-) -> (Vec<Row>, usize, usize) {
+) -> (Vec<Row>, usize, usize, usize) {
     let polys: Vec<Polygon> = countries.iter().map(|c| c.polygon.clone()).collect();
     let index = GridIndex::new(&polys, CELL_E7);
     let pieces: Vec<Polygon> = units
@@ -660,6 +712,32 @@ fn city_rows(
             .find(|&i| pieces.get(i).is_some_and(|p| p.contains(x, y)))
             .and_then(|i| units.get(i))
             .map(|u| u.key.clone())
+    };
+    // The degrees of latitude in NEAR_UNIT_M, on the grid (1e-7°), for a box prefilter; a
+    // longitude degree is shorter, so the box is widened by the latitude's cosine.
+    let near_e7 = NEAR_UNIT_M / crate::links::R_M * 1e7_f64.to_degrees();
+    let boxes: Vec<Option<crate::geom::Bbox>> = pieces.iter().map(Polygon::bbox).collect();
+    let nearest_unit = |country: usize, (x, y): (i32, i32)| {
+        let dy = near_e7;
+        let dx = near_e7 / (f64::from(y) * 1e-7).to_radians().cos().max(0.01);
+        let (fx, fy) = (f64::from(x), f64::from(y));
+        units
+            .iter()
+            .zip(&pieces)
+            .zip(&boxes)
+            .filter(|((u, _), b)| {
+                u.country == country
+                    && b.is_some_and(|b| {
+                        fx >= f64::from(b.0) - dx
+                            && fx <= f64::from(b.2) + dx
+                            && fy >= f64::from(b.1) - dy
+                            && fy <= f64::from(b.3) + dy
+                    })
+            })
+            .map(|((u, p), _)| (p.distance_m((x, y)), u))
+            .filter(|(d, _)| *d <= NEAR_UNIT_M)
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .map(|(_, u)| u.key.clone())
     };
     // The feature of each code: the largest by box, for codes held by several (France and its
     // overseas parts).
@@ -686,15 +764,20 @@ fn city_rows(
             }
         })
         .collect();
-    let (mut fallback, mut orphans) = (0, 0);
+    let (mut fallback, mut orphans, mut near) = (0, 0, 0);
     let rows = cities
         .into_iter()
         .zip(parents)
         .filter(|(c, _)| !skip.contains(&c.cc))
         .map(|(c, (parent, fell_back))| {
-            fallback += usize::from(fell_back && parent.is_some());
             orphans += usize::from(parent.is_none());
-            let parent = unit_of(c.point.0, c.point.1).or_else(|| {
+            let unit = unit_of(c.point.0, c.point.1).or_else(|| {
+                let n = parent.and_then(|i| nearest_unit(i, c.point));
+                near += usize::from(n.is_some());
+                n
+            });
+            fallback += usize::from(unit.is_none() && fell_back && parent.is_some());
+            let parent = unit.or_else(|| {
                 parent
                     .and_then(|i| countries.get(i))
                     .map(|p| format!("ne:{}", p.code))
@@ -702,7 +785,7 @@ fn city_rows(
             city_row(c, parent)
         })
         .collect();
-    (rows, fallback, orphans)
+    (rows, fallback, orphans, near)
 }
 
 /// A city's row: its name, then its ASCII spelling when it differs, under `parent`.
@@ -989,6 +1072,8 @@ fn allocate(
         }
         (None, true) => None,
     };
+    let holder = a.holder(build);
+    let (mut held, mut retired) = (0_usize, 0_usize);
     let mut registries = BTreeMap::new();
     for (ns, members) in groups {
         let name = ns.country().map_or_else(
@@ -1003,13 +1088,29 @@ fn allocate(
             .iter()
             .filter_map(|&i| rows.get(i).map(|r| r.place.sources.clone()))
             .collect();
-        let assigned = assign(&old, &keys, build)?;
+        held += old
+            .entries
+            .values()
+            .filter(|e| matches!(&e.state, State::Live(b) if b.contains(&holder)))
+            .count();
+        let assigned = assign(&old, &keys, &holder)?;
+        retired += assigned.merged + assigned.gone;
         for (&i, &s) in members.iter().zip(&assigned.serials) {
             if let Some(slot) = ids.get_mut(i) {
                 *slot = PlaceId::new(ns, s);
             }
         }
         registries.insert(name, assigned.registry);
+    }
+    // D-267: a published ID is a promise; a rebuild that retires more than a few of its part's
+    // serials is a wrong registry or holder, not places leaving the sources.
+    #[allow(clippy::cast_precision_loss, reason = "counts far below 2^52")]
+    if !a.allow_retire && retired as f64 > RETIRE_MAX * held as f64 {
+        return Err(format!(
+            "{retired} of the {held} serials `{holder}` held would retire (over {}%): a wrong \
+             registry or world part? Pass --allow-retire if places really left the sources (D-267)",
+            RETIRE_MAX * 100.0
+        ));
     }
     let ids = ids
         .into_iter()
@@ -1055,12 +1156,16 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         .map(|cc| super::world_towns::sources(root, cc))
         .collect::<Result<Vec<_>, _>>()?
         .concat();
-    for id in [&a.admin, &a.admin1, &a.cities, &a.tz]
+    // Every source the part reads: the licence gate's input and the notices'.
+    let read: Vec<&str> = [&a.admin, &a.admin1, &a.cities, &a.tz]
         .into_iter()
         .chain(&a.alternates)
+        .chain(&a.populations)
         .chain(&a.labels)
         .chain(&town_sources)
-    {
+        .map(String::as_str)
+        .collect();
+    for &id in &read {
         let s = lock.get(id)?;
         if a.lite && !super::LITE.contains(&s.licence_class.as_str()) {
             return Err(format!(
@@ -1093,13 +1198,6 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     }
     let (ids, registries) = allocate(root, &rows, &a, &packs)?;
     let (sections, snapped) = sections(&places, &rows, &ids, &row_of, &geometry, a.tolerance_m)?;
-    let read: Vec<&str> = [&a.admin, &a.admin1, &a.cities, &a.tz]
-        .into_iter()
-        .chain(&a.alternates)
-        .chain(&a.labels)
-        .chain(&town_sources)
-        .map(String::as_str)
-        .collect();
     let notices = super::notices(&lock, &read)?;
     let out = write(&sections, &a, &notices, root)?;
     super::baseline::check(&out, places.len())?;
@@ -1115,7 +1213,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         )?;
     }
     // A city list other than the default is its own world part, named by it (TG-13).
-    let variant = variant(&a.cities, a.alternates.as_deref(), &a.labels, &a.towns);
+    let variant = a.variant();
     let file = dir.join(format!("world-baseline-{build}{variant}.tgd"));
     crate::make::write_atomic(&file, &out)?;
     let probes = probes(&countries, &ids, &row_of);
@@ -1265,7 +1363,7 @@ fn world_rows(
     let mut rows = country_rows(countries, &labels)?;
     rows.extend(unit_rows(&part.units, countries, &labels)?);
     let skip: BTreeSet<String> = packs.iter().cloned().collect();
-    let (cities, fallback, orphans) = city_rows(
+    let (cities, fallback, orphans, near) = city_rows(
         read_cities(&lock.path(root, &a.cities)?)?,
         countries,
         &part.units,
@@ -1289,6 +1387,15 @@ fn world_rows(
         .chain(chain.iter().map(super::world_labels::Labels::lang))
         .collect();
     let alternates = add_alternates(root, a, lock, &langs, &mut rows)?;
+    let populations = match &a.populations {
+        Some(source) => super::world_population::apply(
+            source,
+            &super::world_population::read(&lock.path(root, source)?)
+                .map_err(|e| format!("{source}: {e}"))?,
+            rows.iter_mut().map(|r| &mut r.place),
+        ),
+        None => String::new(),
+    };
     let dropped = dedup_keys(&mut rows);
     let owners = code_owners(&rows);
     let named = super::world_labels::apply(
@@ -1301,8 +1408,9 @@ fn world_rows(
     let tz_report = zone_rows(root, a, lock, countries, &mut rows)?;
     let counts = format!(
         "- {} countries and disputed areas ({}).\n{}\n- {n_cities} cities ({}): {under_unit} \
-         under a unit, {fallback} under the feature of their code, {orphans} with no \
-         country.\n{towns}{alternates}- {dropped} source keys another row already holds dropped.\n{named}{tz_report}",
+         under a unit ({near} in the nearest within 10 km), {fallback} under the feature of \
+         their code, {orphans} with no \
+         country.\n{towns}{alternates}{populations}- {dropped} source keys another row already holds dropped.\n{named}{tz_report}",
         countries.len(),
         a.admin,
         part.report,

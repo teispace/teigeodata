@@ -571,6 +571,11 @@ A build reads the previous registry with `--ids` and writes the updated one:
    keys (a merge), or else becomes a tombstone. Chains are flattened.
 4. A build only updates the keys of the namespaces it reads, so a lite build (no OSM) keeps
    a main place's OSM keys.
+5. The world part's registries are shared by its parts: each holds its serials under its own
+   name, the build for the default rows (`lite`), else the build and what adds rows
+   (`lite-geonames-cities5000-towns-in`), so one part never retires another's places
+   (D-267). A world build that would retire more than 1% of its holder's serials fails
+   unless `--allow-retire`.
 
 The release order is main, then lite on main's registry; the lite registry is the release's
 registry, the input of the next main build. Measured on Nepal on 2026-11-07:
@@ -681,18 +686,23 @@ recipe has a `baseline` entry (below).
 ## The world part (`world`)
 
 `forge world --release <v> [--lite] [--admin <source>] [--admin1 <source>] [--cities <source>]
-[--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--alternates <source>] [--labels <source>]…
+[--tz <source>] [--tolerance-m <m>] [--islet-km2 <km²>] [--alternates <source>] [--populations <source> | --no-populations] [--labels <source>]…
 [--towns <cc>]…
-[--ids <dir> | --fresh-ids] [--key <seed-file>]` writes `data/build/baseline/world/world-baseline-<build>.tgd`,
+[--ids <dir> | --fresh-ids] [--allow-retire] [--key <seed-file>]` writes `data/build/baseline/world/world-baseline-<build>.tgd`,
 its ID registries `world-ids-<build>/<namespace>.tsv` (the next build's input: without `--ids`
 the stage reads them and fails when they are missing, unless `--fresh-ids` asks for a first
-build, D-260),
+build, D-260; each part holds its serials under its own name and may retire at most 1% of
+them without `--allow-retire`, D-267),
 `summary-<build>.md` (D-147) and `world-probes-<build>.tsv`, the locator's border probes: about
 100,000 source vertices at full resolution, every k-th of every feature, each with its
 feature's ID (D-149). Defaults: `ne-admin0-nep`, `geonames-cities15000`, `tzdb-2026f`;
 admin 1 `overture-divisions` for main (D-155) and `ne-admin1` for lite; tolerance 2 km from
 Overture (D-157), else 1 km; islets the tolerance's square.
 
+- **Unit populations** (`--populations`, default `wikidata-unit-population`, D-266). Each
+  unit without a count of its own takes Wikidata's (best rank, latest dated value), which
+  search importance weighs. Cities outside every unit's simplified outline are placed in the
+  nearest unit of their country within 10 km.
 - **Alternate names** (`--alternates`, D-265). Each city's GeoNames alternate names in the
   part's languages (English and each label source's), as historical, colloquial or alternate
   names; untagged ones are left out. The file name gains `-<source>`.

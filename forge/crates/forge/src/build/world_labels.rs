@@ -24,7 +24,7 @@ use teigeodata_format::names::NameType;
 use super::{Origin, Place, PlaceName};
 use crate::lock::Lock;
 
-const ENTITY: &str = "<http://www.wikidata.org/entity/";
+pub(super) const ENTITY: &str = "<http://www.wikidata.org/entity/";
 
 /// The key prefix of a country's ISO 3166-1 alpha-2 code, as CLDR's territory names are joined.
 const ISO: &str = "iso:";
@@ -242,7 +242,7 @@ fn read_tsv(path: &Path) -> Result<HashMap<String, String>, String> {
 }
 
 /// A TSV literal's text: `"…"` with `\"`, `\\`, `\t` and `\n` escapes, NFC as Wikidata stores it.
-fn unquote(v: &str) -> Option<String> {
+pub(super) fn unquote(v: &str) -> Option<String> {
     let inner = v.strip_prefix('"')?.strip_suffix('"')?;
     let mut out = String::with_capacity(inner.len());
     let mut chars = inner.chars();

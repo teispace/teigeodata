@@ -1,0 +1,72 @@
+# The world's search on the world part (Q-026): big cities against first-level units, exact
+# names and prefixes, as the major geocoders order them (a city before the region of its name;
+# a region of tens of millions before a small city). IDs from the world registry
+# (`world-ids-lite/`), each checked by name, country and kind on 2026-11-14.
+# Run: cargo run --release -p teigeodata-engine --all-features --example golden --
+#   tests/golden/world-search.tsv data/build/baseline/world/world-baseline-lite-<variant>.tgd
+# Columns (tab-separated): query, expected IDs (any passes), worst passing rank, options, note.
+#
+# Exact names: rank 1.
+Tokyo	tgd:jp/p7	1	-	the city before the prefecture
+California	tgd:us/6pa	1	-	state
+Texas	tgd:us/4a2	1	-	state
+Bavaria	tgd:de/3g	1	-	Bayern, by its English name
+Ontario	tgd:ca/95	1	-	province, before Ontario CA (city)
+Punjab	tgd:in/vs,tgd:pk/aa	1	-	either Punjab
+Lagos	tgd:ng/8a	1	-	the city before the state
+Sao Paulo	tgd:br/331	1	-	the city before the state
+Victoria	tgd:au/kx	1	-	the state before the cities
+Sydney	tgd:au/133	1	-	city
+Bihar	tgd:in/15t	1	-	state
+Mumbai	tgd:in/74	1	-	city
+Karachi	tgd:pk/7s	1	-	city
+Bangkok	tgd:th/b7	1	-	city
+Shanghai	tgd:cn/2pk	1	-	city
+Madrid	tgd:es/nn	1	-	the city before the community
+Guangdong	tgd:cn/et	1	-	province
+Paris	tgd:fr/1a1	1	-	city
+Delhi	tgd:in/207	1	-	city
+Cairo	tgd:eg/3s	1	-	city
+Toronto	tgd:ca/n2	1	-	city
+Istanbul	tgd:tr/c5	1	-	the city before the province
+New York	tgd:us/17a	1	-	New York City before the state
+Florida	tgd:us/3vf	1	-	state
+Quebec	tgd:ca/97,tgd:ca/z	1	-	the province or Québec City, its seat of that name (D-158)
+Kerala	tgd:in/5v0	1	-	state
+# Countries: the country before its capital or a region of its name, as the major geocoders
+# give them; a city-state either.
+Mexico	tgd:mx/140	1	-	the country before the state and the city
+Luxembourg	tgd:lu/a	1	-	the country before the city and the province
+Djibouti	tgd:dj/5	1	-	the country before its capital
+Panama	tgd:pa/18	1	-	the country before the province
+Guatemala	tgd:gt/3z	1	-	the country before the department
+Kuwait	tgd:kw/p	1	-	the country before Kuwait City
+Brazil	tgd:br/29c	1	-	country
+India	tgd:in/2nn	1	-	country
+Tunisia	tgd:tn/z	1	-	country
+Algeria	tgd:dz/aq	1	-	country
+Singapore	tgd:sg/1q,tgd:sg/2x	1	-	a city-state: the country or the city
+Monaco	tgd:mc/1,tgd:mc/4	1	-	a city-state: the country or the city
+Georgia	tgd:ge/1p,tgd:us/36c	1	-	the country or the US state
+Bra	tgd:br/29c	3	-	Brazil, 215 million
+Ind	tgd:in/2nn	2	-	India
+Mex	tgd:mx/140	3	-	Mexico
+# Prefixes: a big place within the first few.
+Var	tgd:in/1cd	5	-	Varanasi, 1.2 million
+Cal	tgd:us/6pa	3	-	California
+Mumb	tgd:in/74	1	-	Mumbai
+Kar	tgd:pk/7s	5	-	Karachi
+Tex	tgd:us/4a2	3	-	Texas
+Ont	tgd:ca/95	3	-	Ontario
+Lag	tgd:ng/8a	3	-	Lagos
+Bang	tgd:th/b7	3	-	Bangkok
+Shang	tgd:cn/2pk	1	-	Shanghai
+Guang	tgd:cn/et,tgd:cn/ex	2	-	Guangdong or Guangzhou
+Bav	tgd:de/3g	3	-	Bavaria
+Mad	tgd:es/nn	5	-	Madrid
+Istan	tgd:tr/c5	3	-	Istanbul; India and Pakistan come first by other languages' names (Hindistan), Q-027
+Tor	tgd:ca/n2	5	-	Toronto; Turkey comes first by another language's name, Q-027
+Syd	tgd:au/133	1	-	Sydney
+Flor	tgd:us/3vf	3	-	Florida
+Ker	tgd:in/5v0	3	-	Kerala
+Bih	tgd:in/15t	3	-	Bihar

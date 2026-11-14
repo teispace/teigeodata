@@ -23,6 +23,8 @@ use std::time::Instant;
 use teigeodata_core::{E7, PlaceId, PlaceKind, Point};
 use teigeodata_engine::{Engine, LOCATOR_RADIUS_M, Layer, LayerOptions, Scratch};
 use teigeodata_format::idmap::IdMap;
+use teigeodata_format::search::Search;
+use teigeodata_format::search::rules::Rule;
 use teigeodata_format::{Kind, Pack};
 
 fn read(var: &str) -> Option<Vec<u8>> {
@@ -564,6 +566,20 @@ fn the_shipped_baseline_answers_as_its_parts() {
     );
     let (mut hits_one, mut hits_two) = (Vec::new(), Vec::new());
     let mut same = 0;
+    // D-233: the merged layer carries the union of its parts' query rules, so a slice's
+    // spelling convention also reads the world's names; a query it rewrites may find more there.
+    let spellings: Vec<String> = {
+        let pack = Pack::open(&slice).unwrap();
+        let search = Search::open(&pack.section(Kind::SEARCH).unwrap()).unwrap();
+        (&search.rules())
+            .into_iter()
+            .filter_map(|r| match r {
+                Rule::Spelling { from, .. } => Some(from.to_owned()),
+                _ => None,
+            })
+            .collect()
+    };
+    let mut rewritten = 0;
     for q in &names {
         one.search(q, 10, &mut s, &mut hits_one).unwrap();
         two.search(q, 10, &mut s, &mut hits_two).unwrap();
@@ -572,16 +588,35 @@ fn the_shipped_baseline_answers_as_its_parts() {
         };
         if top(&hits_one) == top(&hits_two) {
             same += 1;
+        } else if spellings
+            .iter()
+            .any(|f| q.to_lowercase().contains(f.as_str()))
+        {
+            rewritten += 1;
+            println!(
+                "{q:?} (a spelling rule rewrites it): {:?} vs {:?}",
+                top(&hits_one),
+                top(&hits_two)
+            );
         } else {
             println!("{q:?}: {:?} vs {:?}", top(&hits_one), top(&hits_two));
         }
     }
     println!(
-        "{} IDs; {same} of {} searches the same",
+        "{} IDs; {same} of {} searches the same, {rewritten} more where a slice's spelling \
+         rule reads the world's names too (D-233)",
         ids.len(),
         names.len()
     );
-    assert_eq!(same, names.len(), "search answers as the layers do");
+    assert!(
+        rewritten * 50 < names.len(),
+        "a spelling rule rarely changes an answer"
+    );
+    assert_eq!(
+        same + rewritten,
+        names.len(),
+        "search answers as the layers do"
+    );
     let mut cost = |e: &Engine| {
         let t = Instant::now();
         for q in &names {

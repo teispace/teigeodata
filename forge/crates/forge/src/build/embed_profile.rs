@@ -72,6 +72,10 @@ struct File {
     /// The world part's alternate-names source (`forge world --alternates`, D-265).
     #[serde(default)]
     world_alternates: Option<String>,
+    /// The world part's unit-population source, when not the default (`forge world
+    /// --populations`, D-266).
+    #[serde(default)]
+    world_populations: Option<String>,
     /// The countries whose districts and towns join the world part (`forge world --towns`,
     /// D-259).
     #[serde(default)]
@@ -545,7 +549,12 @@ fn inputs(root: &Path, p: &File, build: &str) -> Result<Vec<Input>, String> {
     let read = |f: &Path| fs::read(f).map_err(|e| format!("{}: {e}", f.display()));
     let variant = super::world::variant(
         p.world.as_deref().unwrap_or(super::world::DEFAULT_CITIES),
-        p.world_alternates.as_deref(),
+        [
+            p.world_alternates.as_deref(),
+            p.world_populations
+                .as_deref()
+                .filter(|s| *s != super::world::DEFAULT_POPULATIONS),
+        ],
         &p.world_labels,
         &p.world_towns,
     );

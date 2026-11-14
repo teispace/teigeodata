@@ -179,10 +179,14 @@ fn focus_and_strict_reorder_search() {
     .unwrap();
     assert_eq!(country(&hits[0]), *b"in", "a scale of 0 adds nothing");
 
+    // A big city matched exactly comes before a country matched by prefix (D-266).
     e.search("rome", 4, &mut s, &mut hits).unwrap();
-    assert_eq!(name(&e, &hits[0].place), "Romania");
-    let strict = SearchOptions::default().with_strict(true);
-    e.search_with("rome", 4, &strict, &mut s, &mut hits)
-        .unwrap();
     assert_eq!(name(&e, &hits[0].place), "Rome");
+    // A famous place by prefix leads; strict puts the exact match first.
+    e.search("pari", 4, &mut s, &mut hits).unwrap();
+    assert_eq!(name(&e, &hits[0].place), "Paris");
+    let strict = SearchOptions::default().with_strict(true);
+    e.search_with("pari", 4, &strict, &mut s, &mut hits)
+        .unwrap();
+    assert_eq!(name(&e, &hits[0].place), "Pari");
 }

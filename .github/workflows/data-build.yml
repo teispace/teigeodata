@@ -92,6 +92,8 @@ jobs:
           forge/target/fast/forge fetch ne-admin0-nep
           forge/target/fast/forge fetch ne-admin1
           forge/target/fast/forge fetch tzdb-2026f
+          # Units' populations, which importance weighs (D-266).
+          forge/target/fast/forge fetch wikidata-unit-population
           # Main's admin 0 and 1 come from Overture's divisions (D-155); lite keeps Natural
           # Earth's (ODbL is not allowed there).
           if [ "${{ matrix.build }}" = main ]; then

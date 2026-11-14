@@ -16,11 +16,26 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - `forge world --alternates <source>`: each city's GeoNames alternate names in the part's
   languages, historical and colloquial ones included (Bombay, Madras, Benares; D-265).
 
+- `forge world` gives each unit its population from a pinned Wikidata snapshot
+  (`wikidata-unit-population`; `--no-populations` leaves it out), and places a city outside
+  every unit's outline in the nearest unit of its country within 10 km (D-266).
+
 ### Changed
 
+- Search importance is one scale for countries, regions and cities (D-266): a region or a
+  country weighs its people as a city does, so "Var" finds Varanasi and "Cal" California
+  among the first; a settlement of a million people ranks as a city; a place sharing its
+  country's name ranks just below the country ("Luxembourg" gives the country first).
 - A second-level unit ranks just below a city of its own name that it holds, as a first-level
   one did ("Varanasi" gives the city, then the district); India's municipal corporations
   rank as cities (D-264).
+
+### Fixed
+
+- Rebuilding one world part no longer renumbers another's places: each part holds its IDs
+  under its own name in the shared registry, and a build that would retire more than 1% of
+  its IDs stops unless `--allow-retire` (D-267). The next data release renumbers
+  `baseline-lite` and `points-en-lite` once, to the released registry's IDs.
 
 ## [0.3.0] - 2026-11-13
 

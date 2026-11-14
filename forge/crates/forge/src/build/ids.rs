@@ -11,7 +11,7 @@
 //! ```
 //!
 //! Three columns separated by tabs (`\t` above): the serial; its state, either the builds whose packs hold it now (`main`, `lite`,
-//! comma-separated and sorted), `>N` for a serial retired into serial N, or `x` for a tombstone;
+//! or a world part of a build such as `lite-geonames-cities5000`, D-267; comma-separated and sorted), `>N` for a serial retired into serial N, or `x` for a tombstone;
 //! the source keys the place was made of, sorted and separated by spaces. The registry doubles
 //! as the bridge file: source key → our ID.
 //!
@@ -67,8 +67,12 @@ pub(super) struct Assignment {
     pub(super) gone: usize,
 }
 
+/// A holder's name: a build (`main`, `lite`), or a world part of one (`lite-geonames-cities5000`,
+/// D-267): lowercase ASCII letters, digits and hyphens, starting with a letter.
 fn is_build(s: &str) -> bool {
-    !s.is_empty() && s.bytes().all(|b| b.is_ascii_lowercase())
+    s.bytes().next().is_some_and(|b| b.is_ascii_lowercase())
+        && s.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 impl Registry {
@@ -374,6 +378,40 @@ mod tests {
             "# teigeodata id registry 1\n1\tmain\tg:1\n2\tmain\tg:2 o:9\n3\tmain\tg:3\n"
         );
         assert_eq!(Registry::parse(&text).expect("parse"), a.registry);
+    }
+
+    #[test]
+    fn parts_sharing_a_registry_keep_each_others_serials() {
+        // D-267: a small part (big cities) and a large one (also towns) of one build.
+        let small =
+            assign(&Registry::default(), &rows(&[&["g:1"], &["g:2"]]), "lite").expect("small");
+        let large = assign(
+            &small.registry,
+            &rows(&[&["g:1"], &["g:3"], &["g:2"]]),
+            "lite-cities5000",
+        )
+        .expect("large");
+        assert_eq!(large.serials, [1, 3, 2]);
+        // Rebuilding the small part retires nothing the large one holds, both ways round.
+        let again = assign(&large.registry, &rows(&[&["g:2"], &["g:1"]]), "lite").expect("again");
+        assert_eq!(again.serials, [2, 1]);
+        assert_eq!((again.merged, again.gone), (0, 0));
+        assert_eq!(state(&again.registry, 3), live(&["lite-cities5000"]));
+        let large2 = assign(
+            &again.registry,
+            &rows(&[&["g:3"], &["g:1"], &["g:2"]]),
+            "lite-cities5000",
+        )
+        .expect("large again");
+        assert_eq!(large2.serials, [3, 1, 2]);
+        assert_eq!(large2.new, 0);
+        assert_eq!(
+            state(&large2.registry, 1),
+            live(&["lite", "lite-cities5000"])
+        );
+        // A holder name is lowercase letters, digits and hyphens, starting with a letter.
+        assert!(assign(&Registry::default(), &rows(&[&["g:1"]]), "5k").is_err());
+        assert!(assign(&Registry::default(), &rows(&[&["g:1"]]), "Lite").is_err());
     }
 
     #[test]

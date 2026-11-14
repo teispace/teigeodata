@@ -456,6 +456,25 @@ countries = ["*"]
 used_by = "forge world --labels: Nepali country names, before Wikidata's (TG-14, D-257)"
 attribution = "Unicode CLDR (https://cldr.unicode.org), Copyright © 1991-2026 Unicode, Inc., under the Unicode License v3"
 [[source]]
+id = "wikidata-unit-population"
+title = "Wikidata populations of every country's first- and second-level units, best rank, with dates and GeoNames IDs (QLever snapshot)"
+kind = "sparql"
+url = "https://qlever.dev/api/wikidata"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "QLever Wikidata snapshot"
+retrieved = "2026-11-13"
+sha256 = "e3b314591fe8bbe15f11d6cb6275b89e9c0813ab8f00ed1aaee8e5174d6aaf62"
+size = 4972684
+licence = "CC0-1.0"
+licence_class = "cc0"
+countries = ["*"]
+used_by = "forge world --populations (Q-026, D-266)"
+attribution = "Wikidata (https://www.wikidata.org), CC0 1.0"
+query = "forge/queries/wikidata-unit-population.rq"
+query_params = {}
+
+[[source]]
 id = "wikidata-labels-ne"
 title = "Wikidata Nepali labels of every item with a coordinate, with GeoNames IDs (QLever snapshot)"
 kind = "sparql"

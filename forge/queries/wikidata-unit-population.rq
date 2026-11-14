@@ -1,0 +1,22 @@
+# The population of every first- and second-level unit of every country, as Wikidata states it
+# now (forge `world --populations`, D-266). World-general: units are reached from each country
+# (Q6256) by "contains the administrative territorial entity" (P150), one or two steps; only
+# best-rank statements (the preferred ones, else the normal ones), each with its date (P585)
+# when it has one, and the item's GeoNames IDs. The forge takes, per item, the latest dated
+# value, else the largest undated one.
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+PREFIX wd: <http://www.wikidata.org/entity/>
+PREFIX p: <http://www.wikidata.org/prop/>
+PREFIX ps: <http://www.wikidata.org/prop/statement/>
+PREFIX pq: <http://www.wikidata.org/prop/qualifier/>
+PREFIX wikibase: <http://wikiba.se/ontology#>
+SELECT DISTINCT ?item ?gn ?pop ?time WHERE {
+  ?country wdt:P31 wd:Q6256 .
+  ?country wdt:P150/wdt:P150? ?item .
+  ?item p:P1082 ?st .
+  ?st ps:P1082 ?pop .
+  ?st a wikibase:BestRank .
+  OPTIONAL { ?st pq:P585 ?time }
+  OPTIONAL { ?item wdt:P1566 ?gn }
+}
+ORDER BY ?item ?gn ?time
