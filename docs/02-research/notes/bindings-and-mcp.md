@@ -1,7 +1,7 @@
 ---
 title: "Language bindings, packaging, CI and the MCP server"
 status: research
-updated: 2026-11-06
+updated: 2026-11-14
 owner: research-agent
 revisit: 2027-02-01
 ---
@@ -196,6 +196,31 @@ This note feeds the bindings ADR, the boundary-crate architecture page, the rele
 - Do not adopt Sampling, Roots or Logging (deprecated). Logs go to stderr or OpenTelemetry.
 - Run the official MCP conformance suite in CI (rmcp already tracks it), testing both 2026-07-28 and 2025-11-25 clients.
 
+### 3.14 Refresh for Phase 5 (2026-11-14)
+
+Versions checked live (crates.io, npm, PyPI, pub.dev, the Go proxy): napi 3.16.2, napi-derive
+3.7.1, napi-build 2.6.0, `@napi-rs/cli` 3.10.12, wasm-bindgen 0.2.130, PyO3 0.30.1, maturin
+1.16.0, cibuildwheel 4.3.5, jni 0.22.4, cargo-ndk 4.1.2, cbindgen 0.29.4, rmcp 3.10.0, syn
+3.0.10, minijinja 3.1.0, UniFFI 0.32.2, Diplomat 0.17.0, `native_toolchain_rust` 1.0.7, Dart
+`hooks` 2.2.0, ffigen 23.0.0, purego 0.11.3. The workspace moved to the newer napi, syn and
+minijinja; the generated bindings did not change (`cargo xtask bindings --check`).
+
+Three of §7's unverified items, settled:
+- **Android 16 KB:** NDK r28 and later align arm64-v8a and x86_64 shared libraries to 16 KB
+  by default, and the NDK's build-system guide gives `-Wl,-z,max-page-size=16384` for linkers
+  outside its build systems. A Rust library linked by cargo-ndk with the NDK's lld follows the
+  NDK default (community reports only); the CI gate reads the ELF `LOAD` alignment either way,
+  so the flag is set explicitly and the gate decides.
+- **Cloudflare Workers:** since 2026-09-04 the only size limit is 64 MiB uncompressed on every
+  plan; the compressed limits (3 MB free, 10 MB paid) are gone. The WASM size budgets are ours,
+  for download time, not a platform ceiling.
+- **NuGet trusted publishing:** available on nuget.org for GitHub Actions through OIDC (the
+  `NuGet/login` action exchanges the job's token for a key valid about an hour); a policy names
+  the repository and workflow file, and the package must exist on nuget.org first, so the first
+  publish is by the maintainer.
+
+Still unverified: purego's coverage of structs by value and callbacks (spike S1).
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
@@ -329,6 +354,10 @@ This note feeds the bindings ADR, the boundary-crate architecture page, the rele
 | mcp (Python SDK) | 2.3.0 | 2026-11-06 | PyPI |
 
 ## 9. Sources
+
+- [Trusted publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing), Microsoft Learn, accessed 2026-11-14.
+- [Increased Worker size limit](https://developers.cloudflare.com/changelog/post/2026-09-04-increased-worker-size-limit/), Cloudflare changelog 2026-09-04, accessed 2026-11-14.
+- [NDK r28 changelog](https://android.googlesource.com/platform/ndk.git/+/9c5b6fd957b8cc3fc24ee0df4923fb98fb967d89/docs/changelogs/Changelog-r28.md) and the [build system maintainers guide](https://android.googlesource.com/platform/ndk/+/refs/heads/main/docs/BuildSystemMaintainers.md), accessed 2026-11-14.
 
 - [crates.io API](https://crates.io/api/v1/crates/), crates.io, accessed 2026-11-06 (versions, licences, MSRV for all crates above).
 - [Diplomat README](https://github.com/rust-diplomat/diplomat), rust-diplomat, accessed 2026-11-06.

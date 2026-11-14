@@ -31,7 +31,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 ## Steps
 
 ### 5.0 Research
-- [ ] Refresh the bindings note: every version live (napi-rs, wasm-bindgen, PyO3, maturin,
+- [x] Refresh the bindings note (done 2026-11-14, its §3.14; purego's coverage left to S1): every version live (napi-rs, wasm-bindgen, PyO3, maturin,
   cibuildwheel, jni, cargo-ndk and the NDK, Dart hooks and `native_toolchain_rust`, Swift
   toolchains, .NET, purego), what changed since 2026-11-06, the unverified items of its §7
   (Android 16 KB default, Workers size limits, NuGet trusted publishing, purego coverage)
