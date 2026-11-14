@@ -1,0 +1,29 @@
+[package]
+name = "teigeodata-c"
+description = "The C library of teigeodata as it ships: libteigeodata (shared and static), the C ABI of teigeodata-ffi under its released name."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[lib]
+# The file names a C caller links: libteigeodata.so/.dylib/.a, teigeodata.dll with its import
+# library (D-286). Rust names a library after its crate; a renamed file would break the
+# DLL's import library and the dylib's install name, so the name is set here.
+name = "teigeodata"
+crate-type = ["cdylib", "staticlib"]
+
+[features]
+default = ["store"]
+# The store (`Store`, `Job`); without it the lite library (D-279).
+store = ["teigeodata-ffi/store"]
+
+[dependencies]
+teigeodata-ffi = { path = "../teigeodata-ffi", default-features = false }
+
+[lints]
+workspace = true

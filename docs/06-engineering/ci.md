@@ -20,6 +20,7 @@ and checked again before each workflow change.
 | `counts` | push to `main` and PRs touching `crates/` | instruction counts of the hot paths under Callgrind (gungraun, `teigeodata-bench/benches/counts.rs`): a PR measures its base first and fails above +1% instructions on any benchmark | ≤ 40 min |
 | `verify` | push to `main` | full tests on Linux x64/arm64, macOS arm64, Windows x64; doc tests; golden; parity (fast set) | ≤ 30 min |
 | `bindings` | push to `main`, release | cross-compile matrix (Android ABIs, iOS slices, WASM variants, desktop targets), binding tests per language | ≤ 45 min |
+| `c-package` | `v*` tag, push to `main` touching the C library or its packager, by hand | `cargo xtask package-c --smoke`, full and lite, on Linux x64/arm64 (Ubuntu 22.04), macOS arm64 (x64 cross-built), Windows x64/arm64; on a tag `cargo xtask abi --release` and the archives with SHA256SUMS on the release (D-286) | ≤ 40 min |
 | `fast-check` (`windows` job) | push, PR | clippy and tests of `teigeodata-sync` and `teigeodata-cli` on `windows-latest` (D-190) | ≤ 25 min |
 | `nightly` | schedule | fuzzing, Miri, sanitizers, mutants, coverage, differential, benchmarks against baselines | ≤ 6 h per job |
 | `data-build` | weekly (Monday 03:41 UTC) and manual | one job per pack: `forge make --fetch`, then G-det (the build stage again, `cmp`), G-lic (`cargo xtask check-pack`, also on the baseline slice, D-145, and the world part, D-147), the world and locator gates

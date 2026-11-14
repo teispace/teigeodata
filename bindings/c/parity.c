@@ -228,7 +228,9 @@ int main(void) {
     CHECK(tg_engine_tz_local(rules, (const uint8_t *)ny, strlen(ny), 2024, 13, 1, 0, 0, 0, &out) == TG_ERROR_INVALID_ARGUMENT);
     tg_engine_free(rules);
 
-    /* The store (parity.json, store): the fixture root, a mirror that refuses connections. */
+#if TEIGEODATA_FEATURE_STORE
+    /* The store (parity.json, store): the fixture root, a mirror that refuses connections.
+     * A lite library's header leaves it out. */
     FILE *rf = fopen("bindings/fixtures/store-root.json", "rb");
     CHECK(rf != NULL);
     static uint8_t root[1 << 16];
@@ -279,6 +281,7 @@ int main(void) {
     CHECK(tg_job_cancel(job) == TG_OK);
     tg_job_free(job);
     tg_store_free(store);
+#endif
 
     if (failures == 0) puts("c parity ok");
     return failures != 0;

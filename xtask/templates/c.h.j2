@@ -19,6 +19,15 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+{% set features = (handles + functions + records) | map(attribute="feature") | reject("none") | unique | list %}
+{% for feat in features %}
+
+/* 1 when the library has its `{{ feat }}` feature, which a lite build leaves out: the packaged
+ * header of such a build sets it to 0, and the declarations it guards disappear. */
+#ifndef TEIGEODATA_FEATURE_{{ feat | upper }}
+#define TEIGEODATA_FEATURE_{{ feat | upper }} 1
+#endif
+{% endfor %}
 
 /* Success. */
 #define TG_OK 0
@@ -59,6 +68,10 @@ typedef struct tg_{{ h.snake }} tg_{{ h.snake }};
 {% endfor %}
 {% endfor %}
 {% for r in records %}
+{% if r.feature %}
+
+#if TEIGEODATA_FEATURE_{{ r.feature | upper }}
+{% endif %}
 
 /* {{ r.doc | join(" ") }} Pass NULL for the defaults. */
 typedef struct tg_{{ r.snake }} {
@@ -77,6 +90,9 @@ typedef struct tg_{{ r.snake }} {
 {% endif %}
 {% endfor %}
 } tg_{{ r.snake }};
+{% if r.feature %}
+#endif
+{% endif %}
 {% endfor %}
 
 /* Frees a buffer returned by any function. Freeing a zeroed buffer does nothing. */
@@ -101,9 +117,20 @@ int32_t {{ symbol }}(
 {% if f.returns in ["string", "blob"] %}tg_bytes *out{% elif f.returns == "handle" %}tg_{{ f.returns_handle | snake }} **out{% elif f.returns != "void" %}{{ cty(f.returns) }} *out{% elif not f.params and not f.receiver %}void{% endif %});
 {% endmacro %}
 {% for f in functions %}
+{% if f.feature %}
+
+#if TEIGEODATA_FEATURE_{{ f.feature | upper }}
+{% endif %}
 {{ decl(f, "tg_" ~ f.name, none) }}
+{%- if f.feature %}
+#endif
+{% endif %}
 {%- endfor %}
 {% for h in handles %}
+{% if h.feature %}
+
+#if TEIGEODATA_FEATURE_{{ h.feature | upper }}
+{% endif %}
 
 /* {{ h.doc | join(" ") }} */
 
@@ -112,6 +139,10 @@ void tg_{{ h.snake }}_free(tg_{{ h.snake }} *handle);
 {% for f in h.methods %}
 {{ decl(f, "tg_" ~ h.snake ~ "_" ~ f.name, h) }}
 {%- endfor %}
+{% if h.feature %}
+
+#endif
+{% endif %}
 {% endfor %}
 
 #ifdef __cplusplus

@@ -20,6 +20,12 @@
 extern "C" {
 #endif
 
+/* 1 when the library has its `store` feature, which a lite build leaves out: the packaged
+ * header of such a build sets it to 0, and the declarations it guards disappear. */
+#ifndef TEIGEODATA_FEATURE_STORE
+#define TEIGEODATA_FEATURE_STORE 1
+#endif
+
 /* Success. */
 #define TG_OK 0
 /* An argument is outside its documented range. */
@@ -115,6 +121,8 @@ typedef struct tg_open_options {
     size_t languages_len;
 } tg_open_options;
 
+#if TEIGEODATA_FEATURE_STORE
+
 /* What `Store::install` takes of each pack. Every field's zero value is its default (D-276): the whole pack. Pass NULL for the defaults. */
 typedef struct tg_install_options {
     /* The components, by name and comma-separated (`point,names,search`); what they need is added. Empty for every component. UTF-8; NULL only with length 0 (empty). */
@@ -134,6 +142,7 @@ typedef struct tg_install_options {
     /* Keeps the packs when room is made. */
     bool pin;
 } tg_install_options;
+#endif
 
 /* Frees a buffer returned by any function. Freeing a zeroed buffer does nothing. */
 void tg_bytes_free(tg_bytes bytes);
@@ -496,6 +505,8 @@ int32_t tg_engine_tz_version(const tg_engine *handle, tg_bytes *out);
  */
 int32_t tg_engine_by_iso(const tg_engine *handle, const uint8_t *code, size_t code_len, tg_bytes *out);
 
+#if TEIGEODATA_FEATURE_STORE
+
 /* A store of installed packs in one directory: its signed catalog, its packs and their journal (D-171), shared by every language and the command line (research note store-api). Long work runs as a `Job` on a thread of its own; one store runs its jobs one at a time, and its other calls wait for the job running.  Packs are named as catalog paths (`np.places.tgd`) or short (`np`, `np.dem`), several comma-separated. Results are blobs: - `catalog`: `path`, `release`, `download`, `disk`, `components`,   `licence`, `state` (`available`, `installed` or `update`); - `status`: `path`, `release`, `bytes`, `pinned`, `asked`, `health`   (`good`, `length`, `head`, `footer` or `sections`), `components`; - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`; - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;   `remove`: `path`, `release`; - `find` and `locate`: one row per place and pack that   covers it: `id`, `name`, `lat`, `lon`, `countries`, then the pack's `pack`, `release`,   `download`, `disk` and `state`, null for a place no pack in the catalog covers. */
 
 /* Frees a handle. NULL does nothing. No call on it may be in flight. */
@@ -689,6 +700,10 @@ int32_t tg_store_update(const tg_store *handle, const uint8_t *packs, size_t pac
  */
 int32_t tg_store_repair(const tg_store *handle, const uint8_t *pack, size_t pack_len, tg_job **out);
 
+#endif
+
+#if TEIGEODATA_FEATURE_STORE
+
 /* A store's long work on a thread of its own (D-274): its progress in bytes, a wait for the next change, a cancel, and its result.  # Job  Each language builds its own idioms on these methods: a stream of progress, and the awaited result cancelling the job when the caller's task is cancelled. */
 
 /* Frees a handle. NULL does nothing. No call on it may be in flight. */
@@ -747,6 +762,8 @@ int32_t tg_job_cancel(const tg_job *handle);
  * asynchronous form.
  */
 int32_t tg_job_result(const tg_job *handle, tg_bytes *out);
+
+#endif
 
 #ifdef __cplusplus
 }

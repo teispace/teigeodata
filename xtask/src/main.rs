@@ -21,6 +21,7 @@ mod iso3166;
 mod lexicon;
 mod mirror;
 mod pack;
+mod package_c;
 mod postal;
 mod recipe;
 mod romanise;
@@ -62,6 +63,12 @@ Tasks:
                     each section's size; G-wire: the transport asset's bytes per
                     component add up, and each fits the country's wire_kb (D-135);
                     --dump writes each section's bytes to <dir>.
+  package-c [--target <triple>] [--lite] [--out <dir>] [--smoke]
+                    The C library as it ships (D-286): builds teigeodata-c (dist profile),
+                    stages the header, shared and static libraries, pkg-config and CMake
+                    files, checks the exports and archives it under target/package/;
+                    --smoke builds and runs bindings/c/parity.c through pkg-config and
+                    CMake against the staged package.
   pack-sizes <pack.tgd> [--langs ne,en]
                     TG-11: where a pack's bytes go: each component on disk and on the
                     wire and per place, each column, names by language (and the names
@@ -106,6 +113,7 @@ fn main() -> ExitCode {
         }
         "check-data" => report(data::check(&root)),
         "check-pack" => report(pack::run(&root, rest)),
+        "package-c" => report(package_c::run(&root, rest)),
         "pack-sizes" => report(breakdown::run(rest)),
         "check-workspace" => report(workspace::check(&root)),
         "mirror" => report(mirror::run(&root, rest)),

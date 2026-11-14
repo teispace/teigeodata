@@ -85,7 +85,11 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   ([research](../../02-research/notes/c-abi-gates.md), D-285: `cargo xtask abi`, on the full
   and the lite library in CI). Done 2026-11-14
 - [ ] Packaging: shared and static libraries per platform, the header, pkg-config and CMake
-  config, on GitHub Releases
+  config, on GitHub Releases. Built ([research](../../02-research/notes/c-packaging.md),
+  D-286): `crates/teigeodata-c` (`libteigeodata`, its install name and soname), `cargo xtask
+  package-c` with an own-name check and a pkg-config and CMake smoke test, full and lite;
+  `c-package.yml` on six targets attaches the archives to a `v*` release. Done when that
+  workflow is green on all six
 
 ### 5.3 Swift
 - [ ] Wrapper generated over the C ABI; an XCFramework as a SwiftPM `binaryTarget`; the
@@ -130,6 +134,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | 5.2: C packaging (D-286), the header's feature guards | plan |
 | 2026-11-14 | 5.2: the ABI and symbol gates (D-285); 5.1 done with the zone rules (D-284) | plan |
 | 2026-11-14 | 5.1: the store and its jobs in every language, the `store` feature (IDL format 6, D-279) | plan |
 | 2026-11-14 | 5.1: text fields in records (IDL format 5), components and languages to open, `MissingComponent` (D-278) | plan |
