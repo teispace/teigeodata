@@ -400,11 +400,13 @@ fn android_test(root: &Path, out: &Path) -> Result<String, Vec<String>> {
     let script = format!(
         "mkdir -p {device}/tmp && cd {device}/bindings && CLASSPATH={device}/classes.dex \
          app_process -Djava.library.path={device}/lib -Djava.io.tmpdir={device}/tmp \
-         /system/bin org.teispace.teigeodata.ParityTest parity.json; echo exit=$?"
+         /system/bin org.teispace.teigeodata.ParityTest parity.json 2>&1; echo exit=$?"
     );
     let text = adb_out(root, &["shell", &script])?;
     let _ = adb_out(root, &["shell", "rm", "-rf", device]);
-    if text.contains("jvm parity ok") && text.trim_end().ends_with("exit=0") {
+    // The test's progress lines go to stderr, merged into the same stream above; the exit
+    // status is its own line.
+    if text.contains("jvm parity ok") && text.lines().any(|l| l.trim() == "exit=0") {
         Ok(format!(
             "parity passed on Android ({abi}) through app_process"
         ))

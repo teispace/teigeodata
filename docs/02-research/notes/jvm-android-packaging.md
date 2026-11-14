@@ -128,7 +128,16 @@ calls it.
 
 - **API 24 is checked by running, not by a tool.** `jvm.yml` runs parity on API 24 and API 35
   emulators; a call the tests never make is not covered. Android lint's `NewApi` would cover
-  every call but needs a Gradle project.
+  every call but needs a Gradle project. A lighter gate was prototyped on 2026-11-14: list
+  every `java.*` method the compiled classes call (`javap -c`) and look each up, through
+  superclasses, in a platform's `android.jar`. Against API 31 (the oldest installed here) the
+  classes call 131 such methods and none is missing, and a planted class using `Cleaner`,
+  `ByteBuffer.slice(int, int)`, the covariant `ByteBuffer.position(int)`, `Files.readString`
+  and `Path.of` is caught on all five. To become a fast-check gate it needs API 24's
+  `android.jar`, so that `java.nio.file` (API 26) is caught too.
+- **Two more API traps** found by the API 24 run: `ByteBuffer.slice(int, int)` (Java 13) in
+  the test, and the progress lines on stderr arriving after `exit=` on stdout (the runner now
+  merges them and looks for the `exit=0` line).
 - **Native debug symbols are stripped** from the AAR. A separate symbols zip for Play Console
   is a later extra.
 - **Maven Central** needs `-sources.jar` and `-javadoc.jar`, signatures and a POM (bindings

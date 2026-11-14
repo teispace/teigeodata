@@ -412,7 +412,9 @@ public final class ParityTest {
             String n = new String(blob, d, 16, StandardCharsets.UTF_8).replace("\0", "");
             if (n.equals(name)) {
                 int at = b.getInt(d + 20), len = b.getInt(d + 24);
-                return b.slice(at, len).order(ByteOrder.LITTLE_ENDIAN);
+                // ByteBuffer.wrap(array, offset, length).slice(), not slice(at, len): that is
+                // Java 13, absent from Android before API 34.
+                return ByteBuffer.wrap(blob, at, len).slice().order(ByteOrder.LITTLE_ENDIAN);
             }
         }
         throw new AssertionError("no column " + name);

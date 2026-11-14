@@ -156,7 +156,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         working-directory: bindings/dart
         run: |
-          dart pub get
+          dart pub get --no-example
           dart analyze --fatal-infos
           dart format --set-exit-if-changed hook test bench
           # The build hook builds teigeodata-c from this checkout (D-289).
