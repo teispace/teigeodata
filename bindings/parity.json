@@ -1,6 +1,6 @@
 {
   "about": "Expected results every binding's parity test checks; teigeodata-api's tests check this file against Rust.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "fold": [
     ["São Paulo", "sao paulo"],
     ["  Lahachowk  BAZAR ", "lahachowk bazar"],

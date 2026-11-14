@@ -11,6 +11,12 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-14
+
+Search ranks countries, regions and cities on one scale and weighs short substring matches
+less; the forge's world parts gain aliases, unit populations and ISO 3166 codes. No public
+API changed, and the pack format is unchanged: every data release reads here.
+
 ### Added
 
 - `forge world --alternates <source>`: each city's GeoNames alternate names in the part's
@@ -45,7 +51,7 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 - Rebuilding one world part no longer renumbers another's places: each part holds its IDs
   under its own name in the shared registry, and a build that would retire more than 1% of
-  its IDs stops unless `--allow-retire` (D-267). The next data release renumbers
+  its IDs stops unless `--allow-retire` (D-267). `data-2026.11.14` renumbered
   `baseline-lite` and `points-en-lite` once, to the released registry's IDs.
 
 ## [0.3.0] - 2026-11-13
@@ -220,7 +226,8 @@ The first tagged version. Everything below is new.
 
 None: no version was released before this one.
 
-[Unreleased]: https://github.com/teispace/teigeodata/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/teispace/teigeodata/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/teispace/teigeodata/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/teispace/teigeodata/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/teispace/teigeodata/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/teispace/teigeodata/releases/tag/v0.1.0

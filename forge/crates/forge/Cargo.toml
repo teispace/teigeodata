@@ -25,10 +25,10 @@ serde_json = "1.0.154"
 serde-saphyr = "2.1.1"
 tiff = { version = "0.11.3", default-features = false, features = ["deflate", "lzw"] }
 unicode-normalization = "0.1.26"
-teigeodata-names = { version = "0.3.0", path = "../../../crates/teigeodata-names", features = ["serde"] }
-teigeodata-core = { version = "0.3.0", path = "../../../crates/teigeodata-core", features = ["alloc"] }
-teigeodata-format = { version = "0.3.0", path = "../../../crates/teigeodata-format", features = ["write", "signature", "spatial"] }
-teigeodata-sync = { version = "0.3.0", path = "../../../crates/teigeodata-sync", features = ["repo", "write"] }
+teigeodata-names = { version = "0.3.1", path = "../../../crates/teigeodata-names", features = ["serde"] }
+teigeodata-core = { version = "0.3.1", path = "../../../crates/teigeodata-core", features = ["alloc"] }
+teigeodata-format = { version = "0.3.1", path = "../../../crates/teigeodata-format", features = ["write", "signature", "spatial"] }
+teigeodata-sync = { version = "0.3.1", path = "../../../crates/teigeodata-sync", features = ["repo", "write"] }
 # C zstd at level 19, as releases compress the transport asset (an embedded layer's wire budget).
 zstd = { version = "0.14.3", default-features = false }
 blake3 = { version = "1.8.7", default-features = false }
