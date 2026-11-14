@@ -106,6 +106,37 @@ impl Engine {
         Ok(polygon_box(s.polygons, s.arcs, s.polygon))
     }
 
+    /// How many vertices [`Engine::boundary`] reads for `place` at level of detail `lod`, or
+    /// `None` without an outline: counted from the arcs' levels, no coordinate decoded, so a
+    /// caller picks the level that fits a bound before reading it.
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if a section it reads is corrupt.
+    pub fn boundary_vertices(&self, place: &Place, lod: u8) -> Result<Option<usize>, Error> {
+        let Some((i, s)) = self.shape(place.id)? else {
+            return Ok(None);
+        };
+        self.layers.get(i).ok_or(Error::Range)?.ensure(Kind::ARCS)?;
+        let lod = if s.arcs.has_levels() {
+            lod.min(PINNED - 1)
+        } else {
+            0
+        };
+        let mut n = 0_usize;
+        for part in s.polygons.parts(s.polygon).unwrap_or(0..0) {
+            for ring in s.polygons.rings(part).unwrap_or(0..0) {
+                // Consecutive arcs share their joint, which the ring reads once.
+                let (mut vertices, mut arcs) = (0_usize, 0_usize);
+                for (a, _) in s.polygons.refs(ring) {
+                    vertices += s.arcs.count(a, lod);
+                    arcs += 1;
+                }
+                n += vertices.saturating_sub(arcs.saturating_sub(1));
+            }
+        }
+        Ok(Some(n))
+    }
+
     /// `place`'s outline at level of detail `lod` into `out`, from the first layer by
     /// precedence that has one; returns that layer, or `None` (and an empty `out`) without
     /// one. Level 0 is full resolution; levels 1 to 6 are coarser, each within its tolerance

@@ -63,6 +63,15 @@ fn a_place_is_framed_by_its_box_and_drawn_at_each_level() {
             assert_eq!(pts.first(), pts.last(), "closed");
             assert_eq!(out.tolerance_cm, tol);
         }
+        // The count from the levels alone is what a read gives, at every level.
+        for lod in 0..=9 {
+            e.boundary(&p, lod, &mut out).unwrap().unwrap();
+            assert_eq!(
+                e.boundary_vertices(&p, lod).unwrap(),
+                Some(out.points.len()),
+                "lod {lod}"
+            );
+        }
         let country = p.kind == Some(PlaceKind::Country);
         assert_eq!(out.rings.len(), if country { 2 } else { 1 });
         if country {
@@ -80,6 +89,7 @@ fn a_place_is_framed_by_its_box_and_drawn_at_each_level() {
     assert_eq!(e.bbox_of(&p).unwrap(), None);
     assert_eq!(e.boundary(&p, 0, &mut out).unwrap(), None);
     assert!(out.points.is_empty() && out.rings.is_empty());
+    assert_eq!(e.boundary_vertices(&p, 0).unwrap(), None);
 }
 
 #[test]

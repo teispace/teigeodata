@@ -783,14 +783,17 @@ pub fn outlined(country_only: bool) -> (Model, Vec<(u32, [i32; 4])>) {
         .iter()
         .map(|&(_, [w, s, e, n])| ring(w, s, e, n))
         .collect();
-    // A hole in the country: arc after the polygons' own.
+    // A hole in the country, after the polygons' own arcs: two arcs joined at a pinned
+    // corner, so a ring of several arcs (whose joints it reads once) is exercised too.
     let c = i32::midpoint(SOUTH, NORTH);
-    rings.push(ring(
+    let (hp, hl) = ring(
         WEST + HALF,
         c - HALF / 4,
         WEST + HALF + HALF / 2,
         c + HALF / 4,
-    ));
+    );
+    rings.push((hp[..=2].to_vec(), hl[..=2].to_vec()));
+    rings.push((hp[2..].to_vec(), hl[2..].to_vec()));
     let pts: Vec<&[Point<E7>]> = rings.iter().map(|r| r.0.as_slice()).collect();
     let lvs: Vec<&[u8]> = rings.iter().map(|r| r.1.as_slice()).collect();
     let tol = [100, 200, 400, 800, 1_600, 3_200];
@@ -804,7 +807,7 @@ pub fn outlined(country_only: bool) -> (Model, Vec<(u32, [i32; 4])>) {
     let refs: Vec<Vec<u32>> = (0..shapes.len() as u32)
         .map(|a| vec![arc_ref(a, false)])
         .collect();
-    let hole_ref = [arc_ref(hole, false)];
+    let hole_ref = [arc_ref(hole, false), arc_ref(hole + 1, false)];
     let ring_lists: Vec<Vec<&[u32]>> = refs
         .iter()
         .enumerate()
@@ -839,7 +842,7 @@ pub fn outlined(country_only: bool) -> (Model, Vec<(u32, [i32; 4])>) {
         .collect();
     let ix_body = poly_index::encode(&boxes, 4).unwrap();
     let k = shapes.len() as u64;
-    m.arcs = Some((arcs_body, k + 1));
+    m.arcs = Some((arcs_body, k + 2));
     m.raw = vec![
         (Kind::POLYGONS, k, poly_body),
         (Kind::POLY_INDEX, k, ix_body),

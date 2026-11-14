@@ -651,23 +651,21 @@ pub fn boundary(
         ));
     }
     let p = place(e, id)?;
+    // The level is chosen from the arcs' levels alone; only the one chosen is decoded.
     let mut last = None;
+    let mut chosen = None;
     for l in first..=COARSEST_LOD {
-        if e.boundary(&p, l, out)?.is_none() {
+        let Some(n) = e.boundary_vertices(&p, l)? else {
+            e.boundary(&p, l, out)?;
             return Ok(Shape {
                 place: p,
                 lod: l,
                 outlined: false,
             });
-        }
-        let n = out.points.len();
+        };
         if n <= limits.vertices {
-            return Ok(Shape {
-                place: p,
-                // Only full resolution has no tolerance: a pack without levels reads it at any.
-                lod: if out.tolerance_cm == 0 { 0 } else { l },
-                outlined: true,
-            });
+            chosen = Some(l);
+            break;
         }
         // A pack stored at full resolution only has no coarser level: stop at once.
         if last == Some(n) {
@@ -675,14 +673,23 @@ pub fn boundary(
         }
         last = Some(n);
     }
-    Err(QueryError::new(
-        Code::OutOfBounds,
-        format!(
-            "{id}: the outline has {} vertices at its coarsest, past the most allowed, {}",
-            out.points.len(),
-            limits.vertices
-        ),
-    ))
+    let Some(l) = chosen else {
+        return Err(QueryError::new(
+            Code::OutOfBounds,
+            format!(
+                "{id}: the outline has {} vertices at its coarsest, past the most allowed, {}",
+                last.unwrap_or_default(),
+                limits.vertices
+            ),
+        ));
+    };
+    e.boundary(&p, l, out)?;
+    Ok(Shape {
+        place: p,
+        // Only full resolution has no tolerance: a pack without levels reads it at any.
+        lod: if out.tolerance_cm == 0 { 0 } else { l },
+        outlined: true,
+    })
 }
 
 /// What a client asks about postal codes (D-200).
