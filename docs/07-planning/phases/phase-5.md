@@ -101,7 +101,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   `Package.swift` with the release URL comes with 5.10
 
 ### 5.4 Android and the JVM
-- [ ] One generated JNI layer: the AAR (cargo-ndk, the 16 KB ELF gate in CI) and the desktop
+- [x] One generated JNI layer: the AAR (cargo-ndk, the 16 KB ELF gate in CI) and the desktop
   JAR with native libraries per OS and architecture; `noCompress` for bundled packs. Built
   ([research](../../02-research/notes/jvm-android-packaging.md), D-288): `cargo xtask
   package-jvm` (the AAR, minSdk 24, 16 KB checked; the JAR with `NativeLoader` extracting
@@ -132,7 +132,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   from the installed wheel; `tests/test_threads.py`. Done when `python.yml` is green
 
 ### 5.7 Node and WASM
-- [ ] napi-rs package with per-platform prebuilds; the WASM build with wasm-bindgen per feature
+- [x] napi-rs package with per-platform prebuilds; the WASM build with wasm-bindgen per feature
   variant, a size budget per variant (S3), browser, Deno, Bun and Workers
   ([research](../../02-research/notes/node-wasm-packaging.md)):
   - [x] 5.7a the API per component (D-291), `fold` with `search` (D-292), so a variant is a
@@ -140,7 +140,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   - [x] 5.7b the WebAssembly packages `full` and `lookup` (D-293): `cargo xtask package-wasm`,
     budgets, parity on Node.js and Bun here; done when `wasm.yml` is green (Deno, Node.js 22
     to 26, Chromium, Firefox, WebKit, workerd)
-  - [ ] 5.7c the Node.js platform packages and their loader (napi-rs layout, D-294): `cargo
+  - [x] 5.7c the Node.js platform packages and their loader (napi-rs layout, D-294): `cargo
     xtask package-node`, `index.mjs`, installed as npm would and tested here; done when
     `node.yml` is green on all eight platforms
 
@@ -175,6 +175,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 | 2026-11-14 | 5.7: the API per component (D-291), `fold` with `search` (D-292), the WebAssembly packages (D-293) | plan |
 | 2026-11-14 | 5.7c: the Node.js packages in the napi-rs layout, an ES module entry, musl in Alpine (D-294) | plan |
 | 2026-11-14 | 5.8 in sub-steps; Go defaults to purego with the library from the C package, cgo by build tag (research) | plan |
+| 2026-11-14 | 5.4 done (`jvm` green with Android API 24 and 35); 5.7 done (`node` green on eight platforms, `wasm` green); 5.8d built (D-295) | plan |
 | 2026-11-14 | 5.6: abi3 floor 3.11, abi3t, the lent `Blob`, wheels by cibuildwheel (D-290) | plan |
 | 2026-11-14 | 5.5: `@Native` bindings, the build hook, `flutter-check` (D-289) | plan |
 | 2026-11-14 | 5.4: the AAR, the desktop JAR, the 16 KB gate (D-288); 5.2 and 5.3 green in CI | plan |
