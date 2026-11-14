@@ -1,7 +1,7 @@
 ---
 title: "The C ABI: rules for every exported function"
 status: draft
-updated: 2026-11-07
+updated: 2026-11-14
 ---
 
 # The C ABI: rules for every exported function
@@ -25,7 +25,8 @@ hold for every function, so a caller learns them once.
   terminator. Blobs start 8-byte aligned on every supported platform (the system allocator gives
   16), and the C test checks it.
 - **Callbacks** are a function pointer and a `void *` context, called on the caller's thread
-  before the function returns. Returning `false` cancels with `TG_ERROR_CANCELLED`. A null
+  before the function returns; long work is a job instead, awaited by the caller's own thread
+  ([bindings §6](bindings.md#6-handles-threads-and-jobs-d-274), D-274). Returning `false` cancels with `TG_ERROR_CANCELLED`. A null
   callback is `TG_ERROR_INVALID_ARGUMENT`.
 - **Panics never cross the boundary.** Each body runs under `catch_unwind`; a panic becomes
   `TG_ERROR_INTERNAL` with a message, and the thread can keep calling. This needs
@@ -53,4 +54,5 @@ removed or changed function needs a major version. `tg_version` returns the vers
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | Callbacks: long work is a job instead | D-274 |
 | 2026-11-07 | First version, from spike S4 | [S4](../02-research/benches/s4-bindings.md) |

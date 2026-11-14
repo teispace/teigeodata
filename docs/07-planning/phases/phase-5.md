@@ -35,7 +35,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   cibuildwheel, jni, cargo-ndk and the NDK, Dart hooks and `native_toolchain_rust`, Swift
   toolchains, .NET, purego), what changed since 2026-11-06, the unverified items of its §7
   (Android 16 KB default, Workers size limits, NuGet trusted publishing, purego coverage)
-- [ ] The threading and async contract written down per runtime (Dart isolates, the Node event
+- [x] The threading and async contract written down (done 2026-11-14, D-274, [bindings §6](../../04-architecture/bindings.md#6-handles-threads-and-jobs-d-274)) per runtime (Dart isolates, the Node event
   loop, the GIL and free-threaded Python, JNI attach, Swift 6 `Sendable`, .NET, Go): which
   calls block, which run as jobs, how callbacks cross threads (the note's §7)
 - [ ] S2, the result format: blob v0 against Arrow C Data and FlatBuffers on real query

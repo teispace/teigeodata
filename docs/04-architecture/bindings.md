@@ -1,7 +1,7 @@
 ---
 title: "Bindings: one safe API, an extracted IDL, generated layers"
 status: draft
-updated: 2026-11-07
+updated: 2026-11-14
 ---
 
 # Bindings: one safe API, an extracted IDL, generated layers
@@ -97,8 +97,55 @@ passing.
 `bindings/bench.sh` builds all of them and runs the benchmark. The CI job `bindings` in
 `.github/workflows/fast-check.yml` runs every suite on Linux.
 
+## 6. Handles, threads and jobs (D-274)
+
+The contract every language keeps. It is decided so that **Rust never calls foreign code from
+a thread the foreign runtime does not own**: the one place each runtime's rules differ.
+
+**Handles.** An API type with methods (`Engine`, `Store`, `Job`) crosses as an opaque pointer to
+an `Arc` (`tg_engine *`), made by a constructor that returns `Result<Self>` and released once by
+`tg_<type>_free`. Methods take `&self` only, so every handle is `Send + Sync`: the engine wraps
+`Shared` (D-141), and adding or removing a layer publishes a new snapshot while queries go on;
+the store wraps its state in a `Mutex`. In C, freeing a handle while a call on it is in flight
+is the caller's error; every generated wrapper prevents it (below).
+
+**Calls block, and are short.** Queries (`get`, `search`, `reverse`, `tz_at`, …) run on the
+calling thread from any thread, concurrently, and take microseconds to a few milliseconds, so
+no language wraps them in a thread hop by default. A synchronous callback (the `FnMut` of §2)
+still runs on the caller's thread before the call returns.
+
+**Long work is a job.** Store operations that touch the network or the disk at length
+(`refresh`, `install`, `update`, `repair`) return a `Job` at once and run on a thread Rust owns
+(one per job; no async runtime enters the core). A job has:
+
+| Method | Does |
+|---|---|
+| `state()` | running, done, failed or cancelled, without blocking |
+| `progress()` | a snapshot `(done, total, seq)` in bytes, updated per frame |
+| `wait(seq, timeout_ms)` | blocks until `seq` moves on or the job ends, or the timeout passes |
+| `cancel()` | sets a flag checked before every request and frame; the job ends `Cancelled` and leaves the journal as it was (an install commits last) |
+| `result()` | the job's value or its typed error; errors of a job come from here, never from the thread-local `tg_last_error` |
+
+Progress reaches a language by **waiting, not by callback**: the language calls `wait` on a
+thread it owns and delivers each new snapshot to the user by its own rules. Cancellation is by
+flag, so the user's cancel works from any thread. One store runs its jobs one at a time; a
+second job waits for the first.
+
+| Runtime | Handle lifetime | A job awaited as | Notes |
+|---|---|---|---|
+| C/C++ | explicit `free` | `wait` in a loop | none |
+| Swift 6 | `final class`, `deinit` frees; `Sendable` (checked by the handle's `Sync`) | `async` function; `wait` on a detached thread resumes a continuation; an `AsyncStream` of progress | Task cancellation calls `cancel` |
+| Kotlin/Java | `AutoCloseable` plus a `Cleaner`; a call holds a use count, `close` waits for it | `CompletableFuture`, progress through a listener on an executor; Kotlin `suspend` over it | JVM threads are already attached; Rust attaches none |
+| Dart/Flutter | `NativeFinalizer` plus `close()` | `Future` and a `Stream` from a helper isolate that calls `wait` (blocking FFI there never blocks the UI isolate) | `@Native` leaf calls for queries |
+| Python | object owns the handle, freed on drop | `wait` with the GIL released; an `asyncio` wrapper runs it in the default executor | queries release the GIL only above a size threshold; `gil_used = false` for free-threaded builds, proven by a stress test |
+| Node | `napi` finalizer plus `close()` | `Promise` through an `AsyncTask` on the libuv pool; progress through an async iterator over `wait` | queries synchronous on the main thread |
+| .NET | `SafeHandle` (its use count prevents a free during a call) | `Task` with `TaskCreationOptions.LongRunning`; `IProgress<T>` | `CancellationToken` calls `cancel` |
+| Go | `runtime.AddCleanup` plus `Close()` | a goroutine calling `wait`; a channel of progress | `context.Context` calls `cancel` |
+| WASM (browser) | `FinalizationRegistry` plus `free()` | no threads: jobs are written in JS over `fetch`, feeding the same verifier and installer step by step | queries synchronous |
+
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | §6: handles, threads and jobs | phase 5.0, D-274 |
 | 2026-11-07 | First version, from spike S4 | [S4](../02-research/benches/s4-bindings.md) |
