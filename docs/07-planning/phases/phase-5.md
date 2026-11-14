@@ -124,8 +124,12 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   - [ ] the web, with the WASM build (5.7)
 
 ### 5.6 Python
-- [ ] Generated PyO3 module; abi3 wheels (3.10 and later) and abi3t for free-threaded
-  builds; the blob through the buffer protocol; a free-threading stress test
+- [ ] Generated PyO3 module; abi3 wheels (3.11 and later; 3.10 is past its end of life and
+  lacks the buffer protocol in the limited API, D-290) and abi3t for free-threaded builds;
+  the blob through the buffer protocol; a free-threading stress test. Built
+  ([research](../../02-research/notes/python-wheels.md), D-290): `teigeodata.Blob` lends its
+  bytes; cp311-abi3, cp315-abi3t and cp314t wheels by cibuildwheel (`python.yml`), tested
+  from the installed wheel; `tests/test_threads.py`. Done when `python.yml` is green
 
 ### 5.7 Node and WASM
 - [ ] napi-rs package with per-platform prebuilds; the WASM build with wasm-bindgen per feature
@@ -153,6 +157,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | 5.6: abi3 floor 3.11, abi3t, the lent `Blob`, wheels by cibuildwheel (D-290) | plan |
 | 2026-11-14 | 5.5: `@Native` bindings, the build hook, `flutter-check` (D-289) | plan |
 | 2026-11-14 | 5.4: the AAR, the desktop JAR, the 16 KB gate (D-288); 5.2 and 5.3 green in CI | plan |
 | 2026-11-14 | 5.3: the XCFramework, the privacy manifest, simulator parity (D-287) | plan |

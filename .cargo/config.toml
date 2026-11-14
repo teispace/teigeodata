@@ -1,2 +1,8 @@
 [alias]
 xtask = "run --quiet --package xtask --"
+
+[env]
+# The Python module is an extension module (D-290): never linked to the libpython of the
+# interpreter that built it, or another interpreter loading it gets a second runtime and
+# crashes (measured: a 3.14-built module segfaulted 3.11 and 3.15). Only PyO3 reads it.
+PYO3_BUILD_EXTENSION_MODULE = "1"

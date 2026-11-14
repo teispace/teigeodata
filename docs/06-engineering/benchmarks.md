@@ -128,7 +128,7 @@ batches, and reports **binding time minus Rust time** as the marshalling cost.
 | Language | Harness | Platforms |
 |---|---|---|
 | C, C++ | Google Benchmark | Linux, macOS, Windows |
-| Python | `pyperf` (and `pytest-benchmark` for suites) | Linux, macOS, Windows; CPython 3.10+ and free-threaded |
+| Python | `pyperf` (and `pytest-benchmark` for suites) | Linux, macOS, Windows; CPython 3.11+ and free-threaded |
 | Node | `mitata` | Linux, macOS, Windows |
 | WASM | `mitata` in Chrome, Firefox and WebKit via Playwright; plus Node and Deno | browsers |
 | Java, Kotlin (JVM) | JMH | Linux, macOS, Windows |

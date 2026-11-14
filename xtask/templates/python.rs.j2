@@ -29,6 +29,53 @@ create_exception!(
 );
 {% endfor %}
 
+/// A result in the teigeodata blob format (D-275), lent to Python without a copy: it has the
+/// buffer protocol, so `memoryview(blob)`, `bytes(blob)`, `numpy.frombuffer(blob, ...)` and
+/// `teigeodata.blob.Reader(blob)` read it in place. Read-only, and never changed once made, so
+/// any thread may read it.
+#[pyclass(frozen, module = "teigeodata")]
+struct Blob(teigeodata_api::Blob);
+
+#[pymethods]
+impl Blob {
+    /// The buffer protocol: one read-only, contiguous run of bytes.
+    #[allow(unsafe_code, reason = "the buffer protocol is a C call with a raw view to fill")]
+    unsafe fn __getbuffer__(
+        slf: &Bound<'_, Self>,
+        view: *mut pyo3::ffi::Py_buffer,
+        flags: std::os::raw::c_int,
+    ) -> PyResult<()> {
+        let bytes = slf.get().0.as_bytes();
+        let len = isize::try_from(bytes.len())
+            .map_err(|_| pyo3::exceptions::PyOverflowError::new_err("blob too large"))?;
+        // SAFETY: `view` is the caller's buffer to fill. The bytes live in the `Vec` this
+        // frozen object owns and never changes; `PyBuffer_FillInfo` takes a reference to the
+        // object, so they outlive every view, and the view is read-only (it refuses a
+        // writable request).
+        let rc = unsafe {
+            pyo3::ffi::PyBuffer_FillInfo(view, slf.as_ptr(), bytes.as_ptr().cast_mut().cast(), len, 1, flags)
+        };
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(PyErr::fetch(slf.py()))
+        }
+    }
+
+    fn __len__(&self) -> usize {
+        self.0.as_bytes().len()
+    }
+
+    /// A copy as `bytes`.
+    fn __bytes__<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, self.0.as_bytes())
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<teigeodata.Blob of {} bytes>", self.0.as_bytes().len())
+    }
+}
+
 fn error(e: teigeodata_api::Error) -> PyErr {
     match e.code {
 {% for c in error_codes %}
@@ -37,7 +84,7 @@ fn error(e: teigeodata_api::Error) -> PyErr {
     }
 }
 {% macro pyty(p) %}{% if p.ty == "bool" %}bool{% elif p.ty == "str" %}&str{% elif p.ty == "bytes" %}&[u8]{% elif p.ty == "callback" %}&Bound<'_, PyAny>{% elif p.ty == "handle" %}&Bound<'_, {{ p.handle }}>{% elif p.ty == "record" %}&Bound<'_, {{ p.record }}>{% else %}{{ p.ty }}{% endif %}{% endmacro %}
-{% macro rty(f) %}{% if f.returns == "blob" %}Bound<'py, PyBytes>{% elif f.returns == "string" %}String{% elif f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ f.returns }}{% endif %}{% endmacro %}
+{% macro rty(f) %}{% if f.returns == "blob" %}Blob{% elif f.returns == "string" %}String{% elif f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ f.returns }}{% endif %}{% endmacro %}
 {#
   One function: free (`owner` none), a method (`f.receiver`) or an associated function of a
   handle. A method without a callback releases the GIL while Rust runs (D-274), so other
@@ -48,7 +95,7 @@ fn error(e: teigeodata_api::Error) -> PyErr {
 {% set cb = cbs[0] if cbs else none %}
 {% set detach = f.receiver and not cb %}
 {% set wrap = f.fallible or cb %}
-{% set py = f.returns == "blob" or detach %}
+{% set py = detach %}
 
 {% for line in f.doc %}
 /// {{ line }}
@@ -103,7 +150,7 @@ fn {{ f.name }}{% if py %}<'py>{% endif %}(
 {% if f.returns == "void" %}
     {{ expr }};
 {% elif f.returns == "blob" %}
-    PyBytes::new(py, {{ expr }}.as_bytes())
+    Blob({{ expr }})
 {% elif f.returns == "handle" %}
     {{ f.returns_handle }}({{ expr }})
 {% else %}
@@ -123,7 +170,7 @@ fn {{ f.name }}{% if py %}<'py>{% endif %}(
 {% if f.fallible %}
     let value = value.map_err(error)?;
 {% endif %}
-    Ok({% if f.returns == "blob" %}PyBytes::new(py, value.as_bytes()){% elif f.returns == "handle" %}{{ f.returns_handle }}(value){% else %}value{% endif %})
+    Ok({% if f.returns == "blob" %}Blob(value){% elif f.returns == "handle" %}{{ f.returns_handle }}(value){% else %}value{% endif %})
 {% endif %}
 {% endif %}
 }
@@ -243,6 +290,7 @@ impl {{ h.name }} {
 mod _native {
     #[pymodule_export]
     use super::{
+        Blob,
         TeiGeodataError,
 {% for c in error_codes %}
         {{ c.name }}Error,

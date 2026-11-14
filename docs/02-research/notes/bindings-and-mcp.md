@@ -37,7 +37,7 @@ This note feeds the bindings ADR, the boundary-crate architecture page, the rele
 | Node | napi-rs 3.x (`napi` 3.16.1, `@napi-rs/cli` 3.10.12), Node-API 9 baseline | npm package with per-platform `optionalDependencies` prebuilds; optional `wasm32-wasip1-threads` fallback package |
 | Browser/WASM, Deno, Bun, Workers | wasm-bindgen 0.2.130 (now under the `wasm-bindgen` GitHub org) plus binaryen `wasm-opt` (version_133) | npm packages per feature variant (ESM); JSR for Deno |
 | Dart/Flutter | C ABI plus generated `@Native` bindings plus `NativeFinalizer`; Dart build hooks (stable since Dart 3.10 / Flutter 3.38) | pub.dev package whose `hook/build.dart` downloads verified prebuilt binaries, with a build-from-source fallback via `native_toolchain_rust` 1.0.7 |
-| Python | Generated PyO3 0.30 shims, maturin 1.16, cibuildwheel 4.3 | abi3 wheels (cp310+), abi3t wheels for 3.15t+ |
+| Python | Generated PyO3 0.30 shims, maturin 1.16, cibuildwheel 4.3 | abi3 wheels (cp311+; 3.10 superseded by D-290), abi3t wheels for 3.15t+ |
 | JVM | JNI (generated) | JAR with native libs per OS/arch on Maven Central under `com.teispace` |
 | Android | JNI (generated), cargo-ndk 4.1, NDK r30 | AAR on Maven Central; 16 KB ELF alignment enforced in CI |
 | Swift | C ABI plus module map plus generated Swift wrapper | XCFramework zipped as a SwiftPM `binaryTarget` (CocoaPods trunk becomes read-only on 2026-12-02, so no podspec) |

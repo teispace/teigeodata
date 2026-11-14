@@ -22,7 +22,10 @@ store = ["teigeodata-api/store"]
 
 [dependencies]
 teigeodata-api.workspace = true
-pyo3 = { version = "0.30.1", features = ["abi3-py310"] }
+# One stable-ABI module per wheel family (D-290): built by Python 3.11 to 3.14 it is `abi3`
+# (3.11 and later, GIL builds; 3.11 is the first with the buffer protocol in the limited API),
+# built by 3.15 or later it is `abi3t`, which free-threaded and GIL builds both load.
+pyo3 = { version = "0.30.1", features = ["abi3-py311", "abi3t-py315"] }
 
 [lints]
 workspace = true

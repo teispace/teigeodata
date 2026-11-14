@@ -1,0 +1,92 @@
+# The Python wheels as they ship (phase 5.6, D-290): per platform an abi3 wheel (CPython 3.11
+# and later, tested on 3.11 to 3.15), an abi3t wheel (3.15 and later, tested free-threaded) and
+# a cp314t wheel, each tested from the installed wheel by cibuildwheel; on a `v*` tag they are
+# attached to the release.
+name: python
+
+on:
+  push:
+    tags: ["v*"]
+    branches: [main]
+    paths:
+      - crates/teigeodata-api/**
+      - bindings/python/**
+      - bindings/Cargo.toml
+      - bindings/Cargo.lock
+      - bindings/parity.json
+      - bindings/fixtures/**
+      - xtask/templates/python.rs.j2
+      - xtask/templates/python.pyi.j2
+      - .github/workflows/python.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wheels:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, name: Linux x86_64 }
+          - { os: ubuntu-24.04-arm, name: Linux aarch64 }
+          - { os: macos-latest, name: macOS arm64 and x86_64 }
+          - { os: windows-latest, name: Windows x64 }
+          - { os: windows-11-arm, name: Windows arm64 }
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Toolchain (from rust-toolchain.toml)
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          if [ "$RUNNER_OS" = macOS ]; then rustup target add x86_64-apple-darwin; fi
+      - name: Licence files into the package
+        shell: bash
+        run: cp LICENSE NOTICE bindings/python/
+      - uses: pypa/cibuildwheel@f9b966cfadf4109556cadc5bb39ddb72d0ce664e # v4.3.5
+        # Its settings live in bindings/python/pyproject.toml, so a local run is the same.
+        with:
+          package-dir: bindings/python
+          output-dir: wheelhouse
+      - name: Every wheel carries the licence and notice
+        shell: bash
+        run: |
+          ls -l wheelhouse
+          for w in wheelhouse/*.whl; do
+            for f in LICENSE NOTICE; do
+              python -m zipfile -l "$w" | grep -q "dist-info/licenses/$f" || { echo "$w lacks $f"; exit 1; }
+            done
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: python-wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: wheels
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: python-wheels-*
+          path: dist
+          merge-multiple: true
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" ./dist/*.whl --clobber --repo "$GITHUB_REPOSITORY"

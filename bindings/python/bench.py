@@ -17,10 +17,11 @@ def best(n: int, f) -> float:
     return out
 
 
-def lat_sum(blob: bytes) -> float:
+def lat_sum(blob) -> float:
     # Descriptor 1 is `lat` (the order sample_rows writes); offset and length at +20 and +24.
-    at, length = struct.unpack_from("<II", blob, 16 + 40 + 20)
-    return sum(memoryview(blob)[at : at + length].cast("d"))
+    view = memoryview(blob)
+    at, length = struct.unpack_from("<II", view, 16 + 40 + 20)
+    return sum(view[at : at + length].cast("d"))
 
 
 def row(case: str, ns: float) -> None:

@@ -7,22 +7,23 @@ import struct
 import unittest
 
 import teigeodata as tg
-from teigeodata.blob import Blob
+from teigeodata.blob import Reader
 
 PARITY = json.loads((pathlib.Path(__file__).parents[2] / "parity.json").read_text("utf-8"))
 
 
-def column(blob: bytes, name: str) -> memoryview:
+def column(blob: tg.Blob, name: str) -> memoryview:
     """A fixed-width column of a blob, viewed in place (no copy)."""
-    assert blob[:4] == b"TGB1"
-    rows, cols, total = struct.unpack_from("<III", blob, 4)
+    view = memoryview(blob)
+    assert view[:4] == b"TGB1"
+    rows, cols, total = struct.unpack_from("<III", view, 4)
     assert total == len(blob)
     for i in range(cols):
         d = 16 + 40 * i
-        if blob[d : d + 16].rstrip(b"\0").decode() == name:
-            ty, at, length = struct.unpack_from("<III", blob, d + 16)
+        if bytes(view[d : d + 16]).rstrip(b"\0").decode() == name:
+            ty, at, length = struct.unpack_from("<III", view, d + 16)
             fmt = {1: "i", 2: "I", 3: "q", 4: "Q", 5: "f", 6: "d"}[ty]
-            return memoryview(blob)[at : at + length].cast(fmt)
+            return view[at : at + length].cast(fmt)
     raise KeyError(name)
 
 
@@ -38,8 +39,14 @@ class Parity(unittest.TestCase):
     def test_sample_rows(self) -> None:
         s = PARITY["sample_rows"]
         blob = tg.sample_rows(s["rows"])
-        self.assertIsInstance(blob, bytes)
+        self.assertIsInstance(blob, tg.Blob)
         self.assertEqual(len(blob), s["bytes"])
+        # Lent, not copied: read-only, and the same bytes as a copy.
+        view = memoryview(blob)
+        self.assertTrue(view.readonly)
+        self.assertEqual(view.tobytes(), bytes(blob))
+        with self.assertRaises(TypeError):
+            view[0:1] = b"x"
         lat = column(blob, "lat")
         self.assertEqual(len(lat), s["rows"])
         total = 0.0
@@ -96,7 +103,7 @@ class Engine(unittest.TestCase):
 
     def test_get(self) -> None:
         g = self.p["get"]
-        b = Blob(self.engine.get(g["id"]))
+        b = Reader(self.engine.get(g["id"]))
         self.assertEqual(b.columns, self.p["columns"])
         self.assertEqual(b.rows, 1)
         self.assertEqual(b.strings("name"), [g["name"]])
@@ -106,23 +113,23 @@ class Engine(unittest.TestCase):
 
     def test_queries(self) -> None:
         q = self.p["search"]
-        hits = Blob(self.engine.search(q["query"], q["limit"]))
+        hits = Reader(self.engine.search(q["query"], q["limit"]))
         self.assertEqual(hits.strings("id")[0], q["first_id"])
         r = self.p["reverse"]
-        near = Blob(self.engine.reverse(r["lat"], r["lon"], r["limit"]))
+        near = Reader(self.engine.reverse(r["lat"], r["lon"], r["limit"]))
         self.assertEqual(near.strings("id"), r["ids"])
         self.assertAlmostEqual(near.numbers("meters")[0], r["first_meters"], delta=0.1)
         a = self.p["admin_at"]
-        units = Blob(self.engine.admin_at(a["lat"], a["lon"]))
+        units = Reader(self.engine.admin_at(a["lat"], a["lon"]))
         self.assertEqual(units.strings("id"), a["ids"])
 
     def test_search_options(self) -> None:
         w = self.p["search_with"]
         options = tg.SearchOptions(focus_lat=w["focus_lat"], focus_lon=w["focus_lon"], focus_scale_m=w["focus_scale_m"])
         self.assertEqual((options.focus_lat, options.strict), (w["focus_lat"], False))
-        got = Blob(self.engine.search_with(w["query"], w["limit"], options))
+        got = Reader(self.engine.search_with(w["query"], w["limit"], options))
         self.assertEqual(got.strings("id"), w["ids"])
-        plain = Blob(self.engine.search_with(w["query"], w["limit"], tg.SearchOptions()))
+        plain = Reader(self.engine.search_with(w["query"], w["limit"], tg.SearchOptions()))
         self.assertNotEqual(plain.strings("id"), w["ids"])
         with self.assertRaises(tg.InvalidArgumentError):
             self.engine.search_with(w["query"], 1, tg.SearchOptions(focus_lat=1.0))
@@ -146,7 +153,7 @@ class Engine(unittest.TestCase):
             tg.OpenOptions(verify=1)  # an enum, not its value
         points = tg.Engine()
         points.open_file_with(FIXTURE, tg.OpenOptions(components=o["components"], languages=o["languages"]))
-        self.assertEqual(Blob(points.get(self.p["get"]["id"])).rows, 1)
+        self.assertEqual(Reader(points.get(self.p["get"]["id"])).rows, 1)
         with self.assertRaises(tg.MissingComponentError):
             points.search("Synthland", 1)
         with self.assertRaises(tg.InvalidArgumentError):
@@ -155,41 +162,41 @@ class Engine(unittest.TestCase):
     def test_postal(self) -> None:
         e, p = self.engine, self.p
         c = p["postal_lookup"]
-        got = Blob(e.postal_lookup(c["code"], c["scheme"]))
+        got = Reader(e.postal_lookup(c["code"], c["scheme"]))
         self.assertEqual((got.strings("postal"), got.strings("id")), (c["postal"], c["ids"]))
         c = p["postal_prefix"]
-        got = Blob(e.postal_prefix(c["input"], c["scheme"], c["limit"]))
+        got = Reader(e.postal_prefix(c["input"], c["scheme"], c["limit"]))
         self.assertEqual(got.strings("postal"), c["postal"])
         c = p["postal_at"]
-        got = Blob(e.postal_at(c["lat"], c["lon"]))
+        got = Reader(e.postal_at(c["lat"], c["lon"]))
         self.assertEqual((got.strings("postal"), got.strings("code_kind")), (c["postal"], c["code_kind"]))
         c = p["postal_codes_of"]
-        self.assertEqual(Blob(e.postal_codes_of(c["id"])).strings("postal"), c["postal"])
+        self.assertEqual(Reader(e.postal_codes_of(c["id"])).strings("postal"), c["postal"])
 
     def test_elevation(self) -> None:
         h = self.p["elevation_at"]
         self.assertEqual(self.engine.open_file(str(pathlib.Path(FIXTURE).parents[1] / h["fixture"])), 1)
-        got = Blob(self.engine.elevation_at(h["lat"], h["lon"]))
+        got = Reader(self.engine.elevation_at(h["lat"], h["lon"]))
         self.assertEqual(list(got.numbers("meters")), [h["meters"]])
         self.assertEqual(got.strings("source"), [h["source"]])
         self.assertTrue(self.engine.remove(1))
         self.assertFalse(self.engine.remove(1))
-        self.assertEqual(Blob(self.engine.elevation_at(h["lat"], h["lon"])).rows, 0)
+        self.assertEqual(Reader(self.engine.elevation_at(h["lat"], h["lon"])).rows, 0)
 
     def test_graph_radius_zone_and_codes(self) -> None:
         e, p = self.engine, self.p
         for method in ("parent", "ancestors", "children"):
-            got = Blob(getattr(e, method)(p[method]["id"]))
+            got = Reader(getattr(e, method)(p[method]["id"]))
             self.assertEqual(got.strings("id"), p[method]["ids"], method)
         n = p["nearby"]
-        self.assertEqual(Blob(e.nearby(n["id"], n["limit"])).strings("id"), n["ids"])
+        self.assertEqual(Reader(e.nearby(n["id"], n["limit"])).strings("id"), n["ids"])
         w = p["within_radius"]
-        got = Blob(e.within_radius(w["lat"], w["lon"], w["meters"], w["limit"]))
+        got = Reader(e.within_radius(w["lat"], w["lon"], w["meters"], w["limit"]))
         self.assertEqual(got.strings("id"), w["ids"])
         t = p["tz_at"]
-        self.assertEqual(Blob(e.tz_at(t["lat"], t["lon"])).strings("tz"), [t["tz"]])
+        self.assertEqual(Reader(e.tz_at(t["lat"], t["lon"])).strings("tz"), [t["tz"]])
         i = p["by_iso"]
-        self.assertEqual(Blob(e.by_iso(i["code"])).strings("id"), [i["id"]])
+        self.assertEqual(Reader(e.by_iso(i["code"])).strings("id"), [i["id"]])
         with self.assertRaises(tg.InvalidArgumentError):
             e.by_iso(p["bad_iso"])
         with self.assertRaises(tg.InvalidArgumentError):
@@ -213,7 +220,7 @@ class Engine(unittest.TestCase):
         def work() -> None:
             try:
                 for _ in range(50):
-                    b = Blob(self.engine.get(self.p["get"]["id"]))
+                    b = Reader(self.engine.get(self.p["get"]["id"]))
                     assert b.strings("name") == [self.p["get"]["name"]]
             except BaseException as e:  # noqa: BLE001
                 errors.append(e)
@@ -234,21 +241,21 @@ class Tz(unittest.TestCase):
         engine = tg.Engine()
         engine.open_file(str(pathlib.Path(__file__).parents[2] / p["fixture"]))
         self.assertEqual(engine.tz_version(), p["version"])
-        self.assertEqual(Blob(engine.tz_zones()).strings("zone"), p["zones"])
+        self.assertEqual(Reader(engine.tz_zones()).strings("zone"), p["zones"])
         o = p["offset"]
-        got = Blob(engine.tz_offset_at(o["zone"], o["unix"]))
+        got = Reader(engine.tz_offset_at(o["zone"], o["unix"]))
         self.assertEqual(list(got.numbers("seconds")), [o["seconds"]])
         self.assertEqual(list(got.numbers("dst")), [o["dst"]])
         self.assertEqual(got.strings("abbr"), [o["abbr"]])
         for kind in ("gap", "overlap"):
             c = p[kind]
-            got = Blob(engine.tz_local(c["zone"], *c["civil"]))
+            got = Reader(engine.tz_local(c["zone"], *c["civil"]))
             self.assertEqual(got.strings("kind"), [kind])
             self.assertEqual(list(got.numbers("before")), [c["before"]])
             self.assertEqual(list(got.numbers("after")), [c["after"]])
         s = p["start"]
-        self.assertEqual(list(Blob(engine.tz_rules_start(s["zone"])).numbers("unix")), [s["unix"]])
-        self.assertEqual(Blob(engine.tz_offset_at(p["unknown"], 0)).rows, 0)
+        self.assertEqual(list(Reader(engine.tz_rules_start(s["zone"])).numbers("unix")), [s["unix"]])
+        self.assertEqual(Reader(engine.tz_offset_at(p["unknown"], 0)).rows, 0)
         with self.assertRaises(tg.InvalidArgumentError):
             engine.tz_local(o["zone"], 2024, 13, 1, 0, 0, 0)
 
@@ -270,12 +277,12 @@ class Store(unittest.TestCase):
             tg.Store.create(f"{d}/s", mirror, mirror, root)
             store = tg.Store.open(f"{d}/s")
             self.assertEqual(store.damaged(), "")
-            self.assertEqual(Blob(store.catalog()).rows, 0)
-            self.assertEqual(Blob(store.status(False)).rows, 0)
+            self.assertEqual(Reader(store.catalog()).rows, 0)
+            self.assertEqual(Reader(store.status(False)).rows, 0)
             engine = store.engine()
             self.assertEqual(engine.layers(), 0)
-            self.assertEqual(Blob(store.find(engine, pack, 3)).rows, 0)
-            self.assertEqual(Blob(store.locate(engine, 27.7, 85.3, 1000)).rows, 0)
+            self.assertEqual(Reader(store.find(engine, pack, 3)).rows, 0)
+            self.assertEqual(Reader(store.locate(engine, 27.7, 85.3, 1000)).rows, 0)
             with self.assertRaises(tg.InvalidArgumentError):
                 store.find(engine, pack, 10_001)
             with self.assertRaises(tg.InvalidArgumentError):
@@ -307,7 +314,7 @@ class Store(unittest.TestCase):
 
         async def run(d: str) -> None:
             store = await asyncio.to_thread(tg.Store.create, f"{d}/s", p["mirror"], p["mirror"], root)
-            self.assertEqual(Blob(await asyncio.to_thread(store.status, False)).rows, 0)
+            self.assertEqual(Reader(await asyncio.to_thread(store.status, False)).rows, 0)
             job = store.refresh(p["pack"])
             with self.assertRaises(tg.NetworkError):
                 await asyncio.to_thread(job.result)

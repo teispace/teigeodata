@@ -1,0 +1,60 @@
+# The Python package (phase 5.6, D-290): the generated PyO3 module `teigeodata._native` and the
+# hand-written modules beside it, built by maturin. Wheels: one `abi3` wheel per platform for
+# CPython 3.11 and later, one `abi3t` wheel for 3.15 and later (free-threaded and GIL builds
+# both load it), and a `cp314t` wheel for free-threaded 3.14.
+
+[build-system]
+requires = ["maturin>=1.16,<2"]
+build-backend = "maturin"
+
+[project]
+name = "teigeodata"
+description = "Accurate, offline places: names, coordinates, heights, boundaries, zones, postal codes."
+readme = { text = "teigeodata: accurate, offline places. See https://github.com/teispace/teigeodata.", content-type = "text/plain" }
+requires-python = ">=3.11"
+license = "Apache-2.0"
+# LICENSE and NOTICE are copied here from the repository root before a build (gitignored);
+# maturin includes them by its default globs, and the wheel job checks every wheel has them.
+dynamic = ["version"]
+keywords = ["geodata", "gazetteer", "geocoding", "offline", "timezone"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: Free Threading :: 3 - Stable",
+    "Programming Language :: Rust",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/teispace/teigeodata"
+Source = "https://github.com/teispace/teigeodata"
+
+[tool.maturin]
+manifest-path = "Cargo.toml"
+module-name = "teigeodata._native"
+python-source = "."
+python-packages = ["teigeodata"]
+# Built shared objects from a development build are not packaged: maturin writes its own.
+exclude = ["teigeodata/*.so", "teigeodata/*.pyd"]
+profile = "dist"
+strip = true
+
+[tool.cibuildwheel]
+# cp311 builds the abi3 wheel, which cibuildwheel reuses (and tests) on 3.12 to 3.15; 3.15t
+# builds the abi3t wheel; 3.14t a version-specific one.
+build = ["cp311-*", "cp312-*", "cp313-*", "cp314-*", "cp315-*", "cp314t-*", "cp315t-*"]
+skip = ["*-win32", "*-manylinux_i686", "*-musllinux_i686"]
+test-command = "python -m unittest discover -v -s {package}/tests"
+
+[tool.cibuildwheel.linux]
+# The manylinux and musllinux containers have no Rust: rustup, then the version
+# rust-toolchain.toml names (the repository is the container's /project).
+before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none && . $HOME/.cargo/env && rustup toolchain install"
+environment = { PATH = "$HOME/.cargo/bin:$PATH" }
+
+[tool.cibuildwheel.macos]
+# x86_64 is cross-built on Apple silicon and tested under Rosetta.
+archs = ["arm64", "x86_64"]

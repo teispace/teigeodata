@@ -74,6 +74,63 @@ create_exception!(
     "The store refused: the catalog did not verify, a pack is not in it or not installed, a pack another needs, or the store's files cannot be written."
 );
 
+/// A result in the teigeodata blob format (D-275), lent to Python without a copy: it has the
+/// buffer protocol, so `memoryview(blob)`, `bytes(blob)`, `numpy.frombuffer(blob, ...)` and
+/// `teigeodata.blob.Reader(blob)` read it in place. Read-only, and never changed once made, so
+/// any thread may read it.
+#[pyclass(frozen, module = "teigeodata")]
+struct Blob(teigeodata_api::Blob);
+
+#[pymethods]
+impl Blob {
+    /// The buffer protocol: one read-only, contiguous run of bytes.
+    #[allow(
+        unsafe_code,
+        reason = "the buffer protocol is a C call with a raw view to fill"
+    )]
+    unsafe fn __getbuffer__(
+        slf: &Bound<'_, Self>,
+        view: *mut pyo3::ffi::Py_buffer,
+        flags: std::os::raw::c_int,
+    ) -> PyResult<()> {
+        let bytes = slf.get().0.as_bytes();
+        let len = isize::try_from(bytes.len())
+            .map_err(|_| pyo3::exceptions::PyOverflowError::new_err("blob too large"))?;
+        // SAFETY: `view` is the caller's buffer to fill. The bytes live in the `Vec` this
+        // frozen object owns and never changes; `PyBuffer_FillInfo` takes a reference to the
+        // object, so they outlive every view, and the view is read-only (it refuses a
+        // writable request).
+        let rc = unsafe {
+            pyo3::ffi::PyBuffer_FillInfo(
+                view,
+                slf.as_ptr(),
+                bytes.as_ptr().cast_mut().cast(),
+                len,
+                1,
+                flags,
+            )
+        };
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(PyErr::fetch(slf.py()))
+        }
+    }
+
+    fn __len__(&self) -> usize {
+        self.0.as_bytes().len()
+    }
+
+    /// A copy as `bytes`.
+    fn __bytes__<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, self.0.as_bytes())
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<teigeodata.Blob of {} bytes>", self.0.as_bytes().len())
+    }
+}
+
 fn error(e: teigeodata_api::Error) -> PyErr {
     match e.code {
         ErrorCode::InvalidArgument => InvalidArgumentError::new_err(e.message),
@@ -114,10 +171,10 @@ fn fold(text: &str) -> String {
 ///
 /// `ErrorCode::InvalidArgument` if `rows` exceeds `SAMPLE_ROWS_MAX`.
 #[pyfunction]
-fn sample_rows<'py>(py: Python<'py>, rows: u32) -> PyResult<Bound<'py, PyBytes>> {
+fn sample_rows(rows: u32) -> PyResult<Blob> {
     let value = teigeodata_api::sample_rows(rows);
     let value = value.map_err(error)?;
-    Ok(PyBytes::new(py, value.as_bytes()))
+    Ok(Blob(value))
 }
 
 /// Calls `on_step` once per step with the step number, from 1 to `steps`, on the calling
@@ -488,10 +545,10 @@ impl Engine {
     ///
     /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
     /// section read is corrupt.
-    fn get<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Bound<'py, PyBytes>> {
+    fn get<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Blob> {
         let value = py.detach(|| self.0.get(id));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The place's parent as the packs answer for it (one row), or no row for a root or an
     /// unknown ID.
@@ -500,10 +557,10 @@ impl Engine {
     ///
     /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
     /// section read is corrupt.
-    fn parent<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Bound<'py, PyBytes>> {
+    fn parent<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Blob> {
         let value = py.detach(|| self.0.parent(id));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The place's ancestors, parent first up to the country; no rows for a root or an
     /// unknown ID.
@@ -511,20 +568,20 @@ impl Engine {
     /// # Errors
     ///
     /// As `parent`.
-    fn ancestors<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Bound<'py, PyBytes>> {
+    fn ancestors<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Blob> {
         let value = py.detach(|| self.0.ancestors(id));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The place's children, by ID; no rows for a leaf or an unknown ID.
     ///
     /// # Errors
     ///
     /// As `parent`.
-    fn children<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Bound<'py, PyBytes>> {
+    fn children<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Blob> {
         let value = py.detach(|| self.0.children(id));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The places nearest the place with this ID, not counting it, nearest first, at most
     /// `limit`, with `meters` and `bearing`; no rows for an unknown ID.
@@ -533,10 +590,10 @@ impl Engine {
     ///
     /// `ErrorCode::InvalidArgument` if `id` is not a place ID or `limit` exceeds
     /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
-    fn nearby<'py>(&self, py: Python<'py>, id: &str, limit: u32) -> PyResult<Bound<'py, PyBytes>> {
+    fn nearby<'py>(&self, py: Python<'py>, id: &str, limit: u32) -> PyResult<Blob> {
         let value = py.detach(|| self.0.nearby(id, limit));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
     /// parent first. The `score` column compares only within one query.
@@ -545,15 +602,10 @@ impl Engine {
     ///
     /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
     /// `ErrorCode::Corrupt` if a section read is corrupt.
-    fn search<'py>(
-        &self,
-        py: Python<'py>,
-        query: &str,
-        limit: u32,
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    fn search<'py>(&self, py: Python<'py>, query: &str, limit: u32) -> PyResult<Blob> {
         let value = py.detach(|| self.0.search(query, limit));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// `search` ranked by `options`: near a focus point, or in strict match
     /// order.
@@ -569,11 +621,11 @@ impl Engine {
         query: &str,
         limit: u32,
         options: &Bound<'_, SearchOptions>,
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    ) -> PyResult<Blob> {
         let options = &teigeodata_api::SearchOptions::from(*options.get());
         let value = py.detach(|| self.0.search_with(query, limit, options));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The places nearest the point, nearest first, at most `limit`, with `meters` and
     /// `bearing` (degrees from north) to each.
@@ -582,16 +634,10 @@ impl Engine {
     ///
     /// `ErrorCode::InvalidArgument` for a point off the globe or a `limit` above
     /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
-    fn reverse<'py>(
-        &self,
-        py: Python<'py>,
-        lat: f64,
-        lon: f64,
-        limit: u32,
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    fn reverse<'py>(&self, py: Python<'py>, lat: f64, lon: f64, limit: u32) -> PyResult<Blob> {
         let value = py.detach(|| self.0.reverse(lat, lon, limit));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
     /// with `meters` and `bearing` to each.
@@ -608,10 +654,10 @@ impl Engine {
         lon: f64,
         meters: f64,
         limit: u32,
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    ) -> PyResult<Blob> {
         let value = py.detach(|| self.0.within_radius(lat, lon, meters, limit));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The admin units holding the point, country first.
     ///
@@ -619,10 +665,10 @@ impl Engine {
     ///
     /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
     /// section read is corrupt.
-    fn admin_at<'py>(&self, py: Python<'py>, lat: f64, lon: f64) -> PyResult<Bound<'py, PyBytes>> {
+    fn admin_at<'py>(&self, py: Python<'py>, lat: f64, lon: f64) -> PyResult<Blob> {
         let value = py.detach(|| self.0.admin_at(lat, lon));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The terrain height at the point, as one row: `meters` above the datum (bilinear between
     /// the DEM samples around it), `source` (the DEM product's key, null where the pack does
@@ -633,15 +679,10 @@ impl Engine {
     ///
     /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
     /// grid read is corrupt.
-    fn elevation_at<'py>(
-        &self,
-        py: Python<'py>,
-        lat: f64,
-        lon: f64,
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    fn elevation_at<'py>(&self, py: Python<'py>, lat: f64, lon: f64) -> PyResult<Blob> {
         let value = py.detach(|| self.0.elevation_at(lat, lon));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The places postal code `code` names, one row per code and place, with the code's
     /// `postal`, `scheme`, `code_kind`, `valid_from` and `valid_to` columns. `scheme` names
@@ -652,15 +693,10 @@ impl Engine {
     /// # Errors
     ///
     /// `ErrorCode::Corrupt` if a section read is corrupt.
-    fn postal_lookup<'py>(
-        &self,
-        py: Python<'py>,
-        code: &str,
-        scheme: &str,
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    fn postal_lookup<'py>(&self, py: Python<'py>, code: &str, scheme: &str) -> PyResult<Blob> {
         let value = py.detach(|| self.0.postal_lookup(code, scheme));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
     /// in code order per scheme; `scheme` as in `postal_lookup`.
@@ -675,10 +711,10 @@ impl Engine {
         input: &str,
         scheme: &str,
         limit: u32,
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    ) -> PyResult<Blob> {
         let value = py.detach(|| self.0.postal_prefix(input, scheme, limit));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The postal codes of the place with this ID; no rows for an unknown ID.
     ///
@@ -686,10 +722,10 @@ impl Engine {
     ///
     /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
     /// section read is corrupt.
-    fn postal_codes_of<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Bound<'py, PyBytes>> {
+    fn postal_codes_of<'py>(&self, py: Python<'py>, id: &str) -> PyResult<Blob> {
         let value = py.detach(|| self.0.postal_codes_of(id));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The postal codes of the point: those of the deepest admin unit holding it that an
     /// admin-aligned scheme gives codes to, with its parts (a ward's code; the point is in one
@@ -699,10 +735,10 @@ impl Engine {
     ///
     /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
     /// section read is corrupt.
-    fn postal_at<'py>(&self, py: Python<'py>, lat: f64, lon: f64) -> PyResult<Bound<'py, PyBytes>> {
+    fn postal_at<'py>(&self, py: Python<'py>, lat: f64, lon: f64) -> PyResult<Blob> {
         let value = py.detach(|| self.0.postal_at(lat, lon));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
     /// row where no pack answers.
@@ -711,10 +747,10 @@ impl Engine {
     ///
     /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
     /// section read is corrupt.
-    fn tz_at<'py>(&self, py: Python<'py>, lat: f64, lon: f64) -> PyResult<Bound<'py, PyBytes>> {
+    fn tz_at<'py>(&self, py: Python<'py>, lat: f64, lon: f64) -> PyResult<Blob> {
         let value = py.detach(|| self.0.tz_at(lat, lon));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The UTC offset in force in `zone` (a tzdb name or link, `Asia/Kathmandu`) at
     /// `unix_seconds`, from the first layer whose zone rules hold the zone: one row with
@@ -726,15 +762,10 @@ impl Engine {
     /// `ErrorCode::InvalidArgument` for an instant outside the years ±9,999;
     /// `ErrorCode::MissingComponent` if the rules that would hold the zone were not
     /// installed; `ErrorCode::Corrupt` if they are corrupt.
-    fn tz_offset_at<'py>(
-        &self,
-        py: Python<'py>,
-        zone: &str,
-        unix_seconds: i64,
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    fn tz_offset_at<'py>(&self, py: Python<'py>, zone: &str, unix_seconds: i64) -> PyResult<Blob> {
         let value = py.detach(|| self.0.tz_offset_at(zone, unix_seconds));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The offsets a civil time may have in `zone`: one row with `kind` (`unique`, `gap` for
     /// a time a transition skips, `overlap` for one that happens twice), `before` and `after`
@@ -756,13 +787,13 @@ impl Engine {
         hour: u32,
         minute: u32,
         second: u32,
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    ) -> PyResult<Blob> {
         let value = py.detach(|| {
             self.0
                 .tz_local(zone, year, month, day, hour, minute, second)
         });
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// Every zone name (tzdb names and links) the layers' zone rules hold, in byte order:
     /// one `zone` column.
@@ -771,10 +802,10 @@ impl Engine {
     ///
     /// `ErrorCode::MissingComponent` if no installed layer has rules and one has rules that
     /// were not installed.
-    fn tz_zones<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+    fn tz_zones<'py>(&self, py: Python<'py>) -> PyResult<Blob> {
         let value = py.detach(|| self.0.tz_zones());
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The earliest instant `zone`'s rules cover, in Unix seconds: one `unix` row (its first
     /// transition, before which tzdb knows only local mean time; the year −9,999 for a zone
@@ -783,10 +814,10 @@ impl Engine {
     /// # Errors
     ///
     /// As `Engine::tz_offset_at`.
-    fn tz_rules_start<'py>(&self, py: Python<'py>, zone: &str) -> PyResult<Bound<'py, PyBytes>> {
+    fn tz_rules_start<'py>(&self, py: Python<'py>, zone: &str) -> PyResult<Blob> {
         let value = py.detach(|| self.0.tz_rules_start(zone));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The tzdb release (`2026f`) of the first layer with zone rules; empty without rules.
     fn tz_version<'py>(&self, py: Python<'py>) -> String {
@@ -798,10 +829,10 @@ impl Engine {
     ///
     /// `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
     /// `ErrorCode::Corrupt` if a section read is corrupt.
-    fn by_iso<'py>(&self, py: Python<'py>, code: &str) -> PyResult<Bound<'py, PyBytes>> {
+    fn by_iso<'py>(&self, py: Python<'py>, code: &str) -> PyResult<Blob> {
         let value = py.detach(|| self.0.by_iso(code));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
 }
 
@@ -880,10 +911,10 @@ impl Store {
     ///
     /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
     /// language's asynchronous form.
-    fn catalog<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+    fn catalog<'py>(&self, py: Python<'py>) -> PyResult<Blob> {
         let value = py.detach(|| self.0.catalog());
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// Each installed pack and its health, from a full check of every byte when `deep`.
     ///
@@ -895,10 +926,10 @@ impl Store {
     ///
     /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
     /// language's asynchronous form.
-    fn status<'py>(&self, py: Python<'py>, deep: bool) -> PyResult<Bound<'py, PyBytes>> {
+    fn status<'py>(&self, py: Python<'py>, deep: bool) -> PyResult<Blob> {
         let value = py.detach(|| self.0.status(deep));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// Pins the pack (kept when room is made), or unpins it.
     ///
@@ -925,10 +956,10 @@ impl Store {
     ///
     /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
     /// language's asynchronous form.
-    fn remove<'py>(&self, py: Python<'py>, pack: &str) -> PyResult<Bound<'py, PyBytes>> {
+    fn remove<'py>(&self, py: Python<'py>, pack: &str) -> PyResult<Blob> {
         let value = py.detach(|| self.0.remove(pack));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The places named `query` in `engine` (one over a world pack the app ships, the
     /// installed packs, or both), best first, each with the catalog's packs that cover it: what
@@ -949,11 +980,11 @@ impl Store {
         engine: &Bound<'_, Engine>,
         query: &str,
         limit: u32,
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    ) -> PyResult<Blob> {
         let engine = &engine.get().0;
         let value = py.detach(|| self.0.find(engine, query, limit));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// The countries within `radius_m` metres of a point in `engine`, each with the catalog's
     /// packs that cover the point: what to install for where the user stands.
@@ -974,11 +1005,11 @@ impl Store {
         lat: f64,
         lon: f64,
         radius_m: u32,
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    ) -> PyResult<Blob> {
         let engine = &engine.get().0;
         let value = py.detach(|| self.0.locate(engine, lat, lon, radius_m));
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
     /// An engine over the installed packs, each opened with the components and languages
     /// installed.
@@ -1116,10 +1147,10 @@ impl Job {
     ///
     /// Until the job moves or ends: call it off a UI thread, or use the language's
     /// asynchronous form.
-    fn result<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+    fn result<'py>(&self, py: Python<'py>) -> PyResult<Blob> {
         let value = py.detach(|| self.0.result());
         let value = value.map_err(error)?;
-        Ok(PyBytes::new(py, value.as_bytes()))
+        Ok(Blob(value))
     }
 }
 
@@ -1137,8 +1168,8 @@ mod _native {
     use super::Store;
     #[pymodule_export]
     use super::{
-        CancelledError, CorruptError, Engine, InternalError, InvalidArgumentError, IoError, Load,
-        MissingComponentError, NetworkError, OpenOptions, RefusedError, SearchOptions,
+        Blob, CancelledError, CorruptError, Engine, InternalError, InvalidArgumentError, IoError,
+        Load, MissingComponentError, NetworkError, OpenOptions, RefusedError, SearchOptions,
         TeiGeodataError, Verify, distance_m, fold, noop, progress, sample_rows, version,
     };
 

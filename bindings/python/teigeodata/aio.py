@@ -11,12 +11,12 @@ import asyncio
 import contextlib
 from collections.abc import AsyncIterator
 
-from teigeodata._native import Job
+from teigeodata._native import Blob, Job
 
 __all__ = ["progress", "result"]
 
 
-async def result(job: Job) -> bytes:
+async def result(job: Job) -> Blob:
     """``job.result()`` on a worker thread.
 
     Cancelling the awaiting task cancels the job; the cancellation is raised once the job has

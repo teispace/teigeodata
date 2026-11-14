@@ -53,6 +53,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - An install whose catalog refresh fails, when the stored catalog lacks the pack, fails with
   `Network` (the cause) instead of `Refused` (D-282).
 - IDL: an options record must be the last parameter, so every language can default it.
+- Python wheels (D-290): `bindings/python/pyproject.toml` builds with maturin; cibuildwheel
+  makes a cp311-abi3 wheel (CPython 3.11 and later), a cp315-abi3t wheel (3.15 and later,
+  free-threaded included) and a cp314t wheel per platform (`python.yml`). A threads test
+  checks one engine from many threads and that the GIL stays off.
 - The Dart package's build hook (D-289): Dart and Flutter apps get the native library with no
   manual step, built from a checkout (`hooks.user_defines.teigeodata.source`, or in the
   repository) or downloaded from the release and checked against its pinned SHA-256; a given
@@ -120,6 +124,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Breaking
 
+- Python: blob results are `teigeodata.Blob`, lent without a copy through the buffer
+  protocol, not `bytes` (`bytes(blob)` copies); the reader `teigeodata.blob.Blob` is now
+  `teigeodata.blob.Reader` and reads any buffer; CPython 3.11 is the oldest supported (3.10
+  is past its end of life) (D-290).
 - Dart: the bindings are `@Native` functions of the package's code asset (D-289).
   `TeiGeodata.open(path)` is gone; use `TeiGeodata()`. The SDK floor is Dart 3.10.
 - Blobs start with the magic `TGB1` instead of `TGB0`. A binding or caller that checks the
