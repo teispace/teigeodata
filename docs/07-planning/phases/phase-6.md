@@ -72,9 +72,12 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
   against a baseline of the scenarios that need the SDK fixture ([research](../../02-research/notes/mcp-conformance.md), D-319; 2026-11-15)
 
 ### 6.4 Load, safety and size
-- [ ] Load tests with the numbers gated (requests per second, p99, footprint bounded under
-  load), on the Nepal pack and on the world baseline
-- [ ] `tgd` size with and without the servers; the servers behind CLI features
+- [x] Load tests with the numbers gated (requests per second, p99, footprint bounded under
+  load), on the Nepal pack and on the world baseline: `cargo xtask load --check
+  tools/load/budget.toml`, proved on a planted sleep and a planted leak; boundary made 3 to 4
+  times faster on the way ([research](../../02-research/notes/server-load.md), D-320; 2026-11-15)
+- [x] `tgd` size with and without the servers; the servers behind CLI features: 4.59 MB
+  without, 9.38 MB with both, `cargo xtask sizes --tgd`; on by default (D-320; 2026-11-15)
 
 ### 6.5 Exit review
 - [ ] M6 criteria met, each with its evidence; progress updated
@@ -94,3 +97,4 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 | 2026-11-15 | 6.3: `coverage` built: `tgd locate`, `/v1/coverage` and the MCP tool share one function and a read-only catalog read (D-318) | built |
 | 2026-11-15 | 6.3: downloads built: `install` and `install_status` over one job registry, as a task or a handle; the size confirmed by MRTR, by `elicitation/create` on stdio (`Mcp::duplex`), else `max_bytes`; `tgd mcp --no-install`, `tgd serve --allow-install` (D-318) | built |
 | 2026-11-15 | 6.3: the MCP conformance suite in CI for both revisions; its first run found three defects, fixed (own origin, undeclared methods, `data.uri`) (D-319) | built |
+| 2026-11-15 | 6.4 done: the load harness and per-pack budgets, `tgd` sizes per feature set; boundary picks its level by count (D-320) | measured |

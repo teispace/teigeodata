@@ -20,6 +20,7 @@ mod golden;
 mod ids;
 mod iso3166;
 mod lexicon;
+mod load;
 mod maven;
 mod mirror;
 mod pack;
@@ -142,9 +143,17 @@ Tasks:
   clean [--all]     Free disk: incremental caches and scratch of both workspaces (built
                     packs in data/build/ are kept); --all also removes data/build/ and
                     runs `cargo clean` in both. Fetched sources are kept.
+  load <pack.tgd>… [--query <name>] [--secs <n>] [--tgd <path>] [--only <route>]… [--check <budget.toml>]
+                    Phase 6.4 (D-320): builds tgd, serves each pack on loopback and drives
+                    a route mix (search at 1, 16 and 64 connections, reverse, get, near,
+                    hierarchy, boundary, Nominatim, MCP) with oha, twice, sampling the
+                    footprint; --check holds it to tools/load/budget.toml's per-pack
+                    floors and ceilings (needs oha and curl).
   sizes [--native|--wasm]
                     Z2: the bytes each feature set of core and format adds to a linked
                     library, native and wasm32, raw and gzipped (tools/size-probe).
+  sizes --tgd       The tgd binary with neither, either and both servers (features serve
+                    and mcp), stripped, raw and gzipped (phase 6.4, D-320).
   help              Show this message.
 ";
 
@@ -182,6 +191,10 @@ fn main() -> ExitCode {
         "ids" => report(ids::run(&root, rest)),
         "tuf" => report(tuf::run(rest)),
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
+        "load" => report(load::run(&root, rest)),
+        "sizes" if rest.iter().any(|a| a == "--tgd") => {
+            report(sizes::tgd(&root, &root.join("target/sizes-tgd")))
+        }
         "sizes" => {
             let only = |f: &str| rest.iter().any(|a| a == f);
             let (native, wasm) = (!only("--wasm"), !only("--native"));

@@ -14,9 +14,9 @@ readme = "README.md"
 
 [features]
 default = ["serve", "mcp"]
-# `tgd serve`, the HTTP server (phase 6.2); its size is measured in phase 6.4.
+# `tgd serve`, the HTTP server (phase 6.2); +1.5 MB stripped (`cargo xtask sizes --tgd`, D-320).
 serve = ["teigeodata-server/http", "dep:tokio"]
-# `tgd mcp`, the MCP server on stdio (phase 6.3); its size is measured in phase 6.4.
+# `tgd mcp`, the MCP server on stdio (phase 6.3); +2.3 MB stripped (`cargo xtask sizes --tgd`, D-320).
 mcp = ["teigeodata-server/mcp", "dep:tokio"]
 
 [[bin]]

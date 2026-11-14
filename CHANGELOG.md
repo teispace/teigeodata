@@ -13,6 +13,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Added
 
+- `cargo xtask load`: a load test of `tgd serve` and its `/mcp` on real packs with `oha`,
+  gated by `tools/load/budget.toml` (requests per second, p99, footprint and its growth)
+  (D-320); `cargo xtask sizes --tgd` reports the binary with and without its servers.
+
 - The Dart package runs on the web, compiled by dart2js or dart2wasm, over the WebAssembly
   module, with the classes it has natively (D-307). `TeiGeodata.init()` loads the module once
   on the web and returns at once natively; the web opens packs from their bytes.

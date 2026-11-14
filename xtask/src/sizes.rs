@@ -143,13 +143,77 @@ fn build(probe: &Path, features: &str, target: Option<&str>) -> Result<Size, Str
     if !status.success() {
         return Err(format!("cargo build exited with {status}"));
     }
-    let file = artifact(probe, target, profile)?;
-    let raw = fs::metadata(&file)
+    measure(&artifact(probe, target, profile)?)
+}
+
+/// `tgd`'s feature sets, the default last so `target/release/tgd` ends as it ships.
+const TGD_SETS: [(&str, &str); 4] = [
+    ("", "neither server"),
+    ("serve", "`serve` (HTTP)"),
+    ("mcp", "`mcp` (stdio)"),
+    ("serve,mcp", "both servers (default)"),
+];
+
+/// `--tgd`: the `tgd` binary per feature set of its servers (phase 6.4), stripped, raw and
+/// gzipped, built as it ships (release, `--locked`).
+pub(crate) fn tgd(root: &Path, scratch: &Path) -> Result<String, Vec<String>> {
+    fs::create_dir_all(scratch).map_err(|e| vec![format!("{}: {e}", scratch.display())])?;
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let mut out = String::from("| tgd with | stripped | gzip -9 |\n|---|---:|---:|\n");
+    for (features, label) in TGD_SETS {
+        let status = Command::new(&cargo)
+            .current_dir(root)
+            .args([
+                "build",
+                "--quiet",
+                "--release",
+                "--locked",
+                "-p",
+                "teigeodata-cli",
+            ])
+            .args(["--no-default-features", "--features", features])
+            .status()
+            .map_err(|e| vec![e.to_string()])?;
+        if !status.success() {
+            return Err(vec![format!(
+                "tgd with {label}: cargo build exited with {status}"
+            )]);
+        }
+        let exe = if cfg!(windows) { "tgd.exe" } else { "tgd" };
+        let copy = scratch.join(exe);
+        fs::copy(root.join("target/release").join(exe), &copy)
+            .map_err(|e| vec![format!("{}: {e}", copy.display())])?;
+        let strip = Command::new("strip")
+            .arg(&copy)
+            .status()
+            .map_err(|e| vec![format!("strip: {e}")])?;
+        if !strip.success() {
+            return Err(vec![format!("strip exited with {strip}")]);
+        }
+        let size = measure(&copy).map_err(|e| vec![e])?;
+        let _ = writeln!(out, "| {label} | {} | {} |", mb(size.raw), mb(size.gz));
+    }
+    let _ = fs::remove_dir_all(scratch);
+    Ok(out)
+}
+
+fn mb(bytes: u64) -> String {
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "binary sizes are far below 2^52"
+    )]
+    let m = bytes as f64 / 1_000_000.0;
+    format!("{m:.2} MB")
+}
+
+/// A file's bytes, raw and `gzip -9`.
+fn measure(file: &Path) -> Result<Size, String> {
+    let raw = fs::metadata(file)
         .map_err(|e| format!("{}: {e}", file.display()))?
         .len();
     let gz = Command::new("gzip")
         .args(["-9", "-c"])
-        .arg(&file)
+        .arg(file)
         .output()
         .map_err(|e| format!("gzip: {e}"))?;
     if !gz.status.success() {

@@ -1,0 +1,39 @@
+# Load budgets for `cargo xtask load --check` (phase 6.4, D-320,
+# docs/02-research/notes/server-load.md). Keyed by the pack's file stem; each point is
+# "<route> c=<connections>". Floors sit at about a quarter of the slowest of four runs on the
+# shared laptop (load average 8 to 21, 2026-11-15) and p99 ceilings several times over the
+# worst: they catch a regression of a kind (a blocking call, a lock, an allocation storm, a
+# leak), not a few percent. Every request must also succeed.
+
+[packs.np-places-lite]
+footprint_mb = 64
+growth_mb = 12
+
+[packs.np-places-lite.points]
+"search c=1" = { min_rps = 3000, max_p99_ms = 2.0 }
+"search c=16" = { min_rps = 20000, max_p99_ms = 5.0 }
+"search c=64" = { min_rps = 20000, max_p99_ms = 15.0 }
+"reverse c=16" = { min_rps = 20000, max_p99_ms = 5.0 }
+"get c=16" = { min_rps = 20000, max_p99_ms = 5.0 }
+"near c=16" = { min_rps = 15000, max_p99_ms = 6.0 }
+"hierarchy c=16" = { min_rps = 20000, max_p99_ms = 5.0 }
+"boundary c=16" = { min_rps = 1500, max_p99_ms = 100.0 }
+"nominatim c=16" = { min_rps = 10000, max_p99_ms = 8.0 }
+"mcp search c=16" = { min_rps = 10000, max_p99_ms = 8.0 }
+
+[packs.world-baseline-lite]
+query = "Nepal"
+footprint_mb = 64
+growth_mb = 12
+
+[packs.world-baseline-lite.points]
+"search c=1" = { min_rps = 1500, max_p99_ms = 10.0 }
+"search c=16" = { min_rps = 20000, max_p99_ms = 5.0 }
+"search c=64" = { min_rps = 20000, max_p99_ms = 15.0 }
+"reverse c=16" = { min_rps = 20000, max_p99_ms = 5.0 }
+"get c=16" = { min_rps = 20000, max_p99_ms = 5.0 }
+"near c=16" = { min_rps = 15000, max_p99_ms = 6.0 }
+"hierarchy c=16" = { min_rps = 20000, max_p99_ms = 5.0 }
+"boundary c=16" = { min_rps = 10000, max_p99_ms = 15.0 }
+"nominatim c=16" = { min_rps = 15000, max_p99_ms = 8.0 }
+"mcp search c=16" = { min_rps = 10000, max_p99_ms = 10.0 }

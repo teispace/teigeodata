@@ -9,6 +9,8 @@ extend-ignore-re = [
 ]
 
 [default.extend-words]
+# wrk, the HTTP load generator (server-load research).
+wrk = "wrk"
 # IST, India Standard Time (tzdb abbreviation).
 ist = "ist"
 # CLDR subdivision code of Uttarakhand (IN-UT).

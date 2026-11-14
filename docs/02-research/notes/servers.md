@@ -162,7 +162,7 @@ What building it on rmcp 3.10.0 taught (D-315):
   runtime's threads, which waited on the lock forever. `tgd mcp` does not take it.
 - **Measured on the Nepal lite pack** (release build, this machine, shared): `server/discover`
   answers in 3.8 ms from start; `tools/list` is 21.7 KB; the first `search` (pages not yet
-  mapped in) 20 ms. `tgd` with both servers is 9.4 MB (phase 6.4 measures it without them).
+  mapped in) 20 ms. `tgd` with both servers is 9.4 MB, 4.6 MB without them ([load and size](server-load.md)).
 - **Outlines are linked, not inlined** (D-317). Nepal's outline is 10,374 vertices (250 KB of
   GeoJSON) at level 2, the finest within 20,000; Bagmati's 18,379 at full resolution. That
   would fill a model's context, so the `boundary` tool answers what the outline is and a
