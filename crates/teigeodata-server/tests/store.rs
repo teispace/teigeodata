@@ -381,7 +381,8 @@ fn a_failed_install_says_why_without_the_stores_path() {
         .to_owned();
     let end = ended(&mcp, &handle);
     let message = end["error"]["message"].as_str().unwrap();
-    assert!(message.starts_with("the store/config.json"), "{message}");
+    let named = format!("the store{}config.json", std::path::MAIN_SEPARATOR);
+    assert!(message.starts_with(&named), "{message}");
     assert!(!message.contains(root.to_str().unwrap()), "{message}");
     drop(mcp);
     std::fs::remove_dir_all(root.parent().unwrap()).unwrap();
