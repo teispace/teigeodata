@@ -23,6 +23,7 @@ mod lexicon;
 mod mirror;
 mod pack;
 mod package_c;
+mod package_dotnet;
 mod package_jvm;
 mod package_node;
 mod package_swift;
@@ -85,6 +86,11 @@ Tasks:
                     alignment and makes target/jvm/teigeodata-<v>.aar; --desktop makes the
                     JAR with the host's library and those under --natives, --test runs the
                     parity checks from it; --android-test runs them on a running emulator.
+  package-dotnet [--natives <dir>] [--test]
+                    The NuGet package Teispace.TeiGeodata (D-298) under target/dotnet/, with
+                    each RID's library in runtimes/<rid>/native (<dir>/<rid>/<file>, or this
+                    machine's alone); --test runs the parity program from the package under
+                    the JIT and as NativeAOT.
   package-node [--addons <dir>] [--test]
                     The Node.js packages (D-294, napi-rs layout) under target/node/: the
                     main package with its loader, and a platform package per prebuilt
@@ -150,6 +156,7 @@ fn main() -> ExitCode {
         "package-c" => report(package_c::run(&root, rest)),
         "flutter-check" => report(flutter_check::run(&root, rest)),
         "package-jvm" => report(package_jvm::run(&root, rest)),
+        "package-dotnet" => report(package_dotnet::run(&root, rest)),
         "package-node" => report(package_node::run(&root, rest)),
         "package-wasm" => report(package_wasm::run(&root, rest)),
         "package-swift" => report(package_swift::run(&root, rest)),

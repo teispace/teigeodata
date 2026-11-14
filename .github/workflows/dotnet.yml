@@ -15,6 +15,7 @@ on:
       - bindings/parity.json
       - bindings/fixtures/**
       - xtask/templates/cs.j2
+      - xtask/src/package_dotnet.rs
       - .github/workflows/dotnet.yml
   workflow_dispatch:
 
@@ -95,6 +96,6 @@ jobs:
           export TEIGEODATA_LIB="$GITHUB_WORKSPACE/target/release/${{ matrix.lib }}"
           dotnet publish bindings/dotnet/Parity -c Release -r ${{ matrix.rid }} -p:PublishAot=true -o "$RUNNER_TEMP/aot"
           "$RUNNER_TEMP/aot/Parity"
-      - name: Pack
+      - name: The package, restored and tested from its .nupkg
         if: ${{ matrix.rid == 'linux-x64' }}
-        run: dotnet pack bindings/dotnet/TeiGeodata -c Release -o "$RUNNER_TEMP/nupkg"
+        run: cargo xtask package-dotnet --test

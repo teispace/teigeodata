@@ -154,7 +154,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
     (purego too), macOS, Windows x64 and arm64
   - [ ] 5.8c .NET: the generated `LibraryImport` binding, its runtime, `BlobReader` and the
     parity program built (D-298); done when `dotnet.yml` is green (JIT and NativeAOT on every
-    RID); then `cargo xtask package-dotnet`, tested from the `.nupkg`
+    RID) and `cargo xtask package-dotnet --test` passes from the `.nupkg`
   - [x] 5.8d the generated C++17 wrapper, its example and test
 
 ### 5.9 Parity and benchmarks

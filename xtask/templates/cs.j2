@@ -251,7 +251,7 @@ internal sealed class {{ h.name }}Handle : SafeHandle
 {{ doc(h.doc, "") -}}
 /// <remarks>Its methods may run on any thread at once. Dispose frees it once no call holds it;
 /// a call after Dispose throws <see cref="ObjectDisposedException"/>.</remarks>
-public sealed unsafe partial class {{ h.name }} : IDisposable
+public sealed partial class {{ h.name }} : IDisposable
 {
     internal readonly {{ h.name }}Handle handle;
 
@@ -265,7 +265,7 @@ public sealed unsafe partial class {{ h.name }} : IDisposable
     {
     }
 
-    private static {{ h.name }}Handle Create{{ h.name }}()
+    private static unsafe {{ h.name }}Handle Create{{ h.name }}()
     {
 {{ body(f, h, false) }}        return @out;
     }
@@ -275,7 +275,7 @@ public sealed unsafe partial class {{ h.name }} : IDisposable
     public void Dispose() => handle.Dispose();
 {% for f in h.methods if not (f.name == "new" and f.returns_handle == h.name) %}
 
-{{ doc(f.doc, "    ") }}    public {% if not f.receiver %}static {% endif %}{{ rty(f) }} {{ name(f, h) }}({{ params(f) }})
+{{ doc(f.doc, "    ") }}    public {% if not f.receiver %}static {% endif %}unsafe {{ rty(f) }} {{ name(f, h) }}({{ params(f) }})
     {
 {{ body(f, h, true) }}    }
 {{ async_form(f, h, not f.receiver) }}

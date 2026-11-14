@@ -445,7 +445,7 @@ internal sealed class EngineHandle : SafeHandle
 /// </summary>
 /// <remarks>Its methods may run on any thread at once. Dispose frees it once no call holds it;
 /// a call after Dispose throws <see cref="ObjectDisposedException"/>.</remarks>
-public sealed unsafe partial class Engine : IDisposable
+public sealed partial class Engine : IDisposable
 {
     internal readonly EngineHandle handle;
 
@@ -461,7 +461,7 @@ public sealed unsafe partial class Engine : IDisposable
     {
     }
 
-    private static EngineHandle CreateEngine()
+    private static unsafe EngineHandle CreateEngine()
     {
         Interop.Ensure();
         EngineHandle @out;
@@ -483,7 +483,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::Io` if the file cannot be read, `ErrorCode::Corrupt` if it is not a
     /// valid pack.
     /// </summary>
-    public uint OpenFile(string path)
+    public unsafe uint OpenFile(string path)
     {
         using var pathUtf8 = new Utf8(path, stackalloc byte[Utf8.Stack]);
         uint @out = default;
@@ -502,7 +502,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// As `open_file`, and `ErrorCode::InvalidArgument` for an outline
     /// level above 255.
     /// </summary>
-    public uint OpenFileWith(string path, OpenOptions? options = null)
+    public unsafe uint OpenFileWith(string path, OpenOptions? options = null)
     {
         using var pathUtf8 = new Utf8(path, stackalloc byte[Utf8.Stack]);
         using var optionsComponents = new Utf8(options?.Components, stackalloc byte[Utf8.Stack]);
@@ -523,7 +523,7 @@ public sealed unsafe partial class Engine : IDisposable
     ///
     /// `ErrorCode::Corrupt` if the bytes are not a valid pack.
     /// </summary>
-    public uint OpenBytes(ReadOnlySpan<byte> bytes)
+    public unsafe uint OpenBytes(ReadOnlySpan<byte> bytes)
     {
         uint @out = default;
         int status;
@@ -544,7 +544,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// As `open_bytes`, and `ErrorCode::InvalidArgument` for an outline
     /// level above 255.
     /// </summary>
-    public uint OpenBytesWith(ReadOnlySpan<byte> bytes, OpenOptions? options = null)
+    public unsafe uint OpenBytesWith(ReadOnlySpan<byte> bytes, OpenOptions? options = null)
     {
         using var optionsComponents = new Utf8(options?.Components, stackalloc byte[Utf8.Stack]);
         using var optionsLanguages = new Utf8(options?.Languages, stackalloc byte[Utf8.Stack]);
@@ -563,7 +563,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// Removes the pack with this layer ID; false if no pack has it. Queries already running
     /// finish on the snapshot they started with; the pack's memory is released after them.
     /// </summary>
-    public bool Remove(uint layer)
+    public unsafe bool Remove(uint layer)
     {
         byte @out = default;
         int status;
@@ -575,7 +575,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// <summary>
     /// The number of packs.
     /// </summary>
-    public uint Layers()
+    public unsafe uint Layers()
     {
         uint @out = default;
         int status;
@@ -592,7 +592,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
     /// section read is corrupt.
     /// </summary>
-    public byte[] Get(string id)
+    public unsafe byte[] Get(string id)
     {
         using var idUtf8 = new Utf8(id, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
@@ -611,7 +611,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
     /// section read is corrupt.
     /// </summary>
-    public byte[] Parent(string id)
+    public unsafe byte[] Parent(string id)
     {
         using var idUtf8 = new Utf8(id, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
@@ -629,7 +629,7 @@ public sealed unsafe partial class Engine : IDisposable
     ///
     /// As `parent`.
     /// </summary>
-    public byte[] Ancestors(string id)
+    public unsafe byte[] Ancestors(string id)
     {
         using var idUtf8 = new Utf8(id, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
@@ -646,7 +646,7 @@ public sealed unsafe partial class Engine : IDisposable
     ///
     /// As `parent`.
     /// </summary>
-    public byte[] Children(string id)
+    public unsafe byte[] Children(string id)
     {
         using var idUtf8 = new Utf8(id, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
@@ -665,7 +665,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` if `id` is not a place ID or `limit` exceeds
     /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
     /// </summary>
-    public byte[] Nearby(string id, uint limit)
+    public unsafe byte[] Nearby(string id, uint limit)
     {
         using var idUtf8 = new Utf8(id, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
@@ -684,7 +684,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
     /// `ErrorCode::Corrupt` if a section read is corrupt.
     /// </summary>
-    public byte[] Search(string query, uint limit)
+    public unsafe byte[] Search(string query, uint limit)
     {
         using var queryUtf8 = new Utf8(query, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
@@ -704,7 +704,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// globe or has one coordinate only, or its scale is not positive;
     /// `ErrorCode::Corrupt` if a section read is corrupt.
     /// </summary>
-    public byte[] SearchWith(string query, uint limit, SearchOptions? options = null)
+    public unsafe byte[] SearchWith(string query, uint limit, SearchOptions? options = null)
     {
         using var queryUtf8 = new Utf8(query, stackalloc byte[Utf8.Stack]);
         CSearchOptions optionsC = options?.ToNative() ?? default;
@@ -724,7 +724,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` for a point off the globe or a `limit` above
     /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
     /// </summary>
-    public byte[] Reverse(double lat, double lon, uint limit)
+    public unsafe byte[] Reverse(double lat, double lon, uint limit)
     {
         TgBytes @out = default;
         int status;
@@ -743,7 +743,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
     /// corrupt.
     /// </summary>
-    public byte[] WithinRadius(double lat, double lon, double meters, uint limit)
+    public unsafe byte[] WithinRadius(double lat, double lon, double meters, uint limit)
     {
         TgBytes @out = default;
         int status;
@@ -760,7 +760,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
     /// section read is corrupt.
     /// </summary>
-    public byte[] AdminAt(double lat, double lon)
+    public unsafe byte[] AdminAt(double lat, double lon)
     {
         TgBytes @out = default;
         int status;
@@ -780,7 +780,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
     /// grid read is corrupt.
     /// </summary>
-    public byte[] ElevationAt(double lat, double lon)
+    public unsafe byte[] ElevationAt(double lat, double lon)
     {
         TgBytes @out = default;
         int status;
@@ -800,7 +800,7 @@ public sealed unsafe partial class Engine : IDisposable
     ///
     /// `ErrorCode::Corrupt` if a section read is corrupt.
     /// </summary>
-    public byte[] PostalLookup(string code, string scheme)
+    public unsafe byte[] PostalLookup(string code, string scheme)
     {
         using var codeUtf8 = new Utf8(code, stackalloc byte[Utf8.Stack]);
         using var schemeUtf8 = new Utf8(scheme, stackalloc byte[Utf8.Stack]);
@@ -820,7 +820,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
     /// `ErrorCode::Corrupt` if a section read is corrupt.
     /// </summary>
-    public byte[] PostalPrefix(string input, string scheme, uint limit)
+    public unsafe byte[] PostalPrefix(string input, string scheme, uint limit)
     {
         using var inputUtf8 = new Utf8(input, stackalloc byte[Utf8.Stack]);
         using var schemeUtf8 = new Utf8(scheme, stackalloc byte[Utf8.Stack]);
@@ -839,7 +839,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
     /// section read is corrupt.
     /// </summary>
-    public byte[] PostalCodesOf(string id)
+    public unsafe byte[] PostalCodesOf(string id)
     {
         using var idUtf8 = new Utf8(id, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
@@ -859,7 +859,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
     /// section read is corrupt.
     /// </summary>
-    public byte[] PostalAt(double lat, double lon)
+    public unsafe byte[] PostalAt(double lat, double lon)
     {
         TgBytes @out = default;
         int status;
@@ -877,7 +877,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
     /// section read is corrupt.
     /// </summary>
-    public byte[] TzAt(double lat, double lon)
+    public unsafe byte[] TzAt(double lat, double lon)
     {
         TgBytes @out = default;
         int status;
@@ -898,7 +898,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::MissingComponent` if the rules that would hold the zone were not
     /// installed; `ErrorCode::Corrupt` if they are corrupt.
     /// </summary>
-    public byte[] TzOffsetAt(string zone, long unixSeconds)
+    public unsafe byte[] TzOffsetAt(string zone, long unixSeconds)
     {
         using var zoneUtf8 = new Utf8(zone, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
@@ -920,7 +920,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` for a date that is not one of the years ±9,999 or a time
     /// out of range; otherwise as `Engine::tz_offset_at`.
     /// </summary>
-    public byte[] TzLocal(string zone, int year, uint month, uint day, uint hour, uint minute, uint second)
+    public unsafe byte[] TzLocal(string zone, int year, uint month, uint day, uint hour, uint minute, uint second)
     {
         using var zoneUtf8 = new Utf8(zone, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
@@ -939,7 +939,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::MissingComponent` if no installed layer has rules and one has rules that
     /// were not installed.
     /// </summary>
-    public byte[] TzZones()
+    public unsafe byte[] TzZones()
     {
         TgBytes @out = default;
         int status;
@@ -957,7 +957,7 @@ public sealed unsafe partial class Engine : IDisposable
     ///
     /// As `Engine::tz_offset_at`.
     /// </summary>
-    public byte[] TzRulesStart(string zone)
+    public unsafe byte[] TzRulesStart(string zone)
     {
         using var zoneUtf8 = new Utf8(zone, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
@@ -970,7 +970,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// <summary>
     /// The tzdb release (`2026f`) of the first layer with zone rules; empty without rules.
     /// </summary>
-    public string TzVersion()
+    public unsafe string TzVersion()
     {
         TgBytes @out = default;
         int status;
@@ -987,7 +987,7 @@ public sealed unsafe partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
     /// `ErrorCode::Corrupt` if a section read is corrupt.
     /// </summary>
-    public byte[] ByIso(string code)
+    public unsafe byte[] ByIso(string code)
     {
         using var codeUtf8 = new Utf8(code, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
@@ -1036,7 +1036,7 @@ internal sealed class StoreHandle : SafeHandle
 /// </summary>
 /// <remarks>Its methods may run on any thread at once. Dispose frees it once no call holds it;
 /// a call after Dispose throws <see cref="ObjectDisposedException"/>.</remarks>
-public sealed unsafe partial class Store : IDisposable
+public sealed partial class Store : IDisposable
 {
     internal readonly StoreHandle handle;
 
@@ -1063,7 +1063,7 @@ public sealed unsafe partial class Store : IDisposable
     /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
     /// language's asynchronous form.
     /// </summary>
-    public static Store Create(string root, string repo, string assets, ReadOnlySpan<byte> trustedRoot)
+    public static unsafe Store Create(string root, string repo, string assets, ReadOnlySpan<byte> trustedRoot)
     {
         Interop.Ensure();
         using var rootUtf8 = new Utf8(root, stackalloc byte[Utf8.Stack]);
@@ -1107,7 +1107,7 @@ public sealed unsafe partial class Store : IDisposable
     /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
     /// language's asynchronous form.
     /// </summary>
-    public static Store Open(string root)
+    public static unsafe Store Open(string root)
     {
         Interop.Ensure();
         using var rootUtf8 = new Utf8(root, stackalloc byte[Utf8.Stack]);
@@ -1135,7 +1135,7 @@ public sealed unsafe partial class Store : IDisposable
     /// The packs found damaged when the store was opened, comma-separated; empty when none.
     /// `repair` fetches what they lack.
     /// </summary>
-    public string Damaged()
+    public unsafe string Damaged()
     {
         TgBytes @out = default;
         int status;
@@ -1163,7 +1163,7 @@ public sealed unsafe partial class Store : IDisposable
     /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
     /// language's asynchronous form.
     /// </summary>
-    public byte[] Catalog()
+    public unsafe byte[] Catalog()
     {
         TgBytes @out = default;
         int status;
@@ -1197,7 +1197,7 @@ public sealed unsafe partial class Store : IDisposable
     /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
     /// language's asynchronous form.
     /// </summary>
-    public byte[] Status(bool deep)
+    public unsafe byte[] Status(bool deep)
     {
         TgBytes @out = default;
         int status;
@@ -1231,7 +1231,7 @@ public sealed unsafe partial class Store : IDisposable
     /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
     /// language's asynchronous form.
     /// </summary>
-    public void Pin(string pack, bool on)
+    public unsafe void Pin(string pack, bool on)
     {
         using var packUtf8 = new Utf8(pack, stackalloc byte[Utf8.Stack]);
         int status;
@@ -1264,7 +1264,7 @@ public sealed unsafe partial class Store : IDisposable
     /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
     /// language's asynchronous form.
     /// </summary>
-    public byte[] Remove(string pack)
+    public unsafe byte[] Remove(string pack)
     {
         using var packUtf8 = new Utf8(pack, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
@@ -1302,7 +1302,7 @@ public sealed unsafe partial class Store : IDisposable
     /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
     /// language's asynchronous form.
     /// </summary>
-    public byte[] Find(Engine engine, string query, uint limit)
+    public unsafe byte[] Find(Engine engine, string query, uint limit)
     {
         using var queryUtf8 = new Utf8(query, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
@@ -1339,7 +1339,7 @@ public sealed unsafe partial class Store : IDisposable
     /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
     /// language's asynchronous form.
     /// </summary>
-    public byte[] Locate(Engine engine, double lat, double lon, uint radiusM)
+    public unsafe byte[] Locate(Engine engine, double lat, double lon, uint radiusM)
     {
         TgBytes @out = default;
         int status;
@@ -1374,7 +1374,7 @@ public sealed unsafe partial class Store : IDisposable
     /// While a job of this store runs, and on the disk: call it off a UI thread, or use the
     /// language's asynchronous form.
     /// </summary>
-    public Engine Engine()
+    public unsafe Engine Engine()
     {
         EngineHandle @out;
         int status;
@@ -1400,7 +1400,7 @@ public sealed unsafe partial class Store : IDisposable
     /// Refreshes the catalog for the countries (comma-separated ISO codes) and every country
     /// installed. Fails with `ErrorCode::Network` or `ErrorCode::Refused`.
     /// </summary>
-    public Job Refresh(string countries)
+    public unsafe Job Refresh(string countries)
     {
         using var countriesUtf8 = new Utf8(countries, stackalloc byte[Utf8.Stack]);
         JobHandle @out;
@@ -1427,7 +1427,7 @@ public sealed unsafe partial class Store : IDisposable
     /// `ErrorCode::InvalidArgument` for an unknown component or language tag, more than 8
     /// languages, or an outline level above 255; the job's own errors are the job's.
     /// </summary>
-    public Job Install(string packs, InstallOptions? options = null)
+    public unsafe Job Install(string packs, InstallOptions? options = null)
     {
         using var packsUtf8 = new Utf8(packs, stackalloc byte[Utf8.Stack]);
         using var optionsComponents = new Utf8(options?.Components, stackalloc byte[Utf8.Stack]);
@@ -1463,7 +1463,7 @@ public sealed unsafe partial class Store : IDisposable
     /// `ErrorCode::InvalidArgument` as for `Store::install`, or for an empty `dir`; the
     /// job's own errors are the job's.
     /// </summary>
-    public Job InstallPass(string packs, string dir, InstallOptions? options = null)
+    public unsafe Job InstallPass(string packs, string dir, InstallOptions? options = null)
     {
         using var packsUtf8 = new Utf8(packs, stackalloc byte[Utf8.Stack]);
         using var dirUtf8 = new Utf8(dir, stackalloc byte[Utf8.Stack]);
@@ -1488,7 +1488,7 @@ public sealed unsafe partial class Store : IDisposable
     /// Updates the packs (every installed one when empty) to the catalog's releases, keeping
     /// the components and languages installed.
     /// </summary>
-    public Job Update(string packs)
+    public unsafe Job Update(string packs)
     {
         using var packsUtf8 = new Utf8(packs, stackalloc byte[Utf8.Stack]);
         JobHandle @out;
@@ -1508,7 +1508,7 @@ public sealed unsafe partial class Store : IDisposable
     /// <summary>
     /// Checks the pack in full and, unless it is whole, fetches what it lacks.
     /// </summary>
-    public Job Repair(string pack)
+    public unsafe Job Repair(string pack)
     {
         using var packUtf8 = new Utf8(pack, stackalloc byte[Utf8.Stack]);
         JobHandle @out;
@@ -1554,7 +1554,7 @@ internal sealed class JobHandle : SafeHandle
 /// </summary>
 /// <remarks>Its methods may run on any thread at once. Dispose frees it once no call holds it;
 /// a call after Dispose throws <see cref="ObjectDisposedException"/>.</remarks>
-public sealed unsafe partial class Job : IDisposable
+public sealed partial class Job : IDisposable
 {
     internal readonly JobHandle handle;
 
@@ -1576,7 +1576,7 @@ public sealed unsafe partial class Job : IDisposable
     /// Until the job moves or ends: call it off a UI thread, or use the language's
     /// asynchronous form.
     /// </summary>
-    public ulong WaitProgress(ulong seq, uint timeoutMs)
+    public unsafe ulong WaitProgress(ulong seq, uint timeoutMs)
     {
         ulong @out = default;
         int status;
@@ -1601,7 +1601,7 @@ public sealed unsafe partial class Job : IDisposable
     /// <summary>
     /// The progress's sequence number: it moves on with every change.
     /// </summary>
-    public ulong Seq()
+    public unsafe ulong Seq()
     {
         ulong @out = default;
         int status;
@@ -1620,7 +1620,7 @@ public sealed unsafe partial class Job : IDisposable
     /// <summary>
     /// Bytes received so far.
     /// </summary>
-    public ulong DoneBytes()
+    public unsafe ulong DoneBytes()
     {
         ulong @out = default;
         int status;
@@ -1640,7 +1640,7 @@ public sealed unsafe partial class Job : IDisposable
     /// Bytes expected, from the catalog's sizes: never below the bytes received, and equal
     /// to them once the job ends.
     /// </summary>
-    public ulong TotalBytes()
+    public unsafe ulong TotalBytes()
     {
         ulong @out = default;
         int status;
@@ -1659,7 +1659,7 @@ public sealed unsafe partial class Job : IDisposable
     /// <summary>
     /// Whether the job has ended (done, failed or cancelled); its result is then ready.
     /// </summary>
-    public bool IsEnded()
+    public unsafe bool IsEnded()
     {
         byte @out = default;
         int status;
@@ -1679,7 +1679,7 @@ public sealed unsafe partial class Job : IDisposable
     /// Asks the job to stop at its next request or chunk; it then fails with
     /// `ErrorCode::Cancelled` and leaves the store as it was.
     /// </summary>
-    public void Cancel()
+    public unsafe void Cancel()
     {
         int status;
         try
@@ -1706,7 +1706,7 @@ public sealed unsafe partial class Job : IDisposable
     /// Until the job moves or ends: call it off a UI thread, or use the language's
     /// asynchronous form.
     /// </summary>
-    public byte[] Result()
+    public unsafe byte[] Result()
     {
         TgBytes @out = default;
         int status;
