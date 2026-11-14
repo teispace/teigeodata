@@ -9,7 +9,7 @@ const tg = require("..");
 
 const parity = JSON.parse(readFileSync(join(__dirname, "../../parity.json"), "utf8"));
 
-/** A fixed-width column of a v0 blob, viewed in place (no copy). */
+/** A fixed-width column of a blob, viewed in place (no copy). */
 function column(blob, name) {
   const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
   assert.equal(blob.toString("latin1", 0, 4), "TGB1");
@@ -69,4 +69,53 @@ test("progress calls back, cancels and rethrows", () => {
   assert.throws(() => tg.progress(g.steps, (s) => s < g.cancel_after), { code: "Cancelled", message: g.cancelled_message });
   const boom = new RangeError("boom");
   assert.throws(() => tg.progress(5, () => { throw boom; }), (e) => e === boom);
+});
+
+/** A string column (UTF-8 or a dictionary) of a v1 blob, null rows as null. */
+function strings(blob, name) {
+  const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+  const u32 = (at) => view.getUint32(at, true);
+  const rows = u32(4);
+  for (let i = 0; i < u32(8); i++) {
+    const d = 16 + 40 * i;
+    if (blob.toString("utf8", d, d + 16).replace(/\0+$/, "") !== name) continue;
+    const [type, at, , aux, , nulls] = [0, 4, 8, 12, 16, 20].map((k) => u32(d + 16 + k));
+    const isNull = (r) => nulls !== 0 && ((blob[nulls + (r >> 3)] >> (r & 7)) & 1) === 0;
+    const out = [];
+    if (type === 7) {
+      for (let r = 0; r < rows; r++) out.push(blob.toString("utf8", aux + u32(at + 4 * r), aux + u32(at + 4 * r + 4)));
+    } else {
+      const count = u32(aux);
+      const base = aux + 8 + 4 * count;
+      const words = [];
+      for (let k = 0; k < count; k++) words.push(blob.toString("utf8", base + u32(aux + 4 + 4 * k), base + u32(aux + 8 + 4 * k)));
+      for (let r = 0; r < rows; r++) out.push(words[type === 11 ? view.getUint16(at + 2 * r, true) : u32(at + 4 * r)] ?? "");
+    }
+    return out.map((s, r) => (isNull(r) ? null : s));
+  }
+  throw new Error(`no column ${name}`);
+}
+
+/** A number column of a v1 blob, viewed in place. */
+function numbers(blob, name) {
+  return column(blob, name);
+}
+
+test("engine handle on the fixture", () => {
+  const p = parity.engine;
+  const engine = new tg.Engine();
+  assert.equal(engine.openFile(join(__dirname, "../..", p.fixture)), 1);
+  const got = engine.get(p.get.id);
+  assert.deepEqual(strings(got, "name"), [p.get.name]);
+  assert.deepEqual(strings(got, "kind"), [p.get.kind]);
+  assert.deepEqual([...numbers(got, "lat")], [p.get.lat]);
+  assert.equal(strings(engine.search(p.search.query, p.search.limit), "id")[0], p.search.first_id);
+  const near = engine.reverse(p.reverse.lat, p.reverse.lon, p.reverse.limit);
+  assert.deepEqual(strings(near, "id"), p.reverse.ids);
+  assert.ok(Math.abs(numbers(near, "meters")[0] - p.reverse.first_meters) < 0.1);
+  assert.deepEqual(strings(engine.adminAt(p.admin_at.lat, p.admin_at.lon), "id"), p.admin_at.ids);
+  assert.throws(() => engine.get(p.bad_id), { code: "InvalidArgument" });
+  assert.throws(() => engine.openFile("/nonexistent.tgd"), { code: "Io" });
+  assert.throws(() => engine.openBytes(Buffer.from("not a pack")), { code: "Corrupt" });
+  assert.equal(engine.layers(), 1);
 });

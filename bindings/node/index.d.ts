@@ -56,3 +56,85 @@ export function progress(steps: number, onStep: (a0: number) => boolean): number
  * -180..=180, or any value is not finite.
  */
 export function distanceM(lat1: number, lon1: number, lat2: number, lon2: number): number;
+
+/**
+ * Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
+ * answers from any number of threads at once, and adding a pack publishes a new snapshot
+ * while queries go on.
+ *
+ * Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`,
+ * `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search
+ * and `meters` and `bearing` for a reverse lookup.
+ */
+export class Engine {
+  /**
+   * An engine with no packs.
+   */
+  constructor();
+
+  /**
+   * Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+   *
+   * # Errors
+   *
+   * `ErrorCode::Io` if the file cannot be read, `ErrorCode::Corrupt` if it is not a
+   * valid pack.
+   */
+  openFile(path: string): number;
+
+  /**
+   * Adds a pack from its bytes (copied). Returns the number of packs.
+   *
+   * # Errors
+   *
+   * `ErrorCode::Corrupt` if the bytes are not a valid pack.
+   */
+  openBytes(bytes: Buffer): number;
+
+  /**
+   * The number of packs.
+   */
+  layers(): number;
+
+  /**
+   * The place with this ID (`tgd:np/1`), or no row; a retired ID gives its survivor.
+   *
+   * # Errors
+   *
+   * `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+   * section read is corrupt.
+   */
+  get(id: string): Buffer;
+
+  /**
+   * Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
+   * parent first. The `score` column compares only within one query.
+   *
+   * # Errors
+   *
+   * `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+   * `ErrorCode::Corrupt` if a section read is corrupt.
+   */
+  search(query: string, limit: number): Buffer;
+
+  /**
+   * The places nearest the point, nearest first, at most `limit`, with `meters` and
+   * `bearing` (degrees from north) to each.
+   *
+   * # Errors
+   *
+   * `ErrorCode::InvalidArgument` for a point off the globe or a `limit` above
+   * `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+   */
+  reverse(lat: number, lon: number, limit: number): Buffer;
+
+  /**
+   * The admin units holding the point, country first.
+   *
+   * # Errors
+   *
+   * `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+   * section read is corrupt.
+   */
+  adminAt(lat: number, lon: number): Buffer;
+}

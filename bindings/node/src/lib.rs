@@ -10,8 +10,10 @@
     clippy::needless_pass_by_value,
     clippy::must_use_candidate,
     clippy::unreadable_literal,
+    clippy::new_without_default,
     reason = "exports called from JavaScript: napi-rs takes owned arguments, results are used \
-              by the caller, constants are copied from the IDL"
+              by the caller, constants are copied from the IDL, a JavaScript class has no \
+              `Default`"
 )]
 
 use napi::bindgen_prelude::{Buffer, Function};
@@ -146,4 +148,102 @@ pub fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> napi::Result<f6
     let value = teigeodata_api::distance_m(lat1, lon1, lat2, lon2);
     let value = value.map_err(error)?;
     Ok(value)
+}
+
+/// Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
+/// answers from any number of threads at once, and adding a pack publishes a new snapshot
+/// while queries go on.
+///
+/// Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`,
+/// `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search
+/// and `meters` and `bearing` for a reverse lookup.
+#[napi]
+#[derive(Debug)]
+pub struct Engine(teigeodata_api::Engine);
+
+#[napi]
+impl Engine {
+    /// An engine with no packs.
+    #[napi(constructor)]
+    pub fn new() -> Engine {
+        Engine(teigeodata_api::Engine::new())
+    }
+    /// Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Io` if the file cannot be read, `ErrorCode::Corrupt` if it is not a
+    /// valid pack.
+    #[napi]
+    pub fn open_file(&self, path: String) -> napi::Result<u32, Code> {
+        let value = self.0.open_file(&path);
+        let value = value.map_err(error)?;
+        Ok(value)
+    }
+    /// Adds a pack from its bytes (copied). Returns the number of packs.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Corrupt` if the bytes are not a valid pack.
+    #[napi]
+    pub fn open_bytes(&self, bytes: Buffer) -> napi::Result<u32, Code> {
+        let value = self.0.open_bytes(&bytes);
+        let value = value.map_err(error)?;
+        Ok(value)
+    }
+    /// The number of packs.
+    #[napi]
+    pub fn layers(&self) -> u32 {
+        self.0.layers()
+    }
+    /// The place with this ID (`tgd:np/1`), or no row; a retired ID gives its survivor.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    #[napi]
+    pub fn get(&self, id: String) -> napi::Result<Buffer, Code> {
+        let value = self.0.get(&id);
+        let value = value.map_err(error)?;
+        Ok(Buffer::from(value.into_vec()))
+    }
+    /// Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
+    /// parent first. The `score` column compares only within one query.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    #[napi]
+    pub fn search(&self, query: String, limit: u32) -> napi::Result<Buffer, Code> {
+        let value = self.0.search(&query, limit);
+        let value = value.map_err(error)?;
+        Ok(Buffer::from(value.into_vec()))
+    }
+    /// The places nearest the point, nearest first, at most `limit`, with `meters` and
+    /// `bearing` (degrees from north) to each.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe or a `limit` above
+    /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
+    #[napi]
+    pub fn reverse(&self, lat: f64, lon: f64, limit: u32) -> napi::Result<Buffer, Code> {
+        let value = self.0.reverse(lat, lon, limit);
+        let value = value.map_err(error)?;
+        Ok(Buffer::from(value.into_vec()))
+    }
+    /// The admin units holding the point, country first.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    #[napi]
+    pub fn admin_at(&self, lat: f64, lon: f64) -> napi::Result<Buffer, Code> {
+        let value = self.0.admin_at(lat, lon);
+        let value = value.map_err(error)?;
+        Ok(Buffer::from(value.into_vec()))
+    }
 }

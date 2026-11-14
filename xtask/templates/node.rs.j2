@@ -10,8 +10,10 @@
     clippy::needless_pass_by_value,
     clippy::must_use_candidate,
     clippy::unreadable_literal,
+    clippy::new_without_default,
     reason = "exports called from JavaScript: napi-rs takes owned arguments, results are used \
-              by the caller, constants are copied from the IDL"
+              by the caller, constants are copied from the IDL, a JavaScript class has no \
+              `Default`"
 )]
 
 use napi::bindgen_prelude::{Buffer, Function};
@@ -71,18 +73,31 @@ fn error(e: teigeodata_api::Error) -> Error<Code> {
 #[napi]
 pub const {{ c.name }}: {{ c.ty }} = {{ c.value }};
 {% endfor %}
-{% macro jsty(t) %}{% if t == "str" %}String{% else %}{{ t }}{% endif %}{% endmacro %}
-{% for f in functions %}
+{% macro jsty(p) %}{% if p.ty == "str" %}String{% elif p.ty == "bytes" %}Buffer{% elif p.ty == "handle" %}&{{ p.handle }}{% else %}{{ p.ty }}{% endif %}{% endmacro %}
+{% macro rty(f) %}{% if f.returns == "blob" %}Buffer{% elif f.returns == "string" %}String{% elif f.returns == "void" %}(){% elif f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ f.returns }}{% endif %}{% endmacro %}
+{#
+  One export: a free function (`owner` none), a method (`f.receiver`), the constructor (an
+  associated `new` returning the handle) or a factory (another associated function).
+#}
+{% macro jsfn(f, owner) %}
 {% set cbs = f.params | selectattr("ty", "eq", "callback") | list %}
 {% set cb = cbs[0] if cbs else none %}
 {% set wrap = f.fallible or cb %}
-{% macro rty(t) %}{% if t == "blob" %}Buffer{% elif t == "string" %}String{% elif t == "void" %}(){% else %}{{ t }}{% endif %}{% endmacro %}
 
 {% for line in f.doc %}
 /// {{ line }}
 {% endfor %}
+{% if owner and f.name == "new" and f.returns_handle == owner.name %}
+#[napi(constructor)]
+{% elif owner and not f.receiver and f.returns == "handle" %}
+#[napi(factory)]
+{% else %}
 #[napi]
+{% endif %}
 pub fn {{ f.name }}(
+{% if f.receiver %}
+    &self,
+{% endif %}
 {% if cb %}
     env: Env,
 {% endif %}
@@ -90,10 +105,10 @@ pub fn {{ f.name }}(
 {% if p.ty == "callback" %}
     {{ p.name }}: Function<'_, {% if p.callback.args | length == 1 %}{{ p.callback.args[0] }}{% else %}({% for a in p.callback.args %}{{ a }},{% endfor %}){% endif %}, bool>,
 {% else %}
-    {{ p.name }}: {{ jsty(p.ty) }},
+    {{ p.name }}: {{ jsty(p) }},
 {% endif %}
 {% endfor %}
-){% if wrap %} -> napi::Result<{{ rty(f.returns) }}, Code>{% elif f.returns != "void" %} -> {{ rty(f.returns) }}{% endif %} {
+){% if wrap %} -> napi::Result<{{ rty(f) }}, Code>{% elif f.returns != "void" %} -> {{ rty(f) }}{% endif %} {
 {% if cb %}
     // An exception thrown by the callback cancels the call and is rethrown unchanged.
     let mut raised = None;
@@ -105,12 +120,13 @@ pub fn {{ f.name }}(
         }
     };
 {% endif %}
-{% set call %}teigeodata_api::{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% elif p.ty == "str" %}&{{ p.name }}{% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% endset %}
-{% set conv %}{% if f.returns == "blob" %}Buffer::from(value.into_vec()){% else %}value{% endif %}{% endset %}
+{% set target %}{% if f.receiver %}self.0.{% elif owner %}teigeodata_api::{{ owner.name }}::{% else %}teigeodata_api::{% endif %}{% endset %}
+{% set call %}{{ target }}{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% elif p.ty in ["str", "bytes"] %}&{{ p.name }}{% elif p.ty == "handle" %}&{{ p.name }}.0{% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% endset %}
 {% if not wrap %}
 {% if f.returns == "blob" %}
-    let value = {{ call }};
-    {{ conv }}
+    Buffer::from({{ call }}.into_vec())
+{% elif f.returns == "handle" %}
+    {{ f.returns_handle }}({{ call }})
 {% else %}
     {{ call }}{% if f.returns == "void" %};{% endif %}
 
@@ -125,7 +141,26 @@ pub fn {{ f.name }}(
 {% if f.fallible %}
     let value = value.map_err(error)?;
 {% endif %}
-    Ok({{ conv }})
+    Ok({% if f.returns == "blob" %}Buffer::from(value.into_vec()){% elif f.returns == "handle" %}{{ f.returns_handle }}(value){% else %}value{% endif %})
 {% endif %}
+}
+{% endmacro %}
+{% for f in functions %}
+{{ jsfn(f, none) }}
+{%- endfor %}
+{% for h in handles %}
+
+{% for line in h.doc %}
+/// {{ line }}
+{% endfor %}
+#[napi]
+#[derive(Debug)]
+pub struct {{ h.name }}(teigeodata_api::{{ h.name }});
+
+#[napi]
+impl {{ h.name }} {
+{% for f in h.methods %}
+{{ jsfn(f, h) | indent(4) }}
+{%- endfor %}
 }
 {% endfor %}

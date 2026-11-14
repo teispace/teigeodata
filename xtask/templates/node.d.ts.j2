@@ -7,14 +7,35 @@ export type ErrorCode = {% for c in error_codes %}"{{ c.name }}"{% if not loop.l
 /** {{ c.doc | join(" ") }} */
 export const {{ c.name }}: number;
 {% endfor %}
-{% macro tsty(t) %}{% if t == "bool" %}boolean{% elif t in ["str", "string"] %}string{% elif t == "blob" %}Buffer{% elif t == "void" %}void{% elif t in ["i64", "u64"] %}number{% else %}number{% endif %}{% endmacro %}
-{% for f in functions %}
-
-/**
-{% for line in f.doc %}
- *{% if line %} {{ line }}{% endif %}
+{% macro tsty(t, h) %}{% if t == "bool" %}boolean{% elif t in ["str", "string"] %}string{% elif t in ["blob", "bytes"] %}Buffer{% elif t == "void" %}void{% elif t == "handle" %}{{ h }}{% else %}number{% endif %}{% endmacro %}
+{% macro params(f) %}{% for p in f.params %}{{ p.name | camel }}: {% if p.ty == "callback" %}({% for a in p.callback.args %}a{{ loop.index0 }}: {{ tsty(a, none) }}{% if not loop.last %}, {% endif %}{% endfor %}) => boolean{% else %}{{ tsty(p.ty, p.handle) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endmacro %}
+{% macro doc(lines, indent) %}
+{{ indent }}/**
+{% for line in lines %}
+{{ indent }} *{% if line %} {{ line }}{% endif %}
 
 {% endfor %}
- */
-export function {{ f.name | camel }}({% for p in f.params %}{{ p.name | camel }}: {% if p.ty == "callback" %}({% for a in p.callback.args %}a{{ loop.index0 }}: {{ tsty(a) }}{% if not loop.last %}, {% endif %}{% endfor %}) => boolean{% else %}{{ tsty(p.ty) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}): {{ tsty(f.returns) }};
+{{ indent }} */
+{% endmacro %}
+{% for f in functions %}
+
+{{ doc(f.doc, "") -}}
+export function {{ f.name | camel }}({{ params(f) }}): {{ tsty(f.returns, f.returns_handle) }};
+{% endfor %}
+{% for h in handles %}
+
+{{ doc(h.doc, "") -}}
+export class {{ h.name }} {
+{% for f in h.methods %}
+{% if not loop.first %}
+
+{% endif %}
+{{ doc(f.doc, "  ") -}}
+{% if f.name == "new" and f.returns_handle == h.name %}
+  constructor({{ params(f) }});
+{% else %}
+  {{ "static " if not f.receiver else "" }}{{ f.name | camel }}({{ params(f) }}): {{ tsty(f.returns, f.returns_handle) }};
+{% endif %}
+{% endfor %}
+}
 {% endfor %}
