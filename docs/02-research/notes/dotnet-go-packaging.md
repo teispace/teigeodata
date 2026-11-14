@@ -22,17 +22,16 @@ Phase 5.8 ships .NET ("source-generated P/Invoke, NativeAOT-safe, as a NuGet pac
 
 ## 2. Summary and recommendation
 
-- **Go: purego by default, cgo behind a build tag.** purego 0.11.3 has every desktop
-  platform we build at Tier 1 and passes structs by value there; our one callback type takes
-  scalars, which Windows also supports. With purego a Go program needs no C toolchain and
-  cross-compiles with `CGO_ENABLED=0`; the cost is a call through purego's trampoline
-  (**to be measured, S1**: noop and a 1k-row search against cgo, held to the 2x rule of the
-  bindings note).
+- **Go: cgo through function pointers by default, purego without cgo** (S1, measured below).
+  The generated cgo layer calls each C function through a pointer that the binding's own
+  loader resolves with `dlopen`/`LoadLibrary`: cgo's call cost, no library needed to link,
+  and the same loader for both paths. With `CGO_ENABLED=0` the same API runs on purego
+  0.11.3, which covers our ABI on every desktop platform but costs about 10x on a noop, so
+  it is the fallback, not the default.
 - **The Go library comes from the C package** (D-286), the asset a release already publishes
   per platform: the binding finds `libteigeodata` from an explicit path, then
   `TEIGEODATA_LIB`, then a per-user cache filled by a download pinned by SHA-256 in the Go
-  source (as Dart's hook does, D-289). The cgo tag links the same package through its
-  pkg-config file. No binaries in the module, no second repository.
+  source (as Dart's hook does, D-289). No binaries in the module, no second repository.
 - **.NET: one NuGet package, `net10.0`** (the LTS; .NET 11, STS, runs it), `LibraryImport`
   generated from the IDL, `SafeHandle` per handle, the blob as `ReadOnlySpan<byte>`, with the
   library under `runtimes/<rid>/native/` for `osx-arm64`, `osx-x64`, `linux-x64`,
@@ -62,13 +61,30 @@ Phase 5.8 ships .NET ("source-generated P/Invoke, NativeAOT-safe, as a NuGet pac
 - **NuGet trusted publishing** works from GitHub Actions through OIDC (bindings note §8); the
   package must exist before a policy can name it, so the first upload uses a key.
 
+### S1, measured 2026-11-14
+
+This Mac (M-series, Go 1.27.4, the lite C library, `dist` profile; the machine was shared,
+load average about 14, so single runs vary by up to 30%): ns per call, best of three.
+
+| Call | cgo, linked | cgo, through `dlopen`'d pointers | purego 0.11.3 |
+|---|---:|---:|---:|
+| `tg_noop` | 20.5 | 24.0 | 178.6 |
+| `tg_distance_m` | 62.8 | 63.5 | 321.1 |
+| `tg_sample_rows(1000)` and free | 17,813 | 18,005 | 19,919 |
+| `tg_progress(100)`, 100 callbacks into Go | 5,422 | n/a | 24,432 |
+
+purego is within 2x of cgo only once a call does real work (a 1,000-row blob: 1.1x); on small
+calls it is 5x to 10x. A pointer resolved at load costs nothing measurable over a linked
+call. Both paths gave the same answers.
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
 |---|---|---|---|---|---|
-| Go via purego, library from the C package | No C toolchain; cross-compiles; same assets as C and Dart | Runtime `dlopen`; per-call trampoline cost (S1); musl unverified | Apache-2.0 | 0.11.3 | **Default** |
+| Go via cgo, functions through `dlopen`'d pointers, library from the C package | cgo's speed (S1); nothing to link; same assets as C and Dart | Needs a C compiler, as all cgo does | n/a | Go 1.26+ | **Default** |
+| Go via purego, library from the C package | No C toolchain; cross-compiles | 5x to 10x on small calls (S1); musl unverified | Apache-2.0 | 0.11.3 | **When `CGO_ENABLED=0`** |
 | Go via cgo, static library per platform in the module | Fastest calls; one binary | C toolchain for every user; binaries in a module (tens of MB per platform) or a second repository | n/a | Go 1.26+ | Rejected as default |
-| Go via cgo and the C package's pkg-config | Fastest calls; no binaries in the module | C toolchain; the user installs the C package | n/a | Go 1.26+ | **Build tag `teigeodata_cgo`** |
+| Go via cgo and the C package's pkg-config | Fastest calls; no binaries in the module | The user installs the C package before building | n/a | Go 1.26+ | Rejected: the pointer path is as fast |
 | .NET `LibraryImport`, one NuGet package with every RID | Trimming and NativeAOT safe; NuGet picks the RID | `net7.0`+ only | MIT (runtime) | .NET 10 LTS | **Chosen** |
 | .NET `DllImport` | Runs on `netstandard2.0` (Unity, Framework) | Runtime marshalling stubs; not NativeAOT-clean | MIT | all | Open question |
 | A package per RID plus a meta package | Smaller downloads | NuGet has no `optionalDependencies`; RID packages need a runtime.json graph | n/a | n/a | Rejected (about 3 MB a RID) |
@@ -89,10 +105,9 @@ Phase 5.8 ships .NET ("source-generated P/Invoke, NativeAOT-safe, as a NuGet pac
 
 ## 7. Risks and open items
 
-- **S1 is not measured yet**: purego's call cost against cgo, and musl under purego.
+- **musl under purego** is not verified (cgo on musl is the default there).
 - **`netstandard2.0`** for Unity and .NET Framework: a second form, or not in v1.
-- **Neither Go nor the .NET SDK is installed on this machine**; until they are, these
-  bindings are built and tested in CI only.
+- **The .NET SDK is not installed on this machine** (Go 1.27.4 is, from Homebrew).
 
 ## 8. Versions checked
 

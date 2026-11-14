@@ -146,10 +146,10 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 ### 5.8 .NET, Go and C/C++
 - [ ] .NET over the C ABI with source-generated P/Invoke, NativeAOT-safe, as a NuGet package;
-  Go over purego by default and cgo by build tag, the library from the C package; C/C++
+  Go over cgo through pointers it loads, purego without cgo (D-296), the library from the C package; C/C++
   examples ([research](../../02-research/notes/dotnet-go-packaging.md)):
   - [x] 5.8a the C package's musl targets (`linux-musl` x64 and arm64), built in Alpine
-  - [ ] 5.8b Go: S1 (purego against cgo, musl), the generated binding, its loader, `go.yml`
+  - [ ] 5.8b Go: S1 done (D-296); the generated binding (cgo and purego layers), its loader, `go.yml`
   - [ ] 5.8c .NET: the generated `LibraryImport` binding, `cargo xtask package-dotnet`, tested
     from the `.nupkg` on every RID and NativeAOT
   - [x] 5.8d the generated C++17 wrapper, its example and test
@@ -176,6 +176,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 | 2026-11-14 | 5.7c: the Node.js packages in the napi-rs layout, an ES module entry, musl in Alpine (D-294) | plan |
 | 2026-11-14 | 5.8 in sub-steps; Go defaults to purego with the library from the C package, cgo by build tag (research) | plan |
 | 2026-11-14 | 5.4 done (`jvm` green with Android API 24 and 35); 5.7 done (`node` green on eight platforms, `wasm` green); 5.8d built (D-295) | plan |
+| 2026-11-14 | 5.8b: S1 measured; Go defaults to cgo through loaded pointers, purego only without cgo (D-296), reversing the research's first pick | plan |
 | 2026-11-14 | 5.6: abi3 floor 3.11, abi3t, the lent `Blob`, wheels by cibuildwheel (D-290) | plan |
 | 2026-11-14 | 5.5: `@Native` bindings, the build hook, `flutter-check` (D-289) | plan |
 | 2026-11-14 | 5.4: the AAR, the desktop JAR, the 16 KB gate (D-288); 5.2 and 5.3 green in CI | plan |
