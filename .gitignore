@@ -20,6 +20,7 @@ node_modules/
 /bindings/node/*.node
 /bindings/dart/.dart_tool/
 /bindings/swift/.build/
+/bindings/swift/CTeiGeodata.xcframework/
 /bindings/jvm/build/
 __pycache__/
 /bindings/dart/pubspec.lock

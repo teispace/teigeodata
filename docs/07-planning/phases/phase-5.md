@@ -93,7 +93,12 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 ### 5.3 Swift
 - [ ] Wrapper generated over the C ABI; an XCFramework as a SwiftPM `binaryTarget`; the
-  privacy manifest; iOS, macOS and the simulators in CI
+  privacy manifest; iOS, macOS and the simulators in CI. Built
+  ([research](../../02-research/notes/swift-xcframework.md), D-287): `cargo xtask
+  package-swift --test` (static `CTeiGeodata.xcframework`, iOS 15 and macOS 12, parity on
+  macOS and an iOS simulator), `PrivacyInfo.xcprivacy` (file timestamps), `Package.swift`'s
+  XCFramework mode, `apple.yml`. Done when that workflow is green; the root `Package.swift`
+  with the release URL comes with 5.10
 
 ### 5.4 Android and the JVM
 - [ ] One generated JNI layer: the AAR (cargo-ndk, the 16 KB ELF gate in CI) and the desktop
@@ -134,6 +139,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | 5.3: the XCFramework, the privacy manifest, simulator parity (D-287) | plan |
 | 2026-11-14 | 5.2: C packaging (D-286), the header's feature guards | plan |
 | 2026-11-14 | 5.2: the ABI and symbol gates (D-285); 5.1 done with the zone rules (D-284) | plan |
 | 2026-11-14 | 5.1: the store and its jobs in every language, the `store` feature (IDL format 6, D-279) | plan |

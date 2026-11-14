@@ -22,6 +22,7 @@ mod lexicon;
 mod mirror;
 mod pack;
 mod package_c;
+mod package_swift;
 mod postal;
 mod recipe;
 mod romanise;
@@ -69,6 +70,12 @@ Tasks:
                     files, checks the exports and archives it under target/package/;
                     --smoke builds and runs bindings/c/parity.c through pkg-config and
                     CMake against the staged package.
+  package-swift [--test] [--simulator <name>]
+                    The XCFramework the Swift package ships (D-287): teigeodata-c's static
+                    library for iOS, the iOS simulators and macOS, joined, as
+                    bindings/swift/CTeiGeodata.xcframework and a zip with its SwiftPM
+                    checksum under target/apple/; --test runs the Swift parity checks
+                    against it on macOS and on an iOS simulator.
   pack-sizes <pack.tgd> [--langs ne,en]
                     TG-11: where a pack's bytes go: each component on disk and on the
                     wire and per place, each column, names by language (and the names
@@ -114,6 +121,7 @@ fn main() -> ExitCode {
         "check-data" => report(data::check(&root)),
         "check-pack" => report(pack::run(&root, rest)),
         "package-c" => report(package_c::run(&root, rest)),
+        "package-swift" => report(package_swift::run(&root, rest)),
         "pack-sizes" => report(breakdown::run(rest)),
         "check-workspace" => report(workspace::check(&root)),
         "mirror" => report(mirror::run(&root, rest)),

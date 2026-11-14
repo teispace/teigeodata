@@ -53,6 +53,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - An install whose catalog refresh fails, when the stored catalog lacks the pack, fails with
   `Network` (the cause) instead of `Refused` (D-282).
 - IDL: an options record must be the last parameter, so every language can default it.
+- The Swift package's XCFramework (D-287): `cargo xtask package-swift [--test]` builds a
+  static `CTeiGeodata.xcframework` (iOS, the iOS simulators, macOS) and tests the Swift
+  binding against it on macOS and an iOS simulator; a privacy manifest; `Package.swift` gains
+  an XCFramework mode (`TEIGEODATA_XCFRAMEWORK=1`) and the parity checks a Swift Testing test.
 - The C library as it ships (D-286): `libteigeodata` (crate `teigeodata-c`) with an
   `@rpath` install name and a versioned soname, `cargo xtask package-c` (header, shared and
   static libraries, pkg-config, CMake, smoke-tested), full and lite archives for six targets
