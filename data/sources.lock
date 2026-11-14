@@ -456,6 +456,40 @@ countries = ["*"]
 used_by = "forge world --labels: Nepali country names, before Wikidata's (TG-14, D-257)"
 attribution = "Unicode CLDR (https://cldr.unicode.org), Copyright © 1991-2026 Unicode, Inc., under the Unicode License v3"
 [[source]]
+id = "cldr-49-subdivision-validity"
+title = "Unicode CLDR 49 subdivision validity (common/validity/subdivision.xml): regular, deprecated and unknown ISO 3166-2 codes"
+kind = "http"
+url = "https://raw.githubusercontent.com/unicode-org/cldr/release-49/common/validity/subdivision.xml"
+version = "49 (tag release-49, 2026-10-21)"
+retrieved = "2026-11-14"
+sha256 = "93b12c9d55938266c96d44a7ccbb66800afeef4f9dd48b0dc16edfab89833d95"
+size = 22807
+licence = "Unicode-3.0"
+licence_class = "cc-by"
+countries = ["*"]
+used_by = "forge world --iso: the check list of current subdivision codes (G-iso, D-271)"
+attribution = "Unicode CLDR (https://cldr.unicode.org), Copyright © 1991-2026 Unicode, Inc., under the Unicode License v3"
+
+[[source]]
+id = "wikidata-iso3166-2"
+title = "Wikidata ISO 3166-2 codes (P300) of every item, best rank (QLever snapshot)"
+kind = "sparql"
+url = "https://qlever.dev/api/wikidata"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
+moving = true
+version = "QLever Wikidata snapshot"
+retrieved = "2026-11-14"
+sha256 = "06c00656e886682142cca30836f9ba52d221f32a8e829f62cc30b65565f57b80"
+size = 98438
+licence = "CC0-1.0"
+licence_class = "cc0"
+countries = ["*"]
+used_by = "forge world --iso: each first-level unit's current code (D-271)"
+attribution = "Wikidata (https://www.wikidata.org), CC0 1.0"
+query = "forge/queries/wikidata-iso3166-2.rq"
+query_params = {}
+
+[[source]]
 id = "wikidata-unit-population"
 title = "Wikidata populations of every country's first- and second-level units, best rank, with dates and GeoNames IDs (QLever snapshot)"
 kind = "sparql"

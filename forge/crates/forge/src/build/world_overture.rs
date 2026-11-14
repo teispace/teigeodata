@@ -119,6 +119,7 @@ pub(super) fn partition(
                 let unit = WorldUnit {
                     key: format!("gers:{}", area.division),
                     refs,
+                    iso: None,
                     names: super::world::unit_names(&area.names),
                     label: None,
                     country,

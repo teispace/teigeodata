@@ -9,8 +9,8 @@
 //!    alpha-2 prefix;
 //! 4. on the country pack, every key of `units`, `no_code` and `former` is a place of the build.
 //!
-//! The differential against CLDR's subdivision list (the note's §5.3 item 3) waits for CLDR to
-//! be pinned in `data/sources.lock`.
+//! The differential against CLDR's subdivision list (the note's §5.3 item 3) is still to do on
+//! the pack; CLDR is pinned and the world part checks against it (`world_iso`, D-271).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;

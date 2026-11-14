@@ -94,6 +94,8 @@ jobs:
           forge/target/fast/forge fetch tzdb-2026f
           # Units' populations, which importance weighs (D-266).
           forge/target/fast/forge fetch wikidata-unit-population
+          # ISO 3166 codes: Wikidata's, checked against CLDR's current list (D-271).
+          forge/target/fast/forge fetch cldr-49-subdivision-validity wikidata-iso3166-2
           # Main's admin 0 and 1 come from Overture's divisions (D-155); lite keeps Natural
           # Earth's (ODbL is not allowed there).
           if [ "${{ matrix.build }}" = main ]; then

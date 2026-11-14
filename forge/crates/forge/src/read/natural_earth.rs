@@ -83,6 +83,8 @@ pub(crate) struct Unit {
     pub(crate) label: Option<(i32, i32)>,
     /// `FCLASS_NP` is `Unrecognized`: Nepal's point of view does not recognise the unit.
     pub(crate) unrecognized: bool,
+    /// `iso_3166_2` as given (may be stale, or a `~` placeholder); checked by the world part.
+    pub(crate) iso: Option<String>,
     pub(crate) polygon: Polygon,
 }
 
@@ -224,6 +226,7 @@ pub(crate) fn read_admin1(path: &Path) -> Result<Vec<Unit>, String> {
             names,
             label: point(f, "longitude", "latitude"),
             unrecognized: text(f, "FCLASS_NP").as_deref() == Some("Unrecognized"),
+            iso: text(f, "iso_3166_2"),
             polygon: Polygon { rings: rings(f) },
             code,
         });

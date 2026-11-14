@@ -215,6 +215,8 @@ pub(super) struct WorldUnit {
     pub(super) key: String,
     /// Its other source keys (Wikidata, `GeoNames`, OSM).
     pub(super) refs: Vec<String>,
+    /// The ISO 3166-2 code its source gives, unchecked (D-271).
+    pub(super) iso: Option<String>,
     /// The untagged source name first, then each language's.
     pub(super) names: Vec<(Option<&'static str>, String)>,
     /// The source's label point, when it gives one.
@@ -1162,6 +1164,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         .chain(&a.labels)
         .chain(&town_sources)
         .map(String::as_str)
+        .chain(ISO_SOURCES)
         .collect();
     for &id in &read {
         let s = lock.get(id)?;
@@ -1175,7 +1178,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let packs = pack_countries(root)?;
     let mut countries = natural_earth::read(&lock.path(root, &a.admin)?)?;
     let part = partition(root, &a, &lock, &packs, build, &mut countries)?;
-    let (rows, geometry, counts) = world_rows(root, &a, &packs, &lock, &countries, &part)?;
+    let (rows, geometry, counts, codes) = world_rows(root, &a, &packs, &lock, &countries, &part)?;
 
     // Rows: Hilbert order of the stored point, ties by key (as a country pack).
     let mut order: Vec<(u64, &str, usize)> = rows
@@ -1195,21 +1198,14 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         return Err("two places share a key".into());
     }
     let (ids, registries) = allocate(root, &rows, &a, &packs)?;
-    let (sections, snapped) = sections(&places, &rows, &ids, &row_of, &geometry, a.tolerance_m)?;
+    let (sections, snapped) = sections(&places, &rows, &ids, &row_of, &geometry, &a, &codes)?;
     let notices = super::notices(&lock, &read)?;
     let out = write(&sections, &a, &notices, root)?;
     super::baseline::check(&out, places.len())?;
     verify(&out, &places)?;
 
     let dir = root.join("data/build/baseline/world");
-    let ids_dir = dir.join(format!("world-ids-{build}"));
-    fs::create_dir_all(&ids_dir).map_err(|e| format!("{}: {e}", ids_dir.display()))?;
-    for (name, reg) in &registries {
-        crate::make::write_atomic(
-            &ids_dir.join(format!("{name}.tsv")),
-            reg.render().as_bytes(),
-        )?;
-    }
+    write_registries(&dir.join(format!("world-ids-{build}")), &registries)?;
     // A city list other than the default is its own world part, named by it (TG-13).
     let variant = a.variant();
     let file = dir.join(format!("world-baseline-{build}{variant}.tgd"));
@@ -1323,6 +1319,7 @@ fn ne_partition(
             Ok(WorldUnit {
                 key: format!("ne1:{}", u.code),
                 refs,
+                iso: u.iso.clone(),
                 names: unit_names(&u.names),
                 label: u.label,
                 country: p.country,
@@ -1348,7 +1345,7 @@ fn world_rows(
     lock: &Lock,
     countries: &[Country],
     part: &Partition,
-) -> Result<(Vec<Row>, super::geometry::Geometry, String), String> {
+) -> Result<(Vec<Row>, super::geometry::Geometry, String, Codes), String> {
     let name = format!("{}+{}", a.admin, a.admin1);
     let units: Vec<crate::topo::UnitRef<'_>> = part
         .units
@@ -1423,19 +1420,69 @@ fn world_rows(
             &mut places,
         ));
     }
+    let (codes, iso_report) = iso_codes(root, lock, part, &rows, &owners)?;
     let tz_report = zone_rows(root, a, lock, countries, &mut rows)?;
     let counts = format!(
         "- {} countries and disputed areas ({}).\n{}\n- {n_cities} cities ({}): {under_unit} \
          under a unit ({near} in the nearest within 10 km), {fallback} under the feature of \
          their code, {orphans} with no \
-         country.\n{towns}{alternates}{populations}- {dropped} source keys another row already holds dropped.\n{named}{aliases}{tz_report}",
+         country.\n{towns}{alternates}{populations}- {dropped} source keys another row already holds dropped.\n{named}{aliases}{iso_report}{tz_report}",
         countries.len(),
         a.admin,
         part.report,
         a.cities,
     );
-    Ok((rows, geometry, counts))
+    Ok((rows, geometry, counts, codes))
 }
+
+/// Writes each part's ID registry into `ids_dir`.
+fn write_registries(ids_dir: &Path, registries: &BTreeMap<String, Registry>) -> Result<(), String> {
+    fs::create_dir_all(ids_dir).map_err(|e| format!("{}: {e}", ids_dir.display()))?;
+    for (name, reg) in registries {
+        crate::make::write_atomic(
+            &ids_dir.join(format!("{name}.tsv")),
+            reg.render().as_bytes(),
+        )?;
+    }
+    Ok(())
+}
+
+use super::world_iso::Codes;
+
+/// The rows' ISO 3166 codes (D-271) from the pinned sources and each unit's own code.
+fn iso_codes(
+    root: &Path,
+    lock: &Lock,
+    part: &Partition,
+    rows: &[Row],
+    owners: &BTreeMap<[u8; 2], Option<usize>>,
+) -> Result<(Codes, String), String> {
+    let valid = super::world_iso::validity(&lock.path(root, ISO_SOURCES[0])?)?;
+    let wd = super::world_iso::wikidata(&lock.path(root, ISO_SOURCES[1])?)?;
+    let given: HashMap<&str, &str> = part
+        .units
+        .iter()
+        .filter_map(|u| u.iso.as_deref().map(|c| (u.key.as_str(), c)))
+        .collect();
+    let input: Vec<super::world_iso::Input<'_>> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, r)| super::world_iso::Input {
+            place: &r.place,
+            country: r.ns.country(),
+            owns_country_code: r
+                .ns
+                .country()
+                .is_some_and(|c| owners.get(&c) == Some(&Some(i))),
+            source_code: given.get(r.place.key.as_str()).copied(),
+        })
+        .collect();
+    Ok(super::world_iso::assign(&input, valid, &wd))
+}
+
+/// The ISO code sources of every world part (D-271): CLDR's validity list, then Wikidata's
+/// codes.
+const ISO_SOURCES: [&str; 2] = ["cldr-49-subdivision-validity", "wikidata-iso3166-2"];
 
 /// The country row that owns each ISO 3166-1 code, as names keyed by code are joined (D-257):
 /// the most populous country row with that code; `None` when two tie, so a territory that
@@ -1505,8 +1552,10 @@ fn sections(
     ids: &[PlaceId],
     row_of: &BTreeMap<&str, u32>,
     geometry: &super::geometry::Geometry,
-    tolerance_m: u32,
+    a: &Args,
+    codes: &Codes,
 ) -> Result<(Vec<extract::Body>, String), String> {
+    let tolerance_m = a.tolerance_m;
     let e = |e: teigeodata_format::Error| e.to_string();
     let n = places.len() as u64;
     let points: Vec<_> = places
@@ -1557,6 +1606,9 @@ fn sections(
     if let Some(body) = teigeodata_format::elevation::encode_with(&heights, &sources).map_err(e)? {
         full.push((Kind::ELEVATION, Encoding::TABLE, n, body));
     }
+    full.extend(codes.section(row_of, places, |r| {
+        rows.get(r as usize).and_then(|row| row.ns.country())
+    })?);
     let by_code: BTreeMap<String, u32> = row_of
         .iter()
         .filter_map(|(k, &r)| {

@@ -703,6 +703,13 @@ Overture (D-157), else 1 km; islets the tolerance's square.
   unit without a count of its own takes Wikidata's (best rank, latest dated value), which
   search importance weighs. Cities outside every unit's simplified outline are placed in the
   nearest unit of their country within 10 km.
+- **ISO 3166 codes** (always, D-271; `build::world_iso`). A country row that owns its
+  alpha-2 code takes it; a unit takes Wikidata's best-rank P300 on one of its items
+  (`wikidata-iso3166-2`), else its source's code (Natural Earth's `iso_3166_2`), each only
+  when CLDR's validity list (`cldr-49-subdivision-validity`) marks it regular and it carries
+  the row's country. Stale codes, two current codes for one unit and one code on several rows
+  (unless Wikidata files it under exactly one) leave the unit uncoded, reported with
+  examples. G-iso gates the `ISO_CODES` section before it is written.
 - **Alternate names** (`--alternates`, D-265). Each city's GeoNames alternate names in the
   part's languages (English and each label source's), as historical, colloquial or alternate
   names; untagged ones are left out. The file name gains `-<source>`.

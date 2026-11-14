@@ -1,0 +1,10 @@
+# Every item's ISO 3166-2 code (P300) as Wikidata states it now (forge `world --iso`, D-271).
+# World-general: best-rank statements only (`wdt:`), the item as a bare `Q…` string so one
+# response holds every row. A stale code still filed at best rank is left out by the forge,
+# which keeps only codes CLDR's subdivision validity list marks regular.
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+SELECT DISTINCT ?q ?code WHERE {
+  ?item wdt:P300 ?code .
+  BIND(STRAFTER(STR(?item), "http://www.wikidata.org/entity/") AS ?q)
+}
+ORDER BY ?q ?code

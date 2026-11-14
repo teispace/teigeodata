@@ -408,7 +408,8 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   - [ ] 4. India's town-level quality in the world part (re-scoped by D-270; the pack, with
     villages, moves to W1): every placed town's LGD name in its state's language (done,
     D-263, 1,781 towns, 10 languages); ISO 3166-2 codes on the world's first-level units,
-    current by Wikidata P300 and checked against CLDR's validity list (G-iso); name
+    current by Wikidata P300 and checked against CLDR's validity list (done, D-271, 4,071 of
+    4,567 units); name
     completeness in the layer's languages, measured against Wikidata's labels; India's golden
     set of the research §5 (`golden-curated.yaml`)
   - [ ] 5. India's towns in the embedded layer: the world part's done (`world_towns: [in]`,
@@ -524,3 +525,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-13 | TG-15 step 4: city-first for districts, alternate names in the part's languages; India golden 44/44 | D-264, D-265 |
 | 2026-11-14 | Q-026: one importance scale, unit populations from Wikidata, a country before its namesakes, coastal cities in their unit; the world golden set | D-266 |
 | 2026-11-14 | TG-15 step 4 re-scoped to the world part (codes, names, golden set); the India pack moves to W1 with its villages | D-270 |
+| 2026-11-14 | TG-15 step 4: ISO 3166 codes on every world part | D-271 |

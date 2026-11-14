@@ -1,7 +1,7 @@
 ---
 title: "ISO 3166 codes on countries and level-1 units"
 status: accepted
-updated: 2026-11-11
+updated: 2026-11-14
 owner: maintainer's agents
 revisit: 2026-12-15
 ---
@@ -317,12 +317,30 @@ wrong prefix, a stale key, and a merge that drops the section; each must fail.
   file cannot be told from a current one, so the world part ships no codes outside the country
   slices rather than guessing. India's file waits for India's pack (it has no admin source yet).
 
+## 7b. The world part's codes (2026-11-14, D-271)
+
+§7a's open item, built without a file per country: Wikidata P300 gives each unit's current
+code by its item, which the world rows already carry; CLDR's validity list (now pinned) tells
+current from stale; Natural Earth's own code fills where Wikidata files the code on another
+item (Delhi's `IN-DL` sits on the National Capital Territory's item, not Delhi's).
+
+| Variant | Units coded | Why not more |
+|---|--:|---|
+| Natural Earth's `iso_3166_2` alone, CLDR-checked | not built | stale for the first countries (§3.4) |
+| Wikidata first, then Natural Earth, a shared code uncoded | 4,028 of 4,567 | 49 codes on several rows (Ireland's counties split in two, Madagascar's regions) |
+| **+ a shared code goes to the one row Wikidata files it under** | **4,071 of 4,567** | 166 with no code in either source, 230 only stale (Bermuda's parishes: ISO has no codes; Bahrain's `BH-16`, abolished), 24 another country's code, 6 still shared |
+
+`ISO_CODES` costs 20,012 B on the default world part; India's 2023 renames answer by the new
+codes and the old ones by none.
+
 ## 8. Versions checked
 
 | Thing | Version | Checked on | Where |
 |---|---|---|---|
 | Natural Earth admin 1 | 5.1.2 (`ne-admin1`, sha256 `22d0e3ad…`) | 2026-11-11 | `data/cache`, pinned in `data/sources.lock` |
 | CLDR `validity/subdivision.xml`, `supplementalMetadata.xml`, `subdivisions.xml` | main branch | 2026-11-11 | github.com/unicode-org/cldr |
+| CLDR `validity/subdivision.xml` | 49 (`release-49`), pinned | 2026-11-14 | `cldr-49-subdivision-validity` |
+| Wikidata P300 via QLever | snapshot of 2026-11-14 | 2026-11-14 | `wikidata-iso3166-2` |
 | Wikidata P300 constraint | `[A-Z]{2}-[A-Z0-9]{1,3}` | 2026-11-11 | wikidata.org |
 | ISO 3166-2:NP latest change | OBP 2023-11-23 | 2026-11-11 | Wikipedia ISO 3166-2:NP |
 | ISO 3166-2:IN latest change | OBP 2023-11-23 | 2026-11-11 | Wikipedia ISO 3166-2:IN |

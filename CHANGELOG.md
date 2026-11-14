@@ -24,6 +24,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   takes its Wikidata aliases, so Poona, Simla, Tanjore, Peking and Ceylon find their place
   (D-268).
 
+- Every world part carries ISO 3166 codes: 237 countries and 4,071 of 4,567 first-level
+  units, current codes only (India's `IN-OD`, `IN-UK`, `IN-CG`, `IN-TS`), so `iso_code` and
+  `by_iso` answer world-wide (D-271).
+
 ### Changed
 
 - A substring match of 3 or 4 characters weighs less than a longer one, so a short query

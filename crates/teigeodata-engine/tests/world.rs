@@ -705,3 +705,69 @@ fn discovery_names_the_country_of_every_city() {
         );
     }
 }
+
+/// ISO 3166 codes (D-271): every country row and most first-level units carry one, every code
+/// on a row of its kind and country, and the current codes of renamed units answer while the
+/// stale ones do not (India's 2023 changes).
+#[test]
+#[ignore = "needs TGD_WORLD"]
+fn the_world_part_carries_current_iso_codes() {
+    use teigeodata_core::IsoCode;
+    let world = read("TGD_WORLD").expect("TGD_WORLD");
+    let ids = IdMap::open(&Pack::open(&world).unwrap().section(Kind::IDMAP).unwrap()).unwrap();
+    let mut e = Engine::new();
+    e.add(Layer::from_bytes(world.clone(), baseline(0)).unwrap());
+    let (mut countries, mut country_coded) = (0_usize, 0_usize);
+    let (mut units, mut unit_coded) = (0_usize, 0_usize);
+    for r in 0..ids.len() {
+        let p = e.get(ids.id(r).unwrap()).unwrap().unwrap();
+        let code = e.iso_code(&p).unwrap();
+        match (p.kind, code) {
+            (Some(PlaceKind::Country), c) => {
+                countries += 1;
+                country_coded += usize::from(c.is_some_and(IsoCode::is_country));
+            }
+            (Some(PlaceKind::Admin), c) if p.admin_level == 1 => {
+                units += 1;
+                if let Some(c) = c {
+                    assert!(!c.is_country(), "{c} on a unit");
+                    unit_coded += 1;
+                }
+            }
+            (_, Some(c)) => panic!("{c} on {:?}", p.id),
+            _ => {}
+        }
+    }
+    let share = unit_coded as f64 / units as f64;
+    println!(
+        "ISO codes: {country_coded} of {countries} countries, {unit_coded} of {units} units ({share:.3})"
+    );
+    // Measured 2026-11-14: 237 of 248 countries (disputed areas have none), 4071 of 4567 units.
+    assert!(country_coded >= 230, "{country_coded} countries coded");
+    assert!(share >= 0.88, "{share:.3} of first-level units coded");
+    let mut s = Scratch::default();
+    let mut found = Vec::new();
+    for (lat, lon, now, then) in [
+        (203_000_000, 858_000_000, "IN-OD", "IN-OR"),
+        (303_000_000, 780_000_000, "IN-UK", "IN-UT"),
+        (212_500_000, 816_000_000, "IN-CG", "IN-CT"),
+        (174_000_000, 785_000_000, "IN-TS", "IN-TG"),
+    ] {
+        let at = Point::<E7>::from_units(lat, lon).unwrap();
+        e.admin_at(at, &mut s, &mut found).unwrap();
+        let unit = found.iter().find(|u| u.admin_level == 1).expect("a unit");
+        assert_eq!(
+            e.iso_code(unit).unwrap(),
+            Some(now.parse().unwrap()),
+            "{now}"
+        );
+        assert_eq!(
+            e.by_iso(now.parse().unwrap()).unwrap().map(|u| u.id),
+            Some(unit.id)
+        );
+        assert!(
+            e.by_iso(then.parse().unwrap()).unwrap().is_none(),
+            "{then} ships"
+        );
+    }
+}
