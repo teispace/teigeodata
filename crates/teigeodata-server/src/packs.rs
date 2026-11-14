@@ -119,3 +119,19 @@ impl Packs {
         Ok(self.shared.follow(dir, &records, options()))
     }
 }
+
+/// Follows the store's journal every `every` on the runtime, opening packs off its workers
+/// (D-172): what each server runs beside its requests.
+#[cfg(any(feature = "http", feature = "mcp"))]
+pub(crate) fn spawn_follow(packs: std::sync::Arc<Packs>, every: std::time::Duration) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(every);
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tick.tick().await;
+            let packs = std::sync::Arc::clone(&packs);
+            // Opening a pack reads and checks its head: off the request workers.
+            let _ = tokio::task::spawn_blocking(move || packs.follow()).await;
+        }
+    });
+}

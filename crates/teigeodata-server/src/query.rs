@@ -268,6 +268,18 @@ pub enum Ask {
         /// Strict order: every word in order.
         strict: bool,
     },
+    /// A place's ancestors, its parent first, then the parent's, to the root (D-143).
+    Hierarchy {
+        /// The place's ID.
+        id: String,
+    },
+    /// The places whose parent is a place, in the packs' order; the first `limit` of them.
+    Children {
+        /// The place's ID.
+        id: String,
+        /// How many.
+        limit: usize,
+    },
     /// The admin units holding a point, country first.
     Admin {
         /// Latitude, degrees.
@@ -300,7 +312,13 @@ impl Ask {
     /// [`Code::OutOfBounds`] for an argument past a bound.
     pub fn check(&self, limits: &Limits) -> Result<(), QueryError> {
         match self {
-            Self::Get { id, .. } | Self::TzOf { id, .. } => limits.text("the ID", id),
+            Self::Get { id, .. } | Self::TzOf { id, .. } | Self::Hierarchy { id } => {
+                limits.text("the ID", id)
+            }
+            Self::Children { id, limit } => {
+                limits.text("the ID", id)?;
+                limits.count(*limit)
+            }
             Self::Lookup { ids } => {
                 limits.count(ids.len())?;
                 ids.iter().try_for_each(|i| limits.text("an ID", i))
@@ -397,24 +415,7 @@ pub fn answer(
             id,
             limit,
             radius_m,
-        } => {
-            let p = place(e, id)?;
-            let mut near = Vec::new();
-            match radius_m {
-                Some(m) => {
-                    // The place itself is at 0 m: ask for one more and drop it.
-                    e.within_radius(p.point, *m, limit.saturating_add(1), s, &mut near)?;
-                    near.retain(|n| n.place.id != p.id);
-                    near.truncate(*limit);
-                }
-                None => e.nearby(&p, *limit, s, &mut near)?,
-            }
-            out.extend(near.iter().map(|n| Item {
-                meters: Some(n.meters),
-                bearing: Some(n.bearing_deg),
-                ..Item::from(n.place)
-            }));
-        }
+        } => near(e, &place(e, id)?, *limit, *radius_m, s, out)?,
         Ask::Search {
             query,
             limit,
@@ -434,6 +435,16 @@ pub fn answer(
                 ..Item::from(h.place)
             }));
         }
+        Ask::Hierarchy { id } => {
+            let mut up = Vec::new();
+            e.ancestors(&place(e, id)?, &mut up)?;
+            out.extend(up.into_iter().map(Item::from));
+        }
+        Ask::Children { id, limit } => {
+            let mut down = Vec::new();
+            e.children(&place(e, id)?, &mut down)?;
+            out.extend(down.into_iter().take(*limit).map(Item::from));
+        }
         Ask::Admin { lat, lon } => {
             let mut units = Vec::new();
             e.admin_at(point::<E7>(*lat, *lon)?, s, &mut units)?;
@@ -448,6 +459,33 @@ pub fn answer(
             with_offset(e, area, *t, out)?;
         }
     }
+    Ok(())
+}
+
+/// The places nearest `p`, or within `radius_m` of it, itself left out.
+fn near(
+    e: &Engine,
+    p: &Place,
+    limit: usize,
+    radius_m: Option<f64>,
+    s: &mut Scratch,
+    out: &mut Vec<Item>,
+) -> Result<(), QueryError> {
+    let mut near = Vec::new();
+    match radius_m {
+        Some(m) => {
+            // The place itself is at 0 m: ask for one more and drop it.
+            e.within_radius(p.point, m, limit.saturating_add(1), s, &mut near)?;
+            near.retain(|n| n.place.id != p.id);
+            near.truncate(limit);
+        }
+        None => e.nearby(p, limit, s, &mut near)?,
+    }
+    out.extend(near.iter().map(|n| Item {
+        meters: Some(n.meters),
+        bearing: Some(n.bearing_deg),
+        ..Item::from(n.place)
+    }));
     Ok(())
 }
 

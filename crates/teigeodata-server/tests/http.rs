@@ -51,7 +51,7 @@ fn app(seams: Seams) -> (Arc<App>, common::Model, std::path::PathBuf) {
     std::fs::write(&path, bytes).unwrap();
     let (packs, _) = Packs::open(std::slice::from_ref(&path), None).unwrap();
     let app = Arc::new(App {
-        packs,
+        packs: Arc::new(packs),
         seams,
         config: Config::default(),
     });
@@ -89,6 +89,11 @@ async fn call(app: &Arc<App>, uri: &str, origin: Option<&str>) -> (StatusCode, V
 async fn every_route_answers_with_its_attribution() {
     let (app, model, dir) = app(Seams::default());
     let id = model.ids[0].to_string();
+    let row = (0..model.ids.len())
+        .find(|&r| model.parents.get(r).copied().flatten().is_some())
+        .unwrap();
+    let leaf = model.ids[row].to_string();
+    let parent = model.ids[model.parents[row].unwrap() as usize].to_string();
     let (s, j, _) = call(&app, "/health", None).await;
     assert_eq!((s, j["layers"].as_u64()), (StatusCode::OK, Some(1)));
 
@@ -100,6 +105,8 @@ async fn every_route_answers_with_its_attribution() {
         "/v1/search?q=Synthland&limit=3".to_owned(),
         "/v1/search?q=Synthland&focus=27.5,85&scale_km=20&strict=1".to_owned(),
         "/v1/admin?lat=27.5&lon=85".to_owned(),
+        format!("/v1/hierarchy?id={leaf}"),
+        format!("/v1/children?id={parent}&limit=3"),
         "/v1/tz?lat=27.5&lon=85&t=0".to_owned(),
     ] {
         let (s, j, _) = call(&app, &uri, None).await;
@@ -228,7 +235,7 @@ async fn cors_is_off_unless_configured() {
     let (_, _, cors) = call(&open, "/health", Some("https://app.example")).await;
     assert_eq!(cors, "");
     let configured = Arc::new(App {
-        packs: Packs::open(&[dir.join("np.tgd")], None).unwrap().0,
+        packs: Arc::new(Packs::open(&[dir.join("np.tgd")], None).unwrap().0),
         seams: Seams::default(),
         config: Config {
             cors_origins: vec!["https://app.example".parse().unwrap()],

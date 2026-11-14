@@ -58,6 +58,10 @@ pub enum Operation {
     Near,
     /// [`Ask::Search`].
     Search,
+    /// [`Ask::Hierarchy`].
+    Hierarchy,
+    /// [`Ask::Children`].
+    Children,
     /// [`Ask::Admin`].
     Admin,
     /// [`Ask::TzAt`] and [`Ask::TzOf`].
@@ -80,6 +84,8 @@ impl Operation {
             Ask::Reverse { .. } => Self::Reverse,
             Ask::Near { .. } => Self::Near,
             Ask::Search { .. } => Self::Search,
+            Ask::Hierarchy { .. } => Self::Hierarchy,
+            Ask::Children { .. } => Self::Children,
             Ask::Admin { .. } => Self::Admin,
             Ask::TzAt { .. } | Ask::TzOf { .. } => Self::Timezone,
         }
@@ -94,6 +100,8 @@ impl Operation {
             Self::Reverse => "reverse",
             Self::Near => "near",
             Self::Search => "search",
+            Self::Hierarchy => "hierarchy",
+            Self::Children => "children",
             Self::Admin => "admin",
             Self::Timezone => "timezone",
             Self::Elevation => "elevation",

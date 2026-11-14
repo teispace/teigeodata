@@ -65,7 +65,7 @@ async fn the_clients_requests_get_what_they_read() {
     std::fs::write(&path, w.pack(&sections, None).unwrap()).unwrap();
     let (packs, _) = Packs::open(std::slice::from_ref(&path), None).unwrap();
     let app = Arc::new(App {
-        packs,
+        packs: Arc::new(packs),
         seams: Seams::default(),
         config: Config::default(),
     });

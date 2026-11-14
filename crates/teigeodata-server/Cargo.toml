@@ -24,19 +24,27 @@ form_urlencoded = { version = "1.2.2", optional = true }
 axum = { version = "0.8.9", default-features = false, features = ["http1", "http2", "tokio", "query"], optional = true }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "time", "macros"], optional = true }
 tower-http = { version = "0.7.1", features = ["catch-panic", "cors", "timeout"], optional = true }
+# The MCP server (feature `mcp`): the official Rust SDK, pinned exactly (weekly releases; an
+# update is reviewed against its changelog, servers note §7).
+rmcp = { version = "=3.10.0", default-features = false, features = ["server", "transport-io"], optional = true }
+# MCP's signed cursors: a keyed BLAKE3 hash under a key drawn at start.
+blake3 = { version = "1.8.7", default-features = false, optional = true }
+getrandom = { version = "0.4.3", optional = true }
 
 [features]
 # The HTTP server over axum: `http::router` and `http::serve`.
 http = ["dep:axum", "dep:form_urlencoded", "dep:tokio", "dep:tower-http"]
 # The fuzz harness of the query parsing (`fuzz::query_string`).
 fuzz = ["dep:form_urlencoded"]
+# The MCP server over rmcp: `mcp::Mcp` and `mcp::serve_stdio` (phase 6.3, D-315).
+mcp = ["dep:rmcp", "dep:tokio", "dep:blake3", "dep:getrandom"]
 
 [dev-dependencies]
 # The engine's test model (`../teigeodata-engine/tests/common`) writes its packs.
 teigeodata-format = { workspace = true, features = ["write", "spatial"] }
 teigeodata-names.workspace = true
 # The HTTP tests drive the router in process.
-tokio = { version = "1.54.1", features = ["rt", "macros"] }
+tokio = { version = "1.54.1", features = ["rt", "macros", "io-util"] }
 tower = { version = "0.5.3", default-features = false, features = ["util"] }
 
 [[test]]
@@ -46,6 +54,10 @@ required-features = ["fuzz"]
 [[test]]
 name = "http"
 required-features = ["http"]
+
+[[test]]
+name = "mcp"
+required-features = ["mcp"]
 
 [[test]]
 name = "nominatim"

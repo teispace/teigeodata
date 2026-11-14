@@ -4,6 +4,7 @@
 
 use teigeodata_engine::Engine;
 
+use crate::body;
 use crate::compat::{self, Route};
 use crate::params::{self, Params, ROUTES};
 use crate::query::{Code, Limits};
@@ -98,7 +99,14 @@ pub fn query_string(data: &[u8]) {
         return;
     };
     let mut out = Vec::new();
-    match params::answer(&e, &asked, false, &Limits::SERVER, &mut out) {
+    match body::answer(
+        &e,
+        &asked,
+        false,
+        &Limits::SERVER,
+        body::Page::ALL,
+        &mut out,
+    ) {
         Ok(_) => {
             let v: Result<serde_json::Value, _> = serde_json::from_slice(&out);
             assert!(v.is_ok(), "not JSON: {}", String::from_utf8_lossy(&out));

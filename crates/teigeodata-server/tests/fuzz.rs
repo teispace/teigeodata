@@ -48,12 +48,14 @@ fn query_strings() {
 }
 
 /// Valid query strings for each route (`ROUTES` order), with `{}` where a value goes.
-const TEMPLATES: [&str; 13] = [
+const TEMPLATES: [&str; 15] = [
     "id={}&names={}",
     "ids={},{}",
     "lat={}&lon={}&limit={}&in_country={}",
     "id={}&limit={}&radius_m={}",
     "q={}&limit={}&focus={},{}&scale_km={}&strict={}",
+    "id={}",
+    "id={}&limit={}",
     "lat={}&lon={}",
     "lat={}&lon={}&t={}",
     "lat={}&lon={}",

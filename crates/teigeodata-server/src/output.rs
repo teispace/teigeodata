@@ -355,6 +355,26 @@ pub enum Mode {
     Nominatim,
 }
 
+/// The description of one pack: its address, component, release, places, the components
+/// installed and its attribution (`/packs`, MCP's `packs` and its dataset resources).
+#[must_use]
+pub fn pack(l: &Layer) -> Value {
+    json!({
+        "address": l.address(),
+        "component": l.component(),
+        "release": l.release(),
+        "places": l.len(),
+        "components": l.components().iter().map(teigeodata_engine::Component::name).collect::<Vec<_>>(),
+        "attribution": l.attribution(),
+    })
+}
+
+/// `{"packs": [...]}`: every pack of `engine`, highest precedence first.
+#[must_use]
+pub fn packs(engine: &Engine) -> Value {
+    json!({ "packs": engine.layers().map(pack).collect::<Vec<_>>() })
+}
+
 /// The attribution of every layer, one notice per line, each once: for a whole extract
 /// (`tgd export`).
 #[must_use]

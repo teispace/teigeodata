@@ -139,6 +139,31 @@ r1 hyper blocking footprint: 9457 KB
   c=64 in round 2, equal on `get`; 0.4 MB more footprint. axum is chosen: its routing,
   extractors and `tower-http` limits are what we would otherwise write.
 
+### 5.2 The MCP server as built (2026-11-15)
+
+What building it on rmcp 3.10.0 taught (D-315):
+
+- **Handwritten `ServerHandler`.** The tools are the request core's asks, so rmcp's
+  `#[tool]` macros (one Rust function per tool, schemas from types) would duplicate them;
+  without the `macros` feature the server is a table of definitions and one dispatch. rmcp
+  routes `server/discover` and the `initialize` handshake itself: a discover alone does not
+  start a session, so a client that leaves after it ends `serve` with `ConnectionClosed`,
+  which `tgd mcp` treats as a normal end.
+- **Tool names.** MCP allows dots, but hosts that pass tools on to a model accept
+  `[A-Za-z0-9_-]` only, so `snake_case` names, and the host's own prefix namespaces them.
+- **Text and structure.** The 2025-11-25 specification recommends the serialized JSON as text
+  beside `structuredContent` for clients that read only text; a summary would hide data from
+  them. The answers are bounded (50 places a page), so the cost of the copy is bounded too.
+- **Cursors.** Hex of `{tool, arguments, offset}` and its BLAKE3 keyed hash (the workspace
+  already has BLAKE3; rmcp's `request-state` would add HMAC-SHA256 and base64 for the same
+  property). A page is the engine's answer to `offset + limit + 1`, so the last element says
+  whether a next page exists; pages stop at 250 places.
+- **Standard output.** `tgd` locked standard output for the whole run; rmcp writes it from the
+  runtime's threads, which waited on the lock forever. `tgd mcp` does not take it.
+- **Measured on the Nepal lite pack** (release build, this machine, shared): `server/discover`
+  answers in 3.8 ms from start; `tools/list` is 21.7 KB; the first `search` (pages not yet
+  mapped in) 20 ms. `tgd` with both servers is 9.4 MB (phase 6.4 measures it without them).
+
 ## 6. Impact on the plan
 
 - A phase 6 file ([phase-6](../../07-planning/phases/phase-6.md)) with the steps.

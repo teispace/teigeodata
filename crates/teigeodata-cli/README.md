@@ -102,7 +102,7 @@ curl 'http://127.0.0.1:8080/v1/search?q=Pokhara&limit=3'
 ```
 
 Every query is a `GET` route under `/v1/` (`get`, `lookup`, `reverse`, `near`, `search`,
-`admin`, `tz`, `elevation`, `postal`), with `/packs` and `/health`. A place query answers
+`hierarchy`, `children`, `admin`, `tz`, `elevation`, `postal`), with `/packs` and `/health`. A place query answers
 `{"results": [...], "attribution": ...}`, or GeoJSON with `format=geojson`; a failure answers
 `{"error": {"code": ..., "message": ...}}` with its HTTP status. `/search`, `/reverse` and
 `/lookup` answer as Nominatim does (`format=json`, `jsonv2` or `geojson`), for clients written
@@ -111,6 +111,15 @@ for it; OSM-only fields are left out. The server listens on
 an origin, holds every query to its bounds (256 bytes of text, 50 results, a radius up to
 1,000 km), follows the store as packs are installed or removed (`--follow`, every 5 s), and
 stops on Ctrl-C. A build without the `serve` feature leaves it out.
+
+`tgd mcp` serves the same queries to an AI agent over MCP (revisions 2026-07-28 and
+2025-11-25), on standard input and output: an MCP client starts it, for example with
+`{"command": "tgd", "args": ["mcp"]}` in its server list. It has twelve read-only tools
+(`search`, `reverse`, `nearby`, `get_place`, `lookup`, `admin_at`, `hierarchy`, `children`,
+`timezone`, `elevation`, `postal`, `packs`), each answering structured content with the data's
+attribution; long answers come in pages through a signed `next_cursor`. Packs and places are
+resources: `teigeodata://dataset/np/places`, `teigeodata://place/tgd:np/1xhb`. A build without
+the `mcp` feature leaves it out.
 
 ## Exit codes
 

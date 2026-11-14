@@ -7,8 +7,9 @@ use serde_json::{Map, Value, json};
 use teigeodata_core::E7;
 use teigeodata_engine::Engine;
 
+use crate::body::WORK;
 use crate::output::{self, Bufs, Item};
-use crate::params::{Params, WORK};
+use crate::params::Params;
 use crate::query::{self, Ask, Code, Limits, QueryError, point};
 #[cfg(feature = "http")]
 use crate::seams::Operation;

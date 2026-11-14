@@ -47,7 +47,7 @@ part; the ADR each part comes from is linked.
 | `teigeodata-blob` | The columnar result blob, encoder and validating reader | yes | D-068 |
 | `teigeodata-ffi` | The C ABI, generated from the API ([C ABI](abi.md)) | no | [ADR-0016](../03-decisions/adr/ADR-0016-bindings.md) |
 | `bindings/*` (own workspace) | Generated PyO3, napi-rs and JNI shims; Swift and Dart wrappers | no | D-067 |
-| `teigeodata-server` | The request core both servers and `tgd` share: outputs (native, GeoJSON, Nominatim-compatible), query bounds, attribution, the hosted seams; the HTTP and MCP servers behind features (D-310) | no | [ADR-0017](../03-decisions/adr/ADR-0017-mcp.md), [ADR-0025](../03-decisions/adr/ADR-0025-hosted-ready.md) |
+| `teigeodata-server` | The request core both servers and `tgd` share: outputs (native, GeoJSON, Nominatim-compatible), query bounds, attribution, the hosted seams; the HTTP server (D-312) and the MCP server (D-315) behind features (D-310) | no | [ADR-0017](../03-decisions/adr/ADR-0017-mcp.md), [ADR-0025](../03-decisions/adr/ADR-0025-hosted-ready.md) |
 | `teigeodata-cli` (`tgd`) | inspect, verify, diff, extract, export; queries; refresh, catalog, find, locate, install, update, remove, pin, repair (D-178); building is the forge's | no | |
 | `xtask` | every repository task and gate, including the IDL extractor and generators | no | [ADR-0021](../03-decisions/adr/ADR-0021-rust-tooling.md) |
 | `forge/*` (own workspace) | the data pipeline and source adapters | no | [ADR-0001](../03-decisions/adr/ADR-0001-rust-core.md) |

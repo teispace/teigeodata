@@ -29,6 +29,7 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | tower-http | 0.7.1 | 2026-11-15 | crates.io | 2026-12-15 |
 | tower (server tests, `util`) | 0.5.3 | 2026-11-15 | crates.io | 2026-12-15 |
 | rmcp (MCP 2026-07-28, pin `=`) | 3.10.0 | 2026-11-15 | crates.io, GitHub releases | weekly |
+| getrandom (MCP cursor key) | 0.4.3 | 2026-11-15 | crates.io | 2026-12-15 |
 | oha (load generator) | 1.17.0 | 2026-11-15 | crates.io | 2027-02-15 |
 | Playwright (browser parity, `bindings/wasm/test`) | 1.65.1 | 2026-11-14 | npm | 2026-12-14 |
 | Miniflare (workerd parity, `bindings/wasm/test`) | 4.20260730.0 | 2026-11-14 | npm | 2026-12-14 |

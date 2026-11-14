@@ -37,6 +37,13 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - `tgd serve` answers Nominatim's `/search`, `/reverse` and `/lookup` (`json`, `jsonv2`,
   `geojson`) with the parameters geopy and Leaflet Control Geocoder send, so an app switches
   by changing its URL; fields we cannot fill are left out (D-314).
+- `tgd mcp` (feature `mcp`, on by default) and `teigeodata_server::mcp`: the MCP server on
+  standard input and output, for revisions 2026-07-28 and 2025-11-25; twelve read-only tools
+  (`search`, `reverse`, `nearby`, `get_place`, `lookup`, `admin_at`, `hierarchy`, `children`,
+  `timezone`, `elevation`, `postal`, `packs`) with input and output schemas, structured
+  answers with their attribution, signed cursors for pages, and packs and places as resources
+  (D-315).
+- `/v1/hierarchy?id=` (a place's ancestors) and `/v1/children?id=&limit=` (D-315).
 - `Store::read_packs`: the packs the journal lists, read without opening the store, so a reader
   beside an install never recovers or removes its files (D-311).
 - Each release carries the C library alone for every target the Dart hook and the Go loader

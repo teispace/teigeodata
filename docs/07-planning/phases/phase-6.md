@@ -53,9 +53,13 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 - [x] Request fuzzing of the query parsing (2026-11-15, D-313)
 
 ### 6.3 The MCP server
-- [ ] stdio on rmcp: `server/discover`, the tools of ADR-0017 with `outputSchema`,
-  `structuredContent` and a short text, `readOnlyHint`, bounded output with signed cursors,
-  resources for datasets and places, attribution in `_meta`; `tgd mcp`
+- [x] stdio on rmcp: `server/discover`, the tools of ADR-0017 with `outputSchema`,
+  `structuredContent` and the same JSON as text, `readOnlyHint`, bounded output with signed
+  cursors, resources for datasets and places, attribution in `_meta`; `tgd mcp` (2026-11-15,
+  D-315)
+- [ ] The rest of ADR-0017's tools: `boundary` (an outline, simplified, as GeoJSON),
+  `distance` (between places or points) and `coverage` (which packs hold a point, from the
+  catalog: `tgd locate`), over the request core so HTTP and `tgd` get them too
 - [ ] Stateless Streamable HTTP in the HTTP server, `Origin` checked
 - [ ] Downloads: install as a task (the tasks extension) where the client has it, a handle and
   a status tool otherwise; size confirmed by elicitation when the client offers it
@@ -77,3 +81,4 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 | 2026-11-15 | 6.0 done: the HTTP A/B, axum with inline engine calls (D-309) | measured |
 | 2026-11-15 | 6.1 done: the request core (D-310, D-311); the panic guard moves to 6.2's handler | built |
 | 2026-11-15 | 6.2: native routes and `tgd serve` (D-312); fuzzing split into its own item | built |
+| 2026-11-15 | 6.3: the MCP server on stdio (D-315); `hierarchy` and `children` join the request core; tools named in `snake_case`; the text block is the full JSON, not a summary; the remaining ADR-0017 tools split into their own item | built |

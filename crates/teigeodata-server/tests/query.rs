@@ -245,6 +245,66 @@ fn a_lookup_keeps_the_order_asked_and_leaves_out_what_is_not_there() {
 }
 
 #[test]
+fn the_hierarchy_climbs_to_the_root_and_children_come_back_down() {
+    let model = common::synthetic(300, 7);
+    let e = engine(&[model.encode()]);
+    // A row with a parent and a grandparent, so the chain has two links at least.
+    let parent = |r: usize| model.parents.get(r).copied().flatten().map(|p| p as usize);
+    let row = (0..model.ids.len())
+        .find(|&r| parent(r).and_then(parent).is_some())
+        .expect("the model has a two-level chain");
+    let mut chain = Vec::new();
+    let mut at = row;
+    while let Some(p) = parent(at) {
+        chain.push(model.ids[p]);
+        at = p;
+    }
+    let id = model.ids[row].to_string();
+    let got: Vec<_> = run(&e, &Ask::Hierarchy { id: id.clone() })
+        .unwrap()
+        .iter()
+        .map(|i| i.place.id)
+        .collect();
+    assert_eq!(got, chain, "parent first, to the root");
+
+    let up = model.ids[parent(row).unwrap()].to_string();
+    let all = run(
+        &e,
+        &Ask::Children {
+            id: up.clone(),
+            limit: 50,
+        },
+    )
+    .unwrap();
+    let want = (0..model.ids.len())
+        .filter(|&r| parent(r) == parent(row))
+        .count();
+    assert_eq!(all.len(), want.min(50));
+    assert!(all.iter().any(|i| i.place.id == model.ids[row]) || want > 50);
+    let one = run(
+        &e,
+        &Ask::Children {
+            id: up.clone(),
+            limit: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(one.len(), 1);
+    assert_eq!(
+        code(run(&e, &Ask::Children { id: up, limit: 51 })),
+        Code::OutOfBounds
+    );
+    // A root has no ancestors.
+    let root = model.ids[at].to_string();
+    assert!(run(&e, &Ask::Hierarchy { id: root }).unwrap().is_empty());
+    let absent = common::synthetic(300, 99).ids[0].to_string();
+    assert_eq!(
+        code(run(&e, &Ask::Hierarchy { id: absent })),
+        Code::NotFound
+    );
+}
+
+#[test]
 fn an_answer_carries_the_attribution_of_the_packs_that_answered() {
     let model = common::synthetic(400, 5);
     let parts = model.split(2, |_, id| (id.get() % 2) as usize);

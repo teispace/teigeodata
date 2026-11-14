@@ -3,7 +3,8 @@
 //!
 //! **Routes.** `GET /health`; `GET /packs`; under `/v1/`: `get?id=&names=`, `lookup?ids=a,b`,
 //! `reverse?lat=&lon=&limit=&in_country=`, `near?id=&limit=&radius_m=`,
-//! `search?q=&limit=&focus=lat,lon&scale_km=&strict=`, `admin?lat=&lon=`,
+//! `search?q=&limit=&focus=lat,lon&scale_km=&strict=`, `hierarchy?id=`, `children?id=&limit=`,
+//! `admin?lat=&lon=`,
 //! `tz?lat=&lon=&t=` or `tz?id=&t=`, `elevation?lat=&lon=`,
 //! `postal?code=&scheme=&prefix=&limit=` or `postal?lat=&lon=`. A place query answers
 //! `{"results": [...], "attribution": ...}` (the native records, D-032), or a GeoJSON
@@ -31,9 +32,10 @@ use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::timeout::TimeoutLayer;
 
+use crate::body::{Asked, Page, answer};
 use crate::compat::{self, Route};
 use crate::packs::Packs;
-use crate::params::{Asked, Params, answer, asked};
+use crate::params::{Params, asked};
 use crate::query::{Code, Limits, QueryError};
 use crate::seams::{Caller, Incoming, Operation, Seams, Usage};
 
@@ -65,7 +67,7 @@ impl Default for Config {
 #[derive(Debug)]
 pub struct App {
     /// The packs answered from.
-    pub packs: Packs,
+    pub packs: Arc<Packs>,
     /// The hosted seams.
     pub seams: Seams,
     /// How the server runs.
@@ -113,17 +115,7 @@ pub async fn serve(
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> std::io::Result<()> {
     if let Some(every) = follow_every {
-        let app = Arc::clone(&app);
-        tokio::spawn(async move {
-            let mut tick = tokio::time::interval(every);
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-            loop {
-                tick.tick().await;
-                let app = Arc::clone(&app);
-                // Opening a pack reads and checks its head: off the request workers.
-                let _ = tokio::task::spawn_blocking(move || app.packs.follow()).await;
-            }
-        });
+        crate::packs::spawn_follow(Arc::clone(&app.packs), every);
     }
     axum::serve(
         listener,
@@ -194,22 +186,9 @@ async fn packs(
         return error(&e);
     }
     let e = app.packs.load();
-    let rows: Vec<serde_json::Value> = e
-        .layers()
-        .map(|l| {
-            serde_json::json!({
-                "address": l.address(),
-                "component": l.component(),
-                "release": l.release(),
-                "places": l.len(),
-                "components": l.components().iter().map(teigeodata_engine::Component::name).collect::<Vec<_>>(),
-                "attribution": l.attribution(),
-            })
-        })
-        .collect();
     json(
         StatusCode::OK,
-        serde_json::to_vec(&serde_json::json!({ "packs": rows })).unwrap_or_default(),
+        serde_json::to_vec(&crate::output::packs(&e)).unwrap_or_default(),
         "application/json",
     )
 }
@@ -262,10 +241,17 @@ async fn v1(
     };
     let mut body = Vec::with_capacity(1024);
     let e = app.packs.load();
-    match answer(&e, &asked, geojson, &app.config.limits, &mut body) {
-        Ok(results) => {
+    match answer(
+        &e,
+        &asked,
+        geojson,
+        &app.config.limits,
+        Page::ALL,
+        &mut body,
+    ) {
+        Ok(done) => {
             let usage = Usage {
-                results,
+                results: done.results,
                 bytes: body.len(),
                 micros: u64::try_from(start.elapsed().as_micros()).unwrap_or(u64::MAX),
             };
