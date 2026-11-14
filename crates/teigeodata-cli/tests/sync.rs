@@ -20,11 +20,12 @@ use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use serde_json::Value;
 use teigeodata_format::{Encoding, Kind, Part, Tag, Writer};
 
-use repo_support::{Host, pack, pack_of, publish, root_file, serve, serve_at};
+use repo_support::{Host, pack, pack_of, publish, root_file, serve, serve_counted};
 
 fn dir(name: &str) -> PathBuf {
     let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("sync-{name}"));
@@ -603,10 +604,14 @@ fn a_killed_install_or_update_never_damages_the_store() {
         .map(|(_, v)| v.len())
         .unwrap();
     // About a second and a half for the whole asset.
-    let url = serve_at(Arc::clone(&host), asset_len * 2 / 3);
+    let (url, sent) = serve_counted(Arc::clone(&host), asset_len * 2 / 3);
     let store = store_for("killed", &url);
     ok(&store, &["refresh", "--countries", "np"]);
-    let killed = |args: &[&str], after_ms: u64| {
+    // Killed `after_ms` into the run, and once it has been sent `bytes` of the asset: a kill
+    // timed in ms alone could land before any frame arrived on a slow runner, and nothing would
+    // be left to keep.
+    let killed = |args: &[&str], after_ms: u64, bytes: usize| {
+        let start = sent.load(Ordering::Relaxed);
         let mut child = Command::new(env!("CARGO_BIN_EXE_tgd"))
             .arg("--store")
             .arg(&store)
@@ -617,6 +622,13 @@ fn a_killed_install_or_update_never_damages_the_store() {
             .spawn()
             .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(after_ms));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while sent.load(Ordering::Relaxed) - start < bytes
+            && child.try_wait().unwrap().is_none()
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
         let finished = child.try_wait().unwrap().is_some();
         let _ = child.kill();
         let _ = child.wait();
@@ -624,13 +636,22 @@ fn a_killed_install_or_update_never_damages_the_store() {
         assert_eq!(
             s.status.code(),
             Some(0),
-            "{args:?} killed at {after_ms} ms: the store is damaged"
+            "{args:?} killed at {after_ms} ms and {bytes} bytes: the store is damaged"
         );
         finished
     };
     let mut cut = 0;
-    for ms in [80, 250, 450, 700, 950, 1200] {
-        cut += usize::from(!killed(&["install", "np"], ms));
+    // The first kills land early (no asset byte needed); the later ones further into the asset
+    // each time, the last after most of it, so whole frames have reached the staging file.
+    for (ms, bytes) in [
+        (80, 0),
+        (250, 0),
+        (0, asset_len / 4),
+        (0, asset_len / 2),
+        (0, asset_len * 3 / 4),
+        (0, asset_len * 7 / 8),
+    ] {
+        cut += usize::from(!killed(&["install", "np"], ms, bytes));
     }
     assert!(
         cut >= 3,
@@ -649,7 +670,7 @@ fn a_killed_install_or_update_never_damages_the_store() {
     publish(&host, 2, &[pack_of(20_000, "2026.12.0", true)]);
     ok(&store, &["refresh"]);
     for ms in [80, 300, 600, 900] {
-        killed(&["update"], ms);
+        killed(&["update"], ms, 0);
         let s = json(&store, &["status", "--json", "--deep"]);
         assert_eq!(s["packs"].as_array().unwrap().len(), 1, "{s}");
         assert_eq!(s["packs"][0]["health"], "Good", "{s}");

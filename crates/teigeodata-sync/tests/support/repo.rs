@@ -10,6 +10,7 @@
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use ed25519_dalek::SigningKey;
@@ -143,6 +144,14 @@ pub(crate) fn serve(host: Host) -> String {
 /// [`serve`], sending bodies at about `rate` bytes a second (0: at once), so a client can be
 /// killed mid-download.
 pub(crate) fn serve_at(host: Host, rate: usize) -> String {
+    serve_counted(host, rate).0
+}
+
+/// [`serve_at`], with a count of the bytes of `assets/` it has written so far: a test can act
+/// on how far a download got, not on how long it ran (a slow runner moves fewer bytes per ms).
+pub(crate) fn serve_counted(host: Host, rate: usize) -> (String, Arc<AtomicUsize>) {
+    let sent = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&sent);
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     std::thread::spawn(move || {
@@ -195,12 +204,18 @@ pub(crate) fn serve_at(host: Host, rate: usize) -> String {
                     r
                 }
             };
+            let asset = path.starts_with("assets/");
             if rate == 0 {
-                let _ = c.write_all(&reply);
+                if c.write_all(&reply).is_ok() && asset {
+                    counter.fetch_add(reply.len(), Ordering::Relaxed);
+                }
             } else {
                 for chunk in reply.chunks((rate / 20).max(1)) {
                     if c.write_all(chunk).is_err() {
                         break;
+                    }
+                    if asset {
+                        counter.fetch_add(chunk.len(), Ordering::Relaxed);
                     }
                     std::thread::sleep(std::time::Duration::from_millis(50));
                 }
@@ -211,5 +226,5 @@ pub(crate) fn serve_at(host: Host, rate: usize) -> String {
             let _ = c.read(&mut sink);
         }
     });
-    format!("http://{addr}")
+    (format!("http://{addr}"), sent)
 }
