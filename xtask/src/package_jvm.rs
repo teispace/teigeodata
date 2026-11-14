@@ -409,8 +409,31 @@ fn android_test(root: &Path, out: &Path) -> Result<String, Vec<String>> {
             "parity passed on Android ({abi}) through app_process"
         ))
     } else {
-        Err(vec![format!("parity failed on Android ({abi}):\n{text}")])
+        Err(vec![format!(
+            "parity failed on Android ({abi}):\n{text}\ndevice log:\n{}",
+            device_log(root)
+        )])
     }
+}
+
+/// What the device logged about a failed run: a crash, or the reason the process was killed.
+fn device_log(root: &Path) -> String {
+    const KEYS: [&str; 9] = [
+        "lowmemorykiller",
+        "lmkd",
+        "app_process",
+        "teigeodata",
+        "DEBUG",
+        "libc",
+        "AndroidRuntime",
+        "Killing",
+        "art ",
+    ];
+    let log = adb_out(root, &["logcat", "-d", "-t", "400"]).unwrap_or_default();
+    log.lines()
+        .filter(|l| KEYS.iter().any(|k| l.contains(k)))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn walk_classes(dir: &Path) -> Result<Vec<PathBuf>, Vec<String>> {

@@ -19,6 +19,7 @@ public final class ParityTest {
 
     public static void main(String[] args) throws Exception {
         Map<?, ?> p = (Map<?, ?>) new Json(Files.readString(Path.of(args[0]))).value();
+        step("loaded parity.json");
         check(TeiGeodata.version().equals(p.get("version")), "version");
         TeiGeodata.noop();
         for (Object c : (List<?>) p.get("fold")) {
@@ -38,6 +39,7 @@ public final class ParityTest {
         while (e.hasRemaining()) eSum += e.getFloat();
         check(eSum == ((Number) s.get("elevation_sum")).doubleValue(), "elevation sum " + eSum);
         check(TeiGeodata.SAMPLE_ROWS_MAX == ((Number) p.get("sample_rows_max")).longValue(), "max");
+        step("version, fold, sample rows");
 
         expect(TeiGeodataException.InvalidArgument.class, () -> TeiGeodata.sampleRows(TeiGeodata.SAMPLE_ROWS_MAX + 1), "at most");
         expect(TeiGeodataException.InvalidArgument.class, () -> TeiGeodata.sampleRows(-1), "outside its range");
@@ -65,10 +67,19 @@ public final class ParityTest {
         } catch (IllegalStateException caught) {
             check(caught == boom, "callback exception is rethrown unchanged");
         }
+        step("errors, distance, callbacks");
         engine((Map<?, ?>) p.get("engine"), Path.of(args[0]).toAbsolutePath().getParent());
+        step("engine");
         tz((Map<?, ?>) p.get("tz"), Path.of(args[0]).toAbsolutePath().getParent());
+        step("zone rules");
         store((Map<?, ?>) p.get("store"), Path.of(args[0]).toAbsolutePath().getParent());
+        step("store");
         System.out.println("jvm parity ok");
+    }
+
+    /** A section passed: on stderr, so a run that dies shows how far it got. */
+    private static void step(String what) {
+        System.err.println("  ok: " + what);
     }
 
     /** The store (parity.json, "store"): the fixture root, a mirror that refuses connections. */
