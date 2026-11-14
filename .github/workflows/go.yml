@@ -1,0 +1,105 @@
+# The Go binding on every platform it supports (phase 5.8b, D-297): the C library built from
+# this checkout, then the parity suite through cgo (loaded pointers) and through purego
+# (CGO_ENABLED=0), on Go 1.26, the oldest supported release. fast-check runs the newest Go
+# on Linux, with the race detector, the fuzz target and the lite library.
+name: go
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - crates/teigeodata-api/**
+      - crates/teigeodata-engine/**
+      - crates/teigeodata-ffi/**
+      - crates/teigeodata-c/**
+      - bindings/go/**
+      - bindings/parity.json
+      - bindings/fixtures/**
+      - xtask/templates/go*
+      - .github/workflows/go.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  parity:
+    name: Go on ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, name: linux-x64-gnu, lib: libteigeodata.so, cgo: true }
+          - { os: ubuntu-24.04-arm, name: linux-arm64-gnu, lib: libteigeodata.so, cgo: true }
+          - { os: ubuntu-24.04, name: linux-x64-musl, alpine: true }
+          - { os: ubuntu-24.04-arm, name: linux-arm64-musl, alpine: true }
+          - { os: macos-latest, name: darwin-arm64, lib: libteigeodata.dylib, cgo: true }
+          - { os: windows-latest, name: win-x64, lib: teigeodata.dll, cgo: true }
+          # No cgo: Go on Windows arm64 needs an LLVM MinGW toolchain the runner lacks.
+          - { os: windows-11-arm, name: win-arm64, lib: teigeodata.dll, cgo: false }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build and test (Alpine, musl)
+        if: ${{ matrix.alpine }}
+        run: |
+          # A musl cdylib links the C library dynamically (crt-static off), as Alpine's Go does.
+          docker run --rm -v "$PWD:/w" -w /w golang:1.26-alpine sh -euc '
+            apk add --no-cache build-base curl
+            curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+            . "$HOME/.cargo/env"
+            rustup toolchain install
+            RUSTFLAGS="-C target-feature=-crt-static" cargo build --locked --release -p teigeodata-c
+            export TEIGEODATA_LIB=/w/target/release/libteigeodata.so
+            cd bindings/go
+            go version
+            go vet ./...
+            go test -count=1 -v ./... 2>&1 | grep -E "^(--- |ok|FAIL|panic)"
+            go test -count=1 ./...
+            CGO_ENABLED=0 go test -count=1 ./...'
+      - name: Toolchain (from rust-toolchain.toml)
+        if: ${{ !matrix.alpine }}
+        shell: bash
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: ${{ !matrix.alpine }}
+        with:
+          key: go-${{ matrix.name }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: ${{ !matrix.alpine }}
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: bindings/go/go.sum
+      - name: Build the C library
+        if: ${{ !matrix.alpine }}
+        run: cargo build --locked --release -p teigeodata-c
+      - name: Parity through cgo
+        if: ${{ !matrix.alpine && matrix.cgo }}
+        shell: bash
+        working-directory: bindings/go
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          export TEIGEODATA_LIB="$GITHUB_WORKSPACE/target/release/${{ matrix.lib }}"
+          go version
+          go vet ./...
+          go test -count=1 -v ./... 2>&1 | grep -E "^(--- |ok|FAIL|panic)" || true
+          go test -count=1 ./...
+      - name: Parity through purego
+        if: ${{ !matrix.alpine }}
+        shell: bash
+        working-directory: bindings/go
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          export TEIGEODATA_LIB="$GITHUB_WORKSPACE/target/release/${{ matrix.lib }}"
+          go vet ./...
+          go test -count=1 ./...

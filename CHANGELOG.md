@@ -13,6 +13,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Added
 
+- The Go binding, `github.com/teispace/teigeodata/bindings/go` (Go 1.26+, D-297): the whole
+  API through cgo, or through purego with `CGO_ENABLED=0`, over the C library loaded at run
+  time (`LoadLibrary`, `TEIGEODATA_LIB`, a pinned prebuilt in the user cache filled by
+  `fetch`, or the system path); `Reader` for blobs; `*Error` with the stable codes.
 - `teigeodata.hpp`, a header-only C++17 wrapper of the C library, in the C package
   (D-295): owning handles, `Blob`, exceptions with the stable error codes.
 - The C package for Linux musl (x64 and arm64).

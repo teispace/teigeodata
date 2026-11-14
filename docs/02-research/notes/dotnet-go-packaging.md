@@ -77,6 +77,39 @@ purego is within 2x of cgo only once a call does real work (a 1,000-row blob: 1.
 calls it is 5x to 10x. A pointer resolved at load costs nothing measurable over a linked
 call. Both paths gave the same answers.
 
+### Building the Go binding, 2026-11-14 (D-297)
+
+What the S1 spike did not show, found while building and measuring the binding:
+
+- **cgo checks pointer arguments at run time** (`GODEBUG=cgocheck=1`, the default): any
+  `unsafe.Pointer` argument, or pointer to a type holding pointers, is scanned on every call.
+  With the first raw layer (`unsafe.Pointer` everywhere) this cost 10 ns of a 37 ns noop and
+  15 to 30 ns of `fold`. Passing only pointer-free types (a C handle as `uintptr`, text as
+  `*byte`, `tg_bytes` declared with a `uintptr_t` pointer on the Go side) removed it: noop
+  25.8 ns, as fast as S1's bare pointer path. A record with text is still checked, and its
+  text is pinned with `runtime.Pinner`, as the cgo rules require.
+- **`#cgo noescape` and `#cgo nocallback`** (Go 1.24+) keep the out and message buffers on the
+  stack and skip callback bookkeeping: noop 33 ns without them, 27 ns with them.
+- **The library's last error is per thread** and a goroutine moves between threads, so reading
+  it in a second cgo call can read another thread's error. The C wrapper reads it in the same
+  call; purego holds `runtime.LockOSThread` across the two calls.
+- **A lent blob would dangle in Go:** a `[]byte` view of library memory does not keep the
+  memory alive, so a column slice could outlive a blob freed by its cleanup. Blobs are copied
+  once into Go memory (8-byte aligned, so number columns are still viewed in place); 37 KB
+  costs about 1 µs of a 24 µs call.
+- **`//export` forbids C definitions in the same file's preamble**, so the C wrappers live in
+  a generated `raw_cgo.c` with `//go:build cgo` (a `.c` file without cgo would fail the
+  purego build).
+- **The Go code goes through `gofmt`** in `cargo xtask bindings`, as Rust goes through
+  rustfmt, so templates need not align struct fields.
+
+Measured on Go 1.27.4, best of five (2026-11-14, M2 Pro, load 7 to 9), ns a call:
+
+| | noop | fold("Kathmandu") | sample_rows(1000) + sum of `lat` | callback |
+|---|---:|---:|---:|---:|
+| Go, cgo | 25.8 | 106.7 | 24,342 | 47.4 |
+| Go, purego | 184.5 | 786.4 | 26,293 | 216.9 |
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
@@ -93,8 +126,9 @@ call. Both paths gave the same answers.
 
 - **Go and C# templates** from the IDL, like every other layer, and their parity tests over
   `bindings/parity.json`.
-- **A Go loader** (path, environment, pinned download into the user cache), the same contract
-  as the Dart hook and the JVM `NativeLoader`.
+- **A Go loader** (path, environment, the pinned prebuilt in the user cache, the system path),
+  the same contract as the Dart hook and the JVM `NativeLoader`; the download itself is the
+  separate package `fetch`, so a program that never downloads links no HTTP client.
 - **`cargo xtask package-dotnet`** assembling the `.nupkg` from the C package's libraries.
 
 ## 6. Impact on the plan
@@ -105,7 +139,8 @@ call. Both paths gave the same answers.
 
 ## 7. Risks and open items
 
-- **musl under purego** is not verified (cgo on musl is the default there).
+- **musl under purego** is not verified (cgo on musl is the default there); `go.yml` runs it
+  in Alpine.
 - **`netstandard2.0`** for Unity and .NET Framework: a second form, or not in v1.
 - **The .NET SDK is not installed on this machine** (Go 1.27.4 is, from Homebrew).
 

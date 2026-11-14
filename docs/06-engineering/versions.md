@@ -60,7 +60,7 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | Python (local) | 3.15.2 | 2026-11-07 | `python3 --version` | 2026-12-07 |
 | python-tuf, securesystemslib (`tools/tuf-oracle`, the TUF differential, D-161) | 7.0.1, 1.6.0 | 2026-11-10 | PyPI | 2026-12-10 |
 | python-jsonschema (`tools/tuf-oracle`, the catalog schema, D-160) | 4.26.0 | 2026-11-10 | PyPI | 2026-12-10 |
-| taiki-e/install-action / setup-java / setup-dart | v2.90.2 / v6.2.0 / v1.8.1 | 2026-11-07 | GitHub | 2026-12-07 |
+| taiki-e/install-action / setup-java / setup-dart / setup-go | v2.90.2 / v6.2.0 / v1.8.1 / v7.0.0 | 2026-11-07 (setup-go 2026-11-14) | GitHub | 2026-12-07 |
 | Flutter / Dart | 3.47.9 / 3.13.7 | 2026-11-06 | flutter.dev | 2026-12-06 |
 | native_toolchain_rust | 1.0.7 | 2026-11-14 | pub.dev | 2026-12-06 |
 | rmcp (MCP Rust SDK) | 3.10.0 | 2026-11-14 | crates.io | 2026-12-14 |
@@ -89,7 +89,7 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | package-benchmark (Swift) | 1.38.1 | 2026-11-06 | GitHub releases | 2026-12-06 |
 | BenchmarkDotNet | 0.15.8 | 2026-11-06 | NuGet | 2026-12-06 |
 | benchmark_harness (Dart) | 2.4.0 | 2026-11-06 | pub.dev | 2026-12-06 |
-| Go | 1.27.3 | 2026-11-06 | go.dev | 2026-12-06 |
+| Go | 1.27.4 (module floor 1.26, also tested: 1.26.11) | 2026-11-14 | go.dev/dl JSON | 2026-12-14 |
 | osmpbf | 0.3.8 | 2026-11-06 | crates.io | 2026-12-06 |
 | parquet / arrow | 60.1 | 2026-11-06 | crates.io | 2026-12-06 |
 | geoarrow / geoparquet | 0.10 | 2026-11-06 | crates.io | 2026-12-06 |

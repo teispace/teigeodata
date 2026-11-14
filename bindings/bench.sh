@@ -37,4 +37,13 @@ while [ "$i" -lt "$rounds" ]; do
   (cd bindings/node && node bench.js)
   (cd bindings && $jvm org.teispace.teigeodata.Bench)
   (cd bindings/python && PYTHONPATH=. python3 bench.py)
+  for cgo in 1 0; do
+    (cd bindings/go && CGO_ENABLED=$cgo TEIGEODATA_LIB="$root/$lib/libteigeodata_ffi.$ext" \
+      go test -run '^$' -bench . -count 1 . | awk -v name="go-cgo$cgo" '
+        /^BenchmarkNoop/ { c = "noop"; v = $3 }
+        /^BenchmarkFold/ { c = "fold"; v = $3 }
+        /^BenchmarkSampleRowsSum/ { c = "sample_rows(1000)+sum"; v = $3 }
+        /^BenchmarkCallback/ { c = "callback"; v = $5 }
+        /^Benchmark/ { printf "%-10s %-22s %10.1f ns\n", name, c, v }')
+  done
 done

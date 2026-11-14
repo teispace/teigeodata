@@ -17,99 +17,127 @@ use minijinja::syntax::SyntaxConfig;
 use minijinja::value::Serde;
 use minijinja::{Environment, UndefinedBehavior, Value};
 
-/// A generated file: its template and where it goes. Rust outputs are passed through rustfmt
-/// so that `cargo fmt --check` holds for them too.
+/// A generated file: its template, where it goes and its formatter. Rust and Go outputs are
+/// passed through rustfmt and gofmt, so that `cargo fmt --check` and `gofmt -l` hold for them.
 struct Target {
     template: &'static str,
     output: &'static str,
-    rustfmt: bool,
+    fmt: Fmt,
+}
+
+/// The formatter a generated file goes through.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Fmt {
+    None,
+    Rust,
+    Go,
 }
 
 const TARGETS: &[Target] = &[
     Target {
         template: "ffi.rs.j2",
         output: "crates/teigeodata-ffi/src/generated.rs",
-        rustfmt: true,
+        fmt: Fmt::Rust,
     },
     Target {
         template: "c.h.j2",
         output: HEADER_OUTPUT,
-        rustfmt: false,
+        fmt: Fmt::None,
     },
     Target {
         template: "cpp.hpp.j2",
         output: "bindings/c/teigeodata.hpp",
-        rustfmt: false,
+        fmt: Fmt::None,
     },
     Target {
         template: "python.rs.j2",
         output: "bindings/python/src/lib.rs",
-        rustfmt: true,
+        fmt: Fmt::Rust,
     },
     Target {
         template: "python.pyi.j2",
         output: "bindings/python/teigeodata/_native.pyi",
-        rustfmt: false,
+        fmt: Fmt::None,
     },
     Target {
         template: "node.rs.j2",
         output: "bindings/node/src/lib.rs",
-        rustfmt: true,
+        fmt: Fmt::Rust,
     },
     Target {
         template: "node.d.ts.j2",
         output: "bindings/node/index.d.ts",
-        rustfmt: false,
+        fmt: Fmt::None,
     },
     Target {
         template: "node.index.js.j2",
         output: "bindings/node/index.js",
-        rustfmt: false,
+        fmt: Fmt::None,
     },
     Target {
         template: "node.index.mjs.j2",
         output: "bindings/node/index.mjs",
-        rustfmt: false,
+        fmt: Fmt::None,
     },
     Target {
         template: "wasm.rs.j2",
         output: "bindings/wasm/src/lib.rs",
-        rustfmt: true,
+        fmt: Fmt::Rust,
     },
     Target {
         template: "wasm.index.js.j2",
         output: "bindings/wasm/js/index.js",
-        rustfmt: false,
+        fmt: Fmt::None,
     },
     Target {
         template: "wasm.index.d.ts.j2",
         output: "bindings/wasm/js/index.d.ts",
-        rustfmt: false,
+        fmt: Fmt::None,
     },
     Target {
         template: "jni.rs.j2",
         output: "bindings/jvm/src/lib.rs",
-        rustfmt: true,
+        fmt: Fmt::Rust,
     },
     Target {
         template: "java.j2",
         output: "bindings/jvm/java/org/teispace/teigeodata/TeiGeodata.java",
-        rustfmt: false,
+        fmt: Fmt::None,
     },
     Target {
         template: "java-exceptions.j2",
         output: "bindings/jvm/java/org/teispace/teigeodata/TeiGeodataException.java",
-        rustfmt: false,
+        fmt: Fmt::None,
     },
     Target {
         template: "swift.j2",
         output: "bindings/swift/Sources/TeiGeodata/TeiGeodata.swift",
-        rustfmt: false,
+        fmt: Fmt::None,
     },
     Target {
         template: "dart.j2",
         output: "bindings/dart/lib/src/bindings.g.dart",
-        rustfmt: false,
+        fmt: Fmt::None,
+    },
+    Target {
+        template: "go.j2",
+        output: "bindings/go/teigeodata.go",
+        fmt: Fmt::Go,
+    },
+    Target {
+        template: "go_cgo.go.j2",
+        output: "bindings/go/raw_cgo.go",
+        fmt: Fmt::Go,
+    },
+    Target {
+        template: "go_cgo.c.j2",
+        output: "bindings/go/raw_cgo.c",
+        fmt: Fmt::None,
+    },
+    Target {
+        template: "go_purego.go.j2",
+        output: "bindings/go/raw_purego.go",
+        fmt: Fmt::Go,
     },
 ];
 
@@ -131,12 +159,18 @@ pub(crate) fn run(root: &Path, check: bool) -> Result<String, Vec<String>> {
             .get_template(t.template)
             .and_then(|tpl| tpl.render(&ctx))
             .map_err(|e| format!("{}: {e:#}", t.template))
-            .and_then(|text| {
-                if t.rustfmt {
-                    rustfmt(root, &text)
-                } else {
-                    Ok(text)
+            .and_then(|text| match t.fmt {
+                Fmt::None => Ok(text),
+                Fmt::Rust => {
+                    let config = root.join("rustfmt.toml");
+                    let config = config.to_string_lossy();
+                    format(
+                        "rustfmt",
+                        &["--config-path", &config, "--emit", "stdout", "--quiet"],
+                        &text,
+                    )
                 }
+                Fmt::Go => format("gofmt", &[], &text),
             });
         match rendered {
             Ok(text) => files.push((t.output, text)),
@@ -271,30 +305,28 @@ fn environment(root: &Path) -> Result<Environment<'static>, String> {
     Ok(env)
 }
 
-/// Formats Rust source through `rustfmt` on stdin, with the repository's rustfmt.toml.
-fn rustfmt(root: &Path, text: &str) -> Result<String, String> {
-    let mut child = Command::new("rustfmt")
-        .arg("--config-path")
-        .arg(root.join("rustfmt.toml"))
-        .args(["--emit", "stdout", "--quiet"])
+/// Formats source through `tool` (rustfmt or gofmt) on stdin, returning its stdout.
+fn format(tool: &str, args: &[&str], text: &str) -> Result<String, String> {
+    let mut child = Command::new(tool)
+        .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("rustfmt: {e}"))?;
+        .map_err(|e| format!("{tool}: {e}"))?;
     child
         .stdin
         .take()
-        .ok_or("rustfmt: no stdin")?
+        .ok_or_else(|| format!("{tool}: no stdin"))?
         .write_all(text.as_bytes())
-        .map_err(|e| format!("rustfmt: {e}"))?;
+        .map_err(|e| format!("{tool}: {e}"))?;
     let out = child
         .wait_with_output()
-        .map_err(|e| format!("rustfmt: {e}"))?;
+        .map_err(|e| format!("{tool}: {e}"))?;
     if out.status.success() {
-        String::from_utf8(out.stdout).map_err(|e| format!("rustfmt: {e}"))
+        String::from_utf8(out.stdout).map_err(|e| format!("{tool}: {e}"))
     } else {
-        Err(format!("rustfmt: {}", String::from_utf8_lossy(&out.stderr)))
+        Err(format!("{tool}: {}", String::from_utf8_lossy(&out.stderr)))
     }
 }
 

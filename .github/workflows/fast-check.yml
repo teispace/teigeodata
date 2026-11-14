@@ -117,6 +117,11 @@ jobs:
           distribution: temurin
           java-version: "25"
       - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+      # gofmt formats the generated Go files.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.x"
+          cache-dependency-path: bindings/go/go.sum
       - name: Generated files are current; the header matches cbindgen
         run: cargo xtask bindings --check
       - name: Shim format and lints
@@ -174,11 +179,32 @@ jobs:
         run: |
           swift --version
           swift run -c release Parity ../parity.json
+      - name: Go
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: bindings/go
+        env:
+          TEIGEODATA_LIB: ${{ github.workspace }}/target/release/libteigeodata_ffi.so
+        run: |
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+          go vet ./...
+          CGO_ENABLED=0 go vet ./...
+          go test -count=1 -race ./...
+          CGO_ENABLED=0 go test -count=1 ./...
+          go test -run '^$' -fuzz FuzzReader -fuzztime 20s .
       - name: Lite library symbols (D-285)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           cargo build --release --locked -p teigeodata-ffi --lib --no-default-features --features components
           cargo xtask abi --lib target/release/libteigeodata_ffi.so --lite
+      - name: Go on the lite library (the store's calls are MissingComponent)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: bindings/go
+        env:
+          TEIGEODATA_LIB: ${{ github.workspace }}/target/release/libteigeodata_ffi.so
+        run: |
+          out=$(go test -count=1 -v -run 'Store|Version' . 2>&1)
+          echo "$out"
+          grep -q -- '--- SKIP: TestStore' <<<"$out"
 
   deny:
     runs-on: ubuntu-latest
