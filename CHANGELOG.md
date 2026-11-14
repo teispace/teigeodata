@@ -99,8 +99,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   host held a refresh until its body ended (D-283).
 - The C library's Apple builds leave header room for a rewritten install name
   (`-headerpad_max_install_names`), as Dart, Flutter and other packagers rewrite it (D-289).
-- The JVM binding keeps to Android API 24: `NativeLoader` uses `java.io` (Android has
-  `java.nio.file` from API 26), and parity runs on API 24 and API 35 emulators (D-288).
+- The JVM binding keeps to Android API 24: handles are freed by a hand-written
+  `NativeCleaner` instead of `java.lang.ref.Cleaner` (Android API 33), so the classes load on
+  older devices; `NativeLoader` uses `java.io` (`java.nio.file` is API 26); parity runs on API
+  24 and API 35 emulators (D-288).
 - Dart: calls that block are no longer leaf calls; a leaf call blocking in a helper isolate
   kept every isolate of the group from a safepoint and stalled them (D-283).
 

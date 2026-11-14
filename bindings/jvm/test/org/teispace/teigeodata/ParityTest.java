@@ -72,6 +72,8 @@ public final class ParityTest {
             check(caught == boom, "callback exception is rethrown unchanged");
         }
         step("errors, distance, callbacks");
+        cleaner();
+        step("the cleaner");
         engine((Map<?, ?>) p.get("engine"), new File(args[0]).getAbsoluteFile().getParentFile());
         step("engine");
         tz((Map<?, ?>) p.get("tz"), new File(args[0]).getAbsoluteFile().getParentFile());
@@ -97,6 +99,22 @@ public final class ParityTest {
         File d = File.createTempFile(prefix, "");
         if (!d.delete() || !d.mkdir()) throw new IOException("cannot make " + d);
         return d;
+    }
+
+    /** NativeCleaner runs an action once: for an unreachable owner, or at once on clean(). */
+    static void cleaner() throws InterruptedException {
+        java.util.concurrent.atomic.AtomicInteger ran = new java.util.concurrent.atomic.AtomicInteger();
+        NativeCleaner.Cleanable c = NativeCleaner.register(new Object(), ran::incrementAndGet);
+        c.clean();
+        c.clean();
+        check(ran.get() == 1, "clean runs the action once");
+        java.util.concurrent.CountDownLatch freed = new java.util.concurrent.CountDownLatch(1);
+        NativeCleaner.register(new Object(), freed::countDown);
+        for (int i = 0; i < 100 && freed.getCount() > 0; i++) {
+            System.gc();
+            freed.await(50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        }
+        check(freed.getCount() == 0, "the cleaner runs for an unreachable owner");
     }
 
     /** A section passed: on stderr, so a run that dies shows how far it got. */
@@ -189,10 +207,11 @@ public final class ParityTest {
 
     /**
      * A host on localhost that answers every request with a body of a byte every 20 ms: a job
-     * on it runs, its progress moving, until it is cancelled.
+     * on it runs, its progress moving, until it is cancelled. Bound to 127.0.0.1 by name, as
+     * the URL says: Android's loopback address is {@code ::1}.
      */
     static String trickle() throws java.io.IOException {
-        java.net.ServerSocket server = new java.net.ServerSocket(0, 16, java.net.InetAddress.getLoopbackAddress());
+        java.net.ServerSocket server = new java.net.ServerSocket(0, 16, java.net.InetAddress.getByName("127.0.0.1"));
         Thread accept = new Thread(() -> {
             while (true) {
                 java.net.Socket c;

@@ -105,11 +105,6 @@ public final class TeiGeodata {
 {% endfor %}
     }
 {% endfor %}
-{% if handles %}
-
-    /** Frees handles whose owner was never closed and is unreachable. */
-    private static final java.lang.ref.Cleaner CLEANER = java.lang.ref.Cleaner.create();
-{% endif %}
 {% set ns = namespace(blocks=false) %}
 {% for h in handles %}{% for f in h.methods if f.blocks %}{% set ns.blocks = true %}{% endfor %}{% endfor %}
 {% if ns.blocks %}
@@ -132,14 +127,15 @@ public final class TeiGeodata {
 {{ javadoc(h.doc, "    ") -}}
     public static final class {{ h.name }} implements AutoCloseable {
         private final long handle;
-        private final java.lang.ref.Cleaner.Cleanable cleanable;
+        /** Frees the handle if its owner was never closed and is unreachable (NativeCleaner). */
+        private final NativeCleaner.Cleanable cleanable;
         /** Calls hold a read lock; {@link #close} takes the write lock, so it waits for them. */
         private final java.util.concurrent.locks.StampedLock lock = new java.util.concurrent.locks.StampedLock();
         private boolean closed;
 
         private {{ h.name }}(long handle) {
             this.handle = handle;
-            this.cleanable = CLEANER.register(this, new Free(handle));
+            this.cleanable = NativeCleaner.register(this, new Free(handle));
         }
 
         /** Frees the native handle; a static class, so it holds no reference to its owner. */

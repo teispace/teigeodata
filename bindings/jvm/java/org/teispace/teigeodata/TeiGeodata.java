@@ -238,9 +238,6 @@ public final class TeiGeodata {
         }
     }
 
-    /** Frees handles whose owner was never closed and is unreachable. */
-    private static final java.lang.ref.Cleaner CLEANER = java.lang.ref.Cleaner.create();
-
     /**
      * Runs the asynchronous forms ({@code ...Async}) of calls that block. Daemon threads made on
      * demand and dropped after a minute idle, so a waiting call never holds up the common pool
@@ -265,14 +262,15 @@ public final class TeiGeodata {
      */
 public static final class Engine implements AutoCloseable {
         private final long handle;
-        private final java.lang.ref.Cleaner.Cleanable cleanable;
+        /** Frees the handle if its owner was never closed and is unreachable (NativeCleaner). */
+        private final NativeCleaner.Cleanable cleanable;
         /** Calls hold a read lock; {@link #close} takes the write lock, so it waits for them. */
         private final java.util.concurrent.locks.StampedLock lock = new java.util.concurrent.locks.StampedLock();
         private boolean closed;
 
         private Engine(long handle) {
             this.handle = handle;
-            this.cleanable = CLEANER.register(this, new Free(handle));
+            this.cleanable = NativeCleaner.register(this, new Free(handle));
         }
 
         /** Frees the native handle; a static class, so it holds no reference to its owner. */
@@ -924,14 +922,15 @@ public static final class Engine implements AutoCloseable {
      */
 public static final class Store implements AutoCloseable {
         private final long handle;
-        private final java.lang.ref.Cleaner.Cleanable cleanable;
+        /** Frees the handle if its owner was never closed and is unreachable (NativeCleaner). */
+        private final NativeCleaner.Cleanable cleanable;
         /** Calls hold a read lock; {@link #close} takes the write lock, so it waits for them. */
         private final java.util.concurrent.locks.StampedLock lock = new java.util.concurrent.locks.StampedLock();
         private boolean closed;
 
         private Store(long handle) {
             this.handle = handle;
-            this.cleanable = CLEANER.register(this, new Free(handle));
+            this.cleanable = NativeCleaner.register(this, new Free(handle));
         }
 
         /** Frees the native handle; a static class, so it holds no reference to its owner. */
@@ -1385,14 +1384,15 @@ public static final class Store implements AutoCloseable {
      */
 public static final class Job implements AutoCloseable {
         private final long handle;
-        private final java.lang.ref.Cleaner.Cleanable cleanable;
+        /** Frees the handle if its owner was never closed and is unreachable (NativeCleaner). */
+        private final NativeCleaner.Cleanable cleanable;
         /** Calls hold a read lock; {@link #close} takes the write lock, so it waits for them. */
         private final java.util.concurrent.locks.StampedLock lock = new java.util.concurrent.locks.StampedLock();
         private boolean closed;
 
         private Job(long handle) {
             this.handle = handle;
-            this.cleanable = CLEANER.register(this, new Free(handle));
+            this.cleanable = NativeCleaner.register(this, new Free(handle));
         }
 
         /** Frees the native handle; a static class, so it holds no reference to its owner. */

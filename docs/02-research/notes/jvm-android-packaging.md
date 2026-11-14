@@ -61,7 +61,7 @@ The open questions:
   one JAR with all six.
 - **Parity on Android runs through `app_process`.** The classes and `ParityTest` are dexed with
   D8, then pushed with the device ABI's library, `parity.json` and the fixtures, and run by
-  `app_process` on an API 35 x86_64 emulator in CI (ReactiveCircus/android-emulator-runner).
+  `app_process` on API 24 and API 35 x86_64 emulators in CI (ReactiveCircus/android-emulator-runner).
   No Gradle project or instrumented test is needed. This machine runs no emulator, by the
   shared-machine rule.
 
@@ -85,6 +85,17 @@ Measured 2026-11-14 (`dist` profile, fat LTO, stripped):
 - **The generated Java uses records**, so `--release 11` fails and 17 is the floor.
   `NativeLoader` avoids `InputStream.readAllBytes`, which Android has only from API 33. It runs
   only on desktop, but the class ships in the AAR too.
+- **API 24 is now run, and it found three things** (2026-11-14), none of which a desktop JVM
+  or the API 35 emulator shows:
+  - the generated classes used `java.lang.ref.Cleaner`, which Android has only from API 33,
+    so `TeiGeodata` failed to load. A hand-written `NativeCleaner` does the same with a
+    phantom reference per owner and one daemon thread, on any API level; the parity test
+    checks it runs once, both on `clean()` and for an unreachable owner;
+  - `java.nio.file` is API 26, so `NativeLoader` and the test use `java.io`;
+  - the test's `Files.readString`, `Path.of` and `List.of` are Java 11 and are not on Android.
+
+  Android's `InetAddress.getLoopbackAddress()` is `::1`, so the test's local host binds to
+  `127.0.0.1` by name.
 - **`app_process` details.** It takes its class path from `CLASSPATH`. Its system class loader
   searches `java.library.path`. ART's default `java.io.tmpdir` does not exist for a shell
   process, so the test is given one.
@@ -115,9 +126,9 @@ calls it.
 
 ## 7. Risks and open items
 
-- **API 24 is not checked by a tool.** The Java layer's calls are believed to be API 24; Android
-  lint's `NewApi` on the classes, or a run on an API 24 emulator, would prove it. The CI
-  emulator is API 35.
+- **API 24 is checked by running, not by a tool.** `jvm.yml` runs parity on API 24 and API 35
+  emulators; a call the tests never make is not covered. Android lint's `NewApi` would cover
+  every call but needs a Gradle project.
 - **Native debug symbols are stripped** from the AAR. A separate symbols zip for Play Console
   is a later extra.
 - **Maven Central** needs `-sources.jar` and `-javadoc.jar`, signatures and a POM (bindings
