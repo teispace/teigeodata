@@ -2,7 +2,7 @@
 //! per-row allocation.
 
 use teigeodata_blob::{Blob, Column};
-use teigeodata_engine::{Engine, Error as EngineError, Place};
+use teigeodata_engine::{CodeKind, Engine, Error as EngineError, Place, PostalCode};
 
 use crate::{Error, ErrorCode, Result};
 
@@ -57,6 +57,40 @@ fn installed<T>(r: core::result::Result<Option<T>, EngineError>) -> Result<Optio
     }
 }
 
+/// The columns of a postal result, one row per code.
+#[derive(Default)]
+pub(crate) struct Postal {
+    code: Arena,
+    scheme: Arena,
+    kind: Arena,
+    from: Vec<u32>,
+    has_from: Vec<bool>,
+    to: Vec<u32>,
+    has_to: Vec<bool>,
+}
+
+impl Postal {
+    /// The codes' own columns; their places go in [`Places`] in the same order.
+    pub(crate) fn of(codes: &[PostalCode]) -> Self {
+        let mut out = Self::default();
+        for c in codes {
+            out.code.push(Some(c.code()));
+            out.scheme.push(Some(c.scheme()));
+            out.kind.push(Some(match c.kind {
+                CodeKind::Area => "area",
+                CodeKind::Part => "part",
+                CodeKind::PostOffice => "post_office",
+                CodeKind::Point => "point",
+            }));
+            out.from.push(c.valid_from.unwrap_or(0));
+            out.has_from.push(c.valid_from.is_some());
+            out.to.push(c.valid_to.unwrap_or(0));
+            out.has_to.push(c.valid_to.is_some());
+        }
+        out
+    }
+}
+
 /// The rows of a place result, with optional per-query columns.
 #[derive(Default)]
 pub(crate) struct Places {
@@ -75,6 +109,8 @@ pub(crate) struct Places {
     pub(crate) score: Option<Vec<i32>>,
     /// Distances in metres and bearings in degrees, when the query has them.
     pub(crate) near: Option<(Vec<f64>, Vec<f64>)>,
+    /// The codes of a postal query, one per row.
+    pub(crate) postal: Option<Postal>,
 }
 
 impl Places {
@@ -118,7 +154,9 @@ impl Places {
 
     /// The blob: `id`, `name`, `kind` (dictionary), `level` (`u8`), `lat`, `lon` (`f64`),
     /// `elevation` (`i16`, nullable), `parent` (ID, nullable), `tz` and `iso` (dictionaries,
-    /// nullable), then `score`, `meters` and `bearing` when the query set them.
+    /// nullable), then `score`, `meters` and `bearing` when the query set them, and for a
+    /// postal query `postal` (the code), `scheme`, `code_kind` (`area`, `part`, `post_office`,
+    /// `point`), `valid_from` and `valid_to` (days since 1970-01-01, nullable).
     pub(crate) fn blob(&self) -> Result<Blob> {
         let (id, name, kind) = (self.id.strs(), self.name.strs(), self.kind.strs());
         let (parent, tz, iso) = (self.parent.strs(), self.tz.strs(), self.iso.strs());
@@ -144,6 +182,25 @@ impl Places {
         if let Some((meters, bearing)) = &self.near {
             columns.push(("meters", Column::F64(meters)));
             columns.push(("bearing", Column::F64(bearing)));
+        }
+        let postal = self.postal.as_ref().map(|p| {
+            let strs = (p.code.strs(), p.scheme.strs(), p.kind.strs());
+            (p, strs)
+        });
+        let postal_c = postal.as_ref().map(|(p, (_, scheme, kind))| {
+            (
+                Column::Dict(scheme),
+                Column::Dict(kind),
+                Column::U32(&p.from),
+                Column::U32(&p.to),
+            )
+        });
+        if let (Some((p, (code, _, _))), Some((scheme, kind, from, to))) = (&postal, &postal_c) {
+            columns.push(("postal", Column::Utf8(code)));
+            columns.push(("scheme", *scheme));
+            columns.push(("code_kind", *kind));
+            columns.push(("valid_from", Column::Nullable(from, &p.has_from)));
+            columns.push(("valid_to", Column::Nullable(to, &p.has_to)));
         }
         Blob::encode(&columns).map_err(|e| Error::new(ErrorCode::Internal, e.to_string()))
     }

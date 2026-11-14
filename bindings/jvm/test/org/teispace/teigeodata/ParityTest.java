@@ -108,6 +108,17 @@ public final class ParityTest {
             check(strings(engine.byIso((String) iso.get("code")), "id").equals(List.of(iso.get("id"))), "by_iso");
             expect(TeiGeodataException.InvalidArgument.class, () -> engine.byIso((String) p.get("bad_iso")), "ISO 3166");
             expect(TeiGeodataException.InvalidArgument.class, () -> engine.withinRadius(wl, wo, -1, 1), "radius");
+            Map<?, ?> pl = (Map<?, ?>) p.get("postal_lookup");
+            byte[] hit = engine.postalLookup((String) pl.get("code"), (String) pl.get("scheme"));
+            check(strings(hit, "postal").equals(pl.get("postal")) && strings(hit, "id").equals(pl.get("ids")), "postal_lookup");
+            Map<?, ?> pp = (Map<?, ?>) p.get("postal_prefix");
+            check(strings(engine.postalPrefix((String) pp.get("input"), (String) pp.get("scheme"),
+                    ((Number) pp.get("limit")).longValue()), "postal").equals(pp.get("postal")), "postal_prefix");
+            Map<?, ?> pt = (Map<?, ?>) p.get("postal_at");
+            byte[] at = engine.postalAt(((Number) pt.get("lat")).doubleValue(), ((Number) pt.get("lon")).doubleValue());
+            check(strings(at, "postal").equals(pt.get("postal")) && strings(at, "code_kind").equals(pt.get("code_kind")), "postal_at");
+            Map<?, ?> po = (Map<?, ?>) p.get("postal_codes_of");
+            check(strings(engine.postalCodesOf((String) po.get("id")), "postal").equals(po.get("postal")), "postal_codes_of");
             expect(TeiGeodataException.InvalidArgument.class, () -> engine.get((String) p.get("bad_id")), "not a place ID");
             expect(TeiGeodataException.Io.class, () -> engine.openFile("/nonexistent.tgd"), "");
             expect(TeiGeodataException.Corrupt.class, () -> engine.openBytes("not a pack".getBytes(StandardCharsets.UTF_8)), "");

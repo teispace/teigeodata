@@ -92,6 +92,10 @@ final class TeiGeodata {
         _engineWithinRadiusNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Double, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, double, int, Pointer<TgBytes>)>('tg_engine_within_radius', isLeaf: true),
         _engineAdminAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_admin_at', isLeaf: true),
         _engineElevationAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_elevation_at', isLeaf: true),
+        _enginePostalLookupNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_postal_lookup', isLeaf: true),
+        _enginePostalPrefixNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint8>, int, int, Pointer<TgBytes>)>('tg_engine_postal_prefix', isLeaf: true),
+        _enginePostalCodesOfNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_postal_codes_of', isLeaf: true),
+        _enginePostalAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_postal_at', isLeaf: true),
         _engineTzAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_tz_at', isLeaf: true),
         _engineByIsoNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_by_iso', isLeaf: true) {
     _engineFinalizer = NativeFinalizer(_engineFree.cast());
@@ -124,6 +128,10 @@ final class TeiGeodata {
   final int Function(Pointer<Void>, double, double, double, int, Pointer<TgBytes>) _engineWithinRadiusNative;
   final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _engineAdminAtNative;
   final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _engineElevationAtNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<TgBytes>) _enginePostalLookupNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint8>, int, int, Pointer<TgBytes>) _enginePostalPrefixNative;
+  final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _enginePostalCodesOfNative;
+  final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _enginePostalAtNative;
   final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _engineTzAtNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineByIsoNative;
 
@@ -146,37 +154,42 @@ final class TeiGeodata {
     if (_inputCap > 0) malloc.free(_input);
   }
 
-  /// [text] as UTF-8 in the scratch buffer; returns its length. ASCII (most names) is copied
-  /// code unit by code unit; anything else goes through the UTF-8 encoder.
-  int _utf8(String text) {
+  /// [text] as UTF-8 in the scratch buffer at byte [at]; returns its length. ASCII (most
+  /// names) is copied code unit by code unit; anything else goes through the UTF-8 encoder.
+  int _utf8(String text, [int at = 0]) {
     final n = text.length;
-    if (n * 3 > _inputCap) _grow(n * 3);
+    if (at + n * 3 > _inputCap) _grow(at + n * 3);
     final dst = _input.asTypedList(_inputCap);
     for (var i = 0; i < n; i++) {
       final u = text.codeUnitAt(i);
-      if (u >= 0x80) return _utf8Slow(text, dst);
-      dst[i] = u;
+      if (u >= 0x80) return _utf8Slow(text, dst, at);
+      dst[at + i] = u;
     }
     return n;
   }
 
-  /// [bytes] in the scratch buffer; returns their length.
-  int _copy(Uint8List bytes) {
-    if (bytes.length > _inputCap) _grow(bytes.length);
-    _input.asTypedList(bytes.length).setAll(0, bytes);
+  /// [bytes] in the scratch buffer at byte [at]; returns their length.
+  int _copy(Uint8List bytes, [int at = 0]) {
+    if (at + bytes.length > _inputCap) _grow(at + bytes.length);
+    _input.asTypedList(_inputCap).setAll(at, bytes);
     return bytes.length;
   }
 
-  int _utf8Slow(String text, Uint8List dst) {
+  int _utf8Slow(String text, Uint8List dst, int at) {
     final bytes = utf8.encode(text);
-    dst.setRange(0, bytes.length, bytes);
+    dst.setRange(at, at + bytes.length, bytes);
     return bytes.length;
   }
 
+  /// A larger scratch buffer, keeping what an earlier argument of the same call wrote.
   void _grow(int need) {
-    if (_inputCap > 0) malloc.free(_input);
+    final (old, oldCap) = (_input, _inputCap);
     _inputCap = need < 256 ? 256 : need * 2;
     _input = malloc<Uint8>(_inputCap);
+    if (oldCap > 0) {
+      _input.asTypedList(oldCap).setAll(0, old.asTypedList(oldCap));
+      malloc.free(old);
+    }
   }
 
   void _check(int status) {
@@ -371,6 +384,39 @@ final class TeiGeodata {
     return _takeBlob();
   }
 
+  Uint8List _enginePostalLookup(Pointer<Void> handle, String code, String scheme) {
+    final codeAt = 0;
+    final codeLen = _utf8(code, codeAt);
+    final schemeAt = codeAt + codeLen;
+    final schemeLen = _utf8(scheme, schemeAt);
+    final status = _enginePostalLookupNative(handle, _input + codeAt, codeLen, _input + schemeAt, schemeLen, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _enginePostalPrefix(Pointer<Void> handle, String input, String scheme, int limit) {
+    final inputAt = 0;
+    final inputLen = _utf8(input, inputAt);
+    final schemeAt = inputAt + inputLen;
+    final schemeLen = _utf8(scheme, schemeAt);
+    final status = _enginePostalPrefixNative(handle, _input + inputAt, inputLen, _input + schemeAt, schemeLen, limit, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _enginePostalCodesOf(Pointer<Void> handle, String id) {
+    final idLen = _utf8(id);
+    final status = _enginePostalCodesOfNative(handle, _input, idLen, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _enginePostalAt(Pointer<Void> handle, double lat, double lon) {
+    final status = _enginePostalAtNative(handle, lat, lon, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
   Uint8List _engineTzAt(Pointer<Void> handle, double lat, double lon) {
     final status = _engineTzAtNative(handle, lat, lon, _bytes);
     _check(status);
@@ -520,6 +566,44 @@ final class Engine implements Finalizable {
   /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
   /// grid read is corrupt.
   Uint8List elevationAt(double lat, double lon) => _lib._engineElevationAt(_live, lat, lon);
+
+  /// The places postal code `code` names, one row per code and place, with the code's
+  /// `postal`, `scheme`, `code_kind`, `valid_from` and `valid_to` columns. `scheme` names
+  /// one scheme (`np`, `gb`); empty means every scheme whose rule accepts the input. The
+  /// code may be typed with or without separators, in any case, or in another script's
+  /// digits. Retired codes are returned too, with their validity.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::Corrupt` if a section read is corrupt.
+  Uint8List postalLookup(String code, String scheme) => _lib._enginePostalLookup(_live, code, scheme);
+
+  /// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+  /// in code order per scheme; `scheme` as in `postal_lookup`.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+  /// `ErrorCode::Corrupt` if a section read is corrupt.
+  Uint8List postalPrefix(String input, String scheme, int limit) => _lib._enginePostalPrefix(_live, input, scheme, limit);
+
+  /// The postal codes of the place with this ID; no rows for an unknown ID.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+  /// section read is corrupt.
+  Uint8List postalCodesOf(String id) => _lib._enginePostalCodesOf(_live, id);
+
+  /// The postal codes of the point: those of the deepest admin unit holding it that an
+  /// admin-aligned scheme gives codes to, with its parts (a ward's code; the point is in one
+  /// of them). No rows where no unit holding the point has such codes.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+  /// section read is corrupt.
+  Uint8List postalAt(double lat, double lon) => _lib._enginePostalAt(_live, lat, lon);
 
   /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
   /// row where no pack answers.

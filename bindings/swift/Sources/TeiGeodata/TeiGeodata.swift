@@ -335,6 +335,69 @@ public final class Engine: @unchecked Sendable {
         return takeData(out)
     }
 
+    /// The places postal code `code` names, one row per code and place, with the code's
+    /// `postal`, `scheme`, `code_kind`, `valid_from` and `valid_to` columns. `scheme` names
+    /// one scheme (`np`, `gb`); empty means every scheme whose rule accepts the input. The
+    /// code may be typed with or without separators, in any case, or in another script's
+    /// digits. Retired codes are returned too, with their validity.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    public func postalLookup(_ code: String, scheme: String) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var code = code
+        var scheme = scheme
+        let status = withExtendedLifetime(self) { code.withUTF8 { codeBytes in scheme.withUTF8 { schemeBytes in tg_engine_postal_lookup(raw, codeBytes.baseAddress, codeBytes.count, schemeBytes.baseAddress, schemeBytes.count, &out) } } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+    /// in code order per scheme; `scheme` as in `postal_lookup`.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    public func postalPrefix(_ input: String, scheme: String, limit: UInt32) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var input = input
+        var scheme = scheme
+        let status = withExtendedLifetime(self) { input.withUTF8 { inputBytes in scheme.withUTF8 { schemeBytes in tg_engine_postal_prefix(raw, inputBytes.baseAddress, inputBytes.count, schemeBytes.baseAddress, schemeBytes.count, limit, &out) } } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// The postal codes of the place with this ID; no rows for an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    public func postalCodesOf(_ id: String) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var id = id
+        let status = withExtendedLifetime(self) { id.withUTF8 { idBytes in tg_engine_postal_codes_of(raw, idBytes.baseAddress, idBytes.count, &out) } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// The postal codes of the point: those of the deepest admin unit holding it that an
+    /// admin-aligned scheme gives codes to, with its parts (a ward's code; the point is in one
+    /// of them). No rows where no unit holding the point has such codes.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    public func postalAt(_ lat: Double, lon: Double) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        let status = withExtendedLifetime(self) { tg_engine_postal_at(raw, lat, lon, &out) }
+        try check(status)
+        return takeData(out)
+    }
+
     /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
     /// row where no pack answers.
     ///

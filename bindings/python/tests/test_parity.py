@@ -116,6 +116,20 @@ class Engine(unittest.TestCase):
         units = Blob(self.engine.admin_at(a["lat"], a["lon"]))
         self.assertEqual(units.strings("id"), a["ids"])
 
+    def test_postal(self) -> None:
+        e, p = self.engine, self.p
+        c = p["postal_lookup"]
+        got = Blob(e.postal_lookup(c["code"], c["scheme"]))
+        self.assertEqual((got.strings("postal"), got.strings("id")), (c["postal"], c["ids"]))
+        c = p["postal_prefix"]
+        got = Blob(e.postal_prefix(c["input"], c["scheme"], c["limit"]))
+        self.assertEqual(got.strings("postal"), c["postal"])
+        c = p["postal_at"]
+        got = Blob(e.postal_at(c["lat"], c["lon"]))
+        self.assertEqual((got.strings("postal"), got.strings("code_kind")), (c["postal"], c["code_kind"]))
+        c = p["postal_codes_of"]
+        self.assertEqual(Blob(e.postal_codes_of(c["id"])).strings("postal"), c["postal"])
+
     def test_elevation(self) -> None:
         h = self.p["elevation_at"]
         self.assertEqual(self.engine.open_file(str(pathlib.Path(FIXTURE).parents[1] / h["fixture"])), 2)

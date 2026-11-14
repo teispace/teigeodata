@@ -124,6 +124,14 @@ test("engine handle on the fixture", () => {
   assert.deepEqual(strings(engine.byIso(p.by_iso.code), "id"), [p.by_iso.id]);
   assert.throws(() => engine.byIso(p.bad_iso), { code: "InvalidArgument" });
   assert.throws(() => engine.withinRadius(w.lat, w.lon, -1, 1), { code: "InvalidArgument" });
+  const pl = p.postal_lookup;
+  const hit = engine.postalLookup(pl.code, pl.scheme);
+  assert.deepEqual([strings(hit, "postal"), strings(hit, "id")], [pl.postal, pl.ids]);
+  const pp = p.postal_prefix;
+  assert.deepEqual(strings(engine.postalPrefix(pp.input, pp.scheme, pp.limit), "postal"), pp.postal);
+  const pa = engine.postalAt(p.postal_at.lat, p.postal_at.lon);
+  assert.deepEqual([strings(pa, "postal"), strings(pa, "code_kind")], [p.postal_at.postal, p.postal_at.code_kind]);
+  assert.deepEqual(strings(engine.postalCodesOf(p.postal_codes_of.id), "postal"), p.postal_codes_of.postal);
   assert.throws(() => engine.get(p.bad_id), { code: "InvalidArgument" });
   assert.throws(() => engine.openFile("/nonexistent.tgd"), { code: "Io" });
   assert.throws(() => engine.openBytes(Buffer.from("not a pack")), { code: "Corrupt" });

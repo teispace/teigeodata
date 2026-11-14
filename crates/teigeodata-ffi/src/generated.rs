@@ -513,6 +513,127 @@ pub unsafe extern "C" fn tg_engine_elevation_at(
     })
 }
 
+/// The places postal code `code` names, one row per code and place, with the code's
+/// `postal`, `scheme`, `code_kind`, `valid_from` and `valid_to` columns. `scheme` names
+/// one scheme (`np`, `gb`); empty means every scheme whose rule accepts the input. The
+/// code may be typed with or without separators, in any case, or in another script's
+/// digits. Retired codes are returned too, with their validity.
+///
+/// # Errors
+///
+/// `ErrorCode::Corrupt` if a section read is corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_postal_lookup(
+    handle: *const TgEngine,
+    code: *const u8,
+    code_len: usize,
+    scheme: *const u8,
+    scheme_len: usize,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `code_len` readable bytes (or null and 0).
+        let code = unsafe { abi::str_arg(code, code_len, "code") }?;
+        // SAFETY: the caller passes `scheme_len` readable bytes (or null and 0).
+        let scheme = unsafe { abi::str_arg(scheme, scheme_len, "scheme") }?;
+        let value = this.0.postal_lookup(code, scheme)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+/// in code order per scheme; `scheme` as in `postal_lookup`.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+/// `ErrorCode::Corrupt` if a section read is corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_postal_prefix(
+    handle: *const TgEngine,
+    input: *const u8,
+    input_len: usize,
+    scheme: *const u8,
+    scheme_len: usize,
+    limit: u32,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `input_len` readable bytes (or null and 0).
+        let input = unsafe { abi::str_arg(input, input_len, "input") }?;
+        // SAFETY: the caller passes `scheme_len` readable bytes (or null and 0).
+        let scheme = unsafe { abi::str_arg(scheme, scheme_len, "scheme") }?;
+        let value = this.0.postal_prefix(input, scheme, limit)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The postal codes of the place with this ID; no rows for an unknown ID.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+/// section read is corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_postal_codes_of(
+    handle: *const TgEngine,
+    id: *const u8,
+    id_len: usize,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `id_len` readable bytes (or null and 0).
+        let id = unsafe { abi::str_arg(id, id_len, "id") }?;
+        let value = this.0.postal_codes_of(id)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The postal codes of the point: those of the deepest admin unit holding it that an
+/// admin-aligned scheme gives codes to, with its parts (a ward's code; the point is in one
+/// of them). No rows where no unit holding the point has such codes.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+/// section read is corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_postal_at(
+    handle: *const TgEngine,
+    lat: f64,
+    lon: f64,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.postal_at(lat, lon)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
 /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
 /// row where no pack answers.
 ///

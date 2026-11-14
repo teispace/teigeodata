@@ -149,6 +149,17 @@ do {
     check(strings(try engine.byIso(iso["code"] as! String), "id") == [iso["id"] as? String], "by_iso")
     expect(.invalidArgument) { _ = try engine.byIso(e["bad_iso"] as! String) }
     expect(.invalidArgument) { _ = try engine.withinRadius(wl, lon: wo, meters: -1, limit: 1) }
+    let strs = { (v: Any?) in (v as! [String]).map { Optional($0) } }
+    let pl = e["postal_lookup"] as! [String: Any]
+    let hit = try engine.postalLookup(pl["code"] as! String, scheme: pl["scheme"] as! String)
+    check(strings(hit, "postal") == strs(pl["postal"]) && strings(hit, "id") == strs(pl["ids"]), "postal_lookup")
+    let pp = e["postal_prefix"] as! [String: Any]
+    check(strings(try engine.postalPrefix(pp["input"] as! String, scheme: pp["scheme"] as! String, limit: UInt32(pp["limit"] as! Int)), "postal") == strs(pp["postal"]), "postal_prefix")
+    let pa = e["postal_at"] as! [String: Any]
+    let at = try engine.postalAt(pa["lat"] as! Double, lon: pa["lon"] as! Double)
+    check(strings(at, "postal") == strs(pa["postal"]) && strings(at, "code_kind") == strs(pa["code_kind"]), "postal_at")
+    let po = e["postal_codes_of"] as! [String: Any]
+    check(strings(try engine.postalCodesOf(po["id"] as! String), "postal") == strs(po["postal"]), "postal_codes_of")
     expect(.invalidArgument) { _ = try engine.get(e["bad_id"] as! String) }
     expect(.io) { _ = try engine.openFile("/nonexistent.tgd") }
     expect(.corrupt) { _ = try engine.openBytes(Data("not a pack".utf8)) }

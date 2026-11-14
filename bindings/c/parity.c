@@ -142,6 +142,13 @@ int main(void) {
     tg_bytes_free(out);
     CHECK(tg_engine_by_iso(engine, (const uint8_t *)"np", 2, &out) == TG_OK && str_is(out, "id", 0, id));
     tg_bytes_free(out);
+    const char *postal = "106-01";
+    CHECK(tg_engine_postal_lookup(engine, (const uint8_t *)postal, strlen(postal), (const uint8_t *)"np", 2, &out) == TG_OK);
+    CHECK(blob_rows(out) == 1 && str_is(out, "postal", 0, "10601") && str_is(out, "id", 0, "tgd:np/vasbex"));
+    tg_bytes_free(out);
+    CHECK(tg_engine_postal_at(engine, 27.5, 85.5, &out) == TG_OK);
+    CHECK(blob_rows(out) == 2 && str_is(out, "code_kind", 1, "part"));
+    tg_bytes_free(out);
     const char *bad_id = "not an id";
     CHECK(tg_engine_get(engine, (const uint8_t *)bad_id, strlen(bad_id), &out) == TG_ERROR_INVALID_ARGUMENT);
     CHECK(tg_last_error(NULL) == TG_ERROR_INVALID_ARGUMENT);

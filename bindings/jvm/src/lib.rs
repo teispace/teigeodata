@@ -711,6 +711,167 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
         .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// The places postal code `code` names, one row per code and place, with the code's
+/// `postal`, `scheme`, `code_kind`, `valid_from` and `valid_to` columns. `scheme` names
+/// one scheme (`np`, `gb`); empty means every scheme whose rule accepts the input. The
+/// code may be typed with or without separators, in any case, or in another script's
+/// digits. Retired codes are returned too, with their validity.
+///
+/// # Errors
+///
+/// `ErrorCode::Corrupt` if a section read is corrupt.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativePostalLookup<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    code: JString<'caller>,
+    scheme: JString<'caller>,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let code = code.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("code: {e}"),
+                })?;
+                let scheme = scheme
+                    .try_to_string(env)
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: format!("scheme: {e}"),
+                    })?;
+                this.postal_lookup(&code, &scheme)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+/// in code order per scheme; `scheme` as in `postal_lookup`.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
+/// `ErrorCode::Corrupt` if a section read is corrupt.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativePostalPrefix<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    input: JString<'caller>,
+    scheme: JString<'caller>,
+    limit: jlong,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let input = input
+                    .try_to_string(env)
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: format!("input: {e}"),
+                    })?;
+                let scheme = scheme
+                    .try_to_string(env)
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: format!("scheme: {e}"),
+                    })?;
+                let limit: u32 = narrow("limit", limit)?;
+                this.postal_prefix(&input, &scheme, limit)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The postal codes of the place with this ID; no rows for an unknown ID.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a
+/// section read is corrupt.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativePostalCodesOf<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    id: JString<'caller>,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let id = id.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("id: {e}"),
+                })?;
+                this.postal_codes_of(&id)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The postal codes of the point: those of the deepest admin unit holding it that an
+/// admin-aligned scheme gives codes to, with its parts (a ward's code; the point is in one
+/// of them). No rows where no unit holding the point has such codes.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+/// section read is corrupt.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativePostalAt<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    lat: jni::sys::jdouble,
+    lon: jni::sys::jdouble,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                this.postal_at(lat, lon)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
 /// row where no pack answers.
 ///

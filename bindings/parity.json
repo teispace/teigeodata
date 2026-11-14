@@ -76,6 +76,10 @@
     "within_radius": {"lat": 27.5, "lon": 85.5, "meters": 20000.0, "limit": 10, "ids": ["tgd:np/sx2ze9"]},
     "tz_at": {"lat": 27.5, "lon": 85.5, "tz": "Zone 1"},
     "by_iso": {"code": "np", "id": "tgd:np/18n8a6"},
+    "postal_lookup": {"code": "106-01", "scheme": "np", "postal": ["10601"], "ids": ["tgd:np/vasbex"]},
+    "postal_prefix": {"input": "1060", "scheme": "", "limit": 3, "postal": ["10600", "1060001", "10601"]},
+    "postal_at": {"lat": 27.5, "lon": 85.5, "postal": ["10602", "1060201"], "code_kind": ["area", "part"]},
+    "postal_codes_of": {"id": "tgd:np/avwsr1", "postal": ["10602", "1060201"]},
     "elevation_at": {"fixture": "fixtures/dem.tgd", "lat": 27.84, "lon": 76.01, "meters": 1008.0, "source": "copernicus-glo30"},
     "bad_id": "not an id",
     "bad_iso": "not a code"

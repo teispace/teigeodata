@@ -170,6 +170,19 @@ void main() {
     expect(strings(engine.byIso(iso['code'] as String), 'id'), [iso['id']]);
     expect(() => engine.byIso(e['bad_iso'] as String), throwsA(isA<InvalidArgumentException>()));
     expect(() => engine.withinRadius(wl, wo, -1, 1), throwsA(isA<InvalidArgumentException>()));
+    final pl = e['postal_lookup'] as Map<String, dynamic>;
+    final hit = engine.postalLookup(pl['code'] as String, pl['scheme'] as String);
+    expect([strings(hit, 'postal'), strings(hit, 'id')], [pl['postal'], pl['ids']]);
+    final pp = e['postal_prefix'] as Map<String, dynamic>;
+    expect(
+      strings(engine.postalPrefix(pp['input'] as String, pp['scheme'] as String, pp['limit'] as int), 'postal'),
+      pp['postal'],
+    );
+    final pa = e['postal_at'] as Map<String, dynamic>;
+    final at = engine.postalAt(pa['lat'] as double, pa['lon'] as double);
+    expect([strings(at, 'postal'), strings(at, 'code_kind')], [pa['postal'], pa['code_kind']]);
+    final po = e['postal_codes_of'] as Map<String, dynamic>;
+    expect(strings(engine.postalCodesOf(po['id'] as String), 'postal'), po['postal']);
     expect(() => engine.get(e['bad_id'] as String), throwsA(isA<InvalidArgumentException>()));
     expect(() => engine.openFile('/nonexistent.tgd'), throwsA(isA<IoException>()));
     expect(() => engine.openBytes(Uint8List.fromList(utf8.encode('not a pack'))), throwsA(isA<CorruptException>()));

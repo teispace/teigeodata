@@ -19,8 +19,8 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   still read.
 - The `Engine` handle in every binding (C, Python, Node, JVM, Swift, Dart): open packs from a
   file or bytes, then `get`, `search`, `reverse`, `admin_at`, `parent`, `ancestors`,
-  `children`, `nearby`, `within_radius`, `tz_at`, `by_iso` and `elevation_at`, each
-  answering a blob. One
+  `children`, `nearby`, `within_radius`, `tz_at`, `by_iso`, `elevation_at`, and postal codes
+  (`postal_lookup`, `postal_prefix`, `postal_codes_of`, `postal_at`), each answering a blob. One
   engine is safe from many threads at once (D-274).
 - Error codes `Io` (4) and `Corrupt` (5).
 - IDL format 2: handles with methods, `&[u8]` parameters, handle parameters and results.

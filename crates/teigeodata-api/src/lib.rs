@@ -30,7 +30,7 @@ use std::cell::RefCell;
 pub use teigeodata_blob::Blob;
 use teigeodata_blob::Column;
 use teigeodata_core::{E6, E7, PlaceId, Point};
-use teigeodata_engine::{Hit, Layer, LayerOptions, Near, Place, Scratch, Shared};
+use teigeodata_engine::{Hit, Layer, LayerOptions, Near, Place, PostalCode, Scratch, Shared};
 
 use places::Places;
 
@@ -125,6 +125,7 @@ struct Buffers {
     hits: Vec<Hit>,
     near: Vec<Near>,
     units: Vec<Place>,
+    codes: Vec<PostalCode>,
 }
 
 thread_local! {
@@ -398,6 +399,75 @@ impl Engine {
         .map_err(|e| Error::new(ErrorCode::Internal, e.to_string()))
     }
 
+    /// The places postal code `code` names, one row per code and place, with the code's
+    /// `postal`, `scheme`, `code_kind`, `valid_from` and `valid_to` columns. `scheme` names
+    /// one scheme (`np`, `gb`); empty means every scheme whose rule accepts the input. The
+    /// code may be typed with or without separators, in any case, or in another script's
+    /// digits. Retired codes are returned too, with their validity.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::Corrupt`] if a section read is corrupt.
+    pub fn postal_lookup(&self, code: &str, scheme: &str) -> Result<Blob> {
+        let engine = self.shared.load();
+        BUFFERS.with_borrow_mut(|b| {
+            installed(engine.postal_lookup(code, scheme_of(scheme), &mut b.codes))?;
+            postal_blob(&engine, &b.codes)
+        })
+    }
+
+    /// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+    /// in code order per scheme; `scheme` as in [`postal_lookup`](Self::postal_lookup).
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] if `limit` exceeds [`LIMIT_MAX`];
+    /// [`ErrorCode::Corrupt`] if a section read is corrupt.
+    pub fn postal_prefix(&self, input: &str, scheme: &str, limit: u32) -> Result<Blob> {
+        let k = self::limit(limit)?;
+        let engine = self.shared.load();
+        BUFFERS.with_borrow_mut(|b| {
+            installed(engine.postal_prefix(input, scheme_of(scheme), k, &mut b.codes))?;
+            postal_blob(&engine, &b.codes)
+        })
+    }
+
+    /// The postal codes of the place with this ID; no rows for an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] if `id` is not a place ID; [`ErrorCode::Corrupt`] if a
+    /// section read is corrupt.
+    pub fn postal_codes_of(&self, id: &str) -> Result<Blob> {
+        let id = place_id(id)?;
+        let engine = self.shared.load();
+        BUFFERS.with_borrow_mut(|b| {
+            b.codes.clear();
+            if let Some(p) = engine.get(id)? {
+                installed(engine.postal_codes_of(&p, &mut b.codes))?;
+            }
+            postal_blob(&engine, &b.codes)
+        })
+    }
+
+    /// The postal codes of the point: those of the deepest admin unit holding it that an
+    /// admin-aligned scheme gives codes to, with its parts (a ward's code; the point is in one
+    /// of them). No rows where no unit holding the point has such codes.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] for a point off the globe; [`ErrorCode::Corrupt`] if a
+    /// section read is corrupt.
+    pub fn postal_at(&self, lat: f64, lon: f64) -> Result<Blob> {
+        let at = point::<E7>(lat, lon)?;
+        let engine = self.shared.load();
+        BUFFERS.with_borrow_mut(|b| {
+            let Buffers { scratch, codes, .. } = b;
+            installed(engine.postal_at(at, scratch, codes).map(|_| ()))?;
+            postal_blob(&engine, codes)
+        })
+    }
+
     /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
     /// row where no pack answers.
     ///
@@ -438,6 +508,26 @@ fn place_id(id: &str) -> Result<PlaceId> {
             format!("{id:?} is not a place ID: {e}"),
         )
     })
+}
+
+/// An empty scheme is every scheme.
+fn scheme_of(scheme: &str) -> Option<&str> {
+    (!scheme.is_empty()).then_some(scheme)
+}
+
+/// A pack without postal codes installed answers no codes rather than an error (D-133).
+fn installed(r: core::result::Result<(), teigeodata_engine::Error>) -> Result<()> {
+    match r {
+        Err(teigeodata_engine::Error::MissingComponent { .. }) | Ok(()) => Ok(()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// A blob of `codes` with their places.
+fn postal_blob(engine: &teigeodata_engine::Engine, codes: &[PostalCode]) -> Result<Blob> {
+    let mut out = Places::of(engine, codes.iter().map(|c| c.place))?;
+    out.postal = Some(places::Postal::of(codes));
+    out.blob()
 }
 
 /// A blob of `near`'s places with their `meters` and `bearing`.

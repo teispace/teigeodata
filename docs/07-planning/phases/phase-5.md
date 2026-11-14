@@ -49,7 +49,8 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   `parent`, `ancestors`, `children`; every result as a blob, every error typed.
   Done so far: the `Engine` handle with `open_file`, `open_bytes`, `layers`, `get`, `search`,
   `reverse`, `admin_at`, `parent`, `ancestors`, `children`, `nearby`, `within_radius`, `tz_at`,
-  `by_iso` and `elevation_at`, in every language, checked on `bindings/fixtures/synth.tgd`
+  `by_iso`, `elevation_at`, `postal_lookup`, `postal_prefix`, `postal_codes_of` and
+  `postal_at`, in every language, checked on `bindings/fixtures/synth.tgd`
 - [ ] `teigeodata-api` over sync: the store (init, refresh, catalog, find, locate, install,
   update, remove, pin, repair, status) as jobs with progress callbacks and cancellation
 - [ ] The IDL extended for what the surface needs (handles, enums, options structs, jobs), with

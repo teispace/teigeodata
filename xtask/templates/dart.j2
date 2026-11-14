@@ -48,14 +48,13 @@ final class {{ c.name }}Exception extends TeiGeodataException {
 {% macro lookup(f, field, symbol) %}
         {{ field }} = lib.lookupFunction<Int32 Function({{ sig(f, true) }}), int Function({{ sig(f, false) }})>('{{ symbol }}'{% if not (f.params | selectattr("ty", "eq", "callback") | list) %}, isLeaf: true{% endif %}){% endmacro %}
 {% macro dparams(f) %}{% for p in f.params %}{% if p.ty == "callback" %}bool Function({% for a in p.callback.args %}{{ dty(a) }}{% if not loop.last %}, {% endif %}{% endfor %}) {{ p.name | camel }}{% else %}{{ dty(p.ty, p.handle) }} {{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endmacro %}
-{% macro args(f) %}{% if f.receiver %}handle{% if f.params or f.returns != "void" %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty in ["str", "bytes"] %}_input, {{ p.name | camel }}Len{% elif p.ty == "handle" %}{{ p.name | camel }}._live{% elif p.ty == "callback" %}callable.nativeFunction, nullptr{% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}_bytes{% else %}_word.cast(){% endif %}{% endif %}{% endmacro %}
+{% macro args(f) %}{% if f.receiver %}handle{% if f.params or f.returns != "void" %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty in ["str", "bytes"] %}{% if f.params | selectattr("ty", "in", ["str", "bytes"]) | list | length > 1 %}_input + {{ p.name | camel }}At{% else %}_input{% endif %}, {{ p.name | camel }}Len{% elif p.ty == "handle" %}{{ p.name | camel }}._live{% elif p.ty == "callback" %}callable.nativeFunction, nullptr{% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}_bytes{% else %}_word.cast(){% endif %}{% endif %}{% endmacro %}
 {#- A call through the scratch memory: a public function, or (with `owner`) the private half
     of a handle's method. #}
 {% macro call(f, name, native, owner) %}
 {% set cbs = f.params | selectattr("ty", "eq", "callback") | list %}
 {% set cb = cbs[0] if cbs else none %}
 {% set strs = f.params | selectattr("ty", "in", ["str", "bytes"]) | list %}
-{% if strs | length > 1 %}{{ raise("dart: one string or bytes parameter per function, for now") }}{% endif %}
 
 {% if not owner %}
 {% for line in f.doc %}
@@ -64,8 +63,14 @@ final class {{ c.name }}Exception extends TeiGeodataException {
 {% endfor %}
 {% endif %}
   {{ dty(f.returns, f.returns_handle) }} {{ name }}({% if f.receiver %}Pointer<Void> handle{% if f.params %}, {% endif %}{% endif %}{{ dparams(f) }}) {
+{# Several string or byte arguments share the scratch buffer, one after another. #}
+{% set ns = namespace(prev="") %}
 {% for p in strs %}
-    final {{ p.name | camel }}Len = {% if p.ty == "str" %}_utf8{% else %}_copy{% endif %}({{ p.name | camel }});
+{% if strs | length > 1 %}
+    final {{ p.name | camel }}At = {% if ns.prev %}{{ ns.prev }}At + {{ ns.prev }}Len{% else %}0{% endif %};
+{% endif %}
+{% set ns.prev = p.name | camel %}
+    final {{ p.name | camel }}Len = {% if p.ty == "str" %}_utf8{% else %}_copy{% endif %}({{ p.name | camel }}{% if strs | length > 1 %}, {{ p.name | camel }}At{% endif %});
 {% endfor %}
 {% if cb %}
     Object? raised;
@@ -158,37 +163,42 @@ final class TeiGeodata {
     if (_inputCap > 0) malloc.free(_input);
   }
 
-  /// [text] as UTF-8 in the scratch buffer; returns its length. ASCII (most names) is copied
-  /// code unit by code unit; anything else goes through the UTF-8 encoder.
-  int _utf8(String text) {
+  /// [text] as UTF-8 in the scratch buffer at byte [at]; returns its length. ASCII (most
+  /// names) is copied code unit by code unit; anything else goes through the UTF-8 encoder.
+  int _utf8(String text, [int at = 0]) {
     final n = text.length;
-    if (n * 3 > _inputCap) _grow(n * 3);
+    if (at + n * 3 > _inputCap) _grow(at + n * 3);
     final dst = _input.asTypedList(_inputCap);
     for (var i = 0; i < n; i++) {
       final u = text.codeUnitAt(i);
-      if (u >= 0x80) return _utf8Slow(text, dst);
-      dst[i] = u;
+      if (u >= 0x80) return _utf8Slow(text, dst, at);
+      dst[at + i] = u;
     }
     return n;
   }
 
-  /// [bytes] in the scratch buffer; returns their length.
-  int _copy(Uint8List bytes) {
-    if (bytes.length > _inputCap) _grow(bytes.length);
-    _input.asTypedList(bytes.length).setAll(0, bytes);
+  /// [bytes] in the scratch buffer at byte [at]; returns their length.
+  int _copy(Uint8List bytes, [int at = 0]) {
+    if (at + bytes.length > _inputCap) _grow(at + bytes.length);
+    _input.asTypedList(_inputCap).setAll(at, bytes);
     return bytes.length;
   }
 
-  int _utf8Slow(String text, Uint8List dst) {
+  int _utf8Slow(String text, Uint8List dst, int at) {
     final bytes = utf8.encode(text);
-    dst.setRange(0, bytes.length, bytes);
+    dst.setRange(at, at + bytes.length, bytes);
     return bytes.length;
   }
 
+  /// A larger scratch buffer, keeping what an earlier argument of the same call wrote.
   void _grow(int need) {
-    if (_inputCap > 0) malloc.free(_input);
+    final (old, oldCap) = (_input, _inputCap);
     _inputCap = need < 256 ? 256 : need * 2;
     _input = malloc<Uint8>(_inputCap);
+    if (oldCap > 0) {
+      _input.asTypedList(oldCap).setAll(0, old.asTypedList(oldCap));
+      malloc.free(old);
+    }
   }
 
   void _check(int status) {

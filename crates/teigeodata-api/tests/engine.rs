@@ -7,7 +7,8 @@
     clippy::panic,
     clippy::cast_possible_truncation,
     clippy::many_single_char_names,
-    reason = "tests: failures panic with their message"
+    clippy::too_many_lines,
+    reason = "tests: failures panic with their message; the parity test reads the whole file"
 )]
 
 #[path = "../../teigeodata-engine/tests/common/mod.rs"]
@@ -55,11 +56,47 @@ fn country(model: &common::Model) -> usize {
         .unwrap()
 }
 
-/// The bindings' fixture model: the synthetic country, coded `NP`.
+/// The bindings' fixture model: the synthetic country, coded `NP`, with postal codes in an
+/// admin-aligned scheme `np`: district `d` (by row) has the area code `1060d` and the ward
+/// code `1060d01`.
 fn fixture() -> common::Model {
+    use teigeodata_engine::CodeKind;
+    use teigeodata_format::postal::{self, Code, Rule};
     let mut model = synthetic(60, 5);
     let row = u32::try_from(country(&model)).unwrap();
     model.iso = vec![(row, "NP".parse().unwrap())];
+    let rules = [Rule {
+        name: "np".into(),
+        admin_aligned: true,
+        ignore: " -".into(),
+        templates: vec!["99999".into(), "9999999".into()],
+        ..Rule::default()
+    }];
+    let districts = model.admin.as_ref().unwrap().rows[1..].to_vec();
+    let code = |text: String, place, kind| Code {
+        scheme: "np".into(),
+        code: text,
+        place,
+        kind,
+        valid_from: None,
+        valid_to: None,
+        redirect: None,
+    };
+    let codes: Vec<Code> = districts
+        .iter()
+        .enumerate()
+        .flat_map(|(d, &place)| {
+            [
+                code(format!("1060{d}"), place, CodeKind::Area),
+                code(format!("1060{d}01"), place, CodeKind::Part),
+            ]
+        })
+        .collect();
+    let places = u32::try_from(model.ids.len()).unwrap();
+    let body = postal::encode(&rules, &codes, places, true).unwrap();
+    model
+        .raw
+        .push((teigeodata_format::Kind::POSTAL, codes.len() as u64, body));
     model
 }
 
@@ -389,6 +426,29 @@ fn the_parity_file_matches_rust() {
     assert!((f64s(&got, "meters")[0] - n(&c["meters"])).abs() < 1e-6);
     assert_eq!(strings(&got, "source"), [Some(s(&c["source"]))]);
 
+    let c = &p["postal_lookup"];
+    let got = engine
+        .postal_lookup(&s(&c["code"]), &s(&c["scheme"]))
+        .unwrap();
+    assert_eq!(strings(&got, "postal"), ids(&c["postal"]));
+    assert_eq!(strings(&got, "id"), ids(&c["ids"]));
+    let c = &p["postal_prefix"];
+    let got = engine
+        .postal_prefix(
+            &s(&c["input"]),
+            &s(&c["scheme"]),
+            c["limit"].as_u64().unwrap() as u32,
+        )
+        .unwrap();
+    assert_eq!(strings(&got, "postal"), ids(&c["postal"]));
+    let c = &p["postal_at"];
+    let got = engine.postal_at(n(&c["lat"]), n(&c["lon"])).unwrap();
+    assert_eq!(strings(&got, "postal"), ids(&c["postal"]));
+    assert_eq!(strings(&got, "code_kind"), ids(&c["code_kind"]));
+    let c = &p["postal_codes_of"];
+    let got = engine.postal_codes_of(&s(&c["id"])).unwrap();
+    assert_eq!(strings(&got, "postal"), ids(&c["postal"]));
+
     let e = engine.get(&s(&p["bad_id"])).unwrap_err();
     assert_eq!(e.code, ErrorCode::InvalidArgument);
     for (name, code) in [("Io", ErrorCode::Io), ("Corrupt", ErrorCode::Corrupt)] {
@@ -443,4 +503,37 @@ fn the_place_graph_radius_zone_and_codes() {
     assert_eq!(rows(&zone), 1);
     assert!(strings(&zone, "tz")[0].is_some());
     assert_eq!(rows(&engine.by_iso("FR").unwrap()), 0);
+}
+
+#[test]
+fn postal_codes_answer_with_their_places() {
+    let engine = Engine::new();
+    engine.open_bytes(&fixture().encode()).unwrap();
+    let hit = engine.postal_lookup("106 01", "").unwrap();
+    let r = Reader::new(hit.as_bytes()).unwrap();
+    let names: Vec<_> = r.names().collect();
+    assert_eq!(
+        names[names.len() - 5..],
+        ["postal", "scheme", "code_kind", "valid_from", "valid_to"]
+    );
+    assert_eq!(strings(&hit, "postal"), [Some("10601".to_owned())]);
+    assert_eq!(strings(&hit, "scheme"), [Some("np".to_owned())]);
+    let nulls = r.nulls("valid_to").unwrap();
+    assert!(nulls.is_null(0), "no end date");
+    // Another scheme, an unknown code, an empty prefix: no rows.
+    assert_eq!(rows(&engine.postal_lookup("10601", "gb").unwrap()), 0);
+    assert_eq!(rows(&engine.postal_lookup("99999", "").unwrap()), 0);
+    assert_eq!(rows(&engine.postal_prefix("", "", 5).unwrap()), 0);
+    assert_eq!(rows(&engine.postal_prefix("1060", "", 4).unwrap()), 4);
+    assert_eq!(
+        engine
+            .postal_prefix("1", "", LIMIT_MAX + 1)
+            .unwrap_err()
+            .code,
+        ErrorCode::InvalidArgument
+    );
+    // A pack without postal codes answers none, not an error.
+    let (plain, _) = open();
+    assert_eq!(rows(&plain.postal_lookup("10601", "").unwrap()), 0);
+    assert_eq!(rows(&plain.postal_at(27.5, 85.5).unwrap()), 0);
 }
