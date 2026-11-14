@@ -153,6 +153,11 @@ do {
     expect(.io) { _ = try engine.openFile("/nonexistent.tgd") }
     expect(.corrupt) { _ = try engine.openBytes(Data("not a pack".utf8)) }
     check(engine.layers() == 1, "layers")
+    let h = e["elevation_at"] as! [String: Any]
+    check(try engine.openFile(dir.appendingPathComponent(h["fixture"] as! String).path) == 2, "open dem")
+    let height = try engine.elevationAt(h["lat"] as! Double, lon: h["lon"] as! Double)
+    check(column(height, "meters", as: UInt64.self).map { Double(bitPattern: $0) } == [h["meters"] as! Double], "meters")
+    check(strings(height, "source") == [h["source"] as? String], "source")
     // Sendable: four tasks query one engine at once.
     let id = get["id"] as! String
     let names = await withTaskGroup(of: [String?].self) { group in

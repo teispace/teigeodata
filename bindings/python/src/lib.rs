@@ -302,6 +302,25 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(PyBytes::new(py, value.as_bytes()))
     }
+    /// The terrain height at the point, as one row: `meters` above the datum (bilinear between
+    /// the DEM samples around it), `source` (the DEM product's key, null where the pack does
+    /// not state it), `resolution_m` (the sample spacing north to south) and `datum`
+    /// (`EGM2008`). No row where no pack has terrain there (the sea, outside every grid).
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+    /// grid read is corrupt.
+    fn elevation_at<'py>(
+        &self,
+        py: Python<'py>,
+        lat: f64,
+        lon: f64,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let value = py.detach(|| self.0.elevation_at(lat, lon));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
     /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
     /// row where no pack answers.
     ///

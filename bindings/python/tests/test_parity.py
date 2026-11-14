@@ -116,6 +116,13 @@ class Engine(unittest.TestCase):
         units = Blob(self.engine.admin_at(a["lat"], a["lon"]))
         self.assertEqual(units.strings("id"), a["ids"])
 
+    def test_elevation(self) -> None:
+        h = self.p["elevation_at"]
+        self.assertEqual(self.engine.open_file(str(pathlib.Path(FIXTURE).parents[1] / h["fixture"])), 2)
+        got = Blob(self.engine.elevation_at(h["lat"], h["lon"]))
+        self.assertEqual(list(got.numbers("meters")), [h["meters"]])
+        self.assertEqual(got.strings("source"), [h["source"]])
+
     def test_graph_radius_zone_and_codes(self) -> None:
         e, p = self.engine, self.p
         for method in ("parent", "ancestors", "children"):

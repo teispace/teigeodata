@@ -76,6 +76,7 @@
     "within_radius": {"lat": 27.5, "lon": 85.5, "meters": 20000.0, "limit": 10, "ids": ["tgd:np/sx2ze9"]},
     "tz_at": {"lat": 27.5, "lon": 85.5, "tz": "Zone 1"},
     "by_iso": {"code": "np", "id": "tgd:np/18n8a6"},
+    "elevation_at": {"fixture": "fixtures/dem.tgd", "lat": 27.84, "lon": 76.01, "meters": 1008.0, "source": "copernicus-glo30"},
     "bad_id": "not an id",
     "bad_iso": "not a code"
   }

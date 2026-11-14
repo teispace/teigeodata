@@ -128,4 +128,9 @@ test("engine handle on the fixture", () => {
   assert.throws(() => engine.openFile("/nonexistent.tgd"), { code: "Io" });
   assert.throws(() => engine.openBytes(Buffer.from("not a pack")), { code: "Corrupt" });
   assert.equal(engine.layers(), 1);
+  const h = p.elevation_at;
+  assert.equal(engine.openFile(join(__dirname, "../..", h.fixture)), 2);
+  const height = engine.elevationAt(h.lat, h.lon);
+  assert.deepEqual(strings(height, "source"), [h.source]);
+  assert.equal(numbers(height, "meters")[0], h.meters);
 });

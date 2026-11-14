@@ -150,6 +150,11 @@ int main(void) {
     const char *nowhere = "/nonexistent.tgd";
     CHECK(tg_engine_open_file(engine, (const uint8_t *)nowhere, strlen(nowhere), &layers) == TG_ERROR_IO);
     CHECK(tg_last_error(NULL) == TG_ERROR_IO);
+    const char *dem = "bindings/fixtures/dem.tgd";
+    CHECK(tg_engine_open_file(engine, (const uint8_t *)dem, strlen(dem), &layers) == TG_OK && layers == 2);
+    CHECK(tg_engine_elevation_at(engine, 27.84, 76.01, &out) == TG_OK);
+    CHECK(blob_rows(out) == 1 && str_is(out, "source", 0, "copernicus-glo30"));
+    tg_bytes_free(out);
     tg_engine_free(engine);
     tg_engine_free(NULL);
 

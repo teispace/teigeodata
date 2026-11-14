@@ -219,6 +219,75 @@ fn the_bindings_fixture_is_current() {
     );
 }
 
+/// `bindings/fixtures/dem.tgd`: one DEM tile (64 × 64 samples of 1″, Copernicus GLO-30) at
+/// tile row 3,496 and column 14,400 (27.83° to 27.85° N, 76.00° to 76.02° E), sloping east.
+fn dem_fixture() -> Vec<u8> {
+    use teigeodata_format::dem::{self, DATUM_EGM2008, Family, Grid, GridInput, THRESHOLDS};
+    use teigeodata_format::{Encoding, Kind, Writer};
+    let family = Family::standard();
+    let q: Vec<i32> = (0..4096).map(|i| 500 + (i % 64) / 8).collect();
+    let tile = dem::encode_tile(&q, 6, &family, &THRESHOLDS, &dem::TileOptions::default()).unwrap();
+    let grid = Grid {
+        tile_row0: 3_496,
+        tile_col0: 14_400,
+        tile_rows: 1,
+        tile_cols: 1,
+        lat_step: 10,
+        lon_step: 10,
+        step_mm: 2_000,
+        datum: DATUM_EGM2008,
+        source: dem::Source::CopernicusGlo30.code(),
+        tile_log2: 6,
+        first_tile: 0,
+    };
+    let tiles = [Some(tile.as_slice())];
+    let body = dem::encode(
+        &[GridInput {
+            grid,
+            tiles: &tiles,
+        }],
+        &family,
+        &THRESHOLDS,
+    )
+    .unwrap();
+    Writer::new("zz", "places", "2026.11.0")
+        .unwrap()
+        .pack(&[(Kind::DEM, Encoding::TABLE, 1, &body)], None)
+        .unwrap()
+}
+
+#[test]
+fn the_dem_fixture_is_current_and_answers_heights() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../bindings/fixtures/dem.tgd"
+    );
+    let bytes = dem_fixture();
+    if std::env::var_os("TEIGEODATA_WRITE_FIXTURE").is_some() {
+        std::fs::write(path, &bytes).unwrap();
+    }
+    assert!(std::fs::read(path).unwrap() == bytes, "{path} is stale");
+    let engine = Engine::new();
+    engine.open_bytes(&bytes).unwrap();
+    let h = engine.elevation_at(27.84, 76.01).unwrap();
+    let r = Reader::new(h.as_bytes()).unwrap();
+    assert_eq!(
+        r.names().collect::<Vec<_>>(),
+        ["meters", "source", "resolution_m", "datum"]
+    );
+    let m = f64s(&h, "meters")[0];
+    assert!((1_000.0..1_020.0).contains(&m), "{m}");
+    assert_eq!(strings(&h, "source"), [Some("copernicus-glo30".to_owned())]);
+    assert_eq!(strings(&h, "datum"), [Some("EGM2008".to_owned())]);
+    assert!((f64s(&h, "resolution_m")[0] - 30.9).abs() < 0.1);
+    // Off the grid: no row, every column still there.
+    let none = engine.elevation_at(27.5, 85.5).unwrap();
+    assert_eq!(rows(&none), 0);
+    assert_eq!(Reader::new(none.as_bytes()).unwrap().names().count(), 4);
+    let e = engine.elevation_at(95.0, 0.0).unwrap_err();
+    assert_eq!(e.code, ErrorCode::InvalidArgument);
+}
+
 /// The engine section of `bindings/parity.json`, which every language checks, holds what Rust
 /// answers on the fixture.
 #[test]
@@ -308,6 +377,17 @@ fn the_parity_file_matches_rust() {
     assert_eq!(strings(&got, "iso"), [Some(s(&c["code"]).to_uppercase())]);
     let e = engine.by_iso(&s(&p["bad_iso"])).unwrap_err();
     assert_eq!(e.code, ErrorCode::InvalidArgument);
+
+    let c = &p["elevation_at"];
+    let dem = format!(
+        "{}/../../bindings/{}",
+        env!("CARGO_MANIFEST_DIR"),
+        s(&c["fixture"])
+    );
+    assert_eq!(engine.open_file(&dem), Ok(2));
+    let got = engine.elevation_at(n(&c["lat"]), n(&c["lon"])).unwrap();
+    assert!((f64s(&got, "meters")[0] - n(&c["meters"])).abs() < 1e-6);
+    assert_eq!(strings(&got, "source"), [Some(s(&c["source"]))]);
 
     let e = engine.get(&s(&p["bad_id"])).unwrap_err();
     assert_eq!(e.code, ErrorCode::InvalidArgument);

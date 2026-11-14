@@ -366,6 +366,38 @@ impl Engine {
         })
     }
 
+    /// The terrain height at the point, as one row: `meters` above the datum (bilinear between
+    /// the DEM samples around it), `source` (the DEM product's key, null where the pack does
+    /// not state it), `resolution_m` (the sample spacing north to south) and `datum`
+    /// (`EGM2008`). No row where no pack has terrain there (the sea, outside every grid).
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] for a point off the globe; [`ErrorCode::Corrupt`] if a
+    /// grid read is corrupt.
+    pub fn elevation_at(&self, lat: f64, lon: f64) -> Result<Blob> {
+        let at = point::<E7>(lat, lon)?;
+        let engine = self.shared.load();
+        let height = BUFFERS.with_borrow_mut(|b| engine.elevation_at(at, &mut b.scratch))?;
+        let rows: Vec<_> = height.into_iter().collect();
+        let source: Vec<&str> = rows
+            .iter()
+            .map(|h| h.source.map_or("", teigeodata_engine::DemSource::key))
+            .collect();
+        let stated: Vec<bool> = rows.iter().map(|h| h.source.is_some()).collect();
+        let meters: Vec<f64> = rows.iter().map(|h| h.meters).collect();
+        let spacing: Vec<f64> = rows.iter().map(|h| h.resolution_m).collect();
+        let datum: Vec<&str> = rows.iter().map(|h| h.datum.name()).collect();
+        let source_c = Column::Dict(&source);
+        Blob::encode(&[
+            ("meters", Column::F64(&meters)),
+            ("source", Column::Nullable(&source_c, &stated)),
+            ("resolution_m", Column::F64(&spacing)),
+            ("datum", Column::Dict(&datum)),
+        ])
+        .map_err(|e| Error::new(ErrorCode::Internal, e.to_string()))
+    }
+
     /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
     /// row where no pack answers.
     ///

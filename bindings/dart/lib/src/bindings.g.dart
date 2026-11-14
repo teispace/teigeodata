@@ -91,6 +91,7 @@ final class TeiGeodata {
         _engineReverseNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, int, Pointer<TgBytes>)>('tg_engine_reverse', isLeaf: true),
         _engineWithinRadiusNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Double, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, double, int, Pointer<TgBytes>)>('tg_engine_within_radius', isLeaf: true),
         _engineAdminAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_admin_at', isLeaf: true),
+        _engineElevationAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_elevation_at', isLeaf: true),
         _engineTzAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_tz_at', isLeaf: true),
         _engineByIsoNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_by_iso', isLeaf: true) {
     _engineFinalizer = NativeFinalizer(_engineFree.cast());
@@ -122,6 +123,7 @@ final class TeiGeodata {
   final int Function(Pointer<Void>, double, double, int, Pointer<TgBytes>) _engineReverseNative;
   final int Function(Pointer<Void>, double, double, double, int, Pointer<TgBytes>) _engineWithinRadiusNative;
   final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _engineAdminAtNative;
+  final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _engineElevationAtNative;
   final int Function(Pointer<Void>, double, double, Pointer<TgBytes>) _engineTzAtNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineByIsoNative;
 
@@ -363,6 +365,12 @@ final class TeiGeodata {
     return _takeBlob();
   }
 
+  Uint8List _engineElevationAt(Pointer<Void> handle, double lat, double lon) {
+    final status = _engineElevationAtNative(handle, lat, lon, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
   Uint8List _engineTzAt(Pointer<Void> handle, double lat, double lon) {
     final status = _engineTzAtNative(handle, lat, lon, _bytes);
     _check(status);
@@ -501,6 +509,17 @@ final class Engine implements Finalizable {
   /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
   /// section read is corrupt.
   Uint8List adminAt(double lat, double lon) => _lib._engineAdminAt(_live, lat, lon);
+
+  /// The terrain height at the point, as one row: `meters` above the datum (bilinear between
+  /// the DEM samples around it), `source` (the DEM product's key, null where the pack does
+  /// not state it), `resolution_m` (the sample spacing north to south) and `datum`
+  /// (`EGM2008`). No row where no pack has terrain there (the sea, outside every grid).
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+  /// grid read is corrupt.
+  Uint8List elevationAt(double lat, double lon) => _lib._engineElevationAt(_live, lat, lon);
 
   /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
   /// row where no pack answers.

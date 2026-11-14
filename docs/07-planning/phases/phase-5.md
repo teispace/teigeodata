@@ -48,8 +48,8 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   and `tz_of`, the zone rules, `elevation_at`, `iso_code` and `by_iso`, postal codes,
   `parent`, `ancestors`, `children`; every result as a blob, every error typed.
   Done so far: the `Engine` handle with `open_file`, `open_bytes`, `layers`, `get`, `search`,
-  `reverse`, `admin_at`, `parent`, `ancestors`, `children`, `nearby`, `within_radius`, `tz_at`
-  and `by_iso`, in every language, checked on `bindings/fixtures/synth.tgd`
+  `reverse`, `admin_at`, `parent`, `ancestors`, `children`, `nearby`, `within_radius`, `tz_at`,
+  `by_iso` and `elevation_at`, in every language, checked on `bindings/fixtures/synth.tgd`
 - [ ] `teigeodata-api` over sync: the store (init, refresh, catalog, find, locate, install,
   update, remove, pin, repair, status) as jobs with progress callbacks and cancellation
 - [ ] The IDL extended for what the surface needs (handles, enums, options structs, jobs), with

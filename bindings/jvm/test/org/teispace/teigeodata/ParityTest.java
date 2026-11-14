@@ -112,6 +112,11 @@ public final class ParityTest {
             expect(TeiGeodataException.Io.class, () -> engine.openFile("/nonexistent.tgd"), "");
             expect(TeiGeodataException.Corrupt.class, () -> engine.openBytes("not a pack".getBytes(StandardCharsets.UTF_8)), "");
             check(engine.layers() == 1, "layers");
+            Map<?, ?> h = (Map<?, ?>) p.get("elevation_at");
+            check(engine.openFile(dir.resolve((String) h.get("fixture")).toString()) == 2, "open dem");
+            byte[] height = engine.elevationAt(((Number) h.get("lat")).doubleValue(), ((Number) h.get("lon")).doubleValue());
+            check(column(height, "meters").getDouble() == ((Number) h.get("meters")).doubleValue(), "meters");
+            check(strings(height, "source").equals(List.of(h.get("source"))), "source");
             engine.close();
             engine.close(); // idempotent
             try {

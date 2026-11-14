@@ -233,6 +233,19 @@ int32_t tg_engine_within_radius(const tg_engine *handle, double lat, double lon,
 int32_t tg_engine_admin_at(const tg_engine *handle, double lat, double lon, tg_bytes *out);
 
 /*
+ * The terrain height at the point, as one row: `meters` above the datum (bilinear between
+ * the DEM samples around it), `source` (the DEM product's key, null where the pack does
+ * not state it), `resolution_m` (the sample spacing north to south) and `datum`
+ * (`EGM2008`). No row where no pack has terrain there (the sea, outside every grid).
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+ * grid read is corrupt.
+ */
+int32_t tg_engine_elevation_at(const tg_engine *handle, double lat, double lon, tg_bytes *out);
+
+/*
  * The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
  * row where no pack answers.
  *

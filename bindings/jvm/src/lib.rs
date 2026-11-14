@@ -676,6 +676,41 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
         .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// The terrain height at the point, as one row: `meters` above the datum (bilinear between
+/// the DEM samples around it), `source` (the DEM product's key, null where the pack does
+/// not state it), `resolution_m` (the sample spacing north to south) and `datum`
+/// (`EGM2008`). No row where no pack has terrain there (the sea, outside every grid).
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+/// grid read is corrupt.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeElevationAt<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    lat: jni::sys::jdouble,
+    lon: jni::sys::jdouble,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                this.elevation_at(lat, lon)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
 /// row where no pack answers.
 ///

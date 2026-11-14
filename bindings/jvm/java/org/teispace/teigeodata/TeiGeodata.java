@@ -388,6 +388,29 @@ return nativeAdminAt(handle, lat, lon);
         private static native byte[] nativeAdminAt(long handle, double lat, double lon);
 
         /**
+         * The terrain height at the point, as one row: `meters` above the datum (bilinear between
+         * the DEM samples around it), `source` (the DEM product's key, null where the pack does
+         * not state it), `resolution_m` (the sample spacing north to south) and `datum`
+         * (`EGM2008`). No row where no pack has terrain there (the sea, outside every grid).
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+         * grid read is corrupt.
+         */
+        public byte[] elevationAt(double lat, double lon) {
+            long stamp = enter();
+            try {
+return nativeElevationAt(handle, lat, lon);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeElevationAt(long handle, double lat, double lon);
+
+        /**
          * The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
          * row where no pack answers.
          *

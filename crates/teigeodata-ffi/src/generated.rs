@@ -485,6 +485,34 @@ pub unsafe extern "C" fn tg_engine_admin_at(
     })
 }
 
+/// The terrain height at the point, as one row: `meters` above the datum (bilinear between
+/// the DEM samples around it), `source` (the DEM product's key, null where the pack does
+/// not state it), `resolution_m` (the sample spacing north to south) and `datum`
+/// (`EGM2008`). No row where no pack has terrain there (the sea, outside every grid).
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a
+/// grid read is corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_elevation_at(
+    handle: *const TgEngine,
+    lat: f64,
+    lon: f64,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.elevation_at(lat, lon)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
 /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
 /// row where no pack answers.
 ///

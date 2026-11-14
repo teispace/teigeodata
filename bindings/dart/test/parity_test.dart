@@ -174,6 +174,11 @@ void main() {
     expect(() => engine.openFile('/nonexistent.tgd'), throwsA(isA<IoException>()));
     expect(() => engine.openBytes(Uint8List.fromList(utf8.encode('not a pack'))), throwsA(isA<CorruptException>()));
     expect(engine.layers(), 1);
+    final h = e['elevation_at'] as Map<String, dynamic>;
+    expect(engine.openFile('../${h['fixture']}'), 2);
+    final height = engine.elevationAt(h['lat'] as double, h['lon'] as double);
+    expect((column(height, 'meters') as Float64List).single, h['meters']);
+    expect(strings(height, 'source'), [h['source']]);
     engine.close();
     engine.close(); // idempotent
     expect(engine.layers, throwsStateError);
