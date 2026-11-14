@@ -440,6 +440,18 @@ impl<N: Transport> Client<N> {
     ) -> Result<Report> {
         let mut report = Report::default();
         let t = self.catalog_for(paths, &mut report)?;
+        if let Some(m) = &report.stale_catalog {
+            // The refresh failed and the stored catalog lacks a pack asked for: the network,
+            // not the pack, is why it cannot be installed.
+            if let Some(p) = paths
+                .iter()
+                .find(|p| !t.trusted_targets().any(|(q, _)| q == p.as_str()))
+            {
+                return Err(ClientError::Network(format!(
+                    "{m}; {p} is not in the stored catalog"
+                )));
+            }
+        }
         for p in paths {
             self.install_one(&t, p, Some(want), true, downloads, &mut report)?;
             if pin && self.store.packs().iter().any(|r| r.key() == *p) {
