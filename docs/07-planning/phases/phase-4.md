@@ -262,6 +262,8 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   the new signed hashes (2026-11-11, D-174)
 - [ ] Two real consecutive Nepal releases: bytes for section re-download against delta packs
   (and zstd patches, dropped unless this disagrees); decision recorded
+  - first pair measured (D-273, 2026-11-14): a layout release, 11.4 % of the asset by section
+    re-download; the delta-pack decision waits for a release that changes records
 - [ ] If delta packs win: forge emission, compaction policy, L5 with delta layers
 
 ### 4.8 The 15 sync gates
@@ -527,3 +529,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-14 | TG-15 step 4 re-scoped to the world part (codes, names, golden set); the India pack moves to W1 with its villages | D-270 |
 | 2026-11-14 | TG-15 step 4: ISO 3166 codes on every world part | D-271 |
 | 2026-11-14 | TG-15 step 4 done: codes, names measured, India's golden set 47/47 | D-270, D-271 |
+| 2026-11-14 | 4.7: the first real release pair measured; delta packs wait for a record-changing release | D-273 |

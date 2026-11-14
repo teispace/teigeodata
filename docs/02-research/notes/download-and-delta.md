@@ -1,7 +1,7 @@
 ---
 title: "Download and delta: transport compression, ranged downloads, updates"
 status: research
-updated: 2026-11-11
+updated: 2026-11-14
 owner: research-agent
 revisit: 2027-02-09
 ---
@@ -373,6 +373,28 @@ release string writes exactly the head and the block-hash list and reuses every 
 release with a changed PLACES section writes the head, the list and PLACES's frames. Real
 consecutive Nepal releases are still to measure (4.7 second item): that measurement decides
 between this and delta packs.
+
+### 3.7 The first real pair: data-2026.11.12 → data-2026.11.14 (measured 2026-11-14)
+
+Nepal's lite pack, both releases as published (`crates/teigeodata-sync/examples/delta_measure.rs`,
+zstd 19, `update_from`'s reuse rule). `tgd diff`: no place added, removed, moved, renamed or
+retyped; the change is the layout v0.3.0 brought, names split into language parts and outlines
+into level parts (D-251 to D-254), so 57 of the new file's parts are new or changed.
+
+| | Bytes | Share |
+|---|--:|--:|
+| Whole asset | 82,683,651 | 100 % |
+| Of it the DEM (unchanged, reused) | 68,877,726 | 83 % |
+| Section re-download fetches | 9,406,394 | 11.4 % (68 % of the non-DEM bytes) |
+
+A delta pack of changed records cannot express this release (no record changed; the sections
+were re-cut), so it is no A/B for records. The same file gives the sparse model real numbers:
+the place-keyed sections (one row per place) hold 6,291,696 B compressed for 95,716 places,
+65.7 B a place. A release touching 1 % of places (957) is about 63 KB as a delta pack and at
+least 6.3 MB by section re-download when rows reorder (an added or moved place), about 100
+times more; a rename alone changes only the name parts (NAMES, SEARCH, SUBSTRING: 5.6 MB
+here). The decision waits for the first release that changes records (the next data
+correction of a country), measured with the same example (D-273).
 
 ## 4. Options compared
 
