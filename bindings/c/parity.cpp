@@ -1,9 +1,10 @@
-// The C ABI from C++ through the generated wrapper (teigeodata.hpp, 5.8d): the same calls as
-// parity.c, with what the wrapper adds checked too: exceptions with their codes, a callback's
-// exception carried across the library, records with their defaults, move-only handles.
-//
-//   c++ -std=c++17 -Wall -Wextra -Werror -pedantic bindings/c/parity.cpp -Ibindings/c \
-//       -Ltarget/release -lteigeodata_ffi -o target/cpp-parity && target/cpp-parity
+/* The C ABI from C++ through the generated wrapper (teigeodata.hpp, 5.8d): the same calls as
+ * parity.c, with what the wrapper adds checked too: exceptions with their codes, a callback's
+ * exception carried across the library, records with their defaults, move-only handles.
+ *
+ *   c++ -std=c++17 -Wall -Wextra -Werror -pedantic bindings/c/parity.cpp -Ibindings/c \
+ *       -Ltarget/release -lteigeodata_ffi -o target/cpp-parity && target/cpp-parity
+ */
 #include <cstdio>
 #include <cstring>
 #include <fstream>
