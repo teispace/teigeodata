@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The .NET binding (phase 5.8c, D-298): Generated.cs comes from cargo xtask bindings;
+       the native library is packed per runtime identifier under runtimes/<rid>/native. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Teispace.TeiGeodata</RootNamespace>
+    <AssemblyName>Teispace.TeiGeodata</AssemblyName>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+
+    <PackageId>Teispace.TeiGeodata</PackageId>
+    <Version>0.3.1</Version>
+    <Authors>Teispace</Authors>
+    <Description>Accurate, offline places: the .NET binding of teigeodata.</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/teispace/teigeodata</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/teispace/teigeodata</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>geodata;geocoding;places;offline;gazetteer;timezone</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../README.md" Pack="true" PackagePath="/" />
+    <!-- The native libraries, when cargo xtask package-dotnet has staged them. -->
+    <None Include="../runtimes/**/*" Pack="true" PackagePath="runtimes/" Condition="Exists('../runtimes')" />
+  </ItemGroup>
+
+</Project>

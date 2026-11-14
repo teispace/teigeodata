@@ -110,6 +110,40 @@ Measured on Go 1.27.4, best of five (2026-11-14, M2 Pro, load 7 to 9), ns a call
 | Go, cgo | 25.8 | 106.7 | 24,342 | 47.4 |
 | Go, purego | 184.5 | 786.4 | 26,293 | 216.9 |
 
+### Building the .NET binding, 2026-11-14 (D-298)
+
+Choices made while writing the binding, before CI compiled it (no local SDK):
+
+- **Blobs are managed `byte[]`, not a lent `ReadOnlySpan<byte>`**, for Go's reason: a span of
+  library memory cannot keep it alive, and a `ReadOnlySpan<T>` column view from `BlobReader`
+  must not outlive its blob. One copy (`GC.AllocateUninitializedArray`), the library's buffer
+  freed at once; number columns are then viewed in place with `MemoryMarshal.Cast`.
+- **Strings go to the library without pinning**: each is encoded to UTF-8 into a 256-byte
+  stack buffer, or native memory when longer, with a strict encoder, so a lone surrogate is an
+  `ArgumentException` rather than a silent U+FFFD.
+- **Every P/Invoke is blittable** (`byte` for `bool`, `SafeHandle` per handle, records as C
+  mirror structs, the callback a `delegate* unmanaged` to an `[UnmanagedCallersOnly]`
+  trampoline), so the assembly sets `DisableRuntimeMarshalling` and is NativeAOT and trimming
+  safe. A callback's exception is kept in its `GCHandle` box and rethrown with its stack after
+  the call, never unwound through Rust frames.
+- **The last error is read by the generated code straight after the call**, on the same
+  thread: a synchronous P/Invoke cannot change threads.
+- **A store function missing from a library built without the store** throws
+  `EntryPointNotFoundException` at its first call; the generated code maps it to
+  `MissingComponent`, as Go maps its missing symbol.
+- **Loading:** `Library.Load(path)`, else `TEIGEODATA_LIB`, else the runtime's own probing
+  (the package's `runtimes/<rid>/native`, then the system); one `DllImportResolver` then hands
+  every P/Invoke the loaded handle, and the version must be the package's.
+- **Awaitable forms run on a thread of their own** (`TaskCreationOptions.LongRunning`, D-281):
+  a store call can wait on the disk or the network for seconds, which must not hold a pool
+  thread. `Job.ProgressAsync` pumps `WaitProgress` on one such thread into a one-slot channel
+  that keeps the newest value; `Job.ResultAsync(token)` cancels the job when the token fires.
+- **The static class is `Geodata`, not `TeiGeodata`**, because a type named like its namespace
+  (`Teispace.TeiGeodata.TeiGeodata`) breaks lookups from code in a `Teispace.*` namespace
+  (CA1724).
+- **The parity checks are a console program**, not an xUnit project, so the same checks run
+  as a NativeAOT executable and CI downloads no test framework.
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Licence | Maturity / version | Verdict |
@@ -139,10 +173,12 @@ Measured on Go 1.27.4, best of five (2026-11-14, M2 Pro, load 7 to 9), ns a call
 
 ## 7. Risks and open items
 
-- **musl under purego** is not verified (cgo on musl is the default there); `go.yml` runs it
-  in Alpine.
+- ~~**musl under purego**~~: verified, `go.yml` passes the parity suite with
+  `CGO_ENABLED=0` in Alpine on x64 and arm64 (2026-11-14).
 - **`netstandard2.0`** for Unity and .NET Framework: a second form, or not in v1.
-- **The .NET SDK is not installed on this machine** (Go 1.27.4 is, from Homebrew).
+- **The .NET SDK is not installed on this machine** (Go 1.27.4 is, from Homebrew): the .NET
+  binding is compiled and tested in CI (`dotnet.yml`) only, until the maintainer approves the
+  SDK download.
 
 ## 8. Versions checked
 
@@ -151,6 +187,8 @@ Measured on Go 1.27.4, best of five (2026-11-14, M2 Pro, load 7 to 9), ns a call
 | Go | 1.27.4, 1.26.11 | 2026-11-14 | go.dev/dl JSON |
 | purego | v0.11.3 (2026-11-01) | 2026-11-14 | proxy.golang.org |
 | .NET | 11.0.0 (STS), 10.0.15 (LTS) | 2026-11-14 | dotnet release-metadata releases-index.json |
+| .NET SDK | 11.0.100, 10.0.404 | 2026-11-14 | releases-index.json `latest-sdk` |
+| actions/setup-dotnet | v6.1.0 (2026-11-03) | 2026-11-14 | GitHub releases |
 
 ## 9. Sources
 

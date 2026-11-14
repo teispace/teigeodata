@@ -1,0 +1,100 @@
+# The .NET binding on every runtime identifier it ships for (phase 5.8c, D-298): the C library
+# built from this checkout, then the parity checks under the JIT and as a NativeAOT executable.
+# The package targets net10.0 (LTS) and builds with the newest SDK.
+name: dotnet
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - crates/teigeodata-api/**
+      - crates/teigeodata-engine/**
+      - crates/teigeodata-ffi/**
+      - crates/teigeodata-c/**
+      - bindings/dotnet/**
+      - bindings/parity.json
+      - bindings/fixtures/**
+      - xtask/templates/cs.j2
+      - .github/workflows/dotnet.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dotnet-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  parity:
+    name: .NET on ${{ matrix.rid }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, rid: linux-x64, lib: libteigeodata.so }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64, lib: libteigeodata.so }
+          - { os: ubuntu-24.04, rid: linux-musl-x64, alpine: true }
+          - { os: ubuntu-24.04-arm, rid: linux-musl-arm64, alpine: true }
+          - { os: macos-latest, rid: osx-arm64, lib: libteigeodata.dylib }
+          - { os: windows-latest, rid: win-x64, lib: teigeodata.dll }
+          - { os: windows-11-arm, rid: win-arm64, lib: teigeodata.dll }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build and test (Alpine, musl)
+        if: ${{ matrix.alpine }}
+        run: |
+          # A musl cdylib links the C library dynamically (crt-static off), as .NET on Alpine does.
+          docker run --rm -v "$PWD:/w" -w /w -e DOTNET_CLI_TELEMETRY_OPTOUT=1 -e DOTNET_NOLOGO=1 \
+            mcr.microsoft.com/dotnet/sdk:10.0-alpine sh -euc '
+            apk add --no-cache build-base clang lld zlib-dev curl
+            curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+            . "$HOME/.cargo/env"
+            rustup toolchain install
+            RUSTFLAGS="-C target-feature=-crt-static" cargo build --locked --release -p teigeodata-c
+            export TEIGEODATA_LIB=/w/target/release/libteigeodata.so
+            dotnet --version
+            dotnet run -c Release --project bindings/dotnet/Parity
+            dotnet publish bindings/dotnet/Parity -c Release -r ${{ matrix.rid }} -p:PublishAot=true -o /tmp/aot
+            /tmp/aot/Parity'
+      - name: Toolchain (from rust-toolchain.toml)
+        if: ${{ !matrix.alpine }}
+        shell: bash
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: ${{ !matrix.alpine }}
+        with:
+          key: dotnet-${{ matrix.rid }}
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        if: ${{ !matrix.alpine }}
+        with:
+          dotnet-version: |
+            10.0.x
+            11.0.x
+      - name: Build the C library
+        if: ${{ !matrix.alpine }}
+        run: cargo build --locked --release -p teigeodata-c
+      - name: Parity under the JIT
+        if: ${{ !matrix.alpine }}
+        shell: bash
+        run: |
+          export TEIGEODATA_LIB="$GITHUB_WORKSPACE/target/release/${{ matrix.lib }}"
+          dotnet --version
+          dotnet run -c Release --project bindings/dotnet/Parity
+      - name: Parity as a NativeAOT executable
+        if: ${{ !matrix.alpine }}
+        shell: bash
+        run: |
+          export TEIGEODATA_LIB="$GITHUB_WORKSPACE/target/release/${{ matrix.lib }}"
+          dotnet publish bindings/dotnet/Parity -c Release -r ${{ matrix.rid }} -p:PublishAot=true -o "$RUNNER_TEMP/aot"
+          "$RUNNER_TEMP/aot/Parity"
+      - name: Pack
+        if: ${{ matrix.rid == 'linux-x64' }}
+        run: dotnet pack bindings/dotnet/TeiGeodata -c Release -o "$RUNNER_TEMP/nupkg"

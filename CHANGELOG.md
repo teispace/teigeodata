@@ -13,6 +13,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Added
 
+- The .NET binding, NuGet package `Teispace.TeiGeodata` (`net10.0`, D-298): the whole API as
+  source-generated, blittable P/Invoke (NativeAOT and trimming safe), `SafeHandle` handles,
+  `…Async` forms of the blocking store calls, `Job.ProgressAsync` and a cancellable
+  `ResultAsync`, `BlobReader` for blobs and `TeiGeodataException` with the stable codes.
 - The Go binding, `github.com/teispace/teigeodata/bindings/go` (Go 1.26+, D-297): the whole
   API through cgo, or through purego with `CGO_ENABLED=0`, over the C library loaded at run
   time (`LoadLibrary`, `TEIGEODATA_LIB`, a pinned prebuilt in the user cache filled by

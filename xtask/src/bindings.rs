@@ -18,7 +18,8 @@ use minijinja::value::Serde;
 use minijinja::{Environment, UndefinedBehavior, Value};
 
 /// A generated file: its template, where it goes and its formatter. Rust and Go outputs are
-/// passed through rustfmt and gofmt, so that `cargo fmt --check` and `gofmt -l` hold for them.
+/// passed through rustfmt and gofmt, so that `cargo fmt --check` and `gofmt -l` hold for them;
+/// C# only has its runs of blank lines folded (its formatter needs the .NET SDK).
 struct Target {
     template: &'static str,
     output: &'static str,
@@ -31,6 +32,7 @@ enum Fmt {
     None,
     Rust,
     Go,
+    Blank,
 }
 
 const TARGETS: &[Target] = &[
@@ -139,6 +141,11 @@ const TARGETS: &[Target] = &[
         output: "bindings/go/raw_purego.go",
         fmt: Fmt::Go,
     },
+    Target {
+        template: "cs.j2",
+        output: "bindings/dotnet/TeiGeodata/Generated.cs",
+        fmt: Fmt::Blank,
+    },
 ];
 
 const HEADER_OUTPUT: &str = "bindings/c/teigeodata.h";
@@ -171,6 +178,7 @@ pub(crate) fn run(root: &Path, check: bool) -> Result<String, Vec<String>> {
                     )
                 }
                 Fmt::Go => format("gofmt", &[], &text),
+                Fmt::Blank => Ok(fold_blank_lines(&text)),
             });
         match rendered {
             Ok(text) => files.push((t.output, text)),
@@ -306,6 +314,25 @@ fn environment(root: &Path) -> Result<Environment<'static>, String> {
 }
 
 /// Formats source through `tool` (rustfmt or gofmt) on stdin, returning its stdout.
+/// Folds each run of blank lines into one, and drops a blank line before a closing brace.
+fn fold_blank_lines(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut blank = false;
+    for line in text.lines() {
+        if line.trim().is_empty() {
+            blank = true;
+            continue;
+        }
+        if blank && !out.is_empty() && !line.trim_start().starts_with('}') {
+            out.push('\n');
+        }
+        blank = false;
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
 fn format(tool: &str, args: &[&str], text: &str) -> Result<String, String> {
     let mut child = Command::new(tool)
         .args(args)
@@ -332,7 +359,13 @@ fn format(tool: &str, args: &[&str], text: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{camel, camel_lower, pascal, screaming};
+    use super::{camel, camel_lower, fold_blank_lines, pascal, screaming};
+
+    #[test]
+    fn blank_lines() {
+        assert_eq!(fold_blank_lines("a\n\n\n\nb\n\n}\n"), "a\n\nb\n}\n");
+        assert_eq!(fold_blank_lines("\n\na\n"), "a\n");
+    }
 
     #[test]
     fn cases() {
