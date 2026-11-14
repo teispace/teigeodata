@@ -179,15 +179,19 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   Publishing itself needs the maintainer's accounts and namespaces (`com.teispace`, npm
   `@teispace`, PyPI, pub.dev, NuGet). [Research](../../02-research/notes/release-pipeline.md):
   one `release.yml` calling the build workflows, registry steps in its own jobs
-  - [ ] 5.10a the build workflows callable (`workflow_call`, artifacts); `release.yml`
+  - [x] 5.10a the build workflows callable (`workflow_call`, artifacts); `release.yml`
     assembles them with `SHA256SUMS`, SBOMs and attestations; the dry run green on GitHub and
-    every attestation verified (built, D-302; the first dry run found the ABI gate in the
-    called `c-package`, moved to `release.yml`)
-  - [ ] 5.10b each registry's job in dry-run form: the publishable crates, npm, PyPI, pub.dev,
+    every attestation verified (D-302; the first dry run found the ABI gate in the called
+    `c-package`, moved to `release.yml`; the second an Android API 24 emulator refusing `adb`
+    while it settled, now retried. Done 2026-11-15: run 43629194780 green, 52 jobs, 79 files
+    and the SBOMs verified)
+  - [x] 5.10b each registry's job in dry-run form: the publishable crates, npm, PyPI, pub.dev,
     the Maven bundle, the release `Package.swift` and the Go tag (built, D-303 and D-304: the
     crates pass `cargo publish --dry-run`; each library alone for the Dart hook and Go, Android
     and iOS included; `release-pin` and the Dart and Go downloads proven on a mirror; the Maven
-    bundle; green on GitHub pending)
+    bundle. Done 2026-11-15: in run 43629194780 every registry's check passed: `cargo publish
+    --dry-run` for the eight crates, `npm publish --dry-run`, `twine check --strict`,
+    `dart pub publish --dry-run`, `swift package dump-package`, `go vet`, the Maven bundle)
   - [ ] 5.10c the real path behind the `release` environment, and the maintainer's runbook
     (built, D-305: the release commit and tags pushed atomically with a deploy key so the tag
     starts `pub.yml`, every registry publish idempotent, the Maven signing proven with a
@@ -201,6 +205,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-15 | 5.10a and 5.10b done: the release dry run green (run 43629194780) | plan |
 | 2026-11-15 | 5.5e done: Dart on the web over the WebAssembly module (D-307) | plan |
 | 2026-11-14 | 5.7: the API per component (D-291), `fold` with `search` (D-292), the WebAssembly packages (D-293) | plan |
 | 2026-11-14 | 5.7c: the Node.js packages in the napi-rs layout, an ES module entry, musl in Alpine (D-294) | plan |
