@@ -137,7 +137,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   ([research](../../02-research/notes/node-wasm-packaging.md)):
   - [x] 5.7a the API per component (D-291), `fold` with `search` (D-292), so a variant is a
     set of components with one API
-  - [ ] 5.7b the WebAssembly packages `full` and `lookup` (D-293): `cargo xtask package-wasm`,
+  - [x] 5.7b the WebAssembly packages `full` and `lookup` (D-293): `cargo xtask package-wasm`,
     budgets, parity on Node.js and Bun here; done when `wasm.yml` is green (Deno, Node.js 22
     to 26, Chromium, Firefox, WebKit, workerd)
   - [ ] 5.7c the Node.js platform packages and their loader (napi-rs layout, D-294): `cargo
