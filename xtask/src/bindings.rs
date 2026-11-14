@@ -185,6 +185,16 @@ pub(crate) fn run(root: &Path, check: bool) -> Result<String, Vec<String>> {
             Err(e) => problems.push(e),
         }
     }
+    match fs::read_to_string(root.join("bindings/parity.json"))
+        .map_err(|e| e.to_string())
+        .and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string()))
+    {
+        Ok(parity) => match crate::parity::header(&parity) {
+            Ok(text) => files.push((crate::parity::HEADER, text)),
+            Err(e) => problems.push(e),
+        },
+        Err(e) => problems.push(format!("bindings/parity.json: {e}")),
+    }
     if !problems.is_empty() {
         return Err(problems);
     }

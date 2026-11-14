@@ -43,6 +43,22 @@ public final class ParityTest {
         double eSum = 0;
         while (e.hasRemaining()) eSum += e.getFloat();
         check(eSum == ((Number) s.get("elevation_sum")).doubleValue(), "elevation sum " + eSum);
+        check(columnNames(blob).equals(s.get("columns")), "sample columns");
+        List<String> names = strings(blob, "name");
+        check(names.get(names.size() - 1).equals(s.get("last_name")), "sample last name");
+        // The stable error codes, the same in every language.
+        Map<String, TeiGeodataException> codes = new LinkedHashMap<>();
+        codes.put("InvalidArgument", new TeiGeodataException.InvalidArgument(""));
+        codes.put("Cancelled", new TeiGeodataException.Cancelled(""));
+        codes.put("Internal", new TeiGeodataException.Internal(""));
+        codes.put("Io", new TeiGeodataException.Io(""));
+        codes.put("Corrupt", new TeiGeodataException.Corrupt(""));
+        codes.put("MissingComponent", new TeiGeodataException.MissingComponent(""));
+        codes.put("Network", new TeiGeodataException.Network(""));
+        codes.put("Refused", new TeiGeodataException.Refused(""));
+        Map<?, ?> want = (Map<?, ?>) p.get("error_codes");
+        check(want.size() == codes.size(), "error code count");
+        codes.forEach((name, c) -> check(want.get(name) instanceof Number w && w.intValue() == c.code(), "code " + name));
         check(TeiGeodata.SAMPLE_ROWS_MAX == ((Number) p.get("sample_rows_max")).longValue(), "max");
         step("version, fold, sample rows");
 
@@ -263,6 +279,7 @@ public final class ParityTest {
             Map<?, ?> o = (Map<?, ?>) p.get("offset");
             byte[] got = engine.tzOffsetAt((String) o.get("zone"), ((Number) o.get("unix")).longValue());
             check(column(got, "seconds").getInt() == ((Number) o.get("seconds")).intValue(), "tz offset");
+            check(column(got, "dst").get() == ((Number) o.get("dst")).intValue(), "tz dst");
             check(strings(got, "abbr").equals(Collections.singletonList(o.get("abbr"))), "tz abbr");
             for (String kind : Arrays.asList("gap", "overlap")) {
                 Map<?, ?> c = (Map<?, ?>) p.get(kind);
@@ -290,7 +307,9 @@ public final class ParityTest {
             byte[] got = engine.get((String) g.get("id"));
             check(strings(got, "name").equals(Collections.singletonList(g.get("name"))), "get name");
             check(strings(got, "kind").equals(Collections.singletonList(g.get("kind"))), "get kind");
+            check(columnNames(got).equals(p.get("columns")), "engine columns");
             check(column(got, "lat").getDouble() == ((Number) g.get("lat")).doubleValue(), "get lat");
+            check(column(got, "lon").getDouble() == ((Number) g.get("lon")).doubleValue(), "get lon");
             Map<?, ?> q = (Map<?, ?>) p.get("search");
             byte[] hits = engine.search((String) q.get("query"), ((Number) q.get("limit")).longValue());
             check(strings(hits, "id").get(0).equals(q.get("first_id")), "search");
@@ -384,6 +403,14 @@ public final class ParityTest {
                 // closed
             }
         }
+    }
+
+    /** The column names of a v1 blob, in order. */
+    static List<String> columnNames(byte[] blob) {
+        int columns = ByteBuffer.wrap(blob).order(ByteOrder.LITTLE_ENDIAN).getInt(8);
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < columns; i++) out.add(new String(blob, 16 + 40 * i, 16, StandardCharsets.UTF_8).replace("\0", ""));
+        return out;
     }
 
     /** A string column (UTF-8 or a dictionary) of a v1 blob, null rows as null. */

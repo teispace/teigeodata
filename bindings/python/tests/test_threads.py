@@ -6,6 +6,7 @@ need it. On a GIL build the calls still overlap, as each one releases the GIL in
 """
 
 import json
+import os
 import pathlib
 import sys
 import sysconfig
@@ -16,7 +17,9 @@ import teigeodata as tg
 from teigeodata.blob import Reader
 
 ROOT = pathlib.Path(__file__).parents[2]
-PARITY = json.loads((ROOT / "parity.json").read_text("utf-8"))
+PARITY = json.loads(
+    pathlib.Path(os.environ.get("TEIGEODATA_PARITY") or ROOT / "parity.json").read_text("utf-8")
+)
 FIXTURE = str(ROOT / PARITY["engine"]["fixture"])
 THREADS, ROUNDS = 8, 2000
 

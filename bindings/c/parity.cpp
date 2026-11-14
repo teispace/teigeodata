@@ -1,6 +1,7 @@
-/* The C ABI from C++ through the generated wrapper (teigeodata.hpp, 5.8d): the same calls as
- * parity.c, with what the wrapper adds checked too: exceptions with their codes, a callback's
- * exception carried across the library, records with their defaults, move-only handles.
+/* The parity suite in C++ through the generated wrapper (teigeodata.hpp, 5.8d): every value of
+ * bindings/parity.json, read from the generated parity_data.h, and what the wrapper adds:
+ * exceptions with their codes, a callback's exception carried across the library, records
+ * with their defaults, move-only handles. Run it from the repository root:
  *
  *   c++ -std=c++17 -Wall -Wextra -Werror -pedantic bindings/c/parity.cpp -Ibindings/c \
  *       -Ltarget/release -lteigeodata_ffi -o target/cpp-parity && target/cpp-parity
@@ -15,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "parity_data.h"
 #include "teigeodata.hpp"
 
 namespace tg = teigeodata;
@@ -27,6 +29,10 @@ static int failures = 0;
             failures++;                                                              \
         }                                                                            \
     } while (0)
+/* A fixture path: parity.json's paths are relative to bindings/. */
+#define FIXTURE(rel) "bindings/" rel
+
+using Strings = std::vector<std::string>;
 
 /// The code a call throws, or none.
 template <typename F>
@@ -39,6 +45,17 @@ static std::optional<tg::ErrorCode> code_of(F &&call) {
     return std::nullopt;
 }
 
+/// The message a call throws, or none.
+template <typename F>
+static std::optional<std::string> message_of(F &&call) {
+    try {
+        call();
+    } catch (const tg::Error &e) {
+        return std::string(e.what());
+    }
+    return std::nullopt;
+}
+
 static std::uint32_t u32_at(const tg::Blob &b, std::size_t at) {
     std::uint32_t v;
     std::memcpy(&v, b.data() + at, 4);
@@ -47,67 +64,131 @@ static std::uint32_t u32_at(const tg::Blob &b, std::size_t at) {
 
 static std::uint32_t rows(const tg::Blob &b) { return u32_at(b, 4); }
 
-/// Row `row` of the string column `name` (UTF-8 or a dictionary) of a v1 blob.
-static std::optional<std::string> str_at(const tg::Blob &b, const char *name, std::uint32_t row) {
+/// The descriptor of column `name`: type, data, data length, aux, aux length, nulls.
+static std::optional<std::vector<std::uint32_t>> column(const tg::Blob &b, const char *name) {
     const std::uint32_t columns = u32_at(b, 8);
-    for (std::uint32_t i = 0; i < columns && row < rows(b); i++) {
-        const std::size_t d = 16 + 40 * i;
+    for (std::uint32_t i = 0; i < columns; i++) {
+        const std::size_t d = 16 + 40 * std::size_t{i};
         if (std::strncmp(reinterpret_cast<const char *>(b.data() + d), name, 16) != 0) continue;
-        std::uint32_t f[6];
-        std::memcpy(f, b.data() + d + 16, sizeof f);
-        std::uint32_t at, end;
-        std::size_t strings;
-        if (f[0] == 7) {
-            at = u32_at(b, f[1] + 4 * row);
-            end = u32_at(b, f[1] + 4 * (row + 1));
-            strings = f[3];
-        } else if (f[0] == 11 || f[0] == 12) {
-            std::uint32_t code = 0;
-            if (f[0] == 11) {
-                std::uint16_t c16;
-                std::memcpy(&c16, b.data() + f[1] + 2 * row, 2);
-                code = c16;
-            } else {
-                code = u32_at(b, f[1] + 4 * row);
-            }
-            const std::uint32_t count = u32_at(b, f[3]);
-            at = u32_at(b, f[3] + 4 + 4 * code);
-            end = u32_at(b, f[3] + 4 + 4 * (code + 1));
-            strings = f[3] + 4 + 4 * (count + 1);
-        } else {
-            return std::nullopt;
-        }
-        return std::string(reinterpret_cast<const char *>(b.data() + strings + at), end - at);
+        std::vector<std::uint32_t> f(6);
+        std::memcpy(f.data(), b.data() + d + 16, 6 * sizeof(std::uint32_t));
+        return f;
     }
     return std::nullopt;
 }
+
+static Strings columns(const tg::Blob &b) {
+    Strings names;
+    for (std::uint32_t i = 0; i < u32_at(b, 8); i++) {
+        const char *at = reinterpret_cast<const char *>(b.data() + 16 + 40 * std::size_t{i});
+        names.emplace_back(at, strnlen(at, 16));
+    }
+    return names;
+}
+
+/// Row `row` of the string column `name` (UTF-8 or a dictionary).
+static std::optional<std::string> str_at(const tg::Blob &b, const char *name, std::uint32_t row) {
+    const auto f = column(b, name);
+    if (!f || row >= rows(b)) return std::nullopt;
+    const std::uint32_t type = (*f)[0], data = (*f)[1], aux = (*f)[3];
+    std::uint32_t at, end;
+    std::size_t strings;
+    if (type == 7) {
+        at = u32_at(b, data + 4 * std::size_t{row});
+        end = u32_at(b, data + 4 * (std::size_t{row} + 1));
+        strings = aux;
+    } else if (type == 11 || type == 12) {
+        std::uint32_t code = 0;
+        if (type == 11) {
+            std::uint16_t c16;
+            std::memcpy(&c16, b.data() + data + 2 * std::size_t{row}, 2);
+            code = c16;
+        } else {
+            code = u32_at(b, data + 4 * std::size_t{row});
+        }
+        const std::uint32_t count = u32_at(b, aux);
+        at = u32_at(b, aux + 4 + 4 * std::size_t{code});
+        end = u32_at(b, aux + 4 + 4 * (std::size_t{code} + 1));
+        strings = aux + 4 + 4 * (std::size_t{count} + 1);
+    } else {
+        return std::nullopt;
+    }
+    return std::string(reinterpret_cast<const char *>(b.data() + strings + at), end - at);
+}
+
+/// The string column `name`, every row.
+static Strings strs(const tg::Blob &b, const char *name) {
+    Strings out;
+    for (std::uint32_t r = 0; r < rows(b); r++) out.push_back(str_at(b, name, r).value_or("\x01missing"));
+    return out;
+}
+
+template <typename T>
+static T load(const tg::Blob &b, std::size_t at) {
+    T v;
+    std::memcpy(&v, b.data() + at, sizeof v);
+    return v;
+}
+
+/// Row `row` of the number column `name`, as a double.
+static std::optional<double> num_at(const tg::Blob &b, const char *name, std::uint32_t row) {
+    const auto f = column(b, name);
+    if (!f || row >= rows(b)) return std::nullopt;
+    const std::size_t data = (*f)[1], r = row;
+    switch ((*f)[0]) {
+    case 1: return load<std::int32_t>(b, data + 4 * r);
+    case 2: return load<std::uint32_t>(b, data + 4 * r);
+    case 3: return static_cast<double>(load<std::int64_t>(b, data + 8 * r));
+    case 4: return static_cast<double>(load<std::uint64_t>(b, data + 8 * r));
+    case 5: return load<float>(b, data + 4 * r);
+    case 6: return load<double>(b, data + 8 * r);
+    case 8: return load<std::uint8_t>(b, data + r);
+    case 9: return load<std::int16_t>(b, data + 2 * r);
+    case 10: return load<std::uint16_t>(b, data + 2 * r);
+    default: return std::nullopt;
+    }
+}
+
+static double gap(double a, double b) { return a > b ? a - b : b - a; }
 
 static std::vector<std::uint8_t> read_file(const char *path) {
     std::ifstream in(path, std::ios::binary);
     return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(in), {});
 }
 
-int main() {
-    CHECK(tg::version() == "0.3.1");
-    CHECK(tg::components().rfind("point, elevation, admin", 0) == 0);
+static void library() {
+    CHECK(tg::version() == TGP_VERSION);
+    CHECK(tg::components() == TGP_COMPONENTS);
     tg::noop();
-    CHECK(tg::fold("S\xc3\xa3o  Paulo") == "sao paulo");
+    static const char *const fold[][2] = {TGP_FOLD_ITEMS};
+    static_assert(sizeof fold / sizeof fold[0] == TGP_FOLD_COUNT, "fold count");
+    for (const auto &pair : fold) CHECK(tg::fold(pair[0]) == pair[1]);
     CHECK(code_of([] { tg::fold("\xff"); }) == tg::ErrorCode::InvalidArgument);
-    try {
-        tg::fold("\xff");
-    } catch (const tg::Error &e) {
-        CHECK(std::strlen(e.what()) > 0);
-    }
+    CHECK(message_of([] { tg::fold("\xff"); }).value_or("").size() > 0);
 
-    tg::Blob sample = tg::sample_rows(1000);
-    CHECK(sample.size() == 37120 && std::memcmp(sample.data(), "TGB1", 4) == 0);
+    tg::Blob sample = tg::sample_rows(TGP_SAMPLE_ROWS_ROWS);
+    CHECK(sample.size() == TGP_SAMPLE_ROWS_BYTES && std::memcmp(sample.data(), "TGB1", 4) == 0);
+    CHECK(rows(sample) == TGP_SAMPLE_ROWS_ROWS);
+    CHECK(columns(sample) == Strings{TGP_SAMPLE_ROWS_COLUMNS_ITEMS});
+    double lat = 0.0, elevation = 0.0;
+    for (std::uint32_t r = 0; r < rows(sample); r++) { // in row order, as Rust sums
+        lat += num_at(sample, "lat", r).value_or(0.0);
+        elevation += num_at(sample, "elevation", r).value_or(0.0);
+    }
+    CHECK(lat == TGP_SAMPLE_ROWS_LAT_SUM && elevation == TGP_SAMPLE_ROWS_ELEVATION_SUM);
+    CHECK(str_at(sample, "name", rows(sample) - 1) == TGP_SAMPLE_ROWS_LAST_NAME);
     tg::Blob moved = std::move(sample);
-    CHECK(moved.size() == 37120 && sample.empty());
+    CHECK(moved.size() == TGP_SAMPLE_ROWS_BYTES && sample.empty());
+    CHECK(tg::SAMPLE_ROWS_MAX == TGP_SAMPLE_ROWS_MAX);
     CHECK(code_of([] { tg::sample_rows(tg::SAMPLE_ROWS_MAX + 1); }) == tg::ErrorCode::InvalidArgument);
 
     std::uint32_t sum = 0;
     CHECK(tg::progress(2, [&](std::uint32_t s) { sum += s; return s < 3; }) == 2 && sum == 3);
-    CHECK(code_of([] { tg::progress(9, [](std::uint32_t s) { return s < 3; }); }) == tg::ErrorCode::Cancelled);
+    const auto cancelled = [] {
+        tg::progress(TGP_PROGRESS_STEPS, [](std::uint32_t s) { return s < TGP_PROGRESS_CANCEL_AFTER; });
+    };
+    CHECK(code_of(cancelled) == tg::ErrorCode::Cancelled);
+    CHECK(message_of(cancelled) == TGP_PROGRESS_CANCELLED_MESSAGE);
     // A callback's exception cancels the call and comes out of it, not out of the library.
     bool rethrown = false;
     try {
@@ -120,81 +201,169 @@ int main() {
     }
     CHECK(rethrown);
 
-    // The engine on the fixture pack (bindings/parity.json, "engine").
+    const double args[] = {TGP_DISTANCE_M_ARGS_ITEMS}, off[] = {TGP_DISTANCE_M_OUT_OF_RANGE_ITEMS};
+    CHECK(gap(tg::distance_m(args[0], args[1], args[2], args[3]), TGP_DISTANCE_M_METRES) <= 1e-6);
+    CHECK(code_of([&] { tg::distance_m(off[0], off[1], off[2], off[3]); }) == tg::ErrorCode::InvalidArgument);
+
+    CHECK(static_cast<int>(tg::ErrorCode::InvalidArgument) == TGP_ERROR_CODES_INVALIDARGUMENT);
+    CHECK(static_cast<int>(tg::ErrorCode::Cancelled) == TGP_ERROR_CODES_CANCELLED);
+    CHECK(static_cast<int>(tg::ErrorCode::Internal) == TGP_ERROR_CODES_INTERNAL);
+    CHECK(static_cast<int>(tg::ErrorCode::Io) == TGP_ERROR_CODES_IO);
+    CHECK(static_cast<int>(tg::ErrorCode::Corrupt) == TGP_ERROR_CODES_CORRUPT);
+    CHECK(static_cast<int>(tg::ErrorCode::MissingComponent) == TGP_ERROR_CODES_MISSINGCOMPONENT);
+    CHECK(static_cast<int>(tg::ErrorCode::Network) == TGP_ERROR_CODES_NETWORK);
+    CHECK(static_cast<int>(tg::ErrorCode::Refused) == TGP_ERROR_CODES_REFUSED);
+}
+
+static void engine_queries() {
+    const char *path = FIXTURE(TGP_ENGINE_FIXTURE), *id = TGP_ENGINE_GET_ID;
     tg::Engine engine;
-    const char *path = "bindings/fixtures/synth.tgd", *id = "tgd:np/18n8a6";
     CHECK(engine.open_file(path) == 0);
     tg::Blob got = engine.get(id);
-    CHECK(rows(got) == 1 && str_at(got, "name", 0) == "Synthland" && str_at(got, "kind", 0) == "country");
-    CHECK(str_at(engine.search("Synthland", 3), "id", 0) == id);
-    tg::Blob near = engine.reverse(27.5, 85.5, 3);
-    CHECK(rows(near) == 3 && str_at(near, "id", 0) == "tgd:np/sx2ze9");
-    CHECK(str_at(engine.admin_at(27.5, 85.5), "id", 1) == "tgd:np/avwsr1");
-    CHECK(rows(engine.children(id)) == 8);
-    CHECK(code_of([&] { engine.within_radius(27.5, 85.5, -1.0, 10); }) == tg::ErrorCode::InvalidArgument);
-    CHECK(str_at(engine.tz_at(27.5, 85.5), "tz", 0) == "Zone 1");
+    CHECK(rows(got) == 1 && columns(got) == Strings{TGP_ENGINE_COLUMNS_ITEMS});
+    CHECK(str_at(got, "name", 0) == TGP_ENGINE_GET_NAME && str_at(got, "kind", 0) == TGP_ENGINE_GET_KIND);
+    CHECK(num_at(got, "lat", 0) == TGP_ENGINE_GET_LAT && num_at(got, "lon", 0) == TGP_ENGINE_GET_LON);
+    CHECK(str_at(engine.search(TGP_ENGINE_SEARCH_QUERY, TGP_ENGINE_SEARCH_LIMIT), "id", 0) == TGP_ENGINE_SEARCH_FIRST_ID);
+
+    tg::Blob near = engine.reverse(TGP_ENGINE_REVERSE_LAT, TGP_ENGINE_REVERSE_LON, TGP_ENGINE_REVERSE_LIMIT);
+    CHECK(strs(near, "id") == Strings{TGP_ENGINE_REVERSE_IDS_ITEMS});
+    CHECK(gap(num_at(near, "meters", 0).value_or(0.0), TGP_ENGINE_REVERSE_FIRST_METERS) <= 0.1);
+    CHECK(strs(engine.admin_at(TGP_ENGINE_ADMIN_AT_LAT, TGP_ENGINE_ADMIN_AT_LON), "id") == Strings{TGP_ENGINE_ADMIN_AT_IDS_ITEMS});
+    CHECK(strs(engine.parent(TGP_ENGINE_PARENT_ID), "id") == Strings{TGP_ENGINE_PARENT_IDS_ITEMS});
+    CHECK(strs(engine.ancestors(TGP_ENGINE_ANCESTORS_ID), "id") == Strings{TGP_ENGINE_ANCESTORS_IDS_ITEMS});
+    CHECK(strs(engine.children(TGP_ENGINE_CHILDREN_ID), "id") == Strings{TGP_ENGINE_CHILDREN_IDS_ITEMS});
+    CHECK(strs(engine.nearby(TGP_ENGINE_NEARBY_ID, TGP_ENGINE_NEARBY_LIMIT), "id") == Strings{TGP_ENGINE_NEARBY_IDS_ITEMS});
+    CHECK(strs(engine.within_radius(TGP_ENGINE_WITHIN_RADIUS_LAT, TGP_ENGINE_WITHIN_RADIUS_LON, TGP_ENGINE_WITHIN_RADIUS_METERS,
+                                    TGP_ENGINE_WITHIN_RADIUS_LIMIT),
+               "id") == Strings{TGP_ENGINE_WITHIN_RADIUS_IDS_ITEMS});
+    CHECK(code_of([&] { engine.within_radius(TGP_ENGINE_WITHIN_RADIUS_LAT, TGP_ENGINE_WITHIN_RADIUS_LON, -1.0, 1); }) ==
+          tg::ErrorCode::InvalidArgument);
+    CHECK(strs(engine.tz_at(TGP_ENGINE_TZ_AT_LAT, TGP_ENGINE_TZ_AT_LON), "tz") == Strings{TGP_ENGINE_TZ_AT_TZ});
+    CHECK(strs(engine.by_iso(TGP_ENGINE_BY_ISO_CODE), "id") == Strings{TGP_ENGINE_BY_ISO_ID});
+    CHECK(code_of([&] { engine.by_iso(TGP_ENGINE_BAD_ISO); }) == tg::ErrorCode::InvalidArgument);
 
     tg::SearchOptions focus;
-    focus.focus_lat = 26.80005;
-    focus.focus_lon = 87.087849;
-    focus.focus_scale_m = 1000.0;
-    CHECK(str_at(engine.search_with("Lalek", 3, focus), "id", 1) == "tgd:np/tv88y0");
-    CHECK(str_at(engine.search_with("Lalek", 3), "id", 1) != "tgd:np/tv88y0");
+    focus.focus_lat = TGP_ENGINE_SEARCH_WITH_FOCUS_LAT;
+    focus.focus_lon = TGP_ENGINE_SEARCH_WITH_FOCUS_LON;
+    focus.focus_scale_m = TGP_ENGINE_SEARCH_WITH_FOCUS_SCALE_M;
+    const Strings focused{TGP_ENGINE_SEARCH_WITH_IDS_ITEMS};
+    CHECK(strs(engine.search_with(TGP_ENGINE_SEARCH_WITH_QUERY, TGP_ENGINE_SEARCH_WITH_LIMIT, focus), "id") == focused);
+    CHECK(strs(engine.search_with(TGP_ENGINE_SEARCH_WITH_QUERY, TGP_ENGINE_SEARCH_WITH_LIMIT), "id") != focused);
     tg::SearchOptions half;
     half.focus_lat = 1.0;
-    CHECK(code_of([&] { engine.search_with("Lalek", 3, half); }) == tg::ErrorCode::InvalidArgument);
+    CHECK(code_of([&] { engine.search_with(TGP_ENGINE_SEARCH_WITH_QUERY, 1, half); }) == tg::ErrorCode::InvalidArgument);
 
-    // Open options: the byte at 173392 (parity.json, open_with) lies inside a section.
-    std::vector<std::uint8_t> pack = read_file(path);
-    CHECK(pack.size() > 173392);
-    pack[173392] ^= 0xff;
-    tg::Engine scratch;
-    tg::OpenOptions eager;
-    eager.verify = tg::Verify::Eager;
-    CHECK(code_of([&] { scratch.open_bytes_with(pack, eager); }) == tg::ErrorCode::Corrupt);
-    CHECK(scratch.open_bytes_with(pack) == 0);
-    tg::OpenOptions points_only;
-    points_only.components = "point";
-    points_only.languages = "en, ne";
-    tg::Engine points;
-    points.open_file_with(path, points_only);
-    CHECK(rows(points.get(id)) == 1);
-    CHECK(code_of([&] { points.search("Synthland", 1); }) == tg::ErrorCode::MissingComponent);
+    tg::Blob postal = engine.postal_lookup(TGP_ENGINE_POSTAL_LOOKUP_CODE, TGP_ENGINE_POSTAL_LOOKUP_SCHEME);
+    CHECK(strs(postal, "postal") == Strings{TGP_ENGINE_POSTAL_LOOKUP_POSTAL_ITEMS});
+    CHECK(strs(postal, "id") == Strings{TGP_ENGINE_POSTAL_LOOKUP_IDS_ITEMS});
+    CHECK(strs(engine.postal_prefix(TGP_ENGINE_POSTAL_PREFIX_INPUT, TGP_ENGINE_POSTAL_PREFIX_SCHEME, TGP_ENGINE_POSTAL_PREFIX_LIMIT),
+               "postal") == Strings{TGP_ENGINE_POSTAL_PREFIX_POSTAL_ITEMS});
+    tg::Blob at = engine.postal_at(TGP_ENGINE_POSTAL_AT_LAT, TGP_ENGINE_POSTAL_AT_LON);
+    CHECK(strs(at, "postal") == Strings{TGP_ENGINE_POSTAL_AT_POSTAL_ITEMS});
+    CHECK(strs(at, "code_kind") == Strings{TGP_ENGINE_POSTAL_AT_CODE_KIND_ITEMS});
+    CHECK(strs(engine.postal_codes_of(TGP_ENGINE_POSTAL_CODES_OF_ID), "postal") == Strings{TGP_ENGINE_POSTAL_CODES_OF_POSTAL_ITEMS});
 
-    tg::Blob postal = engine.postal_lookup("106-01", "np");
-    CHECK(str_at(postal, "postal", 0) == "10601" && str_at(postal, "id", 0) == "tgd:np/vasbex");
-    CHECK(code_of([&] { engine.get("not an id"); }) == tg::ErrorCode::InvalidArgument);
+    CHECK(code_of([&] { engine.get(TGP_ENGINE_BAD_ID); }) == tg::ErrorCode::InvalidArgument);
     CHECK(code_of([&] { engine.open_file("/nonexistent.tgd"); }) == tg::ErrorCode::Io);
-    CHECK(engine.open_file("bindings/fixtures/dem.tgd") == 1);
-    CHECK(str_at(engine.elevation_at(27.84, 76.01), "source", 0) == "copernicus-glo30");
+    CHECK(engine.layers() == 1);
+    CHECK(engine.open_file(FIXTURE(TGP_ENGINE_ELEVATION_AT_FIXTURE)) == 1);
+    tg::Blob height = engine.elevation_at(TGP_ENGINE_ELEVATION_AT_LAT, TGP_ENGINE_ELEVATION_AT_LON);
+    CHECK(strs(height, "source") == Strings{TGP_ENGINE_ELEVATION_AT_SOURCE});
+    CHECK(num_at(height, "meters", 0) == TGP_ENGINE_ELEVATION_AT_METERS);
     CHECK(engine.remove(1) && !engine.remove(1));
 
     tg::Engine taken = std::move(engine);
     CHECK(taken.native() != nullptr && engine.native() == nullptr);
     CHECK(rows(taken.get(id)) == 1);
+}
 
-    // The zone rules (parity.json, tz) on the rules-only fixture.
+static void open_options() {
+    const char *path = FIXTURE(TGP_ENGINE_FIXTURE);
+    std::vector<std::uint8_t> pack = read_file(path);
+    CHECK(pack.size() > TGP_ENGINE_OPEN_WITH_CORRUPT_AT);
+    if (pack.size() <= TGP_ENGINE_OPEN_WITH_CORRUPT_AT) return;
+    pack[TGP_ENGINE_OPEN_WITH_CORRUPT_AT] ^= 0xff;
+    tg::Engine scratch;
+    tg::OpenOptions eager;
+    eager.verify = tg::Verify::Eager;
+    CHECK(code_of([&] { scratch.open_bytes_with(pack, eager); }) == tg::ErrorCode::Corrupt);
+    CHECK(scratch.open_bytes_with(pack) == 0);
+    tg::OpenOptions every;
+    every.priority = 2;
+    every.verify = tg::Verify::Eager;
+    every.load = tg::Load::Read;
+    every.outline_level = 1;
+    CHECK(scratch.open_file_with(path, every) == 1);
+    tg::OpenOptions odd;
+    odd.verify = static_cast<tg::Verify>(TGP_ENGINE_OPEN_WITH_BAD_VERIFY);
+    CHECK(code_of([&] { scratch.open_file_with(path, odd); }) == tg::ErrorCode::InvalidArgument);
+    tg::OpenOptions deep;
+    deep.outline_level = TGP_ENGINE_OPEN_WITH_BAD_OUTLINE_LEVEL;
+    CHECK(code_of([&] { scratch.open_file_with(path, deep); }) == tg::ErrorCode::InvalidArgument);
+
+    tg::OpenOptions points_only;
+    points_only.components = TGP_ENGINE_OPEN_WITH_COMPONENTS;
+    points_only.languages = TGP_ENGINE_OPEN_WITH_LANGUAGES;
+    tg::Engine points;
+    points.open_file_with(path, points_only);
+    CHECK(rows(points.get(TGP_ENGINE_GET_ID)) == 1);
+    CHECK(code_of([&] { points.search(TGP_ENGINE_SEARCH_QUERY, 1); }) == tg::ErrorCode::MissingComponent);
+    tg::OpenOptions unknown;
+    unknown.components = TGP_ENGINE_OPEN_WITH_BAD_COMPONENTS;
+    CHECK(code_of([&] { points.open_file_with(path, unknown); }) == tg::ErrorCode::InvalidArgument);
+}
+
+static void zone_rules() {
     tg::Engine rules;
-    rules.open_file("bindings/fixtures/tz.tgd");
-    CHECK(rules.tz_version() == "2026f");
-    CHECK(str_at(rules.tz_offset_at("America/New_York", 1719835200), "abbr", 0) == "EDT");
-    CHECK(str_at(rules.tz_local("America/New_York", 2024, 3, 10, 2, 30, 0), "kind", 0) == "gap");
+    CHECK(rules.open_file(FIXTURE(TGP_TZ_FIXTURE)) == 0);
+    CHECK(rules.tz_version() == TGP_TZ_VERSION);
+    CHECK(strs(rules.tz_zones(), "zone") == Strings{TGP_TZ_ZONES_ITEMS});
+    tg::Blob offset = rules.tz_offset_at(TGP_TZ_OFFSET_ZONE, TGP_TZ_OFFSET_UNIX);
+    CHECK(num_at(offset, "seconds", 0) == TGP_TZ_OFFSET_SECONDS && num_at(offset, "dst", 0) == TGP_TZ_OFFSET_DST);
+    CHECK(strs(offset, "abbr") == Strings{TGP_TZ_OFFSET_ABBR});
+    const std::int64_t g[] = {TGP_TZ_GAP_CIVIL_ITEMS}, o[] = {TGP_TZ_OVERLAP_CIVIL_ITEMS};
+    const auto local = [&](const char *zone, const std::int64_t *c) {
+        return rules.tz_local(zone, static_cast<std::int32_t>(c[0]), static_cast<std::uint32_t>(c[1]),
+                              static_cast<std::uint32_t>(c[2]), static_cast<std::uint32_t>(c[3]),
+                              static_cast<std::uint32_t>(c[4]), static_cast<std::uint32_t>(c[5]));
+    };
+    tg::Blob in_gap = local(TGP_TZ_GAP_ZONE, g), in_overlap = local(TGP_TZ_OVERLAP_ZONE, o);
+    CHECK(strs(in_gap, "kind") == Strings{"gap"} && strs(in_overlap, "kind") == Strings{"overlap"});
+    CHECK(num_at(in_gap, "before", 0) == TGP_TZ_GAP_BEFORE && num_at(in_gap, "after", 0) == TGP_TZ_GAP_AFTER);
+    CHECK(num_at(in_overlap, "before", 0) == TGP_TZ_OVERLAP_BEFORE && num_at(in_overlap, "after", 0) == TGP_TZ_OVERLAP_AFTER);
+    CHECK(num_at(rules.tz_rules_start(TGP_TZ_START_ZONE), "unix", 0) == static_cast<double>(TGP_TZ_START_UNIX));
+    CHECK(rows(rules.tz_offset_at(TGP_TZ_UNKNOWN, 0)) == 0);
+    CHECK(code_of([&] { rules.tz_local(TGP_TZ_OFFSET_ZONE, 2024, 13, 1, 0, 0, 0); }) == tg::ErrorCode::InvalidArgument);
+}
 
 #if TEIGEODATA_FEATURE_STORE
-    // The store (parity.json, store): the fixture root, a mirror that refuses connections.
-    const std::vector<std::uint8_t> root = read_file("bindings/fixtures/store-root.json");
-    const char *mirror = "http://127.0.0.1:1/";
+/// The store: the fixture root, a mirror that refuses connections.
+static void store_jobs() {
+    const std::vector<std::uint8_t> root = read_file(FIXTURE(TGP_STORE_ROOT));
+    const char *mirror = TGP_STORE_MIRROR, *pack = TGP_STORE_PACK;
     CHECK(code_of([] { tg::Store::open("target/cpp-store-missing"); }) == tg::ErrorCode::Refused);
     tg::Store store = tg::Store::create("target/cpp-store", mirror, mirror, root);
     tg::Engine installed = store.engine();
     CHECK(installed.layers() == 0);
-    CHECK(rows(store.find(installed, "np", 3)) == 0);
-    tg::Job job = store.refresh("np");
+    CHECK(rows(store.find(installed, pack, 3)) == 0);
+    tg::InstallOptions wrong;
+    wrong.components = TGP_STORE_BAD_COMPONENTS;
+    CHECK(code_of([&] { store.install(pack, wrong); }) == tg::ErrorCode::InvalidArgument);
+    tg::Job job = store.refresh(pack);
     CHECK(code_of([&] { job.result(); }) == tg::ErrorCode::Network);
     CHECK(job.is_ended() && job.done_bytes() == job.total_bytes());
     job.cancel();
+}
 #endif
 
+int main() {
+    library();
+    engine_queries();
+    open_options();
+    zone_rules();
+#if TEIGEODATA_FEATURE_STORE
+    store_jobs();
+#endif
     if (failures == 0) std::puts("c++ parity ok");
     return failures != 0;
 }

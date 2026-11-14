@@ -191,6 +191,11 @@ jobs:
           go test -count=1 -race ./...
           CGO_ENABLED=0 go test -count=1 ./...
           go test -run '^$' -fuzz FuzzReader -fuzztime 20s .
+      # The parity gate's sample: the first value of each section planted in every language
+      # (5.9); the full gate runs in parity-mutants.yml.
+      - name: Parity gate sample
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: cargo xtask parity-mutants --sample --jobs 2
       - name: Lite library symbols (D-285)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |

@@ -8,7 +8,10 @@ const { join } = require("node:path");
 const { test } = require("node:test");
 const tg = require(process.env.TEIGEODATA_NODE_PACKAGE || "..");
 
-const parity = JSON.parse(readFileSync(join(__dirname, "../../parity.json"), "utf8"));
+// TEIGEODATA_PARITY names another copy (cargo xtask parity-mutants plants a difference in one).
+const parity = JSON.parse(
+  readFileSync(process.env.TEIGEODATA_PARITY || join(__dirname, "../../parity.json"), "utf8"),
+);
 
 /** A fixed-width column of a blob, viewed in place (no copy). */
 function column(blob, name) {
@@ -20,10 +23,19 @@ function column(blob, name) {
     const d = 16 + 40 * i;
     if (blob.toString("utf8", d, d + 16).replace(/\0+$/, "") !== name) continue;
     const [type, at, len] = [0, 4, 8].map((k) => view.getUint32(d + 16 + k, true));
-    const Kind = { 1: Int32Array, 2: Uint32Array, 3: BigInt64Array, 4: BigUint64Array, 5: Float32Array, 6: Float64Array }[type];
+    const Kind = {
+      1: Int32Array, 2: Uint32Array, 3: BigInt64Array, 4: BigUint64Array, 5: Float32Array, 6: Float64Array,
+      8: Uint8Array, 9: Int16Array, 10: Uint16Array,
+    }[type];
     return new Kind(blob.buffer, blob.byteOffset + at, len / Kind.BYTES_PER_ELEMENT);
   }
   throw new Error(`no column ${name}`);
+}
+
+/** The column names of a blob, in order. */
+function columnNames(blob) {
+  const count = blob.readUInt32LE(8);
+  return Array.from({ length: count }, (_, i) => blob.toString("utf8", 16 + 40 * i, 32 + 40 * i).replace(/\0+$/, ""));
 }
 
 test("version and noop", () => {
@@ -48,6 +60,8 @@ test("sampleRows", () => {
   let elevation = 0;
   for (const v of column(blob, "elevation")) elevation += v;
   assert.equal(elevation, s.elevation_sum);
+  assert.deepEqual(columnNames(blob), s.columns);
+  assert.equal(strings(blob, "name").at(-1), s.last_name);
   assert.equal(tg.SAMPLE_ROWS_MAX, parity.sample_rows_max);
 });
 
@@ -98,6 +112,12 @@ function strings(blob, name) {
   throw new Error(`no column ${name}`);
 }
 
+/** The column names of a blob, in order. */
+function columnNames(blob) {
+  const count = blob.readUInt32LE(8);
+  return Array.from({ length: count }, (_, i) => blob.toString("utf8", 16 + 40 * i, 32 + 40 * i).replace(/\0+$/, ""));
+}
+
 /** A number column of a v1 blob, viewed in place. */
 function numbers(blob, name) {
   return column(blob, name);
@@ -110,7 +130,9 @@ test("engine handle on the fixture", () => {
   const got = engine.get(p.get.id);
   assert.deepEqual(strings(got, "name"), [p.get.name]);
   assert.deepEqual(strings(got, "kind"), [p.get.kind]);
+  assert.deepEqual(columnNames(got), p.columns);
   assert.deepEqual([...numbers(got, "lat")], [p.get.lat]);
+  assert.deepEqual([...numbers(got, "lon")], [p.get.lon]);
   assert.equal(strings(engine.search(p.search.query, p.search.limit), "id")[0], p.search.first_id);
   const near = engine.reverse(p.reverse.lat, p.reverse.lon, p.reverse.limit);
   assert.deepEqual(strings(near, "id"), p.reverse.ids);
@@ -294,6 +316,7 @@ test("zone rules on the rules-only fixture", () => {
   const o = p.offset;
   const got = engine.tzOffsetAt(o.zone, o.unix);
   assert.deepEqual([...numbers(got, "seconds")], [o.seconds]);
+  assert.deepEqual([...numbers(got, "dst")], [o.dst]);
   assert.deepEqual(strings(got, "abbr"), [o.abbr]);
   for (const kind of ["gap", "overlap"]) {
     const c = p[kind];

@@ -28,6 +28,7 @@ mod package_jvm;
 mod package_node;
 mod package_swift;
 mod package_wasm;
+mod parity;
 mod postal;
 mod recipe;
 mod romanise;
@@ -109,6 +110,11 @@ Tasks:
                     bindings/swift/CTeiGeodata.xcframework and a zip with its SwiftPM
                     checksum under target/apple/; --test runs the Swift parity checks
                     against it on macOS and on an iOS simulator.
+  parity-mutants [--lang <a,b>] [--leaf <prefix>] [--jobs <n>] [--sample] [--no-build] [--list]
+                    Plants each value of bindings/parity.json in turn and requires every
+                    language's parity suite (python, node, go, jvm, swift, dart, c, cpp) to
+                    fail on it (5.9); reports the values a suite does not check. --sample
+                    plants only the first value of each section.
   pack-sizes <pack.tgd> [--langs ne,en]
                     TG-11: where a pack's bytes go: each component on disk and on the
                     wire and per place, each column, names by language (and the names
@@ -158,6 +164,7 @@ fn main() -> ExitCode {
         "package-jvm" => report(package_jvm::run(&root, rest)),
         "package-dotnet" => report(package_dotnet::run(&root, rest)),
         "package-node" => report(package_node::run(&root, rest)),
+        "parity-mutants" => report(parity::run(&root, rest)),
         "package-wasm" => report(package_wasm::run(&root, rest)),
         "package-swift" => report(package_swift::run(&root, rest)),
         "pack-sizes" => report(breakdown::run(rest)),

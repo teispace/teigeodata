@@ -74,6 +74,14 @@ func column<T: FixedWidthInteger>(_ blob: Data, _ name: String, as _: T.Type) ->
     }
 }
 
+/// The column names of a v1 blob, in order.
+func columnNames(_ blob: Data) -> [String] {
+    blob.withUnsafeBytes { raw -> [String] in
+        let count = Int(UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: 8, as: UInt32.self)))
+        return (0..<count).map { i in String(decoding: raw[16 + 40 * i..<32 + 40 * i].prefix { $0 != 0 }, as: UTF8.self) }
+    }
+}
+
 /// A string column (UTF-8 or a dictionary) of a v1 blob, null rows as nil.
 func strings(_ blob: Data, _ name: String) -> [String?] {
     blob.withUnsafeBytes { raw -> [String?] in
@@ -126,6 +134,14 @@ public func runParity(_ path: String) async throws {
     check(lat == s["lat_sum"] as! Double, "lat sum \(lat)")
     let elevation = column(blob, "elevation", as: UInt32.self).reduce(0.0) { $0 + Double(Float(bitPattern: $1)) }
     check(elevation == s["elevation_sum"] as! Double, "elevation sum \(elevation)")
+    check(columnNames(blob) == s["columns"] as! [String], "sample columns")
+    check(strings(blob, "name").last == s["last_name"] as? String, "sample last name")
+    // The stable error codes, the same in every language.
+    let codes: [String: TeiGeodataError.Code] = [
+        "InvalidArgument": .invalidArgument, "Cancelled": .cancelled, "Internal": .internal, "Io": .io,
+        "Corrupt": .corrupt, "MissingComponent": .missingComponent, "Network": .network, "Refused": .refused,
+    ]
+    check(codes.mapValues { Int($0.rawValue) } == p["error_codes"] as! [String: Int], "error codes")
     check(Int(TeiGeodata.sampleRowsMax) == p["sample_rows_max"] as! Int, "max")
 
     do {
@@ -168,6 +184,7 @@ public func runParity(_ path: String) async throws {
         let o = t["offset"] as! [String: Any]
         let got = try engine.tzOffsetAt(o["zone"] as! String, unixSeconds: Int64(o["unix"] as! Int))
         check(column(got, "seconds", as: Int32.self) == [Int32(o["seconds"] as! Int)], "tz offset")
+        check(column(got, "dst", as: UInt8.self) == [UInt8(o["dst"] as! Int)], "tz dst")
         check(strings(got, "abbr") == [o["abbr"] as? String], "tz abbr")
         for kind in ["gap", "overlap"] {
             let c = t[kind] as! [String: Any], v = (c["civil"] as! [Int])
@@ -193,7 +210,9 @@ public func runParity(_ path: String) async throws {
         let row = try engine.get(get["id"] as! String)
         check(strings(row, "name") == [get["name"] as? String], "get name")
         check(strings(row, "kind") == [get["kind"] as? String], "get kind")
+        check(columnNames(row) == e["columns"] as! [String], "engine columns")
         check(column(row, "lat", as: UInt64.self).map { Double(bitPattern: $0) } == [get["lat"] as! Double], "get lat")
+        check(column(row, "lon", as: UInt64.self).map { Double(bitPattern: $0) } == [get["lon"] as! Double], "get lon")
         let q = e["search"] as! [String: Any]
         let hits = try engine.search(q["query"] as! String, limit: UInt32(q["limit"] as! Int))
         check(strings(hits, "id").first == q["first_id"] as? String, "search")

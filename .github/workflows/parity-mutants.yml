@@ -1,0 +1,67 @@
+# The parity gate (5.9, docs/02-research/notes/parity-gate.md): every value of
+# bindings/parity.json is planted in turn and every language's parity suite must fail on it.
+# One job per language; it never blocks a push (D-080). fast-check runs the --sample subset.
+name: parity-mutants
+
+on:
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - bindings/parity.json
+      - bindings/c/parity.c
+      - bindings/c/parity.cpp
+      - bindings/python/tests/**
+      - bindings/node/test/**
+      - bindings/go/parity_test.go
+      - bindings/jvm/test/**
+      - bindings/swift/Sources/Parity/**
+      - bindings/swift/Sources/ParityChecks/**
+      - bindings/dart/test/**
+      - xtask/src/parity.rs
+      - .github/workflows/parity-mutants.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: parity-mutants-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  mutants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        lang: [python, node, go, jvm, swift, dart, c, cpp]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            . -> target
+            bindings -> target
+          shared-key: parity-mutants
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        if: matrix.lang == 'jvm'
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+        if: matrix.lang == 'dart'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: matrix.lang == 'go'
+        with:
+          go-version: "1.27.x"
+          cache-dependency-path: bindings/go/go.sum
+      - name: Plant every value, run the ${{ matrix.lang }} suite on each
+        run: cargo xtask parity-mutants --lang ${{ matrix.lang }} --jobs 1

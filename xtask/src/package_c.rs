@@ -534,6 +534,12 @@ fn smoke(plan: &Plan, os: Os, stage: &Path) -> Result<String, Vec<String>> {
     let parity_cpp = dir.join("parity.cpp");
     std::fs::copy(plan.root.join("bindings/c/parity.cpp"), &parity_cpp)
         .map_err(|e| vec![format!("parity.cpp: {e}")])?;
+    // The golden values, beside the copies (`#include "parity_data.h"`).
+    std::fs::copy(
+        plan.root.join("bindings/c/parity_data.h"),
+        dir.join("parity_data.h"),
+    )
+    .map_err(|e| vec![format!("parity_data.h: {e}")])?;
     let mut done = Vec::new();
 
     if os != Os::Windows {

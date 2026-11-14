@@ -55,6 +55,7 @@ var parity struct {
 	}
 	Engine struct {
 		Fixture string
+		Columns []string
 		Get     struct {
 			ID, Name, Kind string
 			Lat, Lon       float64
@@ -163,7 +164,12 @@ var parity struct {
 }
 
 func TestMain(m *testing.M) {
-	data, err := os.ReadFile("../parity.json")
+	// TEIGEODATA_PARITY names another copy (cargo xtask parity-mutants plants a difference in one).
+	path := os.Getenv("TEIGEODATA_PARITY")
+	if path == "" {
+		path = "../parity.json"
+	}
+	data, err := os.ReadFile(path)
 	if err == nil {
 		err = json.Unmarshal(data, &parity)
 	}
@@ -386,7 +392,9 @@ func TestEngine(t *testing.T) {
 	got := reader(engine.Get(p.Get.ID))
 	equal(t, "name", must(got.Strings("name")), []string{p.Get.Name})
 	equal(t, "kind", must(got.Strings("kind")), []string{p.Get.Kind})
+	equal(t, "columns", got.Columns(), p.Columns)
 	equal(t, "lat", numbers(t, got, "lat"), []float64{p.Get.Lat})
+	equal(t, "lon", numbers(t, got, "lon"), []float64{p.Get.Lon})
 	if first := column("id")(engine.Search(p.Search.Query, p.Search.Limit))[0]; first != p.Search.FirstID {
 		t.Fatal(first)
 	}

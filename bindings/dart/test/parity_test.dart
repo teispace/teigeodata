@@ -23,11 +23,20 @@ TypedData column(Uint8List blob, String name) {
       3 => blob.buffer.asInt64List(blob.offsetInBytes + at, len ~/ 8),
       5 => blob.buffer.asFloat32List(blob.offsetInBytes + at, len ~/ 4),
       6 => blob.buffer.asFloat64List(blob.offsetInBytes + at, len ~/ 8),
+      8 => blob.buffer.asUint8List(blob.offsetInBytes + at, len),
+      9 => blob.buffer.asInt16List(blob.offsetInBytes + at, len ~/ 2),
+      10 => blob.buffer.asUint16List(blob.offsetInBytes + at, len ~/ 2),
       _ => blob.buffer.asUint32List(blob.offsetInBytes + at, len ~/ 4),
     };
   }
   throw StateError('no column $name');
 }
+
+/// The column names of a v1 blob, in order.
+List<String> columnNames(Uint8List blob) => [
+  for (var i = 0; i < ByteData.sublistView(blob).getUint32(8, Endian.little); i++)
+    utf8.decode(blob.sublist(16 + 40 * i, 32 + 40 * i).takeWhile((b) => b != 0).toList()),
+];
 
 /// A string column (UTF-8 or a dictionary) of a v1 blob, null rows as null.
 List<String?> strings(Uint8List blob, String name) {
@@ -57,7 +66,9 @@ List<String?> strings(Uint8List blob, String name) {
 }
 
 void main() {
-  final parity = jsonDecode(File('../parity.json').readAsStringSync()) as Map<String, dynamic>;
+  // TEIGEODATA_PARITY names another copy (cargo xtask parity-mutants plants a difference in one).
+  final path = Platform.environment['TEIGEODATA_PARITY'] ?? '../parity.json';
+  final parity = jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
   final tg = TeiGeodata();
   tearDownAll(tg.close);
 
@@ -87,6 +98,8 @@ void main() {
       elevation += v;
     }
     expect(elevation, s['elevation_sum']);
+    expect(columnNames(blob), s['columns']);
+    expect(strings(blob, 'name').last, s['last_name']);
     expect(TeiGeodata.sampleRowsMax, parity['sample_rows_max']);
   });
 
@@ -99,6 +112,18 @@ void main() {
   });
 
   test('errors carry their code', () {
+    // The stable codes, the same in every language.
+    final codes = <String, int>{
+      'InvalidArgument': const InvalidArgumentException('').code,
+      'Cancelled': const CancelledException('').code,
+      'Internal': const InternalException('').code,
+      'Io': const IoException('').code,
+      'Corrupt': const CorruptException('').code,
+      'MissingComponent': const MissingComponentException('').code,
+      'Network': const NetworkException('').code,
+      'Refused': const RefusedException('').code,
+    };
+    expect(codes, parity['error_codes']);
     expect(
       () => tg.sampleRows(TeiGeodata.sampleRowsMax + 1),
       throwsA(
@@ -136,7 +161,9 @@ void main() {
     final row = engine.get(g['id'] as String);
     expect(strings(row, 'name'), [g['name']]);
     expect(strings(row, 'kind'), [g['kind']]);
+    expect(columnNames(row), e['columns']);
     expect((column(row, 'lat') as Float64List).single, g['lat']);
+    expect((column(row, 'lon') as Float64List).single, g['lon']);
     final q = e['search'] as Map<String, dynamic>;
     expect(
       strings(engine.search(q['query'] as String, q['limit'] as int), 'id').first,
@@ -270,6 +297,7 @@ void main() {
     final o = p['offset'] as Map<String, dynamic>;
     final got = engine.tzOffsetAt(o['zone'] as String, o['unix'] as int);
     expect(column(got, 'seconds'), [o['seconds']]);
+    expect(column(got, 'dst'), [o['dst']]);
     expect(strings(got, 'abbr'), [o['abbr']]);
     for (final kind in ['gap', 'overlap']) {
       final c = p[kind] as Map<String, dynamic>;
@@ -371,12 +399,15 @@ void main() {
     final root = File('../${st['root']}').readAsBytesSync();
     final pack = st['pack'] as String;
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    // Ended at teardown: a write to a client that went away need not throw, and a handler
+    // still trickling would keep the process alive for its full 20 s.
+    var stopped = false;
     server.listen((req) async {
       // Unbuffered: a buffered response holds its body until it closes.
       req.response.bufferOutput = false;
       req.response.contentLength = 1000;
       try {
-        for (var i = 0; i < 1000; i++) {
+        for (var i = 0; i < 1000 && !stopped; i++) {
           req.response.add(const [0x20]);
           await req.response.flush();
           await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -386,7 +417,10 @@ void main() {
         // The client went away.
       }
     });
-    addTearDown(() => server.close(force: true));
+    addTearDown(() {
+      stopped = true;
+      return server.close(force: true);
+    });
     final d = Directory.systemTemp.createTempSync('tg-store-');
     addTearDown(() => d.deleteSync(recursive: true));
 

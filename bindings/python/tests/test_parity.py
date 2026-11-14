@@ -2,6 +2,7 @@
 against Rust)."""
 
 import json
+import os
 import pathlib
 import struct
 import unittest
@@ -9,7 +10,12 @@ import unittest
 import teigeodata as tg
 from teigeodata.blob import Reader
 
-PARITY = json.loads((pathlib.Path(__file__).parents[2] / "parity.json").read_text("utf-8"))
+# TEIGEODATA_PARITY names another copy (cargo xtask parity-mutants plants a difference in one).
+PARITY = json.loads(
+    pathlib.Path(
+        os.environ.get("TEIGEODATA_PARITY") or pathlib.Path(__file__).parents[2] / "parity.json"
+    ).read_text("utf-8")
+)
 
 
 def column(blob: tg.Blob, name: str) -> memoryview:
@@ -55,6 +61,9 @@ class Parity(unittest.TestCase):
             total += v
         self.assertEqual(total, s["lat_sum"])
         self.assertEqual(sum(float(v) for v in column(blob, "elevation")), s["elevation_sum"])
+        rows = Reader(blob)
+        self.assertEqual(rows.columns, s["columns"])
+        self.assertEqual(rows.strings("name")[-1], s["last_name"])
         self.assertEqual(tg.SAMPLE_ROWS_MAX, PARITY["sample_rows_max"])
 
     def test_distance(self) -> None:

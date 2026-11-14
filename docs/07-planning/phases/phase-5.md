@@ -159,8 +159,11 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   - [x] 5.8d the generated C++17 wrapper, its example and test
 
 ### 5.9 Parity and benchmarks
-- [ ] One parity suite of golden vectors run in every language in CI, proven to fail on a
-  planted difference
+- [x] One parity suite of golden vectors run in every language in CI, proven to fail on a
+  planted difference (D-300): `cargo xtask parity-mutants` plants each of the 181 values of
+  `parity.json` in Python, Node.js, Go, the JVM, Swift, Dart, C and C++; every mutant fails
+  except 23 allow-listed inputs no check can observe; `parity-mutants.yml` runs it, `fast-check`
+  a sample. .NET is out while parked (D-299)
 - [ ] The X benchmarks: call overhead, a 1,000-row search end to end and blob decoding per
   language, against the Rust engine
 
@@ -197,3 +200,4 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 | 2026-11-14 | 5.1 started: the `Engine` handle in every language, IDL format 2 | plan |
 | 2026-11-14 | 5.0 done: the threading contract (D-274), S2 (D-275) | research |
 | 2026-11-14 | Phase 5 drafted from the bindings research and spike S4 | Phase 4's open items wait on the maintainer or a future release |
+| 2026-11-14 | 5.9 parity gate done (D-300): the suites gained the checks the planted values showed missing; C and C++ read `parity_data.h` | plan |
