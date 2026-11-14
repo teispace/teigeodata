@@ -41,12 +41,26 @@ create_exception!(
     TeiGeodataError,
     "A bug inside teigeodata (a panic caught at the boundary, or a broken invariant)."
 );
+create_exception!(
+    teigeodata,
+    IoError,
+    TeiGeodataError,
+    "A file could not be read."
+);
+create_exception!(
+    teigeodata,
+    CorruptError,
+    TeiGeodataError,
+    "The bytes are not a valid pack, or a section does not match its hash."
+);
 
 fn error(e: teigeodata_api::Error) -> PyErr {
     match e.code {
         ErrorCode::InvalidArgument => InvalidArgumentError::new_err(e.message),
         ErrorCode::Cancelled => CancelledError::new_err(e.message),
         ErrorCode::Internal => InternalError::new_err(e.message),
+        ErrorCode::Io => IoError::new_err(e.message),
+        ErrorCode::Corrupt => CorruptError::new_err(e.message),
     }
 }
 
@@ -128,11 +142,15 @@ fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> PyResult<f64> {
 mod _native {
     #[pymodule_export]
     use super::{
-        CancelledError, InternalError, InvalidArgumentError, TeiGeodataError, distance_m, fold,
-        noop, progress, sample_rows, version,
+        CancelledError, CorruptError, InternalError, InvalidArgumentError, IoError,
+        TeiGeodataError, distance_m, fold, noop, progress, sample_rows, version,
     };
 
     /// Most rows `sample_rows` builds in one call.
     #[pymodule_export]
     const SAMPLE_ROWS_MAX: u32 = 1000000;
+
+    /// Most places one query returns.
+    #[pymodule_export]
+    const LIMIT_MAX: u32 = 10000;
 }

@@ -7,9 +7,13 @@
 //!
 //! **Boundary types.** A public function may use only these, so that every language can
 //! express it:
-//! - parameters: `bool`, `i32`, `u32`, `i64`, `u64`, `f64`, `&str`, and one callback
-//!   `&mut dyn FnMut(u32) -> bool` (return `false` to cancel);
-//! - results: `()`, the scalars, `String` and [`Blob`], optionally inside [`Result`].
+//! - parameters: `bool`, `i32`, `u32`, `i64`, `u64`, `f64`, `&str`, `&[u8]`, a handle by
+//!   reference (`&Engine`), and one callback `&mut dyn FnMut(u32) -> bool` (return `false` to
+//!   cancel);
+//! - results: `()`, the scalars, `String`, [`Blob`] and a handle, optionally inside [`Result`].
+//!
+//! **Handles** (D-274) are public structs with private fields; their `impl`'s `pub fn`s take
+//! `&self` or no receiver, so each handle is `Send + Sync` and callable from any thread.
 //!
 //! The extractor rejects anything else with the line number.
 //!
@@ -19,8 +23,16 @@
 //! assert_eq!(teigeodata_api::fold("São Paulo"), "sao paulo");
 //! ```
 
+mod places;
+
+use std::cell::RefCell;
+
 pub use teigeodata_blob::Blob;
 use teigeodata_blob::Column;
+use teigeodata_core::{E6, E7, PlaceId, Point};
+use teigeodata_engine::{Hit, Layer, LayerOptions, Near, Place, Scratch, Shared};
+
+use places::Places;
 
 /// Error codes, stable across every language. Zero is success at the C ABI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +44,10 @@ pub enum ErrorCode {
     Cancelled = 2,
     /// A bug inside teigeodata (a panic caught at the boundary, or a broken invariant).
     Internal = 3,
+    /// A file could not be read.
+    Io = 4,
+    /// The bytes are not a valid pack, or a section does not match its hash.
+    Corrupt = 5,
 }
 
 /// A failed call: a stable code and a message for people.
@@ -60,11 +76,205 @@ impl core::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+impl From<teigeodata_engine::Error> for Error {
+    fn from(e: teigeodata_engine::Error) -> Self {
+        use teigeodata_engine::Error as E;
+        let code = match &e {
+            E::Io(_) => ErrorCode::Io,
+            E::Format(_) | E::Integrity { .. } | E::Range => ErrorCode::Corrupt,
+            // A missing component reads as absent where a query allows it; elsewhere it is
+            // the caller asking for what was not installed.
+            _ => ErrorCode::InvalidArgument,
+        };
+        Self::new(code, e.to_string())
+    }
+}
+
 /// The result of a fallible call.
 pub type Result<T> = core::result::Result<T, Error>;
 
 /// Most rows [`sample_rows`] builds in one call.
 pub const SAMPLE_ROWS_MAX: u32 = 1_000_000;
+
+/// Most places one query returns.
+pub const LIMIT_MAX: u32 = 10_000;
+
+/// Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
+/// answers from any number of threads at once, and adding a pack publishes a new snapshot
+/// while queries go on.
+///
+/// Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`,
+/// `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search
+/// and `meters` and `bearing` for a reverse lookup.
+pub struct Engine {
+    shared: Shared,
+}
+
+impl core::fmt::Debug for Engine {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Engine")
+            .field("layers", &self.layers())
+            .finish()
+    }
+}
+
+/// One thread's query buffers.
+#[derive(Default)]
+struct Buffers {
+    scratch: Scratch,
+    hits: Vec<Hit>,
+    near: Vec<Near>,
+    units: Vec<Place>,
+}
+
+thread_local! {
+    /// Each thread's query scratch, reused so a warm query does not allocate (M1).
+    static BUFFERS: RefCell<Buffers> = RefCell::default();
+}
+
+fn limit(n: u32) -> Result<usize> {
+    if n > LIMIT_MAX {
+        return Err(Error::new(
+            ErrorCode::InvalidArgument,
+            format!("limit is {n}; at most {LIMIT_MAX}"),
+        ));
+    }
+    Ok(n as usize)
+}
+
+fn point<G: teigeodata_core::Grid>(lat: f64, lon: f64) -> Result<Point<G>> {
+    Point::from_degrees(lat, lon).map_err(|e| {
+        Error::new(
+            ErrorCode::InvalidArgument,
+            format!("({lat}, {lon}) is not a point: {e}"),
+        )
+    })
+}
+
+impl Default for Engine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Engine {
+    /// An engine with no packs.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            shared: Shared::new(teigeodata_engine::Engine::new()),
+        }
+    }
+
+    /// Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::Io`] if the file cannot be read, [`ErrorCode::Corrupt`] if it is not a
+    /// valid pack.
+    pub fn open_file(&self, path: &str) -> Result<u32> {
+        let layer = Layer::open(path, LayerOptions::default())?;
+        Ok(self.add(layer))
+    }
+
+    /// Adds a pack from its bytes (copied). Returns the number of packs.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::Corrupt`] if the bytes are not a valid pack.
+    pub fn open_bytes(&self, bytes: &[u8]) -> Result<u32> {
+        let layer = Layer::from_bytes(bytes, LayerOptions::default())?;
+        Ok(self.add(layer))
+    }
+
+    fn add(&self, layer: Layer) -> u32 {
+        self.shared.update(|e| {
+            e.add(layer);
+            u32::try_from(e.layers().len()).unwrap_or(u32::MAX)
+        })
+    }
+
+    /// The number of packs.
+    #[must_use]
+    pub fn layers(&self) -> u32 {
+        u32::try_from(self.shared.load().layers().len()).unwrap_or(u32::MAX)
+    }
+
+    /// The place with this ID (`tgd:np/1`), or no row; a retired ID gives its survivor.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] if `id` is not a place ID; [`ErrorCode::Corrupt`] if a
+    /// section read is corrupt.
+    pub fn get(&self, id: &str) -> Result<Blob> {
+        let id: PlaceId = id.parse().map_err(|e| {
+            Error::new(
+                ErrorCode::InvalidArgument,
+                format!("{id:?} is not a place ID: {e}"),
+            )
+        })?;
+        let engine = self.shared.load();
+        let place = engine.get(id)?;
+        Places::of(&engine, place)?.blob()
+    }
+
+    /// Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named
+    /// parent first. The `score` column compares only within one query.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] if `limit` exceeds [`LIMIT_MAX`];
+    /// [`ErrorCode::Corrupt`] if a section read is corrupt.
+    pub fn search(&self, query: &str, limit: u32) -> Result<Blob> {
+        let k = self::limit(limit)?;
+        let engine = self.shared.load();
+        BUFFERS.with_borrow_mut(|b| {
+            let Buffers { scratch, hits, .. } = b;
+            engine.search(query, k, scratch, hits)?;
+            let mut out = Places::of(&engine, hits.iter().map(|h| h.place))?;
+            out.score = Some(hits.iter().map(|h| h.score).collect());
+            out.blob()
+        })
+    }
+
+    /// The places nearest the point, nearest first, at most `limit`, with `meters` and
+    /// `bearing` (degrees from north) to each.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] for a point off the globe or a `limit` above
+    /// [`LIMIT_MAX`]; [`ErrorCode::Corrupt`] if a section read is corrupt.
+    pub fn reverse(&self, lat: f64, lon: f64, limit: u32) -> Result<Blob> {
+        let (k, at) = (self::limit(limit)?, point::<E6>(lat, lon)?);
+        let engine = self.shared.load();
+        BUFFERS.with_borrow_mut(|b| {
+            let Buffers { scratch, near, .. } = b;
+            engine.reverse(at, k, scratch, near)?;
+            let mut out = Places::of(&engine, near.iter().map(|n| n.place))?;
+            out.near = Some((
+                near.iter().map(|n| n.meters).collect(),
+                near.iter().map(|n| n.bearing_deg).collect(),
+            ));
+            out.blob()
+        })
+    }
+
+    /// The admin units holding the point, country first.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] for a point off the globe; [`ErrorCode::Corrupt`] if a
+    /// section read is corrupt.
+    pub fn admin_at(&self, lat: f64, lon: f64) -> Result<Blob> {
+        let at = point::<E7>(lat, lon)?;
+        let engine = self.shared.load();
+        BUFFERS.with_borrow_mut(|b| {
+            let Buffers { scratch, units, .. } = b;
+            engine.admin_at(at, scratch, units)?;
+            Places::of(&engine, units.iter().copied())?.blob()
+        })
+    }
+}
 
 /// The library version, from its package metadata.
 #[must_use]

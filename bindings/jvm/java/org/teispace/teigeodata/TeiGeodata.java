@@ -18,6 +18,9 @@ public final class TeiGeodata {
     /** Most rows `sample_rows` builds in one call. */
     public static final long SAMPLE_ROWS_MAX = 1000000L;
 
+    /** Most places one query returns. */
+    public static final long LIMIT_MAX = 10000L;
+
     /** A callback taking u32; return {@code false} to cancel. */
     @FunctionalInterface
     public interface CallbackU32 {

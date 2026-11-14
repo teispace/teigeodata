@@ -22,6 +22,20 @@
       "doc": [
         "A bug inside teigeodata (a panic caught at the boundary, or a broken invariant)."
       ]
+    },
+    {
+      "name": "Io",
+      "value": 4,
+      "doc": [
+        "A file could not be read."
+      ]
+    },
+    {
+      "name": "Corrupt",
+      "value": 5,
+      "doc": [
+        "The bytes are not a valid pack, or a section does not match its hash."
+      ]
     }
   ],
   "constants": [
@@ -31,6 +45,14 @@
       "value": 1000000,
       "doc": [
         "Most rows `sample_rows` builds in one call."
+      ]
+    },
+    {
+      "name": "LIMIT_MAX",
+      "ty": "u32",
+      "value": 10000,
+      "doc": [
+        "Most places one query returns."
       ]
     }
   ],
@@ -157,7 +179,181 @@
       "fallible": true
     }
   ],
-  "handles": [],
+  "handles": [
+    {
+      "name": "Engine",
+      "snake": "engine",
+      "doc": [
+        "Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine",
+        "answers from any number of threads at once, and adding a pack publishes a new snapshot",
+        "while queries go on.",
+        "",
+        "Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`,",
+        "`elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search",
+        "and `meters` and `bearing` for a reverse lookup."
+      ],
+      "methods": [
+        {
+          "name": "new",
+          "doc": [
+            "An engine with no packs."
+          ],
+          "receiver": false,
+          "params": [],
+          "returns": "handle",
+          "returns_handle": "Engine",
+          "fallible": false
+        },
+        {
+          "name": "open_file",
+          "doc": [
+            "Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::Io` if the file cannot be read, `ErrorCode::Corrupt` if it is not a",
+            "valid pack."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "path",
+              "ty": "str"
+            }
+          ],
+          "returns": "u32",
+          "fallible": true
+        },
+        {
+          "name": "open_bytes",
+          "doc": [
+            "Adds a pack from its bytes (copied). Returns the number of packs.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::Corrupt` if the bytes are not a valid pack."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "bytes",
+              "ty": "bytes"
+            }
+          ],
+          "returns": "u32",
+          "fallible": true
+        },
+        {
+          "name": "layers",
+          "doc": [
+            "The number of packs."
+          ],
+          "receiver": true,
+          "params": [],
+          "returns": "u32",
+          "fallible": false
+        },
+        {
+          "name": "get",
+          "doc": [
+            "The place with this ID (`tgd:np/1`), or no row; a retired ID gives its survivor.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::InvalidArgument` if `id` is not a place ID; `ErrorCode::Corrupt` if a",
+            "section read is corrupt."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "id",
+              "ty": "str"
+            }
+          ],
+          "returns": "blob",
+          "fallible": true
+        },
+        {
+          "name": "search",
+          "doc": [
+            "Places matching `query`, best first, at most `limit`; \"Name, Parent\" ranks a named",
+            "parent first. The `score` column compares only within one query.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;",
+            "`ErrorCode::Corrupt` if a section read is corrupt."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "query",
+              "ty": "str"
+            },
+            {
+              "name": "limit",
+              "ty": "u32"
+            }
+          ],
+          "returns": "blob",
+          "fallible": true
+        },
+        {
+          "name": "reverse",
+          "doc": [
+            "The places nearest the point, nearest first, at most `limit`, with `meters` and",
+            "`bearing` (degrees from north) to each.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::InvalidArgument` for a point off the globe or a `limit` above",
+            "`LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "lat",
+              "ty": "f64"
+            },
+            {
+              "name": "lon",
+              "ty": "f64"
+            },
+            {
+              "name": "limit",
+              "ty": "u32"
+            }
+          ],
+          "returns": "blob",
+          "fallible": true
+        },
+        {
+          "name": "admin_at",
+          "doc": [
+            "The admin units holding the point, country first.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Corrupt` if a",
+            "section read is corrupt."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "lat",
+              "ty": "f64"
+            },
+            {
+              "name": "lon",
+              "ty": "f64"
+            }
+          ],
+          "returns": "blob",
+          "fallible": true
+        }
+      ]
+    }
+  ],
   "callbacks": [
     {
       "id": "u32",

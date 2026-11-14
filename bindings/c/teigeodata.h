@@ -25,8 +25,14 @@ extern "C" {
 #define TG_ERROR_CANCELLED 2
 /* A bug inside teigeodata (a panic caught at the boundary, or a broken invariant). */
 #define TG_ERROR_INTERNAL 3
+/* A file could not be read. */
+#define TG_ERROR_IO 4
+/* The bytes are not a valid pack, or a section does not match its hash. */
+#define TG_ERROR_CORRUPT 5
 /* Most rows `sample_rows` builds in one call. */
 #define TG_SAMPLE_ROWS_MAX 1000000u
+/* Most places one query returns. */
+#define TG_LIMIT_MAX 10000u
 
 /* An owned byte buffer: a UTF-8 string (no NUL) or a blob. A zeroed value is empty. */
 typedef struct tg_bytes {

@@ -1,0 +1,190 @@
+//! The `Engine` handle over a synthetic pack (the engine's own test model): every query as a
+//! blob, its errors typed, and queries from many threads while packs are added (D-274).
+
+#![allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    reason = "tests: failures panic with their message"
+)]
+
+#[path = "../../teigeodata-engine/tests/common/mod.rs"]
+mod common;
+
+use std::sync::Arc;
+
+use common::synthetic;
+use teigeodata_api::{Blob, Engine, ErrorCode, LIMIT_MAX};
+use teigeodata_blob::{Reader, View};
+
+fn strings(blob: &Blob, name: &str) -> Vec<Option<String>> {
+    let r = Reader::new(blob.as_bytes()).unwrap();
+    let nulls = r.nulls(name);
+    let null = |i: usize| nulls.is_some_and(|n| n.is_null(i));
+    match r.column(name) {
+        Some(View::Utf8(s)) => (0..r.rows())
+            .map(|i| (!null(i)).then(|| s.get(i).unwrap().to_owned()))
+            .collect(),
+        Some(View::Dict(d)) => (0..r.rows())
+            .map(|i| (!null(i)).then(|| d.get(i).unwrap().to_owned()))
+            .collect(),
+        _ => panic!("{name} is not a string column"),
+    }
+}
+
+fn f64s(blob: &Blob, name: &str) -> Vec<f64> {
+    let r = Reader::new(blob.as_bytes()).unwrap();
+    let Some(View::F64(v)) = r.column(name) else {
+        panic!("{name}")
+    };
+    v.f64s().collect()
+}
+
+fn rows(blob: &Blob) -> usize {
+    Reader::new(blob.as_bytes()).unwrap().rows()
+}
+
+/// The synthetic country's row (rows are in Hilbert order, so not the first).
+fn country(model: &common::Model) -> usize {
+    model
+        .kinds
+        .iter()
+        .position(|k| *k == teigeodata_core::PlaceKind::Country)
+        .unwrap()
+}
+
+fn open() -> (Engine, common::Model) {
+    let model = synthetic(400, 11);
+    let engine = Engine::new();
+    assert_eq!(engine.layers(), 0);
+    assert_eq!(engine.open_bytes(&model.encode()), Ok(1));
+    (engine, model)
+}
+
+#[test]
+fn get_returns_one_row_with_every_column() {
+    let (engine, model) = open();
+    let row = country(&model);
+    let id = model.ids[row].to_string();
+    let blob = engine.get(&id).unwrap();
+    let r = Reader::new(blob.as_bytes()).unwrap();
+    assert_eq!(r.rows(), 1);
+    assert_eq!(
+        r.names().collect::<Vec<_>>(),
+        [
+            "id",
+            "name",
+            "kind",
+            "level",
+            "lat",
+            "lon",
+            "elevation",
+            "parent",
+            "tz",
+            "iso"
+        ]
+    );
+    assert_eq!(strings(&blob, "id"), [Some(id)]);
+    assert_eq!(strings(&blob, "name"), [Some("Synthland".to_owned())]);
+    assert_eq!(strings(&blob, "kind"), [Some("country".to_owned())]);
+    let lat = f64s(&blob, "lat")[0];
+    assert!((lat - model.points[row].lat_degrees()).abs() < 1e-9);
+    // An unknown but well-formed ID: no row. A malformed one: an argument error.
+    assert_eq!(rows(&engine.get("tgd:np/zzzzzz").unwrap()), 0);
+    let e = engine.get("not an id").unwrap_err();
+    assert_eq!(e.code, ErrorCode::InvalidArgument);
+}
+
+#[test]
+fn search_reverse_and_admin_answer_as_blobs() {
+    let (engine, model) = open();
+    let hits = engine.search("Synthland", 5).unwrap();
+    assert_eq!(strings(&hits, "name")[0].as_deref(), Some("Synthland"));
+    let r = Reader::new(hits.as_bytes()).unwrap();
+    assert!(matches!(r.column("score"), Some(View::I32(_))));
+    // An empty search still carries its score column.
+    let none = engine.search("qqqqqqqq", 5).unwrap();
+    let r = Reader::new(none.as_bytes()).unwrap();
+    assert_eq!(r.rows(), 0);
+    assert!(r.column("score").is_some());
+
+    let p = model.points[model.points.len() - 1];
+    let (lat, lon) = (p.lat_degrees(), p.lon_degrees());
+    let near = engine.reverse(lat, lon, 3).unwrap();
+    let meters = f64s(&near, "meters");
+    assert_eq!(meters.len(), 3);
+    assert!(meters.windows(2).all(|w| w[0] <= w[1]), "{meters:?}");
+    assert_eq!(f64s(&near, "bearing").len(), 3);
+
+    let units = engine.admin_at(lat, lon).unwrap();
+    let kinds = strings(&units, "kind");
+    assert_ne!(kinds.len(), 0);
+    assert!(
+        kinds.iter().all(|k| k.as_deref() != Some("settlement")),
+        "{kinds:?}"
+    );
+}
+
+#[test]
+fn errors_are_typed() {
+    let (engine, _) = open();
+    let code = |r: teigeodata_api::Result<Blob>| r.unwrap_err().code;
+    assert_eq!(
+        code(engine.search("x", LIMIT_MAX + 1)),
+        ErrorCode::InvalidArgument
+    );
+    assert_eq!(
+        code(engine.reverse(91.0, 0.0, 1)),
+        ErrorCode::InvalidArgument
+    );
+    assert_eq!(
+        code(engine.reverse(f64::NAN, 0.0, 1)),
+        ErrorCode::InvalidArgument
+    );
+    assert_eq!(
+        code(engine.admin_at(0.0, 181.0)),
+        ErrorCode::InvalidArgument
+    );
+    assert_eq!(
+        engine.open_bytes(b"not a pack").unwrap_err().code,
+        ErrorCode::Corrupt
+    );
+    let missing = engine.open_file("/nonexistent/teigeodata.tgd").unwrap_err();
+    assert_eq!(missing.code, ErrorCode::Io);
+    assert_eq!(engine.layers(), 1, "a failed open adds nothing");
+}
+
+/// Queries from four threads while the main thread adds packs: each answer is whole, from one
+/// snapshot (D-141), and no call blocks another.
+#[test]
+fn many_threads_query_while_packs_are_added() {
+    let (engine, model) = open();
+    let engine = Arc::new(engine);
+    let id = model.ids[country(&model)].to_string();
+    let workers: Vec<_> = (0..4)
+        .map(|_| {
+            let (engine, id) = (Arc::clone(&engine), id.clone());
+            std::thread::spawn(move || {
+                for _ in 0..100 {
+                    let blob = engine.get(&id).unwrap();
+                    assert_eq!(strings(&blob, "name"), [Some("Synthland".to_owned())]);
+                    assert!(rows(&engine.search("Synthland", 3).unwrap()) >= 1);
+                }
+            })
+        })
+        .collect();
+    for seed in 0..4 {
+        let other = synthetic(50, 100 + seed);
+        engine.open_bytes(&other.encode()).unwrap();
+    }
+    for w in workers {
+        w.join().unwrap();
+    }
+    assert_eq!(engine.layers(), 5);
+}
+
+#[test]
+fn the_handle_is_send_and_sync() {
+    fn check<T: Send + Sync>() {}
+    check::<Engine>();
+}

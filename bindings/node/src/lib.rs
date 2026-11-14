@@ -28,6 +28,10 @@ pub enum Code {
     Cancelled,
     /// A bug inside teigeodata (a panic caught at the boundary, or a broken invariant).
     Internal,
+    /// A file could not be read.
+    Io,
+    /// The bytes are not a valid pack, or a section does not match its hash.
+    Corrupt,
     /// An N-API failure, or an exception thrown by a callback (rethrown as it was).
     Napi(Status),
 }
@@ -38,6 +42,8 @@ impl AsRef<str> for Code {
             Self::InvalidArgument => "InvalidArgument",
             Self::Cancelled => "Cancelled",
             Self::Internal => "Internal",
+            Self::Io => "Io",
+            Self::Corrupt => "Corrupt",
             Self::Napi(s) => s.as_ref(),
         }
     }
@@ -56,6 +62,8 @@ fn error(e: teigeodata_api::Error) -> Error<Code> {
         ErrorCode::InvalidArgument => Code::InvalidArgument,
         ErrorCode::Cancelled => Code::Cancelled,
         ErrorCode::Internal => Code::Internal,
+        ErrorCode::Io => Code::Io,
+        ErrorCode::Corrupt => Code::Corrupt,
     };
     Error::new(code, e.message)
 }
@@ -63,6 +71,10 @@ fn error(e: teigeodata_api::Error) -> Error<Code> {
 /// Most rows `sample_rows` builds in one call.
 #[napi]
 pub const SAMPLE_ROWS_MAX: u32 = 1000000;
+
+/// Most places one query returns.
+#[napi]
+pub const LIMIT_MAX: u32 = 10000;
 
 /// The library version, from its package metadata.
 #[napi]

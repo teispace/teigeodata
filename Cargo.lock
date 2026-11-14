@@ -1629,6 +1629,9 @@ version = "0.3.1"
 dependencies = [
  "serde_json",
  "teigeodata-blob",
+ "teigeodata-core",
+ "teigeodata-engine",
+ "teigeodata-format",
  "teigeodata-names",
 ]
 

@@ -11,10 +11,14 @@ publish.workspace = true
 
 [dependencies]
 teigeodata-blob.workspace = true
+teigeodata-core.workspace = true
+teigeodata-engine.workspace = true
 teigeodata-names.workspace = true
 
 [dev-dependencies]
 serde_json = "1.0.154"
+# The engine's test packs (`tests/engine.rs` includes its `tests/common`).
+teigeodata-format = { workspace = true, features = ["write", "spatial"] }
 
 [lints]
 workspace = true

@@ -45,4 +45,22 @@ public class TeiGeodataException extends RuntimeException {
             super(3, message);
         }
     }
+
+    /** A file could not be read. Code 4. */
+    public static final class Io extends TeiGeodataException {
+        private static final long serialVersionUID = 1L;
+
+        Io(String message) {
+            super(4, message);
+        }
+    }
+
+    /** The bytes are not a valid pack, or a section does not match its hash. Code 5. */
+    public static final class Corrupt extends TeiGeodataException {
+        private static final long serialVersionUID = 1L;
+
+        Corrupt(String message) {
+            super(5, message);
+        }
+    }
 }

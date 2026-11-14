@@ -30,6 +30,8 @@ fn throw(env: &mut Env<'_>, e: &teigeodata_api::Error) -> jni::errors::Result<()
         }
         ErrorCode::Cancelled => jni_str!("org/teispace/teigeodata/TeiGeodataException$Cancelled"),
         ErrorCode::Internal => jni_str!("org/teispace/teigeodata/TeiGeodataException$Internal"),
+        ErrorCode::Io => jni_str!("org/teispace/teigeodata/TeiGeodataException$Io"),
+        ErrorCode::Corrupt => jni_str!("org/teispace/teigeodata/TeiGeodataException$Corrupt"),
     };
     env.throw_new(class, JNIString::from(e.message.as_str()))
 }

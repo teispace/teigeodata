@@ -12,6 +12,10 @@ public struct TeiGeodataError: Error, Equatable, CustomStringConvertible {
         case `cancelled` = 2
         /// A bug inside teigeodata (a panic caught at the boundary, or a broken invariant).
         case `internal` = 3
+        /// A file could not be read.
+        case `io` = 4
+        /// The bytes are not a valid pack, or a section does not match its hash.
+        case `corrupt` = 5
     }
 
     public let code: Code
@@ -56,6 +60,8 @@ private final class CallbackU32 {
 public enum TeiGeodata {
     /// Most rows `sample_rows` builds in one call.
     public static let sampleRowsMax: UInt32 = 1000000
+    /// Most places one query returns.
+    public static let limitMax: UInt32 = 10000
 
     /// The library version, from its package metadata.
     public static func version() -> String {

@@ -15,8 +15,17 @@ class CancelledError(TeiGeodataError):
 class InternalError(TeiGeodataError):
     """A bug inside teigeodata (a panic caught at the boundary, or a broken invariant)."""
 
+class IoError(TeiGeodataError):
+    """A file could not be read."""
+
+class CorruptError(TeiGeodataError):
+    """The bytes are not a valid pack, or a section does not match its hash."""
+
 SAMPLE_ROWS_MAX: int
 """Most rows `sample_rows` builds in one call."""
+
+LIMIT_MAX: int
+"""Most places one query returns."""
 
 def version() -> str:
     """

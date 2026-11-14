@@ -31,6 +31,8 @@ sealed class TeiGeodataException implements Exception {
         1 => InvalidArgumentException(message),
         2 => CancelledException(message),
         3 => InternalException(message),
+        4 => IoException(message),
+        5 => CorruptException(message),
         _ => InternalException(message),
       };
 }
@@ -48,6 +50,16 @@ final class CancelledException extends TeiGeodataException {
 /// A bug inside teigeodata (a panic caught at the boundary, or a broken invariant).
 final class InternalException extends TeiGeodataException {
   const InternalException(String message) : super(3, message);
+}
+
+/// A file could not be read.
+final class IoException extends TeiGeodataException {
+  const IoException(String message) : super(4, message);
+}
+
+/// The bytes are not a valid pack, or a section does not match its hash.
+final class CorruptException extends TeiGeodataException {
+  const CorruptException(String message) : super(5, message);
 }
 
 /// The C callback `tg_callback_u32`.
@@ -86,6 +98,9 @@ final class TeiGeodata {
 
   /// Most rows `sample_rows` builds in one call.
   static const int sampleRowsMax = 1000000;
+
+  /// Most places one query returns.
+  static const int limitMax = 10000;
 
   /// Frees the scratch memory; the instance cannot be used afterwards.
   void close() {
