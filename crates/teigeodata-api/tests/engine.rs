@@ -413,6 +413,26 @@ fn the_parity_file_matches_rust() {
         scratch.open_file_with(&path, &deep).unwrap_err().code,
         ErrorCode::InvalidArgument
     );
+    let points = Engine::new();
+    let only = OpenOptions {
+        components: s(&o["components"]),
+        languages: s(&o["languages"]),
+        ..OpenOptions::default()
+    };
+    points.open_file_with(&path, &only).unwrap();
+    assert_eq!(rows(&points.get(&s(&g["id"])).unwrap()), 1);
+    assert_eq!(
+        points.search("Synthland", 1).unwrap_err().code,
+        ErrorCode::MissingComponent
+    );
+    let odd = OpenOptions {
+        components: s(&o["bad_components"]),
+        ..OpenOptions::default()
+    };
+    assert_eq!(
+        points.open_file_with(&path, &odd).unwrap_err().code,
+        ErrorCode::InvalidArgument
+    );
 
     let v = &p["reverse"];
     let near = engine
@@ -730,4 +750,48 @@ fn open_options_choose_verification_and_outline_levels() {
         top.open_bytes_with(&good, &deep).unwrap_err().code,
         ErrorCode::InvalidArgument
     );
+}
+
+#[test]
+fn open_options_name_components_and_languages() {
+    let model = synthetic(60, 5);
+    let bytes = model.encode();
+    let only = |components: &str, languages: &str| OpenOptions {
+        components: components.into(),
+        languages: languages.into(),
+        ..OpenOptions::default()
+    };
+    // Points only: a place is found by its ID, but search needs the names left out.
+    let points = Engine::new();
+    points.open_bytes_with(&bytes, &only("point", "")).unwrap();
+    let id = model.ids[0].to_string();
+    assert_eq!(rows(&points.get(&id).unwrap()), 1);
+    assert_eq!(
+        points.search("Synthland", 1).unwrap_err().code,
+        ErrorCode::MissingComponent
+    );
+    // Names in two languages, spaces allowed around the commas.
+    let named = Engine::new();
+    named
+        .open_bytes_with(&bytes, &only(" search , point ", "en, ne"))
+        .unwrap();
+    assert_eq!(
+        strings(&named.search("Synthland", 1).unwrap(), "name")[0].as_deref(),
+        Some("Synthland")
+    );
+    for (components, languages) in [
+        ("pointy", ""),
+        ("point,", ""),
+        ("", "e"),
+        ("", "en,ne,hi,mai,new,bho,ur,bn,ta"),
+    ] {
+        assert_eq!(
+            named
+                .open_bytes_with(&bytes, &only(components, languages))
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidArgument,
+            "{components:?} {languages:?}"
+        );
+    }
 }

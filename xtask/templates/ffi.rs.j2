@@ -63,7 +63,7 @@ fn {{ e.snake }}_of(value: u32, field: &str) -> Result<teigeodata_api::{{ e.name
 ///
 /// Passed by `const` pointer; null is every field's default (D-276).
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 pub struct Tg{{ r.name }} {
 {% for f in r.fields %}
 {% if f.optional %}
@@ -73,17 +73,38 @@ pub struct Tg{{ r.name }} {
 {% for line in f.doc %}
     /// {{ line }}
 {% endfor %}
-    pub {{ f.name }}: {% if f.ty == "enum" %}u32{% else %}{{ f.ty }}{% endif %},
+{% if f.ty == "str" %}
+    /// UTF-8, `{{ f.name }}_len` bytes; null only with length 0 (empty).
+    pub {{ f.name }}: *const u8,
+    /// The length of `{{ f.name }}` in bytes.
+    pub {{ f.name }}_len: usize,
+{% else %}
+    pub {{ f.name }}: {{ "u32" if f.ty == "enum" else f.ty }},
+{% endif %}
 {% endfor %}
 }
 
-impl TryFrom<Tg{{ r.name }}> for teigeodata_api::{{ r.name }} {
-    type Error = teigeodata_api::Error;
-
-    fn try_from(r: Tg{{ r.name }}) -> Result<Self, Self::Error> {
-        Ok(Self {
+impl Tg{{ r.name }} {
+    /// The API record, checked.
+    ///
+    /// # Safety
+    ///
+    /// Each text field points to its length in readable bytes, or is null with length 0.
+{% if not (r.fields | selectattr("ty", "in", ["str", "enum"]) | list) %}
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "one shape for every record; this one has no field that can be invalid"
+    )]
+{% endif %}
+    unsafe fn api(self) -> Result<teigeodata_api::{{ r.name }}, teigeodata_api::Error> {
+        Ok(teigeodata_api::{{ r.name }} {
 {% for f in r.fields %}
-            {{ f.name }}: {% if f.optional %}r.has_{{ f.name }}.then_some(r.{{ f.name }}){% elif f.ty == "enum" %}{{ f.enum | snake }}_of(r.{{ f.name }}, "{{ f.name }}")?{% else %}r.{{ f.name }}{% endif %},
+{% if f.ty == "str" %}
+            // SAFETY: the caller's contract above.
+            {{ f.name }}: unsafe { abi::str_arg(self.{{ f.name }}, self.{{ f.name }}_len, "{{ f.name }}") }?.to_owned(),
+{% else %}
+            {{ f.name }}: {% if f.optional %}self.has_{{ f.name }}.then_some(self.{{ f.name }}){% elif f.ty == "enum" %}{{ f.enum | snake }}_of(self.{{ f.name }}, "{{ f.name }}")?{% else %}self.{{ f.name }}{% endif %},
+{% endif %}
 {% endfor %}
         })
     }
@@ -137,8 +158,13 @@ pub unsafe extern "C" fn {{ symbol }}(
         // SAFETY: a live handle from this library, or null (rejected).
         let {{ p.name }} = &unsafe { abi::handle({{ p.name }}, "{{ p.name }}") }?.0;
 {% elif p.ty == "record" %}
-        // SAFETY: the caller passes a readable record, or null for the defaults.
-        let {{ p.name }} = teigeodata_api::{{ p.record }}::try_from(unsafe { abi::record({{ p.name }}) })?;
+        // SAFETY: the caller passes a readable record whose text fields point to their
+        // lengths, or null for the defaults.
+        let {{ p.name }} = match unsafe { abi::record({{ p.name }}) } {
+            // SAFETY: as above, its text fields point to their lengths.
+            Some(r) => unsafe { r.api() }?,
+            None => teigeodata_api::{{ p.record }}::default(),
+        };
 {% elif p.ty == "callback" %}
         let {{ p.name }}_fn = abi::callback({{ p.name }}, "{{ p.name }}")?;
         // SAFETY: the caller's function, called with the caller's context, on this thread.

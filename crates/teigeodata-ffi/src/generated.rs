@@ -27,6 +27,9 @@ pub const TG_ERROR_INTERNAL: i32 = 3;
 pub const TG_ERROR_IO: i32 = 4;
 /// The bytes are not a valid pack, or a section does not match its hash.
 pub const TG_ERROR_CORRUPT: i32 = 5;
+/// The query needs a component of a pack that is not installed: install it, or ask a
+/// pack that has it.
+pub const TG_ERROR_MISSING_COMPONENT: i32 = 6;
 /// Most rows `sample_rows` builds in one call.
 pub const TG_SAMPLE_ROWS_MAX: u32 = 1000000;
 /// Most places one query returns.
@@ -79,7 +82,7 @@ fn load_of(value: u32, field: &str) -> Result<teigeodata_api::Load, teigeodata_a
 ///
 /// Passed by `const` pointer; null is every field's default (D-276).
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 pub struct TgSearchOptions {
     /// Whether `focus_lat` is set.
     pub has_focus_lat: bool,
@@ -100,15 +103,22 @@ pub struct TgSearchOptions {
     pub strict: bool,
 }
 
-impl TryFrom<TgSearchOptions> for teigeodata_api::SearchOptions {
-    type Error = teigeodata_api::Error;
-
-    fn try_from(r: TgSearchOptions) -> Result<Self, Self::Error> {
-        Ok(Self {
-            focus_lat: r.has_focus_lat.then_some(r.focus_lat),
-            focus_lon: r.has_focus_lon.then_some(r.focus_lon),
-            focus_scale_m: r.has_focus_scale_m.then_some(r.focus_scale_m),
-            strict: r.strict,
+impl TgSearchOptions {
+    /// The API record, checked.
+    ///
+    /// # Safety
+    ///
+    /// Each text field points to its length in readable bytes, or is null with length 0.
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "one shape for every record; this one has no field that can be invalid"
+    )]
+    unsafe fn api(self) -> Result<teigeodata_api::SearchOptions, teigeodata_api::Error> {
+        Ok(teigeodata_api::SearchOptions {
+            focus_lat: self.has_focus_lat.then_some(self.focus_lat),
+            focus_lon: self.has_focus_lon.then_some(self.focus_lon),
+            focus_scale_m: self.has_focus_scale_m.then_some(self.focus_scale_m),
+            strict: self.strict,
         })
     }
 }
@@ -118,7 +128,7 @@ impl TryFrom<TgSearchOptions> for teigeodata_api::SearchOptions {
 ///
 /// Passed by `const` pointer; null is every field's default (D-276).
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 pub struct TgOpenOptions {
     /// Precedence over the other packs: a higher one wins where packs disagree (default 0).
     pub priority: i32,
@@ -136,18 +146,43 @@ pub struct TgOpenOptions {
     /// outlines; 0 is full resolution. Admin units at a point may then differ within that
     /// distance of a border.
     pub outline_tolerance_m: u32,
+    /// The components the pack holds, by name and comma-separated (`point,names,search`), for
+    /// a pack installed in part; what they need is added. Empty for a whole pack. A query
+    /// that needs a component left out answers nothing, or `MissingComponent` where it cannot.
+    /// UTF-8, `components_len` bytes; null only with length 0 (empty).
+    pub components: *const u8,
+    /// The length of `components` in bytes.
+    pub components_len: usize,
+    /// The languages whose names and search sections are read, as comma-separated BCP 47
+    /// tags (`en,ne`), at most 8; a language without a part of its own reads the pack's
+    /// shared part. Empty reads every language.
+    /// UTF-8, `languages_len` bytes; null only with length 0 (empty).
+    pub languages: *const u8,
+    /// The length of `languages` in bytes.
+    pub languages_len: usize,
 }
 
-impl TryFrom<TgOpenOptions> for teigeodata_api::OpenOptions {
-    type Error = teigeodata_api::Error;
-
-    fn try_from(r: TgOpenOptions) -> Result<Self, Self::Error> {
-        Ok(Self {
-            priority: r.priority,
-            verify: verify_of(r.verify, "verify")?,
-            load: load_of(r.load, "load")?,
-            outline_level: r.has_outline_level.then_some(r.outline_level),
-            outline_tolerance_m: r.outline_tolerance_m,
+impl TgOpenOptions {
+    /// The API record, checked.
+    ///
+    /// # Safety
+    ///
+    /// Each text field points to its length in readable bytes, or is null with length 0.
+    unsafe fn api(self) -> Result<teigeodata_api::OpenOptions, teigeodata_api::Error> {
+        Ok(teigeodata_api::OpenOptions {
+            priority: self.priority,
+            verify: verify_of(self.verify, "verify")?,
+            load: load_of(self.load, "load")?,
+            outline_level: self.has_outline_level.then_some(self.outline_level),
+            outline_tolerance_m: self.outline_tolerance_m,
+            // SAFETY: the caller's contract above.
+            components: unsafe {
+                abi::str_arg(self.components, self.components_len, "components")
+            }?
+            .to_owned(),
+            // SAFETY: the caller's contract above.
+            languages: unsafe { abi::str_arg(self.languages, self.languages_len, "languages") }?
+                .to_owned(),
         })
     }
 }
@@ -338,8 +373,13 @@ pub unsafe extern "C" fn tg_engine_open_file_with(
         let this = unsafe { abi::handle(handle, "handle") }?;
         // SAFETY: the caller passes `path_len` readable bytes (or null and 0).
         let path = unsafe { abi::str_arg(path, path_len, "path") }?;
-        // SAFETY: the caller passes a readable record, or null for the defaults.
-        let options = teigeodata_api::OpenOptions::try_from(unsafe { abi::record(options) })?;
+        // SAFETY: the caller passes a readable record whose text fields point to their
+        // lengths, or null for the defaults.
+        let options = match unsafe { abi::record(options) } {
+            // SAFETY: as above, its text fields point to their lengths.
+            Some(r) => unsafe { r.api() }?,
+            None => teigeodata_api::OpenOptions::default(),
+        };
         let value = this.0.open_file_with(path, &options)?;
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };
@@ -394,8 +434,13 @@ pub unsafe extern "C" fn tg_engine_open_bytes_with(
         let this = unsafe { abi::handle(handle, "handle") }?;
         // SAFETY: the caller passes `bytes_len` readable bytes (or null and 0).
         let bytes = unsafe { abi::bytes_arg(bytes, bytes_len, "bytes") }?;
-        // SAFETY: the caller passes a readable record, or null for the defaults.
-        let options = teigeodata_api::OpenOptions::try_from(unsafe { abi::record(options) })?;
+        // SAFETY: the caller passes a readable record whose text fields point to their
+        // lengths, or null for the defaults.
+        let options = match unsafe { abi::record(options) } {
+            // SAFETY: as above, its text fields point to their lengths.
+            Some(r) => unsafe { r.api() }?,
+            None => teigeodata_api::OpenOptions::default(),
+        };
         let value = this.0.open_bytes_with(bytes, &options)?;
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };
@@ -625,8 +670,13 @@ pub unsafe extern "C" fn tg_engine_search_with(
         let this = unsafe { abi::handle(handle, "handle") }?;
         // SAFETY: the caller passes `query_len` readable bytes (or null and 0).
         let query = unsafe { abi::str_arg(query, query_len, "query") }?;
-        // SAFETY: the caller passes a readable record, or null for the defaults.
-        let options = teigeodata_api::SearchOptions::try_from(unsafe { abi::record(options) })?;
+        // SAFETY: the caller passes a readable record whose text fields point to their
+        // lengths, or null for the defaults.
+        let options = match unsafe { abi::record(options) } {
+            // SAFETY: as above, its text fields point to their lengths.
+            Some(r) => unsafe { r.api() }?,
+            None => teigeodata_api::SearchOptions::default(),
+        };
         let value = this.0.search_with(query, limit, &options)?;
         let value = TgBytes::from_vec(value.into_vec());
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.

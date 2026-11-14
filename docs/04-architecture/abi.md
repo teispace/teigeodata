@@ -30,7 +30,8 @@ hold for every function, so a caller learns them once.
   it is freed. A `NULL` handle is `TG_ERROR_INVALID_ARGUMENT`.
 - **Records** (options) are plain structs (`tg_search_options`) passed by `const` pointer and
   read once at the call; `NULL` is every field's default, and so is a zeroed struct (D-276). An
-  optional field has a `has_x` flag beside it. An enum field is a `uint32_t` holding one of its
+  optional field has a `has_x` flag beside it; a text field is a UTF-8 pointer and length pair
+  (`x`, `x_len`), as strings in, read during the call only. An enum field is a `uint32_t` holding one of its
   `TG_<ENUM>_<VARIANT>` constants; another value is `TG_ERROR_INVALID_ARGUMENT` (D-277).
 - **Callbacks** are a function pointer and a `void *` context, called on the caller's thread
   before the function returns; long work is a job instead, awaited by the caller's own thread

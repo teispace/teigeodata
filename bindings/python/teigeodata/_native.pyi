@@ -22,6 +22,9 @@ class IoError(TeiGeodataError):
 class CorruptError(TeiGeodataError):
     """The bytes are not a valid pack, or a section does not match its hash."""
 
+class MissingComponentError(TeiGeodataError):
+    """The query needs a component of a pack that is not installed: install it, or ask a pack that has it."""
+
 SAMPLE_ROWS_MAX: int
 """Most rows `sample_rows` builds in one call."""
 
@@ -135,7 +138,7 @@ class OpenOptions:
     zero value is its default (D-276).
     """
 
-    def __init__(self, *, priority: int = 0, verify: Verify = ..., load: Load = ..., outline_level: int | None = None, outline_tolerance_m: int = 0) -> None: ...
+    def __init__(self, *, priority: int = 0, verify: Verify = ..., load: Load = ..., outline_level: int | None = None, outline_tolerance_m: int = 0, components: str = "", languages: str = "") -> None: ...
 
     @property
     def priority(self) -> int:
@@ -156,6 +159,14 @@ class OpenOptions:
     @property
     def outline_tolerance_m(self) -> int:
         """The largest simplification of the outlines read, in metres, when the pack has coarser outlines; 0 is full resolution. Admin units at a point may then differ within that distance of a border."""
+
+    @property
+    def components(self) -> str:
+        """The components the pack holds, by name and comma-separated (`point,names,search`), for a pack installed in part; what they need is added. Empty for a whole pack. A query that needs a component left out answers nothing, or `MissingComponent` where it cannot."""
+
+    @property
+    def languages(self) -> str:
+        """The languages whose names and search sections are read, as comma-separated BCP 47 tags (`en,ne`), at most 8; a language without a part of its own reads the pack's shared part. Empty reads every language."""
 
 class Engine:
     """

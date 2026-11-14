@@ -13,6 +13,7 @@ publish.workspace = true
 teigeodata-blob.workspace = true
 teigeodata-core.workspace = true
 teigeodata-engine.workspace = true
+teigeodata-format.workspace = true
 teigeodata-names.workspace = true
 
 [dev-dependencies]

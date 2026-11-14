@@ -50,7 +50,7 @@ the file, line and column.
 | `String` out | `tg_bytes` | `str` | `string` | `String` | `String` | `String` |
 | `Blob` out | `tg_bytes` | `bytes` | `Buffer` (no copy) | `byte[]` | `Data` (no copy) | `Uint8List` |
 | a handle (`pub struct` with private fields; its `impl` gives the methods) | opaque `tg_x *`, `tg_x_new`, `tg_x_free` | class, freed with the object | class | `TeiGeodata.X`, `AutoCloseable` plus a `Cleaner` | `final class`, `Sendable`, `deinit` frees | `Finalizable` class, `close()` |
-| a record (`pub struct` of pub scalar or `Option<scalar>` fields, `Default`; D-276) | `tg_x` struct by `const tg_x *` (`NULL` for defaults), `has_f` beside each optional | keyword-only class | plain object, every field optional; the parameter optional | `TeiGeodata.X` record, `DEFAULTS` and `withF` | `struct`, every `init` argument defaulted | `const` class, named parameters |
+| a record (`pub struct` of pub scalar, `Option<scalar>`, enum or `String` fields, `Default`; D-276) | `tg_x` struct by `const tg_x *` (`NULL` for defaults), `has_f` beside each optional, `f` and `f_len` for text | keyword-only class | plain object, every field optional; the parameter optional | `TeiGeodata.X` record, `DEFAULTS` and `withF` | `struct`, every `init` argument defaulted | `const` class, named parameters |
 | an enum (unit variants valued 0, 1, 2 …, `#[default]` on 0; D-277), as a record field | `uint32_t`, `TG_X_Y` constants, checked | enum, `X.Y` members | string union (`"y"`) | Java enum | `enum X: UInt32` | enhanced enum |
 | `&mut dyn FnMut(scalars) -> bool` | function pointer + context | callable | function | `Callback…` interface | closure | function |
 | `Result<T>` | status + `tg_last_error` | `…Error` exception | `Error` with `code` | `TeiGeodataException.…` | `throws(TeiGeodataError)` | `…Exception` |
@@ -159,6 +159,7 @@ second job waits for the first.
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | §2: text fields in records (IDL format 5) | D-276 |
 | 2026-11-14 | §2: enums (IDL format 4) | D-277 |
 | 2026-11-14 | §2: records (IDL format 3) | D-276 |
 | 2026-11-14 | §2: `&[u8]` and handles (the `Engine`), IDL format 2 | phase 5.1, D-274 |

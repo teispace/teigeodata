@@ -162,9 +162,9 @@ pub(crate) unsafe fn handle<'a, T>(ptr: *const T, name: &str) -> Result<&'a T, E
 /// # Safety
 ///
 /// `ptr` is null or points to a readable, initialised `T` for the call.
-pub(crate) unsafe fn record<T: Copy + Default>(ptr: *const T) -> T {
+pub(crate) unsafe fn record<T: Copy>(ptr: *const T) -> Option<T> {
     // SAFETY: the caller's contract above.
-    unsafe { ptr.as_ref() }.copied().unwrap_or_default()
+    unsafe { ptr.as_ref() }.copied()
 }
 
 /// Frees a handle made with `Box::into_raw`; null does nothing. A panic in its drop stops

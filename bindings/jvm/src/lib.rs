@@ -32,6 +32,9 @@ fn throw(env: &mut Env<'_>, e: &teigeodata_api::Error) -> jni::errors::Result<()
         ErrorCode::Internal => jni_str!("org/teispace/teigeodata/TeiGeodataException$Internal"),
         ErrorCode::Io => jni_str!("org/teispace/teigeodata/TeiGeodataException$Io"),
         ErrorCode::Corrupt => jni_str!("org/teispace/teigeodata/TeiGeodataException$Corrupt"),
+        ErrorCode::MissingComponent => {
+            jni_str!("org/teispace/teigeodata/TeiGeodataException$MissingComponent")
+        }
     };
     env.throw_new(class, JNIString::from(e.message.as_str()))
 }
@@ -356,6 +359,8 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
     options_has_outline_level: jni::sys::jboolean,
     options_outline_level: jlong,
     options_outline_tolerance_m: jlong,
+    options_components: JString<'caller>,
+    options_languages: JString<'caller>,
 ) -> jlong {
     unowned
         .with_env(|env| -> jni::errors::Result<jlong> {
@@ -380,6 +385,18 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
                         "outline_tolerance_m",
                         options_outline_tolerance_m,
                     )?,
+                    components: options_components.try_to_string(env).map_err(|e| {
+                        teigeodata_api::Error {
+                            code: ErrorCode::InvalidArgument,
+                            message: format!("components: {e}"),
+                        }
+                    })?,
+                    languages: options_languages.try_to_string(env).map_err(|e| {
+                        teigeodata_api::Error {
+                            code: ErrorCode::InvalidArgument,
+                            message: format!("languages: {e}"),
+                        }
+                    })?,
                 };
                 this.open_file_with(&path, &options)
             })();
@@ -449,6 +466,8 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
     options_has_outline_level: jni::sys::jboolean,
     options_outline_level: jlong,
     options_outline_tolerance_m: jlong,
+    options_components: JString<'caller>,
+    options_languages: JString<'caller>,
 ) -> jlong {
     unowned
         .with_env(|env| -> jni::errors::Result<jlong> {
@@ -475,6 +494,18 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
                         "outline_tolerance_m",
                         options_outline_tolerance_m,
                     )?,
+                    components: options_components.try_to_string(env).map_err(|e| {
+                        teigeodata_api::Error {
+                            code: ErrorCode::InvalidArgument,
+                            message: format!("components: {e}"),
+                        }
+                    })?,
+                    languages: options_languages.try_to_string(env).map_err(|e| {
+                        teigeodata_api::Error {
+                            code: ErrorCode::InvalidArgument,
+                            message: format!("languages: {e}"),
+                        }
+                    })?,
                 };
                 this.open_bytes_with(&bytes, &options)
             })();

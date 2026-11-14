@@ -34,6 +34,8 @@ pub enum Code {
     Io,
     /// The bytes are not a valid pack, or a section does not match its hash.
     Corrupt,
+    /// The query needs a component of a pack that is not installed: install it, or ask a pack that has it.
+    MissingComponent,
     /// An N-API failure, or an exception thrown by a callback (rethrown as it was).
     Napi(Status),
 }
@@ -46,6 +48,7 @@ impl AsRef<str> for Code {
             Self::Internal => "Internal",
             Self::Io => "Io",
             Self::Corrupt => "Corrupt",
+            Self::MissingComponent => "MissingComponent",
             Self::Napi(s) => s.as_ref(),
         }
     }
@@ -66,6 +69,7 @@ fn error(e: teigeodata_api::Error) -> Error<Code> {
         ErrorCode::Internal => Code::Internal,
         ErrorCode::Io => Code::Io,
         ErrorCode::Corrupt => Code::Corrupt,
+        ErrorCode::MissingComponent => Code::MissingComponent,
     };
     Error::new(code, e.message)
 }
@@ -240,7 +244,7 @@ impl From<SearchOptions> for teigeodata_api::SearchOptions {
 ///
 /// A plain object; every field may be left out, for its zero value (D-276).
 #[napi(object)]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct OpenOptions {
     /// Precedence over the other packs: a higher one wins where packs disagree (default 0).
     pub priority: Option<i32>,
@@ -256,6 +260,14 @@ pub struct OpenOptions {
     /// outlines; 0 is full resolution. Admin units at a point may then differ within that
     /// distance of a border.
     pub outline_tolerance_m: Option<u32>,
+    /// The components the pack holds, by name and comma-separated (`point,names,search`), for
+    /// a pack installed in part; what they need is added. Empty for a whole pack. A query
+    /// that needs a component left out answers nothing, or `MissingComponent` where it cannot.
+    pub components: Option<String>,
+    /// The languages whose names and search sections are read, as comma-separated BCP 47
+    /// tags (`en,ne`), at most 8; a language without a part of its own reads the pack's
+    /// shared part. Empty reads every language.
+    pub languages: Option<String>,
 }
 
 impl From<OpenOptions> for teigeodata_api::OpenOptions {
@@ -266,6 +278,8 @@ impl From<OpenOptions> for teigeodata_api::OpenOptions {
             load: r.load.unwrap_or_default().into(),
             outline_level: r.outline_level,
             outline_tolerance_m: r.outline_tolerance_m.unwrap_or_default(),
+            components: r.components.unwrap_or_default(),
+            languages: r.languages.unwrap_or_default(),
         }
     }
 }

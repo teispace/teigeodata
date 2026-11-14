@@ -139,6 +139,11 @@ test("engine handle on the fixture", () => {
   assert.equal(scratch.openFileWith(fixture, { verify: "eager", load: "read", priority: 2, outlineLevel: 1 }), 1);
   assert.throws(() => scratch.openFileWith(fixture, { outlineLevel: ow.bad_outline_level }), { code: "InvalidArgument" });
   assert.throws(() => scratch.openFileWith(fixture, { verify: "sometimes" }));
+  const points = new tg.Engine();
+  points.openFileWith(fixture, { components: ow.components, languages: ow.languages });
+  assert.equal(strings(points.get(p.get.id), "id").length, 1);
+  assert.throws(() => points.search("Synthland", 1), { code: "MissingComponent" });
+  assert.throws(() => points.openFileWith(fixture, { components: ow.bad_components }), { code: "InvalidArgument" });
   const pl = p.postal_lookup;
   const hit = engine.postalLookup(pl.code, pl.scheme);
   assert.deepEqual([strings(hit, "postal"), strings(hit, "id")], [pl.postal, pl.ids]);

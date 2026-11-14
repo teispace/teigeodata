@@ -32,6 +32,8 @@ extern "C" {
 #define TG_ERROR_IO 4
 /* The bytes are not a valid pack, or a section does not match its hash. */
 #define TG_ERROR_CORRUPT 5
+/* The query needs a component of a pack that is not installed: install it, or ask a pack that has it. */
+#define TG_ERROR_MISSING_COMPONENT 6
 /* Most rows `sample_rows` builds in one call. */
 #define TG_SAMPLE_ROWS_MAX 1000000u
 /* Most places one query returns. */
@@ -94,6 +96,14 @@ typedef struct tg_open_options {
     uint32_t outline_level;
     /* The largest simplification of the outlines read, in metres, when the pack has coarser outlines; 0 is full resolution. Admin units at a point may then differ within that distance of a border. */
     uint32_t outline_tolerance_m;
+    /* The components the pack holds, by name and comma-separated (`point,names,search`), for a pack installed in part; what they need is added. Empty for a whole pack. A query that needs a component left out answers nothing, or `MissingComponent` where it cannot. UTF-8; NULL only with length 0 (empty). */
+    const uint8_t *components;
+    /* The length of components in bytes. */
+    size_t components_len;
+    /* The languages whose names and search sections are read, as comma-separated BCP 47 tags (`en,ne`), at most 8; a language without a part of its own reads the pack's shared part. Empty reads every language. UTF-8; NULL only with length 0 (empty). */
+    const uint8_t *languages;
+    /* The length of languages in bytes. */
+    size_t languages_len;
 } tg_open_options;
 
 /* Frees a buffer returned by any function. Freeing a zeroed buffer does nothing. */

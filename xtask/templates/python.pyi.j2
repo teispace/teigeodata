@@ -60,7 +60,7 @@ class {{ r.name }}:
 {% endfor %}
     """
 
-    def __init__(self, *, {% for f in r.fields %}{{ f.name }}: {{ pyty(f.ty, none, f.enum) }}{% if f.optional %} | None = None{% elif f.ty == "enum" %} = ...{% elif f.ty == "bool" %} = False{% elif f.ty == "f64" %} = 0.0{% else %} = 0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}) -> None: ...
+    def __init__(self, *, {% for f in r.fields %}{{ f.name }}: {{ pyty(f.ty, none, f.enum) }}{% if f.optional %} | None = None{% elif f.ty == "enum" %} = ...{% elif f.ty == "str" %} = ""{% elif f.ty == "bool" %} = False{% elif f.ty == "f64" %} = 0.0{% else %} = 0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}) -> None: ...
 {% for f in r.fields %}
 
     @property

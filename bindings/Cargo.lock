@@ -546,6 +546,7 @@ dependencies = [
  "teigeodata-blob",
  "teigeodata-core",
  "teigeodata-engine",
+ "teigeodata-format",
  "teigeodata-names",
 ]
 

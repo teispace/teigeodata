@@ -31,6 +31,11 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - IDL format 4: enums (D-277), each its language's own enum. `OpenOptions` (priority,
   `Verify` lazy/eager/trusted, `Load` map/read, outline level and tolerance) with
   `Engine::open_file_with` and `open_bytes_with` in every binding.
+- IDL format 5: text fields in records (`String`, empty by default). `OpenOptions` gains
+  `components` (`point,names,search`; what they need is added) and `languages` (`en,ne`, at
+  most 8), for packs installed in part or read in some languages only.
+- Error code `MissingComponent` (6, D-278): a query needs a component the pack was opened
+  without; before, this was `InvalidArgument`.
 
 ### Breaking
 

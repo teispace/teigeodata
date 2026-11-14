@@ -62,8 +62,14 @@ typedef struct tg_{{ r.snake }} {
     /* Whether {{ f.name }} is set. */
     bool has_{{ f.name }};
 {% endif %}
-    /* {{ f.doc | join(" ") }}{% if f.ty == "enum" %} A TG_{{ f.enum | snake | upper }}_* value.{% endif %} */
+    /* {{ f.doc | join(" ") }}{% if f.ty == "enum" %} A TG_{{ f.enum | snake | upper }}_* value.{% elif f.ty == "str" %} UTF-8; NULL only with length 0 (empty).{% endif %} */
+{% if f.ty == "str" %}
+    const uint8_t *{{ f.name }};
+    /* The length of {{ f.name }} in bytes. */
+    size_t {{ f.name }}_len;
+{% else %}
     {{ "uint32_t" if f.ty == "enum" else cty(f.ty) }} {{ f.name }};
+{% endif %}
 {% endfor %}
 } tg_{{ r.snake }};
 {% endfor %}

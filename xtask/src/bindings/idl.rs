@@ -9,7 +9,7 @@ use syn::spanned::Spanned;
 use syn::{Attribute, Expr, FnArg, GenericArgument, Item, Lit, Pat, PathArguments, ReturnType};
 
 /// Version of the IDL format itself.
-pub(crate) const FORMAT: u32 = 4;
+pub(crate) const FORMAT: u32 = 5;
 
 /// The extracted surface.
 #[derive(Debug, Serialize)]
@@ -85,9 +85,12 @@ pub(crate) struct Record {
     pub(crate) snake: String,
     pub(crate) doc: Vec<String>,
     pub(crate) fields: Vec<Field>,
+    /// No text field: the record is `Copy` in every shim.
+    pub(crate) copy: bool,
 }
 
-/// One field of a record: a scalar, an `Option` of one (`optional`), or an enum.
+/// One field of a record: a scalar, an `Option` of one (`optional`), an enum, or text (`str`,
+/// a `String` whose default is empty).
 #[derive(Debug, Serialize)]
 pub(crate) struct Field {
     pub(crate) name: String,
@@ -340,7 +343,8 @@ fn record(s: &syn::ItemStruct, enums: &[String]) -> Result<Record, String> {
                 at(
                     f.ty.span(),
                     &format!(
-                        "`{name}.{id}`: a record field is a scalar, an `Option` of one, or an enum"
+                        "`{name}.{id}`: a record field is a scalar, an `Option` of one, an enum or \
+                         a `String`"
                     ),
                 )
             })?
@@ -357,6 +361,7 @@ fn record(s: &syn::ItemStruct, enums: &[String]) -> Result<Record, String> {
         snake: snake(&name),
         name,
         doc: docs(&s.attrs),
+        copy: fields.iter().all(|f| f.ty != Ty::Str),
         fields,
     })
 }
@@ -417,10 +422,11 @@ fn enumeration(e: &syn::ItemEnum) -> Result<Enum, String> {
     })
 }
 
-/// A scalar, or `Option<scalar>` (`true`).
+/// A scalar, `Option<scalar>` (`true`), or `String` (text).
 fn field_ty(ty: &syn::Type) -> Option<(Ty, bool)> {
     let (seg, name) = ident(ty)?;
     match &seg.arguments {
+        PathArguments::None if name == "String" => Some((Ty::Str, false)),
         PathArguments::None => Some((Ty::scalar(&name)?, false)),
         PathArguments::AngleBracketed(a) if name == "Option" && a.args.len() == 1 => {
             let GenericArgument::Type(inner) = a.args.first()? else {
@@ -791,6 +797,8 @@ pub struct Opts {
     pub lat: Option<f64>,
     pub strict: bool,
     pub mode: Mode,
+    /// Comma-separated.
+    pub tags: String,
 }
 /// How.
 #[derive(Clone, Copy, Default)]
@@ -869,9 +877,11 @@ impl Engine {
             [
                 ("lat", Ty::F64, true),
                 ("strict", Ty::Bool, false),
-                ("mode", Ty::Enum, false)
+                ("mode", Ty::Enum, false),
+                ("tags", Ty::Str, false)
             ]
         );
+        assert!(!r.copy);
         assert_eq!(r.fields[0].doc, ["Near here."]);
         assert_eq!(r.fields[2].enum_name.as_deref(), Some("Mode"));
         let mode = &idl.enums[0];
@@ -910,11 +920,12 @@ impl Engine {
             "pub struct S { x: u32 } impl S { pub fn f(x: &mut [u8]) {} }",
             "pub fn f(x: &Unknown) {}",
             "pub const X: f64 = 1.0;",
-            "#[derive(Default)] pub struct S { pub x: String }",
             "#[derive(Default)] pub struct S { pub x: u32, y: u32 }",
             "#[derive(Default)] pub struct S { pub x: Option<Vec<u8>> }",
             "#[derive(Default)] pub struct S { pub x: Option<f32> }",
             "#[derive(Default)] pub struct S { pub x: Option<Mode> }",
+            "#[derive(Default)] pub struct S { pub x: Option<String> }",
+            "#[derive(Default)] pub struct S { pub x: &'static str }",
             "pub enum E { #[default] A = 0 }",
             "#[derive(Default)] pub enum E { A = 0 }",
             "#[derive(Default)] pub enum E { #[default] A = 1 }",

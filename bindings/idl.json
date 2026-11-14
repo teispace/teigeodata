@@ -1,5 +1,5 @@
 {
-  "format": 4,
+  "format": 5,
   "source": "crates/teigeodata-api/src/lib.rs",
   "error_codes": [
     {
@@ -35,6 +35,14 @@
       "value": 5,
       "doc": [
         "The bytes are not a valid pack, or a section does not match its hash."
+      ]
+    },
+    {
+      "name": "MissingComponent",
+      "value": 6,
+      "doc": [
+        "The query needs a component of a pack that is not installed: install it, or ask a",
+        "pack that has it."
       ]
     }
   ],
@@ -792,7 +800,8 @@
             "phonetic), then importance and focus, instead of one additive score."
           ]
         }
-      ]
+      ],
+      "copy": true
     },
     {
       "name": "OpenOptions",
@@ -847,8 +856,29 @@
             "outlines; 0 is full resolution. Admin units at a point may then differ within that",
             "distance of a border."
           ]
+        },
+        {
+          "name": "components",
+          "ty": "str",
+          "optional": false,
+          "doc": [
+            "The components the pack holds, by name and comma-separated (`point,names,search`), for",
+            "a pack installed in part; what they need is added. Empty for a whole pack. A query",
+            "that needs a component left out answers nothing, or `MissingComponent` where it cannot."
+          ]
+        },
+        {
+          "name": "languages",
+          "ty": "str",
+          "optional": false,
+          "doc": [
+            "The languages whose names and search sections are read, as comma-separated BCP 47",
+            "tags (`en,ne`), at most 8; a language without a part of its own reads the pack's",
+            "shared part. Empty reads every language."
+          ]
         }
-      ]
+      ],
+      "copy": false
     }
   ],
   "enums": [

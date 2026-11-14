@@ -88,7 +88,8 @@ fn {{ f.name }}{% if py %}<'py>{% endif %}(
     let {{ p.name }} = &{{ p.name }}.get().0;
 {% endfor %}
 {% for p in f.params if p.ty == "record" %}
-    let {{ p.name }} = &teigeodata_api::{{ p.record }}::from(*{{ p.name }}.get());
+{% set rec = records | selectattr("name", "eq", p.record) | first %}
+    let {{ p.name }} = &teigeodata_api::{{ p.record }}::from({% if rec.copy %}*{{ p.name }}.get(){% else %}{{ p.name }}.get().clone(){% endif %});
 {% endfor %}
 {% set target %}{% if f.receiver %}self.0.{% elif owner %}teigeodata_api::{{ owner.name }}::{% else %}teigeodata_api::{% endif %}{% endset %}
 {% set call %}{{ target }}{{ f.name }}({% for p in f.params %}{% if p.ty == "callback" %}&mut {{ p.name }}_fn{% else %}{{ p.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% endset %}
@@ -150,14 +151,14 @@ impl From<{{ e.name }}> for teigeodata_api::{{ e.name }} {
     }
 }
 {% endfor %}
-{% macro fty(f) %}{% if f.ty == "enum" %}{{ f.enum }}{% elif f.optional %}Option<{{ f.ty }}>{% else %}{{ f.ty }}{% endif %}{% endmacro %}
+{% macro fty(f) %}{% if f.ty == "enum" %}{{ f.enum }}{% elif f.ty == "str" %}String{% elif f.optional %}Option<{{ f.ty }}>{% else %}{{ f.ty }}{% endif %}{% endmacro %}
 {% for r in records %}
 
 {% for line in r.doc %}
 /// {{ line }}
 {% endfor %}
 #[pyclass(frozen, get_all, module = "teigeodata")]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, {% if r.copy %}Copy, {% endif %}Debug, Default)]
 pub struct {{ r.name }} {
 {% for f in r.fields %}
 {% for line in f.doc %}
@@ -171,8 +172,8 @@ pub struct {{ r.name }} {
 impl {{ r.name }} {
     /// Keyword arguments only; each left out is its zero value, the default (D-276).
     #[new]
-    #[pyo3(signature = (*, {% for f in r.fields %}{{ f.name }}={% if f.optional %}None{% elif f.ty == "enum" %}{{ f.enum }}::{{ (enums | selectattr("name", "eq", f.enum) | first).variants[0].name }}{% elif f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}))]
-    const fn new({% for f in r.fields %}{{ f.name }}: {{ fty(f) }}{% if not loop.last %}, {% endif %}{% endfor %}) -> Self {
+    #[pyo3(signature = (*, {% for f in r.fields %}{{ f.name }}={% if f.optional %}None{% elif f.ty == "enum" %}{{ f.enum }}::{{ (enums | selectattr("name", "eq", f.enum) | first).variants[0].name }}{% elif f.ty == "str" %}String::new(){% elif f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}))]
+    {% if r.copy %}const {% endif %}fn new({% for f in r.fields %}{{ f.name }}: {{ fty(f) }}{% if not loop.last %}, {% endif %}{% endfor %}) -> Self {
         Self {
 {% for f in r.fields %}
             {{ f.name }},

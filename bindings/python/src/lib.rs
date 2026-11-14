@@ -53,6 +53,12 @@ create_exception!(
     TeiGeodataError,
     "The bytes are not a valid pack, or a section does not match its hash."
 );
+create_exception!(
+    teigeodata,
+    MissingComponentError,
+    TeiGeodataError,
+    "The query needs a component of a pack that is not installed: install it, or ask a pack that has it."
+);
 
 fn error(e: teigeodata_api::Error) -> PyErr {
     match e.code {
@@ -61,6 +67,7 @@ fn error(e: teigeodata_api::Error) -> PyErr {
         ErrorCode::Internal => InternalError::new_err(e.message),
         ErrorCode::Io => IoError::new_err(e.message),
         ErrorCode::Corrupt => CorruptError::new_err(e.message),
+        ErrorCode::MissingComponent => MissingComponentError::new_err(e.message),
     }
 }
 
@@ -243,7 +250,7 @@ impl From<SearchOptions> for teigeodata_api::SearchOptions {
 /// How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's
 /// zero value is its default (D-276).
 #[pyclass(frozen, get_all, module = "teigeodata")]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct OpenOptions {
     /// Precedence over the other packs: a higher one wins where packs disagree (default 0).
     priority: i32,
@@ -259,19 +266,29 @@ pub struct OpenOptions {
     /// outlines; 0 is full resolution. Admin units at a point may then differ within that
     /// distance of a border.
     outline_tolerance_m: u32,
+    /// The components the pack holds, by name and comma-separated (`point,names,search`), for
+    /// a pack installed in part; what they need is added. Empty for a whole pack. A query
+    /// that needs a component left out answers nothing, or `MissingComponent` where it cannot.
+    components: String,
+    /// The languages whose names and search sections are read, as comma-separated BCP 47
+    /// tags (`en,ne`), at most 8; a language without a part of its own reads the pack's
+    /// shared part. Empty reads every language.
+    languages: String,
 }
 
 #[pymethods]
 impl OpenOptions {
     /// Keyword arguments only; each left out is its zero value, the default (D-276).
     #[new]
-    #[pyo3(signature = (*, priority=0, verify=Verify::Lazy, load=Load::Map, outline_level=None, outline_tolerance_m=0))]
-    const fn new(
+    #[pyo3(signature = (*, priority=0, verify=Verify::Lazy, load=Load::Map, outline_level=None, outline_tolerance_m=0, components=String::new(), languages=String::new()))]
+    fn new(
         priority: i32,
         verify: Verify,
         load: Load,
         outline_level: Option<u32>,
         outline_tolerance_m: u32,
+        components: String,
+        languages: String,
     ) -> Self {
         Self {
             priority,
@@ -279,6 +296,8 @@ impl OpenOptions {
             load,
             outline_level,
             outline_tolerance_m,
+            components,
+            languages,
         }
     }
 
@@ -295,6 +314,8 @@ impl From<OpenOptions> for teigeodata_api::OpenOptions {
             load: r.load.into(),
             outline_level: r.outline_level,
             outline_tolerance_m: r.outline_tolerance_m,
+            components: r.components,
+            languages: r.languages,
         }
     }
 }
@@ -342,7 +363,7 @@ impl Engine {
         path: &str,
         options: &Bound<'_, OpenOptions>,
     ) -> PyResult<u32> {
-        let options = &teigeodata_api::OpenOptions::from(*options.get());
+        let options = &teigeodata_api::OpenOptions::from(options.get().clone());
         let value = py.detach(|| self.0.open_file_with(path, options));
         let value = value.map_err(error)?;
         Ok(value)
@@ -371,7 +392,7 @@ impl Engine {
         bytes: &[u8],
         options: &Bound<'_, OpenOptions>,
     ) -> PyResult<u32> {
-        let options = &teigeodata_api::OpenOptions::from(*options.get());
+        let options = &teigeodata_api::OpenOptions::from(options.get().clone());
         let value = py.detach(|| self.0.open_bytes_with(bytes, options));
         let value = value.map_err(error)?;
         Ok(value)
@@ -638,8 +659,8 @@ mod _native {
     #[pymodule_export]
     use super::{
         CancelledError, CorruptError, Engine, InternalError, InvalidArgumentError, IoError, Load,
-        OpenOptions, SearchOptions, TeiGeodataError, Verify, distance_m, fold, noop, progress,
-        sample_rows, version,
+        MissingComponentError, OpenOptions, SearchOptions, TeiGeodataError, Verify, distance_m,
+        fold, noop, progress, sample_rows, version,
     };
 
     /// Most rows `sample_rows` builds in one call.

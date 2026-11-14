@@ -63,17 +63,34 @@ final class {{ c.name }}Exception extends TeiGeodataException {
 {% endfor %}
 {% endif %}
   {{ dty(f.returns, f.returns_handle) }} {{ name }}({% if f.receiver %}Pointer<Void> handle{% if f.params %}, {% endif %}{% endif %}{{ dparams(f) }}) {
-{# Several string or byte arguments share the scratch buffer, one after another. #}
-{% set ns = namespace(prev="") %}
+{#
+  Several string or byte arguments, and the text of records, share the scratch buffer one
+  after another. Pointers into it are taken only after every write: a write may move it.
+#}
+{% set ns = namespace(prev="", n=strs | length) %}
+{% for p in f.params if p.ty == "record" %}
+{% set ns.n = ns.n + ((records | selectattr("name", "eq", p.record) | first).fields | selectattr("ty", "eq", "str") | list | length) %}
+{% endfor %}
+{% set multi = ns.n > 1 %}
 {% for p in strs %}
-{% if strs | length > 1 %}
+{% if multi %}
     final {{ p.name | camel }}At = {% if ns.prev %}{{ ns.prev }}At + {{ ns.prev }}Len{% else %}0{% endif %};
 {% endif %}
 {% set ns.prev = p.name | camel %}
-    final {{ p.name | camel }}Len = {% if p.ty == "str" %}_utf8{% else %}_copy{% endif %}({{ p.name | camel }}{% if strs | length > 1 %}, {{ p.name | camel }}At{% endif %});
+    final {{ p.name | camel }}Len = {% if p.ty == "str" %}_utf8{% else %}_copy{% endif %}({{ p.name | camel }}{% if multi %}, {{ p.name | camel }}At{% endif %});
 {% endfor %}
 {% for p in f.params if p.ty == "record" %}
-    {{ p.name | camel }}._write(_{{ p.record | camel_lower }}.ref);
+{% for g in (records | selectattr("name", "eq", p.record) | first).fields if g.ty == "str" %}
+{% set slot = (p.name | camel) ~ (g.name | pascal) %}
+{% if multi %}
+    final {{ slot }}At = {% if ns.prev %}{{ ns.prev }}At + {{ ns.prev }}Len{% else %}0{% endif %};
+{% endif %}
+{% set ns.prev = slot %}
+    final {{ slot }}Len = _utf8({{ p.name | camel }}.{{ g.name | camel }}{% if multi %}, {{ slot }}At{% endif %});
+{% endfor %}
+{% endfor %}
+{% for p in f.params if p.ty == "record" %}
+    {{ p.name | camel }}._write(_{{ p.record | camel_lower }}.ref{% for g in (records | selectattr("name", "eq", p.record) | first).fields if g.ty == "str" %}, {% if multi %}_input + {{ p.name | camel }}{{ g.name | pascal }}At{% else %}_input{% endif %}, {{ p.name | camel }}{{ g.name | pascal }}Len{% endfor %});
 {% endfor %}
 {% if cb %}
     Object? raised;
@@ -145,7 +162,7 @@ enum {{ e.name }} {
 
 {% endfor %}
 final class {{ r.name }} {
-  const {{ r.name }}({ {% for f in r.fields %}this.{{ f.name | camel }}{% if not f.optional %} = {% if f.ty == "enum" %}{{ f.enum }}.{{ (enums | selectattr("name", "eq", f.enum) | first).variants[0].snake | camel }}{% elif f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %} });
+  const {{ r.name }}({ {% for f in r.fields %}this.{{ f.name | camel }}{% if not f.optional %} = {% if f.ty == "str" %}''{% elif f.ty == "enum" %}{{ f.enum }}.{{ (enums | selectattr("name", "eq", f.enum) | first).variants[0].snake | camel }}{% elif f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %} });
 {% for f in r.fields %}
 
 {% for line in f.doc %}
@@ -155,9 +172,12 @@ final class {{ r.name }} {
   final {{ f.enum if f.ty == "enum" else dty(f.ty) }}{% if f.optional %}?{% endif %} {{ f.name | camel }};
 {% endfor %}
 
-  void _write(_Tg{{ r.name }} to) {
+  void _write(_Tg{{ r.name }} to{% for f in r.fields if f.ty == "str" %}, Pointer<Uint8> {{ f.name | camel }}At, int {{ f.name | camel }}Len{% endfor %}) {
 {% for f in r.fields %}
-{% if f.optional %}
+{% if f.ty == "str" %}
+    to.{{ f.name | camel }} = {{ f.name | camel }}At;
+    to.{{ f.name | camel }}Len = {{ f.name | camel }}Len;
+{% elif f.optional %}
     to.has{{ f.name | pascal }} = {{ f.name | camel }} != null;
     to.{{ f.name | camel }} = {{ f.name | camel }} ?? {% if f.ty == "bool" %}false{% elif f.ty == "f64" %}0.0{% else %}0{% endif %};
 {% else %}
@@ -174,8 +194,14 @@ final class _Tg{{ r.name }} extends Struct {
   @Bool()
   external bool has{{ f.name | pascal }};
 {% endif %}
+{% if f.ty == "str" %}
+  external Pointer<Uint8> {{ f.name | camel }};
+  @Size()
+  external int {{ f.name | camel }}Len;
+{% else %}
   @{{ "Uint32" if f.ty == "enum" else nty(f.ty) }}()
   external {{ dty(f.ty) }} {{ f.name | camel }};
+{% endif %}
 {% endfor %}
 }
 

@@ -33,6 +33,7 @@ sealed class TeiGeodataException implements Exception {
         3 => InternalException(message),
         4 => IoException(message),
         5 => CorruptException(message),
+        6 => MissingComponentException(message),
         _ => InternalException(message),
       };
 }
@@ -60,6 +61,11 @@ final class IoException extends TeiGeodataException {
 /// The bytes are not a valid pack, or a section does not match its hash.
 final class CorruptException extends TeiGeodataException {
   const CorruptException(String message) : super(5, message);
+}
+
+/// The query needs a component of a pack that is not installed: install it, or ask a pack that has it.
+final class MissingComponentException extends TeiGeodataException {
+  const MissingComponentException(String message) : super(6, message);
 }
 
 /// The C callback `tg_callback_u32`.
@@ -147,7 +153,7 @@ final class _TgSearchOptions extends Struct {
 /// How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's
 /// zero value is its default (D-276).
 final class OpenOptions {
-  const OpenOptions({ this.priority = 0, this.verify = Verify.lazy, this.load = Load.map, this.outlineLevel, this.outlineToleranceM = 0 });
+  const OpenOptions({ this.priority = 0, this.verify = Verify.lazy, this.load = Load.map, this.outlineLevel, this.outlineToleranceM = 0, this.components = '', this.languages = '' });
 
   /// Precedence over the other packs: a higher one wins where packs disagree (default 0).
   final int priority;
@@ -168,13 +174,27 @@ final class OpenOptions {
   /// distance of a border.
   final int outlineToleranceM;
 
-  void _write(_TgOpenOptions to) {
+  /// The components the pack holds, by name and comma-separated (`point,names,search`), for
+  /// a pack installed in part; what they need is added. Empty for a whole pack. A query
+  /// that needs a component left out answers nothing, or `MissingComponent` where it cannot.
+  final String components;
+
+  /// The languages whose names and search sections are read, as comma-separated BCP 47
+  /// tags (`en,ne`), at most 8; a language without a part of its own reads the pack's
+  /// shared part. Empty reads every language.
+  final String languages;
+
+  void _write(_TgOpenOptions to, Pointer<Uint8> componentsAt, int componentsLen, Pointer<Uint8> languagesAt, int languagesLen) {
     to.priority = priority;
     to.verify = verify.value;
     to.load = load.value;
     to.hasOutlineLevel = outlineLevel != null;
     to.outlineLevel = outlineLevel ?? 0;
     to.outlineToleranceM = outlineToleranceM;
+    to.components = componentsAt;
+    to.componentsLen = componentsLen;
+    to.languages = languagesAt;
+    to.languagesLen = languagesLen;
   }
 }
 
@@ -192,6 +212,12 @@ final class _TgOpenOptions extends Struct {
   external int outlineLevel;
   @Uint32()
   external int outlineToleranceM;
+  external Pointer<Uint8> components;
+  @Size()
+  external int componentsLen;
+  external Pointer<Uint8> languages;
+  @Size()
+  external int languagesLen;
 }
 
 /// The teigeodata library, loaded from a path. One instance per isolate; calls are
@@ -447,8 +473,13 @@ final class TeiGeodata {
   }
 
   int _engineOpenFileWith(Pointer<Void> handle, String path, OpenOptions options) {
-    final pathLen = _utf8(path);
-    options._write(_openOptions.ref);
+    final pathAt = 0;
+    final pathLen = _utf8(path, pathAt);
+    final optionsComponentsAt = pathAt + pathLen;
+    final optionsComponentsLen = _utf8(options.components, optionsComponentsAt);
+    final optionsLanguagesAt = optionsComponentsAt + optionsComponentsLen;
+    final optionsLanguagesLen = _utf8(options.languages, optionsLanguagesAt);
+    options._write(_openOptions.ref, _input + optionsComponentsAt, optionsComponentsLen, _input + optionsLanguagesAt, optionsLanguagesLen);
     final status = _engineOpenFileWithNative(handle, _input, pathLen, _openOptions, _word.cast());
     _check(status);
     return _word.cast<Uint32>().value;
@@ -462,8 +493,13 @@ final class TeiGeodata {
   }
 
   int _engineOpenBytesWith(Pointer<Void> handle, Uint8List bytes, OpenOptions options) {
-    final bytesLen = _copy(bytes);
-    options._write(_openOptions.ref);
+    final bytesAt = 0;
+    final bytesLen = _copy(bytes, bytesAt);
+    final optionsComponentsAt = bytesAt + bytesLen;
+    final optionsComponentsLen = _utf8(options.components, optionsComponentsAt);
+    final optionsLanguagesAt = optionsComponentsAt + optionsComponentsLen;
+    final optionsLanguagesLen = _utf8(options.languages, optionsLanguagesAt);
+    options._write(_openOptions.ref, _input + optionsComponentsAt, optionsComponentsLen, _input + optionsLanguagesAt, optionsLanguagesLen);
     final status = _engineOpenBytesWithNative(handle, _input, bytesLen, _openOptions, _word.cast());
     _check(status);
     return _word.cast<Uint32>().value;

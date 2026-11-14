@@ -144,6 +144,13 @@ class Engine(unittest.TestCase):
             engine.open_file_with(FIXTURE, tg.OpenOptions(outline_level=o["bad_outline_level"]))
         with self.assertRaises(TypeError):
             tg.OpenOptions(verify=1)  # an enum, not its value
+        points = tg.Engine()
+        points.open_file_with(FIXTURE, tg.OpenOptions(components=o["components"], languages=o["languages"]))
+        self.assertEqual(Blob(points.get(self.p["get"]["id"])).rows, 1)
+        with self.assertRaises(tg.MissingComponentError):
+            points.search("Synthland", 1)
+        with self.assertRaises(tg.InvalidArgumentError):
+            points.open_file_with(FIXTURE, tg.OpenOptions(components=o["bad_components"]))
 
     def test_postal(self) -> None:
         e, p = self.engine, self.p

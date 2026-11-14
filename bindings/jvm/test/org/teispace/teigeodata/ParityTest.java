@@ -128,10 +128,19 @@ public final class ParityTest {
                 check(scratch.openBytesWith(bad, null) == 0, "lazy");
                 TeiGeodata.OpenOptions every = eager.withLoad(TeiGeodata.Load.READ).withPriority(2).withOutlineLevel(1L);
                 check(scratch.openFileWith(fixture.toString(), every) == 1, "open_file_with");
-                check(scratch.openFileWith(fixture.toString(), new TeiGeodata.OpenOptions(0, null, null, null, 0)) == 2, "null enums");
+                check(scratch.openFileWith(fixture.toString(), new TeiGeodata.OpenOptions(0, null, null, null, 0, null, null)) == 2, "null enums and text");
                 long deep = ((Number) ow.get("bad_outline_level")).longValue();
                 expect(TeiGeodataException.InvalidArgument.class,
                         () -> scratch.openFileWith(fixture.toString(), TeiGeodata.OpenOptions.DEFAULTS.withOutlineLevel(deep)), "outline level");
+                TeiGeodata.OpenOptions only = TeiGeodata.OpenOptions.DEFAULTS
+                        .withComponents((String) ow.get("components")).withLanguages((String) ow.get("languages"));
+                try (TeiGeodata.Engine points = new TeiGeodata.Engine()) {
+                    points.openFileWith(fixture.toString(), only);
+                    check(strings(points.get((String) ((Map<?, ?>) p.get("get")).get("id")), "id").size() == 1, "points get");
+                    expect(TeiGeodataException.MissingComponent.class, () -> points.search("Synthland", 1), "search");
+                    expect(TeiGeodataException.InvalidArgument.class,
+                            () -> points.openFileWith(fixture.toString(), TeiGeodata.OpenOptions.DEFAULTS.withComponents((String) ow.get("bad_components"))), "pointy");
+                }
             }
             Map<?, ?> pl = (Map<?, ?>) p.get("postal_lookup");
             byte[] hit = engine.postalLookup((String) pl.get("code"), (String) pl.get("scheme"));

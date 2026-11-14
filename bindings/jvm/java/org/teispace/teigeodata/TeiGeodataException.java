@@ -63,4 +63,13 @@ public class TeiGeodataException extends RuntimeException {
             super(5, message);
         }
     }
+
+    /** The query needs a component of a pack that is not installed: install it, or ask a pack that has it. Code 6. */
+    public static final class MissingComponent extends TeiGeodataException {
+        private static final long serialVersionUID = 1L;
+
+        MissingComponent(String message) {
+            super(6, message);
+        }
+    }
 }

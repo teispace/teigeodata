@@ -36,7 +36,8 @@
     "Cancelled": 2,
     "Internal": 3,
     "Io": 4,
-    "Corrupt": 5
+    "Corrupt": 5,
+    "MissingComponent": 6
   },
   "engine": {
     "about": "Queries on bindings/fixtures/synth.tgd, the engine's synthetic pack (teigeodata-api's tests keep it current)",
@@ -61,7 +62,9 @@
     },
     "open_with": {
       "about": "flip the byte at corrupt_at (inside the ELEVATION section): eager verification refuses the pack, lazy opens it; verify 99 and outline level 256 are invalid",
-      "corrupt_at": 173392, "bad_verify": 99, "bad_outline_level": 256
+      "corrupt_at": 173392, "bad_verify": 99, "bad_outline_level": 256,
+      "components": "point", "languages": "en, ne", "bad_components": "pointy",
+      "about_components": "a pack opened with point alone answers get by ID; search needs the search component, MissingComponent"
     },
     "reverse": {
       "lat": 27.5,

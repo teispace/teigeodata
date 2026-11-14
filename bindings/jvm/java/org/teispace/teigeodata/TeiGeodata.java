@@ -155,34 +155,46 @@ public final class TeiGeodata {
      * @param load How a file is loaded; ignored for bytes. (null: the default)
      * @param outlineLevel The deepest admin level whose outlines are read, in a pack that splits its outlines by level: admin units below it are not found at a point, and their outlines are not loaded. `None` reads every level. (null: unset)
      * @param outlineToleranceM The largest simplification of the outlines read, in metres, when the pack has coarser outlines; 0 is full resolution. Admin units at a point may then differ within that distance of a border.
+     * @param components The components the pack holds, by name and comma-separated (`point,names,search`), for a pack installed in part; what they need is added. Empty for a whole pack. A query that needs a component left out answers nothing, or `MissingComponent` where it cannot. (null: the default)
+     * @param languages The languages whose names and search sections are read, as comma-separated BCP 47 tags (`en,ne`), at most 8; a language without a part of its own reads the pack's shared part. Empty reads every language. (null: the default)
      */
-    public record OpenOptions(int priority, Verify verify, Load load, Long outlineLevel, long outlineToleranceM) {
+    public record OpenOptions(int priority, Verify verify, Load load, Long outlineLevel, long outlineToleranceM, String components, String languages) {
         /** Every field at its zero value: the defaults (D-276). */
-        public static final OpenOptions DEFAULTS = new OpenOptions(0, Verify.LAZY, Load.MAP, null, 0);
+        public static final OpenOptions DEFAULTS = new OpenOptions(0, Verify.LAZY, Load.MAP, null, 0, "", "");
 
         /** A copy with {@code priority} set. */
         public OpenOptions withPriority(int priority) {
-            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM);
+            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM, components, languages);
         }
 
         /** A copy with {@code verify} set. */
         public OpenOptions withVerify(Verify verify) {
-            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM);
+            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM, components, languages);
         }
 
         /** A copy with {@code load} set. */
         public OpenOptions withLoad(Load load) {
-            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM);
+            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM, components, languages);
         }
 
         /** A copy with {@code outlineLevel} set. */
         public OpenOptions withOutlineLevel(Long outlineLevel) {
-            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM);
+            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM, components, languages);
         }
 
         /** A copy with {@code outlineToleranceM} set. */
         public OpenOptions withOutlineToleranceM(long outlineToleranceM) {
-            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM);
+            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM, components, languages);
+        }
+
+        /** A copy with {@code components} set. */
+        public OpenOptions withComponents(String components) {
+            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM, components, languages);
+        }
+
+        /** A copy with {@code languages} set. */
+        public OpenOptions withLanguages(String languages) {
+            return new OpenOptions(priority, verify, load, outlineLevel, outlineToleranceM, components, languages);
         }
     }
 
@@ -292,14 +304,14 @@ public static final class Engine implements AutoCloseable {
             OpenOptions options$ = options != null ? options : OpenOptions.DEFAULTS;
             long stamp = enter();
             try {
-                return nativeOpenFileWith(handle, path, options$.priority(), options$.verify() != null ? options$.verify().value : 0, options$.load() != null ? options$.load().value : 0, options$.outlineLevel() != null, options$.outlineLevel() != null ? options$.outlineLevel() : 0, options$.outlineToleranceM());
+                return nativeOpenFileWith(handle, path, options$.priority(), options$.verify() != null ? options$.verify().value : 0, options$.load() != null ? options$.load().value : 0, options$.outlineLevel() != null, options$.outlineLevel() != null ? options$.outlineLevel() : 0, options$.outlineToleranceM(), options$.components() != null ? options$.components() : "", options$.languages() != null ? options$.languages() : "");
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
             }
         }
 
-        private static native long nativeOpenFileWith(long handle, String path, int optionsPriority, int optionsVerify, int optionsLoad, boolean optionsHasOutlineLevel, long optionsOutlineLevel, long optionsOutlineToleranceM);
+        private static native long nativeOpenFileWith(long handle, String path, int optionsPriority, int optionsVerify, int optionsLoad, boolean optionsHasOutlineLevel, long optionsOutlineLevel, long optionsOutlineToleranceM, String optionsComponents, String optionsLanguages);
 
         /**
          * Adds a pack from its bytes (copied). Returns its layer ID, as
@@ -334,14 +346,14 @@ public static final class Engine implements AutoCloseable {
             OpenOptions options$ = options != null ? options : OpenOptions.DEFAULTS;
             long stamp = enter();
             try {
-                return nativeOpenBytesWith(handle, bytes, options$.priority(), options$.verify() != null ? options$.verify().value : 0, options$.load() != null ? options$.load().value : 0, options$.outlineLevel() != null, options$.outlineLevel() != null ? options$.outlineLevel() : 0, options$.outlineToleranceM());
+                return nativeOpenBytesWith(handle, bytes, options$.priority(), options$.verify() != null ? options$.verify().value : 0, options$.load() != null ? options$.load().value : 0, options$.outlineLevel() != null, options$.outlineLevel() != null ? options$.outlineLevel() : 0, options$.outlineToleranceM(), options$.components() != null ? options$.components() : "", options$.languages() != null ? options$.languages() : "");
             } finally {
                 lock.unlockRead(stamp);
                 java.lang.ref.Reference.reachabilityFence(this);
             }
         }
 
-        private static native long nativeOpenBytesWith(long handle, byte[] bytes, int optionsPriority, int optionsVerify, int optionsLoad, boolean optionsHasOutlineLevel, long optionsOutlineLevel, long optionsOutlineToleranceM);
+        private static native long nativeOpenBytesWith(long handle, byte[] bytes, int optionsPriority, int optionsVerify, int optionsLoad, boolean optionsHasOutlineLevel, long optionsOutlineLevel, long optionsOutlineToleranceM, String optionsComponents, String optionsLanguages);
 
         /**
          * Removes the pack with this layer ID; false if no pack has it. Queries already running

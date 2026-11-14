@@ -61,10 +61,15 @@ private func takeData(_ bytes: tg_bytes) -> Data {
 {% for p in f.params if p.ty == "str" %}
         var {{ p.name | camel }} = {{ p.name | camel }}
 {% endfor %}
+{% for p in f.params if p.ty == "record" %}
+{% for g in (records | selectattr("name", "eq", p.record) | first).fields if g.ty == "str" %}
+        var {{ p.name | camel }}{{ g.name | pascal }} = {{ p.name | camel }}.{{ g.name | camel }}
+{% endfor %}
+{% endfor %}
 {% set args %}{% if f.receiver %}raw{% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty == "str" %}{{ p.name | camel }}Bytes.baseAddress, {{ p.name | camel }}Bytes.count{% elif p.ty == "bytes" %}{{ p.name | camel }}Bytes.baseAddress?.assumingMemoryBound(to: UInt8.self), {{ p.name | camel }}Bytes.count{% elif p.ty == "handle" %}{{ p.name | camel }}.raw{% elif p.ty == "record" %}{{ p.name | camel }}Ptr{% elif p.ty == "callback" %}{ ctx, {% for a in p.callback.args %}a{{ loop.index0 }}{% if not loop.last %}, {% endif %}{% endfor %} in Unmanaged<Callback{{ p.callback.id | pascal }}>.fromOpaque(ctx!).takeUnretainedValue().call({% for a in p.callback.args %}a{{ loop.index0 }}{% if not loop.last %}, {% endif %}{% endfor %}) }, Unmanaged.passUnretained(box).toOpaque(){% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params or f.receiver %}, {% endif %}&out{% endif %}{% endset %}
 {#- Each string, byte or handle argument stays alive and in place for the call. #}
-{% set open %}{% if f.receiver %}withExtendedLifetime(self) { {% endif %}{% for p in f.params %}{% if p.ty == "str" %}{{ p.name | camel }}.withUTF8 { {{ p.name | camel }}Bytes in {% elif p.ty == "bytes" %}{{ p.name | camel }}.withUnsafeBytes { {{ p.name | camel }}Bytes in {% elif p.ty == "handle" %}withExtendedLifetime({{ p.name | camel }}) { {% elif p.ty == "record" %}withUnsafePointer(to: {{ p.name | camel }}.native) { {{ p.name | camel }}Ptr in {% endif %}{% endfor %}{% endset %}
-{% set close %}{% for p in f.params if p.ty in ["str", "bytes", "handle", "record"] %} }{% endfor %}{% if f.receiver %} }{% endif %}{% endset %}
+{% set open %}{% if f.receiver %}withExtendedLifetime(self) { {% endif %}{% for p in f.params %}{% if p.ty == "str" %}{{ p.name | camel }}.withUTF8 { {{ p.name | camel }}Bytes in {% elif p.ty == "bytes" %}{{ p.name | camel }}.withUnsafeBytes { {{ p.name | camel }}Bytes in {% elif p.ty == "handle" %}withExtendedLifetime({{ p.name | camel }}) { {% elif p.ty == "record" %}{% set texts = (records | selectattr("name", "eq", p.record) | first).fields | selectattr("ty", "eq", "str") | list %}{% for g in texts %}{{ p.name | camel }}{{ g.name | pascal }}.withUTF8 { {{ p.name | camel }}{{ g.name | pascal }}Bytes in {% endfor %}withUnsafePointer(to: {{ p.name | camel }}.native({% for g in texts %}{{ p.name | camel }}{{ g.name | pascal }}Bytes{% if not loop.last %}, {% endif %}{% endfor %})) { {{ p.name | camel }}Ptr in {% endif %}{% endfor %}{% endset %}
+{% set close %}{% for p in f.params if p.ty in ["str", "bytes", "handle", "record"] %} }{% if p.ty == "record" %}{% for g in (records | selectattr("name", "eq", p.record) | first).fields if g.ty == "str" %} }{% endfor %}{% endif %}{% endfor %}{% if f.receiver %} }{% endif %}{% endset %}
 {% set call %}tg_{% if owner %}{{ owner.snake }}_{% endif %}{{ f.name }}({{ args }}){% endset %}
 {% if cb %}
         let status = withoutActuallyEscaping({{ cb.name | camel }}) { f in
@@ -123,15 +128,15 @@ public struct {{ r.name }}: Sendable, Equatable {
 
 {% endfor %}
 
-    public init({% for f in r.fields %}{{ f.name | camel }}: {{ f.enum if f.ty == "enum" else swty(f.ty) }}{% if f.optional %}? = nil{% elif f.ty == "enum" %} = .{{ (enums | selectattr("name", "eq", f.enum) | first).variants[0].snake | camel }}{% elif f.ty == "bool" %} = false{% else %} = 0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}) {
+    public init({% for f in r.fields %}{{ f.name | camel }}: {{ f.enum if f.ty == "enum" else swty(f.ty) }}{% if f.optional %}? = nil{% elif f.ty == "enum" %} = .{{ (enums | selectattr("name", "eq", f.enum) | first).variants[0].snake | camel }}{% elif f.ty == "str" %} = ""{% elif f.ty == "bool" %} = false{% else %} = 0{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}) {
 {% for f in r.fields %}
         self.{{ f.name | camel }} = {{ f.name | camel }}
 {% endfor %}
     }
 
-    /// The C struct.
-    fileprivate var native: tg_{{ r.snake }} {
-        tg_{{ r.snake }}({% for f in r.fields %}{% if f.optional %}has_{{ f.name }}: {{ f.name | camel }} != nil, {{ f.name }}: {{ f.name | camel }} ?? {% if f.ty == "bool" %}false{% else %}0{% endif %}{% else %}{{ f.name }}: {{ f.name | camel }}{% if f.ty == "enum" %}.rawValue{% endif %}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %})
+    /// The C struct{% if not r.copy %}, its text pointing into the given UTF-8 bytes, alive for the call{% endif %}.
+    fileprivate func native({% for f in r.fields if f.ty == "str" %}_ {{ f.name | camel }}Bytes: UnsafeBufferPointer<UInt8>{% if not loop.last %}, {% endif %}{% endfor %}) -> tg_{{ r.snake }} {
+        tg_{{ r.snake }}({% for f in r.fields %}{% if f.optional %}has_{{ f.name }}: {{ f.name | camel }} != nil, {{ f.name }}: {{ f.name | camel }} ?? {% if f.ty == "bool" %}false{% else %}0{% endif %}{% elif f.ty == "str" %}{{ f.name }}: {{ f.name | camel }}Bytes.baseAddress, {{ f.name }}_len: {{ f.name | camel }}Bytes.count{% else %}{{ f.name }}: {{ f.name | camel }}{% if f.ty == "enum" %}.rawValue{% endif %}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %})
     }
 }
 

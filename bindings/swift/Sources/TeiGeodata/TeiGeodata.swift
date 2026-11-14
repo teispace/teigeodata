@@ -16,6 +16,8 @@ public struct TeiGeodataError: Error, Equatable, CustomStringConvertible {
         case `io` = 4
         /// The bytes are not a valid pack, or a section does not match its hash.
         case `corrupt` = 5
+        /// The query needs a component of a pack that is not installed: install it, or ask a pack that has it.
+        case `missingComponent` = 6
     }
 
     public let code: Code
@@ -99,7 +101,7 @@ public struct SearchOptions: Sendable, Equatable {
     }
 
     /// The C struct.
-    fileprivate var native: tg_search_options {
+    fileprivate func native() -> tg_search_options {
         tg_search_options(has_focus_lat: focusLat != nil, focus_lat: focusLat ?? 0, has_focus_lon: focusLon != nil, focus_lon: focusLon ?? 0, has_focus_scale_m: focusScaleM != nil, focus_scale_m: focusScaleM ?? 0, strict: strict)
     }
 }
@@ -121,18 +123,28 @@ public struct OpenOptions: Sendable, Equatable {
     /// outlines; 0 is full resolution. Admin units at a point may then differ within that
     /// distance of a border.
     public var outlineToleranceM: UInt32
+    /// The components the pack holds, by name and comma-separated (`point,names,search`), for
+    /// a pack installed in part; what they need is added. Empty for a whole pack. A query
+    /// that needs a component left out answers nothing, or `MissingComponent` where it cannot.
+    public var components: String
+    /// The languages whose names and search sections are read, as comma-separated BCP 47
+    /// tags (`en,ne`), at most 8; a language without a part of its own reads the pack's
+    /// shared part. Empty reads every language.
+    public var languages: String
 
-    public init(priority: Int32 = 0, verify: Verify = .lazy, load: Load = .map, outlineLevel: UInt32? = nil, outlineToleranceM: UInt32 = 0) {
+    public init(priority: Int32 = 0, verify: Verify = .lazy, load: Load = .map, outlineLevel: UInt32? = nil, outlineToleranceM: UInt32 = 0, components: String = "", languages: String = "") {
         self.priority = priority
         self.verify = verify
         self.load = load
         self.outlineLevel = outlineLevel
         self.outlineToleranceM = outlineToleranceM
+        self.components = components
+        self.languages = languages
     }
 
-    /// The C struct.
-    fileprivate var native: tg_open_options {
-        tg_open_options(priority: priority, verify: verify.rawValue, load: load.rawValue, has_outline_level: outlineLevel != nil, outline_level: outlineLevel ?? 0, outline_tolerance_m: outlineToleranceM)
+    /// The C struct, its text pointing into the given UTF-8 bytes, alive for the call.
+    fileprivate func native(_ componentsBytes: UnsafeBufferPointer<UInt8>, _ languagesBytes: UnsafeBufferPointer<UInt8>) -> tg_open_options {
+        tg_open_options(priority: priority, verify: verify.rawValue, load: load.rawValue, has_outline_level: outlineLevel != nil, outline_level: outlineLevel ?? 0, outline_tolerance_m: outlineToleranceM, components: componentsBytes.baseAddress, components_len: componentsBytes.count, languages: languagesBytes.baseAddress, languages_len: languagesBytes.count)
     }
 }
 
@@ -262,7 +274,9 @@ public final class Engine: @unchecked Sendable {
     public func openFileWith(_ path: String, options: OpenOptions = .init()) throws(TeiGeodataError) -> UInt32 {
         var out: UInt32 = 0
         var path = path
-        let status = withExtendedLifetime(self) { path.withUTF8 { pathBytes in withUnsafePointer(to: options.native) { optionsPtr in tg_engine_open_file_with(raw, pathBytes.baseAddress, pathBytes.count, optionsPtr, &out) } } }
+        var optionsComponents = options.components
+        var optionsLanguages = options.languages
+        let status = withExtendedLifetime(self) { path.withUTF8 { pathBytes in optionsComponents.withUTF8 { optionsComponentsBytes in optionsLanguages.withUTF8 { optionsLanguagesBytes in withUnsafePointer(to: options.native(optionsComponentsBytes, optionsLanguagesBytes)) { optionsPtr in tg_engine_open_file_with(raw, pathBytes.baseAddress, pathBytes.count, optionsPtr, &out) } } } } }
         try check(status)
         return out
     }
@@ -289,7 +303,9 @@ public final class Engine: @unchecked Sendable {
     /// level above 255.
     public func openBytesWith(_ bytes: Data, options: OpenOptions = .init()) throws(TeiGeodataError) -> UInt32 {
         var out: UInt32 = 0
-        let status = withExtendedLifetime(self) { bytes.withUnsafeBytes { bytesBytes in withUnsafePointer(to: options.native) { optionsPtr in tg_engine_open_bytes_with(raw, bytesBytes.baseAddress?.assumingMemoryBound(to: UInt8.self), bytesBytes.count, optionsPtr, &out) } } }
+        var optionsComponents = options.components
+        var optionsLanguages = options.languages
+        let status = withExtendedLifetime(self) { bytes.withUnsafeBytes { bytesBytes in optionsComponents.withUTF8 { optionsComponentsBytes in optionsLanguages.withUTF8 { optionsLanguagesBytes in withUnsafePointer(to: options.native(optionsComponentsBytes, optionsLanguagesBytes)) { optionsPtr in tg_engine_open_bytes_with(raw, bytesBytes.baseAddress?.assumingMemoryBound(to: UInt8.self), bytesBytes.count, optionsPtr, &out) } } } } }
         try check(status)
         return out
     }
@@ -408,7 +424,7 @@ public final class Engine: @unchecked Sendable {
     public func searchWith(_ query: String, limit: UInt32, options: SearchOptions = .init()) throws(TeiGeodataError) -> Data {
         var out = tg_bytes()
         var query = query
-        let status = withExtendedLifetime(self) { query.withUTF8 { queryBytes in withUnsafePointer(to: options.native) { optionsPtr in tg_engine_search_with(raw, queryBytes.baseAddress, queryBytes.count, limit, optionsPtr, &out) } } }
+        let status = withExtendedLifetime(self) { query.withUTF8 { queryBytes in withUnsafePointer(to: options.native()) { optionsPtr in tg_engine_search_with(raw, queryBytes.baseAddress, queryBytes.count, limit, optionsPtr, &out) } } }
         try check(status)
         return takeData(out)
     }

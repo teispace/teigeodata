@@ -16,7 +16,8 @@
 //! `&self` or no receiver, so each handle is `Send + Sync` and callable from any thread.
 //!
 //! **Records** (D-276) are public structs with only public fields, each a scalar, an `Option`
-//! of one, or an enum, deriving `Default` so that every field's default is its zero value;
+//! of one, an enum, or a `String`, deriving `Default` so that every field's default is its
+//! zero value (empty text);
 //! they are passed by reference (`&SearchOptions`). **Enums** (D-277) have unit variants
 //! valued 0, 1, 2 … in order, `#[default]` on the one valued 0.
 //!
@@ -36,6 +37,8 @@ pub use teigeodata_blob::Blob;
 use teigeodata_blob::Column;
 use teigeodata_core::{E6, E7, PlaceId, Point};
 use teigeodata_engine::{Hit, Layer, LayerOptions, Near, Place, PostalCode, Scratch, Shared};
+use teigeodata_format::Part;
+use teigeodata_format::component::{Component, Components, MAX_LANGUAGES, Parts};
 
 use places::Places;
 
@@ -53,6 +56,9 @@ pub enum ErrorCode {
     Io = 4,
     /// The bytes are not a valid pack, or a section does not match its hash.
     Corrupt = 5,
+    /// The query needs a component of a pack that is not installed: install it, or ask a
+    /// pack that has it.
+    MissingComponent = 6,
 }
 
 /// A failed call: a stable code and a message for people.
@@ -87,8 +93,9 @@ impl From<teigeodata_engine::Error> for Error {
         let code = match &e {
             E::Io(_) => ErrorCode::Io,
             E::Format(_) | E::Integrity { .. } | E::Range => ErrorCode::Corrupt,
-            // A missing component reads as absent where a query allows it; elsewhere it is
-            // the caller asking for what was not installed.
+            // A missing component reads as absent where a query allows it; elsewhere the
+            // caller learns which one to install.
+            E::MissingComponent { .. } => ErrorCode::MissingComponent,
             _ => ErrorCode::InvalidArgument,
         };
         Self::new(code, e.to_string())
@@ -177,7 +184,7 @@ pub enum Load {
 
 /// How [`Engine::open_file_with`] and [`Engine::open_bytes_with`] open a pack. Every field's
 /// zero value is its default (D-276).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OpenOptions {
     /// Precedence over the other packs: a higher one wins where packs disagree (default 0).
     pub priority: i32,
@@ -193,6 +200,14 @@ pub struct OpenOptions {
     /// outlines; 0 is full resolution. Admin units at a point may then differ within that
     /// distance of a border.
     pub outline_tolerance_m: u32,
+    /// The components the pack holds, by name and comma-separated (`point,names,search`), for
+    /// a pack installed in part; what they need is added. Empty for a whole pack. A query
+    /// that needs a component left out answers nothing, or `MissingComponent` where it cannot.
+    pub components: String,
+    /// The languages whose names and search sections are read, as comma-separated BCP 47
+    /// tags (`en,ne`), at most 8; a language without a part of its own reads the pack's
+    /// shared part. Empty reads every language.
+    pub languages: String,
 }
 
 impl OpenOptions {
@@ -207,6 +222,39 @@ impl OpenOptions {
                 )
             })?),
         };
+        let installed = if self.components.trim().is_empty() {
+            None
+        } else {
+            let mut set = Components::NONE;
+            for name in self.components.split(',').map(str::trim) {
+                let c = Component::from_name(name).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InvalidArgument,
+                        format!("`{name}` is not a component"),
+                    )
+                })?;
+                set = set.union(Components::of(&[c]));
+            }
+            Some(set.closed())
+        };
+        let mut installed_parts = Parts::ALL;
+        if !self.languages.trim().is_empty() {
+            let mut keys = Vec::new();
+            for tag in self.languages.split(',').map(str::trim) {
+                keys.push(Part::language(tag).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InvalidArgument,
+                        format!("`{tag}` is not a language tag"),
+                    )
+                })?);
+            }
+            installed_parts = Parts::ALL.languages(&keys).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidArgument,
+                    format!("{} languages; at most {MAX_LANGUAGES}", keys.len()),
+                )
+            })?;
+        }
         Ok(LayerOptions {
             priority: self.priority,
             verify: match self.verify {
@@ -220,6 +268,8 @@ impl OpenOptions {
             },
             outline_level,
             outline_tolerance_m: self.outline_tolerance_m,
+            installed,
+            installed_parts,
             ..LayerOptions::default()
         })
     }

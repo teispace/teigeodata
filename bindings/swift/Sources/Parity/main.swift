@@ -166,6 +166,11 @@ do {
     let every = OpenOptions(priority: 2, verify: .eager, load: .read, outlineLevel: 1)
     check(try scratch.openFileWith(fixture, options: every) == 1, "open_file_with")
     expect(.invalidArgument) { _ = try scratch.openFileWith(fixture, options: OpenOptions(outlineLevel: UInt32(ow["bad_outline_level"] as! Int))) }
+    let points = Engine()
+    _ = try points.openFileWith(fixture, options: OpenOptions(components: ow["components"] as! String, languages: ow["languages"] as! String))
+    check(strings(try points.get((e["get"] as! [String: Any])["id"] as! String), "id").count == 1, "points get")
+    expect(.missingComponent) { _ = try points.search("Synthland", limit: 1) }
+    expect(.invalidArgument) { _ = try points.openFileWith(fixture, options: OpenOptions(components: ow["bad_components"] as! String)) }
     let pl = e["postal_lookup"] as! [String: Any]
     let hit = try engine.postalLookup(pl["code"] as! String, scheme: pl["scheme"] as! String)
     check(strings(hit, "postal") == strs(pl["postal"]) && strings(hit, "id") == strs(pl["ids"]), "postal_lookup")

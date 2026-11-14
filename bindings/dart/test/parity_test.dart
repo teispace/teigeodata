@@ -199,6 +199,15 @@ void main() {
       throwsA(isA<InvalidArgumentException>()),
     );
     scratch.close();
+    final points = Engine(tg);
+    points.openFileWith(fixture, OpenOptions(components: ow['components'] as String, languages: ow['languages'] as String));
+    expect(strings(points.get((e['get'] as Map<String, dynamic>)['id'] as String), 'id').length, 1);
+    expect(() => points.search('Synthland', 1), throwsA(isA<MissingComponentException>()));
+    expect(
+      () => points.openFileWith(fixture, OpenOptions(components: ow['bad_components'] as String)),
+      throwsA(isA<InvalidArgumentException>()),
+    );
+    points.close();
     final pl = e['postal_lookup'] as Map<String, dynamic>;
     final hit = engine.postalLookup(pl['code'] as String, pl['scheme'] as String);
     expect([strings(hit, 'postal'), strings(hit, 'id')], [pl['postal'], pl['ids']]);

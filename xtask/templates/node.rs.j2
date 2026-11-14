@@ -188,13 +188,13 @@ impl From<{{ e.name }}> for teigeodata_api::{{ e.name }} {
 ///
 /// A plain object; every field may be left out, for its zero value (D-276).
 #[napi(object)]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, {% if r.copy %}Copy, {% endif %}Debug, Default)]
 pub struct {{ r.name }} {
 {% for f in r.fields %}
 {% for line in f.doc %}
     /// {{ line }}
 {% endfor %}
-    pub {{ f.name }}: Option<{% if f.ty == "enum" %}{{ f.enum }}{% else %}{{ f.ty }}{% endif %}>,
+    pub {{ f.name }}: Option<{% if f.ty == "enum" %}{{ f.enum }}{% elif f.ty == "str" %}String{% else %}{{ f.ty }}{% endif %}>,
 {% endfor %}
 }
 

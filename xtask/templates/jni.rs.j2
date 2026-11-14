@@ -127,7 +127,10 @@ pub extern "system" fn {{ symbol }}<'caller>(
 {% elif p.ty == "record" %}
                 let {{ p.name }} = teigeodata_api::{{ p.record }} {
 {% for g in records | selectattr("name", "eq", p.record) | map(attribute="fields") | first %}
-{% set v %}{% if g.ty == "enum" %}{{ g.enum | snake }}_of({{ p.name }}_{{ g.name }}, "{{ g.name }}")?{% elif g.ty in ["u32", "u64"] %}narrow::<{{ g.ty }}>("{{ g.name }}", {{ p.name }}_{{ g.name }})?{% else %}{{ p.name }}_{{ g.name }}{% endif %}{% endset %}
+{% set v %}{% if g.ty == "str" %}{{ p.name }}_{{ g.name }}.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: format!("{{ g.name }}: {e}"),
+                    })?{% elif g.ty == "enum" %}{{ g.enum | snake }}_of({{ p.name }}_{{ g.name }}, "{{ g.name }}")?{% elif g.ty in ["u32", "u64"] %}narrow::<{{ g.ty }}>("{{ g.name }}", {{ p.name }}_{{ g.name }})?{% else %}{{ p.name }}_{{ g.name }}{% endif %}{% endset %}
                     {{ g.name }}: {% if g.optional %}if {{ p.name }}_has_{{ g.name }} { Some({{ v }}) } else { None }{% else %}{{ v }}{% endif %},
 {% endfor %}
                 };
