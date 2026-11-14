@@ -6,7 +6,7 @@ use crate::query::{Ask, At, Code, Limits, PostalAsk, QueryError};
 
 /// The routes under `/v1/`, in the order the fuzz harness picks them.
 #[cfg(feature = "fuzz")]
-pub(crate) const ROUTES: [&str; 17] = [
+pub(crate) const ROUTES: [&str; 18] = [
     "get",
     "lookup",
     "reverse",
@@ -20,6 +20,7 @@ pub(crate) const ROUTES: [&str; 17] = [
     "postal",
     "boundary",
     "distance",
+    "coverage",
     "none",
     "nominatim/search",
     "nominatim/reverse",
@@ -90,6 +91,9 @@ impl Params {
 
 /// The ask of route `/v1/<route>` with parameters `p`.
 pub(crate) fn asked(route: &str, p: &Params) -> Result<Asked, QueryError> {
+    if let Some(other) = not_places(route, p)? {
+        return Ok(other);
+    }
     let ask = match route {
         "get" => Ask::Get {
             id: p.text("id")?,
@@ -160,29 +164,30 @@ pub(crate) fn asked(route: &str, p: &Params) -> Result<Asked, QueryError> {
                 },
             }
         }
-        "elevation" => return Ok(Asked::Elevation(p.need("lat")?, p.need("lon")?)),
-        "boundary" => return Ok(Asked::Boundary(p.text("id")?, p.parsed("lod")?)),
-        "distance" => {
-            return Ok(Asked::Distance(
-                At::parse(&p.text("from")?),
-                At::parse(&p.text("to")?),
-            ));
-        }
-        "postal" => {
-            return Ok(Asked::Postal(match p.get("code") {
-                Some(code) => PostalAsk::Code {
-                    code: code.to_owned(),
-                    scheme: p.get("scheme").map(str::to_owned),
-                    prefix: p.flag("prefix")?,
-                    limit: p.limit()?,
-                },
-                None => PostalAsk::At {
-                    lat: p.need("lat")?,
-                    lon: p.need("lon")?,
-                },
-            }));
-        }
         _ => return Err(QueryError::new(Code::NotFound, "no such route")),
     };
     Ok(Asked::Places(ask))
+}
+
+/// The asks of the routes that answer no list of places, or `None` for a place route.
+fn not_places(route: &str, p: &Params) -> Result<Option<Asked>, QueryError> {
+    Ok(Some(match route {
+        "elevation" => Asked::Elevation(p.need("lat")?, p.need("lon")?),
+        "boundary" => Asked::Boundary(p.text("id")?, p.parsed("lod")?),
+        "coverage" => Asked::Coverage(p.need("lat")?, p.need("lon")?, p.parsed("radius_m")?),
+        "distance" => Asked::Distance(At::parse(&p.text("from")?), At::parse(&p.text("to")?)),
+        "postal" => Asked::Postal(match p.get("code") {
+            Some(code) => PostalAsk::Code {
+                code: code.to_owned(),
+                scheme: p.get("scheme").map(str::to_owned),
+                prefix: p.flag("prefix")?,
+                limit: p.limit()?,
+            },
+            None => PostalAsk::At {
+                lat: p.need("lat")?,
+                lon: p.need("lon")?,
+            },
+        }),
+        _ => return Ok(None),
+    }))
 }

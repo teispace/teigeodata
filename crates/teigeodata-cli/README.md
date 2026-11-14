@@ -102,13 +102,15 @@ curl 'http://127.0.0.1:8080/v1/search?q=Pokhara&limit=3'
 ```
 
 Every query is a `GET` route under `/v1/` (`get`, `lookup`, `reverse`, `near`, `search`,
-`hierarchy`, `children`, `admin`, `tz`, `elevation`, `postal`, `boundary`, `distance`), with
+`hierarchy`, `children`, `admin`, `tz`, `elevation`, `postal`, `boundary`, `distance`,
+`coverage`), with
 `/packs` and `/health`. A place query answers
 `{"results": [...], "attribution": ...}`, or GeoJSON with `format=geojson`; a failure answers
 `{"error": {"code": ..., "message": ...}}` with its HTTP status. `/v1/boundary?id=` answers
 the place's outline as GeoJSON, at the finest level of detail within 20,000 vertices unless
 `lod` (0 to 6) asks for one; `/v1/distance?from=&to=` the metres and bearing between two
-places or points (`from=tgd:np/2cn&to=28.21,83.99`). `/search`, `/reverse` and
+places or points (`from=tgd:np/2cn&to=28.21,83.99`); `/v1/coverage?lat=&lon=` what
+`tgd locate` says, when the server runs over the store. `/search`, `/reverse` and
 `/lookup` answer as Nominatim does (`format=json`, `jsonv2` or `geojson`), for clients written
 for it; OSM-only fields are left out. The server listens on
 127.0.0.1 unless `--listen` says otherwise, sends no CORS headers unless `--cors-origin` names
@@ -120,7 +122,8 @@ stops on Ctrl-C. A build without the `serve` feature leaves it out.
 2025-11-25), on standard input and output: an MCP client starts it, for example with
 `{"command": "tgd", "args": ["mcp"]}` in its server list. It has fourteen read-only tools
 (`search`, `reverse`, `nearby`, `get_place`, `lookup`, `admin_at`, `hierarchy`, `children`,
-`timezone`, `elevation`, `postal`, `boundary`, `distance`, `packs`), each answering structured
+`timezone`, `elevation`, `postal`, `boundary`, `distance`, `packs`, and over the store
+`coverage`), each answering structured
 content with the data's attribution; long answers come in pages through a signed
 `next_cursor`. Packs, places and outlines are resources: `teigeodata://dataset/np/places`,
 `teigeodata://place/tgd:np/1xhb`, `teigeodata://boundary/tgd:np/1wmc?lod=2` (the `boundary`

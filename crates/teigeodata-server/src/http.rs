@@ -7,6 +7,8 @@
 //! `admin?lat=&lon=`,
 //! `tz?lat=&lon=&t=` or `tz?id=&t=`, `elevation?lat=&lon=`, `boundary?id=&lod=` (a GeoJSON
 //! feature), `distance?from=&to=` (each a place's ID or `lat,lon`),
+//! `coverage?lat=&lon=&radius_m=` (the countries there and the store's catalog packs for them;
+//! a server over a store only, D-318),
 //! `postal?code=&scheme=&prefix=&limit=` or `postal?lat=&lon=`. A place query answers
 //! `{"results": [...], "attribution": ...}` (the native records, D-032), or a GeoJSON
 //! FeatureCollection with `format=geojson`; `limit` defaults to [`Limits::DEFAULT_LIMIT`].
@@ -275,6 +277,7 @@ async fn v1(
     let e = app.packs.load();
     match answer(
         &e,
+        app.packs.root(),
         &asked,
         geojson,
         &app.config.limits,

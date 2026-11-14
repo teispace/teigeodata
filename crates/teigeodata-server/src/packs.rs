@@ -97,6 +97,12 @@ impl Packs {
         self.shared.load()
     }
 
+    /// The store's root, when the packs follow a store.
+    #[must_use]
+    pub fn root(&self) -> Option<&Path> {
+        self.store.as_ref().map(|(root, _)| root.as_path())
+    }
+
     /// The shared engine, to update it another way (an app embedding the server).
     #[must_use]
     pub const fn shared(&self) -> &Shared {

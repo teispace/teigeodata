@@ -3,6 +3,7 @@
 //! the HTTP routes, the MCP tools and the fuzz harness share. No runtime.
 
 use std::cell::RefCell;
+use std::path::Path;
 
 use teigeodata_engine::{Engine, Outline, PostalCode, Scratch};
 
@@ -19,6 +20,9 @@ pub(crate) enum Asked {
     Boundary(String, Option<u8>),
     /// A distance between two ends.
     Distance(At, At),
+    /// The countries at or near a point and the catalog's packs for it: latitude, longitude,
+    /// radius in metres.
+    Coverage(f64, f64, Option<u32>),
 }
 
 impl Asked {
@@ -33,6 +37,7 @@ impl Asked {
             Self::Postal(_) => Operation::Postal,
             Self::Boundary(..) => Operation::Boundary,
             Self::Distance(..) => Operation::Distance,
+            Self::Coverage(..) => Operation::Coverage,
         }
     }
 }
@@ -94,10 +99,11 @@ pub(crate) struct Answered {
     pub(crate) more: bool,
 }
 
-/// Runs `asked` on `e` and writes its body, the places of `page` only: the work of one
-/// request.
+/// Runs `asked` on `e` (and the catalog of the store at `store`, for coverage) and writes its
+/// body, the places of `page` only: the work of one request.
 pub(crate) fn answer(
     e: &Engine,
+    store: Option<&Path>,
     asked: &Asked,
     geojson: bool,
     limits: &Limits,
@@ -176,6 +182,70 @@ pub(crate) fn answer(
                     more: false,
                 })
             }
+            Asked::Coverage(lat, lon, radius_m) => {
+                coverage(e, store, *lat, *lon, *radius_m, limits, out)
+            }
         }
     })
+}
+
+/// The countries at or near a point, each with the stored catalog's packs that could hold it
+/// (D-318), as `{"results": [...], "attribution": ...}`.
+#[cfg(feature = "store")]
+fn coverage(
+    e: &Engine,
+    store: Option<&Path>,
+    lat: f64,
+    lon: f64,
+    radius_m: Option<u32>,
+    limits: &Limits,
+    out: &mut Vec<u8>,
+) -> Result<Answered, QueryError> {
+    let at = query::point::<teigeodata_core::E7>(lat, lon)?;
+    let radius_m = radius_m.unwrap_or(teigeodata_engine::LOCATOR_RADIUS_M);
+    if f64::from(radius_m) > limits.radius_m {
+        return Err(QueryError::new(
+            Code::OutOfBounds,
+            format!("`radius_m` is past the most allowed, {}", limits.radius_m),
+        ));
+    }
+    let root = store.ok_or_else(no_catalog)?;
+    // The store's own errors name its paths: a server says only that it cannot read it.
+    let (trusted, installed) = teigeodata_sync::client::catalog_at(root)
+        .map_err(|_| QueryError::new(Code::Unavailable, "the store's catalog cannot be read"))?;
+    let (catalog, _) = teigeodata_sync::catalog::Catalog::trusted(&trusted);
+    let (rows, countries) = crate::catalog::coverage(e, &catalog, &installed, at, radius_m)?;
+    let results = rows.len();
+    out.extend_from_slice(b"{\"results\":");
+    serde_json::to_writer(&mut *out, &rows)
+        .map_err(|_| QueryError::new(Code::Internal, "the answer failed"))?;
+    close(
+        out,
+        output::attribution_layers(e, countries.iter().map(|c| c.layer)).as_deref(),
+    );
+    Ok(Answered {
+        results,
+        more: false,
+    })
+}
+
+/// Without the `store` feature there is no catalog to read.
+#[cfg(not(feature = "store"))]
+fn coverage(
+    _: &Engine,
+    _: Option<&Path>,
+    _: f64,
+    _: f64,
+    _: Option<u32>,
+    _: &Limits,
+    _: &mut Vec<u8>,
+) -> Result<Answered, QueryError> {
+    Err(no_catalog())
+}
+
+fn no_catalog() -> QueryError {
+    QueryError::new(
+        Code::NotFound,
+        "coverage reads a store's catalog: this server serves packs without one",
+    )
 }

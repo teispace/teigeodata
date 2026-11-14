@@ -10,11 +10,14 @@
 //! - [`seams`]: who is asking, may they, how much they used, open by default (ADR-0025).
 //! - `http` (feature `http`): the HTTP server over axum (D-309).
 //! - `mcp` (feature `mcp`): the MCP server over rmcp (D-315).
+//! - `catalog` (feature `store`): the store's catalog, its rows and `coverage` (D-318).
 //!
 //! [D-310]: https://github.com/teispace/teigeodata/blob/main/docs/03-decisions/log.md
 
 #[cfg(any(feature = "http", feature = "fuzz", feature = "mcp"))]
 mod body;
+#[cfg(feature = "store")]
+pub mod catalog;
 #[cfg(any(feature = "http", feature = "fuzz"))]
 mod compat;
 /// The fuzz harness of the query parsing.

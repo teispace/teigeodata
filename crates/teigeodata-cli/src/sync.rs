@@ -18,10 +18,10 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 use teigeodata_core::E7;
-use teigeodata_engine::{Engine, Layer, LayerOptions, Load, Place};
+use teigeodata_engine::{Engine, Layer, LayerOptions, Load};
 use teigeodata_format::Part;
-use teigeodata_format::component::{Component, Components, Parts};
-use teigeodata_sync::catalog::{self, Catalog, Entry};
+use teigeodata_format::component::{Component, Parts};
+use teigeodata_sync::catalog::{Catalog, Entry};
 pub(crate) use teigeodata_sync::client::Want;
 use teigeodata_sync::client::{self as client, Client, ClientError, language, path_of};
 use teigeodata_sync::fetch::Downloads;
@@ -131,27 +131,7 @@ pub(crate) fn refresh(root: &Path, countries: &[String], out: &mut dyn Write) ->
 }
 
 fn entry_json(c: &Client, e: &Entry) -> Value {
-    let all = e.size_of(Components::all());
-    json!({
-        "path": e.path(),
-        "release": e.release,
-        "download": all.wire,
-        "disk": all.disk,
-        "components": e.sizes.keys().map(|c| c.name()).collect::<Vec<_>>(),
-        "parts": e.parts.iter().map(part_json).collect::<Vec<_>>(),
-        "licence": e.licence,
-        "state": c.state(e).name(),
-    })
-}
-
-/// A catalog part for people and `--json`: its component, bytes, and its language or its
-/// outline's level, level of detail and tolerance.
-fn part_json(p: &catalog::PartSize) -> Value {
-    let (component, download, disk) = (p.component.name(), p.size.wire, p.size.disk);
-    p.part.outline_levels().map_or_else(
-        || json!({"component": component, "language": language(p.part), "download": download, "disk": disk}),
-        |(level, lod)| json!({"component": component, "level": level, "lod": lod, "tolerance_m": p.tolerance_m, "download": download, "disk": disk}),
-    )
+    teigeodata_server::catalog::entry(e, c.state(e))
 }
 
 /// The parts a record holds, for people and `--json`: `null` for every one.
@@ -296,27 +276,11 @@ pub(crate) fn locate(
     as_json: bool,
     out: &mut dyn Write,
 ) -> Result<(), Fail> {
-    let mut s = open(root)?;
-    let t = s.offline()?;
+    let s = open(root)?;
+    let (t, installed) = client::catalog_at(root)?;
     let (c, _) = Catalog::trusted(&t);
     let engine = engine(&s, with)?;
-    let mut countries: Vec<Place> = Vec::new();
-    engine.countries_near(at, radius_m, &mut countries)?;
-    let mut buf = [0_u8; 1024];
-    let mut rows = Vec::new();
-    for country in &countries {
-        let Some(cc) = country.id.namespace().country() else {
-            continue;
-        };
-        rows.push(json!({
-            "id": country.id.to_string(),
-            "name": engine.name(country, &mut buf)?,
-            "lat": country.point.lat_degrees(),
-            "lon": country.point.lon_degrees(),
-            "countries": [String::from_utf8_lossy(&cc)],
-            "packs": c.packs_at(cc, at).map(|e| entry_json(&s, e)).collect::<Vec<_>>(),
-        }));
-    }
+    let (rows, _) = teigeodata_server::catalog::coverage(&engine, &c, &installed, at, radius_m)?;
     print_places(&rows, as_json, out)?;
     if rows.is_empty() {
         return Err(Fail::Refused(

@@ -74,6 +74,8 @@ pub enum Operation {
     Boundary,
     /// [`crate::query::distance`].
     Distance,
+    /// The countries and the catalog's packs at a point (D-318).
+    Coverage,
     /// The pack set's description.
     Packs,
 }
@@ -112,6 +114,7 @@ impl Operation {
             Self::Postal => "postal",
             Self::Boundary => "boundary",
             Self::Distance => "distance",
+            Self::Coverage => "coverage",
             Self::Packs => "packs",
         }
     }

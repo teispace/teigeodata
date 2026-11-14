@@ -109,6 +109,26 @@ pub fn now() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
 }
 
+/// The verified catalog stored at `root` and the packs its journal lists, read without
+/// opening the store: nothing is recovered, created or removed, so a reader beside the process
+/// that installs (a server answering `coverage`, D-318) never disturbs it. Offline.
+///
+/// # Errors
+/// [`ClientError::Refused`] if the store is not set up, or neither the stored nor the shipped
+/// root verifies; the file system's.
+pub fn catalog_at(root: &Path) -> Result<(Trusted, Vec<Record>)> {
+    let shipped = std::fs::read(root.join(ROOT)).map_err(|e| {
+        ClientError::Refused(format!(
+            "{}: {e} (set the store up with init first)",
+            root.join(ROOT).display()
+        ))
+    })?;
+    let mut dir = Dir::new(root).map_err(|e| ClientError::of(root.display(), e))?;
+    let trusted = refresh::load(&mut dir, &shipped, now())?;
+    let packs = Store::read_packs(&mut dir).map_err(|e| ClientError::of(root.display(), e))?;
+    Ok((trusted, packs))
+}
+
 /// A mirror base ends with `/`, so a file name joins it.
 fn base(url: &str) -> String {
     if url.ends_with('/') {
@@ -220,6 +240,19 @@ pub enum PackState {
 }
 
 impl PackState {
+    /// What `entry` is against the installed `packs`.
+    #[must_use]
+    pub fn of(entry: &Entry, packs: &[Record]) -> Self {
+        match packs
+            .iter()
+            .find(|r| r.address == entry.address && r.component == entry.component)
+        {
+            None => Self::Available,
+            Some(r) if r.head == entry.head => Self::Installed,
+            Some(_) => Self::Update,
+        }
+    }
+
     /// `available`, `installed` or `update`.
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -411,16 +444,7 @@ impl<N: Transport> Client<N> {
     /// What the catalog says of `entry` against the store.
     #[must_use]
     pub fn state(&self, entry: &Entry) -> PackState {
-        match self
-            .store
-            .packs()
-            .iter()
-            .find(|r| r.address == entry.address && r.component == entry.component)
-        {
-            None => PackState::Available,
-            Some(r) if r.head == entry.head => PackState::Installed,
-            Some(_) => PackState::Update,
-        }
+        PackState::of(entry, self.store.packs())
     }
 
     /// Installs the packs at `paths` (catalog paths) with `want` added to what is installed,

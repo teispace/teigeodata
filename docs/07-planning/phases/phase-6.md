@@ -60,10 +60,13 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 - [x] `boundary` (an outline, simplified to a vertex bound, as GeoJSON; in MCP a summary and a
   resource link) and `distance` (between places or points), over the request core so HTTP
   and MCP answer them alike (2026-11-15, D-317)
-- [ ] `coverage` (which packs hold a point, from the catalog: `tgd locate`), with downloads
 - [x] Stateless Streamable HTTP in the HTTP server, `Origin` checked (2026-11-15, D-316)
-- [ ] Downloads: install as a task (the tasks extension) where the client has it, a handle and
-  a status tool otherwise; size confirmed by elicitation when the client offers it
+- [x] `coverage` (which packs hold a point, from the stored catalog), one function for
+  `tgd locate`, `/v1/coverage` and the MCP tool ([research](../../02-research/notes/mcp-downloads.md), D-318; 2026-11-15)
+- [ ] Downloads: `install` as a task (the tasks extension) where the client has it, a handle
+  and `install_status` otherwise, from one job registry; size confirmed by MRTR elicitation
+  (2026-07-28) or `elicitation/create` (2025-11-25 on stdio), `max_bytes` otherwise; on for
+  `tgd mcp`, opt-in for `tgd serve` (`--allow-install`) (D-318)
 - [ ] The MCP conformance suite in CI for 2026-07-28 and 2025-11-25 clients
 
 ### 6.4 Load, safety and size
@@ -85,3 +88,5 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 | 2026-11-15 | 6.3: the MCP server on stdio (D-315); `hierarchy` and `children` join the request core; tools named in `snake_case`; the text block is the full JSON, not a summary; the remaining ADR-0017 tools split into their own item | built |
 | 2026-11-15 | 6.3: MCP at `/mcp` of the HTTP server, stateless, `Host` and `Origin` checked (D-316) | built |
 | 2026-11-15 | 6.3: `boundary` and `distance` in the request core, HTTP and MCP (D-317); `coverage` moves beside downloads, since both read the catalog | built |
+| 2026-11-15 | 6.3: coverage and downloads researched ([note](../../02-research/notes/mcp-downloads.md)); one job registry answers both `tasks/get` and `install_status`; install opt-in on HTTP (D-318) | planned |
+| 2026-11-15 | 6.3: `coverage` built: `tgd locate`, `/v1/coverage` and the MCP tool share one function and a read-only catalog read (D-318) | built |

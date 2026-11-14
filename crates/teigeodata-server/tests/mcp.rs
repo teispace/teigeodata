@@ -23,7 +23,7 @@ use rmcp::ServiceExt;
 use rmcp::model::CallToolResult;
 use serde_json::{Map, Value, json};
 use teigeodata_format::{Encoding, Kind, Pack, Tag, Writer};
-use teigeodata_server::mcp::{ATTRIBUTION, DEPTH, Mcp, TOOLS};
+use teigeodata_server::mcp::{ATTRIBUTION, DEPTH, Mcp, STORE_TOOLS, TOOLS};
 use teigeodata_server::packs::Packs;
 use teigeodata_server::query::{Code, Limits, QueryError};
 use teigeodata_server::seams::{Authorize, Bare, Caller, Meter, Operation, Seams, Usage};
@@ -60,6 +60,14 @@ fn server_of(model: common::Model, seams: Seams) -> (Mcp, common::Model, std::pa
     let (packs, _) = Packs::open(std::slice::from_ref(&path), None).unwrap();
     let mcp = Mcp::new(Arc::new(packs), seams, Limits::SERVER).unwrap();
     (mcp, model, dir)
+}
+
+/// The tools a server without a store lists, in order.
+fn storeless() -> Vec<&'static str> {
+    TOOLS
+        .into_iter()
+        .filter(|t| !STORE_TOOLS.contains(t))
+        .collect()
 }
 
 fn args(v: Value) -> Map<String, Value> {
@@ -226,7 +234,7 @@ fn every_tool_answers_what_its_schema_says() {
             assert_eq!(v["attribution"], NOTICE, "{tool}");
         }
     }
-    assert_eq!(seen.len(), TOOLS.len(), "every tool is called");
+    assert_eq!(seen.len(), storeless().len(), "every tool is called");
     let v = answered(
         &mcp,
         "get_place",
@@ -542,7 +550,7 @@ async fn the_wire_speaks_2026_07_28_without_a_handshake() {
         .iter()
         .map(|tool| tool["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names, TOOLS, "every tool, in a stable order");
+    assert_eq!(names, storeless(), "every tool, in a stable order");
     for tool in tools {
         assert_eq!(tool["annotations"]["readOnlyHint"], true, "{tool}");
         assert_eq!(tool["outputSchema"]["type"], "object", "{tool}");
@@ -675,7 +683,7 @@ async fn the_wire_serves_2025_11_25_clients_through_initialize() {
     let listed = peer.ask(2, "tools/list", json!({})).await;
     assert_eq!(
         listed["result"]["tools"].as_array().map(Vec::len),
-        Some(TOOLS.len()),
+        Some(storeless().len()),
         "{listed}"
     );
     let got = peer

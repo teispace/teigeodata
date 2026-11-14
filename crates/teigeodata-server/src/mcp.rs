@@ -58,7 +58,7 @@ pub const DEPTH: usize = 250;
 pub const ATTRIBUTION: &str = "teigeodata/attribution";
 
 /// The tools, in the order `tools/list` gives them.
-pub const TOOLS: [&str; 14] = [
+pub const TOOLS: [&str; 15] = [
     "search",
     "reverse",
     "nearby",
@@ -73,7 +73,11 @@ pub const TOOLS: [&str; 14] = [
     "boundary",
     "distance",
     "packs",
+    "coverage",
 ];
+
+/// The tools that read the store's catalog: listed only on a server over a store (D-318).
+pub const STORE_TOOLS: [&str; 1] = ["coverage"];
 
 /// The longest cursor accepted, in bytes: a signed call with arguments at their bounds is
 /// far shorter.
@@ -116,6 +120,7 @@ impl Mcp {
     /// # Errors
     /// The random source failed.
     pub fn new(packs: Arc<Packs>, seams: Seams, limits: Limits) -> std::io::Result<Self> {
+        let store = packs.root().is_some();
         let mut key = [0_u8; 32];
         getrandom::fill(&mut key).map_err(std::io::Error::other)?;
         Ok(Self(Arc::new(Inner {
@@ -123,7 +128,10 @@ impl Mcp {
             seams,
             limits,
             key,
-            tools: tools(&limits),
+            tools: tools(&limits)
+                .into_iter()
+                .filter(|t| store || !STORE_TOOLS.contains(&t.name.as_ref()))
+                .collect(),
         })))
     }
 
@@ -136,6 +144,9 @@ impl Mcp {
         args: &Map<String, Value>,
         incoming: &dyn Incoming,
     ) -> Option<CallToolResult> {
+        if !self.0.tools.iter().any(|t| t.name == name) {
+            return None;
+        }
         let tool = TOOLS.iter().position(|t| *t == name)?;
         let start = Instant::now();
         // The engine's calls are synchronous: a panic is caught here, answered, and the
@@ -193,7 +204,8 @@ impl Mcp {
         };
         let e = self.0.packs.load();
         let mut text = Vec::with_capacity(1024);
-        let answered = body::answer(&e, &asked, false, &limits, page, &mut text)?;
+        let store = self.0.packs.root();
+        let answered = body::answer(&e, store, &asked, false, &limits, page, &mut text)?;
         let mut v: Value = serde_json::from_slice(&text)
             .map_err(|_| QueryError::new(Code::Internal, "the answer failed"))?;
         let attribution = v
@@ -388,6 +400,7 @@ impl Mcp {
             let mut text = Vec::with_capacity(4096);
             body::answer(
                 &e,
+                None,
                 &Asked::Boundary(id, lod),
                 true,
                 &self.0.limits,
@@ -774,6 +787,9 @@ impl Args<'_> {
 
 /// The ask of tool `name` with `a`.
 fn asked(name: &str, a: &Args<'_>, limits: &Limits) -> Result<Asked, QueryError> {
+    if let Some(other) = not_places(name, a)? {
+        return Ok(other);
+    }
     let ask = match name {
         "search" => Ask::Search {
             query: a.need_text("query")?,
@@ -845,32 +861,41 @@ fn asked(name: &str, a: &Args<'_>, limits: &Limits) -> Result<Asked, QueryError>
                 },
             }
         }
-        "elevation" => return Ok(Asked::Elevation(a.need("lat")?, a.need("lon")?)),
-        "distance" => {
-            return Ok(Asked::Distance(
-                At::parse(&a.need_text("from")?),
-                At::parse(&a.need_text("to")?),
-            ));
-        }
-        "postal" => {
-            return Ok(Asked::Postal(match a.text("code")? {
-                Some(code) => PostalAsk::Code {
-                    code,
-                    scheme: a.text("scheme")?,
-                    prefix: a.flag("prefix")?,
-                    limit: a.limit()?,
-                },
-                None => PostalAsk::At {
-                    lat: a.need("lat")?,
-                    lon: a.need("lon")?,
-                },
-            }));
-        }
         _ => return Err(QueryError::new(Code::NotFound, "no such tool")),
     };
     // The bounds hold before any page is computed: `limit` at the server's own.
     ask.check(limits)?;
     Ok(Asked::Places(ask))
+}
+
+/// The asks of the tools that answer no list of places, or `None` for a place tool.
+fn not_places(name: &str, a: &Args<'_>) -> Result<Option<Asked>, QueryError> {
+    Ok(Some(match name {
+        "elevation" => Asked::Elevation(a.need("lat")?, a.need("lon")?),
+        "coverage" => Asked::Coverage(
+            a.need("lat")?,
+            a.need("lon")?,
+            a.whole("radius_m")?
+                .map(|r| u32::try_from(r).unwrap_or(u32::MAX)),
+        ),
+        "distance" => Asked::Distance(
+            At::parse(&a.need_text("from")?),
+            At::parse(&a.need_text("to")?),
+        ),
+        "postal" => Asked::Postal(match a.text("code")? {
+            Some(code) => PostalAsk::Code {
+                code,
+                scheme: a.text("scheme")?,
+                prefix: a.flag("prefix")?,
+                limit: a.limit()?,
+            },
+            None => PostalAsk::At {
+                lat: a.need("lat")?,
+                lon: a.need("lon")?,
+            },
+        }),
+        _ => return Ok(None),
+    }))
 }
 
 fn hex(n: u8) -> char {
@@ -1071,6 +1096,14 @@ fn tools(limits: &Limits) -> Vec<Tool> {
             &[],
             &packs_schema(),
         ),
+        def(
+            "coverage",
+            "Packs for a point",
+            "The countries at a point or within `radius_m` metres of it, each with the catalog's packs that could hold the point: path, release, download and disk bytes, components, parts, licence and state (installed, update or available). From the store's verified catalog, offline.",
+            json!({ "lat": lat, "lon": lon, "radius_m": { "type": "integer", "minimum": 0, "maximum": limits.radius_m, "description": "Metres; default 3,000." } }),
+            &["lat", "lon"],
+            &coverage_schema(),
+        ),
     ]
 }
 
@@ -1189,6 +1222,29 @@ fn distance_schema() -> Value {
             "attribution": { "type": nullable("string") },
         },
         "required": ["result", "attribution"],
+    })
+}
+
+fn coverage_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "results": { "type": "array", "items": { "type": "object", "properties": {
+                "id": { "type": "string" }, "name": { "type": nullable("string") },
+                "lat": { "type": "number" }, "lon": { "type": "number" },
+                "countries": { "type": "array", "items": { "type": "string" } },
+                "packs": { "type": "array", "items": { "type": "object", "properties": {
+                    "path": { "type": "string" }, "release": { "type": "string" },
+                    "download": { "type": "integer" }, "disk": { "type": "integer" },
+                    "components": { "type": "array", "items": { "type": "string" } },
+                    "parts": { "type": "array", "items": { "type": "object" } },
+                    "licence": { "type": "string" },
+                    "state": { "type": "string", "enum": ["installed", "update", "available"] },
+                }, "required": ["path", "release", "download", "disk", "components", "state"] } },
+            }, "required": ["id", "name", "lat", "lon", "countries", "packs"] } },
+            "attribution": { "type": nullable("string") },
+        },
+        "required": ["results", "attribution"],
     })
 }
 

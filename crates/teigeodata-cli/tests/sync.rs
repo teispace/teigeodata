@@ -134,6 +134,28 @@ fn a_store_from_init_to_remove() {
     );
     let found = json(&store, &["find", "Ritarra", "--json"]);
     assert_eq!(found[0]["packs"][0]["state"], "installed");
+    // Locate: a world pack's outlines find the country, and the catalog its pack (D-318).
+    let world = store.parent().unwrap().join("world.tgd");
+    std::fs::write(&world, common::outlined(false).0.encode()).unwrap();
+    let (lat, lon) = (
+        f64::from(i32::midpoint(common::SOUTH, common::NORTH)) / 1e7,
+        f64::from(i32::midpoint(common::WEST, common::EAST)) / 1e7,
+    );
+    let (lat, lon) = (lat.to_string(), lon.to_string());
+    let at = json(
+        &store,
+        &[
+            "locate",
+            &lat,
+            &lon,
+            "--pack",
+            world.to_str().unwrap(),
+            "--json",
+        ],
+    );
+    assert_eq!(at[0]["countries"], serde_json::json!(["np"]), "{at}");
+    assert_eq!(at[0]["packs"][0]["path"], "np.places.tgd", "{at}");
+    assert_eq!(at[0]["packs"][0]["state"], "installed", "{at}");
 
     // A new release: update fetches it, keeping what did not change.
     assert!(ok(&store, &["update"]).contains("up to date"));

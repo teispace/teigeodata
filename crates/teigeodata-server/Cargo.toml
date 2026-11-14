@@ -39,6 +39,9 @@ http = ["dep:axum", "dep:form_urlencoded", "dep:tokio", "dep:tower-http", "rmcp?
 fuzz = ["dep:form_urlencoded"]
 # The MCP server over rmcp: `mcp::Mcp` and `mcp::serve_stdio` (phase 6.3, D-315).
 mcp = ["dep:rmcp", "dep:tokio", "dep:blake3", "dep:getrandom"]
+# The store's catalog: `coverage` and the catalog rows (D-318), and with `mcp` the `install`
+# tool. Brings the store's client (`ureq` over rustls), which `tgd` has already.
+store = ["teigeodata-sync/client"]
 
 [dev-dependencies]
 # The engine's test model (`../teigeodata-engine/tests/common`) writes its packs.
@@ -47,6 +50,15 @@ teigeodata-names.workspace = true
 # The HTTP tests drive the router in process.
 tokio = { version = "1.54.1", features = ["rt", "macros", "io-util"] }
 tower = { version = "0.5.3", default-features = false, features = ["util"] }
+# The store tests: a signed repository written as a release writes it, served on localhost
+# (`../teigeodata-sync/tests/support/repo.rs`).
+teigeodata-sync = { workspace = true, features = ["repo", "write"] }
+ed25519-dalek = { version = "3.0.0", default-features = false }
+zstd = { version = "0.14.3", default-features = false }
+
+[[test]]
+name = "store"
+required-features = ["http", "mcp", "store"]
 
 [[test]]
 name = "fuzz"

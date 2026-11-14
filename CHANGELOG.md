@@ -48,6 +48,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   20,000 vertices unless one is asked; `/v1/distance?from=&to=`: metres and bearing between
   places or points. In MCP, the `boundary` tool links the outline as the resource
   `teigeodata://boundary/{id}?lod=` (D-317).
+- `/v1/coverage?lat=&lon=&radius_m=` and the MCP tool `coverage`, on a server over the store:
+  the countries at a point with the catalog's packs for it and their state, as `tgd locate`
+  answers, read from the stored catalog without opening the store (D-318).
+  `teigeodata_sync::client::catalog_at` reads it so; `PackState::of`.
 - `tgd serve` answers MCP at `/mcp` (stateless Streamable HTTP), refusing a foreign `Host`
   on loopback and any browser origin not configured with `--cors-origin` (D-316).
 - `Store::read_packs`: the packs the journal lists, read without opening the store, so a reader
