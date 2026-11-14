@@ -209,6 +209,10 @@
 #define TGP_STORE_MIRROR "http://127.0.0.1:1/"
 #define TGP_STORE_PACK "np"
 #define TGP_STORE_ROOT "fixtures/store-root.json"
+#define TGP_TZ_EMBEDDED_FIXTURE "fixtures/embedded.bin"
+#define TGP_TZ_EMBEDDED_LENGTH 3012
+#define TGP_TZ_EMBEDDED_OFFSET 4099
+#define TGP_TZ_EMBEDDED_PAST_END 3026
 #define TGP_TZ_FIXTURE "fixtures/tz.tgd"
 #define TGP_TZ_GAP_AFTER -14400
 #define TGP_TZ_GAP_BEFORE -18000

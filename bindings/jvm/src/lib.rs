@@ -437,6 +437,122 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
         .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// Opens the pack stored whole in `length` bytes at `offset` of the file at `path`
+/// (memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app
+/// (`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or
+/// one inside any container that stores it uncompressed. The offset need not be aligned.
+/// Returns its layer ID, as `open_file`.
+///
+/// # Errors
+///
+/// `ErrorCode::Io` if the file cannot be read or the range is not inside it,
+/// `ErrorCode::Corrupt` if the range is not a valid pack.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeOpenFileRange<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    path: JString<'caller>,
+    offset: jlong,
+    length: jlong,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let path = path.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("path: {e}"),
+                })?;
+                let offset: u64 = narrow("offset", offset)?;
+                let length: u64 = narrow("length", length)?;
+                this.open_file_range(&path, offset, length)
+            })();
+            match result {
+                Ok(value) => Ok(jlong::from(value)),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// As `open_file_range`, with these options.
+///
+/// # Errors
+///
+/// As `open_file_range`, and `ErrorCode::InvalidArgument` for an
+/// outline level above 255.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeOpenFileRangeWith<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    path: JString<'caller>,
+    offset: jlong,
+    length: jlong,
+    options_priority: jni::sys::jint,
+    options_verify: jni::sys::jint,
+    options_load: jni::sys::jint,
+    options_has_outline_level: jni::sys::jboolean,
+    options_outline_level: jlong,
+    options_outline_tolerance_m: jlong,
+    options_components: JString<'caller>,
+    options_languages: JString<'caller>,
+) -> jlong {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jlong> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let path = path.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("path: {e}"),
+                })?;
+                let offset: u64 = narrow("offset", offset)?;
+                let length: u64 = narrow("length", length)?;
+                let options = teigeodata_api::OpenOptions {
+                    priority: options_priority,
+                    verify: verify_of(options_verify, "verify")?,
+                    load: load_of(options_load, "load")?,
+                    outline_level: if options_has_outline_level {
+                        Some(narrow::<u32>("outline_level", options_outline_level)?)
+                    } else {
+                        None
+                    },
+                    outline_tolerance_m: narrow::<u32>(
+                        "outline_tolerance_m",
+                        options_outline_tolerance_m,
+                    )?,
+                    components: options_components.try_to_string(env).map_err(|e| {
+                        teigeodata_api::Error {
+                            code: ErrorCode::InvalidArgument,
+                            message: format!("components: {e}"),
+                        }
+                    })?,
+                    languages: options_languages.try_to_string(env).map_err(|e| {
+                        teigeodata_api::Error {
+                            code: ErrorCode::InvalidArgument,
+                            message: format!("languages: {e}"),
+                        }
+                    })?,
+                };
+                this.open_file_range_with(&path, offset, length, &options)
+            })();
+            match result {
+                Ok(value) => Ok(jlong::from(value)),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 /// Adds a pack from its bytes (copied). Returns its layer ID, as
 /// `open_file`.
 ///

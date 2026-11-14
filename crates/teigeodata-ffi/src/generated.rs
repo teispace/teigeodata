@@ -468,6 +468,76 @@ pub unsafe extern "C" fn tg_engine_open_file_with(
     })
 }
 
+/// Opens the pack stored whole in `length` bytes at `offset` of the file at `path`
+/// (memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app
+/// (`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or
+/// one inside any container that stores it uncompressed. The offset need not be aligned.
+/// Returns its layer ID, as `open_file`.
+///
+/// # Errors
+///
+/// `ErrorCode::Io` if the file cannot be read or the range is not inside it,
+/// `ErrorCode::Corrupt` if the range is not a valid pack.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_open_file_range(
+    handle: *const TgEngine,
+    path: *const u8,
+    path_len: usize,
+    offset: u64,
+    length: u64,
+    out: *mut u32,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `path_len` readable bytes (or null and 0).
+        let path = unsafe { abi::str_arg(path, path_len, "path") }?;
+        let value = this.0.open_file_range(path, offset, length)?;
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// As `open_file_range`, with these options.
+///
+/// # Errors
+///
+/// As `open_file_range`, and `ErrorCode::InvalidArgument` for an
+/// outline level above 255.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_open_file_range_with(
+    handle: *const TgEngine,
+    path: *const u8,
+    path_len: usize,
+    offset: u64,
+    length: u64,
+    options: *const TgOpenOptions,
+    out: *mut u32,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `path_len` readable bytes (or null and 0).
+        let path = unsafe { abi::str_arg(path, path_len, "path") }?;
+        // SAFETY: the caller passes a readable record whose text fields point to their
+        // lengths, or null for the defaults.
+        let options = match unsafe { abi::record(options) } {
+            // SAFETY: as above, its text fields point to their lengths.
+            Some(r) => unsafe { r.api() }?,
+            None => teigeodata_api::OpenOptions::default(),
+        };
+        let value = this
+            .0
+            .open_file_range_with(path, offset, length, &options)?;
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
 /// Adds a pack from its bytes (copied). Returns its layer ID, as
 /// `open_file`.
 ///

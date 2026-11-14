@@ -487,6 +487,53 @@ func (h *Engine) OpenFileWith(path string, options *OpenOptions) (uint32, error)
 	return out, nil
 }
 
+// Opens the pack stored whole in `length` bytes at `offset` of the file at `path`
+// (memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app
+// (`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or
+// one inside any container that stores it uncompressed. The offset need not be aligned.
+// Returns its layer ID, as `open_file`.
+//
+// # Errors
+//
+// `ErrorCode::Io` if the file cannot be read or the range is not inside it,
+// `ErrorCode::Corrupt` if the range is not a valid pack.
+func (h *Engine) OpenFileRange(path string, offset uint64, length uint64) (uint32, error) {
+	handle := h.acquire()
+	defer h.release()
+	var out uint32
+	var msg tgBytes
+	status := rawEngineOpenFileRange(handle, unsafe.StringData(path), uintptr(len(path)), offset, length, &out, &msg)
+	if status != 0 {
+		return 0, newError(status, &msg, "tg_engine_open_file_range")
+	}
+	return out, nil
+}
+
+// As `open_file_range`, with these options.
+//
+// # Errors
+//
+// As `open_file_range`, and `ErrorCode::InvalidArgument` for an
+// outline level above 255.
+func (h *Engine) OpenFileRangeWith(path string, offset uint64, length uint64, options *OpenOptions) (uint32, error) {
+	handle := h.acquire()
+	defer h.release()
+	var pinner runtime.Pinner
+	defer pinner.Unpin()
+	var optionsC *cOpenOptions
+	if options != nil {
+		c := options.native(&pinner)
+		optionsC = &c
+	}
+	var out uint32
+	var msg tgBytes
+	status := rawEngineOpenFileRangeWith(handle, unsafe.StringData(path), uintptr(len(path)), offset, length, optionsC, &out, &msg)
+	if status != 0 {
+		return 0, newError(status, &msg, "tg_engine_open_file_range_with")
+	}
+	return out, nil
+}
+
 // Adds a pack from its bytes (copied). Returns its layer ID, as
 // `open_file`.
 //

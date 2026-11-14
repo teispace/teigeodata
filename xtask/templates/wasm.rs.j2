@@ -284,7 +284,7 @@ pub struct {{ h.name }}(teigeodata_api::{{ h.name }});
 
 #[wasm_bindgen]
 impl {{ h.name }} {
-{% for f in h.methods if not f.feature and f.name not in ["open_file", "open_file_with"] %}
+{% for f in h.methods if not f.feature and f.name not in ["open_file", "open_file_with", "open_file_range", "open_file_range_with"] %}
 {{ wasmfn(f, h) | indent(4) }}
 {%- endfor %}
 }

@@ -1,7 +1,7 @@
 ---
 title: "Bindings: one safe API, an extracted IDL, generated layers"
 status: draft
-updated: 2026-11-14
+updated: 2026-11-15
 ---
 
 # Bindings: one safe API, an extracted IDL, generated layers
@@ -173,10 +173,45 @@ second job waits for the first.
 | Go | `runtime.AddCleanup` plus `Close()` | a goroutine calling `wait`; a channel of progress | `context.Context` calls `cancel` |
 | WASM (browser) | `FinalizationRegistry` plus `free()` | no threads: jobs are written in JS over `fetch`, feeding the same verifier and installer step by step | queries synchronous |
 
+## 7. Packs shipped inside an app (D-306)
+
+A pack downloaded into the store is opened by its path. A pack shipped inside the app opens in
+place, mapped, with no copy:
+
+- **Android:** store packs uncompressed, so the APK holds their bytes as they are, then open
+  each by its range of the APK. In the app's Gradle file:
+
+  ```kotlin
+  android { androidResources { noCompress += "tgd" } }
+  ```
+
+  ```kotlin
+  context.assets.openFd("np.tgd").use { asset ->
+      // The file the descriptor reads: the base APK, or the split that holds the asset.
+      val apk = android.system.Os.readlink("/proc/self/fd/${asset.parcelFileDescriptor.fd}")
+      engine.openFileRange(apk, asset.startOffset, asset.length)
+  }
+  ```
+
+  `openFd` throws for a compressed asset, so a missing `noCompress` shows at once. The offset
+  need not be page aligned. Packs larger than an APK should hold come through Play Asset
+  Delivery or the store.
+- **iOS and macOS:** a pack in the bundle is a file: `engine.openFile(Bundle.main.path(forResource:
+  "np", ofType: "tgd")!)`. Mark `.tgd` files as resources so Xcode does not process them.
+- **Desktop and servers:** `openFile`; `openFileRange` opens a pack stored whole inside any
+  file that does not compress it (an archive with stored entries, a custom container).
+- **The web:** no file mapping: `openBytes` on an `ArrayBuffer` from `fetch` or OPFS.
+
+`open_file_range` refuses a range that is not inside the file (`Io`) and a range that is not
+exactly one pack (`Corrupt`: the header names the pack's length). The parity suites open
+`bindings/fixtures/embedded.bin`, a pack at an odd offset between filler bytes, in every
+language.
+
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-15 | §7: packs shipped inside an app; `open_file_range` | D-306, M5 |
 | 2026-11-14 | §6: a job's progress and cancel in each language; Dart's blocking calls not leaf | D-283 |
 | 2026-11-14 | §2, §6: the asynchronous forms in Swift, the JVM, Dart and Python as built | D-281 |
 | 2026-11-14 | §2: calls that block; §6: Node's Promise forms as built | D-280 |

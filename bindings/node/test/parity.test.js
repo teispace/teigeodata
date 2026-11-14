@@ -312,6 +312,14 @@ test("zone rules on the rules-only fixture", () => {
   const engine = new tg.Engine();
   engine.openFile(join(__dirname, "../..", p.fixture));
   assert.equal(engine.tzVersion(), p.version);
+  // The same pack inside another file, opened from its range (an APK asset).
+  const e = p.embedded;
+  const inside = join(__dirname, "../..", e.fixture);
+  const embedded = new tg.Engine();
+  embedded.openFileRange(inside, e.offset, e.length);
+  assert.equal(embedded.tzVersion(), p.version);
+  assert.throws(() => embedded.openFileRange(inside, e.offset, e.past_end), { code: "Io" });
+  assert.throws(() => embedded.openFileRange(inside, e.offset - 1, e.length), { code: "Corrupt" });
   assert.deepEqual(strings(engine.tzZones(), "zone"), p.zones);
   const o = p.offset;
   const got = engine.tzOffsetAt(o.zone, o.unix);

@@ -140,10 +140,15 @@ var parity struct {
 		BadIso string `json:"bad_iso"`
 	}
 	Tz struct {
-		Fixture string
-		Version string
-		Zones   []string
-		Offset  struct {
+		Fixture  string
+		Version  string
+		Embedded struct {
+			Fixture        string
+			Offset, Length uint64
+			PastEnd        uint64 `json:"past_end"`
+		}
+		Zones  []string
+		Offset struct {
 			Zone    string
 			Unix    int64
 			Seconds float64
@@ -548,6 +553,18 @@ func TestTz(t *testing.T) {
 	if v := engine.TzVersion(); v != p.Version {
 		t.Fatal(v)
 	}
+	// The same pack inside another file, opened from its range (an APK asset).
+	e := p.Embedded
+	embedded := must(tg.NewEngine())
+	defer embedded.Close()
+	must(embedded.OpenFileRange(fixture(e.Fixture), e.Offset, e.Length))
+	if v := embedded.TzVersion(); v != p.Version {
+		t.Fatal("embedded", v)
+	}
+	_, err := embedded.OpenFileRange(fixture(e.Fixture), e.Offset, e.PastEnd)
+	wantCode(t, err, tg.CodeIo)
+	_, err = embedded.OpenFileRange(fixture(e.Fixture), e.Offset-1, e.Length)
+	wantCode(t, err, tg.CodeCorrupt)
 	equal(t, "zones", column("zone")(engine.TzZones()), p.Zones)
 	o := p.Offset
 	off := reader(engine.TzOffsetAt(o.Zone, o.Unix))
@@ -568,7 +585,7 @@ func TestTz(t *testing.T) {
 	if n := reader(engine.TzOffsetAt(p.Unknown, 0)).Rows(); n != 0 {
 		t.Fatal(n)
 	}
-	_, err := engine.TzLocal(o.Zone, 2024, 13, 1, 0, 0, 0)
+	_, err = engine.TzLocal(o.Zone, 2024, 13, 1, 0, 0, 0)
 	wantCode(t, err, tg.CodeInvalidArgument)
 }
 

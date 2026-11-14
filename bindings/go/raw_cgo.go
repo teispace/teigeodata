@@ -93,6 +93,12 @@ int32_t teigeodata_w_engine_open_file(uintptr_t handle, const uint8_t *path, siz
 int32_t teigeodata_w_engine_open_file_with(uintptr_t handle, const uint8_t *path, size_t path_len, const teigeodata_open_options *options, uint32_t *out, teigeodata_bytes *msg);
 #cgo noescape teigeodata_w_engine_open_file_with
 #cgo nocallback teigeodata_w_engine_open_file_with
+int32_t teigeodata_w_engine_open_file_range(uintptr_t handle, const uint8_t *path, size_t path_len, uint64_t offset, uint64_t length, uint32_t *out, teigeodata_bytes *msg);
+#cgo noescape teigeodata_w_engine_open_file_range
+#cgo nocallback teigeodata_w_engine_open_file_range
+int32_t teigeodata_w_engine_open_file_range_with(uintptr_t handle, const uint8_t *path, size_t path_len, uint64_t offset, uint64_t length, const teigeodata_open_options *options, uint32_t *out, teigeodata_bytes *msg);
+#cgo noescape teigeodata_w_engine_open_file_range_with
+#cgo nocallback teigeodata_w_engine_open_file_range_with
 int32_t teigeodata_w_engine_open_bytes(uintptr_t handle, const uint8_t *bytes, size_t bytes_len, uint32_t *out, teigeodata_bytes *msg);
 #cgo noescape teigeodata_w_engine_open_bytes
 #cgo nocallback teigeodata_w_engine_open_bytes
@@ -345,6 +351,14 @@ func rawEngineOpenFile(handle uintptr, path *byte, pathLen uintptr, out *uint32,
 
 func rawEngineOpenFileWith(handle uintptr, path *byte, pathLen uintptr, options *cOpenOptions, out *uint32, msg *tgBytes) int32 {
 	return int32(C.teigeodata_w_engine_open_file_with(C.uintptr_t(handle), (*C.uint8_t)(path), C.size_t(pathLen), (*C.teigeodata_open_options)(unsafe.Pointer(options)), (*C.uint32_t)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
+}
+
+func rawEngineOpenFileRange(handle uintptr, path *byte, pathLen uintptr, offset uint64, length uint64, out *uint32, msg *tgBytes) int32 {
+	return int32(C.teigeodata_w_engine_open_file_range(C.uintptr_t(handle), (*C.uint8_t)(path), C.size_t(pathLen), C.uint64_t(offset), C.uint64_t(length), (*C.uint32_t)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
+}
+
+func rawEngineOpenFileRangeWith(handle uintptr, path *byte, pathLen uintptr, offset uint64, length uint64, options *cOpenOptions, out *uint32, msg *tgBytes) int32 {
+	return int32(C.teigeodata_w_engine_open_file_range_with(C.uintptr_t(handle), (*C.uint8_t)(path), C.size_t(pathLen), C.uint64_t(offset), C.uint64_t(length), (*C.teigeodata_open_options)(unsafe.Pointer(options)), (*C.uint32_t)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
 }
 
 func rawEngineOpenBytes(handle uintptr, bytes *byte, bytesLen uintptr, out *uint32, msg *tgBytes) int32 {

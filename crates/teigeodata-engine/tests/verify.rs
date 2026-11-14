@@ -243,3 +243,55 @@ fn heights_that_do_not_match_the_places_are_refused() {
         }))
     ));
 }
+
+/// A pack stored whole inside another file (an uncompressed APK asset, `noCompress`) opens
+/// from its range, mapped or read, at an offset that is not page aligned; it answers as the
+/// pack does on its own and is verified the same way. A range past the end is refused; a range
+/// one byte off is not a pack.
+#[test]
+fn a_pack_inside_another_file_opens_from_its_range() {
+    let model = synthetic(400, 5);
+    let pack = model.encode();
+    let mut container = vec![0x5a_u8; 4099];
+    container.extend_from_slice(&pack);
+    container.extend_from_slice(&[0xa5; 17]);
+    let dir = scratch_dir("range");
+    let path = dir.join("app.apk");
+    fs::write(&path, &container).unwrap();
+    let (offset, length) = (4099, u64::try_from(pack.len()).unwrap());
+    let id = model.ids[3];
+    for load in [Load::Map, Load::Read] {
+        for verify in [Verify::Lazy, Verify::Eager] {
+            let o = LayerOptions {
+                load,
+                verify,
+                ..LayerOptions::default()
+            };
+            let layer = Layer::open_range(&path, offset, length, o).unwrap();
+            assert!(layer.unchanged());
+            let mut e = Engine::new();
+            e.add(layer);
+            assert_eq!(e.get(id).unwrap().unwrap().id, id, "{load:?} {verify:?}");
+            let (mut s, mut hits) = (Scratch::default(), Vec::new());
+            e.search("kama", 5, &mut s, &mut hits).unwrap();
+            assert!(!hits.is_empty(), "{load:?} {verify:?}");
+        }
+        let o = LayerOptions {
+            load,
+            ..LayerOptions::default()
+        };
+        // Past the end of the file, at either end of the range.
+        for (at, len) in [(offset, length + 18), (u64::MAX, 1)] {
+            assert!(
+                matches!(Layer::open_range(&path, at, len, o), Err(Error::Io(_))),
+                "{load:?} {at}+{len}"
+            );
+        }
+        // One byte early: the bytes are not a pack.
+        assert!(matches!(
+            Layer::open_range(&path, offset - 1, length, o),
+            Err(Error::Format(_))
+        ));
+    }
+    fs::remove_dir_all(&dir).unwrap();
+}

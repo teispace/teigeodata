@@ -244,6 +244,30 @@ int32_t tg_engine_open_file(const tg_engine *handle, const uint8_t *path, size_t
 int32_t tg_engine_open_file_with(const tg_engine *handle, const uint8_t *path, size_t path_len, const tg_open_options *options, uint32_t *out);
 
 /*
+ * Opens the pack stored whole in `length` bytes at `offset` of the file at `path`
+ * (memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app
+ * (`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or
+ * one inside any container that stores it uncompressed. The offset need not be aligned.
+ * Returns its layer ID, as `open_file`.
+ *
+ * # Errors
+ *
+ * `ErrorCode::Io` if the file cannot be read or the range is not inside it,
+ * `ErrorCode::Corrupt` if the range is not a valid pack.
+ */
+int32_t tg_engine_open_file_range(const tg_engine *handle, const uint8_t *path, size_t path_len, uint64_t offset, uint64_t length, uint32_t *out);
+
+/*
+ * As `open_file_range`, with these options.
+ *
+ * # Errors
+ *
+ * As `open_file_range`, and `ErrorCode::InvalidArgument` for an
+ * outline level above 255.
+ */
+int32_t tg_engine_open_file_range_with(const tg_engine *handle, const uint8_t *path, size_t path_len, uint64_t offset, uint64_t length, const tg_open_options *options, uint32_t *out);
+
+/*
  * Adds a pack from its bytes (copied). Returns its layer ID, as
  * `open_file`.
  *

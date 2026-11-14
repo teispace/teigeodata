@@ -67,6 +67,11 @@ const SURVIVABLE: &[(&str, &[&str], &str)] = &[
         "a zone still unknown has no rows the same way",
     ),
     (
+        "tz.embedded.past_end",
+        &[],
+        "a range still further past the end is refused the same way",
+    ),
+    (
         "engine.open_with.corrupt_at",
         &[],
         "the next byte is in the same section",

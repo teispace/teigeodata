@@ -275,6 +275,18 @@ public final class ParityTest {
         try (TeiGeodata.Engine engine = new TeiGeodata.Engine()) {
             engine.openFile(new File(dir, (String) p.get("fixture")).toString());
             check(engine.tzVersion().equals(p.get("version")), "tz version");
+            // The same pack inside another file, opened from its range (an APK asset).
+            Map<?, ?> e = (Map<?, ?>) p.get("embedded");
+            String inside = new File(dir, (String) e.get("fixture")).toString();
+            long offset = ((Number) e.get("offset")).longValue();
+            long length = ((Number) e.get("length")).longValue();
+            long pastEnd = ((Number) e.get("past_end")).longValue();
+            try (TeiGeodata.Engine embedded = new TeiGeodata.Engine()) {
+                embedded.openFileRange(inside, offset, length);
+                check(embedded.tzVersion().equals(p.get("version")), "embedded tz version");
+                expect(TeiGeodataException.Io.class, () -> embedded.openFileRange(inside, offset, pastEnd), "");
+                expect(TeiGeodataException.Corrupt.class, () -> embedded.openFileRange(inside, offset - 1, length), "");
+            }
             check(strings(engine.tzZones(), "zone").equals(p.get("zones")), "tz zones");
             Map<?, ?> o = (Map<?, ?>) p.get("offset");
             byte[] got = engine.tzOffsetAt((String) o.get("zone"), ((Number) o.get("unix")).longValue());

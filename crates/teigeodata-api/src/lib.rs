@@ -425,6 +425,37 @@ impl Engine {
         Ok(self.add(layer))
     }
 
+    /// Opens the pack stored whole in `length` bytes at `offset` of the file at `path`
+    /// (memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app
+    /// (`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or
+    /// one inside any container that stores it uncompressed. The offset need not be aligned.
+    /// Returns its layer ID, as [`open_file`](Self::open_file).
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::Io`] if the file cannot be read or the range is not inside it,
+    /// [`ErrorCode::Corrupt`] if the range is not a valid pack.
+    pub fn open_file_range(&self, path: &str, offset: u64, length: u64) -> Result<u32> {
+        self.open_file_range_with(path, offset, length, &OpenOptions::default())
+    }
+
+    /// As [`open_file_range`](Self::open_file_range), with these options.
+    ///
+    /// # Errors
+    ///
+    /// As [`open_file_range`](Self::open_file_range), and [`ErrorCode::InvalidArgument`] for an
+    /// outline level above 255.
+    pub fn open_file_range_with(
+        &self,
+        path: &str,
+        offset: u64,
+        length: u64,
+        options: &OpenOptions,
+    ) -> Result<u32> {
+        let layer = Layer::open_range(path, offset, length, options.layer()?)?;
+        Ok(self.add(layer))
+    }
+
     /// Adds a pack from its bytes (copied). Returns its layer ID, as
     /// [`open_file`](Self::open_file).
     ///

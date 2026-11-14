@@ -180,6 +180,15 @@ public func runParity(_ path: String) async throws {
         let engine = Engine()
         _ = try engine.openFile(base.appendingPathComponent(t["fixture"] as! String).path)
         check(engine.tzVersion() == t["version"] as! String, "tz version")
+        // The same pack inside another file, opened from its range (an APK asset).
+        let e = t["embedded"] as! [String: Any]
+        let inside = base.appendingPathComponent(e["fixture"] as! String).path
+        let (offset, length) = (UInt64(e["offset"] as! Int), UInt64(e["length"] as! Int))
+        let embedded = Engine()
+        _ = try embedded.openFileRange(inside, offset: offset, length: length)
+        check(embedded.tzVersion() == t["version"] as! String, "embedded tz version")
+        expect(.io) { _ = try embedded.openFileRange(inside, offset: offset, length: UInt64(e["past_end"] as! Int)) }
+        expect(.corrupt) { _ = try embedded.openFileRange(inside, offset: offset - 1, length: length) }
         check(strings(try engine.tzZones(), "zone") == (t["zones"] as! [String]), "tz zones")
         let o = t["offset"] as! [String: Any]
         let got = try engine.tzOffsetAt(o["zone"] as! String, unixSeconds: Int64(o["unix"] as! Int))

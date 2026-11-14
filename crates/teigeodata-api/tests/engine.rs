@@ -1002,3 +1002,50 @@ fn open_options_name_components_and_languages() {
         );
     }
 }
+
+/// `bindings/fixtures/embedded.bin`: the tz fixture stored whole inside another file, at an
+/// offset no page boundary has (4,099 filler bytes before it, 13 after), as an uncompressed
+/// asset sits inside an Android APK.
+fn embedded_fixture() -> Vec<u8> {
+    let mut bytes = vec![0x5a_u8; 4099];
+    bytes.extend_from_slice(&tz_fixture());
+    bytes.extend_from_slice(&[0xa5; 13]);
+    bytes
+}
+
+/// A pack inside another file opens from its range and answers; a range past the end is an
+/// I/O error, a range one byte off is not a pack.
+#[test]
+fn the_embedded_fixture_is_current_and_opens_from_its_range() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../bindings/fixtures/embedded.bin"
+    );
+    let bytes = embedded_fixture();
+    if std::env::var_os("TEIGEODATA_WRITE_FIXTURE").is_some() {
+        std::fs::write(path, &bytes).unwrap();
+    }
+    assert!(std::fs::read(path).unwrap() == bytes, "{path} is stale");
+    let length = u64::try_from(tz_fixture().len()).unwrap();
+    let engine = Engine::new();
+    assert_eq!(engine.open_file_range(path, 4099, length).unwrap(), 0);
+    assert_eq!(engine.tz_version(), "2026f");
+    let code = |r: teigeodata_api::Result<u32>| r.unwrap_err().code;
+    assert_eq!(
+        code(engine.open_file_range(path, 4099, length + 14)),
+        ErrorCode::Io
+    );
+    assert_eq!(
+        code(engine.open_file_range(path, 4098, length)),
+        ErrorCode::Corrupt
+    );
+    // A range one byte long or short is not a pack either: the header names its own length.
+    for len in [length - 1, length + 1] {
+        assert_eq!(
+            code(engine.open_file_range(path, 4099, len)),
+            ErrorCode::Corrupt,
+            "{len}"
+        );
+    }
+    assert_eq!(engine.layers(), 1);
+}

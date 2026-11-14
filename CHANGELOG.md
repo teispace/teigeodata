@@ -13,6 +13,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Added
 
+- `Engine::open_file_range(path, offset, length)` (and `_with`) in every language but
+  WebAssembly: opens a pack stored whole inside another file, such as an uncompressed asset of
+  an Android APK (`noCompress`), mapped in place (D-306).
 - Releases are built, attested and published by one workflow, `release.yml` (D-302): every
   file with build provenance through Sigstore, a CycloneDX SBOM per crate and `SHA256SUMS`;
   `gh attestation verify <file> --repo teispace/teigeodata` checks one.

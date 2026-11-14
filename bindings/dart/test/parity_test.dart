@@ -293,6 +293,22 @@ void main() {
     addTearDown(engine.close);
     engine.openFile('../${p['fixture']}');
     expect(engine.tzVersion(), p['version']);
+    // The same pack inside another file, opened from its range (an APK asset).
+    final e = p['embedded'] as Map<String, dynamic>;
+    final inside = '../${e['fixture']}';
+    final (offset, length) = (e['offset'] as int, e['length'] as int);
+    final embedded = Engine(tg);
+    addTearDown(embedded.close);
+    embedded.openFileRange(inside, offset, length);
+    expect(embedded.tzVersion(), p['version']);
+    expect(
+      () => embedded.openFileRange(inside, offset, e['past_end'] as int),
+      throwsA(isA<IoException>()),
+    );
+    expect(
+      () => embedded.openFileRange(inside, offset - 1, length),
+      throwsA(isA<CorruptException>()),
+    );
     expect(strings(engine.tzZones(), 'zone'), p['zones']);
     final o = p['offset'] as Map<String, dynamic>;
     final got = engine.tzOffsetAt(o['zone'] as String, o['unix'] as int);

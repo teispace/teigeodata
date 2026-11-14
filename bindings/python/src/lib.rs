@@ -516,6 +516,46 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(value)
     }
+    /// Opens the pack stored whole in `length` bytes at `offset` of the file at `path`
+    /// (memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app
+    /// (`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or
+    /// one inside any container that stores it uncompressed. The offset need not be aligned.
+    /// Returns its layer ID, as `open_file`.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Io` if the file cannot be read or the range is not inside it,
+    /// `ErrorCode::Corrupt` if the range is not a valid pack.
+    fn open_file_range<'py>(
+        &self,
+        py: Python<'py>,
+        path: &str,
+        offset: u64,
+        length: u64,
+    ) -> PyResult<u32> {
+        let value = py.detach(|| self.0.open_file_range(path, offset, length));
+        let value = value.map_err(error)?;
+        Ok(value)
+    }
+    /// As `open_file_range`, with these options.
+    ///
+    /// # Errors
+    ///
+    /// As `open_file_range`, and `ErrorCode::InvalidArgument` for an
+    /// outline level above 255.
+    fn open_file_range_with<'py>(
+        &self,
+        py: Python<'py>,
+        path: &str,
+        offset: u64,
+        length: u64,
+        options: &Bound<'_, OpenOptions>,
+    ) -> PyResult<u32> {
+        let options = &teigeodata_api::OpenOptions::from(options.get().clone());
+        let value = py.detach(|| self.0.open_file_range_with(path, offset, length, options));
+        let value = value.map_err(error)?;
+        Ok(value)
+    }
     /// Adds a pack from its bytes (copied). Returns its layer ID, as
     /// `open_file`.
     ///

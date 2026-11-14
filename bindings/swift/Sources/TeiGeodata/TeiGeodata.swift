@@ -349,6 +349,40 @@ public final class Engine: @unchecked Sendable {
         return out
     }
 
+    /// Opens the pack stored whole in `length` bytes at `offset` of the file at `path`
+    /// (memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app
+    /// (`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or
+    /// one inside any container that stores it uncompressed. The offset need not be aligned.
+    /// Returns its layer ID, as `open_file`.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Io` if the file cannot be read or the range is not inside it,
+    /// `ErrorCode::Corrupt` if the range is not a valid pack.
+    public func openFileRange(_ path: String, offset: UInt64, length: UInt64) throws(TeiGeodataError) -> UInt32 {
+        var out: UInt32 = 0
+        var path = path
+        let status = withExtendedLifetime(self) { path.withUTF8 { pathBytes in tg_engine_open_file_range(raw, pathBytes.baseAddress, pathBytes.count, offset, length, &out) } }
+        try check(status)
+        return out
+    }
+
+    /// As `open_file_range`, with these options.
+    ///
+    /// # Errors
+    ///
+    /// As `open_file_range`, and `ErrorCode::InvalidArgument` for an
+    /// outline level above 255.
+    public func openFileRangeWith(_ path: String, offset: UInt64, length: UInt64, options: OpenOptions = .init()) throws(TeiGeodataError) -> UInt32 {
+        var out: UInt32 = 0
+        var path = path
+        var optionsComponents = options.components
+        var optionsLanguages = options.languages
+        let status = withExtendedLifetime(self) { path.withUTF8 { pathBytes in optionsComponents.withUTF8 { optionsComponentsBytes in optionsLanguages.withUTF8 { optionsLanguagesBytes in withUnsafePointer(to: options.native(optionsComponentsBytes, optionsLanguagesBytes)) { optionsPtr in tg_engine_open_file_range_with(raw, pathBytes.baseAddress, pathBytes.count, offset, length, optionsPtr, &out) } } } } }
+        try check(status)
+        return out
+    }
+
     /// Adds a pack from its bytes (copied). Returns its layer ID, as
     /// `open_file`.
     ///

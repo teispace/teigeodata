@@ -312,6 +312,75 @@
           "feature": null
         },
         {
+          "name": "open_file_range",
+          "doc": [
+            "Opens the pack stored whole in `length` bytes at `offset` of the file at `path`",
+            "(memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app",
+            "(`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or",
+            "one inside any container that stores it uncompressed. The offset need not be aligned.",
+            "Returns its layer ID, as `open_file`.",
+            "",
+            "# Errors",
+            "",
+            "`ErrorCode::Io` if the file cannot be read or the range is not inside it,",
+            "`ErrorCode::Corrupt` if the range is not a valid pack."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "path",
+              "ty": "str"
+            },
+            {
+              "name": "offset",
+              "ty": "u64"
+            },
+            {
+              "name": "length",
+              "ty": "u64"
+            }
+          ],
+          "returns": "u32",
+          "fallible": true,
+          "blocks": false,
+          "feature": null
+        },
+        {
+          "name": "open_file_range_with",
+          "doc": [
+            "As `open_file_range`, with these options.",
+            "",
+            "# Errors",
+            "",
+            "As `open_file_range`, and `ErrorCode::InvalidArgument` for an",
+            "outline level above 255."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "path",
+              "ty": "str"
+            },
+            {
+              "name": "offset",
+              "ty": "u64"
+            },
+            {
+              "name": "length",
+              "ty": "u64"
+            },
+            {
+              "name": "options",
+              "ty": "record",
+              "record": "OpenOptions"
+            }
+          ],
+          "returns": "u32",
+          "fallible": true,
+          "blocks": false,
+          "feature": null
+        },
+        {
           "name": "open_bytes",
           "doc": [
             "Adds a pack from its bytes (copied). Returns its layer ID, as",

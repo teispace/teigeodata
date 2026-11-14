@@ -215,6 +215,30 @@ export class Engine {
   openFileWith(path: string, options?: OpenOptions): number;
 
   /**
+   * Opens the pack stored whole in `length` bytes at `offset` of the file at `path`
+   * (memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app
+   * (`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or
+   * one inside any container that stores it uncompressed. The offset need not be aligned.
+   * Returns its layer ID, as `open_file`.
+   *
+   * # Errors
+   *
+   * `ErrorCode::Io` if the file cannot be read or the range is not inside it,
+   * `ErrorCode::Corrupt` if the range is not a valid pack.
+   */
+  openFileRange(path: string, offset: number, length: number): number;
+
+  /**
+   * As `open_file_range`, with these options.
+   *
+   * # Errors
+   *
+   * As `open_file_range`, and `ErrorCode::InvalidArgument` for an
+   * outline level above 255.
+   */
+  openFileRangeWith(path: string, offset: number, length: number, options?: OpenOptions): number;
+
+  /**
    * Adds a pack from its bytes (copied). Returns its layer ID, as
    * `open_file`.
    *

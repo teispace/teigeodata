@@ -251,6 +251,16 @@ class Tz(unittest.TestCase):
         engine = tg.Engine()
         engine.open_file(str(pathlib.Path(__file__).parents[2] / p["fixture"]))
         self.assertEqual(engine.tz_version(), p["version"])
+        # The same pack inside another file, opened from its range (an APK asset).
+        e = p["embedded"]
+        inside = str(pathlib.Path(__file__).parents[2] / e["fixture"])
+        embedded = tg.Engine()
+        embedded.open_file_range(inside, e["offset"], e["length"])
+        self.assertEqual(embedded.tz_version(), p["version"])
+        with self.assertRaises(tg.IoError):
+            embedded.open_file_range(inside, e["offset"], e["past_end"])
+        with self.assertRaises(tg.CorruptError):
+            embedded.open_file_range(inside, e["offset"] - 1, e["length"])
         self.assertEqual(Reader(engine.tz_zones()).strings("zone"), p["zones"])
         o = p["offset"]
         got = Reader(engine.tz_offset_at(o["zone"], o["unix"]))

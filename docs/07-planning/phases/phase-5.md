@@ -107,7 +107,8 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   package-jvm` (the AAR, minSdk 24, 16 KB checked; the JAR with `NativeLoader` extracting
   its library; parity from the JAR and on an emulator through `app_process`), `jvm.yml` on
   six desktop platforms and Android. Done when that workflow is green. `noCompress` for
-  bundled packs is the app's Gradle setting, documented with the packs' guide
+  bundled packs is the app's Gradle setting; such a pack opens in place with
+  `open_file_range` ([bindings §7](../../04-architecture/bindings.md#7-packs-shipped-inside-an-app-d-306), D-306)
 
 ### 5.5 Dart and Flutter
 - [ ] Generated `@Native` bindings with `NativeFinalizer`; a build hook that downloads verified
@@ -120,7 +121,9 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
     and assets come with the release pipeline (5.10)
   - [x] 5.5c `cargo xtask flutter-check` on macOS and the iOS simulator (passing here);
     done when `flutter.yml` is green on Linux, Windows and Android too
-  - [ ] 5.5d link-hook tree-shaking, when Dart links code assets statically
+  - [ ] 5.5d link-hook tree-shaking, when Dart links code assets statically (checked
+    2026-11-15: Dart 3.15's changelog and `code_assets` 2.2.0 still have no static linking;
+    recheck 2027-01-15; until then the lite library is the small variant)
   - [ ] the web, with the WASM build (5.7)
 
 ### 5.6 Python

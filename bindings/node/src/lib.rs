@@ -417,6 +417,52 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(value)
     }
+    /// Opens the pack stored whole in `length` bytes at `offset` of the file at `path`
+    /// (memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app
+    /// (`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or
+    /// one inside any container that stores it uncompressed. The offset need not be aligned.
+    /// Returns its layer ID, as `open_file`.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Io` if the file cannot be read or the range is not inside it,
+    /// `ErrorCode::Corrupt` if the range is not a valid pack.
+    #[napi]
+    pub fn open_file_range(
+        &self,
+        path: String,
+        offset: f64,
+        length: f64,
+    ) -> napi::Result<u32, Code> {
+        let value = self
+            .0
+            .open_file_range(&path, u64_of(offset), u64_of(length));
+        let value = value.map_err(error)?;
+        Ok(value)
+    }
+    /// As `open_file_range`, with these options.
+    ///
+    /// # Errors
+    ///
+    /// As `open_file_range`, and `ErrorCode::InvalidArgument` for an
+    /// outline level above 255.
+    #[napi]
+    pub fn open_file_range_with(
+        &self,
+        path: String,
+        offset: f64,
+        length: f64,
+        options: Option<OpenOptions>,
+    ) -> napi::Result<u32, Code> {
+        let value = self.0.open_file_range_with(
+            &path,
+            u64_of(offset),
+            u64_of(length),
+            &options.unwrap_or_default().into(),
+        );
+        let value = value.map_err(error)?;
+        Ok(value)
+    }
     /// Adds a pack from its bytes (copied). Returns its layer ID, as
     /// `open_file`.
     ///

@@ -331,6 +331,12 @@ external int _tgEngineOpenFile(Pointer<Void> self, Pointer<Uint8> path, int path
 @Native<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<_TgOpenOptions>, Pointer<Uint32>)>(symbol: 'tg_engine_open_file_with', isLeaf: true)
 external int _tgEngineOpenFileWith(Pointer<Void> self, Pointer<Uint8> path, int pathLen, Pointer<_TgOpenOptions> options, Pointer<Uint32> out);
 
+@Native<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Uint64, Uint64, Pointer<Uint32>)>(symbol: 'tg_engine_open_file_range', isLeaf: true)
+external int _tgEngineOpenFileRange(Pointer<Void> self, Pointer<Uint8> path, int pathLen, int offset, int length, Pointer<Uint32> out);
+
+@Native<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Uint64, Uint64, Pointer<_TgOpenOptions>, Pointer<Uint32>)>(symbol: 'tg_engine_open_file_range_with', isLeaf: true)
+external int _tgEngineOpenFileRangeWith(Pointer<Void> self, Pointer<Uint8> path, int pathLen, int offset, int length, Pointer<_TgOpenOptions> options, Pointer<Uint32> out);
+
 @Native<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint32>)>(symbol: 'tg_engine_open_bytes', isLeaf: true)
 external int _tgEngineOpenBytes(Pointer<Void> self, Pointer<Uint8> bytes, int bytesLen, Pointer<Uint32> out);
 
@@ -691,6 +697,26 @@ final class TeiGeodata {
     final optionsLanguagesLen = _utf8(options.languages, optionsLanguagesAt);
     options._write(_openOptions.ref, _input + optionsComponentsAt, optionsComponentsLen, _input + optionsLanguagesAt, optionsLanguagesLen);
     final status = _tgEngineOpenFileWith(handle, _input, pathLen, _openOptions, _word.cast());
+    _check(status);
+    return _word.cast<Uint32>().value;
+  }
+
+  int _engineOpenFileRange(Pointer<Void> handle, String path, int offset, int length) {
+    final pathLen = _utf8(path);
+    final status = _tgEngineOpenFileRange(handle, _input, pathLen, offset, length, _word.cast());
+    _check(status);
+    return _word.cast<Uint32>().value;
+  }
+
+  int _engineOpenFileRangeWith(Pointer<Void> handle, String path, int offset, int length, OpenOptions options) {
+    final pathAt = 0;
+    final pathLen = _utf8(path, pathAt);
+    final optionsComponentsAt = pathAt + pathLen;
+    final optionsComponentsLen = _utf8(options.components, optionsComponentsAt);
+    final optionsLanguagesAt = optionsComponentsAt + optionsComponentsLen;
+    final optionsLanguagesLen = _utf8(options.languages, optionsLanguagesAt);
+    options._write(_openOptions.ref, _input + optionsComponentsAt, optionsComponentsLen, _input + optionsLanguagesAt, optionsLanguagesLen);
+    final status = _tgEngineOpenFileRangeWith(handle, _input, pathLen, offset, length, _openOptions, _word.cast());
     _check(status);
     return _word.cast<Uint32>().value;
   }
@@ -1127,6 +1153,26 @@ final class Engine implements Finalizable {
   /// As `open_file`, and `ErrorCode::InvalidArgument` for an outline
   /// level above 255.
   int openFileWith(String path, OpenOptions options) => _lib._engineOpenFileWith(_live, path, options);
+
+  /// Opens the pack stored whole in `length` bytes at `offset` of the file at `path`
+  /// (memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app
+  /// (`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or
+  /// one inside any container that stores it uncompressed. The offset need not be aligned.
+  /// Returns its layer ID, as `open_file`.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::Io` if the file cannot be read or the range is not inside it,
+  /// `ErrorCode::Corrupt` if the range is not a valid pack.
+  int openFileRange(String path, int offset, int length) => _lib._engineOpenFileRange(_live, path, offset, length);
+
+  /// As `open_file_range`, with these options.
+  ///
+  /// # Errors
+  ///
+  /// As `open_file_range`, and `ErrorCode::InvalidArgument` for an
+  /// outline level above 255.
+  int openFileRangeWith(String path, int offset, int length, OpenOptions options) => _lib._engineOpenFileRangeWith(_live, path, offset, length, options);
 
   /// Adds a pack from its bytes (copied). Returns its layer ID, as
   /// `open_file`.

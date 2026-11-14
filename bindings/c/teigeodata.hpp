@@ -412,6 +412,26 @@ class Engine {
     /// level above 255.
     std::uint32_t open_file_with(std::string_view path, const OpenOptions &options = {}) const;
 
+    /// Opens the pack stored whole in `length` bytes at `offset` of the file at `path`
+    /// (memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app
+    /// (`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or
+    /// one inside any container that stores it uncompressed. The offset need not be aligned.
+    /// Returns its layer ID, as `open_file`.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Io` if the file cannot be read or the range is not inside it,
+    /// `ErrorCode::Corrupt` if the range is not a valid pack.
+    std::uint32_t open_file_range(std::string_view path, std::uint64_t offset, std::uint64_t length) const;
+
+    /// As `open_file_range`, with these options.
+    ///
+    /// # Errors
+    ///
+    /// As `open_file_range`, and `ErrorCode::InvalidArgument` for an
+    /// outline level above 255.
+    std::uint32_t open_file_range_with(std::string_view path, std::uint64_t offset, std::uint64_t length, const OpenOptions &options = {}) const;
+
     /// Adds a pack from its bytes (copied). Returns its layer ID, as
     /// `open_file`.
     ///
@@ -933,6 +953,21 @@ inline std::uint32_t Engine::open_file_with(std::string_view path, const OpenOpt
     std::uint32_t out{};
     const auto options_c = options.native();
     const std::int32_t status = tg_engine_open_file_with(raw_, detail::utf8(path), path.size(), &options_c, &out);
+    detail::check(status);
+    return out;
+}
+
+inline std::uint32_t Engine::open_file_range(std::string_view path, std::uint64_t offset, std::uint64_t length) const {
+    std::uint32_t out{};
+    const std::int32_t status = tg_engine_open_file_range(raw_, detail::utf8(path), path.size(), offset, length, &out);
+    detail::check(status);
+    return out;
+}
+
+inline std::uint32_t Engine::open_file_range_with(std::string_view path, std::uint64_t offset, std::uint64_t length, const OpenOptions &options) const {
+    std::uint32_t out{};
+    const auto options_c = options.native();
+    const std::int32_t status = tg_engine_open_file_range_with(raw_, detail::utf8(path), path.size(), offset, length, &options_c, &out);
     detail::check(status);
     return out;
 }

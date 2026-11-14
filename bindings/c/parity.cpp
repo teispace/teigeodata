@@ -317,6 +317,13 @@ static void zone_rules() {
     tg::Engine rules;
     CHECK(rules.open_file(FIXTURE(TGP_TZ_FIXTURE)) == 0);
     CHECK(rules.tz_version() == TGP_TZ_VERSION);
+    // The same pack inside another file, opened from its range (an APK asset).
+    tg::Engine embedded;
+    const char *inside = FIXTURE(TGP_TZ_EMBEDDED_FIXTURE);
+    embedded.open_file_range(inside, TGP_TZ_EMBEDDED_OFFSET, TGP_TZ_EMBEDDED_LENGTH);
+    CHECK(embedded.tz_version() == TGP_TZ_VERSION);
+    CHECK(code_of([&] { embedded.open_file_range(inside, TGP_TZ_EMBEDDED_OFFSET, TGP_TZ_EMBEDDED_PAST_END); }) == tg::ErrorCode::Io);
+    CHECK(code_of([&] { embedded.open_file_range(inside, TGP_TZ_EMBEDDED_OFFSET - 1, TGP_TZ_EMBEDDED_LENGTH); }) == tg::ErrorCode::Corrupt);
     CHECK(strs(rules.tz_zones(), "zone") == Strings{TGP_TZ_ZONES_ITEMS});
     tg::Blob offset = rules.tz_offset_at(TGP_TZ_OFFSET_ZONE, TGP_TZ_OFFSET_UNIX);
     CHECK(num_at(offset, "seconds", 0) == TGP_TZ_OFFSET_SECONDS && num_at(offset, "dst", 0) == TGP_TZ_OFFSET_DST);

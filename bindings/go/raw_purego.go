@@ -19,70 +19,72 @@ import (
 )
 
 var (
-	pBytesFree           func(tgBytes)
-	pLastError           func(*tgBytes) int32
-	cbU32                uintptr
-	pVersion             func(*tgBytes) int32
-	pComponents          func(*tgBytes) int32
-	pNoop                func() int32
-	pFold                func(*byte, uintptr, *tgBytes) int32
-	pSampleRows          func(uint32, *tgBytes) int32
-	pProgress            func(uint32, uintptr, uintptr, *uint32) int32
-	pDistanceM           func(float64, float64, float64, float64, *float64) int32
-	pEngineFree          func(uintptr)
-	pEngineNew           func(*uintptr) int32
-	pEngineOpenFile      func(uintptr, *byte, uintptr, *uint32) int32
-	pEngineOpenFileWith  func(uintptr, *byte, uintptr, *cOpenOptions, *uint32) int32
-	pEngineOpenBytes     func(uintptr, *byte, uintptr, *uint32) int32
-	pEngineOpenBytesWith func(uintptr, *byte, uintptr, *cOpenOptions, *uint32) int32
-	pEngineRemove        func(uintptr, uint32, *bool) int32
-	pEngineLayers        func(uintptr, *uint32) int32
-	pEngineGet           func(uintptr, *byte, uintptr, *tgBytes) int32
-	pEngineParent        func(uintptr, *byte, uintptr, *tgBytes) int32
-	pEngineAncestors     func(uintptr, *byte, uintptr, *tgBytes) int32
-	pEngineChildren      func(uintptr, *byte, uintptr, *tgBytes) int32
-	pEngineNearby        func(uintptr, *byte, uintptr, uint32, *tgBytes) int32
-	pEngineSearch        func(uintptr, *byte, uintptr, uint32, *tgBytes) int32
-	pEngineSearchWith    func(uintptr, *byte, uintptr, uint32, *cSearchOptions, *tgBytes) int32
-	pEngineReverse       func(uintptr, float64, float64, uint32, *tgBytes) int32
-	pEngineWithinRadius  func(uintptr, float64, float64, float64, uint32, *tgBytes) int32
-	pEngineAdminAt       func(uintptr, float64, float64, *tgBytes) int32
-	pEngineElevationAt   func(uintptr, float64, float64, *tgBytes) int32
-	pEnginePostalLookup  func(uintptr, *byte, uintptr, *byte, uintptr, *tgBytes) int32
-	pEnginePostalPrefix  func(uintptr, *byte, uintptr, *byte, uintptr, uint32, *tgBytes) int32
-	pEnginePostalCodesOf func(uintptr, *byte, uintptr, *tgBytes) int32
-	pEnginePostalAt      func(uintptr, float64, float64, *tgBytes) int32
-	pEngineTzAt          func(uintptr, float64, float64, *tgBytes) int32
-	pEngineTzOffsetAt    func(uintptr, *byte, uintptr, int64, *tgBytes) int32
-	pEngineTzLocal       func(uintptr, *byte, uintptr, int32, uint32, uint32, uint32, uint32, uint32, *tgBytes) int32
-	pEngineTzZones       func(uintptr, *tgBytes) int32
-	pEngineTzRulesStart  func(uintptr, *byte, uintptr, *tgBytes) int32
-	pEngineTzVersion     func(uintptr, *tgBytes) int32
-	pEngineByIso         func(uintptr, *byte, uintptr, *tgBytes) int32
-	pStoreFree           func(uintptr)
-	pStoreCreate         func(*byte, uintptr, *byte, uintptr, *byte, uintptr, *byte, uintptr, *uintptr) int32
-	pStoreOpen           func(*byte, uintptr, *uintptr) int32
-	pStoreDamaged        func(uintptr, *tgBytes) int32
-	pStoreCatalog        func(uintptr, *tgBytes) int32
-	pStoreStatus         func(uintptr, bool, *tgBytes) int32
-	pStorePin            func(uintptr, *byte, uintptr, bool) int32
-	pStoreRemove         func(uintptr, *byte, uintptr, *tgBytes) int32
-	pStoreFind           func(uintptr, uintptr, *byte, uintptr, uint32, *tgBytes) int32
-	pStoreLocate         func(uintptr, uintptr, float64, float64, uint32, *tgBytes) int32
-	pStoreEngine         func(uintptr, *uintptr) int32
-	pStoreRefresh        func(uintptr, *byte, uintptr, *uintptr) int32
-	pStoreInstall        func(uintptr, *byte, uintptr, *cInstallOptions, *uintptr) int32
-	pStoreInstallPass    func(uintptr, *byte, uintptr, *byte, uintptr, *cInstallOptions, *uintptr) int32
-	pStoreUpdate         func(uintptr, *byte, uintptr, *uintptr) int32
-	pStoreRepair         func(uintptr, *byte, uintptr, *uintptr) int32
-	pJobFree             func(uintptr)
-	pJobWaitProgress     func(uintptr, uint64, uint32, *uint64) int32
-	pJobSeq              func(uintptr, *uint64) int32
-	pJobDoneBytes        func(uintptr, *uint64) int32
-	pJobTotalBytes       func(uintptr, *uint64) int32
-	pJobIsEnded          func(uintptr, *bool) int32
-	pJobCancel           func(uintptr) int32
-	pJobResult           func(uintptr, *tgBytes) int32
+	pBytesFree               func(tgBytes)
+	pLastError               func(*tgBytes) int32
+	cbU32                    uintptr
+	pVersion                 func(*tgBytes) int32
+	pComponents              func(*tgBytes) int32
+	pNoop                    func() int32
+	pFold                    func(*byte, uintptr, *tgBytes) int32
+	pSampleRows              func(uint32, *tgBytes) int32
+	pProgress                func(uint32, uintptr, uintptr, *uint32) int32
+	pDistanceM               func(float64, float64, float64, float64, *float64) int32
+	pEngineFree              func(uintptr)
+	pEngineNew               func(*uintptr) int32
+	pEngineOpenFile          func(uintptr, *byte, uintptr, *uint32) int32
+	pEngineOpenFileWith      func(uintptr, *byte, uintptr, *cOpenOptions, *uint32) int32
+	pEngineOpenFileRange     func(uintptr, *byte, uintptr, uint64, uint64, *uint32) int32
+	pEngineOpenFileRangeWith func(uintptr, *byte, uintptr, uint64, uint64, *cOpenOptions, *uint32) int32
+	pEngineOpenBytes         func(uintptr, *byte, uintptr, *uint32) int32
+	pEngineOpenBytesWith     func(uintptr, *byte, uintptr, *cOpenOptions, *uint32) int32
+	pEngineRemove            func(uintptr, uint32, *bool) int32
+	pEngineLayers            func(uintptr, *uint32) int32
+	pEngineGet               func(uintptr, *byte, uintptr, *tgBytes) int32
+	pEngineParent            func(uintptr, *byte, uintptr, *tgBytes) int32
+	pEngineAncestors         func(uintptr, *byte, uintptr, *tgBytes) int32
+	pEngineChildren          func(uintptr, *byte, uintptr, *tgBytes) int32
+	pEngineNearby            func(uintptr, *byte, uintptr, uint32, *tgBytes) int32
+	pEngineSearch            func(uintptr, *byte, uintptr, uint32, *tgBytes) int32
+	pEngineSearchWith        func(uintptr, *byte, uintptr, uint32, *cSearchOptions, *tgBytes) int32
+	pEngineReverse           func(uintptr, float64, float64, uint32, *tgBytes) int32
+	pEngineWithinRadius      func(uintptr, float64, float64, float64, uint32, *tgBytes) int32
+	pEngineAdminAt           func(uintptr, float64, float64, *tgBytes) int32
+	pEngineElevationAt       func(uintptr, float64, float64, *tgBytes) int32
+	pEnginePostalLookup      func(uintptr, *byte, uintptr, *byte, uintptr, *tgBytes) int32
+	pEnginePostalPrefix      func(uintptr, *byte, uintptr, *byte, uintptr, uint32, *tgBytes) int32
+	pEnginePostalCodesOf     func(uintptr, *byte, uintptr, *tgBytes) int32
+	pEnginePostalAt          func(uintptr, float64, float64, *tgBytes) int32
+	pEngineTzAt              func(uintptr, float64, float64, *tgBytes) int32
+	pEngineTzOffsetAt        func(uintptr, *byte, uintptr, int64, *tgBytes) int32
+	pEngineTzLocal           func(uintptr, *byte, uintptr, int32, uint32, uint32, uint32, uint32, uint32, *tgBytes) int32
+	pEngineTzZones           func(uintptr, *tgBytes) int32
+	pEngineTzRulesStart      func(uintptr, *byte, uintptr, *tgBytes) int32
+	pEngineTzVersion         func(uintptr, *tgBytes) int32
+	pEngineByIso             func(uintptr, *byte, uintptr, *tgBytes) int32
+	pStoreFree               func(uintptr)
+	pStoreCreate             func(*byte, uintptr, *byte, uintptr, *byte, uintptr, *byte, uintptr, *uintptr) int32
+	pStoreOpen               func(*byte, uintptr, *uintptr) int32
+	pStoreDamaged            func(uintptr, *tgBytes) int32
+	pStoreCatalog            func(uintptr, *tgBytes) int32
+	pStoreStatus             func(uintptr, bool, *tgBytes) int32
+	pStorePin                func(uintptr, *byte, uintptr, bool) int32
+	pStoreRemove             func(uintptr, *byte, uintptr, *tgBytes) int32
+	pStoreFind               func(uintptr, uintptr, *byte, uintptr, uint32, *tgBytes) int32
+	pStoreLocate             func(uintptr, uintptr, float64, float64, uint32, *tgBytes) int32
+	pStoreEngine             func(uintptr, *uintptr) int32
+	pStoreRefresh            func(uintptr, *byte, uintptr, *uintptr) int32
+	pStoreInstall            func(uintptr, *byte, uintptr, *cInstallOptions, *uintptr) int32
+	pStoreInstallPass        func(uintptr, *byte, uintptr, *byte, uintptr, *cInstallOptions, *uintptr) int32
+	pStoreUpdate             func(uintptr, *byte, uintptr, *uintptr) int32
+	pStoreRepair             func(uintptr, *byte, uintptr, *uintptr) int32
+	pJobFree                 func(uintptr)
+	pJobWaitProgress         func(uintptr, uint64, uint32, *uint64) int32
+	pJobSeq                  func(uintptr, *uint64) int32
+	pJobDoneBytes            func(uintptr, *uint64) int32
+	pJobTotalBytes           func(uintptr, *uint64) int32
+	pJobIsEnded              func(uintptr, *bool) int32
+	pJobCancel               func(uintptr) int32
+	pJobResult               func(uintptr, *tgBytes) int32
 )
 
 // bind registers fn to the library's symbol `name`, or sets it nil when the library has none.
@@ -133,6 +135,8 @@ func rawLoad(path string) error {
 	bind(lib, &pEngineNew, "tg_engine_new")
 	bind(lib, &pEngineOpenFile, "tg_engine_open_file")
 	bind(lib, &pEngineOpenFileWith, "tg_engine_open_file_with")
+	bind(lib, &pEngineOpenFileRange, "tg_engine_open_file_range")
+	bind(lib, &pEngineOpenFileRangeWith, "tg_engine_open_file_range_with")
 	bind(lib, &pEngineOpenBytes, "tg_engine_open_bytes")
 	bind(lib, &pEngineOpenBytesWith, "tg_engine_open_bytes_with")
 	bind(lib, &pEngineRemove, "tg_engine_remove")
@@ -317,6 +321,32 @@ func rawEngineOpenFileWith(handle uintptr, path *byte, pathLen uintptr, options 
 	}
 	runtime.LockOSThread()
 	status := pEngineOpenFileWith(handle, path, pathLen, options, out)
+	if status != 0 {
+		status = pLastError(msg)
+	}
+	runtime.UnlockOSThread()
+	return status
+}
+
+func rawEngineOpenFileRange(handle uintptr, path *byte, pathLen uintptr, offset uint64, length uint64, out *uint32, msg *tgBytes) int32 {
+	if pEngineOpenFileRange == nil {
+		return -1
+	}
+	runtime.LockOSThread()
+	status := pEngineOpenFileRange(handle, path, pathLen, offset, length, out)
+	if status != 0 {
+		status = pLastError(msg)
+	}
+	runtime.UnlockOSThread()
+	return status
+}
+
+func rawEngineOpenFileRangeWith(handle uintptr, path *byte, pathLen uintptr, offset uint64, length uint64, options *cOpenOptions, out *uint32, msg *tgBytes) int32 {
+	if pEngineOpenFileRangeWith == nil {
+		return -1
+	}
+	runtime.LockOSThread()
+	status := pEngineOpenFileRangeWith(handle, path, pathLen, offset, length, options, out)
 	if status != 0 {
 		status = pLastError(msg)
 	}

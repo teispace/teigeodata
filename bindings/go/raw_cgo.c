@@ -163,6 +163,22 @@ int32_t teigeodata_w_engine_open_file_with(uintptr_t handle, const uint8_t *path
     return status == 0 ? 0 : p_tg_last_error(msg);
 }
 
+static int32_t (*p_tg_engine_open_file_range)(const void *handle, const void *path, size_t path_len, uint64_t offset, uint64_t length, void *out);
+
+int32_t teigeodata_w_engine_open_file_range(uintptr_t handle, const uint8_t *path, size_t path_len, uint64_t offset, uint64_t length, uint32_t *out, teigeodata_bytes *msg) {
+    if (p_tg_engine_open_file_range == NULL) return -1;
+    const int32_t status = p_tg_engine_open_file_range((const void *)handle, path, path_len, offset, length, out);
+    return status == 0 ? 0 : p_tg_last_error(msg);
+}
+
+static int32_t (*p_tg_engine_open_file_range_with)(const void *handle, const void *path, size_t path_len, uint64_t offset, uint64_t length, const void *options, void *out);
+
+int32_t teigeodata_w_engine_open_file_range_with(uintptr_t handle, const uint8_t *path, size_t path_len, uint64_t offset, uint64_t length, const teigeodata_open_options *options, uint32_t *out, teigeodata_bytes *msg) {
+    if (p_tg_engine_open_file_range_with == NULL) return -1;
+    const int32_t status = p_tg_engine_open_file_range_with((const void *)handle, path, path_len, offset, length, options, out);
+    return status == 0 ? 0 : p_tg_last_error(msg);
+}
+
 static int32_t (*p_tg_engine_open_bytes)(const void *handle, const void *bytes, size_t bytes_len, void *out);
 
 int32_t teigeodata_w_engine_open_bytes(uintptr_t handle, const uint8_t *bytes, size_t bytes_len, uint32_t *out, teigeodata_bytes *msg) {
@@ -603,6 +619,8 @@ char *teigeodata_load(const char *path) {
     *(void **)&p_tg_engine_new = teigeodata_sym(lib, "tg_engine_new");
     *(void **)&p_tg_engine_open_file = teigeodata_sym(lib, "tg_engine_open_file");
     *(void **)&p_tg_engine_open_file_with = teigeodata_sym(lib, "tg_engine_open_file_with");
+    *(void **)&p_tg_engine_open_file_range = teigeodata_sym(lib, "tg_engine_open_file_range");
+    *(void **)&p_tg_engine_open_file_range_with = teigeodata_sym(lib, "tg_engine_open_file_range_with");
     *(void **)&p_tg_engine_open_bytes = teigeodata_sym(lib, "tg_engine_open_bytes");
     *(void **)&p_tg_engine_open_bytes_with = teigeodata_sym(lib, "tg_engine_open_bytes_with");
     *(void **)&p_tg_engine_remove = teigeodata_sym(lib, "tg_engine_remove");

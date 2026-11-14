@@ -710,6 +710,33 @@ impl Layer {
         Self::with(backing, options, Some(stamp))
     }
 
+    /// Opens the pack stored whole in `length` bytes at `offset` of the file at `path`, mapped
+    /// by default: an uncompressed asset inside an Android APK (`noCompress`), or a pack inside
+    /// any container that does not compress it. The offset need not be aligned.
+    ///
+    /// # Errors
+    /// [`Error::Io`] if the file cannot be read or the range is not inside it,
+    /// [`Error::Format`] if the range is not a valid pack.
+    pub fn open_range(
+        path: impl AsRef<Path>,
+        offset: u64,
+        length: u64,
+        options: LayerOptions,
+    ) -> Result<Self, Error> {
+        let path = path.as_ref();
+        let file = File::open(path)?;
+        let stamp = FileStamp::of(path, &file)?;
+        let backing = match options.load {
+            #[cfg(all(feature = "mmap", not(target_arch = "wasm32")))]
+            Load::Map => Backing::map_range(&file, offset, length)?,
+            #[cfg(not(all(feature = "mmap", not(target_arch = "wasm32"))))]
+            Load::Map => Backing::read_range(path, offset, length)?,
+            Load::Read => Backing::read_range(path, offset, length)?,
+        };
+        drop(file);
+        Self::with(backing, options, Some(stamp))
+    }
+
     /// Opens a pack held in memory.
     ///
     /// # Errors

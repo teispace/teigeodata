@@ -108,6 +108,13 @@
   },
   "tz": {
     "fixture": "fixtures/tz.tgd",
+    "embedded": {
+      "about": "the tz fixture stored whole in fixtures/embedded.bin at an unaligned offset, as an uncompressed asset in an APK: open_file_range opens it and tz_version answers; a range past the end is Io, one byte early is Corrupt",
+      "fixture": "fixtures/embedded.bin",
+      "offset": 4099,
+      "length": 3012,
+      "past_end": 3026
+    },
     "version": "2026f",
     "zones": ["America/New_York", "Asia/Kathmandu"],
     "offset": {"zone": "America/New_York", "unix": 1719835200, "seconds": -14400, "dst": 1, "abbr": "EDT"},

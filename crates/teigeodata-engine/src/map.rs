@@ -88,12 +88,64 @@ impl Backing {
         Ok(Self::Mapped(map))
     }
 
+    /// Maps `length` bytes at `offset` of `file` read-only: a pack stored whole inside another
+    /// file, such as an uncompressed asset of an Android APK. The offset need not be page
+    /// aligned (the mapping starts at the page below and the bytes are the range). The file
+    /// must follow the install rule (module docs); an installed APK does.
+    #[cfg(all(feature = "mmap", not(target_arch = "wasm32")))]
+    pub(crate) fn map_range(file: &File, offset: u64, length: u64) -> io::Result<Self> {
+        check_range(file, offset, length)?;
+        if length == 0 {
+            return Ok(Self::Heap(Box::default()));
+        }
+        let len = usize::try_from(length)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "range too long to map"))?;
+        #[allow(
+            unsafe_code,
+            reason = "B13/D-113: as `map`, for a range of a file that is never written while \
+                      mapped (an installed pack or app package)"
+        )]
+        // SAFETY: see the reason above and the module documentation.
+        let map = unsafe {
+            memmap2::MmapOptions::new()
+                .offset(offset)
+                .len(len)
+                .map(file)
+        }?;
+        Ok(Self::Mapped(map))
+    }
+
+    /// Reads `length` bytes at `offset` of `path` into memory.
+    pub(crate) fn read_range(path: &Path, offset: u64, length: u64) -> io::Result<Self> {
+        use std::io::Seek as _;
+        let mut file = File::open(path)?;
+        check_range(&file, offset, length)?;
+        file.seek(io::SeekFrom::Start(offset))?;
+        let len = usize::try_from(length)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "range too long to read"))?;
+        let mut bytes = vec![0; len];
+        file.read_exact(&mut bytes)?;
+        Ok(Self::Heap(bytes.into_boxed_slice()))
+    }
+
     /// Reads `path` into memory.
     pub(crate) fn read(path: &Path) -> io::Result<Self> {
         let mut file = File::open(path)?;
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)?;
         Ok(Self::Heap(bytes.into_boxed_slice()))
+    }
+}
+
+/// Refuses a range that does not lie inside `file`.
+fn check_range(file: &File, offset: u64, length: u64) -> io::Result<()> {
+    let size = file.metadata()?.len();
+    match offset.checked_add(length) {
+        Some(end) if end <= size => Ok(()),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("bytes {offset}..+{length} are not inside a file of {size} bytes"),
+        )),
     }
 }
 

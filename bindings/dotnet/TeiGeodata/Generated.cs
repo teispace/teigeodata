@@ -516,6 +516,49 @@ public sealed partial class Engine : IDisposable
     }
 
     /// <summary>
+    /// Opens the pack stored whole in `length` bytes at `offset` of the file at `path`
+    /// (memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app
+    /// (`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or
+    /// one inside any container that stores it uncompressed. The offset need not be aligned.
+    /// Returns its layer ID, as `open_file`.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::Io` if the file cannot be read or the range is not inside it,
+    /// `ErrorCode::Corrupt` if the range is not a valid pack.
+    /// </summary>
+    public unsafe uint OpenFileRange(string path, ulong offset, ulong length)
+    {
+        using var pathUtf8 = new Utf8(path, stackalloc byte[Utf8.Stack]);
+        uint @out = default;
+        int status;
+        status = Native.tg_engine_open_file_range(handle, pathUtf8.Pointer, pathUtf8.Length, offset, length, &@out);
+        Interop.Check(status);
+        return @out;
+    }
+
+    /// <summary>
+    /// As `open_file_range`, with these options.
+    ///
+    /// # Errors
+    ///
+    /// As `open_file_range`, and `ErrorCode::InvalidArgument` for an
+    /// outline level above 255.
+    /// </summary>
+    public unsafe uint OpenFileRangeWith(string path, ulong offset, ulong length, OpenOptions? options = null)
+    {
+        using var pathUtf8 = new Utf8(path, stackalloc byte[Utf8.Stack]);
+        using var optionsComponents = new Utf8(options?.Components, stackalloc byte[Utf8.Stack]);
+        using var optionsLanguages = new Utf8(options?.Languages, stackalloc byte[Utf8.Stack]);
+        COpenOptions optionsC = options?.ToNative(optionsComponents, optionsLanguages) ?? default;
+        uint @out = default;
+        int status;
+        status = Native.tg_engine_open_file_range_with(handle, pathUtf8.Pointer, pathUtf8.Length, offset, length, options is null ? null : &optionsC, &@out);
+        Interop.Check(status);
+        return @out;
+    }
+
+    /// <summary>
     /// Adds a pack from its bytes (copied). Returns its layer ID, as
     /// `open_file`.
     ///
@@ -1850,6 +1893,12 @@ internal static unsafe partial class Native
 
     [LibraryImport(Lib)]
     internal static partial int tg_engine_open_file_with(EngineHandle handle, byte* path, nuint pathLen, COpenOptions* options, uint* @out);
+
+    [LibraryImport(Lib)]
+    internal static partial int tg_engine_open_file_range(EngineHandle handle, byte* path, nuint pathLen, ulong offset, ulong length, uint* @out);
+
+    [LibraryImport(Lib)]
+    internal static partial int tg_engine_open_file_range_with(EngineHandle handle, byte* path, nuint pathLen, ulong offset, ulong length, COpenOptions* options, uint* @out);
 
     [LibraryImport(Lib)]
     internal static partial int tg_engine_open_bytes(EngineHandle handle, byte* bytes, nuint bytesLen, uint* @out);

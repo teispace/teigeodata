@@ -365,6 +365,16 @@ static void zone_rules(void) {
     CHECK(tg_engine_open_file(rules, TEXT(FIXTURE(TGP_TZ_FIXTURE)), &layer) == TG_OK && layer == 0);
     CHECK(tg_engine_tz_version(rules, &out) == TG_OK && bytes_are(out, TGP_TZ_VERSION));
     tg_bytes_free(out);
+    /* The same pack inside another file, opened from its range (an APK asset). */
+    tg_engine *embedded = NULL;
+    CHECK(tg_engine_new(&embedded) == TG_OK);
+    const char *inside = FIXTURE(TGP_TZ_EMBEDDED_FIXTURE);
+    CHECK(tg_engine_open_file_range(embedded, TEXT(inside), TGP_TZ_EMBEDDED_OFFSET, TGP_TZ_EMBEDDED_LENGTH, &layer) == TG_OK);
+    CHECK(tg_engine_tz_version(embedded, &out) == TG_OK && bytes_are(out, TGP_TZ_VERSION));
+    tg_bytes_free(out);
+    CHECK(tg_engine_open_file_range(embedded, TEXT(inside), TGP_TZ_EMBEDDED_OFFSET, TGP_TZ_EMBEDDED_PAST_END, &layer) == TG_ERROR_IO);
+    CHECK(tg_engine_open_file_range(embedded, TEXT(inside), TGP_TZ_EMBEDDED_OFFSET - 1, TGP_TZ_EMBEDDED_LENGTH, &layer) == TG_ERROR_CORRUPT);
+    tg_engine_free(embedded);
     static const char *const zones[] = {TGP_TZ_ZONES_ITEMS};
     CHECK(tg_engine_tz_zones(rules, &out) == TG_OK && strs_are(out, "zone", zones, COUNT(zones)));
     tg_bytes_free(out);
