@@ -302,4 +302,49 @@ void main() {
     await expectLater(result, throwsA(isA<NetworkException>()));
     expect(job.isEnded, throwsStateError);
   });
+
+  test('job progress', () async {
+    // A mirror in this isolate that trickles a byte every 20 ms: the job runs until cancelled.
+    final st = parity['store'] as Map<String, dynamic>;
+    final root = File('../${st['root']}').readAsBytesSync();
+    final pack = st['pack'] as String;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((req) async {
+      // Unbuffered: a buffered response holds its body until it closes.
+      req.response.bufferOutput = false;
+      req.response.contentLength = 1000;
+      try {
+        for (var i = 0; i < 1000; i++) {
+          req.response.add(const [0x20]);
+          await req.response.flush();
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        await req.response.close();
+      } catch (_) {
+        // The client went away.
+      }
+    });
+    addTearDown(() => server.close(force: true));
+    final d = Directory.systemTemp.createTempSync('tg-store-');
+    addTearDown(() => d.deleteSync(recursive: true));
+
+    // Progress ends with the job, at its total.
+    final mirror = st['mirror'] as String;
+    final quick = Store.create(tg, '${d.path}/q', mirror, mirror, root);
+    addTearDown(quick.close);
+    final last = await quick.refresh(pack).progress().last;
+    expect(last.done, last.total);
+
+    final slow = 'http://127.0.0.1:${server.port}/';
+    final store = Store.create(tg, '${d.path}/s', slow, slow, root);
+    addTearDown(store.close);
+    final job = store.refresh(pack);
+    addTearDown(job.close);
+    final result = job.resultAsync();
+    expect(await job.progress().take(3).length, 3, reason: 'progress moves');
+    final at = DateTime.now();
+    job.cancel();
+    await expectLater(result, throwsA(isA<CancelledException>()));
+    expect(DateTime.now().difference(at).inSeconds, lessThan(2));
+  });
 }

@@ -47,7 +47,7 @@ final class {{ c.name }}Exception extends TeiGeodataException {
 {#- The native signature: `n` is nty for the C side or dty for the Dart side. #}
 {% macro sig(f, c) %}{% if f.receiver %}Pointer<Void>{% if f.params or f.returns != "void" %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty in ["str", "bytes"] %}Pointer<Uint8>, {% if c %}Size{% else %}int{% endif %}{% elif p.ty == "handle" %}Pointer<Void>{% elif p.ty == "record" %}Pointer<_Tg{{ p.record }}>{% elif p.ty == "callback" %}Pointer<NativeFunction<Callback{{ p.callback.id | pascal }}>>, Pointer<Void>{% elif c %}{{ nty(p.ty) }}{% else %}{{ dty(p.ty) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}Pointer<TgBytes>{% elif f.returns == "handle" %}Pointer<Pointer<Void>>{% else %}Pointer<{{ nty(f.returns) }}>{% endif %}{% endif %}{% endmacro %}
 {% macro lookup(f, field, symbol) %}
-        {{ field }} = lib.lookupFunction<Int32 Function({{ sig(f, true) }}), int Function({{ sig(f, false) }})>('{{ symbol }}'{% if not (f.params | selectattr("ty", "eq", "callback") | list) %}, isLeaf: true{% endif %}){% endmacro %}
+        {{ field }} = lib.lookupFunction<Int32 Function({{ sig(f, true) }}), int Function({{ sig(f, false) }})>('{{ symbol }}'{% if not f.blocks and not (f.params | selectattr("ty", "eq", "callback") | list) %}, isLeaf: true{% endif %}){% endmacro %}
 {% macro dparams(f) %}{% for p in f.params %}{% if p.ty == "callback" %}bool Function({% for a in p.callback.args %}{{ dty(a) }}{% if not loop.last %}, {% endif %}{% endfor %}) {{ p.name | camel }}{% else %}{{ dty(p.ty, p.record if p.ty == "record" else p.handle) }} {{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endmacro %}
 {% macro args(f) %}{% if f.receiver %}handle{% if f.params or f.returns != "void" %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty in ["str", "bytes"] %}{% if f.params | selectattr("ty", "in", ["str", "bytes"]) | list | length > 1 %}_input + {{ p.name | camel }}At{% else %}_input{% endif %}, {{ p.name | camel }}Len{% elif p.ty == "handle" %}{{ p.name | camel }}._live{% elif p.ty == "record" %}_{{ p.record | camel_lower }}{% elif p.ty == "callback" %}callable.nativeFunction, nullptr{% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}_bytes{% else %}_word.cast(){% endif %}{% endif %}{% endmacro %}
 {#- A call through the scratch memory: a public function, or (with `owner`) the private half
@@ -216,7 +216,9 @@ final class _Tg{{ r.name }} extends Struct {
 {% if f.returns == "handle" %}{% set ns_async.made = ns_async.made + [f.returns_handle] %}{% endif %}
 {% endfor %}{% endfor %}
 /// The teigeodata library, loaded from a path. One instance per isolate; calls are
-/// synchronous. Functions without callbacks are leaf calls (the cheapest kind).
+/// synchronous. Functions without callbacks are leaf calls (the cheapest kind), except those
+/// that block: a leaf call keeps its isolate from a safepoint, so a long one would stall
+/// garbage collection in every isolate of the group.
 final class TeiGeodata {
   TeiGeodata._(DynamicLibrary lib, this._path)
       : _free = lib.lookupFunction<Void Function(TgBytes), void Function(TgBytes)>('tg_bytes_free', isLeaf: true),
@@ -457,6 +459,27 @@ final class {{ h.name }} implements Finalizable {
 {% endif %}
 {% endif %}
 {% endfor %}
+{% if h.job %}
+
+  /// The job's progress in bytes: now, then at each change, ending when the job ends (the
+  /// last at its total). Cancelling the subscription stops the waiting, not the job; for that,
+  /// [cancel].
+  Stream<({int done, int total})> progress() async* {
+    var seq = this.seq();
+    var last = (done: doneBytes(), total: totalBytes());
+    yield last;
+    while (!isEnded()) {
+      final next = await waitProgressAsync(seq, 250);
+      if (next != seq) {
+        seq = next;
+        last = (done: doneBytes(), total: totalBytes());
+        yield last;
+      }
+    }
+    final end = (done: doneBytes(), total: totalBytes());
+    if (end != last) yield end;
+  }
+{% endif %}
 }
 {% endfor %}
 {% for h in handles %}

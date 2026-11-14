@@ -286,7 +286,9 @@ final class _TgInstallOptions extends Struct {
 }
 
 /// The teigeodata library, loaded from a path. One instance per isolate; calls are
-/// synchronous. Functions without callbacks are leaf calls (the cheapest kind).
+/// synchronous. Functions without callbacks are leaf calls (the cheapest kind), except those
+/// that block: a leaf call keeps its isolate from a safepoint, so a long one would stall
+/// garbage collection in every isolate of the group.
 final class TeiGeodata {
   TeiGeodata._(DynamicLibrary lib, this._path)
       : _free = lib.lookupFunction<Void Function(TgBytes), void Function(TgBytes)>('tg_bytes_free', isLeaf: true),
@@ -323,29 +325,29 @@ final class TeiGeodata {
         _engineTzAtNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>), int Function(Pointer<Void>, double, double, Pointer<TgBytes>)>('tg_engine_tz_at', isLeaf: true),
         _engineByIsoNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_by_iso', isLeaf: true),
         _storeFree = lib.lookup<NativeFunction<Void Function(Pointer<Void>)>>('tg_store_free'),
-        _storeCreateNative = lib.lookupFunction<Int32 Function(Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_create', isLeaf: true),
-        _storeOpenNative = lib.lookupFunction<Int32 Function(Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_open', isLeaf: true),
+        _storeCreateNative = lib.lookupFunction<Int32 Function(Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_create'),
+        _storeOpenNative = lib.lookupFunction<Int32 Function(Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_open'),
         _storeDamagedNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<TgBytes>)>('tg_store_damaged', isLeaf: true),
-        _storeCatalogNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<TgBytes>)>('tg_store_catalog', isLeaf: true),
-        _storeStatusNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Bool, Pointer<TgBytes>), int Function(Pointer<Void>, bool, Pointer<TgBytes>)>('tg_store_status', isLeaf: true),
-        _storePinNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Bool), int Function(Pointer<Void>, Pointer<Uint8>, int, bool)>('tg_store_pin', isLeaf: true),
-        _storeRemoveNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_store_remove', isLeaf: true),
-        _storeFindNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Void>, Pointer<Uint8>, Size, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>)>('tg_store_find', isLeaf: true),
-        _storeLocateNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Void>, Double, Double, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Void>, double, double, int, Pointer<TgBytes>)>('tg_store_locate', isLeaf: true),
-        _storeEngineNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Pointer<Void>>)>('tg_store_engine', isLeaf: true),
+        _storeCatalogNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<TgBytes>)>('tg_store_catalog'),
+        _storeStatusNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Bool, Pointer<TgBytes>), int Function(Pointer<Void>, bool, Pointer<TgBytes>)>('tg_store_status'),
+        _storePinNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Bool), int Function(Pointer<Void>, Pointer<Uint8>, int, bool)>('tg_store_pin'),
+        _storeRemoveNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_store_remove'),
+        _storeFindNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Void>, Pointer<Uint8>, Size, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>)>('tg_store_find'),
+        _storeLocateNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Void>, Double, Double, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Void>, double, double, int, Pointer<TgBytes>)>('tg_store_locate'),
+        _storeEngineNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Pointer<Void>>)>('tg_store_engine'),
         _storeRefreshNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_refresh', isLeaf: true),
         _storeInstallNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>)>('tg_store_install', isLeaf: true),
         _storeInstallPassNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint8>, int, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>)>('tg_store_install_pass', isLeaf: true),
         _storeUpdateNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_update', isLeaf: true),
         _storeRepairNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_repair', isLeaf: true),
         _jobFree = lib.lookup<NativeFunction<Void Function(Pointer<Void>)>>('tg_job_free'),
-        _jobWaitProgressNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Uint64, Uint32, Pointer<Uint64>), int Function(Pointer<Void>, int, int, Pointer<Uint64>)>('tg_job_wait_progress', isLeaf: true),
+        _jobWaitProgressNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Uint64, Uint32, Pointer<Uint64>), int Function(Pointer<Void>, int, int, Pointer<Uint64>)>('tg_job_wait_progress'),
         _jobSeqNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint64>), int Function(Pointer<Void>, Pointer<Uint64>)>('tg_job_seq', isLeaf: true),
         _jobDoneBytesNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint64>), int Function(Pointer<Void>, Pointer<Uint64>)>('tg_job_done_bytes', isLeaf: true),
         _jobTotalBytesNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint64>), int Function(Pointer<Void>, Pointer<Uint64>)>('tg_job_total_bytes', isLeaf: true),
         _jobIsEndedNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Bool>), int Function(Pointer<Void>, Pointer<Bool>)>('tg_job_is_ended', isLeaf: true),
         _jobCancelNative = lib.lookupFunction<Int32 Function(Pointer<Void>), int Function(Pointer<Void>)>('tg_job_cancel', isLeaf: true),
-        _jobResultNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<TgBytes>)>('tg_job_result', isLeaf: true) {
+        _jobResultNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<TgBytes>)>('tg_job_result') {
     _engineFinalizer = NativeFinalizer(_engineFree.cast());
     _storeFinalizer = NativeFinalizer(_storeFree.cast());
     _jobFinalizer = NativeFinalizer(_jobFree.cast());
@@ -1615,6 +1617,25 @@ final class Job implements Finalizable {
     return _jobResultOff(lib._path, self).whenComplete(() {
       _unhold();
     });
+  }
+
+  /// The job's progress in bytes: now, then at each change, ending when the job ends (the
+  /// last at its total). Cancelling the subscription stops the waiting, not the job; for that,
+  /// [cancel].
+  Stream<({int done, int total})> progress() async* {
+    var seq = this.seq();
+    var last = (done: doneBytes(), total: totalBytes());
+    yield last;
+    while (!isEnded()) {
+      final next = await waitProgressAsync(seq, 250);
+      if (next != seq) {
+        seq = next;
+        last = (done: doneBytes(), total: totalBytes());
+        yield last;
+      }
+    }
+    final end = (done: doneBytes(), total: totalBytes());
+    if (end != last) yield end;
   }
 }
 
