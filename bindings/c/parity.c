@@ -235,6 +235,12 @@ int main(void) {
     tg_engine *installed = NULL;
     CHECK(tg_store_engine(store, &installed) == TG_OK);
     CHECK(tg_engine_layers(installed, &layers) == TG_OK && layers == 0);
+    CHECK(tg_store_find(store, installed, (const uint8_t *)np, strlen(np), 3, &out) == TG_OK && blob_rows(out) == 0);
+    tg_bytes_free(out);
+    CHECK(tg_store_find(store, installed, (const uint8_t *)np, strlen(np), 10001, &out) == TG_ERROR_INVALID_ARGUMENT);
+    CHECK(tg_store_locate(store, installed, 27.7, 85.3, 1000, &out) == TG_OK && blob_rows(out) == 0);
+    tg_bytes_free(out);
+    CHECK(tg_store_locate(store, installed, 91.0, 0.0, 1000, &out) == TG_ERROR_INVALID_ARGUMENT);
     tg_engine_free(installed);
     tg_job *job = NULL;
     tg_install_options wrong = {.components = (const uint8_t *)pointy, .components_len = strlen(pointy)};

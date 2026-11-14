@@ -325,3 +325,161 @@ pub(crate) fn engine(c: &Client<Net>) -> Result<Engine> {
     }
     Ok(engine)
 }
+
+/// A place and the catalog's packs that cover it.
+struct Covered<'a> {
+    id: Option<teigeodata_core::PlaceId>,
+    name: Option<String>,
+    lat: f64,
+    lon: f64,
+    countries: String,
+    packs: Vec<&'a teigeodata_sync::catalog::Entry>,
+}
+
+fn country_codes(codes: &[[u8; 2]]) -> String {
+    codes
+        .iter()
+        .map(|c| String::from_utf8_lossy(c).into_owned())
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// One row per place and pack; a place no pack covers has one row with the pack's columns
+/// null.
+fn covered(c: &Client<Net>, places: &[Covered<'_>]) -> Result<Blob> {
+    let mut rows: Vec<(&Covered<'_>, Option<&teigeodata_sync::catalog::Entry>)> = Vec::new();
+    for p in places {
+        if p.packs.is_empty() {
+            rows.push((p, None));
+        }
+        rows.extend(p.packs.iter().map(|&e| (p, Some(e))));
+    }
+    let ids: Vec<String> = rows
+        .iter()
+        .map(|(p, _)| p.id.map(|i| i.to_string()).unwrap_or_default())
+        .collect();
+    let id: Vec<&str> = ids.iter().map(String::as_str).collect();
+    let has_id: Vec<bool> = rows.iter().map(|(p, _)| p.id.is_some()).collect();
+    let name: Vec<&str> = rows
+        .iter()
+        .map(|(p, _)| p.name.as_deref().unwrap_or_default())
+        .collect();
+    let has_name: Vec<bool> = rows.iter().map(|(p, _)| p.name.is_some()).collect();
+    let lat: Vec<f64> = rows.iter().map(|(p, _)| p.lat).collect();
+    let lon: Vec<f64> = rows.iter().map(|(p, _)| p.lon).collect();
+    let countries: Vec<&str> = rows.iter().map(|(p, _)| p.countries.as_str()).collect();
+    let paths: Vec<String> = rows
+        .iter()
+        .map(|(_, e)| {
+            e.map(teigeodata_sync::catalog::Entry::path)
+                .unwrap_or_default()
+        })
+        .collect();
+    let pack: Vec<&str> = paths.iter().map(String::as_str).collect();
+    let has_pack: Vec<bool> = rows.iter().map(|(_, e)| e.is_some()).collect();
+    let release: Vec<&str> = rows
+        .iter()
+        .map(|(_, e)| e.map_or("", |e| e.release.as_str()))
+        .collect();
+    let size: Vec<(u64, u64)> = rows
+        .iter()
+        .map(|(_, e)| {
+            e.map_or((0, 0), |e| {
+                let s = e.size_of(Components::all());
+                (s.wire, s.disk)
+            })
+        })
+        .collect();
+    let download: Vec<u64> = size.iter().map(|s| s.0).collect();
+    let disk: Vec<u64> = size.iter().map(|s| s.1).collect();
+    let state: Vec<&str> = rows
+        .iter()
+        .map(|(_, e)| e.map_or("", |e| c.state(e).name()))
+        .collect();
+    let (id, name) = (Column::Utf8(&id), Column::Utf8(&name));
+    let (pack, release) = (Column::Utf8(&pack), Column::Dict(&release));
+    let (download, disk, state) = (
+        Column::U64(&download),
+        Column::U64(&disk),
+        Column::Dict(&state),
+    );
+    blob(&[
+        ("id", Column::Nullable(&id, &has_id)),
+        ("name", Column::Nullable(&name, &has_name)),
+        ("lat", Column::F64(&lat)),
+        ("lon", Column::F64(&lon)),
+        ("countries", Column::Dict(&countries)),
+        ("pack", Column::Nullable(&pack, &has_pack)),
+        ("release", Column::Nullable(&release, &has_pack)),
+        ("download", Column::Nullable(&download, &has_pack)),
+        ("disk", Column::Nullable(&disk, &has_pack)),
+        ("state", Column::Nullable(&state, &has_pack)),
+    ])
+}
+
+fn name_of(
+    engine: &teigeodata_engine::Engine,
+    place: &teigeodata_engine::Place,
+    buf: &mut [u8],
+) -> Result<Option<String>> {
+    Ok(engine.name(place, buf)?.map(str::to_owned))
+}
+
+/// The places named `query` in `engine`, with the packs that cover each.
+pub(crate) fn find(
+    c: &mut Client<Net>,
+    engine: &teigeodata_engine::Engine,
+    query: &str,
+    limit: usize,
+) -> Result<Blob> {
+    let t = c.offline()?;
+    let (cat, _) = Catalog::trusted(&t);
+    let found = cat.find(engine, query, limit)?;
+    let mut buf = [0_u8; 1024];
+    let mut places = Vec::with_capacity(found.len());
+    for f in found {
+        let id = teigeodata_core::PlaceId::from_raw(f.candidate.id);
+        let name = match id.map(|id| engine.get(id)).transpose()?.flatten() {
+            Some(place) => name_of(engine, &place, &mut buf)?,
+            None => None,
+        };
+        places.push(Covered {
+            id,
+            name,
+            lat: f.candidate.point.lat_degrees(),
+            lon: f.candidate.point.lon_degrees(),
+            countries: country_codes(&f.candidate.countries),
+            packs: f.packs,
+        });
+    }
+    covered(c, &places)
+}
+
+/// The countries within `radius_m` of `at` in `engine`, with the packs that cover `at`.
+pub(crate) fn locate(
+    c: &mut Client<Net>,
+    engine: &teigeodata_engine::Engine,
+    at: teigeodata_core::Point<teigeodata_core::E7>,
+    radius_m: u32,
+) -> Result<Blob> {
+    let t = c.offline()?;
+    let (cat, _) = Catalog::trusted(&t);
+    let mut countries = Vec::new();
+    engine.countries_near(at, radius_m, &mut countries)?;
+    let mut buf = [0_u8; 1024];
+    let mut places = Vec::with_capacity(countries.len());
+    for country in &countries {
+        let Some(cc) = country.id.namespace().country() else {
+            continue;
+        };
+        places.push(Covered {
+            id: Some(country.id),
+            name: name_of(engine, country, &mut buf)?,
+            lat: country.point.lat_degrees(),
+            lon: country.point.lon_degrees(),
+            countries: country_codes(&[cc]),
+            packs: cat.packs_at(cc, at).collect(),
+        });
+    }
+    covered(c, &places)
+}

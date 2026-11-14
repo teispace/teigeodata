@@ -38,6 +38,7 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   without; before, this was `InvalidArgument`.
 - The `Store` and `Job` handles in every binding (D-279, research note store-api): `create`,
   `open`, `catalog`, `status`, `pin`, `remove`, `engine` (an engine over the installed packs),
+  `find` and `locate` (the catalog's packs for a name or a point, over any engine, offline),
   and `refresh`, `install` (with `InstallOptions`: components, languages, outline, pin),
   `update` and `repair` as jobs on a thread of their own, with `wait_progress`, `seq`,
   `done_bytes`, `total_bytes`, `is_ended`, `cancel` and `result`. A cancelled install leaves

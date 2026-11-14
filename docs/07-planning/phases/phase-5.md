@@ -59,10 +59,11 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   ([research](../../02-research/notes/store-api.md)). Done so far: the policy moved from the
   command line into `teigeodata_sync::client`, the CLI on top (its tests unchanged); progress
   and cancel as a watched transport (`teigeodata_sync::watch`); the `Store` and `Job` handles
-  in every language (D-279: `create`, `open`, `catalog`, `status`, `pin`, `remove`, `engine`;
+  in every language (D-279: `create`, `open`, `catalog`, `status`, `pin`, `remove`, `engine`,
+  `find`, `locate`;
   `refresh`, `install`, `update`, `repair` as jobs with progress, wait, cancel and result),
-  behind the default `store` feature. Left: `find` and `locate`, the platform downloads pass
-  (D-184), and each language's idiomatic awaiting over the job (bindings §6)
+  behind the default `store` feature. Left: the platform downloads pass (D-184), and each
+  language's idiomatic awaiting over the job (bindings §6)
 - [ ] The IDL extended for what the surface needs (handles, enums, options structs, jobs), with
   a schema version; the drift check covers every generated file. Done so far: format 2 with
   handles, methods, `&[u8]` and handle parameters; format 3 with records of scalar fields

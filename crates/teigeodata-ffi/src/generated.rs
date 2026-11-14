@@ -1040,7 +1040,10 @@ pub unsafe extern "C" fn tg_engine_by_iso(
 ///   (`good`, `length`, `head`, `footer` or `sections`), `components`;
 /// - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;
 /// - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;
-///   `remove`: `path`, `release`.
+///   `remove`: `path`, `release`;
+/// - `find` and `locate`: one row per place and pack that
+///   covers it: `id`, `name`, `lat`, `lon`, `countries`, then the pack's `pack`, `release`,
+///   `download`, `disk` and `state`, null for a place no pack in the catalog covers.
 ///
 /// Opaque at the C ABI: made by its constructors, freed once with `tg_store_free`.
 #[cfg(feature = "store")]
@@ -1223,6 +1226,71 @@ pub unsafe extern "C" fn tg_store_remove(
         // SAFETY: the caller passes `pack_len` readable bytes (or null and 0).
         let pack = unsafe { abi::str_arg(pack, pack_len, "pack") }?;
         let value = this.0.remove(pack)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The places named `query` in `engine` (one over a world pack the app ships, the
+/// installed packs, or both), best first, each with the catalog's packs that cover it: what
+/// to install for "Dubai". Runs offline on the stored catalog.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
+/// `ErrorCode::Refused` if the stored catalog no longer verifies.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_find(
+    handle: *const TgStore,
+    engine: *const TgEngine,
+    query: *const u8,
+    query_len: usize,
+    limit: u32,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let engine = &unsafe { abi::handle(engine, "engine") }?.0;
+        // SAFETY: the caller passes `query_len` readable bytes (or null and 0).
+        let query = unsafe { abi::str_arg(query, query_len, "query") }?;
+        let value = this.0.find(engine, query, limit)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The countries within `radius_m` metres of a point in `engine`, each with the catalog's
+/// packs that cover the point: what to install for where the user stands.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
+/// the stored catalog no longer verifies.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_store_locate(
+    handle: *const TgStore,
+    engine: *const TgEngine,
+    lat: f64,
+    lon: f64,
+    radius_m: u32,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let engine = &unsafe { abi::handle(engine, "engine") }?.0;
+        let value = this.0.locate(engine, lat, lon, radius_m)?;
         let value = TgBytes::from_vec(value.into_vec());
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };

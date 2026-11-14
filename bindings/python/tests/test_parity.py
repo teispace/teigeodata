@@ -245,7 +245,14 @@ class Store(unittest.TestCase):
             self.assertEqual(store.damaged(), "")
             self.assertEqual(Blob(store.catalog()).rows, 0)
             self.assertEqual(Blob(store.status(False)).rows, 0)
-            self.assertEqual(store.engine().layers(), 0)
+            engine = store.engine()
+            self.assertEqual(engine.layers(), 0)
+            self.assertEqual(Blob(store.find(engine, pack, 3)).rows, 0)
+            self.assertEqual(Blob(store.locate(engine, 27.7, 85.3, 1000)).rows, 0)
+            with self.assertRaises(tg.InvalidArgumentError):
+                store.find(engine, pack, 10_001)
+            with self.assertRaises(tg.InvalidArgumentError):
+                store.locate(engine, 91.0, 0.0, 1000)
             with self.assertRaises(tg.InvalidArgumentError):
                 store.install(pack, tg.InstallOptions(components=p["bad_components"]))
             with self.assertRaises(tg.RefusedError):

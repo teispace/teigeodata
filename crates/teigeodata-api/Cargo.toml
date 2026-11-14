@@ -23,7 +23,7 @@ default = ["store"]
 # HTTP and TLS stack is most of the library's size: the C ABI is 949,456 B (467 KB gzipped)
 # without it and 3,123,168 B (1.64 MB gzipped) with it (`dist` profile, aarch64-apple-darwin,
 # 2026-11-14, D-279). An app that only reads the packs it ships leaves it out.
-store = ["dep:teigeodata-sync"]
+store = ["dep:teigeodata-sync", "teigeodata-engine/catalog"]
 
 [dev-dependencies]
 serde_json = "1.0.154"

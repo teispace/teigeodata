@@ -800,7 +800,10 @@ pub struct InstallOptions {
 ///   (`good`, `length`, `head`, `footer` or `sections`), `components`;
 /// - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;
 /// - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;
-///   [`remove`](Self::remove): `path`, `release`.
+///   [`remove`](Self::remove): `path`, `release`;
+/// - [`find`](Self::find) and [`locate`](Self::locate): one row per place and pack that
+///   covers it: `id`, `name`, `lat`, `lon`, `countries`, then the pack's `pack`, `release`,
+///   `download`, `disk` and `state`, null for a place no pack in the catalog covers.
 #[cfg(feature = "store")]
 pub struct Store {
     inner: Arc<store::Inner>,
@@ -896,6 +899,41 @@ impl Store {
             gone.extend(c.remove(&p)?);
         }
         store::removed(&gone)
+    }
+
+    /// The places named `query` in `engine` (one over a world pack the app ships, the
+    /// installed packs, or both), best first, each with the catalog's packs that cover it: what
+    /// to install for "Dubai". Runs offline on the stored catalog.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] for a limit above [`LIMIT_MAX`];
+    /// [`ErrorCode::Refused`] if the stored catalog no longer verifies.
+    pub fn find(&self, engine: &Engine, query: &str, limit: u32) -> Result<Blob> {
+        let limit = crate::limit(limit)?;
+        store::find(
+            &mut self.inner.client(),
+            &engine.shared.load(),
+            query,
+            limit,
+        )
+    }
+
+    /// The countries within `radius_m` metres of a point in `engine`, each with the catalog's
+    /// packs that cover the point: what to install for where the user stands.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] for a point off the globe; [`ErrorCode::Refused`] if
+    /// the stored catalog no longer verifies.
+    pub fn locate(&self, engine: &Engine, lat: f64, lon: f64, radius_m: u32) -> Result<Blob> {
+        let at = point(lat, lon)?;
+        store::locate(
+            &mut self.inner.client(),
+            &engine.shared.load(),
+            at,
+            radius_m,
+        )
     }
 
     /// An engine over the installed packs, each opened with the components and languages

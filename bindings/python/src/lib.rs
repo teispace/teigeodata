@@ -740,7 +740,10 @@ impl Engine {
 ///   (`good`, `length`, `head`, `footer` or `sections`), `components`;
 /// - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;
 /// - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;
-///   `remove`: `path`, `release`.
+///   `remove`: `path`, `release`;
+/// - `find` and `locate`: one row per place and pack that
+///   covers it: `id`, `name`, `lat`, `lon`, `countries`, then the pack's `pack`, `release`,
+///   `download`, `disk` and `state`, null for a place no pack in the catalog covers.
 #[cfg(feature = "store")]
 #[pyclass(frozen, module = "teigeodata")]
 #[derive(Debug)]
@@ -816,6 +819,46 @@ impl Store {
     /// `ErrorCode::Refused` if one is not installed or another pack needs it.
     fn remove<'py>(&self, py: Python<'py>, pack: &str) -> PyResult<Bound<'py, PyBytes>> {
         let value = py.detach(|| self.0.remove(pack));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// The places named `query` in `engine` (one over a world pack the app ships, the
+    /// installed packs, or both), best first, each with the catalog's packs that cover it: what
+    /// to install for "Dubai". Runs offline on the stored catalog.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
+    /// `ErrorCode::Refused` if the stored catalog no longer verifies.
+    fn find<'py>(
+        &self,
+        py: Python<'py>,
+        engine: &Bound<'_, Engine>,
+        query: &str,
+        limit: u32,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let engine = &engine.get().0;
+        let value = py.detach(|| self.0.find(engine, query, limit));
+        let value = value.map_err(error)?;
+        Ok(PyBytes::new(py, value.as_bytes()))
+    }
+    /// The countries within `radius_m` metres of a point in `engine`, each with the catalog's
+    /// packs that cover the point: what to install for where the user stands.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
+    /// the stored catalog no longer verifies.
+    fn locate<'py>(
+        &self,
+        py: Python<'py>,
+        engine: &Bound<'_, Engine>,
+        lat: f64,
+        lon: f64,
+        radius_m: u32,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let engine = &engine.get().0;
+        let value = py.detach(|| self.0.locate(engine, lat, lon, radius_m));
         let value = value.map_err(error)?;
         Ok(PyBytes::new(py, value.as_bytes()))
     }

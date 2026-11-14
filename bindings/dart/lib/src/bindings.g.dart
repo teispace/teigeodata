@@ -329,6 +329,8 @@ final class TeiGeodata {
         _storeStatusNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Bool, Pointer<TgBytes>), int Function(Pointer<Void>, bool, Pointer<TgBytes>)>('tg_store_status', isLeaf: true),
         _storePinNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Bool), int Function(Pointer<Void>, Pointer<Uint8>, int, bool)>('tg_store_pin', isLeaf: true),
         _storeRemoveNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_store_remove', isLeaf: true),
+        _storeFindNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Void>, Pointer<Uint8>, Size, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>)>('tg_store_find', isLeaf: true),
+        _storeLocateNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Void>, Double, Double, Uint32, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Void>, double, double, int, Pointer<TgBytes>)>('tg_store_locate', isLeaf: true),
         _storeEngineNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Pointer<Void>>)>('tg_store_engine', isLeaf: true),
         _storeRefreshNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>)>('tg_store_refresh', isLeaf: true),
         _storeInstallNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>)>('tg_store_install', isLeaf: true),
@@ -393,6 +395,8 @@ final class TeiGeodata {
   final int Function(Pointer<Void>, bool, Pointer<TgBytes>) _storeStatusNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, bool) _storePinNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _storeRemoveNative;
+  final int Function(Pointer<Void>, Pointer<Void>, Pointer<Uint8>, int, int, Pointer<TgBytes>) _storeFindNative;
+  final int Function(Pointer<Void>, Pointer<Void>, double, double, int, Pointer<TgBytes>) _storeLocateNative;
   final int Function(Pointer<Void>, Pointer<Pointer<Void>>) _storeEngineNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Pointer<Void>>) _storeRefreshNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<_TgInstallOptions>, Pointer<Pointer<Void>>) _storeInstallNative;
@@ -801,6 +805,19 @@ final class TeiGeodata {
     return _takeBlob();
   }
 
+  Uint8List _storeFind(Pointer<Void> handle, Engine engine, String query, int limit) {
+    final queryLen = _utf8(query);
+    final status = _storeFindNative(handle, engine._live, _input, queryLen, limit, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _storeLocate(Pointer<Void> handle, Engine engine, double lat, double lon, int radiusM) {
+    final status = _storeLocateNative(handle, engine._live, lat, lon, radiusM, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
   Engine _storeEngine(Pointer<Void> handle) {
     final status = _storeEngineNative(handle, _word.cast());
     _check(status);
@@ -1122,7 +1139,10 @@ final class Engine implements Finalizable {
 ///   (`good`, `length`, `head`, `footer` or `sections`), `components`;
 /// - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;
 /// - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;
-///   `remove`: `path`, `release`.
+///   `remove`: `path`, `release`;
+/// - `find` and `locate`: one row per place and pack that
+///   covers it: `id`, `name`, `lat`, `lon`, `countries`, then the pack's `pack`, `release`,
+///   `download`, `disk` and `state`, null for a place no pack in the catalog covers.
 ///
 /// Freed by [close], or when collected if never closed. Use it on the isolate that made it.
 final class Store implements Finalizable {
@@ -1191,6 +1211,25 @@ final class Store implements Finalizable {
   ///
   /// `ErrorCode::Refused` if one is not installed or another pack needs it.
   Uint8List remove(String pack) => _lib._storeRemove(_live, pack);
+
+  /// The places named `query` in `engine` (one over a world pack the app ships, the
+  /// installed packs, or both), best first, each with the catalog's packs that cover it: what
+  /// to install for "Dubai". Runs offline on the stored catalog.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
+  /// `ErrorCode::Refused` if the stored catalog no longer verifies.
+  Uint8List find(Engine engine, String query, int limit) => _lib._storeFind(_live, engine, query, limit);
+
+  /// The countries within `radius_m` metres of a point in `engine`, each with the catalog's
+  /// packs that cover the point: what to install for where the user stands.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
+  /// the stored catalog no longer verifies.
+  Uint8List locate(Engine engine, double lat, double lon, int radiusM) => _lib._storeLocate(_live, engine, lat, lon, radiusM);
 
   /// An engine over the installed packs, each opened with the components and languages
   /// installed.

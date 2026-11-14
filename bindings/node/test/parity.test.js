@@ -181,7 +181,12 @@ test("store", () => {
     assert.equal(store.damaged(), "");
     assert.equal(strings(store.catalog(), "path").length, 0);
     assert.equal(strings(store.status(false), "path").length, 0);
-    assert.equal(store.engine().layers(), 0);
+    const engine = store.engine();
+    assert.equal(engine.layers(), 0);
+    assert.equal(strings(store.find(engine, s.pack, 3), "name").length, 0);
+    assert.equal(strings(store.locate(engine, 27.7, 85.3, 1000), "name").length, 0);
+    assert.throws(() => store.find(engine, s.pack, 10001), { code: "InvalidArgument" });
+    assert.throws(() => store.locate(engine, 91, 0, 1000), { code: "InvalidArgument" });
     assert.throws(() => store.install(s.pack, { components: s.bad_components }), { code: "InvalidArgument" });
     assert.throws(() => store.remove(s.pack), { code: "Refused" });
     const job = store.refresh(s.pack);

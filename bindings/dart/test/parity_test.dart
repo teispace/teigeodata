@@ -258,6 +258,10 @@ void main() {
     expect(strings(store.status(false), 'path'), isEmpty);
     final engine = store.engine();
     expect(engine.layers(), 0);
+    expect(strings(store.find(engine, pack, 3), 'name'), isEmpty);
+    expect(strings(store.locate(engine, 27.7, 85.3, 1000), 'name'), isEmpty);
+    expect(() => store.find(engine, pack, 10001), throwsA(isA<InvalidArgumentException>()));
+    expect(() => store.locate(engine, 91, 0, 1000), throwsA(isA<InvalidArgumentException>()));
     engine.close();
     expect(
       () => store.install(pack, InstallOptions(components: st['bad_components'] as String)),

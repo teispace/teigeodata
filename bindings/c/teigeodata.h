@@ -441,7 +441,7 @@ int32_t tg_engine_tz_at(const tg_engine *handle, double lat, double lon, tg_byte
  */
 int32_t tg_engine_by_iso(const tg_engine *handle, const uint8_t *code, size_t code_len, tg_bytes *out);
 
-/* A store of installed packs in one directory: its signed catalog, its packs and their journal (D-171), shared by every language and the command line (research note store-api). Long work runs as a `Job` on a thread of its own; one store runs its jobs one at a time, and its other calls wait for the job running.  Packs are named as catalog paths (`np.places.tgd`) or short (`np`, `np.dem`), several comma-separated. Results are blobs: - `catalog`: `path`, `release`, `download`, `disk`, `components`,   `licence`, `state` (`available`, `installed` or `update`); - `status`: `path`, `release`, `bytes`, `pinned`, `asked`, `health`   (`good`, `length`, `head`, `footer` or `sections`), `components`; - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`; - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;   `remove`: `path`, `release`. */
+/* A store of installed packs in one directory: its signed catalog, its packs and their journal (D-171), shared by every language and the command line (research note store-api). Long work runs as a `Job` on a thread of its own; one store runs its jobs one at a time, and its other calls wait for the job running.  Packs are named as catalog paths (`np.places.tgd`) or short (`np`, `np.dem`), several comma-separated. Results are blobs: - `catalog`: `path`, `release`, `download`, `disk`, `components`,   `licence`, `state` (`available`, `installed` or `update`); - `status`: `path`, `release`, `bytes`, `pinned`, `asked`, `health`   (`good`, `length`, `head`, `footer` or `sections`), `components`; - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`; - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;   `remove`: `path`, `release`; - `find` and `locate`: one row per place and pack that   covers it: `id`, `name`, `lat`, `lon`, `countries`, then the pack's `pack`, `release`,   `download`, `disk` and `state`, null for a place no pack in the catalog covers. */
 
 /* Frees a handle. NULL does nothing. No call on it may be in flight. */
 void tg_store_free(tg_store *handle);
@@ -508,6 +508,29 @@ int32_t tg_store_pin(const tg_store *handle, const uint8_t *pack, size_t pack_le
  * `ErrorCode::Refused` if one is not installed or another pack needs it.
  */
 int32_t tg_store_remove(const tg_store *handle, const uint8_t *pack, size_t pack_len, tg_bytes *out);
+
+/*
+ * The places named `query` in `engine` (one over a world pack the app ships, the
+ * installed packs, or both), best first, each with the catalog's packs that cover it: what
+ * to install for "Dubai". Runs offline on the stored catalog.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
+ * `ErrorCode::Refused` if the stored catalog no longer verifies.
+ */
+int32_t tg_store_find(const tg_store *handle, const tg_engine *engine, const uint8_t *query, size_t query_len, uint32_t limit, tg_bytes *out);
+
+/*
+ * The countries within `radius_m` metres of a point in `engine`, each with the catalog's
+ * packs that cover the point: what to install for where the user stands.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
+ * the stored catalog no longer verifies.
+ */
+int32_t tg_store_locate(const tg_store *handle, const tg_engine *engine, double lat, double lon, uint32_t radius_m, tg_bytes *out);
 
 /*
  * An engine over the installed packs, each opened with the components and languages

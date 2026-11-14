@@ -1453,6 +1453,86 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_native
         .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// The places named `query` in `engine` (one over a world pack the app ships, the
+/// installed packs, or both), best first, each with the catalog's packs that cover it: what
+/// to install for "Dubai". Runs offline on the stored catalog.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
+/// `ErrorCode::Refused` if the stored catalog no longer verifies.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeFind<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    engine: jlong,
+    query: JString<'caller>,
+    limit: jlong,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Store>(handle, "handle") }?;
+                // SAFETY: as for `handle`: the caller's live handle of this type.
+                let engine = unsafe { handle_ref::<teigeodata_api::Engine>(engine, "engine") }?;
+                let query = query
+                    .try_to_string(env)
+                    .map_err(|e| teigeodata_api::Error {
+                        code: ErrorCode::InvalidArgument,
+                        message: format!("query: {e}"),
+                    })?;
+                let limit: u32 = narrow("limit", limit)?;
+                this.find(engine, &query, limit)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The countries within `radius_m` metres of a point in `engine`, each with the catalog's
+/// packs that cover the point: what to install for where the user stands.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
+/// the stored catalog no longer verifies.
+#[cfg(feature = "store")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Store_nativeLocate<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    engine: jlong,
+    lat: jni::sys::jdouble,
+    lon: jni::sys::jdouble,
+    radius_m: jlong,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Store>(handle, "handle") }?;
+                // SAFETY: as for `handle`: the caller's live handle of this type.
+                let engine = unsafe { handle_ref::<teigeodata_api::Engine>(engine, "engine") }?;
+                let radius_m: u32 = narrow("radius_m", radius_m)?;
+                this.locate(engine, lat, lon, radius_m)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 /// An engine over the installed packs, each opened with the components and languages
 /// installed.
 ///

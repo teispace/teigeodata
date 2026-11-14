@@ -474,7 +474,10 @@ class Store:
       (`good`, `length`, `head`, `footer` or `sections`), `components`;
     - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;
     - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;
-      `remove`: `path`, `release`.
+      `remove`: `path`, `release`;
+    - `find` and `locate`: one row per place and pack that
+      covers it: `id`, `name`, `lat`, `lon`, `countries`, then the pack's `pack`, `release`,
+      `download`, `disk` and `state`, null for a place no pack in the catalog covers.
     """
 
     @staticmethod
@@ -540,6 +543,29 @@ class Store:
         # Errors
 
         `ErrorCode::Refused` if one is not installed or another pack needs it.
+        """
+
+    def find(self, engine: Engine, query: str, limit: int) -> bytes:
+        """
+        The places named `query` in `engine` (one over a world pack the app ships, the
+        installed packs, or both), best first, each with the catalog's packs that cover it: what
+        to install for "Dubai". Runs offline on the stored catalog.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
+        `ErrorCode::Refused` if the stored catalog no longer verifies.
+        """
+
+    def locate(self, engine: Engine, lat: float, lon: float, radius_m: int) -> bytes:
+        """
+        The countries within `radius_m` metres of a point in `engine`, each with the catalog's
+        packs that cover the point: what to install for where the user stands.
+
+        # Errors
+
+        `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
+        the stored catalog no longer verifies.
         """
 
     def engine(self) -> Engine:

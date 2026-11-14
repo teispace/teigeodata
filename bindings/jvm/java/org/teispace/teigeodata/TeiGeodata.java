@@ -799,7 +799,10 @@ public static final class Engine implements AutoCloseable {
      *   (`good`, `length`, `head`, `footer` or `sections`), `components`;
      * - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;
      * - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;
-     *   `remove`: `path`, `release`.
+     *   `remove`: `path`, `release`;
+     * - `find` and `locate`: one row per place and pack that
+     *   covers it: `id`, `name`, `lat`, `lon`, `countries`, then the pack's `pack`, `release`,
+     *   `download`, `disk` and `state`, null for a place no pack in the catalog covers.
      */
 public static final class Store implements AutoCloseable {
         private final long handle;
@@ -972,6 +975,49 @@ public static final class Store implements AutoCloseable {
         }
 
         private static native byte[] nativeRemove(long handle, String pack);
+
+        /**
+         * The places named `query` in `engine` (one over a world pack the app ships, the
+         * installed packs, or both), best first, each with the catalog's packs that cover it: what
+         * to install for "Dubai". Runs offline on the stored catalog.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
+         * `ErrorCode::Refused` if the stored catalog no longer verifies.
+         */
+        public byte[] find(Engine engine, String query, long limit) {
+            long stamp = enter();
+            try {
+                return nativeFind(handle, engine.handle, query, limit);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeFind(long handle, long engine, String query, long limit);
+
+        /**
+         * The countries within `radius_m` metres of a point in `engine`, each with the catalog's
+         * packs that cover the point: what to install for where the user stands.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
+         * the stored catalog no longer verifies.
+         */
+        public byte[] locate(Engine engine, double lat, double lon, long radiusM) {
+            long stamp = enter();
+            try {
+                return nativeLocate(handle, engine.handle, lat, lon, radiusM);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native byte[] nativeLocate(long handle, long engine, double lat, double lon, long radiusM);
 
         /**
          * An engine over the installed packs, each opened with the components and languages

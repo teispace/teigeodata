@@ -626,7 +626,10 @@ public final class Engine: @unchecked Sendable {
 ///   (`good`, `length`, `head`, `footer` or `sections`), `components`;
 /// - an install or update: `path`, `release`, `fetched`, `reused`, `kept`, `changed`;
 /// - a refresh: `timestamp`, `files`, `bytes`; a repair: `path`, `health`, `fetched`;
-///   `remove`: `path`, `release`.
+///   `remove`: `path`, `release`;
+/// - `find` and `locate`: one row per place and pack that
+///   covers it: `id`, `name`, `lat`, `lon`, `countries`, then the pack's `pack`, `release`,
+///   `download`, `disk` and `state`, null for a place no pack in the catalog covers.
 ///
 /// Sendable: every call is safe from any thread at once (D-274). The handle is freed when the
 /// last reference goes.
@@ -721,6 +724,36 @@ public final class Store: @unchecked Sendable {
         var out = tg_bytes()
         var pack = pack
         let status = withExtendedLifetime(self) { pack.withUTF8 { packBytes in tg_store_remove(raw, packBytes.baseAddress, packBytes.count, &out) } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// The places named `query` in `engine` (one over a world pack the app ships, the
+    /// installed packs, or both), best first, each with the catalog's packs that cover it: what
+    /// to install for "Dubai". Runs offline on the stored catalog.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a limit above `LIMIT_MAX`;
+    /// `ErrorCode::Refused` if the stored catalog no longer verifies.
+    public func find(_ engine: Engine, query: String, limit: UInt32) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var query = query
+        let status = withExtendedLifetime(self) { withExtendedLifetime(engine) { query.withUTF8 { queryBytes in tg_store_find(raw, engine.raw, queryBytes.baseAddress, queryBytes.count, limit, &out) } } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// The countries within `radius_m` metres of a point in `engine`, each with the catalog's
+    /// packs that cover the point: what to install for where the user stands.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` for a point off the globe; `ErrorCode::Refused` if
+    /// the stored catalog no longer verifies.
+    public func locate(_ engine: Engine, lat: Double, lon: Double, radiusM: UInt32) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        let status = withExtendedLifetime(self) { withExtendedLifetime(engine) { tg_store_locate(raw, engine.raw, lat, lon, radiusM, &out) } }
         try check(status)
         return takeData(out)
     }

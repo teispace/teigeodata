@@ -84,6 +84,10 @@ public final class ParityTest {
             check(strings(store.status(false), "path").isEmpty(), "empty status");
             try (TeiGeodata.Engine engine = store.engine()) {
                 check(engine.layers() == 0, "no layers");
+                check(strings(store.find(engine, pack, 3), "name").isEmpty(), "find nothing");
+                check(strings(store.locate(engine, 27.7, 85.3, 1000), "name").isEmpty(), "locate nothing");
+                expect(TeiGeodataException.InvalidArgument.class, () -> store.find(engine, pack, 10_001), "limit");
+                expect(TeiGeodataException.InvalidArgument.class, () -> store.locate(engine, 91.0, 0.0, 1000), "");
             }
             expect(TeiGeodataException.InvalidArgument.class,
                     () -> store.install(pack, TeiGeodata.InstallOptions.DEFAULTS.withComponents((String) s.get("bad_components"))), "component");

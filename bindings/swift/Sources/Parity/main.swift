@@ -216,7 +216,12 @@ do {
     check(store.damaged().isEmpty, "damaged")
     check(strings(try store.catalog(), "path").isEmpty, "empty catalog")
     check(strings(try store.status(false), "path").isEmpty, "empty status")
-    check(try store.engine().layers() == 0, "no layers")
+    let installed = try store.engine()
+    check(installed.layers() == 0, "no layers")
+    check(strings(try store.find(installed, query: pack, limit: 3), "name").isEmpty, "find nothing")
+    check(strings(try store.locate(installed, lat: 27.7, lon: 85.3, radiusM: 1000), "name").isEmpty, "locate nothing")
+    expect(.invalidArgument) { _ = try store.find(installed, query: pack, limit: 10_001) }
+    expect(.invalidArgument) { _ = try store.locate(installed, lat: 91, lon: 0, radiusM: 1000) }
     expect(.invalidArgument) { _ = try store.install(pack, options: InstallOptions(components: st["bad_components"] as! String)) }
     expect(.refused) { _ = try store.remove(pack) }
     let job = store.refresh(pack)

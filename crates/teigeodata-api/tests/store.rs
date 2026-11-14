@@ -36,6 +36,14 @@ fn strings(blob: &Blob, name: &str) -> Vec<String> {
     }
 }
 
+fn f64s(blob: &Blob, name: &str) -> Vec<f64> {
+    let r = Reader::new(blob.as_bytes()).unwrap();
+    let Some(View::F64(v)) = r.column(name) else {
+        panic!("{name} is not an f64 column")
+    };
+    v.f64s().collect()
+}
+
 fn u64s(blob: &Blob, name: &str) -> Vec<u64> {
     let r = Reader::new(blob.as_bytes()).unwrap();
     match r.column(name) {
@@ -156,6 +164,24 @@ fn a_store_from_init_to_remove_through_jobs() {
         ErrorCode::MissingComponent
     );
 
+    // What to install for a name: the catalog's packs over the engine's places, offline.
+    let found = store.find(&engine, "Ritarra", 3).unwrap();
+    assert_eq!(strings(&found, "name"), ["Ritarra"]);
+    assert_eq!(strings(&found, "countries"), ["np"]);
+    assert_eq!(strings(&found, "pack"), ["np.places.tgd"]);
+    assert_eq!(strings(&found, "state"), ["installed"]);
+    assert!(u64s(&found, "download")[0] > 0);
+    assert_eq!(
+        store.find(&engine, "Ritarra", 10_001).unwrap_err().code,
+        ErrorCode::InvalidArgument
+    );
+    // Nothing found is no row; an empty engine finds nothing.
+    assert_eq!(
+        strings(&store.find(&engine, "Zzyzx Qwv", 3).unwrap(), "name"),
+        Vec::<String>::new()
+    );
+    let (lat, lon) = (f64s(&hit, "lat")[0], f64s(&hit, "lon")[0]);
+
     // Everything, pinned: the same release, more components.
     let all = InstallOptions {
         pin: true,
@@ -166,6 +192,16 @@ fn a_store_from_init_to_remove_through_jobs() {
     let again = run(&store.install("np", &all).unwrap()).unwrap();
     assert_eq!(u64s(&again, "changed"), [0], "installed already");
     assert_eq!(u64s(&store.status(false).unwrap(), "pinned"), [1]);
+    // What to install for where one stands: the countries whose outlines lie near a point.
+    // The synthetic pack has no arc outlines, so no country; the engine's world tests check
+    // the locator on real outlines.
+    let engine = store.engine().unwrap();
+    let here = store.locate(&engine, lat, lon, 1_000).unwrap();
+    assert_eq!(strings(&here, "pack"), Vec::<String>::new());
+    assert_eq!(
+        store.locate(&engine, 91.0, 0.0, 1_000).unwrap_err().code,
+        ErrorCode::InvalidArgument
+    );
 
     // A new release: the update fetches it, reusing what did not change.
     publish(&host, 2, &[pack("2026.12.0", true)]);
