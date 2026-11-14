@@ -110,12 +110,22 @@ public final class ParityTest {
         c.clean();
         check(ran.get() == 1, "clean runs the action once");
         java.util.concurrent.CountDownLatch freed = new java.util.concurrent.CountDownLatch(1);
-        NativeCleaner.register(new Object(), freed::countDown);
+        registerUnreachable(freed::countDown);
         for (int i = 0; i < 100 && freed.getCount() > 0; i++) {
             System.gc();
+            System.runFinalization();
             freed.await(50, java.util.concurrent.TimeUnit.MILLISECONDS);
         }
         check(freed.getCount() == 0, "the cleaner runs for an unreachable owner");
+    }
+
+    /**
+     * Registers an owner that nothing reaches once this returns. In a frame of its own: ART's
+     * interpreter (API 24) keeps a dead local in its register until the frame ends, so an
+     * owner made in the caller's frame stays reachable there.
+     */
+    private static void registerUnreachable(Runnable action) {
+        NativeCleaner.register(new Object(), action);
     }
 
     /** A section passed: on stderr, so a run that dies shows how far it got. */
