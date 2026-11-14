@@ -50,16 +50,19 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         (Some(d), _) => d,
         (None, true) => {
             let (id, name, was_booted) = iphone()?;
+            eprintln!("flutter-check: {name} ({id})");
             if !was_booted {
-                command(root, "xcrun", &["simctl", "boot", &id])?;
+                // `boot` returns before the simulator is up; `bootstatus -b` boots and waits.
+                command(root, "xcrun", &["simctl", "bootstatus", &id, "-b"])?;
                 booted = Some(id.clone());
             }
-            eprintln!("flutter-check: {name} ({id})");
             id
         }
         (None, false) => host().to_owned(),
     };
-    let result = command(
+    // Streamed, not captured: an app build and a device run are long, and a stall must show
+    // where it is in the log.
+    let result = stream(
         &example,
         flutter,
         &["test", "integration_test", "-d", &device],
@@ -85,20 +88,88 @@ fn host() -> &'static str {
     }
 }
 
-/// The first available iPhone simulator: its id, name and whether it is already booted.
+/// Runs `program` with its output going to this process's, so a CI log shows its progress.
+fn stream(dir: &Path, program: &str, args: &[&str]) -> Result<(), Vec<String>> {
+    let status = Command::new(program)
+        .current_dir(dir)
+        .args(args)
+        .status()
+        .map_err(|e| vec![format!("{program}: {e}")])?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(vec![format!(
+            "{program} {} failed: {status}",
+            args.join(" ")
+        )])
+    }
+}
+
+/// How a simulator is preferred: booted, then by iOS version, then a Pro Max.
+type Rank = (bool, (u32, u32), bool);
+
+/// The iPhone simulator to test on: a booted one first, then on the newest iOS runtime, a Pro
+/// Max (the machine's shared set) before others. Its id, name and whether it is booted.
 fn iphone() -> Result<(String, String, bool), Vec<String>> {
     let out = Command::new("xcrun")
-        .args(["simctl", "list", "devices", "available"])
+        .args(["simctl", "list", "devices", "available", "-j"])
         .output()
         .map_err(|e| vec![format!("xcrun: {e}")])?;
-    let text = String::from_utf8_lossy(&out.stdout);
-    text.lines()
-        .map(str::trim)
-        .filter(|l| l.starts_with("iPhone"))
-        .find_map(|l| {
-            let (name, rest) = l.split_once(" (")?;
-            let (id, rest) = rest.split_once(')')?;
-            Some((id.to_owned(), name.to_owned(), rest.contains("Booted")))
-        })
+    let list: serde_json::Value =
+        serde_json::from_slice(&out.stdout).map_err(|e| vec![format!("simctl list: {e}")])?;
+    let mut best: Option<(Rank, String, String)> = None;
+    let runtimes = list.get("devices").and_then(serde_json::Value::as_object);
+    for (runtime, devices) in runtimes.into_iter().flatten() {
+        let Some(version) = ios_version(runtime) else {
+            continue;
+        };
+        for d in devices.as_array().into_iter().flatten() {
+            let field = |k: &str| d.get(k).and_then(serde_json::Value::as_str).unwrap_or("");
+            let (name, id) = (field("name"), field("udid"));
+            if !name.starts_with("iPhone") || id.is_empty() {
+                continue;
+            }
+            let rank = (
+                field("state") == "Booted",
+                version,
+                name.contains("Pro Max"),
+            );
+            if best.as_ref().is_none_or(|(r, _, _)| rank > *r) {
+                best = Some((rank, id.to_owned(), name.to_owned()));
+            }
+        }
+    }
+    best.map(|((booted, _, _), id, name)| (id, name, booted))
         .ok_or_else(|| vec!["no iPhone simulator available".into()])
+}
+
+/// The iOS version of a simulator runtime identifier, such as
+/// `com.apple.CoreSimulator.SimRuntime.iOS-27-2` or `…iOS-27-2-iPhone19-4`.
+fn ios_version(runtime: &str) -> Option<(u32, u32)> {
+    let rest = runtime.rsplit_once("SimRuntime.iOS-")?.1;
+    let mut parts = rest.split('-');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
+    Some((major, minor))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ios_version;
+
+    #[test]
+    fn runtime_versions_are_read() {
+        assert_eq!(
+            ios_version("com.apple.CoreSimulator.SimRuntime.iOS-27-2"),
+            Some((27, 2))
+        );
+        assert_eq!(
+            ios_version("com.apple.CoreSimulator.SimRuntime.iOS-27-2-iPhone19-4"),
+            Some((27, 2))
+        );
+        assert_eq!(
+            ios_version("com.apple.CoreSimulator.SimRuntime.watchOS-12-0"),
+            None
+        );
+    }
 }
