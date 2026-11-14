@@ -48,7 +48,7 @@ fn query_strings() {
 }
 
 /// Valid query strings for each route (`ROUTES` order), with `{}` where a value goes.
-const TEMPLATES: [&str; 10] = [
+const TEMPLATES: [&str; 13] = [
     "id={}&names={}",
     "ids={},{}",
     "lat={}&lon={}&limit={}&in_country={}",
@@ -59,10 +59,13 @@ const TEMPLATES: [&str; 10] = [
     "lat={}&lon={}",
     "code={}&prefix={}&limit={}",
     "x={}",
+    "q={}&format={}&limit={}&countrycodes={}&viewbox={},{},{},{}&bounded={}&addressdetails={}",
+    "lat={}&lon={}&zoom={}&format={}&addressdetails={}",
+    "osm_ids={},{},N{}&format={}",
 ];
 
 /// The values put in a template: at and past every bound, off the globe, not numbers.
-const VALUES: [&str; 24] = [
+const VALUES: [&str; 30] = [
     "0",
     "1",
     "7",
@@ -87,6 +90,12 @@ const VALUES: [&str; 24] = [
     "Pokhara",
     "%FF%FE",
     "4",
+    "json",
+    "jsonv2",
+    "geojson",
+    "xml",
+    "np",
+    "18",
 ];
 
 #[test]

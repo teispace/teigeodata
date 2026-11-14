@@ -12,7 +12,7 @@ use crate::seams::Operation;
 
 /// The routes under `/v1/`, in the order the fuzz harness picks them.
 #[cfg(feature = "fuzz")]
-pub(crate) const ROUTES: [&str; 10] = [
+pub(crate) const ROUTES: [&str; 13] = [
     "get",
     "lookup",
     "reverse",
@@ -23,6 +23,9 @@ pub(crate) const ROUTES: [&str; 10] = [
     "elevation",
     "postal",
     "none",
+    "nominatim/search",
+    "nominatim/reverse",
+    "nominatim/lookup",
 ];
 
 /// A request's query parameters, decoded once.
@@ -44,13 +47,16 @@ impl Params {
             .map(|(_, v)| v.as_str())
     }
 
-    fn text(&self, name: &str) -> Result<String, QueryError> {
+    pub(crate) fn text(&self, name: &str) -> Result<String, QueryError> {
         self.get(name)
             .map(str::to_owned)
             .ok_or_else(|| QueryError::new(Code::InvalidArgument, format!("`{name}` is missing")))
     }
 
-    fn parsed<T: core::str::FromStr>(&self, name: &str) -> Result<Option<T>, QueryError> {
+    pub(crate) fn parsed<T: core::str::FromStr>(
+        &self,
+        name: &str,
+    ) -> Result<Option<T>, QueryError> {
         self.get(name)
             .map(|v| {
                 v.parse().map_err(|_| {
@@ -63,12 +69,12 @@ impl Params {
             .transpose()
     }
 
-    fn need<T: core::str::FromStr>(&self, name: &str) -> Result<T, QueryError> {
+    pub(crate) fn need<T: core::str::FromStr>(&self, name: &str) -> Result<T, QueryError> {
         self.parsed(name)?
             .ok_or_else(|| QueryError::new(Code::InvalidArgument, format!("`{name}` is missing")))
     }
 
-    fn flag(&self, name: &str) -> Result<bool, QueryError> {
+    pub(crate) fn flag(&self, name: &str) -> Result<bool, QueryError> {
         match self.get(name) {
             None | Some("0" | "false") => Ok(false),
             Some("" | "1" | "true") => Ok(true),
@@ -79,7 +85,7 @@ impl Params {
         }
     }
 
-    fn limit(&self) -> Result<usize, QueryError> {
+    pub(crate) fn limit(&self) -> Result<usize, QueryError> {
         Ok(self.parsed("limit")?.unwrap_or(Limits::DEFAULT_LIMIT))
     }
 }
@@ -198,7 +204,7 @@ pub(crate) fn asked(route: &str, p: &Params) -> Result<Asked, QueryError> {
 thread_local! {
     /// Each worker's query memory, reused across requests (no allocation per query but the
     /// body).
-    static WORK: RefCell<(Scratch, Vec<Item>, Vec<PostalCode>)> =
+    pub(crate) static WORK: RefCell<(Scratch, Vec<Item>, Vec<PostalCode>)> =
         RefCell::new((Scratch::default(), Vec::new(), Vec::new()));
 }
 

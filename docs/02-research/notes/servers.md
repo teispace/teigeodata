@@ -60,9 +60,10 @@ rmcp's transport is a `tower` service, so actix needs an adapter: not considered
 **Nominatim compatibility (ADR-0038).** Nominatim 5.3.3 (2026-10-14) is the current release.
 Its `/search`, `/reverse` and `/lookup` with `format=json|jsonv2|geojson|geocodejson` are
 what clients call. The compatible mode maps our native rows to its fields and leaves out
-what we cannot fill (`osm_type` and `osm_id` exist only for OSM-derived rows; `importance`
-is our score, documented as such). The conformance corpus is a set of client requests with
-the fields each client reads.
+what we cannot fill (`osm_type` and `osm_id` exist only for OSM-derived rows). The
+conformance corpus is a set of client requests with the fields each client reads. Refined by
+[Nominatim compatibility](nominatim-compat.md) (2026-11-15): `importance` is left out too, as
+our score is not on its scale.
 
 **What exists to reuse.** `tgd` already has native, GeoJSON and Nominatim-shaped outputs in
 `crates/teigeodata-cli/src/output.rs`, written to move to the server. The engine answers

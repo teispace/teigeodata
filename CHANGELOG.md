@@ -34,6 +34,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   every query as a `GET` route under `/v1/`, `/packs` and `/health`, on axum; bound to
   127.0.0.1, CORS off unless configured, a 4 KiB query string, a request timeout, a panic
   answered `internal`; follows the store's journal every 5 s (D-312).
+- `tgd serve` answers Nominatim's `/search`, `/reverse` and `/lookup` (`json`, `jsonv2`,
+  `geojson`) with the parameters geopy and Leaflet Control Geocoder send, so an app switches
+  by changing its URL; fields we cannot fill are left out (D-314).
 - `Store::read_packs`: the packs the journal lists, read without opening the store, so a reader
   beside an install never recovers or removes its files (D-311).
 - Each release carries the C library alone for every target the Dart hook and the Go loader

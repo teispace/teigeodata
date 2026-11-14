@@ -47,5 +47,9 @@ required-features = ["fuzz"]
 name = "http"
 required-features = ["http"]
 
+[[test]]
+name = "nominatim"
+required-features = ["http"]
+
 [lints]
 workspace = true

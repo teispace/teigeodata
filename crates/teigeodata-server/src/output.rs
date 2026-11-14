@@ -522,8 +522,12 @@ fn hhmm(seconds: i32) -> String {
     }
 }
 
-/// The Nominatim `json` object of `item`, from its native record.
-fn nominatim(
+/// The Nominatim `json` object of `item`, from its native record, with `licence` as its
+/// `licence` (the module's mapping; the HTTP server's Nominatim routes use it too).
+///
+/// # Errors
+/// A query the object needs failed.
+pub fn nominatim(
     engine: &Engine,
     item: &Item,
     licence: Option<&str>,

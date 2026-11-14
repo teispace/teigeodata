@@ -12,6 +12,8 @@
 //!
 //! [D-310]: https://github.com/teispace/teigeodata/blob/main/docs/03-decisions/log.md
 
+#[cfg(any(feature = "http", feature = "fuzz"))]
+mod compat;
 /// The fuzz harness of the query parsing.
 #[cfg(feature = "fuzz")]
 pub mod fuzz;

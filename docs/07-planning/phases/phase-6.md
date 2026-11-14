@@ -11,7 +11,8 @@ HTTP server with native, GeoJSON and Nominatim-compatible outputs, both over one
 whose seams (auth, limits, metering, tenants) let a hosted tier be a deployment, not a fork.
 Exit: milestone **M6** ([roadmap](../roadmap.md)).
 
-**Research:** [servers](../../02-research/notes/servers.md) (2026-11-15); the MCP part of
+**Research:** [servers](../../02-research/notes/servers.md) (2026-11-15),
+[Nominatim compatibility](../../02-research/notes/nominatim-compat.md) (2026-11-15); the MCP part of
 [bindings and MCP](../../02-research/notes/bindings-and-mcp.md) §3.13; ADR-0017, ADR-0025,
 ADR-0028, ADR-0038; D-032 (attribution), D-048 (outputs).
 
@@ -44,8 +45,9 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 ### 6.2 The HTTP server
 - [x] Routes for every engine query, `/packs` and `/health`; `tgd serve` (bound to
   127.0.0.1 by default) (2026-11-15, D-312)
-- [ ] Nominatim-compatible `/search`, `/reverse`, `/lookup` (ADR-0038) with a conformance
-  corpus of client requests
+- [x] Nominatim-compatible `/search`, `/reverse`, `/lookup` (ADR-0038) with a conformance
+  corpus of client requests (2026-11-15, D-314,
+  [research](../../02-research/notes/nominatim-compat.md))
 - [x] Limits and timeouts, CORS off unless configured, a panic answered `internal`
   (2026-11-15, D-312)
 - [x] Request fuzzing of the query parsing (2026-11-15, D-313)

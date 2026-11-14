@@ -104,7 +104,9 @@ curl 'http://127.0.0.1:8080/v1/search?q=Pokhara&limit=3'
 Every query is a `GET` route under `/v1/` (`get`, `lookup`, `reverse`, `near`, `search`,
 `admin`, `tz`, `elevation`, `postal`), with `/packs` and `/health`. A place query answers
 `{"results": [...], "attribution": ...}`, or GeoJSON with `format=geojson`; a failure answers
-`{"error": {"code": ..., "message": ...}}` with its HTTP status. The server listens on
+`{"error": {"code": ..., "message": ...}}` with its HTTP status. `/search`, `/reverse` and
+`/lookup` answer as Nominatim does (`format=json`, `jsonv2` or `geojson`), for clients written
+for it; OSM-only fields are left out. The server listens on
 127.0.0.1 unless `--listen` says otherwise, sends no CORS headers unless `--cors-origin` names
 an origin, holds every query to its bounds (256 bytes of text, 50 results, a radius up to
 1,000 km), follows the store as packs are installed or removed (`--follow`, every 5 s), and

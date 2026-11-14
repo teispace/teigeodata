@@ -31,6 +31,7 @@ use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::timeout::TimeoutLayer;
 
+use crate::compat::{self, Route};
 use crate::packs::Packs;
 use crate::params::{Asked, Params, answer, asked};
 use crate::query::{Code, Limits, QueryError};
@@ -83,6 +84,9 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/health", get(health))
         .route("/packs", get(packs))
         .route("/v1/{query}", get(v1))
+        .route("/search", get(nominatim_search))
+        .route("/reverse", get(nominatim_reverse))
+        .route("/lookup", get(nominatim_lookup))
         .fallback(not_found)
         .with_state(app);
     if let Some(c) = cors {
@@ -277,5 +281,92 @@ async fn v1(
             )
         }
         Err(x) => error(&x),
+    }
+}
+
+async fn nominatim_search(
+    State(app): State<Arc<App>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    RawQuery(raw): RawQuery,
+) -> Response {
+    nominatim(&app, Route::Search, peer, &headers, raw.as_deref())
+}
+
+async fn nominatim_reverse(
+    State(app): State<Arc<App>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    RawQuery(raw): RawQuery,
+) -> Response {
+    nominatim(&app, Route::Reverse, peer, &headers, raw.as_deref())
+}
+
+async fn nominatim_lookup(
+    State(app): State<Arc<App>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    RawQuery(raw): RawQuery,
+) -> Response {
+    nominatim(&app, Route::Lookup, peer, &headers, raw.as_deref())
+}
+
+/// A failure as Nominatim answers it, with the code's status.
+fn nominatim_error(e: &QueryError, status: Option<StatusCode>) -> Response {
+    let status = status.unwrap_or_else(|| {
+        StatusCode::from_u16(e.code.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+    });
+    json(status, compat::error_body(e), "application/json")
+}
+
+/// A Nominatim-compatible request (D-314): the seams, the bounds and the panic guard as for
+/// `/v1/`, Nominatim's shapes for the answer and the errors.
+fn nominatim(
+    app: &App,
+    route: Route,
+    peer: SocketAddr,
+    headers: &HeaderMap,
+    raw: Option<&str>,
+) -> Response {
+    let start = Instant::now();
+    if raw.is_some_and(|q| q.len() > app.config.max_query_bytes) {
+        let e = QueryError::new(
+            Code::OutOfBounds,
+            format!(
+                "the query string is past {} bytes",
+                app.config.max_query_bytes
+            ),
+        );
+        return nominatim_error(&e, Some(StatusCode::URI_TOO_LONG));
+    }
+    let p = Params::parse(raw);
+    let op = route.operation();
+    let req = Request { headers, peer };
+    let caller = match app.seams.admit(&req, op) {
+        Ok(c) => c,
+        Err(e) => return nominatim_error(&e, None),
+    };
+    let mut body = Vec::with_capacity(1024);
+    let e = app.packs.load();
+    match compat::answer(&e, route, &p, &app.config.limits, &mut body) {
+        Ok(results) => {
+            let usage = Usage {
+                results,
+                bytes: body.len(),
+                micros: u64::try_from(start.elapsed().as_micros()).unwrap_or(u64::MAX),
+            };
+            app.seams.meter.record(&caller, op, usage);
+            let geo = p.get("format") == Some("geojson");
+            json(
+                StatusCode::OK,
+                body,
+                if geo {
+                    "application/geo+json"
+                } else {
+                    "application/json"
+                },
+            )
+        }
+        Err(x) => nominatim_error(&x, None),
     }
 }

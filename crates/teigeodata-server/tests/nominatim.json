@@ -1,0 +1,152 @@
+{
+  "about": "The Nominatim conformance corpus (ADR-0038, D-314; research note nominatim-compat): requests real clients send and the fields each reads, with their types. `{id}`, `{lat}` and `{lon}` are a place of the test pack. `results` is `array` (each entry checked, at least `min` of them), `object` (one place) or `error`. A type is `numstr` (a string holding a finite number), `string`, `object`, `bbox` (four numstr), `number` or a literal JSON value.",
+  "requests": [
+    {
+      "client": "geopy, Nominatim.geocode",
+      "request": "/search?q=Synthland&format=json&limit=1",
+      "status": 200,
+      "results": "array",
+      "min": 1,
+      "max": 1,
+      "reads": { "/lat": "numstr", "/lon": "numstr", "/display_name": "string" }
+    },
+    {
+      "client": "geopy, Nominatim.geocode with filters",
+      "request": "/search?q=Synthland&format=json&limit=10&addressdetails=1&countrycodes=np,in&viewbox=60,0,100,40&bounded=1",
+      "status": 200,
+      "results": "array",
+      "min": 1,
+      "reads": {
+        "/lat": "numstr",
+        "/lon": "numstr",
+        "/display_name": "string",
+        "/address": "object",
+        "/address/country_code": "np"
+      }
+    },
+    {
+      "client": "geopy, Nominatim.geocode in another country",
+      "request": "/search?q=Synthland&format=json&countrycodes=gb",
+      "status": 200,
+      "results": "array",
+      "min": 0,
+      "max": 0
+    },
+    {
+      "client": "geopy, Nominatim.geocode outside the viewbox",
+      "request": "/search?q=Synthland&format=json&viewbox=-10,40,10,60&bounded=1",
+      "status": 200,
+      "results": "array",
+      "min": 0,
+      "max": 0
+    },
+    {
+      "client": "geopy, Nominatim.reverse",
+      "request": "/reverse?lat={lat}&lon={lon}&format=json&addressdetails=1",
+      "status": 200,
+      "results": "object",
+      "reads": {
+        "/lat": "numstr",
+        "/lon": "numstr",
+        "/display_name": "string",
+        "/address": "object"
+      }
+    },
+    {
+      "client": "geopy, Nominatim.reverse with a zoom",
+      "request": "/reverse?lat={lat}&lon={lon}&format=json&addressdetails=0&zoom=3",
+      "status": 200,
+      "results": "object",
+      "reads": { "/lat": "numstr", "/lon": "numstr", "/display_name": "Synthland" },
+      "absent": ["/address"]
+    },
+    {
+      "client": "geopy, Nominatim.reverse at sea (no result)",
+      "request": "/reverse?lat=0&lon=-30&format=json",
+      "status": 200,
+      "results": "error",
+      "reads": { "/error": "Unable to geocode" }
+    },
+    {
+      "client": "Leaflet Control Geocoder, geocode",
+      "request": "/search?q=Synthland&limit=5&format=json&addressdetails=1",
+      "status": 200,
+      "results": "array",
+      "min": 1,
+      "max": 5,
+      "reads": {
+        "/boundingbox": "bbox",
+        "/lat": "numstr",
+        "/lon": "numstr",
+        "/display_name": "string",
+        "/address": "object"
+      }
+    },
+    {
+      "client": "Leaflet Control Geocoder, reverse",
+      "request": "/reverse?lat={lat}&lon={lon}&zoom=13&addressdetails=1&format=json",
+      "status": 200,
+      "results": "object",
+      "reads": {
+        "/boundingbox": "bbox",
+        "/lat": "numstr",
+        "/lon": "numstr",
+        "/display_name": "string",
+        "/address": "object"
+      }
+    },
+    {
+      "client": "Nominatim API, jsonv2 (the default)",
+      "request": "/search?q=Synthland",
+      "status": 200,
+      "results": "array",
+      "min": 1,
+      "reads": { "/place_id": "string", "/licence": "string", "/lat": "numstr" },
+      "absent": ["/address", "/osm_id", "/class", "/importance"]
+    },
+    {
+      "client": "Nominatim API, lookup",
+      "request": "/lookup?osm_ids={id},N240109189&format=json",
+      "status": 200,
+      "results": "array",
+      "min": 1,
+      "max": 1,
+      "reads": { "/place_id": "{id}", "/lat": "numstr", "/display_name": "string" }
+    },
+    {
+      "client": "Nominatim API, geojson",
+      "request": "/search?q=Synthland&format=geojson&limit=1",
+      "status": 200,
+      "results": "object",
+      "reads": {
+        "/type": "FeatureCollection",
+        "/licence": "string",
+        "/features/0/type": "Feature",
+        "/features/0/geometry/coordinates/0": "number",
+        "/features/0/bbox/3": "number",
+        "/features/0/properties/display_name": "string"
+      }
+    },
+    {
+      "client": "Nominatim API, a format we do not offer",
+      "request": "/search?q=Synthland&format=xml",
+      "status": 400,
+      "results": "object",
+      "reads": { "/error/code": 400, "/error/message": "string" }
+    },
+    {
+      "client": "Nominatim API, a limit past 40",
+      "request": "/search?q=Synthland&limit=41&format=json",
+      "status": 400,
+      "results": "object",
+      "reads": { "/error/code": 400 }
+    },
+    {
+      "client": "Nominatim API, JSONP",
+      "request": "/search?q=Synthland&format=json&json_callback=cb",
+      "status": 400,
+      "results": "object",
+      "reads": { "/error/code": 400 }
+    }
+  ]
+}

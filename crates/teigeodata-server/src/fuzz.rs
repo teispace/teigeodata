@@ -4,11 +4,12 @@
 
 use teigeodata_engine::Engine;
 
+use crate::compat::{self, Route};
 use crate::params::{self, Params, ROUTES};
 use crate::query::{Code, Limits};
 
 /// The parameter names the routes read, so random input reaches past "missing".
-const KEYS: [&str; 18] = [
+const KEYS: [&str; 28] = [
     "id",
     "ids",
     "names",
@@ -27,6 +28,16 @@ const KEYS: [&str; 18] = [
     "prefix",
     "format",
     "x",
+    "countrycodes",
+    "viewbox",
+    "bounded",
+    "addressdetails",
+    "zoom",
+    "osm_ids",
+    "json_callback",
+    "city",
+    "country",
+    "postalcode",
 ];
 
 /// Parses `data` as a route's query string and answers it on an engine with no packs, as the
@@ -65,10 +76,27 @@ pub fn query_string(data: &[u8]) {
         q.finish()
     };
     let p = Params::parse(Some(&raw));
+    let e = Engine::new();
+    let compat = match route {
+        "nominatim/search" => Some(Route::Search),
+        "nominatim/reverse" => Some(Route::Reverse),
+        "nominatim/lookup" => Some(Route::Lookup),
+        _ => None,
+    };
+    if let Some(r) = compat {
+        let mut out = Vec::new();
+        match compat::answer(&e, r, &p, &Limits::SERVER, &mut out) {
+            Ok(_) => {
+                let v: Result<serde_json::Value, _> = serde_json::from_slice(&out);
+                assert!(v.is_ok(), "not JSON: {}", String::from_utf8_lossy(&out));
+            }
+            Err(x) => assert!(x.code != Code::Internal, "{route}?{raw}: internal: {x}"),
+        }
+        return;
+    }
     let Ok(asked) = params::asked(route, &p) else {
         return;
     };
-    let e = Engine::new();
     let mut out = Vec::new();
     match params::answer(&e, &asked, false, &Limits::SERVER, &mut out) {
         Ok(_) => {
