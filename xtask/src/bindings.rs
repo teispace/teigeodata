@@ -62,6 +62,11 @@ const TARGETS: &[Target] = &[
         rustfmt: false,
     },
     Target {
+        template: "node.index.mjs.j2",
+        output: "bindings/node/index.mjs",
+        rustfmt: false,
+    },
+    Target {
         template: "wasm.rs.j2",
         output: "bindings/wasm/src/lib.rs",
         rustfmt: true,

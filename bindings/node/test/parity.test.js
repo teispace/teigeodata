@@ -1,11 +1,12 @@
 // Parity: the Node.js binding gives the results bindings/parity.json expects (checked there
-// against Rust). Run with `node --test test/parity.test.js` after building teigeodata.node.
+// against Rust). Run with `node --test test/parity.test.js` after building teigeodata.node;
+// `TEIGEODATA_NODE_PACKAGE` names an installed package to test instead (test/install.mjs).
 "use strict";
 const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const { test } = require("node:test");
-const tg = require("..");
+const tg = require(process.env.TEIGEODATA_NODE_PACKAGE || "..");
 
 const parity = JSON.parse(readFileSync(join(__dirname, "../../parity.json"), "utf8"));
 

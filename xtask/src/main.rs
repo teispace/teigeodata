@@ -24,6 +24,7 @@ mod mirror;
 mod pack;
 mod package_c;
 mod package_jvm;
+mod package_node;
 mod package_swift;
 mod package_wasm;
 mod postal;
@@ -84,6 +85,12 @@ Tasks:
                     alignment and makes target/jvm/teigeodata-<v>.aar; --desktop makes the
                     JAR with the host's library and those under --natives, --test runs the
                     parity checks from it; --android-test runs them on a running emulator.
+  package-node [--addons <dir>] [--test]
+                    The Node.js packages (D-294, napi-rs layout) under target/node/: the
+                    main package with its loader, and a platform package per prebuilt
+                    addon; --addons takes teigeodata.<suffix>.node for every platform,
+                    else this machine's addon is built and packaged; --test installs them
+                    as npm would and runs the parity checks.
   package-wasm [--variant full|lookup] [--test]
                     The WebAssembly npm packages (D-293): each variant (a set of
                     components, D-291) built, through wasm-bindgen --target web and
@@ -143,6 +150,7 @@ fn main() -> ExitCode {
         "package-c" => report(package_c::run(&root, rest)),
         "flutter-check" => report(flutter_check::run(&root, rest)),
         "package-jvm" => report(package_jvm::run(&root, rest)),
+        "package-node" => report(package_node::run(&root, rest)),
         "package-wasm" => report(package_wasm::run(&root, rest)),
         "package-swift" => report(package_swift::run(&root, rest)),
         "pack-sizes" => report(breakdown::run(rest)),

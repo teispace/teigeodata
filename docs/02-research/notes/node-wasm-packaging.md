@@ -79,6 +79,11 @@ Measured 2026-11-14 on this Mac (wasm32-unknown-unknown, the `wasm` profile: `op
 - **Workers load WebAssembly as an imported module** (`import wasm from "./x.wasm"`), and
   `fetch` cannot reach the bundle's own files; the `workerd` condition is the one their
   bundler resolves. Their only size limit is 64 MiB uncompressed (bindings note §3.14).
+- **musl is told by `/usr/bin/ldd`**: musl's is its loader (or a script calling it) and names
+  musl; glibc's is a script that need not say "GNU C Library". Without a readable `ldd`, Node.js's
+  `process.report` names glibc's version only on glibc (napi-rs does the same).
+- **A musl `cdylib` needs `-C target-feature=-crt-static`**; Rust's musl targets link statically
+  by default and cannot make a dynamic library that way.
 - **The query paths call nothing wasm32 lacks.** `SystemTime` and `std::fs` appear only in
   `open_file`, threads only in the store; both are left out of the module.
 
@@ -103,7 +108,12 @@ Measured 2026-11-14 on this Mac (wasm32-unknown-unknown, the `wasm` profile: `op
 - **Three entry files of a few lines each** and `cargo xtask package-wasm`, which builds a
   variant, runs wasm-bindgen and wasm-opt, and assembles its package.
 - **The platform packages and loader for Node.js** in `cargo xtask package-node`, in the napi-rs
-  layout, so no Node.js tool is needed to build.
+  layout, so no Node.js tool is needed to build (D-294). The loader is about forty lines
+  (`native.js`, `target.js`) against napi-rs 3.10.12's generated loader of several hundred: we
+  need eight platforms, no WASI fallback and no FreeBSD, Android or OpenHarmony branches.
+- **`index.mjs`**, generated from the IDL: Node.js cannot see named exports through
+  `module.exports = native`, so without it `import { Engine } from "@teispace/teigeodata"`
+  fails.
 
 ## 6. Impact on the plan
 

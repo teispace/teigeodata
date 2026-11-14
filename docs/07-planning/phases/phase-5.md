@@ -140,8 +140,9 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   - [ ] 5.7b the WebAssembly packages `full` and `lookup` (D-293): `cargo xtask package-wasm`,
     budgets, parity on Node.js and Bun here; done when `wasm.yml` is green (Deno, Node.js 22
     to 26, Chromium, Firefox, WebKit, workerd)
-  - [ ] 5.7c the Node.js platform packages and their loader (napi-rs layout), every platform
-    in CI
+  - [ ] 5.7c the Node.js platform packages and their loader (napi-rs layout, D-294): `cargo
+    xtask package-node`, `index.mjs`, installed as npm would and tested here; done when
+    `node.yml` is green on all eight platforms
 
 ### 5.8 .NET, Go and C/C++
 - [ ] .NET over the C ABI with source-generated P/Invoke, NativeAOT-safe, as a NuGet package;
@@ -166,6 +167,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-14 | 5.7: the API per component (D-291), `fold` with `search` (D-292), the WebAssembly packages (D-293) | plan |
+| 2026-11-14 | 5.7c: the Node.js packages in the napi-rs layout, an ES module entry, musl in Alpine (D-294) | plan |
 | 2026-11-14 | 5.6: abi3 floor 3.11, abi3t, the lent `Blob`, wheels by cibuildwheel (D-290) | plan |
 | 2026-11-14 | 5.5: `@Native` bindings, the build hook, `flutter-check` (D-289) | plan |
 | 2026-11-14 | 5.4: the AAR, the desktop JAR, the 16 KB gate (D-288); 5.2 and 5.3 green in CI | plan |

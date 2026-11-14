@@ -13,6 +13,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Added
 
+- The Node.js packages: `@teispace/teigeodata` with a prebuilt addon per platform
+  (`@teispace/teigeodata-<platform>`, macOS, Linux glibc and musl, Windows, x64 and arm64), npm
+  installing only the one a machine needs; CommonJS and ES module entries; Node.js 22 and later;
+  assembled by `cargo xtask package-node` (D-294).
 - The WebAssembly packages `@teispace/teigeodata-wasm` (every component) and
   `@teispace/teigeodata-wasm-lookup` (no search): one ES module for browsers, Deno, Bun,
   Node.js and Workers, the `Engine` over pack bytes, built and size-checked by
