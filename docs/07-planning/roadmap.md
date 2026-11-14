@@ -55,3 +55,4 @@ parallel lanes: research notes, docs, one heavy build lane, one test or benchmar
 | 2026-11-14 | W1 notes TG-15, India's lite town level built before v1.0 for the embedded layer | the roadmap still placed all of India after v1.0 (D-216) |
 | 2026-11-14 | Phase 5 drafted (`phases/phase-5.md`); Phase 4's open items wait on the maintainer's key ceremony and a record-changing release | D-273 |
 | 2026-11-15 | M5 met (D-308); Phase 6 drafted (`phases/phase-6.md`) from the [servers research](../02-research/notes/servers.md) | D-308 |
+| 2026-11-15 | M6 met (D-321): servers, conformance in CI, load gated | D-321 |

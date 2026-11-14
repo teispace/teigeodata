@@ -1,6 +1,6 @@
 ---
 title: "Phase 6: servers"
-status: draft
+status: accepted
 updated: 2026-11-15
 ---
 
@@ -80,7 +80,32 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
   without, 9.38 MB with both, `cargo xtask sizes --tgd`; on by default (D-320; 2026-11-15)
 
 ### 6.5 Exit review
-- [ ] M6 criteria met, each with its evidence; progress updated
+- [x] M6 criteria met (2026-11-15, D-321), each against the [roadmap](../roadmap.md):
+  - **MCP server at the latest revision:** `tgd mcp` on stdio and `/mcp` over stateless
+    Streamable HTTP speak 2026-07-28 and 2025-11-25 (D-315, D-316); 17 tools of ADR-0017 over
+    the request core, with output schemas, bounded output and signed cursors, resources,
+    attribution in `_meta`, coverage and downloads as a task or a handle (D-317, D-318); the
+    official conformance suite in CI for both revisions, check by check (D-319),
+    `mcp-conformance` green at `b8c06dd` (run 43652685864);
+  - **HTTP server:** `tgd serve` with versioned native routes, GeoJSON, and Nominatim-compatible
+    `/search`, `/reverse`, `/lookup` held to a corpus of client requests (D-312, D-314);
+    limits, timeouts, CORS off unless configured, a panic answered `internal`; the query
+    parsing fuzzed on every push and nightly (`server_query`, D-313); `fast-check` green at `b8c06dd` (run
+    43652685760);
+  - **hosted-ready seams:** who asks, may they, how much they used (`Identify`, `Authorize`,
+    `Meter`, ADR-0025) as traits with open defaults, called by both servers and tested to gate
+    and meter (`the_seams_gate_and_meter_and_a_panic_is_answered`); one request core, so a
+    hosted tier is a deployment, not a fork (D-310, D-311);
+  - **measured:** the A/B that chose the stack (D-309); load gated per pack on the Nepal pack
+    and the world baseline, proved on a planted sleep and leak; `tgd` 4.59 MB without the
+    servers, 9.38 MB with both (D-320).
+- [x] Not blocking M6, recorded:
+  - the load gate runs locally before a release, not in CI, until CI has real packs (a data
+    release); its floors are loose because the machine is shared ([load](../../02-research/notes/server-load.md) §7);
+  - the conformance scenarios that need the SDK's fixture tools are listed, not scored
+    ([conformance](../../02-research/notes/mcp-conformance.md) §7);
+  - a large country's boundary is the slowest route (5k to 10k requests per second on Nepal),
+    bounded by the outline's size; no hosted deployment exists, by design (vision).
 
 ## Changelog
 
@@ -98,3 +123,4 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 | 2026-11-15 | 6.3: downloads built: `install` and `install_status` over one job registry, as a task or a handle; the size confirmed by MRTR, by `elicitation/create` on stdio (`Mcp::duplex`), else `max_bytes`; `tgd mcp --no-install`, `tgd serve --allow-install` (D-318) | built |
 | 2026-11-15 | 6.3: the MCP conformance suite in CI for both revisions; its first run found three defects, fixed (own origin, undeclared methods, `data.uri`) (D-319) | built |
 | 2026-11-15 | 6.4 done: the load harness and per-pack budgets, `tgd` sizes per feature set; boundary picks its level by count (D-320) | measured |
+| 2026-11-15 | 6.5: M6 met, each criterion with its evidence (D-321) | exit review |
