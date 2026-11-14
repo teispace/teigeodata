@@ -46,11 +46,14 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 - [ ] `teigeodata-api` over the engine: open layers (bytes and files, components, parts),
   `get`, `search` and its options, `reverse`, `near`, `within_radius`, `admin_at`, `tz_at`
   and `tz_of`, the zone rules, `elevation_at`, `iso_code` and `by_iso`, postal codes,
-  `parent`, `ancestors`, `children`; every result as a blob, every error typed
+  `parent`, `ancestors`, `children`; every result as a blob, every error typed.
+  Done so far: the `Engine` handle with `open_file`, `open_bytes`, `layers`, `get`, `search`,
+  `reverse` and `admin_at`, in every language, checked on `bindings/fixtures/synth.tgd`
 - [ ] `teigeodata-api` over sync: the store (init, refresh, catalog, find, locate, install,
   update, remove, pin, repair, status) as jobs with progress callbacks and cancellation
 - [ ] The IDL extended for what the surface needs (handles, enums, options structs, jobs), with
-  a schema version; the drift check covers every generated file
+  a schema version; the drift check covers every generated file. Done so far: format 2 with
+  handles, methods, `&[u8]` and handle parameters
 
 ### 5.2 The C ABI and its gates
 - [ ] Generated `teigeodata-ffi` and `teigeodata.h` for the whole surface: opaque handles,
@@ -103,5 +106,6 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | 5.1 started: the `Engine` handle in every language, IDL format 2 | plan |
 | 2026-11-14 | 5.0 done: the threading contract (D-274), S2 (D-275) | research |
 | 2026-11-14 | Phase 5 drafted from the bindings research and spike S4 | Phase 4's open items wait on the maintainer or a future release |

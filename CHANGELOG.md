@@ -17,6 +17,11 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   (`Column::Nullable`, `Reader::nulls`), dictionary-encoded strings (`Column::Dict`, read as
   `View::Dict`: each distinct string stored once), and `u8`, `i16`, `u16` columns. v0 blobs
   still read.
+- The `Engine` handle in every binding (C, Python, Node, JVM, Swift, Dart): open packs from a
+  file or bytes, then `get`, `search`, `reverse` and `admin_at`, each answering a blob. One
+  engine is safe from many threads at once (D-274).
+- Error codes `Io` (4) and `Corrupt` (5).
+- IDL format 2: handles with methods, `&[u8]` parameters, handle parameters and results.
 
 ### Breaking
 

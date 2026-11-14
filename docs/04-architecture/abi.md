@@ -24,6 +24,10 @@ hold for every function, so a caller learns them once.
   with `tg_bytes_free`. A zeroed `tg_bytes` is empty and safe to free. Strings have no NUL
   terminator. Blobs start 8-byte aligned on every supported platform (the system allocator gives
   16), and the C test checks it.
+- **Handles** are opaque structs (`tg_engine`) made by their constructor (`tg_engine_new(&out)`)
+  and freed once with `tg_engine_free` (`NULL` does nothing). Methods take a `const` pointer:
+  any number of threads may call one handle at once (D-274), but no call may be in flight when
+  it is freed. A `NULL` handle is `TG_ERROR_INVALID_ARGUMENT`.
 - **Callbacks** are a function pointer and a `void *` context, called on the caller's thread
   before the function returns; long work is a job instead, awaited by the caller's own thread
   ([bindings §6](bindings.md#6-handles-threads-and-jobs-d-274), D-274). Returning `false` cancels with `TG_ERROR_CANCELLED`. A null
@@ -54,5 +58,6 @@ removed or changed function needs a major version. `tg_version` returns the vers
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | Handles: opaque, constructor and `_free` | phase 5.1 |
 | 2026-11-14 | Callbacks: long work is a job instead | D-274 |
 | 2026-11-07 | First version, from spike S4 | [S4](../02-research/benches/s4-bindings.md) |

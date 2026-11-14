@@ -46,8 +46,10 @@ the file, line and column.
 | `bool`, `i32`, `i64`, `f64` | same | `bool`, `int`, `float` | `boolean`, `number` | `boolean`, `int`, `long`, `double` | `Bool`, `Int32`, `Int64`, `Double` | `bool`, `int`, `double` |
 | `u32`, `u64` | same | `int` (overflow checked) | `number` | `long`, range checked | `UInt32`, `UInt64` | `int` |
 | `&str` in | `const uint8_t *`, `size_t` | `str` | `string` | `String` | `String` | `String` |
+| `&[u8]` in | `const uint8_t *`, `size_t` | `bytes` | `Buffer` | `byte[]` | `Data` | `Uint8List` |
 | `String` out | `tg_bytes` | `str` | `string` | `String` | `String` | `String` |
 | `Blob` out | `tg_bytes` | `bytes` | `Buffer` (no copy) | `byte[]` | `Data` (no copy) | `Uint8List` |
+| a handle (`pub struct` with private fields; its `impl` gives the methods) | opaque `tg_x *`, `tg_x_new`, `tg_x_free` | class, freed with the object | class | `TeiGeodata.X`, `AutoCloseable` plus a `Cleaner` | `final class`, `Sendable`, `deinit` frees | `Finalizable` class, `close()` |
 | `&mut dyn FnMut(scalars) -> bool` | function pointer + context | callable | function | `Callback…` interface | closure | function |
 | `Result<T>` | status + `tg_last_error` | `…Error` exception | `Error` with `code` | `TeiGeodataException.…` | `throws(TeiGeodataError)` | `…Exception` |
 
@@ -55,6 +57,9 @@ the file, line and column.
   becomes each language's error classes.
 - Names become each language's convention: `sample_rows` is `sampleRows` in Node, Swift, Dart
   and Java, and `SAMPLE_ROWS_MAX` becomes `sampleRowsMax` in Swift and Dart.
+- A handle's `new` becomes the constructor; a method without `&self` becomes a static method.
+  A call on a closed JVM or Dart handle throws `IllegalStateException` or `StateError`; on the
+  JVM a call holds a read lock, so `close` waits for the calls in flight.
 - A callback returning `false` cancels with `Cancelled`. An exception thrown inside a callback
   cancels the call and reaches the caller unchanged (Python, Node, JVM, Dart).
 
@@ -152,6 +157,7 @@ second job waits for the first.
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | §2: `&[u8]` and handles (the `Engine`), IDL format 2 | phase 5.1, D-274 |
 | 2026-11-14 | §3: blob v1 (nulls, dictionaries, narrow integers) | S2, D-275 |
 | 2026-11-14 | §6: handles, threads and jobs | phase 5.0, D-274 |
 | 2026-11-07 | First version, from spike S4 | [S4](../02-research/benches/s4-bindings.md) |
