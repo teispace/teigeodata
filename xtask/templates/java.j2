@@ -16,7 +16,7 @@ public final class TeiGeodata {
     private TeiGeodata() {}
 {% for c in constants %}
 
-    /** {{ c.doc | join(" ") }} */
+    /** {{ c.doc | join(" ") | replace("&", "&amp;") | replace("<", "&lt;") | replace(">", "&gt;") }} */
     public static final long {{ c.name }} = {{ c.value }}L;
 {% endfor %}
 {% macro jty(t) %}{% if t == "bool" %}boolean{% elif t == "i32" %}int{% elif t == "f64" %}double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}byte[]{% elif t == "void" %}void{% elif t == "enum" %}int{% else %}long{% endif %}{% endmacro %}
@@ -34,7 +34,7 @@ public final class TeiGeodata {
 {% macro javadoc(lines, indent) %}
 {{ indent }}/**
 {% for line in lines %}
-{{ indent }} *{% if line %} {{ line | replace("<", "&lt;") | replace(">", "&gt;") }}{% endif %}
+{{ indent }} *{% if line %} {{ line | replace("&", "&amp;") | replace("<", "&lt;") | replace(">", "&gt;") }}{% endif %}
 
 {% endfor %}
 {{ indent }} */
@@ -52,7 +52,7 @@ public final class TeiGeodata {
 
     /**
 {% for line in f.doc %}
-     *{% if line %} {{ line | replace("<", "&lt;") | replace(">", "&gt;") }}{% endif %}
+     *{% if line %} {{ line | replace("&", "&amp;") | replace("<", "&lt;") | replace(">", "&gt;") }}{% endif %}
 
 {% endfor %}
      */
@@ -62,13 +62,13 @@ public final class TeiGeodata {
 
     /**
 {% for line in e.doc %}
-     *{% if line %} {{ line | replace("<", "&lt;") | replace(">", "&gt;") }}{% endif %}
+     *{% if line %} {{ line | replace("&", "&amp;") | replace("<", "&lt;") | replace(">", "&gt;") }}{% endif %}
 
 {% endfor %}
      */
     public enum {{ e.name }} {
 {% for v in e.variants %}
-        /** {{ v.doc | join(" ") | replace("<", "&lt;") | replace(">", "&gt;") }} */
+        /** {{ v.doc | join(" ") | replace("&", "&amp;") | replace("<", "&lt;") | replace(">", "&gt;") }} */
         {{ v.snake | upper }}({{ v.value }}){{ ";" if loop.last else "," }}
 {% endfor %}
 
@@ -84,12 +84,12 @@ public final class TeiGeodata {
 
     /**
 {% for line in r.doc %}
-     *{% if line %} {{ line | replace("<", "&lt;") | replace(">", "&gt;") }}{% endif %}
+     *{% if line %} {{ line | replace("&", "&amp;") | replace("<", "&lt;") | replace(">", "&gt;") }}{% endif %}
 
 {% endfor %}
      *
 {% for f in r.fields %}
-     * @param {{ f.name | camel }} {{ f.doc | join(" ") | replace("<", "&lt;") | replace(">", "&gt;") }}{% if f.optional %} (null: unset){% elif f.ty in ["enum", "str"] %} (null: the default){% endif %}
+     * @param {{ f.name | camel }} {{ f.doc | join(" ") | replace("&", "&amp;") | replace("<", "&lt;") | replace(">", "&gt;") }}{% if f.optional %} (null: unset){% elif f.ty in ["enum", "str"] %} (null: the default){% endif %}
 
 {% endfor %}
      */

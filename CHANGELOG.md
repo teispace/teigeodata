@@ -13,6 +13,15 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Added
 
+- Releases are built, attested and published by one workflow, `release.yml` (D-302): every
+  file with build provenance through Sigstore, a CycloneDX SBOM per crate and `SHA256SUMS`;
+  `gh attestation verify <file> --repo teispace/teigeodata` checks one.
+- The crates `teigeodata-core`, `-blob`, `-format`, `-names`, `-sync`, `-engine`, `-api` and
+  `-cli` are publishable to crates.io (D-303).
+- Each release carries the C library alone for every target the Dart hook and the Go loader
+  download, Android and iOS included, its SHA-256 pinned in both (D-304); the Dart package is
+  publishable to pub.dev, and the JVM binding is bundled for Maven Central as
+  `com.teispace:teigeodata` and `com.teispace:teigeodata-android`.
 - The parity gate (D-300): `cargo xtask parity-mutants` plants each value of
   `bindings/parity.json` and requires every language's parity suite to fail on it; C and C++
   read the values from the generated `bindings/c/parity_data.h`. The suites check the values

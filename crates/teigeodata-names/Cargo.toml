@@ -7,7 +7,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
-publish.workspace = true
+publish = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 unicode-normalization = { version = "0.1.26", default-features = false }

@@ -38,6 +38,9 @@ license = "Apache-2.0"
 repository = "https://github.com/teispace/teigeodata"
 homepage = "https://github.com/teispace/teigeodata"
 rust-version = "1.99"
+keywords = ["geodata", "gazetteer", "geocoding", "offline", "gis"]
+categories = ["science::geo"]
+# Only the stable surface and what it needs are published (D-303); the rest opt in, never out.
 publish = false
 
 # Lints are `warn` here and errors in CI (`-D warnings`), so an editor shows them without a

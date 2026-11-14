@@ -11,6 +11,8 @@
 //!   the library.
 //! - `--android-test`: the parity checks on a running emulator or device (`adb`), from a dex of
 //!   the classes and the test, through `app_process`.
+//! - `--maven [<dir>] [--sign]`: the Maven Central bundle of the JAR and the AAR in `<dir>`
+//!   (default `target/jvm`), see [`crate::maven`].
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -25,10 +27,10 @@ const ABIS: &[(&str, &str, bool)] = &[
 ];
 
 /// The lowest Android API level the library supports (D-288).
-const MIN_SDK: &str = "24";
+pub(crate) const MIN_SDK: &str = "24";
 
 /// Google Play's page size for 64-bit libraries.
-const PAGE: u64 = 16 * 1024;
+pub(crate) const PAGE: u64 = 16 * 1024;
 
 const LIB: &str = "libteigeodata_jvm.so";
 
@@ -59,13 +61,27 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     if has("--android-test") {
         summary.push(android_test(root, &out)?);
     }
+    if has("--maven") {
+        let built = value("--maven")
+            .filter(|v| !v.starts_with("--"))
+            .map_or_else(|| crate::maven::default_dir(root), PathBuf::from);
+        summary.push(crate::maven::bundle(
+            root,
+            &out,
+            &version,
+            &built,
+            has("--sign"),
+        )?);
+    }
     if summary.is_empty() {
-        return Err(vec!["name --android, --desktop or --android-test".into()]);
+        return Err(vec![
+            "name --android, --desktop, --android-test or --maven".into(),
+        ]);
     }
     Ok(summary.join("\n"))
 }
 
-fn ndk_bin(tool: &str) -> Result<PathBuf, Vec<String>> {
+pub(crate) fn ndk_bin(tool: &str) -> Result<PathBuf, Vec<String>> {
     let ndk = std::env::var("ANDROID_NDK_HOME")
         .map_err(|_| vec!["ANDROID_NDK_HOME is not set".to_owned()])?;
     let prebuilt = Path::new(&ndk).join("toolchains/llvm/prebuilt");

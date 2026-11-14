@@ -1,7 +1,7 @@
 ---
 title: "Phase 5: boundary and bindings"
 status: draft
-updated: 2026-11-14
+updated: 2026-11-15
 ---
 
 # Phase 5: boundary and bindings
@@ -176,9 +176,13 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   one `release.yml` calling the build workflows, registry steps in its own jobs
   - [ ] 5.10a the build workflows callable (`workflow_call`, artifacts); `release.yml`
     assembles them with `SHA256SUMS`, SBOMs and attestations; the dry run green on GitHub and
-    every attestation verified
+    every attestation verified (built, D-302; the first dry run found the ABI gate in the
+    called `c-package`, moved to `release.yml`)
   - [ ] 5.10b each registry's job in dry-run form: the publishable crates, npm, PyPI, pub.dev,
-    the Maven bundle, the release `Package.swift` and the Go tag
+    the Maven bundle, the release `Package.swift` and the Go tag (built, D-303 and D-304: the
+    crates pass `cargo publish --dry-run`; each library alone for the Dart hook and Go, Android
+    and iOS included; `release-pin` and the Dart and Go downloads proven on a mirror; the Maven
+    bundle; green on GitHub pending)
   - [ ] 5.10c the real path behind the `release` environment, and the maintainer's runbook
 
 ### 5.11 Exit review
@@ -212,3 +216,4 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 | 2026-11-14 | 5.9 parity gate done (D-300): the suites gained the checks the planted values showed missing; C and C++ read `parity_data.h` | plan |
 | 2026-11-14 | 5.9 done: the 1,000-row query is a radius query (text search returns a few dozen best hits), decoded in each language (D-301) | plan |
 | 2026-11-14 | 5.10 in three sub-steps after research: one `release.yml` calls the build workflows; trusted publishing where a registry has it; the workflow makes the release commit for SwiftPM's checksum | plan |
+| 2026-11-15 | 5.10a built (D-302); 5.10b built (D-303, D-304): the release also ships each library alone, since the Dart hook and the Go loader download them and nothing built them for Android and iOS | plan |

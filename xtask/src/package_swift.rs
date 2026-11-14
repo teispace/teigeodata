@@ -16,7 +16,7 @@ use std::process::Command;
 use crate::package_c::command;
 
 /// The deployment targets, the same as `bindings/swift/Package.swift`'s platforms.
-const IOS_MIN: &str = "15.0";
+pub(crate) const IOS_MIN: &str = "15.0";
 const MACOS_MIN: &str = "12.0";
 
 /// Each platform of the `XCFramework` and the Rust targets in its fat library.

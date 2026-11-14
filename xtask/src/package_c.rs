@@ -19,6 +19,12 @@
 //! (`cargo xtask abi --lib`). `--smoke` builds `bindings/c/parity.c` against the staged
 //! package through `pkg-config` (shared and static) and through `CMake` (both targets), and
 //! `bindings/c/parity.cpp` through `CMake` (shared), and runs each.
+//!
+//! `--prebuilt` also writes the shared library alone as the release asset the Dart hook and
+//! the Go loader download, `teigeodata-<version>-<target>-<file>` (D-289, D-297; full variant
+//! only). For Android and iOS targets that file is all it builds: their apps link the library
+//! through Dart's hooks, not through a C package (Android through the NDK's clang for API 24,
+//! the AAR's lowest; iOS for the Swift package's lowest version).
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -41,6 +47,8 @@ struct Plan {
     triple: String,
     lite: bool,
     out: PathBuf,
+    /// Extra environment for cargo (a cross-compiler).
+    env: Vec<(String, String)>,
 }
 
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
@@ -62,7 +70,21 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         triple,
         lite: has("--lite"),
         out: value("--out").map_or_else(|| root.join("target/package"), PathBuf::from),
+        env: Vec::new(),
     };
+    let prebuilt = has("--prebuilt");
+    if prebuilt && plan.lite {
+        return Err(vec!["--prebuilt is the full library: drop --lite".into()]);
+    }
+    if is_mobile(&plan.triple) {
+        if !prebuilt {
+            return Err(vec![format!(
+                "{}: only --prebuilt (no C package for a mobile target)",
+                plan.triple
+            )]);
+        }
+        return mobile(plan);
+    }
     let os = os_of(&plan.triple);
     build(&plan)?;
     let built = built_dir(&plan);
@@ -91,10 +113,120 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     if has("--smoke") {
         summary.push(smoke(&plan, os, &stage)?);
     }
+    if prebuilt {
+        summary.push(write_prebuilt(&plan, &version, &shared)?);
+    }
     let archive = archive(&plan.out, &name, os)?;
     let bytes = std::fs::metadata(&archive).map_or(0, |m| m.len());
     summary.push(format!("{}: {} KB", archive.display(), bytes / 1024));
     Ok(summary.join("\n"))
+}
+
+fn is_mobile(triple: &str) -> bool {
+    triple.contains("-android") || triple.contains("-apple-ios")
+}
+
+/// The file name of the shared library on `triple`, as the Dart hook and the Go loader name
+/// it (`Target.fileName`, `prebuilt.FileName`).
+fn library_file(triple: &str) -> &'static str {
+    match os_of(triple) {
+        Os::Windows => "teigeodata.dll",
+        Os::Apple => "libteigeodata.dylib",
+        Os::Elf => "libteigeodata.so",
+    }
+}
+
+/// The release asset name of `triple`'s library (`assetName` in the Dart hook, `Asset` in Go).
+pub(crate) fn prebuilt_name(version: &str, triple: &str) -> String {
+    format!("teigeodata-{version}-{triple}-{}", library_file(triple))
+}
+
+fn write_prebuilt(plan: &Plan, version: &str, shared: &Path) -> Result<String, Vec<String>> {
+    let to = plan.out.join(prebuilt_name(version, &plan.triple));
+    std::fs::create_dir_all(&plan.out).map_err(|e| vec![format!("{}: {e}", plan.out.display())])?;
+    std::fs::copy(shared, &to).map_err(|e| vec![format!("{}: {e}", shared.display())])?;
+    let bytes = std::fs::metadata(&to).map_or(0, |m| m.len());
+    Ok(format!("{}: {} KB", to.display(), bytes / 1024))
+}
+
+/// An Android or iOS library: built with the target's compiler and deployment floor, its own
+/// name checked, written as the release asset.
+fn mobile(mut plan: Plan) -> Result<String, Vec<String>> {
+    let triple = plan.triple.clone();
+    let os = os_of(&triple);
+    if triple.contains("-android") {
+        let clang_triple = if triple == "armv7-linux-androideabi" {
+            "armv7a-linux-androideabi"
+        } else {
+            triple.as_str()
+        };
+        let clang = crate::package_jvm::ndk_bin(&format!(
+            "{clang_triple}{}-clang",
+            crate::package_jvm::MIN_SDK
+        ))?;
+        let ar = crate::package_jvm::ndk_bin("llvm-ar")?;
+        let key = triple.replace('-', "_");
+        plan.env = vec![
+            (format!("CC_{key}"), clang.display().to_string()),
+            (format!("AR_{key}"), ar.display().to_string()),
+            (
+                format!("CARGO_TARGET_{}_LINKER", key.to_uppercase()),
+                clang.display().to_string(),
+            ),
+        ];
+    } else {
+        plan.env = vec![(
+            "IPHONEOS_DEPLOYMENT_TARGET".into(),
+            crate::package_swift::IOS_MIN.into(),
+        )];
+    }
+    build(&plan)?;
+    let built = built_dir(&plan).join(library_file(&triple));
+    let version = version(&plan.root)?;
+    let mut summary = Vec::new();
+    // Android loads a library by its file name, so its soname is unversioned (build.rs).
+    summary.push(if os == Os::Apple {
+        own_name(os, &built, &version)?
+    } else {
+        soname(&built, "libteigeodata.so")?
+    });
+    // Google Play's 16 KB page rule (Android 15 and later) for the 64-bit libraries, as the
+    // AAR's (D-288); `armv7-linux-androideabi` is 32-bit.
+    if triple.ends_with("-linux-android") {
+        let bytes = std::fs::read(&built).map_err(|e| vec![format!("{}: {e}", built.display())])?;
+        crate::package_jvm::check_alignment(&bytes, crate::package_jvm::PAGE)
+            .map_err(|e| vec![format!("{triple}: {e}")])?;
+        summary.push("LOAD segments 16 KB aligned".into());
+    }
+    summary.push(write_prebuilt(&plan, &version, &built)?);
+    Ok(summary.join("\n"))
+}
+
+/// The soname of an ELF file, checked against `want` (an Android library is read with the
+/// NDK's `llvm-readelf`, which reads any ELF).
+fn soname(file: &Path, want: &str) -> Result<String, Vec<String>> {
+    let readelf = crate::package_jvm::ndk_bin("llvm-readelf")?;
+    let out = Command::new(&readelf)
+        .arg("-d")
+        .arg(file)
+        .output()
+        .map_err(|e| vec![format!("{}: {e}", readelf.display())])?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let found = text
+        .lines()
+        .find(|l| l.contains("(SONAME)"))
+        .and_then(|l| l.rsplit(' ').next())
+        .unwrap_or_default()
+        .trim_matches(['[', ']'])
+        .to_owned();
+    if found == want {
+        Ok(format!("own name: {want}"))
+    } else {
+        Err(vec![format!(
+            "{}: soname `{found}`, not `{want}`",
+            file.display()
+        )])
+    }
 }
 
 fn build(plan: &Plan) -> Result<(), Vec<String>> {
@@ -114,6 +246,7 @@ fn build(plan: &Plan) -> Result<(), Vec<String>> {
         // Without the store, with every component (D-291).
         cmd.args(["--no-default-features", "--features", "components"]);
     }
+    cmd.envs(plan.env.iter().map(|(k, v)| (k, v)));
     let status = cmd.status().map_err(|e| vec![format!("cargo: {e}")])?;
     if status.success() {
         Ok(())
@@ -787,5 +920,32 @@ mod tests {
         assert_eq!(os_of("x86_64-pc-windows-msvc"), Os::Windows);
         assert_eq!(os_of("x86_64-unknown-linux-gnu"), Os::Elf);
         assert_eq!(os_of("aarch64-linux-android"), Os::Elf);
+    }
+
+    #[test]
+    fn prebuilt_assets_are_named_as_the_dart_hook_and_go_name_them() {
+        let cases = [
+            (
+                "aarch64-apple-ios-sim",
+                "teigeodata-0.3.1-aarch64-apple-ios-sim-libteigeodata.dylib",
+            ),
+            (
+                "armv7-linux-androideabi",
+                "teigeodata-0.3.1-armv7-linux-androideabi-libteigeodata.so",
+            ),
+            (
+                "x86_64-pc-windows-msvc",
+                "teigeodata-0.3.1-x86_64-pc-windows-msvc-teigeodata.dll",
+            ),
+            (
+                "aarch64-unknown-linux-musl",
+                "teigeodata-0.3.1-aarch64-unknown-linux-musl-libteigeodata.so",
+            ),
+        ];
+        for (triple, name) in cases {
+            assert_eq!(prebuilt_name("0.3.1", triple), name);
+        }
+        assert!(is_mobile("x86_64-apple-ios") && is_mobile("x86_64-linux-android"));
+        assert!(!is_mobile("aarch64-apple-darwin") && !is_mobile("x86_64-unknown-linux-gnu"));
     }
 }

@@ -1,7 +1,7 @@
 ---
 title: "The release pipeline: one workflow, every registry, provenance on every artifact"
-status: research
-updated: 2026-11-14
+status: accepted
+updated: 2026-11-15
 owner: maintainer's agents
 revisit: 2027-02-14
 ---
@@ -87,6 +87,25 @@ proven?
 - **Attestations:** `actions/attest-build-provenance` v4.2.2 (2026-08-06) and
   `actions/attest-sbom` v4.1.0 (2026-03-18) need `id-token: write` and `attestations: write`;
   for a public repository they are signed through public-good Sigstore.
+- **Found while building it (2026-11-15):**
+  - The Dart hook and the Go loader download each target's library alone
+    (`teigeodata-<v>-<target>-<file>`), and no workflow built it, for Android and iOS least of
+    all: the C package now writes it (`--prebuilt`), and a `mobile` job builds the six mobile
+    targets (D-304).
+  - pub.dev's archive leaves out gitignored files, so a `LICENSE` copied in at release time
+    would be missing: `LICENSE`, `NOTICE` and `CHANGELOG.md` are committed symlinks, which
+    `dart pub publish` and `cargo package` both store as files.
+  - `dart pub publish --dry-run` exits 65 on any warning, a modified file included: the dry
+    run commits the release commit locally before it checks.
+  - A called workflow's `github.workflow` is the caller's, so concurrency groups name their own
+    workflow, or a release would cancel a push run.
+  - The ABI release gate in each `c-package` job failed every dry run of a version already
+    released: it belongs once, in the release's first job, warning in a dry run.
+  - crates.io accepts a trusted publisher only for a crate that exists: the first version of
+    each crate is published by hand. `tgd` is taken on crates.io; the CLI crate stays
+    `teigeodata-cli`.
+  - javadoc's doclint, with every group as errors, found a bare `&` in the generated docs; its
+    `missing` group would demand an `@param` per argument, which the IDL does not have.
 - **Today's state (2026-11-14):** six workflows build and test the artifacts on every push and
   attach them on a `v*` tag with `gh release upload`; no registry is published to, nothing is
   attested, and the root `Package.swift` points at a local build.

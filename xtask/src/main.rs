@@ -20,6 +20,7 @@ mod golden;
 mod ids;
 mod iso3166;
 mod lexicon;
+mod maven;
 mod mirror;
 mod pack;
 mod package_c;
@@ -31,6 +32,7 @@ mod package_wasm;
 mod parity;
 mod postal;
 mod recipe;
+mod release;
 mod romanise;
 mod sizes;
 mod sources;
@@ -75,12 +77,18 @@ Tasks:
                     bindings/dart/example, analyses it and runs its integration test on the
                     host's desktop, the given device, or (--ios) the first iPhone simulator,
                     booted for the run and shut down after it.
-  package-c [--target <triple>] [--lite] [--out <dir>] [--smoke]
+  package-c [--target <triple>] [--lite] [--out <dir>] [--smoke] [--prebuilt]
                     The C library as it ships (D-286): builds teigeodata-c (dist profile),
                     stages the header, shared and static libraries, pkg-config and CMake
                     files, checks the exports and archives it under target/package/;
                     --smoke builds and runs bindings/c/parity.c through pkg-config and
-                    CMake against the staged package.
+                    CMake against the staged package; --prebuilt also writes the library
+                    alone as the release asset Dart and Go download (an Android or iOS
+                    target builds only that, D-304).
+  release-pin <dist> [--check]
+                    Pins a release's files (D-304): the libraries' SHA-256 into the Dart
+                    hook and the Go loader, the XCFramework's URL and checksum into the
+                    root Package.swift; --check only compares.
   package-jvm [--android] [--desktop [--natives <dir>] [--test]] [--android-test]
                     The JVM binding as it ships (D-288): --android builds the JNI library
                     for arm64-v8a, armeabi-v7a and x86_64 (cargo-ndk, API 24), checks 16 KB
@@ -160,6 +168,7 @@ fn main() -> ExitCode {
         "check-data" => report(data::check(&root)),
         "check-pack" => report(pack::run(&root, rest)),
         "package-c" => report(package_c::run(&root, rest)),
+        "release-pin" => report(release::run(&root, rest)),
         "flutter-check" => report(flutter_check::run(&root, rest)),
         "package-jvm" => report(package_jvm::run(&root, rest)),
         "package-dotnet" => report(package_dotnet::run(&root, rest)),

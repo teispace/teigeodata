@@ -27,7 +27,9 @@ jobs:
   # checks against its own.
   version:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
+    env:
+      DRY_RUN: ${{ inputs.dry_run }}
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
@@ -42,14 +44,22 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
           if git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
             echo "::warning::v$v is already tagged: a real release needs a version bump first"
-            test "${{ inputs.dry_run }}" = true
+            test "$DRY_RUN" = true
+          fi
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: ABI release gate (the version covers the C ABI's changes since the last release)
+        run: |
+          # The release is not tagged yet: the newest tag reachable is the last release.
+          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD)
+          if ! cargo xtask abi --since "$prev" --release; then
+            echo "::warning::the ABI release gate fails: a real release stops here"
+            test "$DRY_RUN" = true
           fi
 
   c:
     needs: version
     uses: ./.github/workflows/c-package.yml
-    with:
-      release: true
   apple:
     needs: version
     uses: ./.github/workflows/apple.yml
@@ -93,6 +103,12 @@ jobs:
           pattern: teigeodata-c-*
           path: dist
           merge-multiple: true
+      - name: The libraries alone, for Dart and Go
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: teigeodata-prebuilt-*
+          path: dist
+          merge-multiple: true
       - name: The XCFramework
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -128,7 +144,7 @@ jobs:
         run: |
           cd dist
           ls -l
-          for f in "teigeodata-c-$VERSION-"* CTeiGeodata.xcframework.zip CTeiGeodata.xcframework.zip.checksum \
+          for f in "teigeodata-c-$VERSION-"* "teigeodata-$VERSION-"* CTeiGeodata.xcframework.zip CTeiGeodata.xcframework.zip.checksum \
                    teigeodata-*"$VERSION"*.jar teigeodata-*"$VERSION"*.aar "teigeodata-$VERSION-"*.whl \
                    "teispace-teigeodata-$VERSION.tgz" "teispace-teigeodata-wasm-$VERSION.tgz"; do
             compgen -G "$f" >/dev/null || { echo "::error::missing: $f"; exit 1; }
@@ -216,7 +232,7 @@ jobs:
   # the Swift release commit follow in 5.10b and 5.10c.
   github-release:
     if: ${{ !inputs.dry_run }}
-    needs: [version, assemble]
+    needs: [version, assemble, packages]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: release
@@ -247,3 +263,93 @@ jobs:
           gh release upload "v$VERSION" -- "${files[@]}"
           gh release edit "v$VERSION" --draft=false
           gh release view "v$VERSION"
+
+  # The release commit and each registry's own check of what it would publish (D-304). The
+  # commit pins the prebuilt files into the Dart hook, the Go loader and the root
+  # Package.swift; a dry run makes it locally and pushes nothing.
+  packages:
+    needs: [version, assemble]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-${{ env.VERSION }}
+          path: ${{ runner.temp }}/dist
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: The release commit
+        run: |
+          cargo xtask release-pin "$RUNNER_TEMP/dist"
+          git add -A bindings/dart/hook/src/prebuilt_hashes.dart bindings/go/internal/prebuilt/prebuilt.go Package.swift
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -s -q -m "chore(repo): release v$VERSION"
+          git show --stat HEAD
+          cargo xtask release-pin "$RUNNER_TEMP/dist" --check
+      - name: Swift (the released Package.swift)
+        run: swift package dump-package > /dev/null
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.x"
+          cache: false
+      - name: Go (module bindings/go, tagged bindings/go/v${{ env.VERSION }})
+        working-directory: bindings/go
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          grep -q '^const Version = "'"$VERSION"'"$' internal/prebuilt/prebuilt.go
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+      - name: pub.dev
+        working-directory: bindings/dart
+        run: dart pub publish --dry-run
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: npm
+        run: |
+          for p in "$RUNNER_TEMP"/dist/teispace-*.tgz; do npm publish --dry-run --access public "$p"; done
+      - name: PyPI
+        run: pipx run twine==7.0.0 check --strict "$RUNNER_TEMP"/dist/*.whl
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+      - name: Maven Central (the bundle, unsigned in a dry run)
+        run: cargo xtask package-jvm --maven "$RUNNER_TEMP/dist"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: maven-bundle-${{ env.VERSION }}
+          path: target/jvm/central-bundle.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  # The crates: the stable surface and what it needs (D-303), in dependency order. A dry run
+  # packages and builds each against the others as packaged; a real run publishes through
+  # crates.io trusted publishing (no stored token), after the GitHub release.
+  crates:
+    needs: [version, packages, github-release]
+    if: ${{ !cancelled() && needs.packages.result == 'success' && (inputs.dry_run || needs.github-release.result == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.dry_run && 'dry-run' || 'release' }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Every crate packages and builds as published
+        if: ${{ inputs.dry_run }}
+        run: cargo publish --workspace --locked --dry-run
+      - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+        if: ${{ !inputs.dry_run }}
+        id: auth
+      - name: Publish
+        if: ${{ !inputs.dry_run }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish --workspace --locked

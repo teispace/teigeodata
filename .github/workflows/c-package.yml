@@ -1,7 +1,7 @@
 # The C library's packages (phase 5.2, D-286): `cargo xtask package-c` per target, full and
-# lite, each smoke-tested through pkg-config and CMake where the runner can run it. A release
-# (release.yml) calls this workflow with `release`, which runs the ABI release gate, and
-# publishes the archives it uploads.
+# lite, each smoke-tested through pkg-config and CMake where the runner can run it, and the
+# library alone for every Dart and Go target, Android and iOS included (D-304). A release
+# (release.yml) calls this workflow and publishes the files it uploads.
 name: c-package
 
 on:
@@ -11,18 +11,15 @@ on:
       - crates/teigeodata-c/**
       - crates/teigeodata-ffi/**
       - xtask/src/package_c.rs
+      - xtask/src/package_jvm.rs
       - xtask/src/abi.rs
       - xtask/templates/c.h.j2
       - xtask/templates/cpp.hpp.j2
       - bindings/c/**
       - .github/workflows/c-package.yml
   workflow_dispatch:
-  # release.yml builds a release with this workflow; `release` runs the ABI release gate.
+  # release.yml builds a release with this workflow.
   workflow_call:
-    inputs:
-      release:
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -71,16 +68,9 @@ jobs:
         if: ${{ !matrix.alpine }}
         with:
           key: ${{ matrix.target }}
-      - name: Release gate (the release's version covers its ABI changes since the last one)
-        if: ${{ inputs.release && !matrix.alpine }}
-        shell: bash
-        run: |
-          # A release is built before it is tagged: the newest tag is the last release.
-          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD)
-          cargo xtask abi --since "$prev" --release
-      - name: Full package
+      - name: Full package, and its library alone for Dart and Go
         if: ${{ !matrix.alpine }}
-        run: cargo xtask package-c --target ${{ matrix.target }} --smoke
+        run: cargo xtask package-c --target ${{ matrix.target }} --smoke --prebuilt
       - name: Lite package
         if: ${{ !matrix.alpine }}
         run: cargo xtask package-c --target ${{ matrix.target }} --lite --smoke
@@ -97,7 +87,7 @@ jobs:
             . "$HOME/.cargo/env"
             rustup toolchain install
             export RUSTFLAGS="-C target-feature=-crt-static"
-            cargo xtask package-c --smoke
+            cargo xtask package-c --smoke --prebuilt
             cargo xtask package-c --lite --smoke'
           ls -l target/package
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -106,5 +96,51 @@ jobs:
           path: |
             target/package/*.tar.gz
             target/package/*.zip
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: teigeodata-prebuilt-${{ matrix.target }}
+          path: target/package/teigeodata-[0-9]*
+          if-no-files-found: error
+          retention-days: 14
+
+  # The library alone for Android and iOS, the release assets the Dart hook downloads there
+  # (D-304): no C package, since apps on those systems get it through Dart, Swift or the AAR.
+  mobile:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # NDK r28 or later links 16 KB aligned; the image's default NDK is older.
+          - os: ubuntu-latest
+            name: android
+            targets: aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+          - os: macos-latest
+            name: ios
+            targets: aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Toolchain (from rust-toolchain.toml)
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          # shellcheck disable=SC2086 # a list of targets
+          rustup target add ${{ matrix.targets }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ matrix.name }}
+      - name: The libraries (own name checked; Android 64-bit 16 KB aligned)
+        env:
+          TARGETS: ${{ matrix.targets }}
+        run: |
+          if [ -n "${ANDROID_NDK_LATEST_HOME:-}" ]; then export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"; fi
+          for t in $TARGETS; do cargo xtask package-c --target "$t" --prebuilt; done
+          ls -l target/package
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: teigeodata-prebuilt-${{ matrix.name }}
+          path: target/package/teigeodata-[0-9]*
           if-no-files-found: error
           retention-days: 14

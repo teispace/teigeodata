@@ -17,11 +17,14 @@ teigeodata-sync = { workspace = true, features = ["http", "repo", "store", "writ
 ed25519-dalek = { version = "3.0.0", default-features = false }
 flate2 = { version = "1.1.11", default-features = false, features = ["zlib-rs"] }
 getrandom = "0.4.3"
+# The MD5 and SHA-1 the Maven Central Portal requires beside every file (D-304).
+md-5 = "0.11.0"
 minijinja = { version = "3.1.0", default-features = false, features = ["builtins", "macros", "serde"] }
 proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde-saphyr = "2.1.1"
 serde_json = "1.0.154"
+sha1 = "0.11.0"
 sha2 = "0.11.1"
 syn = { version = "3.0.10", default-features = false, features = ["full", "parsing", "printing"] }
 toml = "1.2.1"

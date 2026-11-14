@@ -264,7 +264,7 @@ public final class TeiGeodata {
                     });
 
     /**
-     * Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine
+     * Open packs answering place queries (D-141, D-274). Every method takes `&amp;self`: one engine
      * answers from any number of threads at once, and adding a pack publishes a new snapshot
      * while queries go on.
      *

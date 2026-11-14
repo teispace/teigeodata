@@ -21,8 +21,9 @@ How the code is versioned and tagged, so a consumer can pin it (TG-01, D-198). D
   teigeodata-sync = { git = "https://github.com/teispace/teigeodata", tag = "v0.1.0" }
   ```
 
-  Publishing to crates.io needs the maintainer's account and waits for that; the tags come
-  first.
+  The stable surface and what it needs are published to crates.io (`teigeodata-core`,
+  `-blob`, `-format`, `-names`, `-sync`, `-engine`, `-api`, `-cli`; D-303) once the
+  maintainer's account holds them; the tags come first.
 - **SemVer, 0.x rules until 1.0.** Before 1.0.0 a minor bump (`0.1` → `0.2`) may break the
   public API; a patch bump (`0.1.0` → `0.1.1`) never does. From 1.0.0 only a major bump breaks.
 - **Stable surface:** the public Rust API of `teigeodata-engine` and `teigeodata-sync`, the
@@ -58,7 +59,9 @@ built for a release name the reader version they need in the catalog.
    (`gh workflow run release.yml -f dry_run=false`, approved in the `release` environment). It
    builds every artifact as CI does, adds an SBOM per crate and `SHA256SUMS`, attests them,
    verifies every attestation, tags `vX.Y.Z`, and publishes the release with every file
-   (D-302). Check one: `gh attestation verify <file> --repo teispace/teigeodata`.
+   (D-302). The release also carries each library alone for the Dart hook and Go, pinned by
+   the release commit with the root `Package.swift` (D-304), and every registry's own check
+   runs first. Check one: `gh attestation verify <file> --repo teispace/teigeodata`.
 4. Check from a scratch project: `cargo build` with the `git` + `tag` dependency above, then
    open a pack with `Layer::open` and answer a `get`.
 

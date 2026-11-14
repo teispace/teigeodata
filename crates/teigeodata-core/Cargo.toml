@@ -7,7 +7,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
-publish.workspace = true
+publish = true
+keywords.workspace = true
+categories.workspace = true
 
 [features]
 # Encoders (the forge, tests). Decoders need no allocation.
