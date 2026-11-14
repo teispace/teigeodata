@@ -22,7 +22,7 @@ After v1.0, coverage grows by data waves.
 | [4](phases/phase-4.md) | Engine, baseline and sync | 2, 3 | **M4**: layered engine, embedded baseline, catalog, download and storage managers, delta updates (section re-download first), the 15 sync gates of ADR-0037, CLI `tgd` complete |
 | [5](phases/phase-5.md) | Boundary and bindings | 4 | **M5**: C ABI, IDL, generators, every binding with packaging (Swift privacy manifest, Android `noCompress` for bundled packs), the parity gate and the X benchmarks green across all |
 | [6](phases/phase-6.md) | Servers | 4 | **M6**: MCP server (latest revision) and HTTP server, hosted-ready seams |
-| 7 | Docs site | 5, 6 | **M7**: Fumadocs site, generated reference, guides per language, per-country pages, playground |
+| [7](phases/phase-7.md) | Docs site | 5, 6 | **M7**: Fumadocs site, generated reference, guides per language, per-country pages, playground |
 | 8 | Hardening and release | all | **M8 = v1.0.0**: fuzzing campaign, performance pass, security review, docs complete, first data release (Nepal) |
 
 ## Data waves after v1.0
@@ -56,3 +56,4 @@ parallel lanes: research notes, docs, one heavy build lane, one test or benchmar
 | 2026-11-14 | Phase 5 drafted (`phases/phase-5.md`); Phase 4's open items wait on the maintainer's key ceremony and a record-changing release | D-273 |
 | 2026-11-15 | M5 met (D-308); Phase 6 drafted (`phases/phase-6.md`) from the [servers research](../02-research/notes/servers.md) | D-308 |
 | 2026-11-15 | M6 met (D-321): servers, conformance in CI, load gated | D-321 |
+| 2026-11-15 | Phase 7 drafted (`phases/phase-7.md`) from the [docs-site research](../02-research/notes/docs-site.md) | research |

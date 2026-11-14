@@ -20,7 +20,8 @@ A short status. The numbers and evidence live in each phase file and the
 | 4 Engine, baseline and sync | in progress: what remains waits on the maintainer (the key ceremony, Q-024) or on a release that changes records (4.7, gate 11, D-273) | [phase 4](../07-planning/phases/phase-4.md) |
 | 5 Boundary and bindings | **M5 met** 2026-11-15 (D-308); open, not blocking: 5.5d (Dart static linking), 5.10c (the first real release, on the maintainer's setup), the APK path of D-306 on a real APK | [phase 5 §5.11](../07-planning/phases/phase-5.md#511-exit-review) |
 | 6 Servers | **M6 met** 2026-11-15 (D-321): HTTP and MCP servers over one request core, conformance in CI, load gated, hosted seams | [phase 6 §6.5](../07-planning/phases/phase-6.md#65-exit-review) |
-| 7–8 | not started | [roadmap](../07-planning/roadmap.md) |
+| 7 Docs site | in progress: 7.0 research done ([docs site](../02-research/notes/docs-site.md)); next 7.1 (the site and its deploy) | [phase 7](../07-planning/phases/phase-7.md) |
+| 8 | not started | [roadmap](../07-planning/roadmap.md) |
 
 - **Now (Phase 3):** the Nepal main pack has 100,358 places with heights (D-111), admin
   records linked (D-110), same-place merges (D-116), the first corrections (D-117), modelled
