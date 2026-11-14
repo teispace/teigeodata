@@ -76,6 +76,8 @@ pub enum Operation {
     Distance,
     /// The countries and the catalog's packs at a point (D-318).
     Coverage,
+    /// Installing packs into the server's store, and asking how an install goes (D-318).
+    Install,
     /// The pack set's description.
     Packs,
 }
@@ -115,6 +117,7 @@ impl Operation {
             Self::Boundary => "boundary",
             Self::Distance => "distance",
             Self::Coverage => "coverage",
+            Self::Install => "install",
             Self::Packs => "packs",
         }
     }

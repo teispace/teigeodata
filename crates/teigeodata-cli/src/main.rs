@@ -278,6 +278,10 @@ enum Command {
         /// Seconds a request may take before it is answered `unavailable`.
         #[arg(long, default_value_t = 10, value_name = "SECONDS")]
         timeout: u64,
+        /// Let MCP clients install the catalog's packs into the store (the `install` and
+        /// `install_status` tools); off by default, as the server then writes to its disk.
+        #[arg(long)]
+        allow_install: bool,
         #[command(flatten)]
         packs: Packs,
     },
@@ -289,6 +293,10 @@ enum Command {
         /// Seconds between reads of the store's journal; 0 never follows.
         #[arg(long, default_value_t = 5, value_name = "SECONDS")]
         follow: u64,
+        /// Leave out the `install` and `install_status` tools: the client may not install
+        /// the catalog's packs into the store.
+        #[arg(long)]
+        no_install: bool,
         #[command(flatten)]
         packs: Packs,
     },
@@ -752,6 +760,7 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             cors,
             follow,
             timeout,
+            allow_install,
             packs,
         } => serve::run(
             store,
@@ -761,11 +770,16 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
                 cors,
                 follow_secs: follow,
                 timeout_secs: timeout,
+                allow_install,
             },
             out,
         ),
         #[cfg(feature = "mcp")]
-        Command::Mcp { follow, packs } => serve::mcp(store, &packs.packs, follow),
+        Command::Mcp {
+            follow,
+            no_install,
+            packs,
+        } => serve::mcp(store, &packs.packs, follow, !no_install),
         Command::Init { repo, assets, root } => sync::init(store, &repo, &assets, &root, out),
         Command::Refresh { countries } => sync::refresh(store, &countries, out),
         Command::Catalog { json } => sync::catalog(store, json, out),

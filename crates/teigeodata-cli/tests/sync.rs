@@ -690,7 +690,7 @@ fn a_killed_install_or_update_never_damages_the_store() {
 
     // An update killed the same way: the old release stays whole until the new one commits.
     publish(&host, 2, &[pack_of(20_000, "2026.12.0", true)]);
-    ok(&store, &["refresh"]);
+    ok(&store, &["refresh", "--countries", "np"]);
     for ms in [80, 300, 600, 900] {
         killed(&["update"], ms, 0);
         let s = json(&store, &["status", "--json", "--deep"]);
@@ -706,4 +706,168 @@ fn a_killed_install_or_update_never_damages_the_store() {
         staged.is_empty(),
         "no staging file is left behind: {staged:?}"
     );
+}
+
+/// `tgd mcp` with `args` over a store, spoken to line by line as an MCP client on stdio.
+struct Stdio {
+    child: std::process::Child,
+    stdin: Option<std::process::ChildStdin>,
+    out: std::io::BufReader<std::process::ChildStdout>,
+}
+
+impl Stdio {
+    /// Started, and a 2025-11-25 session begun with `capabilities`.
+    fn start(store: &Path, args: &[&str], capabilities: &Value) -> Self {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_tgd"))
+            .arg("--store")
+            .arg(store)
+            .arg("mcp")
+            .args(args)
+            .env_remove("TEIGEODATA_STORE")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let stdin = child.stdin.take();
+        let out = std::io::BufReader::new(child.stdout.take().unwrap());
+        let mut s = Self { child, stdin, out };
+        s.send(
+            &serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": { "protocolVersion": "2025-11-25", "capabilities": capabilities,
+                        "clientInfo": { "name": "gate", "version": "0" } } }),
+        );
+        assert_eq!(s.next()["id"], 1);
+        s.send(&serde_json::json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }));
+        s
+    }
+
+    fn send(&mut self, v: &Value) {
+        use std::io::Write as _;
+        writeln!(self.stdin.as_mut().unwrap(), "{v}").unwrap();
+    }
+
+    fn next(&mut self) -> Value {
+        let mut line = String::new();
+        assert!(
+            std::io::BufRead::read_line(&mut self.out, &mut line).unwrap() > 0,
+            "closed"
+        );
+        serde_json::from_str(&line).unwrap()
+    }
+
+    /// Closes standard input: the server ends.
+    fn end(mut self) {
+        drop(self.stdin.take());
+        assert!(self.child.wait().unwrap().success());
+    }
+}
+
+/// The tools `tgd mcp` lists over standard input and output, with `args`.
+fn mcp_tools(store: &Path, args: &[&str]) -> Vec<String> {
+    let mut s = Stdio::start(store, args, &serde_json::json!({}));
+    s.send(&serde_json::json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" }));
+    let v = s.next();
+    s.end();
+    v["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+/// The tools `tgd serve` lists at `/mcp`, with `args`.
+fn serve_tools(store: &Path, args: &[&str]) -> Vec<String> {
+    use std::io::{BufRead as _, Read as _, Write as _};
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tgd"))
+        .arg("--store")
+        .arg(store)
+        .args(["serve", "--listen", "127.0.0.1:0"])
+        .args(args)
+        .env_remove("TEIGEODATA_STORE")
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut out = std::io::BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    out.read_line(&mut line).unwrap();
+    let addr = line
+        .trim()
+        .strip_prefix("serving on http://")
+        .unwrap()
+        .to_owned();
+    let body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
+    let mut tcp = std::net::TcpStream::connect(&addr).unwrap();
+    write!(
+        tcp,
+        "POST /mcp HTTP/1.1\r\nhost: {addr}\r\ncontent-type: application/json\r\n\
+         accept: application/json, text/event-stream\r\nmcp-protocol-version: 2025-11-25\r\n\
+         content-length: {}\r\nconnection: close\r\n\r\n{body}",
+        body.len()
+    )
+    .unwrap();
+    let mut res = String::new();
+    tcp.read_to_string(&mut res).unwrap();
+    child.kill().unwrap();
+    child.wait().unwrap();
+    let (_, json) = res.split_once("\r\n\r\n").unwrap();
+    let v: Value = serde_json::from_str(json).unwrap();
+    let tools = v["result"]["tools"].as_array();
+    assert!(tools.is_some(), "{res}");
+    tools
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn installs_from_mcp_are_on_for_tgd_mcp_and_opt_in_for_tgd_serve() {
+    let host: Host = Arc::default();
+    publish(&host, 1, &[pack("2026.11.0", false)]);
+    let url = serve(Arc::clone(&host));
+    let store = store_for("mcp-install", &url);
+    ok(&store, &["refresh", "--countries", "np"]);
+    let has = |tools: &[String], name: &str| tools.iter().any(|t| t == name);
+
+    let tools = mcp_tools(&store, &[]);
+    assert!(
+        has(&tools, "install") && has(&tools, "install_status"),
+        "{tools:?}"
+    );
+    assert!(has(&tools, "coverage"), "{tools:?}");
+    let tools = mcp_tools(&store, &["--no-install"]);
+    assert!(
+        !has(&tools, "install") && !has(&tools, "install_status"),
+        "{tools:?}"
+    );
+    assert!(has(&tools, "coverage"), "{tools:?}");
+
+    let tools = serve_tools(&store, &[]);
+    assert!(
+        !has(&tools, "install") && has(&tools, "coverage"),
+        "{tools:?}"
+    );
+    let tools = serve_tools(&store, &["--allow-install"]);
+    assert!(
+        has(&tools, "install") && has(&tools, "install_status"),
+        "{tools:?}"
+    );
+
+    // On stdio a 2025-11-25 client that can ask the person is asked the size first.
+    let mut s = Stdio::start(&store, &[], &serde_json::json!({ "elicitation": {} }));
+    s.send(
+        &serde_json::json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+        "params": { "name": "install", "arguments": { "packs": ["np"] } } }),
+    );
+    let asked = s.next();
+    assert_eq!(asked["method"], "elicitation/create", "{asked}");
+    s.send(&serde_json::json!({ "jsonrpc": "2.0", "id": asked["id"],
+                                "result": { "action": "decline" } }));
+    let r = s.next();
+    assert_eq!(
+        r["result"]["structuredContent"]["result"]["status"], "declined",
+        "{r}"
+    );
+    s.end();
 }

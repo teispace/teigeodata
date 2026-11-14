@@ -63,10 +63,11 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 - [x] Stateless Streamable HTTP in the HTTP server, `Origin` checked (2026-11-15, D-316)
 - [x] `coverage` (which packs hold a point, from the stored catalog), one function for
   `tgd locate`, `/v1/coverage` and the MCP tool ([research](../../02-research/notes/mcp-downloads.md), D-318; 2026-11-15)
-- [ ] Downloads: `install` as a task (the tasks extension) where the client has it, a handle
+- [x] Downloads: `install` as a task (the tasks extension) where the client has it, a handle
   and `install_status` otherwise, from one job registry; size confirmed by MRTR elicitation
   (2026-07-28) or `elicitation/create` (2025-11-25 on stdio), `max_bytes` otherwise; on for
-  `tgd mcp`, opt-in for `tgd serve` (`--allow-install`) (D-318)
+  `tgd mcp` (`--no-install` leaves it out), opt-in for `tgd serve` (`--allow-install`)
+  (D-318; 2026-11-15)
 - [ ] The MCP conformance suite in CI for 2026-07-28 and 2025-11-25 clients
 
 ### 6.4 Load, safety and size
@@ -90,3 +91,4 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 | 2026-11-15 | 6.3: `boundary` and `distance` in the request core, HTTP and MCP (D-317); `coverage` moves beside downloads, since both read the catalog | built |
 | 2026-11-15 | 6.3: coverage and downloads researched ([note](../../02-research/notes/mcp-downloads.md)); one job registry answers both `tasks/get` and `install_status`; install opt-in on HTTP (D-318) | planned |
 | 2026-11-15 | 6.3: `coverage` built: `tgd locate`, `/v1/coverage` and the MCP tool share one function and a read-only catalog read (D-318) | built |
+| 2026-11-15 | 6.3: downloads built: `install` and `install_status` over one job registry, as a task or a handle; the size confirmed by MRTR, by `elicitation/create` on stdio (`Mcp::duplex`), else `max_bytes`; `tgd mcp --no-install`, `tgd serve --allow-install` (D-318) | built |

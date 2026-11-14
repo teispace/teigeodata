@@ -1,6 +1,6 @@
 ---
 title: "Coverage and downloads in the servers"
-status: research
+status: accepted
 updated: 2026-11-15
 owner: maintainer's agents
 revisit: 2026-12-15
@@ -117,6 +117,23 @@ Phase 6.3's `coverage` item joins the downloads item; the status tool is named
   hook in `Client::install` is a later improvement.
 - A server run as several processes behind a balancer would need the registry shared; not a
   v1 deployment (one process per store).
+
+## 7a. What building it taught (2026-11-15)
+
+- rmcp's `Peer::create_elicitation` needs its `elicitation` feature, which brings `url` and
+  25 crates of ICU tables. The server sends the same request through the peer's generic
+  `send_request_with_option` instead, with no new dependency. The person has 10 minutes to
+  answer; no answer installs nothing (`unavailable`).
+- Whether the server may ask the client is a property of the transport, not of the client:
+  `Mcp::duplex` marks a server on stdio (`serve_stdio` sets it). Stateless HTTP answers each
+  POST alone, so a 2025-11-25 client there gets the `max_bytes` bound, as planned.
+- A call asked about over the session is planned again with the answer, so the size the
+  person confirmed is the size of what runs, and the seams admit it again (they are
+  stateless: identify and authorise).
+- Gates (all proved on a planted fault): the confirmation asked on each path and declined in
+  three ways; a forged `requestState`; `max_bytes` without a duplex transport; the task
+  polled to completion; the tools absent without a store, on `tgd mcp --no-install` and on
+  `tgd serve` without `--allow-install`; `tgd mcp` asking a 2025-11-25 client end to end.
 
 ## 8. Versions checked
 

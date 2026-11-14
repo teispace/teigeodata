@@ -25,6 +25,8 @@ mod compat;
 pub mod fuzz;
 #[cfg(feature = "http")]
 pub mod http;
+#[cfg(all(feature = "mcp", feature = "store"))]
+pub mod install;
 #[cfg(feature = "mcp")]
 pub mod mcp;
 pub mod output;

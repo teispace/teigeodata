@@ -123,13 +123,17 @@ stops on Ctrl-C. A build without the `serve` feature leaves it out.
 `{"command": "tgd", "args": ["mcp"]}` in its server list. It has fourteen read-only tools
 (`search`, `reverse`, `nearby`, `get_place`, `lookup`, `admin_at`, `hierarchy`, `children`,
 `timezone`, `elevation`, `postal`, `boundary`, `distance`, `packs`, and over the store
-`coverage`), each answering structured
+`coverage`), and over the store `install` and `install_status`, which let the agent install
+the catalog's packs (as a task, or a handle to poll; the person confirms the size where the
+client can ask, else it must fit `max_bytes`, 100 MB by default; `--no-install` leaves them
+out). Each tool answers structured
 content with the data's attribution; long answers come in pages through a signed
 `next_cursor`. Packs, places and outlines are resources: `teigeodata://dataset/np/places`,
 `teigeodata://place/tgd:np/1xhb`, `teigeodata://boundary/tgd:np/1wmc?lod=2` (the `boundary`
 tool answers what an outline is and links it, rather than filling the context with it). A build without
 the `mcp` feature leaves it out. `tgd serve` answers the same MCP server at `/mcp` over HTTP,
-for clients that connect by URL (`http://127.0.0.1:8080/mcp`).
+for clients that connect by URL (`http://127.0.0.1:8080/mcp`); there `install` is off unless
+`--allow-install` is given, as the server then writes to its disk on a request.
 
 ## Exit codes
 

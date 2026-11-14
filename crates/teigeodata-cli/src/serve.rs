@@ -43,12 +43,21 @@ fn open(store: &Path, packs: &[PathBuf]) -> Result<Packs, Fail> {
 
 /// Serves MCP on standard input and output until the client closes them.
 #[cfg(feature = "mcp")]
-pub(crate) fn mcp(store: &Path, packs: &[PathBuf], follow_secs: u64) -> Result<(), Fail> {
+pub(crate) fn mcp(
+    store: &Path,
+    packs: &[PathBuf],
+    follow_secs: u64,
+    install: bool,
+) -> Result<(), Fail> {
     use teigeodata_server::mcp::{self, Mcp};
     use teigeodata_server::query::Limits;
 
     let packs = Arc::new(open(store, packs)?);
-    let server = Mcp::new(packs, Seams::default(), Limits::SERVER)?;
+    let server = if install {
+        Mcp::installing(packs, Seams::default(), Limits::SERVER)?
+    } else {
+        Mcp::new(packs, Seams::default(), Limits::SERVER)?
+    };
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -67,6 +76,12 @@ pub(crate) struct Options {
     pub(crate) cors: Vec<String>,
     pub(crate) follow_secs: u64,
     pub(crate) timeout_secs: u64,
+    /// MCP clients may install the catalog's packs into the store.
+    #[cfg_attr(
+        not(feature = "mcp"),
+        expect(dead_code, reason = "read by `/mcp`, built with the `mcp` feature")
+    )]
+    pub(crate) allow_install: bool,
 }
 
 #[cfg(feature = "serve")]
@@ -95,11 +110,12 @@ pub(crate) fn run(
     };
     #[cfg(feature = "mcp")]
     {
-        config.mcp = Some(teigeodata_server::mcp::Mcp::new(
-            Arc::clone(&packs),
-            seams.clone(),
-            config.limits,
-        )?);
+        let new = if o.allow_install {
+            teigeodata_server::mcp::Mcp::installing
+        } else {
+            teigeodata_server::mcp::Mcp::new
+        };
+        config.mcp = Some(new(Arc::clone(&packs), seams.clone(), config.limits)?);
         // The `Host` check guards a server on loopback against DNS rebinding; bound beyond
         // it, the names it answers to are the operator's.
         if !o.listen.ip().is_loopback() {

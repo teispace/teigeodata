@@ -52,6 +52,13 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   the countries at a point with the catalog's packs for it and their state, as `tgd locate`
   answers, read from the stored catalog without opening the store (D-318).
   `teigeodata_sync::client::catalog_at` reads it so; `PackState::of`.
+- MCP `install` and `install_status`, on a server over the store: catalog packs installed into
+  the store and served, as a task (`tasks/get`, `tasks/cancel`) for a client with the tasks
+  extension or a handle polled with `install_status`, from one job registry. The size is
+  confirmed by the person first (MRTR elicitation in 2026-07-28, `elicitation/create` for a
+  2025-11-25 client on stdio), else the download must fit `max_bytes` (100 MB by default). On
+  for `tgd mcp` (`--no-install` leaves it out), opt-in for `tgd serve` (`--allow-install`)
+  (D-318).
 - `tgd serve` answers MCP at `/mcp` (stateless Streamable HTTP), refusing a foreign `Host`
   on loopback and any browser origin not configured with `--cors-origin` (D-316).
 - `Store::read_packs`: the packs the journal lists, read without opening the store, so a reader

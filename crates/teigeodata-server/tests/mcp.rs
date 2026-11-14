@@ -15,19 +15,19 @@
 
 #[path = "../../teigeodata-engine/tests/common/mod.rs"]
 mod common;
+mod wire;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use rmcp::ServiceExt;
 use rmcp::model::CallToolResult;
 use serde_json::{Map, Value, json};
 use teigeodata_format::{Encoding, Kind, Pack, Tag, Writer};
-use teigeodata_server::mcp::{ATTRIBUTION, DEPTH, Mcp, STORE_TOOLS, TOOLS};
+use teigeodata_server::mcp::{ATTRIBUTION, DEPTH, INSTALL_TOOLS, Mcp, STORE_TOOLS, TOOLS};
 use teigeodata_server::packs::Packs;
 use teigeodata_server::query::{Code, Limits, QueryError};
 use teigeodata_server::seams::{Authorize, Bare, Caller, Meter, Operation, Seams, Usage};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use wire::{meta, wire};
 
 const NOTICE: &str = "Synthetic Source, ODbL";
 
@@ -66,7 +66,7 @@ fn server_of(model: common::Model, seams: Seams) -> (Mcp, common::Model, std::pa
 fn storeless() -> Vec<&'static str> {
     TOOLS
         .into_iter()
-        .filter(|t| !STORE_TOOLS.contains(t))
+        .filter(|t| !STORE_TOOLS.contains(t) && !INSTALL_TOOLS.contains(t))
         .collect()
 }
 
@@ -471,56 +471,6 @@ fn the_seams_gate_and_meter_every_call() {
     assert_eq!(counted.load(Ordering::Relaxed), 6);
     drop(mcp);
     std::fs::remove_dir_all(dir).unwrap();
-}
-
-/// A JSON-RPC peer on the other end of a pipe: sends a line, reads the answer to its ID.
-struct Wire {
-    tx: tokio::io::WriteHalf<tokio::io::DuplexStream>,
-    rx: BufReader<tokio::io::ReadHalf<tokio::io::DuplexStream>>,
-}
-
-impl Wire {
-    async fn send(&mut self, msg: Value) {
-        let mut line = msg.to_string();
-        line.push('\n');
-        self.tx.write_all(line.as_bytes()).await.unwrap();
-    }
-
-    async fn ask(&mut self, id: u64, method: &str, params: Value) -> Value {
-        self.send(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))
-            .await;
-        loop {
-            let mut line = String::new();
-            assert!(self.rx.read_line(&mut line).await.unwrap() > 0, "closed");
-            let v: Value = serde_json::from_str(&line).unwrap();
-            if v["id"] == id {
-                return v;
-            }
-        }
-    }
-}
-
-fn wire(mcp: Mcp) -> Wire {
-    let (ours, theirs) = tokio::io::duplex(1 << 20);
-    tokio::spawn(async move {
-        if let Ok(running) = mcp.serve(theirs).await {
-            let _ = running.waiting().await;
-        }
-    });
-    let (rx, tx) = tokio::io::split(ours);
-    Wire {
-        tx,
-        rx: BufReader::new(rx),
-    }
-}
-
-/// The `_meta` a 2026-07-28 request carries.
-fn meta() -> Value {
-    json!({
-        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-        "io.modelcontextprotocol/clientCapabilities": {},
-        "io.modelcontextprotocol/clientInfo": { "name": "gate", "version": "0" },
-    })
 }
 
 #[tokio::test]

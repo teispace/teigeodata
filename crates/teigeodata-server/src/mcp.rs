@@ -3,9 +3,13 @@
 //! 2026-07-28 (`server/discover`, no handshake) and serves 2025-11-25 clients and older ones
 //! through their `initialize`.
 //!
-//! **Tools** (read-only, [`TOOLS`]): `search`, `reverse`, `nearby`, `get_place`, `lookup`,
+//! **Tools** ([`TOOLS`]): read-only `search`, `reverse`, `nearby`, `get_place`, `lookup`,
 //! `admin_at`, `hierarchy`, `children`, `timezone`, `elevation`, `postal`, `boundary`,
-//! `distance` and `packs` (D-317). Each has
+//! `distance` and `packs` (D-317); over a store `coverage` ([`STORE_TOOLS`]), and on a server
+//! that installs ([`Mcp::installing`]) `install` and `install_status` ([`INSTALL_TOOLS`],
+//! feature `store`, D-318): an install runs as a task for a client with the tasks extension,
+//! else as a handle, after the person confirms its size (MRTR elicitation, or
+//! `elicitation/create` on a [duplex](Mcp::duplex) transport), else within `max_bytes`. Each has
 //! an `inputSchema` with the server's bounds and an `outputSchema`, and answers
 //! `structuredContent` with the same object as text: the HTTP server's native body,
 //! `{"results": [...], "attribution": ...}` (D-032), from the same code. The attribution is in
@@ -45,10 +49,20 @@ use rmcp::{ErrorData, RoleServer, ServerHandler, ServiceExt};
 use serde_json::{Map, Value, json};
 
 use crate::body::{self, Asked, Page, WORK};
+#[cfg(feature = "store")]
+use crate::install::{self, Jobs};
 use crate::output::{self, Bufs};
 use crate::packs::Packs;
 use crate::query::{self, Ask, At, Code, Limits, PostalAsk, QueryError};
 use crate::seams::{Bare, Caller, Incoming, Operation, Seams, Usage};
+#[cfg(feature = "store")]
+use rmcp::model::{
+    CancelTaskParams, ClientResult, CreateTaskResult, ElicitRequest, ElicitRequestParams,
+    ElicitationAction, GetTaskParams, GetTaskResult, InputRequest, InputRequests,
+    InputRequiredResult, InputResponses, ProtocolVersion, ServerRequest, UpdateTaskParams,
+};
+#[cfg(feature = "store")]
+use rmcp::service::PeerRequestOptions;
 
 /// The deepest place a cursor reaches: five pages of the most results [`Limits::SERVER`]
 /// allows.
@@ -58,7 +72,7 @@ pub const DEPTH: usize = 250;
 pub const ATTRIBUTION: &str = "teigeodata/attribution";
 
 /// The tools, in the order `tools/list` gives them.
-pub const TOOLS: [&str; 15] = [
+pub const TOOLS: [&str; 17] = [
     "search",
     "reverse",
     "nearby",
@@ -74,10 +88,20 @@ pub const TOOLS: [&str; 15] = [
     "distance",
     "packs",
     "coverage",
+    "install",
+    "install_status",
 ];
 
 /// The tools that read the store's catalog: listed only on a server over a store (D-318).
 pub const STORE_TOOLS: [&str; 1] = ["coverage"];
+
+/// The tools that install into the store: listed only on a server over a store that allows
+/// installs (D-318).
+pub const INSTALL_TOOLS: [&str; 2] = ["install", "install_status"];
+
+/// The key of the size confirmation among a call's `inputRequests`.
+#[cfg(feature = "store")]
+const CONFIRM: &str = "confirm";
 
 /// The longest cursor accepted, in bytes: a signed call with arguments at their bounds is
 /// far shorter.
@@ -93,9 +117,17 @@ const DATASET: &str = "teigeodata://dataset/";
 const PLACE: &str = "teigeodata://place/";
 const BOUNDARY: &str = "teigeodata://boundary/";
 
-/// The MCP server over a pack set: clone it freely (it is one `Arc`).
+/// The MCP server over a pack set: clone it freely (it is one `Arc`). The flag: the transport
+/// carries requests from the server to the client ([`Mcp::duplex`]).
 #[derive(Clone)]
-pub struct Mcp(Arc<Inner>);
+pub struct Mcp(
+    Arc<Inner>,
+    #[cfg_attr(
+        not(feature = "store"),
+        expect(dead_code, reason = "read by `install`, built with `store`")
+    )]
+    bool,
+);
 
 struct Inner {
     packs: Arc<Packs>,
@@ -103,6 +135,9 @@ struct Inner {
     limits: Limits,
     key: [u8; 32],
     tools: Vec<Tool>,
+    /// The install jobs, on a server that installs (D-318).
+    #[cfg(feature = "store")]
+    jobs: Option<Jobs>,
 }
 
 impl core::fmt::Debug for Mcp {
@@ -120,19 +155,54 @@ impl Mcp {
     /// # Errors
     /// The random source failed.
     pub fn new(packs: Arc<Packs>, seams: Seams, limits: Limits) -> std::io::Result<Self> {
+        Self::build(packs, seams, limits, false)
+    }
+
+    /// [`Mcp::new`], with the `install` and `install_status` tools when `packs` follow a
+    /// store: an agent may install the catalog's packs into it (D-318).
+    ///
+    /// # Errors
+    /// The random source failed.
+    #[cfg(feature = "store")]
+    pub fn installing(packs: Arc<Packs>, seams: Seams, limits: Limits) -> std::io::Result<Self> {
+        Self::build(packs, seams, limits, true)
+    }
+
+    fn build(
+        packs: Arc<Packs>,
+        seams: Seams,
+        limits: Limits,
+        install: bool,
+    ) -> std::io::Result<Self> {
         let store = packs.root().is_some();
+        let install = install && store && cfg!(feature = "store");
         let mut key = [0_u8; 32];
         getrandom::fill(&mut key).map_err(std::io::Error::other)?;
-        Ok(Self(Arc::new(Inner {
-            packs,
-            seams,
-            limits,
-            key,
-            tools: tools(&limits)
-                .into_iter()
-                .filter(|t| store || !STORE_TOOLS.contains(&t.name.as_ref()))
-                .collect(),
-        })))
+        Ok(Self(
+            Arc::new(Inner {
+                packs,
+                seams,
+                limits,
+                key,
+                tools: tools(&limits)
+                    .into_iter()
+                    .filter(|t| store || !STORE_TOOLS.contains(&t.name.as_ref()))
+                    .filter(|t| install || !INSTALL_TOOLS.contains(&t.name.as_ref()))
+                    .collect(),
+                #[cfg(feature = "store")]
+                jobs: install.then(Jobs::default),
+            }),
+            false,
+        ))
+    }
+
+    /// This server on a transport that carries requests from the server to the client, as
+    /// standard input and output do ([`serve_stdio`] sets it); stateless HTTP does not. There a
+    /// 2025-11-25 client that declared elicitation confirms an install's size through
+    /// `elicitation/create` (D-318).
+    #[must_use]
+    pub fn duplex(self) -> Self {
+        Self(self.0, true)
     }
 
     /// Runs the tool `name` with `args` for `incoming` (what the seams read): what
@@ -178,6 +248,17 @@ impl Mcp {
             let e = self.0.packs.load();
             return Ok(done(output::packs(&e), output::attribution(&e)));
         }
+        #[cfg(feature = "store")]
+        match name {
+            "install_status" => return self.install_status(&a, incoming),
+            "install" => {
+                return match self.install(&args, incoming, &Confirm::default(), start)? {
+                    Step::Answer(CallToolResponse::Complete(r)) => Ok(r),
+                    _ => Err(QueryError::new(Code::Internal, "the install failed")),
+                };
+            }
+            _ => {}
+        }
         if name == "boundary" {
             let caller = self.0.seams.admit(incoming, Operation::Boundary)?;
             let r = self.outline_summary(&a)?;
@@ -220,6 +301,188 @@ impl Mcp {
             o.insert("next_cursor".into(), self.cursor(name, &args, next).into());
         }
         Ok(self.metered(&caller, op, answered.results, done(v, attribution), start))
+    }
+
+    /// The `install` tool (D-318): what the call would download, confirmed by the person when
+    /// the client can ask (MRTR elicitation in 2026-07-28, else [`Step::Ask`] for
+    /// `elicitation/create`), else held to `max_bytes`; then a job, as a task for a client with
+    /// the tasks extension, else a handle for `install_status`.
+    #[cfg(feature = "store")]
+    fn install(
+        &self,
+        given: &Map<String, Value>,
+        incoming: &dyn Incoming,
+        confirm: &Confirm<'_>,
+        start: Instant,
+    ) -> Result<Step, QueryError> {
+        let (Some(jobs), Some(root)) = (&self.0.jobs, self.0.packs.root()) else {
+            return Err(QueryError::new(Code::NotFound, "no such tool"));
+        };
+        let caller = self.0.seams.admit(incoming, Operation::Install)?;
+        // A retry after the confirmation: the call is the one sealed in its state, whatever
+        // the retry's own arguments say.
+        let (args, answer) = match confirm.state {
+            Some(state) => {
+                let (sealed, _) = self.open_cursor("install", state)?;
+                let accepted = confirm
+                    .responses
+                    .and_then(|r| r.get(CONFIRM))
+                    .is_some_and(|v| {
+                        v.get("action").and_then(Value::as_str) == Some("accept")
+                            && v.get("content").and_then(|c| c.get("confirm"))
+                                == Some(&Value::Bool(true))
+                    });
+                (sealed, Some(accepted))
+            }
+            None => (given.clone(), confirm.answered),
+        };
+        let a = Args(&args);
+        let packs = a.strings("packs")?;
+        let components = a.strings("components")?;
+        let max_bytes = a.whole("max_bytes")?.unwrap_or(install::DEFAULT_MAX_BYTES);
+        let plan = install::plan(root, &packs, &components)?;
+        let size = install::megabytes(plan.download);
+        match answer {
+            Some(false) => {
+                let declined = json!({ "status": "declined", "packs": plan.paths,
+                                       "download": plan.download });
+                return Ok(Step::Answer(CallToolResponse::Complete(done(
+                    json!({ "result": declined, "attribution": null }),
+                    None,
+                ))));
+            }
+            None if plan.download > 0 && confirm.elicit => {
+                let question = format!("Download {size} to install {}?", plan.paths.join(", "));
+                let mut requests = InputRequests::new();
+                requests.insert(CONFIRM.into(), confirmation(&question)?);
+                let state = self.cursor("install", &args, 0);
+                return Ok(Step::Answer(CallToolResponse::InputRequired(
+                    InputRequiredResult::new(Some(requests), Some(state)),
+                )));
+            }
+            None if plan.download > 0 && confirm.ask => {
+                let question = format!("Download {size} to install {}?", plan.paths.join(", "));
+                return Ok(Step::Ask(question));
+            }
+            None if plan.download > max_bytes => {
+                return Err(QueryError::new(
+                    Code::OutOfBounds,
+                    format!(
+                        "the download is {size} ({} bytes), past `max_bytes` ({max_bytes}): \
+                         call again with `max_bytes` at least {} to install it",
+                        plan.download, plan.download
+                    ),
+                ));
+            }
+            _ => {}
+        }
+        let mut raw = [0_u8; 16];
+        getrandom::fill(&mut raw)
+            .map_err(|_| QueryError::new(Code::Internal, "the install could not start"))?;
+        let id: String = raw
+            .iter()
+            .flat_map(|b| [hex(b >> 4), hex(b & 15)])
+            .collect();
+        let job = jobs.start(
+            id,
+            root.to_path_buf(),
+            plan.clone(),
+            Arc::clone(&self.0.packs),
+        )?;
+        let response = if confirm.tasks {
+            CallToolResponse::Task(CreateTaskResult::new(job.task().task))
+        } else {
+            let mut status = job.status();
+            if let Some(o) = status.as_object_mut() {
+                o.insert("packs".into(), json!(plan.paths));
+                o.insert("download".into(), json!(plan.download));
+            }
+            CallToolResponse::Complete(done(json!({ "result": status, "attribution": null }), None))
+        };
+        self.0.seams.meter.record(
+            &caller,
+            Operation::Install,
+            Usage {
+                results: plan.paths.len(),
+                bytes: usize::try_from(plan.download).unwrap_or(usize::MAX),
+                micros: u64::try_from(start.elapsed().as_micros()).unwrap_or(u64::MAX),
+            },
+        );
+        Ok(Step::Answer(response))
+    }
+
+    /// A `tools/call` of `install`: [`Mcp::install`], asking the person first through
+    /// `elicitation/create` when it says so, then again with their answer.
+    #[cfg(feature = "store")]
+    async fn install_call(
+        &self,
+        request: &CallToolRequestParams,
+        context: &RequestContext<RoleServer>,
+    ) -> CallToolResponse {
+        let empty = JsonObject::new();
+        let args = request.arguments.as_ref().unwrap_or(&empty);
+        let start = Instant::now();
+        let run = |confirm: &Confirm<'_>| {
+            incoming(context, |i| {
+                catch_unwind(AssertUnwindSafe(|| self.install(args, i, confirm, start)))
+                    .unwrap_or_else(|_| Err(QueryError::new(Code::Internal, "the server failed")))
+            })
+        };
+        let mut confirm = Confirm::of(request, context, self.1);
+        let mut step = run(&confirm);
+        if let Ok(Step::Ask(question)) = &step {
+            step = match ask(context, question).await {
+                Ok(accepted) => {
+                    confirm.answered = Some(accepted);
+                    run(&confirm)
+                }
+                Err(e) => Err(e),
+            };
+        }
+        match step {
+            Ok(Step::Answer(response)) => response,
+            Ok(Step::Ask(_)) => CallToolResponse::Complete(failed(&QueryError::new(
+                Code::Internal,
+                "the server failed",
+            ))),
+            Err(e) => CallToolResponse::Complete(failed(&e)),
+        }
+    }
+
+    /// The `install_status` tool: where the install of a handle is.
+    #[cfg(feature = "store")]
+    fn install_status(
+        &self,
+        a: &Args<'_>,
+        incoming: &dyn Incoming,
+    ) -> Result<CallToolResult, QueryError> {
+        let jobs = self
+            .0
+            .jobs
+            .as_ref()
+            .ok_or_else(|| QueryError::new(Code::NotFound, "no such tool"))?;
+        self.0.seams.admit(incoming, Operation::Install)?;
+        let handle = a.need_text("handle")?;
+        let job = jobs.get(&handle).ok_or_else(|| {
+            QueryError::new(
+                Code::NotFound,
+                format!("no install {handle:?}: it ended over an hour ago, or never began"),
+            )
+        })?;
+        Ok(done(
+            json!({ "result": job.status(), "attribution": null }),
+            None,
+        ))
+    }
+
+    /// The install job `id` as a task, for `tasks/*`.
+    #[cfg(feature = "store")]
+    fn job(&self, id: &str) -> Result<Arc<install::Job>, ErrorData> {
+        self.0
+            .jobs
+            .as_ref()
+            .and_then(|j| j.get(id))
+            .ok_or_else(|| ErrorData::invalid_params(format!("no task {id:?}"), None))
     }
 
     /// Records a call's usage with the meter seam, and passes its result on.
@@ -450,7 +713,7 @@ pub async fn serve_stdio(server: Mcp, follow_every: Option<Duration>) -> std::io
     if let Some(every) = follow_every {
         crate::packs::spawn_follow(Arc::clone(&server.0.packs), every);
     }
-    let running = match server.serve(rmcp::transport::stdio()).await {
+    let running = match server.duplex().serve(rmcp::transport::stdio()).await {
         Ok(r) => r,
         // The client left before it began a session (after `server/discover` alone, say):
         // the end of the conversation, not a failure.
@@ -465,21 +728,26 @@ pub async fn serve_stdio(server: Mcp, follow_every: Option<Duration>) -> std::io
 // D-309).
 impl ServerHandler for Mcp {
     fn get_info(&self) -> ServerConfig {
-        ServerConfig::new(
-            ServerCapabilities::builder()
-                .enable_tools()
-                .enable_resources()
-                .build(),
-        )
-        .with_server_info(
-            Implementation::new("teigeodata", env!("CARGO_PKG_VERSION"))
-                .with_title("teigeodata")
-                .with_description(
-                    "Places offline: search, reverse geocoding, admin units, timezones, \
+        let capabilities = ServerCapabilities::builder()
+            .enable_tools()
+            .enable_resources();
+        // Installs run as tasks for a client that declares the extension (D-318).
+        #[cfg(feature = "store")]
+        let capabilities = if self.0.jobs.is_some() {
+            capabilities.enable_tasks()
+        } else {
+            capabilities
+        };
+        ServerConfig::new(capabilities.build())
+            .with_server_info(
+                Implementation::new("teigeodata", env!("CARGO_PKG_VERSION"))
+                    .with_title("teigeodata")
+                    .with_description(
+                        "Places offline: search, reverse geocoding, admin units, timezones, \
                      elevation and postal codes from signed packs",
-                ),
-        )
-        .with_instructions(INSTRUCTIONS)
+                    ),
+            )
+            .with_instructions(INSTRUCTIONS)
     }
 
     fn list_tools(
@@ -496,20 +764,27 @@ impl ServerHandler for Mcp {
         self.0.tools.iter().find(|t| t.name == name).cloned()
     }
 
-    fn call_tool(
+    #[cfg_attr(
+        not(feature = "store"),
+        expect(
+            clippy::unused_async_trait_impl,
+            reason = "only `install` (feature `store`) awaits"
+        )
+    )]
+    async fn call_tool(
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> impl Future<Output = Result<CallToolResponse, ErrorData>> + MaybeSendFuture + '_ {
+    ) -> Result<CallToolResponse, ErrorData> {
+        #[cfg(feature = "store")]
+        if request.name == "install" && self.0.jobs.is_some() {
+            return Ok(self.install_call(&request, &context).await);
+        }
         let empty = JsonObject::new();
         let args = request.arguments.as_ref().unwrap_or(&empty);
-        std::future::ready(
-            incoming(&context, |i| self.call(&request.name, args, i))
-                .map(CallToolResponse::from)
-                .ok_or_else(|| {
-                    ErrorData::invalid_params(format!("no tool {:?}", request.name), None)
-                }),
-        )
+        incoming(&context, |i| self.call(&request.name, args, i))
+            .map(CallToolResponse::from)
+            .ok_or_else(|| ErrorData::invalid_params(format!("no tool {:?}", request.name), None))
     }
 
     fn list_resources(
@@ -551,6 +826,44 @@ impl ServerHandler for Mcp {
         std::future::ready(Ok(ListResourceTemplatesResult::with_all_items(items)
             .with_ttl_ms(TOOLS_TTL_MS)
             .with_cache_scope(CacheScope::Public)))
+    }
+
+    #[cfg(feature = "store")]
+    fn get_task(
+        &self,
+        request: GetTaskParams,
+        _: RequestContext<RoleServer>,
+    ) -> impl Future<Output = Result<GetTaskResult, ErrorData>> + MaybeSendFuture + '_ {
+        std::future::ready(
+            self.job(&request.task_id)
+                .map(|j| GetTaskResult::new(j.task())),
+        )
+    }
+
+    #[cfg(feature = "store")]
+    fn cancel_task(
+        &self,
+        request: CancelTaskParams,
+        _: RequestContext<RoleServer>,
+    ) -> impl Future<Output = Result<(), ErrorData>> + MaybeSendFuture + '_ {
+        std::future::ready(self.job(&request.task_id).map(|_| {
+            if let Some(jobs) = &self.0.jobs {
+                jobs.cancel(&request.task_id);
+            }
+        }))
+    }
+
+    #[cfg(feature = "store")]
+    fn update_task(
+        &self,
+        _: UpdateTaskParams,
+        _: RequestContext<RoleServer>,
+    ) -> impl Future<Output = Result<(), ErrorData>> + MaybeSendFuture + '_ {
+        // The size is confirmed before an install starts: a running one asks nothing.
+        std::future::ready(Err(ErrorData::invalid_params(
+            "an install asks for no input while it runs",
+            None,
+        )))
     }
 
     fn read_resource(
@@ -666,7 +979,7 @@ has a `next_cursor`: call the same tool with only `cursor` for the next page. Sh
 `attribution` of an answer wherever its data is shown: the licences require it.";
 
 /// A tool error: the stable code and the message, as the HTTP server answers them.
-fn failed(e: &QueryError) -> CallToolResult {
+pub(crate) fn failed(e: &QueryError) -> CallToolResult {
     let text = json!({ "error": { "code": e.code.name(), "message": e.message } }).to_string();
     CallToolResult::error(vec![ContentBlock::text(text)])
 }
@@ -685,7 +998,7 @@ fn protocol(e: QueryError) -> ErrorData {
 }
 
 /// A finished answer: `v` as structured content and as text, `attribution` in `_meta`.
-fn done(v: Value, attribution: Option<String>) -> CallToolResult {
+pub(crate) fn done(v: Value, attribution: Option<String>) -> CallToolResult {
     let mut r = CallToolResult::structured(v);
     if let Some(a) = attribution {
         let mut m = Map::new();
@@ -742,6 +1055,20 @@ impl Args<'_> {
     fn need_text(&self, name: &str) -> Result<String, QueryError> {
         self.text(name)?
             .ok_or_else(|| bad(&format!("`{name}` is required")))
+    }
+
+    /// A list of strings; empty when not given.
+    #[cfg(feature = "store")]
+    fn strings(&self, name: &str) -> Result<Vec<String>, QueryError> {
+        match self.get(name) {
+            None => Ok(Vec::new()),
+            Some(Value::Array(a)) => a
+                .iter()
+                .map(|v| v.as_str().map(str::to_owned))
+                .collect::<Option<_>>()
+                .ok_or_else(|| bad(&format!("`{name}` must be strings"))),
+            Some(_) => Err(bad(&format!("`{name}` must be an array of strings"))),
+        }
     }
 
     fn num(&self, name: &str) -> Result<Option<f64>, QueryError> {
@@ -896,6 +1223,116 @@ fn not_places(name: &str, a: &Args<'_>) -> Result<Option<Asked>, QueryError> {
         }),
         _ => return Ok(None),
     }))
+}
+
+/// Where an install call stands: answered, or the person must first be asked `question`
+/// through `elicitation/create` (a 2025-11-25 client on a duplex transport).
+#[cfg(feature = "store")]
+enum Step {
+    Answer(CallToolResponse),
+    Ask(String),
+}
+
+/// How long the person has to answer an `elicitation/create` confirmation.
+#[cfg(feature = "store")]
+const ASK_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// What a client can do for an install call: run it as a task, confirm its size by MRTR
+/// elicitation (`elicit`) or by `elicitation/create` (`ask`), the answer and sealed state of an
+/// MRTR retry, and the answer to `elicitation/create` once asked.
+#[cfg(feature = "store")]
+#[derive(Default)]
+struct Confirm<'a> {
+    tasks: bool,
+    elicit: bool,
+    ask: bool,
+    responses: Option<&'a InputResponses>,
+    state: Option<&'a str>,
+    answered: Option<bool>,
+}
+
+#[cfg(feature = "store")]
+impl<'a> Confirm<'a> {
+    fn of(
+        request: &'a CallToolRequestParams,
+        context: &RequestContext<RoleServer>,
+        duplex: bool,
+    ) -> Self {
+        let caps = context.client_capabilities();
+        // MRTR is 2026-07-28's; an older client is asked over the session where the transport
+        // carries it, else gets the `max_bytes` bound.
+        let current = context
+            .protocol_version()
+            .is_some_and(|v| v >= ProtocolVersion::V_2026_07_28);
+        // An empty `elicitation` declares form mode (2025-11-25 compatibility).
+        let form = caps
+            .as_ref()
+            .and_then(|c| c.elicitation.as_ref())
+            .is_some_and(|e| e.form.is_some() || e.url.is_none());
+        Self {
+            tasks: caps
+                .as_ref()
+                .is_some_and(rmcp::model::ClientCapabilities::supports_tasks),
+            elicit: current && form,
+            ask: !current && duplex && form,
+            responses: request.input_responses.as_ref(),
+            state: request.request_state.as_deref(),
+            answered: None,
+        }
+    }
+}
+
+/// Asks the person through `elicitation/create` (2025-11-25) to confirm `question`: whether
+/// they accepted with `confirm` true.
+///
+/// # Errors
+/// [`Code::Unavailable`] when the client did not answer within [`ASK_TIMEOUT`].
+#[cfg(feature = "store")]
+async fn ask(context: &RequestContext<RoleServer>, question: &str) -> Result<bool, QueryError> {
+    let InputRequest::Elicitation(request) = confirmation(question)? else {
+        return Err(QueryError::new(Code::Internal, "the confirmation failed"));
+    };
+    let unanswered = || {
+        QueryError::new(
+            Code::Unavailable,
+            "the confirmation was not answered: nothing was installed",
+        )
+    };
+    // The peer's generic request: rmcp's `create_elicitation` needs its `elicitation` feature,
+    // which brings `url` and the ICU tables for one call.
+    let mut options = PeerRequestOptions::no_options();
+    options.timeout = Some(ASK_TIMEOUT);
+    let answer = context
+        .peer
+        .send_request_with_option(ServerRequest::ElicitRequest(request), options)
+        .await
+        .map_err(|_| unanswered())?
+        .await_response()
+        .await
+        .map_err(|_| unanswered())?;
+    let ClientResult::ElicitResult(answer) = answer else {
+        return Err(unanswered());
+    };
+    Ok(answer.action == ElicitationAction::Accept
+        && answer.content.as_ref().and_then(|c| c.get("confirm")) == Some(&Value::Bool(true)))
+}
+
+/// The form asking the person to confirm a download.
+#[cfg(feature = "store")]
+fn confirmation(question: &str) -> Result<InputRequest, QueryError> {
+    let schema = serde_json::from_value(json!({
+        "type": "object",
+        "properties": { "confirm": { "type": "boolean", "title": "Download", "default": true } },
+        "required": ["confirm"],
+    }))
+    .map_err(|_| QueryError::new(Code::Internal, "the confirmation failed"))?;
+    Ok(InputRequest::Elicitation(ElicitRequest::new(
+        ElicitRequestParams::FormElicitationParams {
+            meta: None,
+            message: question.to_owned(),
+            requested_schema: schema,
+        },
+    )))
 }
 
 fn hex(n: u8) -> char {
@@ -1104,6 +1541,33 @@ fn tools(limits: &Limits) -> Vec<Tool> {
             &["lat", "lon"],
             &coverage_schema(),
         ),
+        def(
+            "install",
+            "Install packs",
+            "Downloads packs from the catalog into the store, verified, and serves them: `packs` as catalog paths or addresses (np, np.places, ae-du), `components` (every one when none). The person confirms the download's size when the client can ask; otherwise the call is refused past `max_bytes` (default 100 MB), naming the size. Answers a task, or a `handle` for `install_status`.",
+            json!({
+                "packs": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": limits.text_bytes }, "minItems": 1, "maxItems": install_limit() },
+                "components": { "type": "array", "items": { "type": "string", "enum": component_names() } },
+                "max_bytes": { "type": "integer", "minimum": 0, "description": "The most this call may download without the person's confirmation; default 100,000,000." },
+            }),
+            &["packs"],
+            &install_schema(),
+        )
+        .with_annotations(
+            ToolAnnotations::new()
+                .read_only(false)
+                .destructive(false)
+                .idempotent(true)
+                .open_world(true),
+        ),
+        def(
+            "install_status",
+            "How an install goes",
+            "Where the install of a `handle` (from `install`) is: working, completed, failed or cancelled, with its message and, once ended, what it installed or why it failed. Ask about once a second.",
+            json!({ "handle": { "type": "string", "minLength": 32, "maxLength": 32 } }),
+            &["handle"],
+            &install_schema(),
+        ),
     ]
 }
 
@@ -1245,6 +1709,38 @@ fn coverage_schema() -> Value {
             "attribution": { "type": nullable("string") },
         },
         "required": ["results", "attribution"],
+    })
+}
+
+/// The most packs one install names.
+const fn install_limit() -> usize {
+    16
+}
+
+/// Every component's name, for the `install` tool's schema.
+fn component_names() -> Vec<&'static str> {
+    teigeodata_engine::Components::all()
+        .iter()
+        .map(teigeodata_engine::Component::name)
+        .collect()
+}
+
+fn install_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "result": { "type": "object", "properties": {
+                "handle": { "type": "string" },
+                "status": { "type": "string", "enum": ["working", "completed", "failed", "cancelled", "declined"] },
+                "message": { "type": "string" },
+                "packs": { "type": "array", "items": { "type": "string" } },
+                "download": { "type": "integer" },
+                "result": { "type": ["object", "null"] },
+                "error": { "type": ["object", "null"] },
+            }, "required": ["status"] },
+            "attribution": { "type": "null" },
+        },
+        "required": ["result", "attribution"],
     })
 }
 
