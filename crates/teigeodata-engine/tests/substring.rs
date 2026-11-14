@@ -197,8 +197,10 @@ fn an_exact_match_stays_first() {
     let e = nepal(true);
     // Pokhara exact (60 + 200) above Bhimpokhara from the middle (20 + 60).
     assert_eq!(found(&e, "Pokhara"), [(POKHARA, 260), (BHIMPOKHARA, 80)]);
-    // A row found as a prefix (30) and from the middle (20) keeps the higher bonus.
-    assert_eq!(found(&e, "pokh"), [(POKHARA, 230), (BHIMPOKHARA, 80)]);
+    // A row found as a prefix (30) and from the middle keeps the higher bonus; 4 code points
+    // from the middle take 15, 5 or more 20 (D-269).
+    assert_eq!(found(&e, "pokh"), [(POKHARA, 230), (BHIMPOKHARA, 75)]);
+    assert_eq!(found(&e, "okh"), [(POKHARA, 210), (BHIMPOKHARA, 70)]);
     // khara: both from the middle; importance decides.
     assert_eq!(found(&e, "khara"), [(POKHARA, 220), (BHIMPOKHARA, 80)]);
     assert_eq!(serials(&e, "खरा"), [POKHARA]);

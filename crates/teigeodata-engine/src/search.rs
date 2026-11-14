@@ -57,6 +57,19 @@ const CONTEXT_PREFIX_MIN: usize = 3;
 /// phonetic (5). Not strong, so it never stops the unanchored fuzzy pass.
 #[cfg(feature = "substring")]
 const SUBSTRING_BONUS: i32 = 20;
+/// The substring bonus of a query of `chars` code points: a short run inside a word is weak
+/// evidence, so 3 and 4 code points take 10 and 15, and 5 or more the full bonus.
+#[cfg(feature = "substring")]
+fn substring_bonus(chars: usize) -> i32 {
+    let short = i32::try_from(SUBSTRING_FULL.saturating_sub(chars)).unwrap_or(0);
+    SUBSTRING_BONUS - SUBSTRING_PER_CHAR * short
+}
+/// The query length from which a substring match takes [`SUBSTRING_BONUS`].
+#[cfg(feature = "substring")]
+const SUBSTRING_FULL: usize = 5;
+/// What each code point under [`SUBSTRING_FULL`] takes off the substring bonus.
+#[cfg(feature = "substring")]
+const SUBSTRING_PER_CHAR: i32 = 5;
 /// The substring tier takes the best rows by importance over every layer, as the prefix tier.
 #[cfg(feature = "substring")]
 const SUBSTRING_K: usize = 16;
@@ -361,7 +374,7 @@ impl Engine {
             s.substring
                 .iter()
                 .filter(|p| p.layer == me)
-                .map(|p| (p.row, SUBSTRING_BONUS)),
+                .map(|p| (p.row, substring_bonus(q.chars().count()))),
         );
         rows.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
         rows.dedup_by_key(|r| r.0);
