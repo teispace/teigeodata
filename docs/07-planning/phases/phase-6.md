@@ -33,8 +33,8 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
   (D-141, D-172)
 - [ ] The query model with its bounds (query length, `limit` at most 50 by default, radius,
   time), the error model (stable codes, no panic reaches a client)
-- [ ] Outputs moved from the CLI (`output.rs`): native, GeoJSON, Nominatim-compatible; one
-  mapping each, used by the CLI and both servers
+- [x] Outputs moved from the CLI (`output.rs`): native, GeoJSON, Nominatim-compatible; one
+  mapping each, used by the CLI and both servers (2026-11-15, D-310)
 - [ ] Attribution on every answer from main data (D-032), from each pack's notices
 - [ ] The hosted seams as traits with open defaults: who is asking, may they, how much they
   used (ADR-0025)

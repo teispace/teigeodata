@@ -1,5 +1,5 @@
 //! The queries: `get`, `reverse`, `near`, `search`, `admin` and `tz`, over the packs given with
-//! `--pack` as one dataset (the engine's layers, D-113), printed by [`crate::output`].
+//! `--pack` as one dataset (the engine's layers, D-113), printed by [`teigeodata_server::output`].
 //!
 //! The files are read into memory: the CLI does not own them (D-113). A query with no result
 //! prints its empty output and exits 1.
@@ -11,7 +11,7 @@ use teigeodata_core::{E6, E7, PlaceId, Point};
 use teigeodata_engine::{Engine, Layer, LayerOptions, Load, Place, Scratch};
 
 use crate::Fail;
-use crate::output::{self, Item, Mode};
+use teigeodata_server::output::{self, Item, Mode};
 
 /// The engine over `packs`, in the order given (equal priority: later wins ties by the
 /// engine's rules).

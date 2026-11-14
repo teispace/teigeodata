@@ -1,0 +1,22 @@
+[package]
+name = "teigeodata-server"
+description = "The request core of the teigeodata servers: outputs (native, GeoJSON, Nominatim-compatible), query bounds, attribution and the seams a hosted tier plugs into."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish = true
+keywords.workspace = true
+categories.workspace = true
+readme = "README.md"
+
+[dependencies]
+teigeodata-core.workspace = true
+teigeodata-engine.workspace = true
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[lints]
+workspace = true

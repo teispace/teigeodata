@@ -1,5 +1,5 @@
 //! `export`: every place of a pack, streamed in its stored (Hilbert) order, as NDJSON or a
-//! GeoJSON FeatureCollection, each place mapped by [`crate::output`]. One place is held at a
+//! GeoJSON FeatureCollection, each place mapped by [`teigeodata_server::output`]. One place is held at a
 //! time; IDs and names are written straight from their buffers, so a row costs no allocation.
 //! GeoJSON carries the pack's attribution as the foreign member `attribution`; NDJSON has
 //! nowhere to put it, so it goes to standard error.
@@ -9,8 +9,8 @@ use std::path::Path;
 
 use teigeodata_engine::{Engine, Layer, LayerOptions, Load};
 
-use crate::output::{self, Bufs, Item};
 use crate::{Fail, Format};
+use teigeodata_server::output::{self, Bufs, Item};
 
 pub(crate) fn run(path: &Path, format: Format, out: &mut dyn Write) -> Result<(), Fail> {
     let bad = |e: teigeodata_engine::Error| Fail::of(path.display(), e);

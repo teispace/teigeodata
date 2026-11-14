@@ -385,7 +385,7 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          for c in core blob names format sync engine api cli; do
+          for c in core blob names format sync engine api server cli; do
             code=$(curl -s -o /dev/null -w '%{http_code}' -A "teigeodata-release" \
               "https://crates.io/api/v1/crates/teigeodata-$c/$VERSION")
             if [ "$code" = 200 ]; then echo "teigeodata-$c $VERSION: already published"; continue; fi

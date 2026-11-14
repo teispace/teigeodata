@@ -18,7 +18,6 @@
 
 mod export;
 mod extract;
-mod output;
 mod pack;
 mod query;
 mod sync;
@@ -30,6 +29,7 @@ use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use teigeodata_format::component::Component;
+use teigeodata_server::output;
 
 /// The teigeodata command line: packs, queries and the store.
 #[derive(Debug, Parser)]
@@ -508,6 +508,15 @@ impl From<io::Error> for Fail {
 impl From<teigeodata_engine::Error> for Fail {
     fn from(e: teigeodata_engine::Error) -> Self {
         Self::Refused(e.to_string())
+    }
+}
+
+impl From<output::OutputError> for Fail {
+    fn from(e: output::OutputError) -> Self {
+        match e {
+            output::OutputError::Io(e) => e.into(),
+            output::OutputError::Engine(e) => e.into(),
+        }
     }
 }
 

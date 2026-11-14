@@ -1820,6 +1820,7 @@ dependencies = [
  "teigeodata-engine",
  "teigeodata-format",
  "teigeodata-names",
+ "teigeodata-server",
  "teigeodata-sync",
  "zstd",
 ]
@@ -1875,6 +1876,16 @@ dependencies = [
  "serde",
  "unicode-normalization",
  "unicode-script",
+]
+
+[[package]]
+name = "teigeodata-server"
+version = "0.3.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "teigeodata-core",
+ "teigeodata-engine",
 ]
 
 [[package]]

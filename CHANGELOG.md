@@ -22,8 +22,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - Releases are built, attested and published by one workflow, `release.yml` (D-302): every
   file with build provenance through Sigstore, a CycloneDX SBOM per crate and `SHA256SUMS`;
   `gh attestation verify <file> --repo teispace/teigeodata` checks one.
-- The crates `teigeodata-core`, `-blob`, `-format`, `-names`, `-sync`, `-engine`, `-api` and
-  `-cli` are publishable to crates.io (D-303).
+- The crates `teigeodata-core`, `-blob`, `-format`, `-names`, `-sync`, `-engine`, `-api`,
+  `-server` and `-cli` are publishable to crates.io (D-303, D-310).
+- `teigeodata-server`, the request core both servers and `tgd` share: the native, GeoJSON and
+  Nominatim-compatible outputs moved there from the CLI, unchanged (D-310).
 - Each release carries the C library alone for every target the Dart hook and the Go loader
   download, Android and iOS included, its SHA-256 pinned in both (D-304); the Dart package is
   publishable to pub.dev, and the JVM binding is bundled for Maven Central as

@@ -1,7 +1,6 @@
 //! The one mapping from a place to what `tgd` prints (ADR-0038): the native record, and the
 //! GeoJSON and Nominatim forms made from it. A compatibility form never adds what the native
 //! record lacks, and leaves out what it cannot fill (Nominatim's OSM `class`, `type`, `osm_id`).
-//! The HTTP server (Phase 6) moves this module as it is.
 //!
 //! - **Native** (`--json`, NDJSON): `id`, `name`, `kind`, `admin_level`, `lat`, `lon`,
 //!   `elevation` (m), `elevation_source` (`surveyed` or `model`, when stated), `parent` (ID), `timezone` (its area's name), `iso_code` (ISO 3166, a
@@ -18,21 +17,66 @@
 //!   ISO `country_code`: the country's ISO 3166 code where the packs have it, else the ID's
 //!   namespace.
 
-use std::fmt::Display;
-use std::io::Write;
+use std::fmt::{self, Display};
+use std::io::{self, Write};
 
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value, json};
 use teigeodata_core::{IsoCode, PlaceId, PlaceKind};
 use teigeodata_engine::{Engine, Error, HeightSource, Place};
 
-use crate::Fail;
+/// Why writing an answer failed.
+#[derive(Debug)]
+pub enum OutputError {
+    /// The writer failed (a closed pipe is [`io::ErrorKind::BrokenPipe`]).
+    Io(io::Error),
+    /// A query the answer needs failed.
+    Engine(Error),
+}
+
+impl Display for OutputError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(e) => e.fmt(f),
+            Self::Engine(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for OutputError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(e) => Some(e),
+            Self::Engine(e) => Some(e),
+        }
+    }
+}
+
+impl From<io::Error> for OutputError {
+    fn from(e: io::Error) -> Self {
+        Self::Io(e)
+    }
+}
+
+impl From<Error> for OutputError {
+    fn from(e: Error) -> Self {
+        Self::Engine(e)
+    }
+}
+
+impl From<serde_json::Error> for OutputError {
+    fn from(e: serde_json::Error) -> Self {
+        // Serializing our records cannot fail but by the writer.
+        Self::Io(e.into())
+    }
+}
 
 /// The longest name a buffer holds: NAMES caps a record far below it.
-const NAME: usize = 1024;
+pub const NAME: usize = 1024;
 
 /// A value serialized by its `Display`, with no allocation.
-pub(crate) struct Shown<T>(pub(crate) T);
+#[derive(Clone, Copy, Debug)]
+pub struct Shown<T>(pub T);
 
 impl<T: Display> Serialize for Shown<T> {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
@@ -41,42 +85,58 @@ impl<T: Display> Serialize for Shown<T> {
 }
 
 /// The native record of one place.
-#[derive(Serialize)]
-pub(crate) struct Record<'a> {
-    pub(crate) id: Shown<PlaceId>,
-    pub(crate) name: Option<&'a str>,
-    pub(crate) kind: Option<&'static str>,
-    pub(crate) admin_level: u8,
+#[derive(Debug, Serialize)]
+pub struct Record<'a> {
+    /// Its stable ID.
+    pub id: Shown<PlaceId>,
+    /// Its canonical name.
+    pub name: Option<&'a str>,
+    /// Its kind (`city`, `country`, ...).
+    pub kind: Option<&'static str>,
+    /// Its admin level: 0 for a point, 1 for a country, deeper units after.
+    pub admin_level: u8,
+    /// Latitude, WGS84 degrees (left out of a GeoJSON feature's properties).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) lat: Option<f64>,
+    pub lat: Option<f64>,
+    /// Longitude, WGS84 degrees (as `lat`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) lon: Option<f64>,
-    pub(crate) elevation: Option<i16>,
+    pub lon: Option<f64>,
+    /// Height above the geoid, metres.
+    pub elevation: Option<i16>,
     /// Where the height came from: `surveyed` or `model` (D-219).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) elevation_source: Option<&'static str>,
-    pub(crate) parent: Option<Shown<PlaceId>>,
-    pub(crate) timezone: Option<&'a str>,
+    pub elevation_source: Option<&'static str>,
+    /// Its parent's ID.
+    pub parent: Option<Shown<PlaceId>>,
+    /// Its timezone area's name (`Asia/Kathmandu`).
+    pub timezone: Option<&'a str>,
+    /// Its ISO 3166 code, when it has one (D-197).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) iso_code: Option<Shown<IsoCode>>,
+    pub iso_code: Option<Shown<IsoCode>>,
+    /// Distance from the point asked about, metres (one decimal).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) meters: Option<f64>,
+    pub meters: Option<f64>,
+    /// Bearing from the place to the point asked about, degrees clockwise from north.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) bearing: Option<f64>,
+    pub bearing: Option<f64>,
+    /// Whether the point asked about is inside the place's outline (`reverse`, TG-19).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) inside: Option<bool>,
+    pub inside: Option<bool>,
+    /// Its search score, comparable only within one query.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) score: Option<i32>,
-    /// `+05:45` (`tgd tz`, TG-03).
+    pub score: Option<i32>,
     /// Every name, canonical first, with its language and origin (`tgd get`, D-227).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) names: Option<Vec<NameOut>>,
+    pub names: Option<Vec<NameOut>>,
+    /// The UTC offset at the instant asked: `+05:45` (`tgd tz`, TG-03).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) utc_offset: Option<String>,
+    pub utc_offset: Option<String>,
+    /// The zone's abbreviation at that instant.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) tz_abbr: Option<String>,
+    pub tz_abbr: Option<String>,
+    /// Whether daylight saving time is in force at that instant.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) is_dst: Option<bool>,
+    pub is_dst: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -94,7 +154,8 @@ struct Feature<'a> {
 }
 
 /// Buffers for one record's names.
-pub(crate) struct Bufs {
+#[derive(Debug)]
+pub struct Bufs {
     name: [u8; NAME],
     tz: [u8; NAME],
 }
@@ -110,16 +171,21 @@ impl Default for Bufs {
 
 /// One place a command found, with what the query adds.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Item {
-    pub(crate) place: Place,
-    pub(crate) meters: Option<f64>,
-    pub(crate) bearing: Option<f64>,
-    pub(crate) inside: Option<bool>,
-    pub(crate) score: Option<i32>,
+pub struct Item {
+    /// The place.
+    pub place: Place,
+    /// Distance from the point asked about, metres.
+    pub meters: Option<f64>,
+    /// Bearing from the place to the point asked about, degrees clockwise from north.
+    pub bearing: Option<f64>,
+    /// Whether the point asked about is inside the place's outline.
+    pub inside: Option<bool>,
+    /// Its search score.
+    pub score: Option<i32>,
     /// A timezone area's UTC offset at the instant asked (`tgd tz`).
-    pub(crate) offset: Option<teigeodata_engine::Offset>,
+    pub offset: Option<teigeodata_engine::Offset>,
     /// List every name with its language and origin (`tgd get`, D-227).
-    pub(crate) all_names: bool,
+    pub all_names: bool,
 }
 
 impl From<Place> for Item {
@@ -138,7 +204,10 @@ impl From<Place> for Item {
 
 /// An optional field: absent when its component is not installed (D-133), so a store that
 /// installed part of a pack answers with what it has; any other error stands.
-pub(crate) fn installed<T>(r: Result<Option<T>, Error>) -> Result<Option<T>, Error> {
+///
+/// # Errors
+/// Any error of `r` but [`Error::MissingComponent`].
+pub fn installed<T>(r: Result<Option<T>, Error>) -> Result<Option<T>, Error> {
     match r {
         Err(Error::MissingComponent { .. }) => Ok(None),
         r => r,
@@ -146,8 +215,8 @@ pub(crate) fn installed<T>(r: Result<Option<T>, Error>) -> Result<Option<T>, Err
 }
 
 /// One name of a place: its text, language tag (`ne-Deva`), type and origin.
-#[derive(Serialize)]
-pub(crate) struct NameOut {
+#[derive(Debug, Serialize)]
+pub struct NameOut {
     text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     lang: Option<String>,
@@ -183,7 +252,10 @@ fn all_names(engine: &Engine, place: &Place, buf: &mut [u8]) -> Result<Vec<NameO
 }
 
 /// The native record of `item`; `with_point` puts `lat` and `lon` in it.
-pub(crate) fn record<'b>(
+///
+/// # Errors
+/// A query the record needs failed (a component not installed leaves its field out).
+pub fn record<'b>(
     engine: &Engine,
     item: &Item,
     bufs: &'b mut Bufs,
@@ -223,11 +295,14 @@ pub(crate) fn record<'b>(
 }
 
 /// Writes `record` of `place` as a GeoJSON feature.
-pub(crate) fn feature(
+///
+/// # Errors
+/// The writer failed.
+pub fn feature(
     out: &mut dyn Write,
     place: &Place,
     properties: Record<'_>,
-) -> Result<(), Fail> {
+) -> Result<(), OutputError> {
     let f = Feature {
         r#type: "Feature",
         id: Shown(place.id),
@@ -241,8 +316,12 @@ pub(crate) fn feature(
     Ok(())
 }
 
-/// Opens a FeatureCollection; [`close_collection`] ends it.
-pub(crate) fn open_collection(out: &mut dyn Write, attribution: Option<&str>) -> Result<(), Fail> {
+/// Opens a FeatureCollection, with `attribution` as a foreign member; [`close_collection`]
+/// ends it.
+///
+/// # Errors
+/// The writer failed.
+pub fn open_collection(out: &mut dyn Write, attribution: Option<&str>) -> Result<(), OutputError> {
     out.write_all(b"{\"type\":\"FeatureCollection\",")?;
     if let Some(a) = attribution {
         out.write_all(b"\"attribution\":")?;
@@ -253,22 +332,31 @@ pub(crate) fn open_collection(out: &mut dyn Write, attribution: Option<&str>) ->
     Ok(())
 }
 
-pub(crate) fn close_collection(out: &mut dyn Write) -> Result<(), Fail> {
+/// Ends a FeatureCollection [`open_collection`] began.
+///
+/// # Errors
+/// The writer failed.
+pub fn close_collection(out: &mut dyn Write) -> Result<(), OutputError> {
     out.write_all(b"\n]}\n")?;
     Ok(())
 }
 
 /// How a query's results are printed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Mode {
+pub enum Mode {
+    /// One line a place, for a terminal.
     Text,
+    /// The native records, a JSON array.
     Json,
+    /// A GeoJSON FeatureCollection (RFC 7946).
     Geojson,
+    /// Nominatim's `json` format.
     Nominatim,
 }
 
 /// The attribution of every layer, one notice per line, each once.
-pub(crate) fn attribution(engine: &Engine) -> Option<String> {
+#[must_use]
+pub fn attribution(engine: &Engine) -> Option<String> {
     let mut lines: Vec<&str> = Vec::new();
     for l in engine.layers() {
         for line in l.attribution().unwrap_or_default().lines() {
@@ -281,18 +369,20 @@ pub(crate) fn attribution(engine: &Engine) -> Option<String> {
 }
 
 /// Writes `items` in `mode`.
-pub(crate) fn write(
+///
+/// # Errors
+/// A query a record needs failed, or the writer failed.
+pub fn write(
     engine: &Engine,
     items: &[Item],
     mode: Mode,
     out: &mut dyn Write,
-) -> Result<(), Fail> {
-    let bad = |e: Error| Fail::Refused(e.to_string());
+) -> Result<(), OutputError> {
     let mut bufs = Bufs::default();
     match mode {
         Mode::Text => {
             for item in items {
-                let r = record(engine, item, &mut bufs, true).map_err(bad)?;
+                let r = record(engine, item, &mut bufs, true)?;
                 text(out, &r)?;
             }
         }
@@ -300,7 +390,7 @@ pub(crate) fn write(
             out.write_all(b"[")?;
             for (i, item) in items.iter().enumerate() {
                 out.write_all(if i == 0 { b"\n" } else { b",\n" })?;
-                let r = record(engine, item, &mut bufs, true).map_err(bad)?;
+                let r = record(engine, item, &mut bufs, true)?;
                 serde_json::to_writer(&mut *out, &r)?;
             }
             out.write_all(b"\n]\n")?;
@@ -311,7 +401,7 @@ pub(crate) fn write(
                 if i > 0 {
                     out.write_all(b",\n")?;
                 }
-                let r = record(engine, item, &mut bufs, false).map_err(bad)?;
+                let r = record(engine, item, &mut bufs, false)?;
                 feature(out, &item.place, r)?;
             }
             close_collection(out)?;
@@ -321,8 +411,7 @@ pub(crate) fn write(
             let v: Vec<Value> = items
                 .iter()
                 .map(|item| nominatim(engine, item, licence.as_deref(), &mut bufs))
-                .collect::<Result<_, _>>()
-                .map_err(bad)?;
+                .collect::<Result<_, _>>()?;
             serde_json::to_writer_pretty(&mut *out, &v)?;
             writeln!(out)?;
         }
@@ -330,7 +419,7 @@ pub(crate) fn write(
     Ok(())
 }
 
-fn text(out: &mut dyn Write, r: &Record<'_>) -> Result<(), Fail> {
+fn text(out: &mut dyn Write, r: &Record<'_>) -> Result<(), OutputError> {
     write!(
         out,
         "{}  {}",
