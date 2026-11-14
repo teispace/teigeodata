@@ -33,7 +33,8 @@ getrandom = { version = "0.4.3", optional = true }
 
 [features]
 # The HTTP server over axum: `http::router` and `http::serve`.
-http = ["dep:axum", "dep:form_urlencoded", "dep:tokio", "dep:tower-http"]
+# With `mcp` too, the MCP server answers at `/mcp` (stateless Streamable HTTP).
+http = ["dep:axum", "dep:form_urlencoded", "dep:tokio", "dep:tower-http", "rmcp?/transport-streamable-http-server"]
 # The fuzz harness of the query parsing (`fuzz::query_string`).
 fuzz = ["dep:form_urlencoded"]
 # The MCP server over rmcp: `mcp::Mcp` and `mcp::serve_stdio` (phase 6.3, D-315).
@@ -58,6 +59,10 @@ required-features = ["http"]
 [[test]]
 name = "mcp"
 required-features = ["mcp"]
+
+[[test]]
+name = "mcp_http"
+required-features = ["http", "mcp"]
 
 [[test]]
 name = "nominatim"

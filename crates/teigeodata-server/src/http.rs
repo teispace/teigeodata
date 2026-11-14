@@ -10,7 +10,8 @@
 //! `{"results": [...], "attribution": ...}` (the native records, D-032), or a GeoJSON
 //! FeatureCollection with `format=geojson`; `limit` defaults to [`Limits::DEFAULT_LIMIT`].
 //! Unknown parameters are ignored. A failure answers `{"error": {"code", "message"}}` with the
-//! code's status ([`Code`]).
+//! code's status ([`Code`]). With the `mcp` feature and `Config::mcp` set, `POST /mcp` is the
+//! MCP server as stateless Streamable HTTP (D-316).
 //!
 //! **Safe by default:** bound to `127.0.0.1` unless told otherwise; CORS off unless origins are
 //! configured; a query string past [`Config::max_query_bytes`] is refused (414); every bound of
@@ -24,7 +25,7 @@ use std::time::{Duration, Instant};
 
 use axum::Router;
 use axum::extract::{ConnectInfo, RawQuery, State};
-use axum::http::header::{CONTENT_TYPE, HeaderValue};
+use axum::http::header::{ACCEPT, CONTENT_TYPE, HeaderName, HeaderValue};
 use axum::http::{HeaderMap, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -49,7 +50,16 @@ pub struct Config {
     /// How long a request may take before it is answered `unavailable` (503).
     pub timeout: Duration,
     /// The origins a browser may call from (CORS); none, the default, sends no CORS headers.
+    /// `/mcp` refuses a request from any other origin (MCP requires the check).
     pub cors_origins: Vec<HeaderValue>,
+    /// The MCP server answered at `/mcp` (stateless Streamable HTTP, D-316); `None` leaves the
+    /// route out.
+    #[cfg(feature = "mcp")]
+    pub mcp: Option<crate::mcp::Mcp>,
+    /// The `Host` values `/mcp` accepts, against DNS rebinding of a server on loopback; empty
+    /// accepts any (a server bound beyond loopback, where the name is the operator's).
+    #[cfg(feature = "mcp")]
+    pub mcp_hosts: Vec<String>,
 }
 
 impl Default for Config {
@@ -59,6 +69,10 @@ impl Default for Config {
             max_query_bytes: 4096,
             timeout: Duration::from_secs(10),
             cors_origins: Vec::new(),
+            #[cfg(feature = "mcp")]
+            mcp: None,
+            #[cfg(feature = "mcp")]
+            mcp_hosts: ["localhost", "127.0.0.1", "::1"].map(String::from).to_vec(),
         }
     }
 }
@@ -79,18 +93,33 @@ pub fn router(app: Arc<App>) -> Router {
     let timeout = app.config.timeout;
     let cors = (!app.config.cors_origins.is_empty()).then(|| {
         CorsLayer::new()
-            .allow_methods([Method::GET])
+            // `POST` and these headers for `/mcp`; the other routes answer `GET` only.
+            .allow_methods([Method::GET, Method::POST])
+            .allow_headers([
+                CONTENT_TYPE,
+                ACCEPT,
+                HeaderName::from_static("mcp-protocol-version"),
+                HeaderName::from_static("mcp-method"),
+                HeaderName::from_static("mcp-name"),
+            ])
             .allow_origin(AllowOrigin::list(app.config.cors_origins.clone()))
     });
-    let mut r = Router::new()
+    let r = Router::new()
         .route("/health", get(health))
         .route("/packs", get(packs))
         .route("/v1/{query}", get(v1))
         .route("/search", get(nominatim_search))
         .route("/reverse", get(nominatim_reverse))
-        .route("/lookup", get(nominatim_lookup))
-        .fallback(not_found)
-        .with_state(app);
+        .route("/lookup", get(nominatim_lookup));
+    #[cfg(feature = "mcp")]
+    let r = match &app.config.mcp {
+        Some(m) => r.route_service(
+            "/mcp",
+            crate::mcp::http_service(m.clone(), &app.config.mcp_hosts, &app.config.cors_origins),
+        ),
+        None => r,
+    };
+    let mut r = r.fallback(not_found).with_state(app);
     if let Some(c) = cors {
         r = r.layer(c);
     }
@@ -125,10 +154,10 @@ pub async fn serve(
     .await
 }
 
-/// A request's headers and peer, for the seams.
-struct Request<'a> {
-    headers: &'a HeaderMap,
-    peer: SocketAddr,
+/// A request's headers and peer, for the seams (MCP's `/mcp` reads them too).
+pub(crate) struct Request<'a> {
+    pub(crate) headers: &'a HeaderMap,
+    pub(crate) peer: Option<SocketAddr>,
 }
 
 impl Incoming for Request<'_> {
@@ -139,7 +168,7 @@ impl Incoming for Request<'_> {
     }
 
     fn peer(&self) -> Option<SocketAddr> {
-        Some(self.peer)
+        self.peer
     }
 }
 
@@ -180,7 +209,7 @@ async fn packs(
 ) -> Response {
     let req = Request {
         headers: &headers,
-        peer,
+        peer: Some(peer),
     };
     if let Err(e) = app.seams.admit(&req, Operation::Packs) {
         return error(&e);
@@ -233,7 +262,7 @@ async fn v1(
     let op = asked.operation();
     let req = Request {
         headers: &headers,
-        peer,
+        peer: Some(peer),
     };
     let caller: Caller = match app.seams.admit(&req, op) {
         Ok(c) => c,
@@ -327,7 +356,10 @@ fn nominatim(
     }
     let p = Params::parse(raw);
     let op = route.operation();
-    let req = Request { headers, peer };
+    let req = Request {
+        headers,
+        peer: Some(peer),
+    };
     let caller = match app.seams.admit(&req, op) {
         Ok(c) => c,
         Err(e) => return nominatim_error(&e, None),

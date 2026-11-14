@@ -119,7 +119,8 @@ stops on Ctrl-C. A build without the `serve` feature leaves it out.
 `timezone`, `elevation`, `postal`, `packs`), each answering structured content with the data's
 attribution; long answers come in pages through a signed `next_cursor`. Packs and places are
 resources: `teigeodata://dataset/np/places`, `teigeodata://place/tgd:np/1xhb`. A build without
-the `mcp` feature leaves it out.
+the `mcp` feature leaves it out. `tgd serve` answers the same MCP server at `/mcp` over HTTP,
+for clients that connect by URL (`http://127.0.0.1:8080/mcp`).
 
 ## Exit codes
 

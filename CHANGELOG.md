@@ -44,6 +44,8 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   answers with their attribution, signed cursors for pages, and packs and places as resources
   (D-315).
 - `/v1/hierarchy?id=` (a place's ancestors) and `/v1/children?id=&limit=` (D-315).
+- `tgd serve` answers MCP at `/mcp` (stateless Streamable HTTP), refusing a foreign `Host`
+  on loopback and any browser origin not configured with `--cors-origin` (D-316).
 - `Store::read_packs`: the packs the journal lists, read without opening the store, so a reader
   beside an install never recovers or removes its files (D-311).
 - Each release carries the C library alone for every target the Dart hook and the Go loader

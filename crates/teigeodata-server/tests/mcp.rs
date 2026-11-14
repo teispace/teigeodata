@@ -26,7 +26,7 @@ use teigeodata_format::{Encoding, Kind, Pack, Tag, Writer};
 use teigeodata_server::mcp::{ATTRIBUTION, DEPTH, Mcp, TOOLS};
 use teigeodata_server::packs::Packs;
 use teigeodata_server::query::{Code, Limits, QueryError};
-use teigeodata_server::seams::{Authorize, Caller, Meter, Operation, Seams, Usage};
+use teigeodata_server::seams::{Authorize, Bare, Caller, Meter, Operation, Seams, Usage};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 const NOTICE: &str = "Synthetic Source, ODbL";
@@ -66,7 +66,7 @@ fn args(v: Value) -> Map<String, Value> {
 }
 
 fn call(mcp: &Mcp, tool: &str, a: Value) -> CallToolResult {
-    mcp.call(tool, &args(a)).expect("the tool exists")
+    mcp.call(tool, &args(a), &Bare).expect("the tool exists")
 }
 
 /// The text of a result's one content block.
@@ -300,7 +300,7 @@ fn every_failure_is_a_tool_error_with_its_code() {
         let r = call(&mcp, tool, a.clone());
         assert_eq!(code(&r), want, "{tool} {a}");
     }
-    assert!(mcp.call("no_such_tool", &Map::new()).is_none());
+    assert!(mcp.call("no_such_tool", &Map::new(), &Bare).is_none());
     drop(mcp);
     std::fs::remove_dir_all(dir).unwrap();
 }

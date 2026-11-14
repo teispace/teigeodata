@@ -262,8 +262,8 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Serve the packs over HTTP: every query as a `GET` route under `/v1/`, with `/packs` and
-    /// `/health`; follows the store's installed packs as they change.
+    /// Serve the packs over HTTP: every query as a `GET` route under `/v1/`, with `/packs`,
+    /// `/health` and MCP at `/mcp`; follows the store's installed packs as they change.
     #[cfg(feature = "serve")]
     Serve {
         /// The address to listen on; port 0 picks a free one.

@@ -45,7 +45,7 @@ use crate::body::{self, Asked, Page, WORK};
 use crate::output::{self, Bufs};
 use crate::packs::Packs;
 use crate::query::{self, Ask, Code, Limits, PostalAsk, QueryError};
-use crate::seams::{Bare, Operation, Seams, Usage};
+use crate::seams::{Bare, Incoming, Operation, Seams, Usage};
 
 /// The deepest place a cursor reaches: five pages of the most results [`Limits::SERVER`]
 /// allows.
@@ -121,14 +121,20 @@ impl Mcp {
         })))
     }
 
-    /// Runs the tool `name` with `args`: what `tools/call` does, without a transport.
+    /// Runs the tool `name` with `args` for `incoming` (what the seams read): what
+    /// `tools/call` does, without a transport. `None` for no such tool.
     #[must_use]
-    pub fn call(&self, name: &str, args: &Map<String, Value>) -> Option<CallToolResult> {
+    pub fn call(
+        &self,
+        name: &str,
+        args: &Map<String, Value>,
+        incoming: &dyn Incoming,
+    ) -> Option<CallToolResult> {
         let tool = TOOLS.iter().position(|t| *t == name)?;
         let start = Instant::now();
         // The engine's calls are synchronous: a panic is caught here, answered, and the
         // server goes on.
-        let done = catch_unwind(AssertUnwindSafe(|| self.run(tool, args, start)))
+        let done = catch_unwind(AssertUnwindSafe(|| self.run(tool, args, incoming, start)))
             .unwrap_or_else(|_| Err(QueryError::new(Code::Internal, "the server failed")));
         Some(match done {
             Ok(r) => r,
@@ -140,6 +146,7 @@ impl Mcp {
         &self,
         tool: usize,
         given: &Map<String, Value>,
+        incoming: &dyn Incoming,
         start: Instant,
     ) -> Result<CallToolResult, QueryError> {
         let name = TOOLS.get(tool).copied().unwrap_or_default();
@@ -150,13 +157,13 @@ impl Mcp {
         };
         let a = Args(&args);
         if name == "packs" {
-            self.0.seams.admit(&Bare, Operation::Packs)?;
+            self.0.seams.admit(incoming, Operation::Packs)?;
             let e = self.0.packs.load();
             return Ok(done(output::packs(&e), output::attribution(&e)));
         }
         let asked = asked(name, &a, &self.0.limits)?;
         let op = asked.operation();
-        let caller = self.0.seams.admit(&Bare, op)?;
+        let caller = self.0.seams.admit(incoming, op)?;
         // A paged ask runs to the end of its page and one more, so the answer knows whether
         // more are there; its own `limit` is checked first, at the server's bound.
         let (asked, page, limits) = match asked {
@@ -257,8 +264,8 @@ impl Mcp {
     }
 
     /// Every pack as a dataset resource.
-    fn datasets(&self) -> Result<ListResourcesResult, QueryError> {
-        self.0.seams.admit(&Bare, Operation::Packs)?;
+    fn datasets(&self, incoming: &dyn Incoming) -> Result<ListResourcesResult, QueryError> {
+        self.0.seams.admit(incoming, Operation::Packs)?;
         let e = self.0.packs.load();
         let items = e
             .layers()
@@ -280,10 +287,10 @@ impl Mcp {
             .with_cache_scope(CacheScope::Private))
     }
 
-    fn read(&self, uri: &str) -> Result<ResourceContents, QueryError> {
+    fn read(&self, uri: &str, incoming: &dyn Incoming) -> Result<ResourceContents, QueryError> {
         let e = self.0.packs.load();
         if let Some(rest) = uri.strip_prefix(DATASET) {
-            self.0.seams.admit(&Bare, Operation::Packs)?;
+            self.0.seams.admit(incoming, Operation::Packs)?;
             let (address, component) = rest.split_once('/').unwrap_or((rest, ""));
             let l = e
                 .layers()
@@ -295,7 +302,7 @@ impl Mcp {
         let Some(id) = uri.strip_prefix(PLACE) else {
             return Err(QueryError::new(Code::NotFound, format!("{uri}: not found")));
         };
-        self.0.seams.admit(&Bare, Operation::Get)?;
+        self.0.seams.admit(incoming, Operation::Get)?;
         let id = percent_decoded(id).ok_or_else(|| bad("the place ID is not valid UTF-8"))?;
         let item = WORK.with_borrow_mut(|(sc, items, _)| {
             let get = Ask::Get { id, names: true };
@@ -380,12 +387,12 @@ impl ServerHandler for Mcp {
     fn call_tool(
         &self,
         request: CallToolRequestParams,
-        _: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> impl Future<Output = Result<CallToolResponse, ErrorData>> + MaybeSendFuture + '_ {
         let empty = JsonObject::new();
         let args = request.arguments.as_ref().unwrap_or(&empty);
         std::future::ready(
-            self.call(&request.name, args)
+            incoming(&context, |i| self.call(&request.name, args, i))
                 .map(CallToolResponse::from)
                 .ok_or_else(|| {
                     ErrorData::invalid_params(format!("no tool {:?}", request.name), None)
@@ -396,9 +403,9 @@ impl ServerHandler for Mcp {
     fn list_resources(
         &self,
         _: Option<PaginatedRequestParams>,
-        _: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> impl Future<Output = Result<ListResourcesResult, ErrorData>> + MaybeSendFuture + '_ {
-        std::future::ready(self.datasets().map_err(protocol))
+        std::future::ready(incoming(&context, |i| self.datasets(i)).map_err(protocol))
     }
 
     fn list_resource_templates(
@@ -430,16 +437,104 @@ impl ServerHandler for Mcp {
     fn read_resource(
         &self,
         request: ReadResourceRequestParams,
-        _: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> impl Future<Output = Result<ReadResourceResponse, ErrorData>> + MaybeSendFuture + '_ {
-        let read = catch_unwind(AssertUnwindSafe(|| self.read(&request.uri)))
-            .unwrap_or_else(|_| Err(QueryError::new(Code::Internal, "the server failed")));
+        let read = catch_unwind(AssertUnwindSafe(|| {
+            incoming(&context, |i| self.read(&request.uri, i))
+        }))
+        .unwrap_or_else(|_| Err(QueryError::new(Code::Internal, "the server failed")));
         std::future::ready(read.map_err(protocol).map(|contents| {
             ReadResourceResult::new(vec![contents])
                 .with_ttl_ms(DATA_TTL_MS)
                 .with_cache_scope(CacheScope::Private)
                 .into()
         }))
+    }
+}
+
+/// Runs `f` with what the request carries for the seams: over HTTP its headers and peer, on
+/// stdio nothing.
+fn incoming<R>(context: &RequestContext<RoleServer>, f: impl FnOnce(&dyn Incoming) -> R) -> R {
+    #[cfg(feature = "http")]
+    if let Some(parts) = context.extensions.get::<axum::http::request::Parts>() {
+        let req = crate::http::Request {
+            headers: &parts.headers,
+            peer: parts
+                .extensions
+                .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+                .map(|c| c.0),
+        };
+        return f(&req);
+    }
+    #[cfg(not(feature = "http"))]
+    let _ = context;
+    f(&Bare)
+}
+
+/// The MCP server as stateless Streamable HTTP (D-316), for the HTTP server's `/mcp`: JSON
+/// answers, no sessions, a `Host` in `hosts` (none: any), and a browser's `Origin` refused
+/// unless it is one of `origins`.
+#[cfg(feature = "http")]
+pub(crate) fn http_service(
+    server: Mcp,
+    hosts: &[String],
+    origins: &[axum::http::HeaderValue],
+) -> rmcp::transport::streamable_http_server::StreamableHttpService<
+    Mcp,
+    rmcp::transport::streamable_http_server::session::never::NeverSessionManager,
+> {
+    use rmcp::transport::streamable_http_server::StreamableHttpServerConfig;
+
+    let mut config = StreamableHttpServerConfig::default()
+        .with_legacy_session_mode(false)
+        .with_json_response(true)
+        .with_sse_keep_alive(None)
+        .with_sse_retry(None)
+        .with_max_request_body_bytes(MAX_BODY_BYTES);
+    config = if hosts.is_empty() {
+        config.disable_allowed_hosts()
+    } else {
+        config.with_allowed_hosts(hosts.iter().cloned())
+    };
+    // With no origins, every `Origin` sent is refused (a native client sends none).
+    let origins: Vec<String> = origins
+        .iter()
+        .filter_map(|o| o.to_str().ok())
+        .map(with_port)
+        .collect();
+    config = if origins.is_empty() {
+        config.enforce_origin_validation()
+    } else {
+        config.with_allowed_origins(origins)
+    };
+    rmcp::transport::streamable_http_server::StreamableHttpService::new(
+        move || Ok(server.clone()),
+        Arc::default(),
+        config,
+    )
+}
+
+/// The longest `/mcp` request body: a call at every bound is a few kilobytes.
+#[cfg(feature = "http")]
+const MAX_BODY_BYTES: usize = 64 * 1024;
+
+/// `origin` with its scheme's port when it names none (`https://a.example` matches port 443
+/// only, never any port).
+#[cfg(feature = "http")]
+fn with_port(origin: &str) -> String {
+    let after_scheme = origin.split_once("://").map_or("", |(_, rest)| rest);
+    // An IPv6 host is bracketed: a port follows the bracket.
+    let host_end = after_scheme.rfind(']').map_or(0, |i| i + 1);
+    if after_scheme
+        .get(host_end..)
+        .is_some_and(|r| r.contains(':'))
+    {
+        return origin.to_owned();
+    }
+    match origin.split_once("://").map(|(s, _)| s) {
+        Some("https") => format!("{origin}:443"),
+        Some("http") => format!("{origin}:80"),
+        _ => origin.to_owned(),
     }
 }
 

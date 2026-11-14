@@ -2,7 +2,8 @@
 //! `tgd install` and `remove` change them (D-172):
 //!
 //! - `tgd serve`: the HTTP server (phase 6.2, [`teigeodata_server::http`]), bound to 127.0.0.1
-//!   unless told otherwise; stops on Ctrl-C after the requests in flight end.
+//!   unless told otherwise, with MCP at `/mcp` when built with `mcp` (D-316); stops on Ctrl-C
+//!   after the requests in flight end.
 //! - `tgd mcp`: the MCP server on standard input and output (phase 6.3,
 //!   [`teigeodata_server::mcp`]), for an MCP client to start; stops when the client closes
 //!   them. Standard output is the protocol's: warnings go to standard error.
@@ -84,14 +85,31 @@ pub(crate) fn run(
                 .map_err(|_| Fail::Refused(format!("--cors-origin {c:?} is not a valid origin")))
         })
         .collect::<Result<_, _>>()?;
+    let packs = Arc::new(packs);
+    let seams = Seams::default();
+    #[allow(unused_mut, reason = "set further with the `mcp` feature")]
+    let mut config = Config {
+        cors_origins,
+        timeout: Duration::from_secs(o.timeout_secs.max(1)),
+        ..Config::default()
+    };
+    #[cfg(feature = "mcp")]
+    {
+        config.mcp = Some(teigeodata_server::mcp::Mcp::new(
+            Arc::clone(&packs),
+            seams.clone(),
+            config.limits,
+        )?);
+        // The `Host` check guards a server on loopback against DNS rebinding; bound beyond
+        // it, the names it answers to are the operator's.
+        if !o.listen.ip().is_loopback() {
+            config.mcp_hosts.clear();
+        }
+    }
     let app = Arc::new(App {
-        packs: Arc::new(packs),
-        seams: Seams::default(),
-        config: Config {
-            cors_origins,
-            timeout: Duration::from_secs(o.timeout_secs.max(1)),
-            ..Config::default()
-        },
+        packs,
+        seams,
+        config,
     });
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

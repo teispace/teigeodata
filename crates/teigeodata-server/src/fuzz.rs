@@ -1,5 +1,5 @@
 //! The fuzz harness of the HTTP query parsing (phase 6.2, feature `fuzz`): one property,
-//! [`query_string`], run on seeded inputs by `cargo test` (`tests/fuzz.rs`) and by libFuzzer
+//! `query_string`, run on seeded inputs by `cargo test` (`tests/fuzz.rs`) and by libFuzzer
 //! nightly (`fuzz/`, target `server_query`), as the format's harnesses are (D-072).
 
 use teigeodata_engine::Engine;
@@ -47,7 +47,7 @@ const KEYS: [&str; 28] = [
 ///
 /// The first byte's upper bits pick the route, its low bit the form of the rest: the bytes as a raw
 /// query string, or segments split at `0xff`, each a key (its first byte, from the routes'
-/// names, its low two bits the value's form) and a value made from the rest ([`value`]),
+/// names, its low two bits the value's form) and a value made from the rest (`value`),
 /// encoded as a browser would.
 ///
 /// # Panics
