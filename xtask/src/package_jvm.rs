@@ -363,7 +363,7 @@ fn android_test(root: &Path, out: &Path) -> Result<String, Vec<String>> {
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     command(root, &d8.display().to_string(), &refs)?;
 
-    let abi = adb_out(root, &["shell", "getprop", "ro.product.cpu.abi"])?;
+    let abi = adb_setup(root, &["shell", "getprop", "ro.product.cpu.abi"])?;
     let abi = abi.trim();
     let lib = out.join("aar/jni").join(abi).join(LIB);
     if !lib.is_file() {
@@ -373,9 +373,12 @@ fn android_test(root: &Path, out: &Path) -> Result<String, Vec<String>> {
         )]);
     }
     let device = "/data/local/tmp/teigeodata";
-    adb_out(root, &["shell", "rm", "-rf", device])?;
-    adb_out(root, &["shell", "mkdir", "-p", &format!("{device}/lib")])?;
-    adb_out(
+    // A device just booted can refuse a command for a few seconds (its storage or adbd still
+    // settling: CI saw `mkdir` fail with no message): setup steps, each idempotent, are tried
+    // again; the parity run itself never is.
+    adb_setup(root, &["shell", "rm", "-rf", device])?;
+    adb_setup(root, &["shell", "mkdir", "-p", &format!("{device}/lib")])?;
+    adb_setup(
         root,
         &[
             "push",
@@ -383,7 +386,7 @@ fn android_test(root: &Path, out: &Path) -> Result<String, Vec<String>> {
             &format!("{device}/lib/{LIB}"),
         ],
     )?;
-    adb_out(
+    adb_setup(
         root,
         &[
             "push",
@@ -391,11 +394,11 @@ fn android_test(root: &Path, out: &Path) -> Result<String, Vec<String>> {
             &format!("{device}/classes.dex"),
         ],
     )?;
-    adb_out(
+    adb_setup(
         root,
         &["shell", "mkdir", "-p", &format!("{device}/bindings")],
     )?;
-    adb_out(
+    adb_setup(
         root,
         &[
             "push",
@@ -403,7 +406,7 @@ fn android_test(root: &Path, out: &Path) -> Result<String, Vec<String>> {
             &format!("{device}/bindings/parity.json"),
         ],
     )?;
-    adb_out(
+    adb_setup(
         root,
         &[
             "push",
@@ -468,6 +471,23 @@ fn walk_classes(dir: &Path) -> Result<Vec<PathBuf>, Vec<String>> {
         }
     }
     Ok(out)
+}
+
+/// `adb_out` for an idempotent setup step: tried up to five times, two seconds apart, waiting
+/// for the device before each retry.
+fn adb_setup(root: &Path, args: &[&str]) -> Result<String, Vec<String>> {
+    let mut last = Vec::new();
+    for attempt in 0..5 {
+        if attempt > 0 {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            let _ = adb_out(root, &["wait-for-device"]);
+        }
+        match adb_out(root, args) {
+            Ok(text) => return Ok(text),
+            Err(e) => last = e,
+        }
+    }
+    Err(last)
 }
 
 fn adb_out(root: &Path, args: &[&str]) -> Result<String, Vec<String>> {
