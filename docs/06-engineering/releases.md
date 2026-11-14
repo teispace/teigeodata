@@ -77,7 +77,7 @@ comes first), data is released by hand as a GitHub pre-release (D-247):
    generic names (a profile's layer is published under a name for what it holds, such as
    `world-np-lite.tgd`), and no gate or doc of a consumer is cited.
 
-The first: [data-2026.11.12](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.12). The latest: [data-2026.11.13.3](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.13.3), built from `86aa753` for readers at `v0.2.0` or later (cities' alternate names, Indian towns' own-language names, city-first ranking; no place added, moved or renamed); every checksum verified from a fresh download, and `cargo xtask ids restore` found it and matched all 250 registries.
+The first: [data-2026.11.12](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.12). The latest: [data-2026.11.14](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.14), built from `8ccf25c` for readers at `v0.2.0` or later (one importance scale, D-266; the profile layer and the Nepal pack keep every ID, while `baseline-lite` and `points-en-lite` were renumbered once to the released registry, D-267); every checksum verified from a fresh download, and `cargo xtask ids restore` found it and matched all 250 registries.
 Once the catalog is live, data releases go through it and these pre-releases stop.
 
 ## Changelog
