@@ -64,6 +64,7 @@ fn served(seams: Seams, mcp: bool, cors: &[&str]) -> (Arc<App>, common::Model, s
                 .iter()
                 .map(|c| HeaderValue::from_str(c).unwrap())
                 .collect(),
+            mcp_port: Some(8080),
             ..Config::default()
         },
     });
@@ -190,6 +191,28 @@ async fn mcp_refuses_a_foreign_host_and_origin() {
     // A native client sends none: answered.
     let (s, v) = post(&app, &call, &h).await;
     assert_eq!(s, StatusCode::OK, "{v}");
+    // The server's own origin (a page it serves) is answered under every loopback name; a
+    // loopback page on another port is another site and is refused.
+    for own in [
+        "http://127.0.0.1:8080",
+        "http://localhost:8080",
+        "http://[::1]:8080",
+    ] {
+        let mut o = h.clone();
+        o.push(("origin", own));
+        let (s, v) = post(&app, &call, &o).await;
+        assert_eq!(s, StatusCode::OK, "{own}: {v}");
+    }
+    for other in [
+        "http://127.0.0.1:3000",
+        "https://127.0.0.1:8080",
+        "http://localhost",
+    ] {
+        let mut o = h.clone();
+        o.push(("origin", other));
+        let (s, _) = post(&app, &call, &o).await;
+        assert!(s.is_client_error(), "{other}: {s}");
+    }
     drop(app);
     std::fs::remove_dir_all(dir).unwrap();
 

@@ -63,6 +63,11 @@ pub struct Config {
     /// accepts any (a server bound beyond loopback, where the name is the operator's).
     #[cfg(feature = "mcp")]
     pub mcp_hosts: Vec<String>,
+    /// The port the server listens on. With `mcp_hosts` set (a server on loopback), `/mcp`
+    /// also accepts the server's own origin, `http://` a loopback name and this port: a page
+    /// it serves is not a rebinding attack. Another port is another site and is refused.
+    #[cfg(feature = "mcp")]
+    pub mcp_port: Option<u16>,
 }
 
 impl Default for Config {
@@ -76,6 +81,8 @@ impl Default for Config {
             mcp: None,
             #[cfg(feature = "mcp")]
             mcp_hosts: ["localhost", "127.0.0.1", "::1"].map(String::from).to_vec(),
+            #[cfg(feature = "mcp")]
+            mcp_port: None,
         }
     }
 }
@@ -118,7 +125,12 @@ pub fn router(app: Arc<App>) -> Router {
     let r = match &app.config.mcp {
         Some(m) => r.route_service(
             "/mcp",
-            crate::mcp::http_service(m.clone(), &app.config.mcp_hosts, &app.config.cors_origins),
+            crate::mcp::http_service(
+                m.clone(),
+                &app.config.mcp_hosts,
+                app.config.mcp_port,
+                &app.config.cors_origins,
+            ),
         ),
         None => r,
     };

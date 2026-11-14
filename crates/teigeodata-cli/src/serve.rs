@@ -100,6 +100,9 @@ pub(crate) fn run(
                 .map_err(|_| Fail::Refused(format!("--cors-origin {c:?} is not a valid origin")))
         })
         .collect::<Result<_, _>>()?;
+    // Bound before the server is made: on loopback `/mcp` accepts its own origin, by port.
+    let listener = std::net::TcpListener::bind(o.listen)?;
+    listener.set_nonblocking(true)?;
     let packs = Arc::new(packs);
     let seams = Seams::default();
     #[allow(unused_mut, reason = "set further with the `mcp` feature")]
@@ -121,6 +124,7 @@ pub(crate) fn run(
         if !o.listen.ip().is_loopback() {
             config.mcp_hosts.clear();
         }
+        config.mcp_port = Some(listener.local_addr()?.port());
     }
     let app = Arc::new(App {
         packs,
@@ -131,7 +135,7 @@ pub(crate) fn run(
         .enable_all()
         .build()?;
     rt.block_on(async {
-        let listener = tokio::net::TcpListener::bind(o.listen).await?;
+        let listener = tokio::net::TcpListener::from_std(listener)?;
         writeln!(out, "serving on http://{}", listener.local_addr()?)?;
         out.flush()?;
         let follow = (o.follow_secs > 0).then(|| Duration::from_secs(o.follow_secs));

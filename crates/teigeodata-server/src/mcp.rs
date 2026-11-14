@@ -38,11 +38,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rmcp::model::{
-    CacheScope, CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock,
-    Implementation, JsonObject, ListResourceTemplatesResult, ListResourcesResult, ListToolsResult,
-    MetaObject, PaginatedRequestParams, ReadResourceRequestParams, ReadResourceResponse,
-    ReadResourceResult, Resource, ResourceContents, ResourceTemplate, ServerCapabilities,
-    ServerConfig, Tool, ToolAnnotations,
+    CacheScope, CallToolRequestParams, CallToolResponse, CallToolResult, CompleteRequestMethod,
+    CompleteRequestParams, CompleteResult, ContentBlock, Implementation, JsonObject,
+    ListPromptsRequestMethod, ListPromptsResult, ListResourceTemplatesResult, ListResourcesResult,
+    ListToolsResult, MetaObject, PaginatedRequestParams, ReadResourceRequestParams,
+    ReadResourceResponse, ReadResourceResult, Resource, ResourceContents, ResourceTemplate,
+    ServerCapabilities, ServerConfig, Tool, ToolAnnotations,
 };
 use rmcp::service::{MaybeSendFuture, RequestContext};
 use rmcp::{ErrorData, RoleServer, ServerHandler, ServiceExt};
@@ -795,6 +796,26 @@ impl ServerHandler for Mcp {
         std::future::ready(incoming(&context, |i| self.datasets(i)).map_err(protocol))
     }
 
+    // Neither prompts nor completions are declared: their methods are not found, rather
+    // than rmcp's default empty answers, which would claim a capability the server lacks.
+    fn list_prompts(
+        &self,
+        _: Option<PaginatedRequestParams>,
+        _: RequestContext<RoleServer>,
+    ) -> impl Future<Output = Result<ListPromptsResult, ErrorData>> + MaybeSendFuture + '_ {
+        std::future::ready(Err(
+            ErrorData::method_not_found::<ListPromptsRequestMethod>(),
+        ))
+    }
+
+    fn complete(
+        &self,
+        _: CompleteRequestParams,
+        _: RequestContext<RoleServer>,
+    ) -> impl Future<Output = Result<CompleteResult, ErrorData>> + MaybeSendFuture + '_ {
+        std::future::ready(Err(ErrorData::method_not_found::<CompleteRequestMethod>()))
+    }
+
     fn list_resource_templates(
         &self,
         _: Option<PaginatedRequestParams>,
@@ -875,7 +896,7 @@ impl ServerHandler for Mcp {
             incoming(&context, |i| self.read(&request.uri, i))
         }))
         .unwrap_or_else(|_| Err(QueryError::new(Code::Internal, "the server failed")));
-        std::future::ready(read.map_err(protocol).map(|contents| {
+        std::future::ready(read.map_err(|e| unread(e, &request.uri)).map(|contents| {
             ReadResourceResult::new(vec![contents])
                 .with_ttl_ms(DATA_TTL_MS)
                 .with_cache_scope(CacheScope::Private)
@@ -910,6 +931,7 @@ fn incoming<R>(context: &RequestContext<RoleServer>, f: impl FnOnce(&dyn Incomin
 pub(crate) fn http_service(
     server: Mcp,
     hosts: &[String],
+    port: Option<u16>,
     origins: &[axum::http::HeaderValue],
 ) -> rmcp::transport::streamable_http_server::StreamableHttpService<
     Mcp,
@@ -928,11 +950,25 @@ pub(crate) fn http_service(
     } else {
         config.with_allowed_hosts(hosts.iter().cloned())
     };
-    // With no origins, every `Origin` sent is refused (a native client sends none).
+    // With no origins, every `Origin` sent is refused (a native client sends none). On
+    // loopback the server's own origin is accepted: same-origin, never a rebinding.
+    let own = port
+        .filter(|_| !hosts.is_empty())
+        .into_iter()
+        .flat_map(|p| {
+            hosts.iter().map(move |h| {
+                if h.contains(':') {
+                    format!("http://[{h}]:{p}")
+                } else {
+                    format!("http://{h}:{p}")
+                }
+            })
+        });
     let origins: Vec<String> = origins
         .iter()
         .filter_map(|o| o.to_str().ok())
         .map(with_port)
+        .chain(own)
         .collect();
     config = if origins.is_empty() {
         config.enforce_origin_validation()
@@ -995,6 +1031,17 @@ fn protocol(e: QueryError) -> ErrorData {
         }
         _ => ErrorData::internal_error(e.message, data),
     }
+}
+
+/// A failed `resources/read` of `uri`: [`protocol`]'s error, carrying the URI when it is not
+/// found (SEP-2164: `data.uri`, so a client knows which of its reads failed).
+fn unread(e: QueryError, uri: &str) -> ErrorData {
+    let missing = e.code == Code::NotFound;
+    let mut error = protocol(e);
+    if missing && let Some(Value::Object(data)) = error.data.as_mut() {
+        data.insert("uri".into(), uri.into());
+    }
+    error
 }
 
 /// A finished answer: `v` as structured content and as text, `attribution` in `_meta`.

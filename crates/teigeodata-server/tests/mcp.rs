@@ -607,6 +607,26 @@ async fn the_resources_are_the_packs_and_the_places() {
         )
         .await;
     assert_eq!(missing["error"]["code"], -32602, "{missing}");
+    // SEP-2164: the error names the resource not found.
+    assert_eq!(
+        missing["error"]["data"]["uri"],
+        format!("teigeodata://place/{absent}"),
+        "{missing}"
+    );
+    // Prompts and completions are not declared: their methods are not found (-32601), not
+    // answered empty.
+    for (n, method, params) in [
+        (10, "prompts/list", json!({ "_meta": meta() })),
+        (
+            11,
+            "completion/complete",
+            json!({ "_meta": meta(), "ref": { "type": "ref/prompt", "name": "x" },
+                    "argument": { "name": "a", "value": "" } }),
+        ),
+    ] {
+        let v = peer.ask(n, method, params).await;
+        assert_eq!(v["error"]["code"], -32601, "{method}: {v}");
+    }
     drop(peer);
     std::fs::remove_dir_all(dir).unwrap();
 }
