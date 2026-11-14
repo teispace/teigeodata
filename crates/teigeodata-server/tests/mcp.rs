@@ -33,8 +33,12 @@ const NOTICE: &str = "Synthetic Source, ODbL";
 
 /// A server over a noticed synthetic pack, and the model it was built from.
 fn server(seams: Seams) -> (Mcp, common::Model, std::path::PathBuf) {
+    server_of(common::synthetic(300, 7), seams)
+}
+
+/// A server over `model` noticed, and the model.
+fn server_of(model: common::Model, seams: Seams) -> (Mcp, common::Model, std::path::PathBuf) {
     static N: AtomicUsize = AtomicUsize::new(0);
-    let model = common::synthetic(300, 7);
     let p = model.encode();
     let pack = Pack::open(&p).unwrap();
     let sections: Vec<(Kind, Encoding, u64, &[u8])> = pack
@@ -69,9 +73,14 @@ fn call(mcp: &Mcp, tool: &str, a: Value) -> CallToolResult {
     mcp.call(tool, &args(a), &Bare).expect("the tool exists")
 }
 
-/// The text of a result's one content block.
+/// The text of a result's first content block; any after it are resource links.
 fn text(r: &CallToolResult) -> &str {
-    assert_eq!(r.content.len(), 1);
+    assert!(
+        r.content[1..]
+            .iter()
+            .all(|c| c.as_resource_link().is_some()),
+        "a text block, then links"
+    );
     &r.content[0].as_text().expect("a text block").text
 }
 
@@ -201,6 +210,9 @@ fn every_tool_answers_what_its_schema_says() {
         ("timezone", json!({ "id": id })),
         ("elevation", json!({ "lat": 27.5, "lon": 85 })),
         ("postal", json!({ "lat": 27.5, "lon": 85 })),
+        ("boundary", json!({ "id": id })),
+        ("distance", json!({ "from": id, "to": "27.5,85" })),
+        ("distance", json!({ "from": "27.5,85", "to": "28,86" })),
         ("packs", json!({})),
     ];
     let mut seen = std::collections::BTreeSet::new();
@@ -440,6 +452,15 @@ fn the_seams_gate_and_meter_every_call() {
     );
     assert_eq!(ids.len(), 4);
     assert_eq!(counted.load(Ordering::Relaxed), 4);
+    // The tools answered outside the paged path are metered too.
+    let id = ids[0].clone();
+    for (tool, a) in [
+        ("boundary", json!({ "id": id })),
+        ("distance", json!({ "from": id, "to": "0,0" })),
+    ] {
+        assert_eq!(call(&mcp, tool, a).is_error, Some(false), "{tool}");
+    }
+    assert_eq!(counted.load(Ordering::Relaxed), 6);
     drop(mcp);
     std::fs::remove_dir_all(dir).unwrap();
 }
@@ -586,7 +607,7 @@ async fn the_resources_are_the_packs_and_the_places() {
         templates["result"]["resourceTemplates"]
             .as_array()
             .map(Vec::len),
-        Some(2),
+        Some(3),
         "{templates}"
     );
     let dataset = peer
@@ -679,6 +700,153 @@ async fn the_wire_serves_2025_11_25_clients_through_initialize() {
         )
         .await;
     assert_eq!(off["result"]["isError"], true, "{off}");
+    drop(peer);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// A server over the synthetic model with outlines, and its country's ID.
+fn outlined_server() -> (Mcp, common::Model, std::path::PathBuf, String) {
+    let (model, _) = common::outlined(false);
+    let row = model
+        .kinds
+        .iter()
+        .position(|&k| k == teigeodata_core::PlaceKind::Country)
+        .unwrap();
+    let (mcp, model, dir) = server_of(model, Seams::default());
+    let id = model.ids[row].to_string();
+    (mcp, model, dir, id)
+}
+
+#[test]
+fn the_boundary_tool_summarises_its_outline_and_links_it() {
+    let (mcp, model, dir, id) = outlined_server();
+    let absent = common::synthetic(300, 99).ids[0].to_string();
+    // The summary: what the outline is, not its vertices, and a link to it.
+    let result = call(&mcp, "boundary", json!({ "id": id }));
+    let summary = answered(&mcp, "boundary", &result);
+    let uri = format!("teigeodata://boundary/{id}?lod=0");
+    assert_eq!(
+        summary["result"],
+        json!({
+            "id": id, "name": summary["result"]["name"], "outlined": true, "lod": 0,
+            "tolerance_m": 0.0, "vertices": 12, "parts": 1, "holes": 1,
+            "bbox": summary["result"]["bbox"], "uri": uri,
+        }),
+        "{summary}"
+    );
+    assert_eq!(summary["attribution"], NOTICE);
+    let bbox: Vec<f64> = serde_json::from_value(summary["result"]["bbox"].clone()).unwrap();
+    let west = f64::from(common::WEST) / 1e7;
+    let east = f64::from(common::EAST) / 1e7;
+    assert!(
+        (bbox[0] - west).abs() < 1e-6 && (bbox[2] - east).abs() < 1e-6 && bbox[1] < bbox[3],
+        "{bbox:?}"
+    );
+    let link = result.content[1]
+        .as_resource_link()
+        .expect("a resource link");
+    assert_eq!(
+        (link.uri.as_str(), link.mime_type.as_deref()),
+        (uri.as_str(), Some("application/geo+json"))
+    );
+    let coarse = answered(
+        &mcp,
+        "boundary",
+        &call(&mcp, "boundary", json!({ "id": id, "lod": 3 })),
+    );
+    assert_eq!(
+        (&coarse["result"]["lod"], &coarse["result"]["vertices"]),
+        (&json!(3), &json!(10))
+    );
+    // A district: one ring, no hole.
+    let district = (0..model.ids.len())
+        .find(|&r| model.kinds[r] == teigeodata_core::PlaceKind::Admin && model.levels[r] == 1)
+        .unwrap();
+    let one = answered(
+        &mcp,
+        "boundary",
+        &call(
+            &mcp,
+            "boundary",
+            json!({ "id": model.ids[district].to_string() }),
+        ),
+    );
+    assert_eq!(
+        (
+            &one["result"]["vertices"],
+            &one["result"]["parts"],
+            &one["result"]["holes"]
+        ),
+        (&json!(6), &json!(1), &json!(0)),
+        "{one}"
+    );
+    for (a, want) in [
+        (json!({ "id": id, "lod": 7 }), "invalid_argument"),
+        (json!({}), "invalid_argument"),
+        (json!({ "id": absent }), "not_found"),
+    ] {
+        assert_eq!(code(&call(&mcp, "boundary", a.clone())), want, "{a}");
+    }
+    // A distance's failures.
+    for (a, want) in [
+        (json!({ "from": id }), "invalid_argument"),
+        (json!({ "from": id, "to": "91,0" }), "invalid_argument"),
+        (json!({ "from": absent, "to": id }), "not_found"),
+    ] {
+        assert_eq!(code(&call(&mcp, "distance", a.clone())), want, "{a}");
+    }
+
+    drop(mcp);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn the_boundary_resource_reads_the_outline_at_its_level() {
+    let (mcp, _, dir, id) = outlined_server();
+    let uri = format!("teigeodata://boundary/{id}?lod=0");
+    // The resource: the outline as GeoJSON, at the level linked, and refused past 6.
+    let mut peer = wire(mcp);
+    let read = peer
+        .ask(2, "resources/read", json!({ "_meta": meta(), "uri": uri }))
+        .await;
+    let contents = &read["result"]["contents"][0];
+    assert_eq!(contents["mimeType"], "application/geo+json", "{read}");
+    let feature: Value = serde_json::from_str(contents["text"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        (
+            &feature["type"],
+            &feature["id"],
+            &feature["geometry"]["type"]
+        ),
+        (&json!("Feature"), &json!(id), &json!("Polygon")),
+        "{feature}"
+    );
+    assert_eq!(feature["properties"]["vertices"], 12, "{feature}");
+    assert_eq!(feature["attribution"], NOTICE, "{feature}");
+    let escaped = format!(
+        "teigeodata://boundary/{}?lod=2",
+        id.replace(':', "%3A").replace('/', "%2F")
+    );
+    let read = peer
+        .ask(
+            3,
+            "resources/read",
+            json!({ "_meta": meta(), "uri": escaped }),
+        )
+        .await;
+    let feature: Value =
+        serde_json::from_str(read["result"]["contents"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(feature["properties"]["lod"], 2, "{feature}");
+    for bad in ["?lod=7", "?lod=x", "?zoom=1"] {
+        let read = peer
+            .ask(
+                4,
+                "resources/read",
+                json!({ "_meta": meta(), "uri": format!("teigeodata://boundary/{id}{bad}") }),
+            )
+            .await;
+        assert_eq!(read["error"]["code"], -32602, "{bad}: {read}");
+    }
     drop(peer);
     std::fs::remove_dir_all(dir).unwrap();
 }

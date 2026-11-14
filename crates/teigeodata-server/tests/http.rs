@@ -129,6 +129,34 @@ async fn every_route_answers_with_its_attribution() {
             &Value::from(NOTICE)
         )
     );
+    // A distance, and an outline (a point place's is its point), as GeoJSON always.
+    let (s, j, _) = call(&app, &format!("/v1/distance?from={id}&to=27.5,85"), None).await;
+    assert_eq!(s, StatusCode::OK, "{j}");
+    assert!(j["result"]["meters"].as_f64().unwrap() > 0.0, "{j}");
+    assert_eq!(
+        (
+            &j["result"]["from"]["id"],
+            &j["result"]["to"]["id"],
+            &j["attribution"]
+        ),
+        (
+            &Value::from(id.as_str()),
+            &Value::Null,
+            &Value::from(NOTICE)
+        ),
+        "{j}"
+    );
+    let (s, j, _) = call(&app, &format!("/v1/boundary?id={id}&format=json"), None).await;
+    assert_eq!(
+        (s, &j["type"], &j["id"], &j["attribution"]),
+        (
+            StatusCode::OK,
+            &Value::from("Feature"),
+            &Value::from(id.as_str()),
+            &Value::from(NOTICE)
+        ),
+        "{j}"
+    );
     let (s, j, _) = call(&app, "/packs", None).await;
     assert_eq!(
         (s, &j["packs"][0]["attribution"]),
@@ -156,6 +184,19 @@ async fn every_failure_answers_its_code_and_status() {
             "/v1/elevation?lat=27&lon=85&format=geojson",
             400,
             "invalid_argument",
+        ),
+        (
+            &*format!("/v1/boundary?id={}&lod=7", model.ids[0]),
+            400,
+            "invalid_argument",
+        ),
+        ("/v1/boundary?lod=1", 400, "invalid_argument"),
+        ("/v1/distance?from=27,85", 400, "invalid_argument"),
+        ("/v1/distance?from=91,0&to=0,0", 400, "invalid_argument"),
+        (
+            &*format!("/v1/distance?from={absent}&to=0,0"),
+            404,
+            "not_found",
         ),
         ("/v1/nothing", 404, "not_found"),
         ("/nothing", 404, "not_found"),

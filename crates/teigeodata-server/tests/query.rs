@@ -1,6 +1,8 @@
 //! The request core's gates (phase 6.1): every bound of [`Limits`] holds at its edge and refuses
 //! past it, every failure has its stable code and never shows a server path, and an answer
-//! carries the attribution of the packs that answered it (D-032), not of every pack.
+//! carries the attribution of the packs that answered it (D-032), not of every pack. An outline
+//! steps to a coarser level to stay within its vertex bound and comes out as GeoJSON with its
+//! rings wound by RFC 7946; a distance measures between places and points (D-317).
 
 #![allow(
     clippy::unwrap_used,
@@ -11,10 +13,14 @@
 #[path = "../../teigeodata-engine/tests/common/mod.rs"]
 mod common;
 
-use teigeodata_engine::{Component, Components, Engine, Layer, LayerOptions, Scratch};
+use serde_json::Value;
+use teigeodata_core::PlaceKind;
+use teigeodata_engine::{Component, Components, Engine, Layer, LayerOptions, Outline, Scratch};
 use teigeodata_format::{Encoding, Kind, Pack, Tag, Writer};
 use teigeodata_server::output::{self, Item, Mode};
-use teigeodata_server::query::{Ask, Code, Limits, PostalAsk, QueryError, answer, postal};
+use teigeodata_server::query::{
+    Ask, At, COARSEST_LOD, Code, Limits, PostalAsk, QueryError, answer, boundary, distance, postal,
+};
 use teigeodata_server::seams::{Authorize, Bare, Caller, Incoming, Operation, Seams};
 
 /// `pack` again with `notice` as its attribution.
@@ -342,11 +348,11 @@ fn an_answer_carries_the_attribution_of_the_packs_that_answered() {
     // The GeoJSON and Nominatim forms carry the same.
     let mut out = Vec::new();
     output::write(&e, &items, Mode::Geojson, &mut out).unwrap();
-    let g: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    let g: Value = serde_json::from_slice(&out).unwrap();
     assert_eq!(g["attribution"], "Source A, ODbL");
     out.clear();
     output::write(&e, &both, Mode::Nominatim, &mut out).unwrap();
-    let n: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    let n: Value = serde_json::from_slice(&out).unwrap();
     assert_eq!(n[0]["licence"], "Source A, ODbL; Source B, CC BY 4.0");
 }
 
@@ -391,4 +397,138 @@ fn the_seams_are_open_by_default_and_a_deployment_plugs_its_own() {
         Code::RateLimited
     );
     assert!(limited.admit(&Bare, Operation::Get).is_ok());
+}
+
+/// Twice the signed area of a GeoJSON ring (shoelace, x = lon): positive counterclockwise.
+fn winding(ring: &Value) -> f64 {
+    let pts: Vec<(f64, f64)> = ring
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (p[0].as_f64().unwrap(), p[1].as_f64().unwrap()))
+        .collect();
+    pts.windows(2)
+        .map(|w| w[0].0 * w[1].1 - w[1].0 * w[0].1)
+        .sum()
+}
+
+#[test]
+fn an_outline_steps_coarser_to_its_vertex_bound_and_is_wound_by_rfc_7946() {
+    let (model, _) = common::outlined(false);
+    let e = engine(&[model.encode()]);
+    let row = model
+        .kinds
+        .iter()
+        .position(|&k| k == PlaceKind::Country)
+        .unwrap();
+    let id = model.ids[row].to_string();
+    // The country: an outer ring and a hole, 6 vertices each at full resolution and 5 at
+    // every coarser level (the mid-edge point goes).
+    let bound = |vertices| Limits {
+        vertices,
+        ..Limits::SERVER
+    };
+    let mut out = Outline::default();
+    let got = |lod, vertices, out: &mut Outline| boundary(&e, &id, lod, &bound(vertices), out);
+    let s = got(None, 12, &mut out).unwrap();
+    assert_eq!((s.lod, s.outlined, out.points.len()), (0, true, 12));
+    let s = got(None, 11, &mut out).unwrap();
+    assert_eq!((s.lod, out.points.len()), (1, 10), "one level coarser");
+    let s = got(Some(4), 12, &mut out).unwrap();
+    assert_eq!(s.lod, 4, "the level asked when within the bound");
+    let s = got(Some(COARSEST_LOD), 10, &mut out).unwrap();
+    assert_eq!(s.lod, COARSEST_LOD);
+    let past = got(None, 9, &mut out).unwrap_err();
+    assert_eq!(past.code, Code::OutOfBounds);
+    assert_eq!(
+        past.message,
+        format!("{id}: the outline has 10 vertices at its coarsest, past the most allowed, 9")
+    );
+    let past = got(Some(COARSEST_LOD + 1), 12, &mut out).unwrap_err();
+    assert_eq!(
+        (past.code, past.message.as_str()),
+        (Code::InvalidArgument, "`lod` must be 0 to 6")
+    );
+    let absent = common::synthetic(300, 99).ids[0].to_string();
+    assert_eq!(
+        boundary(&e, &absent, None, &Limits::SERVER, &mut out)
+            .unwrap_err()
+            .code,
+        Code::NotFound
+    );
+
+    // As GeoJSON: the outer ring counterclockwise, the hole clockwise, closed, with what it is.
+    let s = got(Some(0), 12, &mut out).unwrap();
+    let mut body = Vec::new();
+    output::outline(&e, &s.place, &out, s.lod, s.outlined, &mut body).unwrap();
+    let f: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(f["type"], "Feature");
+    assert_eq!(f["id"], id.as_str());
+    assert_eq!(f["geometry"]["type"], "Polygon", "{f}");
+    let rings = f["geometry"]["coordinates"].as_array().unwrap();
+    assert_eq!(rings.len(), 2);
+    assert!(winding(&rings[0]) > 0.0, "outer counterclockwise: {f}");
+    assert!(winding(&rings[1]) < 0.0, "hole clockwise: {f}");
+    for r in rings {
+        let r = r.as_array().unwrap();
+        assert_eq!(r.first(), r.last(), "closed");
+    }
+    assert_eq!(f["properties"]["lod"], 0);
+    assert_eq!(f["properties"]["vertices"], 12);
+    assert_eq!(f["properties"]["tolerance_m"], 0.0);
+
+    // A settlement has no outline: its point.
+    let r = model
+        .kinds
+        .iter()
+        .position(|&k| k == PlaceKind::Settlement)
+        .unwrap();
+    let town = model.ids[r].to_string();
+    let s = boundary(&e, &town, None, &Limits::SERVER, &mut out).unwrap();
+    assert!(!s.outlined);
+    let mut body = Vec::new();
+    output::outline(&e, &s.place, &out, s.lod, s.outlined, &mut body).unwrap();
+    let f: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(f["geometry"]["type"], "Point", "{f}");
+}
+
+#[test]
+fn a_distance_measures_between_places_and_points() {
+    let model = common::synthetic(300, 7);
+    let e = engine(&[model.encode()]);
+    let at = |lat, lon| At::Point { lat, lon };
+    // A degree of the equator on the mean sphere (R = 6,371,008.8 m): 111,195.08 m, east.
+    let m = distance(&e, &at(0.0, 0.0), &at(0.0, 1.0), &Limits::SERVER).unwrap();
+    assert!((m.meters - 111_195.08).abs() < 0.01, "{}", m.meters);
+    assert!((m.bearing_deg - 90.0).abs() < 1e-9, "{}", m.bearing_deg);
+    let m = distance(&e, &at(1.0, 0.0), &at(0.0, 0.0), &Limits::SERVER).unwrap();
+    assert!(
+        (m.bearing_deg - 180.0).abs() < 1e-9,
+        "south: {}",
+        m.bearing_deg
+    );
+    // A place's end is its point, and carries the place.
+    let id = model.ids[0].to_string();
+    let p = model.points[0];
+    let (lat, lon) = (p.lat_degrees(), p.lon_degrees());
+    let m = distance(&e, &At::parse(&id), &at(lat, lon), &Limits::SERVER).unwrap();
+    assert!(m.meters < 1e-6, "{}", m.meters);
+    assert_eq!(m.from.place.map(|p| p.id), Some(model.ids[0]));
+    assert!(m.to.place.is_none());
+    assert_eq!(At::parse(" 27.7 , 85.3 "), at(27.7, 85.3));
+    assert_eq!(At::parse("tgd:np/1xhb"), At::Place("tgd:np/1xhb".into()));
+    // Failures: a place not there, a point off the globe.
+    let absent = common::synthetic(300, 99).ids[0].to_string();
+    assert_eq!(
+        distance(&e, &At::parse(&absent), &at(0.0, 0.0), &Limits::SERVER)
+            .unwrap_err()
+            .code,
+        Code::NotFound
+    );
+    assert_eq!(
+        distance(&e, &at(91.0, 0.0), &at(0.0, 0.0), &Limits::SERVER)
+            .unwrap_err()
+            .code,
+        Code::InvalidArgument
+    );
 }

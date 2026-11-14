@@ -10,7 +10,7 @@ use core::fmt;
 
 use teigeodata_core::{E6, E7, Grid, PlaceId, Point};
 use teigeodata_engine::{
-    CodeKind, Engine, Error, Focus, Height, Place, PostalCode, Scratch, SearchOptions,
+    CodeKind, Engine, Error, Focus, Height, Outline, Place, PostalCode, Scratch, SearchOptions,
 };
 
 use crate::output::{self, Item};
@@ -139,6 +139,9 @@ pub struct Limits {
     pub limit: usize,
     /// The widest radius in metres.
     pub radius_m: f64,
+    /// The most vertices one outline may answer: a finer one is answered at a coarser level of
+    /// detail, and one past it at the coarsest is refused.
+    pub vertices: usize,
 }
 
 impl Limits {
@@ -148,6 +151,7 @@ impl Limits {
         text_bytes: 256,
         limit: 50,
         radius_m: 1_000_000.0,
+        vertices: 20_000,
     };
 
     /// No bound: `tgd`, whose user owns the machine it runs on.
@@ -155,6 +159,7 @@ impl Limits {
         text_bytes: usize::MAX,
         limit: usize::MAX,
         radius_m: f64::INFINITY,
+        vertices: usize::MAX,
     };
 
     /// The results a query answers when it does not say.
@@ -519,6 +524,165 @@ pub fn elevation(
     s: &mut Scratch,
 ) -> Result<Option<Height>, QueryError> {
     Ok(e.elevation_at(point::<E7>(lat, lon)?, s)?)
+}
+
+/// One end of a distance: a place by ID, or a point.
+#[derive(Clone, Debug, PartialEq)]
+pub enum At {
+    /// A place's ID.
+    Place(String),
+    /// A point, degrees.
+    Point {
+        /// Latitude.
+        lat: f64,
+        /// Longitude.
+        lon: f64,
+    },
+}
+
+/// One end of a measured distance: the point, and the place when it was one.
+#[derive(Clone, Copy, Debug)]
+pub struct End {
+    /// Latitude, degrees.
+    pub lat: f64,
+    /// Longitude, degrees.
+    pub lon: f64,
+    /// The place, when the end was asked by ID.
+    pub place: Option<Place>,
+}
+
+/// A great-circle distance between two ends.
+#[derive(Clone, Copy, Debug)]
+pub struct Measured {
+    /// Where it starts.
+    pub from: End,
+    /// Where it ends.
+    pub to: End,
+    /// Metres on the mean Earth sphere (within about 0.5% of the ellipsoid).
+    pub meters: f64,
+    /// The initial bearing from `from` to `to`, degrees clockwise from north.
+    pub bearing_deg: f64,
+}
+
+impl At {
+    /// An end from its text: `lat,lon` for a point, anything else a place's ID.
+    #[must_use]
+    pub fn parse(text: &str) -> Self {
+        let point = text.split_once(',').and_then(|(lat, lon)| {
+            Some(Self::Point {
+                lat: lat.trim().parse().ok()?,
+                lon: lon.trim().parse().ok()?,
+            })
+        });
+        point.unwrap_or_else(|| Self::Place(text.to_owned()))
+    }
+
+    fn end(&self, e: &Engine, limits: &Limits) -> Result<End, QueryError> {
+        match self {
+            Self::Place(id) => {
+                limits.text("the ID", id)?;
+                let p = place(e, id)?;
+                Ok(End {
+                    lat: p.point.lat_degrees(),
+                    lon: p.point.lon_degrees(),
+                    place: Some(p),
+                })
+            }
+            Self::Point { lat, lon } => {
+                point::<E7>(*lat, *lon)?;
+                Ok(End {
+                    lat: *lat,
+                    lon: *lon,
+                    place: None,
+                })
+            }
+        }
+    }
+}
+
+/// The great-circle distance and initial bearing from `from` to `to`.
+///
+/// # Errors
+/// A place not found, an ID past the bound, a point off the globe.
+pub fn distance(e: &Engine, from: &At, to: &At, limits: &Limits) -> Result<Measured, QueryError> {
+    let (a, b) = (from.end(e, limits)?, to.end(e, limits)?);
+    Ok(Measured {
+        from: a,
+        to: b,
+        meters: teigeodata_engine::meters_between(a.lat, a.lon, b.lat, b.lon),
+        bearing_deg: teigeodata_engine::bearing_deg(a.lat, a.lon, b.lat, b.lon),
+    })
+}
+
+/// The coarsest level of detail [`boundary`] reads; 0 is full resolution.
+pub const COARSEST_LOD: u8 = 6;
+
+/// A place's outline as answered: the level of detail read, into the caller's [`Outline`].
+#[derive(Clone, Copy, Debug)]
+pub struct Shape {
+    /// The place.
+    pub place: Place,
+    /// The level of detail answered: the one asked, or coarser to keep within
+    /// [`Limits::vertices`]; 0 from a pack stored at full resolution only.
+    pub lod: u8,
+    /// Whether the place has an outline; a point place has none (its point is its extent).
+    pub outlined: bool,
+}
+
+/// The outline of the place `id` at level of detail `lod` (0, full resolution, when `None`)
+/// into `out`, or at the first coarser level within [`Limits::vertices`].
+///
+/// # Errors
+/// A `lod` past [`COARSEST_LOD`], a place not found, an ID past the bound, an outline past
+/// the bound at the coarsest level, or the engine's (`boundaries` not installed).
+pub fn boundary(
+    e: &Engine,
+    id: &str,
+    lod: Option<u8>,
+    limits: &Limits,
+    out: &mut Outline,
+) -> Result<Shape, QueryError> {
+    limits.text("the ID", id)?;
+    let first = lod.unwrap_or(0);
+    if first > COARSEST_LOD {
+        return Err(QueryError::new(
+            Code::InvalidArgument,
+            format!("`lod` must be 0 to {COARSEST_LOD}"),
+        ));
+    }
+    let p = place(e, id)?;
+    let mut last = None;
+    for l in first..=COARSEST_LOD {
+        if e.boundary(&p, l, out)?.is_none() {
+            return Ok(Shape {
+                place: p,
+                lod: l,
+                outlined: false,
+            });
+        }
+        let n = out.points.len();
+        if n <= limits.vertices {
+            return Ok(Shape {
+                place: p,
+                // Only full resolution has no tolerance: a pack without levels reads it at any.
+                lod: if out.tolerance_cm == 0 { 0 } else { l },
+                outlined: true,
+            });
+        }
+        // A pack stored at full resolution only has no coarser level: stop at once.
+        if last == Some(n) {
+            break;
+        }
+        last = Some(n);
+    }
+    Err(QueryError::new(
+        Code::OutOfBounds,
+        format!(
+            "{id}: the outline has {} vertices at its coarsest, past the most allowed, {}",
+            out.points.len(),
+            limits.vertices
+        ),
+    ))
 }
 
 /// What a client asks about postal codes (D-200).

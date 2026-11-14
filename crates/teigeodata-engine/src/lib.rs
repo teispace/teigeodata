@@ -103,6 +103,9 @@ pub use shared::{Shared, Snapshot};
 pub use teigeodata_format::Kind;
 pub use teigeodata_format::component::{Component, Components};
 pub use teigeodata_format::place_index::Rect;
+/// Great-circle distance and initial bearing on the mean Earth sphere, as every query
+/// measures them (the same result on every platform).
+pub use teigeodata_format::place_index::{bearing_deg, meters_between};
 
 /// Why the engine could not open a pack or answer a query.
 #[derive(Debug)]

@@ -4,10 +4,10 @@
 
 use std::cell::RefCell;
 
-use teigeodata_engine::{Engine, PostalCode, Scratch};
+use teigeodata_engine::{Engine, Outline, PostalCode, Scratch};
 
 use crate::output::{self, Item, Mode};
-use crate::query::{self, Ask, Code, Limits, PostalAsk, QueryError};
+use crate::query::{self, Ask, At, Code, Limits, PostalAsk, QueryError};
 use crate::seams::Operation;
 
 /// What a request asks: places, a height or postal codes.
@@ -15,6 +15,10 @@ pub(crate) enum Asked {
     Places(Ask),
     Elevation(f64, f64),
     Postal(PostalAsk),
+    /// A place's outline, at a level of detail.
+    Boundary(String, Option<u8>),
+    /// A distance between two ends.
+    Distance(At, At),
 }
 
 impl Asked {
@@ -27,6 +31,8 @@ impl Asked {
             Self::Places(a) => Operation::of(a),
             Self::Elevation(..) => Operation::Elevation,
             Self::Postal(_) => Operation::Postal,
+            Self::Boundary(..) => Operation::Boundary,
+            Self::Distance(..) => Operation::Distance,
         }
     }
 }
@@ -43,6 +49,8 @@ thread_local! {
     /// body).
     pub(crate) static WORK: RefCell<(Scratch, Vec<Item>, Vec<PostalCode>)> =
         RefCell::new((Scratch::default(), Vec::new(), Vec::new()));
+    /// Each worker's outline memory: a country's outline is large, read once per request.
+    pub(crate) static SHAPE: RefCell<Outline> = RefCell::new(Outline::default());
 }
 
 /// Ends a native body: `"attribution": …}`.
@@ -142,6 +150,29 @@ pub(crate) fn answer(
                 );
                 Ok(Answered {
                     results: codes.len(),
+                    more: false,
+                })
+            }
+            Asked::Boundary(id, lod) => SHAPE.with_borrow_mut(|shape| {
+                let got = query::boundary(e, id, *lod, limits, shape)?;
+                output::outline(e, &got.place, shape, got.lod, got.outlined, out).map_err(fail)?;
+                Ok(Answered {
+                    results: 1,
+                    more: false,
+                })
+            }),
+            Asked::Distance(from, to) => {
+                let m = query::distance(e, from, to, limits)?;
+                out.extend_from_slice(b"{\"result\":");
+                output::distance(&m, out).map_err(fail)?;
+                let layers = [m.from.place, m.to.place];
+                close(
+                    out,
+                    output::attribution_layers(e, layers.iter().flatten().map(|p| p.layer))
+                        .as_deref(),
+                );
+                Ok(Answered {
+                    results: 1,
                     more: false,
                 })
             }

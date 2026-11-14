@@ -70,6 +70,10 @@ pub enum Operation {
     Elevation,
     /// [`crate::query::postal`].
     Postal,
+    /// [`crate::query::boundary`].
+    Boundary,
+    /// [`crate::query::distance`].
+    Distance,
     /// The pack set's description.
     Packs,
 }
@@ -106,6 +110,8 @@ impl Operation {
             Self::Timezone => "timezone",
             Self::Elevation => "elevation",
             Self::Postal => "postal",
+            Self::Boundary => "boundary",
+            Self::Distance => "distance",
             Self::Packs => "packs",
         }
     }

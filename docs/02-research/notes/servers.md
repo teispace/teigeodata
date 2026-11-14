@@ -163,6 +163,11 @@ What building it on rmcp 3.10.0 taught (D-315):
 - **Measured on the Nepal lite pack** (release build, this machine, shared): `server/discover`
   answers in 3.8 ms from start; `tools/list` is 21.7 KB; the first `search` (pages not yet
   mapped in) 20 ms. `tgd` with both servers is 9.4 MB (phase 6.4 measures it without them).
+- **Outlines are linked, not inlined** (D-317). Nepal's outline is 10,374 vertices (250 KB of
+  GeoJSON) at level 2, the finest within 20,000; Bagmati's 18,379 at full resolution. That
+  would fill a model's context, so the `boundary` tool answers what the outline is and a
+  `resource_link`; a client that draws reads the resource. With both tools `tools/list` is
+  24.5 KB.
 
 ## 6. Impact on the plan
 

@@ -22,16 +22,17 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use teigeodata_core::{E6, E7, IsoCode, Namespace, PlaceId, PlaceKind, Point, hilbert};
-use teigeodata_format::arcs::Arcs;
+use teigeodata_format::arcs::{self, ArcColumns, Arcs, PINNED};
 use teigeodata_format::elevation::{self, Elevations};
 use teigeodata_format::hierarchy::{self, Hierarchy};
 use teigeodata_format::idmap::{self, IdMap};
 use teigeodata_format::iso_codes::{self, IsoCodes};
 use teigeodata_format::names::{self, NameRecord, NameType, Names, Tag as NameTag};
-use teigeodata_format::place_index::{self, PlaceIndex};
+use teigeodata_format::place_index::{self, PlaceIndex, Rect};
 use teigeodata_format::place_tz;
 use teigeodata_format::places::{self, PlaceColumns, Places};
-use teigeodata_format::polygons::Polygons;
+use teigeodata_format::poly_index;
+use teigeodata_format::polygons::{self, PolygonInput, Polygons, arc_ref};
 use teigeodata_format::redirects::{self, Fate, Redirects};
 use teigeodata_format::region::{self, Options, Region};
 use teigeodata_format::search::{self, EXACT, LOOSE, Search};
@@ -739,4 +740,109 @@ pub fn synthetic(n: usize, seed: u64) -> Model {
         iso: Vec::new(),
         parents: rows.iter().map(|p| p.parent.map(|q| new_of[&q])).collect(),
     }
+}
+
+/// Half the side of a district, 1e-7°: the synthetic country is 4 × 2 districts of 2° × 2°.
+pub const HALF: i32 = (EAST - WEST) / 8;
+
+pub fn at(lat: i32, lon: i32) -> Point<E7> {
+    Point::<E7>::from_units(lat, lon).unwrap()
+}
+
+/// A closed ring around `[w, s, e, n]` with a point halfway along the south edge that only full
+/// resolution keeps, and its levels.
+pub fn ring(w: i32, s: i32, e: i32, n: i32) -> (Vec<Point<E7>>, Vec<u8>) {
+    let mid = w + (e - w) / 2;
+    (
+        vec![at(s, w), at(s, mid), at(s, e), at(n, e), at(n, w), at(s, w)],
+        vec![PINNED, 0, PINNED, PINNED, PINNED, PINNED],
+    )
+}
+
+/// The synthetic model with outlines (D-194): the country (with a hole) and, unless `country_only`, its
+/// 8 districts. Returns the model and each outlined row with its exact box `[w, s, e, n]` on
+/// the 1e-7° grid.
+pub fn outlined(country_only: bool) -> (Model, Vec<(u32, [i32; 4])>) {
+    let mut m = synthetic(300, 7);
+    // The admin index stays off: it was written for these regions without arcs.
+    m.admin = None;
+    let mut shapes = Vec::new();
+    for (r, (&kind, &level)) in m.kinds.iter().zip(&m.levels).enumerate() {
+        let r = r as u32;
+        if kind == PlaceKind::Country {
+            shapes.push((r, [WEST, SOUTH, EAST, NORTH]));
+        } else if kind == PlaceKind::Admin && level == 1 && !country_only {
+            let p = m.points[r as usize];
+            let (lat, lon) = (p.lat() * 10, p.lon() * 10);
+            shapes.push((r, [lon - HALF, lat - HALF, lon + HALF, lat + HALF]));
+        }
+    }
+    // POLYGONS order: level 0, then level 1, each by row.
+    shapes.sort_by_key(|&(r, _)| (m.levels[r as usize], r));
+    let mut rings: Vec<(Vec<Point<E7>>, Vec<u8>)> = shapes
+        .iter()
+        .map(|&(_, [w, s, e, n])| ring(w, s, e, n))
+        .collect();
+    // A hole in the country: arc after the polygons' own.
+    let c = i32::midpoint(SOUTH, NORTH);
+    rings.push(ring(
+        WEST + HALF,
+        c - HALF / 4,
+        WEST + HALF + HALF / 2,
+        c + HALF / 4,
+    ));
+    let pts: Vec<&[Point<E7>]> = rings.iter().map(|r| r.0.as_slice()).collect();
+    let lvs: Vec<&[u8]> = rings.iter().map(|r| r.1.as_slice()).collect();
+    let tol = [100, 200, 400, 800, 1_600, 3_200];
+    let arcs_body = arcs::encode(&ArcColumns {
+        arcs: &pts,
+        levels: &lvs,
+        tolerances_cm: &tol,
+    })
+    .unwrap();
+    let hole = shapes.len() as u32;
+    let refs: Vec<Vec<u32>> = (0..shapes.len() as u32)
+        .map(|a| vec![arc_ref(a, false)])
+        .collect();
+    let hole_ref = [arc_ref(hole, false)];
+    let ring_lists: Vec<Vec<&[u32]>> = refs
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let mut v = vec![r.as_slice()];
+            if i == 0 {
+                v.push(&hole_ref[..]);
+            }
+            v
+        })
+        .collect();
+    let parts: Vec<[&[&[u32]]; 1]> = ring_lists.iter().map(|r| [r.as_slice()]).collect();
+    let input: Vec<PolygonInput<'_>> = shapes
+        .iter()
+        .zip(&parts)
+        .map(|(&(row, [w, s, e, n]), parts)| PolygonInput {
+            row,
+            parts: &parts[..],
+            label: at(s + (n - s) / 2, w + (e - w) / 2),
+            area_ha: 1,
+        })
+        .collect();
+    let groups: &[u32] = if country_only { &[0] } else { &[0, 1] };
+    let poly_body = polygons::encode(&input, groups).unwrap();
+    let boxes: Vec<Rect> = shapes
+        .iter()
+        .map(|&(_, [w, s, e, n])| {
+            let mut b = Rect::around_e7(s, w);
+            b.grow(&Rect::around_e7(n, e));
+            b
+        })
+        .collect();
+    let ix_body = poly_index::encode(&boxes, 4).unwrap();
+    let k = shapes.len() as u64;
+    m.arcs = Some((arcs_body, k + 1));
+    m.raw = vec![
+        (Kind::POLYGONS, k, poly_body),
+        (Kind::POLY_INDEX, k, ix_body),
+    ];
+    (m, shapes)
 }

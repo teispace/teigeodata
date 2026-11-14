@@ -648,6 +648,143 @@ pub fn elevation(
     Ok(())
 }
 
+/// Writes `place`'s outline as a GeoJSON feature: a `Polygon` for one part, a `MultiPolygon`
+/// for several, the point for a place without one. Outer rings run counterclockwise and holes
+/// clockwise (RFC 7946 §3.1.6), coordinates to 7 decimals (the stored grid). Its properties are
+/// the native record, the level of detail, the tolerance in metres and the vertex count; its
+/// `attribution` the outline's and the place's layers'.
+///
+/// # Errors
+/// A query the record needs failed, or the writer failed.
+pub fn outline(
+    engine: &Engine,
+    place: &Place,
+    shape: &teigeodata_engine::Outline,
+    lod: u8,
+    outlined: bool,
+    out: &mut Vec<u8>,
+) -> Result<(), OutputError> {
+    let mut bufs = Bufs::default();
+    let r = record(engine, &Item::from(*place), &mut bufs, true)?;
+    out.extend_from_slice(b"{\"type\":\"Feature\",\"id\":");
+    serde_json::to_writer(&mut *out, &place.id.to_string())?;
+    out.extend_from_slice(b",\"geometry\":");
+    if outlined {
+        geometry(shape, out)?;
+    } else {
+        write!(
+            out,
+            "{{\"type\":\"Point\",\"coordinates\":[{:.7},{:.7}]}}",
+            place.point.lon_degrees(),
+            place.point.lat_degrees()
+        )?;
+    }
+    out.extend_from_slice(b",\"properties\":");
+    let mut props = serde_json::to_value(&r)?;
+    if let Some(o) = props.as_object_mut() {
+        o.insert("lod".into(), lod.into());
+        o.insert(
+            "tolerance_m".into(),
+            (f64::from(shape.tolerance_cm) / 100.0).into(),
+        );
+        o.insert(
+            "vertices".into(),
+            if outlined { shape.points.len() } else { 1 }.into(),
+        );
+    }
+    serde_json::to_writer(&mut *out, &props)?;
+    out.extend_from_slice(b",\"attribution\":");
+    serde_json::to_writer(
+        &mut *out,
+        &attribution_layers(engine, [place.layer]).as_deref(),
+    )?;
+    out.extend_from_slice(b"}\n");
+    Ok(())
+}
+
+/// The `Polygon` or `MultiPolygon` of `shape`.
+fn geometry(shape: &teigeodata_engine::Outline, out: &mut Vec<u8>) -> Result<(), OutputError> {
+    let parts = shape
+        .rings
+        .iter()
+        .map(|r| r.part)
+        .max()
+        .map_or(0, |p| p + 1);
+    let multi = parts > 1;
+    out.extend_from_slice(if multi {
+        b"{\"type\":\"MultiPolygon\",\"coordinates\":["
+    } else {
+        b"{\"type\":\"Polygon\",\"coordinates\":["
+    });
+    let mut part = None;
+    for (i, ring) in shape.rings.iter().enumerate() {
+        let pts = shape.points.get(ring.points.clone()).unwrap_or_default();
+        if multi && part != Some(ring.part) {
+            if part.is_some() {
+                out.extend_from_slice(b"],");
+            }
+            out.push(b'[');
+            part = Some(ring.part);
+        } else if i > 0 {
+            out.push(b',');
+        }
+        // Twice the signed area (shoelace, degrees): positive for counterclockwise.
+        let area: f64 = pts
+            .windows(2)
+            .map(|w| match w {
+                [a, b] => a.lon_degrees() * b.lat_degrees() - b.lon_degrees() * a.lat_degrees(),
+                _ => 0.0,
+            })
+            .sum();
+        let reverse = (area > 0.0) == ring.hole;
+        out.push(b'[');
+        let mut write_point = |j: usize, p: &teigeodata_core::Point<teigeodata_core::E7>| {
+            if j > 0 {
+                out.push(b',');
+            }
+            write!(out, "[{:.7},{:.7}]", p.lon_degrees(), p.lat_degrees())
+        };
+        if reverse {
+            for (j, p) in pts.iter().rev().enumerate() {
+                write_point(j, p)?;
+            }
+        } else {
+            for (j, p) in pts.iter().enumerate() {
+                write_point(j, p)?;
+            }
+        }
+        out.push(b']');
+    }
+    if multi && part.is_some() {
+        out.push(b']');
+    }
+    out.extend_from_slice(b"]}");
+    Ok(())
+}
+
+/// Writes a distance (from [`crate::query::distance`]) as its native object: `meters`,
+/// `bearing` and each end's `lat`, `lon` and `id` when it was a place.
+///
+/// # Errors
+/// The writer failed.
+pub fn distance(m: &crate::query::Measured, out: &mut Vec<u8>) -> Result<(), OutputError> {
+    let end = |e: &crate::query::End| {
+        json!({
+            "lat": e.lat,
+            "lon": e.lon,
+            "id": e.place.map(|p| p.id.to_string()),
+        })
+    };
+    let v = json!({
+        "meters": (m.meters * 10.0).round() / 10.0,
+        "bearing": (m.bearing_deg * 10.0).round() / 10.0,
+        "from": end(&m.from),
+        "to": end(&m.to),
+    });
+    serde_json::to_writer(&mut *out, &v)?;
+    Ok(())
+}
+
 /// Writes postal codes (from [`crate::query::postal`]): one line per code and place, or a
 /// JSON array of `scheme`, `code`, `kind`, `valid_from`, `valid_to`, `replaced`, `id`, `name`
 /// and `admin_level`.

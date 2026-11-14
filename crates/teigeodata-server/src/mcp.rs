@@ -4,7 +4,8 @@
 //! through their `initialize`.
 //!
 //! **Tools** (read-only, [`TOOLS`]): `search`, `reverse`, `nearby`, `get_place`, `lookup`,
-//! `admin_at`, `hierarchy`, `children`, `timezone`, `elevation`, `postal` and `packs`. Each has
+//! `admin_at`, `hierarchy`, `children`, `timezone`, `elevation`, `postal`, `boundary`,
+//! `distance` and `packs` (D-317). Each has
 //! an `inputSchema` with the server's bounds and an `outputSchema`, and answers
 //! `structuredContent` with the same object as text: the HTTP server's native body,
 //! `{"results": [...], "attribution": ...}` (D-032), from the same code. The attribution is in
@@ -18,8 +19,10 @@
 //! run of the server is refused.
 //!
 //! **Resources.** `teigeodata://dataset/{address}/{component}` (a pack: release, places,
-//! components, attribution) and `teigeodata://place/{id}` (a place with every name, as a
-//! GeoJSON feature).
+//! components, attribution), `teigeodata://place/{id}` (a place with every name, as a
+//! GeoJSON feature) and `teigeodata://boundary/{id}?lod=` (its outline as a GeoJSON feature).
+//! The `boundary` tool answers what the outline is and links that resource: an outline runs to
+//! thousands of vertices, too many for a model's context.
 //!
 //! The engine's calls run inline (D-309) and every call passes the seams (ADR-0025); a panic
 //! answers `internal` and the server goes on.
@@ -44,8 +47,8 @@ use serde_json::{Map, Value, json};
 use crate::body::{self, Asked, Page, WORK};
 use crate::output::{self, Bufs};
 use crate::packs::Packs;
-use crate::query::{self, Ask, Code, Limits, PostalAsk, QueryError};
-use crate::seams::{Bare, Incoming, Operation, Seams, Usage};
+use crate::query::{self, Ask, At, Code, Limits, PostalAsk, QueryError};
+use crate::seams::{Bare, Caller, Incoming, Operation, Seams, Usage};
 
 /// The deepest place a cursor reaches: five pages of the most results [`Limits::SERVER`]
 /// allows.
@@ -55,7 +58,7 @@ pub const DEPTH: usize = 250;
 pub const ATTRIBUTION: &str = "teigeodata/attribution";
 
 /// The tools, in the order `tools/list` gives them.
-pub const TOOLS: [&str; 12] = [
+pub const TOOLS: [&str; 14] = [
     "search",
     "reverse",
     "nearby",
@@ -67,6 +70,8 @@ pub const TOOLS: [&str; 12] = [
     "timezone",
     "elevation",
     "postal",
+    "boundary",
+    "distance",
     "packs",
 ];
 
@@ -82,6 +87,7 @@ const DATA_TTL_MS: u64 = 60_000;
 
 const DATASET: &str = "teigeodata://dataset/";
 const PLACE: &str = "teigeodata://place/";
+const BOUNDARY: &str = "teigeodata://boundary/";
 
 /// The MCP server over a pack set: clone it freely (it is one `Arc`).
 #[derive(Clone)]
@@ -161,6 +167,11 @@ impl Mcp {
             let e = self.0.packs.load();
             return Ok(done(output::packs(&e), output::attribution(&e)));
         }
+        if name == "boundary" {
+            let caller = self.0.seams.admit(incoming, Operation::Boundary)?;
+            let r = self.outline_summary(&a)?;
+            return Ok(self.metered(&caller, Operation::Boundary, 1, r, start));
+        }
         let asked = asked(name, &a, &self.0.limits)?;
         let op = asked.operation();
         let caller = self.0.seams.admit(incoming, op)?;
@@ -196,22 +207,33 @@ impl Mcp {
         {
             o.insert("next_cursor".into(), self.cursor(name, &args, next).into());
         }
-        let r = done(v, attribution);
+        Ok(self.metered(&caller, op, answered.results, done(v, attribution), start))
+    }
+
+    /// Records a call's usage with the meter seam, and passes its result on.
+    fn metered(
+        &self,
+        caller: &Caller,
+        op: Operation,
+        results: usize,
+        r: CallToolResult,
+        start: Instant,
+    ) -> CallToolResult {
         let bytes = r
             .content
             .first()
             .and_then(|c| c.as_text())
             .map_or(0, |t| t.text.len());
         self.0.seams.meter.record(
-            &caller,
+            caller,
             op,
             Usage {
-                results: answered.results,
+                results,
                 bytes,
                 micros: u64::try_from(start.elapsed().as_micros()).unwrap_or(u64::MAX),
             },
         );
-        Ok(r)
+        r
     }
 
     /// A cursor for `tool` called with `args` (less any cursor), at `offset`: the call as
@@ -263,6 +285,61 @@ impl Mcp {
         }
     }
 
+    /// The `boundary` tool: what the outline is (level of detail, vertices, parts, box) and a
+    /// link to it as a resource, not the vertices themselves: an outline is too large for a
+    /// model's context and a client fetches it when it draws.
+    fn outline_summary(&self, args: &Args<'_>) -> Result<CallToolResult, QueryError> {
+        let id = args.need_text("id")?;
+        let lod = args
+            .whole("lod")?
+            .map(|l| u8::try_from(l).unwrap_or(u8::MAX));
+        let e = self.0.packs.load();
+        body::SHAPE.with_borrow_mut(|shape| {
+            let got = query::boundary(&e, &id, lod, &self.0.limits, shape)?;
+            let mut buf = [0_u8; output::NAME];
+            let name = output::installed(e.name(&got.place, &mut buf))
+                .map_err(QueryError::from)?
+                .map(str::to_owned);
+            let mut bbox = [f64::MAX, f64::MAX, f64::MIN, f64::MIN];
+            for point in &shape.points {
+                let (lat, lon) = (point.lat_degrees(), point.lon_degrees());
+                bbox = [
+                    bbox[0].min(lon),
+                    bbox[1].min(lat),
+                    bbox[2].max(lon),
+                    bbox[3].max(lat),
+                ];
+            }
+            let uri = format!("{BOUNDARY}{}?lod={}", got.place.id, got.lod);
+            let result = if got.outlined {
+                json!({
+                    "id": got.place.id.to_string(), "name": name, "outlined": true,
+                    "lod": got.lod, "tolerance_m": f64::from(shape.tolerance_cm) / 100.0,
+                    "vertices": shape.points.len(),
+                    "parts": shape.rings.iter().map(|r| r.part).max().map_or(0, |p| p + 1),
+                    "holes": shape.rings.iter().filter(|r| r.hole).count(),
+                    "bbox": bbox, "uri": uri,
+                })
+            } else {
+                json!({
+                    "id": got.place.id.to_string(), "name": name, "outlined": false,
+                    "lod": got.lod, "tolerance_m": 0.0, "vertices": 1, "parts": 0, "holes": 0,
+                    "bbox": null, "uri": uri,
+                })
+            };
+            let attribution = output::attribution_layers(&e, [got.place.layer]);
+            let mut r = done(
+                json!({ "result": result, "attribution": attribution }),
+                attribution.clone(),
+            );
+            r.content.push(ContentBlock::resource_link(
+                Resource::new(uri, format!("boundary of {}", got.place.id))
+                    .with_mime_type("application/geo+json"),
+            ));
+            Ok(r)
+        })
+    }
+
     /// Every pack as a dataset resource.
     fn datasets(&self, incoming: &dyn Incoming) -> Result<ListResourcesResult, QueryError> {
         self.0.seams.admit(incoming, Operation::Packs)?;
@@ -298,6 +375,28 @@ impl Mcp {
                 .ok_or_else(|| QueryError::new(Code::NotFound, format!("{uri}: not found")))?;
             return Ok(ResourceContents::text(output::pack(l).to_string(), uri)
                 .with_mime_type("application/json"));
+        }
+        if let Some(rest) = uri.strip_prefix(BOUNDARY) {
+            self.0.seams.admit(incoming, Operation::Boundary)?;
+            let (id, query) = rest.split_once('?').unwrap_or((rest, ""));
+            let id = percent_decoded(id).ok_or_else(|| bad("the place ID is not valid UTF-8"))?;
+            let lod = match query.strip_prefix("lod=") {
+                None if query.is_empty() => None,
+                Some(l) => Some(l.parse::<u8>().unwrap_or(u8::MAX)),
+                None => return Err(bad("the only parameter is `lod`")),
+            };
+            let mut text = Vec::with_capacity(4096);
+            body::answer(
+                &e,
+                &Asked::Boundary(id, lod),
+                true,
+                &self.0.limits,
+                Page::ALL,
+                &mut text,
+            )?;
+            let text = String::from_utf8(text)
+                .map_err(|_| QueryError::new(Code::Internal, "the answer failed"))?;
+            return Ok(ResourceContents::text(text, uri).with_mime_type("application/geo+json"));
         }
         let Some(id) = uri.strip_prefix(PLACE) else {
             return Err(QueryError::new(Code::NotFound, format!("{uri}: not found")));
@@ -419,6 +518,13 @@ impl ServerHandler for Mcp {
                 .with_title("A place")
                 .with_description(
                     "A place by its ID (tgd:np/1xhb), with every name, as a GeoJSON feature",
+                )
+                .with_mime_type("application/geo+json"),
+            ResourceTemplate::new(format!("{BOUNDARY}{{id}}{{?lod}}"), "boundary")
+                .with_title("A place's outline")
+                .with_description(
+                    "A place's outline as a GeoJSON feature, simplified to level of detail `lod` \
+                     (0 finest to 6 coarsest)",
                 )
                 .with_mime_type("application/geo+json"),
             ResourceTemplate::new(format!("{DATASET}{{address}}/{{component}}"), "dataset")
@@ -740,6 +846,12 @@ fn asked(name: &str, a: &Args<'_>, limits: &Limits) -> Result<Asked, QueryError>
             }
         }
         "elevation" => return Ok(Asked::Elevation(a.need("lat")?, a.need("lon")?)),
+        "distance" => {
+            return Ok(Asked::Distance(
+                At::parse(&a.need_text("from")?),
+                At::parse(&a.need_text("to")?),
+            ));
+        }
         "postal" => {
             return Ok(Asked::Postal(match a.text("code")? {
                 Some(code) => PostalAsk::Code {
@@ -799,10 +911,7 @@ fn percent_decoded(s: &str) -> Option<String> {
 }
 
 /// The tools' definitions, their bounds from `limits`.
-#[allow(
-    clippy::too_many_lines,
-    reason = "one table: the twelve tools' definitions"
-)]
+#[allow(clippy::too_many_lines, reason = "one table: the tools' definitions")]
 fn tools(limits: &Limits) -> Vec<Tool> {
     let lat = json!({ "type": "number", "minimum": -90, "maximum": 90, "description": "Latitude, WGS84 degrees." });
     let lon = json!({ "type": "number", "minimum": -180, "maximum": 180, "description": "Longitude, WGS84 degrees." });
@@ -936,6 +1045,25 @@ fn tools(limits: &Limits) -> Vec<Tool> {
             &postal_schema(),
         ),
         def(
+            "boundary",
+            "Outline of a place",
+            "What a place's outline is: its level of detail (0 finest to 6 coarsest; the finest within the vertex bound when `lod` is not given), tolerance in metres, vertices, parts, holes and bounding box, and the `uri` of the outline itself as a GeoJSON resource, to read when it is drawn. A place with no outline answers `outlined: false`.",
+            json!({ "id": id, "lod": { "type": "integer", "minimum": 0, "maximum": query::COARSEST_LOD } }),
+            &["id"],
+            &boundary_schema(),
+        ),
+        def(
+            "distance",
+            "Distance and bearing",
+            "The great-circle distance in metres and initial bearing between two ends, each a place ID or a point as `lat,lon`.",
+            json!({
+                "from": { "type": "string", "minLength": 1, "maxLength": limits.text_bytes, "description": "A place ID such as tgd:np/1xhb, or a point such as 27.7172,85.324." },
+                "to": { "type": "string", "minLength": 1, "maxLength": limits.text_bytes, "description": "A place ID, or a point as `lat,lon`." },
+            }),
+            &["from", "to"],
+            &distance_schema(),
+        ),
+        def(
             "packs",
             "Installed packs",
             "The packs served: address, component, release, places, installed components and attribution.",
@@ -1023,6 +1151,44 @@ fn postal_schema() -> Value {
             "attribution": { "type": nullable("string") },
         },
         "required": ["results", "attribution"],
+    })
+}
+
+fn boundary_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "result": { "type": "object", "properties": {
+                "id": { "type": "string" }, "name": { "type": nullable("string") },
+                "outlined": { "type": "boolean" },
+                "lod": { "type": "integer" }, "tolerance_m": { "type": "number" },
+                "vertices": { "type": "integer" }, "parts": { "type": "integer" },
+                "holes": { "type": "integer" },
+                "bbox": { "type": ["array", "null"], "items": { "type": "number" }, "minItems": 4, "maxItems": 4, "description": "West, south, east, north." },
+                "uri": { "type": "string" },
+            }, "required": ["id", "name", "outlined", "lod", "vertices", "bbox", "uri"] },
+            "attribution": { "type": nullable("string") },
+        },
+        "required": ["result", "attribution"],
+    })
+}
+
+fn distance_schema() -> Value {
+    let end = json!({ "type": "object", "properties": {
+        "lat": { "type": "number" }, "lon": { "type": "number" },
+        "id": { "type": nullable("string") },
+    }, "required": ["lat", "lon", "id"] });
+    json!({
+        "type": "object",
+        "properties": {
+            "result": { "type": "object", "properties": {
+                "meters": { "type": "number" },
+                "bearing": { "type": "number", "description": "Degrees clockwise from north." },
+                "from": end, "to": end,
+            }, "required": ["meters", "bearing", "from", "to"] },
+            "attribution": { "type": nullable("string") },
+        },
+        "required": ["result", "attribution"],
     })
 }
 

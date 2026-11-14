@@ -5,7 +5,8 @@
 //! `reverse?lat=&lon=&limit=&in_country=`, `near?id=&limit=&radius_m=`,
 //! `search?q=&limit=&focus=lat,lon&scale_km=&strict=`, `hierarchy?id=`, `children?id=&limit=`,
 //! `admin?lat=&lon=`,
-//! `tz?lat=&lon=&t=` or `tz?id=&t=`, `elevation?lat=&lon=`,
+//! `tz?lat=&lon=&t=` or `tz?id=&t=`, `elevation?lat=&lon=`, `boundary?id=&lod=` (a GeoJSON
+//! feature), `distance?from=&to=` (each a place's ID or `lat,lon`),
 //! `postal?code=&scheme=&prefix=&limit=` or `postal?lat=&lon=`. A place query answers
 //! `{"results": [...], "attribution": ...}` (the native records, D-032), or a GeoJSON
 //! FeatureCollection with `format=geojson`; `limit` defaults to [`Limits::DEFAULT_LIMIT`].
@@ -250,6 +251,8 @@ async fn v1(
         Err(e) => return error(&e),
     };
     let geojson = match p.get("format") {
+        // An outline is a GeoJSON feature in any format asked.
+        _ if matches!(asked, Asked::Boundary(..)) => true,
         None | Some("json") => false,
         Some("geojson") if matches!(asked, Asked::Places(_)) => true,
         Some(f) => {

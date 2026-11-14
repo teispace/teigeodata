@@ -2,11 +2,11 @@
 //! so the fuzz harness ([`crate::fuzz`]) runs the very code the server does.
 
 use crate::body::Asked;
-use crate::query::{Ask, Code, Limits, PostalAsk, QueryError};
+use crate::query::{Ask, At, Code, Limits, PostalAsk, QueryError};
 
 /// The routes under `/v1/`, in the order the fuzz harness picks them.
 #[cfg(feature = "fuzz")]
-pub(crate) const ROUTES: [&str; 15] = [
+pub(crate) const ROUTES: [&str; 17] = [
     "get",
     "lookup",
     "reverse",
@@ -18,6 +18,8 @@ pub(crate) const ROUTES: [&str; 15] = [
     "tz",
     "elevation",
     "postal",
+    "boundary",
+    "distance",
     "none",
     "nominatim/search",
     "nominatim/reverse",
@@ -159,6 +161,13 @@ pub(crate) fn asked(route: &str, p: &Params) -> Result<Asked, QueryError> {
             }
         }
         "elevation" => return Ok(Asked::Elevation(p.need("lat")?, p.need("lon")?)),
+        "boundary" => return Ok(Asked::Boundary(p.text("id")?, p.parsed("lod")?)),
+        "distance" => {
+            return Ok(Asked::Distance(
+                At::parse(&p.text("from")?),
+                At::parse(&p.text("to")?),
+            ));
+        }
         "postal" => {
             return Ok(Asked::Postal(match p.get("code") {
                 Some(code) => PostalAsk::Code {

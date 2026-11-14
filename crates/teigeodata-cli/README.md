@@ -102,9 +102,13 @@ curl 'http://127.0.0.1:8080/v1/search?q=Pokhara&limit=3'
 ```
 
 Every query is a `GET` route under `/v1/` (`get`, `lookup`, `reverse`, `near`, `search`,
-`hierarchy`, `children`, `admin`, `tz`, `elevation`, `postal`), with `/packs` and `/health`. A place query answers
+`hierarchy`, `children`, `admin`, `tz`, `elevation`, `postal`, `boundary`, `distance`), with
+`/packs` and `/health`. A place query answers
 `{"results": [...], "attribution": ...}`, or GeoJSON with `format=geojson`; a failure answers
-`{"error": {"code": ..., "message": ...}}` with its HTTP status. `/search`, `/reverse` and
+`{"error": {"code": ..., "message": ...}}` with its HTTP status. `/v1/boundary?id=` answers
+the place's outline as GeoJSON, at the finest level of detail within 20,000 vertices unless
+`lod` (0 to 6) asks for one; `/v1/distance?from=&to=` the metres and bearing between two
+places or points (`from=tgd:np/2cn&to=28.21,83.99`). `/search`, `/reverse` and
 `/lookup` answer as Nominatim does (`format=json`, `jsonv2` or `geojson`), for clients written
 for it; OSM-only fields are left out. The server listens on
 127.0.0.1 unless `--listen` says otherwise, sends no CORS headers unless `--cors-origin` names
@@ -114,11 +118,13 @@ stops on Ctrl-C. A build without the `serve` feature leaves it out.
 
 `tgd mcp` serves the same queries to an AI agent over MCP (revisions 2026-07-28 and
 2025-11-25), on standard input and output: an MCP client starts it, for example with
-`{"command": "tgd", "args": ["mcp"]}` in its server list. It has twelve read-only tools
+`{"command": "tgd", "args": ["mcp"]}` in its server list. It has fourteen read-only tools
 (`search`, `reverse`, `nearby`, `get_place`, `lookup`, `admin_at`, `hierarchy`, `children`,
-`timezone`, `elevation`, `postal`, `packs`), each answering structured content with the data's
-attribution; long answers come in pages through a signed `next_cursor`. Packs and places are
-resources: `teigeodata://dataset/np/places`, `teigeodata://place/tgd:np/1xhb`. A build without
+`timezone`, `elevation`, `postal`, `boundary`, `distance`, `packs`), each answering structured
+content with the data's attribution; long answers come in pages through a signed
+`next_cursor`. Packs, places and outlines are resources: `teigeodata://dataset/np/places`,
+`teigeodata://place/tgd:np/1xhb`, `teigeodata://boundary/tgd:np/1wmc?lod=2` (the `boundary`
+tool answers what an outline is and links it, rather than filling the context with it). A build without
 the `mcp` feature leaves it out. `tgd serve` answers the same MCP server at `/mcp` over HTTP,
 for clients that connect by URL (`http://127.0.0.1:8080/mcp`).
 
