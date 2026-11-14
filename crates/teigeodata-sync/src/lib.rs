@@ -74,5 +74,7 @@ pub mod store;
 pub mod transport;
 #[cfg(feature = "trust")]
 pub mod trust;
+#[cfg(feature = "client")]
+pub mod watch;
 
 pub use error::Error;

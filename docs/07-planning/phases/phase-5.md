@@ -57,7 +57,8 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 - [ ] `teigeodata-api` over sync: the store (init, refresh, catalog, find, locate, install,
   update, remove, pin, repair, status) as jobs with progress callbacks and cancellation
   ([research](../../02-research/notes/store-api.md)). Done so far: the policy moved from the
-  command line into `teigeodata_sync::client`, the CLI on top (its tests unchanged)
+  command line into `teigeodata_sync::client`, the CLI on top (its tests unchanged); progress
+  and cancel as a watched transport (`teigeodata_sync::watch`)
 - [ ] The IDL extended for what the surface needs (handles, enums, options structs, jobs), with
   a schema version; the drift check covers every generated file. Done so far: format 2 with
   handles, methods, `&[u8]` and handle parameters; format 3 with records of scalar fields

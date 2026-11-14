@@ -57,6 +57,7 @@ impl From<ClientError> for Fail {
         match e {
             ClientError::Network(m) => Self::Network(m),
             ClientError::Refused(m) => Self::Refused(m),
+            ClientError::Cancelled => Self::Refused("cancelled".into()),
         }
     }
 }

@@ -43,6 +43,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   remove, pin, repair, status) moved from the command line into `teigeodata_sync::client`
   (feature `client`), for the bindings to share; `tgd` formats its results. `tgd install`
   now prints its lines when the whole install ends.
+- `teigeodata_sync::watch`: a `Watch` (progress in bytes, a sequence to wait on, cancel) and
+  `Watched`, a transport that reports to it and stops at the next request or chunk once
+  cancelled (`FetchError::Cancelled`, `ClientError::Cancelled`). `Transport::expect` passes
+  the catalog's size of the work to come.
 
 ### Breaking
 

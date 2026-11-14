@@ -43,6 +43,8 @@ pub enum ClientError {
     Network(String),
     /// The call cannot be done as asked: a refusal, a verification failure, a missing pack.
     Refused(String),
+    /// The work was cancelled; the store is as it was before it.
+    Cancelled,
 }
 
 impl ClientError {
@@ -55,6 +57,7 @@ impl fmt::Display for ClientError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Network(m) | Self::Refused(m) => f.write_str(m),
+            Self::Cancelled => f.write_str("cancelled"),
         }
     }
 }
@@ -64,6 +67,10 @@ impl std::error::Error for ClientError {}
 impl From<RefreshError> for ClientError {
     fn from(e: RefreshError) -> Self {
         match e {
+            RefreshError::Network {
+                error: FetchError::Cancelled,
+                ..
+            } => Self::Cancelled,
             RefreshError::Network { .. } => Self::Network(e.to_string()),
             e => Self::Refused(e.to_string()),
         }
@@ -72,7 +79,9 @@ impl From<RefreshError> for ClientError {
 
 impl From<FetchError> for ClientError {
     fn from(e: FetchError) -> Self {
-        if matches!(e, FetchError::Transport(_) | FetchError::Status(_)) {
+        if matches!(e, FetchError::Cancelled) {
+            Self::Cancelled
+        } else if matches!(e, FetchError::Transport(_) | FetchError::Status(_)) {
             Self::Network(e.to_string())
         } else {
             Self::Refused(e.to_string())
@@ -624,6 +633,7 @@ impl<N: Transport> Client<N> {
             }
         } else {
             let mut mirrors = Mirrors::new(self.assets.clone());
+            self.net.expect(entry.size_of(set.set).wire);
             self.store.install(
                 &mut self.net,
                 &mut mirrors,

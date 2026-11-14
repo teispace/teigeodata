@@ -77,6 +77,12 @@ pub trait Transport {
     /// [`FetchError::Response`] for more than `max` bytes; [`FetchError::Transport`] when the
     /// request failed.
     fn fetch(&mut self, url: &str, max: u64, out: &mut Vec<u8>) -> Result<(), FetchError>;
+
+    /// The work about to start expects about `bytes` from the host (the catalog's wire size),
+    /// for a transport that reports progress. The default ignores it.
+    fn expect(&mut self, bytes: u64) {
+        let _ = bytes;
+    }
 }
 
 /// Why fetching or installing failed.
@@ -101,11 +107,14 @@ pub enum FetchError {
     /// The transport does not hold these byte ranges of the asset yet: a platform downloads
     /// them, then installs again (D-184). Ranges are in file order, adjacent ones merged.
     Needs(Vec<Range<u64>>),
+    /// The work was cancelled (a watched transport, D-274).
+    Cancelled,
 }
 
 impl fmt::Display for FetchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Cancelled => f.write_str("cancelled"),
             Self::Status(s) => write!(f, "the host answered {s}, not 206 Partial Content"),
             Self::Response(p) => write!(f, "the host's response was refused: {p}"),
             Self::Transport(m) => write!(f, "the request failed: {m}"),
