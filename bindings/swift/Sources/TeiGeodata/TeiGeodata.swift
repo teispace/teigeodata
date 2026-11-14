@@ -157,7 +157,8 @@ public final class Engine: @unchecked Sendable {
         raw = out!
     }
 
-    /// Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+    /// Opens the pack at `path` (memory-mapped) and adds it. Returns its layer ID, for
+    /// `remove`: unique in this engine, counting up from 0.
     ///
     /// # Errors
     ///
@@ -171,7 +172,8 @@ public final class Engine: @unchecked Sendable {
         return out
     }
 
-    /// Adds a pack from its bytes (copied). Returns the number of packs.
+    /// Adds a pack from its bytes (copied). Returns its layer ID, as
+    /// `open_file`.
     ///
     /// # Errors
     ///
@@ -180,6 +182,15 @@ public final class Engine: @unchecked Sendable {
         var out: UInt32 = 0
         let status = withExtendedLifetime(self) { bytes.withUnsafeBytes { bytesBytes in tg_engine_open_bytes(raw, bytesBytes.baseAddress?.assumingMemoryBound(to: UInt8.self), bytesBytes.count, &out) } }
         try check(status)
+        return out
+    }
+
+    /// Removes the pack with this layer ID; false if no pack has it. Queries already running
+    /// finish on the snapshot they started with; the pack's memory is released after them.
+    public func remove(_ layer: UInt32) -> Bool {
+        var out: Bool = false
+        let status = withExtendedLifetime(self) { tg_engine_remove(raw, layer, &out) }
+        expectOK(status)
         return out
     }
 

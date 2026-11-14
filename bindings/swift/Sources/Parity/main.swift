@@ -114,7 +114,7 @@ let e = p["engine"] as! [String: Any]
 let dir = URL(fileURLWithPath: path).deletingLastPathComponent()
 do {
     let engine = Engine()
-    check(try engine.openFile(dir.appendingPathComponent(e["fixture"] as! String).path) == 1, "open")
+    check(try engine.openFile(dir.appendingPathComponent(e["fixture"] as! String).path) == 0, "open")
     let get = e["get"] as! [String: Any]
     let row = try engine.get(get["id"] as! String)
     check(strings(row, "name") == [get["name"] as? String], "get name")
@@ -165,10 +165,11 @@ do {
     expect(.corrupt) { _ = try engine.openBytes(Data("not a pack".utf8)) }
     check(engine.layers() == 1, "layers")
     let h = e["elevation_at"] as! [String: Any]
-    check(try engine.openFile(dir.appendingPathComponent(h["fixture"] as! String).path) == 2, "open dem")
+    check(try engine.openFile(dir.appendingPathComponent(h["fixture"] as! String).path) == 1, "open dem")
     let height = try engine.elevationAt(h["lat"] as! Double, lon: h["lon"] as! Double)
     check(column(height, "meters", as: UInt64.self).map { Double(bitPattern: $0) } == [h["meters"] as! Double], "meters")
     check(strings(height, "source") == [h["source"] as? String], "source")
+    check(engine.remove(1) && !engine.remove(1) && engine.layers() == 1, "remove")
     // Sendable: four tasks query one engine at once.
     let id = get["id"] as! String
     let names = await withTaskGroup(of: [String?].self) { group in

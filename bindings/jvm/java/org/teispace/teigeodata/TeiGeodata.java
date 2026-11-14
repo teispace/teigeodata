@@ -149,7 +149,8 @@ public static final class Engine implements AutoCloseable {
         private static native long nativeNew();
 
         /**
-         * Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+         * Opens the pack at `path` (memory-mapped) and adds it. Returns its layer ID, for
+         * `remove`: unique in this engine, counting up from 0.
          *
          * # Errors
          *
@@ -169,7 +170,8 @@ return nativeOpenFile(handle, path);
         private static native long nativeOpenFile(long handle, String path);
 
         /**
-         * Adds a pack from its bytes (copied). Returns the number of packs.
+         * Adds a pack from its bytes (copied). Returns its layer ID, as
+         * `open_file`.
          *
          * # Errors
          *
@@ -186,6 +188,22 @@ return nativeOpenBytes(handle, bytes);
         }
 
         private static native long nativeOpenBytes(long handle, byte[] bytes);
+
+        /**
+         * Removes the pack with this layer ID; false if no pack has it. Queries already running
+         * finish on the snapshot they started with; the pack's memory is released after them.
+         */
+        public boolean remove(long layer) {
+            long stamp = enter();
+            try {
+return nativeRemove(handle, layer);
+            } finally {
+                lock.unlockRead(stamp);
+                java.lang.ref.Reference.reachabilityFence(this);
+            }
+        }
+
+        private static native boolean nativeRemove(long handle, long layer);
 
         /**
          * The number of packs.

@@ -173,7 +173,8 @@ pub unsafe extern "C" fn tg_engine_new(out: *mut *mut TgEngine) -> i32 {
     })
 }
 
-/// Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+/// Opens the pack at `path` (memory-mapped) and adds it. Returns its layer ID, for
+/// `remove`: unique in this engine, counting up from 0.
 ///
 /// # Errors
 ///
@@ -199,7 +200,8 @@ pub unsafe extern "C" fn tg_engine_open_file(
     })
 }
 
-/// Adds a pack from its bytes (copied). Returns the number of packs.
+/// Adds a pack from its bytes (copied). Returns its layer ID, as
+/// `open_file`.
 ///
 /// # Errors
 ///
@@ -218,6 +220,25 @@ pub unsafe extern "C" fn tg_engine_open_bytes(
         // SAFETY: the caller passes `bytes_len` readable bytes (or null and 0).
         let bytes = unsafe { abi::bytes_arg(bytes, bytes_len, "bytes") }?;
         let value = this.0.open_bytes(bytes)?;
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// Removes the pack with this layer ID; false if no pack has it. Queries already running
+/// finish on the snapshot they started with; the pack's memory is released after them.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_remove(
+    handle: *const TgEngine,
+    layer: u32,
+    out: *mut bool,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        let value = this.0.remove(layer);
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };
         Ok(())

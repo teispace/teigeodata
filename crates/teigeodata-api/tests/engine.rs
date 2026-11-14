@@ -104,7 +104,7 @@ fn open() -> (Engine, common::Model) {
     let model = synthetic(400, 11);
     let engine = Engine::new();
     assert_eq!(engine.layers(), 0);
-    assert_eq!(engine.open_bytes(&model.encode()), Ok(1));
+    assert_eq!(engine.open_bytes(&model.encode()), Ok(0));
     (engine, model)
 }
 
@@ -343,7 +343,7 @@ fn the_parity_file_matches_rust() {
         env!("CARGO_MANIFEST_DIR"),
         s(&p["fixture"])
     );
-    assert_eq!(engine.open_file(&path), Ok(1));
+    assert_eq!(engine.open_file(&path), Ok(0));
 
     let g = &p["get"];
     let blob = engine.get(&s(&g["id"])).unwrap();
@@ -421,7 +421,7 @@ fn the_parity_file_matches_rust() {
         env!("CARGO_MANIFEST_DIR"),
         s(&c["fixture"])
     );
-    assert_eq!(engine.open_file(&dem), Ok(2));
+    assert_eq!(engine.open_file(&dem), Ok(1));
     let got = engine.elevation_at(n(&c["lat"]), n(&c["lon"])).unwrap();
     assert!((f64s(&got, "meters")[0] - n(&c["meters"])).abs() < 1e-6);
     assert_eq!(strings(&got, "source"), [Some(s(&c["source"]))]);
@@ -536,4 +536,24 @@ fn postal_codes_answer_with_their_places() {
     let (plain, _) = open();
     assert_eq!(rows(&plain.postal_lookup("10601", "").unwrap()), 0);
     assert_eq!(rows(&plain.postal_at(27.5, 85.5).unwrap()), 0);
+}
+
+#[test]
+fn packs_are_removed_by_their_layer_id() {
+    let (engine, model) = open();
+    let id = model.ids[country(&model)].to_string();
+    let other = engine.open_bytes(&synthetic(50, 3).encode()).unwrap();
+    assert_eq!((other, engine.layers()), (1, 2));
+    // A held snapshot keeps answering while its pack goes.
+    let blob = engine.get(&id).unwrap();
+    assert!(engine.remove(0));
+    assert!(!engine.remove(0), "already gone");
+    assert!(!engine.remove(7), "never added");
+    assert_eq!(engine.layers(), 1);
+    assert_eq!(strings(&blob, "name"), [Some("Synthland".to_owned())]);
+    // IDs are not reused.
+    assert_eq!(engine.open_bytes(&model.encode()), Ok(2));
+    assert!(engine.remove(other) && engine.remove(2));
+    assert_eq!(engine.layers(), 0);
+    assert_eq!(rows(&engine.get(&id).unwrap()), 0);
 }

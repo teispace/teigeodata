@@ -81,6 +81,7 @@ final class TeiGeodata {
         _engineNewNative = lib.lookupFunction<Int32 Function(Pointer<Pointer<Void>>), int Function(Pointer<Pointer<Void>>)>('tg_engine_new', isLeaf: true),
         _engineOpenFileNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint32>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>)>('tg_engine_open_file', isLeaf: true),
         _engineOpenBytesNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint32>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>)>('tg_engine_open_bytes', isLeaf: true),
+        _engineRemoveNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Uint32, Pointer<Bool>), int Function(Pointer<Void>, int, Pointer<Bool>)>('tg_engine_remove', isLeaf: true),
         _engineLayersNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint32>), int Function(Pointer<Void>, Pointer<Uint32>)>('tg_engine_layers', isLeaf: true),
         _engineGetNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_get', isLeaf: true),
         _engineParentNative = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>), int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>)>('tg_engine_parent', isLeaf: true),
@@ -117,6 +118,7 @@ final class TeiGeodata {
   final int Function(Pointer<Pointer<Void>>) _engineNewNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>) _engineOpenFileNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>) _engineOpenBytesNative;
+  final int Function(Pointer<Void>, int, Pointer<Bool>) _engineRemoveNative;
   final int Function(Pointer<Void>, Pointer<Uint32>) _engineLayersNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineGetNative;
   final int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<TgBytes>) _engineParentNative;
@@ -312,6 +314,12 @@ final class TeiGeodata {
     return _word.cast<Uint32>().value;
   }
 
+  bool _engineRemove(Pointer<Void> handle, int layer) {
+    final status = _engineRemoveNative(handle, layer, _word.cast());
+    _check(status);
+    return _word.cast<Bool>().value;
+  }
+
   int _engineLayers(Pointer<Void> handle) {
     final status = _engineLayersNative(handle, _word.cast());
     _check(status);
@@ -461,7 +469,8 @@ final class Engine implements Finalizable {
   /// An engine with no packs.
   factory Engine(TeiGeodata lib) => lib._engineNew();
 
-  /// Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+  /// Opens the pack at `path` (memory-mapped) and adds it. Returns its layer ID, for
+  /// `remove`: unique in this engine, counting up from 0.
   ///
   /// # Errors
   ///
@@ -469,12 +478,17 @@ final class Engine implements Finalizable {
   /// valid pack.
   int openFile(String path) => _lib._engineOpenFile(_live, path);
 
-  /// Adds a pack from its bytes (copied). Returns the number of packs.
+  /// Adds a pack from its bytes (copied). Returns its layer ID, as
+  /// `open_file`.
   ///
   /// # Errors
   ///
   /// `ErrorCode::Corrupt` if the bytes are not a valid pack.
   int openBytes(Uint8List bytes) => _lib._engineOpenBytes(_live, bytes);
+
+  /// Removes the pack with this layer ID; false if no pack has it. Queries already running
+  /// finish on the snapshot they started with; the pack's memory is released after them.
+  bool remove(int layer) => _lib._engineRemove(_live, layer);
 
   /// The number of packs.
   int layers() => _lib._engineLayers(_live);

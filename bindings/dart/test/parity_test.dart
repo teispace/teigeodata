@@ -137,7 +137,7 @@ void main() {
   test('engine handle on the fixture pack', () {
     final e = parity['engine'] as Map<String, dynamic>;
     final engine = Engine(tg);
-    expect(engine.openFile('../${e['fixture']}'), 1);
+    expect(engine.openFile('../${e['fixture']}'), 0);
     final g = e['get'] as Map<String, dynamic>;
     final row = engine.get(g['id'] as String);
     expect(strings(row, 'name'), [g['name']]);
@@ -188,10 +188,11 @@ void main() {
     expect(() => engine.openBytes(Uint8List.fromList(utf8.encode('not a pack'))), throwsA(isA<CorruptException>()));
     expect(engine.layers(), 1);
     final h = e['elevation_at'] as Map<String, dynamic>;
-    expect(engine.openFile('../${h['fixture']}'), 2);
+    expect(engine.openFile('../${h['fixture']}'), 1);
     final height = engine.elevationAt(h['lat'] as double, h['lon'] as double);
     expect((column(height, 'meters') as Float64List).single, h['meters']);
     expect(strings(height, 'source'), [h['source']]);
+    expect([engine.remove(1), engine.remove(1), engine.layers()], [true, false, 1]);
     engine.close();
     engine.close(); // idempotent
     expect(engine.layers, throwsStateError);

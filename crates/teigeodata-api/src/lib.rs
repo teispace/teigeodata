@@ -167,7 +167,8 @@ impl Engine {
         }
     }
 
-    /// Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+    /// Opens the pack at `path` (memory-mapped) and adds it. Returns its layer ID, for
+    /// [`remove`](Self::remove): unique in this engine, counting up from 0.
     ///
     /// # Errors
     ///
@@ -178,7 +179,8 @@ impl Engine {
         Ok(self.add(layer))
     }
 
-    /// Adds a pack from its bytes (copied). Returns the number of packs.
+    /// Adds a pack from its bytes (copied). Returns its layer ID, as
+    /// [`open_file`](Self::open_file).
     ///
     /// # Errors
     ///
@@ -189,9 +191,16 @@ impl Engine {
     }
 
     fn add(&self, layer: Layer) -> u32 {
+        self.shared.update(|e| e.add(layer).get())
+    }
+
+    /// Removes the pack with this layer ID; false if no pack has it. Queries already running
+    /// finish on the snapshot they started with; the pack's memory is released after them.
+    #[must_use]
+    pub fn remove(&self, layer: u32) -> bool {
         self.shared.update(|e| {
-            e.add(layer);
-            u32::try_from(e.layers().len()).unwrap_or(u32::MAX)
+            let id = e.layers().map(Layer::id).find(|id| id.get() == layer);
+            id.and_then(|id| e.remove(id)).is_some()
         })
     }
 

@@ -207,7 +207,8 @@
         {
           "name": "open_file",
           "doc": [
-            "Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.",
+            "Opens the pack at `path` (memory-mapped) and adds it. Returns its layer ID, for",
+            "`remove`: unique in this engine, counting up from 0.",
             "",
             "# Errors",
             "",
@@ -227,7 +228,8 @@
         {
           "name": "open_bytes",
           "doc": [
-            "Adds a pack from its bytes (copied). Returns the number of packs.",
+            "Adds a pack from its bytes (copied). Returns its layer ID, as",
+            "`open_file`.",
             "",
             "# Errors",
             "",
@@ -242,6 +244,22 @@
           ],
           "returns": "u32",
           "fallible": true
+        },
+        {
+          "name": "remove",
+          "doc": [
+            "Removes the pack with this layer ID; false if no pack has it. Queries already running",
+            "finish on the snapshot they started with; the pack's memory is released after them."
+          ],
+          "receiver": true,
+          "params": [
+            {
+              "name": "layer",
+              "ty": "u32"
+            }
+          ],
+          "returns": "bool",
+          "fallible": false
         },
         {
           "name": "layers",

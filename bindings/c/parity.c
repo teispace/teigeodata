@@ -111,7 +111,7 @@ int main(void) {
     uint32_t layers = 0;
     const char *path = "bindings/fixtures/synth.tgd";
     CHECK(tg_engine_open_file(engine, (const uint8_t *)path, strlen(path), &layers) == TG_OK);
-    CHECK(layers == 1);
+    CHECK(layers == 0);
     const char *id = "tgd:np/18n8a6";
     CHECK(tg_engine_get(engine, (const uint8_t *)id, strlen(id), &out) == TG_OK);
     CHECK(blob_rows(out) == 1 && str_is(out, "name", 0, "Synthland"));
@@ -158,10 +158,13 @@ int main(void) {
     CHECK(tg_engine_open_file(engine, (const uint8_t *)nowhere, strlen(nowhere), &layers) == TG_ERROR_IO);
     CHECK(tg_last_error(NULL) == TG_ERROR_IO);
     const char *dem = "bindings/fixtures/dem.tgd";
-    CHECK(tg_engine_open_file(engine, (const uint8_t *)dem, strlen(dem), &layers) == TG_OK && layers == 2);
+    CHECK(tg_engine_open_file(engine, (const uint8_t *)dem, strlen(dem), &layers) == TG_OK && layers == 1);
     CHECK(tg_engine_elevation_at(engine, 27.84, 76.01, &out) == TG_OK);
     CHECK(blob_rows(out) == 1 && str_is(out, "source", 0, "copernicus-glo30"));
     tg_bytes_free(out);
+    bool removed = false;
+    CHECK(tg_engine_remove(engine, 1, &removed) == TG_OK && removed);
+    CHECK(tg_engine_remove(engine, 1, &removed) == TG_OK && !removed);
     tg_engine_free(engine);
     tg_engine_free(NULL);
 

@@ -18,7 +18,7 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   `View::Dict`: each distinct string stored once), and `u8`, `i16`, `u16` columns. v0 blobs
   still read.
 - The `Engine` handle in every binding (C, Python, Node, JVM, Swift, Dart): open packs from a
-  file or bytes, then `get`, `search`, `reverse`, `admin_at`, `parent`, `ancestors`,
+  file or bytes (each answers its layer ID; `remove` takes it), then `get`, `search`, `reverse`, `admin_at`, `parent`, `ancestors`,
   `children`, `nearby`, `within_radius`, `tz_at`, `by_iso`, `elevation_at`, and postal codes
   (`postal_lookup`, `postal_prefix`, `postal_codes_of`, `postal_at`), each answering a blob. One
   engine is safe from many threads at once (D-274).

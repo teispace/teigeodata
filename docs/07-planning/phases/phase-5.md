@@ -47,7 +47,8 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   `get`, `search` and its options, `reverse`, `near`, `within_radius`, `admin_at`, `tz_at`
   and `tz_of`, the zone rules, `elevation_at`, `iso_code` and `by_iso`, postal codes,
   `parent`, `ancestors`, `children`; every result as a blob, every error typed.
-  Done so far: the `Engine` handle with `open_file`, `open_bytes`, `layers`, `get`, `search`,
+  Done so far: the `Engine` handle with `open_file`, `open_bytes` (each giving a layer ID),
+  `remove`, `layers`, `get`, `search`,
   `reverse`, `admin_at`, `parent`, `ancestors`, `children`, `nearby`, `within_radius`, `tz_at`,
   `by_iso`, `elevation_at`, `postal_lookup`, `postal_prefix`, `postal_codes_of` and
   `postal_at`, in every language, checked on `bindings/fixtures/synth.tgd`

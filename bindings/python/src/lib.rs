@@ -155,7 +155,8 @@ impl Engine {
     fn new() -> Engine {
         Engine(teigeodata_api::Engine::new())
     }
-    /// Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+    /// Opens the pack at `path` (memory-mapped) and adds it. Returns its layer ID, for
+    /// `remove`: unique in this engine, counting up from 0.
     ///
     /// # Errors
     ///
@@ -166,7 +167,8 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(value)
     }
-    /// Adds a pack from its bytes (copied). Returns the number of packs.
+    /// Adds a pack from its bytes (copied). Returns its layer ID, as
+    /// `open_file`.
     ///
     /// # Errors
     ///
@@ -175,6 +177,11 @@ impl Engine {
         let value = py.detach(|| self.0.open_bytes(bytes));
         let value = value.map_err(error)?;
         Ok(value)
+    }
+    /// Removes the pack with this layer ID; false if no pack has it. Queries already running
+    /// finish on the snapshot they started with; the pack's memory is released after them.
+    fn remove<'py>(&self, py: Python<'py>, layer: u32) -> bool {
+        py.detach(|| self.0.remove(layer))
     }
     /// The number of packs.
     fn layers<'py>(&self, py: Python<'py>) -> u32 {

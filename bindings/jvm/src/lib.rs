@@ -268,7 +268,8 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
         .resolve::<ThrowRuntimeExAndDefault>()
 }
 
-/// Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+/// Opens the pack at `path` (memory-mapped) and adds it. Returns its layer ID, for
+/// `remove`: unique in this engine, counting up from 0.
 ///
 /// # Errors
 ///
@@ -303,7 +304,8 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
         .resolve::<ThrowRuntimeExAndDefault>()
 }
 
-/// Adds a pack from its bytes (copied). Returns the number of packs.
+/// Adds a pack from its bytes (copied). Returns its layer ID, as
+/// `open_file`.
 ///
 /// # Errors
 ///
@@ -333,6 +335,32 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
             })();
             match result {
                 Ok(value) => Ok(jlong::from(value)),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Removes the pack with this layer ID; false if no pack has it. Queries already running
+/// finish on the snapshot they started with; the pack's memory is released after them.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeRemove<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    layer: jlong,
+) -> jni::sys::jboolean {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jni::sys::jboolean> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let layer: u32 = narrow("layer", layer)?;
+                Ok(this.remove(layer))
+            })();
+            match result {
+                Ok(value) => Ok(value),
                 Err(e) => throw(env, &e).map(|()| Default::default()),
             }
         })

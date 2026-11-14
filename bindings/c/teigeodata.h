@@ -114,7 +114,8 @@ void tg_engine_free(tg_engine *handle);
 int32_t tg_engine_new(tg_engine **out);
 
 /*
- * Opens the pack at `path` (memory-mapped) and adds it. Returns the number of packs.
+ * Opens the pack at `path` (memory-mapped) and adds it. Returns its layer ID, for
+ * `remove`: unique in this engine, counting up from 0.
  *
  * # Errors
  *
@@ -124,13 +125,20 @@ int32_t tg_engine_new(tg_engine **out);
 int32_t tg_engine_open_file(const tg_engine *handle, const uint8_t *path, size_t path_len, uint32_t *out);
 
 /*
- * Adds a pack from its bytes (copied). Returns the number of packs.
+ * Adds a pack from its bytes (copied). Returns its layer ID, as
+ * `open_file`.
  *
  * # Errors
  *
  * `ErrorCode::Corrupt` if the bytes are not a valid pack.
  */
 int32_t tg_engine_open_bytes(const tg_engine *handle, const uint8_t *bytes, size_t bytes_len, uint32_t *out);
+
+/*
+ * Removes the pack with this layer ID; false if no pack has it. Queries already running
+ * finish on the snapshot they started with; the pack's memory is released after them.
+ */
+int32_t tg_engine_remove(const tg_engine *handle, uint32_t layer, bool *out);
 
 /*
  * The number of packs.

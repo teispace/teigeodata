@@ -131,6 +131,14 @@ impl LayerOptions {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LayerId(pub(crate) u32);
 
+impl LayerId {
+    /// Its number: unique among the layers an engine has held, counting up from 0.
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
 /// Section states for lazy verification.
 const UNCHECKED: u8 = 0;
 const GOOD: u8 = 1;

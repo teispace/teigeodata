@@ -104,7 +104,7 @@ function numbers(blob, name) {
 test("engine handle on the fixture", () => {
   const p = parity.engine;
   const engine = new tg.Engine();
-  assert.equal(engine.openFile(join(__dirname, "../..", p.fixture)), 1);
+  assert.equal(engine.openFile(join(__dirname, "../..", p.fixture)), 0);
   const got = engine.get(p.get.id);
   assert.deepEqual(strings(got, "name"), [p.get.name]);
   assert.deepEqual(strings(got, "kind"), [p.get.kind]);
@@ -137,8 +137,11 @@ test("engine handle on the fixture", () => {
   assert.throws(() => engine.openBytes(Buffer.from("not a pack")), { code: "Corrupt" });
   assert.equal(engine.layers(), 1);
   const h = p.elevation_at;
-  assert.equal(engine.openFile(join(__dirname, "../..", h.fixture)), 2);
+  assert.equal(engine.openFile(join(__dirname, "../..", h.fixture)), 1);
   const height = engine.elevationAt(h.lat, h.lon);
   assert.deepEqual(strings(height, "source"), [h.source]);
   assert.equal(numbers(height, "meters")[0], h.meters);
+  assert.equal(engine.remove(1), true);
+  assert.equal(engine.remove(1), false);
+  assert.equal(engine.layers(), 1);
 });

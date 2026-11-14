@@ -91,7 +91,7 @@ class Engine(unittest.TestCase):
 
     def setUp(self) -> None:
         self.engine = tg.Engine()
-        self.assertEqual(self.engine.open_file(FIXTURE), 1)
+        self.assertEqual(self.engine.open_file(FIXTURE), 0)
         self.p = PARITY["engine"]
 
     def test_get(self) -> None:
@@ -132,10 +132,13 @@ class Engine(unittest.TestCase):
 
     def test_elevation(self) -> None:
         h = self.p["elevation_at"]
-        self.assertEqual(self.engine.open_file(str(pathlib.Path(FIXTURE).parents[1] / h["fixture"])), 2)
+        self.assertEqual(self.engine.open_file(str(pathlib.Path(FIXTURE).parents[1] / h["fixture"])), 1)
         got = Blob(self.engine.elevation_at(h["lat"], h["lon"]))
         self.assertEqual(list(got.numbers("meters")), [h["meters"]])
         self.assertEqual(got.strings("source"), [h["source"]])
+        self.assertTrue(self.engine.remove(1))
+        self.assertFalse(self.engine.remove(1))
+        self.assertEqual(Blob(self.engine.elevation_at(h["lat"], h["lon"])).rows, 0)
 
     def test_graph_radius_zone_and_codes(self) -> None:
         e, p = self.engine, self.p

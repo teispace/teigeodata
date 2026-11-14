@@ -73,7 +73,7 @@ public final class ParityTest {
     static void engine(Map<?, ?> p, Path dir) {
         TeiGeodata.Engine engine = new TeiGeodata.Engine();
         {
-            check(engine.openFile(dir.resolve((String) p.get("fixture")).toString()) == 1, "open");
+            check(engine.openFile(dir.resolve((String) p.get("fixture")).toString()) == 0, "open");
             Map<?, ?> g = (Map<?, ?>) p.get("get");
             byte[] got = engine.get((String) g.get("id"));
             check(strings(got, "name").equals(List.of(g.get("name"))), "get name");
@@ -124,10 +124,11 @@ public final class ParityTest {
             expect(TeiGeodataException.Corrupt.class, () -> engine.openBytes("not a pack".getBytes(StandardCharsets.UTF_8)), "");
             check(engine.layers() == 1, "layers");
             Map<?, ?> h = (Map<?, ?>) p.get("elevation_at");
-            check(engine.openFile(dir.resolve((String) h.get("fixture")).toString()) == 2, "open dem");
+            check(engine.openFile(dir.resolve((String) h.get("fixture")).toString()) == 1, "open dem");
             byte[] height = engine.elevationAt(((Number) h.get("lat")).doubleValue(), ((Number) h.get("lon")).doubleValue());
             check(column(height, "meters").getDouble() == ((Number) h.get("meters")).doubleValue(), "meters");
             check(strings(height, "source").equals(List.of(h.get("source"))), "source");
+            check(engine.remove(1) && !engine.remove(1) && engine.layers() == 1, "remove");
             engine.close();
             engine.close(); // idempotent
             try {
