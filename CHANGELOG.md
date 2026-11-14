@@ -24,8 +24,14 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   `gh attestation verify <file> --repo teispace/teigeodata` checks one.
 - The crates `teigeodata-core`, `-blob`, `-format`, `-names`, `-sync`, `-engine`, `-api`,
   `-server` and `-cli` are publishable to crates.io (D-303, D-310).
-- `teigeodata-server`, the request core both servers and `tgd` share: the native, GeoJSON and
-  Nominatim-compatible outputs moved there from the CLI, unchanged (D-310).
+- `teigeodata-server`, the request core both servers and `tgd` share (D-310, D-311): the
+  native, GeoJSON and Nominatim-compatible outputs moved there from the CLI; `query`, every
+  place, elevation and postal query with its bounds (`Limits::SERVER`: 256 bytes of text, 50
+  results, 1,000 km) and stable error codes (`Code`, each with its HTTP status); `packs`, the
+  pack set over files and the store, following the store's journal while it answers; and
+  `seams`, who is asking, may they and how much they used, open by default (ADR-0025).
+- `Store::read_packs`: the packs the journal lists, read without opening the store, so a reader
+  beside an install never recovers or removes its files (D-311).
 - Each release carries the C library alone for every target the Dart hook and the Go loader
   download, Android and iOS included, its SHA-256 pinned in both (D-304); the Dart package is
   publishable to pub.dev, and the JVM binding is bundled for Maven Central as
@@ -142,6 +148,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Changed
 
+- `tgd`'s GeoJSON `attribution` and Nominatim `licence` name the packs the places came from,
+  not every pack given, and are absent when nothing was found (D-311). `tgd near --radius`
+  refuses a radius that is not positive and finite.
 - A cancel stops a metadata download at its next chunk, and its bytes count as progress:
   `Transport::fetch_streamed` (the `http` transport reads in 16 KiB chunks); before, a slow
   host held a refresh until its body ended (D-283).
@@ -165,6 +174,12 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   `Watched`, a transport that reports to it and stops at the next request or chunk once
   cancelled (`FetchError::Cancelled`, `ClientError::Cancelled`). `Transport::expect` passes
   the catalog's size of the work to come.
+
+### Fixed
+
+- `Shared::follow` (and `Engine::follow`) opens a store pack with the parts it was installed
+  with (D-251); before, a pack of some parts was opened as whole, its parts not installed read
+  as holes (D-311).
 
 ### Breaking
 

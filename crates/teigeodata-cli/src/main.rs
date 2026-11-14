@@ -520,6 +520,17 @@ impl From<output::OutputError> for Fail {
     }
 }
 
+impl From<teigeodata_server::query::QueryError> for Fail {
+    /// The engine's error whole when there is one (a path is fine on the user's own machine),
+    /// else the message.
+    fn from(e: teigeodata_server::query::QueryError) -> Self {
+        match e.cause {
+            Some(c) => c.into(),
+            None => Self::Refused(e.message),
+        }
+    }
+}
+
 impl From<serde_json::Error> for Fail {
     fn from(e: serde_json::Error) -> Self {
         match e.io_error_kind() {
@@ -576,7 +587,7 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
         } => query::run(
             store,
             &packs.packs,
-            query::Ask::Get { id, names },
+            &query::Ask::Get { id, names },
             o.mode(),
             out,
         ),
@@ -590,10 +601,10 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
         } => query::run(
             store,
             &packs.packs,
-            query::Ask::Reverse {
+            &query::Ask::Reverse {
                 lat,
                 lon,
-                k,
+                limit: k,
                 in_country,
             },
             o.mode(),
@@ -610,13 +621,11 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
         } => query::run(
             store,
             &packs.packs,
-            query::Ask::Search {
+            &query::Ask::Search {
                 query: q,
-                k,
-                rank: (
-                    focus.map(|(lat, lon)| (lat, lon, scale_km * 1_000.0)),
-                    strict,
-                ),
+                limit: k,
+                focus: focus.map(|(lat, lon)| (lat, lon, scale_km * 1_000.0)),
+                strict,
             },
             o.mode(),
             out,
@@ -630,7 +639,11 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
         } => query::run(
             store,
             &packs.packs,
-            query::Ask::Near { id, k, radius },
+            &query::Ask::Near {
+                id,
+                limit: k,
+                radius_m: radius,
+            },
             o.mode(),
             out,
         ),
@@ -642,7 +655,7 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
         } => query::run(
             store,
             &packs.packs,
-            query::Ask::Admin { lat, lon },
+            &query::Ask::Admin { lat, lon },
             o.mode(),
             out,
         ),
@@ -668,7 +681,7 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
                 },
                 None => query::Ask::TzOf { id: at, t },
             };
-            query::run(store, &packs.packs, ask, o.mode(), out)
+            query::run(store, &packs.packs, &ask, o.mode(), out)
         }
         Command::Elevation {
             lat,
@@ -699,7 +712,7 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
                     limit,
                 },
             };
-            query::postal(store, &packs.packs, ask, json, out)
+            query::postal(store, &packs.packs, &ask, json, out)
         }
         Command::Init { repo, assets, root } => sync::init(store, &repo, &assets, &root, out),
         Command::Refresh { countries } => sync::refresh(store, &countries, out),

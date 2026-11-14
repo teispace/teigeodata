@@ -90,7 +90,7 @@ by default, or:
 | Flag | Output |
 |---|---|
 | `--json` | the native records: `id`, `name`, `kind`, `admin_level`, `lat`, `lon`, `elevation`, `parent`, `timezone` |
-| `--geojson` | a GeoJSON FeatureCollection (RFC 7946), the attribution as a foreign member |
+| `--geojson` | a GeoJSON FeatureCollection (RFC 7946), the attribution of the packs that answered as a foreign member |
 | `--nominatim` | Nominatim's `json` format, for tools that read it; OSM-only fields are left out |
 
 ## Exit codes

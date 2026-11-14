@@ -29,15 +29,17 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
   calls inline; [servers §5.1](../../02-research/notes/servers.md#51-the-ab-measured-2026-11-15))
 
 ### 6.1 The request core (`teigeodata-server`)
-- [ ] The pack set: files or a store, served through `Shared` snapshots that follow updates
-  (D-141, D-172)
-- [ ] The query model with its bounds (query length, `limit` at most 50 by default, radius,
-  time), the error model (stable codes, no panic reaches a client)
+- [x] The pack set: files or a store, served through `Shared` snapshots that follow updates
+  (D-141, D-172); the journal read without opening the store (2026-11-15, D-311)
+- [x] The query model with its bounds (query length, `limit` at most 50 by default, radius;
+  time by the server's timeout, the inputs bounding the engine's work), the error model
+  (stable codes; that no panic reaches a client is 6.2's, at the handler) (2026-11-15, D-311)
 - [x] Outputs moved from the CLI (`output.rs`): native, GeoJSON, Nominatim-compatible; one
   mapping each, used by the CLI and both servers (2026-11-15, D-310)
-- [ ] Attribution on every answer from main data (D-032), from each pack's notices
-- [ ] The hosted seams as traits with open defaults: who is asking, may they, how much they
-  used (ADR-0025)
+- [x] Attribution on every answer from main data (D-032), from the notices of the packs that
+  answered (2026-11-15, D-311)
+- [x] The hosted seams as traits with open defaults: who is asking, may they, how much they
+  used (ADR-0025) (2026-11-15, D-311)
 
 ### 6.2 The HTTP server
 - [ ] Routes for every engine query, `/packs` and `/health`; `tgd serve` (bound to
@@ -69,3 +71,4 @@ behind the store and an explicit call (ADR-0012); every bound is a number with i
 |---|---|---|
 | 2026-11-15 | Phase 6 drafted from the servers research | M5 met (D-308) |
 | 2026-11-15 | 6.0 done: the HTTP A/B, axum with inline engine calls (D-309) | measured |
+| 2026-11-15 | 6.1 done: the request core (D-310, D-311); the panic guard moves to 6.2's handler | built |

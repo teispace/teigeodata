@@ -9,8 +9,9 @@
 //!   `inside` (whether the point is in a country's or unit's outline; `reverse`, TG-19), or
 //!   `score` (search).
 //! - **GeoJSON** (RFC 7946): a FeatureCollection of points, the native record as properties
-//!   without `lat` and `lon` (they are the geometry), the attribution as a foreign member.
-//! - **Nominatim** (`json` format): `place_id` (our stable ID), `licence` (the attribution),
+//!   without `lat` and `lon` (they are the geometry), the attribution of the packs the places
+//!   came from as a foreign member.
+//! - **Nominatim** (`json` format): `place_id` (our stable ID), `licence` (the same attribution),
 //!   `lat` and `lon` as strings, `name`, `display_name` (the place and its ancestors),
 //!   `boundingbox` (the point's: south, north, west, east, as strings), and `address`: each
 //!   ancestor's name under `country` for a country and `admin_level_<n>` otherwise, and the
@@ -23,7 +24,7 @@ use std::io::{self, Write};
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value, json};
 use teigeodata_core::{IsoCode, PlaceId, PlaceKind};
-use teigeodata_engine::{Engine, Error, HeightSource, Place};
+use teigeodata_engine::{Engine, Error, Height, HeightSource, Layer, LayerId, Place, PostalCode};
 
 /// Why writing an answer failed.
 #[derive(Debug)]
@@ -354,11 +355,26 @@ pub enum Mode {
     Nominatim,
 }
 
-/// The attribution of every layer, one notice per line, each once.
+/// The attribution of every layer, one notice per line, each once: for a whole extract
+/// (`tgd export`).
 #[must_use]
 pub fn attribution(engine: &Engine) -> Option<String> {
+    notices(engine.layers())
+}
+
+/// The attribution of the layers `items` came from, one notice per line, each once (D-032):
+/// what an answer carries. `None` for an answer with no place, or from layers with no notices.
+#[must_use]
+pub fn attribution_of(engine: &Engine, items: &[Item]) -> Option<String> {
+    let mut ids: Vec<LayerId> = items.iter().map(|i| i.place.layer).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    notices(ids.into_iter().filter_map(|id| engine.layer(id)))
+}
+
+fn notices<'a>(layers: impl Iterator<Item = &'a Layer>) -> Option<String> {
     let mut lines: Vec<&str> = Vec::new();
-    for l in engine.layers() {
+    for l in layers {
         for line in l.attribution().unwrap_or_default().lines() {
             if !lines.contains(&line) {
                 lines.push(line);
@@ -396,7 +412,7 @@ pub fn write(
             out.write_all(b"\n]\n")?;
         }
         Mode::Geojson => {
-            open_collection(out, attribution(engine).as_deref())?;
+            open_collection(out, attribution_of(engine, items).as_deref())?;
             for (i, item) in items.iter().enumerate() {
                 if i > 0 {
                     out.write_all(b",\n")?;
@@ -407,7 +423,7 @@ pub fn write(
             close_collection(out)?;
         }
         Mode::Nominatim => {
-            let licence = attribution(engine).map(|a| a.replace('\n', "; "));
+            let licence = attribution_of(engine, items).map(|a| a.replace('\n', "; "));
             let v: Vec<Value> = items
                 .iter()
                 .map(|item| nominatim(engine, item, licence.as_deref(), &mut bufs))
@@ -554,4 +570,93 @@ fn nominatim(
         }
     }
     Ok(v)
+}
+
+/// Writes a terrain height at `lat`, `lon` (from [`crate::query::elevation`]): one line for a
+/// terminal, or the native JSON object; with no terrain there, nothing, or the object with
+/// `elevation_m` null.
+///
+/// # Errors
+/// The writer failed.
+pub fn elevation(
+    lat: f64,
+    lon: f64,
+    h: Option<&Height>,
+    json: bool,
+    out: &mut dyn Write,
+) -> Result<(), OutputError> {
+    match (h, json) {
+        (Some(h), false) => {
+            let from = h.source.map_or("an unstated DEM", |s| s.name());
+            writeln!(
+                out,
+                "{:.1} m above {} ({from}, {:.0} m spacing)",
+                h.meters,
+                h.datum.name(),
+                h.resolution_m
+            )?;
+        }
+        (Some(h), true) => writeln!(
+            out,
+            "{{\"lat\":{lat},\"lon\":{lon},\"elevation_m\":{:.1},\"datum\":\"{}\",\"source\":{},\"resolution_m\":{:.1}}}",
+            h.meters,
+            h.datum.name(),
+            h.source
+                .map_or_else(|| "null".to_owned(), |s| format!("\"{}\"", s.key())),
+            h.resolution_m
+        )?,
+        (None, true) => writeln!(
+            out,
+            "{{\"lat\":{lat},\"lon\":{lon},\"elevation_m\":null,\"datum\":\"EGM2008\"}}"
+        )?,
+        (None, false) => {}
+    }
+    Ok(())
+}
+
+/// Writes postal codes (from [`crate::query::postal`]): one line per code and place, or a
+/// JSON array of `scheme`, `code`, `kind`, `valid_from`, `valid_to`, `replaced`, `id`, `name`
+/// and `admin_level`.
+///
+/// # Errors
+/// A name lookup failed, or the writer failed.
+pub fn postal(
+    engine: &Engine,
+    codes: &[PostalCode],
+    json: bool,
+    out: &mut dyn Write,
+) -> Result<(), OutputError> {
+    let mut buf = [0_u8; NAME];
+    let mut rows = Vec::with_capacity(codes.len());
+    for c in codes {
+        let name = installed(engine.name(&c.place, &mut buf))?.map(str::to_owned);
+        rows.push(json!({
+            "scheme": c.scheme(),
+            "code": c.code(),
+            "kind": crate::query::code_kind(c.kind),
+            "valid_from": c.valid_from,
+            "valid_to": c.valid_to,
+            "replaced": c.is_replaced(),
+            "id": c.place.id.to_string(),
+            "name": name,
+            "admin_level": c.place.admin_level,
+        }));
+    }
+    if json {
+        writeln!(out, "{}", Value::Array(rows))?;
+    } else {
+        for (c, r) in codes.iter().zip(&rows) {
+            writeln!(
+                out,
+                "{} {}\t{}\t{}\t{}{}",
+                c.scheme(),
+                c.code(),
+                crate::query::code_kind(c.kind),
+                c.place.id,
+                r["name"].as_str().unwrap_or("-"),
+                if c.is_replaced() { "\t(replaced)" } else { "" }
+            )?;
+        }
+    }
+    Ok(())
 }

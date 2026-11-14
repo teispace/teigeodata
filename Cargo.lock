@@ -1886,6 +1886,9 @@ dependencies = [
  "serde_json",
  "teigeodata-core",
  "teigeodata-engine",
+ "teigeodata-format",
+ "teigeodata-names",
+ "teigeodata-sync",
 ]
 
 [[package]]
