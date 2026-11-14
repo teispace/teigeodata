@@ -40,7 +40,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   calls block, which run as jobs, how callbacks cross threads (the note's §7)
 - [x] S2, the result format: blob v0 against Arrow C Data and FlatBuffers on real query
   results (10,000 rows in each language: decode time, allocations, size, schema evolution);
-  the decision recorded (done 2026-11-14: [S2](../../02-research/benches/bindings-s2-result-format.md), our blob as v1 with nulls and dictionaries, D-275)
+  the decision recorded (done 2026-11-14: [S2](../../02-research/benches/bindings-s2-result-format.md), our blob as v1 with nulls and dictionaries, D-275; v1 built the same day)
 
 ### 5.1 The API surface
 - [ ] `teigeodata-api` over the engine: open layers (bytes and files, components, parts),

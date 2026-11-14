@@ -86,6 +86,92 @@ pub mod blob {
     }
 }
 
+/// Blob v1 as the API will use it: dictionaries for repeated strings, real nulls, narrow ints.
+#[cfg(feature = "blob")]
+pub mod blob1 {
+    use super::*;
+    use teigeodata_blob::{Blob, Column, Reader, View};
+    pub fn encode(r: &Rows) -> Vec<u8> {
+        fn s(v: &[String]) -> Vec<&str> {
+            v.iter().map(String::as_str).collect()
+        }
+        fn o(v: &[Option<String>]) -> (Vec<&str>, Vec<bool>) {
+            (
+                v.iter().map(|x| x.as_deref().unwrap_or("")).collect(),
+                v.iter().map(Option::is_some).collect(),
+            )
+        }
+        let (id, name) = (s(&r.id), s(&r.name));
+        let ((parent, pm), (tz, tm), (iso, im)) = (o(&r.parent), o(&r.tz), o(&r.iso));
+        let elev: Vec<i32> = r.elevation.iter().map(|e| e.unwrap_or(0)).collect();
+        let em: Vec<bool> = r.elevation.iter().map(Option::is_some).collect();
+        let kind: Vec<u8> = r.kind.iter().map(|&k| k as u8).collect();
+        let level: Vec<u8> = r.level.iter().map(|&k| k as u8).collect();
+        let (e, p, t, i) = (
+            Column::I32(&elev),
+            Column::Dict(&parent),
+            Column::Dict(&tz),
+            Column::Dict(&iso),
+        );
+        Blob::encode(&[
+            ("id", Column::Utf8(&id)),
+            ("name", Column::Utf8(&name)),
+            ("kind", Column::U8(&kind)),
+            ("level", Column::U8(&level)),
+            ("lat", Column::F64(&r.lat)),
+            ("lon", Column::F64(&r.lon)),
+            ("elevation", Column::Nullable(&e, &em)),
+            ("parent", Column::Nullable(&p, &pm)),
+            ("tz", Column::Nullable(&t, &tm)),
+            ("iso", Column::Nullable(&i, &im)),
+        ])
+        .unwrap()
+        .into_vec()
+    }
+    pub fn decode(b: &[u8]) -> Digest {
+        let r = Reader::new(b).unwrap();
+        let mut d = Digest::default();
+        for c in ["lat", "lon"] {
+            if let Some(View::F64(v)) = r.column(c) {
+                d.coords += v.f64s().sum::<f64>();
+            }
+        }
+        let en = r.nulls("elevation");
+        if let Some(View::I32(v)) = r.column("elevation") {
+            for (k, e) in v.i32s().enumerate() {
+                if en.is_some_and(|n| n.is_null(k)) {
+                    d.nulls += 1
+                } else {
+                    d.elev += i64::from(e)
+                }
+            }
+        }
+        for c in ["kind", "level"] {
+            if let Some(View::U8(v)) = r.column(c) {
+                d.ints += v.u8s().map(u64::from).sum::<u64>();
+            }
+        }
+        for c in ["id", "name"] {
+            if let Some(View::Utf8(v)) = r.column(c) {
+                d.bytes += v.iter().map(|s| s.len() as u64).sum::<u64>();
+            }
+        }
+        for c in ["parent", "tz", "iso"] {
+            let n = r.nulls(c);
+            if let Some(View::Dict(v)) = r.column(c) {
+                for k in 0..v.len() {
+                    if n.is_some_and(|n| n.is_null(k)) {
+                        d.nulls += 1
+                    } else {
+                        d.bytes += v.get(k).map_or(0, str::len) as u64
+                    }
+                }
+            }
+        }
+        d
+    }
+}
+
 #[cfg(feature = "arrow")]
 pub mod arrow {
     use super::*;

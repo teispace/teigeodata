@@ -71,7 +71,7 @@ public final class ParityTest {
     /** A fixed-width column of a v0 blob, viewed in place (no copy). */
     static ByteBuffer column(byte[] blob, String name) {
         ByteBuffer b = ByteBuffer.wrap(blob).order(ByteOrder.LITTLE_ENDIAN);
-        check(new String(blob, 0, 4, StandardCharsets.US_ASCII).equals("TGB0"), "magic");
+        check(new String(blob, 0, 4, StandardCharsets.US_ASCII).equals("TGB1"), "magic");
         int columns = b.getInt(8);
         for (int i = 0; i < columns; i++) {
             int d = 16 + 40 * i;

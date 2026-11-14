@@ -18,7 +18,7 @@ A short status. The numbers and evidence live in each phase file and the
 | 2 Indexes | **M2 met** 2026-11-07 (D-087) | [phase 2 §2.4](../07-planning/phases/phase-2.md#24-exit-review) |
 | 3 Forge and Nepal data | in progress: 3.1–3.3 and 3.5 done (3.5 lite codes wait on Q-009); 3.4 DEM and 3.6 names in progress; 3.7–3.8 open | [phase 3](../07-planning/phases/phase-3.md) |
 | 4 Engine, baseline and sync | in progress: what remains waits on the maintainer (the key ceremony, Q-024) or on a release that changes records (4.7, gate 11, D-273) | [phase 4](../07-planning/phases/phase-4.md) |
-| 5 Boundary and bindings | in progress: 5.0 done (the threading contract D-274, the result format D-275); next blob v1, then the API surface (bindings prototyped in S4, D-065 to D-068) | [phase 5](../07-planning/phases/phase-5.md) |
+| 5 Boundary and bindings | in progress: 5.0 done (the threading contract D-274, the result format D-275); blob v1 built (D-275); next the API surface (5.1) (bindings prototyped in S4, D-065 to D-068) | [phase 5](../07-planning/phases/phase-5.md) |
 | 6–8 | not started | [roadmap](../07-planning/roadmap.md) |
 
 - **Now (Phase 3):** the Nepal main pack has 100,358 places with heights (D-111), admin

@@ -62,8 +62,9 @@ fn main() {
     println!(
         "| format | bytes | encode µs | decode+verify+read all µs | ns/row |\n|---|--:|--:|--:|--:|"
     );
-    let fmts: [(&str, fn(&Rows) -> Vec<u8>, fn(&[u8]) -> Digest); 3] = [
+    let fmts: [(&str, fn(&Rows) -> Vec<u8>, fn(&[u8]) -> Digest); 4] = [
         ("blob v0", blob::encode, blob::decode),
+        ("blob1 v1", blob1::encode, blob1::decode),
         ("arrow ipc", arrow::encode, arrow::decode),
         ("flatbuffers rows", fb::encode, fb::decode),
     ];

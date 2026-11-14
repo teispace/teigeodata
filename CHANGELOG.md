@@ -11,6 +11,18 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ## [Unreleased]
 
+### Added
+
+- `teigeodata-blob` format v1 (D-275, spike S2): a null bitmap per column
+  (`Column::Nullable`, `Reader::nulls`), dictionary-encoded strings (`Column::Dict`, read as
+  `View::Dict`: each distinct string stored once), and `u8`, `i16`, `u16` columns. v0 blobs
+  still read.
+
+### Breaking
+
+- Blobs start with the magic `TGB1` instead of `TGB0`. A binding or caller that checks the
+  magic compares with `TGB1` (or accepts both); the layout of the v0 types is unchanged.
+
 ## [0.3.1] - 2026-11-14
 
 Search ranks countries, regions and cities on one scale and weighs short substring matches

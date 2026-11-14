@@ -12,7 +12,7 @@ const parity = JSON.parse(readFileSync(join(__dirname, "../../parity.json"), "ut
 /** A fixed-width column of a v0 blob, viewed in place (no copy). */
 function column(blob, name) {
   const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
-  assert.equal(blob.toString("latin1", 0, 4), "TGB0");
+  assert.equal(blob.toString("latin1", 0, 4), "TGB1");
   assert.equal(view.getUint32(12, true), blob.byteLength);
   const columns = view.getUint32(8, true);
   for (let i = 0; i < columns; i++) {

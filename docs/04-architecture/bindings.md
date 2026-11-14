@@ -60,17 +60,21 @@ the file, line and column.
 
 ## 3. Results: the blob
 
-A result with rows crosses as one blob (`teigeodata-blob`, format v0, D-068):
-- a 16-byte header (magic `TGB0`, row count, column count, total length);
-- 40-byte column descriptors;
-- column data, each column on an 8-byte boundary.
+A result with rows crosses as one blob (`teigeodata-blob`, format v1, D-068 and D-275):
+- a 16-byte header (magic `TGB1`, row count, column count, total length);
+- 40-byte column descriptors: name, type, the data region, an auxiliary region and a null
+  bitmap;
+- the regions, each on an 8-byte boundary.
 
-Columns are typed (`i32`, `u32`, `i64`, `u64`, `f32`, `f64`, UTF-8 with Arrow-style offsets), so
-every language views a column in place: a `Float64Array`, a `memoryview`, a `Float64List`. The
-Rust reader validates every offset, length, alignment and string before it returns a view; a test
-flips every byte of a blob and truncates it at every length. Spike S2 kept the format and
-extends it to v1 (D-275, [S2](../02-research/benches/bindings-s2-result-format.md)): a null
-bitmap per column, dictionary-encoded strings and narrow integers.
+Columns are typed (`u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`, `f32`, `f64`, UTF-8 with
+Arrow-style offsets, and dictionary strings with `u16` or `u32` codes), so every language views
+a column in place: a `Float64Array`, a `memoryview`, a `Float64List`. A column with nulls carries
+an Arrow-style bitmap (1 for a value). A repeated string (a timezone, a country) is a dictionary
+column, stored and decoded once: strings are most of a result's decoding time in every
+language (S2). The Rust reader validates every offset, length, alignment, string, code and
+bitmap before it returns a view; a test flips every byte of a blob and truncates it at every
+length. Readers look columns up by name, so adding a column breaks no reader. The format and
+its measurements: [S2](../02-research/benches/bindings-s2-result-format.md); v0 blobs still read.
 
 ## 4. Adding a function
 
@@ -148,6 +152,6 @@ second job waits for the first.
 
 | Date | Change | Why |
 |---|---|---|
-| 2026-11-14 | §3: blob v1 planned | S2, D-275 |
+| 2026-11-14 | §3: blob v1 (nulls, dictionaries, narrow integers) | S2, D-275 |
 | 2026-11-14 | §6: handles, threads and jobs | phase 5.0, D-274 |
 | 2026-11-07 | First version, from spike S4 | [S4](../02-research/benches/s4-bindings.md) |

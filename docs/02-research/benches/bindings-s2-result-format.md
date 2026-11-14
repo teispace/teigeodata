@@ -39,6 +39,12 @@ strings, which are most of a result's bytes and of every language's decoding tim
 | blob v0 | 917,936 | 309 | 283 | 28.3 |
 | Arrow IPC | 924,360 | 799 | 225 | 22.5 |
 | FlatBuffers rows | 1,217,528 | 1,047 | 1,313 | 131.3 |
+| **blob v1** (built after the decision) | **584,360** | 664 | 290 | 29.0 |
+
+Blob v1 is the same result as the API will send it: `parent`, `tz` and `iso` as dictionaries,
+real nulls, `kind` and `level` as `u8`. It is 36 % smaller than v0 and Arrow IPC and reads as
+fast as v0. Its encoder finds repeats with an open-addressing table and a word-at-a-time hash:
+a `BTreeMap` took 1,142 µs. With v1 the reader adds 16,592 B native and 19,358 B to WASM.
 
 Blob v0 reads slower than Arrow IPC only because it validates each string's UTF-8 as it is read;
 both are within the noise of a 10,000-row search.
@@ -99,4 +105,5 @@ Bindings expose numbers as views and strings lazily (decoded when read, a dictio
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-14 | Blob v1 measured: 584,360 B, 664 µs to encode | the decision built |
 | 2026-11-14 | First version | phase 5.0, S2 |

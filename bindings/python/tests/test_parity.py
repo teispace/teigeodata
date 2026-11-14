@@ -13,7 +13,7 @@ PARITY = json.loads((pathlib.Path(__file__).parents[2] / "parity.json").read_tex
 
 def column(blob: bytes, name: str) -> memoryview:
     """A fixed-width column of a v0 blob, viewed in place (no copy)."""
-    assert blob[:4] == b"TGB0"
+    assert blob[:4] == b"TGB1"
     rows, cols, total = struct.unpack_from("<III", blob, 4)
     assert total == len(blob)
     for i in range(cols):

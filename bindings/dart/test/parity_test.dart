@@ -19,7 +19,7 @@ String libraryPath() {
 /// A fixed-width column of a v0 blob, viewed in place.
 TypedData column(Uint8List blob, String name) {
   final view = ByteData.sublistView(blob);
-  expect(ascii.decode(blob.sublist(0, 4)), 'TGB0');
+  expect(ascii.decode(blob.sublist(0, 4)), 'TGB1');
   for (var i = 0; i < view.getUint32(8, Endian.little); i++) {
     final d = 16 + 40 * i;
     final n = utf8.decode(blob.sublist(d, d + 16).takeWhile((b) => b != 0).toList());

@@ -42,7 +42,7 @@ int main(void) {
     tg_bytes_free(msg);
 
     CHECK(tg_sample_rows(1000, &out) == TG_OK && out.len == 37120);
-    CHECK(memcmp(out.ptr, "TGB0", 4) == 0 && ((uintptr_t)out.ptr % 8) == 0);
+    CHECK(memcmp(out.ptr, "TGB1", 4) == 0 && ((uintptr_t)out.ptr % 8) == 0);
     tg_bytes_free(out);
     CHECK(tg_sample_rows(TG_SAMPLE_ROWS_MAX + 1, &out) == TG_ERROR_INVALID_ARGUMENT);
     CHECK(tg_last_error(NULL) == TG_ERROR_INVALID_ARGUMENT);
