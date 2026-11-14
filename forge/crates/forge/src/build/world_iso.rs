@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn units_take_only_current_codes_of_their_country() {
-        let dir = std::env::temp_dir().join(format!("forge-iso-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("forge-world-iso-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let cldr = dir.join("subdivision.xml");
         fs::write(
