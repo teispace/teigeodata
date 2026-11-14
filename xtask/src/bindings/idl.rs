@@ -9,7 +9,7 @@ use syn::spanned::Spanned;
 use syn::{Attribute, Expr, FnArg, GenericArgument, Item, Lit, Pat, PathArguments, ReturnType};
 
 /// Version of the IDL format itself.
-pub(crate) const FORMAT: u32 = 1;
+pub(crate) const FORMAT: u32 = 2;
 
 /// The extracted surface.
 #[derive(Debug, Serialize)]
@@ -19,6 +19,8 @@ pub(crate) struct Idl {
     pub(crate) error_codes: Vec<Code>,
     pub(crate) constants: Vec<Constant>,
     pub(crate) functions: Vec<Function>,
+    /// Opaque types with methods (D-274): each crosses as a handle, freed once.
+    pub(crate) handles: Vec<Handle>,
     /// Every distinct callback signature, for the targets that declare one type per signature.
     pub(crate) callbacks: Vec<Callback>,
 }
@@ -40,23 +42,42 @@ pub(crate) struct Constant {
     pub(crate) doc: Vec<String>,
 }
 
-/// One `pub fn`.
+/// One `pub fn`, free or in a handle's `impl`.
 #[derive(Debug, Serialize)]
 pub(crate) struct Function {
     pub(crate) name: String,
     pub(crate) doc: Vec<String>,
+    /// A method on `&self` (only inside a handle's `impl`); otherwise a free or associated
+    /// function.
+    pub(crate) receiver: bool,
     pub(crate) params: Vec<Param>,
     pub(crate) returns: Ty,
+    /// The handle type returned, when `returns` is [`Ty::Handle`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) returns_handle: Option<String>,
     pub(crate) fallible: bool,
 }
 
-/// One parameter. `callback` is set when `ty` is [`Ty::Callback`].
+/// One parameter. `callback` is set when `ty` is [`Ty::Callback`], `handle` when it is
+/// [`Ty::Handle`].
 #[derive(Debug, Serialize)]
 pub(crate) struct Param {
     pub(crate) name: String,
     pub(crate) ty: Ty,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) callback: Option<Callback>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) handle: Option<String>,
+}
+
+/// A `pub struct` with private fields and the `pub fn`s of its `impl` blocks.
+#[derive(Debug, Serialize)]
+pub(crate) struct Handle {
+    pub(crate) name: String,
+    /// The name in `snake_case`, for C symbols (`tg_engine_search`).
+    pub(crate) snake: String,
+    pub(crate) doc: Vec<String>,
+    pub(crate) methods: Vec<Function>,
 }
 
 /// A callback's signature: scalar arguments, a `bool` result (`false` cancels). `id` names the
@@ -81,6 +102,10 @@ pub(crate) enum Ty {
     F64,
     /// `&str` in.
     Str,
+    /// `&[u8]` in.
+    Bytes,
+    /// A handle: `&Name` in, `Name` (or `Self`) out.
+    Handle,
     /// `String` out.
     String,
     /// `Blob` out.
@@ -112,6 +137,8 @@ impl Ty {
             Self::U64 => "u64",
             Self::F64 => "f64",
             Self::Str => "str",
+            Self::Bytes => "bytes",
+            Self::Handle => "handle",
             Self::String => "string",
             Self::Blob => "blob",
             Self::Callback => "callback",
@@ -135,19 +162,46 @@ pub(crate) fn extract(source: &str) -> Result<Idl, Vec<String>> {
         error_codes: Vec::new(),
         constants: Vec::new(),
         functions: Vec::new(),
+        handles: Vec::new(),
         callbacks: Vec::new(),
     };
     let mut problems = Vec::new();
+    // Handle types first, so a signature anywhere may name any of them.
+    for item in &file.items {
+        if let Item::Struct(s) = item
+            && is_pub(&s.vis)
+            && s.ident != "Error"
+        {
+            if s.fields
+                .iter()
+                .any(|f| !matches!(f.vis, syn::Visibility::Inherited))
+                || !s.generics.params.is_empty()
+            {
+                problems.push(at(s.span(), "a handle has private fields and no generics"));
+            }
+            let name = s.ident.to_string();
+            idl.handles.push(Handle {
+                snake: snake(&name),
+                name,
+                doc: docs(&s.attrs),
+                methods: Vec::new(),
+            });
+        }
+    }
+    let names: Vec<String> = idl.handles.iter().map(|h| h.name.clone()).collect();
     for item in &file.items {
         let result = match item {
-            Item::Fn(f) if is_pub(&f.vis) => function(f).map(|f| idl.functions.push(f)),
+            Item::Fn(f) if is_pub(&f.vis) => {
+                function(&f.sig, &f.attrs, None, &names).map(|f| idl.functions.push(f))
+            }
+            Item::Impl(i) if i.trait_.is_none() => methods(i, &names).map(|(owner, mut m)| {
+                if let Some(h) = idl.handles.iter_mut().find(|h| h.name == owner) {
+                    h.methods.append(&mut m);
+                }
+            }),
             Item::Const(c) if is_pub(&c.vis) => constant(c).map(|c| idl.constants.push(c)),
             Item::Enum(e) if e.ident == "ErrorCode" => {
                 codes(e).map(|mut c| idl.error_codes.append(&mut c))
-            }
-            // The error type, the result alias and re-exports are fixed by the boundary.
-            Item::Struct(s) if is_pub(&s.vis) && s.ident != "Error" => {
-                Err(at(s.span(), "a public struct cannot cross the boundary"))
             }
             Item::Enum(e) if is_pub(&e.vis) => {
                 Err(at(e.span(), "only `ErrorCode` may be a public enum"))
@@ -158,9 +212,11 @@ pub(crate) fn extract(source: &str) -> Result<Idl, Vec<String>> {
             problems.push(p);
         }
     }
-    for cb in idl
+    let all = idl
         .functions
         .iter()
+        .chain(idl.handles.iter().flat_map(|h| &h.methods));
+    for cb in all
         .flat_map(|f| &f.params)
         .filter_map(|p| p.callback.as_ref())
     {
@@ -234,8 +290,56 @@ fn unlink(line: &str) -> String {
     out
 }
 
-fn function(f: &syn::ItemFn) -> Result<Function, String> {
-    let sig = &f.sig;
+/// `CamelCase` to `snake_case`.
+fn snake(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 4);
+    for (i, c) in s.chars().enumerate() {
+        if c.is_uppercase() && i > 0 {
+            out.push('_');
+        }
+        out.extend(c.to_lowercase());
+    }
+    out
+}
+
+/// The `pub fn`s of `impl Handle { .. }`.
+fn methods(i: &syn::ItemImpl, handles: &[String]) -> Result<(String, Vec<Function>), String> {
+    let public = i
+        .items
+        .iter()
+        .any(|it| matches!(it, syn::ImplItem::Fn(f) if is_pub(&f.vis)));
+    let owner = ident(&i.self_ty).map(|(_, n)| n).unwrap_or_default();
+    if !handles.contains(&owner) {
+        // Private helpers on the error type are fine; public ones would not cross.
+        return if public {
+            Err(at(
+                i.self_ty.span(),
+                "`impl` of a type that is not a public handle",
+            ))
+        } else {
+            Ok((owner, Vec::new()))
+        };
+    }
+    if !i.generics.params.is_empty() {
+        return Err(at(i.span(), &format!("`{owner}`: no generics")));
+    }
+    let mut out = Vec::new();
+    for item in &i.items {
+        if let syn::ImplItem::Fn(f) = item
+            && is_pub(&f.vis)
+        {
+            out.push(function(&f.sig, &f.attrs, Some(&owner), handles)?);
+        }
+    }
+    Ok((owner, out))
+}
+
+fn function(
+    sig: &syn::Signature,
+    attrs: &[Attribute],
+    owner: Option<&str>,
+    handles: &[String],
+) -> Result<Function, String> {
     let name = sig.ident.to_string();
     if sig.asyncness.is_some()
         || !matches!(sig.safety, syn::Safety::Default)
@@ -247,14 +351,28 @@ fn function(f: &syn::ItemFn) -> Result<Function, String> {
         ));
     }
     let mut params = Vec::new();
+    let mut receiver = false;
     for input in &sig.inputs {
-        let FnArg::Typed(pt) = input else {
-            return Err(at(input.span(), &format!("`{name}`: free functions only")));
+        let pt = match input {
+            FnArg::Receiver(r)
+                if owner.is_some()
+                    && matches!(r.kind, syn::ReceiverKind::Reference(_, _, None)) =>
+            {
+                receiver = true;
+                continue;
+            }
+            FnArg::Receiver(_) => {
+                return Err(at(
+                    input.span(),
+                    &format!("`{name}`: a method takes `&self` only (D-274)"),
+                ));
+            }
+            FnArg::Typed(pt) => pt,
         };
         let Pat::Ident(id) = &*pt.pat else {
             return Err(at(pt.span(), &format!("`{name}`: name every parameter")));
         };
-        let (ty, callback) = param_ty(&pt.ty).ok_or_else(|| {
+        let (ty, callback, handle) = param_ty(&pt.ty, handles).ok_or_else(|| {
             at(
                 pt.ty.span(),
                 &format!("`{name}`: parameter type is not a boundary type"),
@@ -264,14 +382,15 @@ fn function(f: &syn::ItemFn) -> Result<Function, String> {
             name: id.ident.to_string(),
             ty,
             callback,
+            handle,
         });
     }
     if params.iter().filter(|p| p.ty == Ty::Callback).count() > 1 {
         return Err(at(sig.span(), &format!("`{name}`: at most one callback")));
     }
-    let (returns, fallible) = match &sig.output {
-        ReturnType::Default => (Ty::Void, false),
-        ReturnType::Type(_, ty) => result_ty(ty).ok_or_else(|| {
+    let (returns, returns_handle, fallible) = match &sig.output {
+        ReturnType::Default => (Ty::Void, None, false),
+        ReturnType::Type(_, ty) => result_ty(ty, owner, handles).ok_or_else(|| {
             at(
                 ty.span(),
                 &format!("`{name}`: return type is not a boundary type"),
@@ -280,9 +399,11 @@ fn function(f: &syn::ItemFn) -> Result<Function, String> {
     };
     Ok(Function {
         name,
-        doc: docs(&f.attrs),
+        doc: docs(attrs),
+        receiver,
         params,
         returns,
+        returns_handle,
         fallible,
     })
 }
@@ -297,17 +418,32 @@ fn ident(ty: &syn::Type) -> Option<(&syn::PathSegment, String)> {
     Some((seg, seg.ident.to_string()))
 }
 
-fn param_ty(ty: &syn::Type) -> Option<(Ty, Option<Callback>)> {
+type ParamTy = (Ty, Option<Callback>, Option<String>);
+
+fn param_ty(ty: &syn::Type, handles: &[String]) -> Option<ParamTy> {
     if let syn::Type::Reference(r) = ty {
         return match (&*r.elem, r.mutability.is_some()) {
-            (syn::Type::Path(_), false) if ident(&r.elem)?.1 == "str" => Some((Ty::Str, None)),
-            (syn::Type::TraitObject(t), true) => Some((Ty::Callback, Some(callback(t)?))),
+            (syn::Type::Path(_), false) => {
+                let (seg, name) = ident(&r.elem)?;
+                matches!(seg.arguments, PathArguments::None).then_some(())?;
+                if name == "str" {
+                    Some((Ty::Str, None, None))
+                } else {
+                    handles
+                        .contains(&name)
+                        .then_some((Ty::Handle, None, Some(name)))
+                }
+            }
+            (syn::Type::Slice(s), false) if ident(&s.elem)?.1 == "u8" => {
+                Some((Ty::Bytes, None, None))
+            }
+            (syn::Type::TraitObject(t), true) => Some((Ty::Callback, Some(callback(t)?), None)),
             _ => None,
         };
     }
     let (seg, name) = ident(ty)?;
     matches!(seg.arguments, PathArguments::None).then_some(())?;
-    Some((Ty::scalar(&name)?, None))
+    Some((Ty::scalar(&name)?, None, None))
 }
 
 /// `dyn FnMut(scalars..) -> bool`, nothing else.
@@ -338,20 +474,31 @@ fn callback(t: &syn::TypeTraitObject) -> Option<Callback> {
     })
 }
 
-fn out_ty(ty: &syn::Type) -> Option<Ty> {
+fn out_ty(ty: &syn::Type, owner: Option<&str>, handles: &[String]) -> Option<(Ty, Option<String>)> {
     if let syn::Type::Tuple(t) = ty {
-        return t.elems.is_empty().then_some(Ty::Void);
+        return t.elems.is_empty().then_some((Ty::Void, None));
     }
     let (seg, name) = ident(ty)?;
     matches!(seg.arguments, PathArguments::None).then_some(())?;
+    let name = match (name.as_str(), owner) {
+        ("Self", Some(o)) => o.to_owned(),
+        _ => name,
+    };
+    if handles.contains(&name) {
+        return Some((Ty::Handle, Some(name)));
+    }
     match name.as_str() {
-        "String" => Some(Ty::String),
-        "Blob" => Some(Ty::Blob),
-        other => Ty::scalar(other),
+        "String" => Some((Ty::String, None)),
+        "Blob" => Some((Ty::Blob, None)),
+        other => Some((Ty::scalar(other)?, None)),
     }
 }
 
-fn result_ty(ty: &syn::Type) -> Option<(Ty, bool)> {
+fn result_ty(
+    ty: &syn::Type,
+    owner: Option<&str>,
+    handles: &[String],
+) -> Option<(Ty, Option<String>, bool)> {
     let (seg, name) = ident(ty)?;
     if name == "Result" {
         let PathArguments::AngleBracketed(args) = &seg.arguments else {
@@ -361,9 +508,11 @@ fn result_ty(ty: &syn::Type) -> Option<(Ty, bool)> {
         let (Some(GenericArgument::Type(inner)), None) = (args.next(), args.next()) else {
             return None;
         };
-        return Some((out_ty(inner)?, true));
+        let (t, h) = out_ty(inner, owner, handles)?;
+        return Some((t, h, true));
     }
-    Some((out_ty(ty)?, false))
+    let (t, h) = out_ty(ty, owner, handles)?;
+    Some((t, h, false))
 }
 
 fn int(e: &Expr) -> Option<i64> {
@@ -429,6 +578,14 @@ pub fn fold(text: &str) -> String { String::new() }
 pub fn run(n: u32, on: &mut dyn FnMut(u32) -> bool) -> Result<u32> { Ok(n) }
 pub fn noop() {}
 fn private(x: Vec<u8>) {}
+/// An engine.
+pub struct Engine { inner: u32 }
+impl Engine {
+    /// Opens one.
+    pub fn open(bytes: &[u8]) -> Result<Self> { todo!() }
+    pub fn search(&self, query: &str, other: &Engine) -> Blob { todo!() }
+    fn hidden(&self) {}
+}
 ";
 
     #[test]
@@ -454,6 +611,24 @@ fn private(x: Vec<u8>) {}
         assert_eq!(idl.error_codes[0].value, 1);
         assert_eq!(idl.callbacks.len(), 1);
         assert_eq!(idl.callbacks[0].id, "u32");
+        let h = &idl.handles[0];
+        assert_eq!(
+            (h.name.as_str(), h.snake.as_str(), h.methods.len()),
+            ("Engine", "engine", 2)
+        );
+        let open = &h.methods[0];
+        assert_eq!(
+            (open.receiver, open.params[0].ty, open.returns),
+            (false, Ty::Bytes, Ty::Handle)
+        );
+        assert_eq!(
+            (open.returns_handle.as_deref(), open.fallible),
+            (Some("Engine"), true)
+        );
+        let search = &h.methods[1];
+        assert!(search.receiver);
+        assert_eq!(search.params[1].handle.as_deref(), Some("Engine"));
+        assert!(!idl.functions[0].receiver);
     }
 
     #[test]
@@ -467,7 +642,14 @@ fn private(x: Vec<u8>) {}
             "pub fn f(a: &mut dyn FnMut(u32) -> bool, b: &mut dyn FnMut(u32) -> bool) {}",
             "pub fn f(a: &mut dyn FnMut(&str) -> bool) {}",
             "pub fn f(a: &mut dyn FnMut(u32)) {}",
-            "pub struct S;",
+            "pub struct S(pub u32);",
+            "pub struct S<T> { t: T }",
+            "pub struct S { pub x: u32 }",
+            "impl Unknown { pub fn f() {} }",
+            "pub struct S { x: u32 } impl S { pub fn f(&mut self) {} }",
+            "pub struct S { x: u32 } impl S { pub fn f(self) {} }",
+            "pub struct S { x: u32 } impl S { pub fn f(x: &mut [u8]) {} }",
+            "pub fn f(x: &Unknown) {}",
             "pub const X: f64 = 1.0;",
         ] {
             let src = format!("{API}\n{bad}");
