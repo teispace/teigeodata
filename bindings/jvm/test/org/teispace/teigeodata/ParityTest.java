@@ -25,6 +25,7 @@ public final class ParityTest {
         Map<?, ?> p = (Map<?, ?>) new Json(new String(read(new File(args[0])), StandardCharsets.UTF_8)).value();
         step("loaded parity.json");
         check(TeiGeodata.version().equals(p.get("version")), "version");
+        check(TeiGeodata.components().equals(p.get("components")), "components");
         TeiGeodata.noop();
         for (Object c : (List<?>) p.get("fold")) {
             List<?> pair = (List<?>) c;

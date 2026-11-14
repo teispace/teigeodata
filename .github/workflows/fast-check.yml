@@ -42,6 +42,10 @@ jobs:
         run: |
           cargo clippy --locked -p teigeodata-engine --all-targets --no-default-features --features mmap
           cargo test --locked -p teigeodata-engine --no-default-features --features mmap
+      - name: The API with no component features (D-291)
+        run: |
+          cargo clippy --locked -p teigeodata-api --all-targets --no-default-features
+          cargo test --locked -p teigeodata-api --no-default-features
       - name: The engine as the catalog's resolver (D-164)
         run: |
           cargo clippy --locked -p teigeodata-engine --all-targets --features catalog
@@ -170,7 +174,7 @@ jobs:
       - name: Lite library symbols (D-285)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
-          cargo build --release --locked -p teigeodata-ffi --lib --no-default-features
+          cargo build --release --locked -p teigeodata-ffi --lib --no-default-features --features components
           cargo xtask abi --lib target/release/libteigeodata_ffi.so --lite
 
   deny:

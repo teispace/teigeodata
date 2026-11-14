@@ -30,6 +30,7 @@ def column(blob: tg.Blob, name: str) -> memoryview:
 class Parity(unittest.TestCase):
     def test_version(self) -> None:
         self.assertEqual(tg.version(), PARITY["version"])
+        self.assertEqual(tg.components(), PARITY["components"])
         tg.noop()
 
     def test_fold(self) -> None:

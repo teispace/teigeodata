@@ -216,6 +216,16 @@ public enum TeiGeodata {
         return takeString(out)
     }
 
+    /// The components this build answers, in table order, comma-separated (`point, elevation,
+    /// admin`). A build made without one answers its queries as a layer installed without it
+    /// does: no rows, or `ErrorCode::MissingComponent`.
+    public static func components() -> String {
+        var out = tg_bytes()
+        let status = tg_components(&out)
+        expectOK(status)
+        return takeString(out)
+    }
+
     /// Does nothing. Measures the bare cost of a call across each boundary.
     public static func noop() {
         let status = tg_noop()

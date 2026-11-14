@@ -157,6 +157,13 @@ int32_t tg_last_error(tg_bytes *message);
 int32_t tg_version(tg_bytes *out);
 
 /*
+ * The components this build answers, in table order, comma-separated (`point, elevation,
+ * admin`). A build made without one answers its queries as a layer installed without it
+ * does: no rows, or `ErrorCode::MissingComponent`.
+ */
+int32_t tg_components(tg_bytes *out);
+
+/*
  * Does nothing. Measures the bare cost of a call across each boundary.
  */
 int32_t tg_noop(void);

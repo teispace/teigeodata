@@ -121,6 +121,14 @@ pub fn version() -> String {
     teigeodata_api::version()
 }
 
+/// The components this build answers, in table order, comma-separated (`point, elevation,
+/// admin`). A build made without one answers its queries as a layer installed without it
+/// does: no rows, or `ErrorCode::MissingComponent`.
+#[napi]
+pub fn components() -> String {
+    teigeodata_api::components()
+}
+
 /// Does nothing. Measures the bare cost of a call across each boundary.
 #[napi]
 pub fn noop() {

@@ -18,9 +18,12 @@ name = "teigeodata"
 crate-type = ["cdylib", "staticlib"]
 
 [features]
-default = ["store"]
+default = ["store", "components"]
 # The store (`Store`, `Job`); without it the lite library (D-279).
 store = ["teigeodata-ffi/store"]
+# Every pack component's queries (teigeodata-api's `components`, D-291); without it the
+# library answers only `point` queries.
+components = ["teigeodata-ffi/components"]
 
 [dependencies]
 teigeodata-ffi.workspace = true

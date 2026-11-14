@@ -28,6 +28,43 @@
 //! ```
 //! assert_eq!(teigeodata_api::fold("São Paulo"), "sao paulo");
 //! ```
+//!
+//! **Components** (D-137, D-291): a Cargo feature per pack component, all in `components`
+//! (default). A build without one answers its queries as a layer installed without the
+//! component does: the same functions in every build, so each language's API is one API, and
+//! a query that needs the component returns [`ErrorCode::MissingComponent`] or no rows.
+#![cfg_attr(
+    not(feature = "components"),
+    allow(
+        dead_code,
+        unused_imports,
+        unused_variables,
+        reason = "a build without a component leaves its helpers and arguments unused"
+    )
+)]
+
+/// The engine's answer where `$feature` is built (of type `$ty`); in a build without it, the
+/// error a layer installed without the component gives (D-137), handled by the same code.
+macro_rules! built {
+    ($feature:literal, $component:ident, $ty:ty, $call:expr) => {{
+        #[cfg(feature = $feature)]
+        let r: core::result::Result<$ty, teigeodata_engine::Error> = $call;
+        #[cfg(not(feature = $feature))]
+        let r: core::result::Result<$ty, teigeodata_engine::Error> = Err($crate::not_built(
+            teigeodata_format::component::Component::$component,
+        ));
+        r
+    }};
+    (any($a:literal, $b:literal), $component:ident, $ty:ty, $call:expr) => {{
+        #[cfg(any(feature = $a, feature = $b))]
+        let r: core::result::Result<$ty, teigeodata_engine::Error> = $call;
+        #[cfg(not(any(feature = $a, feature = $b)))]
+        let r: core::result::Result<$ty, teigeodata_engine::Error> = Err($crate::not_built(
+            teigeodata_format::component::Component::$component,
+        ));
+        r
+    }};
+}
 
 mod places;
 #[cfg(feature = "store")]
@@ -40,9 +77,11 @@ use std::sync::Arc;
 pub use teigeodata_blob::Blob;
 use teigeodata_blob::Column;
 use teigeodata_core::{E6, E7, PlaceId, Point};
-use teigeodata_engine::{
-    Civil, Hit, Layer, LayerOptions, Local, Near, Place, PostalCode, Scratch, Shared,
-};
+#[cfg(feature = "postal")]
+use teigeodata_engine::PostalCode;
+#[cfg(feature = "tz-rules")]
+use teigeodata_engine::{Civil, Local};
+use teigeodata_engine::{Hit, Layer, LayerOptions, Near, Place, Scratch, Shared};
 use teigeodata_format::Part;
 use teigeodata_format::component::{Component, Components, MAX_LANGUAGES, Parts};
 
@@ -141,6 +180,7 @@ pub struct SearchOptions {
 
 impl SearchOptions {
     /// The engine's options, checked.
+    #[cfg(feature = "search")]
     fn engine(&self) -> Result<teigeodata_engine::SearchOptions> {
         let mut out = teigeodata_engine::SearchOptions::default().with_strict(self.strict);
         match (self.focus_lat, self.focus_lon) {
@@ -312,6 +352,7 @@ struct Buffers {
     hits: Vec<Hit>,
     near: Vec<Near>,
     units: Vec<Place>,
+    #[cfg(feature = "postal")]
     codes: Vec<PostalCode>,
 }
 
@@ -443,7 +484,7 @@ impl Engine {
         let id = place_id(id)?;
         let engine = self.shared.load();
         let parent = match engine.get(id)? {
-            Some(p) => engine.parent(&p)?,
+            Some(p) => built!("admin", Admin, Option<Place>, engine.parent(&p))?,
             None => None,
         };
         Places::of(&engine, parent)?.blob()
@@ -456,7 +497,11 @@ impl Engine {
     ///
     /// As [`parent`](Self::parent).
     pub fn ancestors(&self, id: &str) -> Result<Blob> {
-        self.related(id, teigeodata_engine::Engine::ancestors)
+        #[cfg(feature = "admin")]
+        let walk = teigeodata_engine::Engine::ancestors;
+        #[cfg(not(feature = "admin"))]
+        let walk = |_: &_, _: &_, _: &mut _| Err(not_built(Component::Admin));
+        self.related(id, walk)
     }
 
     /// The place's children, by ID; no rows for a leaf or an unknown ID.
@@ -465,7 +510,11 @@ impl Engine {
     ///
     /// As [`parent`](Self::parent).
     pub fn children(&self, id: &str) -> Result<Blob> {
-        self.related(id, teigeodata_engine::Engine::children)
+        #[cfg(feature = "admin")]
+        let walk = teigeodata_engine::Engine::children;
+        #[cfg(not(feature = "admin"))]
+        let walk = |_: &_, _: &_, _: &mut _| Err(not_built(Component::Admin));
+        self.related(id, walk)
     }
 
     /// `ancestors` and `children`: the places `walk` gives for the place with this ID.
@@ -529,15 +578,23 @@ impl Engine {
     /// globe or has one coordinate only, or its scale is not positive;
     /// [`ErrorCode::Corrupt`] if a section read is corrupt.
     pub fn search_with(&self, query: &str, limit: u32, options: &SearchOptions) -> Result<Blob> {
-        let (k, opts) = (self::limit(limit)?, options.engine()?);
-        let engine = self.shared.load();
-        BUFFERS.with_borrow_mut(|b| {
-            let Buffers { scratch, hits, .. } = b;
-            engine.search_with(query, k, &opts, scratch, hits)?;
-            let mut out = Places::of(&engine, hits.iter().map(|h| h.place))?;
-            out.score = Some(hits.iter().map(|h| h.score).collect());
-            out.blob()
-        })
+        #[cfg(feature = "search")]
+        {
+            let (k, opts) = (self::limit(limit)?, options.engine()?);
+            let engine = self.shared.load();
+            BUFFERS.with_borrow_mut(|b| {
+                let Buffers { scratch, hits, .. } = b;
+                engine.search_with(query, k, &opts, scratch, hits)?;
+                let mut out = Places::of(&engine, hits.iter().map(|h| h.place))?;
+                out.score = Some(hits.iter().map(|h| h.score).collect());
+                out.blob()
+            })
+        }
+        #[cfg(not(feature = "search"))]
+        {
+            self::limit(limit)?;
+            Err(not_built(Component::Search).into())
+        }
     }
 
     /// The places nearest the point, nearest first, at most `limit`, with `meters` and
@@ -592,7 +649,12 @@ impl Engine {
         let engine = self.shared.load();
         BUFFERS.with_borrow_mut(|b| {
             let Buffers { scratch, units, .. } = b;
-            engine.admin_at(at, scratch, units)?;
+            built!(
+                "admin-index",
+                AdminIndex,
+                (),
+                engine.admin_at(at, scratch, units).map(|_| ())
+            )?;
             Places::of(&engine, units.iter().copied())?.blob()
         })
     }
@@ -608,25 +670,32 @@ impl Engine {
     /// grid read is corrupt.
     pub fn elevation_at(&self, lat: f64, lon: f64) -> Result<Blob> {
         let at = point::<E7>(lat, lon)?;
-        let engine = self.shared.load();
-        let height = BUFFERS.with_borrow_mut(|b| engine.elevation_at(at, &mut b.scratch))?;
-        let rows: Vec<_> = height.into_iter().collect();
-        let source: Vec<&str> = rows
-            .iter()
-            .map(|h| h.source.map_or("", teigeodata_engine::DemSource::key))
-            .collect();
-        let stated: Vec<bool> = rows.iter().map(|h| h.source.is_some()).collect();
-        let meters: Vec<f64> = rows.iter().map(|h| h.meters).collect();
-        let spacing: Vec<f64> = rows.iter().map(|h| h.resolution_m).collect();
-        let datum: Vec<&str> = rows.iter().map(|h| h.datum.name()).collect();
-        let source_c = Column::Dict(&source);
-        Blob::encode(&[
-            ("meters", Column::F64(&meters)),
-            ("source", Column::Nullable(&source_c, &stated)),
-            ("resolution_m", Column::F64(&spacing)),
-            ("datum", Column::Dict(&datum)),
-        ])
-        .map_err(|e| Error::new(ErrorCode::Internal, e.to_string()))
+        #[cfg(any(feature = "dem", feature = "dem-coarse"))]
+        {
+            let engine = self.shared.load();
+            let height = BUFFERS.with_borrow_mut(|b| engine.elevation_at(at, &mut b.scratch))?;
+            let rows: Vec<_> = height.into_iter().collect();
+            let source: Vec<&str> = rows
+                .iter()
+                .map(|h| h.source.map_or("", teigeodata_engine::DemSource::key))
+                .collect();
+            let stated: Vec<bool> = rows.iter().map(|h| h.source.is_some()).collect();
+            let meters: Vec<f64> = rows.iter().map(|h| h.meters).collect();
+            let spacing: Vec<f64> = rows.iter().map(|h| h.resolution_m).collect();
+            let datum: Vec<&str> = rows.iter().map(|h| h.datum.name()).collect();
+            let source_c = Column::Dict(&source);
+            Blob::encode(&[
+                ("meters", Column::F64(&meters)),
+                ("source", Column::Nullable(&source_c, &stated)),
+                ("resolution_m", Column::F64(&spacing)),
+                ("datum", Column::Dict(&datum)),
+            ])
+            .map_err(|e| Error::new(ErrorCode::Internal, e.to_string()))
+        }
+        #[cfg(not(any(feature = "dem", feature = "dem-coarse")))]
+        {
+            Err(not_built(Component::Dem).into())
+        }
     }
 
     /// The places postal code `code` names, one row per code and place, with the code's
@@ -639,11 +708,18 @@ impl Engine {
     ///
     /// [`ErrorCode::Corrupt`] if a section read is corrupt.
     pub fn postal_lookup(&self, code: &str, scheme: &str) -> Result<Blob> {
-        let engine = self.shared.load();
-        BUFFERS.with_borrow_mut(|b| {
-            installed(engine.postal_lookup(code, scheme_of(scheme), &mut b.codes))?;
-            postal_blob(&engine, &b.codes)
-        })
+        #[cfg(feature = "postal")]
+        {
+            let engine = self.shared.load();
+            BUFFERS.with_borrow_mut(|b| {
+                installed(engine.postal_lookup(code, scheme_of(scheme), &mut b.codes))?;
+                postal_blob(&engine, &b.codes)
+            })
+        }
+        #[cfg(not(feature = "postal"))]
+        {
+            no_codes()
+        }
     }
 
     /// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
@@ -655,11 +731,18 @@ impl Engine {
     /// [`ErrorCode::Corrupt`] if a section read is corrupt.
     pub fn postal_prefix(&self, input: &str, scheme: &str, limit: u32) -> Result<Blob> {
         let k = self::limit(limit)?;
-        let engine = self.shared.load();
-        BUFFERS.with_borrow_mut(|b| {
-            installed(engine.postal_prefix(input, scheme_of(scheme), k, &mut b.codes))?;
-            postal_blob(&engine, &b.codes)
-        })
+        #[cfg(feature = "postal")]
+        {
+            let engine = self.shared.load();
+            BUFFERS.with_borrow_mut(|b| {
+                installed(engine.postal_prefix(input, scheme_of(scheme), k, &mut b.codes))?;
+                postal_blob(&engine, &b.codes)
+            })
+        }
+        #[cfg(not(feature = "postal"))]
+        {
+            no_codes()
+        }
     }
 
     /// The postal codes of the place with this ID; no rows for an unknown ID.
@@ -670,14 +753,21 @@ impl Engine {
     /// section read is corrupt.
     pub fn postal_codes_of(&self, id: &str) -> Result<Blob> {
         let id = place_id(id)?;
-        let engine = self.shared.load();
-        BUFFERS.with_borrow_mut(|b| {
-            b.codes.clear();
-            if let Some(p) = engine.get(id)? {
-                installed(engine.postal_codes_of(&p, &mut b.codes))?;
-            }
-            postal_blob(&engine, &b.codes)
-        })
+        #[cfg(feature = "postal")]
+        {
+            let engine = self.shared.load();
+            BUFFERS.with_borrow_mut(|b| {
+                b.codes.clear();
+                if let Some(p) = engine.get(id)? {
+                    installed(engine.postal_codes_of(&p, &mut b.codes))?;
+                }
+                postal_blob(&engine, &b.codes)
+            })
+        }
+        #[cfg(not(feature = "postal"))]
+        {
+            no_codes()
+        }
     }
 
     /// The postal codes of the point: those of the deepest admin unit holding it that an
@@ -690,12 +780,19 @@ impl Engine {
     /// section read is corrupt.
     pub fn postal_at(&self, lat: f64, lon: f64) -> Result<Blob> {
         let at = point::<E7>(lat, lon)?;
-        let engine = self.shared.load();
-        BUFFERS.with_borrow_mut(|b| {
-            let Buffers { scratch, codes, .. } = b;
-            installed(engine.postal_at(at, scratch, codes).map(|_| ()))?;
-            postal_blob(&engine, codes)
-        })
+        #[cfg(feature = "postal")]
+        {
+            let engine = self.shared.load();
+            BUFFERS.with_borrow_mut(|b| {
+                let Buffers { scratch, codes, .. } = b;
+                installed(engine.postal_at(at, scratch, codes).map(|_| ()))?;
+                postal_blob(&engine, codes)
+            })
+        }
+        #[cfg(not(feature = "postal"))]
+        {
+            no_codes()
+        }
     }
 
     /// The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no
@@ -708,7 +805,12 @@ impl Engine {
     pub fn tz_at(&self, lat: f64, lon: f64) -> Result<Blob> {
         let at = point::<E7>(lat, lon)?;
         let engine = self.shared.load();
-        let area = engine.tz_at(at)?;
+        let area = built!(
+            "timezone-index",
+            TimezoneIndex,
+            Option<Place>,
+            engine.tz_at(at)
+        )?;
         Places::of(&engine, area)?.blob()
     }
 
@@ -723,20 +825,27 @@ impl Engine {
     /// [`ErrorCode::MissingComponent`] if the rules that would hold the zone were not
     /// installed; [`ErrorCode::Corrupt`] if they are corrupt.
     pub fn tz_offset_at(&self, zone: &str, unix_seconds: i64) -> Result<Blob> {
-        let engine = self.shared.load();
-        let found = engine.tz_offset_at(zone, unix_seconds).map_err(instant)?;
-        let (seconds, dst, abbr) = found.as_ref().map_or((&[][..], &[][..], vec![]), |o| {
-            (
-                core::slice::from_ref(&o.seconds),
-                if o.is_dst { &[1_u8][..] } else { &[0_u8][..] },
-                vec![o.abbr()],
-            )
-        });
-        table(&[
-            ("seconds", Column::I32(seconds)),
-            ("dst", Column::U8(dst)),
-            ("abbr", Column::Dict(&abbr)),
-        ])
+        #[cfg(feature = "tz-rules")]
+        {
+            let engine = self.shared.load();
+            let found = engine.tz_offset_at(zone, unix_seconds).map_err(instant)?;
+            let (seconds, dst, abbr) = found.as_ref().map_or((&[][..], &[][..], vec![]), |o| {
+                (
+                    core::slice::from_ref(&o.seconds),
+                    if o.is_dst { &[1_u8][..] } else { &[0_u8][..] },
+                    vec![o.abbr()],
+                )
+            });
+            table(&[
+                ("seconds", Column::I32(seconds)),
+                ("dst", Column::U8(dst)),
+                ("abbr", Column::Dict(&abbr)),
+            ])
+        }
+        #[cfg(not(feature = "tz-rules"))]
+        {
+            Err(not_built(Component::TzRules).into())
+        }
     }
 
     /// The offsets a civil time may have in `zone`: one row with `kind` (`unique`, `gap` for
@@ -763,40 +872,47 @@ impl Engine {
         minute: u32,
         second: u32,
     ) -> Result<Blob> {
-        let field = |v: u32, max: u32, what: &str| {
-            u8::try_from(v)
-                .ok()
-                .filter(|&v| u32::from(v) <= max)
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::InvalidArgument,
-                        format!("{what} {v} is out of range"),
-                    )
-                })
-        };
-        let civil = Civil {
-            year,
-            month: field(month, 12, "month")?,
-            day: field(day, 31, "day")?,
-            hour: field(hour, 23, "hour")?,
-            minute: field(minute, 59, "minute")?,
-            second: field(second, 59, "second")?,
-        };
-        let engine = self.shared.load();
-        let found = engine.tz_local_candidates(zone, civil).map_err(instant)?;
-        let (kind, before, after) = match found {
-            None => (vec![], vec![], vec![]),
-            Some(Local::Unique(o)) => (vec!["unique"], vec![o], vec![o]),
-            Some(Local::Gap { before, after }) => (vec!["gap"], vec![before], vec![after]),
-            Some(Local::Overlap { earlier, later }) => {
-                (vec!["overlap"], vec![earlier], vec![later])
-            }
-        };
-        table(&[
-            ("kind", Column::Dict(&kind)),
-            ("before", Column::I32(&before)),
-            ("after", Column::I32(&after)),
-        ])
+        #[cfg(feature = "tz-rules")]
+        {
+            let field = |v: u32, max: u32, what: &str| {
+                u8::try_from(v)
+                    .ok()
+                    .filter(|&v| u32::from(v) <= max)
+                    .ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::InvalidArgument,
+                            format!("{what} {v} is out of range"),
+                        )
+                    })
+            };
+            let civil = Civil {
+                year,
+                month: field(month, 12, "month")?,
+                day: field(day, 31, "day")?,
+                hour: field(hour, 23, "hour")?,
+                minute: field(minute, 59, "minute")?,
+                second: field(second, 59, "second")?,
+            };
+            let engine = self.shared.load();
+            let found = engine.tz_local_candidates(zone, civil).map_err(instant)?;
+            let (kind, before, after) = match found {
+                None => (vec![], vec![], vec![]),
+                Some(Local::Unique(o)) => (vec!["unique"], vec![o], vec![o]),
+                Some(Local::Gap { before, after }) => (vec!["gap"], vec![before], vec![after]),
+                Some(Local::Overlap { earlier, later }) => {
+                    (vec!["overlap"], vec![earlier], vec![later])
+                }
+            };
+            table(&[
+                ("kind", Column::Dict(&kind)),
+                ("before", Column::I32(&before)),
+                ("after", Column::I32(&after)),
+            ])
+        }
+        #[cfg(not(feature = "tz-rules"))]
+        {
+            Err(not_built(Component::TzRules).into())
+        }
     }
 
     /// Every zone name (tzdb names and links) the layers' zone rules hold, in byte order:
@@ -808,7 +924,7 @@ impl Engine {
     /// were not installed.
     pub fn tz_zones(&self) -> Result<Blob> {
         let engine = self.shared.load();
-        let zones = engine.tz_zones()?;
+        let zones = built!("tz-rules", TzRules, Vec<&str>, engine.tz_zones())?;
         table(&[("zone", Column::Utf8(&zones))])
     }
 
@@ -821,18 +937,30 @@ impl Engine {
     /// As [`Engine::tz_offset_at`].
     pub fn tz_rules_start(&self, zone: &str) -> Result<Blob> {
         let engine = self.shared.load();
-        let start = engine.tz_rules_start(zone)?;
+        let start = built!(
+            "tz-rules",
+            TzRules,
+            Option<i64>,
+            engine.tz_rules_start(zone)
+        )?;
         table(&[("unix", Column::I64(start.as_slice()))])
     }
 
     /// The tzdb release (`2026f`) of the first layer with zone rules; empty without rules.
     #[must_use]
     pub fn tz_version(&self) -> String {
-        self.shared
-            .load()
-            .tz_version()
-            .unwrap_or_default()
-            .to_owned()
+        #[cfg(feature = "tz-rules")]
+        {
+            self.shared
+                .load()
+                .tz_version()
+                .unwrap_or_default()
+                .to_owned()
+        }
+        #[cfg(not(feature = "tz-rules"))]
+        {
+            String::new()
+        }
     }
 
     /// The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row.
@@ -849,7 +977,7 @@ impl Engine {
             )
         })?;
         let engine = self.shared.load();
-        let place = engine.by_iso(code)?;
+        let place = built!("admin", Admin, Option<Place>, engine.by_iso(code))?;
         Places::of(&engine, place)?.blob()
     }
 }
@@ -893,10 +1021,36 @@ fn installed(r: core::result::Result<(), teigeodata_engine::Error>) -> Result<()
 }
 
 /// A blob of `codes` with their places.
+#[cfg(feature = "postal")]
 fn postal_blob(engine: &teigeodata_engine::Engine, codes: &[PostalCode]) -> Result<Blob> {
     let mut out = Places::of(engine, codes.iter().map(|c| c.place))?;
     out.postal = Some(places::Postal::of(codes));
     out.blob()
+}
+
+/// The empty answer of a postal query in a build without postal codes, as a layer installed
+/// without them answers.
+#[cfg(not(feature = "postal"))]
+fn no_codes() -> Result<Blob> {
+    let mut out = Places::default();
+    out.postal = Some(places::Postal::default());
+    out.blob()
+}
+
+/// The error of a query that needs `component` in a build without it: a layer installed
+/// without the component gives the same (D-137).
+#[cfg_attr(
+    feature = "components",
+    allow(
+        dead_code,
+        reason = "a build with every component has no query to refuse"
+    )
+)]
+fn not_built(component: Component) -> teigeodata_engine::Error {
+    teigeodata_engine::Error::MissingComponent {
+        address: "this build of teigeodata".into(),
+        component,
+    }
 }
 
 /// A blob of `near`'s places with their `meters` and `bearing`.
@@ -1309,6 +1463,21 @@ pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
 }
 
+/// The components this build answers, in table order, comma-separated (`point, elevation,
+/// admin`). A build made without one answers its queries as a layer installed without it
+/// does: no rows, or [`ErrorCode::MissingComponent`].
+#[must_use]
+pub fn components() -> String {
+    let mut out = String::new();
+    for c in teigeodata_engine::built().iter() {
+        if !out.is_empty() {
+            out.push_str(", ");
+        }
+        out.push_str(c.name());
+    }
+    out
+}
+
 /// Does nothing. Measures the bare cost of a call across each boundary.
 pub fn noop() {}
 
@@ -1530,10 +1699,12 @@ mod tests {
     /// `bindings/parity.json` holds the expectations of every language's parity test; this
     /// checks them against Rust, so a binding that passes agrees with the core.
     #[test]
+    #[cfg(feature = "components")]
     fn parity_file_matches_rust() {
         let parity: serde_json::Value =
             serde_json::from_str(include_str!("../../../bindings/parity.json")).unwrap();
         assert_eq!(parity["version"], version());
+        assert_eq!(parity["components"], super::components());
         for case in parity["fold"].as_array().unwrap() {
             assert_eq!(fold(case[0].as_str().unwrap()), case[1].as_str().unwrap());
         }

@@ -123,6 +123,13 @@ export interface InstallOptions {
 export function version(): string;
 
 /**
+ * The components this build answers, in table order, comma-separated (`point, elevation,
+ * admin`). A build made without one answers its queries as a layer installed without it
+ * does: no rows, or `ErrorCode::MissingComponent`.
+ */
+export function components(): string;
+
+/**
  * Does nothing. Measures the bare cost of a call across each boundary.
  */
 export function noop(): void;

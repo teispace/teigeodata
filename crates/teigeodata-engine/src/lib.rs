@@ -60,7 +60,7 @@ mod tz;
 use core::fmt;
 use std::sync::Arc;
 
-pub use layer::{Layer, LayerId, LayerOptions, Load, Verify};
+pub use layer::{Layer, LayerId, LayerOptions, Load, Verify, built};
 #[cfg(feature = "boundaries")]
 pub use outline::{Outline, Ring};
 #[cfg(feature = "postal")]

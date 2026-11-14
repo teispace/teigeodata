@@ -58,6 +58,13 @@ def version() -> str:
     The library version, from its package metadata.
     """
 
+def components() -> str:
+    """
+    The components this build answers, in table order, comma-separated (`point, elevation,
+    admin`). A build made without one answers its queries as a layer installed without it
+    does: no rows, or `ErrorCode::MissingComponent`.
+    """
+
 def noop() -> None:
     """
     Does nothing. Measures the bare cost of a call across each boundary.

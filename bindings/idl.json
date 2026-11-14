@@ -93,6 +93,20 @@
       "feature": null
     },
     {
+      "name": "components",
+      "doc": [
+        "The components this build answers, in table order, comma-separated (`point, elevation,",
+        "admin`). A build made without one answers its queries as a layer installed without it",
+        "does: no rows, or `ErrorCode::MissingComponent`."
+      ],
+      "receiver": false,
+      "params": [],
+      "returns": "string",
+      "fallible": false,
+      "blocks": false,
+      "feature": null
+    },
+    {
       "name": "noop",
       "doc": [
         "Does nothing. Measures the bare cost of a call across each boundary."

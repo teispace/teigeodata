@@ -298,6 +298,9 @@ external int _tgLastError(Pointer<TgBytes> out);
 @Native<Int32 Function(Pointer<TgBytes>)>(symbol: 'tg_version', isLeaf: true)
 external int _tgVersion(Pointer<TgBytes> out);
 
+@Native<Int32 Function(Pointer<TgBytes>)>(symbol: 'tg_components', isLeaf: true)
+external int _tgComponents(Pointer<TgBytes> out);
+
 @Native<Int32 Function()>(symbol: 'tg_noop', isLeaf: true)
 external int _tgNoop();
 
@@ -575,6 +578,15 @@ final class TeiGeodata {
   /// The library version, from its package metadata.
   String version() {
     final status = _tgVersion(_bytes);
+    _check(status);
+    return _takeString();
+  }
+
+  /// The components this build answers, in table order, comma-separated (`point, elevation,
+  /// admin`). A build made without one answers its queries as a layer installed without it
+  /// does: no rows, or `ErrorCode::MissingComponent`.
+  String components() {
+    final status = _tgComponents(_bytes);
     _check(status);
     return _takeString();
   }

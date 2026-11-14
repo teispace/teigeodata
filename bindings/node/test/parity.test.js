@@ -27,6 +27,7 @@ function column(blob, name) {
 
 test("version and noop", () => {
   assert.equal(tg.version(), parity.version);
+  assert.equal(tg.components(), parity.components);
   assert.equal(tg.noop(), undefined);
 });
 

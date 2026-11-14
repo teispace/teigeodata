@@ -63,6 +63,7 @@ void main() {
 
   test('version and noop', () {
     expect(tg.version(), parity['version']);
+    expect(tg.components(), parity['components']);
     tg.noop();
   });
 

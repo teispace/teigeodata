@@ -79,6 +79,9 @@ int main(void) {
     tg_bytes out = {0};
     CHECK(tg_version(&out) == TG_OK && out.len == 5 && memcmp(out.ptr, "0.3.1", 5) == 0);
     tg_bytes_free(out);
+    static const char all[] = "point, elevation, admin, names, search, timezone, timezone-index, boundaries, admin-index, postal, dem, extra, tz-rules, substring, dem-coarse";
+    CHECK(tg_components(&out) == TG_OK && out.len == sizeof all - 1 && memcmp(out.ptr, all, sizeof all - 1) == 0);
+    tg_bytes_free(out);
     CHECK(tg_noop() == TG_OK);
 
     const char *text = "S\xc3\xa3o  Paulo";

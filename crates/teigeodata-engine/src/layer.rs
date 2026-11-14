@@ -180,6 +180,13 @@ const NOT_BUILT: &[Component] = &[
     Component::Substring,
 ];
 
+/// The components this build has readers for (D-137): every component but those whose Cargo
+/// feature is off.
+#[must_use]
+pub fn built() -> Components {
+    Components::all().without(Components::of(NOT_BUILT))
+}
+
 /// Where the block-hash list of every installed section is (located, not proved: D-142).
 fn located_blocks<'a>(
     pack: &Pack<'a>,

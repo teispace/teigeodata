@@ -150,6 +150,14 @@ fn version() -> String {
     teigeodata_api::version()
 }
 
+/// The components this build answers, in table order, comma-separated (`point, elevation,
+/// admin`). A build made without one answers its queries as a layer installed without it
+/// does: no rows, or `ErrorCode::MissingComponent`.
+#[pyfunction]
+fn components() -> String {
+    teigeodata_api::components()
+}
+
 /// Does nothing. Measures the bare cost of a call across each boundary.
 #[pyfunction]
 fn noop() {
@@ -1170,7 +1178,8 @@ mod _native {
     use super::{
         Blob, CancelledError, CorruptError, Engine, InternalError, InvalidArgumentError, IoError,
         Load, MissingComponentError, NetworkError, OpenOptions, RefusedError, SearchOptions,
-        TeiGeodataError, Verify, distance_m, fold, noop, progress, sample_rows, version,
+        TeiGeodataError, Verify, components, distance_m, fold, noop, progress, sample_rows,
+        version,
     };
 
     /// Most rows `sample_rows` builds in one call.

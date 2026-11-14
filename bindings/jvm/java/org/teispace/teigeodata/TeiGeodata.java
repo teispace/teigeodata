@@ -34,6 +34,13 @@ public final class TeiGeodata {
     public static native String version();
 
     /**
+     * The components this build answers, in table order, comma-separated (`point, elevation,
+     * admin`). A build made without one answers its queries as a layer installed without it
+     * does: no rows, or `ErrorCode::MissingComponent`.
+     */
+    public static native String components();
+
+    /**
      * Does nothing. Measures the bare cost of a call across each boundary.
      */
     public static native void noop();

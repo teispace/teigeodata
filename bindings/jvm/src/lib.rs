@@ -114,6 +114,26 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_version<'caller>(
         .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// The components this build answers, in table order, comma-separated (`point, elevation,
+/// admin`). A build made without one answers its queries as a layer installed without it
+/// does: no rows, or `ErrorCode::MissingComponent`.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_components<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+) -> JString<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JString<'caller>> {
+            let result =
+                (|| -> Result<_, teigeodata_api::Error> { Ok(teigeodata_api::components()) })();
+            match result {
+                Ok(value) => env.new_string(value),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 /// Does nothing. Measures the bare cost of a call across each boundary.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_noop<'caller>(

@@ -13,6 +13,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Added
 
+- `components()` in every binding: the components the build answers. `teigeodata-api` has a
+  Cargo feature per pack component, all in `components` (default); a build without one keeps
+  every function and answers as a layer installed without it (D-291).
 - `teigeodata-blob` format v1 (D-275, spike S2): a null bitmap per column
   (`Column::Nullable`, `Reader::nulls`), dictionary-encoded strings (`Column::Dict`, read as
   `View::Dict`: each distinct string stored once), and `u8`, `i16`, `u16` columns. v0 blobs

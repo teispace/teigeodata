@@ -14,10 +14,13 @@ publish.workspace = true
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [features]
-default = ["store"]
+default = ["store", "components"]
 # The store (`Store`, `Job`) in the C ABI; without it the HTTP and TLS stack is left out
 # (teigeodata-api's `store` feature).
 store = ["teigeodata-api/store"]
+# Every pack component's queries (teigeodata-api's `components`, D-291); without it the
+# library answers only `point` queries.
+components = ["teigeodata-api/components"]
 
 [dependencies]
 teigeodata-api.workspace = true

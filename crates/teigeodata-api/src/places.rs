@@ -2,7 +2,9 @@
 //! per-row allocation.
 
 use teigeodata_blob::{Blob, Column};
-use teigeodata_engine::{CodeKind, Engine, Error as EngineError, Place, PostalCode};
+#[cfg(feature = "postal")]
+use teigeodata_engine::{CodeKind, PostalCode};
+use teigeodata_engine::{Engine, Error as EngineError, Place};
 
 use crate::{Error, ErrorCode, Result};
 
@@ -71,6 +73,7 @@ pub(crate) struct Postal {
 
 impl Postal {
     /// The codes' own columns; their places go in [`Places`] in the same order.
+    #[cfg(feature = "postal")]
     pub(crate) fn of(codes: &[PostalCode]) -> Self {
         let mut out = Self::default();
         for c in codes {
@@ -122,23 +125,50 @@ impl Places {
         buf: &mut [u8; NAME],
     ) -> Result<()> {
         self.id.push_fmt(Some(&place.id));
-        self.name.push(installed(engine.name(place, buf))?);
+        self.name.push(installed(built!(
+            "names",
+            Names,
+            Option<&str>,
+            engine.name(place, buf)
+        ))?);
         self.kind
             .push(place.kind.map(teigeodata_core::PlaceKind::name));
         self.level.push(place.admin_level);
         self.lat.push(place.point.lat_degrees());
         self.lon.push(place.point.lon_degrees());
-        let e = installed(engine.elevation(place))?;
+        let e = installed(built!(
+            "elevation",
+            Elevation,
+            Option<i16>,
+            engine.elevation(place)
+        ))?;
         self.elevation.push(e.unwrap_or(0));
         self.has_elevation.push(e.is_some());
-        let parent = installed(engine.parent(place))?.map(|p| p.id);
+        let parent = installed(built!("admin", Admin, Option<Place>, engine.parent(place)))?;
+        let parent = parent.map(|p| p.id);
         self.parent.push_fmt(parent.as_ref());
-        match installed(engine.tz_of(place))? {
-            Some(z) => self.tz.push(installed(engine.name(&z, buf))?),
+        let zone = built!(
+            any("timezone", "timezone-index"),
+            Timezone,
+            Option<Place>,
+            engine.tz_of(place)
+        );
+        match installed(zone)? {
+            Some(z) => self.tz.push(installed(built!(
+                "names",
+                Names,
+                Option<&str>,
+                engine.name(&z, buf)
+            ))?),
             None => self.tz.push(None),
         }
-        self.iso
-            .push_fmt(installed(engine.iso_code(place))?.as_ref());
+        let iso = built!(
+            "admin",
+            Admin,
+            Option<teigeodata_core::IsoCode>,
+            engine.iso_code(place)
+        );
+        self.iso.push_fmt(installed(iso)?.as_ref());
         Ok(())
     }
 

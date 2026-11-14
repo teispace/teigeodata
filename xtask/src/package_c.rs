@@ -109,7 +109,8 @@ fn build(plan: &Plan) -> Result<(), Vec<String>> {
         cmd.args(["--target", t]);
     }
     if plan.lite {
-        cmd.arg("--no-default-features");
+        // Without the store, with every component (D-291).
+        cmd.args(["--no-default-features", "--features", "components"]);
     }
     let status = cmd.status().map_err(|e| vec![format!("cargo: {e}")])?;
     if status.success() {
@@ -281,7 +282,8 @@ fn native_static_libs(plan: &Plan) -> Result<Vec<String>, Vec<String>> {
         cmd.args(["--target", t]);
     }
     if plan.lite {
-        cmd.arg("--no-default-features");
+        // Without the store, with every component (D-291).
+        cmd.args(["--no-default-features", "--features", "components"]);
     }
     // Cargo replays the note from its cache when the crate is fresh.
     cmd.args(["--", "--print", "native-static-libs"]);

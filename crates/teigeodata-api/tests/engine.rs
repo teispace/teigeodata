@@ -10,6 +10,7 @@
     clippy::too_many_lines,
     reason = "tests: failures panic with their message; the parity test reads the whole file"
 )]
+#![cfg(feature = "components")]
 
 #[path = "../../teigeodata-engine/tests/common/mod.rs"]
 mod common;

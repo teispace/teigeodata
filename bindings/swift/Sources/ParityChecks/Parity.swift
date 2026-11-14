@@ -114,6 +114,7 @@ public func runParity(_ path: String) async throws {
     let p = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as! [String: Any]
 
     check(TeiGeodata.version() == p["version"] as! String, "version")
+    check(TeiGeodata.components() == p["components"] as! String, "components")
     TeiGeodata.noop()
     for case let pair as [String] in p["fold"] as! [Any] {
         check(TeiGeodata.fold(pair[0]) == pair[1], "fold \(pair[0])")

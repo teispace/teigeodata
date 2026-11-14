@@ -261,6 +261,21 @@ pub unsafe extern "C" fn tg_version(out: *mut TgBytes) -> i32 {
     })
 }
 
+/// The components this build answers, in table order, comma-separated (`point, elevation,
+/// admin`). A build made without one answers its queries as a layer installed without it
+/// does: no rows, or `ErrorCode::MissingComponent`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_components(out: *mut TgBytes) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        let value = teigeodata_api::components();
+        let value = TgBytes::from_vec(value.into_bytes());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
 /// Does nothing. Measures the bare cost of a call across each boundary.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_noop() -> i32 {
