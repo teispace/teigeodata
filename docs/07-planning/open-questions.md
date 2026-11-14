@@ -1,7 +1,7 @@
 ---
 title: "Open questions"
 status: living
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # Open questions
@@ -24,4 +24,3 @@ move it to the [decision log](../03-decisions/log.md) and delete it here.
 | Q-014 | Which CORS host serves packs to browser apps (ADR-0037)? Deferred (D-212): GitHub Releases only for now | Later, an object store with free egress on its own account or quota, so it never competes with other projects; the settings are in D-212 | Maintainer (when web apps need it) |
 | Q-023 | Does Nepal's 2020 official map claim Susta? Natural Earth's Nepal view gives it to Nepal; India's pack must be cut by the project's own claim polygon (D-217) | Check the Survey Department 2020 map when the lite claim area is digitised (D-206) | Research (TG-15) |
 | Q-024 | How do we read the Census 2011 town directory (census towns, about 3,892)? LGD lists statutory towns only (measured 2026-11-13: 74 urban villages outside every urban body); data.gov.in's API takes a key, its pages need JavaScript | A data.gov.in API key on the maintainer's account, or another GODL copy; until then the India pack has statutory towns and GeoNames' places of 5,000 or more | Maintainer (account), then TG-15 step 6 |
-| Q-027 | Should a name in a language other than the query's weigh less? `Istan` finds India (its Turkish name Hindistan) and Pakistan before Istanbul, `Tor` Turkey (another language's name) before Toronto; the world golden set accepts them 3rd and 5th (measured 2026-11-14) | Research: weigh a name by the search languages (`SearchOptions`), A/B on the three golden sets | Research |

@@ -108,8 +108,10 @@ the forge page's world-part flags (`--populations`); the next data release.
 
 ## 7. Risks and open items
 
-- Q-027: a name in a language other than the query's weighs as much as one in it (`Istan`,
-  `Tor`); weighting names by the search languages is its own question.
+- Q-027 (answered by D-272): names are not weighed by language; a layer's languages are its
+  data's choice. `Istan` is fixed by D-269; `Tor` gives Turkey first only on the 26-language
+  baseline ([MapTiler on the language parameter](https://maptiler.com/news/2026/06/tuning-geocoding-searches-a-guide-to-better-results/),
+  accessed 2026-11-14).
 - Unit counts come from Wikidata's best-rank statements, of varying years; a unit without one
   takes its level's typical count.
 - India's districts mostly lack a count; the city-first rule covers the common case.
