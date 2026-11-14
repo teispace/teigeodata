@@ -26,6 +26,9 @@ bhanjyang = "bhanjyang"
 palika = "palika"
 # Darma Rural Municipality, Salyan (COD-AB name, Nepal postal codes).
 darma = "darma"
+# A simulator's unique device ID (simctl's JSON field) and the macOS wheel repair tool.
+udid = "udid"
+delocate = "delocate"
 # Level of detail (boundary geometry).
 lod = "lod"
 # ISO 15924 script codes.
