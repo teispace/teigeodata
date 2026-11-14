@@ -15,6 +15,10 @@
 //! [`catalog`] (feature `trust`) reads each target's pack details, schema v1; `repo` (feature
 //! `repo`) writes and signs the roles.
 //!
+//! Phase 5.1: `client` (feature `client`) is the policy over one store directory (init,
+//! refresh, install, update, remove, pin, repair, status), shared by the command line and
+//! every binding.
+//!
 //! The reader side is `no_std` with `alloc` and sans-I/O: it never touches a file or a socket.
 //!
 //! ```
@@ -47,6 +51,8 @@ extern crate std;
 
 #[cfg(feature = "trust")]
 pub mod catalog;
+#[cfg(feature = "client")]
+pub mod client;
 mod error;
 #[cfg(feature = "fetch")]
 pub mod fetch;

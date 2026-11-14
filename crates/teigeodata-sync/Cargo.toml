@@ -34,6 +34,9 @@ http = ["fetch", "dep:ureq", "ureq/gzip"]
 # and the catalog refresh that keeps the verified metadata beside them (D-178). Sections a
 # partial install leaves out are punched out of the file (D-189): `libc` or `windows-sys`.
 store = ["fetch", "dep:libc", "dep:windows-sys"]
+# The store's client: the policy over one store directory, shared by the command line and
+# every binding (research note store-api).
+client = ["store", "http"]
 # The fuzz and property harnesses, shared by `cargo test` and cargo-fuzz (D-072).
 fuzz = ["write"]
 

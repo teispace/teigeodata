@@ -37,6 +37,13 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - Error code `MissingComponent` (6, D-278): a query needs a component the pack was opened
   without; before, this was `InvalidArgument`.
 
+### Changed
+
+- The store's policy (init, refresh, install with dependencies and selections, update,
+  remove, pin, repair, status) moved from the command line into `teigeodata_sync::client`
+  (feature `client`), for the bindings to share; `tgd` formats its results. `tgd install`
+  now prints its lines when the whole install ends.
+
 ### Breaking
 
 - Blobs start with the magic `TGB1` instead of `TGB0`. A binding or caller that checks the

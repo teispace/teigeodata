@@ -19,7 +19,7 @@ teigeodata-core.workspace = true
 # `catalog`: the engine as the catalog's resolver for `find` (D-164).
 teigeodata-engine = { workspace = true, features = ["catalog"] }
 # The store, the catalog refresh and the default transport (D-168, D-171, D-179).
-teigeodata-sync = { workspace = true, features = ["http", "store"] }
+teigeodata-sync = { workspace = true, features = ["client"] }
 # The writer for `extract`, BLOBS decoding and signatures for `verify`.
 teigeodata-format = { workspace = true, features = ["write", "zstd", "signature"] }
 # clap derive (D-178): help, suggestions, uniform usage errors and completions.

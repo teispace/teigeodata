@@ -20,19 +20,14 @@ use serde_json::{Value, json};
 use teigeodata_core::E7;
 use teigeodata_engine::{Engine, Layer, LayerOptions, Load, Place};
 use teigeodata_format::Part;
-use teigeodata_format::component::{Component, Components, Parts, Selection};
+use teigeodata_format::component::{Component, Components, Parts};
 use teigeodata_sync::catalog::{self, Catalog, Entry};
-use teigeodata_sync::fetch::{Downloads, FetchError, Mirrors, Ureq};
-use teigeodata_sync::refresh::{self, RefreshError};
-use teigeodata_sync::store::{Dir, Health, Record, Store, StoreError};
-use teigeodata_sync::trust::Trusted;
+pub(crate) use teigeodata_sync::client::Want;
+use teigeodata_sync::client::{self as client, Client, ClientError, language, path_of};
+use teigeodata_sync::fetch::Downloads;
+use teigeodata_sync::store::Health;
 
 use crate::Fail;
-
-/// The store's configuration, written by `init`.
-const CONFIG: &str = "config.json";
-/// The trust anchor `init` was given.
-const ROOT: &str = "root.json";
 
 /// The store directory: `--store`, else `TEIGEODATA_STORE`, else the platform's data directory.
 pub(crate) fn default_store() -> PathBuf {
@@ -57,152 +52,45 @@ fn field<'a>(v: &'a Value, key: &str) -> &'a Value {
     v.get(key).unwrap_or(&Value::Null)
 }
 
-fn now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
-}
-
-/// A mirror base ends with `/`, so a file name joins it.
-fn base(url: &str) -> String {
-    if url.ends_with('/') {
-        url.to_string()
-    } else {
-        format!("{url}/")
-    }
-}
-
-fn network(e: &FetchError) -> bool {
-    matches!(e, FetchError::Transport(_) | FetchError::Status(_))
-}
-
-impl From<RefreshError> for Fail {
-    fn from(e: RefreshError) -> Self {
+impl From<ClientError> for Fail {
+    fn from(e: ClientError) -> Self {
         match e {
-            RefreshError::Network { .. } => Self::Network(e.to_string()),
-            e => Self::Refused(e.to_string()),
+            ClientError::Network(m) => Self::Network(m),
+            ClientError::Refused(m) => Self::Refused(m),
         }
     }
 }
 
-impl From<FetchError> for Fail {
-    fn from(e: FetchError) -> Self {
-        if network(&e) {
-            Self::Network(e.to_string())
-        } else {
-            Self::Refused(e.to_string())
-        }
+/// The store at `root`, set up by `init`; a pack found damaged is reported on standard error.
+pub(crate) fn open(root: &Path) -> Result<Client, Fail> {
+    let (c, damaged) = Client::open(root)?;
+    for d in &damaged {
+        let _ = writeln!(std::io::stderr(), "tgd: {d} is damaged: `tgd repair` it");
     }
+    Ok(c)
 }
 
-impl From<StoreError> for Fail {
-    fn from(e: StoreError) -> Self {
-        match e {
-            StoreError::Fetch(f) => f.into(),
-            e => Self::Refused(e.to_string()),
-        }
-    }
-}
-
-/// An open store: its packs, its catalog's trust anchor and mirrors.
-pub(crate) struct Opened {
-    pub(crate) root: PathBuf,
-    pub(crate) store: Store<Dir>,
-    shipped: Vec<u8>,
-    repo: Vec<String>,
-    assets: Vec<String>,
-    /// `install --downloads`: the directory a platform downloads assets into (D-184).
-    downloads: Option<PathBuf>,
-    /// What the packs installed from `downloads` still need, one record per asset.
-    pending: Vec<Value>,
-}
-
-impl Opened {
-    /// The store at `root`, set up by `init`.
-    pub(crate) fn open(root: &Path) -> Result<Self, Fail> {
-        let at = |p: &str| root.join(p);
-        let config = std::fs::read(at(CONFIG)).map_err(|e| {
-            Fail::Refused(format!(
-                "{}: {e} (run `tgd init` first)",
-                at(CONFIG).display()
-            ))
-        })?;
-        let config: Value =
-            serde_json::from_slice(&config).map_err(|e| Fail::of(at(CONFIG).display(), e))?;
-        let list = |k: &str| -> Vec<String> {
-            field(&config, k)
-                .as_array()
-                .map(|a| a.iter().filter_map(Value::as_str).map(base).collect())
-                .unwrap_or_default()
+/// The engine over the installed packs, each opened with its installed components and parts,
+/// and the packs `extra`.
+pub(crate) fn engine(c: &Client, extra: &[PathBuf]) -> Result<Engine, Fail> {
+    let mut e = Engine::new();
+    for r in c.packs() {
+        let path = c.pack_path(r)?;
+        let options = LayerOptions {
+            installed: Some(r.set),
+            installed_parts: r.parts,
+            ..LayerOptions::default()
         };
-        let shipped = std::fs::read(at(ROOT)).map_err(|e| Fail::of(at(ROOT).display(), e))?;
-        let dir = Dir::new(root).map_err(|e| Fail::of(root.display(), e))?;
-        let (store, recovered) = Store::open(dir).map_err(|e| Fail::of(root.display(), e))?;
-        for d in &recovered.damaged {
-            let _ = writeln!(std::io::stderr(), "tgd: {d} is damaged: `tgd repair` it");
-        }
-        Ok(Self {
-            root: root.to_path_buf(),
-            store,
-            shipped,
-            repo: list("repo"),
-            assets: list("assets"),
-            downloads: None,
-            pending: Vec::new(),
-        })
+        e.add(Layer::open(&path, options).map_err(|x| Fail::of(path.display(), x))?);
     }
-
-    /// The verified catalog, from the store alone.
-    fn offline(&mut self) -> Result<Trusted, Fail> {
-        Ok(refresh::load(self.store.fs(), &self.shipped, now())?)
+    for p in extra {
+        let options = LayerOptions {
+            load: Load::Read,
+            ..LayerOptions::default()
+        };
+        e.add(Layer::open(p, options).map_err(|x| Fail::of(p.display(), x))?);
     }
-
-    /// The catalog refreshed from the mirrors, with the roles of `want` and of every country
-    /// whose pack is installed.
-    fn refresh(&mut self, want: &[String]) -> Result<refresh::Refreshed, Fail> {
-        let mut want: Vec<String> = want.to_vec();
-        for r in self.store.packs() {
-            if let Some(cc) = catalog::country_of(&r.address) {
-                want.push(String::from_utf8_lossy(&cc).into_owned());
-            }
-        }
-        want.sort();
-        want.dedup();
-        let refs: Vec<&str> = want.iter().map(String::as_str).collect();
-        let mut mirrors = Mirrors::new(self.repo.clone());
-        Ok(refresh::refresh(
-            self.store.fs(),
-            &mut Ureq::new(),
-            &mut mirrors,
-            &self.shipped,
-            now(),
-            &refs,
-        )?)
-    }
-
-    /// The engine over the installed packs, each opened with its installed components and
-    /// parts.
-    pub(crate) fn engine(&self, extra: &[PathBuf]) -> Result<Engine, Fail> {
-        let mut e = Engine::new();
-        let dir = Dir::new(&self.root).map_err(|x| Fail::of(self.root.display(), x))?;
-        for r in self.store.packs() {
-            let path = dir.pack_path(r);
-            let options = LayerOptions {
-                installed: Some(r.set),
-                installed_parts: r.parts,
-                ..LayerOptions::default()
-            };
-            e.add(Layer::open(&path, options).map_err(|x| Fail::of(path.display(), x))?);
-        }
-        for p in extra {
-            let options = LayerOptions {
-                load: Load::Read,
-                ..LayerOptions::default()
-            };
-            e.add(Layer::open(p, options).map_err(|x| Fail::of(p.display(), x))?);
-        }
-        Ok(e)
-    }
+    Ok(e)
 }
 
 pub(crate) fn init(
@@ -213,18 +101,7 @@ pub(crate) fn init(
     out: &mut dyn Write,
 ) -> Result<(), Fail> {
     let bytes = std::fs::read(trusted_root).map_err(|e| Fail::of(trusted_root.display(), e))?;
-    // The root must verify by itself before it becomes the anchor.
-    Trusted::new(&bytes, now()).map_err(|e| Fail::of(trusted_root.display(), e))?;
-    std::fs::create_dir_all(root).map_err(|e| Fail::of(root.display(), e))?;
-    let config = json!({ "repo": repo, "assets": assets });
-    let write = |name: &str, data: &[u8]| {
-        let (path, tmp) = (root.join(name), root.join(format!("{name}.tmp")));
-        std::fs::write(&tmp, data)
-            .and_then(|()| std::fs::rename(&tmp, &path))
-            .map_err(|e| Fail::of(path.display(), e))
-    };
-    write(ROOT, &bytes)?;
-    write(CONFIG, &serde_json::to_vec_pretty(&config)?)?;
+    client::init(root, repo, assets, &bytes)?;
     writeln!(
         out,
         "store {} set up: {} metadata and {} asset mirrors",
@@ -236,7 +113,7 @@ pub(crate) fn init(
 }
 
 pub(crate) fn refresh(root: &Path, countries: &[String], out: &mut dyn Write) -> Result<(), Fail> {
-    let mut s = Opened::open(root)?;
+    let mut s = open(root)?;
     let r = s.refresh(countries)?;
     let ts = r.trusted.timestamp().map_or(0, |t| t.common.version);
     if r.fetched.len() <= 1 {
@@ -252,31 +129,7 @@ pub(crate) fn refresh(root: &Path, countries: &[String], out: &mut dyn Write) ->
     Ok(())
 }
 
-/// The catalog's path of an argument: `np` is `np.places.tgd`, `np.dem` is `np.dem.tgd`.
-fn path_of(arg: &str) -> String {
-    match arg.strip_suffix(".tgd") {
-        Some(_) => arg.to_string(),
-        None => match arg.split_once('.') {
-            Some((a, c)) => catalog::path(a, c),
-            None => catalog::path(arg, "places"),
-        },
-    }
-}
-
-/// What the catalog says of an entry against the store.
-fn state(store: &Store<Dir>, e: &Entry) -> &'static str {
-    match store
-        .packs()
-        .iter()
-        .find(|r| r.address == e.address && r.component == e.component)
-    {
-        None => "available",
-        Some(r) if r.head == e.head => "installed",
-        Some(_) => "update",
-    }
-}
-
-fn entry_json(store: &Store<Dir>, e: &Entry) -> Value {
+fn entry_json(c: &Client, e: &Entry) -> Value {
     let all = e.size_of(Components::all());
     json!({
         "path": e.path(),
@@ -286,7 +139,7 @@ fn entry_json(store: &Store<Dir>, e: &Entry) -> Value {
         "components": e.sizes.keys().map(|c| c.name()).collect::<Vec<_>>(),
         "parts": e.parts.iter().map(part_json).collect::<Vec<_>>(),
         "licence": e.licence,
-        "state": state(store, e),
+        "state": c.state(e).name(),
     })
 }
 
@@ -297,25 +150,6 @@ fn part_json(p: &catalog::PartSize) -> Value {
     p.part.outline_levels().map_or_else(
         || json!({"component": component, "language": language(p.part), "download": download, "disk": disk}),
         |(level, lod)| json!({"component": component, "level": level, "lod": lod, "tolerance_m": p.tolerance_m, "download": download, "disk": disk}),
-    )
-}
-
-/// A names part for people: its language (`ne`), `*` for the rest, `base` for the base.
-fn language(p: Part) -> String {
-    if p.is_base() {
-        return "base".into();
-    }
-    if p == Part::REST {
-        return "*".into();
-    }
-    p.language_code().map_or_else(
-        || format!("{:#x}", p.0),
-        |c| {
-            c.iter()
-                .filter(|&&b| b != 0)
-                .map(|&b| char::from(b))
-                .collect()
-        },
     )
 }
 
@@ -348,44 +182,14 @@ fn parts_text(p: Parts) -> String {
     t
 }
 
-/// What `install` takes of each pack it names: components (every one when empty) and, when
-/// asked, only some languages and one outline part (D-253).
-#[derive(Clone, Debug, Default)]
-pub(crate) struct Want {
-    /// The components named.
-    pub(crate) components: Vec<Component>,
-    /// `--names`: the languages besides the base names.
-    pub(crate) languages: Option<Vec<Part>>,
-    /// `--outlines`: the deepest admin level and the tolerance in metres.
-    pub(crate) outline: Option<(u8, u32)>,
-}
-
-impl Want {
-    /// The components: those named, with names and boundaries when languages or an outline
-    /// are asked for, closed by what they need; every one when none is named.
-    fn set(&self) -> Components {
-        if self.components.is_empty() {
-            return Components::all();
-        }
-        let mut set = Components::of(&self.components);
-        if self.languages.is_some() {
-            set = set.union(Components::of(&[Component::Names]));
-        }
-        if self.outline.is_some() {
-            set = set.union(Components::of(&[Component::Boundaries]));
-        }
-        set.closed()
-    }
-}
-
 pub(crate) fn catalog(root: &Path, as_json: bool, out: &mut dyn Write) -> Result<(), Fail> {
-    let mut s = Opened::open(root)?;
+    let mut s = open(root)?;
     let t = s.offline()?;
     let (c, bad) = Catalog::trusted(&t);
     for (p, e) in &bad {
         let _ = writeln!(std::io::stderr(), "tgd: {p}: {e}");
     }
-    let rows: Vec<Value> = c.entries().map(|(_, e)| entry_json(&s.store, e)).collect();
+    let rows: Vec<Value> = c.entries().map(|(_, e)| entry_json(&s, e)).collect();
     if as_json {
         serde_json::to_writer_pretty(&mut *out, &rows)?;
         writeln!(out)?;
@@ -424,10 +228,10 @@ pub(crate) fn find(
     as_json: bool,
     out: &mut dyn Write,
 ) -> Result<(), Fail> {
-    let mut s = Opened::open(root)?;
+    let mut s = open(root)?;
     let t = s.offline()?;
     let (c, _) = Catalog::trusted(&t);
-    let engine = s.engine(with)?;
+    let engine = engine(&s, with)?;
     let found = c.find(&engine, query, limit)?;
     let mut buf = [0_u8; 1024];
     let mut rows = Vec::new();
@@ -444,7 +248,7 @@ pub(crate) fn find(
             "lat": f.candidate.point.lat_degrees(),
             "lon": f.candidate.point.lon_degrees(),
             "countries": f.candidate.countries.iter().map(|c| String::from_utf8_lossy(c).into_owned()).collect::<Vec<_>>(),
-            "packs": f.packs.iter().map(|e| entry_json(&s.store, e)).collect::<Vec<_>>(),
+            "packs": f.packs.iter().map(|e| entry_json(&s, e)).collect::<Vec<_>>(),
         }));
     }
     print_places(&rows, as_json, out)?;
@@ -491,10 +295,10 @@ pub(crate) fn locate(
     as_json: bool,
     out: &mut dyn Write,
 ) -> Result<(), Fail> {
-    let mut s = Opened::open(root)?;
+    let mut s = open(root)?;
     let t = s.offline()?;
     let (c, _) = Catalog::trusted(&t);
-    let engine = s.engine(with)?;
+    let engine = engine(&s, with)?;
     let mut countries: Vec<Place> = Vec::new();
     engine.countries_near(at, radius_m, &mut countries)?;
     let mut buf = [0_u8; 1024];
@@ -509,7 +313,7 @@ pub(crate) fn locate(
             "lat": country.point.lat_degrees(),
             "lon": country.point.lon_degrees(),
             "countries": [String::from_utf8_lossy(&cc)],
-            "packs": c.packs_at(cc, at).map(|e| entry_json(&s.store, e)).collect::<Vec<_>>(),
+            "packs": c.packs_at(cc, at).map(|e| entry_json(&s, e)).collect::<Vec<_>>(),
         }));
     }
     print_places(&rows, as_json, out)?;
@@ -521,170 +325,6 @@ pub(crate) fn locate(
     Ok(())
 }
 
-/// The catalog entry at `path` and its asset's length.
-fn target(t: &Trusted, path: &str) -> Result<(Entry, u64), Fail> {
-    let (_, target) = t
-        .trusted_targets()
-        .find(|(p, _)| *p == path)
-        .ok_or_else(|| Fail::Refused(format!("{path}: not in the catalog")))?;
-    let entry = Entry::from_target(path, target).map_err(|e| Fail::of(path, e))?;
-    Ok((entry, target.length))
-}
-
-/// The catalog for installing `paths`: refreshed for their countries, or the stored one when
-/// the network fails (an install then fails at the network itself).
-fn catalog_for(s: &mut Opened, paths: &[String]) -> Result<Trusted, Fail> {
-    let want: Vec<String> = paths
-        .iter()
-        .filter_map(|p| catalog::country_of(p.split('.').next().unwrap_or_default()))
-        .map(|cc| String::from_utf8_lossy(&cc).into_owned())
-        .collect();
-    match s.refresh(&want) {
-        Ok(r) => Ok(r.trusted),
-        Err(Fail::Network(m)) => {
-            let _ = writeln!(std::io::stderr(), "tgd: {m}; using the stored catalog");
-            s.offline()
-        }
-        Err(e) => Err(e),
-    }
-}
-
-/// What to install of `entry`: `want` added to what is `installed` (components added, the
-/// parts it names replaced), or what is installed (an update, a dependency), or everything;
-/// closed and resolved on the pack.
-fn selection(
-    entry: &Entry,
-    want: Option<&Want>,
-    installed: Option<&Record>,
-) -> Result<Selection, Fail> {
-    // An install adds components to what is there and replaces the parts it names; `None`
-    // (an update, a dependency) keeps what is there.
-    let set = match (want, installed) {
-        (Some(w), r) => {
-            let mut parts = r.map_or(Parts::ALL, |r| r.parts);
-            if let Some(l) = &w.languages {
-                parts = parts.languages(l).ok_or_else(|| {
-                    Fail::Refused(format!(
-                        "--names: at most {} languages",
-                        teigeodata_format::component::MAX_LANGUAGES
-                    ))
-                })?;
-            }
-            if let Some((level, t)) = w.outline {
-                parts = parts.outline(entry.outline_for(level, t));
-            }
-            Selection {
-                set: r.map_or(w.set(), |r| w.set().union(r.set)),
-                parts,
-            }
-        }
-        (None, Some(r)) => {
-            // An update keeps the outline part, or, when the new release no longer has it,
-            // takes the same levels at full resolution.
-            let mut sel = r.selection();
-            if let Some((level, _)) = r.parts.outline_part().and_then(Part::outline_levels)
-                && !entry
-                    .parts
-                    .iter()
-                    .any(|p| Some(p.part) == r.parts.outline_part())
-            {
-                sel.parts = sel.parts.outline(entry.outline_for(level, 0));
-            }
-            sel
-        }
-        (None, None) => Components::all().into(),
-    };
-    Ok(Selection {
-        parts: entry.resolve(set.parts),
-        ..set.closed()
-    })
-}
-
-/// Installs `path` with `want` added to what is installed (or the installed selection, or
-/// everything), its dependencies first.
-fn install_one(
-    s: &mut Opened,
-    t: &Trusted,
-    path: &str,
-    want: Option<&Want>,
-    asked: bool,
-    out: &mut dyn Write,
-) -> Result<(), Fail> {
-    let (entry, asset_len) = target(t, path)?;
-    for dep in &entry.deps {
-        if !s.store.packs().iter().any(|r| r.key() == *dep) {
-            install_one(s, t, dep, None, false, out)?;
-        }
-    }
-    let installed = s.store.packs().iter().find(|r| r.key() == path).cloned();
-    let set = selection(&entry, want, installed.as_ref())?;
-    if installed
-        .as_ref()
-        .is_some_and(|r| r.head == entry.head && r.selection() == set)
-    {
-        writeln!(out, "{path} {} is installed", entry.release)?;
-        return Ok(());
-    }
-    let done = if let Some(dir) = s.downloads.clone() {
-        // A platform's pass (D-184): the files it downloaded, or what is still missing.
-        let at = dir.join(&entry.file);
-        let mut parts = Downloads::open(&at, asset_len).map_err(|e| Fail::of(at.display(), e))?;
-        let mut mirrors = Mirrors::new(["downloads/"]);
-        match s.store.install(
-            &mut parts,
-            &mut mirrors,
-            &entry.file,
-            &entry,
-            asset_len,
-            set,
-        ) {
-            Err(FetchError::Needs(ranges)) => {
-                let urls: Vec<String> = s
-                    .assets
-                    .iter()
-                    .map(|m| format!("{m}{}", entry.file))
-                    .collect();
-                let parts: Vec<Value> = ranges
-                    .iter()
-                    .map(|r| json!({ "start": r.start, "end": r.end, "file": Downloads::name(r) }))
-                    .collect();
-                s.pending.push(json!({
-                    "pack": path,
-                    "urls": urls,
-                    "length": asset_len,
-                    "dir": at,
-                    "ranges": parts,
-                }));
-                return Ok(());
-            }
-            r => r?,
-        }
-    } else {
-        let mut mirrors = Mirrors::new(s.assets.clone());
-        s.store.install(
-            &mut Ureq::new(),
-            &mut mirrors,
-            &entry.file,
-            &entry,
-            asset_len,
-            set,
-        )?
-    };
-    if let Some(dir) = &s.downloads {
-        // Committed: the downloaded files are no longer needed.
-        let _ = std::fs::remove_dir_all(dir.join(&entry.file));
-    }
-    if !asked && installed.is_none() {
-        s.store.mark(&entry.address, &entry.component, false)?;
-    }
-    writeln!(
-        out,
-        "{path} {}: {} bytes fetched, {} reused, {} kept from an earlier attempt",
-        entry.release, done.fetched, done.reused, done.kept
-    )?;
-    Ok(())
-}
-
 pub(crate) fn install(
     root: &Path,
     packs: &[String],
@@ -693,112 +333,98 @@ pub(crate) fn install(
     downloads: Option<&Path>,
     out: &mut dyn Write,
 ) -> Result<(), Fail> {
-    let mut s = Opened::open(root)?;
-    s.downloads = downloads.map(Path::to_path_buf);
+    let mut s = open(root)?;
     let paths: Vec<String> = packs.iter().map(|p| path_of(p)).collect();
-    let t = catalog_for(&mut s, &paths)?;
-    for p in &paths {
-        install_one(&mut s, &t, p, Some(want), true, out)?;
-        if pin && s.store.packs().iter().any(|r| r.key() == *p) {
-            let (a, c) = split(p);
-            s.store.pin(a, c, true)?;
+    let report = s.install(&paths, want, pin, downloads);
+    let report = report.map_err(|e| match e {
+        ClientError::Refused(m) if m.starts_with("at most") => {
+            Fail::Refused(format!("--names: {m}"))
         }
+        e => e.into(),
+    })?;
+    if let Some(m) = &report.stale_catalog {
+        let _ = writeln!(std::io::stderr(), "tgd: {m}; using the stored catalog");
     }
-    if s.pending.is_empty() {
+    print_done(&report.done, out)?;
+    if report.pending.is_empty() {
         return Ok(());
     }
-    serde_json::to_writer_pretty(&mut *out, &s.pending)?;
+    let pending: Vec<Value> = report
+        .pending
+        .iter()
+        .map(|p| {
+            let ranges: Vec<Value> = p
+                .ranges
+                .iter()
+                .map(|r| json!({ "start": r.start, "end": r.end, "file": Downloads::name(r) }))
+                .collect();
+            json!({
+                "pack": p.pack,
+                "urls": p.urls,
+                "length": p.length,
+                "dir": p.dir,
+                "ranges": ranges,
+            })
+        })
+        .collect();
+    serde_json::to_writer_pretty(&mut *out, &pending)?;
     writeln!(out)?;
     Err(Fail::Pending)
 }
 
-pub(crate) fn update(root: &Path, packs: &[String], out: &mut dyn Write) -> Result<(), Fail> {
-    let mut s = Opened::open(root)?;
-    let installed: Vec<String> = s.store.packs().iter().map(Record::key).collect();
-    let paths: Vec<String> = if packs.is_empty() {
-        installed
-    } else {
-        packs.iter().map(|p| path_of(p)).collect()
-    };
-    let t = s.refresh(&[])?.trusted;
-    let mut updated = 0_usize;
-    for p in &paths {
-        if !s.store.packs().iter().any(|r| r.key() == *p) {
-            return Err(Fail::Refused(format!("{p}: not installed")));
-        }
-        let (entry, _) = target(&t, p)?;
-        if s.store
-            .packs()
-            .iter()
-            .any(|r| r.key() == *p && r.head != entry.head)
-        {
-            install_one(&mut s, &t, p, None, true, out)?;
-            updated += 1;
+/// One line per pack an install or update reached.
+fn print_done(done: &[client::Done], out: &mut dyn Write) -> Result<(), Fail> {
+    for d in done {
+        match &d.installed {
+            None => writeln!(out, "{} {} is installed", d.path, d.release)?,
+            Some(i) => writeln!(
+                out,
+                "{} {}: {} bytes fetched, {} reused, {} kept from an earlier attempt",
+                d.path, d.release, i.fetched, i.reused, i.kept
+            )?,
         }
     }
-    if updated == 0 {
+    Ok(())
+}
+
+pub(crate) fn update(root: &Path, packs: &[String], out: &mut dyn Write) -> Result<(), Fail> {
+    let mut s = open(root)?;
+    let paths: Vec<String> = packs.iter().map(|p| path_of(p)).collect();
+    let done = s.update(&paths)?;
+    print_done(&done, out)?;
+    if done.is_empty() {
         writeln!(out, "everything is up to date")?;
     }
     Ok(())
 }
 
-/// `address` and `component` of a catalog path.
-fn split(path: &str) -> (&str, &str) {
-    let stem = path.strip_suffix(".tgd").unwrap_or(path);
-    stem.split_once('.').unwrap_or((stem, "places"))
-}
-
 pub(crate) fn remove(root: &Path, pack: &str, out: &mut dyn Write) -> Result<(), Fail> {
-    let mut s = Opened::open(root)?;
-    let path = path_of(pack);
-    let (a, c) = split(&path);
-    for r in s.store.remove(a, c)? {
+    let mut s = open(root)?;
+    for r in s.remove(&path_of(pack))? {
         writeln!(out, "removed {} {}", r.key(), r.release)?;
     }
     Ok(())
 }
 
 pub(crate) fn pin(root: &Path, pack: &str, on: bool, out: &mut dyn Write) -> Result<(), Fail> {
-    let mut s = Opened::open(root)?;
+    let mut s = open(root)?;
     let path = path_of(pack);
-    let (a, c) = split(&path);
-    s.store.pin(a, c, on)?;
+    s.pin(&path, on)?;
     writeln!(out, "{path} {}", if on { "pinned" } else { "unpinned" })?;
     Ok(())
 }
 
 pub(crate) fn repair(root: &Path, pack: &str, out: &mut dyn Write) -> Result<(), Fail> {
-    let mut s = Opened::open(root)?;
+    let mut s = open(root)?;
     let path = path_of(pack);
-    let (a, c) = split(&path);
-    match s.store.verify(a, c, true)? {
-        Health::Good => {
-            writeln!(out, "{path} is whole")?;
-            return Ok(());
+    let r = s.repair(&path)?;
+    match r.fetched {
+        None => writeln!(out, "{path} is whole")?,
+        Some(fetched) => {
+            writeln!(out, "{path}: {:?}; repairing", r.health)?;
+            writeln!(out, "{path} repaired: {fetched} bytes fetched")?;
         }
-        h => writeln!(out, "{path}: {h:?}; repairing")?,
     }
-    let release = s
-        .store
-        .packs()
-        .iter()
-        .find(|r| r.key() == path)
-        .map(|r| r.release.clone())
-        .unwrap_or_default();
-    let t = match s.offline() {
-        Ok(t) if target(&t, &path).is_ok_and(|(e, _)| e.release == release) => t,
-        _ => s.refresh(&[])?.trusted,
-    };
-    let (entry, asset_len) = target(&t, &path)?;
-    let mut mirrors = Mirrors::new(s.assets.clone());
-    let done = s.store.repair(
-        &mut Ureq::new(),
-        &mut mirrors,
-        &entry.file,
-        &entry,
-        asset_len,
-    )?;
-    writeln!(out, "{path} repaired: {} bytes fetched", done.fetched)?;
     Ok(())
 }
 
@@ -808,14 +434,13 @@ pub(crate) fn status(
     as_json: bool,
     out: &mut dyn Write,
 ) -> Result<(), Fail> {
-    let mut s = Opened::open(root)?;
-    let t = s.offline().ok();
-    let packs: Vec<_> = s.store.packs().to_vec();
+    let mut s = open(root)?;
+    let st = s.status(deep)?;
+    let packs: Vec<_> = st.packs.iter().map(|(r, _)| r.clone()).collect();
     let mut rows = Vec::new();
     let mut bad = 0_usize;
-    for r in &packs {
-        let health = s.store.verify(&r.address, &r.component, deep)?;
-        bad += usize::from(health != Health::Good);
+    for (r, health) in &st.packs {
+        bad += usize::from(*health != Health::Good);
         rows.push(json!({
             "path": r.key(),
             "release": r.release,
@@ -827,20 +452,20 @@ pub(crate) fn status(
             "health": format!("{health:?}"),
         }));
     }
-    let ts = t.as_ref().and_then(|t| t.timestamp());
+    let ts = st.catalog;
     let catalog = json!({
-        "timestamp": ts.map(|x| x.common.version),
-        "expires": ts.map(|x| crate::pack::utc(u64::try_from(x.common.expires).unwrap_or(0))),
+        "timestamp": ts.map(|(version, _)| version),
+        "expires": ts.map(|(_, expires)| crate::pack::utc(u64::try_from(expires).unwrap_or(0))),
     });
     if as_json {
         serde_json::to_writer_pretty(&mut *out, &json!({"catalog": catalog, "packs": rows}))?;
         writeln!(out)?;
     } else {
         match ts {
-            Some(x) => writeln!(
+            Some((version, _)) => writeln!(
                 out,
                 "catalog: timestamp {}, expires {}",
-                x.common.version,
+                version,
                 field(&catalog, "expires").as_str().unwrap_or_default()
             )?,
             None => writeln!(out, "catalog: not refreshed yet")?,

@@ -135,7 +135,7 @@ pub(crate) fn run(
     out: &mut dyn Write,
 ) -> Result<(), Fail> {
     let e = if packs.is_empty() {
-        crate::sync::Opened::open(store)?.engine(&[])?
+        crate::sync::engine(&crate::sync::open(store)?, &[])?
     } else {
         engine(packs)?
     };
@@ -251,7 +251,7 @@ pub(crate) fn elevation(
     out: &mut dyn Write,
 ) -> Result<(), Fail> {
     let e = if packs.is_empty() {
-        crate::sync::Opened::open(store)?.engine(&[])?
+        crate::sync::engine(&crate::sync::open(store)?, &[])?
     } else {
         engine(packs)?
     };
@@ -322,7 +322,7 @@ pub(crate) fn postal(
     out: &mut dyn Write,
 ) -> Result<(), Fail> {
     let e = if packs.is_empty() {
-        crate::sync::Opened::open(store)?.engine(&[])?
+        crate::sync::engine(&crate::sync::open(store)?, &[])?
     } else {
         engine(packs)?
     };
