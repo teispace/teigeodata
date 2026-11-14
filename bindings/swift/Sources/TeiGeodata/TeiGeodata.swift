@@ -82,6 +82,17 @@ public enum Load: UInt32, Sendable {
     case read = 1
 }
 
+
+/// Runs a call that blocks (`# Blocks`) on a thread of its own and resumes the caller when it
+/// ends, so it never holds a thread of Swift's cooperative pool, which must not block.
+private func detached<T: Sendable, E: Error>(
+    _ work: @escaping @Sendable () throws(E) -> T
+) async throws(E) -> T {
+    let result: Result<T, E> = await withCheckedContinuation { done in
+        Thread.detachNewThread { done.resume(returning: Result(catching: work)) }
+    }
+    return try result.get()
+}
 /// How `Engine::search_with` ranks (D-226). Every field's zero value is its default
 /// (D-276).
 public struct SearchOptions: Sendable, Equatable {
@@ -663,6 +674,11 @@ public final class Store: @unchecked Sendable {
         return Store(raw: out!)
     }
 
+    /// ``create(_:repo:assets:trustedRoot:)`` on a thread of its own; awaiting it never blocks the caller's thread.
+    public static func createAsync(_ root: String, repo: String, assets: String, trustedRoot: Data) async throws(TeiGeodataError) -> Store {
+try await detached { () throws(TeiGeodataError) in try Store.create(root, repo: repo, assets: assets, trustedRoot: trustedRoot) }
+    }
+
     /// Opens the store at `root`, finishing or undoing an install a crash cut short.
     ///
     /// # Errors
@@ -679,6 +695,11 @@ public final class Store: @unchecked Sendable {
         let status = root.withUTF8 { rootBytes in tg_store_open(rootBytes.baseAddress, rootBytes.count, &out) }
         try check(status)
         return Store(raw: out!)
+    }
+
+    /// ``open(_:)`` on a thread of its own; awaiting it never blocks the caller's thread.
+    public static func openAsync(_ root: String) async throws(TeiGeodataError) -> Store {
+try await detached { () throws(TeiGeodataError) in try Store.open(root) }
     }
 
     /// The packs found damaged when the store was opened, comma-separated; empty when none.
@@ -707,6 +728,11 @@ public final class Store: @unchecked Sendable {
         return takeData(out)
     }
 
+    /// ``catalog()`` on a thread of its own; awaiting it never blocks the caller's thread.
+    public func catalogAsync() async throws(TeiGeodataError) -> Data {
+try await detached { () throws(TeiGeodataError) in try self.catalog() }
+    }
+
     /// Each installed pack and its health, from a full check of every byte when `deep`.
     ///
     /// # Errors
@@ -722,6 +748,11 @@ public final class Store: @unchecked Sendable {
         let status = withExtendedLifetime(self) { tg_store_status(raw, deep, &out) }
         try check(status)
         return takeData(out)
+    }
+
+    /// ``status(_:)`` on a thread of its own; awaiting it never blocks the caller's thread.
+    public func statusAsync(_ deep: Bool) async throws(TeiGeodataError) -> Data {
+try await detached { () throws(TeiGeodataError) in try self.status(deep) }
     }
 
     /// Pins the pack (kept when room is made), or unpins it.
@@ -740,6 +771,11 @@ public final class Store: @unchecked Sendable {
         try check(status)
     }
 
+    /// ``pin(_:on:)`` on a thread of its own; awaiting it never blocks the caller's thread.
+    public func pinAsync(_ pack: String, on: Bool) async throws(TeiGeodataError) {
+try await detached { () throws(TeiGeodataError) in try self.pin(pack, on: on) }
+    }
+
     /// Removes the packs and the dependencies nothing else needs; returns what was removed.
     ///
     /// # Errors
@@ -756,6 +792,11 @@ public final class Store: @unchecked Sendable {
         let status = withExtendedLifetime(self) { pack.withUTF8 { packBytes in tg_store_remove(raw, packBytes.baseAddress, packBytes.count, &out) } }
         try check(status)
         return takeData(out)
+    }
+
+    /// ``remove(_:)`` on a thread of its own; awaiting it never blocks the caller's thread.
+    public func removeAsync(_ pack: String) async throws(TeiGeodataError) -> Data {
+try await detached { () throws(TeiGeodataError) in try self.remove(pack) }
     }
 
     /// The places named `query` in `engine` (one over a world pack the app ships, the
@@ -779,6 +820,11 @@ public final class Store: @unchecked Sendable {
         return takeData(out)
     }
 
+    /// ``find(_:query:limit:)`` on a thread of its own; awaiting it never blocks the caller's thread.
+    public func findAsync(_ engine: Engine, query: String, limit: UInt32) async throws(TeiGeodataError) -> Data {
+try await detached { () throws(TeiGeodataError) in try self.find(engine, query: query, limit: limit) }
+    }
+
     /// The countries within `radius_m` metres of a point in `engine`, each with the catalog's
     /// packs that cover the point: what to install for where the user stands.
     ///
@@ -798,6 +844,11 @@ public final class Store: @unchecked Sendable {
         return takeData(out)
     }
 
+    /// ``locate(_:lat:lon:radiusM:)`` on a thread of its own; awaiting it never blocks the caller's thread.
+    public func locateAsync(_ engine: Engine, lat: Double, lon: Double, radiusM: UInt32) async throws(TeiGeodataError) -> Data {
+try await detached { () throws(TeiGeodataError) in try self.locate(engine, lat: lat, lon: lon, radiusM: radiusM) }
+    }
+
     /// An engine over the installed packs, each opened with the components and languages
     /// installed.
     ///
@@ -814,6 +865,11 @@ public final class Store: @unchecked Sendable {
         let status = withExtendedLifetime(self) { tg_store_engine(raw, &out) }
         try check(status)
         return Engine(raw: out!)
+    }
+
+    /// ``engine()`` on a thread of its own; awaiting it never blocks the caller's thread.
+    public func engineAsync() async throws(TeiGeodataError) -> Engine {
+try await detached { () throws(TeiGeodataError) in try self.engine() }
     }
 
     /// Refreshes the catalog for the countries (comma-separated ISO codes) and every country
@@ -891,6 +947,11 @@ public final class Job: @unchecked Sendable {
         return out
     }
 
+    /// ``waitProgress(_:timeoutMs:)`` on a thread of its own; awaiting it never blocks the caller's thread.
+    public func waitProgressAsync(_ seq: UInt64, timeoutMs: UInt32) async -> UInt64 {
+await detached { self.waitProgress(seq, timeoutMs: timeoutMs) }
+    }
+
     /// The progress's sequence number: it moves on with every change.
     public func seq() -> UInt64 {
         var out: UInt64 = 0
@@ -947,5 +1008,10 @@ public final class Job: @unchecked Sendable {
         let status = withExtendedLifetime(self) { tg_job_result(raw, &out) }
         try check(status)
         return takeData(out)
+    }
+
+    /// ``result()`` on a thread of its own; awaiting it never blocks the caller's thread.
+    public func resultAsync() async throws(TeiGeodataError) -> Data {
+try await detached { () throws(TeiGeodataError) in try self.result() }
     }
 }

@@ -120,6 +120,17 @@ public enum {{ e.name }}: UInt32, Sendable {
 }
 
 {% endfor %}
+
+/// Runs a call that blocks (`# Blocks`) on a thread of its own and resumes the caller when it
+/// ends, so it never holds a thread of Swift's cooperative pool, which must not block.
+private func detached<T: Sendable, E: Error>(
+    _ work: @escaping @Sendable () throws(E) -> T
+) async throws(E) -> T {
+    let result: Result<T, E> = await withCheckedContinuation { done in
+        Thread.detachNewThread { done.resume(returning: Result(catching: work)) }
+    }
+    return try result.get()
+}
 {% for r in records %}
 {{ doc(r.doc) | replace("    ///", "///") -}}
 public struct {{ r.name }}: Sendable, Equatable {
@@ -174,6 +185,13 @@ public final class {{ h.name }}: @unchecked Sendable {
 {% else %}
     public {% if not f.receiver %}static {% endif %}func {{ f.name | camel }}{{ signature(f) }}{% if f.returns != "void" %} -> {{ swty(f.returns, f.returns_handle) }}{% endif %} {
 {{ body(f, h, false) }}    }
+{% if f.blocks %}
+
+    /// ``{{ f.name | camel }}{% if f.params %}({% for p in f.params %}{% if loop.first %}_{% else %}{{ p.name | camel }}{% endif %}:{% endfor %}){% else %}(){% endif %}`` on a thread of its own; awaiting it never blocks the caller's thread.
+    public {% if not f.receiver %}static {% endif %}func {{ f.name | camel }}Async{{ signature(f) | replace(") throws(", ") async throws(") }}{% if not f.fallible %} async{% endif %}{% if f.returns != "void" %} -> {{ swty(f.returns, f.returns_handle) }}{% endif %} {
+        {% if f.fallible %}try {% endif %}await detached { {% if f.fallible %}() throws(TeiGeodataError) in try {% endif %}{% if f.receiver %}self{% else %}{{ h.name }}{% endif %}.{{ f.name | camel }}({% for p in f.params %}{% if not loop.first %}{{ p.name | camel }}: {% endif %}{{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) }
+    }
+{% endif %}
 {% endif %}
 {% endfor %}
 }

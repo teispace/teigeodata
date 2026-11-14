@@ -230,5 +230,13 @@ do {
     check(job.waitProgress(job.seq(), timeoutMs: 60_000) == job.seq(), "wait on an ended job")
     check(job.doneBytes() == job.totalBytes(), "done at total")
     job.cancel()
+    // The asynchronous forms run off the cooperative pool and carry the same error code.
+    check(strings(try await store.statusAsync(false), "path").isEmpty, "status async")
+    do {
+        _ = try await store.refresh(pack).resultAsync()
+        check(false, "result async: no error")
+    } catch {
+        check(error.code == .network, "result async: \(error)")
+    }
 }
 print("swift parity ok")
