@@ -169,3 +169,10 @@ fn the_reader_refuses_bad_tables() {
     rehash(&mut b);
     assert_eq!(problem(&b), (2, "reserved flags or bytes are not zero"));
 }
+
+/// The `open` fuzz harness rebuilds an accepted pack part by part: a kind with two parts is
+/// not a kind given twice (found by the nightly fuzzer, 2026-11-14).
+#[test]
+fn the_open_harness_round_trips_a_pack_with_parts() {
+    teigeodata_format::fuzz::open(&pack(40));
+}

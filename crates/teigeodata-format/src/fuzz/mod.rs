@@ -103,8 +103,9 @@ fn rebuild(p: &Pack<'_>) -> Vec<u8> {
     }
     for s in p.sections() {
         let len = u64::try_from(s.bytes().len()).unwrap_or(u64::MAX);
-        w.section(
+        w.section_part(
             s.kind(),
+            s.part(),
             s.encoding(),
             s.item_count(),
             s.decoded_length(),
