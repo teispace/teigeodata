@@ -1,7 +1,7 @@
 ---
 title: "Versions register"
 status: living
-updated: 2026-11-09
+updated: 2026-11-14
 ---
 
 # Versions register
@@ -17,19 +17,19 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | pnpm | 12.16.1 | 2026-11-06 | `pnpm --version` | 2026-12-06 |
 | Contributor Covenant | 3.0 | 2026-11-06 | EthicalSource repository | 2027-05-06 |
 | DCO | 1.1 | 2026-11-06 | developercertificate.org | — |
-| napi / napi-derive / napi-build (napi-rs) | 3.16.1 / 3.7.0 / 2.6.0 | 2026-11-07 | crates.io | 2026-12-07 |
-| @napi-rs/cli | 3.10.12 | 2026-11-06 | npm | 2026-12-06 |
-| wasm-bindgen | 0.2.130 | 2026-11-06 | crates.io | 2026-12-06 |
+| napi / napi-derive / napi-build (napi-rs) | 3.16.2 / 3.7.1 / 2.6.0 | 2026-11-14 | crates.io | 2026-12-14 |
+| @napi-rs/cli | 3.10.12 | 2026-11-14 | npm | 2026-12-06 |
+| wasm-bindgen | 0.2.130 | 2026-11-14 | crates.io | 2026-12-06 |
 | binaryen (wasm-opt) | version_133 | 2026-11-06 | GitHub releases | 2026-12-06 |
-| PyO3 | 0.30.1 | 2026-11-07 | crates.io | 2026-12-07 |
-| maturin | 1.16 | 2026-11-06 | PyPI | 2026-12-06 |
-| cibuildwheel | 4.3 | 2026-11-06 | PyPI | 2026-12-06 |
-| jni (crate) | 0.22.4 | 2026-11-07 | crates.io | 2026-12-07 |
-| cargo-ndk | 4.1 | 2026-11-06 | crates.io | 2026-12-06 |
+| PyO3 | 0.30.1 | 2026-11-14 | crates.io | 2026-12-14 |
+| maturin | 1.16.0 | 2026-11-14 | PyPI | 2026-12-06 |
+| cibuildwheel | 4.3.5 | 2026-11-14 | PyPI | 2026-12-06 |
+| jni (crate) | 0.22.4 | 2026-11-14 | crates.io | 2026-12-07 |
+| cargo-ndk | 4.1.2 | 2026-11-14 | crates.io | 2026-12-06 |
 | Android NDK | r30 | 2026-11-06 | developer.android.com | 2026-12-06 |
-| cbindgen (header cross-check) | 0.29.4 | 2026-11-07 | crates.io | 2026-12-07 |
-| syn / proc-macro2 (IDL extractor) | 3.0.9 / 1.0.107 | 2026-11-07 | crates.io | 2026-12-07 |
-| minijinja (binding templates) | 3.0.5 | 2026-11-07 | crates.io | 2026-12-07 |
+| cbindgen (header cross-check) | 0.29.4 | 2026-11-14 | crates.io | 2026-12-07 |
+| syn / proc-macro2 (IDL extractor) | 3.0.10 / 1.0.107 | 2026-11-14 | crates.io | 2026-12-14 |
+| minijinja (binding templates) | 3.1.0 | 2026-11-14 | crates.io | 2026-12-14 |
 | zerocopy (pack views, `derive`) | 0.8.63 | 2026-11-07 | crates.io | 2026-12-07 |
 | blake3 (section and head hashes, no default features) | 1.8.7 | 2026-11-07 | crates.io | 2026-12-07 |
 | ed25519-dalek (pack signatures, no default features) | 3.0.0 | 2026-11-07 | crates.io | 2026-12-07 |
@@ -56,10 +56,10 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | python-jsonschema (`tools/tuf-oracle`, the catalog schema, D-160) | 4.26.0 | 2026-11-10 | PyPI | 2026-12-10 |
 | taiki-e/install-action / setup-java / setup-dart | v2.90.2 / v6.2.0 / v1.8.1 | 2026-11-07 | GitHub | 2026-12-07 |
 | Flutter / Dart | 3.47.9 / 3.13.7 | 2026-11-06 | flutter.dev | 2026-12-06 |
-| native_toolchain_rust | 1.0.7 | 2026-11-06 | pub.dev | 2026-12-06 |
-| rmcp (MCP Rust SDK) | 3.9.0 | 2026-11-06 | crates.io | 2026-12-06 |
+| native_toolchain_rust | 1.0.7 | 2026-11-14 | pub.dev | 2026-12-06 |
+| rmcp (MCP Rust SDK) | 3.10.0 | 2026-11-14 | crates.io | 2026-12-14 |
 | MCP protocol | 2026-07-28 (fallback 2025-11-25) | 2026-11-06 | modelcontextprotocol.io | 2027-01-06 |
-| purego (Go) | 0.11 | 2026-11-06 | pkg.go.dev | 2026-12-06 |
+| purego (Go) | 0.11.3 | 2026-11-14 | pkg.go.dev | 2026-12-06 |
 | GitHub actions/checkout | v7.0.1 | 2026-11-06 | GitHub | 2026-12-06 |
 | Swatinem/rust-cache | v2.9.3 | 2026-11-06 | GitHub | 2026-12-06 |
 | GitHub actions/cache | v6.1.0 | 2026-11-07 | GitHub | 2026-12-07 |

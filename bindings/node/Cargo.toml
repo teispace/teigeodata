@@ -16,8 +16,8 @@ doctest = false
 
 [dependencies]
 teigeodata-api.workspace = true
-napi = { version = "3.16.1", default-features = false, features = ["napi4"] }
-napi-derive = "3.7.0"
+napi = { version = "3.16.2", default-features = false, features = ["napi4"] }
+napi-derive = "3.7.1"
 
 [build-dependencies]
 napi-build = "2.6.0"
