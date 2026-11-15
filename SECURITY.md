@@ -28,7 +28,7 @@ Before v1.0.0, only the latest `main` is supported. From v1.0.0:
 | Version | Security fixes |
 |---|---|
 | The latest minor release of the current major | Yes, as a patch release |
-| Earlier minor releases of the current major | No: upgrade to the latest minor, which is compatible under semver |
+| Earlier minor releases of the current major | No: upgrade to the latest minor, which is compatible ([what 1.0 promises](docs/06-engineering/semver.md)) |
 | The previous major | For 6 months after the next major's first release |
 | Data releases | The latest data release of each pack; a pack's fix is a new data release |
 

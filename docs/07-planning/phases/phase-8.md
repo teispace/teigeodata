@@ -191,6 +191,10 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 
 - [ ] The 1.0 API review: every IDL item read once for name, shape and error; changes made
   before the freeze, each through the bindings' `--check`
+  - Found while writing `semver.md`: `teigeodata_api::ErrorCode` is an exhaustive enum, and the
+    generated JVM glue matches it exhaustively, so a new error code would break callers. Make
+    every public enum that may grow `#[non_exhaustive]`, with a fallback arm in each
+    generator
 - [x] The format freeze (Q-028): each of the format benchmarks B1–B14 recorded or retired with
   its reason (D-029), then `FORMAT_MAJOR = 1`, `READER_MAJOR = 1` and `pack-format.md` out of
   draft, with the fixtures and seeds written again. **Done (2026-11-15, D-335, D-336,
@@ -203,8 +207,11 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   - It also found `tgd verify --deep` skipping `TZ_RULES`.
   - Format-0 packs stay readable (`tests/compat.rs`), and a client refuses a pack for a newer
     reader before downloading it.
-- [ ] `docs/06-engineering/semver.md`: what 1.0 promises (Rust API, C ABI, pack format, catalog,
+- [x] `docs/06-engineering/semver.md`: what 1.0 promises (Rust API, C ABI, pack format, catalog,
   HTTP and MCP), MSRV and deprecation
+  - Done (2026-11-15): [semver.md](../../06-engineering/semver.md), with each surface's
+    compatible changes, its breaking changes and its gate; what is not covered; deprecation;
+    MSRV
 - [ ] `cargo-semver-checks` in `release.yml` from the first tag, beside the ABI gate (D-285).
   Built (2026-11-15): `cargo-semver-checks` 0.51.0 on every published crate against the last
   `v*` tag, a warning in a dry run. Open: its first run, in the 8.5 dry run

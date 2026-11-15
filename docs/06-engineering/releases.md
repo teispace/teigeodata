@@ -25,7 +25,8 @@ How the code is versioned and tagged, so a consumer can pin it (TG-01, D-198). D
   `-blob`, `-format`, `-names`, `-sync`, `-engine`, `-api`, `-server`, `-cli`; D-303, D-310) once the
   maintainer's account holds them; the tags come first.
 - **SemVer, 0.x rules until 1.0.** Before 1.0.0 a minor bump (`0.1` → `0.2`) may break the
-  public API; a patch bump (`0.1.0` → `0.1.1`) never does. From 1.0.0 only a major bump breaks.
+  public API; a patch bump (`0.1.0` → `0.1.1`) never does. From 1.0.0 only a major bump breaks:
+  [what 1.0 promises](semver.md), surface by surface.
 - **Stable surface:** the public Rust API of `teigeodata-engine` and `teigeodata-sync`, the
   `tgd` command line and its JSON output. The other crates are public so the bindings and the
   forge can use them; their APIs may change in any minor release before 1.0.
