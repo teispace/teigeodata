@@ -220,7 +220,7 @@ size = 75955
 licence = "CC-BY (Open Data Nepal record: \"Creative Commons Attribution\", harvested from CBS)"
 licence_class = "cc-by"
 countries = ["NP"]
-used_by = "forge xlit-eval, set cbs (TG-14, D-222)"
+used_by = "forge build: official names, tier 1 (data/countries/np/official-names.yaml, D-232); forge xlit-eval, set cbs (TG-14, D-222)"
 attribution = "Central Bureau of Statistics (now National Statistics Office), Nepal, via Open Data Nepal (https://opendatanepal.com), Creative Commons Attribution"
 
 [[source]]
@@ -237,7 +237,7 @@ size = 3022
 licence = "CC-BY (Open Data Nepal record: \"Creative Commons Attribution\", harvested from CBS)"
 licence_class = "cc-by"
 countries = ["NP"]
-used_by = "forge xlit-eval, set cbs (TG-14, D-222)"
+used_by = "forge build: official names, tier 1 (data/countries/np/official-names.yaml, D-232); forge xlit-eval, set cbs (TG-14, D-222)"
 attribution = "Central Bureau of Statistics (now National Statistics Office), Nepal, via Open Data Nepal (https://opendatanepal.com), Creative Commons Attribution"
 
 [[source]]
