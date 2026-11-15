@@ -31,34 +31,34 @@ pub(crate) const CLASSES: [&str; 11] = [
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Lock {
+pub(crate) struct Lock {
     schema: String,
     #[serde(default, rename = "source")]
-    sources: Vec<Source>,
+    pub(crate) sources: Vec<Source>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Source {
-    id: String,
-    title: String,
+pub(crate) struct Source {
+    pub(crate) id: String,
+    pub(crate) title: String,
     /// `http` (a file), `sparql` (a query snapshot) or `tileset` (tiles pinned by a manifest).
     kind: String,
-    url: String,
+    pub(crate) url: String,
     /// Our own copy (a release asset); required before a release build reads the source.
     #[serde(default)]
     mirror_url: Option<String>,
     /// The upstream replaces the file in place (no dated archive): only the mirror is stable.
     #[serde(default)]
     moving: bool,
-    version: String,
+    pub(crate) version: String,
     retrieved: String,
     sha256: String,
     size: u64,
-    licence: String,
-    licence_class: String,
+    pub(crate) licence: String,
+    pub(crate) licence_class: String,
     /// ISO 3166-1 alpha-2 codes of the countries covered, or `["*"]` for world sources.
-    countries: Vec<String>,
+    pub(crate) countries: Vec<String>,
     /// What reads it (a spike, a forge stage).
     used_by: String,
     /// The notice every pack built from it carries (D-126): one line, at most

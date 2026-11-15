@@ -233,6 +233,8 @@ jobs:
         run: cargo build --release --locked -p teigeodata-cli
       - name: The Rust and CLI tours
         run: cargo xtask docs-examples --fetch --check --lang rust,cli
+      - name: The coverage and country pages match the pinned pack and data/countries
+        run: cargo xtask data-pages --check
 
   deny:
     runs-on: ubuntu-latest

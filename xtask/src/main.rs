@@ -14,6 +14,7 @@ mod clean;
 mod commit;
 mod corrections;
 mod data;
+mod data_pages;
 mod docs;
 mod docs_examples;
 mod flutter_check;
@@ -144,6 +145,11 @@ Tasks:
   clean [--all]     Free disk: incremental caches and scratch of both workspaces (built
                     packs in data/build/ are kept); --all also removes data/build/ and
                     runs `cargo clean` in both. Fetched sources are kept.
+  data-pages [--check] [--fetch] [--pack <path>] [--tgd <path>]
+                    Phase 7.5: writes the site's coverage page and a page per country folder
+                    (site/content/docs/data/) from data/countries/ and the pack site/data.json
+                    pins, read with `tgd export` and `tgd inspect` (target/release/tgd);
+                    --check fails on any difference.
   docs-examples [--check|--bless] [--lang <a,b>] [--pack <path>] [--fetch]
                     Phase 7: runs each language's tour (site/examples/<lang>/) on the pack
                     site/data.json pins (--fetch downloads it to target/docs-data/ and checks
@@ -201,6 +207,7 @@ fn main() -> ExitCode {
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
         "load" => report(load::run(&root, rest)),
         "docs-examples" => report(docs_examples::run(&root, rest)),
+        "data-pages" => report(data_pages::run(&root, rest)),
         "sizes" if rest.iter().any(|a| a == "--tgd") => {
             report(sizes::tgd(&root, &root.join("target/sizes-tgd")))
         }

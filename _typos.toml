@@ -58,4 +58,7 @@ extend-exclude = [
   "LICENSE",
   "DCO",
   "CODE_OF_CONDUCT.md",
+  # Generated from the pack: ISO 3166 codes and source names (`cargo xtask data-pages`).
+  "site/content/docs/data/coverage.mdx",
+  "site/content/docs/data/countries/*.mdx",
 ]

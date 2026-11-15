@@ -16,38 +16,38 @@ const SCHEMA: &str = "teigeodata/lexicon/v1";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct LexiconFile {
+pub(crate) struct LexiconFile {
     schema: String,
     country: String,
     updated: String,
-    terms: Vec<Term>,
+    pub(crate) terms: Vec<Term>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Term {
+pub(crate) struct Term {
     id: String,
-    canonical: String,
+    pub(crate) canonical: String,
     #[serde(default)]
-    native: Vec<Native>,
+    pub(crate) native: Vec<Native>,
     #[serde(default)]
-    variants: Vec<String>,
+    pub(crate) variants: Vec<String>,
     /// Related spellings that are a different word in names (Pura is not a misspelling of
     /// Pur): a display name keeps them as written.
     #[serde(default)]
     not_respelled: Vec<String>,
-    kind: Kind,
-    meaning: String,
+    pub(crate) kind: Kind,
+    pub(crate) meaning: String,
     #[serde(default)]
     english: Option<String>,
-    status: Status,
+    pub(crate) status: Status,
     #[serde(default)]
     evidence: Vec<Evidence>,
 }
 
 #[derive(Deserialize, PartialEq, Eq, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
-enum Kind {
+pub(crate) enum Kind {
     Generic,
     AdminSuffix,
     StreetType,

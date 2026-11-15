@@ -431,7 +431,7 @@ fn drop_decisions(text: &str) -> String {
 }
 
 /// Escapes `<`, `{` and `}` outside code spans.
-fn escape_mdx(text: &str) -> String {
+pub(crate) fn escape_mdx(text: &str) -> String {
     let mut out = String::with_capacity(text.len() + 8);
     let mut in_code = false;
     for c in text.chars() {

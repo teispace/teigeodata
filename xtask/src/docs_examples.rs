@@ -25,8 +25,10 @@ use sha2::{Digest as _, Sha256};
 
 /// The pack every example runs on.
 #[derive(Deserialize)]
-struct Data {
-    file: String,
+pub(crate) struct Data {
+    /// The data release that holds it.
+    pub(crate) release: String,
+    pub(crate) file: String,
     bytes: u64,
     sha256: String,
     url: String,
@@ -398,7 +400,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
 }
 
 /// The pinned pack under `target/docs-data/`, fetched and checked when `fetch` is set.
-fn pinned(root: &Path, data: &Data, fetch: bool) -> Result<PathBuf, Vec<String>> {
+pub(crate) fn pinned(root: &Path, data: &Data, fetch: bool) -> Result<PathBuf, Vec<String>> {
     let dir = root.join("target/docs-data");
     let path = dir.join(&data.file);
     if !path.is_file() {
@@ -598,7 +600,7 @@ fn first_difference(expected: &str, printed: &str) -> String {
     "only in line endings".into()
 }
 
-fn read(path: &Path) -> Result<String, Vec<String>> {
+pub(crate) fn read(path: &Path) -> Result<String, Vec<String>> {
     fs::read_to_string(path).map_err(|e| vec![format!("{}: {e}", path.display())])
 }
 

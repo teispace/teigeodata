@@ -1,0 +1,291 @@
+---
+title: Coverage
+description: Every country in the released pack, with its places by kind and admin level, read from the pack itself.
+---
+
+<Callout title="Generated from the data">
+This page is written by `cargo xtask data-pages` from `data/countries/` and the pack the site's
+examples run on (`world-np-lite.tgd`, data release `data-2026.11.14.3`), and CI fails when it differs. It changes with
+each release.
+</Callout>
+
+`world-np-lite.tgd` holds **172,339 places**: 171,962 in 248 countries and territories, and 377 timezone areas. Countries with rules of their own in
+[`data/countries`](https://github.com/teispace/teigeodata/tree/main/data/countries) have a
+page of their own; the rest are covered by the world sources alone.
+
+## Inside the pack
+
+| Component | Bytes |
+|---|--:|
+| head, seek table, block hashes | 23,792 |
+| `admin` | 705,560 |
+| `admin-index` | 1,069,672 |
+| `boundaries` | 2,190,508 |
+| `dem-coarse` | 526,240 |
+| `elevation` | 315,180 |
+| `names` | 4,599,148 |
+| `point` | 1,597,508 |
+| `search` | 4,472,092 |
+| `timezone` | 55,404 |
+| `tz-rules` | 83,320 |
+| **the file**, with the alignment between sections | **15,641,408** |
+
+What each component answers is in [packs](/docs/concepts/packs#components).
+
+## Countries
+
+| Country | Code | Places | Admin units | Settlements | Other | With a height |
+|---|---|--:|--:|--:|--:|--:|
+| Afghanistan | `AF` | 137 | 34 | 102 | 0 | 74.5% |
+| Albania | `AL` | 85 | 12 | 72 | 0 | 84.7% |
+| Algeria | `DZ` | 373 | 48 | 324 | 0 | 86.9% |
+| American Samoa | `AS` | 10 | 5 | 4 | 0 | 40.0% |
+| Andorra | `AD` | 15 | 7 | 7 | 0 | 46.7% |
+| Angola | `AO` | 200 | 18 | 181 | 0 | 90.0% |
+| Anguilla | `AI` | 29 | 14 | 14 | 0 | 48.3% |
+| Antarctica | `AQ` | 2 | 1 | 0 | 0 | 0.0% |
+| Antigua and Barb. | `AG` | 20 | 8 | 11 | 0 | 50.0% |
+| Argentina | `AR` | 661 | 24 | 636 | 0 | 96.2% |
+| Armenia | `AM` | 92 | 11 | 80 | 0 | 87.0% |
+| Aruba | `AW` | 14 | 1 | 12 | 0 | 85.7% |
+| Austria | `AT` | 228 | 9 | 218 | 0 | 95.6% |
+| Azerbaijan | `AZ` | 212 | 78 | 133 | 0 | 62.7% |
+| Bahamas | `BS` | 65 | 30 | 34 | 0 | 46.2% |
+| Bahrain | `BH` | 18 | 5 | 12 | 0 | 66.7% |
+| Bangladesh | `BD` | 189 | 7 | 181 | 0 | 95.8% |
+| Barbados | `BB` | 23 | 11 | 11 | 0 | 47.8% |
+| Belarus | `BY` | 148 | 7 | 140 | 0 | 94.6% |
+| Belgium | `BE` | 701 | 11 | 689 | 0 | 98.3% |
+| Belize | `BZ` | 20 | 6 | 13 | 0 | 65.0% |
+| Benin | `BJ` | 89 | 12 | 76 | 0 | 85.4% |
+| Bermuda | `BM` | 22 | 11 | 10 | 0 | 45.5% |
+| Bhutan | `BT` | 44 | 20 | 23 | 0 | 52.3% |
+| Bolivia | `BO` | 87 | 9 | 77 | 0 | 88.5% |
+| Bosnia and Herz. | `BA` | 137 | 18 | 118 | 0 | 86.1% |
+| Botswana | `BW` | 79 | 15 | 63 | 0 | 79.7% |
+| Br. Indian Ocean Ter. | `IO` | 2 | 1 | 0 | 0 | 0.0% |
+| Brazilian Island | `br` | 4,454 | 27 | 4,425 | 0 | 99.3% |
+| British Virgin Is. | `VG` | 3 | 1 | 1 | 0 | 33.3% |
+| Brunei | `BN` | 31 | 4 | 26 | 0 | 83.9% |
+| Bulgaria | `BG` | 171 | 28 | 142 | 0 | 83.0% |
+| Burkina Faso | `BF` | 130 | 45 | 84 | 0 | 64.6% |
+| Burundi | `BI` | 44 | 17 | 26 | 0 | 59.1% |
+| Cabo Verde | `CV` | 59 | 22 | 36 | 0 | 61.0% |
+| Cambodia | `KH` | 148 | 24 | 123 | 0 | 83.1% |
+| Cameroon | `CM` | 136 | 10 | 125 | 0 | 91.9% |
+| Canada | `CA` | 1,349 | 13 | 1,335 | 0 | 98.7% |
+| Cayman Is. | `KY` | 47 | 1 | 45 | 0 | 91.5% |
+| Central African Rep. | `CF` | 65 | 17 | 47 | 0 | 72.3% |
+| Chad | `TD` | 92 | 22 | 69 | 0 | 75.0% |
+| Chile | `CL` | 264 | 16 | 247 | 0 | 93.2% |
+| China | `CN` | 3,024 | 52 | 2,971 | 0 | 97.8% |
+| Colombia | `CO` | 639 | 33 | 605 | 0 | 94.5% |
+| Comoros | `KM` | 23 | 3 | 19 | 0 | 82.6% |
+| Cook Is. | `CK` | 13 | 11 | 1 | 0 | 7.7% |
+| Coral Sea Is. | `au` | 1,514 | 15 | 1,495 | 0 | 98.7% |
+| Costa Rica | `CR` | 84 | 7 | 76 | 0 | 90.5% |
+| Croatia | `HR` | 99 | 21 | 77 | 0 | 76.8% |
+| Cuba | `CU` | 185 | 16 | 168 | 0 | 90.8% |
+| Curaçao | `CW` | 8 | 1 | 6 | 0 | 75.0% |
+| Cyprus | `CY` | 40 | 6 | 33 | 0 | 82.5% |
+| Czechia | `CZ` | 366 | 14 | 351 | 0 | 95.9% |
+| Côte d'Ivoire | `CI` | 868 | 19 | 848 | 0 | 97.7% |
+| Dem. Rep. Korea | `KP` | 128 | 11 | 116 | 0 | 90.6% |
+| Democratic Republic of the Congo | `CD` | 128 | 11 | 116 | 0 | 90.6% |
+| Denmark | `DK` | 182 | 5 | 176 | 0 | 96.7% |
+| Djibouti | `DJ` | 16 | 6 | 9 | 0 | 56.2% |
+| Dominica | `DM` | 22 | 10 | 11 | 0 | 50.0% |
+| Dominican Rep. | `DO` | 151 | 32 | 118 | 0 | 78.1% |
+| Ecuador | `EC` | 143 | 24 | 118 | 0 | 81.8% |
+| Egypt | `EG` | 277 | 27 | 249 | 0 | 89.5% |
+| El Salvador | `SV` | 89 | 14 | 74 | 0 | 83.1% |
+| Eq. Guinea | `GQ` | 21 | 7 | 13 | 0 | 52.4% |
+| Eritrea | `ER` | 19 | 6 | 12 | 0 | 63.2% |
+| Estonia | `EE` | 54 | 15 | 38 | 0 | 70.4% |
+| Ethiopia | `ET` | 259 | 11 | 247 | 0 | 95.4% |
+| Faeroe Islands | `FO` | 8 | 1 | 6 | 0 | 75.0% |
+| Falkland Is. | `FK` | 3 | 1 | 1 | 0 | 33.3% |
+| Fiji | `FJ` | 21 | 5 | 15 | 0 | 66.7% |
+| Finland | `FI` | 360 | 18 | 341 | 0 | 93.1% |
+| Fr. Polynesia | `PF` | 18 | 5 | 12 | 0 | 66.7% |
+| Fr. S. and Antarctic Lands | `TF` | 6 | 4 | 1 | 0 | 16.7% |
+| France | `FR` | 2,252 | 102 | 2,148 | 0 | 94.9% |
+| Gabon | `GA` | 43 | 9 | 33 | 0 | 76.7% |
+| Gambia | `GM` | 73 | 6 | 66 | 0 | 90.4% |
+| Georgia | `GE` | 72 | 12 | 59 | 0 | 81.9% |
+| Germany | `DE` | 3,094 | 16 | 3,077 | 0 | 99.5% |
+| Ghana | `GH` | 128 | 10 | 117 | 0 | 91.4% |
+| Gibraltar | `GI` | 3 | 1 | 1 | 0 | 0.0% |
+| Greece | `GR` | 299 | 14 | 284 | 0 | 94.6% |
+| Greenland | `GL` | 12 | 6 | 5 | 0 | 25.0% |
+| Grenada | `GD` | 15 | 7 | 7 | 0 | 46.7% |
+| Guam | `GU` | 23 | 1 | 21 | 0 | 91.3% |
+| Guatemala | `GT` | 230 | 22 | 207 | 0 | 90.0% |
+| Guernsey | `GG` | 13 | 1 | 11 | 0 | 84.6% |
+| Guinea | `GN` | 98 | 34 | 63 | 0 | 64.3% |
+| Guinea-Bissau | `GW` | 49 | 9 | 39 | 0 | 77.6% |
+| Guyana | `GY` | 26 | 10 | 15 | 0 | 57.7% |
+| Haiti | `HT` | 63 | 10 | 52 | 0 | 81.0% |
+| Heard I. and McDonald Is. | `HM` | 2 | 1 | 0 | 0 | 0.0% |
+| Honduras | `HN` | 177 | 18 | 158 | 0 | 87.6% |
+| Hong Kong | `HK` | 285 | 18 | 266 | 0 | 80.7% |
+| Hungary | `HU` | 426 | 43 | 382 | 0 | 89.7% |
+| Iceland | `IS` | 24 | 9 | 14 | 0 | 54.2% |
+| [India](/docs/data/countries/in) | `IN` | 8,111 | 800 | 7,310 | 0 | 90.1% |
+| Indonesia | `ID` | 519 | 33 | 485 | 0 | 93.4% |
+| Iran | `IR` | 947 | 31 | 915 | 0 | 96.5% |
+| Iraq | `IQ` | 134 | 18 | 115 | 0 | 85.8% |
+| Ireland | `IE` | 187 | 34 | 152 | 0 | 80.7% |
+| Isle of Man | `IM` | 23 | 1 | 21 | 0 | 91.3% |
+| Israel | `IL` | 186 | 6 | 179 | 0 | 96.2% |
+| Italy | `IT` | 2,153 | 110 | 2,042 | 0 | 94.8% |
+| Jamaica | `JM` | 59 | 14 | 44 | 0 | 74.6% |
+| Japan | `JP` | 1,848 | 47 | 1,800 | 0 | 97.3% |
+| Jersey | `JE` | 5 | 1 | 3 | 0 | 60.0% |
+| Jordan | `JO` | 89 | 12 | 76 | 0 | 85.4% |
+| Kazakhstan | `KZ` | 224 | 17 | 206 | 0 | 92.0% |
+| Kenya | `KE` | 246 | 8 | 237 | 0 | 96.3% |
+| Kiribati | `KI` | 5 | 1 | 3 | 0 | 60.0% |
+| Kuwait | `KW` | 30 | 6 | 23 | 0 | 76.7% |
+| Kyrgyzstan | `KG` | 71 | 8 | 62 | 0 | 87.3% |
+| Laos | `LA` | 51 | 17 | 33 | 0 | 64.7% |
+| Latvia | `LV` | 172 | 119 | 52 | 0 | 30.2% |
+| Lebanon | `LB` | 36 | 6 | 29 | 0 | 80.6% |
+| Lesotho | `LS` | 38 | 10 | 27 | 0 | 71.1% |
+| Liberia | `LR` | 42 | 15 | 26 | 0 | 61.9% |
+| Libya | `LY` | 127 | 22 | 104 | 0 | 81.9% |
+| Liechtenstein | `LI` | 22 | 11 | 10 | 0 | 45.5% |
+| Lithuania | `LT` | 82 | 10 | 71 | 0 | 86.6% |
+| Luxembourg | `LU` | 36 | 3 | 32 | 0 | 88.9% |
+| Macao | `MO` | 12 | 1 | 10 | 0 | 83.3% |
+| Madagascar | `MG` | 162 | 22 | 139 | 0 | 84.0% |
+| Malawi | `MW` | 65 | 28 | 36 | 0 | 55.4% |
+| Malaysia | `MY` | 548 | 16 | 531 | 0 | 96.5% |
+| Maldives | `MV` | 41 | 21 | 19 | 0 | 41.5% |
+| Mali | `ML` | 83 | 9 | 73 | 0 | 88.0% |
+| Malta | `MT` | 134 | 68 | 65 | 0 | 47.8% |
+| Marshall Is. | `MH` | 28 | 2 | 25 | 0 | 89.3% |
+| Mauritania | `MR` | 71 | 13 | 57 | 0 | 80.3% |
+| Mauritius | `MU` | 82 | 16 | 65 | 0 | 75.6% |
+| Mexico | `MX` | 1,858 | 32 | 1,825 | 0 | 98.1% |
+| Micronesia | `FM` | 11 | 4 | 6 | 0 | 54.5% |
+| Moldova | `MD` | 101 | 40 | 60 | 0 | 59.4% |
+| Monaco | `MC` | 8 | 1 | 6 | 0 | 37.5% |
+| Mongolia | `MN` | 58 | 22 | 35 | 0 | 60.3% |
+| Montenegro | `ME` | 48 | 21 | 26 | 0 | 54.2% |
+| Montserrat | `MS` | 7 | 3 | 3 | 0 | 42.9% |
+| Morocco | `MA` | 320 | 14 | 305 | 0 | 95.3% |
+| Mozambique | `MZ` | 102 | 11 | 90 | 0 | 88.2% |
+| Myanmar | `MM` | 271 | 14 | 256 | 0 | 94.5% |
+| N. Mariana Is. | `MP` | 7 | 4 | 2 | 0 | 28.6% |
+| Namibia | `NA` | 58 | 13 | 44 | 0 | 75.9% |
+| Nauru | `NR` | 22 | 14 | 7 | 0 | 31.8% |
+| [Nepal](/docs/data/countries/np) | `NP` | 95,716 | 3,500 | 90,371 | 1,844 | 100.0% |
+| Netherlands | `NL` | 601 | 15 | 585 | 0 | 97.3% |
+| New Caledonia | `NC` | 17 | 3 | 13 | 0 | 70.6% |
+| New Zealand | `NZ` | 263 | 24 | 238 | 0 | 90.1% |
+| Nicaragua | `NI` | 94 | 17 | 76 | 0 | 80.9% |
+| Niger | `NE` | 73 | 8 | 64 | 0 | 87.7% |
+| Nigeria | `NG` | 518 | 37 | 480 | 0 | 92.7% |
+| Niue | `NU` | 3 | 1 | 1 | 0 | 33.3% |
+| Norfolk Island | `NF` | 3 | 1 | 1 | 0 | 33.3% |
+| North Macedonia | `MK` | 176 | 84 | 91 | 0 | 51.7% |
+| Norway | `NO` | 142 | 21 | 120 | 0 | 81.0% |
+| Oman | `OM` | 45 | 11 | 33 | 0 | 73.3% |
+| Pakistan | `PK` | 477 | 6 | 470 | 0 | 98.5% |
+| Palau | `PW` | 35 | 16 | 18 | 0 | 51.4% |
+| Palestine | `PS` | 130 | 2 | 127 | 0 | 97.7% |
+| Panama | `PA` | 82 | 12 | 69 | 0 | 82.9% |
+| Papua New Guinea | `PG` | 52 | 20 | 31 | 0 | 59.6% |
+| Paraguay | `PY` | 84 | 18 | 65 | 0 | 77.4% |
+| Peru | `PE` | 330 | 26 | 303 | 0 | 91.8% |
+| Philippines | `PH` | 1,499 | 118 | 1,380 | 0 | 91.6% |
+| Pitcairn Is. | `PN` | 3 | 1 | 1 | 0 | 33.3% |
+| Poland | `PL` | 789 | 16 | 772 | 0 | 97.8% |
+| Portugal | `PT` | 564 | 20 | 543 | 0 | 96.1% |
+| Puerto Rico | `PR` | 96 | 1 | 94 | 0 | 97.9% |
+| Qatar | `QA` | 45 | 7 | 37 | 0 | 82.2% |
+| Republic of Korea | `KR` | 173 | 17 | 155 | 0 | 89.6% |
+| Republic of the Congo | `CG` | 60 | 12 | 47 | 0 | 78.3% |
+| Romania | `RO` | 825 | 42 | 782 | 0 | 94.8% |
+| Russia | `RU` | 2,845 | 83 | 2,761 | 0 | 96.9% |
+| Rwanda | `RW` | 56 | 5 | 50 | 0 | 89.3% |
+| S. Geo. and the Is. | `GS` | 3 | 1 | 1 | 0 | 33.3% |
+| S. Sudan | `SS` | 32 | 10 | 21 | 0 | 65.6% |
+| Saint Helena | `SH` | 7 | 3 | 3 | 0 | 42.9% |
+| Saint Kitts and Nevis | `KN` | 29 | 14 | 14 | 0 | 48.3% |
+| Saint Lucia | `LC` | 22 | 11 | 10 | 0 | 45.5% |
+| Saint-Martin | `MF` | 6 | 1 | 4 | 0 | 66.7% |
+| Samoa | `WS` | 25 | 11 | 13 | 0 | 52.0% |
+| San Marino | `SM` | 18 | 9 | 8 | 0 | 44.4% |
+| Sao Tome and Principe | `ST` | 8 | 2 | 5 | 0 | 62.5% |
+| Saudi Arabia | `SA` | 158 | 13 | 144 | 0 | 91.1% |
+| Senegal | `SN` | 135 | 14 | 120 | 0 | 88.9% |
+| Serbia | `RS` | 201 | 55 | 145 | 0 | 72.1% |
+| Seychelles | `SC` | 38 | 26 | 11 | 0 | 26.3% |
+| Sierra Leone | `SL` | 54 | 4 | 49 | 0 | 90.7% |
+| Singapore | `SG` | 101 | 5 | 95 | 0 | 94.1% |
+| Sint Maarten | `SX` | 6 | 1 | 4 | 0 | 66.7% |
+| Slovakia | `SK` | 160 | 8 | 151 | 0 | 94.4% |
+| Slovenia | `SI` | 406 | 193 | 212 | 0 | 52.2% |
+| Solomon Is. | `SB` | 30 | 10 | 19 | 0 | 63.3% |
+| Somalia | `SO` | 79 | 14 | 64 | 0 | 81.0% |
+| South Africa | `ZA` | 603 | 9 | 593 | 0 | 98.3% |
+| Spain | `ES` | 1,536 | 52 | 1,483 | 0 | 96.3% |
+| Spratly Is. | `world` | 390 | 4 | 4 | 376 | 1.0% |
+| Sri Lanka | `LK` | 98 | 25 | 72 | 0 | 72.4% |
+| St-Barthélemy | `BL` | 3 | 1 | 1 | 0 | 33.3% |
+| St. Pierre and Miquelon | `PM` | 5 | 2 | 2 | 0 | 40.0% |
+| St. Vin. and Gren. | `VC` | 14 | 6 | 7 | 0 | 50.0% |
+| Sudan | `SD` | 117 | 17 | 99 | 0 | 84.6% |
+| Suriname | `SR` | 36 | 10 | 25 | 0 | 69.4% |
+| Sweden | `SE` | 304 | 21 | 282 | 0 | 92.4% |
+| Switzerland | `CH` | 387 | 26 | 360 | 0 | 93.0% |
+| Syria | `SY` | 130 | 15 | 114 | 0 | 87.7% |
+| Tajikistan | `TJ` | 70 | 5 | 64 | 0 | 91.4% |
+| Tanzania | `TZ` | 338 | 30 | 307 | 0 | 90.8% |
+| Thailand | `TH` | 531 | 77 | 453 | 0 | 85.1% |
+| Timor-Leste | `TL` | 35 | 13 | 21 | 0 | 60.0% |
+| Togo | `TG` | 38 | 5 | 32 | 0 | 84.2% |
+| Tonga | `TO` | 11 | 5 | 5 | 0 | 45.5% |
+| Trinidad and Tobago | `TT` | 39 | 16 | 22 | 0 | 56.4% |
+| Tunisia | `TN` | 261 | 23 | 237 | 0 | 90.8% |
+| Turkey | `TR` | 991 | 81 | 909 | 0 | 91.2% |
+| Turkmenistan | `TM` | 97 | 5 | 91 | 0 | 93.8% |
+| Turks and Caicos Is. | `TC` | 9 | 6 | 2 | 0 | 22.2% |
+| Tuvalu | `TV` | 8 | 1 | 6 | 0 | 75.0% |
+| U.S. Minor Outlying Is. | `UM` | 9 | 8 | 0 | 0 | 0.0% |
+| U.S. Virgin Is. | `VI` | 8 | 3 | 4 | 0 | 50.0% |
+| Uganda | `UG` | 276 | 112 | 163 | 0 | 59.1% |
+| Ukraine | `UA` | 1,077 | 27 | 1,049 | 0 | 97.4% |
+| United Arab Emirates | `AE` | 104 | 9 | 94 | 0 | 89.4% |
+| United Kingdom | `GB` | 2,147 | 232 | 1,914 | 0 | 88.8% |
+| United States | `US` | 7,607 | 51 | 7,555 | 0 | 99.3% |
+| Uruguay | `UY` | 79 | 19 | 59 | 0 | 74.7% |
+| Uzbekistan | `UZ` | 156 | 14 | 141 | 0 | 90.4% |
+| Vanuatu | `VU` | 13 | 6 | 6 | 0 | 46.2% |
+| Vatican | `VA` | 2 | 1 | 0 | 0 | 0.0% |
+| Venezuela | `VE` | 264 | 25 | 238 | 0 | 89.4% |
+| Vietnam | `VN` | 520 | 63 | 456 | 0 | 87.3% |
+| W. Sahara | `EH` | 12 | 1 | 10 | 0 | 83.3% |
+| Wallis and Futuna Islands | `WF` | 7 | 3 | 3 | 0 | 42.9% |
+| Yemen | `YE` | 56 | 21 | 34 | 0 | 60.7% |
+| Zambia | `ZM` | 105 | 10 | 94 | 0 | 89.5% |
+| Zimbabwe | `ZW` | 56 | 10 | 45 | 0 | 80.4% |
+| eSwatini | `SZ` | 15 | 4 | 10 | 0 | 66.7% |
+| Åland | `AX` | 15 | 11 | 3 | 0 | 13.3% |
+
+Some places reach no country in the hierarchy: they are counted under their ID's code.
+
+| Code | Places | Admin units | Settlements |
+|---|--:|--:|--:|
+| `CC` | 1 | 0 | 1 |
+| `CX` | 1 | 0 | 1 |
+| `GF` | 2 | 0 | 2 |
+| `GP` | 8 | 0 | 8 |
+| `MQ` | 3 | 0 | 3 |
+| `RE` | 4 | 0 | 4 |
+| `SJ` | 2 | 0 | 2 |
+| `TK` | 3 | 0 | 3 |
+| `TW` | 3 | 0 | 3 |
+| `YT` | 9 | 0 | 9 |

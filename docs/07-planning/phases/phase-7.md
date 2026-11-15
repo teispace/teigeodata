@@ -74,9 +74,13 @@ pages, the playground. Nothing names a country in code (P16): country pages come
   `parity-mutants` in eight languages; every tour gained a `boundary` section
 
 ### 7.5 Pages from the data and the gates
-- [ ] Per-country pages from `data/countries/` and the released packs: sources and licences,
-  coverage, admin levels, lexicon, accuracy
-- [ ] Measured pages from the gates' reports: sizes, benchmarks, accuracy, load
+- [x] 7.5a Per-country pages from `data/countries/` and the released pack
+  ([research](../../02-research/notes/docs-data-pages.md), D-325): `cargo xtask data-pages`
+  writes the coverage page (components, every country's places) and a page per country folder
+  (places, admin levels, heights, timezones, names, lexicon, sources and licences); checked in
+  fast-check. The release's gate figures stay in its summary until the forge writes them as
+  JSON (open item of the note)
+- [ ] 7.5b Measured pages from the gates: sizes, benchmarks, accuracy, load
 
 ### 7.6 The playground
 - [ ] The WebAssembly build over the public layer, in the browser, with MapLibre drawing the
@@ -93,4 +97,5 @@ pages, the playground. Nothing names a country in code (P16): country pages come
 | 2026-11-15 | A reader in every language added to 7.2 | The tours found most bindings cannot read a result (D-322) |
 | 2026-11-15 | 7.1 and 7.2 done; the guides generated from one script; the playground link waits for 7.6; the reference page hand-written until 7.3 generates it | the guides share their prose, and a link must not point at nothing |
 | 2026-11-15 | 7.3 done: the API reference generated from the bindings' own declaration macros, the HTTP and MCP reference from the servers' definitions | a second copy of each signature or route would drift (D-323) |
+| 2026-11-15 | 7.5 split into 7.5a (country pages) and 7.5b (measured pages); 7.5a done | the country pages need only the pinned pack and the data folders; the measured pages need each gate to write a record (D-325) |
 | 2026-11-15 | 7.4 done: boundary and distance in every language; the GeoJSON writer moved to the engine | the playground and every app draw outlines from the bindings, and one writer keeps them equal to the servers (D-324) |

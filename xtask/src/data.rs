@@ -39,12 +39,12 @@ const PROFILE_SCHEMA: &str = "teigeodata/profile/v1";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Profile {
+pub(crate) struct Profile {
     schema: String,
-    country: String,
+    pub(crate) country: String,
     /// ISO 3166-1 alpha-3 (some sources, such as COD-AB, key by it).
     iso3: String,
-    name: String,
+    pub(crate) name: String,
     /// The country's Wikidata item (`Q837`), for per-country source queries.
     #[serde(default)]
     wikidata: Option<String>,
@@ -52,16 +52,16 @@ struct Profile {
     #[serde(default)]
     phonetic_key: Option<String>,
     /// BCP 47 language codes, official ones first.
-    languages: Vec<String>,
+    pub(crate) languages: Vec<String>,
     /// ISO 15924 scripts in use.
-    scripts: Vec<String>,
+    pub(crate) scripts: Vec<String>,
     /// Romanisation profiles (`data/romanise/<id>.yaml`) for its names, in order.
     #[serde(default)]
-    romanise: Vec<String>,
+    pub(crate) romanise: Vec<String>,
     /// Transliteration profiles (`data/xlit/<id>.yaml`) that fill missing names (D-228).
     #[serde(default)]
-    transliterate: Vec<String>,
-    admin_levels: Vec<AdminLevel>,
+    pub(crate) transliterate: Vec<String>,
+    pub(crate) admin_levels: Vec<AdminLevel>,
     #[serde(default)]
     unit_types: Vec<UnitType>,
     #[serde(default)]
@@ -89,11 +89,11 @@ struct Conflation {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct AdminLevel {
-    level: u8,
-    english: String,
+pub(crate) struct AdminLevel {
+    pub(crate) level: u8,
+    pub(crate) english: String,
     #[serde(default)]
-    native: Vec<Native>,
+    pub(crate) native: Vec<Native>,
 }
 
 #[derive(Deserialize)]

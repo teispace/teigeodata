@@ -26,18 +26,8 @@ The release notes and each file's summary are on the
 
 ### Inside world-np-lite.tgd
 
-| Component | Disk | Wire |
-|---|--:|--:|
-| `point` | 1,597,632 B | 1,056,748 B |
-| `names` | 4,599,168 B | 1,826,602 B |
-| `search` | 4,472,128 B | 2,905,581 B |
-| `admin` | 705,600 B | 283,743 B |
-| `boundaries` | 2,190,656 B | 2,025,405 B |
-| `admin-index` | 1,069,696 B | 803,920 B |
-| `elevation` | 315,200 B | 232,832 B |
-| `dem-coarse` | 526,240 B | 517,805 B |
-| `timezone` | 55,424 B | 13,612 B |
-| `tz-rules` | 83,328 B | 63,545 B |
+Every component's bytes, and every country's places by kind and admin level, are on the
+[coverage page](/docs/data/coverage), read from the pack itself.
 
 Places with a name in each language:
 
@@ -50,10 +40,11 @@ Places with a name in each language:
 
 | Country | Today | Levels |
 |---|---|---|
-| Nepal | In full: provinces, districts and local levels with their boundaries and ISO codes, wards, about 90,000 settlements, localities (toles, chowks) and natural features (peaks, passes), every one with a height. | country, province, district, local level, ward |
-| India | Districts and statutory towns, with the states' current ISO codes. Full coverage is next. | country, state, district |
+| [Nepal](/docs/data/countries/np) | In full: provinces, districts and local levels with their boundaries and ISO codes, wards, about 90,000 settlements, localities (toles, chowks) and natural features (peaks, passes), every one with a height. | country, province, district, local level, ward |
+| [India](/docs/data/countries/in) | Districts and statutory towns, with the states' current ISO codes. Full coverage is next. | country, state, district |
 | Every other country | The country, its first-level units with ISO codes and boundaries, and its cities of 5,000 or more. | country, first level |
 
+Every country, with its places by kind and level, is on the [coverage page](/docs/data/coverage).
 Each country's rules (its admin ladder, the spellings of its generic terms, its sources and its
 perspective on borders) are data in
 [`data/countries`](https://github.com/teispace/teigeodata/tree/main/data/countries), each rule
