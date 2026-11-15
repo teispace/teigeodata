@@ -82,6 +82,8 @@ jobs:
         run: npx tsc --noEmit
       - name: Links
         run: node scripts/check-links.mjs out "$DOCS_BASE_PATH"
+      - name: The search index within its budget
+        run: node scripts/check-search.mjs out
       - name: Chromium (the Playwright version in package-lock.json)
         run: npx playwright install --with-deps chromium-headless-shell
       - name: The playground, run in Chromium
