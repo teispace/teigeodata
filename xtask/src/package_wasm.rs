@@ -10,9 +10,10 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::measured::Record;
 use crate::package_c::{command, version};
 
-const USAGE: &str = "usage: cargo xtask package-wasm [--variant full|lookup] [--test]";
+const USAGE: &str = "usage: cargo xtask package-wasm [--variant full|lookup] [--test] [--record]";
 
 /// The wasm-bindgen version `bindings/wasm/Cargo.toml` pins; the CLI must match it.
 const WASM_BINDGEN: &str = "0.2.130";
@@ -59,12 +60,13 @@ const ENTRIES: [&str; 5] = [
 ];
 
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
-    let (mut only, mut test) = (None, false);
+    let (mut only, mut test, mut record) = (None, false, false);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--variant" => only = Some(it.next().ok_or_else(|| vec![USAGE.to_owned()])?.clone()),
             "--test" => test = true,
+            "--record" => record = true,
             _ => return Err(vec![USAGE.to_owned()]),
         }
     }
@@ -72,13 +74,16 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         .iter()
         .filter(|v| only.as_deref().is_none_or(|o| o == v.name))
         .collect();
-    if variants.is_empty() {
-        return Err(vec![USAGE.to_owned()]);
+    if variants.is_empty() || (record && only.is_some()) {
+        return Err(vec![format!("{USAGE} (--record measures every variant)")]);
     }
     tool_version("wasm-bindgen", WASM_BINDGEN)?;
     tool_version("wasm-opt", "")?;
     let version = version(root)?;
     let mut report = String::new();
+    let mut table = String::from(
+        "| Package | Holds | Module | gzip -9 | Budget | Headroom |\n|---|---|--:|--:|--:|--:|\n",
+    );
     for v in variants {
         let dir = package(root, v, &version)?;
         let wasm = fs::read(dir.join("teigeodata_wasm_bg.wasm"))
@@ -96,11 +101,43 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         }
         report.push_str(&line);
         report.push('\n');
+        let _ = writeln!(
+            table,
+            "| `{}` | {} | {} B | {gz} B | {} B | {:.1}% |",
+            v.package,
+            v.features
+                .map_or("every component", |_| "every query at a point or by ID"),
+            wasm.len(),
+            v.budget_gz,
+            percent(v.budget_gz - gz, v.budget_gz)
+        );
         if test {
             report.push_str(&parity(root, &dir)?);
         }
     }
+    if record {
+        let written = Record::new(
+            root,
+            20,
+            "WebAssembly packages",
+            "Each npm package's module after `wasm-opt -Oz`, raw and gzipped at level 9. \
+             `cargo xtask package-wasm` fails a build whose gzipped module is over its budget.",
+            "cargo xtask package-wasm --record",
+            &table,
+        )
+        .write(root, "wasm")?;
+        let _ = writeln!(report, "recorded in {written}");
+    }
     Ok(report.trim_end().to_owned())
+}
+
+fn percent(part: u64, whole: u64) -> f64 {
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "module sizes are far below 2^52"
+    )]
+    let p = part as f64 * 100.0 / whole as f64;
+    p
 }
 
 /// Builds `v` and assembles its package; returns its folder.

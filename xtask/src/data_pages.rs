@@ -20,6 +20,7 @@ use crate::bindings::escape_mdx;
 use crate::data::Profile;
 use crate::docs_examples::{Data, pinned, read};
 use crate::lexicon::{Kind, LexiconFile, Status};
+use crate::measured::Record;
 use crate::sources::{LITE, Lock};
 
 const OUT: &str = "site/content/docs/data";
@@ -158,6 +159,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         coverage_page(&countries, (file_bytes, &components), &pages_of, &data),
     );
 
+    pages.insert(root.join(OUT).join("measured.mdx"), measured_page(root)?);
     write_pages(root, &pages, args.check)
 }
 
@@ -723,6 +725,50 @@ fn list_or_none(ids: &[String]) -> String {
             .collect::<Vec<_>>()
             .join(", ")
     }
+}
+
+/// The measured page: every record in `site/data/measured/`, in its order.
+fn measured_page(root: &Path) -> Result<String, Vec<String>> {
+    let dir = root.join(crate::measured::DIR);
+    let mut records = Vec::new();
+    for entry in fs::read_dir(&dir)
+        .map_err(|e| vec![format!("{}: {e}", dir.display())])?
+        .flatten()
+    {
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == "json") {
+            let record: Record = serde_json::from_str(&read(&path)?)
+                .map_err(|e| vec![format!("{}: {e}", rel(root, &path))])?;
+            records.push(record);
+        }
+    }
+    records.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.title.cmp(&b.title)));
+    let mut out = String::from(
+        "---\ntitle: \"Measured\"\ndescription: \"Sizes and speed as the gates measured them, each with its date, machine and commit.\"\n---\n\n",
+    );
+    out.push_str(
+        "<Callout title=\"Generated from the gates\">\nThis page is written by `cargo xtask data-pages` from the records in\n[`site/data/measured`](https://github.com/teispace/teigeodata/tree/main/site/data/measured), each\nwritten by the gate that measured it (`--record`). Every figure says when, where and at which\ncommit it was measured: compare a timing only with timings from the same machine, and read one\nfrom a busy machine (a high load average) as a ceiling, not a typical value.\n</Callout>\n\nThe bytes of each component of the released pack are on the [coverage page](/docs/data/coverage);\nhow good the data is, and how it is gated, is on [accuracy](/docs/concepts/accuracy).\n",
+    );
+    for r in &records {
+        let commit = r.commit.trim_end_matches("+changes");
+        let commit = if r.commit.ends_with("+changes") {
+            format!("`{commit}` with uncommitted changes")
+        } else {
+            format!("[`{commit}`](https://github.com/teispace/teigeodata/commit/{commit})")
+        };
+        let _ = write!(
+            out,
+            "\n## {}\n\n{}\n\nMeasured {} on {} (load average {}), commit {commit}, by `{}`.\n\n{}\n",
+            cell(&r.title),
+            r.intro,
+            r.date,
+            cell(&r.machine),
+            r.load,
+            r.command,
+            r.table
+        );
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

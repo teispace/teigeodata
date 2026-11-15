@@ -24,6 +24,7 @@ mod iso3166;
 mod lexicon;
 mod load;
 mod maven;
+mod measured;
 mod mirror;
 mod pack;
 mod package_c;
@@ -109,12 +110,13 @@ Tasks:
                     addon; --addons takes teigeodata.<suffix>.node for every platform,
                     else this machine's addon is built and packaged; --test installs them
                     as npm would and runs the parity checks.
-  package-wasm [--variant full|lookup] [--test]
+  package-wasm [--variant full|lookup] [--test] [--record]
                     The WebAssembly npm packages (D-293): each variant (a set of
                     components, D-291) built, through wasm-bindgen --target web and
                     wasm-opt -Oz, with the per-host entries, under target/wasm/<variant>/;
                     fails when the gzipped module is over the variant's budget; --test runs
-                    the parity checks from the package on Node.js, Bun and Deno.
+                    the parity checks from the package on Node.js, Bun and Deno; --record
+                    writes the sizes for the site's measured page (site/data/measured/).
   package-swift [--test] [--simulator <name>]
                     The XCFramework the Swift package ships (D-287): teigeodata-c's static
                     library for iOS, the iOS simulators and macOS, joined, as
@@ -163,9 +165,10 @@ Tasks:
                     hierarchy, boundary, Nominatim, MCP) with oha, twice, sampling the
                     footprint; --check holds it to tools/load/budget.toml's per-pack
                     floors and ceilings (needs oha and curl).
-  sizes [--native|--wasm]
+  sizes [--native|--wasm] [--record]
                     Z2: the bytes each feature set of core and format adds to a linked
-                    library, native and wasm32, raw and gzipped (tools/size-probe).
+                    library, native and wasm32, raw and gzipped (tools/size-probe); --record
+                    writes them for the site's measured page.
   sizes --tgd       The tgd binary with neither, either and both servers (features serve
                     and mcp), stripped, raw and gzipped (phase 6.4, D-320).
   help              Show this message.
@@ -214,7 +217,26 @@ fn main() -> ExitCode {
         "sizes" => {
             let only = |f: &str| rest.iter().any(|a| a == f);
             let (native, wasm) = (!only("--wasm"), !only("--native"));
-            report(sizes::run(&root, wasm, native))
+            report(sizes::run(&root, wasm, native).and_then(|table| {
+                if !only("--record") {
+                    return Ok(table);
+                }
+                if !(native && wasm) {
+                    return Err(vec!["--record measures both targets".into()]);
+                }
+                let written = measured::Record::new(
+                    &root,
+                    30,
+                    "Library bytes per feature set",
+                    "What each feature set of the runtime crates adds to a linked library \
+                     (`tools/size-probe`, a baseline that any host library links subtracted), \
+                     natively in the release profile and for wasm32 in the size profile.",
+                    "cargo xtask sizes --record",
+                    &table,
+                )
+                .write(&root, "library")?;
+                Ok(format!("{table}\nrecorded in {written}"))
+            }))
         }
         "help" | "-h" | "--help" => {
             print!("{HELP}");

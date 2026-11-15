@@ -14,6 +14,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
 use serde::Deserialize;
+
+use crate::measured::Record;
 use serde_json::Value;
 
 /// The connections search is driven at; every other route at the middle one.
@@ -30,6 +32,8 @@ struct Options {
     check: Option<PathBuf>,
     /// Only the routes named (for an experiment; the budget check needs them all).
     only: Vec<String>,
+    /// Write the tables for the site's measured page (`site/data/measured/load.json`).
+    record: bool,
 }
 
 fn options(args: &[String]) -> Result<Options, Vec<String>> {
@@ -40,6 +44,7 @@ fn options(args: &[String]) -> Result<Options, Vec<String>> {
         tgd: None,
         check: None,
         only: Vec::new(),
+        record: false,
     };
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -58,18 +63,19 @@ fn options(args: &[String]) -> Result<Options, Vec<String>> {
             "--tgd" => o.tgd = Some(value("--tgd")?.into()),
             "--check" => o.check = Some(value("--check")?.into()),
             "--only" => o.only.push(value("--only")?),
+            "--record" => o.record = true,
             p if !p.starts_with("--") => o.packs.push(p.into()),
             other => return Err(vec![format!("unknown option {other}")]),
         }
     }
-    if o.check.is_some() && !o.only.is_empty() {
+    if (o.check.is_some() || o.record) && !o.only.is_empty() {
         return Err(vec![
-            "--check measures every route: leave out --only".into(),
+            "--check and --record measure every route: leave out --only".into(),
         ]);
     }
     if o.packs.is_empty() {
         return Err(vec![
-            "usage: cargo xtask load <pack.tgd>... [--query <name>] [--secs <n>] [--tgd <path>] [--check <budget.toml>]"
+            "usage: cargo xtask load <pack.tgd>... [--query <name>] [--secs <n>] [--tgd <path>] [--check <budget.toml>] [--record]"
                 .into(),
         ]);
     }
@@ -134,6 +140,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     );
     let budgets = o.check.as_deref().map(budgets).transpose()?;
     let mut reports = Vec::new();
+    let mut tables = String::new();
     for pack in &o.packs {
         let query = o
             .query
@@ -147,7 +154,10 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
             .unwrap_or("Kathmandu");
         let r = measure(root, &tgd, pack, query, &o)
             .map_err(|e| vec![format!("{}: {e}", pack.display())])?;
-        print_report(&mut out, &r);
+        let mut table = String::new();
+        print_report(&mut table, &r);
+        out.push_str(&table);
+        tables.push_str(&table);
         reports.push(r);
     }
     if let (Some(budget), Some(budgets)) = (&o.check, &budgets) {
@@ -157,6 +167,25 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
             return Err(problems);
         }
         let _ = writeln!(out, "within {}", budget.display());
+    }
+    if o.record {
+        let intro = format!(
+            "`tgd serve` on loopback, each route driven by {} for {} s at each point, twice; round \
+             two is reported, and the footprint's growth across it is the leak check. \
+             `tools/load/budget.toml` sets each point's floor and ceiling.",
+            oha.trim(),
+            o.secs
+        );
+        let written = Record::new(
+            root,
+            40,
+            "Server load",
+            &intro,
+            "cargo xtask load <pack> --check tools/load/budget.toml --record",
+            &tables,
+        )
+        .write(root, "load")?;
+        let _ = writeln!(out, "recorded in {written}");
     }
     Ok(out)
 }
