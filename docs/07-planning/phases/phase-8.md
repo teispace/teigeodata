@@ -245,20 +245,26 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   - Done (2026-11-15): [semver.md](../../06-engineering/semver.md), with each surface's
     compatible changes, its breaking changes and its gate; what is not covered; deprecation;
     MSRV
-- [ ] `cargo-semver-checks` in `release.yml` from the first tag, beside the ABI gate (D-285).
+- [x] `cargo-semver-checks` in `release.yml` from the first tag, beside the ABI gate (D-285).
   Built (2026-11-15): `cargo-semver-checks` 0.51.0 on every published crate against the last
-  `v*` tag, a warning in a dry run. Open: its first run, in the 8.5 dry run
+  `v*` tag, a warning in a dry run. First clean run in the 1.0.0 dry run 43719097976, after
+  three fixes its earlier runs found: a full clone (a partial one hides blobs from its git
+  library), a stand-in pack for the engine's `baseline` feature, and only the crates the last
+  tag holds (`teigeodata-server` is new since `v0.3.1`)
 - [x] A docs audit: every guide, concept and reference page read against the code once; the
   1.0 section of `CHANGELOG.md` (2026-11-15, D-343)
 
 ### 8.5 The first data release
 
-- [ ] Phase 3.7: the lite build from clean-room sources only, and Nepal's `ACCURACY.md` against
-  held-out truth (Q-017)
-- [ ] Phase 3.8: M3 met
+- [x] Phase 3.7: the lite build from clean-room sources only, and Nepal's `ACCURACY.md` against
+  held-out truth (Q-017): both builds' pages on the CI-built packs (D-339, D-348)
+- [x] Phase 3.8: M3 met (D-350)
 - [ ] Nepal's main and lite packs as a data release, through the catalog, with their accuracy
   summary
-- [ ] A dry run of `release.yml` end to end at the release commit
+- [x] A dry run of `release.yml` end to end at the release commit: run 43719097976 on
+  `chore/release-1.0.0` (the version bumped to 1.0.0 with `cargo xtask bump`, D-346), 53 jobs
+  green, the ABI and Rust API gates clean. Rerun on the branch once it is rebased for the
+  tag
 - [ ] The maintainer: the key ceremony (phase 4.3), the release environment and registry
   accounts (5.10c), Pages (`DOCS_DEPLOY`)
 

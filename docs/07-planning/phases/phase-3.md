@@ -212,7 +212,25 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   labels can show
 
 ### 3.8 Exit review
-- [ ] M3 criteria met; progress updated
+- [x] M3 criteria met (2026-11-15, D-350), each against the [roadmap](../roadmap.md):
+  - **Nepal main and lite builds reproducible:** both built by `data-build` from the pinned,
+    mirrored sources (D-127, D-342); G-det runs the build stage twice and compares the bytes,
+    green for both at `66e56c9` (run 43719616814); the lite pack is byte for byte the one of
+    run 43707881798, and has the same places as `data-2026.11.14`'s (`tgd diff`);
+  - **geo-fix, conflation, hierarchy, names lexicon, postal, timezone:** 3.2 (core and
+    consensus, D-091, D-096), 3.3 (ARCS, POLYGONS, POLY_INDEX, D-097 to D-099), 3.5 (POSTAL,
+    D-090, D-105), 3.6 (the lexicon, official names, corrections, D-232, ADR-0036), PLACE_TZ
+    and the zone rules (D-134, D-138, D-196); the DEM section with its own codec (3.4, D-089,
+    B11 in and outside Nepal, D-345);
+  - **every QA gate:** G-det, G-lic and notices, G-corr, G-tz, the world, locator and
+    shipped-baseline gates and the golden search gate, all green in that run; the main
+    golden baseline re-recorded with its reasons (D-347);
+  - **`ACCURACY.md` for Nepal:** [main](../../../data/countries/np/ACCURACY.md) and
+    [lite](../../../data/countries/np/ACCURACY-lite.md), measured on the CI-built packs
+    against held-out labels, with the labels' own noise and their bias named (D-339, D-348).
+  - Open, not blocking: Nepal's postal codes in lite (Q-009, a licence only the maintainer can
+    obtain), the maintainer's review of the corrections, `not-same-as` when a case needs it,
+    and the search ranking of populous local levels (Q-028).
 
 ## Changelog
 
@@ -254,3 +272,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-11 | 3.4: summits as natural places with surveyed heights (D-201); the DEM section closed with the Nepal size | the DEM tiles fetched again |
 | 2026-11-15 | 3.7: Nepal's accuracy measured and generated (`cargo xtask accuracy`) | D-339 |
 | 2026-11-15 | 3.4: B11 outside Nepal and against LERC and zstd; tiles above 50° N moved to W5 | D-345 |
+| 2026-11-15 | 3.8: M3 met; the hill-settlement consensus reviewed against the blind labels | D-348, D-350 |
