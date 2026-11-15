@@ -6,8 +6,9 @@ description: tgd serve answers every query over HTTP as JSON or GeoJSON, with No
 `tgd serve` puts the packs behind an HTTP API: every query as a `GET` route, native JSON or
 GeoJSON, and Nominatim-compatible `/search`, `/reverse` and `/lookup` so existing clients work
 unchanged. It is one process with no database: the packs are memory-mapped, and on Nepal it
-answers 5,000 to 10,000 requests per second for the heaviest route (a large boundary) and more
-for the others (measured by `cargo xtask load`, with a budget the load test enforces).
+answers about 9,000 requests per second for the heaviest route (a large boundary) and 40,000 to
+90,000 for the others, at 16 connections on one machine ([measured](/docs/data/measured#server-load)
+by `cargo xtask load`, with a budget the load test enforces).
 
 <Callout title="Every example on this page ran">
 The requests below are part of the [command-line tour](https://github.com/teispace/teigeodata/blob/main/site/examples/cli/tour.sh),
@@ -24,7 +25,7 @@ tgd serve --pack world-np-lite.tgd
 | Option | Default | What |
 |---|---|---|
 | `--listen <addr:port>` | `127.0.0.1:8080` | Where to listen; port 0 picks a free one. Loopback only unless you name another address. |
-| `--pack <file>` | the store's packs | A pack to serve; repeat for several. |
+| `--pack <file>` | the store's packs | A pack to serve; repeat for several. Given, it replaces the store: only these packs are served, and nothing is followed. |
 | `--store <dir>` | the platform's data directory | Serve the store's installed packs, and follow it as packs are installed or updated. |
 | `--follow <seconds>` | 5 | How often to read the store's journal; 0 never. |
 | `--timeout <seconds>` | 10 | A request taking longer is answered `unavailable`. |
@@ -139,7 +140,7 @@ A failure answers a stable code and an HTTP status:
 
 <include lang="json" meta='title="Response"'>../../../examples/cli/out/http-error.txt</include>
 
-The codes and their statuses are listed in the [reference](/docs/reference/http#errors): `invalid_argument` and `out_of_bounds` answer 400, `not_found` 404, `missing_component` 501, `unavailable` 503 and `internal` 500.
+The codes and their statuses are listed in the [reference](/docs/reference/http#errors): `invalid_argument` and `out_of_bounds` answer 400 (a query string past the server's bound 414), `not_found` 404, `missing_component` 501, `unavailable` 503 and `internal` 500; `unauthenticated` 401, `forbidden` 403 and `rate_limited` 429 only from a deployment that adds keys, rules or limits.
 
 ## Deploying it
 
