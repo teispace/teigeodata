@@ -1,7 +1,7 @@
 ---
 title: "Roadmap"
 status: living
-updated: 2026-11-09
+updated: 2026-11-15
 ---
 
 # Roadmap
@@ -23,7 +23,7 @@ After v1.0, coverage grows by data waves.
 | [5](phases/phase-5.md) | Boundary and bindings | 4 | **M5**: C ABI, IDL, generators, every binding with packaging (Swift privacy manifest, Android `noCompress` for bundled packs), the parity gate and the X benchmarks green across all |
 | [6](phases/phase-6.md) | Servers | 4 | **M6**: MCP server (latest revision) and HTTP server, hosted-ready seams |
 | [7](phases/phase-7.md) | Docs site | 5, 6 | **M7**: Fumadocs site, generated reference, guides per language, per-country pages, playground |
-| 8 | Hardening and release | all | **M8 = v1.0.0**: fuzzing campaign, performance pass, security review, docs complete, first data release (Nepal) |
+| [8](phases/phase-8.md) | Hardening and release | all | **M8 = v1.0.0**: fuzzing campaign, performance pass, security review, docs complete, first data release (Nepal) |
 
 ## Data waves after v1.0
 
@@ -57,3 +57,4 @@ parallel lanes: research notes, docs, one heavy build lane, one test or benchmar
 | 2026-11-15 | M5 met (D-308); Phase 6 drafted (`phases/phase-6.md`) from the [servers research](../02-research/notes/servers.md) | D-308 |
 | 2026-11-15 | M6 met (D-321): servers, conformance in CI, load gated | D-321 |
 | 2026-11-15 | Phase 7 drafted (`phases/phase-7.md`) from the [docs-site research](../02-research/notes/docs-site.md) | research |
+| 2026-11-15 | M7 met (D-330); Phase 8 drafted (`phases/phase-8.md`) from the [hardening research](../02-research/notes/hardening-and-release.md) | D-331 |

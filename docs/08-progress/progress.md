@@ -17,11 +17,11 @@ A short status. The numbers and evidence live in each phase file and the
 | 1 Core and format | **M1 met** 2026-11-07 (D-080) | [phase 1 §1.6](../07-planning/phases/phase-1.md#16-exit-review) |
 | 2 Indexes | **M2 met** 2026-11-07 (D-087) | [phase 2 §2.4](../07-planning/phases/phase-2.md#24-exit-review) |
 | 3 Forge and Nepal data | in progress: 3.1–3.3 and 3.5 done (3.5 lite codes wait on Q-009); 3.4 DEM and 3.6 names in progress; 3.7–3.8 open | [phase 3](../07-planning/phases/phase-3.md) |
-| 4 Engine, baseline and sync | in progress: what remains waits on the maintainer (the key ceremony, Q-024) or on a release that changes records (4.7, gate 11, D-273) | [phase 4](../07-planning/phases/phase-4.md) |
+| 4 Engine, baseline and sync | in progress: what remains waits on the maintainer (the key ceremony, 4.3) or on a release that changes records (4.7, gate 11, D-273) | [phase 4](../07-planning/phases/phase-4.md) |
 | 5 Boundary and bindings | **M5 met** 2026-11-15 (D-308); open, not blocking: 5.5d (Dart static linking), 5.10c (the first real release, on the maintainer's setup), the APK path of D-306 on a real APK | [phase 5 §5.11](../07-planning/phases/phase-5.md#511-exit-review) |
 | 6 Servers | **M6 met** 2026-11-15 (D-321): HTTP and MCP servers over one request core, conformance in CI, load gated, hosted seams | [phase 6 §6.5](../07-planning/phases/phase-6.md#65-exit-review) |
 | 7 Docs site | **M7 met** 2026-11-15 (D-330): the site, guides in every language with tours that ran, the generated reference, coverage, country and measured pages, the playground (D-328); open, not blocking: the maintainer enables Pages (`DOCS_DEPLOY`), registry installs after the first release | [phase 7 §7.7](../07-planning/phases/phase-7.md#77-exit-review) |
-| 8 | not started | [roadmap](../07-planning/roadmap.md) |
+| 8 Hardening and release | in progress: research and plan done (D-331); every failed nightly accounted for, the crash inputs kept as tests; next: the `engine` fuzz target (8.1) | [phase 8](../07-planning/phases/phase-8.md) |
 
 - **Now (Phase 3):** the Nepal main pack has 100,358 places with heights (D-111), admin
   records linked (D-110), same-place merges (D-116), the first corrections (D-117), modelled

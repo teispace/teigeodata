@@ -1,0 +1,111 @@
+---
+title: "Phase 8: hardening and release"
+status: accepted
+updated: 2026-11-15
+---
+
+# Phase 8: hardening and release
+
+**Goal:** a 1.0 that strangers can put in front of untrusted input, depend on through semver,
+and learn from its docs alone, released with Nepal's data. Exit: milestone **M8 = v1.0.0**
+([roadmap](../roadmap.md)).
+
+**Research:** [hardening and the v1.0.0 release](../../02-research/notes/hardening-and-release.md)
+(2026-11-15); D-331.
+
+**Order:**
+
+1. The fuzzing campaign, which may change code everything else measures.
+2. The security review, then the performance pass on the hardened code.
+3. Docs and the API review, which freeze the surface.
+4. The first data release and v1.0.0.
+
+Phase 3's 3.7 and 3.8 are on this path (the data release needs them) and run between the others
+while they wait on labels (Q-017). Long runs go to GitHub's runners, never to this shared
+machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in code (P16).
+
+## Steps
+
+### 8.0 Research
+
+- [x] The hardening note: fuzzing gaps, supply chain, performance gates that never ran, docs,
+  the release path, versions live (2026-11-15)
+
+### 8.1 Fuzzing campaign
+
+- [x] Every failed nightly accounted for:
+  - `transport_table` (2026-11-09, 2026-11-10), fixed in 6a3ff32;
+  - `mutate` (2026-11-14), fixed in 685495a.
+
+  Both were harness faults. Their inputs replay in each crate's `found_by_libfuzzer` test; the
+  `mutate` one fails with its fix reverted (2026-11-15)
+- [ ] `engine`: one mutated section of a synthetic pack with every kind, rewritten by the writer
+  so its hashes hold, opened with `Layer::from_bytes` and asked every query. No panic, bounded
+  allocation, typed errors only. It runs under `cargo test` (seeded) and libFuzzer. Planted: a
+  panic in one decoder is found within 300 s
+- [ ] `payloads`: the 17 section kinds not yet fuzzed get their `open` and `check`, and a
+  section `check` accepts never makes a query fail untyped
+- [ ] `trust`: the TUF metadata parser and the catalog's `custom` fields
+- [ ] `ffi`: the C ABI's strings and buffers (lengths, NUL bytes, invalid UTF-8, documented null
+  pointers) through the generated layer
+- [ ] `mcp`: JSON-RPC messages into the MCP request core
+- [ ] `fuzz-campaign.yml`: weekly and by dispatch, 3 h per target, a job each, with coverage
+  reports as artifacts. Gate: every section kind's decoder reached, the coverage recorded here
+
+### 8.2 Security review
+
+- [ ] `docs/06-engineering/threat-model.md`: each trust boundary of `SECURITY.md`'s scope, what
+  an attacker controls, what must hold, and the test or gate that shows it
+- [ ] `cargo xtask unsafe-audit`: every `unsafe` block with its `SAFETY:` argument and the test
+  that reaches it, written to the threat model; fails on a block without one (planted)
+- [ ] Resource limits on every server route and MCP tool (body, result count, time), a test per
+  limit
+- [ ] `zizmor` on every workflow in fast-check, findings fixed or each one justified
+- [ ] OpenSSF Scorecard weekly on `main`; the checks only the maintainer can satisfy listed
+  for them
+- [ ] The review's findings fixed, each with its test; `SECURITY.md` states the 1.0 support
+  policy
+
+### 8.3 Performance pass
+
+- [ ] A `samply` profile of each Q and L suite on Nepal's main pack and the world baseline; the
+  three largest self-time items per suite recorded in `docs/02-research/benches/phase-8.md`
+- [ ] Each change justified by its profile and landed with its instruction count and
+  wall-clock before and after
+- [ ] The scaling gate (`cargo xtask scaling`): throughput at 1, 2, 4 and 8 threads on one
+  `Shared` engine, recorded for the measured page
+- [ ] Suite C, the competitive report (`competitive.yml`, by dispatch on GitHub runners):
+  Nominatim and Photon on Nepal's extract, `tzf-rs` and a GeoNames-backed library, on the
+  golden queries. Medians of repeated runs, with each rival's version and configuration
+
+### 8.4 Docs complete and the API frozen
+
+- [ ] The 1.0 API review: every IDL item read once for name, shape and error; changes made
+  before the freeze, each through the bindings' `--check`
+- [ ] `docs/06-engineering/semver.md`: what 1.0 promises (Rust API, C ABI, pack format, catalog,
+  HTTP and MCP), MSRV and deprecation
+- [ ] `cargo-semver-checks` in `release.yml` from the first tag, beside the ABI gate (D-285)
+- [ ] A docs audit: every guide, concept and reference page read against the code once; the
+  1.0 section of `CHANGELOG.md`
+
+### 8.5 The first data release
+
+- [ ] Phase 3.7: the lite build from clean-room sources only, and Nepal's `ACCURACY.md` against
+  held-out truth (Q-017)
+- [ ] Phase 3.8: M3 met
+- [ ] Nepal's main and lite packs as a data release, through the catalog, with their accuracy
+  summary
+- [ ] A dry run of `release.yml` end to end at the release commit
+- [ ] The maintainer: the key ceremony (phase 4.3), the release environment and registry
+  accounts (5.10c), Pages (`DOCS_DEPLOY`)
+
+### 8.6 Exit review
+
+- [ ] v1.0.0 tagged and published; installs from every registry checked
+- [ ] M8 criteria met, each with its evidence; progress updated
+
+## Changelog
+
+| Date | Change | Why |
+|---|---|---|
+| 2026-11-15 | Phase 8 drafted from the [hardening research](../../02-research/notes/hardening-and-release.md) | D-331 |
