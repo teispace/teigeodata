@@ -599,3 +599,38 @@ mod find {
         assert_eq!(c.packs_at(*b"fj", pt(-25.0, 178.0)).count(), 0);
     }
 }
+
+/// A signed catalog still never names a path outside the store: an asset name that would
+/// climb out, hide, nest or leave plain lowercase ASCII is refused before the disk is touched
+/// (`store::pack_name`, threat model: the store).
+#[test]
+fn an_asset_name_never_leaves_the_store() {
+    let named = |file: &str| {
+        let e = Entry {
+            file: file.into(),
+            ..entry()
+        };
+        crate::store::pack_name(&e, Components::all())
+    };
+    assert_eq!(
+        named("np.places.2026.11.0.1a1a1a1a.tgd.zst").unwrap(),
+        "np.places.2026.11.0.1a1a1a1a.all.tgd"
+    );
+    for bad in [
+        "../np.places.tgd.zst",
+        "np/../../etc.tgd.zst",
+        "np/places.tgd.zst",
+        "np\\places.tgd.zst",
+        "/etc/np.tgd.zst",
+        ".np.tgd.zst",
+        "np..places.tgd.zst",
+        "NP.places.tgd.zst",
+        "np places.tgd.zst",
+        "np\0.tgd.zst",
+        "ने.tgd.zst",
+        "C:np.tgd.zst",
+        "np.places.tgd",
+    ] {
+        assert!(named(bad).is_err(), "{bad:?} was accepted");
+    }
+}
