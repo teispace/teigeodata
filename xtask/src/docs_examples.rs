@@ -29,9 +29,15 @@ pub(crate) struct Data {
     /// The data release that holds it.
     pub(crate) release: String,
     pub(crate) file: String,
-    bytes: u64,
-    sha256: String,
+    pub(crate) bytes: u64,
+    pub(crate) sha256: String,
     url: String,
+}
+
+/// The pinned pack's record, `site/data.json`.
+pub(crate) fn data(root: &Path) -> Result<Data, Vec<String>> {
+    serde_json::from_str(&read(&root.join("site/data.json"))?)
+        .map_err(|e| vec![format!("site/data.json: {e}")])
 }
 
 /// One language: how to run its tour, and what it needs first.
@@ -323,8 +329,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         pack,
         asked,
     } = parse(args)?;
-    let data: Data = serde_json::from_str(&read(&root.join("site/data.json"))?)
-        .map_err(|e| vec![format!("site/data.json: {e}")])?;
+    let data = data(root)?;
     let pack = match pack {
         Some(p) => p,
         None => pinned(root, &data, fetch)?,

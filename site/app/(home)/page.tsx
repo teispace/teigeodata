@@ -117,6 +117,12 @@ export default function HomePage() {
               >
                 Get started
               </Link>
+              <Link
+                href="/playground"
+                className="rounded-lg border px-5 py-2.5 text-sm font-medium hover:border-fd-primary hover:text-fd-primary"
+              >
+                Try it in the browser
+              </Link>
               <Link href="/docs" className="rounded-lg px-5 py-2.5 text-sm font-medium hover:bg-fd-accent">
                 Read the docs →
               </Link>

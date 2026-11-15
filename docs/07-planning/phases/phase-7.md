@@ -86,8 +86,11 @@ pages, the playground. Nothing names a country in code (P16): country pages come
   release's summary until the forge writes its gate figures as JSON
 
 ### 7.6 The playground
-- [ ] The WebAssembly build over the public layer, in the browser, with MapLibre drawing the
-  pack's own outlines: search, reverse, admin, timezone, elevation, nearby, boundary
+- [x] The WebAssembly build over the public layer, in the browser, with MapLibre drawing the
+  pack's own outlines: search, reverse, admin, timezone, elevation, nearby, boundary (D-328;
+  [research](../../02-research/notes/docs-playground.md)). `cargo xtask playground` writes its
+  files; `site/scripts/check-playground.mjs` runs it in Chromium in the docs workflow. Building
+  it found world timezone areas answering no zone (D-327, fixed in the engine)
 
 ### 7.7 Exit review
 - [ ] M7 criteria met, each with its evidence; progress updated
@@ -103,3 +106,4 @@ pages, the playground. Nothing names a country in code (P16): country pages come
 | 2026-11-15 | 7.5 split into 7.5a (country pages) and 7.5b (measured pages); 7.5a done | the country pages need only the pinned pack and the data folders; the measured pages need each gate to write a record (D-325) |
 | 2026-11-15 | 7.4 done: boundary and distance in every language; the GeoJSON writer moved to the engine | the playground and every app draw outlines from the bindings, and one writer keeps them equal to the servers (D-324) |
 | 2026-11-15 | 7.5b done: the measured page rendered from the gates' records; `cargo xtask phone` | a number on the site needs its date, machine and commit, and one renderer (D-326) |
+| 2026-11-15 | 7.6 done: the playground, its files from `cargo xtask playground`, its browser check in the docs workflow; the WebAssembly tools one composite action | the page runs the commit's engine from the site's own origin; the pack cannot come from the release (D-328); a timezone area is its own zone (D-327) |

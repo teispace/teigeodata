@@ -32,6 +32,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   servers used, now one writer for the servers and the bindings.
 - `cargo xtask data-pages`: the site's coverage, country and measured pages, generated from the
   pinned pack, `data/countries/` and the gates' records, with `--check` (D-325, D-326).
+- The site's playground (`/playground`): the WebAssembly engine and the pinned pack in the
+  browser, MapLibre drawing the pack's own outlines, every answer with its code and timing;
+  `cargo xtask playground [--fetch]` writes its files, and `site/scripts/check-playground.mjs`
+  runs it in Chromium in the docs workflow (D-328).
 - `--record` on `package-wasm`, `sizes` and `load`, and `cargo xtask phone <layer.tgd>
   [--record]` (the phone-class bench with the example's own features): each writes its table,
   stamped with the day, commit, machine and load average, to `site/data/measured/` (D-326).
@@ -247,6 +251,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Fixed
 
+- `tz_at` and every answer's `tz` column named no zone in a world timezone area (`tz` was null
+  at New York or Shanghai, set only where a country's pack recorded its own area): a timezone
+  area is now its own zone, whatever `PLACE_TZ` holds for its row (D-327).
 - The MCP `search` tool said `strict` keeps every word in order; it ranks by how well the name
   matched first, as everywhere else. The place fields of every tool's output schema now say
   what each holds.

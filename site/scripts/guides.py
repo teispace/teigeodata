@@ -574,7 +574,8 @@ lang(
     intro="""`@teispace/teigeodata-wasm` is the engine compiled to WebAssembly, for browsers, Web Workers,
 Deno, Bun, Node.js and Cloudflare Workers. The API is the [Node.js package's](/docs/guides/node);
 the difference is where packs come from: a page has no file system, so it opens a pack from its
-bytes. After that one download, every query runs locally.""",
+bytes. After that one download, every query runs locally. The [playground](/playground) is this
+package in a page: every query on the pack below, with the code each answer came from.""",
     install="""<Tabs items={["From a checkout (today)", "npm"]}>
 <Tab value="From a checkout (today)">
 

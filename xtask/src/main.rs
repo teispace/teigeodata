@@ -35,6 +35,7 @@ mod package_swift;
 mod package_wasm;
 mod parity;
 mod phone;
+mod playground;
 mod postal;
 mod recipe;
 mod release;
@@ -171,6 +172,11 @@ Tasks:
                     P1, G-phone: runs the engine's phone-class bench on a layer (open, first
                     queries, search a keystroke at a time, point queries, heap) scaled to a
                     low-end phone; --record writes its table for the site's measured page.
+  playground [--fetch] [--no-build]
+                    Phase 7.6: writes what the site's playground loads to
+                    site/public/playground/ (git-ignored): the full WebAssembly package built
+                    from this commit, the pinned pack (SHA-256 checked; --fetch downloads it),
+                    MapLibre's worker (npm ci in site/ first) and manifest.json.
   sizes [--native|--wasm] [--record]
                     Z2: the bytes each feature set of core and format adds to a linked
                     library, native and wasm32, raw and gzipped (tools/size-probe); --record
@@ -216,6 +222,7 @@ fn main() -> ExitCode {
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
         "load" => report(load::run(&root, rest)),
         "phone" => report(phone::run(&root, rest)),
+        "playground" => report(playground::run(&root, rest)),
         "docs-examples" => report(docs_examples::run(&root, rest)),
         "data-pages" => report(data_pages::run(&root, rest)),
         "sizes" if rest.iter().any(|a| a == "--tgd") => {

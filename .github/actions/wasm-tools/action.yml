@@ -1,0 +1,31 @@
+# The tools `cargo xtask package-wasm` builds the WebAssembly packages with: the toolchain from
+# rust-toolchain.toml with wasm32, a Rust cache for the main and bindings workspaces,
+# wasm-bindgen (the version package_wasm.rs checks) and binaryen's wasm-opt, checked by
+# SHA-256. One copy for the wasm and docs workflows (docs/02-research/notes/docs-playground.md).
+name: WebAssembly tools
+description: Rust with wasm32, wasm-bindgen 0.2.130 and binaryen version_133 on PATH.
+runs:
+  using: composite
+  steps:
+    - name: Toolchain (from rust-toolchain.toml) and wasm32
+      shell: bash
+      run: |
+        rustup show active-toolchain || rustup toolchain install
+        rustup target add wasm32-unknown-unknown
+    - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      with:
+        workspaces: |
+          . -> target
+          bindings -> target
+    - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+      with:
+        tool: wasm-bindgen@0.2.130
+    - name: binaryen version_133 (wasm-opt), checked by SHA-256
+      shell: bash
+      run: |
+        f=binaryen-version_133-x86_64-linux.tar.gz
+        curl -sSfLO "https://github.com/WebAssembly/binaryen/releases/download/version_133/$f"
+        echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  $f" | sha256sum -c
+        tar xzf "$f" -C "$RUNNER_TEMP"
+        rm "$f"
+        echo "$RUNNER_TEMP/binaryen-version_133/bin" >> "$GITHUB_PATH"

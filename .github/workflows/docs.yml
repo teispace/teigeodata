@@ -1,8 +1,10 @@
 # The docs site (phase 7, ADR-0024, docs/02-research/notes/docs-site.md): Fumadocs on Next.js,
 # a static export served by GitHub Pages under /teigeodata/. Every push that touches the site
-# or what it is generated from builds it, type-checks it and checks every internal link; a
-# push to main deploys it once the maintainer has enabled Pages (source: GitHub Actions) and
-# set the repository variable DOCS_DEPLOY to true.
+# or what it is generated from builds it, type-checks it, checks every internal link and runs
+# the playground in Chromium on the WebAssembly package built from the same commit
+# (docs/02-research/notes/docs-playground.md); a push to main deploys it once the maintainer
+# has enabled Pages (source: GitHub Actions) and set the repository variable DOCS_DEPLOY to
+# true.
 name: docs
 
 on:
@@ -11,11 +13,33 @@ on:
     paths:
       - site/**
       - bindings/idl.json
+      # The playground runs the engine built from these.
+      - crates/teigeodata-api/**
+      - crates/teigeodata-engine/**
+      - crates/teigeodata-format/**
+      - crates/teigeodata-core/**
+      - crates/teigeodata-blob/**
+      - crates/teigeodata-names/**
+      - bindings/wasm/**
+      - xtask/src/playground.rs
+      - xtask/src/package_wasm.rs
+      - .github/actions/wasm-tools/**
       - .github/workflows/docs.yml
   pull_request:
     paths:
       - site/**
       - bindings/idl.json
+      # The playground runs the engine built from these.
+      - crates/teigeodata-api/**
+      - crates/teigeodata-engine/**
+      - crates/teigeodata-format/**
+      - crates/teigeodata-core/**
+      - crates/teigeodata-blob/**
+      - crates/teigeodata-names/**
+      - bindings/wasm/**
+      - xtask/src/playground.rs
+      - xtask/src/package_wasm.rs
+      - .github/actions/wasm-tools/**
       - .github/workflows/docs.yml
   workflow_dispatch:
 
@@ -33,12 +57,13 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: site
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/wasm-tools
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
@@ -48,12 +73,19 @@ jobs:
         run: python3 scripts/guides.py --check
       - name: Install
         run: npm ci
+      - name: The playground's engine, pack and map worker
+        working-directory: .
+        run: cargo xtask playground --fetch
       - name: Build
         run: npm run build
       - name: Type check
         run: npx tsc --noEmit
       - name: Links
         run: node scripts/check-links.mjs out "$DOCS_BASE_PATH"
+      - name: Chromium (the Playwright version in package-lock.json)
+        run: npx playwright install --with-deps chromium-headless-shell
+      - name: The playground, run in Chromium
+        run: node scripts/check-playground.mjs out "$DOCS_BASE_PATH"
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site/out

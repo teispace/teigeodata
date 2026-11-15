@@ -131,6 +131,18 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     Ok(report.trim_end().to_owned())
 }
 
+/// Builds one variant's package into `target/wasm/<name>` (what `--variant <name>` builds,
+/// without the budget report); its directory.
+pub(crate) fn build(root: &Path, name: &str) -> Result<PathBuf, Vec<String>> {
+    let v = VARIANTS
+        .iter()
+        .find(|v| v.name == name)
+        .ok_or_else(|| vec![format!("no WebAssembly variant {name}")])?;
+    tool_version("wasm-bindgen", WASM_BINDGEN)?;
+    tool_version("wasm-opt", "")?;
+    package(root, v, &version(root)?)
+}
+
 fn percent(part: u64, whole: u64) -> f64 {
     #[allow(
         clippy::cast_precision_loss,

@@ -93,8 +93,7 @@ fn parse(args: &[String]) -> Result<Args, Vec<String>> {
 
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     let args = parse(args)?;
-    let data: Data = serde_json::from_str(&read(&root.join("site/data.json"))?)
-        .map_err(|e| vec![format!("site/data.json: {e}")])?;
+    let data = crate::docs_examples::data(root)?;
     let pack = match args.pack {
         Some(p) => p,
         None => pinned(root, &data, args.fetch)?,

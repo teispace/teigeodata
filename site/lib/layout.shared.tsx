@@ -11,6 +11,7 @@ export function baseOptions(): BaseLayoutProps {
     links: [
       { text: 'Docs', url: '/docs', active: 'nested-url' },
       { text: 'Reference', url: '/docs/reference', active: 'nested-url' },
+      { text: 'Playground', url: '/playground', active: 'url' },
     ],
   };
 }

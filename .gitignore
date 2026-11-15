@@ -36,3 +36,6 @@ mutants.out*/
 /site/examples/dart/pubspec.lock
 /site/examples/dotnet/bin/
 /site/examples/dotnet/obj/
+
+# The playground's engine, pack and worker (`cargo xtask playground`).
+/site/public/playground/
