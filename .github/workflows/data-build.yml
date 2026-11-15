@@ -150,6 +150,28 @@ jobs:
           dir=data/build/pack/${{ matrix.cc }}
           target/release/pack-eval "$dir/${{ matrix.cc }}-places-${{ matrix.build }}.tgd" \
             tests/golden/${{ matrix.cc }}.yaml "$dir/${{ matrix.cc }}-ids-${{ matrix.build }}.tsv"
+      - name: The packs, for a data release (D-247)
+        # Only a build that passed every gate above; the release is assembled from these files
+        # by hand (docs/06-engineering/releases.md#data), never from a local build.
+        run: |
+          b=${{ matrix.build }}
+          mkdir -p out
+          cargo xtask ids save "$b" "out/ids-$b.tar.gz"
+          cp data/build/pack/${{ matrix.cc }}/${{ matrix.cc }}-places-$b.tgd out/
+          for f in data/build/baseline/${{ matrix.cc }}/${{ matrix.cc }}-baseline-$b.tgd \
+                   data/build/baseline/world/world-baseline-$b.tgd \
+                   data/build/baseline/baseline-$b.tgd; do
+            if [ -f "$f" ]; then cp "$f" out/; fi
+          done
+          cp data/build/pack/${{ matrix.cc }}/summary-$b.md "out/${{ matrix.cc }}-summary-$b.md"
+          cp data/build/pack/${{ matrix.cc }}/attribution-$b.md "out/${{ matrix.cc }}-attribution-$b.md"
+          (cd out && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.cc }}-${{ matrix.build }}-packs
+          path: out/
+          retention-days: 14
+          if-no-files-found: error
       - name: Reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
