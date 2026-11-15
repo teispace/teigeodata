@@ -528,9 +528,10 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
   source with no stated licence) leaves its codes out, with a note in the summary. The read
   back looks up every code, finds its record at the unit's place and finds that record again
   through the place index.
-- **Determinism (G-det).** The build ID is BLAKE3 of the forge version, `sources.lock` and
-  the arguments; the creation time is `SOURCE_DATE_EPOCH` or 0. Two builds give identical
-  bytes.
+- **Determinism (G-det).** The build ID is BLAKE3 of the forge version, `sources.lock`, the
+  arguments and the IDs the pack carries (the registry the build leaves), never the registry's
+  path, so a first build and its rebuild from the registry it wrote are the same build
+  (D-344); the creation time is `SOURCE_DATE_EPOCH` or 0. Two builds give identical bytes.
 - **Sign and read back.** `--key` signs with an Ed25519 seed (64 hex digits). The pack is then
   opened with the runtime reader: hashes and signature are checked, every section is opened
   and passes `check`, and every place keeps its ID, point, parent and canonical name, is found

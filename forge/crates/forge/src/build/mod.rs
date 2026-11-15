@@ -98,7 +98,7 @@ pub(crate) const LITE: [&str; 7] = [
 ];
 
 /// What the command line asks for.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Args {
     pub(crate) cc: String,
     pub(crate) release: String,

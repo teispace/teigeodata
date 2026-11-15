@@ -485,7 +485,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
         sections.push((Kind::REDIRECTS, Encoding::TABLE, moved.len() as u64, body));
     }
 
-    let (bytes, key) = assemble(input, &sections, &parts)?;
+    let (bytes, key) = assemble(input, &sections, &parts, assigned.as_ref())?;
     // Read back from memory first: a pack that fails its checks is never written, and the
     // pack and its registry each replace the old file in one rename.
     let mut report = String::new();
@@ -660,12 +660,32 @@ fn sections_table(sections: &[Body], parts: &[PartBody], report: &mut String) {
     }
 }
 
+/// The build ID: a hash of the forge version, the pinned sources, the command line and the IDs
+/// the pack carries (the registry the build leaves; for a part of a split build, the one it was
+/// given). Not the registry's path: a first build
+/// (`--fresh-ids`) and its rebuild from the registry it wrote are the same build, so G-det
+/// compares them byte for byte.
+fn build_id(sources_lock: &[u8], args: &Args, registry: &str) -> u64 {
+    let args = Args {
+        ids: None,
+        ..args.clone()
+    };
+    let mut h = blake3::Hasher::new();
+    h.update(env!("CARGO_PKG_VERSION").as_bytes());
+    h.update(sources_lock);
+    h.update(format!("{args:?}").as_bytes());
+    h.update(registry.as_bytes());
+    let digest = h.finalize();
+    u64::from_le_bytes(digest.as_bytes()[..8].try_into().unwrap_or([0; 8]))
+}
+
 /// The pack file: the manifest (coverage box, build ID, `SOURCE_DATE_EPOCH`), the sections,
 /// and the signature when a key is given.
 fn assemble(
     input: &Input<'_>,
     sections: &[Body],
     parts: &[PartBody],
+    assigned: Option<&Assignment>,
 ) -> Result<(Vec<u8>, Option<ed25519_dalek::SigningKey>), String> {
     let mut w =
         Writer::new(input.address, "places", &input.args.release).map_err(|e| e.to_string())?;
@@ -689,14 +709,12 @@ fn assemble(
         w.manifest(Tag::ATTRIBUTION, input.attribution.as_bytes())
             .map_err(|e| e.to_string())?;
     }
-    // The build ID: a hash of the forge version, the pinned sources and the command line.
-    let mut h = blake3::Hasher::new();
-    h.update(env!("CARGO_PKG_VERSION").as_bytes());
-    h.update(&fs::read(input.root.join("data/sources.lock")).map_err(|e| e.to_string())?);
-    h.update(format!("{:?}", input.args).as_bytes());
-    h.update(input.registry.render().as_bytes());
-    let digest = h.finalize();
-    let id = u64::from_le_bytes(digest.as_bytes()[..8].try_into().unwrap_or([0; 8]));
+    let registry = assigned.map_or_else(|| input.registry.render(), |a| a.registry.render());
+    let id = build_id(
+        &fs::read(input.root.join("data/sources.lock")).map_err(|e| e.to_string())?,
+        input.args,
+        &registry,
+    );
     let epoch = std::env::var("SOURCE_DATE_EPOCH")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
@@ -1604,7 +1622,8 @@ pub(super) fn verify_rows(
 #[cfg(test)]
 mod tests {
     use super::{
-        CITY_RANK, FORMER, below_their_city, below_their_country, importance, is_city, rank_of,
+        CITY_RANK, FORMER, below_their_city, below_their_country, build_id, importance, is_city,
+        rank_of,
     };
     use crate::build::Place;
     use std::collections::{BTreeMap, BTreeSet};
@@ -1808,5 +1827,47 @@ mod tests {
         let mut former = place(PlaceKind::Settlement, 0, 4, Some(1_000_000));
         former.flags = places::FLAG_FORMER;
         assert_eq!(importance(&former), FORMER);
+    }
+
+    /// G-det: a first build (`--fresh-ids`) and its rebuild from the registry it wrote carry
+    /// the same IDs, so they get the same build ID; other IDs or other arguments do not.
+    #[test]
+    fn the_build_id_ignores_where_the_registry_was_read_from() {
+        let parse = |extra: &[&str]| {
+            let mut v: Vec<String> = [
+                "np",
+                "--release",
+                "2026.11.0",
+                "--admin",
+                "codab-np-geojson",
+            ]
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+            v.extend(extra.iter().map(ToString::to_string));
+            v.push("geonames-np".into());
+            crate::build::Args::parse(&v).unwrap()
+        };
+        let (fresh, rebuild) = (
+            parse(&[]),
+            parse(&["--ids", "data/build/pack/np/np-ids-main.tsv"]),
+        );
+        let registry = "serial\tstate\tkeys\n1\tmain\tgeonames:1\n";
+        assert_eq!(
+            build_id(b"lock", &fresh, registry),
+            build_id(b"lock", &rebuild, registry)
+        );
+        assert_ne!(
+            build_id(b"lock", &fresh, registry),
+            build_id(
+                b"lock",
+                &fresh,
+                "serial\tstate\tkeys\n2\tmain\tgeonames:1\n"
+            )
+        );
+        assert_ne!(
+            build_id(b"lock", &fresh, registry),
+            build_id(b"lock", &parse(&["--lite"]), registry)
+        );
     }
 }
