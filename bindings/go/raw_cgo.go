@@ -81,6 +81,9 @@ int32_t teigeodata_w_progress(uint32_t steps, uintptr_t on_step_ctx, uint32_t *o
 int32_t teigeodata_w_distance_m(double lat1, double lon1, double lat2, double lon2, double *out, teigeodata_bytes *msg);
 #cgo noescape teigeodata_w_distance_m
 #cgo nocallback teigeodata_w_distance_m
+int32_t teigeodata_w_bearing_deg(double lat1, double lon1, double lat2, double lon2, double *out, teigeodata_bytes *msg);
+#cgo noescape teigeodata_w_bearing_deg
+#cgo nocallback teigeodata_w_bearing_deg
 void teigeodata_w_engine_free(uintptr_t handle);
 #cgo noescape teigeodata_w_engine_free
 #cgo nocallback teigeodata_w_engine_free
@@ -177,6 +180,12 @@ int32_t teigeodata_w_engine_tz_version(uintptr_t handle, teigeodata_bytes *out, 
 int32_t teigeodata_w_engine_by_iso(uintptr_t handle, const uint8_t *code, size_t code_len, teigeodata_bytes *out, teigeodata_bytes *msg);
 #cgo noescape teigeodata_w_engine_by_iso
 #cgo nocallback teigeodata_w_engine_by_iso
+int32_t teigeodata_w_engine_boundary(uintptr_t handle, const uint8_t *id, size_t id_len, uint32_t lod, teigeodata_bytes *out, teigeodata_bytes *msg);
+#cgo noescape teigeodata_w_engine_boundary
+#cgo nocallback teigeodata_w_engine_boundary
+int32_t teigeodata_w_engine_distance(uintptr_t handle, const uint8_t *from, size_t from_len, const uint8_t *to, size_t to_len, teigeodata_bytes *out, teigeodata_bytes *msg);
+#cgo noescape teigeodata_w_engine_distance
+#cgo nocallback teigeodata_w_engine_distance
 void teigeodata_w_store_free(uintptr_t handle);
 #cgo noescape teigeodata_w_store_free
 #cgo nocallback teigeodata_w_store_free
@@ -339,6 +348,10 @@ func rawDistanceM(lat1 float64, lon1 float64, lat2 float64, lon2 float64, out *f
 	return int32(C.teigeodata_w_distance_m(C.double(lat1), C.double(lon1), C.double(lat2), C.double(lon2), (*C.double)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
 }
 
+func rawBearingDeg(lat1 float64, lon1 float64, lat2 float64, lon2 float64, out *float64, msg *tgBytes) int32 {
+	return int32(C.teigeodata_w_bearing_deg(C.double(lat1), C.double(lon1), C.double(lat2), C.double(lon2), (*C.double)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
+}
+
 func rawEngineFree(handle uintptr) { C.teigeodata_w_engine_free(C.uintptr_t(handle)) }
 
 func rawEngineNew(out *uintptr, msg *tgBytes) int32 {
@@ -463,6 +476,14 @@ func rawEngineTzVersion(handle uintptr, out *tgBytes, msg *tgBytes) int32 {
 
 func rawEngineByIso(handle uintptr, code *byte, codeLen uintptr, out *tgBytes, msg *tgBytes) int32 {
 	return int32(C.teigeodata_w_engine_by_iso(C.uintptr_t(handle), (*C.uint8_t)(code), C.size_t(codeLen), (*C.teigeodata_bytes)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
+}
+
+func rawEngineBoundary(handle uintptr, id *byte, idLen uintptr, lod uint32, out *tgBytes, msg *tgBytes) int32 {
+	return int32(C.teigeodata_w_engine_boundary(C.uintptr_t(handle), (*C.uint8_t)(id), C.size_t(idLen), C.uint32_t(lod), (*C.teigeodata_bytes)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
+}
+
+func rawEngineDistance(handle uintptr, from *byte, fromLen uintptr, to *byte, toLen uintptr, out *tgBytes, msg *tgBytes) int32 {
+	return int32(C.teigeodata_w_engine_distance(C.uintptr_t(handle), (*C.uint8_t)(from), C.size_t(fromLen), (*C.uint8_t)(to), C.size_t(toLen), (*C.teigeodata_bytes)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
 }
 
 func rawStoreFree(handle uintptr) { C.teigeodata_w_store_free(C.uintptr_t(handle)) }

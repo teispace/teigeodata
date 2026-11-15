@@ -21,6 +21,9 @@ public final class TeiGeodata {
     /** Most places one query returns. */
     public static final long LIMIT_MAX = 10000L;
 
+    /** The coarsest level of detail `Engine::boundary` reads; 0 is full resolution. */
+    public static final long COARSEST_LOD = 6L;
+
     /** A callback taking u32; return {@code false} to cancel. */
     @FunctionalInterface
     public interface CallbackU32 {
@@ -79,7 +82,8 @@ public final class TeiGeodata {
 
     /**
      * Great-circle distance in metres between two points in degrees, by the haversine formula on
-     * the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+     * the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query
+     * measures it, with the same digits on every platform.
      *
      * # Errors
      *
@@ -87,6 +91,18 @@ public final class TeiGeodata {
      * -180..=180, or any value is not finite.
      */
     public static native double distanceM(double lat1, double lon1, double lat2, double lon2);
+
+    /**
+     * The initial great-circle bearing from the first point to the second, in degrees clockwise
+     * from true north in `[0, 360)`; 0 for one point twice or from a pole. The same digits on
+     * every platform.
+     *
+     * # Errors
+     *
+     * `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+     * -180..=180, or any value is not finite.
+     */
+    public static native double bearingDeg(double lat1, double lon1, double lat2, double lon2);
 
     /**
      * When a pack's sections are verified against their hashes.
@@ -960,6 +976,57 @@ public static final class Engine implements AutoCloseable {
         }
 
         private static native byte[] nativeByIso(long handle, String code);
+
+        /**
+         * The outline of the place with this ID at level of detail `lod`, as one row: `id`,
+         * `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m`
+         * (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an
+         * RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings
+         * counterclockwise, holes clockwise), or the place's `Point` when it has no outline.
+         * Level 0 is full resolution and 1 to `COARSEST_LOD` coarser; neighbours share their
+         * borders at every level. A whole country at level 0 can be megabytes: ask a coarser
+         * level to draw it small. No row for an unknown ID.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` if `id` is not a place ID or `lod` exceeds
+         * `COARSEST_LOD`; `ErrorCode::MissingComponent` without `boundaries`;
+         * `ErrorCode::Corrupt` if a section read is corrupt.
+         */
+        public byte[] boundary(String id, long lod) {
+            long stamp = enter();
+            try {
+                return nativeBoundary(handle, id, lod);
+            } finally {
+                lock.unlockRead(stamp);
+                NativeCleaner.fence(this);
+            }
+        }
+
+        private static native byte[] nativeBoundary(long handle, String id, long lod);
+
+        /**
+         * The great-circle distance between the places with these IDs, as one row: `meters` on
+         * the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees
+         * clockwise from north. No row when either ID is unknown. From a point, use `distance_m`
+         * and `bearing_deg` with the place's `lat` and `lon`.
+         *
+         * # Errors
+         *
+         * `ErrorCode::InvalidArgument` if an ID is not a place ID; `ErrorCode::Corrupt` if a
+         * section read is corrupt.
+         */
+        public byte[] distance(String from, String to) {
+            long stamp = enter();
+            try {
+                return nativeDistance(handle, from, to);
+            } finally {
+                lock.unlockRead(stamp);
+                NativeCleaner.fence(this);
+            }
+        }
+
+        private static native byte[] nativeDistance(long handle, String from, String to);
     }
 
     /**

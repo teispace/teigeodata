@@ -112,8 +112,21 @@ do {
     print("=== distance")
     // #region distance
     let meters = try TeiGeodata.distanceM(27.7172, lon1: 85.3240, lat2: 28.2096, lon2: 83.9856)
-    print("Kathmandu to Pokhara: \(fixed(meters / 1000, 1)) km")
+    let heading = try TeiGeodata.bearingDeg(27.7172, lon1: 85.3240, lat2: 28.2096, lon2: 83.9856)
+    print("Kathmandu to Pokhara: \(fixed(meters / 1000, 1)) km, heading \(fixed(heading, 0))°")
+    let apart = try Reader(engine.distance("tgd:np/2cn", to: "tgd:np/1xhb")).records()[0]
+    print("place to place: \(fixed(apart.double("meters")! / 1000, 1)) km at \(fixed(apart.double("bearing"), 0))°")
     // #endregion distance
+
+    print("=== boundary")
+    // #region boundary
+    let shape = try Reader(engine.boundary("tgd:np/2gm", lod: 0)).records()[0]
+    let geojson = shape["geojson"]!.description // a GeoJSON Feature, for any map library
+    let feature = try JSONSerialization.jsonObject(with: Data(geojson.utf8)) as! [String: Any]
+    let type = (feature["geometry"] as! [String: Any])["type"] as! String
+    print("\(type) of \(shape["vertices"]!) vertices at level \(shape["lod"]!)")
+    print("tolerance \(fixed(shape.double("tolerance_m"), 0)) m, \(geojson.utf8.count) bytes of GeoJSON")
+    // #endregion boundary
 
     print("=== errors")
     // #region errors

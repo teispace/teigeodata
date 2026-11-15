@@ -253,6 +253,9 @@ static void library() {
     const double args[] = {TGP_DISTANCE_M_ARGS_ITEMS}, off[] = {TGP_DISTANCE_M_OUT_OF_RANGE_ITEMS};
     CHECK(gap(tg::distance_m(args[0], args[1], args[2], args[3]), TGP_DISTANCE_M_METRES) <= 1e-6);
     CHECK(code_of([&] { tg::distance_m(off[0], off[1], off[2], off[3]); }) == tg::ErrorCode::InvalidArgument);
+    const double bargs[] = {TGP_BEARING_DEG_ARGS_ITEMS}, boff[] = {TGP_BEARING_DEG_OUT_OF_RANGE_ITEMS};
+    CHECK(gap(tg::bearing_deg(bargs[0], bargs[1], bargs[2], bargs[3]), TGP_BEARING_DEG_DEGREES) <= 1e-9);
+    CHECK(code_of([&] { tg::bearing_deg(boff[0], boff[1], boff[2], boff[3]); }) == tg::ErrorCode::InvalidArgument);
 
     CHECK(static_cast<int>(tg::ErrorCode::InvalidArgument) == TGP_ERROR_CODES_INVALIDARGUMENT);
     CHECK(static_cast<int>(tg::ErrorCode::Cancelled) == TGP_ERROR_CODES_CANCELLED);
@@ -325,6 +328,24 @@ static void engine_queries() {
     CHECK(strs(height, "source") == Strings{TGP_ENGINE_ELEVATION_AT_SOURCE});
     CHECK(num_at(height, "meters", 0) == TGP_ENGINE_ELEVATION_AT_METERS);
     CHECK(engine.remove(1) && !engine.remove(1));
+
+    tg::Blob apart = engine.distance(TGP_ENGINE_DISTANCE_FROM, TGP_ENGINE_DISTANCE_TO);
+    CHECK(rows(apart) == 1 && gap(num_at(apart, "meters", 0).value_or(0), TGP_ENGINE_DISTANCE_METERS) <= 1e-6);
+    CHECK(gap(num_at(apart, "bearing", 0).value_or(0), TGP_ENGINE_DISTANCE_BEARING) <= 1e-6);
+    CHECK(rows(engine.distance(TGP_ENGINE_DISTANCE_FROM, TGP_ENGINE_BOUNDARY_UNKNOWN_ID)) == 0);
+    {
+        tg::Engine outlined;
+        outlined.open_file(FIXTURE(TGP_ENGINE_BOUNDARY_FIXTURE));
+        tg::Blob shape = outlined.boundary(TGP_ENGINE_BOUNDARY_ID, TGP_ENGINE_BOUNDARY_LOD);
+        CHECK(columns(shape) == Strings{TGP_ENGINE_BOUNDARY_COLUMNS_ITEMS});
+        CHECK(strs(shape, "id") == Strings{TGP_ENGINE_BOUNDARY_ID});
+        CHECK(strs(shape, "geojson") == Strings{TGP_ENGINE_BOUNDARY_GEOJSON});
+        CHECK(num_at(shape, "lod", 0) == TGP_ENGINE_BOUNDARY_LOD);
+        CHECK(num_at(shape, "tolerance_m", 0) == TGP_ENGINE_BOUNDARY_TOLERANCE_M);
+        CHECK(num_at(shape, "vertices", 0) == TGP_ENGINE_BOUNDARY_VERTICES);
+        CHECK(rows(outlined.boundary(TGP_ENGINE_BOUNDARY_UNKNOWN_ID, 0)) == 0);
+        CHECK(code_of([&] { outlined.boundary(TGP_ENGINE_BOUNDARY_ID, TGP_ENGINE_BOUNDARY_BAD_LOD); }) == tg::ErrorCode::InvalidArgument);
+    }
 
     tg::Engine taken = std::move(engine);
     CHECK(taken.native() != nullptr && engine.native() == nullptr);

@@ -671,14 +671,9 @@ pub fn outline(
     serde_json::to_writer(&mut *out, &place.id.to_string())?;
     out.extend_from_slice(b",\"geometry\":");
     if outlined {
-        geometry(shape, out);
+        shape.write_geojson(out);
     } else {
-        write!(
-            out,
-            "{{\"type\":\"Point\",\"coordinates\":[{:.7},{:.7}]}}",
-            place.point.lon_degrees(),
-            place.point.lat_degrees()
-        )?;
+        teigeodata_engine::write_point_geojson(place.point, out);
     }
     out.extend_from_slice(b",\"properties\":");
     let mut props = serde_json::to_value(&r)?;
@@ -701,102 +696,6 @@ pub fn outline(
     )?;
     out.extend_from_slice(b"}\n");
     Ok(())
-}
-
-/// The `Polygon` or `MultiPolygon` of `shape`.
-fn geometry(shape: &teigeodata_engine::Outline, out: &mut Vec<u8>) {
-    let parts = shape
-        .rings
-        .iter()
-        .map(|r| r.part)
-        .max()
-        .map_or(0, |p| p + 1);
-    let multi = parts > 1;
-    out.extend_from_slice(if multi {
-        b"{\"type\":\"MultiPolygon\",\"coordinates\":["
-    } else {
-        b"{\"type\":\"Polygon\",\"coordinates\":["
-    });
-    let mut part = None;
-    for (i, ring) in shape.rings.iter().enumerate() {
-        let pts = shape.points.get(ring.points.clone()).unwrap_or_default();
-        if multi && part != Some(ring.part) {
-            if part.is_some() {
-                out.extend_from_slice(b"],");
-            }
-            out.push(b'[');
-            part = Some(ring.part);
-        } else if i > 0 {
-            out.push(b',');
-        }
-        // Twice the signed area (shoelace, degrees): positive for counterclockwise.
-        let area: f64 = pts
-            .windows(2)
-            .map(|w| match w {
-                [a, b] => a.lon_degrees() * b.lat_degrees() - b.lon_degrees() * a.lat_degrees(),
-                _ => 0.0,
-            })
-            .sum();
-        let reverse = (area > 0.0) == ring.hole;
-        out.push(b'[');
-        let mut write_point = |j: usize, p: &teigeodata_core::Point<teigeodata_core::E7>| {
-            if j > 0 {
-                out.push(b',');
-            }
-            out.push(b'[');
-            e7(p.lon(), out);
-            out.push(b',');
-            e7(p.lat(), out);
-            out.push(b']');
-        };
-        if reverse {
-            for (j, p) in pts.iter().rev().enumerate() {
-                write_point(j, p);
-            }
-        } else {
-            for (j, p) in pts.iter().enumerate() {
-                write_point(j, p);
-            }
-        }
-        out.push(b']');
-    }
-    if multi && part.is_some() {
-        out.push(b']');
-    }
-    out.extend_from_slice(b"]}");
-}
-
-/// Writes `units` of the 1e-7° grid as degrees with 7 decimals, exactly: what `{:.7}` writes
-/// for `units / 1e7`, from the integer alone (an outline writes tens of thousands of them).
-pub(crate) fn e7(units: i32, out: &mut Vec<u8>) {
-    if units < 0 {
-        out.push(b'-');
-    }
-    let abs = units.unsigned_abs();
-    let (whole, fraction) = (abs / 10_000_000, abs % 10_000_000);
-    let mut digits = [0_u8; 10];
-    let mut start = digits.len();
-    let mut rest = whole;
-    loop {
-        start -= 1;
-        if let Some(d) = digits.get_mut(start) {
-            // `rest % 10` is a digit.
-            *d = b'0' + (rest % 10) as u8;
-        }
-        rest /= 10;
-        if rest == 0 {
-            break;
-        }
-    }
-    out.extend_from_slice(digits.get(start..).unwrap_or_default());
-    out.push(b'.');
-    let mut decimals = [b'0'; 7];
-    let mut left = fraction;
-    for d in decimals.iter_mut().rev() {
-        *d = b'0' + (left % 10) as u8;
-        left /= 10;
-    }
-    out.extend_from_slice(&decimals);
 }
 
 /// Writes a distance (from [`crate::query::distance`]) as its native object: `meters`,
@@ -867,47 +766,4 @@ pub fn postal(
         }
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use teigeodata_core::{E7, Point};
-
-    /// `e7` writes what `{:.7}` of the degrees wrote, for every kind of value.
-    #[test]
-    fn e7_is_the_degrees_to_seven_decimals() {
-        let mut values = vec![
-            0,
-            1,
-            -1,
-            9_999_999,
-            -9_999_999,
-            10_000_000,
-            -10_000_000,
-            1_800_000_000,
-            -1_800_000_000,
-            900_000_000,
-            -900_000_000,
-            123_456_789,
-            -5,
-        ];
-        // A fixed LCG over the whole longitude range.
-        let mut x = 0x2545_f491_u64;
-        for _ in 0..200_000 {
-            x = x.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
-            let v = i64::try_from(x >> 33).unwrap_or(0) % 3_600_000_001 - 1_800_000_000;
-            values.push(i32::try_from(v).unwrap_or(0));
-        }
-        let mut out = Vec::new();
-        for v in values {
-            let p = Point::<E7>::from_units(0, v).unwrap_or_else(|| panic!("{v} on the grid"));
-            out.clear();
-            super::e7(v, &mut out);
-            assert_eq!(
-                String::from_utf8_lossy(&out),
-                format!("{:.7}", p.lon_degrees()),
-                "{v}"
-            );
-        }
-    }
 }

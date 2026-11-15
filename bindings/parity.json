@@ -32,6 +32,12 @@
     "metres": 142393.9132189373,
     "out_of_range": [91.0, 0.0, 0.0, 0.0]
   },
+  "bearing_deg": {
+    "about": "Kathmandu to Pokhara, degrees clockwise from north; compare within 1e-9",
+    "args": [27.7172, 85.324, 28.2096, 83.9856],
+    "degrees": 292.9261763521785,
+    "out_of_range": [0.0, 181.0, 0.0, 0.0]
+  },
   "error_codes": {
     "InvalidArgument": 1,
     "Cancelled": 2,
@@ -103,6 +109,8 @@
     "postal_at": {"lat": 27.5, "lon": 85.5, "postal": ["10602", "1060201"], "code_kind": ["area", "part"]},
     "postal_codes_of": {"id": "tgd:np/avwsr1", "postal": ["10602", "1060201"]},
     "elevation_at": {"fixture": "fixtures/dem.tgd", "lat": 27.84, "lon": 76.01, "meters": 1008.0, "source": "copernicus-glo30"},
+    "boundary": {"about": "fixtures/outline.tgd: the synthetic country with a hole (teigeodata-api's tests keep it current); at lod 1 its outer ring runs counterclockwise and its hole clockwise; an unknown ID answers no row; lod 7 is invalid", "fixture": "fixtures/outline.tgd", "id": "tgd:np/1rxre8", "lod": 1, "columns": ["id", "lod", "tolerance_m", "vertices", "geojson"], "tolerance_m": 1.0, "vertices": 10, "geojson": "{\"type\":\"Feature\",\"id\":\"tgd:np/1rxre8\",\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[80.0000000,26.0000000],[88.0000000,26.0000000],[88.0000000,30.0000000],[80.0000000,30.0000000],[80.0000000,26.0000000]],[[81.0000000,27.7500000],[81.0000000,28.2500000],[81.5000000,28.2500000],[81.5000000,27.7500000],[81.0000000,27.7500000]]]},\"properties\":{\"lod\":1,\"tolerance_m\":1,\"vertices\":10}}", "unknown_id": "tgd:np/1", "bad_lod": 7},
+    "distance": {"about": "between two places of synth.tgd; compare within 1e-6", "from": "tgd:np/18n8a6", "to": "tgd:np/sx2ze9", "meters": 157883.1040944845, "bearing": 106.74628026303373},
     "bad_id": "not an id",
     "bad_iso": "not a code"
   },

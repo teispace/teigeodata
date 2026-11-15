@@ -5,6 +5,19 @@
 
 #include <stdbool.h>
 
+#define TGP_BEARING_DEG_ARGS_COUNT 4
+#define TGP_BEARING_DEG_ARGS_ITEMS 27.7172, 85.324, 28.2096, 83.9856
+#define TGP_BEARING_DEG_ARGS_0 27.7172
+#define TGP_BEARING_DEG_ARGS_1 85.324
+#define TGP_BEARING_DEG_ARGS_2 28.2096
+#define TGP_BEARING_DEG_ARGS_3 83.9856
+#define TGP_BEARING_DEG_DEGREES 292.9261763521785
+#define TGP_BEARING_DEG_OUT_OF_RANGE_COUNT 4
+#define TGP_BEARING_DEG_OUT_OF_RANGE_ITEMS 0.0, 181.0, 0.0, 0.0
+#define TGP_BEARING_DEG_OUT_OF_RANGE_0 0.0
+#define TGP_BEARING_DEG_OUT_OF_RANGE_1 181.0
+#define TGP_BEARING_DEG_OUT_OF_RANGE_2 0.0
+#define TGP_BEARING_DEG_OUT_OF_RANGE_3 0.0
 #define TGP_COMPONENTS "point, elevation, admin, names, search, timezone, timezone-index, boundaries, admin-index, postal, dem, extra, tz-rules, substring, dem-coarse"
 #define TGP_DISTANCE_M_ARGS_COUNT 4
 #define TGP_DISTANCE_M_ARGS_ITEMS 27.7172, 85.324, 28.2096, 83.9856
@@ -32,6 +45,21 @@
 #define TGP_ENGINE_ANCESTORS_IDS_1 "tgd:np/18n8a6"
 #define TGP_ENGINE_BAD_ID "not an id"
 #define TGP_ENGINE_BAD_ISO "not a code"
+#define TGP_ENGINE_BOUNDARY_BAD_LOD 7
+#define TGP_ENGINE_BOUNDARY_COLUMNS_COUNT 5
+#define TGP_ENGINE_BOUNDARY_COLUMNS_ITEMS "id", "lod", "tolerance_m", "vertices", "geojson"
+#define TGP_ENGINE_BOUNDARY_COLUMNS_0 "id"
+#define TGP_ENGINE_BOUNDARY_COLUMNS_1 "lod"
+#define TGP_ENGINE_BOUNDARY_COLUMNS_2 "tolerance_m"
+#define TGP_ENGINE_BOUNDARY_COLUMNS_3 "vertices"
+#define TGP_ENGINE_BOUNDARY_COLUMNS_4 "geojson"
+#define TGP_ENGINE_BOUNDARY_FIXTURE "fixtures/outline.tgd"
+#define TGP_ENGINE_BOUNDARY_GEOJSON "{\"type\":\"Feature\",\"id\":\"tgd:np/1rxre8\",\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[80.0000000,26.0000000],[88.0000000,26.0000000],[88.0000000,30.0000000],[80.0000000,30.0000000],[80.0000000,26.0000000]],[[81.0000000,27.7500000],[81.0000000,28.2500000],[81.5000000,28.2500000],[81.5000000,27.7500000],[81.0000000,27.7500000]]]},\"properties\":{\"lod\":1,\"tolerance_m\":1,\"vertices\":10}}"
+#define TGP_ENGINE_BOUNDARY_ID "tgd:np/1rxre8"
+#define TGP_ENGINE_BOUNDARY_LOD 1
+#define TGP_ENGINE_BOUNDARY_TOLERANCE_M 1.0
+#define TGP_ENGINE_BOUNDARY_UNKNOWN_ID "tgd:np/1"
+#define TGP_ENGINE_BOUNDARY_VERTICES 10
 #define TGP_ENGINE_BY_ISO_CODE "np"
 #define TGP_ENGINE_BY_ISO_ID "tgd:np/18n8a6"
 #define TGP_ENGINE_CHILDREN_ID "tgd:np/18n8a6"
@@ -57,6 +85,10 @@
 #define TGP_ENGINE_COLUMNS_7 "parent"
 #define TGP_ENGINE_COLUMNS_8 "tz"
 #define TGP_ENGINE_COLUMNS_9 "iso"
+#define TGP_ENGINE_DISTANCE_BEARING 106.74628026303373
+#define TGP_ENGINE_DISTANCE_FROM "tgd:np/18n8a6"
+#define TGP_ENGINE_DISTANCE_METERS 157883.1040944845
+#define TGP_ENGINE_DISTANCE_TO "tgd:np/sx2ze9"
 #define TGP_ENGINE_ELEVATION_AT_FIXTURE "fixtures/dem.tgd"
 #define TGP_ENGINE_ELEVATION_AT_LAT 27.84
 #define TGP_ENGINE_ELEVATION_AT_LON 76.01

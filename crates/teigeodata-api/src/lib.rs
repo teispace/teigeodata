@@ -162,6 +162,9 @@ pub const SAMPLE_ROWS_MAX: u32 = 1_000_000;
 /// Most places one query returns.
 pub const LIMIT_MAX: u32 = 10_000;
 
+/// The coarsest level of detail `Engine::boundary` reads; 0 is full resolution.
+pub const COARSEST_LOD: u32 = 6;
+
 /// How [`Engine::search_with`] ranks (D-226). Every field's zero value is its default
 /// (D-276).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -1019,6 +1022,102 @@ impl Engine {
         let place = built!("admin", Admin, Option<Place>, engine.by_iso(code))?;
         Places::of(&engine, place)?.blob()
     }
+
+    /// The outline of the place with this ID at level of detail `lod`, as one row: `id`,
+    /// `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m`
+    /// (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an
+    /// RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings
+    /// counterclockwise, holes clockwise), or the place's `Point` when it has no outline.
+    /// Level 0 is full resolution and 1 to `COARSEST_LOD` coarser; neighbours share their
+    /// borders at every level. A whole country at level 0 can be megabytes: ask a coarser
+    /// level to draw it small. No row for an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] if `id` is not a place ID or `lod` exceeds
+    /// `COARSEST_LOD`; [`ErrorCode::MissingComponent`] without `boundaries`;
+    /// [`ErrorCode::Corrupt`] if a section read is corrupt.
+    pub fn boundary(&self, id: &str, lod: u32) -> Result<Blob> {
+        let id = place_id(id)?;
+        let lod = u8::try_from(lod)
+            .ok()
+            .filter(|l| u32::from(*l) <= COARSEST_LOD)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidArgument,
+                    format!("lod is {lod}; it must be 0 to {COARSEST_LOD}"),
+                )
+            })?;
+        #[cfg(not(feature = "boundaries"))]
+        {
+            let _ = (id, lod);
+            Err(not_built(Component::Boundaries).into())
+        }
+        #[cfg(feature = "boundaries")]
+        {
+            let engine = self.shared.load();
+            let place = engine.get(id)?;
+            let (mut ids, mut lods, mut tolerance, mut vertices, mut text) =
+                (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+            if let Some(place) = place {
+                let mut shape = teigeodata_engine::Outline::default();
+                let outlined = engine.boundary(&place, lod, &mut shape)?.is_some();
+                let mut geometry = Vec::with_capacity(shape.points.len() * 24 + 64);
+                if outlined {
+                    shape.write_geojson(&mut geometry);
+                } else {
+                    teigeodata_engine::write_point_geojson(place.point, &mut geometry);
+                }
+                let read = if shape.tolerance_cm == 0 { 0 } else { lod };
+                let tolerance_m = f64::from(shape.tolerance_cm) / 100.0;
+                let count = if outlined { shape.points.len() } else { 1 };
+                let id = place.id.to_string();
+                let feature = format!(
+                    "{{\"type\":\"Feature\",\"id\":\"{id}\",\"geometry\":{},\"properties\":{{\"lod\":{read},\"tolerance_m\":{tolerance_m},\"vertices\":{count}}}}}",
+                    String::from_utf8_lossy(&geometry)
+                );
+                ids.push(id);
+                lods.push(u32::from(read));
+                tolerance.push(tolerance_m);
+                vertices.push(u64::try_from(count).unwrap_or(u64::MAX));
+                text.push(feature);
+            }
+            let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+            let text: Vec<&str> = text.iter().map(String::as_str).collect();
+            table(&[
+                ("id", Column::Utf8(&ids)),
+                ("lod", Column::U32(&lods)),
+                ("tolerance_m", Column::F64(&tolerance)),
+                ("vertices", Column::U64(&vertices)),
+                ("geojson", Column::Utf8(&text)),
+            ])
+        }
+    }
+
+    /// The great-circle distance between the places with these IDs, as one row: `meters` on
+    /// the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees
+    /// clockwise from north. No row when either ID is unknown. From a point, use `distance_m`
+    /// and `bearing_deg` with the place's `lat` and `lon`.
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorCode::InvalidArgument`] if an ID is not a place ID; [`ErrorCode::Corrupt`] if a
+    /// section read is corrupt.
+    pub fn distance(&self, from: &str, to: &str) -> Result<Blob> {
+        let (from, to) = (place_id(from)?, place_id(to)?);
+        let engine = self.shared.load();
+        let (mut meters, mut bearing) = (Vec::new(), Vec::new());
+        if let (Some(a), Some(b)) = (engine.get(from)?, engine.get(to)?) {
+            let (lat1, lon1) = (a.point.lat_degrees(), a.point.lon_degrees());
+            let (lat2, lon2) = (b.point.lat_degrees(), b.point.lon_degrees());
+            meters.push(teigeodata_engine::meters_between(lat1, lon1, lat2, lon2));
+            bearing.push(teigeodata_engine::bearing_deg(lat1, lon1, lat2, lon2));
+        }
+        table(&[
+            ("meters", Column::F64(&meters)),
+            ("bearing", Column::F64(&bearing)),
+        ])
+    }
 }
 
 /// A blob of `columns`.
@@ -1632,17 +1731,9 @@ pub fn progress(steps: u32, on_step: &mut dyn FnMut(u32) -> bool) -> Result<u32>
     Ok(steps)
 }
 
-/// Mean Earth radius of WGS84, metres (IUGG R1 = (2a + b) / 3).
-const EARTH_RADIUS_M: f64 = 6_371_008.8;
-
-/// Great-circle distance in metres between two points in degrees, by the haversine formula on
-/// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
-///
-/// # Errors
-///
-/// [`ErrorCode::InvalidArgument`] if a latitude is outside -90..=90, a longitude outside
-/// -180..=180, or any value is not finite.
-pub fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> Result<f64> {
+/// Checks two points in degrees: each latitude within ±90, each longitude within ±180, all
+/// finite.
+fn two_points(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> Result<()> {
     for (name, v, max) in [
         ("lat1", lat1, 90.0),
         ("lon1", lon1, 180.0),
@@ -1656,11 +1747,33 @@ pub fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> Result<f64> {
             ));
         }
     }
-    let (p1, p2) = (lat1.to_radians(), lat2.to_radians());
-    let dp = p2 - p1;
-    let dl = (lon2 - lon1).to_radians();
-    let h = (dp / 2.0).sin().powi(2) + p1.cos() * p2.cos() * (dl / 2.0).sin().powi(2);
-    Ok(2.0 * EARTH_RADIUS_M * h.sqrt().min(1.0).asin())
+    Ok(())
+}
+
+/// Great-circle distance in metres between two points in degrees, by the haversine formula on
+/// the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query
+/// measures it, with the same digits on every platform.
+///
+/// # Errors
+///
+/// [`ErrorCode::InvalidArgument`] if a latitude is outside -90..=90, a longitude outside
+/// -180..=180, or any value is not finite.
+pub fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> Result<f64> {
+    two_points(lat1, lon1, lat2, lon2)?;
+    Ok(teigeodata_engine::meters_between(lat1, lon1, lat2, lon2))
+}
+
+/// The initial great-circle bearing from the first point to the second, in degrees clockwise
+/// from true north in `[0, 360)`; 0 for one point twice or from a pole. The same digits on
+/// every platform.
+///
+/// # Errors
+///
+/// [`ErrorCode::InvalidArgument`] if a latitude is outside -90..=90, a longitude outside
+/// -180..=180, or any value is not finite.
+pub fn bearing_deg(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> Result<f64> {
+    two_points(lat1, lon1, lat2, lon2)?;
+    Ok(teigeodata_engine::bearing_deg(lat1, lon1, lat2, lon2))
 }
 
 #[cfg(test)]
@@ -1675,11 +1788,20 @@ mod tests {
         assert!((d - 142_394.0).abs() < 1.0, "{d}");
         assert_eq!(super::distance_m(1.0, 2.0, 1.0, 2.0), Ok(0.0));
         let half = super::distance_m(0.0, 0.0, 0.0, 180.0).unwrap();
-        assert!((half - core::f64::consts::PI * super::EARTH_RADIUS_M).abs() < 1e-6);
+        assert!((half - core::f64::consts::PI * 6_371_008.8).abs() < 1e-6);
         for bad in [f64::NAN, 91.0, -90.5, f64::INFINITY] {
             let e = super::distance_m(bad, 0.0, 0.0, 0.0).unwrap_err();
             assert_eq!(e.code, ErrorCode::InvalidArgument);
         }
+    }
+
+    #[test]
+    fn bearing_is_clockwise_from_north_and_checks_ranges() {
+        let east = super::bearing_deg(0.0, 0.0, 0.0, 1.0).unwrap();
+        assert!((east - 90.0).abs() < 1e-9, "{east}");
+        assert_eq!(super::bearing_deg(1.0, 2.0, 1.0, 2.0), Ok(0.0));
+        let e = super::bearing_deg(0.0, 181.0, 0.0, 0.0).unwrap_err();
+        assert_eq!(e.code, ErrorCode::InvalidArgument);
     }
 
     #[test]
@@ -1807,6 +1929,23 @@ mod tests {
             .collect();
         let got = super::distance_m(args[0], args[1], args[2], args[3]).unwrap();
         assert!((got - d["metres"].as_f64().unwrap()).abs() < 1e-6, "{got}");
+        let d = &parity["bearing_deg"];
+        let args: Vec<f64> = d["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect();
+        let got = super::bearing_deg(args[0], args[1], args[2], args[3]).unwrap();
+        assert!((got - d["degrees"].as_f64().unwrap()).abs() < 1e-9, "{got}");
+        let bad: Vec<f64> = d["out_of_range"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect();
+        let e = super::bearing_deg(bad[0], bad[1], bad[2], bad[3]).unwrap_err();
+        assert_eq!(e.code, ErrorCode::InvalidArgument);
         let codes = &parity["error_codes"];
         for (code, name) in [
             (ErrorCode::InvalidArgument, "InvalidArgument"),

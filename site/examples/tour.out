@@ -44,6 +44,10 @@ tzdb 2026f
 === elevation
 1304.2 m above EGM2008 (nasadem, 464 m grid)
 === distance
-Kathmandu to Pokhara: 142.4 km
+Kathmandu to Pokhara: 142.4 km, heading 293°
+place to place: 146.9 km at 296°
+=== boundary
+Polygon of 176 vertices at level 0
+tolerance 0 m, 4362 bytes of GeoJSON
 === errors
 invalid argument: (91, 0) is not a point: the latitude is outside -90 to 90 degrees

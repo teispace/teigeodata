@@ -48,6 +48,8 @@ extern "C" {
 #define TG_SAMPLE_ROWS_MAX 1000000u
 /* Most places one query returns. */
 #define TG_LIMIT_MAX 10000u
+/* The coarsest level of detail `Engine::boundary` reads; 0 is full resolution. */
+#define TG_COARSEST_LOD 6u
 
 /* An owned byte buffer: a UTF-8 string (no NUL) or a blob. A zeroed value is empty. */
 typedef struct tg_bytes {
@@ -202,7 +204,8 @@ int32_t tg_progress(uint32_t steps, tg_callback_u32 on_step, void *on_step_ctx, 
 
 /*
  * Great-circle distance in metres between two points in degrees, by the haversine formula on
- * the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+ * the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query
+ * measures it, with the same digits on every platform.
  *
  * # Errors
  *
@@ -210,6 +213,18 @@ int32_t tg_progress(uint32_t steps, tg_callback_u32 on_step, void *on_step_ctx, 
  * -180..=180, or any value is not finite.
  */
 int32_t tg_distance_m(double lat1, double lon1, double lat2, double lon2, double *out);
+
+/*
+ * The initial great-circle bearing from the first point to the second, in degrees clockwise
+ * from true north in `[0, 360)`; 0 for one point twice or from a pole. The same digits on
+ * every platform.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+ * -180..=180, or any value is not finite.
+ */
+int32_t tg_bearing_deg(double lat1, double lon1, double lat2, double lon2, double *out);
 
 /* Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine answers from any number of threads at once, and adding a pack publishes a new snapshot while queries go on.  Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search and `meters` and `bearing` for a reverse lookup. */
 
@@ -540,6 +555,37 @@ int32_t tg_engine_tz_version(const tg_engine *handle, tg_bytes *out);
  * `ErrorCode::Corrupt` if a section read is corrupt.
  */
 int32_t tg_engine_by_iso(const tg_engine *handle, const uint8_t *code, size_t code_len, tg_bytes *out);
+
+/*
+ * The outline of the place with this ID at level of detail `lod`, as one row: `id`,
+ * `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m`
+ * (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an
+ * RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings
+ * counterclockwise, holes clockwise), or the place's `Point` when it has no outline.
+ * Level 0 is full resolution and 1 to `COARSEST_LOD` coarser; neighbours share their
+ * borders at every level. A whole country at level 0 can be megabytes: ask a coarser
+ * level to draw it small. No row for an unknown ID.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` if `id` is not a place ID or `lod` exceeds
+ * `COARSEST_LOD`; `ErrorCode::MissingComponent` without `boundaries`;
+ * `ErrorCode::Corrupt` if a section read is corrupt.
+ */
+int32_t tg_engine_boundary(const tg_engine *handle, const uint8_t *id, size_t id_len, uint32_t lod, tg_bytes *out);
+
+/*
+ * The great-circle distance between the places with these IDs, as one row: `meters` on
+ * the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees
+ * clockwise from north. No row when either ID is unknown. From a point, use `distance_m`
+ * and `bearing_deg` with the place's `lat` and `lon`.
+ *
+ * # Errors
+ *
+ * `ErrorCode::InvalidArgument` if an ID is not a place ID; `ErrorCode::Corrupt` if a
+ * section read is corrupt.
+ */
+int32_t tg_engine_distance(const tg_engine *handle, const uint8_t *from, size_t from_len, const uint8_t *to, size_t to_len, tg_bytes *out);
 
 #if TEIGEODATA_FEATURE_STORE
 

@@ -13,6 +13,9 @@ export const SAMPLE_ROWS_MAX = 1000000;
 /** Most places one query returns. */
 export const LIMIT_MAX = 10000;
 
+/** The coarsest level of detail `Engine::boundary` reads; 0 is full resolution. */
+export const COARSEST_LOD = 6;
+
 let ready;
 
 /**

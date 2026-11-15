@@ -49,6 +49,11 @@ var parity struct {
 		Metres     float64
 		OutOfRange [4]float64 `json:"out_of_range"`
 	} `json:"distance_m"`
+	BearingDeg struct {
+		Args       [4]float64
+		Degrees    float64
+		OutOfRange [4]float64 `json:"out_of_range"`
+	} `json:"bearing_deg"`
 	ErrorCodes map[string]int32 `json:"error_codes"`
 	Store      struct {
 		Root, Mirror, Pack string
@@ -137,6 +142,20 @@ var parity struct {
 			Meters   float64
 			Source   string
 		} `json:"elevation_at"`
+		Boundary struct {
+			Fixture, ID string
+			Lod         uint32
+			Columns     []string
+			ToleranceM  float64 `json:"tolerance_m"`
+			Vertices    float64
+			GeoJSON     string `json:"geojson"`
+			UnknownID   string `json:"unknown_id"`
+			BadLod      uint32 `json:"bad_lod"`
+		}
+		Distance struct {
+			From, To        string
+			Meters, Bearing float64
+		}
 		BadID  string `json:"bad_id"`
 		BadIso string `json:"bad_iso"`
 	}
@@ -354,6 +373,49 @@ func TestDistance(t *testing.T) {
 	o := d.OutOfRange
 	_, err := tg.DistanceM(o[0], o[1], o[2], o[3])
 	wantCode(t, err, tg.CodeInvalidArgument)
+}
+
+func TestBearing(t *testing.T) {
+	d := parity.BearingDeg
+	got := must(tg.BearingDeg(d.Args[0], d.Args[1], d.Args[2], d.Args[3]))
+	if math.Abs(got-d.Degrees) > 1e-9 {
+		t.Fatal(got)
+	}
+	o := d.OutOfRange
+	_, err := tg.BearingDeg(o[0], o[1], o[2], o[3])
+	wantCode(t, err, tg.CodeInvalidArgument)
+}
+
+func TestBoundaryAndDistance(t *testing.T) {
+	p := parity.Engine
+	c := p.Boundary
+	outlined := must(tg.NewEngine())
+	defer outlined.Close()
+	must(outlined.OpenFile(fixture(c.Fixture)))
+	got := reader(outlined.Boundary(c.ID, c.Lod))
+	equal(t, "boundary columns", got.Columns(), c.Columns)
+	equal(t, "boundary id", must(got.Strings("id")), []string{c.ID})
+	equal(t, "boundary geojson", must(got.Strings("geojson")), []string{c.GeoJSON})
+	equal(t, "boundary lod", numbers(t, got, "lod"), []float64{float64(c.Lod)})
+	equal(t, "boundary tolerance", numbers(t, got, "tolerance_m"), []float64{c.ToleranceM})
+	equal(t, "boundary vertices", numbers(t, got, "vertices"), []float64{c.Vertices})
+	if n := reader(outlined.Boundary(c.UnknownID, 0)).Rows(); n != 0 {
+		t.Fatal("boundary of an unknown ID", n)
+	}
+	_, err := outlined.Boundary(c.ID, c.BadLod)
+	wantCode(t, err, tg.CodeInvalidArgument)
+
+	d := p.Distance
+	engine := must(tg.NewEngine())
+	defer engine.Close()
+	must(engine.OpenFile(fixture(p.Fixture)))
+	m := reader(engine.Distance(d.From, d.To))
+	if math.Abs(numbers(t, m, "meters")[0]-d.Meters) > 1e-6 || math.Abs(numbers(t, m, "bearing")[0]-d.Bearing) > 1e-6 {
+		t.Fatal("distance", numbers(t, m, "meters"), numbers(t, m, "bearing"))
+	}
+	if n := reader(engine.Distance(d.From, c.UnknownID)).Rows(); n != 0 {
+		t.Fatal("distance to an unknown ID", n)
+	}
 }
 
 func TestProgress(t *testing.T) {

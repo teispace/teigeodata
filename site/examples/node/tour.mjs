@@ -2,7 +2,7 @@
 // Usage: node tour.mjs world-np-lite.tgd
 
 // #region import
-import { Engine, Reader, distanceM } from "@teispace/teigeodata";
+import { Engine, Reader, bearingDeg, distanceM } from "@teispace/teigeodata";
 // #endregion import
 
 const pack = process.argv[2];
@@ -107,8 +107,19 @@ console.log(
 console.log("=== distance");
 // #region distance
 const km = distanceM(27.7172, 85.324, 28.2096, 83.9856) / 1000;
-console.log(`Kathmandu to Pokhara: ${fixed(km, 1)} km`);
+const heading = bearingDeg(27.7172, 85.324, 28.2096, 83.9856);
+console.log(`Kathmandu to Pokhara: ${fixed(km, 1)} km, heading ${fixed(heading, 0)}°`);
+const [apart] = new Reader(engine.distance("tgd:np/2cn", "tgd:np/1xhb")).records();
+console.log(`place to place: ${fixed(apart.meters / 1000, 1)} km at ${fixed(apart.bearing, 0)}°`);
 // #endregion distance
+
+console.log("=== boundary");
+// #region boundary
+const [shape] = new Reader(engine.boundary("tgd:np/2gm", 0)).records();
+const feature = JSON.parse(shape.geojson); // a GeoJSON Feature: map.addSource("x", { type: "geojson", data: feature })
+console.log(`${feature.geometry.type} of ${shape.vertices} vertices at level ${shape.lod}`);
+console.log(`tolerance ${fixed(shape.tolerance_m, 0)} m, ${shape.geojson.length} bytes of GeoJSON`);
+// #endregion boundary
 
 console.log("=== errors");
 // #region errors

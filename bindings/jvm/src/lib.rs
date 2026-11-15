@@ -270,7 +270,8 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_progress<'caller>
 }
 
 /// Great-circle distance in metres between two points in degrees, by the haversine formula on
-/// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+/// the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query
+/// measures it, with the same digits on every platform.
 ///
 /// # Errors
 ///
@@ -289,6 +290,36 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_distanceM<'caller
         .with_env(|env| -> jni::errors::Result<jni::sys::jdouble> {
             let result = (|| -> Result<_, teigeodata_api::Error> {
                 teigeodata_api::distance_m(lat1, lon1, lat2, lon2)
+            })();
+            match result {
+                Ok(value) => Ok(value),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The initial great-circle bearing from the first point to the second, in degrees clockwise
+/// from true north in `[0, 360)`; 0 for one point twice or from a pole. The same digits on
+/// every platform.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+/// -180..=180, or any value is not finite.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_bearingDeg<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    lat1: jni::sys::jdouble,
+    lon1: jni::sys::jdouble,
+    lat2: jni::sys::jdouble,
+    lon2: jni::sys::jdouble,
+) -> jni::sys::jdouble {
+    unowned
+        .with_env(|env| -> jni::errors::Result<jni::sys::jdouble> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                teigeodata_api::bearing_deg(lat1, lon1, lat2, lon2)
             })();
             match result {
                 Ok(value) => Ok(value),
@@ -1524,6 +1555,94 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
                     message: format!("code: {e}"),
                 })?;
                 this.by_iso(&code)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The outline of the place with this ID at level of detail `lod`, as one row: `id`,
+/// `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m`
+/// (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an
+/// RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings
+/// counterclockwise, holes clockwise), or the place's `Point` when it has no outline.
+/// Level 0 is full resolution and 1 to `COARSEST_LOD` coarser; neighbours share their
+/// borders at every level. A whole country at level 0 can be megabytes: ask a coarser
+/// level to draw it small. No row for an unknown ID.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if `id` is not a place ID or `lod` exceeds
+/// `COARSEST_LOD`; `ErrorCode::MissingComponent` without `boundaries`;
+/// `ErrorCode::Corrupt` if a section read is corrupt.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeBoundary<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    id: JString<'caller>,
+    lod: jlong,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let id = id.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("id: {e}"),
+                })?;
+                let lod: u32 = narrow("lod", lod)?;
+                this.boundary(&id, lod)
+            })();
+            match result {
+                Ok(value) => env.byte_array_from_slice(value.as_bytes()),
+                Err(e) => throw(env, &e).map(|()| Default::default()),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// The great-circle distance between the places with these IDs, as one row: `meters` on
+/// the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees
+/// clockwise from north. No row when either ID is unknown. From a point, use `distance_m`
+/// and `bearing_deg` with the place's `lat` and `lon`.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if an ID is not a place ID; `ErrorCode::Corrupt` if a
+/// section read is corrupt.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativeDistance<
+    'caller,
+>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    handle: jlong,
+    from: JString<'caller>,
+    to: JString<'caller>,
+) -> JByteArray<'caller> {
+    unowned
+        .with_env(|env| -> jni::errors::Result<JByteArray<'caller>> {
+            let result = (|| -> Result<_, teigeodata_api::Error> {
+                // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
+                // call (a read lock and a reachability fence).
+                let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
+                let from = from.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("from: {e}"),
+                })?;
+                let to = to.try_to_string(env).map_err(|e| teigeodata_api::Error {
+                    code: ErrorCode::InvalidArgument,
+                    message: format!("to: {e}"),
+                })?;
+                this.distance(&from, &to)
             })();
             match result {
                 Ok(value) => env.byte_array_from_slice(value.as_bytes()),

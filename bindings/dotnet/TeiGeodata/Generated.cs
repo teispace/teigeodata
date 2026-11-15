@@ -284,6 +284,11 @@ public static unsafe partial class Geodata
     public const uint LimitMax = 10000;
 
     /// <summary>
+    /// The coarsest level of detail `Engine::boundary` reads; 0 is full resolution.
+    /// </summary>
+    public const uint CoarsestLod = 6;
+
+    /// <summary>
     /// The library version, from its package metadata.
     /// </summary>
     public static string Version()
@@ -399,7 +404,8 @@ public static unsafe partial class Geodata
 
     /// <summary>
     /// Great-circle distance in metres between two points in degrees, by the haversine formula on
-    /// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+    /// the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query
+    /// measures it, with the same digits on every platform.
     ///
     /// # Errors
     ///
@@ -412,6 +418,26 @@ public static unsafe partial class Geodata
         double @out = default;
         int status;
         status = Native.tg_distance_m(lat1, lon1, lat2, lon2, &@out);
+        Interop.Check(status);
+        return @out;
+    }
+
+    /// <summary>
+    /// The initial great-circle bearing from the first point to the second, in degrees clockwise
+    /// from true north in `[0, 360)`; 0 for one point twice or from a pole. The same digits on
+    /// every platform.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+    /// -180..=180, or any value is not finite.
+    /// </summary>
+    public static double BearingDeg(double lat1, double lon1, double lat2, double lon2)
+    {
+        Interop.Ensure();
+        double @out = default;
+        int status;
+        status = Native.tg_bearing_deg(lat1, lon1, lat2, lon2, &@out);
         Interop.Check(status);
         return @out;
     }
@@ -1036,6 +1062,54 @@ public sealed partial class Engine : IDisposable
         TgBytes @out = default;
         int status;
         status = Native.tg_engine_by_iso(handle, codeUtf8.Pointer, codeUtf8.Length, &@out);
+        Interop.Check(status);
+        return Interop.TakeBytes(@out);
+    }
+
+    /// <summary>
+    /// The outline of the place with this ID at level of detail `lod`, as one row: `id`,
+    /// `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m`
+    /// (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an
+    /// RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings
+    /// counterclockwise, holes clockwise), or the place's `Point` when it has no outline.
+    /// Level 0 is full resolution and 1 to `COARSEST_LOD` coarser; neighbours share their
+    /// borders at every level. A whole country at level 0 can be megabytes: ask a coarser
+    /// level to draw it small. No row for an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID or `lod` exceeds
+    /// `COARSEST_LOD`; `ErrorCode::MissingComponent` without `boundaries`;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    /// </summary>
+    public unsafe byte[] Boundary(string id, uint lod)
+    {
+        using var idUtf8 = new Utf8(id, stackalloc byte[Utf8.Stack]);
+        TgBytes @out = default;
+        int status;
+        status = Native.tg_engine_boundary(handle, idUtf8.Pointer, idUtf8.Length, lod, &@out);
+        Interop.Check(status);
+        return Interop.TakeBytes(@out);
+    }
+
+    /// <summary>
+    /// The great-circle distance between the places with these IDs, as one row: `meters` on
+    /// the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees
+    /// clockwise from north. No row when either ID is unknown. From a point, use `distance_m`
+    /// and `bearing_deg` with the place's `lat` and `lon`.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if an ID is not a place ID; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    /// </summary>
+    public unsafe byte[] Distance(string from, string to)
+    {
+        using var fromUtf8 = new Utf8(from, stackalloc byte[Utf8.Stack]);
+        using var toUtf8 = new Utf8(to, stackalloc byte[Utf8.Stack]);
+        TgBytes @out = default;
+        int status;
+        status = Native.tg_engine_distance(handle, fromUtf8.Pointer, fromUtf8.Length, toUtf8.Pointer, toUtf8.Length, &@out);
         Interop.Check(status);
         return Interop.TakeBytes(@out);
     }
@@ -1883,6 +1957,9 @@ internal static unsafe partial class Native
     internal static partial int tg_distance_m(double lat1, double lon1, double lat2, double lon2, double* @out);
 
     [LibraryImport(Lib)]
+    internal static partial int tg_bearing_deg(double lat1, double lon1, double lat2, double lon2, double* @out);
+
+    [LibraryImport(Lib)]
     internal static partial void tg_engine_free(nint handle);
 
     [LibraryImport(Lib)]
@@ -1977,6 +2054,12 @@ internal static unsafe partial class Native
 
     [LibraryImport(Lib)]
     internal static partial int tg_engine_by_iso(EngineHandle handle, byte* code, nuint codeLen, TgBytes* @out);
+
+    [LibraryImport(Lib)]
+    internal static partial int tg_engine_boundary(EngineHandle handle, byte* id, nuint idLen, uint lod, TgBytes* @out);
+
+    [LibraryImport(Lib)]
+    internal static partial int tg_engine_distance(EngineHandle handle, byte* from, nuint fromLen, byte* to, nuint toLen, TgBytes* @out);
 
     [LibraryImport(Lib)]
     internal static partial void tg_store_free(nint handle);

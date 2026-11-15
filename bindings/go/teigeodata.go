@@ -61,6 +61,9 @@ const SampleRowsMax uint32 = 1000000
 // Most places one query returns.
 const LimitMax uint32 = 10000
 
+// The coarsest level of detail `Engine::boundary` reads; 0 is full resolution.
+const CoarsestLod uint32 = 6
+
 // When a pack's sections are verified against their hashes.
 type Verify uint32
 
@@ -358,7 +361,8 @@ func Progress(steps uint32, onStep func(uint32) bool) (uint32, error) {
 }
 
 // Great-circle distance in metres between two points in degrees, by the haversine formula on
-// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+// the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query
+// measures it, with the same digits on every platform.
 //
 // # Errors
 //
@@ -373,6 +377,27 @@ func DistanceM(lat1 float64, lon1 float64, lat2 float64, lon2 float64) (float64,
 	status := rawDistanceM(lat1, lon1, lat2, lon2, &out, &msg)
 	if status != 0 {
 		return 0, newError(status, &msg, "tg_distance_m")
+	}
+	return out, nil
+}
+
+// The initial great-circle bearing from the first point to the second, in degrees clockwise
+// from true north in `[0, 360)`; 0 for one point twice or from a pole. The same digits on
+// every platform.
+//
+// # Errors
+//
+// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+// -180..=180, or any value is not finite.
+func BearingDeg(lat1 float64, lon1 float64, lat2 float64, lon2 float64) (float64, error) {
+	if err := ensure(); err != nil {
+		return 0, err
+	}
+	var out float64
+	var msg tgBytes
+	status := rawBearingDeg(lat1, lon1, lat2, lon2, &out, &msg)
+	if status != 0 {
+		return 0, newError(status, &msg, "tg_bearing_deg")
 	}
 	return out, nil
 }
@@ -1024,6 +1049,53 @@ func (h *Engine) ByIso(code string) ([]byte, error) {
 	status := rawEngineByIso(handle, unsafe.StringData(code), uintptr(len(code)), &out, &msg)
 	if status != 0 {
 		return nil, newError(status, &msg, "tg_engine_by_iso")
+	}
+	return takeBytes(out), nil
+}
+
+// The outline of the place with this ID at level of detail `lod`, as one row: `id`,
+// `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m`
+// (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an
+// RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings
+// counterclockwise, holes clockwise), or the place's `Point` when it has no outline.
+// Level 0 is full resolution and 1 to `COARSEST_LOD` coarser; neighbours share their
+// borders at every level. A whole country at level 0 can be megabytes: ask a coarser
+// level to draw it small. No row for an unknown ID.
+//
+// # Errors
+//
+// `ErrorCode::InvalidArgument` if `id` is not a place ID or `lod` exceeds
+// `COARSEST_LOD`; `ErrorCode::MissingComponent` without `boundaries`;
+// `ErrorCode::Corrupt` if a section read is corrupt.
+func (h *Engine) Boundary(id string, lod uint32) ([]byte, error) {
+	handle := h.acquire()
+	defer h.release()
+	var out tgBytes
+	var msg tgBytes
+	status := rawEngineBoundary(handle, unsafe.StringData(id), uintptr(len(id)), lod, &out, &msg)
+	if status != 0 {
+		return nil, newError(status, &msg, "tg_engine_boundary")
+	}
+	return takeBytes(out), nil
+}
+
+// The great-circle distance between the places with these IDs, as one row: `meters` on
+// the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees
+// clockwise from north. No row when either ID is unknown. From a point, use `distance_m`
+// and `bearing_deg` with the place's `lat` and `lon`.
+//
+// # Errors
+//
+// `ErrorCode::InvalidArgument` if an ID is not a place ID; `ErrorCode::Corrupt` if a
+// section read is corrupt.
+func (h *Engine) Distance(from string, to string) ([]byte, error) {
+	handle := h.acquire()
+	defer h.release()
+	var out tgBytes
+	var msg tgBytes
+	status := rawEngineDistance(handle, unsafe.StringData(from), uintptr(len(from)), unsafe.StringData(to), uintptr(len(to)), &out, &msg)
+	if status != 0 {
+		return nil, newError(status, &msg, "tg_engine_distance")
 	}
 	return takeBytes(out), nil
 }

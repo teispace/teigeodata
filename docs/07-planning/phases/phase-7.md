@@ -67,8 +67,11 @@ pages, the playground. Nothing names a country in code (P16): country pages come
   released pack
 
 ### 7.4 The boundary in the language API
-- [ ] Research, then `Engine.boundary` (an outline as GeoJSON at a level of detail) and the
-  distance between places, in every language, with parity values
+- [x] Research ([language-boundary](../../02-research/notes/language-boundary.md)), then
+  `Engine.boundary` (an outline as a GeoJSON Feature at a level of detail) and the distance
+  between places, in every language, with parity values (D-324). One GeoJSON writer, moved
+  from the server into the engine; `bearing_deg` added; every value proven checked by
+  `parity-mutants` in eight languages; every tour gained a `boundary` section
 
 ### 7.5 Pages from the data and the gates
 - [ ] Per-country pages from `data/countries/` and the released packs: sources and licences,
@@ -90,3 +93,4 @@ pages, the playground. Nothing names a country in code (P16): country pages come
 | 2026-11-15 | A reader in every language added to 7.2 | The tours found most bindings cannot read a result (D-322) |
 | 2026-11-15 | 7.1 and 7.2 done; the guides generated from one script; the playground link waits for 7.6; the reference page hand-written until 7.3 generates it | the guides share their prose, and a link must not point at nothing |
 | 2026-11-15 | 7.3 done: the API reference generated from the bindings' own declaration macros, the HTTP and MCP reference from the servers' definitions | a second copy of each signature or route would drift (D-323) |
+| 2026-11-15 | 7.4 done: boundary and distance in every language; the GeoJSON writer moved to the engine | the playground and every app draw outlines from the bindings, and one writer keeps them equal to the servers (D-324) |

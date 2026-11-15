@@ -8,8 +8,8 @@ description: Every function, method, record and error of the API, with its docum
 The API is defined once, in Rust (`teigeodata-api`), and every binding is generated from that
 definition, so this reference is generated from it too: each entry gives the documentation
 written in the API and the declaration each language's binding is written with. It holds
-31 engine methods, 22
-store and job methods and 7 functions.
+33 engine methods, 22
+store and job methods and 8 functions.
 
 Names follow each language's style; the entries use the Rust ones:
 
@@ -24,7 +24,9 @@ The servers have their own reference: every route of the [HTTP API](/docs/refere
 and every tool of the [MCP server](/docs/reference/mcp), generated from the servers' own
 definitions.
 
-## [Engine](/docs/reference/engine)
+## Engine
+
+The [Engine page](/docs/reference/engine) has each method's declaration in every language.
 
 | Name | What |
 |---|---|
@@ -59,8 +61,12 @@ definitions.
 | [`tz_rules_start`](/docs/reference/engine#tz_rules_start) | The earliest instant `zone`'s rules cover, in Unix seconds: one `unix` row (its first transition, before which tzdb knows only local mean time; the year −9,999 for a zone that never changed); no row where no layer holds the zone. |
 | [`tz_version`](/docs/reference/engine#tz_version) | The tzdb release (`2026f`) of the first layer with zone rules; empty without rules. |
 | [`by_iso`](/docs/reference/engine#by_iso) | The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row. |
+| [`boundary`](/docs/reference/engine#boundary) | The outline of the place with this ID at level of detail `lod`, as one row: `id`, `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m` (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings counterclockwise, holes clockwise), or the place's `Point` when it has no outline. |
+| [`distance`](/docs/reference/engine#distance) | The great-circle distance between the places with these IDs, as one row: `meters` on the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees clockwise from north. |
 
-## [Store](/docs/reference/store#store)
+## Store
+
+The [Store page](/docs/reference/store#store) has each method's declaration in every language.
 
 | Name | What |
 |---|---|
@@ -80,7 +86,9 @@ definitions.
 | [`update`](/docs/reference/store#update) | Updates the packs (every installed one when empty) to the catalog's releases, keeping the components and languages installed. |
 | [`repair`](/docs/reference/store#repair) | Checks the pack in full and, unless it is whole, fetches what it lacks. |
 
-## [Job](/docs/reference/store#job)
+## Job
+
+A job's methods are on the [Store page](/docs/reference/store#job).
 
 | Name | What |
 |---|---|
@@ -92,7 +100,9 @@ definitions.
 | [`cancel`](/docs/reference/store#cancel) | Asks the job to stop at its next request or chunk; it then fails with `ErrorCode::Cancelled` and leaves the store as it was. |
 | [`result`](/docs/reference/store#result) | The job's result, waiting for it to end. |
 
-## [Functions](/docs/reference/functions)
+## Functions
+
+The [functions page](/docs/reference/functions) has each declaration in every language.
 
 | Name | What |
 |---|---|
@@ -102,9 +112,12 @@ definitions.
 | [`fold`](/docs/reference/functions#fold) | The search fold of a name: NFKD, lower case, optional accents dropped by script, spaces collapsed, recomposed to NFC. |
 | [`sample_rows`](/docs/reference/functions#sample_rows) | Builds `rows` deterministic sample places as a blob with the columns `id` (`u32`), `lat` and `lon` (`f64`, degrees), `elevation` (`f32`, metres) and `name` (UTF-8). |
 | [`progress`](/docs/reference/functions#progress) | Calls `on_step` once per step with the step number, from 1 to `steps`, on the calling thread, and returns the number of steps run. |
-| [`distance_m`](/docs/reference/functions#distance_m) | Great-circle distance in metres between two points in degrees, by the haversine formula on the WGS84 mean sphere (error up to about 0.5% against the ellipsoid). |
+| [`distance_m`](/docs/reference/functions#distance_m) | Great-circle distance in metres between two points in degrees, by the haversine formula on the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query measures it, with the same digits on every platform. |
+| [`bearing_deg`](/docs/reference/functions#bearing_deg) | The initial great-circle bearing from the first point to the second, in degrees clockwise from true north in `[0, 360)`; 0 for one point twice or from a pole. |
 
-## [Types, constants and errors](/docs/reference/types)
+## Types, constants and errors
+
+Every record, enum, constant and error code is on the [types page](/docs/reference/types):
 
 [`SearchOptions`](/docs/reference/types#searchoptions), [`OpenOptions`](/docs/reference/types#openoptions), [`InstallOptions`](/docs/reference/types#installoptions);
 [`Verify`](/docs/reference/types#verify), [`Load`](/docs/reference/types#load);

@@ -3,6 +3,8 @@
 // Usage: dart run bin/tour.dart world-np-lite.tgd
 
 // #region import
+import 'dart:convert';
+
 import 'package:teigeodata/teigeodata.dart';
 
 // #endregion import
@@ -144,8 +146,22 @@ void main(List<String> args) async {
   print('=== distance');
   // #region distance
   final km = tg.distanceM(27.7172, 85.3240, 28.2096, 83.9856) / 1000;
-  print('Kathmandu to Pokhara: ${km.toStringAsFixed(1)} km');
+  final heading = tg.bearingDeg(27.7172, 85.3240, 28.2096, 83.9856);
+  print('Kathmandu to Pokhara: ${km.toStringAsFixed(1)} km, heading ${heading.toStringAsFixed(0)}°');
+  final apart = Reader(engine.distance('tgd:np/2cn', 'tgd:np/1xhb')).single;
+  final (far, bearing) = (apart['meters'] as double, apart['bearing'] as double);
+  print('place to place: ${(far / 1000).toStringAsFixed(1)} km at ${bearing.toStringAsFixed(0)}°');
   // #endregion distance
+
+  print('=== boundary');
+  // #region boundary
+  final shape = Reader(engine.boundary('tgd:np/2gm', 0)).single;
+  final geojson = shape['geojson'] as String; // a GeoJSON Feature, for any map library
+  final feature = jsonDecode(geojson) as Map<String, dynamic>;
+  print('${feature['geometry']['type']} of ${shape['vertices']} vertices at level ${shape['lod']}');
+  final tolerance = shape['tolerance_m'] as double;
+  print('tolerance ${tolerance.toStringAsFixed(0)} m, ${utf8.encode(geojson).length} bytes of GeoJSON');
+  // #endregion boundary
 
   print('=== errors');
   // #region errors

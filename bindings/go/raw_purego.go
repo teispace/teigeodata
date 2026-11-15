@@ -29,6 +29,7 @@ var (
 	pSampleRows              func(uint32, *tgBytes) int32
 	pProgress                func(uint32, uintptr, uintptr, *uint32) int32
 	pDistanceM               func(float64, float64, float64, float64, *float64) int32
+	pBearingDeg              func(float64, float64, float64, float64, *float64) int32
 	pEngineFree              func(uintptr)
 	pEngineNew               func(*uintptr) int32
 	pEngineOpenFile          func(uintptr, *byte, uintptr, *uint32) int32
@@ -61,6 +62,8 @@ var (
 	pEngineTzRulesStart      func(uintptr, *byte, uintptr, *tgBytes) int32
 	pEngineTzVersion         func(uintptr, *tgBytes) int32
 	pEngineByIso             func(uintptr, *byte, uintptr, *tgBytes) int32
+	pEngineBoundary          func(uintptr, *byte, uintptr, uint32, *tgBytes) int32
+	pEngineDistance          func(uintptr, *byte, uintptr, *byte, uintptr, *tgBytes) int32
 	pStoreFree               func(uintptr)
 	pStoreCreate             func(*byte, uintptr, *byte, uintptr, *byte, uintptr, *byte, uintptr, *uintptr) int32
 	pStoreOpen               func(*byte, uintptr, *uintptr) int32
@@ -131,6 +134,7 @@ func rawLoad(path string) error {
 	bind(lib, &pSampleRows, "tg_sample_rows")
 	bind(lib, &pProgress, "tg_progress")
 	bind(lib, &pDistanceM, "tg_distance_m")
+	bind(lib, &pBearingDeg, "tg_bearing_deg")
 	bind(lib, &pEngineFree, "tg_engine_free")
 	bind(lib, &pEngineNew, "tg_engine_new")
 	bind(lib, &pEngineOpenFile, "tg_engine_open_file")
@@ -163,6 +167,8 @@ func rawLoad(path string) error {
 	bind(lib, &pEngineTzRulesStart, "tg_engine_tz_rules_start")
 	bind(lib, &pEngineTzVersion, "tg_engine_tz_version")
 	bind(lib, &pEngineByIso, "tg_engine_by_iso")
+	bind(lib, &pEngineBoundary, "tg_engine_boundary")
+	bind(lib, &pEngineDistance, "tg_engine_distance")
 	bind(lib, &pStoreFree, "tg_store_free")
 	bind(lib, &pStoreCreate, "tg_store_create")
 	bind(lib, &pStoreOpen, "tg_store_open")
@@ -276,6 +282,19 @@ func rawDistanceM(lat1 float64, lon1 float64, lat2 float64, lon2 float64, out *f
 	}
 	runtime.LockOSThread()
 	status := pDistanceM(lat1, lon1, lat2, lon2, out)
+	if status != 0 {
+		status = pLastError(msg)
+	}
+	runtime.UnlockOSThread()
+	return status
+}
+
+func rawBearingDeg(lat1 float64, lon1 float64, lat2 float64, lon2 float64, out *float64, msg *tgBytes) int32 {
+	if pBearingDeg == nil {
+		return -1
+	}
+	runtime.LockOSThread()
+	status := pBearingDeg(lat1, lon1, lat2, lon2, out)
 	if status != 0 {
 		status = pLastError(msg)
 	}
@@ -685,6 +704,32 @@ func rawEngineByIso(handle uintptr, code *byte, codeLen uintptr, out *tgBytes, m
 	}
 	runtime.LockOSThread()
 	status := pEngineByIso(handle, code, codeLen, out)
+	if status != 0 {
+		status = pLastError(msg)
+	}
+	runtime.UnlockOSThread()
+	return status
+}
+
+func rawEngineBoundary(handle uintptr, id *byte, idLen uintptr, lod uint32, out *tgBytes, msg *tgBytes) int32 {
+	if pEngineBoundary == nil {
+		return -1
+	}
+	runtime.LockOSThread()
+	status := pEngineBoundary(handle, id, idLen, lod, out)
+	if status != 0 {
+		status = pLastError(msg)
+	}
+	runtime.UnlockOSThread()
+	return status
+}
+
+func rawEngineDistance(handle uintptr, from *byte, fromLen uintptr, to *byte, toLen uintptr, out *tgBytes, msg *tgBytes) int32 {
+	if pEngineDistance == nil {
+		return -1
+	}
+	runtime.LockOSThread()
+	status := pEngineDistance(handle, from, fromLen, to, toLen, out)
 	if status != 0 {
 		status = pLastError(msg)
 	}

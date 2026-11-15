@@ -151,6 +151,9 @@ external int _tgProgress(int steps, Pointer<NativeFunction<CallbackU32>> onStep,
 @Native<Int32 Function(Double, Double, Double, Double, Pointer<Double>)>(symbol: 'tg_distance_m', isLeaf: true)
 external int _tgDistanceM(double lat1, double lon1, double lat2, double lon2, Pointer<Double> out);
 
+@Native<Int32 Function(Double, Double, Double, Double, Pointer<Double>)>(symbol: 'tg_bearing_deg', isLeaf: true)
+external int _tgBearingDeg(double lat1, double lon1, double lat2, double lon2, Pointer<Double> out);
+
 @Native<Void Function(Pointer<Void>)>(symbol: 'tg_engine_free', isLeaf: true)
 external void _tgEngineFree(Pointer<Void> handle);
 
@@ -249,6 +252,12 @@ external int _tgEngineTzVersion(Pointer<Void> self, Pointer<TgBytes> out);
 
 @Native<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>)>(symbol: 'tg_engine_by_iso', isLeaf: true)
 external int _tgEngineByIso(Pointer<Void> self, Pointer<Uint8> code, int codeLen, Pointer<TgBytes> out);
+
+@Native<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Uint32, Pointer<TgBytes>)>(symbol: 'tg_engine_boundary', isLeaf: true)
+external int _tgEngineBoundary(Pointer<Void> self, Pointer<Uint8> id, int idLen, int lod, Pointer<TgBytes> out);
+
+@Native<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Pointer<TgBytes>)>(symbol: 'tg_engine_distance', isLeaf: true)
+external int _tgEngineDistance(Pointer<Void> self, Pointer<Uint8> from, int fromLen, Pointer<Uint8> to, int toLen, Pointer<TgBytes> out);
 
 @Native<Void Function(Pointer<Void>)>(symbol: 'tg_store_free', isLeaf: true)
 external void _tgStoreFree(Pointer<Void> handle);
@@ -351,6 +360,9 @@ final class TeiGeodata {
 
   /// Most places one query returns.
   static const int limitMax = 10000;
+
+  /// The coarsest level of detail `Engine::boundary` reads; 0 is full resolution.
+  static const int coarsestLod = 6;
 
   /// Frees the scratch memory; the instance cannot be used afterwards.
   void close() {
@@ -502,7 +514,8 @@ final class TeiGeodata {
   }
 
   /// Great-circle distance in metres between two points in degrees, by the haversine formula on
-  /// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+  /// the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query
+  /// measures it, with the same digits on every platform.
   ///
   /// # Errors
   ///
@@ -510,6 +523,20 @@ final class TeiGeodata {
   /// -180..=180, or any value is not finite.
   double distanceM(double lat1, double lon1, double lat2, double lon2) {
     final status = _tgDistanceM(lat1, lon1, lat2, lon2, _word.cast());
+    _check(status);
+    return _word.cast<Double>().value;
+  }
+
+  /// The initial great-circle bearing from the first point to the second, in degrees clockwise
+  /// from true north in `[0, 360)`; 0 for one point twice or from a pole. The same digits on
+  /// every platform.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+  /// -180..=180, or any value is not finite.
+  double bearingDeg(double lat1, double lon1, double lat2, double lon2) {
+    final status = _tgBearingDeg(lat1, lon1, lat2, lon2, _word.cast());
     _check(status);
     return _word.cast<Double>().value;
   }
@@ -741,6 +768,23 @@ final class TeiGeodata {
   Uint8List _engineByIso(Pointer<Void> handle, String code) {
     final codeLen = _utf8(code);
     final status = _tgEngineByIso(handle, _input, codeLen, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _engineBoundary(Pointer<Void> handle, String id, int lod) {
+    final idLen = _utf8(id);
+    final status = _tgEngineBoundary(handle, _input, idLen, lod, _bytes);
+    _check(status);
+    return _takeBlob();
+  }
+
+  Uint8List _engineDistance(Pointer<Void> handle, String from, String to) {
+    final fromAt = 0;
+    final fromLen = _utf8(from, fromAt);
+    final toAt = fromAt + fromLen;
+    final toLen = _utf8(to, toAt);
+    final status = _tgEngineDistance(handle, _input + fromAt, fromLen, _input + toAt, toLen, _bytes);
     _check(status);
     return _takeBlob();
   }
@@ -1234,6 +1278,33 @@ final class Engine implements Finalizable {
   /// `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
   /// `ErrorCode::Corrupt` if a section read is corrupt.
   Uint8List byIso(String code) => _lib._engineByIso(_live, code);
+
+  /// The outline of the place with this ID at level of detail `lod`, as one row: `id`,
+  /// `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m`
+  /// (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an
+  /// RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings
+  /// counterclockwise, holes clockwise), or the place's `Point` when it has no outline.
+  /// Level 0 is full resolution and 1 to `COARSEST_LOD` coarser; neighbours share their
+  /// borders at every level. A whole country at level 0 can be megabytes: ask a coarser
+  /// level to draw it small. No row for an unknown ID.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if `id` is not a place ID or `lod` exceeds
+  /// `COARSEST_LOD`; `ErrorCode::MissingComponent` without `boundaries`;
+  /// `ErrorCode::Corrupt` if a section read is corrupt.
+  Uint8List boundary(String id, int lod) => _lib._engineBoundary(_live, id, lod);
+
+  /// The great-circle distance between the places with these IDs, as one row: `meters` on
+  /// the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees
+  /// clockwise from north. No row when either ID is unknown. From a point, use `distance_m`
+  /// and `bearing_deg` with the place's `lat` and `lon`.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if an ID is not a place ID; `ErrorCode::Corrupt` if a
+  /// section read is corrupt.
+  Uint8List distance(String from, String to) => _lib._engineDistance(_live, from, to);
 }
 
 /// A store of installed packs in one directory: its signed catalog, its packs and their

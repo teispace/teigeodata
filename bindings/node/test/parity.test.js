@@ -69,6 +69,9 @@ test("distanceM", () => {
   const d = parity.distance_m;
   assert.ok(Math.abs(tg.distanceM(...d.args) - d.metres) < 1e-6);
   assert.throws(() => tg.distanceM(...d.out_of_range), { code: "InvalidArgument" });
+  const b = parity.bearing_deg;
+  assert.ok(Math.abs(tg.bearingDeg(...b.args) - b.degrees) < 1e-9);
+  assert.throws(() => tg.bearingDeg(...b.out_of_range), { code: "InvalidArgument" });
 });
 
 test("errors carry their code", () => {
@@ -188,6 +191,29 @@ test("engine handle on the fixture", () => {
   assert.equal(engine.remove(1), true);
   assert.equal(engine.remove(1), false);
   assert.equal(engine.layers(), 1);
+});
+
+test("boundary and distance", () => {
+  const p = parity.engine;
+  const c = p.boundary;
+  const outlined = new tg.Engine();
+  outlined.openFile(join(__dirname, "../..", c.fixture));
+  const got = outlined.boundary(c.id, c.lod);
+  assert.deepEqual(columnNames(got), c.columns);
+  assert.deepEqual(strings(got, "id"), [c.id]);
+  assert.deepEqual(strings(got, "geojson"), [c.geojson]);
+  assert.equal(Number(numbers(got, "lod")[0]), c.lod);
+  assert.equal(Number(numbers(got, "tolerance_m")[0]), c.tolerance_m);
+  assert.equal(Number(numbers(got, "vertices")[0]), c.vertices);
+  assert.equal(outlined.boundary(c.unknown_id, 0).readUInt32LE(4), 0);
+  assert.throws(() => outlined.boundary(c.id, c.bad_lod), { code: "InvalidArgument" });
+  const d = p.distance;
+  const engine = new tg.Engine();
+  engine.openFile(join(__dirname, "../..", p.fixture));
+  const m = engine.distance(d.from, d.to);
+  assert.ok(Math.abs(numbers(m, "meters")[0] - d.meters) < 1e-6);
+  assert.ok(Math.abs(numbers(m, "bearing")[0] - d.bearing) < 1e-6);
+  assert.equal(engine.distance(d.from, c.unknown_id).readUInt32LE(4), 0);
 });
 
 test("store", () => {

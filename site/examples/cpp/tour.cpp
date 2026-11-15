@@ -149,8 +149,25 @@ int main(int argc, char **argv) try {
     std::cout << "=== distance\n";
     // #region distance
     const double meters = tg::distance_m(27.7172, 85.3240, 28.2096, 83.9856);
-    std::cout << "Kathmandu to Pokhara: " << fixed(meters / 1000, 1) << " km\n";
+    const double heading = tg::bearing_deg(27.7172, 85.3240, 28.2096, 83.9856);
+    std::cout << "Kathmandu to Pokhara: " << fixed(meters / 1000, 1) << " km, heading " << fixed(heading, 0) << "°\n";
+    const tg::Blob between = engine.distance("tgd:np/2cn", "tgd:np/1xhb");
+    const auto apart = tg::Reader(between)[0];
+    std::cout << "place to place: " << fixed(*apart.number("meters") / 1000, 1) << " km at "
+              << fixed(apart.number("bearing"), 0) << "°\n";
     // #endregion distance
+
+    std::cout << "=== boundary\n";
+    // #region boundary
+    const tg::Blob outline = engine.boundary("tgd:np/2gm", 0);
+    const auto shape = tg::Reader(outline)[0];
+    const std::string_view geojson = *shape.string("geojson"); // a GeoJSON Feature, for any map library
+    const std::string_view key = "\"geometry\":{\"type\":\"";
+    const std::string_view type = geojson.substr(geojson.find(key) + key.size());
+    std::cout << type.substr(0, type.find('"')) << " of " << *shape.integer("vertices") << " vertices at level "
+              << *shape.integer("lod") << '\n';
+    std::cout << "tolerance " << fixed(shape.number("tolerance_m"), 0) << " m, " << geojson.size() << " bytes of GeoJSON\n";
+    // #endregion boundary
 
     std::cout << "=== errors\n";
     // #region errors

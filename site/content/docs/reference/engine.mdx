@@ -2483,3 +2483,163 @@ public unsafe byte[] ByIso(string code);
 </Tab>
 </Tabs>
 
+
+## `boundary`
+
+The outline of the place with this ID at level of detail `lod`, as one row: `id`, `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m` (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings counterclockwise, holes clockwise), or the place's `Point` when it has no outline. Level 0 is full resolution and 1 to `COARSEST_LOD` coarser; neighbours share their borders at every level. A whole country at level 0 can be megabytes: ask a coarser level to draw it small. No row for an unknown ID.
+
+**Errors.** `ErrorCode::InvalidArgument` if `id` is not a place ID or `lod` exceeds `COARSEST_LOD`; `ErrorCode::MissingComponent` without `boundaries`; `ErrorCode::Corrupt` if a section read is corrupt.
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "JavaScript", "Swift", "Java and Kotlin", "Dart", "Go", "C", "C++", ".NET"]}>
+<Tab value="Rust">
+
+```rust
+pub fn boundary(&self, id: &str, lod: u32) -> Result<Blob>
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+def boundary(self, id: str, lod: int) -> Blob: ...
+```
+
+</Tab>
+<Tab value="JavaScript">
+
+```ts
+boundary(id: string, lod: number): Buffer;
+```
+
+</Tab>
+<Tab value="Swift">
+
+```swift
+public func boundary(_ id: String, lod: UInt32) throws(TeiGeodataError) -> Data
+```
+
+</Tab>
+<Tab value="Java and Kotlin">
+
+```java
+public byte[] boundary(String id, long lod);
+```
+
+</Tab>
+<Tab value="Dart">
+
+```dart
+Uint8List boundary(String id, int lod);
+```
+
+</Tab>
+<Tab value="Go">
+
+```go
+func (h *Engine) Boundary(id string, lod uint32) ([]byte, error)
+```
+
+</Tab>
+<Tab value="C">
+
+```c
+int32_t tg_engine_boundary(const tg_engine *handle, const uint8_t *id, size_t id_len, uint32_t lod, tg_bytes *out);
+```
+
+</Tab>
+<Tab value="C++">
+
+```cpp
+Blob boundary(std::string_view id, std::uint32_t lod) const;
+```
+
+</Tab>
+<Tab value=".NET">
+
+```csharp
+public unsafe byte[] Boundary(string id, uint lod);
+```
+
+</Tab>
+</Tabs>
+
+
+## `distance`
+
+The great-circle distance between the places with these IDs, as one row: `meters` on the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees clockwise from north. No row when either ID is unknown. From a point, use `distance_m` and `bearing_deg` with the place's `lat` and `lon`.
+
+**Errors.** `ErrorCode::InvalidArgument` if an ID is not a place ID; `ErrorCode::Corrupt` if a section read is corrupt.
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "JavaScript", "Swift", "Java and Kotlin", "Dart", "Go", "C", "C++", ".NET"]}>
+<Tab value="Rust">
+
+```rust
+pub fn distance(&self, from: &str, to: &str) -> Result<Blob>
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+def distance(self, from: str, to: str) -> Blob: ...
+```
+
+</Tab>
+<Tab value="JavaScript">
+
+```ts
+distance(from: string, to: string): Buffer;
+```
+
+</Tab>
+<Tab value="Swift">
+
+```swift
+public func distance(_ from: String, to: String) throws(TeiGeodataError) -> Data
+```
+
+</Tab>
+<Tab value="Java and Kotlin">
+
+```java
+public byte[] distance(String from, String to);
+```
+
+</Tab>
+<Tab value="Dart">
+
+```dart
+Uint8List distance(String from, String to);
+```
+
+</Tab>
+<Tab value="Go">
+
+```go
+func (h *Engine) Distance(from string, to string) ([]byte, error)
+```
+
+</Tab>
+<Tab value="C">
+
+```c
+int32_t tg_engine_distance(const tg_engine *handle, const uint8_t *from, size_t from_len, const uint8_t *to, size_t to_len, tg_bytes *out);
+```
+
+</Tab>
+<Tab value="C++">
+
+```cpp
+Blob distance(std::string_view from, std::string_view to) const;
+```
+
+</Tab>
+<Tab value=".NET">
+
+```csharp
+public unsafe byte[] Distance(string from, string to);
+```
+
+</Tab>
+</Tabs>
+

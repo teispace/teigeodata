@@ -25,6 +25,10 @@ List<num> column(Uint8List blob, String name) {
         for (var r = at; r < at + len; r += 8)
           view.getInt32(r + 4, Endian.little) * 0x100000000 + view.getUint32(r, Endian.little),
       ],
+      4 => [
+        for (var r = at; r < at + len; r += 8)
+          view.getUint32(r + 4, Endian.little) * 0x100000000 + view.getUint32(r, Endian.little),
+      ],
       5 => blob.buffer.asFloat32List(blob.offsetInBytes + at, len ~/ 4),
       6 => blob.buffer.asFloat64List(blob.offsetInBytes + at, len ~/ 8),
       8 => blob.buffer.asUint8List(blob.offsetInBytes + at, len),
@@ -122,6 +126,15 @@ void checks(
     expect(tg.distanceM(a[0], a[1], a[2], a[3]), closeTo(d['metres'] as double, 1e-6));
     final b = (d['out_of_range'] as List).cast<num>().map((v) => v.toDouble()).toList();
     expect(() => tg.distanceM(b[0], b[1], b[2], b[3]), throwsA(isA<InvalidArgumentException>()));
+  });
+
+  test('bearingDeg', () {
+    final tg = lib();
+    final d = parity['bearing_deg'] as Map<String, dynamic>;
+    final a = (d['args'] as List).cast<num>().map((v) => v.toDouble()).toList();
+    expect(tg.bearingDeg(a[0], a[1], a[2], a[3]), closeTo(d['degrees'] as double, 1e-9));
+    final b = (d['out_of_range'] as List).cast<num>().map((v) => v.toDouble()).toList();
+    expect(() => tg.bearingDeg(b[0], b[1], b[2], b[3]), throwsA(isA<InvalidArgumentException>()));
   });
 
   test('errors carry their code', () {
@@ -329,6 +342,27 @@ void checks(
     expect((column(height, 'meters') as Float64List).single, h['meters']);
     expect(strings(height, 'source'), [h['source']]);
     expect([engine.remove(1), engine.remove(1), engine.layers()], [true, false, 1]);
+    final dist = e['distance'] as Map<String, dynamic>;
+    final c = e['boundary'] as Map<String, dynamic>;
+    final m = engine.distance(dist['from'] as String, dist['to'] as String);
+    expect((column(m, 'meters') as Float64List).single, closeTo(dist['meters'] as double, 1e-6));
+    expect((column(m, 'bearing') as Float64List).single, closeTo(dist['bearing'] as double, 1e-6));
+    expect(column(engine.distance(dist['from'] as String, c['unknown_id'] as String), 'meters'), isEmpty);
+    final outlined = Engine(tg);
+    open(outlined, c['fixture'] as String);
+    final got = outlined.boundary(c['id'] as String, c['lod'] as int);
+    expect(columnNames(got), c['columns']);
+    expect(strings(got, 'id'), [c['id']]);
+    expect(strings(got, 'geojson'), [c['geojson']]);
+    expect(column(got, 'lod'), [c['lod']]);
+    expect(column(got, 'tolerance_m'), [c['tolerance_m']]);
+    expect(column(got, 'vertices'), [c['vertices']]);
+    expect(strings(outlined.boundary(c['unknown_id'] as String, 0), 'id'), isEmpty);
+    expect(
+      () => outlined.boundary(c['id'] as String, c['bad_lod'] as int),
+      throwsA(isA<InvalidArgumentException>()),
+    );
+    outlined.close();
     engine.close();
     engine.close(); // idempotent
     expect(engine.layers, throwsStateError);

@@ -25,6 +25,16 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   declaration macros by `cargo xtask bindings`, the servers' from `teigeodata_server::http::ENDPOINTS`
   (a route table a test holds to the parser) and `mcp::tool_definitions` and
   `mcp::resource_templates` (D-323).
+- `Engine::boundary(id, lod)` (an outline as a GeoJSON Feature, with its level, tolerance and
+  vertex count), `Engine::distance(from, to)` between two places, and `bearing_deg` in the
+  language API and every binding, with parity values checked in each (D-324).
+  `teigeodata_engine::Outline::write_geojson` and `write_point_geojson`: the GeoJSON writer the
+  servers used, now one writer for the servers and the bindings.
+
+### Changed
+
+- `distance_m` calls the engine's `meters_between` instead of a second haversine of its own
+  (D-324).
 
 - `cargo xtask load`: a load test of `tgd serve` and its `/mcp` on real packs with `oha`,
   gated by `tools/load/budget.toml` (requests per second, p99, footprint and its growth)

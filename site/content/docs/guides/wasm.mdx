@@ -239,14 +239,44 @@ Every place also has its own `elevation` column. The world pack carries a coarse
 country's terrain pack adds a finer one, and the engine answers from the finest grid that covers
 the point.
 
-## Distance between two points
+## Distance and bearing
 
 `distanceM` is the great-circle distance in metres (haversine on the WGS84 mean
-sphere, within about 0.5% of the ellipsoid). It needs no pack.
+sphere, within about 0.5% of the ellipsoid), and `bearingDeg` the initial bearing from the
+first point to the second, in degrees clockwise from north. Neither needs a pack. Between two
+places you already have, `distance` takes their IDs and answers one row with `meters` and
+`bearing`.
 
 <include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#distance</include>
 
 <include lang="text" meta='title="Output"'>../../../examples/out/distance.txt</include>
+
+`distance` answers no row when either ID is unknown. From a point to a place, pass the
+place's `lat` and `lon` to `distanceM`. The bearing is the direction you set off in: on a
+great circle it changes along the way, so the bearing back is not the reverse of this one.
+
+## A place's outline
+
+`boundary` answers a unit's outline as one row: `geojson`, an RFC 7946 Feature (a
+Polygon or MultiPolygon, outer rings counterclockwise and holes clockwise, seven decimals as
+stored), with the `lod` read, its `tolerance_m` and the number of `vertices`. A place with no
+outline answers its point as the geometry; an unknown ID answers no row.
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#boundary</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/boundary.txt</include>
+
+The Feature goes to a map as it is: MapLibre's and Leaflet's GeoJSON sources, OpenLayers,
+Shapely's `shape()`, Turf and JTS all read it.
+
+- **Level of detail.** `lod` 0 is full resolution; 1 to 6 are coarser, each within its
+  `tolerance_m`, with neighbouring units still sharing their borders at every level. A pack
+  stored at full resolution only (the lite packs) answers every level as 0. A country at level 0
+  can be megabytes: draw a coarser level, and keep 0 for measuring.
+- `lod` above 6 is `InvalidArgument`; a pack installed without `boundaries` is
+  `MissingComponent`.
+- Whether a point is *inside* a unit is `adminAt`, which tests the same outlines without
+  building them.
 
 ## Errors
 

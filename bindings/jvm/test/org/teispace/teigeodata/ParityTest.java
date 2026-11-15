@@ -76,6 +76,12 @@ public final class ParityTest {
         check(Math.abs(d - ((Number) dm.get("metres")).doubleValue()) < 1e-6, "distance " + d);
         List<?> bad = (List<?>) dm.get("out_of_range");
         expect(TeiGeodataException.InvalidArgument.class, () -> TeiGeodata.distanceM(n(bad, 0), n(bad, 1), n(bad, 2), n(bad, 3)), "within");
+        Map<?, ?> bm = (Map<?, ?>) p.get("bearing_deg");
+        List<?> from = (List<?>) bm.get("args");
+        double deg = TeiGeodata.bearingDeg(n(from, 0), n(from, 1), n(from, 2), n(from, 3));
+        check(Math.abs(deg - ((Number) bm.get("degrees")).doubleValue()) < 1e-9, "bearing " + deg);
+        List<?> bb = (List<?>) bm.get("out_of_range");
+        expect(TeiGeodataException.InvalidArgument.class, () -> TeiGeodata.bearingDeg(n(bb, 0), n(bb, 1), n(bb, 2), n(bb, 3)), "within");
 
         List<Long> seen = new ArrayList<>();
         check(TeiGeodata.progress(3, step -> seen.add(step)) == 3 && seen.equals(Arrays.asList(1L, 2L, 3L)), "progress");
@@ -412,6 +418,26 @@ public final class ParityTest {
             check(column(height, "meters").getDouble() == ((Number) h.get("meters")).doubleValue(), "meters");
             check(strings(height, "source").equals(Collections.singletonList(h.get("source"))), "source");
             check(engine.remove(1) && !engine.remove(1) && engine.layers() == 1, "remove");
+            Map<?, ?> dist = (Map<?, ?>) p.get("distance");
+            Map<?, ?> c = (Map<?, ?>) p.get("boundary");
+            byte[] apart = engine.distance((String) dist.get("from"), (String) dist.get("to"));
+            check(Math.abs(column(apart, "meters").getDouble() - ((Number) dist.get("meters")).doubleValue()) < 1e-6, "distance meters");
+            check(Math.abs(column(apart, "bearing").getDouble() - ((Number) dist.get("bearing")).doubleValue()) < 1e-6, "distance bearing");
+            check(rawNumbers(engine.distance((String) dist.get("from"), (String) c.get("unknown_id")), "meters").length == 0, "distance unknown");
+            try (TeiGeodata.Engine outlined = new TeiGeodata.Engine()) {
+                outlined.openFile(new File(dir, (String) c.get("fixture")).toString());
+                String id = (String) c.get("id");
+                long lod = ((Number) c.get("lod")).longValue();
+                byte[] shape = outlined.boundary(id, lod);
+                check(columnNames(shape).equals(c.get("columns")), "boundary columns");
+                check(strings(shape, "id").equals(Collections.singletonList(id)), "boundary id");
+                check(strings(shape, "geojson").equals(Collections.singletonList(c.get("geojson"))), "boundary geojson");
+                check(rawNumbers(shape, "lod")[0] == lod, "boundary lod");
+                check(rawNumbers(shape, "tolerance_m")[0] == ((Number) c.get("tolerance_m")).doubleValue(), "boundary tolerance");
+                check(rawNumbers(shape, "vertices")[0] == ((Number) c.get("vertices")).doubleValue(), "boundary vertices");
+                check(rawNumbers(outlined.boundary((String) c.get("unknown_id"), 0), "lod").length == 0, "boundary unknown");
+                expect(TeiGeodataException.InvalidArgument.class, () -> outlined.boundary(id, ((Number) c.get("bad_lod")).longValue()), "lod");
+            }
             engine.close();
             engine.close(); // idempotent
             try {

@@ -113,8 +113,21 @@ Console.WriteLine($"{height["meters"]:F1} m above {height["datum"]} ({height["so
 Console.WriteLine("=== distance");
 // #region distance
 double meters = Geodata.DistanceM(27.7172, 85.3240, 28.2096, 83.9856);
-Console.WriteLine($"Kathmandu to Pokhara: {meters / 1000:F1} km");
+double heading = Geodata.BearingDeg(27.7172, 85.3240, 28.2096, 83.9856);
+Console.WriteLine($"Kathmandu to Pokhara: {meters / 1000:F1} km, heading {heading:F0}°");
+var apart = new BlobReader(engine.Distance("tgd:np/2cn", "tgd:np/1xhb")).Single();
+Console.WriteLine($"place to place: {(double)apart["meters"]! / 1000:F1} km at {apart["bearing"]:F0}°");
 // #endregion distance
+
+Console.WriteLine("=== boundary");
+// #region boundary
+var shape = new BlobReader(engine.Boundary("tgd:np/2gm", 0)).Single();
+string geojson = (string)shape["geojson"]!; // a GeoJSON Feature, for any map library
+using var feature = System.Text.Json.JsonDocument.Parse(geojson);
+string type = feature.RootElement.GetProperty("geometry").GetProperty("type").GetString()!;
+Console.WriteLine($"{type} of {shape["vertices"]} vertices at level {shape["lod"]}");
+Console.WriteLine($"tolerance {shape["tolerance_m"]:F0} m, {geojson.Length} bytes of GeoJSON");
+// #endregion boundary
 
 Console.WriteLine("=== errors");
 // #region errors

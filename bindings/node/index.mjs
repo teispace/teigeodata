@@ -6,6 +6,7 @@ export default tg;
 export const {
   SAMPLE_ROWS_MAX,
   LIMIT_MAX,
+  COARSEST_LOD,
   version,
   components,
   noop,
@@ -13,6 +14,7 @@ export const {
   sampleRows,
   progress,
   distanceM,
+  bearingDeg,
   Verify,
   Load,
   Engine,

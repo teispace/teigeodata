@@ -259,6 +259,26 @@ fn the_bindings_fixture_is_current() {
     );
 }
 
+/// `bindings/fixtures/outline.tgd`, the outlined pack every language's `boundary` parity check
+/// opens, is the synthetic country with its outline and hole, byte for byte;
+/// `TEIGEODATA_WRITE_FIXTURE=1` rewrites it.
+#[test]
+fn the_outline_fixture_is_current() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../bindings/fixtures/outline.tgd"
+    );
+    let bytes = common::outlined(true).0.encode();
+    if std::env::var_os("TEIGEODATA_WRITE_FIXTURE").is_some() {
+        std::fs::write(path, &bytes).unwrap();
+    }
+    let on_disk = std::fs::read(path).unwrap_or_default();
+    assert!(
+        on_disk == bytes,
+        "{path} is stale: rerun with TEIGEODATA_WRITE_FIXTURE=1"
+    );
+}
+
 /// `bindings/fixtures/dem.tgd`: one DEM tile (64 × 64 samples of 1″, Copernicus GLO-30) at
 /// tile row 3,496 and column 14,400 (27.83° to 27.85° N, 76.00° to 76.02° E), sloping east.
 fn dem_fixture() -> Vec<u8> {
@@ -726,6 +746,52 @@ fn the_parity_file_matches_rust() {
     let c = &p["postal_codes_of"];
     let got = engine.postal_codes_of(&s(&c["id"])).unwrap();
     assert_eq!(strings(&got, "postal"), ids(&c["postal"]));
+
+    let c = &p["distance"];
+    let got = engine.distance(&s(&c["from"]), &s(&c["to"])).unwrap();
+    assert!((f64s(&got, "meters")[0] - n(&c["meters"])).abs() < 1e-6);
+    assert!((f64s(&got, "bearing")[0] - n(&c["bearing"])).abs() < 1e-6);
+    assert_eq!(
+        rows(&engine.distance(&s(&c["from"]), "tgd:np/1").unwrap()),
+        0
+    );
+
+    let c = &p["boundary"];
+    let outlined = Engine::new();
+    outlined
+        .open_file(&format!(
+            "{}/../../bindings/{}",
+            env!("CARGO_MANIFEST_DIR"),
+            s(&c["fixture"])
+        ))
+        .unwrap();
+    let lod = c["lod"].as_u64().unwrap() as u32;
+    let got = outlined.boundary(&s(&c["id"]), lod).unwrap();
+    let r = Reader::new(got.as_bytes()).unwrap();
+    assert_eq!(
+        serde_json::json!(r.names().collect::<Vec<_>>()),
+        c["columns"]
+    );
+    assert_eq!(strings(&got, "id"), [Some(s(&c["id"]))]);
+    assert_eq!(strings(&got, "geojson"), [Some(s(&c["geojson"]))]);
+    assert_eq!(f64s(&got, "tolerance_m"), [n(&c["tolerance_m"])]);
+    let Some(View::U64(v)) = r.column("vertices") else {
+        panic!("vertices")
+    };
+    assert_eq!(v.u64s().next(), c["vertices"].as_u64());
+    let Some(View::U32(l)) = r.column("lod") else {
+        panic!("lod")
+    };
+    assert_eq!(l.u32s().next(), Some(lod));
+    assert_eq!(
+        rows(&outlined.boundary(&s(&c["unknown_id"]), 0).unwrap()),
+        0
+    );
+    let bad = c["bad_lod"].as_u64().unwrap() as u32;
+    assert_eq!(
+        outlined.boundary(&s(&c["id"]), bad).unwrap_err().code,
+        ErrorCode::InvalidArgument
+    );
 
     let e = engine.get(&s(&p["bad_id"])).unwrap_err();
     assert_eq!(e.code, ErrorCode::InvalidArgument);

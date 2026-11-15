@@ -191,8 +191,24 @@ int main(int argc, char **argv) {
     /* #region distance */
     double meters = 0;
     check(tg_distance_m(27.7172, 85.3240, 28.2096, 83.9856, &meters));
-    printf("Kathmandu to Pokhara: %.1f km\n", meters / 1000);
+    double heading = 0;
+    check(tg_bearing_deg(27.7172, 85.3240, 28.2096, 83.9856, &heading));
+    printf("Kathmandu to Pokhara: %.1f km, heading %.0f°\n", meters / 1000, heading);
+    r = reader(tg_engine_distance(engine, TEXT("tgd:np/2cn"), TEXT("tgd:np/1xhb"), &blob), &blob);
+    printf("place to place: %.1f km at %.0f°\n", num(&r, "meters", 0) / 1000, num(&r, "bearing", 0));
+    tg_bytes_free(blob);
     /* #endregion distance */
+
+    puts("=== boundary");
+    /* #region boundary */
+    r = reader(tg_engine_boundary(engine, TEXT("tgd:np/2gm"), 0, &blob), &blob);
+    tg_str geojson = str(&r, "geojson", 0); /* a GeoJSON Feature, for any map library */
+    const char *type = strstr(geojson.ptr, "\"geometry\":{\"type\":\"") + 20;
+    printf("%.*s of %lld vertices at level %lld\n", (int)strcspn(type, "\""), type, integer(&r, "vertices", 0),
+           integer(&r, "lod", 0));
+    printf("tolerance %.0f m, %zu bytes of GeoJSON\n", num(&r, "tolerance_m", 0), geojson.len);
+    tg_bytes_free(blob);
+    /* #endregion boundary */
 
     puts("=== errors");
     /* #region errors */

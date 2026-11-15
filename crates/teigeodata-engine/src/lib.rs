@@ -62,7 +62,7 @@ use std::sync::Arc;
 
 pub use layer::{Layer, LayerId, LayerOptions, Load, Verify, built};
 #[cfg(feature = "boundaries")]
-pub use outline::{Outline, Ring};
+pub use outline::{Outline, Ring, write_point_geojson};
 #[cfg(feature = "postal")]
 pub use postal::PostalCode;
 #[cfg(all(feature = "admin", feature = "admin-index"))]

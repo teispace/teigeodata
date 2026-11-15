@@ -123,6 +123,12 @@ void CheckDistance()
     Assert(Math.Abs(got - d.GetProperty("metres").GetDouble()) <= 1e-6, $"distance {got}");
     double[] o = d.Doubles("out_of_range");
     Code(ErrorCode.InvalidArgument, () => Geodata.DistanceM(o[0], o[1], o[2], o[3]));
+    JsonElement bd = parity.GetProperty("bearing_deg");
+    double[] pair = bd.Doubles("args");
+    double deg = Geodata.BearingDeg(pair[0], pair[1], pair[2], pair[3]);
+    Assert(Math.Abs(deg - bd.D("degrees")) <= 1e-9, $"bearing {deg}");
+    double[] bo = bd.Doubles("out_of_range");
+    Code(ErrorCode.InvalidArgument, () => Geodata.BearingDeg(bo[0], bo[1], bo[2], bo[3]));
 }
 
 void CheckProgress()
@@ -203,6 +209,24 @@ void CheckEngineQueries()
     Equal(h.Str("source"), height.Strings("source").Single(), "source");
     Equal(h.D("meters"), Numbers(height, "meters").Single(), "meters");
     Assert(engine.Remove(1) && !engine.Remove(1) && engine.Layers() == 1, "remove");
+
+    JsonElement dist = p.GetProperty("distance");
+    JsonElement c = p.GetProperty("boundary");
+    var apart = new BlobReader(engine.Distance(dist.Str("from"), dist.Str("to")));
+    Assert(Math.Abs(Numbers(apart, "meters").Single() - dist.D("meters")) <= 1e-6, "distance meters");
+    Assert(Math.Abs(Numbers(apart, "bearing").Single() - dist.D("bearing")) <= 1e-6, "distance bearing");
+    Equal(0, new BlobReader(engine.Distance(dist.Str("from"), c.Str("unknown_id"))).Rows, "distance unknown");
+    using var outlined = new Engine();
+    outlined.OpenFile(Fixture(c.Str("fixture")));
+    var shape = new BlobReader(outlined.Boundary(c.Str("id"), c.U32("lod")));
+    Equal(string.Join(",", c.Strings("columns")), string.Join(",", shape.Columns), "boundary columns");
+    Equal(c.Str("id"), shape.Strings("id").Single(), "boundary id");
+    Equal(c.Str("geojson"), shape.Strings("geojson").Single(), "boundary geojson");
+    Equal((double)c.U32("lod"), Numbers(shape, "lod").Single(), "boundary lod");
+    Equal(c.D("tolerance_m"), Numbers(shape, "tolerance_m").Single(), "boundary tolerance");
+    Equal(c.D("vertices"), Numbers(shape, "vertices").Single(), "boundary vertices");
+    Equal(0, new BlobReader(outlined.Boundary(c.Str("unknown_id"), 0)).Rows, "boundary unknown");
+    Code(ErrorCode.InvalidArgument, () => outlined.Boundary(c.Str("id"), c.U32("bad_lod")));
 }
 
 void CheckOpenOptions()

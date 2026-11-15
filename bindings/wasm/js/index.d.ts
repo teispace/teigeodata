@@ -8,6 +8,9 @@ export const SAMPLE_ROWS_MAX: number;
 /** Most places one query returns. */
 export const LIMIT_MAX: number;
 
+/** The coarsest level of detail `Engine::boundary` reads; 0 is full resolution. */
+export const COARSEST_LOD: number;
+
 /**
  * Loads the module once, from `source` (a URL, a `Response`, bytes or a compiled
  * `WebAssembly.Module`) or the file beside this one; later calls return the same promise.

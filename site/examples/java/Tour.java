@@ -129,8 +129,21 @@ public final class Tour {
         System.out.println("=== distance");
         // #region distance
         double meters = TeiGeodata.distanceM(27.7172, 85.3240, 28.2096, 83.9856);
-        System.out.println(f("Kathmandu to Pokhara: %.1f km", meters / 1000));
+        double heading = TeiGeodata.bearingDeg(27.7172, 85.3240, 28.2096, 83.9856);
+        System.out.println(f("Kathmandu to Pokhara: %.1f km, heading %.0f°", meters / 1000, heading));
+        Map<String, Object> apart = new Reader(engine.distance("tgd:np/2cn", "tgd:np/1xhb")).records().get(0);
+        System.out.println(f("place to place: %.1f km at %.0f°", (Double) apart.get("meters") / 1000, apart.get("bearing")));
         // #endregion distance
+
+        System.out.println("=== boundary");
+        // #region boundary
+        Map<String, Object> shape = new Reader(engine.boundary("tgd:np/2gm", 0)).records().get(0);
+        String geojson = (String) shape.get("geojson"); // a GeoJSON Feature, for any map library
+        int at = geojson.indexOf("\"type\":\"", geojson.indexOf("\"geometry\"")) + 8;
+        String type = geojson.substring(at, geojson.indexOf('"', at));
+        System.out.println(f("%s of %s vertices at level %s", type, shape.get("vertices"), shape.get("lod")));
+        System.out.println(f("tolerance %.0f m, %d bytes of GeoJSON", shape.get("tolerance_m"), geojson.length()));
+        // #endregion boundary
 
         System.out.println("=== errors");
         // #region errors

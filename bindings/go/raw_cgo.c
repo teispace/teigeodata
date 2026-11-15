@@ -133,6 +133,14 @@ int32_t teigeodata_w_distance_m(double lat1, double lon1, double lat2, double lo
     return status == 0 ? 0 : p_tg_last_error(msg);
 }
 
+static int32_t (*p_tg_bearing_deg)(double lat1, double lon1, double lat2, double lon2, void *out);
+
+int32_t teigeodata_w_bearing_deg(double lat1, double lon1, double lat2, double lon2, double *out, teigeodata_bytes *msg) {
+    if (p_tg_bearing_deg == NULL) return -1;
+    const int32_t status = p_tg_bearing_deg(lat1, lon1, lat2, lon2, out);
+    return status == 0 ? 0 : p_tg_last_error(msg);
+}
+
 static void (*p_tg_engine_free)(const void *);
 
 void teigeodata_w_engine_free(uintptr_t handle) {
@@ -387,6 +395,22 @@ int32_t teigeodata_w_engine_by_iso(uintptr_t handle, const uint8_t *code, size_t
     return status == 0 ? 0 : p_tg_last_error(msg);
 }
 
+static int32_t (*p_tg_engine_boundary)(const void *handle, const void *id, size_t id_len, uint32_t lod, void *out);
+
+int32_t teigeodata_w_engine_boundary(uintptr_t handle, const uint8_t *id, size_t id_len, uint32_t lod, teigeodata_bytes *out, teigeodata_bytes *msg) {
+    if (p_tg_engine_boundary == NULL) return -1;
+    const int32_t status = p_tg_engine_boundary((const void *)handle, id, id_len, lod, out);
+    return status == 0 ? 0 : p_tg_last_error(msg);
+}
+
+static int32_t (*p_tg_engine_distance)(const void *handle, const void *from, size_t from_len, const void *to, size_t to_len, void *out);
+
+int32_t teigeodata_w_engine_distance(uintptr_t handle, const uint8_t *from, size_t from_len, const uint8_t *to, size_t to_len, teigeodata_bytes *out, teigeodata_bytes *msg) {
+    if (p_tg_engine_distance == NULL) return -1;
+    const int32_t status = p_tg_engine_distance((const void *)handle, from, from_len, to, to_len, out);
+    return status == 0 ? 0 : p_tg_last_error(msg);
+}
+
 static void (*p_tg_store_free)(const void *);
 
 void teigeodata_w_store_free(uintptr_t handle) {
@@ -615,6 +639,7 @@ char *teigeodata_load(const char *path) {
     *(void **)&p_tg_sample_rows = teigeodata_sym(lib, "tg_sample_rows");
     *(void **)&p_tg_progress = teigeodata_sym(lib, "tg_progress");
     *(void **)&p_tg_distance_m = teigeodata_sym(lib, "tg_distance_m");
+    *(void **)&p_tg_bearing_deg = teigeodata_sym(lib, "tg_bearing_deg");
     *(void **)&p_tg_engine_free = teigeodata_sym(lib, "tg_engine_free");
     *(void **)&p_tg_engine_new = teigeodata_sym(lib, "tg_engine_new");
     *(void **)&p_tg_engine_open_file = teigeodata_sym(lib, "tg_engine_open_file");
@@ -647,6 +672,8 @@ char *teigeodata_load(const char *path) {
     *(void **)&p_tg_engine_tz_rules_start = teigeodata_sym(lib, "tg_engine_tz_rules_start");
     *(void **)&p_tg_engine_tz_version = teigeodata_sym(lib, "tg_engine_tz_version");
     *(void **)&p_tg_engine_by_iso = teigeodata_sym(lib, "tg_engine_by_iso");
+    *(void **)&p_tg_engine_boundary = teigeodata_sym(lib, "tg_engine_boundary");
+    *(void **)&p_tg_engine_distance = teigeodata_sym(lib, "tg_engine_distance");
     *(void **)&p_tg_store_free = teigeodata_sym(lib, "tg_store_free");
     *(void **)&p_tg_store_create = teigeodata_sym(lib, "tg_store_create");
     *(void **)&p_tg_store_open = teigeodata_sym(lib, "tg_store_open");

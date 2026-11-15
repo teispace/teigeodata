@@ -152,10 +152,34 @@ the point.""",
     ),
     (
         "distance",
-        "Distance between two points",
+        "Distance and bearing",
         """{f:distance_m} is the great-circle distance in metres (haversine on the WGS84 mean
-sphere, within about 0.5% of the ellipsoid). It needs no pack.""",
-        "",
+sphere, within about 0.5% of the ellipsoid), and {f:bearing_deg} the initial bearing from the
+first point to the second, in degrees clockwise from north. Neither needs a pack. Between two
+places you already have, {m:distance} takes their IDs and answers one row with `meters` and
+`bearing`.""",
+        """{m:distance} answers no row when either ID is unknown. From a point to a place, pass the
+place's `lat` and `lon` to {f:distance_m}. The bearing is the direction you set off in: on a
+great circle it changes along the way, so the bearing back is not the reverse of this one.""",
+    ),
+    (
+        "boundary",
+        "A place's outline",
+        """{m:boundary} answers a unit's outline as one row: `geojson`, an RFC 7946 Feature (a
+Polygon or MultiPolygon, outer rings counterclockwise and holes clockwise, seven decimals as
+stored), with the `lod` read, its `tolerance_m` and the number of `vertices`. A place with no
+outline answers its point as the geometry; an unknown ID answers no row.""",
+        """The Feature goes to a map as it is: MapLibre's and Leaflet's GeoJSON sources, OpenLayers,
+Shapely's `shape()`, Turf and JTS all read it.
+
+- **Level of detail.** `lod` 0 is full resolution; 1 to 6 are coarser, each within its
+  `tolerance_m`, with neighbouring units still sharing their borders at every level. A pack
+  stored at full resolution only (the lite packs) answers every level as 0. A country at level 0
+  can be megabytes: draw a coarser level, and keep 0 for measuring.
+- `lod` above 6 is `InvalidArgument`; a pack installed without `boundaries` is
+  `MissingComponent`.
+- Whether a point is *inside* a unit is {m:admin_at}, which tests the same outlines without
+  building them.""",
     ),
     (
         "errors",
@@ -262,6 +286,7 @@ byte and keeps the packs updated."""
     for region, title, before, after in SECTIONS:
         if region == "errors":
             continue
+        before, after = lang.get("prose", {}).get(region, (before, after))
         out.append(f"## {title}")
         out.append("")
         out.append(fill(before, lang).strip())
@@ -344,6 +369,30 @@ lang(
     naming="snake",
     files=[("Rust", "rust/tour.rs", "rust")],
     tour_url=TOUR + "rust/tour.rs",
+    # The typed engine's own calls where they differ from the bindings'.
+    prose={
+        "distance": (
+            """`meters_between` is the great-circle distance in metres (haversine on the WGS84 mean
+sphere, within about 0.5% of the ellipsoid), and `bearing_deg` the initial bearing from the
+first point to the second, in degrees clockwise from north. Both take degrees and need no
+pack; between two places, pass their points.""",
+            """The bindings' `distance` takes two place IDs and answers both in one row. The bearing
+is the direction you set off in: on a great circle it changes along the way.""",
+        ),
+        "boundary": (
+            """`Engine::boundary` decodes a unit's outline at a level of detail into an `Outline` you
+reuse: its rings, its points and the level's `tolerance_cm`. It returns the layer that held it,
+or `None` (and an empty outline) for a place without one. `Outline::write_geojson` writes the
+geometry as RFC 7946 GeoJSON (outer rings counterclockwise, holes clockwise, seven decimals as
+stored): the same bytes the servers and every binding's `boundary` answer.""",
+            """- **Level of detail.** Level 0 is full resolution; 1 to 6 are coarser, each within its
+  tolerance, with neighbouring units still sharing their borders at every level. A pack stored
+  at full resolution only (the lite packs) reads every level as 0. Draw a coarser level; keep 0
+  for measuring.
+- `Engine::boundary_vertices` counts an outline's vertices without decoding it, and
+  `admin_at` tests a point against the same outlines without building them.""",
+        ),
+    },
     intro="""teigeodata is written in Rust, and Rust gets the engine itself: typed places, typed IDs and
 points, and queries that write into buffers you reuse, so a warm query allocates nothing. Every
 other language reaches the same engine through a generated binding.""",

@@ -21,6 +21,7 @@ extension type _Module._(JSObject _) implements JSObject {
   external JSUint8Array sampleRows(int rows);
   external int progress(int steps, JSFunction onStep);
   external double distanceM(double lat1, double lon1, double lat2, double lon2);
+  external double bearingDeg(double lat1, double lon1, double lat2, double lon2);
   @JS('Engine')
   external JSFunction get engineClass;
 }
@@ -54,6 +55,8 @@ extension type _JsEngine._(JSObject _) implements JSObject {
   external JSUint8Array tzRulesStart(String zone);
   external String tzVersion();
   external JSUint8Array byIso(String code);
+  external JSUint8Array boundary(String id, int lod);
+  external JSUint8Array distance(String from, String to);
 }
 
 /// `SearchOptions` as the module reads it: a plain object, enums by name.
@@ -139,6 +142,9 @@ final class TeiGeodata {
 
   /// Most places one query returns.
   static const int limitMax = 10000;
+
+  /// The coarsest level of detail `Engine::boundary` reads; 0 is full resolution.
+  static const int coarsestLod = 6;
 
   /// The path the module loads from by default: the entry (`index.js`) of the
   /// `@teispace/teigeodata-wasm` package copied beside the page, with its module beside it.
@@ -242,7 +248,8 @@ final class TeiGeodata {
   }
 
   /// Great-circle distance in metres between two points in degrees, by the haversine formula on
-  /// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+  /// the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query
+  /// measures it, with the same digits on every platform.
   ///
   /// # Errors
   ///
@@ -251,6 +258,22 @@ final class TeiGeodata {
   double distanceM(double lat1, double lon1, double lat2, double lon2) {
     try {
       return _m.distanceM(lat1, lon1, lat2, lon2);
+    } catch (e, s) {
+      _rethrow(e, s);
+    }
+  }
+
+  /// The initial great-circle bearing from the first point to the second, in degrees clockwise
+  /// from true north in `[0, 360)`; 0 for one point twice or from a pole. The same digits on
+  /// every platform.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+  /// -180..=180, or any value is not finite.
+  double bearingDeg(double lat1, double lon1, double lat2, double lon2) {
+    try {
+      return _m.bearingDeg(lat1, lon1, lat2, lon2);
     } catch (e, s) {
       _rethrow(e, s);
     }
@@ -649,6 +672,45 @@ final class Engine {
   Uint8List byIso(String code) {
     try {
       return _live.byIso(code).toDart;
+    } catch (e, s) {
+      _rethrow(e, s);
+    }
+  }
+
+  /// The outline of the place with this ID at level of detail `lod`, as one row: `id`,
+  /// `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m`
+  /// (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an
+  /// RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings
+  /// counterclockwise, holes clockwise), or the place's `Point` when it has no outline.
+  /// Level 0 is full resolution and 1 to `COARSEST_LOD` coarser; neighbours share their
+  /// borders at every level. A whole country at level 0 can be megabytes: ask a coarser
+  /// level to draw it small. No row for an unknown ID.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if `id` is not a place ID or `lod` exceeds
+  /// `COARSEST_LOD`; `ErrorCode::MissingComponent` without `boundaries`;
+  /// `ErrorCode::Corrupt` if a section read is corrupt.
+  Uint8List boundary(String id, int lod) {
+    try {
+      return _live.boundary(id, lod).toDart;
+    } catch (e, s) {
+      _rethrow(e, s);
+    }
+  }
+
+  /// The great-circle distance between the places with these IDs, as one row: `meters` on
+  /// the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees
+  /// clockwise from north. No row when either ID is unknown. From a point, use `distance_m`
+  /// and `bearing_deg` with the place's `lat` and `lon`.
+  ///
+  /// # Errors
+  ///
+  /// `ErrorCode::InvalidArgument` if an ID is not a place ID; `ErrorCode::Corrupt` if a
+  /// section read is corrupt.
+  Uint8List distance(String from, String to) {
+    try {
+      return _live.distance(from, to).toDart;
     } catch (e, s) {
       _rethrow(e, s);
     }

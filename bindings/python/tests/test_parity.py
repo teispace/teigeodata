@@ -71,6 +71,10 @@ class Parity(unittest.TestCase):
         self.assertAlmostEqual(tg.distance_m(*d["args"]), d["metres"], delta=1e-6)
         with self.assertRaises(tg.InvalidArgumentError):
             tg.distance_m(*d["out_of_range"])
+        b = PARITY["bearing_deg"]
+        self.assertAlmostEqual(tg.bearing_deg(*b["args"]), b["degrees"], delta=1e-9)
+        with self.assertRaises(tg.InvalidArgumentError):
+            tg.bearing_deg(*b["out_of_range"])
 
     def test_errors(self) -> None:
         with self.assertRaises(tg.InvalidArgumentError) as e:
@@ -213,6 +217,26 @@ class Engine(unittest.TestCase):
         self.assertTrue(self.engine.remove(1))
         self.assertFalse(self.engine.remove(1))
         self.assertEqual(Reader(self.engine.elevation_at(h["lat"], h["lon"])).rows, 0)
+
+    def test_boundary_and_distance(self) -> None:
+        c = self.p["boundary"]
+        outlined = tg.Engine()
+        outlined.open_file(str(pathlib.Path(FIXTURE).parents[1] / c["fixture"]))
+        got = Reader(outlined.boundary(c["id"], c["lod"]))
+        self.assertEqual(got.columns, c["columns"])
+        self.assertEqual(got.strings("id"), [c["id"]])
+        self.assertEqual(list(got.numbers("lod")), [c["lod"]])
+        self.assertEqual(list(got.numbers("tolerance_m")), [c["tolerance_m"]])
+        self.assertEqual(list(got.numbers("vertices")), [c["vertices"]])
+        self.assertEqual(got.strings("geojson"), [c["geojson"]])
+        self.assertEqual(Reader(outlined.boundary(c["unknown_id"], 0)).rows, 0)
+        with self.assertRaises(tg.InvalidArgumentError):
+            outlined.boundary(c["id"], c["bad_lod"])
+        d = self.p["distance"]
+        got = Reader(self.engine.distance(d["from"], d["to"]))
+        self.assertAlmostEqual(got.numbers("meters")[0], d["meters"], delta=1e-6)
+        self.assertAlmostEqual(got.numbers("bearing")[0], d["bearing"], delta=1e-6)
+        self.assertEqual(Reader(self.engine.distance(d["from"], c["unknown_id"])).rows, 0)
 
     def test_graph_radius_zone_and_codes(self) -> None:
         e, p = self.engine, self.p

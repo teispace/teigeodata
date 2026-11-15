@@ -41,6 +41,8 @@ pub const TG_ERROR_REFUSED: i32 = 8;
 pub const TG_SAMPLE_ROWS_MAX: u32 = 1000000;
 /// Most places one query returns.
 pub const TG_LIMIT_MAX: u32 = 10000;
+/// The coarsest level of detail `Engine::boundary` reads; 0 is full resolution.
+pub const TG_COARSEST_LOD: u32 = 6;
 
 /// A callback taking `u32`; return `false` to cancel.
 pub type TgCallbackU32 = Option<unsafe extern "C" fn(ctx: Ctx, a0: u32) -> bool>;
@@ -351,7 +353,8 @@ pub unsafe extern "C" fn tg_progress(
 }
 
 /// Great-circle distance in metres between two points in degrees, by the haversine formula on
-/// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+/// the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query
+/// measures it, with the same digits on every platform.
 ///
 /// # Errors
 ///
@@ -368,6 +371,31 @@ pub unsafe extern "C" fn tg_distance_m(
     abi::call(|| {
         let out = abi::out(out)?;
         let value = teigeodata_api::distance_m(lat1, lon1, lat2, lon2)?;
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The initial great-circle bearing from the first point to the second, in degrees clockwise
+/// from true north in `[0, 360)`; 0 for one point twice or from a pole. The same digits on
+/// every platform.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+/// -180..=180, or any value is not finite.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_bearing_deg(
+    lat1: f64,
+    lon1: f64,
+    lat2: f64,
+    lon2: f64,
+    out: *mut f64,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        let value = teigeodata_api::bearing_deg(lat1, lon1, lat2, lon2)?;
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };
         Ok(())
@@ -1247,6 +1275,76 @@ pub unsafe extern "C" fn tg_engine_by_iso(
         // SAFETY: the caller passes `code_len` readable bytes (or null and 0).
         let code = unsafe { abi::str_arg(code, code_len, "code") }?;
         let value = this.0.by_iso(code)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The outline of the place with this ID at level of detail `lod`, as one row: `id`,
+/// `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m`
+/// (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an
+/// RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings
+/// counterclockwise, holes clockwise), or the place's `Point` when it has no outline.
+/// Level 0 is full resolution and 1 to `COARSEST_LOD` coarser; neighbours share their
+/// borders at every level. A whole country at level 0 can be megabytes: ask a coarser
+/// level to draw it small. No row for an unknown ID.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if `id` is not a place ID or `lod` exceeds
+/// `COARSEST_LOD`; `ErrorCode::MissingComponent` without `boundaries`;
+/// `ErrorCode::Corrupt` if a section read is corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_boundary(
+    handle: *const TgEngine,
+    id: *const u8,
+    id_len: usize,
+    lod: u32,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `id_len` readable bytes (or null and 0).
+        let id = unsafe { abi::str_arg(id, id_len, "id") }?;
+        let value = this.0.boundary(id, lod)?;
+        let value = TgBytes::from_vec(value.into_vec());
+        // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
+        unsafe { out.write(value) };
+        Ok(())
+    })
+}
+
+/// The great-circle distance between the places with these IDs, as one row: `meters` on
+/// the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees
+/// clockwise from north. No row when either ID is unknown. From a point, use `distance_m`
+/// and `bearing_deg` with the place's `lat` and `lon`.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if an ID is not a place ID; `ErrorCode::Corrupt` if a
+/// section read is corrupt.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tg_engine_distance(
+    handle: *const TgEngine,
+    from: *const u8,
+    from_len: usize,
+    to: *const u8,
+    to_len: usize,
+    out: *mut TgBytes,
+) -> i32 {
+    abi::call(|| {
+        let out = abi::out(out)?;
+        // SAFETY: a live handle from this library, or null (rejected).
+        let this = unsafe { abi::handle(handle, "handle") }?;
+        // SAFETY: the caller passes `from_len` readable bytes (or null and 0).
+        let from = unsafe { abi::str_arg(from, from_len, "from") }?;
+        // SAFETY: the caller passes `to_len` readable bytes (or null and 0).
+        let to = unsafe { abi::str_arg(to, to_len, "to") }?;
+        let value = this.0.distance(from, to)?;
         let value = TgBytes::from_vec(value.into_vec());
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };

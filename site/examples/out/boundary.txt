@@ -1,0 +1,2 @@
+Polygon of 176 vertices at level 0
+tolerance 0 m, 4362 bytes of GeoJSON

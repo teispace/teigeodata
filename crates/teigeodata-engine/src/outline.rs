@@ -7,7 +7,7 @@
 
 use core::ops::Range;
 
-use teigeodata_core::{E7, PlaceId, Point};
+use teigeodata_core::{E6, E7, PlaceId, Point};
 use teigeodata_format::Kind;
 use teigeodata_format::arcs::{Arcs, PINNED};
 use teigeodata_format::place_index::Rect;
@@ -181,5 +181,161 @@ impl Engine {
             }
         }
         Ok(Some(l.id))
+    }
+}
+
+impl Outline {
+    /// Writes the outline as an RFC 7946 geometry: a `Polygon`, or a `MultiPolygon` when it
+    /// has more than one part, each outer ring counterclockwise and each hole clockwise (the
+    /// right-hand rule, §3.1.6), coordinates longitude first with the seven decimals the pack
+    /// stores. The servers' answers and every binding's `boundary` are these bytes. O(vertices).
+    pub fn write_geojson(&self, out: &mut Vec<u8>) {
+        let shape = self;
+        let parts = shape
+            .rings
+            .iter()
+            .map(|r| r.part)
+            .max()
+            .map_or(0, |p| p + 1);
+        let multi = parts > 1;
+        out.extend_from_slice(if multi {
+            b"{\"type\":\"MultiPolygon\",\"coordinates\":["
+        } else {
+            b"{\"type\":\"Polygon\",\"coordinates\":["
+        });
+        let mut part = None;
+        for (i, ring) in shape.rings.iter().enumerate() {
+            let pts = shape.points.get(ring.points.clone()).unwrap_or_default();
+            if multi && part != Some(ring.part) {
+                if part.is_some() {
+                    out.extend_from_slice(b"],");
+                }
+                out.push(b'[');
+                part = Some(ring.part);
+            } else if i > 0 {
+                out.push(b',');
+            }
+            // Twice the signed area (shoelace, degrees): positive for counterclockwise.
+            let area: f64 = pts
+                .windows(2)
+                .map(|w| match w {
+                    [a, b] => a.lon_degrees() * b.lat_degrees() - b.lon_degrees() * a.lat_degrees(),
+                    _ => 0.0,
+                })
+                .sum();
+            let reverse = (area > 0.0) == ring.hole;
+            out.push(b'[');
+            let mut write_point = |j: usize, p: &Point<E7>| {
+                if j > 0 {
+                    out.push(b',');
+                }
+                out.push(b'[');
+                e7(p.lon(), out);
+                out.push(b',');
+                e7(p.lat(), out);
+                out.push(b']');
+            };
+            if reverse {
+                for (j, p) in pts.iter().rev().enumerate() {
+                    write_point(j, p);
+                }
+            } else {
+                for (j, p) in pts.iter().enumerate() {
+                    write_point(j, p);
+                }
+            }
+            out.push(b']');
+        }
+        if multi && part.is_some() {
+            out.push(b']');
+        }
+        out.extend_from_slice(b"]}");
+    }
+}
+
+/// Writes a place's `point` as an RFC 7946 `Point` geometry, longitude first, with seven
+/// decimals as an outline's: the extent of a place with no outline.
+pub fn write_point_geojson(point: Point<E6>, out: &mut Vec<u8>) {
+    out.extend_from_slice(b"{\"type\":\"Point\",\"coordinates\":[");
+    // A 1e-6° unit is ten 1e-7° units; ±1.8e9 still fits an `i32`.
+    e7(point.lon().saturating_mul(10), out);
+    out.push(b',');
+    e7(point.lat().saturating_mul(10), out);
+    out.extend_from_slice(b"]}");
+}
+
+/// Writes `units` of the 1e-7° grid as degrees with 7 decimals, exactly: what `{:.7}` writes
+/// for `units / 1e7`, from the integer alone (an outline writes tens of thousands of them).
+fn e7(units: i32, out: &mut Vec<u8>) {
+    if units < 0 {
+        out.push(b'-');
+    }
+    let abs = units.unsigned_abs();
+    let (whole, fraction) = (abs / 10_000_000, abs % 10_000_000);
+    let mut digits = [0_u8; 10];
+    let mut start = digits.len();
+    let mut rest = whole;
+    loop {
+        start -= 1;
+        if let Some(d) = digits.get_mut(start) {
+            // `rest % 10` is a digit.
+            *d = b'0' + (rest % 10) as u8;
+        }
+        rest /= 10;
+        if rest == 0 {
+            break;
+        }
+    }
+    out.extend_from_slice(digits.get(start..).unwrap_or_default());
+    out.push(b'.');
+    let mut decimals = [b'0'; 7];
+    let mut left = fraction;
+    for d in decimals.iter_mut().rev() {
+        *d = b'0' + (left % 10) as u8;
+        left /= 10;
+    }
+    out.extend_from_slice(&decimals);
+}
+
+#[cfg(test)]
+mod tests {
+    use teigeodata_core::{E7, Point};
+
+    /// `e7` writes what `{:.7}` of the degrees wrote, for every kind of value.
+    #[test]
+    fn e7_is_the_degrees_to_seven_decimals() {
+        let mut values = vec![
+            0,
+            1,
+            -1,
+            9_999_999,
+            -9_999_999,
+            10_000_000,
+            -10_000_000,
+            1_800_000_000,
+            -1_800_000_000,
+            900_000_000,
+            -900_000_000,
+            123_456_789,
+            -5,
+        ];
+        // A fixed LCG over the whole longitude range.
+        let mut x = 0x2545_f491_u64;
+        for _ in 0..200_000 {
+            x = x.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            let v = i64::try_from(x >> 33).unwrap_or(0) % 3_600_000_001 - 1_800_000_000;
+            values.push(i32::try_from(v).unwrap_or(0));
+        }
+        let mut out = Vec::new();
+        for v in values {
+            let p = Point::<E7>::from_units(0, v).unwrap_or_else(|| panic!("{v} on the grid"));
+            out.clear();
+            super::e7(v, &mut out);
+            assert_eq!(
+                String::from_utf8_lossy(&out),
+                format!("{:.7}", p.lon_degrees()),
+                "{v}"
+            );
+        }
     }
 }

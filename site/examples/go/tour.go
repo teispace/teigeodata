@@ -5,6 +5,7 @@ package main
 
 // #region import
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -154,8 +155,28 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Kathmandu to Pokhara: %.1f km\n", meters/1000)
+	heading, err := tg.BearingDeg(27.7172, 85.3240, 28.2096, 83.9856)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Kathmandu to Pokhara: %.1f km, heading %.0f°\n", meters/1000, heading)
+	apart := rows(engine.Distance("tgd:np/2cn", "tgd:np/1xhb"))[0]
+	fmt.Printf("place to place: %.1f km at %.0f°\n", apart["meters"].(float64)/1000, apart["bearing"])
 	// #endregion distance
+
+	fmt.Println("=== boundary")
+	// #region boundary
+	shape := rows(engine.Boundary("tgd:np/2gm", 0))[0]
+	geojson := shape["geojson"].(string) // a GeoJSON Feature, for any map library
+	var feature struct {
+		Geometry struct{ Type string } `json:"geometry"`
+	}
+	if err := json.Unmarshal([]byte(geojson), &feature); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%s of %d vertices at level %d\n", feature.Geometry.Type, shape["vertices"], shape["lod"])
+	fmt.Printf("tolerance %.0f m, %d bytes of GeoJSON\n", shape["tolerance_m"], len(geojson))
+	// #endregion boundary
 
 	fmt.Println("=== errors")
 	// #region errors

@@ -52,6 +52,9 @@ export function run(tg, parity, read, { full }) {
   const d = parity.distance_m;
   ok("distanceM", Math.abs(tg.distanceM(...d.args) - d.metres) < 1e-6);
   throws("distanceM out of range", () => tg.distanceM(...d.out_of_range), "InvalidArgument");
+  const bd = parity.bearing_deg;
+  ok("bearingDeg", Math.abs(tg.bearingDeg(...bd.args) - bd.degrees) < 1e-9);
+  throws("bearingDeg out of range", () => tg.bearingDeg(...bd.out_of_range), "InvalidArgument");
   const tooMany = throws("sampleRows too many", () => tg.sampleRows(tg.SAMPLE_ROWS_MAX + 1), "InvalidArgument");
   ok("message", /at most/.test(tooMany.message));
   ok("a thrown error is an Error", tooMany instanceof Error);
@@ -146,7 +149,27 @@ export function run(tg, parity, read, { full }) {
   eq("remove", engine.remove(1), true);
   eq("remove again", engine.remove(1), false);
   eq("layers after remove", engine.layers(), 1);
+  const dd = p.distance;
+  const m = engine.distance(dd.from, dd.to);
+  ok("distance meters", Math.abs(column(m, "meters")[0] - dd.meters) < 1e-6);
+  ok("distance bearing", Math.abs(column(m, "bearing")[0] - dd.bearing) < 1e-6);
+  const c = p.boundary;
+  eq("distance unknown", column(engine.distance(dd.from, c.unknown_id), "meters").length, 0);
   engine.free();
+
+  const outlined = new tg.Engine();
+  outlined.openBytes(read(c.fixture));
+  needs("boundaries", "boundary", () => outlined.boundary(c.id, c.lod), (r) => {
+    eq("boundary columns", names(r), c.columns);
+    eq("boundary id", strings(r, "id"), [c.id]);
+    eq("boundary geojson", strings(r, "geojson"), [c.geojson]);
+    eq("boundary lod", [...column(r, "lod")], [c.lod]);
+    eq("boundary tolerance", [...column(r, "tolerance_m")], [c.tolerance_m]);
+    eq("boundary vertices", [...column(r, "vertices")].map(Number), [c.vertices]);
+    eq("boundary unknown", strings(outlined.boundary(c.unknown_id, 0), "id").length, 0);
+  });
+  throws("boundary lod", () => outlined.boundary(c.id, c.bad_lod), "InvalidArgument");
+  outlined.free();
 
   const t = parity.tz;
   const zones = new tg.Engine();
@@ -173,6 +196,14 @@ export function run(tg, parity, read, { full }) {
   }
   zones.free();
   return n;
+}
+
+/** The column names of a blob, in order. */
+function names(blob) {
+  const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+  const decode = new TextDecoder();
+  return Array.from({ length: view.getUint32(8, true) }, (_, i) =>
+    decode.decode(blob.subarray(16 + 40 * i, 32 + 40 * i)).replace(/\0+$/, ""));
 }
 
 function sum(xs) {

@@ -32,6 +32,16 @@ const SURVIVABLE: &[(&str, &[&str], &str)] = &[
         "a point still out of range is refused the same way",
     ),
     (
+        "bearing_deg.out_of_range",
+        &[],
+        "a point still out of range is refused the same way",
+    ),
+    (
+        "engine.boundary.bad_lod",
+        &[],
+        "a level still too coarse is refused the same way",
+    ),
+    (
         "engine.bad_id",
         &[],
         "an ID still malformed is refused the same way",

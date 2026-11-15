@@ -13,7 +13,8 @@ use std::error::Error;
 // #region import
 use teigeodata_core::{E6, E7, Point};
 use teigeodata_engine::{
-    Engine, Focus, Layer, LayerOptions, Place, Scratch, SearchOptions, meters_between,
+    Engine, Focus, Layer, LayerOptions, Outline, Place, Scratch, SearchOptions, bearing_deg,
+    meters_between,
 };
 // #endregion import
 
@@ -239,8 +240,54 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("=== distance");
     // #region distance
     let meters = meters_between(27.7172, 85.3240, 28.2096, 83.9856);
-    println!("Kathmandu to Pokhara: {:.1} km", meters / 1000.0);
+    let heading = bearing_deg(27.7172, 85.3240, 28.2096, 83.9856);
+    println!(
+        "Kathmandu to Pokhara: {:.1} km, heading {heading:.0}°",
+        meters / 1000.0
+    );
+    let pokhara = engine.get("tgd:np/1xhb".parse()?)?.ok_or("not found")?;
+    let (a, b) = (kathmandu.point, pokhara.point);
+    let (lat1, lon1, lat2, lon2) = (
+        a.lat_degrees(),
+        a.lon_degrees(),
+        b.lat_degrees(),
+        b.lon_degrees(),
+    );
+    println!(
+        "place to place: {:.1} km at {:.0}°",
+        meters_between(lat1, lon1, lat2, lon2) / 1000.0,
+        bearing_deg(lat1, lon1, lat2, lon2)
+    );
     // #endregion distance
+
+    println!("=== boundary");
+    // #region boundary
+    let metro = engine.get("tgd:np/2gm".parse()?)?.ok_or("not found")?;
+    let mut shape = Outline::default();
+    engine
+        .boundary(&metro, 0, &mut shape)?
+        .ok_or("no outline")?;
+    // The geometry as GeoJSON (RFC 7946), the bytes every binding's `geojson` column holds.
+    let mut geometry = Vec::new();
+    shape.write_geojson(&mut geometry);
+    let kind = if geometry.starts_with(br#"{"type":"Polygon""#) {
+        "Polygon"
+    } else {
+        "MultiPolygon"
+    };
+    println!("{kind} of {} vertices at level 0", shape.points.len());
+    let tolerance_m = f64::from(shape.tolerance_cm) / 100.0;
+    let feature = format!(
+        r#"{{"type":"Feature","id":"{}","geometry":{},"properties":{{"lod":0,"tolerance_m":{tolerance_m},"vertices":{}}}}}"#,
+        metro.id,
+        String::from_utf8_lossy(&geometry),
+        shape.points.len()
+    );
+    println!(
+        "tolerance {tolerance_m:.0} m, {} bytes of GeoJSON",
+        feature.len()
+    );
+    // #endregion boundary
 
     println!("=== errors");
     // #region errors

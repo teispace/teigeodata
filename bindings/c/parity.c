@@ -289,6 +289,12 @@ static void library(void) {
     CHECK(tg_distance_m(args[0], args[1], args[2], args[3], &metres) == TG_OK);
     CHECK(distance(metres, TGP_DISTANCE_M_METRES) <= 1e-6);
     CHECK(tg_distance_m(off[0], off[1], off[2], off[3], &metres) == TG_ERROR_INVALID_ARGUMENT);
+    static const double bargs[] = {TGP_BEARING_DEG_ARGS_ITEMS};
+    static const double boff[] = {TGP_BEARING_DEG_OUT_OF_RANGE_ITEMS};
+    double degrees = 0.0;
+    CHECK(tg_bearing_deg(bargs[0], bargs[1], bargs[2], bargs[3], &degrees) == TG_OK);
+    CHECK(distance(degrees, TGP_BEARING_DEG_DEGREES) <= 1e-9);
+    CHECK(tg_bearing_deg(boff[0], boff[1], boff[2], boff[3], &degrees) == TG_ERROR_INVALID_ARGUMENT);
 
     CHECK(TG_ERROR_INVALID_ARGUMENT == TGP_ERROR_CODES_INVALIDARGUMENT);
     CHECK(TG_ERROR_CANCELLED == TGP_ERROR_CODES_CANCELLED);
@@ -401,8 +407,32 @@ static void engine_queries(void) {
     bool removed = false;
     CHECK(tg_engine_remove(engine, 1, &removed) == TG_OK && removed);
     CHECK(tg_engine_remove(engine, 1, &removed) == TG_OK && !removed);
+
+    CHECK(tg_engine_distance(engine, TEXT(TGP_ENGINE_DISTANCE_FROM), TEXT(TGP_ENGINE_DISTANCE_TO), &out) == TG_OK);
+    CHECK(blob_rows(out) == 1 && distance(column_num(out, "meters", 0), TGP_ENGINE_DISTANCE_METERS) <= 1e-6);
+    CHECK(distance(column_num(out, "bearing", 0), TGP_ENGINE_DISTANCE_BEARING) <= 1e-6);
+    tg_bytes_free(out);
+    CHECK(tg_engine_distance(engine, TEXT(TGP_ENGINE_DISTANCE_FROM), TEXT(TGP_ENGINE_BOUNDARY_UNKNOWN_ID), &out) == TG_OK);
+    CHECK(blob_rows(out) == 0);
+    tg_bytes_free(out);
     tg_engine_free(engine);
     tg_engine_free(NULL);
+
+    tg_engine *outlined = NULL;
+    CHECK(tg_engine_new(&outlined) == TG_OK);
+    CHECK(tg_engine_open_file(outlined, TEXT(FIXTURE(TGP_ENGINE_BOUNDARY_FIXTURE)), &layers) == TG_OK);
+    CHECK(tg_engine_boundary(outlined, TEXT(TGP_ENGINE_BOUNDARY_ID), TGP_ENGINE_BOUNDARY_LOD, &out) == TG_OK);
+    static const char *const boundary_columns[] = {TGP_ENGINE_BOUNDARY_COLUMNS_ITEMS};
+    CHECK(blob_rows(out) == 1 && columns_are(out, boundary_columns, COUNT(boundary_columns)));
+    CHECK(str_is(out, "id", 0, TGP_ENGINE_BOUNDARY_ID) && str_is(out, "geojson", 0, TGP_ENGINE_BOUNDARY_GEOJSON));
+    CHECK(column_num(out, "lod", 0) == TGP_ENGINE_BOUNDARY_LOD);
+    CHECK(column_num(out, "tolerance_m", 0) == TGP_ENGINE_BOUNDARY_TOLERANCE_M);
+    CHECK(column_num(out, "vertices", 0) == TGP_ENGINE_BOUNDARY_VERTICES);
+    tg_bytes_free(out);
+    CHECK(tg_engine_boundary(outlined, TEXT(TGP_ENGINE_BOUNDARY_UNKNOWN_ID), 0, &out) == TG_OK && blob_rows(out) == 0);
+    tg_bytes_free(out);
+    CHECK(tg_engine_boundary(outlined, TEXT(TGP_ENGINE_BOUNDARY_ID), TGP_ENGINE_BOUNDARY_BAD_LOD, &out) == TG_ERROR_INVALID_ARGUMENT);
+    tg_engine_free(outlined);
 }
 
 static void open_options(void) {

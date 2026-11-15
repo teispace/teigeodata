@@ -117,8 +117,20 @@ fun tour(engine: Engine) {
     println("=== distance")
     // #region distance
     val meters = TeiGeodata.distanceM(27.7172, 85.3240, 28.2096, 83.9856)
-    println("Kathmandu to Pokhara: %.1f km".f(meters / 1000))
+    val heading = TeiGeodata.bearingDeg(27.7172, 85.3240, 28.2096, 83.9856)
+    println("Kathmandu to Pokhara: %.1f km, heading %.0f°".f(meters / 1000, heading))
+    val apart = Reader(engine.distance("tgd:np/2cn", "tgd:np/1xhb")).single()
+    println("place to place: %.1f km at %.0f°".f(apart["meters"] as Double / 1000, apart["bearing"]))
     // #endregion distance
+
+    println("=== boundary")
+    // #region boundary
+    val shape = Reader(engine.boundary("tgd:np/2gm", 0)).single()
+    val geojson = shape["geojson"] as String // a GeoJSON Feature, for any map library
+    val type = geojson.substringAfter("\"geometry\":{\"type\":\"").substringBefore('"')
+    println("%s of %s vertices at level %s".f(type, shape["vertices"], shape["lod"]))
+    println("tolerance %.0f m, %d bytes of GeoJSON".f(shape["tolerance_m"], geojson.length))
+    // #endregion boundary
 
     println("=== errors")
     // #region errors

@@ -237,14 +237,38 @@ Every place also has its own `elevation` column. The world pack carries a coarse
 country's terrain pack adds a finer one, and the engine answers from the finest grid that covers
 the point.
 
-## Distance between two points
+## Distance and bearing
 
-`distance_m` is the great-circle distance in metres (haversine on the WGS84 mean
-sphere, within about 0.5% of the ellipsoid). It needs no pack.
+`meters_between` is the great-circle distance in metres (haversine on the WGS84 mean
+sphere, within about 0.5% of the ellipsoid), and `bearing_deg` the initial bearing from the
+first point to the second, in degrees clockwise from north. Both take degrees and need no
+pack; between two places, pass their points.
 
 <include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#distance</include>
 
 <include lang="text" meta='title="Output"'>../../../examples/out/distance.txt</include>
+
+The bindings' `distance` takes two place IDs and answers both in one row. The bearing
+is the direction you set off in: on a great circle it changes along the way.
+
+## A place's outline
+
+`Engine::boundary` decodes a unit's outline at a level of detail into an `Outline` you
+reuse: its rings, its points and the level's `tolerance_cm`. It returns the layer that held it,
+or `None` (and an empty outline) for a place without one. `Outline::write_geojson` writes the
+geometry as RFC 7946 GeoJSON (outer rings counterclockwise, holes clockwise, seven decimals as
+stored): the same bytes the servers and every binding's `boundary` answer.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#boundary</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/boundary.txt</include>
+
+- **Level of detail.** Level 0 is full resolution; 1 to 6 are coarser, each within its
+  tolerance, with neighbouring units still sharing their borders at every level. A pack stored
+  at full resolution only (the lite packs) reads every level as 0. Draw a coarser level; keep 0
+  for measuring.
+- `Engine::boundary_vertices` counts an outline's vertices without decoding it, and
+  `admin_at` tests a point against the same outlines without building them.
 
 ## Errors
 

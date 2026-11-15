@@ -178,6 +178,12 @@ public func runParity(_ path: String) async throws {
     } catch {
         check(error.code == .invalidArgument, "\(error)")
     }
+    let bm = p["bearing_deg"] as! [String: Any]
+    let from = bm["args"] as! [Double]
+    let deg = try TeiGeodata.bearingDeg(from[0], lon1: from[1], lat2: from[2], lon2: from[3])
+    check(abs(deg - (bm["degrees"] as! Double)) < 1e-9, "bearing \(deg)")
+    let bb = bm["out_of_range"] as! [Double]
+    expect(.invalidArgument) { _ = try TeiGeodata.bearingDeg(bb[0], lon1: bb[1], lat2: bb[2], lon2: bb[3]) }
 
     var seen: [UInt32] = []
     check(try TeiGeodata.progress(3) { seen.append($0); return true } == 3 && seen == [1, 2, 3], "progress")
@@ -340,6 +346,24 @@ public func runParity(_ path: String) async throws {
         check(column(height, "meters", as: UInt64.self).map { Double(bitPattern: $0) } == [h["meters"] as! Double], "meters")
         check(strings(height, "source") == [h["source"] as? String], "source")
         check(engine.remove(1) && !engine.remove(1) && engine.layers() == 1, "remove")
+        let dist = e["distance"] as! [String: Any]
+        let c = e["boundary"] as! [String: Any]
+        let apart = try engine.distance(dist["from"] as! String, to: dist["to"] as! String)
+        check(abs(rawNumbers(apart, "meters", .f64)![0] - (dist["meters"] as! Double)) < 1e-6, "distance meters")
+        check(abs(rawNumbers(apart, "bearing", .f64)![0] - (dist["bearing"] as! Double)) < 1e-6, "distance bearing")
+        check(rawNumbers(try engine.distance(dist["from"] as! String, to: c["unknown_id"] as! String), "meters", .f64)!.isEmpty, "distance unknown")
+        let outlined = Engine()
+        _ = try outlined.openFile(dir.appendingPathComponent(c["fixture"] as! String).path)
+        let lod = UInt32(c["lod"] as! Int)
+        let got = try outlined.boundary(c["id"] as! String, lod: lod)
+        check(columnNames(got) == (c["columns"] as! [String]), "boundary columns")
+        check(strings(got, "id") == [c["id"] as? String], "boundary id")
+        check(strings(got, "geojson") == [c["geojson"] as? String], "boundary geojson")
+        check(rawNumbers(got, "lod", .u32) == [Double(lod)], "boundary lod")
+        check(rawNumbers(got, "tolerance_m", .f64) == [c["tolerance_m"] as! Double], "boundary tolerance")
+        check(rawNumbers(got, "vertices", .u64) == [Double(c["vertices"] as! Int)], "boundary vertices")
+        check(strings(try outlined.boundary(c["unknown_id"] as! String, lod: 0), "id").isEmpty, "boundary unknown")
+        expect(.invalidArgument) { _ = try outlined.boundary(c["id"] as! String, lod: UInt32(c["bad_lod"] as! Int)) }
         // Sendable: four tasks query one engine at once.
         let id = get["id"] as! String
         let names = await withTaskGroup(of: [String?].self) { group in

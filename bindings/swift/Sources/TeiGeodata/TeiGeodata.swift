@@ -207,6 +207,8 @@ public enum TeiGeodata {
     public static let sampleRowsMax: UInt32 = 1000000
     /// Most places one query returns.
     public static let limitMax: UInt32 = 10000
+    /// The coarsest level of detail `Engine::boundary` reads; 0 is full resolution.
+    public static let coarsestLod: UInt32 = 6
 
     /// The library version, from its package metadata.
     public static func version() -> String {
@@ -278,7 +280,8 @@ public enum TeiGeodata {
     }
 
     /// Great-circle distance in metres between two points in degrees, by the haversine formula on
-    /// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+    /// the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query
+    /// measures it, with the same digits on every platform.
     ///
     /// # Errors
     ///
@@ -287,6 +290,21 @@ public enum TeiGeodata {
     public static func distanceM(_ lat1: Double, lon1: Double, lat2: Double, lon2: Double) throws(TeiGeodataError) -> Double {
         var out: Double = 0
         let status = tg_distance_m(lat1, lon1, lat2, lon2, &out)
+        try check(status)
+        return out
+    }
+
+    /// The initial great-circle bearing from the first point to the second, in degrees clockwise
+    /// from true north in `[0, 360)`; 0 for one point twice or from a pole. The same digits on
+    /// every platform.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+    /// -180..=180, or any value is not finite.
+    public static func bearingDeg(_ lat1: Double, lon1: Double, lat2: Double, lon2: Double) throws(TeiGeodataError) -> Double {
+        var out: Double = 0
+        let status = tg_bearing_deg(lat1, lon1, lat2, lon2, &out)
         try check(status)
         return out
     }
@@ -749,6 +767,46 @@ public final class Engine: @unchecked Sendable {
         var out = tg_bytes()
         var code = code
         let status = withExtendedLifetime(self) { code.withUTF8 { codeBytes in tg_engine_by_iso(raw, codeBytes.baseAddress, codeBytes.count, &out) } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// The outline of the place with this ID at level of detail `lod`, as one row: `id`,
+    /// `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m`
+    /// (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an
+    /// RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings
+    /// counterclockwise, holes clockwise), or the place's `Point` when it has no outline.
+    /// Level 0 is full resolution and 1 to `COARSEST_LOD` coarser; neighbours share their
+    /// borders at every level. A whole country at level 0 can be megabytes: ask a coarser
+    /// level to draw it small. No row for an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID or `lod` exceeds
+    /// `COARSEST_LOD`; `ErrorCode::MissingComponent` without `boundaries`;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    public func boundary(_ id: String, lod: UInt32) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var id = id
+        let status = withExtendedLifetime(self) { id.withUTF8 { idBytes in tg_engine_boundary(raw, idBytes.baseAddress, idBytes.count, lod, &out) } }
+        try check(status)
+        return takeData(out)
+    }
+
+    /// The great-circle distance between the places with these IDs, as one row: `meters` on
+    /// the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees
+    /// clockwise from north. No row when either ID is unknown. From a point, use `distance_m`
+    /// and `bearing_deg` with the place's `lat` and `lon`.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if an ID is not a place ID; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    public func distance(_ from: String, to: String) throws(TeiGeodataError) -> Data {
+        var out = tg_bytes()
+        var from = from
+        var to = to
+        let status = withExtendedLifetime(self) { from.withUTF8 { fromBytes in to.withUTF8 { toBytes in tg_engine_distance(raw, fromBytes.baseAddress, fromBytes.count, toBytes.baseAddress, toBytes.count, &out) } } }
         try check(status)
         return takeData(out)
     }

@@ -219,7 +219,8 @@ fn progress(steps: u32, on_step: &Bound<'_, PyAny>) -> PyResult<u32> {
 }
 
 /// Great-circle distance in metres between two points in degrees, by the haversine formula on
-/// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+/// the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query
+/// measures it, with the same digits on every platform.
 ///
 /// # Errors
 ///
@@ -228,6 +229,21 @@ fn progress(steps: u32, on_step: &Bound<'_, PyAny>) -> PyResult<u32> {
 #[pyfunction]
 fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> PyResult<f64> {
     let value = teigeodata_api::distance_m(lat1, lon1, lat2, lon2);
+    let value = value.map_err(error)?;
+    Ok(value)
+}
+
+/// The initial great-circle bearing from the first point to the second, in degrees clockwise
+/// from true north in `[0, 360)`; 0 for one point twice or from a pole. The same digits on
+/// every platform.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+/// -180..=180, or any value is not finite.
+#[pyfunction]
+fn bearing_deg(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> PyResult<f64> {
+    let value = teigeodata_api::bearing_deg(lat1, lon1, lat2, lon2);
     let value = value.map_err(error)?;
     Ok(value)
 }
@@ -889,6 +905,39 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(Blob(value))
     }
+    /// The outline of the place with this ID at level of detail `lod`, as one row: `id`,
+    /// `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m`
+    /// (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an
+    /// RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings
+    /// counterclockwise, holes clockwise), or the place's `Point` when it has no outline.
+    /// Level 0 is full resolution and 1 to `COARSEST_LOD` coarser; neighbours share their
+    /// borders at every level. A whole country at level 0 can be megabytes: ask a coarser
+    /// level to draw it small. No row for an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID or `lod` exceeds
+    /// `COARSEST_LOD`; `ErrorCode::MissingComponent` without `boundaries`;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    fn boundary<'py>(&self, py: Python<'py>, id: &str, lod: u32) -> PyResult<Blob> {
+        let value = py.detach(|| self.0.boundary(id, lod));
+        let value = value.map_err(error)?;
+        Ok(Blob(value))
+    }
+    /// The great-circle distance between the places with these IDs, as one row: `meters` on
+    /// the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees
+    /// clockwise from north. No row when either ID is unknown. From a point, use `distance_m`
+    /// and `bearing_deg` with the place's `lat` and `lon`.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if an ID is not a place ID; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    fn distance<'py>(&self, py: Python<'py>, from: &str, to: &str) -> PyResult<Blob> {
+        let value = py.detach(|| self.0.distance(from, to));
+        let value = value.map_err(error)?;
+        Ok(Blob(value))
+    }
 }
 
 /// A store of installed packs in one directory: its signed catalog, its packs and their
@@ -1225,8 +1274,8 @@ mod _native {
     use super::{
         Blob, CancelledError, CorruptError, Engine, InternalError, InvalidArgumentError, IoError,
         Load, MissingComponentError, NetworkError, OpenOptions, RefusedError, SearchOptions,
-        TeiGeodataError, Verify, components, distance_m, fold, noop, progress, sample_rows,
-        version,
+        TeiGeodataError, Verify, bearing_deg, components, distance_m, fold, noop, progress,
+        sample_rows, version,
     };
 
     /// Most rows `sample_rows` builds in one call.
@@ -1236,4 +1285,8 @@ mod _native {
     /// Most places one query returns.
     #[pymodule_export]
     const LIMIT_MAX: u32 = 10000;
+
+    /// The coarsest level of detail `Engine::boundary` reads; 0 is full resolution.
+    #[pymodule_export]
+    const COARSEST_LOD: u32 = 6;
 }

@@ -3,6 +3,7 @@
 Usage: python tour.py world-np-lite.tgd
 """
 
+import json
 import sys
 
 # region import
@@ -108,8 +109,19 @@ def main(pack):
     print("=== distance")
     # region distance
     meters = teigeodata.distance_m(27.7172, 85.3240, 28.2096, 83.9856)
-    print(f"Kathmandu to Pokhara: {meters / 1000:.1f} km")
+    heading = teigeodata.bearing_deg(27.7172, 85.3240, 28.2096, 83.9856)
+    print(f"Kathmandu to Pokhara: {meters / 1000:.1f} km, heading {heading:.0f}°")
+    (apart,) = rows(engine.distance("tgd:np/2cn", "tgd:np/1xhb"))
+    print(f"place to place: {apart['meters'] / 1000:.1f} km at {apart['bearing']:.0f}°")
     # endregion distance
+
+    print("=== boundary")
+    # region boundary
+    (shape,) = rows(engine.boundary("tgd:np/2gm", 0))
+    feature = json.loads(shape["geojson"])  # a GeoJSON Feature, for any map library
+    print(f"{feature['geometry']['type']} of {shape['vertices']} vertices at level {shape['lod']}")
+    print(f"tolerance {shape['tolerance_m']:.0f} m, {len(shape['geojson'])} bytes of GeoJSON")
+    # endregion boundary
 
     print("=== errors")
     # region errors

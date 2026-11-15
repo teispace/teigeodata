@@ -58,6 +58,9 @@ inline constexpr std::uint32_t SAMPLE_ROWS_MAX = TG_SAMPLE_ROWS_MAX;
 /// Most places one query returns.
 inline constexpr std::uint32_t LIMIT_MAX = TG_LIMIT_MAX;
 
+/// The coarsest level of detail `Engine::boundary` reads; 0 is full resolution.
+inline constexpr std::uint32_t COARSEST_LOD = TG_COARSEST_LOD;
+
 /// A blob or string the library returned, freed when this is destroyed. Move-only; a C++20
 /// caller views it as std::span<const std::uint8_t>(blob.data(), blob.size()).
 class Blob {
@@ -336,7 +339,8 @@ inline std::uint32_t progress(std::uint32_t steps, const std::function<bool(std:
 }
 
 /// Great-circle distance in metres between two points in degrees, by the haversine formula on
-/// the WGS84 mean sphere (error up to about 0.5% against the ellipsoid).
+/// the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query
+/// measures it, with the same digits on every platform.
 ///
 /// # Errors
 ///
@@ -345,6 +349,21 @@ inline std::uint32_t progress(std::uint32_t steps, const std::function<bool(std:
 inline double distance_m(double lat1, double lon1, double lat2, double lon2) {
     double out{};
     const std::int32_t status = tg_distance_m(lat1, lon1, lat2, lon2, &out);
+    detail::check(status);
+    return out;
+}
+
+/// The initial great-circle bearing from the first point to the second, in degrees clockwise
+/// from true north in `[0, 360)`; 0 for one point twice or from a pole. The same digits on
+/// every platform.
+///
+/// # Errors
+///
+/// `ErrorCode::InvalidArgument` if a latitude is outside -90..=90, a longitude outside
+/// -180..=180, or any value is not finite.
+inline double bearing_deg(double lat1, double lon1, double lat2, double lon2) {
+    double out{};
+    const std::int32_t status = tg_bearing_deg(lat1, lon1, lat2, lon2, &out);
     detail::check(status);
     return out;
 }
@@ -653,6 +672,33 @@ class Engine {
     /// `ErrorCode::InvalidArgument` if `code` is not an ISO 3166 code;
     /// `ErrorCode::Corrupt` if a section read is corrupt.
     Blob by_iso(std::string_view code) const;
+
+    /// The outline of the place with this ID at level of detail `lod`, as one row: `id`,
+    /// `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m`
+    /// (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an
+    /// RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings
+    /// counterclockwise, holes clockwise), or the place's `Point` when it has no outline.
+    /// Level 0 is full resolution and 1 to `COARSEST_LOD` coarser; neighbours share their
+    /// borders at every level. A whole country at level 0 can be megabytes: ask a coarser
+    /// level to draw it small. No row for an unknown ID.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if `id` is not a place ID or `lod` exceeds
+    /// `COARSEST_LOD`; `ErrorCode::MissingComponent` without `boundaries`;
+    /// `ErrorCode::Corrupt` if a section read is corrupt.
+    Blob boundary(std::string_view id, std::uint32_t lod) const;
+
+    /// The great-circle distance between the places with these IDs, as one row: `meters` on
+    /// the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees
+    /// clockwise from north. No row when either ID is unknown. From a point, use `distance_m`
+    /// and `bearing_deg` with the place's `lat` and `lon`.
+    ///
+    /// # Errors
+    ///
+    /// `ErrorCode::InvalidArgument` if an ID is not a place ID; `ErrorCode::Corrupt` if a
+    /// section read is corrupt.
+    Blob distance(std::string_view from, std::string_view to) const;
 
   private:
     explicit Engine(tg_engine *raw) noexcept : raw_(raw) {}
@@ -1152,6 +1198,20 @@ inline std::string Engine::tz_version() const {
 inline Blob Engine::by_iso(std::string_view code) const {
     tg_bytes out{};
     const std::int32_t status = tg_engine_by_iso(raw_, detail::utf8(code), code.size(), &out);
+    detail::check(status);
+    return Blob(out);
+}
+
+inline Blob Engine::boundary(std::string_view id, std::uint32_t lod) const {
+    tg_bytes out{};
+    const std::int32_t status = tg_engine_boundary(raw_, detail::utf8(id), id.size(), lod, &out);
+    detail::check(status);
+    return Blob(out);
+}
+
+inline Blob Engine::distance(std::string_view from, std::string_view to) const {
+    tg_bytes out{};
+    const std::int32_t status = tg_engine_distance(raw_, detail::utf8(from), from.size(), detail::utf8(to), to.size(), &out);
     detail::check(status);
     return Blob(out);
 }
