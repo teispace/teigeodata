@@ -136,6 +136,8 @@ test("engine handle on the fixture", () => {
   assert.deepEqual(columnNames(got), p.columns);
   assert.deepEqual([...numbers(got, "lat")], [p.get.lat]);
   assert.deepEqual([...numbers(got, "lon")], [p.get.lon]);
+  assert.deepEqual([...numbers(got, "population")].map(Number), [p.get.population]);
+  assert.deepEqual(strings(got, "population_kind"), [p.get.population_kind]);
   assert.equal(strings(engine.search(p.search.query, p.search.limit), "id")[0], p.search.first_id);
   const near = engine.reverse(p.reverse.lat, p.reverse.lon, p.reverse.limit);
   assert.deepEqual(strings(near, "id"), p.reverse.ids);

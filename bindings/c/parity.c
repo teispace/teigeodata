@@ -319,6 +319,8 @@ static void engine_queries(void) {
     CHECK(columns_are(out, place_columns, COUNT(place_columns)));
     CHECK(str_is(out, "name", 0, TGP_ENGINE_GET_NAME) && str_is(out, "kind", 0, TGP_ENGINE_GET_KIND));
     CHECK(column_num(out, "lat", 0) == TGP_ENGINE_GET_LAT && column_num(out, "lon", 0) == TGP_ENGINE_GET_LON);
+    CHECK(column_num(out, "population", 0) == TGP_ENGINE_GET_POPULATION &&
+          str_is(out, "population_kind", 0, TGP_ENGINE_GET_POPULATION_KIND));
     tg_bytes_free(out);
 
     CHECK(tg_engine_search(engine, TEXT(TGP_ENGINE_SEARCH_QUERY), TGP_ENGINE_SEARCH_LIMIT, &out) == TG_OK);

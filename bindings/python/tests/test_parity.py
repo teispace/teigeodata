@@ -124,6 +124,8 @@ class Engine(unittest.TestCase):
         self.assertEqual(b.strings("kind"), [g["kind"]])
         self.assertEqual(list(b.numbers("lat")), [g["lat"]])
         self.assertEqual(list(b.numbers("lon")), [g["lon"]])
+        self.assertEqual(list(b.numbers("population")), [g["population"]])
+        self.assertEqual(b.strings("population_kind"), [g["population_kind"]])
 
     def test_records(self) -> None:
         nulls = 0

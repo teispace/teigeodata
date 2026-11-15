@@ -90,6 +90,9 @@ export function run(tg, parity, read, { full }) {
   eq("get name", strings(got, "name"), [built.has("names") ? p.get.name : null]);
   eq("get kind", strings(got, "kind"), [p.get.kind]);
   eq("get lat", [...column(got, "lat")], [p.get.lat]);
+  const people = built.has("extra");
+  if (people) eq("get population", [...column(got, "population")], [p.get.population]);
+  eq("get population_kind", strings(got, "population_kind"), [people ? p.get.population_kind : null]);
   needs("search", "search", () => engine.search(p.search.query, p.search.limit),
     (r) => eq("search", strings(r, "id")[0], p.search.first_id));
   const near = engine.reverse(p.reverse.lat, p.reverse.lon, p.reverse.limit);

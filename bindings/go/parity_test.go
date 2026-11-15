@@ -66,6 +66,8 @@ var parity struct {
 		Get     struct {
 			ID, Name, Kind string
 			Lat, Lon       float64
+			Population     float64
+			PopulationKind string `json:"population_kind"`
 		}
 		Search struct {
 			Query   string
@@ -464,6 +466,8 @@ func TestEngine(t *testing.T) {
 	equal(t, "columns", got.Columns(), p.Columns)
 	equal(t, "lat", numbers(t, got, "lat"), []float64{p.Get.Lat})
 	equal(t, "lon", numbers(t, got, "lon"), []float64{p.Get.Lon})
+	equal(t, "population", numbers(t, got, "population"), []float64{p.Get.Population})
+	equal(t, "population_kind", must(got.Strings("population_kind")), []string{p.Get.PopulationKind})
 	if first := column("id")(engine.Search(p.Search.Query, p.Search.Limit))[0]; first != p.Search.FirstID {
 		t.Fatal(first)
 	}

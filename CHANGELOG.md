@@ -22,7 +22,8 @@ renamed the last parameters that broke the naming rule (see **Breaking**).
   `extra`, on by default) returns `Population { people, source }`; every place result has the
   nullable columns `population` and `population_kind` in every language, and `tgd`, the HTTP
   server and MCP print `population` and `population_kind`. `extract::merge` keeps every
-  component of COMPONENTS.
+  component of COMPONENTS. Both WebAssembly packages build `extra` (feature of
+  `teigeodata-wasm`); every binding's parity suite checks both columns.
 - `teigeodata-engine` feature `fuzz`: `fuzz::engine`, every query on a pack with edited
   sections whose hashes hold, run nightly by libFuzzer (`fuzz/fuzz_targets/engine.rs`) and on
   seeded inputs by `cargo test` (D-331); `teigeodata_format::fuzz::edit_section` builds such

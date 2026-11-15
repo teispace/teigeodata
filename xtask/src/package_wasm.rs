@@ -44,7 +44,7 @@ const VARIANTS: &[Variant] = &[
                       without search.",
         features: Some(
             "names,admin,elevation,timezone,timezone-index,boundaries,admin-index,dem,\
-             dem-coarse,tz-rules,postal",
+             dem-coarse,tz-rules,postal,extra",
         ),
         budget_gz: 153_600,
     },

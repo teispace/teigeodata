@@ -275,6 +275,8 @@ static void engine_queries() {
     CHECK(rows(got) == 1 && columns(got) == Strings{TGP_ENGINE_COLUMNS_ITEMS});
     CHECK(str_at(got, "name", 0) == TGP_ENGINE_GET_NAME && str_at(got, "kind", 0) == TGP_ENGINE_GET_KIND);
     CHECK(num_at(got, "lat", 0) == TGP_ENGINE_GET_LAT && num_at(got, "lon", 0) == TGP_ENGINE_GET_LON);
+    CHECK(num_at(got, "population", 0) == TGP_ENGINE_GET_POPULATION &&
+          str_at(got, "population_kind", 0) == TGP_ENGINE_GET_POPULATION_KIND);
     CHECK(str_at(engine.search(TGP_ENGINE_SEARCH_QUERY, TGP_ENGINE_SEARCH_LIMIT), "id", 0) == TGP_ENGINE_SEARCH_FIRST_ID);
 
     tg::Blob near = engine.reverse(TGP_ENGINE_REVERSE_LAT, TGP_ENGINE_REVERSE_LON, TGP_ENGINE_REVERSE_LIMIT);

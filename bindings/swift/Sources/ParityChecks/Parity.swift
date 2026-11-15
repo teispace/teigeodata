@@ -244,6 +244,8 @@ public func runParity(_ path: String) async throws {
         check(columnNames(row) == e["columns"] as! [String], "engine columns")
         check(column(row, "lat", as: UInt64.self).map { Double(bitPattern: $0) } == [get["lat"] as! Double], "get lat")
         check(column(row, "lon", as: UInt64.self).map { Double(bitPattern: $0) } == [get["lon"] as! Double], "get lon")
+        check(rawNumbers(row, "population", .u32) == [Double(get["population"] as! Int)], "get population")
+        check(strings(row, "population_kind") == [get["population_kind"] as? String], "get population_kind")
         let q = e["search"] as! [String: Any]
         let hits = try engine.search(q["query"] as! String, limit: UInt32(q["limit"] as! Int))
         check(strings(hits, "id").first == q["first_id"] as? String, "search")

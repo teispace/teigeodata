@@ -101,6 +101,7 @@ asks its layer for each section before reading it (`ensure`). Per query:
 | `countries_near`, `missing_packs` | `admin-index`; a layer without `boundaries` installed is skipped |
 | `postal_lookup`, `postal_prefix`, `postal_codes_of`, `postal_replacement` | `postal`; a layer with codes not installed is passed, and named only when no layer answers |
 | `postal_at` | `postal` and `admin-index` |
+| `population(place)` | `extra`; a pack without populations answers none |
 
 `Place` carries no elevation: `Engine::elevation(&place)` reads it, so a points-only `get`
 never touches heights.
@@ -109,9 +110,9 @@ never touches heights.
 
 Each component the engine reads has a Cargo feature, all on by default: `elevation`, `admin`,
 `names`, `search` (with `names`), `timezone`, `timezone-index`, `boundaries`,
-`admin-index` (with `boundaries`), `dem`, `dem-coarse`, `tz-rules`, `postal` and `substring`
-(with `search`).
-`point` is always built; `extra` is read raw through `Layer::section_bytes`. A build without a
+`admin-index` (with `boundaries`), `dem`, `dem-coarse`, `tz-rules`, `postal`, `substring`
+(with `search`) and `extra` (COMPONENTS: populations, D-351).
+`point` is always built. A build without a
 feature has neither the query nor
 the section reader, and treats the component as not installed: a pack's sections of it are
 never read or hashed, `Layer::components()` leaves it out, and a query of a built component
@@ -134,6 +135,7 @@ that needs it (a search context needs `admin`) returns `Error::MissingComponent`
 | `countries_near`, `missing_packs` | `admin-index` |
 | `postal_lookup`, `postal_prefix`, `postal_codes_of`, `postal_replacement` | `postal` |
 | `postal_at` | `postal` and `admin-index` |
+| `population` | `extra` |
 
 Measured by `cargo xtask sizes --native` (macOS arm64, release, LTO, 2026-11-09): the engine
 with no component features (open, `get`, `reverse`) adds 97.3 KiB (60.9 KiB gzip) to a

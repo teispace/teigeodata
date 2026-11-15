@@ -332,6 +332,9 @@ public final class ParityTest {
             check(columnNames(got).equals(p.get("columns")), "engine columns");
             check(column(got, "lat").getDouble() == ((Number) g.get("lat")).doubleValue(), "get lat");
             check(column(got, "lon").getDouble() == ((Number) g.get("lon")).doubleValue(), "get lon");
+            check(rawNumbers(got, "population")[0] == ((Number) g.get("population")).doubleValue(), "get population");
+            check(strings(got, "population_kind").equals(Collections.singletonList(g.get("population_kind"))),
+                    "get population_kind");
             Map<?, ?> q = (Map<?, ?>) p.get("search");
             byte[] hits = engine.search((String) q.get("query"), ((Number) q.get("limit")).longValue());
             check(strings(hits, "id").get(0).equals(q.get("first_id")), "search");

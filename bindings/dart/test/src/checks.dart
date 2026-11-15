@@ -193,6 +193,8 @@ void checks(
     expect(columnNames(row), e['columns']);
     expect((column(row, 'lat') as Float64List).single, g['lat']);
     expect((column(row, 'lon') as Float64List).single, g['lon']);
+    expect(column(row, 'population'), [g['population']]);
+    expect(strings(row, 'population_kind'), [g['population_kind']]);
     final q = e['search'] as Map<String, dynamic>;
     expect(
       strings(engine.search(q['query'] as String, q['limit'] as int), 'id').first,

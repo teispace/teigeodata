@@ -158,6 +158,8 @@ void CheckEngineQueries()
     Equal(get.Str("name"), got.Strings("name").Single(), "name");
     Equal(get.Str("kind"), got.Strings("kind").Single(), "kind");
     Equal(get.GetProperty("lat").GetDouble(), Numbers(got, "lat").Single(), "lat");
+    Equal(get.D("population"), Numbers(got, "population").Single(), "population");
+    Equal(get.Str("population_kind"), got.Strings("population_kind").Single(), "population_kind");
     JsonElement search = p.GetProperty("search");
     Equal(search.Str("first_id"), Ids(engine.Search(search.Str("query"), search.U32("limit")))[0], "search");
     JsonElement rev = p.GetProperty("reverse");

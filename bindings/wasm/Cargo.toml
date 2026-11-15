@@ -32,6 +32,7 @@ dem-coarse = ["teigeodata-api/dem-coarse"]
 tz-rules = ["teigeodata-api/tz-rules"]
 postal = ["teigeodata-api/postal"]
 substring = ["teigeodata-api/substring"]
+extra = ["teigeodata-api/extra"]
 
 [dependencies]
 teigeodata-api.workspace = true
