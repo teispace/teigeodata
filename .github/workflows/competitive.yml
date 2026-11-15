@@ -1,0 +1,172 @@
+# Suite C, the competitive report (docs/02-research/notes/competitive-suite.md, D-331, D-340):
+# teigeodata (in process and `tgd serve`), Nominatim, Photon, GeoNames' own points and
+# `tzf-rs` asked the same questions from the repository's files by `tools/competitive`. By hand
+# and on each release; not a gate. The report is the job summary and an artifact.
+name: competitive
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Data release to read teigeodata's pack from (empty: the newest)"
+        required: false
+        default: ""
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: competitive
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # Pinned rivals: an image by digest, a jar by its SHA-256 (GitHub's asset digest).
+  NOMINATIM_IMAGE: mediagis/nominatim:5.3@sha256:168c30e20fbba0c2e8199fca7a8aa2640e8cc1a62f8b05b1958897796fdb38f1
+  PHOTON_VERSION: "1.3.0"
+  PHOTON_SHA256: a89707c0045e4807b2a1180e132e68e108d998709f48b6c94b98a6e281f571a5
+  PHOTON_DUMP: https://download1.graphhopper.com/public/asia/nepal/photon-dump-nepal-1.0-latest.jsonl.zst
+
+jobs:
+  report:
+    if: ${{ github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            . -> target
+            tools/competitive -> target
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/in" && cd "$RUNNER_TEMP/in"
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release list -R "$GITHUB_REPOSITORY" -L 50 --json tagName \
+              -q '[.[].tagName | select(startswith("data-"))][0]')
+          fi
+          echo "data release: $TAG"
+          echo "DATA_TAG=$TAG" >> "$GITHUB_ENV"
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p 'world-np-*.tgd' -p 'ids-*.tar.gz' -p SHA256SUMS
+          grep -E ' (world-np-[a-z]+\.tgd|ids-[a-z]+\.tar\.gz)$' SHA256SUMS | sha256sum -c -
+          tar xzf ids-*.tar.gz
+          # Each source from our mirror by the SHA-256 the source lock pins.
+          python3 - "$GITHUB_WORKSPACE/data/sources.lock" <<'EOF'
+          import hashlib, sys, tomllib, urllib.request
+          lock = tomllib.load(open(sys.argv[1], "rb"))
+          for s in lock["source"]:
+              if s["id"] not in ("geonames-np", "geofabrik-np"):
+                  continue
+              url = s["mirror_url"].format(sha256=s["sha256"])
+              out = {"geonames-np": "NP.zip", "geofabrik-np": "nepal.osm.pbf"}[s["id"]]
+              urllib.request.urlretrieve(url, out)
+              got = hashlib.sha256(open(out, "rb").read()).hexdigest()
+              assert got == s["sha256"], f"{s['id']}: {got} is not {s['sha256']}"
+              print(s["id"], s["version"], got)
+          EOF
+          unzip -o -q NP.zip NP.txt
+          ls -la
+
+      - name: Build tgd and the harness
+        run: |
+          cargo build --release --locked -p teigeodata-cli
+          cargo build --release --locked --manifest-path tools/competitive/Cargo.toml
+
+      - name: teigeodata (tgd serve)
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/in"
+          pack=$(ls world-np-*.tgd)
+          start=$(date +%s%N)
+          "$GITHUB_WORKSPACE/target/release/tgd" serve --listen 127.0.0.1:8080 --follow 0 --pack "$pack" > tgd.log 2>&1 &
+          echo $! > tgd.pid
+          until curl -fsS http://127.0.0.1:8080/health > /dev/null; do sleep 0.2; done
+          setup=$(awk -v ns=$(( $(date +%s%N) - start )) 'BEGIN { printf "%.3f", ns / 1e9 }')
+          ver=$("$GITHUB_WORKSPACE/target/release/tgd" --version | awk '{print $2}')
+          printf 'teigeodata\t%s (data %s)\t%s\t%s\t-\t%s, one file\n' \
+            "$ver" "$DATA_TAG" "$setup" "$(stat -c %s "$pack")" "$pack" > footprint.tsv
+
+      - name: Nominatim
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/in"
+          mkdir -p nominatim && mv nepal.osm.pbf nominatim/
+          start=$(date +%s)
+          docker run -d --name nominatim --shm-size=1g -p 127.0.0.1:8088:8080 \
+            -e PBF_PATH=/nominatim/data/nepal.osm.pbf -e THREADS=4 -e REPLICATION_URL= \
+            -v "$PWD/nominatim:/nominatim/data" "$NOMINATIM_IMAGE"
+          # The import runs first; the API answers `OK` on /status once it is done.
+          until [ "$(curl -s http://127.0.0.1:8088/status || true)" = "OK" ]; do
+            if ! docker ps -q -f name=nominatim | grep -q .; then docker logs --tail 50 nominatim; exit 1; fi
+            sleep 15
+          done
+          setup=$(( $(date +%s) - start ))
+          disk=$(docker exec nominatim sh -c 'du -sb /var/lib/postgresql/*/main' | awk '{print $1}')
+          printf 'Nominatim\t%s\t%s\t%s\t-\tthe Geofabrik Nepal extract the main build reads (2026-11-05), default import style\n' \
+            "$NOMINATIM_IMAGE" "$setup" "$disk" >> footprint.tsv
+
+      - name: Photon
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/in"
+          curl -fsSL -o photon.jar "https://github.com/komoot/photon/releases/download/$PHOTON_VERSION/photon-$PHOTON_VERSION.jar"
+          echo "$PHOTON_SHA256  photon.jar" | sha256sum -c -
+          curl -fsSL -o photon-dump.jsonl.zst "$PHOTON_DUMP"
+          dump=$(sha256sum photon-dump.jsonl.zst | cut -c1-16)
+          start=$(date +%s)
+          zstd --stdout -d photon-dump.jsonl.zst | java -jar photon.jar import -import-file - -languages en,ne
+          java -jar photon.jar serve -listen-ip 127.0.0.1 -listen-port 2322 > photon.log 2>&1 &
+          echo $! > photon.pid
+          until curl -fsS 'http://127.0.0.1:2322/api?q=Pokhara&limit=1' > /dev/null; do sleep 2; done
+          setup=$(( $(date +%s) - start ))
+          printf 'Photon\t%s\t%s\t%s\t-\tthe GraphHopper Nepal dump (SHA-256 %s…), languages en, ne\n' \
+            "$PHOTON_VERSION" "$setup" "$(du -sb photon_data | awk '{print $1}')" "$dump" >> footprint.tsv
+
+      - name: Ask them all
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/in"
+          "$GITHUB_WORKSPACE/tools/competitive/target/release/competitive" --cc np \
+            --root "$GITHUB_WORKSPACE" --pack "$(ls world-np-*.tgd)" --registry "$(ls pack/np/np-ids-*.tsv)" \
+            --geonames NP.txt --tgd http://127.0.0.1:8080 --nominatim http://127.0.0.1:8088 \
+            --photon http://127.0.0.1:2322 --footprint footprint.tsv --out report-body.md
+          # Memory after the run: resident set of each service.
+          rss() { ps -o rss= -p "$1" | awk '{print $1 * 1024}'; }
+          {
+            echo
+            echo "Memory after the run (resident): tgd serve $(rss "$(cat tgd.pid)") B; Photon $(rss "$(cat photon.pid)") B; Nominatim $(docker stats --no-stream --format '{{.MemUsage}}' nominatim)."
+            echo
+            echo "Data release \`$DATA_TAG\`; commit \`$GITHUB_SHA\`."
+          } >> report-body.md
+          cp report-body.md "$GITHUB_WORKSPACE/competitive-report.md"
+          cat report-body.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: competitive-report
+          path: competitive-report.md
+          if-no-files-found: error
+
+      - name: Stop the services
+        if: ${{ always() }}
+        run: |
+          cd "$RUNNER_TEMP/in" || exit 0
+          for p in tgd.pid photon.pid; do [ -f "$p" ] && kill "$(cat "$p")" || true; done
+          docker rm -f nominatim || true

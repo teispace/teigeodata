@@ -3,6 +3,7 @@
 /tools/size-probe/target/
 /tools/tough-oracle/target/
 /tools/result-format-probe/target/
+/tools/competitive/target/
 /scratch/
 /data/cache/
 /data/build/

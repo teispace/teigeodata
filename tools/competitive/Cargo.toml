@@ -1,0 +1,25 @@
+# Suite C, the competitive report (docs/02-research/notes/competitive-suite.md): asks
+# teigeodata and its rivals the same questions and writes one Markdown report. Its own
+# workspace, like `tools/size-probe`, so that its HTTP client and `tzf-rs` never reach the
+# runtime graph. Run by `.github/workflows/competitive.yml`.
+[package]
+name = "competitive"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[workspace]
+members = ["."]
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde-saphyr = "2.1.1"
+serde_json = "1.0.154"
+teigeodata-core = { path = "../../crates/teigeodata-core" }
+teigeodata-engine = { path = "../../crates/teigeodata-engine" }
+tzf-rs = "2.3.0"
+ureq = { version = "3.5.2", features = ["json"] }
+
+[profile.release]
+debug = "line-tables-only"

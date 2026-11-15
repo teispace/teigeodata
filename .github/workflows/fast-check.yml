@@ -300,6 +300,26 @@ jobs:
       - name: Differential
         run: cargo run --locked --release --manifest-path tools/tough-oracle/Cargo.toml
 
+  competitive-harness:
+    # Suite C's harness (tools/competitive), its own workspace: built, linted and its unit
+    # tests run on every push, so an engine change that breaks it is found before a release
+    # needs the report (D-340). The report itself runs in competitive.yml.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: tools/competitive
+      - name: Lints
+        run: cargo clippy --locked --release --all-targets --manifest-path tools/competitive/Cargo.toml -- -D warnings
+      - name: Tests
+        run: cargo test --locked --release --manifest-path tools/competitive/Cargo.toml
+
   typos:
     runs-on: ubuntu-latest
     timeout-minutes: 5
