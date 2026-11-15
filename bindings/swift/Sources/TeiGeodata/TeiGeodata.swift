@@ -563,7 +563,7 @@ public final class Engine: @unchecked Sendable {
         return takeData(out)
     }
 
-    /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+    /// The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
     /// with `meters` and `bearing` to each.
     ///
     /// # Errors
@@ -571,9 +571,9 @@ public final class Engine: @unchecked Sendable {
     /// `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite
     /// radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
     /// corrupt.
-    public func withinRadius(_ lat: Double, lon: Double, meters: Double, limit: UInt32) throws(TeiGeodataError) -> Data {
+    public func withinRadius(_ lat: Double, lon: Double, radiusM: Double, limit: UInt32) throws(TeiGeodataError) -> Data {
         var out = tg_bytes()
-        let status = withExtendedLifetime(self) { tg_engine_within_radius(raw, lat, lon, meters, limit, &out) }
+        let status = withExtendedLifetime(self) { tg_engine_within_radius(raw, lat, lon, radiusM, limit, &out) }
         try check(status)
         return takeData(out)
     }
@@ -625,18 +625,18 @@ public final class Engine: @unchecked Sendable {
         return takeData(out)
     }
 
-    /// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+    /// Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
     /// in code order per scheme; `scheme` as in `postal_lookup`.
     ///
     /// # Errors
     ///
     /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
     /// `ErrorCode::Corrupt` if a section read is corrupt.
-    public func postalPrefix(_ input: String, scheme: String, limit: UInt32) throws(TeiGeodataError) -> Data {
+    public func postalPrefix(_ prefix: String, scheme: String, limit: UInt32) throws(TeiGeodataError) -> Data {
         var out = tg_bytes()
-        var input = input
+        var prefix = prefix
         var scheme = scheme
-        let status = withExtendedLifetime(self) { input.withUTF8 { inputBytes in scheme.withUTF8 { schemeBytes in tg_engine_postal_prefix(raw, inputBytes.baseAddress, inputBytes.count, schemeBytes.baseAddress, schemeBytes.count, limit, &out) } } }
+        let status = withExtendedLifetime(self) { prefix.withUTF8 { prefixBytes in scheme.withUTF8 { schemeBytes in tg_engine_postal_prefix(raw, prefixBytes.baseAddress, prefixBytes.count, schemeBytes.baseAddress, schemeBytes.count, limit, &out) } } }
         try check(status)
         return takeData(out)
     }

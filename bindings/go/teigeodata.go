@@ -784,7 +784,7 @@ func (h *Engine) Reverse(lat float64, lon float64, limit uint32) ([]byte, error)
 	return takeBytes(out), nil
 }
 
-// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+// The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
 // with `meters` and `bearing` to each.
 //
 // # Errors
@@ -792,12 +792,12 @@ func (h *Engine) Reverse(lat float64, lon float64, limit uint32) ([]byte, error)
 // `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite
 // radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
 // corrupt.
-func (h *Engine) WithinRadius(lat float64, lon float64, meters float64, limit uint32) ([]byte, error) {
+func (h *Engine) WithinRadius(lat float64, lon float64, radiusM float64, limit uint32) ([]byte, error) {
 	handle := h.acquire()
 	defer h.release()
 	var out tgBytes
 	var msg tgBytes
-	status := rawEngineWithinRadius(handle, lat, lon, meters, limit, &out, &msg)
+	status := rawEngineWithinRadius(handle, lat, lon, radiusM, limit, &out, &msg)
 	if status != 0 {
 		return nil, newError(status, &msg, "tg_engine_within_radius")
 	}
@@ -864,19 +864,19 @@ func (h *Engine) PostalLookup(code string, scheme string) ([]byte, error) {
 	return takeBytes(out), nil
 }
 
-// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+// Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
 // in code order per scheme; `scheme` as in `postal_lookup`.
 //
 // # Errors
 //
 // `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
 // `ErrorCode::Corrupt` if a section read is corrupt.
-func (h *Engine) PostalPrefix(input string, scheme string, limit uint32) ([]byte, error) {
+func (h *Engine) PostalPrefix(prefix string, scheme string, limit uint32) ([]byte, error) {
 	handle := h.acquire()
 	defer h.release()
 	var out tgBytes
 	var msg tgBytes
-	status := rawEnginePostalPrefix(handle, unsafe.StringData(input), uintptr(len(input)), unsafe.StringData(scheme), uintptr(len(scheme)), limit, &out, &msg)
+	status := rawEnginePostalPrefix(handle, unsafe.StringData(prefix), uintptr(len(prefix)), unsafe.StringData(scheme), uintptr(len(scheme)), limit, &out, &msg)
 	if status != 0 {
 		return nil, newError(status, &msg, "tg_engine_postal_prefix")
 	}

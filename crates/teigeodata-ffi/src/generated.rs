@@ -891,7 +891,7 @@ pub unsafe extern "C" fn tg_engine_reverse(
     })
 }
 
-/// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+/// The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
 /// with `meters` and `bearing` to each.
 ///
 /// # Errors
@@ -904,7 +904,7 @@ pub unsafe extern "C" fn tg_engine_within_radius(
     handle: *const TgEngine,
     lat: f64,
     lon: f64,
-    meters: f64,
+    radius_m: f64,
     limit: u32,
     out: *mut TgBytes,
 ) -> i32 {
@@ -912,7 +912,7 @@ pub unsafe extern "C" fn tg_engine_within_radius(
         let out = abi::out(out)?;
         // SAFETY: a live handle from this library, or null (rejected).
         let this = unsafe { abi::handle(handle, "handle") }?;
-        let value = this.0.within_radius(lat, lon, meters, limit)?;
+        let value = this.0.within_radius(lat, lon, radius_m, limit)?;
         let value = TgBytes::from_vec(value.into_vec());
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };
@@ -1007,7 +1007,7 @@ pub unsafe extern "C" fn tg_engine_postal_lookup(
     })
 }
 
-/// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+/// Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
 /// in code order per scheme; `scheme` as in `postal_lookup`.
 ///
 /// # Errors
@@ -1017,8 +1017,8 @@ pub unsafe extern "C" fn tg_engine_postal_lookup(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tg_engine_postal_prefix(
     handle: *const TgEngine,
-    input: *const u8,
-    input_len: usize,
+    prefix: *const u8,
+    prefix_len: usize,
     scheme: *const u8,
     scheme_len: usize,
     limit: u32,
@@ -1028,11 +1028,11 @@ pub unsafe extern "C" fn tg_engine_postal_prefix(
         let out = abi::out(out)?;
         // SAFETY: a live handle from this library, or null (rejected).
         let this = unsafe { abi::handle(handle, "handle") }?;
-        // SAFETY: the caller passes `input_len` readable bytes (or null and 0).
-        let input = unsafe { abi::str_arg(input, input_len, "input") }?;
+        // SAFETY: the caller passes `prefix_len` readable bytes (or null and 0).
+        let prefix = unsafe { abi::str_arg(prefix, prefix_len, "prefix") }?;
         // SAFETY: the caller passes `scheme_len` readable bytes (or null and 0).
         let scheme = unsafe { abi::str_arg(scheme, scheme_len, "scheme") }?;
-        let value = this.0.postal_prefix(input, scheme, limit)?;
+        let value = this.0.postal_prefix(prefix, scheme, limit)?;
         let value = TgBytes::from_vec(value.into_vec());
         // SAFETY: checked non-null by `abi::out`; the caller guarantees it is writable.
         unsafe { out.write(value) };

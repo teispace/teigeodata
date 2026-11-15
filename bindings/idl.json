@@ -714,7 +714,7 @@
         {
           "name": "within_radius",
           "doc": [
-            "The places within `meters` of the point (great-circle), nearest first, at most `limit`,",
+            "The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,",
             "with `meters` and `bearing` to each.",
             "",
             "# Errors",
@@ -734,7 +734,7 @@
               "ty": "f64"
             },
             {
-              "name": "meters",
+              "name": "radius_m",
               "ty": "f64"
             },
             {
@@ -834,7 +834,7 @@
         {
           "name": "postal_prefix",
           "doc": [
-            "Up to `limit` postal codes starting with `input`, with their places (autocomplete),",
+            "Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),",
             "in code order per scheme; `scheme` as in `postal_lookup`.",
             "",
             "# Errors",
@@ -845,7 +845,7 @@
           "receiver": true,
           "params": [
             {
-              "name": "input",
+              "name": "prefix",
               "ty": "str"
             },
             {

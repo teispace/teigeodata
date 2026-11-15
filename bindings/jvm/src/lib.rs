@@ -1054,7 +1054,7 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
         .resolve::<ThrowRuntimeExAndDefault>()
 }
 
-/// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+/// The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
 /// with `meters` and `bearing` to each.
 ///
 /// # Errors
@@ -1071,7 +1071,7 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
     handle: jlong,
     lat: jni::sys::jdouble,
     lon: jni::sys::jdouble,
-    meters: jni::sys::jdouble,
+    radius_m: jni::sys::jdouble,
     limit: jlong,
 ) -> JByteArray<'caller> {
     unowned
@@ -1081,7 +1081,7 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
                 // call (a read lock and a reachability fence).
                 let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
                 let limit: u32 = narrow("limit", limit)?;
-                this.within_radius(lat, lon, meters, limit)
+                this.within_radius(lat, lon, radius_m, limit)
             })();
             match result {
                 Ok(value) => env.byte_array_from_slice(value.as_bytes()),
@@ -1203,7 +1203,7 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
         .resolve::<ThrowRuntimeExAndDefault>()
 }
 
-/// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+/// Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
 /// in code order per scheme; `scheme` as in `postal_lookup`.
 ///
 /// # Errors
@@ -1217,7 +1217,7 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
     mut unowned: EnvUnowned<'caller>,
     _class: JClass<'caller>,
     handle: jlong,
-    input: JString<'caller>,
+    prefix: JString<'caller>,
     scheme: JString<'caller>,
     limit: jlong,
 ) -> JByteArray<'caller> {
@@ -1227,11 +1227,11 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
                 // SAFETY: the Java class passes its live handle, kept alive and unfreed for the
                 // call (a read lock and a reachability fence).
                 let this = unsafe { handle_ref::<teigeodata_api::Engine>(handle, "handle") }?;
-                let input = input
+                let prefix = prefix
                     .try_to_string(env)
                     .map_err(|e| teigeodata_api::Error {
                         code: ErrorCode::InvalidArgument,
-                        message: format!("input: {e}"),
+                        message: format!("prefix: {e}"),
                     })?;
                 let scheme = scheme
                     .try_to_string(env)
@@ -1240,7 +1240,7 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
                         message: format!("scheme: {e}"),
                     })?;
                 let limit: u32 = narrow("limit", limit)?;
-                this.postal_prefix(&input, &scheme, limit)
+                this.postal_prefix(&prefix, &scheme, limit)
             })();
             match result {
                 Ok(value) => env.byte_array_from_slice(value.as_bytes()),

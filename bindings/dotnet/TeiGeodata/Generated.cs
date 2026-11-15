@@ -803,7 +803,7 @@ public sealed partial class Engine : IDisposable
     }
 
     /// <summary>
-    /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+    /// The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
     /// with `meters` and `bearing` to each.
     ///
     /// # Errors
@@ -812,11 +812,11 @@ public sealed partial class Engine : IDisposable
     /// radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
     /// corrupt.
     /// </summary>
-    public unsafe byte[] WithinRadius(double lat, double lon, double meters, uint limit)
+    public unsafe byte[] WithinRadius(double lat, double lon, double radiusM, uint limit)
     {
         TgBytes @out = default;
         int status;
-        status = Native.tg_engine_within_radius(handle, lat, lon, meters, limit, &@out);
+        status = Native.tg_engine_within_radius(handle, lat, lon, radiusM, limit, &@out);
         Interop.Check(status);
         return Interop.TakeBytes(@out);
     }
@@ -881,7 +881,7 @@ public sealed partial class Engine : IDisposable
     }
 
     /// <summary>
-    /// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+    /// Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
     /// in code order per scheme; `scheme` as in `postal_lookup`.
     ///
     /// # Errors
@@ -889,13 +889,13 @@ public sealed partial class Engine : IDisposable
     /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
     /// `ErrorCode::Corrupt` if a section read is corrupt.
     /// </summary>
-    public unsafe byte[] PostalPrefix(string input, string scheme, uint limit)
+    public unsafe byte[] PostalPrefix(string prefix, string scheme, uint limit)
     {
-        using var inputUtf8 = new Utf8(input, stackalloc byte[Utf8.Stack]);
+        using var prefixUtf8 = new Utf8(prefix, stackalloc byte[Utf8.Stack]);
         using var schemeUtf8 = new Utf8(scheme, stackalloc byte[Utf8.Stack]);
         TgBytes @out = default;
         int status;
-        status = Native.tg_engine_postal_prefix(handle, inputUtf8.Pointer, inputUtf8.Length, schemeUtf8.Pointer, schemeUtf8.Length, limit, &@out);
+        status = Native.tg_engine_postal_prefix(handle, prefixUtf8.Pointer, prefixUtf8.Length, schemeUtf8.Pointer, schemeUtf8.Length, limit, &@out);
         Interop.Check(status);
         return Interop.TakeBytes(@out);
     }
@@ -2014,7 +2014,7 @@ internal static unsafe partial class Native
     internal static partial int tg_engine_reverse(EngineHandle handle, double lat, double lon, uint limit, TgBytes* @out);
 
     [LibraryImport(Lib)]
-    internal static partial int tg_engine_within_radius(EngineHandle handle, double lat, double lon, double meters, uint limit, TgBytes* @out);
+    internal static partial int tg_engine_within_radius(EngineHandle handle, double lat, double lon, double radiusM, uint limit, TgBytes* @out);
 
     [LibraryImport(Lib)]
     internal static partial int tg_engine_admin_at(EngineHandle handle, double lat, double lon, TgBytes* @out);
@@ -2026,7 +2026,7 @@ internal static unsafe partial class Native
     internal static partial int tg_engine_postal_lookup(EngineHandle handle, byte* code, nuint codeLen, byte* scheme, nuint schemeLen, TgBytes* @out);
 
     [LibraryImport(Lib)]
-    internal static partial int tg_engine_postal_prefix(EngineHandle handle, byte* input, nuint inputLen, byte* scheme, nuint schemeLen, uint limit, TgBytes* @out);
+    internal static partial int tg_engine_postal_prefix(EngineHandle handle, byte* prefix, nuint prefixLen, byte* scheme, nuint schemeLen, uint limit, TgBytes* @out);
 
     [LibraryImport(Lib)]
     internal static partial int tg_engine_postal_codes_of(EngineHandle handle, byte* id, nuint idLen, TgBytes* @out);

@@ -138,7 +138,7 @@ int32_t teigeodata_w_engine_search_with(uintptr_t handle, const uint8_t *query, 
 int32_t teigeodata_w_engine_reverse(uintptr_t handle, double lat, double lon, uint32_t limit, teigeodata_bytes *out, teigeodata_bytes *msg);
 #cgo noescape teigeodata_w_engine_reverse
 #cgo nocallback teigeodata_w_engine_reverse
-int32_t teigeodata_w_engine_within_radius(uintptr_t handle, double lat, double lon, double meters, uint32_t limit, teigeodata_bytes *out, teigeodata_bytes *msg);
+int32_t teigeodata_w_engine_within_radius(uintptr_t handle, double lat, double lon, double radius_m, uint32_t limit, teigeodata_bytes *out, teigeodata_bytes *msg);
 #cgo noescape teigeodata_w_engine_within_radius
 #cgo nocallback teigeodata_w_engine_within_radius
 int32_t teigeodata_w_engine_admin_at(uintptr_t handle, double lat, double lon, teigeodata_bytes *out, teigeodata_bytes *msg);
@@ -150,7 +150,7 @@ int32_t teigeodata_w_engine_elevation_at(uintptr_t handle, double lat, double lo
 int32_t teigeodata_w_engine_postal_lookup(uintptr_t handle, const uint8_t *code, size_t code_len, const uint8_t *scheme, size_t scheme_len, teigeodata_bytes *out, teigeodata_bytes *msg);
 #cgo noescape teigeodata_w_engine_postal_lookup
 #cgo nocallback teigeodata_w_engine_postal_lookup
-int32_t teigeodata_w_engine_postal_prefix(uintptr_t handle, const uint8_t *input, size_t input_len, const uint8_t *scheme, size_t scheme_len, uint32_t limit, teigeodata_bytes *out, teigeodata_bytes *msg);
+int32_t teigeodata_w_engine_postal_prefix(uintptr_t handle, const uint8_t *prefix, size_t prefix_len, const uint8_t *scheme, size_t scheme_len, uint32_t limit, teigeodata_bytes *out, teigeodata_bytes *msg);
 #cgo noescape teigeodata_w_engine_postal_prefix
 #cgo nocallback teigeodata_w_engine_postal_prefix
 int32_t teigeodata_w_engine_postal_codes_of(uintptr_t handle, const uint8_t *id, size_t id_len, teigeodata_bytes *out, teigeodata_bytes *msg);
@@ -422,8 +422,8 @@ func rawEngineReverse(handle uintptr, lat float64, lon float64, limit uint32, ou
 	return int32(C.teigeodata_w_engine_reverse(C.uintptr_t(handle), C.double(lat), C.double(lon), C.uint32_t(limit), (*C.teigeodata_bytes)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
 }
 
-func rawEngineWithinRadius(handle uintptr, lat float64, lon float64, meters float64, limit uint32, out *tgBytes, msg *tgBytes) int32 {
-	return int32(C.teigeodata_w_engine_within_radius(C.uintptr_t(handle), C.double(lat), C.double(lon), C.double(meters), C.uint32_t(limit), (*C.teigeodata_bytes)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
+func rawEngineWithinRadius(handle uintptr, lat float64, lon float64, radiusM float64, limit uint32, out *tgBytes, msg *tgBytes) int32 {
+	return int32(C.teigeodata_w_engine_within_radius(C.uintptr_t(handle), C.double(lat), C.double(lon), C.double(radiusM), C.uint32_t(limit), (*C.teigeodata_bytes)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
 }
 
 func rawEngineAdminAt(handle uintptr, lat float64, lon float64, out *tgBytes, msg *tgBytes) int32 {
@@ -438,8 +438,8 @@ func rawEnginePostalLookup(handle uintptr, code *byte, codeLen uintptr, scheme *
 	return int32(C.teigeodata_w_engine_postal_lookup(C.uintptr_t(handle), (*C.uint8_t)(code), C.size_t(codeLen), (*C.uint8_t)(scheme), C.size_t(schemeLen), (*C.teigeodata_bytes)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
 }
 
-func rawEnginePostalPrefix(handle uintptr, input *byte, inputLen uintptr, scheme *byte, schemeLen uintptr, limit uint32, out *tgBytes, msg *tgBytes) int32 {
-	return int32(C.teigeodata_w_engine_postal_prefix(C.uintptr_t(handle), (*C.uint8_t)(input), C.size_t(inputLen), (*C.uint8_t)(scheme), C.size_t(schemeLen), C.uint32_t(limit), (*C.teigeodata_bytes)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
+func rawEnginePostalPrefix(handle uintptr, prefix *byte, prefixLen uintptr, scheme *byte, schemeLen uintptr, limit uint32, out *tgBytes, msg *tgBytes) int32 {
+	return int32(C.teigeodata_w_engine_postal_prefix(C.uintptr_t(handle), (*C.uint8_t)(prefix), C.size_t(prefixLen), (*C.uint8_t)(scheme), C.size_t(schemeLen), C.uint32_t(limit), (*C.teigeodata_bytes)(unsafe.Pointer(out)), (*C.teigeodata_bytes)(unsafe.Pointer(msg))))
 }
 
 func rawEnginePostalCodesOf(handle uintptr, id *byte, idLen uintptr, out *tgBytes, msg *tgBytes) int32 {

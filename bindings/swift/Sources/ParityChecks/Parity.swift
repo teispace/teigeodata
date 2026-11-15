@@ -297,13 +297,13 @@ public func runParity(_ path: String) async throws {
         check(strings(try engine.nearby(nb["id"] as! String, limit: UInt32(nb["limit"] as! Int)), "id") == (nb["ids"] as! [String]).map { $0 }, "nearby")
         let w = e["within_radius"] as! [String: Any]
         let (wl, wo) = (w["lat"] as! Double, w["lon"] as! Double)
-        check(strings(try engine.withinRadius(wl, lon: wo, meters: w["meters"] as! Double, limit: UInt32(w["limit"] as! Int)), "id") == (w["ids"] as! [String]).map { $0 }, "within_radius")
+        check(strings(try engine.withinRadius(wl, lon: wo, radiusM: w["meters"] as! Double, limit: UInt32(w["limit"] as! Int)), "id") == (w["ids"] as! [String]).map { $0 }, "within_radius")
         let tz = e["tz_at"] as! [String: Any]
         check(strings(try engine.tzAt(tz["lat"] as! Double, lon: tz["lon"] as! Double), "tz") == [tz["tz"] as? String], "tz_at")
         let iso = e["by_iso"] as! [String: Any]
         check(strings(try engine.byIso(iso["code"] as! String), "id") == [iso["id"] as? String], "by_iso")
         expect(.invalidArgument) { _ = try engine.byIso(e["bad_iso"] as! String) }
-        expect(.invalidArgument) { _ = try engine.withinRadius(wl, lon: wo, meters: -1, limit: 1) }
+        expect(.invalidArgument) { _ = try engine.withinRadius(wl, lon: wo, radiusM: -1, limit: 1) }
         let strs = { (v: Any?) in (v as! [String]).map { Optional($0) } }
         let sw = e["search_with"] as! [String: Any]
         let focus = SearchOptions(focusLat: sw["focus_lat"] as? Double, focusLon: sw["focus_lon"] as? Double, focusScaleM: sw["focus_scale_m"] as? Double)

@@ -400,7 +400,7 @@ int32_t tg_engine_search_with(const tg_engine *handle, const uint8_t *query, siz
 int32_t tg_engine_reverse(const tg_engine *handle, double lat, double lon, uint32_t limit, tg_bytes *out);
 
 /*
- * The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+ * The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
  * with `meters` and `bearing` to each.
  *
  * # Errors
@@ -409,7 +409,7 @@ int32_t tg_engine_reverse(const tg_engine *handle, double lat, double lon, uint3
  * radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
  * corrupt.
  */
-int32_t tg_engine_within_radius(const tg_engine *handle, double lat, double lon, double meters, uint32_t limit, tg_bytes *out);
+int32_t tg_engine_within_radius(const tg_engine *handle, double lat, double lon, double radius_m, uint32_t limit, tg_bytes *out);
 
 /*
  * The admin units holding the point, country first.
@@ -448,7 +448,7 @@ int32_t tg_engine_elevation_at(const tg_engine *handle, double lat, double lon, 
 int32_t tg_engine_postal_lookup(const tg_engine *handle, const uint8_t *code, size_t code_len, const uint8_t *scheme, size_t scheme_len, tg_bytes *out);
 
 /*
- * Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+ * Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
  * in code order per scheme; `scheme` as in `postal_lookup`.
  *
  * # Errors
@@ -456,7 +456,7 @@ int32_t tg_engine_postal_lookup(const tg_engine *handle, const uint8_t *code, si
  * `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
  * `ErrorCode::Corrupt` if a section read is corrupt.
  */
-int32_t tg_engine_postal_prefix(const tg_engine *handle, const uint8_t *input, size_t input_len, const uint8_t *scheme, size_t scheme_len, uint32_t limit, tg_bytes *out);
+int32_t tg_engine_postal_prefix(const tg_engine *handle, const uint8_t *prefix, size_t prefix_len, const uint8_t *scheme, size_t scheme_len, uint32_t limit, tg_bytes *out);
 
 /*
  * The postal codes of the place with this ID; no rows for an unknown ID.

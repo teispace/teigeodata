@@ -72,7 +72,7 @@ do {
 
     print("=== radius")
     // #region radius
-    let within = try Reader(engine.withinRadius(27.7172, lon: 85.3240, meters: 500, limit: 10)).records()
+    let within = try Reader(engine.withinRadius(27.7172, lon: 85.3240, radiusM: 500, limit: 10)).records()
     print(within.count, "places within 500 m; farthest", fixed(within.last?.double("meters"), 0), "m")
     // #endregion radius
 

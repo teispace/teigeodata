@@ -212,7 +212,7 @@ external int _tgEngineSearchWith(Pointer<Void> self, Pointer<Uint8> query, int q
 external int _tgEngineReverse(Pointer<Void> self, double lat, double lon, int limit, Pointer<TgBytes> out);
 
 @Native<Int32 Function(Pointer<Void>, Double, Double, Double, Uint32, Pointer<TgBytes>)>(symbol: 'tg_engine_within_radius', isLeaf: true)
-external int _tgEngineWithinRadius(Pointer<Void> self, double lat, double lon, double meters, int limit, Pointer<TgBytes> out);
+external int _tgEngineWithinRadius(Pointer<Void> self, double lat, double lon, double radiusM, int limit, Pointer<TgBytes> out);
 
 @Native<Int32 Function(Pointer<Void>, Double, Double, Pointer<TgBytes>)>(symbol: 'tg_engine_admin_at', isLeaf: true)
 external int _tgEngineAdminAt(Pointer<Void> self, double lat, double lon, Pointer<TgBytes> out);
@@ -224,7 +224,7 @@ external int _tgEngineElevationAt(Pointer<Void> self, double lat, double lon, Po
 external int _tgEnginePostalLookup(Pointer<Void> self, Pointer<Uint8> code, int codeLen, Pointer<Uint8> scheme, int schemeLen, Pointer<TgBytes> out);
 
 @Native<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<Uint8>, Size, Uint32, Pointer<TgBytes>)>(symbol: 'tg_engine_postal_prefix', isLeaf: true)
-external int _tgEnginePostalPrefix(Pointer<Void> self, Pointer<Uint8> input, int inputLen, Pointer<Uint8> scheme, int schemeLen, int limit, Pointer<TgBytes> out);
+external int _tgEnginePostalPrefix(Pointer<Void> self, Pointer<Uint8> prefix, int prefixLen, Pointer<Uint8> scheme, int schemeLen, int limit, Pointer<TgBytes> out);
 
 @Native<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size, Pointer<TgBytes>)>(symbol: 'tg_engine_postal_codes_of', isLeaf: true)
 external int _tgEnginePostalCodesOf(Pointer<Void> self, Pointer<Uint8> id, int idLen, Pointer<TgBytes> out);
@@ -675,8 +675,8 @@ final class TeiGeodata {
     return _takeBlob();
   }
 
-  Uint8List _engineWithinRadius(Pointer<Void> handle, double lat, double lon, double meters, int limit) {
-    final status = _tgEngineWithinRadius(handle, lat, lon, meters, limit, _bytes);
+  Uint8List _engineWithinRadius(Pointer<Void> handle, double lat, double lon, double radiusM, int limit) {
+    final status = _tgEngineWithinRadius(handle, lat, lon, radiusM, limit, _bytes);
     _check(status);
     return _takeBlob();
   }
@@ -703,12 +703,12 @@ final class TeiGeodata {
     return _takeBlob();
   }
 
-  Uint8List _enginePostalPrefix(Pointer<Void> handle, String input, String scheme, int limit) {
-    final inputAt = 0;
-    final inputLen = _utf8(input, inputAt);
-    final schemeAt = inputAt + inputLen;
+  Uint8List _enginePostalPrefix(Pointer<Void> handle, String prefix, String scheme, int limit) {
+    final prefixAt = 0;
+    final prefixLen = _utf8(prefix, prefixAt);
+    final schemeAt = prefixAt + prefixLen;
     final schemeLen = _utf8(scheme, schemeAt);
-    final status = _tgEnginePostalPrefix(handle, _input + inputAt, inputLen, _input + schemeAt, schemeLen, limit, _bytes);
+    final status = _tgEnginePostalPrefix(handle, _input + prefixAt, prefixLen, _input + schemeAt, schemeLen, limit, _bytes);
     _check(status);
     return _takeBlob();
   }
@@ -1150,7 +1150,7 @@ final class Engine implements Finalizable {
   /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
   Uint8List reverse(double lat, double lon, int limit) => _lib._engineReverse(_live, lat, lon, limit);
 
-  /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+  /// The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
   /// with `meters` and `bearing` to each.
   ///
   /// # Errors
@@ -1158,7 +1158,7 @@ final class Engine implements Finalizable {
   /// `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite
   /// radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
   /// corrupt.
-  Uint8List withinRadius(double lat, double lon, double meters, int limit) => _lib._engineWithinRadius(_live, lat, lon, meters, limit);
+  Uint8List withinRadius(double lat, double lon, double radiusM, int limit) => _lib._engineWithinRadius(_live, lat, lon, radiusM, limit);
 
   /// The admin units holding the point, country first.
   ///
@@ -1190,14 +1190,14 @@ final class Engine implements Finalizable {
   /// `ErrorCode::Corrupt` if a section read is corrupt.
   Uint8List postalLookup(String code, String scheme) => _lib._enginePostalLookup(_live, code, scheme);
 
-  /// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+  /// Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
   /// in code order per scheme; `scheme` as in `postal_lookup`.
   ///
   /// # Errors
   ///
   /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
   /// `ErrorCode::Corrupt` if a section read is corrupt.
-  Uint8List postalPrefix(String input, String scheme, int limit) => _lib._enginePostalPrefix(_live, input, scheme, limit);
+  Uint8List postalPrefix(String prefix, String scheme, int limit) => _lib._enginePostalPrefix(_live, prefix, scheme, limit);
 
   /// The postal codes of the place with this ID; no rows for an unknown ID.
   ///

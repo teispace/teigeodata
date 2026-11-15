@@ -529,12 +529,12 @@ func rawEngineReverse(handle uintptr, lat float64, lon float64, limit uint32, ou
 	return status
 }
 
-func rawEngineWithinRadius(handle uintptr, lat float64, lon float64, meters float64, limit uint32, out *tgBytes, msg *tgBytes) int32 {
+func rawEngineWithinRadius(handle uintptr, lat float64, lon float64, radiusM float64, limit uint32, out *tgBytes, msg *tgBytes) int32 {
 	if pEngineWithinRadius == nil {
 		return -1
 	}
 	runtime.LockOSThread()
-	status := pEngineWithinRadius(handle, lat, lon, meters, limit, out)
+	status := pEngineWithinRadius(handle, lat, lon, radiusM, limit, out)
 	if status != 0 {
 		status = pLastError(msg)
 	}
@@ -581,12 +581,12 @@ func rawEnginePostalLookup(handle uintptr, code *byte, codeLen uintptr, scheme *
 	return status
 }
 
-func rawEnginePostalPrefix(handle uintptr, input *byte, inputLen uintptr, scheme *byte, schemeLen uintptr, limit uint32, out *tgBytes, msg *tgBytes) int32 {
+func rawEnginePostalPrefix(handle uintptr, prefix *byte, prefixLen uintptr, scheme *byte, schemeLen uintptr, limit uint32, out *tgBytes, msg *tgBytes) int32 {
 	if pEnginePostalPrefix == nil {
 		return -1
 	}
 	runtime.LockOSThread()
-	status := pEnginePostalPrefix(handle, input, inputLen, scheme, schemeLen, limit, out)
+	status := pEnginePostalPrefix(handle, prefix, prefixLen, scheme, schemeLen, limit, out)
 	if status != 0 {
 		status = pLastError(msg)
 	}

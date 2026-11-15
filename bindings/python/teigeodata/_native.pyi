@@ -425,9 +425,9 @@ class Engine:
         `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
         """
 
-    def within_radius(self, lat: float, lon: float, meters: float, limit: int) -> Blob:
+    def within_radius(self, lat: float, lon: float, radius_m: float, limit: int) -> Blob:
         """
-        The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+        The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
         with `meters` and `bearing` to each.
 
         # Errors
@@ -473,9 +473,9 @@ class Engine:
         `ErrorCode::Corrupt` if a section read is corrupt.
         """
 
-    def postal_prefix(self, input: str, scheme: str, limit: int) -> Blob:
+    def postal_prefix(self, prefix: str, scheme: str, limit: int) -> Blob:
         """
-        Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+        Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
         in code order per scheme; `scheme` as in `postal_lookup`.
 
         # Errors

@@ -681,7 +681,7 @@ public static final class Engine implements AutoCloseable {
         private static native byte[] nativeReverse(long handle, double lat, double lon, long limit);
 
         /**
-         * The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+         * The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
          * with `meters` and `bearing` to each.
          *
          * # Errors
@@ -690,17 +690,17 @@ public static final class Engine implements AutoCloseable {
          * radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
          * corrupt.
          */
-        public byte[] withinRadius(double lat, double lon, double meters, long limit) {
+        public byte[] withinRadius(double lat, double lon, double radiusM, long limit) {
             long stamp = enter();
             try {
-                return nativeWithinRadius(handle, lat, lon, meters, limit);
+                return nativeWithinRadius(handle, lat, lon, radiusM, limit);
             } finally {
                 lock.unlockRead(stamp);
                 NativeCleaner.fence(this);
             }
         }
 
-        private static native byte[] nativeWithinRadius(long handle, double lat, double lon, double meters, long limit);
+        private static native byte[] nativeWithinRadius(long handle, double lat, double lon, double radiusM, long limit);
 
         /**
          * The admin units holding the point, country first.
@@ -769,7 +769,7 @@ public static final class Engine implements AutoCloseable {
         private static native byte[] nativePostalLookup(long handle, String code, String scheme);
 
         /**
-         * Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+         * Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
          * in code order per scheme; `scheme` as in `postal_lookup`.
          *
          * # Errors
@@ -777,17 +777,17 @@ public static final class Engine implements AutoCloseable {
          * `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
          * `ErrorCode::Corrupt` if a section read is corrupt.
          */
-        public byte[] postalPrefix(String input, String scheme, long limit) {
+        public byte[] postalPrefix(String prefix, String scheme, long limit) {
             long stamp = enter();
             try {
-                return nativePostalPrefix(handle, input, scheme, limit);
+                return nativePostalPrefix(handle, prefix, scheme, limit);
             } finally {
                 lock.unlockRead(stamp);
                 NativeCleaner.fence(this);
             }
         }
 
-        private static native byte[] nativePostalPrefix(long handle, String input, String scheme, long limit);
+        private static native byte[] nativePostalPrefix(long handle, String prefix, String scheme, long limit);
 
         /**
          * The postal codes of the place with this ID; no rows for an unknown ID.

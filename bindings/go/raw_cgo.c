@@ -283,11 +283,11 @@ int32_t teigeodata_w_engine_reverse(uintptr_t handle, double lat, double lon, ui
     return status == 0 ? 0 : p_tg_last_error(msg);
 }
 
-static int32_t (*p_tg_engine_within_radius)(const void *handle, double lat, double lon, double meters, uint32_t limit, void *out);
+static int32_t (*p_tg_engine_within_radius)(const void *handle, double lat, double lon, double radius_m, uint32_t limit, void *out);
 
-int32_t teigeodata_w_engine_within_radius(uintptr_t handle, double lat, double lon, double meters, uint32_t limit, teigeodata_bytes *out, teigeodata_bytes *msg) {
+int32_t teigeodata_w_engine_within_radius(uintptr_t handle, double lat, double lon, double radius_m, uint32_t limit, teigeodata_bytes *out, teigeodata_bytes *msg) {
     if (p_tg_engine_within_radius == NULL) return -1;
-    const int32_t status = p_tg_engine_within_radius((const void *)handle, lat, lon, meters, limit, out);
+    const int32_t status = p_tg_engine_within_radius((const void *)handle, lat, lon, radius_m, limit, out);
     return status == 0 ? 0 : p_tg_last_error(msg);
 }
 
@@ -315,11 +315,11 @@ int32_t teigeodata_w_engine_postal_lookup(uintptr_t handle, const uint8_t *code,
     return status == 0 ? 0 : p_tg_last_error(msg);
 }
 
-static int32_t (*p_tg_engine_postal_prefix)(const void *handle, const void *input, size_t input_len, const void *scheme, size_t scheme_len, uint32_t limit, void *out);
+static int32_t (*p_tg_engine_postal_prefix)(const void *handle, const void *prefix, size_t prefix_len, const void *scheme, size_t scheme_len, uint32_t limit, void *out);
 
-int32_t teigeodata_w_engine_postal_prefix(uintptr_t handle, const uint8_t *input, size_t input_len, const uint8_t *scheme, size_t scheme_len, uint32_t limit, teigeodata_bytes *out, teigeodata_bytes *msg) {
+int32_t teigeodata_w_engine_postal_prefix(uintptr_t handle, const uint8_t *prefix, size_t prefix_len, const uint8_t *scheme, size_t scheme_len, uint32_t limit, teigeodata_bytes *out, teigeodata_bytes *msg) {
     if (p_tg_engine_postal_prefix == NULL) return -1;
-    const int32_t status = p_tg_engine_postal_prefix((const void *)handle, input, input_len, scheme, scheme_len, limit, out);
+    const int32_t status = p_tg_engine_postal_prefix((const void *)handle, prefix, prefix_len, scheme, scheme_len, limit, out);
     return status == 0 ? 0 : p_tg_last_error(msg);
 }
 

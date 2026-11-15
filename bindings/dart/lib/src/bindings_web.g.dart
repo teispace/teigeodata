@@ -41,11 +41,11 @@ extension type _JsEngine._(JSObject _) implements JSObject {
   external JSUint8Array search(String query, int limit);
   external JSUint8Array searchWith(String query, int limit, _JsSearchOptions? options);
   external JSUint8Array reverse(double lat, double lon, int limit);
-  external JSUint8Array withinRadius(double lat, double lon, double meters, int limit);
+  external JSUint8Array withinRadius(double lat, double lon, double radiusM, int limit);
   external JSUint8Array adminAt(double lat, double lon);
   external JSUint8Array elevationAt(double lat, double lon);
   external JSUint8Array postalLookup(String code, String scheme);
-  external JSUint8Array postalPrefix(String input, String scheme, int limit);
+  external JSUint8Array postalPrefix(String prefix, String scheme, int limit);
   external JSUint8Array postalCodesOf(String id);
   external JSUint8Array postalAt(double lat, double lon);
   external JSUint8Array tzAt(double lat, double lon);
@@ -468,7 +468,7 @@ final class Engine {
     }
   }
 
-  /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+  /// The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
   /// with `meters` and `bearing` to each.
   ///
   /// # Errors
@@ -476,9 +476,9 @@ final class Engine {
   /// `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite
   /// radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
   /// corrupt.
-  Uint8List withinRadius(double lat, double lon, double meters, int limit) {
+  Uint8List withinRadius(double lat, double lon, double radiusM, int limit) {
     try {
-      return _live.withinRadius(lat, lon, meters, limit).toDart;
+      return _live.withinRadius(lat, lon, radiusM, limit).toDart;
     } catch (e, s) {
       _rethrow(e, s);
     }
@@ -532,16 +532,16 @@ final class Engine {
     }
   }
 
-  /// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+  /// Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
   /// in code order per scheme; `scheme` as in `postal_lookup`.
   ///
   /// # Errors
   ///
   /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
   /// `ErrorCode::Corrupt` if a section read is corrupt.
-  Uint8List postalPrefix(String input, String scheme, int limit) {
+  Uint8List postalPrefix(String prefix, String scheme, int limit) {
     try {
-      return _live.postalPrefix(input, scheme, limit).toDart;
+      return _live.postalPrefix(prefix, scheme, limit).toDart;
     } catch (e, s) {
       _rethrow(e, s);
     }

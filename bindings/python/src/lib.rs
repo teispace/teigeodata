@@ -711,7 +711,7 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(Blob(value))
     }
-    /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+    /// The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
     /// with `meters` and `bearing` to each.
     ///
     /// # Errors
@@ -724,10 +724,10 @@ impl Engine {
         py: Python<'py>,
         lat: f64,
         lon: f64,
-        meters: f64,
+        radius_m: f64,
         limit: u32,
     ) -> PyResult<Blob> {
-        let value = py.detach(|| self.0.within_radius(lat, lon, meters, limit));
+        let value = py.detach(|| self.0.within_radius(lat, lon, radius_m, limit));
         let value = value.map_err(error)?;
         Ok(Blob(value))
     }
@@ -770,7 +770,7 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(Blob(value))
     }
-    /// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+    /// Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
     /// in code order per scheme; `scheme` as in `postal_lookup`.
     ///
     /// # Errors
@@ -780,11 +780,11 @@ impl Engine {
     fn postal_prefix<'py>(
         &self,
         py: Python<'py>,
-        input: &str,
+        prefix: &str,
         scheme: &str,
         limit: u32,
     ) -> PyResult<Blob> {
-        let value = py.detach(|| self.0.postal_prefix(input, scheme, limit));
+        let value = py.detach(|| self.0.postal_prefix(prefix, scheme, limit));
         let value = value.map_err(error)?;
         Ok(Blob(value))
     }

@@ -544,7 +544,7 @@ class Engine {
     /// `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
     Blob reverse(double lat, double lon, std::uint32_t limit) const;
 
-    /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+    /// The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
     /// with `meters` and `bearing` to each.
     ///
     /// # Errors
@@ -552,7 +552,7 @@ class Engine {
     /// `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite
     /// radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
     /// corrupt.
-    Blob within_radius(double lat, double lon, double meters, std::uint32_t limit) const;
+    Blob within_radius(double lat, double lon, double radius_m, std::uint32_t limit) const;
 
     /// The admin units holding the point, country first.
     ///
@@ -584,14 +584,14 @@ class Engine {
     /// `ErrorCode::Corrupt` if a section read is corrupt.
     Blob postal_lookup(std::string_view code, std::string_view scheme) const;
 
-    /// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+    /// Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
     /// in code order per scheme; `scheme` as in `postal_lookup`.
     ///
     /// # Errors
     ///
     /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
     /// `ErrorCode::Corrupt` if a section read is corrupt.
-    Blob postal_prefix(std::string_view input, std::string_view scheme, std::uint32_t limit) const;
+    Blob postal_prefix(std::string_view prefix, std::string_view scheme, std::uint32_t limit) const;
 
     /// The postal codes of the place with this ID; no rows for an unknown ID.
     ///
@@ -1104,9 +1104,9 @@ inline Blob Engine::reverse(double lat, double lon, std::uint32_t limit) const {
     return Blob(out);
 }
 
-inline Blob Engine::within_radius(double lat, double lon, double meters, std::uint32_t limit) const {
+inline Blob Engine::within_radius(double lat, double lon, double radius_m, std::uint32_t limit) const {
     tg_bytes out{};
-    const std::int32_t status = tg_engine_within_radius(raw_, lat, lon, meters, limit, &out);
+    const std::int32_t status = tg_engine_within_radius(raw_, lat, lon, radius_m, limit, &out);
     detail::check(status);
     return Blob(out);
 }
@@ -1132,9 +1132,9 @@ inline Blob Engine::postal_lookup(std::string_view code, std::string_view scheme
     return Blob(out);
 }
 
-inline Blob Engine::postal_prefix(std::string_view input, std::string_view scheme, std::uint32_t limit) const {
+inline Blob Engine::postal_prefix(std::string_view prefix, std::string_view scheme, std::uint32_t limit) const {
     tg_bytes out{};
-    const std::int32_t status = tg_engine_postal_prefix(raw_, detail::utf8(input), input.size(), detail::utf8(scheme), scheme.size(), limit, &out);
+    const std::int32_t status = tg_engine_postal_prefix(raw_, detail::utf8(prefix), prefix.size(), detail::utf8(scheme), scheme.size(), limit, &out);
     detail::check(status);
     return Blob(out);
 }

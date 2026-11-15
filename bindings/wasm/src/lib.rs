@@ -549,7 +549,7 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(value.into_vec())
     }
-    /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+    /// The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
     /// with `meters` and `bearing` to each.
     ///
     /// # Errors
@@ -562,10 +562,10 @@ impl Engine {
         &self,
         lat: f64,
         lon: f64,
-        meters: f64,
+        #[wasm_bindgen(js_name = radiusM)] radius_m: f64,
         limit: u32,
     ) -> Result<Vec<u8>, JsValue> {
-        let value = self.0.within_radius(lat, lon, meters, limit);
+        let value = self.0.within_radius(lat, lon, radius_m, limit);
         let value = value.map_err(error)?;
         Ok(value.into_vec())
     }
@@ -611,7 +611,7 @@ impl Engine {
         let value = value.map_err(error)?;
         Ok(value.into_vec())
     }
-    /// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+    /// Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
     /// in code order per scheme; `scheme` as in `postal_lookup`.
     ///
     /// # Errors
@@ -619,8 +619,13 @@ impl Engine {
     /// `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
     /// `ErrorCode::Corrupt` if a section read is corrupt.
     #[wasm_bindgen(js_name = postalPrefix)]
-    pub fn postal_prefix(&self, input: &str, scheme: &str, limit: u32) -> Result<Vec<u8>, JsValue> {
-        let value = self.0.postal_prefix(input, scheme, limit);
+    pub fn postal_prefix(
+        &self,
+        prefix: &str,
+        scheme: &str,
+        limit: u32,
+    ) -> Result<Vec<u8>, JsValue> {
+        let value = self.0.postal_prefix(prefix, scheme, limit);
         let value = value.map_err(error)?;
         Ok(value.into_vec())
     }

@@ -58,7 +58,7 @@ row("callback", best(1_000) { sink += Double(try! TeiGeodata.progress(1000) { _ 
 if let pack = ProcessInfo.processInfo.environment["TEIGEODATA_BENCH_PACK"] {
     let engine = Engine()
     _ = try engine.openFile(pack)
-    let query = { try! engine.withinRadius(27.7, lon: 85.3, meters: 50_000, limit: 1000) }
+    let query = { try! engine.withinRadius(27.7, lon: 85.3, radiusM: 50_000, limit: 1000) }
     if query().withUnsafeBytes({ $0.loadUnaligned(fromByteOffset: 4, as: UInt32.self) }) == 1000 {
         row("radius(1000)+decode", best(200) { sink += decode(query()) })
     } else {

@@ -659,7 +659,7 @@ impl Engine {
         })
     }
 
-    /// The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+    /// The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
     /// with `meters` and `bearing` to each.
     ///
     /// # Errors
@@ -667,18 +667,18 @@ impl Engine {
     /// [`ErrorCode::InvalidArgument`] for a point off the globe, a negative or non-finite
     /// radius, or a `limit` above [`LIMIT_MAX`]; [`ErrorCode::Corrupt`] if a section read is
     /// corrupt.
-    pub fn within_radius(&self, lat: f64, lon: f64, meters: f64, limit: u32) -> Result<Blob> {
+    pub fn within_radius(&self, lat: f64, lon: f64, radius_m: f64, limit: u32) -> Result<Blob> {
         let (k, at) = (self::limit(limit)?, point::<E6>(lat, lon)?);
-        if !(meters.is_finite() && meters >= 0.0) {
+        if !(radius_m.is_finite() && radius_m >= 0.0) {
             return Err(Error::new(
                 ErrorCode::InvalidArgument,
-                format!("radius is {meters} m; it must be finite and not negative"),
+                format!("radius_m is {radius_m}; it must be finite and not negative"),
             ));
         }
         let engine = self.shared.load();
         BUFFERS.with_borrow_mut(|b| {
             let Buffers { scratch, near, .. } = b;
-            engine.within_radius(at, meters, k, scratch, near)?;
+            engine.within_radius(at, radius_m, k, scratch, near)?;
             near_blob(&engine, near)
         })
     }
@@ -767,20 +767,20 @@ impl Engine {
         }
     }
 
-    /// Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+    /// Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
     /// in code order per scheme; `scheme` as in [`postal_lookup`](Self::postal_lookup).
     ///
     /// # Errors
     ///
     /// [`ErrorCode::InvalidArgument`] if `limit` exceeds [`LIMIT_MAX`];
     /// [`ErrorCode::Corrupt`] if a section read is corrupt.
-    pub fn postal_prefix(&self, input: &str, scheme: &str, limit: u32) -> Result<Blob> {
+    pub fn postal_prefix(&self, prefix: &str, scheme: &str, limit: u32) -> Result<Blob> {
         let k = self::limit(limit)?;
         #[cfg(feature = "postal")]
         {
             let engine = self.shared.load();
             BUFFERS.with_borrow_mut(|b| {
-                installed(engine.postal_prefix(input, scheme_of(scheme), k, &mut b.codes))?;
+                installed(engine.postal_prefix(prefix, scheme_of(scheme), k, &mut b.codes))?;
                 postal_blob(&engine, &b.codes)
             })
         }

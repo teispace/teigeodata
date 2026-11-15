@@ -1368,7 +1368,7 @@ public unsafe byte[] Reverse(double lat, double lon, uint limit);
 
 ## `within_radius`
 
-The places within `meters` of the point (great-circle), nearest first, at most `limit`, with `meters` and `bearing` to each.
+The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`, with `meters` and `bearing` to each.
 
 **Errors.** `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
 
@@ -1376,70 +1376,70 @@ The places within `meters` of the point (great-circle), nearest first, at most `
 <Tab value="Rust">
 
 ```rust
-pub fn within_radius(&self, lat: f64, lon: f64, meters: f64, limit: u32) -> Result<Blob>
+pub fn within_radius(&self, lat: f64, lon: f64, radius_m: f64, limit: u32) -> Result<Blob>
 ```
 
 </Tab>
 <Tab value="Python">
 
 ```python
-def within_radius(self, lat: float, lon: float, meters: float, limit: int) -> Blob: ...
+def within_radius(self, lat: float, lon: float, radius_m: float, limit: int) -> Blob: ...
 ```
 
 </Tab>
 <Tab value="JavaScript">
 
 ```ts
-withinRadius(lat: number, lon: number, meters: number, limit: number): Buffer;
+withinRadius(lat: number, lon: number, radiusM: number, limit: number): Buffer;
 ```
 
 </Tab>
 <Tab value="Swift">
 
 ```swift
-public func withinRadius(_ lat: Double, lon: Double, meters: Double, limit: UInt32) throws(TeiGeodataError) -> Data
+public func withinRadius(_ lat: Double, lon: Double, radiusM: Double, limit: UInt32) throws(TeiGeodataError) -> Data
 ```
 
 </Tab>
 <Tab value="Java and Kotlin">
 
 ```java
-public byte[] withinRadius(double lat, double lon, double meters, long limit);
+public byte[] withinRadius(double lat, double lon, double radiusM, long limit);
 ```
 
 </Tab>
 <Tab value="Dart">
 
 ```dart
-Uint8List withinRadius(double lat, double lon, double meters, int limit);
+Uint8List withinRadius(double lat, double lon, double radiusM, int limit);
 ```
 
 </Tab>
 <Tab value="Go">
 
 ```go
-func (h *Engine) WithinRadius(lat float64, lon float64, meters float64, limit uint32) ([]byte, error)
+func (h *Engine) WithinRadius(lat float64, lon float64, radiusM float64, limit uint32) ([]byte, error)
 ```
 
 </Tab>
 <Tab value="C">
 
 ```c
-int32_t tg_engine_within_radius(const tg_engine *handle, double lat, double lon, double meters, uint32_t limit, tg_bytes *out);
+int32_t tg_engine_within_radius(const tg_engine *handle, double lat, double lon, double radius_m, uint32_t limit, tg_bytes *out);
 ```
 
 </Tab>
 <Tab value="C++">
 
 ```cpp
-Blob within_radius(double lat, double lon, double meters, std::uint32_t limit) const;
+Blob within_radius(double lat, double lon, double radius_m, std::uint32_t limit) const;
 ```
 
 </Tab>
 <Tab value=".NET">
 
 ```csharp
-public unsafe byte[] WithinRadius(double lat, double lon, double meters, uint limit);
+public unsafe byte[] WithinRadius(double lat, double lon, double radiusM, uint limit);
 ```
 
 </Tab>
@@ -1688,7 +1688,7 @@ public unsafe byte[] PostalLookup(string code, string scheme);
 
 ## `postal_prefix`
 
-Up to `limit` postal codes starting with `input`, with their places (autocomplete), in code order per scheme; `scheme` as in `postal_lookup`.
+Up to `limit` postal codes starting with `prefix`, with their places (autocomplete), in code order per scheme; `scheme` as in `postal_lookup`.
 
 **Errors.** `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
 
@@ -1696,70 +1696,70 @@ Up to `limit` postal codes starting with `input`, with their places (autocomplet
 <Tab value="Rust">
 
 ```rust
-pub fn postal_prefix(&self, input: &str, scheme: &str, limit: u32) -> Result<Blob>
+pub fn postal_prefix(&self, prefix: &str, scheme: &str, limit: u32) -> Result<Blob>
 ```
 
 </Tab>
 <Tab value="Python">
 
 ```python
-def postal_prefix(self, input: str, scheme: str, limit: int) -> Blob: ...
+def postal_prefix(self, prefix: str, scheme: str, limit: int) -> Blob: ...
 ```
 
 </Tab>
 <Tab value="JavaScript">
 
 ```ts
-postalPrefix(input: string, scheme: string, limit: number): Buffer;
+postalPrefix(prefix: string, scheme: string, limit: number): Buffer;
 ```
 
 </Tab>
 <Tab value="Swift">
 
 ```swift
-public func postalPrefix(_ input: String, scheme: String, limit: UInt32) throws(TeiGeodataError) -> Data
+public func postalPrefix(_ prefix: String, scheme: String, limit: UInt32) throws(TeiGeodataError) -> Data
 ```
 
 </Tab>
 <Tab value="Java and Kotlin">
 
 ```java
-public byte[] postalPrefix(String input, String scheme, long limit);
+public byte[] postalPrefix(String prefix, String scheme, long limit);
 ```
 
 </Tab>
 <Tab value="Dart">
 
 ```dart
-Uint8List postalPrefix(String input, String scheme, int limit);
+Uint8List postalPrefix(String prefix, String scheme, int limit);
 ```
 
 </Tab>
 <Tab value="Go">
 
 ```go
-func (h *Engine) PostalPrefix(input string, scheme string, limit uint32) ([]byte, error)
+func (h *Engine) PostalPrefix(prefix string, scheme string, limit uint32) ([]byte, error)
 ```
 
 </Tab>
 <Tab value="C">
 
 ```c
-int32_t tg_engine_postal_prefix(const tg_engine *handle, const uint8_t *input, size_t input_len, const uint8_t *scheme, size_t scheme_len, uint32_t limit, tg_bytes *out);
+int32_t tg_engine_postal_prefix(const tg_engine *handle, const uint8_t *prefix, size_t prefix_len, const uint8_t *scheme, size_t scheme_len, uint32_t limit, tg_bytes *out);
 ```
 
 </Tab>
 <Tab value="C++">
 
 ```cpp
-Blob postal_prefix(std::string_view input, std::string_view scheme, std::uint32_t limit) const;
+Blob postal_prefix(std::string_view prefix, std::string_view scheme, std::uint32_t limit) const;
 ```
 
 </Tab>
 <Tab value=".NET">
 
 ```csharp
-public unsafe byte[] PostalPrefix(string input, string scheme, uint limit);
+public unsafe byte[] PostalPrefix(string prefix, string scheme, uint limit);
 ```
 
 </Tab>

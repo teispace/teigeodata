@@ -372,7 +372,7 @@ export class Engine {
   reverse(lat: number, lon: number, limit: number): Buffer;
 
   /**
-   * The places within `meters` of the point (great-circle), nearest first, at most `limit`,
+   * The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
    * with `meters` and `bearing` to each.
    *
    * # Errors
@@ -381,7 +381,7 @@ export class Engine {
    * radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is
    * corrupt.
    */
-  withinRadius(lat: number, lon: number, meters: number, limit: number): Buffer;
+  withinRadius(lat: number, lon: number, radiusM: number, limit: number): Buffer;
 
   /**
    * The admin units holding the point, country first.
@@ -420,7 +420,7 @@ export class Engine {
   postalLookup(code: string, scheme: string): Buffer;
 
   /**
-   * Up to `limit` postal codes starting with `input`, with their places (autocomplete),
+   * Up to `limit` postal codes starting with `prefix`, with their places (autocomplete),
    * in code order per scheme; `scheme` as in `postal_lookup`.
    *
    * # Errors
@@ -428,7 +428,7 @@ export class Engine {
    * `ErrorCode::InvalidArgument` if `limit` exceeds `LIMIT_MAX`;
    * `ErrorCode::Corrupt` if a section read is corrupt.
    */
-  postalPrefix(input: string, scheme: string, limit: number): Buffer;
+  postalPrefix(prefix: string, scheme: string, limit: number): Buffer;
 
   /**
    * The postal codes of the place with this ID; no rows for an unknown ID.
