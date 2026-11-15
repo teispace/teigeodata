@@ -54,7 +54,7 @@ jobs:
       - name: ABI release gate (the version covers the C ABI's changes since the last release)
         run: |
           # The release is not tagged yet: the newest tag reachable is the last release.
-          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD)
+          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude 'v*-*' HEAD)
           if ! cargo xtask abi --since "$prev" --release; then
             echo "::warning::the ABI release gate fails: a real release stops here"
             test "$DRY_RUN" = true
@@ -66,7 +66,7 @@ jobs:
         # Every crate with `publish = true`, default features, against the last release's
         # tag. Before 1.0 a minor bump may break; from 1.0 only a major may (semver.md).
         run: |
-          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD)
+          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude 'v*-*' HEAD)
           # The checks build every feature; `baseline` embeds the file this names at compile
           # time. Any pack does for the API, so the bindings' fixture stands in (absolute path,
           # read by both the current and the baseline build).

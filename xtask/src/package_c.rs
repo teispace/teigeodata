@@ -878,6 +878,8 @@ fn last_tag(root: &Path) -> Result<String, Vec<String>> {
     let out = Command::new("git")
         .current_dir(root)
         .args(["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"])
+        // A pre-release tag (`v1.0.0-rc.1`) is a test of the pipeline, not a release.
+        .args(["--exclude", "v*-*"])
         .output()
         .map_err(|e| vec![format!("git: {e}")])?;
     let tag = String::from_utf8_lossy(&out.stdout).trim().to_owned();

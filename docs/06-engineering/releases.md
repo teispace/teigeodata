@@ -58,7 +58,9 @@ that needs a newer reader than its own.
    `parity.json`); `check-workspace` (in the commit hook and CI) fails on any place left
    behind (D-346). Commit `chore(repo): release vX.Y.Z`.
 3. Push, then run the `release` workflow on that commit: first as a dry run
-   (`gh workflow run release.yml`), then for real
+   (`gh workflow run release.yml`; a release candidate is tagged `vX.Y.Z-rc.N` and its dry run
+   dispatched on that tag, and every lookup of the last release skips such tags, so the gates
+   still compare with the last real release), then for real
    (`gh workflow run release.yml -f dry_run=false`, approved in the `release` environment). It
    builds every artifact as CI does, adds an SBOM per crate and `SHA256SUMS`, attests them,
    verifies every attestation, tags `vX.Y.Z`, and publishes the release with every file

@@ -231,7 +231,15 @@ fn exported(lib: &Path) -> Result<BTreeSet<String>, Vec<String>> {
 fn last_release(root: &Path) -> Result<String, Vec<String>> {
     let tag = git(
         root,
-        &["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"],
+        &[
+            "describe",
+            "--tags",
+            "--abbrev=0",
+            "--match",
+            "v[0-9]*",
+            "--exclude",
+            "v*-*",
+        ],
     )
     .map_err(|mut e| {
         e.push("no release tag: fetch the tags (`git fetch --tags`) or pass --since".into());
