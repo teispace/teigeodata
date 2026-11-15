@@ -54,7 +54,8 @@ it.""",
         """{m:search} finds places by name, best first. It matches every name a place has, in every
 script, and forgives spelling: काठमाडौं, Kathmandu and Kathamandu find the same city, and so do
 typos, missing accents and abbreviations. A result row has the place columns (`id`, `name`,
-`kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`) and a `score`.""",
+`kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`, `population`,
+`population_kind`) and a `score`.""",
         """The `score` ranks the rows of one query and means nothing across queries. It adds how well the
 name matched to how important the place is, so a city ranks above a village of the same name.
 `limit` is at most 10,000 ({c:limit_max}).""",
