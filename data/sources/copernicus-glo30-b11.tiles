@@ -1,0 +1,4 @@
+# Tiles of copernicus-glo30-b11 (forge fetch --pin). tile, sha256 (or absent), size.
+Copernicus_DSM_COG_10_N28_00_E077_00_DEM	a8e69d432869bf85a63b7cfcaa61b5a770c7705125b3cfde9b892d65dfed98b4	41680243
+Copernicus_DSM_COG_10_N35_00_E138_00_DEM	06d8b0fa3ebe34ec2c2d2900d7576aeb457beb40f0216d9bebd234610e5ecf03	43412544
+Copernicus_DSM_COG_10_N45_00_E007_00_DEM	638c155dd9a5f0b7ee818146def740093da33cee4606071b2bbf7ce3fa00ab95	42594792

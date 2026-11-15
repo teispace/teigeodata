@@ -307,11 +307,52 @@ On the two-tile section (N27 E085 and E086, 9.21 MB, 6,441 tiles):
   hills +4.1–6.0%), mostly the 17-byte tile header. 64 × 64 stays the default (D-104); the
   side is per grid, so a pack can change it without a format change.
 
+### All 45 Nepal tiles
+
+139.3 MB for the 9° × 5° box, 1.907 bits per sample, every probe within 1 m, 163 s (D-109,
+[phase 3 §3.4](../../07-planning/phases/phase-3.md#34-b11-dem)).
+
+### Outside Nepal, against LERC and zstd (2026-11-15)
+
+```
+forge fetch copernicus-glo30-b11
+forge dem-section copernicus-glo30-b11 7,45,7,45      # and 77,28,77,28, 138,35,138,35
+```
+
+Three Copernicus GLO-30 tiles pinned as the research tileset `copernicus-glo30-b11` (it feeds no
+build): the Alps (N45 E007, the Matterhorn and Monte Rosa), the Delhi plain (N28 E077, the next
+wave's first state) and Mount Fuji with Suruga Bay (N35 E138: sea, coast and a 3,776 m cone).
+Each is 3600 × 3600 = 12.96 M samples, all at ±1 m. The rivals were run in Python 3.15
+(numpy 2.5.4, tifffile 2026.11.12, imagecodecs 2026.11.11 with LERC 4.3.0 and zstd 1.5.7;
+script and full table in scratch) on the same samples:
+
+| Tile | teigeodata DEM section | zstd 19 on q, left delta | zstd 19 on q | LERC 1 m + zstd | LERC 1 m | GeoTIFF as shipped |
+|---|--:|--:|--:|--:|--:|--:|
+| Alps | **2.375** (3.86 MB) | 3.348 | 5.110 | 6.295 | 6.479 | 26.29 |
+| Delhi plain | **1.034** (1.69 MB) | 1.361 | 1.441 | 1.991 | 2.571 | 25.73 |
+| Fuji and coast | **2.649** (4.31 MB) | 3.728 | 5.429 | 6.314 | 6.448 | 26.80 |
+
+Bits per sample over the whole tile. q = round(h / 2), the same 2 m step; every codec's largest
+error is 1.0000 m (LERC's measured on decode, ours on 20,000 random points against the source).
+
+- **The codec carries outside Nepal.** It is 24–29% smaller than the best general-purpose
+  rival and 2.4–2.7 times smaller than LERC at the same bound, the same margins as on Nepal's
+  tiles in the [note](../notes/dem-section.md). Plains and mountains land where Nepal's did
+  (Terai 1.11, mountains 2.7–2.9 bits).
+- **The comparison favours the rivals:** their figures are one stream for the whole tile, with
+  no random access; ours include the directory and 64 × 64 tiles a point query decodes alone.
+- **Sea costs nothing extra:** Fuji's tile is a quarter sea and sits with the mountain tiles,
+  driven by the cone and the coastal ranges.
+- **Encoding is slower and does not matter:** 3.4–3.7 s per tile for ours with refinement
+  (4.7–4.9 s with the read, 121–129 MB peak), 0.15 s for LERC, 9–13 s for zstd 19. The forge
+  encodes once; readers decode.
+
 ### Not yet measured
 
-- All 45 Nepal tiles, the Nepal total against the note's 58 MB, and 2–3 tiles outside Nepal (a
-  desert, a coast, above 50°): the download (1.84 GB) waits for approval.
-- LERC and zstd on the same tiles; wasm and a phone.
+- A tile above 50° N: Copernicus widens the longitude spacing there (1.5″ to 10″), and
+  `dem-section` stops on such a tile until the second grid is built. Needed before a country
+  above 50° N gets terrain ([roadmap](../../07-planning/roadmap.md), W5).
+- Decode speed on wasm and a phone.
 
 ## POSTAL
 

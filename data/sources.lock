@@ -304,6 +304,24 @@ used_by = "spike S5.6 (DEM disagreement)"
 attribution = "Elevation: © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved"
 
 [[source]]
+id = "copernicus-glo30-b11"
+title = "Copernicus DEM GLO-30 Public (DGED), three COG tiles outside Nepal for B11: the Alps, the Delhi plain, Mount Fuji and its coast (AWS open data)"
+kind = "tileset"
+url = "https://copernicus-dem-30m.s3.amazonaws.com/{tile}/{tile}.tif"
+tiles = "data/sources/copernicus-glo30-b11.tiles"
+query_params = { list = "data/sources/copernicus-glo30-b11.list", tile = "Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_DEM", dem = "copernicus-glo30" }
+version = "GLO-30 Public DGED, AWS COG (Float32, DEFLATE, predictor 3, PixelIsPoint)"
+retrieved = "2026-11-15"
+sha256 = "92e1ed970a5d87acb1513a90947dc257ba48f99d2c64b3c6196ae6241de1c18f"
+size = 430
+licence = "Copernicus DEM licence (fixed notice: © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved)"
+# Research only: measures the DEM codec; feeds no build or pack.
+licence_class = "proprietary"
+countries = ["*"]
+used_by = "B11 elsewhere (phase 3.4): forge dem-section, research only"
+attribution = "Elevation: © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved"
+
+[[source]]
 id = "sliderule-atl08-np-2023"
 title = "ICESat-2 ATL08 land segments over the Nepal box, 2023, subset by SlideRule (public atl08x endpoint)"
 kind = "tileset"

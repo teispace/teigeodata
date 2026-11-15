@@ -189,8 +189,9 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   Signed-Releases (the first release). Maintained (the repository's age) and CI-Tests (no
   pull requests yet) come with time
   for them
-- [ ] The review's findings fixed, each with its test; `SECURITY.md` states the 1.0 support
-  policy
+- [x] The review's findings fixed, each with its test; `SECURITY.md` states the 1.0 support
+  policy (2026-11-15: no row of the [threat model](../../06-engineering/threat-model.md) is
+  open; each boundary names its tests and gates)
 
 ### 8.3 Performance pass
 

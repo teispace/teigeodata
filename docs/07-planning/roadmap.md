@@ -33,7 +33,7 @@ After v1.0, coverage grows by data waves.
 | W2 | South Asia | Bangladesh, Bhutan, Sri Lanka, Pakistan, Maldives, Afghanistan |
 | W3 | Asia | |
 | W4 | USA | strong public-domain sources; lite build at full quality expected |
-| W5 | Rest of the world | depth per country by data quality and population threshold |
+| W5 | Rest of the world | depth per country by data quality and population threshold; terrain above 50° N needs the DEM section's second grid, for Copernicus's wider longitude spacing there (D-345) |
 
 Every wave passes the same gates as Nepal. Each wave starts with a per-country research note in
 `docs/05-data/countries/`.

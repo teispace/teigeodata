@@ -86,7 +86,11 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   ([B11](../../02-research/benches/phase-3.md#b11-dem))
 - [x] B11 on all 45 Nepal tiles (D-109): 139.3 MB for the 9° × 5° box, 1.907 bits per sample,
   all probes within 1 m, 163 s
-- [ ] B11 on 2–3 tiles elsewhere, and against LERC and zstd
+- [x] B11 on 2–3 tiles elsewhere, and against LERC and zstd (2026-11-15, D-345): the Alps,
+  the Delhi plain and Fuji's coast at 2.375, 1.034 and 2.649 bits per sample, 24–29% under
+  zstd 19 with a left delta and 2.4–2.7 times under LERC at ±1 m
+  ([B11](../../02-research/benches/phase-3.md#outside-nepal-against-lerc-and-zstd-2026-11-15)).
+  A tile above 50° N needs the second grid first (W5)
 - [x] The DEM section in the Nepal packs: its own component, tiles masked to the country.
   Built 2026-11-11 (D-192): `dem::mask`, the forge's mask and read-back gate,
   `Engine::elevation_at`, `tgd elevation`. Nepal main (2026-11-11): 64.2 MB raw, 64.2 MB on
@@ -237,3 +241,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-11 | 3.5: point → postal code in the engine and `tgd postal` (D-200) | the SDK half of 3.5 |
 | 2026-11-11 | 3.4: summits as natural places with surveyed heights (D-201); the DEM section closed with the Nepal size | the DEM tiles fetched again |
 | 2026-11-15 | 3.7: Nepal's accuracy measured and generated (`cargo xtask accuracy`) | D-339 |
+| 2026-11-15 | 3.4: B11 outside Nepal and against LERC and zstd; tiles above 50° N moved to W5 | D-345 |

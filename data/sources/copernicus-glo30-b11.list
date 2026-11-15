@@ -1,0 +1,4 @@
+# B11 elsewhere (phase 3.4): three Copernicus GLO-30 tiles outside Nepal, below 50° N. tile<TAB>url
+Copernicus_DSM_COG_10_N45_00_E007_00_DEM	https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N45_00_E007_00_DEM/Copernicus_DSM_COG_10_N45_00_E007_00_DEM.tif
+Copernicus_DSM_COG_10_N28_00_E077_00_DEM	https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N28_00_E077_00_DEM/Copernicus_DSM_COG_10_N28_00_E077_00_DEM.tif
+Copernicus_DSM_COG_10_N35_00_E138_00_DEM	https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N35_00_E138_00_DEM/Copernicus_DSM_COG_10_N35_00_E138_00_DEM.tif

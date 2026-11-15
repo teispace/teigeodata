@@ -446,7 +446,10 @@ test planted with the old check fails).
 - **Copernicus licence:** its notice must ship in every main pack (ADR-0030); the lite build uses
   NASADEM. Unchanged by this note.
 - **Tiles above 50°** with 1.5″–10″ longitude spacing are untested; the grid record handles them,
-  the predictor may need different taps where samples are not square.
+  the predictor may need different taps where samples are not square. `dem-section` stops on
+  such a tile until the second grid is built (W5). Tiles elsewhere below 50° (the Alps, the
+  Delhi plain, Fuji's coast) were measured on 2026-11-15 and land as Nepal's did
+  ([B11](../benches/phase-3.md#outside-nepal-against-lerc-and-zstd-2026-11-15), D-345).
 - **`constriction`** (0.5.0) was checked as an rANS source: `no_std` with `default = ["std"]`,
   MIT / Apache-2.0 / BSL-1.0, but it declares `unsafe` traits and functions, and a research API
   that is larger than the 100 lines we need. Not used.
