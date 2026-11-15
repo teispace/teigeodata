@@ -5,6 +5,7 @@
 
 use std::path::Path;
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 use crate::package_c::command;
 
@@ -61,12 +62,25 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         (None, false) => host().to_owned(),
     };
     // Streamed, not captured: an app build and a device run are long, and a stall must show
-    // where it is in the log.
-    let result = stream(
-        &example,
-        flutter,
-        &["test", "integration_test", "-d", &device],
-    );
+    // where it is in the log. On the iOS simulator a run is bounded and tried twice: a GitHub
+    // runner's simulator now and then hangs launching the app after a clean build (run
+    // 43690656789: built in 143 s, then idle until the step's 30 minutes). The second try
+    // starts from a freshly booted simulator and is announced, so a real hang still fails.
+    let args = ["test", "integration_test", "-d", device.as_str()];
+    let result = if ios {
+        let mut r = stream_within(&example, flutter, &args, DEVICE_RUN);
+        if r.is_err() {
+            println!(
+                "::warning::flutter-check: the iOS run failed or hung; rebooting the simulator and trying once more"
+            );
+            let _ = command(root, "xcrun", &["simctl", "shutdown", &device]);
+            command(root, "xcrun", &["simctl", "bootstatus", &device, "-b"])?;
+            r = stream_within(&example, flutter, &args, DEVICE_RUN);
+        }
+        r
+    } else {
+        stream(&example, flutter, &args)
+    };
     // A simulator this run booted is shut down again: the machine is shared.
     if let Some(id) = booted {
         let _ = command(root, "xcrun", &["simctl", "shutdown", &id]);
@@ -85,6 +99,47 @@ fn host() -> &'static str {
         "windows"
     } else {
         "linux"
+    }
+}
+
+/// How long one device run may take: a clean iOS build is about 2.5 minutes on a GitHub runner
+/// and the test under one.
+const DEVICE_RUN: Duration = Duration::from_mins(10);
+
+/// As [`stream`], killed after `limit`.
+fn stream_within(
+    dir: &Path,
+    program: &str,
+    args: &[&str],
+    limit: Duration,
+) -> Result<(), Vec<String>> {
+    let mut child = Command::new(program)
+        .current_dir(dir)
+        .args(args)
+        .spawn()
+        .map_err(|e| vec![format!("{program}: {e}")])?;
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(status)) => {
+                return Err(vec![format!(
+                    "{program} {} failed: {status}",
+                    args.join(" ")
+                )]);
+            }
+            Ok(None) if start.elapsed() > limit => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(vec![format!(
+                    "{program} {} still running after {} s: stopped",
+                    args.join(" "),
+                    limit.as_secs()
+                )]);
+            }
+            Ok(None) => std::thread::sleep(Duration::from_secs(1)),
+            Err(e) => return Err(vec![format!("{program}: {e}")]),
+        }
     }
 }
 
@@ -155,7 +210,20 @@ fn ios_version(runtime: &str) -> Option<(u32, u32)> {
 
 #[cfg(test)]
 mod tests {
-    use super::ios_version;
+    use super::{ios_version, stream_within};
+
+    #[cfg(unix)]
+    #[test]
+    fn a_device_run_is_stopped_at_its_limit() {
+        let dir = std::env::temp_dir();
+        let second = std::time::Duration::from_secs(1);
+        assert!(stream_within(&dir, "true", &[], second).is_ok());
+        assert!(stream_within(&dir, "false", &[], second).is_err());
+        let started = std::time::Instant::now();
+        let err = stream_within(&dir, "sleep", &["30"], second).unwrap_err();
+        assert!(err[0].contains("still running after 1 s"), "{err:?}");
+        assert!(started.elapsed().as_secs() < 10, "stopped, not waited for");
+    }
 
     #[test]
     fn runtime_versions_are_read() {
