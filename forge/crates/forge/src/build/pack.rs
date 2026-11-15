@@ -78,7 +78,8 @@ pub(super) struct Input<'a> {
 /// first- or second-level unit (45) weigh their people as a city does (44, a capital 54), so a
 /// city of a million comes near a region of a million and a region of 450 people does not
 /// outrank it; a unit without a population counts as a typical one of its level
-/// ([`UNKNOWN_POP`]). Below them the scale is D-124's, calibrated on Nepal's golden set: a
+/// ([`UNKNOWN_POP`]). A third-level or lower unit weighs no people (D-347). Below them the
+/// scale is D-124's, calibrated on Nepal's golden set: a
 /// settlement 30, a local level 45, a lower unit 40, a locality 10. Measured 2026-11-14: the
 /// world golden set 32 → 44 of 44, Nepal's recall@1 0.839 → 0.848 with no class worse, India's
 /// 44 of 44.
@@ -110,6 +111,10 @@ fn importance(p: &Place) -> u8 {
         (PlaceKind::Admin, l @ 1..=2) => UNKNOWN_POP.get(usize::from(l - 1)).copied(),
         _ => None,
     };
+    // A third-level or lower unit weighs no people (D-347): it is often the settlement of its
+    // name (a municipality and its town), and its count is the sum of its settlements', so a
+    // census on units would lift each above the place a search for it means.
+    let weighs_people = !(p.kind == PlaceKind::Admin && p.admin_level >= 3);
     #[allow(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
@@ -118,7 +123,7 @@ fn importance(p: &Place) -> u8 {
     )]
     let pop = p
         .population
-        .filter(|&n| n > 0)
+        .filter(|&n| n > 0 && weighs_people)
         .or(unknown)
         .map_or(0, |n| ((n as f64).log10() * 5.0) as u32);
     u8::try_from((base + pop).min(255)).unwrap_or(u8::MAX)
@@ -1685,9 +1690,11 @@ mod tests {
                 place(PlaceKind::Admin, 3, 0, Some(1_000_000)),
                 None,
             ),
+            // No count: a local level weighs no people (D-347), so only a city without one
+            // stays below it and shows the rule leaving the municipality alone.
             keyed(
                 "c:damak",
-                place(PlaceKind::Settlement, 0, 3, Some(75_000)),
+                place(PlaceKind::Settlement, 0, 3, None),
                 Some("m:damak"),
             ),
             keyed(
@@ -1802,6 +1809,12 @@ mod tests {
         assert_eq!(unit(1, None), unit(1, Some(1_000_000)));
         assert_eq!(unit(2, None), unit(2, Some(200_000)));
         assert_eq!(unit(3, None), 45, "a local level keeps D-124's base");
+        // D-347: a local level's census does not lift it over its own city or a village it
+        // only nearly names (Biratnagar's municipality, 244,750 people, and the city, 182,324).
+        assert_eq!(unit(3, Some(244_750)), 45);
+        assert_eq!(unit(4, Some(21_000)), 40);
+        let biratnagar = importance(&place(PlaceKind::Settlement, 0, 3, Some(182_324)));
+        assert!(biratnagar > unit(3, Some(244_750)));
         // A region of 450 people ranks below a city of 1.2 million; one of 39 million above it.
         let varanasi = importance(&place(PlaceKind::Settlement, 0, 3, Some(1_200_000)));
         assert!(unit(1, Some(450)) < varanasi);

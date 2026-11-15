@@ -290,6 +290,7 @@ renamed the last parameters that broke the naming rule (see **Breaking**).
 
 ### Fixed
 
+- Search in packs whose local levels carry a census count (Nepal's main build): a municipality no longer outranks the city of its name, nor a one-edit match an exact one; a third-level or lower unit weighs no people (D-347).
 - The documentation, read against the code for 1.0 (D-343): a reverse answer's `bearing` is from
   the place to the point, several `--pack`s follow the layer rule rather than their order, the
   Nominatim routes' supported parameters and differences are listed, and each language's guide

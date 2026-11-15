@@ -1,7 +1,7 @@
 ---
 title: "One importance scale for countries, regions and cities"
 status: accepted
-updated: 2026-11-14
+updated: 2026-11-15
 owner: forge
 revisit: 2027-05-14
 ---
@@ -29,6 +29,11 @@ Decided (D-266), measured on three golden sets:
 - A country weighs 45 and a first-, second- or third-level unit 45 before population, on the
   cities' scale of 5 per tenfold population; a first- and second-level unit without a count
   takes a typical one (1,000,000 and 200,000). Below them D-124's calibration stays.
+  **Refined by D-347 (2026-11-15):** a third-level or lower unit weighs no people. Measured
+  on Nepal's main build, whose local levels carry census counts (the lite build's carry none,
+  so this note's measurements could not see it): each municipality rose 20–27, outranked the
+  city of its name by one and, on a one-edit match, an exact match on a village; the golden
+  gate lost 8 native-script hits@1.
 - World units take their population from Wikidata (a pinned CC0 snapshot of every country's
   first- and second-level units, best-rank statements, the latest dated value).
 - A settlement of 1,000,000 people or more ranks as a city whatever its source class.
