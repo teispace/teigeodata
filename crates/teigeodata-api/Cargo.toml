@@ -77,3 +77,4 @@ workspace = true
 [[example]]
 name = "tour"
 path = "../../site/examples/rust/tour.rs"
+required-features = ["components"]

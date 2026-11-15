@@ -147,7 +147,7 @@ public struct Reader: Sendable, Sequence {
     /// well-formed blob.
     public init(_ data: Data) throws(TeiGeodataError) {
         let data = data.startIndex == 0 ? data : Data(data)
-        let parsed: (Int, [Column])? = data.withUnsafeBytes { raw in Reader.parse(raw) }
+        let parsed: (Int, [Column])? = data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in Reader.parse(raw) }
         guard let (rows, columns) = parsed else {
             throw TeiGeodataError(code: .corrupt, message: "not a well-formed result blob")
         }
@@ -210,7 +210,7 @@ public struct Reader: Sendable, Sequence {
     public func nulls(_ name: String) throws(TeiGeodataError) -> [Bool] {
         let c = try described(name)
         guard c.nullsAt != 0 else { return Array(repeating: false, count: rows) }
-        return data.withUnsafeBytes { raw in
+        return data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> [Bool] in
             (0..<rows).map { (r: Int) -> Bool in
                 let byte: UInt8 = raw[c.nullsAt + r / 8]
                 return (byte >> UInt8(r % 8)) & 1 == 0
@@ -226,7 +226,7 @@ public struct Reader: Sendable, Sequence {
             throw TeiGeodataError(code: .invalidArgument, message: "column \(name) does not hold \(T.self)")
         }
         let width = c.type.width
-        return data.withUnsafeBytes { raw in (0..<rows).map { T.load(raw, c.at + $0 * width) } }
+        return data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> [T] in (0..<rows).map { T.load(raw, c.at + $0 * width) } }
     }
 
     /// Any number column called `name` as `Double`s; a null row reads as zero (see `nulls`).
@@ -241,7 +241,7 @@ public struct Reader: Sendable, Sequence {
             throw TeiGeodataError(code: .invalidArgument, message: "column \(name) does not hold strings")
         }
         let nulls = try self.nulls(name)
-        let read: [String?]? = data.withUnsafeBytes { raw -> [String?]? in
+        let read: [String?]? = data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> [String?]? in
             let u32 = { (at: Int) in Int(UInt32.load(raw, at)) }
             let text = { (from: Int, to: Int, limit: Int) -> String? in
                 guard from <= to, to <= limit else { return nil }
