@@ -4,7 +4,8 @@
 # and pinned by SHA-256 and size. `forge fetch` downloads into data/cache/store/sha256/ and keeps
 # only matching bytes; `forge fetch --pin <id>` records new bytes deliberately. `moving = true`
 # marks an upstream that replaces files in place (no dated archive): such a source needs a
-# mirror_url (our release asset) before a release build reads it. `cargo xtask check-data`
+# mirror_url (our release asset) before a release build reads it. So does a dated file the
+# upstream deletes after a while (Geofabrik's dated extracts, Overture's releases). `cargo xtask check-data`
 # validates this file.
 
 schema = "teigeodata/sources/v1"
@@ -14,6 +15,7 @@ id = "geofabrik-np"
 title = "OpenStreetMap Nepal extract (Geofabrik), dated file"
 kind = "http"
 url = "https://download.geofabrik.de/asia/nepal-261105.osm.pbf"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources/{sha256}"
 version = "2026-11-05"
 retrieved = "2026-11-06"
 sha256 = "0f2a5f19bd07420d252d08533853aa1205ab2df497802ae4cd96fb0db5892da5"
