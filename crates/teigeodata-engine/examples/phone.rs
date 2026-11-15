@@ -5,7 +5,7 @@
 //! heap is counted by a counting allocator: live after open and the first queries, and peak.
 //!
 //! ```text
-//! cargo run --release -p teigeodata-engine --example phone -- data/build/embed/tithipatra-lite.tgd [--factor 6.5]
+//! cargo xtask phone <layer.tgd> [--factor 6.5] [--record]
 //! ```
 //!
 //! Each time is the minimum of several rounds, so load on a shared machine inflates it only

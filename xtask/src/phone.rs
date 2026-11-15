@@ -21,6 +21,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         }
     }
     let layer = layer.ok_or_else(|| vec![USAGE.to_owned()])?;
+    let features = features(root)?;
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut cmd = Command::new(cargo);
     cmd.current_dir(root).args([
@@ -30,7 +31,8 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         "--release",
         "-p",
         "teigeodata-engine",
-        "--all-features",
+        "--features",
+        &features,
         "--example",
         "phone",
         "--",
@@ -81,4 +83,35 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         return Ok(format!("{text}\nrecorded in {written}"));
     }
     Ok(text)
+}
+
+/// The example's `required-features` in the engine's manifest, so the list has one home (the
+/// `baseline` feature, which embeds a pack, stays off).
+fn features(root: &Path) -> Result<String, Vec<String>> {
+    let path = root.join("crates/teigeodata-engine/Cargo.toml");
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| vec![format!("{}: {e}", path.display())])?;
+    let manifest: toml::Table = text
+        .parse()
+        .map_err(|e| vec![format!("{}: {e}", path.display())])?;
+    manifest
+        .get("example")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|e| e.get("name").and_then(toml::Value::as_str) == Some("phone"))
+        .and_then(|e| e.get("required-features"))
+        .and_then(toml::Value::as_array)
+        .map(|f| {
+            f.iter()
+                .filter_map(toml::Value::as_str)
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .ok_or_else(|| {
+            vec![format!(
+                "{}: no phone example with required-features",
+                path.display()
+            )]
+        })
 }

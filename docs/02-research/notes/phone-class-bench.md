@@ -27,8 +27,9 @@ How do we measure a low-end phone's experience, and gate it, without one? Feeds
   when every round is slowed; an estimate over target is rerun before it is believed.
 - **Heap by a counting allocator**, live and peak. The mapped pack is clean, file-backed
   memory the system can drop, so it is not the app's heap.
-- **The gate:** `cargo run --release -p teigeodata-engine --all-features --example phone --
-  <layer.tgd>` exits non-zero when an estimate is over its target (§3.3). Proven red with a
+- **The gate:** `cargo xtask phone <layer.tgd> [--record]` (it runs the engine's `phone`
+  example with the example's own `required-features`; `--all-features` would turn on the
+  `baseline` feature, which needs a pack to embed) exits non-zero when an estimate is over its target (§3.3). Proven red with a
   3 ms sleep planted in the keystroke search (30.2 ms estimate, over 16 ms).
 - **What the bench found, and what was fixed (D-235):**
   - Deriving SUBSTRING on the Tithipatra layer took 1.04 s here, 6.8 s on the phone estimate,
