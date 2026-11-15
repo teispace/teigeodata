@@ -640,6 +640,16 @@ impl Mcp {
             .with_cache_scope(CacheScope::Private))
     }
 
+    /// `resources/read` of `uri` without a transport, for the fuzz harness.
+    #[cfg(feature = "fuzz")]
+    pub(crate) fn read_for_fuzz(
+        &self,
+        uri: &str,
+        incoming: &dyn Incoming,
+    ) -> Result<ResourceContents, QueryError> {
+        self.read(uri, incoming)
+    }
+
     fn read(&self, uri: &str, incoming: &dyn Incoming) -> Result<ResourceContents, QueryError> {
         let e = self.0.packs.load();
         if let Some(rest) = uri.strip_prefix(DATASET) {

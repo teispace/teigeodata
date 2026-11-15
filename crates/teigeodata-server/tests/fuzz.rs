@@ -47,6 +47,13 @@ fn query_strings() {
     drive(11, iterations(50_000), fuzz::query_string);
 }
 
+/// Every MCP tool and resource on fuzzed arguments (D-331).
+#[cfg(feature = "mcp")]
+#[test]
+fn mcp_calls() {
+    drive(12, iterations(5_000), fuzz::mcp);
+}
+
 /// Valid query strings for each route (`ROUTES` order), with `{}` where a value goes.
 const TEMPLATES: [&str; 18] = [
     "id={}&names={}",

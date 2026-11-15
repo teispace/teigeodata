@@ -71,7 +71,8 @@ fuzzing time per target as an input).
   the catalog on a repository with one role attacked and signed again, D-331) in
   `teigeodata_sync::fuzz` (D-112, `crates/teigeodata-sync/tests/fuzz.rs`); `server_query` in
   `teigeodata_server::fuzz` (D-313, `crates/teigeodata-server/tests/fuzz.rs`, run by fast-check's
-  `check` job); `engine` in `teigeodata_engine::fuzz` (D-331, `crates/teigeodata-engine/tests/fuzz.rs`):
+  `check` job) and `mcp` there too (D-331): every MCP tool with arguments built from its own
+  input schema, and resource reads, failing on an `internal` answer; `engine` in `teigeodata_engine::fuzz` (D-331, `crates/teigeodata-engine/tests/fuzz.rs`):
   every query on a seed pack with one or two sections edited and every hash right, the seeds
   embedded from `bindings/fixtures/` and `fuzz/seeds/`; `ffi` in `teigeodata_ffi::fuzz` (D-331,
   `crates/teigeodata-ffi/tests/fuzz.rs`): every `Engine` function of the C ABI with fuzzed

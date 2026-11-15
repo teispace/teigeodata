@@ -1,6 +1,12 @@
-//! The fuzz harness of the HTTP query parsing (phase 6.2, feature `fuzz`): one property,
-//! `query_string`, run on seeded inputs by `cargo test` (`tests/fuzz.rs`) and by libFuzzer
-//! nightly (`fuzz/`, target `server_query`), as the format's harnesses are (D-072).
+//! The servers' fuzz harnesses (feature `fuzz`), run on seeded inputs by `cargo test`
+//! (`tests/fuzz.rs`) and by libFuzzer nightly (`fuzz/`), as the format's harnesses are (D-072):
+//! `query_string`, the HTTP query parsing (phase 6.2, target `server_query`); and with `mcp`,
+//! `mcp`, every tool and resource of the MCP server (D-331, target `mcp`).
+
+#[cfg(feature = "mcp")]
+mod mcp;
+#[cfg(feature = "mcp")]
+pub use mcp::mcp;
 
 use teigeodata_engine::Engine;
 

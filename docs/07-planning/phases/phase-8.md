@@ -91,7 +91,17 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   left out: they reach the file system and the network.
   - **Run:** 300 s clean, 507,361 inputs, coverage 7,758, peak RSS 386 MB. `u32::MAX` limits
     allocate nothing unbounded
-- [ ] `mcp`: JSON-RPC messages into the MCP request core
+- [x] `mcp` (2026-11-15). The MCP server runs over the synthetic fixture. Each input either
+  calls one tool (`Mcp::call`, `tools/call` without a transport) or reads a resource URI made
+  from the fuzz bytes.
+  - **Arguments** are built from the tool's own input schema, so a new tool is fuzzed with no
+    change. Each property gets any JSON type: numbers past every bound, real IDs and zones,
+    arrays, objects, null and unknown keys.
+  - **Property:** no answer is `internal`. Planted: an internal error in `timezone` was found
+    at once.
+  - **Run:** 300 s clean, 167,048 inputs, coverage 5,215, peak RSS 453 MB.
+  - **Not fuzzed here:** the JSON-RPC framing is rmcp's own (`=3.10.0`), and the
+    `mcp-conformance` workflow tests it against the specification's suite
 - [ ] `fuzz-campaign.yml`: weekly and by dispatch, 3 h per target, a job each, with coverage
   reports as artifacts. Gate: every section kind's decoder reached, the coverage recorded here
 
@@ -156,3 +166,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.1 payloads folded into the engine target; seeds hold every kind but BLOBS | D-332 |
 | 2026-11-15 | 8.1 trust target done | D-331 |
 | 2026-11-15 | 8.1 ffi target done | D-331 |
+| 2026-11-15 | 8.1 mcp target done | D-331 |
