@@ -34,3 +34,5 @@ mutants.out*/
 /site/examples/swift/Tour/Package.resolved
 /site/examples/dart/.dart_tool/
 /site/examples/dart/pubspec.lock
+/site/examples/dotnet/bin/
+/site/examples/dotnet/obj/

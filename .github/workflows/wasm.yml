@@ -28,6 +28,8 @@ on:
       - bindings/dart/test/**
       - bindings/dart/pubspec.yaml
       - xtask/templates/dart*
+      - site/examples/wasm/**
+      - site/examples/tour.out
       - .github/workflows/wasm.yml
   workflow_dispatch:
   # release.yml builds a release with this workflow and publishes what it uploads.
@@ -79,6 +81,9 @@ jobs:
           deno-version: v2.9.8
       - name: Packages, budgets and parity on Node.js, Bun and Deno
         run: cargo xtask package-wasm --test
+      # The docs site's WebAssembly tour on the pinned public pack (D-322).
+      - name: The WebAssembly tour
+        run: cargo xtask docs-examples --fetch --check --lang wasm
       - name: Every host ran
         run: |
           for host in node bun deno; do command -v "$host"; done

@@ -16,6 +16,8 @@ on:
       - bindings/fixtures/**
       - xtask/templates/cs.j2
       - xtask/src/package_dotnet.rs
+      - site/examples/dotnet/**
+      - site/examples/tour.out
       - .github/workflows/dotnet.yml
   workflow_dispatch:
 
@@ -96,6 +98,12 @@ jobs:
           export TEIGEODATA_LIB="$GITHUB_WORKSPACE/target/release/${{ matrix.lib }}"
           dotnet publish bindings/dotnet/Parity -c Release -r ${{ matrix.rid }} -p:PublishAot=true -o "$RUNNER_TEMP/aot"
           "$RUNNER_TEMP/aot/Parity"
+      # The docs site's .NET tour on the pinned public pack (D-322), over the C ABI library.
+      - name: The .NET tour
+        if: ${{ matrix.rid == 'linux-x64' }}
+        run: |
+          cargo build --locked --release -p teigeodata-ffi --lib
+          cargo xtask docs-examples --fetch --check --lang dotnet
       - name: The package, restored and tested from its .nupkg
         if: ${{ matrix.rid == 'linux-x64' }}
         run: cargo xtask package-dotnet --test

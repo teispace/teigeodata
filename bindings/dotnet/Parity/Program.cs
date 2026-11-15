@@ -35,6 +35,7 @@ var checks = new (string Name, Action Run)[]
     ("store", CheckStore),
     ("job_cancel", CheckJobCancel),
     ("reader_fuzz", CheckReaderFuzz),
+    ("reader_records", CheckRecords),
 };
 int failed = 0;
 foreach (var (name, run) in checks)
@@ -305,6 +306,66 @@ void CheckTz()
     Equal(start.D("unix"), Numbers(new BlobReader(engine.TzRulesStart(start.Str("zone"))), "unix").Single(), "start");
     Equal(0, new BlobReader(engine.TzOffsetAt(p.Str("unknown"), 0)).Rows, "unknown zone");
     Code(ErrorCode.InvalidArgument, () => engine.TzLocal(o.Str("zone"), 2024, 13, 1, 0, 0, 0));
+}
+
+// The reader's columns and records against its typed reads (D-322), nulls included.
+void CheckRecords()
+{
+    JsonElement p = parity.GetProperty("engine");
+    using var engine = new Engine();
+    engine.OpenFile(Fixture(p.Str("fixture")));
+    JsonElement rev = p.GetProperty("reverse");
+    int nullsSeen = 0;
+    foreach (byte[] blob in new[]
+    {
+        engine.Reverse(rev.D("lat"), rev.D("lon"), rev.U32("limit")),
+        engine.Ancestors(p.GetProperty("ancestors").Str("id")),
+        Geodata.SampleRows(20),
+    })
+    {
+        var r = new BlobReader(blob);
+        var records = r.Records();
+        Equal(r.Rows, records.Count, "records");
+        Equal(r.Rows, r.Count(), "iterated rows");
+        foreach (string name in r.Columns)
+        {
+            Assert(r.Has(name), "has " + name);
+            object?[] values = r.Column(name);
+            bool[] nulls = r.Nulls(name) ?? new bool[r.Rows];
+            r.TryGetType(name, out ColumnType type);
+            bool text = type is ColumnType.Utf8 or ColumnType.Dict16 or ColumnType.Dict32;
+            string[]? strings = text ? r.Strings(name) : null;
+            double[]? numbers = text ? null : Numbers(r, name);
+            if (numbers is not null)
+            {
+                Equal(string.Join(",", numbers), string.Join(",", r.Numbers(name)), "numbers " + name);
+            }
+            for (int i = 0; i < r.Rows; i++)
+            {
+                Equal(nulls[i], values[i] is null, $"null {name} {i}");
+                Equal(values[i], records[i][name], $"record {name} {i}");
+                if (nulls[i])
+                {
+                    nullsSeen++;
+                    continue;
+                }
+                if (strings is not null)
+                {
+                    Equal(strings[i], (string)values[i]!, $"string {name} {i}");
+                }
+                else
+                {
+                    Equal(numbers![i], Convert.ToDouble(values[i], System.Globalization.CultureInfo.InvariantCulture), $"number {name} {i}");
+                }
+            }
+        }
+    }
+    Assert(nullsSeen > 0, "no null value was checked");
+    var sample = new BlobReader(Geodata.SampleRows(2));
+    Assert(!sample.Has("nope"), "has nope");
+    Equal(typeof(uint), sample.Column("id")[0]!.GetType(), "a u32 column reads as uint");
+    Throws<InvalidCastException>(() => sample.Numbers("name"));
+    Throws<KeyNotFoundException>(() => sample.Column("nope"));
 }
 
 // The store parity.json describes, or a skip for a library built without one.

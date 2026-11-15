@@ -194,8 +194,8 @@ void checks(
     );
     // The Reader against this file's own reads of the layout (D-322).
     var nullsSeen = 0;
-    final anc = (e['ancestors'] as Map<String, dynamic>)['id'] as String;
-    for (final blob in [near, engine.ancestors(anc), lib().sampleRows(20)]) {
+    final ancestorsId = (e['ancestors'] as Map<String, dynamic>)['id'] as String;
+    for (final blob in [near, engine.ancestors(ancestorsId), lib().sampleRows(20)]) {
       final reader = Reader(blob);
       expect(reader.columns, columnNames(blob));
       final records = reader.records();

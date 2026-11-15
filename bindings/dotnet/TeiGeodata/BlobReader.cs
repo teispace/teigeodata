@@ -2,7 +2,9 @@
 
 using System;
 using System.Buffers.Binary;
+using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -49,16 +51,20 @@ public enum ColumnType : uint
 /// var places = new BlobReader(engine.Search("Kathmandu", 5));
 /// string[] names = places.Strings("name");
 /// ReadOnlySpan&lt;double&gt; lats = places.Values&lt;double&gt;("lat");
+/// foreach (var place in places) // each row: column name to value, null where null
+/// {
+///     Console.WriteLine($"{place["name"]} {place["lat"]}");
+/// }
 /// </code>
 /// </example>
-public sealed class BlobReader
+public sealed class BlobReader : IEnumerable<IReadOnlyDictionary<string, object?>>
 {
     private const int Header = 16;
     private const int Descriptor = 40;
     private const int NameMax = 16;
 
     private readonly byte[] data;
-    private readonly Column[] columns;
+    private readonly ColumnInfo[] columns;
 
     /// <summary>Checks <paramref name="data"/>'s header and column descriptors.</summary>
     /// <exception cref="InvalidDataException">The bytes are not a well-formed blob.</exception>
@@ -84,7 +90,7 @@ public sealed class BlobReader
         }
         Rows = (int)rows;
         long floor = Header + (long)count * Descriptor;
-        columns = new Column[count];
+        columns = new ColumnInfo[count];
         for (int i = 0; i < count; i++)
         {
             ReadOnlySpan<byte> d = data.AsSpan(Header + i * Descriptor, Descriptor);
@@ -97,7 +103,7 @@ public sealed class BlobReader
             {
                 throw Malformed();
             }
-            var c = new Column(
+            var c = new ColumnInfo(
                 Encoding.UTF8.GetString(d[..end]),
                 (ColumnType)U32(d, NameMax),
                 U32(d, NameMax + 4),
@@ -128,6 +134,9 @@ public sealed class BlobReader
     /// <summary>The column names, in order.</summary>
     public IReadOnlyList<string> Columns => Array.ConvertAll(columns, c => c.Name);
 
+    /// <summary>Whether there is a column called <paramref name="name"/>.</summary>
+    public bool Has(string name) => Index(name, columns.Length) >= 0;
+
     /// <summary>The type of the column called <paramref name="name"/>, if there is one.</summary>
     public bool TryGetType(string name, out ColumnType type)
     {
@@ -140,7 +149,7 @@ public sealed class BlobReader
     /// <exception cref="KeyNotFoundException">The blob has no such column.</exception>
     public bool[]? Nulls(string name)
     {
-        Column c = Find(name);
+        ColumnInfo c = Find(name);
         if (c.NullsAt == 0)
         {
             return null;
@@ -163,7 +172,7 @@ public sealed class BlobReader
     public ReadOnlySpan<T> Values<T>(string name)
         where T : unmanaged
     {
-        Column c = Find(name);
+        ColumnInfo c = Find(name);
         if (c.Type != TypeOf<T>())
         {
             throw new InvalidCastException($"teigeodata: column {name} holds {c.Type}, not {typeof(T).Name}");
@@ -190,7 +199,7 @@ public sealed class BlobReader
     /// <exception cref="InvalidDataException">The column's offsets or codes are out of range.</exception>
     public string[] Strings(string name)
     {
-        Column c = Find(name);
+        ColumnInfo c = Find(name);
         ReadOnlySpan<byte> values = data.AsSpan((int)c.At, (int)c.Length);
         ReadOnlySpan<byte> aux = data.AsSpan((int)c.AuxAt, (int)c.AuxLength);
         var output = new string[Rows];
@@ -238,6 +247,109 @@ public sealed class BlobReader
         }
     }
 
+    /// <summary>
+    /// Any number column as doubles (a null row reads as zero: see <see cref="Nulls"/>); a
+    /// 64-bit integer is exact to 2^53.
+    /// </summary>
+    /// <exception cref="KeyNotFoundException">The blob has no such column.</exception>
+    /// <exception cref="InvalidCastException">The column holds strings.</exception>
+    public double[] Numbers(string name)
+    {
+        object[] values = NumberValues(Find(name));
+        var output = new double[values.Length];
+        for (int i = 0; i < values.Length; i++)
+        {
+            output[i] = Convert.ToDouble(values[i], CultureInfo.InvariantCulture);
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// The column called <paramref name="name"/> with one value per row: a
+    /// <see cref="string"/>, or a number in the column's own type (<see cref="int"/>,
+    /// <see cref="byte"/>, <see cref="double"/>, ...), and null where the row is null.
+    /// </summary>
+    /// <exception cref="KeyNotFoundException">The blob has no such column.</exception>
+    public object?[] Column(string name)
+    {
+        ColumnInfo c = Find(name);
+        var output = new object?[Rows];
+        if (c.Type is ColumnType.Utf8 or ColumnType.Dict16 or ColumnType.Dict32)
+        {
+            string[] strings = Strings(name);
+            Array.Copy(strings, output, Rows);
+        }
+        else
+        {
+            object[] numbers = NumberValues(c);
+            Array.Copy(numbers, output, Rows);
+        }
+        bool[]? nulls = Nulls(name);
+        if (nulls is not null)
+        {
+            for (int i = 0; i < Rows; i++)
+            {
+                if (nulls[i])
+                {
+                    output[i] = null;
+                }
+            }
+        }
+        return output;
+    }
+
+    /// <summary>Every row as a dictionary from column name to value, as <see cref="Column"/>
+    /// reads it.</summary>
+    public IReadOnlyList<IReadOnlyDictionary<string, object?>> Records()
+    {
+        var values = new object?[columns.Length][];
+        for (int k = 0; k < columns.Length; k++)
+        {
+            values[k] = Column(columns[k].Name);
+        }
+        var output = new IReadOnlyDictionary<string, object?>[Rows];
+        for (int i = 0; i < Rows; i++)
+        {
+            var row = new Dictionary<string, object?>(columns.Length);
+            for (int k = 0; k < columns.Length; k++)
+            {
+                row[columns[k].Name] = values[k][i];
+            }
+            output[i] = row;
+        }
+        return output;
+    }
+
+    /// <summary>The rows as <see cref="Records"/> gives them.</summary>
+    public IEnumerator<IReadOnlyDictionary<string, object?>> GetEnumerator() => Records().GetEnumerator();
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    private object[] NumberValues(ColumnInfo c) => c.Type switch
+    {
+        ColumnType.I32 => Box(Values<int>(c.Name)),
+        ColumnType.U32 => Box(Values<uint>(c.Name)),
+        ColumnType.I64 => Box(Values<long>(c.Name)),
+        ColumnType.U64 => Box(Values<ulong>(c.Name)),
+        ColumnType.F32 => Box(Values<float>(c.Name)),
+        ColumnType.F64 => Box(Values<double>(c.Name)),
+        ColumnType.U8 => Box(Values<byte>(c.Name)),
+        ColumnType.I16 => Box(Values<short>(c.Name)),
+        ColumnType.U16 => Box(Values<ushort>(c.Name)),
+        _ => throw new InvalidCastException($"teigeodata: column {c.Name} holds {c.Type}, not numbers"),
+    };
+
+    private static object[] Box<T>(ReadOnlySpan<T> values)
+        where T : unmanaged
+    {
+        var output = new object[values.Length];
+        for (int i = 0; i < values.Length; i++)
+        {
+            output[i] = values[i];
+        }
+        return output;
+    }
+
     private static string Slice(ReadOnlySpan<byte> bytes, ReadOnlySpan<byte> offsets, int i)
     {
         uint at = U32(offsets, 4 * i);
@@ -264,7 +376,7 @@ public sealed class BlobReader
         return -1;
     }
 
-    private Column Find(string name)
+    private ColumnInfo Find(string name)
     {
         int i = Index(name, columns.Length);
         return i >= 0 ? columns[i] : throw new KeyNotFoundException($"teigeodata: the blob has no column {name}");
@@ -298,5 +410,5 @@ public sealed class BlobReader
 
     private static InvalidDataException Malformed() => new("teigeodata: malformed blob");
 
-    private readonly record struct Column(string Name, ColumnType Type, uint At, uint Length, uint AuxAt, uint AuxLength, uint NullsAt);
+    private readonly record struct ColumnInfo(string Name, ColumnType Type, uint At, uint Length, uint AuxAt, uint AuxLength, uint NullsAt);
 }

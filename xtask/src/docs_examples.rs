@@ -233,6 +233,22 @@ const LANGS: &[Lang] = &[
         own: None,
     },
     Lang {
+        name: "dotnet",
+        tool: "dotnet",
+        needs: &["{ffi}"],
+        command: &[
+            "sh",
+            "-c",
+            "dotnet build -c Release -v q site/examples/dotnet >&2 && \
+             dotnet run --no-build -c Release --project site/examples/dotnet -- \"$0\"",
+            "{pack}",
+        ],
+        dir: "",
+        env: &[("TEIGEODATA_LIB", "{root}/{ffi}")],
+        links: &[],
+        own: None,
+    },
+    Lang {
         name: "cli",
         tool: "sh",
         needs: &["target/release/tgd"],

@@ -193,6 +193,13 @@ jobs:
           go test -count=1 -race ./...
           CGO_ENABLED=0 go test -count=1 ./...
           go test -run '^$' -fuzz FuzzReader -fuzztime 20s .
+      # Every language's tour of the docs site, run on the pinned public pack, its output
+      # checked (D-322): what the guides show is what ran. Before the lite build below, which
+      # replaces the C library. Rust and the CLI run in the examples job, WebAssembly in
+      # wasm.yml, .NET in dotnet.yml.
+      - name: Docs examples
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: cargo xtask docs-examples --fetch --check --lang python,node,go,swift,dart,java,kotlin,c,cpp
       # The parity gate's sample: the first value of each section planted in every language
       # (5.9); the full gate runs in parity-mutants.yml.
       - name: Parity gate sample
@@ -212,6 +219,20 @@ jobs:
           out=$(go test -count=1 -v -run 'Store|Version' . 2>&1)
           echo "$out"
           grep -q -- '--- SKIP: TestStore' <<<"$out"
+
+  # The docs site's Rust and CLI tours on the pinned public pack (D-322).
+  examples:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: tgd as it ships
+        run: cargo build --release --locked -p teigeodata-cli
+      - name: The Rust and CLI tours
+        run: cargo xtask docs-examples --fetch --check --lang rust,cli
 
   deny:
     runs-on: ubuntu-latest
