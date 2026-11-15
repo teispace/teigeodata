@@ -23,6 +23,8 @@ import (
 {#- A call returns an error when the library may fail it, or may first have to load. #}
 {% macro results(f) %}{% set fl = f.fallible or not f.receiver %}{% if f.returns != "void" and fl %} ({{ goty(f.returns, f.returns_handle) }}, error){% elif f.returns != "void" %} {{ goty(f.returns, f.returns_handle) }}{% elif fl %} error{% endif %}{% endmacro %}
 {% macro zero(f) %}{% if f.returns in ["blob", "handle"] %}nil{% elif f.returns == "string" %}""{% elif f.returns == "bool" %}false{% else %}0{% endif %}{% endmacro %}
+{# A declaration as this file writes it; the docs reference imports it. #}
+{% macro decl(f, h) %}func {% if f.receiver %}(h *{{ h.name }}) {% endif %}{{ name(f, h) }}({% for p in f.params %}{{ param(p) }}{% if not loop.last %}, {% endif %}{% endfor %}){{ results(f) }}{% endmacro %}
 {#- A call's Go name: a handle's static method is a function named after it (NewEngine,
     OpenStore). #}
 {% macro name(f, h) %}{% if h and not f.receiver %}{% if f.name == "new" %}New{% else %}{{ f.name | pascal }}{% endif %}{{ h.name }}{% else %}{{ f.name | pascal }}{% endif %}{% endmacro %}
@@ -210,7 +212,7 @@ func callback{{ cb.id | pascal }}(ctx uintptr{% for a in cb.args %}, a{{ loop.in
 {% for f in functions %}
 
 {{ doc(f.doc, "") -}}
-func {{ name(f, none) }}({% for p in f.params %}{{ param(p) }}{% if not loop.last %}, {% endif %}{% endfor %}){{ results(f) }} {
+{{ decl(f, none) }} {
 {{ body(f, none) -}}
 }
 {% endfor %}
@@ -263,7 +265,7 @@ func (h *{{ h.name }}) release() {
 {% for f in h.methods %}
 
 {{ doc(f.doc, "") -}}
-func {% if f.receiver %}(h *{{ h.name }}) {% endif %}{{ name(f, h) }}({% for p in f.params %}{{ param(p) }}{% if not loop.last %}, {% endif %}{% endfor %}){{ results(f) }} {
+{{ decl(f, h) }} {
 {{ body(f, h) -}}
 }
 {% endfor %}

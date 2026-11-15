@@ -38,6 +38,8 @@ final class TgBytes extends Struct {
 external int {{ name }}({{ named(f) }});
 {% endmacro %}
 {% macro dparams(f) %}{% for p in f.params %}{% if p.ty == "callback" %}bool Function({% for a in p.callback.args %}{{ dty(a) }}{% if not loop.last %}, {% endif %}{% endfor %}) {{ p.name | camel }}{% else %}{{ dty(p.ty, p.record if p.ty == "record" else p.handle) }} {{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endmacro %}
+{# A declaration as this file writes it (a function is a method of TeiGeodata); the docs reference imports it. #}
+{% macro decl(f, h) %}{% if h and f.name == "new" and f.returns_handle == h.name %}factory {{ h.name }}(TeiGeodata lib{% if f.params %}, {{ dparams(f) }}{% endif %}){% elif not h or f.receiver %}{{ dty(f.returns, f.returns_handle) }} {{ f.name | camel }}({{ dparams(f) }}){% else %}static {{ dty(f.returns, f.returns_handle) }} {{ f.name | camel }}(TeiGeodata lib{% if f.params %}, {{ dparams(f) }}{% endif %}){% endif %}{% endmacro %}
 {% macro args(f) %}{% if f.receiver %}handle{% if f.params or f.returns != "void" %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty in ["str", "bytes"] %}{% if f.params | selectattr("ty", "in", ["str", "bytes"]) | list | length > 1 %}_input + {{ p.name | camel }}At{% else %}_input{% endif %}, {{ p.name | camel }}Len{% elif p.ty == "handle" %}{{ p.name | camel }}._live{% elif p.ty == "record" %}_{{ p.record | camel_lower }}{% elif p.ty == "callback" %}callable.nativeFunction, nullptr{% else %}{{ p.name | camel }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if f.returns != "void" %}{% if f.params %}, {% endif %}{% if f.returns in ["string", "blob"] %}_bytes{% else %}_word.cast(){% endif %}{% endif %}{% endmacro %}
 {#- A call through the scratch memory: a public function, or (with `owner`) the private half
     of a handle's method. #}
@@ -366,11 +368,11 @@ final class {{ h.name }} implements Finalizable {
 {% set fwd %}{% if f.receiver %}_live{% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}{% endset %}
 {% set impl %}_lib._{{ h.snake | camel }}{{ f.name | pascal }}({{ fwd }}){% endset %}
 {% if f.name == "new" and f.returns_handle == h.name %}
-  factory {{ h.name }}(TeiGeodata lib{% if f.params %}, {{ dparams(f) }}{% endif %}) => lib._{{ h.snake | camel }}New({{ fwd }});
+  {{ decl(f, h) }} => lib._{{ h.snake | camel }}New({{ fwd }});
 {% elif f.receiver %}
-  {{ dty(f.returns, f.returns_handle) }} {{ f.name | camel }}({{ dparams(f) }}) => {{ impl }};
+  {{ decl(f, h) }} => {{ impl }};
 {% else %}
-  static {{ dty(f.returns, f.returns_handle) }} {{ f.name | camel }}(TeiGeodata lib{% if f.params %}, {{ dparams(f) }}{% endif %}) => lib._{{ h.snake | camel }}{{ f.name | pascal }}({{ fwd }});
+  {{ decl(f, h) }} => lib._{{ h.snake | camel }}{{ f.name | pascal }}({{ fwd }});
 {% endif %}
 {% if f.blocks %}
 {% set hps = f.params | selectattr("ty", "eq", "handle") | list %}

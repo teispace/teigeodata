@@ -166,6 +166,31 @@ const TARGETS: &[Target] = &[
         output: "bindings/dotnet/TeiGeodata/Generated.cs",
         fmt: Fmt::Blank,
     },
+    Target {
+        template: "reference.index.mdx.j2",
+        output: "site/content/docs/reference/index.mdx",
+        fmt: Fmt::None,
+    },
+    Target {
+        template: "reference.engine.mdx.j2",
+        output: "site/content/docs/reference/engine.mdx",
+        fmt: Fmt::None,
+    },
+    Target {
+        template: "reference.store.mdx.j2",
+        output: "site/content/docs/reference/store.mdx",
+        fmt: Fmt::None,
+    },
+    Target {
+        template: "reference.functions.mdx.j2",
+        output: "site/content/docs/reference/functions.mdx",
+        fmt: Fmt::None,
+    },
+    Target {
+        template: "reference.types.mdx.j2",
+        output: "site/content/docs/reference/types.mdx",
+        fmt: Fmt::None,
+    },
 ];
 
 const HEADER_OUTPUT: &str = "bindings/c/teigeodata.h";
@@ -315,6 +340,117 @@ fn screaming(s: &str) -> String {
     out
 }
 
+/// A doc comment's lines as MDX for the reference pages: paragraphs joined, `- ` items kept
+/// as a list, a `# Errors` heading turned into a bold lead-in, decision references such as
+/// `(D-141, D-274)` dropped (they point into the repository, not the site), and `<`, `{` and
+/// `}` escaped outside code spans so MDX reads them as text.
+fn mdx(lines: &[String]) -> String {
+    let mut blocks: Vec<String> = Vec::new();
+    let mut block: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut lead: Option<String> = None;
+    let end_block = |block: &mut Vec<String>, cur: &mut String, blocks: &mut Vec<String>| {
+        if !cur.is_empty() {
+            block.push(std::mem::take(cur));
+        }
+        if !block.is_empty() {
+            blocks.push(block.join("\n"));
+            block.clear();
+        }
+    };
+    for line in lines {
+        let t = line.trim_end();
+        if t.is_empty() {
+            end_block(&mut block, &mut cur, &mut blocks);
+        } else if let Some(h) = t.strip_prefix("# ") {
+            end_block(&mut block, &mut cur, &mut blocks);
+            lead = Some(format!("**{h}.** "));
+        } else if t.starts_with("- ") {
+            if !cur.is_empty() {
+                block.push(std::mem::take(&mut cur));
+            }
+            cur.push_str(t);
+        } else {
+            if cur.is_empty() {
+                if let Some(l) = lead.take() {
+                    cur.push_str(&l);
+                }
+            } else {
+                cur.push(' ');
+            }
+            cur.push_str(t.trim_start());
+        }
+    }
+    end_block(&mut block, &mut cur, &mut blocks);
+    escape_mdx(&drop_decisions(&blocks.join("\n\n")))
+}
+
+/// The first sentence of a doc comment, as MDX: what an index row says about an entry.
+fn summary(lines: &[String]) -> String {
+    let first = mdx(lines);
+    let para = first.split("\n\n").next().unwrap_or_default();
+    let mut in_code = false;
+    for (i, c) in para.char_indices() {
+        match c {
+            '`' => in_code = !in_code,
+            '.' if !in_code && (i + 1 == para.len() || para[i + 1..].starts_with(' ')) => {
+                return para[..=i].to_owned();
+            }
+            _ => {}
+        }
+    }
+    para.to_owned()
+}
+
+/// Drops ` (D-141, D-274)`: a parenthesis that holds nothing but decision IDs.
+fn drop_decisions(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find("(D-") {
+        let close = rest[at..].find(')').map(|c| at + c);
+        let inner = close.map(|c| &rest[at + 1..c]);
+        let only_ids = inner.is_some_and(|s| {
+            s.split(", ").all(|id| {
+                id.strip_prefix("D-")
+                    .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+            })
+        });
+        match close {
+            Some(c) if only_ids => {
+                out.push_str(rest[..at].strip_suffix(' ').unwrap_or(&rest[..at]));
+                rest = &rest[c + 1..];
+            }
+            _ => {
+                out.push_str(&rest[..at + 3]);
+                rest = &rest[at + 3..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Escapes `<`, `{` and `}` outside code spans.
+fn escape_mdx(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 8);
+    let mut in_code = false;
+    for c in text.chars() {
+        match c {
+            '`' => {
+                in_code = !in_code;
+                out.push(c);
+            }
+            '<' if !in_code => out.push_str("&lt;"),
+            '{' | '}' if !in_code => {
+                out.push('\\');
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 fn environment(root: &Path) -> Result<Environment<'static>, String> {
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
@@ -330,6 +466,11 @@ fn environment(root: &Path) -> Result<Environment<'static>, String> {
     env.add_filter("screaming", |s: &str| screaming(s));
     env.add_filter("snake", |s: &str| snake(s));
     env.add_filter("camel_lower", |s: &str| camel_lower(s));
+    env.add_filter("mdx", |lines: Vec<String>| mdx(&lines));
+    env.add_filter("summary", |lines: Vec<String>| summary(&lines));
+    env.add_filter("quoted", |s: &str| {
+        serde_json::to_string(s).unwrap_or_default()
+    });
     let dir = root.join("xtask/templates");
     let entries = fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     for entry in entries.flatten() {
@@ -407,5 +548,26 @@ mod tests {
         assert_eq!(camel_lower("SAMPLE_ROWS_MAX"), "sampleRowsMax");
         assert_eq!(camel_lower("InvalidArgument"), "invalidArgument");
         assert_eq!(camel_lower("MAX"), "max");
+    }
+
+    fn lines(text: &str) -> Vec<String> {
+        text.lines().map(str::to_owned).collect()
+    }
+
+    #[test]
+    fn doc_to_mdx() {
+        let doc = lines(
+            "Open packs (D-141, D-274). Every method\ntakes `&self` and a `Vec<u8>`.\n\n# Errors\n\n`Corrupt` if x < 1 {no}.\n\nRows:\n- `a`: one,\n  two;\n- `b` (D-9x).",
+        );
+        assert_eq!(
+            super::mdx(&doc),
+            "Open packs. Every method takes `&self` and a `Vec<u8>`.\n\n**Errors.** `Corrupt` if x &lt; 1 \\{no\\}.\n\nRows:\n- `a`: one, two;\n- `b` (D-9x)."
+        );
+        assert_eq!(super::summary(&doc), "Open packs.");
+        assert_eq!(
+            super::summary(&lines("Uses `a.b` here. Then")),
+            "Uses `a.b` here."
+        );
+        assert_eq!(super::summary(&lines("No stop")), "No stop");
     }
 }

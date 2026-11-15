@@ -101,6 +101,8 @@ void tg_bytes_free(tg_bytes bytes);
 /* The code of the last failure on this thread (0 if none) and its message, which the caller
  * frees. Reading clears it. message may be NULL. */
 int32_t tg_last_error(tg_bytes *message);
+{# A declaration as this file writes it; the docs reference imports it. #}
+{% macro proto(f, symbol, owner) %}int32_t {{ symbol }}({% if f.receiver %}const tg_{{ owner.snake }} *handle{% if f.params or f.returns != "void" %}, {% endif %}{% endif %}{% for p in f.params %}{% if p.ty in ["str", "bytes"] %}const uint8_t *{{ p.name }}, size_t {{ p.name }}_len{% elif p.ty == "callback" %}tg_callback_{{ p.callback.id }} {{ p.name }}, void *{{ p.name }}_ctx{% elif p.ty == "handle" %}const tg_{{ p.handle | snake }} *{{ p.name }}{% elif p.ty == "record" %}const tg_{{ p.record | snake }} *{{ p.name }}{% else %}{{ cty(p.ty) }} {{ p.name }}{% endif %}{% if not loop.last or f.returns != "void" %}, {% endif %}{% endfor %}{% if f.returns in ["string", "blob"] %}tg_bytes *out{% elif f.returns == "handle" %}tg_{{ f.returns_handle | snake }} **out{% elif f.returns != "void" %}{{ cty(f.returns) }} *out{% elif not f.params and not f.receiver %}void{% endif %});{% endmacro %}
 {% macro decl(f, symbol, owner) %}
 
 /*
@@ -109,12 +111,7 @@ int32_t tg_last_error(tg_bytes *message);
 
 {% endfor %}
  */
-int32_t {{ symbol }}(
-{%- if f.receiver %}const tg_{{ owner.snake }} *handle{% if f.params or f.returns != "void" %}, {% endif %}{% endif -%}
-{%- for p in f.params -%}
-{% if p.ty in ["str", "bytes"] %}const uint8_t *{{ p.name }}, size_t {{ p.name }}_len{% elif p.ty == "callback" %}tg_callback_{{ p.callback.id }} {{ p.name }}, void *{{ p.name }}_ctx{% elif p.ty == "handle" %}const tg_{{ p.handle | snake }} *{{ p.name }}{% elif p.ty == "record" %}const tg_{{ p.record | snake }} *{{ p.name }}{% else %}{{ cty(p.ty) }} {{ p.name }}{% endif %}{% if not loop.last or f.returns != "void" %}, {% endif %}
-{%- endfor -%}
-{% if f.returns in ["string", "blob"] %}tg_bytes *out{% elif f.returns == "handle" %}tg_{{ f.returns_handle | snake }} **out{% elif f.returns != "void" %}{{ cty(f.returns) }} *out{% elif not f.params and not f.receiver %}void{% endif %});
+{{ proto(f, symbol, owner) }}
 {% endmacro %}
 {% for f in functions %}
 {% if f.feature %}

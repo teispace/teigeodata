@@ -140,6 +140,8 @@ namespace Teispace.TeiGeodata;
 {% endif %}
 {% endmacro %}
 {% macro name(f, h) %}{{ f.name | pascal }}{% endmacro %}
+{# A declaration as this file writes it; the docs reference imports it. #}
+{% macro decl(f, h) %}{% if not h %}public static {{ rty(f) }} {{ f.name | pascal }}({{ params(f) }}){% elif f.name == "new" and f.returns_handle == h.name %}public {{ h.name }}({{ params(f) }}){% else %}public {% if not f.receiver %}static {% endif %}unsafe {{ rty(f) }} {{ name(f, h) }}({{ params(f) }}){% endif %}{% endmacro %}
 
 /// <summary>The stable error codes, the same in every language.</summary>
 public enum ErrorCode
@@ -223,7 +225,7 @@ public static unsafe partial class Geodata
 
 {% endfor %}
 {% for f in functions %}
-{{ doc(f.doc, "    ") }}    public static {{ rty(f) }} {{ f.name | pascal }}({{ params(f) }})
+{{ doc(f.doc, "    ") }}    {{ decl(f, none) }}
     {
 {{ body(f, none, true) }}    }
 {{ async_form(f, none, true) }}
@@ -261,7 +263,7 @@ public sealed partial class {{ h.name }} : IDisposable
     }
 {% for f in h.methods if f.name == "new" and f.returns_handle == h.name %}
 
-{{ doc(f.doc, "    ") }}    public {{ h.name }}() : this(Create{{ h.name }}())
+{{ doc(f.doc, "    ") }}    {{ decl(f, h) }} : this(Create{{ h.name }}())
     {
     }
 
@@ -275,7 +277,7 @@ public sealed partial class {{ h.name }} : IDisposable
     public void Dispose() => handle.Dispose();
 {% for f in h.methods if not (f.name == "new" and f.returns_handle == h.name) %}
 
-{{ doc(f.doc, "    ") }}    public {% if not f.receiver %}static {% endif %}unsafe {{ rty(f) }} {{ name(f, h) }}({{ params(f) }})
+{{ doc(f.doc, "    ") }}    {{ decl(f, h) }}
     {
 {{ body(f, h, true) }}    }
 {{ async_form(f, h, not f.receiver) }}

@@ -45,6 +45,8 @@ private func takeData(_ bytes: tg_bytes) -> Data {
 }
 {% macro swty(t, h) %}{% if t == "bool" %}Bool{% elif t == "i32" %}Int32{% elif t == "u32" %}UInt32{% elif t == "i64" %}Int64{% elif t == "u64" %}UInt64{% elif t == "f64" %}Double{% elif t in ["str", "string"] %}String{% elif t in ["blob", "bytes"] %}Data{% elif t in ["handle", "record"] %}{{ h }}{% else %}Void{% endif %}{% endmacro %}
 {% macro signature(f) %}({% for p in f.params %}{% if loop.first %}_ {% endif %}{{ p.name | camel }}: {% if p.ty == "callback" %}({% for a in p.callback.args %}{{ swty(a) }}{% if not loop.last %}, {% endif %}{% endfor %}) -> Bool{% elif p.ty == "record" %}{{ p.record }} = .init(){% else %}{{ swty(p.ty, p.handle) }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}){% if f.fallible %} throws(TeiGeodataError){% endif %}{% endmacro %}
+{# A declaration as this file writes it; the docs reference imports it. #}
+{% macro decl(f, h) %}{% if h and f.name == "new" and f.returns_handle == h.name %}public init{{ signature(f) }}{% else %}public {% if not f.receiver %}static {% endif %}func {{ f.name | camel }}{{ signature(f) }}{% if f.returns != "void" %} -> {{ swty(f.returns, f.returns_handle) }}{% endif %}{% endif %}{% endmacro %}
 {#- The body of a call: `owner` is the handle a method belongs to (none for a function); a
     handle's constructor (`init`) stores the new pointer instead of returning it. #}
 {% macro body(f, owner, init) %}
@@ -168,7 +170,7 @@ public enum TeiGeodata {
 {% endfor %}
 {% for f in functions %}
 
-{{ doc(f.doc) }}    public static func {{ f.name | camel }}{{ signature(f) }}{% if f.returns != "void" %} -> {{ swty(f.returns, f.returns_handle) }}{% endif %} {
+{{ doc(f.doc) }}    {{ decl(f, none) }} {
 {{ body(f, none, false) }}    }
 {% endfor %}
 }
@@ -188,10 +190,10 @@ public final class {{ h.name }}: @unchecked Sendable {
 
 {{ doc(f.doc) -}}
 {% if f.name == "new" and f.returns_handle == h.name %}
-    public init{{ signature(f) }} {
+    {{ decl(f, h) }} {
 {{ body(f, h, true) }}    }
 {% else %}
-    public {% if not f.receiver %}static {% endif %}func {{ f.name | camel }}{{ signature(f) }}{% if f.returns != "void" %} -> {{ swty(f.returns, f.returns_handle) }}{% endif %} {
+    {{ decl(f, h) }} {
 {{ body(f, h, false) }}    }
 {% if f.blocks %}
 

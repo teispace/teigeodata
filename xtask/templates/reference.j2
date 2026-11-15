@@ -1,0 +1,96 @@
+{#- Macros of the generated API reference (site/content/docs/reference). Each language's
+    declaration comes from the macro its own binding is written with, so the reference cannot
+    drift from the code. -#}
+{% import "python.pyi.j2" as py %}
+{% import "node.d.ts.j2" as js %}
+{% import "swift.j2" as sw %}
+{% import "java.j2" as jv %}
+{% import "dart.j2" as dt %}
+{% import "go.j2" as gol %}
+{% import "c.h.j2" as c %}
+{% import "cpp.hpp.j2" as cpp %}
+{% import "cs.j2" as cs %}
+{% macro rty(t, h) %}{% if t == "str" %}String{% elif t in ["blob"] %}Blob{% elif t == "string" %}String{% elif t == "void" %}(){% else %}{{ t }}{% endif %}{% endmacro %}
+{% macro rparam(p) %}{% if p.ty == "str" %}&str{% elif p.ty == "bytes" %}&[u8]{% elif p.ty == "record" %}&{{ p.record }}{% elif p.ty == "handle" %}&{{ p.handle }}{% elif p.ty == "callback" %}&mut dyn FnMut({{ p.callback.args | join(", ") }}) -> {{ p.callback.returns }}{% else %}{{ p.ty }}{% endif %}{% endmacro %}
+{% macro rret(f, h) %}{% if f.returns == "handle" %}{% if h and f.returns_handle == h.name %}Self{% else %}{{ f.returns_handle }}{% endif %}{% else %}{{ rty(f.returns) }}{% endif %}{% endmacro %}
+{% macro rust(f, h) %}pub fn {{ f.name }}({% if f.receiver %}&self{% if f.params %}, {% endif %}{% endif %}{% for p in f.params %}{{ p.name }}: {{ rparam(p) }}{% if not loop.last %}, {% endif %}{% endfor %}){% if f.fallible %} -> Result<{{ rret(f, h) }}>{% elif f.returns != "void" %} -> {{ rret(f, h) }}{% endif %}{% endmacro %}
+{% macro csym(f, h) %}tg_{% if h %}{{ h.snake }}_{% endif %}{{ f.name }}{% endmacro %}
+{#- One entry: its heading, its documentation, then its declaration in every language. -#}
+{% macro entry(f, h, level) %}
+{{ level }} `{{ f.name }}`
+
+{{ f.doc | mdx }}
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "JavaScript", "Swift", "Java and Kotlin", "Dart", "Go", "C", "C++", ".NET"]}>
+<Tab value="Rust">
+
+```rust
+{{ rust(f, h) }}
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+{{ py.decl(f, h) }} ...
+```
+
+</Tab>
+<Tab value="JavaScript">
+
+```ts
+{{ js.decl(f, h) }}
+```
+
+</Tab>
+<Tab value="Swift">
+
+```swift
+{{ sw.decl(f, h) }}
+```
+
+</Tab>
+<Tab value="Java and Kotlin">
+
+```java
+{{ jv.decl(f, h) }};
+```
+
+</Tab>
+<Tab value="Dart">
+
+```dart
+{{ dt.decl(f, h) }};
+```
+
+</Tab>
+<Tab value="Go">
+
+```go
+{{ gol.decl(f, h) }}
+```
+
+</Tab>
+<Tab value="C">
+
+```c
+{{ c.proto(f, csym(f, h), h) }}
+```
+
+</Tab>
+<Tab value="C++">
+
+```cpp
+{{ cpp.decl(f, h) }};
+```
+
+</Tab>
+<Tab value=".NET">
+
+```csharp
+{{ cs.decl(f, h) }};
+```
+
+</Tab>
+</Tabs>
+{% endmacro %}

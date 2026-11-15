@@ -174,6 +174,8 @@ struct Callback{{ cb.id | pascal }} {
 {% endif %}
 {% endmacro %}
 {% macro signature(f, defaults=true) %}({% for p in f.params %}{{ param(p, defaults) }}{% if not loop.last %}, {% endif %}{% endfor %}){% endmacro %}
+{# A declaration as this file writes it; the docs reference imports it. #}
+{% macro decl(f, h) %}{% if not h %}inline {{ cppty(f.returns, f.returns_handle) }} {{ f.name }}{{ signature(f) }}{% elif f.name == "new" and f.returns_handle == h.name %}{{ h.name }}{{ signature(f) }}{% else %}{% if not f.receiver %}static {% endif %}{{ cppty(f.returns, f.returns_handle) }} {{ f.name }}{{ signature(f) }}{% if f.receiver %} const{% endif %}{% endif %}{% endmacro %}
 {% for e in enums %}
 
 {{ doc(e.doc, "") -}}
@@ -225,7 +227,7 @@ struct {{ r.name }} {
 {% endif %}
 
 {{ doc(f.doc, "") -}}
-inline {{ cppty(f.returns, f.returns_handle) }} {{ f.name }}{{ signature(f) }} {
+{{ decl(f, none) }} {
 {{ body(f, none, false, "    ") -}}
 }
 {% if f.feature %}
@@ -255,7 +257,7 @@ class {{ h.name }} {
 {% for f in h.methods %}
 {% if f.name == "new" and f.returns_handle == h.name %}
 
-{{ doc(f.doc, "    ") }}    {{ h.name }}{{ signature(f) }} {
+{{ doc(f.doc, "    ") }}    {{ decl(f, h) }} {
 {{ body(f, h, true, "        ") -}}
     }
 {% endif %}
@@ -277,7 +279,7 @@ class {{ h.name }} {
     tg_{{ h.snake }} *native() const noexcept { return raw_; }
 {% for f in h.methods if not (f.name == "new" and f.returns_handle == h.name) %}
 
-{{ doc(f.doc, "    ") }}    {% if not f.receiver %}static {% endif %}{{ cppty(f.returns, f.returns_handle) }} {{ f.name }}{{ signature(f) }}{% if f.receiver %} const{% endif %};
+{{ doc(f.doc, "    ") }}    {{ decl(f, h) }};
 {% endfor %}
 
   private:

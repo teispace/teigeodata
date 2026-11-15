@@ -23,6 +23,8 @@ public final class TeiGeodata {
 {#- A return type boxed for a generic, such as {@code CompletableFuture<T>}. #}
 {% macro bty(f) %}{% if f.returns == "handle" %}{{ f.returns_handle }}{% elif f.returns == "bool" %}Boolean{% elif f.returns == "i32" %}Integer{% elif f.returns == "f64" %}Double{% elif f.returns == "void" %}Void{% elif f.returns in ["str", "string", "blob", "bytes", "enum"] %}{{ jty(f.returns) }}{% else %}Long{% endif %}{% endmacro %}
 {% macro pty(p) %}{% if p.ty == "callback" %}Callback{{ p.callback.id | pascal }}{% elif p.ty == "handle" %}{{ p.handle }}{% elif p.ty == "record" %}{{ p.record }}{% else %}{{ jty(p.ty) }}{% endif %}{% endmacro %}
+{# A declaration as this file writes it; the docs reference imports it. #}
+{% macro decl(f, h) %}{% if not h %}public static native {{ jty(f.returns) }} {{ f.name | camel }}({% for p in f.params %}{% if p.ty == "callback" %}Callback{{ p.callback.id | pascal }}{% else %}{{ jty(p.ty) }}{% endif %} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}){% elif f.name == "new" and f.returns_handle == h.name %}public {{ h.name }}({% for p in f.params %}{{ pty(p) }} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}){% else %}public {% if not f.receiver %}static {% endif %}{% if f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ jty(f.returns) }}{% endif %} {{ f.name | camel }}({% for p in f.params %}{{ pty(p) }} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}{% endmacro %}
 {#- A record field's Java type: boxed when optional (null is unset). #}
 {% macro fty(f) %}{% if f.ty == "enum" %}{{ f.enum }}{% elif f.ty == "str" %}String{% elif not f.optional %}{{ jty(f.ty) }}{% elif f.ty == "bool" %}Boolean{% elif f.ty == "i32" %}Integer{% elif f.ty == "f64" %}Double{% else %}Long{% endif %}{% endmacro %}
 {#- A call argument; a record is flattened into its fields, `has` before each optional one. #}
@@ -56,7 +58,7 @@ public final class TeiGeodata {
 
 {% endfor %}
      */
-    public static native {{ jty(f.returns) }} {{ f.name | camel }}({% for p in f.params %}{% if p.ty == "callback" %}Callback{{ p.callback.id | pascal }}{% else %}{{ jty(p.ty) }}{% endif %} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %});
+    {{ decl(f, none) }};
 {% endfor %}
 {% for e in enums %}
 
@@ -184,15 +186,15 @@ public final class TeiGeodata {
 
 {{ javadoc(f.doc, "        ") -}}
 {% if f.name == "new" and f.returns_handle == h.name %}
-        public {{ h.name }}({% for p in f.params %}{{ pty(p) }} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) {
+        {{ decl(f, h) }} {
             this(nativeNew({% for p in f.params %}{{ arg(p) }}{% if not loop.last %}, {% endif %}{% endfor %}));
         }
 {% elif not f.receiver %}
-        public static {% if f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ jty(f.returns) }}{% endif %} {{ f.name | camel }}({% for p in f.params %}{{ pty(p) }} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) {
+        {{ decl(f, h) }} {
 {{ defaults(f) }}            {{ ("return new " ~ f.returns_handle ~ "(") if f.returns == "handle" else ("return " if f.returns != "void" else "") }}native{{ f.name | pascal }}({% for p in f.params %}{{ arg(p) }}{% if not loop.last %}, {% endif %}{% endfor %}){% if f.returns == "handle" %}){% endif %};
         }
 {% else %}
-        public {% if f.returns == "handle" %}{{ f.returns_handle }}{% else %}{{ jty(f.returns) }}{% endif %} {{ f.name | camel }}({% for p in f.params %}{{ pty(p) }} {{ p.name | camel }}{% if not loop.last %}, {% endif %}{% endfor %}) {
+        {{ decl(f, h) }} {
 {{ defaults(f) }}            long stamp = enter();
             try {
                 {{ ("return new " ~ f.returns_handle ~ "(") if f.returns == "handle" else ("return " if f.returns != "void" else "") }}native{{ f.name | pascal }}(handle{% for p in f.params %}, {{ arg(p) }}{% endfor %}){% if f.returns == "handle" %}){% endif %};
