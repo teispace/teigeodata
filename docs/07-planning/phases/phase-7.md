@@ -80,7 +80,10 @@ pages, the playground. Nothing names a country in code (P16): country pages come
   (places, admin levels, heights, timezones, names, lexicon, sources and licences); checked in
   fast-check. The release's gate figures stay in its summary until the forge writes them as
   JSON (open item of the note)
-- [ ] 7.5b Measured pages from the gates: sizes, benchmarks, accuracy, load
+- [x] 7.5b Measured pages from the gates (D-326): `package-wasm`, `sizes`, `load` and the new
+  `phone` command write a stamped record with `--record`; `cargo xtask data-pages` renders
+  them into `data/measured.mdx` and checks it. Accuracy stays on its page and in each
+  release's summary until the forge writes its gate figures as JSON
 
 ### 7.6 The playground
 - [ ] The WebAssembly build over the public layer, in the browser, with MapLibre drawing the
@@ -99,3 +102,4 @@ pages, the playground. Nothing names a country in code (P16): country pages come
 | 2026-11-15 | 7.3 done: the API reference generated from the bindings' own declaration macros, the HTTP and MCP reference from the servers' definitions | a second copy of each signature or route would drift (D-323) |
 | 2026-11-15 | 7.5 split into 7.5a (country pages) and 7.5b (measured pages); 7.5a done | the country pages need only the pinned pack and the data folders; the measured pages need each gate to write a record (D-325) |
 | 2026-11-15 | 7.4 done: boundary and distance in every language; the GeoJSON writer moved to the engine | the playground and every app draw outlines from the bindings, and one writer keeps them equal to the servers (D-324) |
+| 2026-11-15 | 7.5b done: the measured page rendered from the gates' records; `cargo xtask phone` | a number on the site needs its date, machine and commit, and one renderer (D-326) |

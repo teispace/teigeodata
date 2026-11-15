@@ -1,0 +1,11 @@
+{
+  "order": 50,
+  "title": "Phone-class estimates",
+  "intro": "The phone-class bench (P1, G-phone) on `world-np-lite.tgd`: open, the first query of each kind, search a keystroke at a time and the point queries, each the minimum of several rounds here and multiplied by 6.5 (this machine's core over a low-end phone's), and the heap counted by allocator; the gate fails when an estimate is over its target. A point query is `reverse_in_country` (10 nearest), `admin_at`, `tz_at` and `elevation_at`; the page cache is warm, as on a relaunch.",
+  "command": "cargo xtask phone world-np-lite.tgd --record",
+  "date": "2026-11-15",
+  "commit": "41ba69a",
+  "machine": "Darwin arm64, 10 cores",
+  "load": "7.63",
+  "table": "| Measure | Here | Phone estimate | Target |\n|---|--:|--:|--:|\n| open | 133.75µs | 869.38µs | 50ms |\n| first queries | 6.06ms | 39.40ms | 150ms |\n|   first get | 809.79µs | 5.26ms | – |\n|   first reverse | 2.21ms | 14.39ms | – |\n|   first admin_at | 458.00ns | 2.98µs | – |\n|   first tz_at | 31.62µs | 205.56µs | – |\n|   first elevation_at | 286.42µs | 1.86ms | – |\n|   first search | 2.57ms | 16.68ms | – |\n| keystroke p50 | 9.25µs | 60.12µs | – |\n| keystroke p99 | 203.46µs | 1.32ms | 16ms |\n| keystroke max | 235.00µs | 1.53ms | 50ms |\n| point query p99 | 76.00µs | 494.00µs | 2ms |\n| get p99 | 250.00ns | 1.62µs | 500µs |\n| derive SUBSTRING | 389.03ms | 2.53s | 3s |\n| heap after open and the first queries | 0.05 MiB | | 4 MiB |\n| heap peak | 0.05 MiB | | 16 MiB |\n| heap peak while deriving SUBSTRING | 55.00 MiB | | 64 MiB |"
+}

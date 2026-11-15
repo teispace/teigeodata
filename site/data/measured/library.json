@@ -1,0 +1,11 @@
+{
+  "order": 30,
+  "title": "Library bytes per feature set",
+  "intro": "What each feature set of the runtime crates adds to a linked library (`tools/size-probe`, a baseline that any host library links subtracted), natively in the release profile and for wasm32 in the size profile.",
+  "command": "cargo xtask sizes --record",
+  "date": "2026-11-15",
+  "commit": "25ad7e5",
+  "machine": "Darwin arm64, 10 cores",
+  "load": "7.04",
+  "table": "| Feature set | native B | native gzip | wasm32 B | wasm32 gzip |\n|---|---:|---:|---:|---:|\n| open: head checks, section lookup | 16.4 KiB | 12.3 KiB | 18.4 KiB | 8.4 KiB |\n| open + BLAKE3 of every section | 16.5 KiB | 13.5 KiB | 20.2 KiB | 9.2 KiB |\n| open + Ed25519 signature check | 32.7 KiB | 27.8 KiB | 47.6 KiB | 20.0 KiB |\n| open + every section view (places, hierarchy, ID map, names, components) | 64.9 KiB | 36.7 KiB | 103.5 KiB | 25.8 KiB |\n| open + BLOBS (`ruzstd`) | 65.0 KiB | 43.3 KiB | 124.0 KiB | 34.5 KiB |\n| the whole reader: all of the above | 129.7 KiB | 74.1 KiB | 171.8 KiB | 53.6 KiB |\n| the writer alone (forge side) | 16.5 KiB | 16.3 KiB | 26.1 KiB | 11.2 KiB |\n| the engine, points only: open, `get`, `reverse` | 113.5 KiB | 67.7 KiB | 143.4 KiB | 43.8 KiB |\n| the engine, every query | 452.4 KiB | 248.1 KiB | 459.8 KiB | 184.1 KiB |\n\nBaseline (subtracted): native 278.5 KiB, wasm32 16.1 KiB."
+}

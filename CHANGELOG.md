@@ -30,11 +30,18 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   language API and every binding, with parity values checked in each (D-324).
   `teigeodata_engine::Outline::write_geojson` and `write_point_geojson`: the GeoJSON writer the
   servers used, now one writer for the servers and the bindings.
+- `cargo xtask data-pages`: the site's coverage, country and measured pages, generated from the
+  pinned pack, `data/countries/` and the gates' records, with `--check` (D-325, D-326).
+- `--record` on `package-wasm`, `sizes` and `load`, and `cargo xtask phone <layer.tgd>
+  [--record]` (the phone-class bench with the example's own features): each writes its table,
+  stamped with the day, commit, machine and load average, to `site/data/measured/` (D-326).
 
 ### Changed
 
 - `distance_m` calls the engine's `meters_between` instead of a second haversine of its own
   (D-324).
+- `cargo xtask load` names each pack in bold and right-aligns its figures, so its tables read
+  as Markdown (D-326).
 
 - `cargo xtask load`: a load test of `tgd serve` and its `/mcp` on real packs with `oha`,
   gated by `tools/load/budget.toml` (requests per second, p99, footprint and its growth)

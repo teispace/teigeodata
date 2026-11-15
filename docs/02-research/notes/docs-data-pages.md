@@ -37,7 +37,9 @@ table by hand). Where does each figure come from, and what keeps a page equal to
 - **Measured pages** take sizes that are a function of the code and the pinned pack (the pack's
   components, the WebAssembly packages, library bytes per feature set) from the commands that
   gate them; timings (load, phone class) carry their date, machine and command, because they
-  depend on the machine. Planned as 7.5b in the same generator.
+  depend on the machine. Done as 7.5b (D-326): each gate writes a record with `--record`
+  (`site/data/measured/<name>.json`: its own table plus the day, commit, machine and load
+  average) and the same generator renders the records into `data/measured.mdx`.
 
 ## 3. Findings
 
@@ -73,6 +75,13 @@ readers become `pub(crate)` in their modules.
 7.5 splits into 7.5a (coverage and country pages, this note) and 7.5b (measured pages).
 
 ## 7. Risks and open items
+
+- **Measured records are taken by hand, on a clean tree.** A shared CI runner varies from run
+  to run, so timings regenerated in CI would change the page on every run and hide real
+  drift; sizes could be regenerated in CI, but one renderer for every record is simpler.
+  First records (2026-11-15) were taken under a load average of 7 to 25 from another
+  project's builds; the page shows each one's load average. Rerun them on a quiet machine
+  before a release.
 
 - The gate figures of a release (G-pip, G-tz, heights QA) should come as JSON from the forge
   beside each summary, so the country pages can show them; until then the pages link to the
