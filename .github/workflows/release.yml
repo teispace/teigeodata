@@ -36,8 +36,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Full history with every blob: `cargo semver-checks` checks the last release out
+          # through its own git library, which cannot fetch a partial clone's missing blobs
+          # (dry run 43700863511: "an object ... could not be found").
           fetch-depth: 0
-          filter: blob:none
       - id: v
         run: |
           v=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
