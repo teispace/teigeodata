@@ -77,10 +77,29 @@ fn reverse_says_bearing_and_inside() {
         .iter()
         .find(|n| name(&e, &n.place) == "Pokhara")
         .unwrap();
+    // From the place's own point to the probe, wherever a build puts the place (GeoNames' point
+    // in lite, due west of the probe; the consensus point in main): not the reverse.
+    let (plat, plon) = (
+        pokhara.place.point.lat_degrees(),
+        pokhara.place.point.lon_degrees(),
+    );
+    let want = teigeodata_engine::bearing_deg(plat, plon, 28.2669, 84.10);
+    let back = teigeodata_engine::bearing_deg(28.2669, 84.10, plat, plon);
     assert!(
-        (pokhara.bearing_deg - 90.0).abs() < 1.0,
-        "{}",
+        (pokhara.bearing_deg - want).abs() < 0.01,
+        "{} against {want}",
         pokhara.bearing_deg
+    );
+    assert!(
+        (pokhara.bearing_deg - back).abs() > 90.0,
+        "{} is the bearing back",
+        pokhara.bearing_deg
+    );
+    let meters = teigeodata_engine::meters_between(plat, plon, 28.2669, 84.10);
+    assert!(
+        (pokhara.meters - meters).abs() < 1.0,
+        "{} against {meters}",
+        pokhara.meters
     );
     for n in &near {
         let held = units.iter().any(|u| u.id == n.place.id);
