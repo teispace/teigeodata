@@ -57,6 +57,18 @@ jobs:
             echo "::warning::the ABI release gate fails: a real release stops here"
             test "$DRY_RUN" = true
           fi
+      - uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
+        with:
+          tool: cargo-semver-checks@0.51.0
+      - name: Rust API release gate (the version covers the published crates' changes)
+        # Every crate with `publish = true`, default features, against the last release's
+        # tag. Before 1.0 a minor bump may break; from 1.0 only a major may (semver.md).
+        run: |
+          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD)
+          if ! cargo semver-checks --workspace --baseline-rev "$prev"; then
+            echo "::warning::the Rust API release gate fails: a real release stops here"
+            test "$DRY_RUN" = true
+          fi
 
   c:
     needs: version
