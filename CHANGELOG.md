@@ -10,7 +10,9 @@ applied: a minor release could break the public API, and every break is listed u
 
 ## [Unreleased]
 
-The 1.0.0 candidate. Every public surface now has its promise and its gate
+## [1.0.0] - 2026-11-16
+
+The first stable release. Every public surface now has its promise and its gate
 ([what 1.0 promises](docs/06-engineering/semver.md)); the pack format is 1.0 and older packs
 stay readable; every public enum that may grow is `#[non_exhaustive]`; the 1.0 API review
 renamed the last parameters that broke the naming rule (see **Breaking**).
@@ -576,7 +578,8 @@ The first tagged version. Everything below is new.
 
 None: no version was released before this one.
 
-[Unreleased]: https://github.com/teispace/teigeodata/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/teispace/teigeodata/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/teispace/teigeodata/compare/v0.3.1...v1.0.0
 [0.3.1]: https://github.com/teispace/teigeodata/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/teispace/teigeodata/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/teispace/teigeodata/compare/v0.1.0...v0.2.0
