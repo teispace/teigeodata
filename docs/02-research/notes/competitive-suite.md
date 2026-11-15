@@ -97,6 +97,38 @@ GitHub only; Nominatim's import alone takes tens of minutes):
 - `zone_name` needs the zone rules; a layer without them still names each timezone area by its
   tzdb name, which the harness reads instead.
 
+### 3b. The first run on GitHub (2026-11-15, run 43697996108)
+
+AMD EPYC 9V74, 4 cores; teigeodata's embedded `world-np-lite.tgd` of `data-2026.11.14.3`;
+Nominatim 5.3.3 on the Geofabrik extract of 2026-11-05; Photon 1.3.0 on GraphHopper's Nepal
+dump. The full report is the run's `competitive-report` artifact.
+
+| | teigeodata in process | `tgd serve` | Nominatim | Photon |
+|---|--:|--:|--:|--:|
+| Labelled places found by name (of 222) | 138 (62%) | 138 (62%) | 45 (20%) | 46 (21%) |
+| P50 / P90 over the found | 0.44 / 1.24 km | 0.44 / 1.24 km | 0.41 / 3.13 km | 0.41 / 3.08 km |
+| Golden recall@1 / @5 (450 queries) | 86% / 93% | 86% / 93% | 24% / 28% | 32% / 42% |
+| Search median / P95 | 27 / 142 µs | 223 / 535 µs | 4.6 / 9.1 ms | 13.9 / 37.6 ms |
+| Reverse median / P95 | 7 / 10 µs | 168 / 194 µs | 6.3 / 8.3 ms | 5.6 / 8.8 ms |
+| Set-up | – | 13 ms | 9 min import | 64 s import |
+| On disk | 14.9 MB | 14.9 MB | 8.6 GB | 127 MB |
+| Resident after the run | – | 26 MB | 722 MB | 779 MB |
+
+By identity, teigeodata's records are P50 0.26 km and P90 0.94 km from the labels (65%
+within 500 m); GeoNames' own points P50 0.39 km and P90 0.89 km (61%). Timezones: 86%
+agreement with `tzf-rs` over 5,675 land points, as locally; 90 ns against 101 ns per call.
+
+**Read these numbers with their bias.** The golden queries are generated from GeoNames and
+COD-AB, the sources teigeodata's lite build reads, so their spellings, variants and
+historical names are the ones its index holds; Nominatim and Photon read OpenStreetMap, whose
+names for the same hamlets often differ or are absent. Recall by class shows it: on Nepal's
+romanisation variants, mixed-script and abbreviated queries the OpenStreetMap services are
+near 0%, while on colloquial names (hand-written, from Wikipedia) Nominatim does better
+(69% against 62% at @1). The labelled places are independent truth (blind imagery labels),
+but their names come from GeoNames too. A fairer second set, names from OpenStreetMap's own
+Nepal places marked the same way, is an item for the report's next version
+([ideas](../../01-product/ideas.md)). Latency and footprint carry no such bias.
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Verdict |

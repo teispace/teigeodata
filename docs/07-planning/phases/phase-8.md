@@ -206,11 +206,12 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 - [x] The scaling gate (`cargo xtask scaling`): throughput at 1, 2, 4 and 8 threads on one
   `Shared` engine, recorded for the measured page (`site/data/measured/scaling.json`). Fails
   under 1.5× at four threads; a planted global lock gave 0.76×
-- [ ] Suite C, the competitive report (`competitive.yml`, by dispatch on GitHub runners):
+- [x] Suite C, the competitive report (`competitive.yml`, by dispatch on GitHub runners):
   Nominatim and Photon on Nepal's extract, `tzf-rs` and a GeoNames-backed library, on the
   golden queries. Medians of repeated runs, with each rival's version and configuration.
-  **Built (D-340):** `tools/competitive` and the workflow; run locally in process and against
-  `tgd serve` (the two agree exactly). Done once the first run on GitHub has its report
+  **Done (2026-11-15, D-340):** `tools/competitive` and the workflow; the first run on GitHub
+  (43697996108) is in [suite C §3b](../../02-research/notes/competitive-suite.md), with the
+  bias of its golden set stated
 
 ### 8.4 Docs complete and the API frozen
 
