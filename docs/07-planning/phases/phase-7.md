@@ -1,6 +1,6 @@
 ---
 title: "Phase 7: docs site"
-status: draft
+status: accepted
 updated: 2026-11-15
 ---
 
@@ -93,7 +93,37 @@ pages, the playground. Nothing names a country in code (P16): country pages come
   it found world timezone areas answering no zone (D-327, fixed in the engine)
 
 ### 7.7 Exit review
-- [ ] M7 criteria met, each with its evidence; progress updated
+- [x] M7 criteria met (2026-11-15, D-330), each against the [roadmap](../roadmap.md):
+  - **Fumadocs site:** Fumadocs 16.19.3 on Next.js 16.4.6, a static export of 39 pages under
+    `/teigeodata/` with static search, `llms.txt` and per-page Markdown; every build checks its
+    1,844 internal links and holds the search index to gzip 300 KiB (291,390 B, D-329); the
+    deploy job is ready behind `DOCS_DEPLOY`; `docs` green at `c1236d8` (run 43669973165);
+  - **guides per language:** eleven languages and the command line, written by
+    `site/scripts/guides.py` from one copy of the shared prose (`--check` in `docs`); every
+    sample is a region of a tour that ran on the released pack and every language prints the
+    same output (D-322), in CI: fast-check's bindings and examples jobs, `wasm`, `dotnet`;
+    writing them found and fixed a missing result reader in eight languages (D-322), the
+    boundary missing from the language API (D-324) and two server bugs;
+  - **generated reference:** the API from each binding's own declaration macro, the HTTP and
+    MCP reference from the servers' definitions, each failing on drift (D-323);
+  - **per-country pages:** the coverage page and a page per country folder from the pinned
+    pack and `data/countries/`, checked in fast-check (D-325); the measured page from the
+    gates' stamped records (D-326);
+  - **playground:** the commit's WebAssembly engine on the pinned pack, a map of the pack's own
+    outlines, every answer with its code and timing, nothing sent anywhere; run in Chromium in
+    `docs` against the tours' answers (D-328), which found world timezone areas answering no
+    zone (D-327, fixed in the engine).
+- [x] Not blocking M7, recorded:
+  - the site is not public until the maintainer enables GitHub Pages (source: GitHub
+    Actions) and sets `DOCS_DEPLOY` to `true`; the registry install tabs wait for the first
+    release (5.10c);
+  - the .NET tour runs only in CI (no local SDK, D-299);
+  - a release's gate figures (G-pip, G-tz, heights QA) stay in its summary until the forge
+    writes them as JSON ([data pages](../../02-research/notes/docs-data-pages.md) §7);
+  - the first measured records were taken under a load average of 7 to 25 from other
+    projects' builds, shown beside each; rerun on a quiet machine before a release;
+  - the playground loads 16.3 MB; a smaller playground pack once a release names one
+    ([playground](../../02-research/notes/docs-playground.md) §7).
 
 ## Changelog
 
@@ -107,3 +137,4 @@ pages, the playground. Nothing names a country in code (P16): country pages come
 | 2026-11-15 | 7.4 done: boundary and distance in every language; the GeoJSON writer moved to the engine | the playground and every app draw outlines from the bindings, and one writer keeps them equal to the servers (D-324) |
 | 2026-11-15 | 7.5b done: the measured page rendered from the gates' records; `cargo xtask phone` | a number on the site needs its date, machine and commit, and one renderer (D-326) |
 | 2026-11-15 | 7.6 done: the playground, its files from `cargo xtask playground`, its browser check in the docs workflow; the WebAssembly tools one composite action | the page runs the commit's engine from the site's own origin; the pack cannot come from the release (D-328); a timezone area is its own zone (D-327) |
+| 2026-11-15 | 7.7: M7 met; the search index held to its budget | the exit review measured the index over the budget the research set (D-329, D-330) |
