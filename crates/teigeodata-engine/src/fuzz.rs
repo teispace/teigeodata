@@ -5,7 +5,8 @@
 //! (`teigeodata_format::fuzz::edit_section`), so it passes `Layer::from_bytes` and the
 //! section hashes, and every query reads the edited contents. The property is the one
 //! `SECURITY.md` promises for a pack from an untrusted source: no panic, only a typed error or
-//! an answer. libFuzzer's `-rss_limit_mb` and `-timeout` bound memory and time. The same
+//! an answer; and the edited sections' full check (`teigeodata_format::check`) never panics,
+//! which reaches every kind's `open` and `check`. libFuzzer's `-rss_limit_mb` and `-timeout` bound memory and time. The same
 //! function runs under `cargo test` on seeded inputs (`tests/fuzz.rs`) and under libFuzzer
 //! (`fuzz/fuzz_targets/engine.rs`), as D-072 set for every harness.
 
@@ -128,9 +129,20 @@ struct Work {
 /// panics. Places are taken from the pack's first rows and from what the queries return, so
 /// edits are reached through the paths apps use.
 pub fn engine(seed: &[u8], data: &[u8]) {
-    let Some((bytes, rest)) = teigeodata_format::fuzz::edit_section(seed, data) else {
+    let Some(edit) = teigeodata_format::fuzz::edit_section(seed, data) else {
         return;
     };
+    let (bytes, rest) = (edit.pack, edit.rest);
+    // The edited sections' full check (`tgd verify --deep`) never panics either; the others
+    // are the seed's, whole (`tests/fuzz.rs` checks every seed).
+    if let Ok(p) = teigeodata_format::Pack::open(&bytes) {
+        let edited = &edit.edited;
+        teigeodata_format::check::sections_where(
+            &p,
+            |k, part| edited.contains(&(k, part)),
+            |_, _| {},
+        );
+    }
     let Ok(layer) = Layer::from_bytes(bytes, LayerOptions::default()) else {
         return;
     };

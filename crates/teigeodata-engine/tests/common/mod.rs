@@ -812,7 +812,8 @@ pub fn outlined(country_only: bool) -> (Model, Vec<(u32, [i32; 4])>) {
     let refs: Vec<Vec<u32>> = (0..shapes.len() as u32)
         .map(|a| vec![arc_ref(a, false)])
         .collect();
-    let hole_ref = [arc_ref(hole, false), arc_ref(hole + 1, false)];
+    // Holes run clockwise (the format's rule, `Polygons::check`): the two arcs reversed.
+    let hole_ref = [arc_ref(hole + 1, true), arc_ref(hole, true)];
     let ring_lists: Vec<Vec<&[u32]>> = refs
         .iter()
         .enumerate()

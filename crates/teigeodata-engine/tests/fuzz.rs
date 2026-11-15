@@ -30,9 +30,12 @@ fn seed(name: &str) -> Vec<u8> {
     std::fs::read(path(name)).expect(name)
 }
 
-/// The extra seed: a small synthetic country with SUBSTRING, and the DEM fixture's grid as
-/// `DEM_COARSE`.
+/// The extra seed, with the kinds the other seeds lack: a small synthetic country with
+/// SUBSTRING, the DEM fixture's grid as `DEM_COARSE`, the outline fixture's arcs with their
+/// `ARCS_OVERVIEW`, and COMPONENTS (one component on every other row, with a field).
 fn extra() -> Vec<u8> {
+    use teigeodata_format::arcs::{self, Arcs};
+    use teigeodata_format::components::{self, ComponentColumns};
     let mut m = common::synthetic(60, 31);
     m.with_substring();
     let dem = seed("bindings/fixtures/dem.tgd");
@@ -40,6 +43,28 @@ fn extra() -> Vec<u8> {
     let grid = dem.section(Kind::DEM).expect("its DEM");
     m.raw
         .push((Kind::DEM_COARSE, grid.item_count(), grid.bytes().to_vec()));
+    let outline = seed("bindings/fixtures/outline.tgd");
+    let outline = Pack::open(&outline).expect("the outline fixture");
+    let full = outline.section(Kind::ARCS).expect("its ARCS");
+    let overview = arcs::overview(&Arcs::open(&full).expect("its arcs"), 1).expect("an overview");
+    m.raw
+        .push((Kind::ARCS, full.item_count(), full.bytes().to_vec()));
+    m.raw
+        .push((Kind::ARCS_OVERVIEW, full.item_count(), overview));
+    let n = m.ids.len();
+    let rows: Vec<u32> = (0..u32::try_from(n).expect("rows")).step_by(2).collect();
+    let values: Vec<u32> = rows.iter().map(|r| r * 3).collect();
+    let fields = [(1_u8, values.as_slice())];
+    let comps = [ComponentColumns {
+        id: 1,
+        rows: &rows,
+        fields: &fields,
+    }];
+    m.raw.push((
+        Kind::COMPONENTS,
+        n as u64,
+        components::encode(n, &comps).expect("COMPONENTS"),
+    ));
     m.encode()
 }
 
@@ -100,13 +125,22 @@ fn the_seeds_hold_every_kind_the_engine_reads() {
         let pack = seed(name);
         let p = Pack::open(&pack).expect(name);
         kinds.extend(p.sections().map(|s| s.kind().0));
+        // A seed the engine refuses, or the format's check faults, would teach the fuzzer
+        // nothing: each one is whole.
+        teigeodata_format::check::sections(&p, |kind, r| {
+            assert!(r.is_ok(), "{name}: {kind:?} fails its check: {r:?}");
+        });
+        teigeodata_engine::Layer::from_bytes(
+            pack.clone(),
+            teigeodata_engine::LayerOptions::default(),
+        )
+        .unwrap_or_else(|e| panic!("{name}: the engine refuses it: {e}"));
     }
     let missing: Vec<u32> = (1..=Kind::DEM_COARSE.0)
         .filter(|k| *k != Kind::BLOCK_HASHES.0 && !kinds.contains(k))
         .collect();
-    // COMPONENTS, BLOBS and ARCS_OVERVIEW are not read by queries: the format's harnesses
-    // cover them (`teigeodata_format::fuzz::sections`).
-    let not_read = [Kind::COMPONENTS.0, Kind::BLOBS.0, Kind::ARCS_OVERVIEW.0];
+    // BLOBS is not read by queries; the format's `sections` harness covers it.
+    let not_read = [Kind::BLOBS.0];
     let missing: Vec<u32> = missing
         .into_iter()
         .filter(|k| !not_read.contains(k))

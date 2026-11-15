@@ -415,11 +415,12 @@ fn edit_body(c: &mut Cursor<'_>, body: &mut Vec<u8>) {
 
 /// A valid pack `seed` with one or two of its sections edited ([`edit_body`], sometimes the
 /// item count too), written again by the writer, unsigned, so every hash holds: the reader's
-/// structure checks pass and what reads the section's contents is reached. Returns the pack
-/// and the fuzz bytes left over, or `None` when `seed` is not a pack or the writer refuses
-/// the edit (a raw section's lengths cannot disagree). Used by the engine's harness.
+/// structure checks pass and what reads the section's contents is reached. Returns the pack,
+/// the kind and part of each section edited, and the fuzz bytes left over; `None` when `seed`
+/// is not a pack or the writer refuses the edit (a raw section's lengths cannot disagree).
+/// Used by the engine's harness.
 #[must_use]
-pub fn edit_section<'d>(seed: &[u8], data: &'d [u8]) -> Option<(Vec<u8>, &'d [u8])> {
+pub fn edit_section<'d>(seed: &[u8], data: &'d [u8]) -> Option<Edited<'d>> {
     let p = Pack::open(seed).ok()?;
     let mut c = Cursor(data);
     let mut sections: Vec<_> = p
@@ -439,9 +440,11 @@ pub fn edit_section<'d>(seed: &[u8], data: &'d [u8]) -> Option<(Vec<u8>, &'d [u8
     if sections.is_empty() {
         return None;
     }
+    let mut edited = Vec::new();
     for _ in 0..=(c.u8() % 2) {
         let n = sections.len();
         let s = &mut sections[c.below(n)];
+        edited.push((s.0, s.1));
         edit_body(&mut c, &mut s.5);
         if c.u8() % 8 == 0 {
             s.3 = match c.u8() % 4 {
@@ -482,8 +485,23 @@ pub fn edit_section<'d>(seed: &[u8], data: &'d [u8]) -> Option<(Vec<u8>, &'d [u8
                 .map(|s| s.5.as_slice())
         })
         .collect();
-    let bytes = layout.assemble(&order).ok()?;
-    Some((bytes, c.rest()))
+    let pack = layout.assemble(&order).ok()?;
+    Some(Edited {
+        pack,
+        edited,
+        rest: c.rest(),
+    })
+}
+
+/// What [`edit_section`] returns.
+#[derive(Debug)]
+pub struct Edited<'d> {
+    /// The pack, written again with every hash right.
+    pub pack: Vec<u8>,
+    /// The kind and part of each section edited.
+    pub edited: Vec<(Kind, crate::Part)>,
+    /// The fuzz bytes left over.
+    pub rest: &'d [u8],
 }
 
 /// A valid pack, edited (bytes, named fields with boundary values, inserted or deleted bytes),

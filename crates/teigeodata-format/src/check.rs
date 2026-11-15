@@ -28,7 +28,7 @@ use crate::postal::Postal;
 use crate::redirects::Redirects;
 use crate::region::Region;
 use crate::search::Search;
-use crate::{Error, Kind, Pack, Section};
+use crate::{Error, Kind, Pack, Part, Section};
 
 fn needs(kind: Kind, problem: &'static str) -> Error {
     Error::Payload {
@@ -42,7 +42,17 @@ fn needs(kind: Kind, problem: &'static str) -> Error {
 /// result: `Ok(true)` checked, `Ok(false)` a kind this reader has no check for (an unknown
 /// kind, or `BLOCK_HASHES`, which is proved with the section it covers), `Err` the first
 /// problem found in it.
-pub fn sections(pack: &Pack<'_>, mut each: impl FnMut(Kind, Result<bool, Error>)) {
+pub fn sections(pack: &Pack<'_>, each: impl FnMut(Kind, Result<bool, Error>)) {
+    sections_where(pack, |_, _| true, each);
+}
+
+/// [`sections`] for the sections `keep` selects by kind and part, each still checked against
+/// the sections it reads: a caller that changed only some sections checks only those.
+pub fn sections_where(
+    pack: &Pack<'_>,
+    keep: impl Fn(Kind, Part) -> bool,
+    mut each: impl FnMut(Kind, Result<bool, Error>),
+) {
     let get = |k| pack.section(k);
     let places = get(Kind::PLACES).map(|s| Places::open(&s));
     let rows = match places {
@@ -57,7 +67,7 @@ pub fn sections(pack: &Pack<'_>, mut each: impl FnMut(Kind, Result<bool, Error>)
         Some(_) => Err(needs(kind, "not one row per PLACES row")),
         None => Err(needs(kind, "no PLACES to count its rows")),
     };
-    for s in pack.sections() {
+    for s in pack.sections().filter(|s| keep(s.kind(), s.part())) {
         let kind = s.kind();
         let checked = (|| -> Result<bool, Error> {
             if let Some(b) = pack.part_blocks(kind, s.part())? {

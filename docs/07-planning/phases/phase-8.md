@@ -54,8 +54,17 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   - **Then a clean run:** 300 s, 331,057 inputs, coverage 8,506, peak RSS 403 MB (this machine,
     2026-11-15). The real faults stand in for the planted one: the target reaches the decoders'
     arithmetic
-- [ ] `payloads`: the 17 section kinds not yet fuzzed get their `open` and `check`, and a
-  section `check` accepts never makes a query fail untyped
+- [x] `payloads`, in the `engine` target rather than a second harness (2026-11-15). Each edited
+  section also gets its full check (`check::sections_where`, which selects sections, so
+  REGION's 90 ms debug check does not run for an edit elsewhere). That reaches every kind's
+  `open` and `check`.
+  - **The seeds hold all 22 kinds except BLOBS**, which the format's `sections` harness covers.
+    The extra seed gained ARCS, ARCS_OVERVIEW and COMPONENTS.
+  - **Every seed is held whole:** `check::sections` passes and the engine opens it. That found
+    the outline fixture's hole stored counter-clockwise, against `Polygons::check`. The
+    fixture is fixed, and no parity answer changed, since queries re-orient.
+  - **Run:** 300 s clean, 149,633 inputs, coverage 10,668 (8,506 without the checks), peak
+    RSS 405 MB
 - [ ] `trust`: the TUF metadata parser and the catalog's `custom` fields
 - [ ] `ffi`: the C ABI's strings and buffers (lengths, NUL bytes, invalid UTF-8, documented null
   pointers) through the generated layer
@@ -121,3 +130,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 |---|---|---|
 | 2026-11-15 | Phase 8 drafted from the [hardening research](../../02-research/notes/hardening-and-release.md) | D-331 |
 | 2026-11-15 | 8.1 engine target done; two DEM, ARCS and POLYGONS faults fixed | D-332 |
+| 2026-11-15 | 8.1 payloads folded into the engine target; seeds hold every kind but BLOBS | D-332 |
