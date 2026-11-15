@@ -9,6 +9,7 @@
 *.tgd
 !/fixtures/**/*.tgd
 !/bindings/fixtures/*.tgd
+!/fuzz/seeds/*.tgd
 node_modules/
 .next/
 /site/out/
