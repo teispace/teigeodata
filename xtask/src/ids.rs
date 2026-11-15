@@ -67,7 +67,10 @@ fn registries(build_dir: &Path, build: &str) -> Result<Vec<PathBuf>, String> {
     if let Ok(entries) = fs::read_dir(build_dir.join(&world)) {
         for e in entries.flatten() {
             let name = e.file_name();
-            if Path::new(&name).extension().is_some_and(|x| x == "tsv") {
+            // Hidden files are not registries: macOS tar once packed an AppleDouble `._x.tsv`
+            // beside each (data-2026.11.14.3), which is not text.
+            let hidden = name.to_string_lossy().starts_with('.');
+            if !hidden && Path::new(&name).extension().is_some_and(|x| x == "tsv") {
                 out.push(world.join(name));
             }
         }
@@ -107,6 +110,9 @@ fn save(root: &Path, build: &str, out: &Path) -> Result<String, String> {
         root.join(out)
     };
     let status = Command::new("tar")
+        // macOS tar otherwise adds an AppleDouble `._` file for each file with extended
+        // attributes; GNU tar ignores the variable.
+        .env("COPYFILE_DISABLE", "1")
         .arg("-czf")
         .arg(&out)
         .arg("-C")
@@ -279,6 +285,12 @@ mod tests {
         write(&from, "baseline/world/world-ids-lite/in.tsv", reg);
         write(&from, "pack/np/np-ids-lite.tsv", reg);
         write(&from, "pack/np/np-ids-main.tsv", reg);
+        // An AppleDouble file beside a registry, as macOS tar packs one: not a registry.
+        write(
+            &from,
+            "baseline/world/world-ids-lite/._in.tsv",
+            "\u{0}\u{5}\u{16}\u{7}",
+        );
         assert_eq!(registries(&from, "lite").unwrap().len(), 2);
         // A newer local registry stays.
         let newer = "# teigeodata id registry 1\n1\tlite\tgeonames:1\n2\tlite\tgeonames:2\n";
