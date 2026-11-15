@@ -146,10 +146,25 @@ jobs:
         env:
           S3_ENGINE: product
           S3_GATE: tests/golden/${{ matrix.cc }}-baseline-${{ matrix.build }}.tsv
+          # Every miss in the log, so a failed gate says which queries lost their place.
+          S3_MISSES: "1"
         run: |
           dir=data/build/pack/${{ matrix.cc }}
           target/release/pack-eval "$dir/${{ matrix.cc }}-places-${{ matrix.build }}.tgd" \
             tests/golden/${{ matrix.cc }}.yaml "$dir/${{ matrix.cc }}-ids-${{ matrix.build }}.tsv"
+      - name: The pack and its registry, when the golden gate fails
+        if: ${{ failure() }}
+        run: |
+          mkdir -p golden-fail
+          cp data/build/pack/${{ matrix.cc }}/${{ matrix.cc }}-places-${{ matrix.build }}.tgd \
+             data/build/pack/${{ matrix.cc }}/${{ matrix.cc }}-ids-${{ matrix.build }}.tsv golden-fail/ || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ failure() }}
+        with:
+          name: ${{ matrix.cc }}-${{ matrix.build }}-golden-fail
+          path: golden-fail/
+          retention-days: 5
+          if-no-files-found: ignore
       - name: The packs, for a data release (D-247)
         # Only a build that passed every gate above; the release is assembled from these files
         # by hand (docs/06-engineering/releases.md#data), never from a local build.
