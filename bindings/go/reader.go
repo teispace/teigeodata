@@ -327,3 +327,86 @@ func slice(bytes, offsets []byte, i int) (string, bool) {
 	}
 	return string(bytes[at:end]), true
 }
+
+// Column is the column called name with one value per row: a string for a string column, the
+// column's own number type (int32, uint8, float64, ...) for a number column, and nil where the
+// row is null. It copies; Strings and Values read faster.
+func (r *Reader) Column(name string) ([]any, error) {
+	c, err := r.column(name)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]any, r.rows)
+	switch c.ty {
+	case TypeUtf8, TypeDict16, TypeDict32:
+		err = fill(out, r.Strings, name)
+	case TypeI32:
+		err = fill(out, valuesOf[int32](r), name)
+	case TypeU32:
+		err = fill(out, valuesOf[uint32](r), name)
+	case TypeI64:
+		err = fill(out, valuesOf[int64](r), name)
+	case TypeU64:
+		err = fill(out, valuesOf[uint64](r), name)
+	case TypeF32:
+		err = fill(out, valuesOf[float32](r), name)
+	case TypeF64:
+		err = fill(out, valuesOf[float64](r), name)
+	case TypeU8:
+		err = fill(out, valuesOf[uint8](r), name)
+	case TypeI16:
+		err = fill(out, valuesOf[int16](r), name)
+	default:
+		err = fill(out, valuesOf[uint16](r), name)
+	}
+	if err != nil {
+		return nil, err
+	}
+	nulls, err := r.Nulls(name)
+	if err != nil {
+		return nil, err
+	}
+	for i, null := range nulls {
+		if null {
+			out[i] = nil
+		}
+	}
+	return out, nil
+}
+
+func valuesOf[T Number](r *Reader) func(string) ([]T, error) {
+	return func(name string) ([]T, error) { return Values[T](r, name) }
+}
+
+func fill[T any](out []any, read func(string) ([]T, error), name string) error {
+	values, err := read(name)
+	if err != nil {
+		return err
+	}
+	for i, v := range values {
+		out[i] = v
+	}
+	return nil
+}
+
+// Record is one row: column name to value, as Column gives it.
+type Record map[string]any
+
+// Records is every row as a Record. It copies every value; for many rows, read the columns
+// you need with Strings and Values.
+func (r *Reader) Records() ([]Record, error) {
+	out := make([]Record, r.rows)
+	for i := range out {
+		out[i] = make(Record, len(r.columns))
+	}
+	for _, c := range r.columns {
+		values, err := r.Column(c.name)
+		if err != nil {
+			return nil, err
+		}
+		for i, v := range values {
+			out[i][c.name] = v
+		}
+	}
+	return out, nil
+}

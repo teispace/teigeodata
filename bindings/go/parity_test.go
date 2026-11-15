@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -737,6 +738,85 @@ func FuzzReader(f *testing.F) {
 			_, _ = r.Nulls(name)
 			_, _ = tg.Values[float64](r, name)
 			_, _ = tg.Values[uint8](r, name)
+			_, _ = r.Column(name)
 		}
+		_, _ = r.Records()
 	})
+}
+
+func TestRecords(t *testing.T) {
+	p := parity.Engine
+	engine := must(tg.NewEngine())
+	defer engine.Close()
+	must(engine.OpenFile(fixture(p.Fixture)))
+	nulls := 0
+	for _, blob := range [][]byte{
+		must(tg.SampleRows(parity.SampleRows.Rows)),
+		must(engine.Ancestors(p.Ancestors.ID)),
+		must(engine.Reverse(p.Reverse.Lat, p.Reverse.Lon, p.Reverse.Limit)),
+	} {
+		r := must(tg.NewReader(blob))
+		records := must(r.Records())
+		if len(records) != r.Rows() {
+			t.Fatalf("%d records, want %d", len(records), r.Rows())
+		}
+		for _, name := range r.Columns() {
+			isNull := must(r.Nulls(name))
+			typ, _ := r.Type(name)
+			var want []any
+			if typ == tg.TypeUtf8 || typ == tg.TypeDict16 || typ == tg.TypeDict32 {
+				for _, v := range must(r.Strings(name)) {
+					want = append(want, v)
+				}
+			} else {
+				for _, v := range numbers(t, r, name) {
+					want = append(want, v)
+				}
+			}
+			for i, rec := range records {
+				got := rec[name]
+				switch {
+				case isNull != nil && isNull[i]:
+					nulls++
+					if got != nil {
+						t.Fatalf("%s row %d: null read as %v", name, i, got)
+					}
+				case got == nil:
+					t.Fatalf("%s row %d: read as null", name, i)
+				case fmt.Sprint(toFloat(got)) != fmt.Sprint(want[i]):
+					t.Fatalf("%s row %d: %v, want %v", name, i, got, want[i])
+				}
+			}
+		}
+	}
+	if nulls == 0 {
+		t.Fatal("no null value was checked")
+	}
+	r := must(tg.NewReader(must(tg.SampleRows(1))))
+	if _, err := r.Column("nope"); err == nil {
+		t.Fatal("a missing column read")
+	}
+}
+
+// toFloat widens a number to float64, as numbers does, and leaves a string.
+func toFloat(v any) any {
+	switch n := v.(type) {
+	case int32:
+		return float64(n)
+	case uint32:
+		return float64(n)
+	case int64:
+		return float64(n)
+	case uint64:
+		return float64(n)
+	case float32:
+		return float64(n)
+	case uint8:
+		return float64(n)
+	case int16:
+		return float64(n)
+	case uint16:
+		return float64(n)
+	}
+	return v
 }

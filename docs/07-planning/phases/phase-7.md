@@ -39,11 +39,11 @@ pages, the playground. Nothing names a country in code (P16): country pages come
   registry), open a pack, every query, read results, errors, threads, bundling and
   downloading packs, platform notes; each backed by a program in `site/examples/<lang>/`
 - [x] `cargo xtask docs-examples [--check]`: every example run on the pinned public pack, its
-  output compared with the checked-in output (D-322); Rust, Python, Node.js, WebAssembly and
+  output compared with the checked-in output (D-322); Rust, Python, Node.js, WebAssembly, Go and
   the CLI so far
-- [ ] A result `Reader` of one shape in every language (D-322): Node.js and WebAssembly done;
-  Swift, Kotlin and Java, Dart, C, C++; `records` in Python, Go and .NET
-- [ ] The tours in Go, C, C++, Java, Kotlin, Swift, Dart and .NET; `docs-examples` in CI
+- [ ] A result `Reader` of one shape in every language (D-322): Node.js, WebAssembly and Go
+  done; Swift, Kotlin and Java, Dart, C, C++; `records` in Python and .NET
+- [ ] The tours in C, C++, Java, Kotlin, Swift, Dart and .NET; `docs-examples` in CI
   per language
 - [ ] The servers: `tgd serve` (every route, Nominatim compatibility, deployment) and
   `tgd mcp` (clients' configuration, tools, resources, installs)

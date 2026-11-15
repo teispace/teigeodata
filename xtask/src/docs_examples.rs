@@ -39,7 +39,8 @@ struct Lang {
     tool: &'static str,
     /// Files that must exist (binding builds), relative to the root.
     needs: &'static [&'static str],
-    /// The command, with `{pack}` and `{root}` replaced.
+    /// The command, with `{pack}`, `{root}` and `{ffi}` (the C library, relative to the root)
+    /// replaced; `needs` and `env` are filled the same way.
     command: &'static [&'static str],
     /// Where to run it, relative to the root.
     dir: &'static str,
@@ -50,6 +51,14 @@ struct Lang {
     /// Its own expected output (`None`: the shared tour).
     own: Option<&'static str>,
 }
+
+/// The C library as `cargo build --release -p teigeodata-ffi` writes it.
+#[cfg(target_os = "macos")]
+const FFI: &str = "target/release/libteigeodata_ffi.dylib";
+#[cfg(windows)]
+const FFI: &str = "target/release/teigeodata_ffi.dll";
+#[cfg(not(any(target_os = "macos", windows)))]
+const FFI: &str = "target/release/libteigeodata_ffi.so";
 
 const LANGS: &[Lang] = &[
     Lang {
@@ -108,6 +117,16 @@ const LANGS: &[Lang] = &[
             "site/examples/wasm/node_modules/@teispace/teigeodata-wasm",
             "target/wasm/full",
         )],
+        own: None,
+    },
+    Lang {
+        name: "go",
+        tool: "go",
+        needs: &["{ffi}"],
+        command: &["go", "run", ".", "{pack}"],
+        dir: "site/examples/go",
+        env: &[("TEIGEODATA_LIB", "{root}/{ffi}")],
+        links: &[],
         own: None,
     },
     Lang {
@@ -324,7 +343,7 @@ fn missing(root: &Path, lang: &Lang) -> Option<String> {
     }
     lang.needs
         .iter()
-        .find(|n| !root.join(n).exists())
+        .find(|n| !root.join(n.replace("{ffi}", FFI)).exists())
         .map(|n| format!("{n} is not built"))
 }
 
@@ -349,7 +368,11 @@ fn link(root: &Path, lang: &Lang) -> Result<(), String> {
 fn execute(root: &Path, lang: &Lang, pack: &Path) -> Result<String, String> {
     let root_s = root.display().to_string();
     let pack_s = pack.display().to_string();
-    let fill = |s: &str| s.replace("{pack}", &pack_s).replace("{root}", &root_s);
+    let fill = |s: &str| {
+        s.replace("{ffi}", FFI)
+            .replace("{pack}", &pack_s)
+            .replace("{root}", &root_s)
+    };
     let (program, rest) = lang.command.split_first().ok_or("no command")?;
     let mut cmd = Command::new(fill(program));
     cmd.args(rest.iter().map(|a| fill(a)))
