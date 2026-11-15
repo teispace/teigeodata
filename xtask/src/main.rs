@@ -18,6 +18,7 @@ mod data_pages;
 mod docs;
 mod docs_examples;
 mod flutter_check;
+mod fuzz_coverage;
 mod golden;
 mod ids;
 mod iso3166;
@@ -161,6 +162,10 @@ Tasks:
                     --check also checks the per-section files the pages include, --bless
                     writes them from one language. Languages not built here are skipped
                     and named.
+  fuzz-coverage <dir>
+                    The fuzzing campaign's gate (phase 8.1): reads each target's llvm-cov
+                    summary (<target>.json) and fails unless every section kind's decoder was
+                    reached; prints the Markdown report.
   load <pack.tgd>… [--query <name>] [--secs <n>] [--tgd <path>] [--only <route>]… [--check <budget.toml>] [--record]
                     Phase 6.4 (D-320): builds tgd, serves each pack on loopback and drives
                     a route mix (search at 1, 16 and 64 connections, reverse, get, near,
@@ -221,6 +226,7 @@ fn main() -> ExitCode {
         "tuf" => report(tuf::run(rest)),
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
         "load" => report(load::run(&root, rest)),
+        "fuzz-coverage" => report(fuzz_coverage::run(&root, rest)),
         "phone" => report(phone::run(&root, rest)),
         "playground" => report(playground::run(&root, rest)),
         "docs-examples" => report(docs_examples::run(&root, rest)),

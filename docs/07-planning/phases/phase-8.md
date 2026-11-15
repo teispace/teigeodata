@@ -104,6 +104,11 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
     `mcp-conformance` workflow tests it against the specification's suite
 - [ ] `fuzz-campaign.yml`: weekly and by dispatch, 3 h per target, a job each, with coverage
   reports as artifacts. Gate: every section kind's decoder reached, the coverage recorded here
+  - **Built (2026-11-15):** the workflow ([ci.md](../../06-engineering/ci.md#fuzzing-campaign))
+    and its gate `cargo xtask fuzz-coverage`. The gate fails on a decoder no target reached and
+    on a kind with no decoder entry (both planted). It read a real `llvm-cov` export locally
+    (the `sections` target on whole-pack seeds, rightly red: that harness takes payloads)
+  - **Open:** the first run's coverage, recorded here
 
 ### 8.2 Security review
 
@@ -167,3 +172,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.1 trust target done | D-331 |
 | 2026-11-15 | 8.1 ffi target done | D-331 |
 | 2026-11-15 | 8.1 mcp target done | D-331 |
+| 2026-11-15 | 8.1 campaign workflow and coverage gate built | D-331 |

@@ -19,6 +19,13 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   packs, and the edited sections' full check runs too.
 - `teigeodata_sync::fuzz::trust` (feature `fuzz`, now with `repo`): the TUF update chain and
   the catalog on a repository with one role attacked, nightly as the `trust` target (D-331).
+- `teigeodata_ffi::fuzz::abi` (feature `fuzz`): every engine function of the C ABI with fuzzed
+  arguments, nightly as the `ffi` target; `teigeodata_server::fuzz::mcp` (features `fuzz` and
+  `mcp`): every MCP tool with arguments from its own input schema, and resource reads, nightly
+  as the `mcp` target (D-331).
+- The weekly fuzzing campaign (`fuzz-campaign.yml`): every target for 3 hours with coverage
+  reports, and its gate `cargo xtask fuzz-coverage`, which fails unless every section kind's
+  decoder is reached (D-331).
 - `teigeodata_format::check::sections_where`: the full check of the sections a caller selects.
 - A result `Reader` of one shape in every language (D-322): new in Node.js, WebAssembly,
   Swift, Dart, Java (Kotlin), C (`teigeodata_reader.h`) and C++ (`teigeodata_reader.hpp`),

@@ -34,7 +34,8 @@ ones on every pull request, the slow ones nightly, and all of them before a rele
 | differential | against reference implementations: point-in-polygon (GEOS-equivalent), timezone (reference tz lookups), compression round-trips | nightly |
 | metamorphic | splitting, reordering or compacting packs does not change answers | nightly |
 | parity | the same golden queries in every binding give identical answers | PR (fast set), nightly (full) |
-| fuzz | every decoder and parser (`cargo fuzz`), with a corpus kept in the repo | nightly |
+| fuzz | every decoder and parser (`cargo fuzz`), the corpus kept in the Actions cache | nightly (300 s per target) |
+| fuzz coverage | every section kind's decoder reached by some target after 3 h (`cargo xtask fuzz-coverage`) | weekly `fuzz-campaign` |
 | miri, sanitizers | the zero-copy module and the FFI under Miri and AddressSanitizer | nightly |
 | mutants | `cargo mutants` on changed code; survivors reviewed | nightly |
 | coverage | line and branch coverage floors that only rise | nightly |

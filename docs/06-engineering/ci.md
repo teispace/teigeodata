@@ -33,6 +33,7 @@ and checked again before each workflow change.
 | `parity-mutants` | weekly (Monday 05:23 UTC), push to `main` touching `parity.json`, a parity suite or the task, by hand | the parity gate (5.9, D-300): `cargo xtask parity-mutants --lang <l>`, one job per language (Python, Node.js, Go, JVM, Swift, Dart, C, C++); every value of `bindings/parity.json` is planted in turn and the suite must fail on each; `fast-check` runs `--sample` (the first value of each section) in every language | ≤ 60 min |
 | `fast-check` (`windows` job) | push, PR | clippy and tests of `teigeodata-sync` and `teigeodata-cli` on `windows-latest` (D-190) | ≤ 25 min |
 | `nightly` | schedule | fuzzing, Miri, sanitizers, mutants, coverage, differential, benchmarks against baselines | ≤ 6 h per job |
+| `fuzz-campaign` | weekly (Saturday 06:13 UTC), by hand (`seconds`, at most 5 h) | every libFuzzer target for 3 h, one job each, continuing the nightly corpus; the minimised corpus replayed under `cargo fuzz coverage`; the coverage gate (`cargo xtask fuzz-coverage`): every section kind's decoder reached by some target, the report in the job summary and as an artifact (D-331, [below](#fuzzing-campaign)) | ≤ 340 min per job |
 | `data-build` | weekly (Monday 03:41 UTC) and manual | one job per pack: `forge make --fetch`, then G-det (the build stage again, `cmp`), G-lic (`cargo xtask check-pack`, also on the baseline slice, D-145, and the world part, D-147), the world and locator gates
 (`tests/world.rs` on the built files: cities under their country, the slice's IDs, the border
 probes, `missing_packs`; D-147, D-149) and the golden gate (`pack-eval` with `S3_GATE`); reports as artifacts. Later: sharded tiles and a final verify-sign-publish job | per shard ≤ 3 h |
@@ -103,6 +104,35 @@ fuzzing time per target as an input).
   `cargo test`.
   The core property tests take their case counts from `crate::cases(n)`: `n` natively, a
   thousandth (at least 4) under Miri; libFuzzer covers the volume.
+
+## Fuzzing campaign
+
+`.github/workflows/fuzz-campaign.yml` (phase 8.1, D-331) runs each nightly target for 3 hours,
+weekly on Saturday at 06:13 UTC (after the nightly has finished) and on demand with `seconds`
+as an input (at most 18,000, so fuzzing, minimising and the coverage replay fit in the 6-hour
+job limit). It runs on GitHub's runners, free for a public repository; a long run never uses
+this machine (AGENTS.md §7).
+
+- **Corpus:** the same cache keys as the nightly (`fuzz-corpus-<target>-`). The campaign starts
+  from the newest corpus either workflow saved and saves its own, minimised, which the next
+  nightly continues.
+- **Coverage:** the minimised corpus is replayed by `cargo fuzz coverage`. `llvm-cov export
+  -summary-only` writes `<target>.json` and `llvm-cov report` writes a per-file text report;
+  both, with libFuzzer's final stats, are the artifact `fuzz-coverage-<target>`.
+- **The gate** (`gate` job, `cargo xtask fuzz-coverage`): every section kind's decoder module in
+  `crates/teigeodata-format/src/` has covered lines in at least one target. It reads the kinds
+  from the reader (`Kind::name`), so a kind added without a decoder entry fails its test, and it
+  fails on a decoder no target reached (both planted). The report (each kind's best target with
+  its line and function coverage, then each target's totals) is the job summary and the
+  artifact `fuzz-campaign-report`. Coverage is per file: kinds that share a layout (SEARCH and
+  SUBSTRING, REGION and ADMIN_REGION, ARCS and ARCS_OVERVIEW, DEM and DEM_COARSE) share a row's
+  figures. The gate runs when a target crashed too, so the other targets' report is written.
+- **A crash** fails its job and uploads the input as `fuzz-artifacts-<target>`; it becomes a
+  `found_by_libfuzzer` regression in the crate's `tests/fuzz.rs`.
+
+Locally (seeds or a corpus): `cargo +nightly fuzz coverage <target> <dir>`, then `llvm-cov
+export -summary-only` into a directory and `cargo xtask fuzz-coverage <dir>`. Delete
+`fuzz/target` and `fuzz/coverage` afterwards (about 0.7 GB).
 
 Locally: `cargo +nightly fuzz run <target> -- -max_total_time=30 -rss_limit_mb=1024`; the
 seeded run is part of `cargo test -p teigeodata-format`.
