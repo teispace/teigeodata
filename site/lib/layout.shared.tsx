@@ -10,7 +10,6 @@ export function baseOptions(): BaseLayoutProps {
     githubUrl: repoUrl,
     links: [
       { text: 'Docs', url: '/docs', active: 'nested-url' },
-      { text: 'Playground', url: '/playground' },
       { text: 'Reference', url: '/docs/reference', active: 'nested-url' },
     ],
   };

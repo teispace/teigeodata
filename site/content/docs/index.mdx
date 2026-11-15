@@ -3,4 +3,61 @@ title: Introduction
 description: What teigeodata is, what it answers, and where to start.
 ---
 
-Placeholder.
+teigeodata answers questions about places, on the device, with no network and no API key:
+
+- **Search by name** in any script and spelling: काठमाडौं, Kathmandu and Kathamandu find the
+  same city; `"Kathmandu, Bagmati"` ranks the one in Bagmati first; a focus point ranks what is
+  near the user.
+- **Reverse geocode** a point to the nearest places, with distance and bearing, and to every
+  admin unit that holds it, from the country down to the lowest level the data has.
+- **Timezones**: the IANA zone at any point as its boundaries draw it, the UTC offset at any
+  instant from tzdb rules carried in the pack, and whether a local time is skipped or repeated.
+- **Elevation** of every place, and the terrain height at any point.
+- **The hierarchy, ISO 3166 codes, postal codes** and stable IDs that survive data updates.
+
+The data is cleaned, deduplicated and merged from the best open sources, and ships as **packs**:
+signed, compact, memory-mapped files. Bundle one in your app, or download a country when a user
+needs it. Every pack credits its sources, and you may keep and redistribute what it answers.
+
+## One engine, every language
+
+The engine is written in Rust. Every other language calls it through a binding generated from
+one description of the API, so each query, option and error code is the same everywhere, and
+every guide on this site runs the same program and prints the same output.
+
+<Cards>
+  <Card title="Rust" href="/docs/guides/rust" />
+  <Card title="Python" href="/docs/guides/python" />
+  <Card title="Node.js" href="/docs/guides/node" />
+  <Card title="Browser (WebAssembly)" href="/docs/guides/wasm" />
+  <Card title="Swift" href="/docs/guides/swift" />
+  <Card title="Kotlin and Java" href="/docs/guides/kotlin-java" />
+  <Card title="Dart and Flutter" href="/docs/guides/dart-flutter" />
+  <Card title="Go" href="/docs/guides/go" />
+  <Card title="C" href="/docs/guides/c" />
+  <Card title="C++" href="/docs/guides/cpp" />
+  <Card title=".NET" href="/docs/guides/dotnet" />
+  <Card title="Command line" href="/docs/cli" />
+</Cards>
+
+There is also an [HTTP server](/docs/servers/http) (native JSON, GeoJSON and
+Nominatim-compatible routes) and an [MCP server](/docs/servers/mcp) that gives AI agents the same
+queries as tools.
+
+## Where to start
+
+<Cards>
+  <Card title="Getting started" href="/docs/getting-started" description="A pack and your first queries in five minutes." />
+  <Card title="Concepts" href="/docs/concepts" description="Places and IDs, packs and components, results, the store, accuracy." />
+  <Card title="Reference" href="/docs/reference" description="Every query, its arguments, columns and errors." />
+  <Card title="Data" href="/docs/data" description="What the packs hold today, their sources and licences." />
+</Cards>
+
+## Status
+
+The code is at `v0.3.1` and the data is published as pre-releases (the latest is
+`data-2026.11.14.3`). Nepal is covered in full, with the world's countries, first-level units
+and cities of 5,000 or more, and India's districts and towns; coverage grows by data releases,
+India next. The package registries (crates.io, PyPI, npm, Maven Central, pub.dev, NuGet) are
+filled from the first registry release; until then each guide shows how to build from a
+checkout, and Go and Swift install from the repository's tags.

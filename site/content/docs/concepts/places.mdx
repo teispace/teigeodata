@@ -1,0 +1,62 @@
+---
+title: Places and IDs
+description: What a place is in teigeodata, its kinds and admin levels, and why its ID never changes.
+---
+
+Everything teigeodata answers is about **places**. A place has:
+
+| Field | What it is |
+|---|---|
+| `id` | A stable ID, such as `tgd:np/1xhb`. |
+| `name` | Its name in the pack's base language, with every other name it has (other scripts, languages, former and alternative names) behind it for search. |
+| `kind` | What sort of place it is (below). |
+| `level` | For an admin unit, its admin level; 0 for a country and for anything that is not a unit. |
+| `lat`, `lon` | Its point in WGS84 degrees: the centre of a settlement, a label point for a unit. |
+| `elevation` | Metres above mean sea level (EGM2008), with how it was found: `surveyed` from a source, `model` from the terrain. |
+| `parent` | The ID of the smallest unit that holds it. |
+| `tz` | Its IANA timezone. |
+| `iso` | The ISO 3166 code of a country (`NP`) or a subdivision (`NP-P4`). |
+
+Any of these but the ID, kind and point may be null where the data has no value.
+
+## Kinds
+
+| Kind | What |
+|---|---|
+| `country` | A country. |
+| `admin` | An admin unit: a province, a district, a municipality, a ward. Its `level` says which. |
+| `settlement` | A city, town or village: where people live, whether or not it is a unit. |
+| `locality` | A named part of a settlement: a neighbourhood, a tole, a chowk. |
+| `natural` | A mountain, lake, river or other natural feature. |
+| `postal_area` | The area of a postal code. |
+| `timezone_area` | An area with one IANA timezone; its name is the zone. |
+
+## Admin levels
+
+Countries divide themselves differently, so each country's ladder is data: its
+[profile](https://github.com/teispace/teigeodata/tree/main/data/countries) names each level.
+Nepal's is country (0), province (1), district (2), local level (3, the municipality) and ward
+(4). Code never assumes a ladder: ask for a place's `level` and its ancestors.
+
+## IDs that last
+
+An ID is the country that first allocated it and a serial: `tgd:np/1xhb` is Nepal's serial
+`1xhb` in base32. IDs are allocated once and never reused, so you can store them in your
+database and look them up after any data update:
+
+- A place keeps its ID through every rebuild, however its name, point or parent change.
+- When two records turn out to be one place, the survivor keeps its ID and the other is
+  **retired**: looking up a retired ID answers with the survivor.
+- A place that moves to another country keeps the ID it was born with: the prefix is where the ID
+  was allocated, not where the place is now.
+
+`tgd:world/…` IDs belong to places in no country: oceans, seas, the world.
+
+## Names in every script
+
+A place carries every name the sources give it: its official name, names in other scripts and
+languages, former names and common alternatives. Search reads all of them through a fold that
+ignores case, accents and the small spelling differences of each script, and forgives typos,
+so काठमाडौं, Kathmandu and Kathamandu all find the capital. Each country's spelling rules (such as
+चोक written **Chowk**, not Chok) are data in its [lexicon](https://github.com/teispace/teigeodata/tree/main/data/countries),
+each with its source.

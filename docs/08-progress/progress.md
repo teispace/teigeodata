@@ -20,7 +20,7 @@ A short status. The numbers and evidence live in each phase file and the
 | 4 Engine, baseline and sync | in progress: what remains waits on the maintainer (the key ceremony, Q-024) or on a release that changes records (4.7, gate 11, D-273) | [phase 4](../07-planning/phases/phase-4.md) |
 | 5 Boundary and bindings | **M5 met** 2026-11-15 (D-308); open, not blocking: 5.5d (Dart static linking), 5.10c (the first real release, on the maintainer's setup), the APK path of D-306 on a real APK | [phase 5 §5.11](../07-planning/phases/phase-5.md#511-exit-review) |
 | 6 Servers | **M6 met** 2026-11-15 (D-321): HTTP and MCP servers over one request core, conformance in CI, load gated, hosted seams | [phase 6 §6.5](../07-planning/phases/phase-6.md#65-exit-review) |
-| 7 Docs site | in progress: 7.0 research done ([docs site](../02-research/notes/docs-site.md)); next 7.1 (the site and its deploy) | [phase 7](../07-planning/phases/phase-7.md) |
+| 7 Docs site | in progress: 7.0 to 7.2 done: the site and its deploy, a result reader in every language (D-322), every tour run on the released pack in CI, the guides, concepts, CLI and servers pages; next 7.3 (the reference generated from the IDL) | [phase 7](../07-planning/phases/phase-7.md) |
 | 8 | not started | [roadmap](../07-planning/roadmap.md) |
 
 - **Now (Phase 3):** the Nepal main pack has 100,358 places with heights (D-111), admin
@@ -192,3 +192,4 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-15 | D-315: `tgd mcp`, the MCP server on stdio (2026-07-28 and 2025-11-25): twelve read-only tools with output schemas, signed cursors, packs and places as resources; `hierarchy` and `children` in the request core; run on the Nepal lite pack |
 | 2026-11-15 | D-316: MCP at `/mcp` of `tgd serve`, stateless Streamable HTTP, `Host` and `Origin` checked, seams reading the request headers |
 | 2026-11-15 | D-317..D-321: `boundary` and `distance`, coverage and downloads in MCP, the conformance suite in CI, load gated per pack and `tgd` sized, boundary 3 to 4 times faster; **M6 met** (CI green at `b8c06dd`) | Phase 7 (docs site): research first |
+| 2026-11-15 | Phase 7.1 and 7.2: the Fumadocs site and `docs.yml`; D-322, a result reader of one shape in every language and every tour run on `data-2026.11.14.3` in CI; the guides (11 languages, from `site/scripts/guides.py`), concepts, getting started, CLI, HTTP and MCP pages; fixed on the way: Java's first-call `UnsatisfiedLinkError`, `/packs` counting bytes as places, error bodies without a newline | 7.3: the reference from the IDL |

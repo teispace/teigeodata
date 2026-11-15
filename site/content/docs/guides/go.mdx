@@ -1,0 +1,287 @@
+---
+title: Go
+description: "teigeodata from Go, with cgo or without it (purego): offline geocoding with typed column reads and rows as maps."
+---
+
+The Go module calls the C library through cgo, or through
+[purego](https://github.com/ebitengine/purego) when built with `CGO_ENABLED=0`, so it cross-compiles
+without a C toolchain. The library is loaded at run time: the file passed to `LoadLibrary`, then
+the one `TEIGEODATA_LIB` names, then the release's prebuilt library in the user cache (checked
+against the SHA-256 the module pins), then the system's.
+
+<Callout title="Every example on this page ran">
+The code below is cut from one program, [the tour](https://github.com/teispace/teigeodata/blob/main/site/examples/go/tour.go), which CI runs on the released
+public pack `world-np-lite.tgd` (`data-2026.11.14.3`) and checks line by line against the
+output shown here. The output is the same in every language.
+</Callout>
+
+## Install
+
+```sh
+go get github.com/teispace/teigeodata/bindings/go
+```
+
+The tags are the Go releases. Go 1.26 or later. Fetch the prebuilt library once (from the first
+release that carries it):
+
+```sh
+go run github.com/teispace/teigeodata/bindings/go/cmd/teigeodata-fetch
+```
+
+or build it from a checkout and name it:
+
+```sh
+cargo build --release -p teigeodata-ffi
+export TEIGEODATA_LIB=$PWD/target/release/libteigeodata_ffi.so   # .dylib on macOS, .dll on Windows
+```
+
+## Get a pack
+
+Queries read **packs**: signed, memory-mapped files of places. This guide uses the world
+lite pack: the world's countries, first-level units and cities of 5,000 or more, India's
+districts and statutory towns, and Nepal in full, 172,339 places named in Nepali, Hindi and
+English (15.6 MB, CC BY 4.0):
+
+```sh
+curl -LO https://github.com/teispace/teigeodata/releases/download/data-2026.11.14.3/world-np-lite.tgd
+shasum -a 256 world-np-lite.tgd   # 243ae55509a538b1f61da50994a791cc78e7deb70bb4bf743b9f59d458cbe3f3
+```
+
+An app ships a pack inside its bundle, or downloads one when a user needs it. Once the signed
+catalog is live, the [store](/docs/concepts/store) does that download for you: it verifies every
+byte and keeps the packs updated.
+
+## Read a result
+
+Every query returns a **result blob** (`[]byte`), read in place by `NewReader`. `Records()`
+gives each row as a `Record` (a `map[string]any`, `nil` where null); the tour reads every
+result through one helper:
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#rows</include>
+
+Typed column reads avoid the maps for large results: `r.Strings("name")`,
+`tg.Values[float64](r, "lat")` (a slice viewing the blob, no copy), `r.Nulls("elevation")`.
+
+## Open a pack
+
+An `Engine` holds the packs it answers from. `OpenFile` memory-maps a pack file and
+adds it as a **layer**; the engine answers from every layer at once, and a higher layer wins
+where two disagree. Opening is cheap: only the head of the file is read and checked, and each
+section is verified against its hash the first time a query reads it.
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#open</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/open.txt</include>
+
+- `OpenBytes` adds a pack from bytes already in memory (a download, an app asset, the
+  browser). `OpenFileRange` opens a pack stored uncompressed inside another file, such as an
+  Android APK.
+- Each `_with` form takes `OpenOptions`: precedence over the other packs, when sections are
+  verified (lazy, eager or trusted), whether the file is mapped or read, and which components,
+  languages and outline level to read.
+- `OpenFile` returns the layer's number; `Remove` takes it out again while other threads
+  keep querying. One engine answers from any number of threads at once.
+
+## Search by name
+
+`Search` finds places by name, best first. It matches every name a place has, in every
+script, and forgives spelling: काठमाडौं, Kathmandu and Kathamandu find the same city, and so do
+typos, missing accents and abbreviations. A result row has the place columns (`id`, `name`,
+`kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`) and a `score`.
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#search</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/search.txt</include>
+
+The `score` ranks the rows of one query and means nothing across queries. It adds how well the
+name matched to how important the place is, so a city ranks above a village of the same name.
+`limit` is at most 10,000 (`LIMIT_MAX`).
+
+## Narrow a search by its parent
+
+Write the place's parent after a comma, as people do: `"Kathmandu, Bagmati"`. Places
+inside a unit of that name rank first; the parent can be any ancestor (a district, a province,
+a country) and is matched with the same tolerance as the name.
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#search-parent</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/search-parent.txt</include>
+
+The city (a settlement, level 0) and the metropolitan municipality (an admin unit at
+level 3) share the name, and both are in Bagmati.
+
+## Rank by distance from a point
+
+Many places share a name. `SearchWith` takes `SearchOptions`: a **focus** point (the
+user's location, or the middle of the map they are looking at) ranks near places first. A place
+at the focus gains 30 points, one `focus_scale_m` away 15, and the gain keeps halving with
+distance (the default scale is 50 km).
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#search-focus</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/search-focus.txt</include>
+
+Set `strict` to rank by how well the name matched first (exact, loose, prefix, one edit,
+substring, two edits, phonetic), then by importance and focus, instead of one combined score:
+useful for an autocomplete that must show exact matches on top.
+
+## Get a place by its ID
+
+Every place has a stable ID such as `tgd:np/1xhb`: the country, then a short code. IDs
+survive rebuilds of the data; when two places are merged, `Get` on the retired ID answers
+with the survivor, so IDs you stored keep working.
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#get</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/get.txt</include>
+
+`elevation` is metres above mean sea level (EGM2008), `tz` the IANA zone and `parent` the
+ID of the unit that holds the place. Any column may be null where the data has no value: read
+each through the reader, which gives your language's null.
+
+## Walk the admin hierarchy
+
+`Ancestors` lists the units that hold a place, parent first, up to its country; `Parent`
+gives the first of them alone and `Children` the units and places one level down.
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#hierarchy</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/hierarchy.txt</include>
+
+`level` is the admin level as each country defines it: 0 is a country (and a settlement,
+which is not a unit), 1 a province or state, and so on down to the lowest level the data has.
+Each country's ladder is in its profile on the [data pages](/docs/data).
+
+## Reverse geocode a point
+
+`Reverse` gives the places nearest a point, nearest first, each with `meters` (the
+great-circle distance) and `bearing` (degrees clockwise from north, from the point to the
+place).
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#reverse</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/reverse.txt</include>
+
+For the admin units that *hold* a point (its district, province and country) use
+`AdminAt` below; reverse answers with what is *near* it.
+
+## Find everything within a radius
+
+`WithinRadius` gives the places within a distance of a point, nearest first, with the
+same `meters` and `bearing` columns, at most `limit` of them.
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#radius</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/radius.txt</include>
+
+## Find places near a place
+
+`Nearby` is reverse geocoding from a place you already have: the places nearest it,
+itself left out.
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#nearby</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/nearby.txt</include>
+
+## Admin units at a point, and ISO 3166 codes
+
+`AdminAt` tests the point against the admin boundaries and gives every unit that holds
+it, country first. `ByIso` finds a country or a subdivision by its ISO 3166 code (`NP`,
+`NP-P4`, in either case).
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#admin</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/admin.txt</include>
+
+Boundaries are exact polygons, so a point near a border is answered by the side it is on,
+not by the nearest centre. Disputed boundaries are drawn from one stated perspective; see
+[accuracy](/docs/concepts/accuracy).
+
+## Timezones: the zone, its offset and local times
+
+`TzAt` gives the IANA zone at a point as the zone boundaries draw it. With the zone,
+`TzOffsetAt` gives the UTC offset at an instant (from the tzdb rules inside the pack, not
+from the operating system), and `TzLocal` tells whether a wall-clock time exists: `unique`,
+`gap` (skipped by a daylight-saving change) or `overlap` (it happens twice), with the offsets
+before and after.
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#timezone</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/timezone.txt</include>
+
+`TzVersion` names the tzdb release the rules come from, so you can tell when a pack is
+older than a rule change; `TzZones` lists every zone the packs hold.
+
+## Elevation at any point
+
+`ElevationAt` reads the terrain height at a point from the pack's elevation grid,
+interpolated between the four samples around it: `meters` above EGM2008, the `source` product,
+the grid's `resolution_m` and the `datum`. There is no row at sea or outside every grid.
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#elevation</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/elevation.txt</include>
+
+Every place also has its own `elevation` column. The world pack carries a coarse grid; a
+country's terrain pack adds a finer one, and the engine answers from the finest grid that covers
+the point.
+
+## Distance between two points
+
+`DistanceM` is the great-circle distance in metres (haversine on the WGS84 mean
+sphere, within about 0.5% of the ellipsoid). It needs no pack.
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#distance</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/distance.txt</include>
+
+## Errors
+
+A call fails with one of eight stable codes, the same in every language:
+
+| Code | Meaning |
+|---|---|
+| `InvalidArgument` | An argument is outside its range: a latitude of 91, a limit over 10,000, a malformed ID. |
+| `MissingComponent` | The query needs a component the pack was installed without (search on a pack installed without `search`). |
+| `Corrupt` | The bytes are not a valid pack, or a section does not match its hash. |
+| `Io` | A file could not be read. |
+| `Network` | No mirror answered, or the connection broke (the store only). |
+| `Refused` | The store refused: the catalog did not verify, a pack is not installed or another needs it. |
+| `Cancelled` | A callback or a job was asked to stop. |
+| `Internal` | A bug inside teigeodata; a panic never crosses into your program. |
+
+A query that finds nothing is not an error: it returns no rows.
+
+Every failure is a `*tg.Error` with a stable `Code`; match it with `errors.As`, or
+`errors.Is(err, tg.CodeMissingComponent)`:
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#errors</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/errors.txt</include>
+
+## Goroutines
+
+Handles may be used from any goroutine at once; `Close` frees one once no call holds it. The
+store's long calls run as a `Job` whose progress you poll or wait for (`WaitProgress`) and which
+`Cancel` stops.
+
+## The whole program
+
+Run it from a checkout of the repository, which builds what the language needs, fetches
+the pinned pack and compares the output:
+
+```sh
+cargo xtask docs-examples --fetch --check --lang go
+```
+
+<Accordions>
+<Accordion title="tour.go">
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go</include>
+</Accordion>
+</Accordions>
+
+## Next
+
+- [Concepts](/docs/concepts): places and IDs, packs and components, results, the store.
+- [Reference](/docs/reference): every query, its columns and its errors.
+- [Data](/docs/data): what each country's packs hold, with their sources and measured accuracy.

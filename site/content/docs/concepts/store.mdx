@@ -1,0 +1,65 @@
+---
+title: The store
+description: How an app finds, downloads, verifies, updates and removes packs on the user's device, offline once installed.
+---
+
+The **store** keeps the packs installed on a device and the signed **catalog** that says which
+packs exist. It is how an app downloads data when a user needs it: the user searches for
+"Dubai", the app finds that the UAE pack holds it, installs that pack, and from then on answers
+offline.
+
+<Callout type="warn" title="The catalog is not live yet">
+The store is built and tested, but the signed catalog it reads goes live with the first catalog
+release, after the offline key ceremony. Until then, data comes as GitHub pre-releases:
+download a pack, check its SHA-256, and open it with `open_file`.
+</Callout>
+
+## What it does
+
+- **Finds packs offline.** `find` takes a name and returns the places it matches with the
+  catalog's packs that hold each one; `locate` does the same for the countries at a point. Both
+  read the stored catalog alone, so the app can offer the download, with its size, before it has
+a network.
+- **Installs a part.** Install a pack whole, or some components, the names of some languages,
+  and boundaries down to a level: the same choices as in [packs](/docs/concepts/packs).
+- **Verifies every byte.** The catalog is signed metadata (TUF): every pack it lists has its
+  head's hash, the head holds every section's hash, and large sections hold a hash per 16 KiB
+  block. Nothing is written before it is checked against that chain, so a bad mirror or a broken
+  download is refused and the next mirror resumes.
+- **Survives crashes.** An install that a crash or a kill cuts short is finished or undone the
+  next time the store opens; the installed packs are never half-written.
+- **Updates and evicts.** `update` moves installed packs to the catalog's releases, keeping the
+  components and languages installed. Pinned packs are kept when room is made; `remove` takes a
+  pack out with the dependencies nothing else needs.
+- **Gives you an engine.** `engine()` opens every installed pack, with the parts installed.
+
+## In code
+
+The store's calls block on the network and the disk, so call them off the UI thread or use the
+language's asynchronous form (`…Async` in Swift, Kotlin and Java, Dart, Node.js and .NET; `aio`
+in Python). An install runs as a `Job` that reports its bytes as it goes and can be cancelled:
+cancelled, it leaves the store as it was.
+
+```python
+import teigeodata
+from teigeodata import aio
+
+store = teigeodata.Store.open(path)  # set up once with Store.create
+job = store.install("ae", teigeodata.InstallOptions(components="point,names,search"))
+async for done, total in aio.progress(job):
+    print(f"{done} of {total} bytes")
+await aio.result(job)                  # raises the job's error, if any
+engine = store.engine()                # every installed pack, opened
+```
+
+On iOS and Android a download may need to go on while the app is suspended. `install_pass`
+splits an install so the platform's own download service fetches the bytes (a background
+`URLSession`, `WorkManager`): each pass lists the byte ranges still missing, the platform fetches
+them into files, and the next pass verifies and installs what arrived.
+
+## From the command line
+
+`tgd init`, `refresh`, `catalog`, `find`, `locate`, `install`, `update`, `remove`, `pin`,
+`status` and `repair` do the same from a shell; see the [command line](/docs/cli#the-store).
+`tgd serve` and `tgd mcp` follow the store: a pack installed or updated while they run is
+answered from within seconds.

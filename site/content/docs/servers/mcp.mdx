@@ -1,0 +1,94 @@
+---
+title: MCP server
+description: tgd mcp gives AI agents teigeodata's queries as read-only MCP tools, offline, with attribution on every answer.
+---
+
+The [Model Context Protocol](https://modelcontextprotocol.io) lets an AI agent call tools. `tgd mcp`
+gives it every teigeodata query as a tool: an agent can geocode a place, find what is at a
+point, read a timezone or a height, and get the right answer from local packs instead of
+guessing, with no API key and no network.
+
+## Connect a client
+
+The client starts the server itself over standard input and output:
+
+<Tabs items={["Claude Code", "Claude Desktop", "Any client"]}>
+<Tab value="Claude Code">
+
+```sh
+claude mcp add teigeodata -- tgd mcp --pack /path/to/world-np-lite.tgd
+```
+
+</Tab>
+<Tab value="Claude Desktop">
+
+```json title="claude_desktop_config.json"
+{
+  "mcpServers": {
+    "teigeodata": {
+      "command": "tgd",
+      "args": ["mcp", "--pack", "/path/to/world-np-lite.tgd"]
+    }
+  }
+}
+```
+
+</Tab>
+<Tab value="Any client">
+
+Command `tgd`, arguments `mcp --pack <file>` (repeat `--pack` for several packs, or leave it out
+to serve the store's installed packs). Over HTTP, `tgd serve` also answers MCP at `/mcp`
+(Streamable HTTP) on its port.
+
+</Tab>
+</Tabs>
+
+The server speaks MCP 2026-07-28 and 2025-11-25, and older clients too.
+
+## Tools
+
+Every tool is read-only (`readOnlyHint`), declares its output schema, and returns the same
+JSON as structured content and as text, with the attribution of the packs that answered.
+
+| Tool | What it answers |
+|---|---|
+| `search` | Places matching a name, best first; "Name, Parent" and a focus point as in the API. |
+| `reverse` | The places nearest a point, with distance and bearing. |
+| `nearby` | The places nearest a place. |
+| `get_place` | One place by its ID, optionally with every name it has. |
+| `lookup` | Places by ID, in the order asked. |
+| `admin_at` | The admin units holding a point, country first. |
+| `hierarchy` | A place's ancestors up to its country. |
+| `children` | A place's children, such as a country's provinces. |
+| `timezone` | The IANA zone of a place or at a point, with its offset and abbreviation. |
+| `elevation` | The terrain height at a point. |
+| `postal` | Postal codes to places, by prefix, or at a point. |
+| `boundary` | A unit's outline: a summary, and the GeoJSON as a resource. |
+| `distance` | The distance and bearing between two points or places. |
+| `packs` | The packs served, with their components and attribution. |
+| `coverage` | The catalog's packs that cover a point (a server over a store). |
+| `install`, `install_status` | Install catalog packs into the store, after the person confirms the size (a server over a store that allows it). |
+
+Long answers are paged with signed cursors, so an agent can never be handed more than its context
+can hold. Packs and places are also **resources**: `teigeodata://dataset/…`,
+`teigeodata://place/…` and `teigeodata://boundary/…`.
+
+## Installs
+
+Over a store, `tgd mcp` lists `install` and `install_status`, so an agent that finds a place
+outside the installed packs can offer to download its country. The person confirms the size
+through the client (elicitation) before a byte is fetched; a client that cannot ask installs only
+within a size the server allows. `tgd mcp --no-install` leaves the tools out; `tgd serve` lists
+them only with `--allow-install`.
+
+## Try it
+
+Ask your agent things like:
+
+- "What's the timezone and the elevation of Namche Bazaar?"
+- "Which district and province is 28.2096, 83.9856 in?"
+- "List the provinces of Nepal with their ISO codes."
+- "How far is Pokhara from Kathmandu as the crow flies?"
+
+The agent calls `search`, `timezone`, `elevation`, `admin_at`, `children` and `distance`, and
+answers from the packs, citing their sources.

@@ -1,0 +1,299 @@
+---
+title: Rust
+description: "The typed engine from Rust: search, reverse, admin, timezones and elevation on an offline pack, with no allocation in a warm query."
+---
+
+teigeodata is written in Rust, and Rust gets the engine itself: typed places, typed IDs and
+points, and queries that write into buffers you reuse, so a warm query allocates nothing. Every
+other language reaches the same engine through a generated binding.
+
+<Callout title="Every example on this page ran">
+The code below is cut from one program, [the tour](https://github.com/teispace/teigeodata/blob/main/site/examples/rust/tour.rs), which CI runs on the released
+public pack `world-np-lite.tgd` (`data-2026.11.14.3`) and checks line by line against the
+output shown here. The output is the same in every language.
+</Callout>
+
+## Install
+
+<Tabs items={["Git tag (today)", "crates.io"]}>
+<Tab value="Git tag (today)">
+
+```toml title="Cargo.toml"
+[dependencies]
+teigeodata-core = { git = "https://github.com/teispace/teigeodata", tag = "v0.3.1" }
+teigeodata-engine = { git = "https://github.com/teispace/teigeodata", tag = "v0.3.1" }
+```
+
+</Tab>
+<Tab value="crates.io">
+
+The crates (`teigeodata-core`, `-engine`, `-sync`, `-api`, `-server`, `-cli` and what they
+need) are published to crates.io from the first registry release:
+
+```sh
+cargo add teigeodata-core teigeodata-engine
+```
+
+</Tab>
+</Tabs>
+
+The minimum Rust version is the one `rust-toolchain.toml` pins. `teigeodata-engine`'s default
+features read packs from files (`mmap`); `teigeodata-sync` adds the store (download, verify,
+update); the core crates build for `no_std` targets.
+
+## Get a pack
+
+Queries read **packs**: signed, memory-mapped files of places. This guide uses the world
+lite pack: the world's countries, first-level units and cities of 5,000 or more, India's
+districts and statutory towns, and Nepal in full, 172,339 places named in Nepali, Hindi and
+English (15.6 MB, CC BY 4.0):
+
+```sh
+curl -LO https://github.com/teispace/teigeodata/releases/download/data-2026.11.14.3/world-np-lite.tgd
+shasum -a 256 world-np-lite.tgd   # 243ae55509a538b1f61da50994a791cc78e7deb70bb4bf743b9f59d458cbe3f3
+```
+
+An app ships a pack inside its bundle, or downloads one when a user needs it. Once the signed
+catalog is live, the [store](/docs/concepts/store) does that download for you: it verifies every
+byte and keeps the packs updated.
+
+## Read a result
+
+The Rust engine returns typed values, not result blobs: a `Place` holds its ID, kind, admin
+level and point, and the rest (its name, ISO code, elevation, timezone) is read on demand from
+the engine, into a buffer you pass. The tour gathers what it prints in one helper:
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#describe</include>
+
+Queries that return several places write into a `Vec` you own and reuse (`hits`, `near`,
+`places` in the tour), with a `Scratch` for the search's working memory. Points are fixed-point
+(`Point<E6>`, `Point<E7>`): `Point::from_degrees` checks the range once, so a query never sees
+an invalid coordinate.
+
+If you want the same blobs every binding gets, `teigeodata-api` wraps this engine with the
+binding API (`Engine::search` returning a result blob).
+
+## Open a pack
+
+An `Engine` holds the packs it answers from. `open_file` memory-maps a pack file and
+adds it as a **layer**; the engine answers from every layer at once, and a higher layer wins
+where two disagree. Opening is cheap: only the head of the file is read and checked, and each
+section is verified against its hash the first time a query reads it.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#open</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/open.txt</include>
+
+- `open_bytes` adds a pack from bytes already in memory (a download, an app asset, the
+  browser). `open_file_range` opens a pack stored uncompressed inside another file, such as an
+  Android APK.
+- Each `_with` form takes `OpenOptions`: precedence over the other packs, when sections are
+  verified (lazy, eager or trusted), whether the file is mapped or read, and which components,
+  languages and outline level to read.
+- `open_file` returns the layer's number; `remove` takes it out again while other threads
+  keep querying. One engine answers from any number of threads at once.
+
+## Search by name
+
+`search` finds places by name, best first. It matches every name a place has, in every
+script, and forgives spelling: काठमाडौं, Kathmandu and Kathamandu find the same city, and so do
+typos, missing accents and abbreviations. A result row has the place columns (`id`, `name`,
+`kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`) and a `score`.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#search</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/search.txt</include>
+
+The `score` ranks the rows of one query and means nothing across queries. It adds how well the
+name matched to how important the place is, so a city ranks above a village of the same name.
+`limit` is at most 10,000 (`LIMIT_MAX`).
+
+## Narrow a search by its parent
+
+Write the place's parent after a comma, as people do: `"Kathmandu, Bagmati"`. Places
+inside a unit of that name rank first; the parent can be any ancestor (a district, a province,
+a country) and is matched with the same tolerance as the name.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#search-parent</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/search-parent.txt</include>
+
+The city (a settlement, level 0) and the metropolitan municipality (an admin unit at
+level 3) share the name, and both are in Bagmati.
+
+## Rank by distance from a point
+
+Many places share a name. `search_with` takes `SearchOptions`: a **focus** point (the
+user's location, or the middle of the map they are looking at) ranks near places first. A place
+at the focus gains 30 points, one `focus_scale_m` away 15, and the gain keeps halving with
+distance (the default scale is 50 km).
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#search-focus</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/search-focus.txt</include>
+
+Set `strict` to rank by how well the name matched first (exact, loose, prefix, one edit,
+substring, two edits, phonetic), then by importance and focus, instead of one combined score:
+useful for an autocomplete that must show exact matches on top.
+
+## Get a place by its ID
+
+Every place has a stable ID such as `tgd:np/1xhb`: the country, then a short code. IDs
+survive rebuilds of the data; when two places are merged, `get` on the retired ID answers
+with the survivor, so IDs you stored keep working.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#get</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/get.txt</include>
+
+`elevation` is metres above mean sea level (EGM2008), `tz` the IANA zone and `parent` the
+ID of the unit that holds the place. Any column may be null where the data has no value: read
+each through the reader, which gives your language's null.
+
+## Walk the admin hierarchy
+
+`ancestors` lists the units that hold a place, parent first, up to its country; `parent`
+gives the first of them alone and `children` the units and places one level down.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#hierarchy</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/hierarchy.txt</include>
+
+`level` is the admin level as each country defines it: 0 is a country (and a settlement,
+which is not a unit), 1 a province or state, and so on down to the lowest level the data has.
+Each country's ladder is in its profile on the [data pages](/docs/data).
+
+## Reverse geocode a point
+
+`reverse` gives the places nearest a point, nearest first, each with `meters` (the
+great-circle distance) and `bearing` (degrees clockwise from north, from the point to the
+place).
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#reverse</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/reverse.txt</include>
+
+For the admin units that *hold* a point (its district, province and country) use
+`admin_at` below; reverse answers with what is *near* it.
+
+## Find everything within a radius
+
+`within_radius` gives the places within a distance of a point, nearest first, with the
+same `meters` and `bearing` columns, at most `limit` of them.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#radius</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/radius.txt</include>
+
+## Find places near a place
+
+`nearby` is reverse geocoding from a place you already have: the places nearest it,
+itself left out.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#nearby</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/nearby.txt</include>
+
+## Admin units at a point, and ISO 3166 codes
+
+`admin_at` tests the point against the admin boundaries and gives every unit that holds
+it, country first. `by_iso` finds a country or a subdivision by its ISO 3166 code (`NP`,
+`NP-P4`, in either case).
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#admin</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/admin.txt</include>
+
+Boundaries are exact polygons, so a point near a border is answered by the side it is on,
+not by the nearest centre. Disputed boundaries are drawn from one stated perspective; see
+[accuracy](/docs/concepts/accuracy).
+
+## Timezones: the zone, its offset and local times
+
+`tz_at` gives the IANA zone at a point as the zone boundaries draw it. With the zone,
+`tz_offset_at` gives the UTC offset at an instant (from the tzdb rules inside the pack, not
+from the operating system), and `tz_local` tells whether a wall-clock time exists: `unique`,
+`gap` (skipped by a daylight-saving change) or `overlap` (it happens twice), with the offsets
+before and after.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#timezone</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/timezone.txt</include>
+
+`tz_version` names the tzdb release the rules come from, so you can tell when a pack is
+older than a rule change; `tz_zones` lists every zone the packs hold.
+
+## Elevation at any point
+
+`elevation_at` reads the terrain height at a point from the pack's elevation grid,
+interpolated between the four samples around it: `meters` above EGM2008, the `source` product,
+the grid's `resolution_m` and the `datum`. There is no row at sea or outside every grid.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#elevation</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/elevation.txt</include>
+
+Every place also has its own `elevation` column. The world pack carries a coarse grid; a
+country's terrain pack adds a finer one, and the engine answers from the finest grid that covers
+the point.
+
+## Distance between two points
+
+`distance_m` is the great-circle distance in metres (haversine on the WGS84 mean
+sphere, within about 0.5% of the ellipsoid). It needs no pack.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#distance</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/distance.txt</include>
+
+## Errors
+
+A call fails with one of eight stable codes, the same in every language:
+
+| Code | Meaning |
+|---|---|
+| `InvalidArgument` | An argument is outside its range: a latitude of 91, a limit over 10,000, a malformed ID. |
+| `MissingComponent` | The query needs a component the pack was installed without (search on a pack installed without `search`). |
+| `Corrupt` | The bytes are not a valid pack, or a section does not match its hash. |
+| `Io` | A file could not be read. |
+| `Network` | No mirror answered, or the connection broke (the store only). |
+| `Refused` | The store refused: the catalog did not verify, a pack is not installed or another needs it. |
+| `Cancelled` | A callback or a job was asked to stop. |
+| `Internal` | A bug inside teigeodata; a panic never crosses into your program. |
+
+A query that finds nothing is not an error: it returns no rows.
+
+Rust returns `Result`s: the tour's `main` returns `Result<(), Box<dyn Error>>` and uses `?`
+throughout. A point is checked when it is made, so the latitude error comes from
+`Point::from_degrees`:
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#errors</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/errors.txt</include>
+
+## Threads and updates
+
+`Engine` is `Send + Sync`: share it in an `Arc` and query from any number of threads. Adding or
+removing a layer publishes a new snapshot; queries already running finish on the one they
+started with.
+
+## The whole program
+
+Run it from a checkout of the repository, which builds what the language needs, fetches
+the pinned pack and compares the output:
+
+```sh
+cargo xtask docs-examples --fetch --check --lang rust
+```
+
+<Accordions>
+<Accordion title="tour.rs">
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs</include>
+</Accordion>
+</Accordions>
+
+## Next
+
+- [Concepts](/docs/concepts): places and IDs, packs and components, results, the store.
+- [Reference](/docs/reference): every query, its columns and its errors.
+- [Data](/docs/data): what each country's packs hold, with their sources and measured accuracy.

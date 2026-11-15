@@ -1,0 +1,15 @@
+{
+  "title": "teigeodata",
+  "pages": [
+    "index",
+    "getting-started",
+    "---Guides---",
+    "guides",
+    "cli",
+    "servers",
+    "---Learn---",
+    "concepts",
+    "reference",
+    "data"
+  ]
+}

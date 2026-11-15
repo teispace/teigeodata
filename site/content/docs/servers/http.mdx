@@ -1,0 +1,148 @@
+---
+title: HTTP server
+description: tgd serve answers every query over HTTP as JSON or GeoJSON, with Nominatim-compatible routes, from packs on local disk.
+---
+
+`tgd serve` puts the packs behind an HTTP API: every query as a `GET` route, native JSON or
+GeoJSON, and Nominatim-compatible `/search`, `/reverse` and `/lookup` so existing clients work
+unchanged. It is one process with no database: the packs are memory-mapped, and on Nepal it
+answers 5,000 to 10,000 requests per second for the heaviest route (a large boundary) and more
+for the others (measured by `cargo xtask load`, with a budget the load test enforces).
+
+<Callout title="Every example on this page ran">
+The requests below are part of the [command-line tour](https://github.com/teispace/teigeodata/blob/main/site/examples/cli/tour.sh),
+which starts the server on the released pack, sends them with curl, and checks the answers.
+</Callout>
+
+## Start it
+
+```sh
+tgd serve --pack world-np-lite.tgd
+# serving on http://127.0.0.1:8080
+```
+
+| Option | Default | What |
+|---|---|---|
+| `--listen <addr:port>` | `127.0.0.1:8080` | Where to listen; port 0 picks a free one. Loopback only unless you name another address. |
+| `--pack <file>` | the store's packs | A pack to serve; repeat for several. |
+| `--store <dir>` | the platform's data directory | Serve the store's installed packs, and follow it as packs are installed or updated. |
+| `--follow <seconds>` | 5 | How often to read the store's journal; 0 never. |
+| `--timeout <seconds>` | 10 | A request taking longer is answered `unavailable`. |
+| `--cors-origin <origin>` | none | An origin browsers may call from; repeat for several. CORS is off by default. |
+| `--allow-install` | off | Let MCP clients install catalog packs into the store. |
+
+<include lang="sh" meta='title="tour.sh"'>../../../examples/cli/tour.sh#http-health</include>
+
+<include lang="json" meta='title="Response"'>../../../examples/cli/out/http-health.txt</include>
+
+## Native routes
+
+Every route is `GET /v1/<query>` with query parameters, and answers
+`{"results": [...], "attribution": "..."}` (or `"result"` for one value). `limit` defaults to 10.
+
+| Route | Parameters | Answers |
+|---|---|---|
+| `/v1/search` | `q`, `limit`, `focus=lat,lon`, `scale_km`, `strict` | Places matching a name, best first, with `score`. |
+| `/v1/get` | `id`, `names` | One place; `names=1` adds every name with its language. |
+| `/v1/lookup` | `ids` (comma-separated) | Places by ID, in the order asked. |
+| `/v1/reverse` | `lat`, `lon`, `limit`, `in_country` | The nearest places with `meters`, `bearing` and `inside`. |
+| `/v1/near` | `id`, `limit`, `radius_m` | The places nearest a place. |
+| `/v1/admin` | `lat`, `lon` | The admin units holding the point, country first. |
+| `/v1/hierarchy` | `id` | A place's ancestors, parent first. |
+| `/v1/children` | `id`, `limit` | A place's children. |
+| `/v1/tz` | `id` or `lat`, `lon`; `t` (Unix seconds, default now) | The timezone with its offset, abbreviation and DST flag at `t`. |
+| `/v1/elevation` | `lat`, `lon` | The terrain height, its datum, source and grid spacing. |
+| `/v1/distance` | `from`, `to` (each `lat,lon` or an ID) | The great-circle distance and initial bearing. |
+| `/v1/postal` | `code`, `scheme`, `prefix`, `limit`, or `lat`, `lon` | Postal codes and their places. |
+| `/v1/boundary` | `id`, `lod` (0 finest to 6) | A unit's outline as GeoJSON. |
+| `/v1/coverage` | `lat`, `lon`, `radius_m` | The catalog's packs that cover a point (a server over a store). |
+| `/packs` | | The packs served, with their components, places and attribution. |
+| `/health` | | `{"status": "ok", "layers": n}`. |
+
+Search:
+
+<include lang="sh" meta='title="tour.sh"'>../../../examples/cli/tour.sh#http-search</include>
+
+<include lang="json" meta='title="Response"'>../../../examples/cli/out/http-search.txt</include>
+
+Reverse geocoding; `inside` is true when the place's area holds the point:
+
+<include lang="sh" meta='title="tour.sh"'>../../../examples/cli/tour.sh#http-reverse</include>
+
+<include lang="json" meta='title="Response"'>../../../examples/cli/out/http-reverse.txt</include>
+
+The timezone at a point, at an instant:
+
+<include lang="sh" meta='title="tour.sh"'>../../../examples/cli/tour.sh#http-tz</include>
+
+<include lang="json" meta='title="Response"'>../../../examples/cli/out/http-tz.txt</include>
+
+Elevation and distance answer one value, under `result`:
+
+<include lang="sh" meta='title="tour.sh"'>../../../examples/cli/tour.sh#http-elevation</include>
+
+<include lang="json" meta='title="Response"'>../../../examples/cli/out/http-elevation.txt</include>
+
+<include lang="sh" meta='title="tour.sh"'>../../../examples/cli/tour.sh#http-distance</include>
+
+<include lang="json" meta='title="Response"'>../../../examples/cli/out/http-distance.txt</include>
+
+## GeoJSON
+
+Add `format=geojson` to any route that answers places, and the answer is a FeatureCollection
+(RFC 7946) that MapLibre, Leaflet, OpenLayers and QGIS read directly:
+
+<include lang="sh" meta='title="tour.sh"'>../../../examples/cli/tour.sh#http-geojson</include>
+
+<include lang="json" meta='title="Response"'>../../../examples/cli/out/http-geojson.txt</include>
+
+```js title="MapLibre"
+map.addSource("admin", { type: "geojson", data: `${server}/v1/admin?lat=28.2096&lon=83.9856&format=geojson` });
+map.addLayer({ id: "admin", type: "circle", source: "admin" });
+```
+
+## Nominatim-compatible
+
+`/search`, `/reverse` and `/lookup` speak Nominatim's API: the same parameters, and the
+`json`, `jsonv2` and `geojson` formats (JSONP is refused: use CORS). Point a Nominatim client, a geocoder
+plugin or a script at teigeodata and it works offline:
+
+<include lang="sh" meta='title="tour.sh"'>../../../examples/cli/tour.sh#http-nominatim</include>
+
+<include lang="json" meta='title="Response"'>../../../examples/cli/out/http-nominatim.txt</include>
+
+A conformance corpus of real client requests is checked in CI. Differences from Nominatim:
+`place_id` is a teigeodata ID (a string), there is no `osm_type` or `osm_id`, and the address
+names the admin units by level as the country defines them.
+
+## Errors
+
+A failure answers a stable code and an HTTP status:
+
+<include lang="sh" meta='title="tour.sh"'>../../../examples/cli/tour.sh#http-error</include>
+
+<include lang="json" meta='title="Response"'>../../../examples/cli/out/http-error.txt</include>
+
+| Code | Status | When |
+|---|---|---|
+| `invalid_argument` | 400 | A parameter is missing or out of range. |
+| `out_of_bounds` | 400, 414 | A limit, radius or text over the server's bounds. |
+| `not_found` | 404 | No such place, or no such route. |
+| `missing_component` | 501 | The packs were installed without what the query needs. |
+| `rate_limited`, `unauthenticated`, `forbidden` | 429, 401, 403 | Reserved for a deployment that adds limits or keys; the server alone never answers them. |
+| `unavailable` | 503 | The request took longer than `--timeout`. |
+| `internal` | 500 | A bug; a panic is caught and answered, never a dropped connection. |
+
+## Deploying it
+
+- **Bind it where you mean to.** It listens on loopback by default; behind a reverse proxy
+  (Caddy, nginx), keep it there. With `--listen 0.0.0.0:8080` it answers anyone who can reach
+  the port.
+- **Limits are built in.** Every request is bounded (text length, `limit` at most 50, radius,
+  time), so no request can make the server do unbounded work.
+- **Updates without restarts.** Over a store, the server reads its journal every `--follow`
+  seconds and serves newly installed or updated packs; queries in flight finish on the packs
+  they started with.
+- **Attribution** comes with every answer, from the packs that answered it; keep it visible
+  where the data is shown.
+- **MCP** is served at `/mcp` on the same port (Streamable HTTP): see [MCP server](/docs/servers/mcp).

@@ -1,0 +1,109 @@
+---
+title: Reference
+description: Every query of the engine with its arguments, columns and errors, the same in every language.
+---
+
+The API is defined once, in Rust (`teigeodata-api`), and every binding is generated from that
+definition: the names below are the Rust ones, and each language spells them its own way
+(`search_with` is `searchWith` in JavaScript, Swift, Kotlin and Dart, `SearchWith` in Go and
+C#, `tg_engine_search_with` in C).
+
+## Engine: opening packs
+
+| Method | Returns | What |
+|---|---|---|
+| `new()` | `Engine` | An engine with no packs. |
+| `open_file(path)` | layer ID | Map the pack at `path` and add it. |
+| `open_file_with(path, options)` | layer ID | The same with `OpenOptions`. |
+| `open_file_range(path, offset, length)` | layer ID | A pack stored uncompressed inside another file (an Android APK asset). |
+| `open_bytes(bytes)` | layer ID | A pack from bytes in memory (copied). |
+| `remove(layer)` | bool | Take a pack out; queries running finish first. |
+| `layers()` | count | The number of packs. |
+
+## Engine: queries
+
+Every query returns a [result blob](/docs/concepts/results). Place results have the place
+columns; the extra columns are listed.
+
+| Method | Extra columns | What |
+|---|---|---|
+| `search(query, limit)` | `score` | Places matching a name, best first; "Name, Parent" ranks a named parent first. |
+| `search_with(query, limit, options)` | `score` | Ranked by `SearchOptions`: a focus point, or strict match order. |
+| `get(id)` | | The place with this ID; a retired ID gives its survivor. |
+| `parent(id)` | | Its parent. |
+| `ancestors(id)` | | Its ancestors, parent first, up to the country. |
+| `children(id)` | | Its children, by ID. |
+| `nearby(id, limit)` | `meters`, `bearing` | The places nearest a place, itself left out. |
+| `reverse(lat, lon, limit)` | `meters`, `bearing` | The places nearest a point. |
+| `within_radius(lat, lon, meters, limit)` | `meters`, `bearing` | The places within a distance of a point. |
+| `admin_at(lat, lon)` | | The admin units holding the point, country first. |
+| `by_iso(code)` | | The country or subdivision with this ISO 3166 code. |
+| `tz_at(lat, lon)` | | The timezone area holding the point; `tz` is the IANA zone. |
+| `tz_offset_at(zone, unix_seconds)` | `seconds`, `dst`, `abbr` | The UTC offset in force at an instant. |
+| `tz_local(zone, year, month, day, hour, minute, second)` | `kind`, `before`, `after` | Whether a wall-clock time is `unique`, in a `gap` or an `overlap`, with its offsets. |
+| `tz_zones()` | `zone` | Every zone the packs' rules hold. |
+| `tz_rules_start(zone)` | `unix` | The earliest instant the zone's rules cover. |
+| `tz_version()` | string | The tzdb release of the rules. |
+| `elevation_at(lat, lon)` | `meters`, `source`, `resolution_m`, `datum` | The terrain height at the point. |
+| `postal_lookup(code, scheme)` | postal | The places a postal code names. |
+| `postal_prefix(input, scheme, limit)` | postal | Codes starting with the input (autocomplete). |
+| `postal_codes_of(id)` | postal | A place's postal codes. |
+| `postal_at(lat, lon)` | postal | The postal codes at a point. |
+
+`limit` is at most 10,000 (`LIMIT_MAX`). The postal columns are `postal`, `scheme`, `code_kind`,
+`valid_from` and `valid_to`.
+
+## Options
+
+`SearchOptions` (every field's zero value is its default):
+
+| Field | Default | What |
+|---|---|---|
+| `focus_lat`, `focus_lon` | none | Prefer places near this point. |
+| `focus_scale_m` | 50 km | The distance at which the focus gain halves (30 points at the focus, 15 one scale away). |
+| `strict` | false | Rank by match tier first (exact, loose, prefix, one edit, substring, two edits, phonetic). |
+
+`OpenOptions`:
+
+| Field | Default | What |
+|---|---|---|
+| `priority` | 0 | A higher one wins where packs disagree. |
+| `verify` | `Lazy` | `Lazy` (each section on first read), `Eager` (all at open) or `Trusted` (never). |
+| `load` | `Map` | `Map` the file, or `Read` it whole into memory. |
+| `components` | all | The components the pack holds, for a pack installed in part. |
+| `languages` | all | The languages whose names and search are read, at most 8. |
+| `outline_level`, `outline_tolerance_m` | all, full | The deepest admin level whose outlines are read, and their simplification. |
+
+## Functions
+
+| Function | What |
+|---|---|
+| `version()` | The library version. |
+| `components()` | The components this build answers. |
+| `distance_m(lat1, lon1, lat2, lon2)` | The great-circle distance in metres. |
+| `fold(text)` | The search fold of a text (as the index sees it). |
+
+## The store
+
+`Store.create(root, repo, assets, trusted_root)`, `Store.open(root)`, then `catalog()`,
+`status(deep)`, `find(engine, query, limit)`, `locate(engine, lat, lon, radius_m)`,
+`refresh(countries)`, `install(packs, options)`, `install_pass(packs, dir, options)`,
+`update(packs)`, `repair(pack)`, `pin(pack, on)`, `remove(pack)`, `damaged()` and `engine()`.
+The long ones return a `Job`: `seq()`, `wait_progress(seq, timeout_ms)`, `done_bytes()`,
+`total_bytes()`, `is_ended()`, `cancel()`, `result()`. See [the store](/docs/concepts/store).
+
+## Error codes
+
+| Code | Value | Meaning |
+|---|--:|---|
+| `InvalidArgument` | 1 | An argument is outside its documented range. |
+| `Cancelled` | 2 | A callback asked to stop. |
+| `Internal` | 3 | A bug inside teigeodata (a panic caught at the boundary). |
+| `Io` | 4 | A file could not be read. |
+| `Corrupt` | 5 | The bytes are not a valid pack, or a section does not match its hash. |
+| `MissingComponent` | 6 | The query needs a component that is not installed. |
+| `Network` | 7 | No mirror answered, or the connection broke. |
+| `Refused` | 8 | The store refused: the catalog did not verify, a pack is not installed or another needs it. |
+
+The HTTP routes are in [HTTP server](/docs/servers/http), the MCP tools in
+[MCP server](/docs/servers/mcp).

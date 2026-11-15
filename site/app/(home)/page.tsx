@@ -81,12 +81,13 @@ from teigeodata.blob import Reader
 engine = teigeodata.Engine()
 engine.open_file("world-np-lite.tgd")
 
-places = Reader(engine.search("Pokhara", 3))
-for name, place_id in zip(places.strings("name"), places.strings("id")):
-    print(name, place_id)
+for place in Reader(engine.search("Pokhara", 2)):
+    print(place["id"], place["name"], place["kind"])
+# tgd:np/1xhb Pokhara settlement
+# tgd:np/1xnr Pokhara admin
 
-zone = Reader(engine.tz_at(27.7172, 85.3240)).strings("tz")[0]
-print(zone)  # Asia/Kathmandu`;
+(area,) = Reader(engine.tz_at(27.7172, 85.3240))
+print(area["tz"])  # Asia/Kathmandu`;
 
 export default function HomePage() {
   return (
@@ -115,12 +116,6 @@ export default function HomePage() {
                 className="rounded-lg bg-fd-primary px-5 py-2.5 text-sm font-medium text-fd-primary-foreground hover:opacity-90"
               >
                 Get started
-              </Link>
-              <Link
-                href="/playground"
-                className="rounded-lg border px-5 py-2.5 text-sm font-medium hover:bg-fd-accent"
-              >
-                Try it in the browser
               </Link>
               <Link href="/docs" className="rounded-lg px-5 py-2.5 text-sm font-medium hover:bg-fd-accent">
                 Read the docs →

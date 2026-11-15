@@ -44,6 +44,8 @@ jobs:
           node-version: 26
           cache: npm
           cache-dependency-path: site/package-lock.json
+      - name: Guides match their generator
+        run: python3 scripts/guides.py --check
       - name: Install
         run: npm ci
       - name: Build

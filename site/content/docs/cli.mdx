@@ -1,0 +1,167 @@
+---
+title: Command line
+description: tgd inspects, verifies, cuts and queries packs, manages the store, and serves packs over HTTP and MCP.
+---
+
+`tgd` is the command line of teigeodata: one static binary that looks inside packs, checks them,
+cuts smaller ones, answers every query in text, JSON, GeoJSON or Nominatim's format, installs and
+updates packs in the store, and serves them over [HTTP](/docs/servers/http) and
+[MCP](/docs/servers/mcp).
+
+<Callout title="Every example on this page ran">
+The commands below are cut from one script, [tour.sh](https://github.com/teispace/teigeodata/blob/main/site/examples/cli/tour.sh),
+which CI runs on the released pack `world-np-lite.tgd` and checks against the output shown.
+</Callout>
+
+## Install
+
+```sh
+cargo install --locked --git https://github.com/teispace/teigeodata --tag v0.3.1 teigeodata-cli
+```
+
+Prebuilt binaries come with the first registry release. `tgd completions zsh` (or `bash`,
+`fish`, `powershell`, `elvish`) prints a completion script.
+
+Every query takes `--pack <file>` (repeat it for several packs, the first wins where they
+disagree). Without one, it answers from the packs installed in the [store](#the-store).
+
+## Look inside a pack
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#inspect</include>
+
+<include lang="text" meta='title="Output"'>../../examples/cli/out/inspect.txt</include>
+
+The full listing goes on with every source's notice, every section with its component and size,
+and the bytes of each component. `tgd verify <pack>` checks the head and every section's hash
+(`--deep` also decodes every value, `--key` checks the signature); `tgd diff <old> <new>` lists
+what changed between two releases, section by section and place by place.
+
+## Search
+
+A name, in any script or spelling. `-k` is how many:
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#search</include>
+
+<include lang="text" meta='title="Output"'>../../examples/cli/out/search.txt</include>
+
+Each line is the name, the kind (and admin level), the point, the ID, the elevation with how it
+was found (`model` from the terrain, `surveyed` from a source), the timezone and the score.
+Write a parent after a comma to rank the places inside it first:
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#search-parent</include>
+
+<include lang="text" meta='title="Output"'>../../examples/cli/out/search-parent.txt</include>
+
+`--focus lat,lon` ranks places near a point first: at the focus a place gains 30 points, and the
+gain halves every `--scale-km` (50 by default). `--strict` ranks by how well the name matched
+before anything else.
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#search-focus</include>
+
+<include lang="text" meta='title="Output"'>../../examples/cli/out/search-focus.txt</include>
+
+## A place by its ID
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#get</include>
+
+<include lang="text" meta='title="Output"'>../../examples/cli/out/get.txt</include>
+
+Every query prints JSON with `--json`: one record per place, nulls where a value is unknown.
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#json</include>
+
+<include lang="json" meta='title="Output"'>../../examples/cli/out/json.txt</include>
+
+## From a point
+
+`reverse` gives the nearest places with their distance and bearing; `inside` marks a place whose
+area holds the point. `--in-country` never crosses a border.
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#reverse</include>
+
+<include lang="text" meta='title="Output"'>../../examples/cli/out/reverse.txt</include>
+
+`near` does the same from a place:
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#near</include>
+
+<include lang="text" meta='title="Output"'>../../examples/cli/out/near.txt</include>
+
+`admin` gives every unit that holds the point, country first:
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#admin</include>
+
+<include lang="text" meta='title="Output"'>../../examples/cli/out/admin.txt</include>
+
+## Timezone and elevation
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#timezone</include>
+
+<include lang="text" meta='title="Output"'>../../examples/cli/out/timezone.txt</include>
+
+`tgd tz` also takes a place ID. The offset is computed from the tzdb rules inside the pack, at
+the current time.
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#elevation</include>
+
+<include lang="text" meta='title="Output"'>../../examples/cli/out/elevation.txt</include>
+
+## GeoJSON and Nominatim
+
+`--geojson` prints a FeatureCollection (RFC 7946) ready for MapLibre, Leaflet or QGIS, with the
+attribution at its top level:
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#geojson</include>
+
+<include lang="json" meta='title="Output"'>../../examples/cli/out/geojson.txt</include>
+
+`--nominatim` prints Nominatim's `json` format, so tools written for Nominatim read the output
+unchanged:
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#nominatim</include>
+
+<include lang="json" meta='title="Output"'>../../examples/cli/out/nominatim.txt</include>
+
+## Cut a smaller pack
+
+`extract` writes a pack of the places in a box (with their ancestors and timezone areas), of some
+components, or both. The new pack is a normal pack: every query works on it.
+
+<include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#extract</include>
+
+<include lang="text" meta='title="Output"'>../../examples/cli/out/extract.txt</include>
+
+`--components point,names` keeps only those components and what they need; with `--bbox`,
+`--lod 3` stores coarser boundaries. `tgd export <pack>` streams every place out, in the order the pack stores
+them.
+
+## Postal codes
+
+`tgd postal 44600` finds the places a code names; `--prefix` completes a partial code;
+`tgd postal <lat> <lon>` gives the codes at a point. Codes are matched with or without
+separators, in any case and in any script's digits.
+
+## The store
+
+The store keeps installed packs and the signed catalog that says which exist. It lives in the
+platform's data directory, or where `--store` or `TEIGEODATA_STORE` says.
+
+| Command | What it does |
+|---|---|
+| `tgd init` | Set up the store: the catalog's mirrors and its trusted root. |
+| `tgd refresh [countries]` | Fetch what changed in the catalog. |
+| `tgd catalog` | List the catalog's packs, offline. |
+| `tgd find <name>` | Find a place by name with the packs that hold it, offline: what to install for "Dubai". |
+| `tgd locate <lat> <lon>` | The countries at a point, with their packs. |
+| `tgd install <packs>` | Install packs and their dependencies; `--components`, `--names` and `--outlines` install a part. |
+| `tgd update` | Update installed packs to the catalog's releases. |
+| `tgd remove`, `tgd pin` | Remove a pack (and what nothing else needs), or keep one when room is made. |
+| `tgd status`, `tgd repair` | The installed packs and their health; fetch what a damaged one lacks. |
+
+The signed catalog goes live with the first catalog release; until then, packs are downloaded
+from the data releases and opened with `--pack`. See [the store](/docs/concepts/store).
+
+## Serve
+
+`tgd serve` answers every query over HTTP, and `tgd mcp` over MCP for AI agents: see
+[HTTP server](/docs/servers/http) and [MCP server](/docs/servers/mcp).
