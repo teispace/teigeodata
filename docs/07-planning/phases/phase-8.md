@@ -159,6 +159,9 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 
 - [ ] The 1.0 API review: every IDL item read once for name, shape and error; changes made
   before the freeze, each through the bindings' `--check`
+- [ ] The format freeze (Q-028): each of the format benchmarks B1–B14 recorded or retired with
+  its reason (D-029), then `FORMAT_MAJOR = 1`, `READER_MAJOR = 1` and `pack-format.md` out of
+  draft, with the fixtures and seeds written again
 - [ ] `docs/06-engineering/semver.md`: what 1.0 promises (Rust API, C ABI, pack format, catalog,
   HTTP and MCP), MSRV and deprecation
 - [ ] `cargo-semver-checks` in `release.yml` from the first tag, beside the ABI gate (D-285)
@@ -194,3 +197,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.1 campaign workflow and coverage gate built | D-331 |
 | 2026-11-15 | 8.2 threat model and unsafe audit done | D-333 |
 | 2026-11-15 | 8.2 server limits done | D-334 |
+| 2026-11-15 | 8.4 gains the format freeze, Q-028 | the format is still major 0 and D-029's benchmarks are not all ticked |
