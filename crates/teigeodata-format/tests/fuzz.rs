@@ -76,3 +76,15 @@ fn column_tables() {
 fn bitmaps() {
     drive(14, iterations(4_000), fuzz::bits);
 }
+
+/// Inputs libFuzzer found failing, kept so they stay fixed.
+#[test]
+fn found_by_libfuzzer() {
+    // Nightly 2026-11-14, `mutate`: "a section kind was given twice". The harness rebuilt an
+    // accepted pack kind by kind, so a kind with two parts looked repeated (fixed in 685495a).
+    fuzz::mutate(&[
+        10, 85, 146, 66, 147, 234, 65, 44, 199, 212, 242, 172, 12, 6, 110, 49, 89, 214, 141, 9, 7,
+        161, 199, 212, 242, 172, 12, 6, 110, 124, 206, 53, 143, 242, 35, 177, 63, 39, 34, 221, 221,
+        127, 213, 39, 221, 221,
+    ]);
+}
