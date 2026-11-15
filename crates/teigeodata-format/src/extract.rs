@@ -11,10 +11,11 @@
 //! level of detail `lod` of the pack's ARCS (0 = full resolution): the levels are the forge's
 //! topology-safe simplification, so no new simplifier runs here. `PLACE_TZ` keeps each kept
 //! row's zone when the zone's row is kept too, and none otherwise (D-151): keep the zone rows
-//! of the kept places to keep their zones. `ISO_CODES` keeps each kept row's code (D-197).
+//! of the kept places to keep their zones. `ISO_CODES` keeps each kept row's code (D-197), and
+//! COMPONENTS each kept row's optional fields, its population among them (D-351).
 //!
 //! Left out, for the caller to add if it needs them: REGION (a slice answers `tz_at` from its
-//! units and `PLACE_TZ`), REDIRECTS, POSTAL, DEM, BLOBS and EXTRA. The manifest is the
+//! units and `PLACE_TZ`), REDIRECTS, POSTAL, DEM and BLOBS. The manifest is the
 //! caller's too: it names the new pack, and must carry the source pack's attribution.
 
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -25,6 +26,7 @@ use alloc::vec::Vec;
 use teigeodata_core::{E6, E7, PlaceId, Point, hilbert};
 
 use crate::arcs::{self, ArcColumns, Arcs};
+use crate::components::{self, Components};
 use crate::elevation::{self, Elevations};
 use crate::hierarchy::{self, Hierarchy};
 use crate::idmap::{self, IdMap};
@@ -218,6 +220,7 @@ pub fn merge(parts: &[Part<'_, '_>], region: &Options) -> Result<Vec<Body>, Erro
     out.extend(m.names_and_search()?);
     out.extend(m.hierarchy()?);
     out.extend(m.iso_codes()?);
+    out.extend(m.components()?);
     out.extend(m.geometry(region)?);
     Ok(out)
 }
@@ -291,6 +294,9 @@ struct Merged<'p, 'a> {
     by_id: BTreeMap<PlaceId, u32>,
     total: u32,
 }
+
+/// One component of a merge's COMPONENTS: its ID, new rows, and each field's values.
+type Built = (u8, Vec<u32>, Vec<(u8, Vec<u32>)>);
 
 /// A name record, owned.
 type OwnedName = (String, NameMeta);
@@ -446,6 +452,95 @@ impl<'a> Merged<'_, 'a> {
         })?;
         let k = u64::from(self.total);
         Ok(place_tz::encode(&zone_of)?.map(|b| (Kind::PLACE_TZ, Encoding::TABLE, k, b)))
+    }
+
+    /// COMPONENTS: every component of every part, each kept row's values from the part that owns
+    /// the row; a field one part has and another lacks reads 0 in the other's rows.
+    fn components(&self) -> Result<Option<Body>, Error> {
+        if !self.any(Kind::COMPONENTS) {
+            return Ok(None);
+        }
+        let opened: Vec<Option<Components<'a>>> = self
+            .open
+            .iter()
+            .map(|o| {
+                o.section(Kind::COMPONENTS)
+                    .as_ref()
+                    .map(Components::open)
+                    .transpose()
+            })
+            .collect::<Result<_, _>>()?;
+        let mut fields_of: BTreeMap<u8, BTreeSet<u8>> = BTreeMap::new();
+        for c in opened.iter().flatten() {
+            for id in c.ids() {
+                if let Some(comp) = c.component(id) {
+                    fields_of.entry(id).or_default().extend(comp.fields());
+                }
+            }
+        }
+        let mut built: Vec<Built> = Vec::new();
+        for (&id, fields) in &fields_of {
+            // (new row, part, index among the part's present rows), in new-row order.
+            let mut at: Vec<(u32, usize, usize)> = Vec::new();
+            for (p, (o, c)) in self.open.iter().zip(&opened).enumerate() {
+                let Some(comp) = c.as_ref().and_then(|c| c.component(id)) else {
+                    continue;
+                };
+                for &r in &o.own {
+                    if let Some(i) = comp.index(r as usize) {
+                        let new = o.own_of.get(r as usize).copied().unwrap_or(u32::MAX);
+                        at.push((new, p, i));
+                    }
+                }
+            }
+            if at.is_empty() {
+                continue;
+            }
+            at.sort_unstable();
+            let mut columns = Vec::with_capacity(fields.len());
+            for &f in fields {
+                let parts: Vec<Option<components::Field<'a>>> = opened
+                    .iter()
+                    .map(|c| {
+                        c.as_ref()
+                            .and_then(|c| c.component(id))
+                            .and_then(|c| c.field(f))
+                    })
+                    .collect();
+                let values = at
+                    .iter()
+                    .map(|&(_, p, i)| {
+                        parts
+                            .get(p)
+                            .copied()
+                            .flatten()
+                            .and_then(|v| v.values().get(i))
+                            .unwrap_or(0)
+                    })
+                    .collect();
+                columns.push((f, values));
+            }
+            built.push((id, at.iter().map(|x| x.0).collect(), columns));
+        }
+        if built.is_empty() {
+            return Ok(None);
+        }
+        let field_refs: Vec<Vec<(u8, &[u32])>> = built
+            .iter()
+            .map(|(_, _, fs)| fs.iter().map(|(f, v)| (*f, v.as_slice())).collect())
+            .collect();
+        let comps: Vec<components::ComponentColumns<'_>> = built
+            .iter()
+            .zip(&field_refs)
+            .map(|((id, rows, _), fields)| components::ComponentColumns {
+                id: *id,
+                rows,
+                fields,
+            })
+            .collect();
+        let k = u64::from(self.total);
+        let body = components::encode(self.total as usize, &comps)?;
+        Ok(Some((Kind::COMPONENTS, Encoding::TABLE, k, body)))
     }
 
     /// `ISO_CODES`: each kept row's code, from the part that owns the row.

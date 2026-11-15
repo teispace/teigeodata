@@ -51,6 +51,21 @@ struct Row {
 }
 
 impl Outcome {
+    /// The keys of the units whose population is still the modelled one (D-351): the grid's
+    /// value replaced or filled the stated one, and nothing after (a correction) changed it.
+    pub(super) fn modelled(&self, places: &[Place]) -> std::collections::BTreeSet<String> {
+        let now: HashMap<&str, Option<i64>> = places
+            .iter()
+            .map(|p| (p.key.as_str(), p.population))
+            .collect();
+        self.rows
+            .iter()
+            .filter(|r| r.kept != r.stated && r.kept == Some(r.modelled))
+            .filter(|r| now.get(r.key.as_str()).copied().flatten() == r.kept)
+            .map(|r| r.key.clone())
+            .collect()
+    }
+
     /// Writes `population-<build>.tsv` beside the pack (nothing without a grid).
     pub(super) fn write(&self, dir: &Path, build: &str) -> Result<(), String> {
         if self.rows.is_empty() {
@@ -241,7 +256,7 @@ fn pct(v: &mut [f64], q: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Modelled, fill};
+    use super::{Modelled, Outcome, fill};
     use crate::build::{Place, PlaceName};
     use teigeodata_core::PlaceKind;
 
@@ -293,5 +308,15 @@ mod tests {
         // none; e at 1.43×: stated.
         assert_eq!(pops, [Some(110), Some(42), Some(100), None, Some(70)]);
         assert_eq!(rows.len(), 5);
+        // b and c keep the grid's count (D-351); a correction then states c's, so only b is
+        // modelled.
+        let outcome = Outcome {
+            report: String::new(),
+            rows,
+        };
+        let keys = |p: &[Place]| outcome.modelled(p).into_iter().collect::<Vec<_>>();
+        assert_eq!(keys(&places), ["b", "c"]);
+        places[2].population = Some(950);
+        assert_eq!(keys(&places), ["b"]);
     }
 }

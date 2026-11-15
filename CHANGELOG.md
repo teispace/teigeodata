@@ -17,6 +17,12 @@ renamed the last parameters that broke the naming rule (see **Breaking**).
 
 ### Added
 
+- Each place's population (D-351): packs carry it in COMPONENTS (component 1, a count and
+  whether a source stated it or a population grid modelled it); `Engine::population` (feature
+  `extra`, on by default) returns `Population { people, source }`; every place result has the
+  nullable columns `population` and `population_kind` in every language, and `tgd`, the HTTP
+  server and MCP print `population` and `population_kind`. `extract::merge` keeps every
+  component of COMPONENTS.
 - `teigeodata-engine` feature `fuzz`: `fuzz::engine`, every query on a pack with edited
   sections whose hashes hold, run nightly by libFuzzer (`fuzz/fuzz_targets/engine.rs`) and on
   seeded inputs by `cargo test` (D-331); `teigeodata_format::fuzz::edit_section` builds such

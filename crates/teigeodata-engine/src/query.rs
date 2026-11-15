@@ -11,6 +11,8 @@ use core::ops::{ControlFlow, Range};
 
 use teigeodata_core::{E6, E7, PlaceId, PlaceKind, Point};
 use teigeodata_format::Kind;
+#[cfg(feature = "extra")]
+use teigeodata_format::components::PopulationSource;
 #[cfg(feature = "elevation")]
 use teigeodata_format::elevation::HeightSource;
 use teigeodata_format::idmap::IdMap;
@@ -43,6 +45,18 @@ pub struct Place {
     pub admin_level: u8,
     /// Its flag bits (`places::FLAG_FORMER`).
     pub flags: u32,
+}
+
+/// A place's number of people, from [`Engine::population`] (D-351).
+#[cfg(feature = "extra")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Population {
+    /// The number of people.
+    pub people: u32,
+    /// Whether a source stated it or a population grid modelled it; `None` when the pack does
+    /// not say.
+    pub source: Option<PopulationSource>,
 }
 
 /// A terrain height and where it came from, from [`Engine::elevation_at`] (D-195).
@@ -556,6 +570,25 @@ impl Engine {
             .heights
             .as_ref()
             .and_then(|h| h.source(place.row as usize)))
+    }
+
+    /// The number of people of `place` and where it came from (D-351), from its layer's
+    /// `extra` component; `None` where it is unknown or the layer has no populations.
+    ///
+    /// # Errors
+    /// [`Error::MissingComponent`] if the layer has populations but they are not installed;
+    /// [`Error::Integrity`] if they are corrupt.
+    #[cfg(feature = "extra")]
+    pub fn population(&self, place: &Place) -> Result<Option<Population>, Error> {
+        let Some(l) = self.layer(place.layer) else {
+            return Ok(None);
+        };
+        l.ensure(Kind::COMPONENTS)?;
+        Ok(l.views()
+            .populations
+            .as_ref()
+            .and_then(|p| p.get(place.row as usize))
+            .map(|(people, source)| Population { people, source }))
     }
 
     /// The canonical name of `place` (its first name record), decoded into `buf`.

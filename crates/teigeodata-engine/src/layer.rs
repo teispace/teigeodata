@@ -21,6 +21,8 @@ use teigeodata_format::arcs::ArcChunks;
 use teigeodata_format::arcs::Arcs;
 use teigeodata_format::blocks::{BLOCK, Blocks};
 use teigeodata_format::component::{Component, Components, Parts};
+#[cfg(feature = "extra")]
+use teigeodata_format::components::{Components as Optional, Populations};
 #[cfg(any(feature = "dem", feature = "dem-coarse"))]
 use teigeodata_format::dem::Dem;
 #[cfg(feature = "elevation")]
@@ -180,6 +182,8 @@ const NOT_BUILT: &[Component] = &[
     Component::Postal,
     #[cfg(not(feature = "substring"))]
     Component::Substring,
+    #[cfg(not(feature = "extra"))]
+    Component::Extra,
 ];
 
 /// The components this build has readers for (D-137): every component but those whose Cargo
@@ -311,6 +315,9 @@ pub(crate) struct Views<'a> {
     /// Heights, one per PLACES row (D-133); absent in a pack without them.
     #[cfg(feature = "elevation")]
     pub(crate) heights: Option<Elevations<'a>>,
+    /// Each place's number of people (D-351); absent in a pack without them.
+    #[cfg(feature = "extra")]
+    pub(crate) populations: Option<Populations<'a>>,
     /// Each place's timezone area (D-134); absent in a pack without them.
     #[cfg(feature = "timezone")]
     pub(crate) place_tz: Option<PlaceTz<'a>>,
@@ -408,10 +415,18 @@ impl<'a> Views<'a> {
         #[cfg(feature = "timezone")]
         let place_tz = get(Kind::PLACE_TZ).map(|s| PlaceTz::open(&s)).transpose()?;
         // Per-place sections are one row per PLACES row, or the layer is refused.
-        #[cfg(any(feature = "elevation", feature = "timezone"))]
+        #[cfg(any(feature = "elevation", feature = "timezone", feature = "extra"))]
         let rows = places.map(|p| p.len());
         #[cfg(feature = "elevation")]
         one_per_place(Kind::ELEVATION, heights.map(|h| h.len()), rows)?;
+        #[cfg(feature = "extra")]
+        let optional = get(Kind::COMPONENTS)
+            .map(|s| Optional::open(&s))
+            .transpose()?;
+        #[cfg(feature = "extra")]
+        one_per_place(Kind::COMPONENTS, optional.map(|c| c.rows()), rows)?;
+        #[cfg(feature = "extra")]
+        let populations = optional.as_ref().and_then(Populations::of);
         #[cfg(feature = "timezone")]
         one_per_place(Kind::PLACE_TZ, place_tz.map(|t| t.len()), rows)?;
         #[cfg(feature = "admin")]
@@ -489,6 +504,8 @@ impl<'a> Views<'a> {
             places,
             #[cfg(feature = "elevation")]
             heights,
+            #[cfg(feature = "extra")]
+            populations,
             #[cfg(feature = "timezone")]
             place_tz,
             #[cfg(feature = "admin")]
@@ -590,7 +607,7 @@ fn missing(pack: &Pack<'_>, installed: Option<Components>) -> Result<Components,
 }
 
 /// Refuses a per-place section (`len` rows) that is not one row per PLACES row (`rows`).
-#[cfg(any(feature = "elevation", feature = "timezone"))]
+#[cfg(any(feature = "elevation", feature = "timezone", feature = "extra"))]
 fn one_per_place(kind: Kind, len: Option<usize>, rows: Option<usize>) -> Result<(), Error> {
     if len.is_some() && len != rows {
         return Err(Error::Format(teigeodata_format::Error::Payload {

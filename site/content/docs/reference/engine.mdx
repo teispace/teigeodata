@@ -7,7 +7,7 @@ description: "Open packs answering place queries."
 
 Open packs answering place queries. Every method takes `&self`: one engine answers from any number of threads at once, and adding a pack publishes a new snapshot while queries go on.
 
-Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search and `meters` and `bearing` for a reverse lookup.
+Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`, `population` and `population_kind` (`stated` or `modelled`; absent values are null), plus `score` for a search and `meters` and `bearing` for a reverse lookup.
 
 Every query returns a [result blob](/docs/concepts/results); read it with your language's
 `Reader`. Pick a language in any tab and every tab on the site follows.

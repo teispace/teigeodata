@@ -538,6 +538,7 @@ fn write_part(
         stated_tz: input.stated_tz,
         iso: input.iso,
         tz_rules: input.tz_rules,
+        modelled_population: input.modelled_population,
     };
     let (_, built) = pack::write(&part_input)?;
     let line = format!(

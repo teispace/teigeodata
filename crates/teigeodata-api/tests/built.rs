@@ -57,6 +57,7 @@ fn components_names_what_the_build_has() {
         ("dem", cfg!(feature = "dem")),
         ("tz-rules", cfg!(feature = "tz-rules")),
         ("substring", cfg!(feature = "substring")),
+        ("extra", cfg!(feature = "extra")),
     ] {
         assert_eq!(built.contains(&component), on, "{component} in {list}");
     }

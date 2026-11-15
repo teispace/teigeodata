@@ -8,6 +8,7 @@ use std::ops::ControlFlow;
 use std::path::Path;
 
 use teigeodata_core::{E6, E7, IsoCode, Namespace, PlaceId, PlaceKind, Point, hilbert};
+use teigeodata_format::components::{self, PopulationSource};
 use teigeodata_format::elevation::Elevations as Heights;
 use teigeodata_format::hierarchy::{self, Hierarchy};
 use teigeodata_format::idmap::{self, IdMap};
@@ -71,6 +72,9 @@ pub(super) struct Input<'a> {
     pub(super) iso: Option<&'a super::iso::Iso>,
     /// The timezones' compiled rules (D-196); a pack with timezone areas needs them.
     pub(super) tz_rules: Option<&'a super::tz_rules::Compiled>,
+    /// The keys of the places whose population a grid modelled (D-123, D-351); every other
+    /// population is a source's.
+    pub(super) modelled_population: &'a BTreeSet<String>,
 }
 
 /// The search importance of a place (D-052, D-124, D-266), from what every source has: kind,
@@ -468,6 +472,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
     ];
     let iso_codes = iso_section(input, &rows, &mut sections)?;
     terrain(input, heights_body, n, &mut sections)?;
+    let people = population_section(&rows, input.modelled_population, &mut sections)?;
     zone_sections(input, &row_of, &points, &mut sections)?;
     let mut lod_lines = Vec::new();
     if let Some(g) = input.geometry {
@@ -498,6 +503,7 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
         &mut report,
     )?;
     verify_iso(&bytes, &iso_codes, &mut report)?;
+    verify_populations(&bytes, &people, &mut report)?;
     crate::make::write_atomic(input.file, &bytes)?;
     if let (Some(assigned), Some(file)) = (&assigned, input.ids_file) {
         crate::make::write_atomic(file, assigned.registry.render().as_bytes())?;
@@ -510,7 +516,6 @@ pub(super) fn write(input: &Input<'_>) -> Result<(String, Built), String> {
             lod_lines.join("; ")
         );
     }
-    let _ = writeln!(report, "\n| Section | Bytes |\n|---|---:|");
     sections_table(&sections, &parts, &mut report);
     let _ = writeln!(
         report,
@@ -649,6 +654,7 @@ fn ids_report(a: &Assignment, ids_file: &Path, input: &Input<'_>, report: &mut S
 
 /// The summary's table of section sizes, parts listed after their base (ADR-0040).
 fn sections_table(sections: &[Body], parts: &[PartBody], report: &mut String) {
+    let _ = writeln!(report, "\n| Section | Bytes |\n|---|---:|");
     let mut listed: Vec<(Kind, Part, usize)> = sections
         .iter()
         .map(|s| (s.0, Part::BASE, s.3.len()))
@@ -1362,6 +1368,85 @@ const TZ_DIFFER_MAX: f64 = 0.001;
 
 /// `ISO_CODES` read back (D-197): `check`, and every coded row reads back its code and no other
 /// row has one.
+/// Each row's population and its source (D-351): a current place's count above 0 that fits
+/// `u32`, modelled where `modelled` holds its key. A former unit's count is of a unit that no
+/// longer exists, so it is left out, as it is from importance.
+pub(super) fn populations(
+    rows: &[&Place],
+    modelled: &BTreeSet<String>,
+) -> Vec<Option<(u32, PopulationSource)>> {
+    rows.iter()
+        .map(|p| {
+            let n = p.population.and_then(|n| u32::try_from(n).ok())?;
+            if n == 0 || p.flags & places::FLAG_FORMER != 0 {
+                return None;
+            }
+            let source = if modelled.contains(&p.key) {
+                PopulationSource::Modelled
+            } else {
+                PopulationSource::Stated
+            };
+            Some((n, source))
+        })
+        .collect()
+}
+
+/// COMPONENTS with the rows' populations ([`populations`]), added to `sections` when a row has
+/// one; returns them, for G-pop.
+fn population_section(
+    rows: &[&Place],
+    modelled: &BTreeSet<String>,
+    sections: &mut Vec<Body>,
+) -> Result<Vec<Option<(u32, PopulationSource)>>, String> {
+    let people = populations(rows, modelled);
+    if let Some(body) = components::encode_populations(&people).map_err(|e| e.to_string())? {
+        sections.push((Kind::COMPONENTS, Encoding::TABLE, rows.len() as u64, body));
+    }
+    Ok(people)
+}
+
+/// COMPONENTS read back (G-pop, D-351): every row's population and source are the ones
+/// written, and no row without one has one.
+pub(super) fn verify_populations(
+    bytes: &[u8],
+    want: &[Option<(u32, PopulationSource)>],
+    report: &mut String,
+) -> Result<(), String> {
+    let err = |e: teigeodata_format::Error| e.to_string();
+    let pack = Pack::open(bytes).map_err(err)?;
+    let with = want.iter().flatten().count();
+    let Some(section) = pack.section(Kind::COMPONENTS) else {
+        return if with == 0 {
+            Ok(())
+        } else {
+            Err("no COMPONENTS section".into())
+        };
+    };
+    let c = components::Components::open(&section).map_err(err)?;
+    c.check().map_err(err)?;
+    if c.rows() != want.len() {
+        return Err("COMPONENTS is not one row per place".into());
+    }
+    let read = components::Populations::of(&c).ok_or("COMPONENTS has no population")?;
+    for (row, w) in want.iter().enumerate() {
+        if read.get(row) != w.map(|(n, s)| (n, Some(s))) {
+            return Err(format!("row {row}: population {w:?} does not read back"));
+        }
+    }
+    let modelled = want
+        .iter()
+        .flatten()
+        .filter(|p| p.1 == PopulationSource::Modelled)
+        .count();
+    let _ = writeln!(
+        report,
+        "\nPopulation (G-pop, D-351): {with} places with a population ({} stated, {modelled} modelled), each read back; {} bytes.",
+        with - modelled,
+        section.bytes().len()
+    );
+    Ok(())
+}
+
 fn verify_iso(bytes: &[u8], want: &[(u32, IsoCode)], report: &mut String) -> Result<(), String> {
     let err = |e: teigeodata_format::Error| e.to_string();
     let pack = Pack::open(bytes).map_err(err)?;
@@ -1628,7 +1713,9 @@ mod tests {
     use crate::build::Place;
     use std::collections::{BTreeMap, BTreeSet};
     use teigeodata_core::PlaceKind;
+    use teigeodata_format::components;
     use teigeodata_format::places;
+    use teigeodata_format::{Encoding, Kind, Writer};
 
     fn place(kind: PlaceKind, admin_level: u8, rank: u8, population: Option<i64>) -> Place {
         Place {
@@ -1643,6 +1730,56 @@ mod tests {
             parent: None,
             sources: Vec::new(),
         }
+    }
+
+    #[test]
+    fn populations_keep_current_counts_and_mark_the_modelled_ones() {
+        use teigeodata_format::components::PopulationSource::{Modelled, Stated};
+        let keyed = |key: &str, population, flags| {
+            let mut p = place(PlaceKind::Admin, 3, 0, population);
+            p.key = key.into();
+            p.flags = flags;
+            p
+        };
+        let list = [
+            keyed("stated", Some(1_200), 0),
+            keyed("modelled", Some(800), 0),
+            keyed("none", None, 0),
+            keyed("zero", Some(0), 0),
+            keyed("former", Some(5_000), places::FLAG_FORMER),
+            keyed("too-many", Some(i64::from(u32::MAX) + 1), 0),
+        ];
+        let rows: Vec<&Place> = list.iter().collect();
+        let modelled: BTreeSet<String> = ["modelled".to_string()].into();
+        let got = super::populations(&rows, &modelled);
+        assert_eq!(
+            got,
+            [
+                Some((1_200, Stated)),
+                Some((800, Modelled)),
+                None,
+                None,
+                None,
+                None
+            ]
+        );
+        // Written, read back, and a changed one refused.
+        let body = components::encode_populations(&got).unwrap().unwrap();
+        let mut w = Writer::new("np", "places", "2026.11.0").unwrap();
+        w.section_bytes(Kind::COMPONENTS, Encoding::TABLE, got.len() as u64, &body)
+            .unwrap();
+        let bytes = w.layout(false).unwrap().assemble(&[&body]).unwrap();
+        let mut report = String::new();
+        super::verify_populations(&bytes, &got, &mut report).unwrap();
+        assert!(
+            report.contains("2 places with a population (1 stated, 1 modelled)"),
+            "{report}"
+        );
+        let mut other = got.clone();
+        other[0] = Some((1_201, Stated));
+        assert!(super::verify_populations(&bytes, &other, &mut report).is_err());
+        other[0] = None;
+        assert!(super::verify_populations(&bytes, &other, &mut report).is_err());
     }
 
     #[test]

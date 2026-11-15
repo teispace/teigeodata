@@ -259,8 +259,11 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 - [x] Phase 3.7: the lite build from clean-room sources only, and Nepal's `ACCURACY.md` against
   held-out truth (Q-017): both builds' pages on the CI-built packs (D-339, D-348)
 - [x] Phase 3.8: M3 met (D-350)
+- [x] Each place's population in the packs and every API (D-351): COMPONENTS component 1, the
+  forge writes and reads it back (G-pop), the engine, the API columns `population` and
+  `population_kind`, `tgd` and the servers; found missing while staging the data release
 - [ ] Nepal's main and lite packs as a data release, through the catalog, with their accuracy
-  summary
+  summary: rebuilt in CI with populations
 - [x] A dry run of `release.yml` end to end at the release commit: run 43719097976 on
   `chore/release-1.0.0` (the version bumped to 1.0.0 with `cargo xtask bump`, D-346), 53 jobs
   green, the ABI and Rust API gates clean. Rerun on the branch once it is rebased for the
@@ -293,3 +296,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.3: suite C built (`tools/competitive`, `competitive.yml`); the parse change re-measured in its final form | D-340 |
 | 2026-11-15 | 8.4: the API review done, two parameters renamed; the CHANGELOG's 1.0 section | D-341 |
 | 2026-11-15 | 8.4: the docs audit done; the guides spell each language's own names | D-343 |
+| 2026-11-15 | 8.5: populations shipped before the data release (the schema promised them; no pack had them) | D-351 |

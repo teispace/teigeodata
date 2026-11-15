@@ -94,6 +94,7 @@ fn of_place(e: &Engine, p: &Place, s: &mut Scratch, w: &mut Work) {
     let _ = e.nearby(p, 5, s, &mut w.near);
     let _ = e.elevation(p);
     let _ = e.elevation_source(p);
+    let _ = e.population(p);
     let _ = e.tz_of(p);
     let _ = e.zone_name(p);
     let _ = e.iso_code(p);

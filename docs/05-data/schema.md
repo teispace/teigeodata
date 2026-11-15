@@ -98,8 +98,8 @@ Every losing spelling is kept as an `alt` name, so search still finds it.
 
 | Field | Type | Notes |
 |---|---|---|
-| `population` | u32 | With `population_year` and `population_source`. Census values beat estimates |
-| `population_kind` | enum | `census`, `estimate`, `modelled` |
+| `population` | u32 | The number of people of a current place; null where unknown and for a former unit (D-351) |
+| `population_kind` | enum | `stated` (a source's count: a census or an estimate, as the source gives it) or `modelled` (a population grid summed over an admin unit, D-123). No year in v1: most sources state none ([note](../02-research/notes/population-field.md)) |
 | `importance` | u8 | Ranking score for search (population, admin level, links); documented formula |
 | `wikipedia` | map lang → title | Optional |
 
@@ -120,7 +120,7 @@ For each field: `source` (adapter ID), `source_version`, `licence_class` (as in
 | `boundaries` | geometry per level of detail | off; chosen per LOD |
 | `timezone` | timezone | on |
 | `postal` | postal records | on where data exists |
-| `population` | population fields, importance | on |
+| `extra` | `population`, `population_kind` (COMPONENTS component 1, D-351); importance lives in `search` | on |
 | `external` | `ext` cross-references, Wikipedia | off |
 | `provenance` | per-field provenance | off; on in the full build |
 

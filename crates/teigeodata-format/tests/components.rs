@@ -338,3 +338,43 @@ fn mutated_payloads_never_panic() {
         });
     }
 }
+
+#[test]
+fn populations_round_trip_with_their_source() {
+    use components::{PEOPLE, PEOPLE_SOURCE, POPULATION, PopulationSource, Populations};
+    let (stated, modelled) = (PopulationSource::Stated, PopulationSource::Modelled);
+    // Sparse (sorted rows), dense (a bitmap) and every row (no presence column).
+    for every in [97_usize, 3, 1] {
+        let n = 1000;
+        let people: Vec<Option<(u32, PopulationSource)>> = (0..n)
+            .map(|r| {
+                let s = if r % 2 == 0 { stated } else { modelled };
+                (r % every == 0).then_some((r as u32 * 1_000_003 % 1_400_000_000, s))
+            })
+            .collect();
+        let body = components::encode_populations(&people).unwrap().unwrap();
+        with_view(n, &body, |c| {
+            let c = c.unwrap();
+            c.check().unwrap();
+            let comp = c.component(POPULATION).unwrap();
+            assert_eq!(comp.fields().collect::<Vec<_>>(), [PEOPLE, PEOPLE_SOURCE]);
+            let p = Populations::of(&c).unwrap();
+            for (r, want) in people.iter().enumerate() {
+                assert_eq!(p.get(r), want.map(|(n, s)| (n, Some(s))), "row {r}");
+            }
+            assert_eq!(p.get(n), None);
+        });
+    }
+    // No row with a population writes no section.
+    assert!(
+        components::encode_populations(&[None, None])
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(PopulationSource::from_code(0), None);
+    assert_eq!(PopulationSource::from_code(3), None);
+    for s in [stated, modelled] {
+        assert_eq!(PopulationSource::from_code(s.code()), Some(s));
+    }
+    assert_eq!((stated.name(), modelled.name()), ("stated", "modelled"));
+}

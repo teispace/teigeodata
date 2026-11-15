@@ -344,8 +344,9 @@ impl OpenOptions {
 /// while queries go on.
 ///
 /// Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`,
-/// `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search
-/// and `meters` and `bearing` for a reverse lookup.
+/// `elevation`, `parent`, `tz`, `iso`, `population` and `population_kind` (`stated` or
+/// `modelled`; absent values are null), plus `score` for a search and `meters` and `bearing`
+/// for a reverse lookup.
 pub struct Engine {
     shared: Shared,
 }

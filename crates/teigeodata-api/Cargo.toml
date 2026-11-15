@@ -39,6 +39,7 @@ components = [
     "tz-rules",
     "postal",
     "substring",
+    "extra",
 ]
 elevation = ["teigeodata-engine/elevation"]
 admin = ["teigeodata-engine/admin"]
@@ -53,6 +54,7 @@ dem-coarse = ["teigeodata-engine/dem-coarse"]
 tz-rules = ["teigeodata-engine/tz-rules"]
 postal = ["teigeodata-engine/postal"]
 substring = ["teigeodata-engine/substring"]
+extra = ["teigeodata-engine/extra"]
 
 # The store (`Store`, `Job`): the signed catalog, installs over HTTPS and the journal. Its
 # HTTP and TLS stack is most of the library's size: the C ABI is 949,456 B (467 KB gzipped)

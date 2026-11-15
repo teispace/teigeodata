@@ -4,7 +4,8 @@
 //!
 //! - **Native** (`--json`, NDJSON): `id`, `name`, `kind`, `admin_level`, `lat`, `lon`,
 //!   `elevation` (m), `elevation_source` (`surveyed` or `model`, when stated), `parent` (ID), `timezone` (its area's name), `iso_code` (ISO 3166, a
-//!   country's or unit's, only when it has one, D-197), and for a query `meters` (distance),
+//!   country's or unit's, only when it has one, D-197), `population` and `population_kind`
+//!   (`stated` or `modelled`, D-351; only when known), and for a query `meters` (distance),
 //!   `bearing` (degrees clockwise from north, from the place to the point asked about) and
 //!   `inside` (whether the point is in a country's or unit's outline; `reverse`, TG-19), or
 //!   `score` (search).
@@ -24,7 +25,9 @@ use std::io::{self, Write};
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value, json};
 use teigeodata_core::{IsoCode, PlaceId, PlaceKind};
-use teigeodata_engine::{Engine, Error, Height, HeightSource, Layer, LayerId, Place, PostalCode};
+use teigeodata_engine::{
+    Engine, Error, Height, HeightSource, Layer, LayerId, Place, PopulationSource, PostalCode,
+};
 
 /// Why writing an answer failed.
 #[derive(Debug)]
@@ -116,6 +119,13 @@ pub struct Record<'a> {
     /// Its ISO 3166 code, when it has one (D-197).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub iso_code: Option<Shown<IsoCode>>,
+    /// Its number of people, when known (D-351).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub population: Option<u32>,
+    /// Where the number came from: `stated` (a source's count) or `modelled` (a population
+    /// grid, D-123).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub population_kind: Option<&'static str>,
     /// Distance from the point asked about, metres (one decimal).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meters: Option<f64>,
@@ -270,6 +280,7 @@ pub fn record<'b>(
         Some(z) => installed(engine.name(&z, &mut bufs.tz))?,
         None => None,
     };
+    let people = installed(engine.population(place))?;
     Ok(Record {
         id: Shown(place.id),
         name: installed(engine.name(place, &mut bufs.name))?,
@@ -282,6 +293,8 @@ pub fn record<'b>(
         parent,
         timezone,
         iso_code: installed(engine.iso_code(place))?.map(Shown),
+        population: people.map(|p| p.people),
+        population_kind: people.and_then(|p| p.source).map(PopulationSource::name),
         meters: item.meters.map(|m| (m * 10.0).round() / 10.0),
         bearing: item.bearing.map(|b| (b * 10.0).round() / 10.0),
         inside: item.inside,
@@ -496,6 +509,12 @@ fn text(out: &mut dyn Write, r: &Record<'_>) -> Result<(), OutputError> {
     }
     if let Some(t) = r.timezone {
         write!(out, "  {t}")?;
+    }
+    if let Some(n) = r.population {
+        write!(out, "  {n} people")?;
+        if let Some(k) = r.population_kind {
+            write!(out, " ({k})")?;
+        }
     }
     if let Some(m) = r.meters {
         write!(out, "  {m} m away")?;

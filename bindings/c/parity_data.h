@@ -73,8 +73,8 @@
 #define TGP_ENGINE_CHILDREN_IDS_5 "tgd:np/qz1beh"
 #define TGP_ENGINE_CHILDREN_IDS_6 "tgd:np/vasbex"
 #define TGP_ENGINE_CHILDREN_IDS_7 "tgd:np/y02ha8"
-#define TGP_ENGINE_COLUMNS_COUNT 10
-#define TGP_ENGINE_COLUMNS_ITEMS "id", "name", "kind", "level", "lat", "lon", "elevation", "parent", "tz", "iso"
+#define TGP_ENGINE_COLUMNS_COUNT 12
+#define TGP_ENGINE_COLUMNS_ITEMS "id", "name", "kind", "level", "lat", "lon", "elevation", "parent", "tz", "iso", "population", "population_kind"
 #define TGP_ENGINE_COLUMNS_0 "id"
 #define TGP_ENGINE_COLUMNS_1 "name"
 #define TGP_ENGINE_COLUMNS_2 "kind"
@@ -85,6 +85,8 @@
 #define TGP_ENGINE_COLUMNS_7 "parent"
 #define TGP_ENGINE_COLUMNS_8 "tz"
 #define TGP_ENGINE_COLUMNS_9 "iso"
+#define TGP_ENGINE_COLUMNS_10 "population"
+#define TGP_ENGINE_COLUMNS_11 "population_kind"
 #define TGP_ENGINE_DISTANCE_BEARING 106.74628026303373
 #define TGP_ENGINE_DISTANCE_FROM "tgd:np/18n8a6"
 #define TGP_ENGINE_DISTANCE_METERS 157883.1040944845
@@ -100,6 +102,8 @@
 #define TGP_ENGINE_GET_LAT 28.0
 #define TGP_ENGINE_GET_LON 84.0
 #define TGP_ENGINE_GET_NAME "Synthland"
+#define TGP_ENGINE_GET_POPULATION 29164578
+#define TGP_ENGINE_GET_POPULATION_KIND "stated"
 #define TGP_ENGINE_NEARBY_ID "tgd:np/sx2ze9"
 #define TGP_ENGINE_NEARBY_IDS_COUNT 2
 #define TGP_ENGINE_NEARBY_IDS_ITEMS "tgd:np/kv9ac7", "tgd:np/6xhf5q"
@@ -110,7 +114,7 @@
 #define TGP_ENGINE_OPEN_WITH_BAD_OUTLINE_LEVEL 256
 #define TGP_ENGINE_OPEN_WITH_BAD_VERIFY 99
 #define TGP_ENGINE_OPEN_WITH_COMPONENTS "point"
-#define TGP_ENGINE_OPEN_WITH_CORRUPT_AT 173392
+#define TGP_ENGINE_OPEN_WITH_CORRUPT_AT 174032
 #define TGP_ENGINE_OPEN_WITH_LANGUAGES "en, ne"
 #define TGP_ENGINE_PARENT_ID "tgd:np/avwsr1"
 #define TGP_ENGINE_PARENT_IDS_COUNT 1

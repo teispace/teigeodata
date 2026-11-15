@@ -270,6 +270,132 @@ impl<'a> Field<'a> {
     }
 }
 
+impl Component<'_> {
+    /// The field numbers present, increasing (presence left out).
+    pub fn fields(&self) -> impl Iterator<Item = u8> + '_ {
+        let id = self.id;
+        self.table
+            .ids()
+            .map(split)
+            .filter(move |&(c, f)| c == id && f != PRESENCE)
+            .map(|(_, f)| f)
+    }
+}
+
+/// Component 1, `population` (D-351): the number of people of a place.
+pub const POPULATION: u8 = 1;
+/// Field 1 of [`POPULATION`]: the number of people.
+pub const PEOPLE: u8 = 1;
+/// Field 2 of [`POPULATION`]: where the number came from, a [`PopulationSource`] code (0:
+/// unstated).
+pub const PEOPLE_SOURCE: u8 = 2;
+
+/// Where a place's number of people came from (D-351).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+#[non_exhaustive]
+pub enum PopulationSource {
+    /// Stated: a source's count for the place (a census or an estimate, as the source gives
+    /// it), kept because the population grid agrees with it within a factor of 1.5 where the
+    /// place is an admin unit (D-123).
+    Stated = 1,
+    /// Modelled: a population grid summed over the unit (D-123).
+    Modelled = 2,
+}
+
+impl PopulationSource {
+    /// The stored code.
+    #[must_use]
+    pub const fn code(self) -> u32 {
+        self as u32
+    }
+
+    /// The source of a stored code; `None` for 0 (unstated) and unknown codes.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Option<Self> {
+        match code {
+            1 => Some(Self::Stated),
+            2 => Some(Self::Modelled),
+            _ => None,
+        }
+    }
+
+    /// Its name, as reports and bindings spell it.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Stated => "stated",
+            Self::Modelled => "modelled",
+        }
+    }
+}
+
+/// The [`POPULATION`] component of an open COMPONENTS section.
+#[derive(Clone, Copy, Debug)]
+pub struct Populations<'a> {
+    people: Field<'a>,
+    source: Option<Field<'a>>,
+}
+
+impl<'a> Populations<'a> {
+    /// The population component of `components`; `None` if it has none, or the component has no
+    /// [`PEOPLE`] field.
+    #[must_use]
+    pub fn of(components: &Components<'a>) -> Option<Self> {
+        let c = components.component(POPULATION)?;
+        Some(Self {
+            people: c.field(PEOPLE)?,
+            source: c.field(PEOPLE_SOURCE),
+        })
+    }
+
+    /// The number of people of `row`, and where it came from; `None` if unknown.
+    #[must_use]
+    pub fn get(&self, row: usize) -> Option<(u32, Option<PopulationSource>)> {
+        let n = self.people.get(row)?;
+        let source = self
+            .source
+            .and_then(|s| s.get(row))
+            .and_then(PopulationSource::from_code);
+        Some((n, source))
+    }
+}
+
+/// A COMPONENTS payload holding only [`POPULATION`], one entry per row (feature `write`);
+/// `None` when no row has a population.
+///
+/// # Errors
+/// As [`encode`].
+#[cfg(feature = "write")]
+pub fn encode_populations(
+    people: &[Option<(u32, PopulationSource)>],
+) -> Result<Option<alloc::vec::Vec<u8>>, Error> {
+    use alloc::vec::Vec;
+    let mut rows = Vec::new();
+    let mut counts = Vec::new();
+    let mut sources = Vec::new();
+    for (r, p) in people.iter().enumerate() {
+        if let Some((n, s)) = p {
+            rows.push(u32::try_from(r).map_err(|_| Error::Write("too many rows"))?);
+            counts.push(*n);
+            sources.push(s.code());
+        }
+    }
+    if rows.is_empty() {
+        return Ok(None);
+    }
+    let fields: [(u8, &[u32]); 2] = [(PEOPLE, &counts), (PEOPLE_SOURCE, &sources)];
+    encode(
+        people.len(),
+        &[ComponentColumns {
+            id: POPULATION,
+            rows: &rows,
+            fields: &fields,
+        }],
+    )
+    .map(Some)
+}
+
 /// A component to write: its ID, the rows that have it (strictly increasing), and its fields,
 /// each `(field, values)` with one value per present row, fields strictly increasing from 1.
 #[cfg(feature = "write")]

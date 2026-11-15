@@ -407,8 +407,9 @@ func BearingDeg(lat1 float64, lon1 float64, lat2 float64, lon2 float64) (float64
 // while queries go on.
 //
 // Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`,
-// `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search
-// and `meters` and `bearing` for a reverse lookup.
+// `elevation`, `parent`, `tz`, `iso`, `population` and `population_kind` (`stated` or
+// `modelled`; absent values are null), plus `score` for a search and `meters` and `bearing`
+// for a reverse lookup.
 //
 // Its methods may run on any goroutine at once. Close frees it at once; otherwise it is freed
 // once unreachable. A method called after Close fails with CodeInvalidArgument, or panics

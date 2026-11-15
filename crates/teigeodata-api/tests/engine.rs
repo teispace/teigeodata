@@ -64,6 +64,7 @@ fn country(model: &common::Model) -> usize {
 /// code `1060d01`.
 fn fixture() -> common::Model {
     use teigeodata_engine::CodeKind;
+    use teigeodata_format::components::{PopulationSource, encode_populations};
     use teigeodata_format::postal::{self, Code, Rule};
     let mut model = synthetic(60, 5);
     let row = u32::try_from(country(&model)).unwrap();
@@ -100,8 +101,23 @@ fn fixture() -> common::Model {
     model
         .raw
         .push((teigeodata_format::Kind::POSTAL, codes.len() as u64, body));
+    // The country's stated population and each district's modelled one (D-351).
+    let mut people = vec![None; model.ids.len()];
+    people[row as usize] = Some((COUNTRY_PEOPLE, PopulationSource::Stated));
+    for (d, &place) in districts.iter().enumerate() {
+        people[place as usize] = Some((1_000 * (d as u32 + 1), PopulationSource::Modelled));
+    }
+    let body = encode_populations(&people).unwrap().unwrap();
+    model.raw.push((
+        teigeodata_format::Kind::COMPONENTS,
+        people.len() as u64,
+        body,
+    ));
     model
 }
+
+/// The fixture country's population.
+const COUNTRY_PEOPLE: u32 = 29_164_578;
 
 fn open() -> (Engine, common::Model) {
     let model = synthetic(400, 11);
@@ -131,7 +147,9 @@ fn get_returns_one_row_with_every_column() {
             "elevation",
             "parent",
             "tz",
-            "iso"
+            "iso",
+            "population",
+            "population_kind"
         ]
     );
     assert_eq!(strings(&blob, "id"), [Some(id)]);
@@ -585,6 +603,15 @@ fn the_parity_file_matches_rust() {
     assert_eq!(strings(&blob, "kind"), [Some(s(&g["kind"]))]);
     assert_eq!(f64s(&blob, "lat"), [n(&g["lat"])]);
     assert_eq!(f64s(&blob, "lon"), [n(&g["lon"])]);
+    let Some(View::U32(people)) = r.column("population") else {
+        panic!("population")
+    };
+    assert_eq!(people.u32s().collect::<Vec<_>>(), [COUNTRY_PEOPLE]);
+    assert_eq!(f64::from(COUNTRY_PEOPLE), n(&g["population"]));
+    assert_eq!(
+        strings(&blob, "population_kind"),
+        [Some(s(&g["population_kind"]))]
+    );
 
     let q = &p["search"];
     let hits = engine

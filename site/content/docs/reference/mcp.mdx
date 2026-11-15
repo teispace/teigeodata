@@ -411,6 +411,8 @@ The answer of every place tool: a page of `results`, the `next_cursor` of the ne
 | `results[].names[].text` | string |  |
 | `results[].names[].kind` | string | The name's type. |
 | `results[].names[].lang` | string | A BCP 47 tag, such as ne-Deva. |
+| `results[].population` | integer | Its number of people, when known. |
+| `results[].population_kind` | string | Where the number came from: stated (a source's count) or modelled (a population grid over an admin unit). |
 | `results[].score` | integer | Its search score, comparable only within one query. |
 | `results[].tz_abbr` | string | The zone's abbreviation at that instant. |
 | `results[].utc_offset` | string | The UTC offset at the instant asked, such as +05:45 (timezone). |

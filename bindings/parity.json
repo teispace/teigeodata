@@ -58,13 +58,15 @@
   "engine": {
     "about": "Queries on bindings/fixtures/synth.tgd, the engine's synthetic pack (teigeodata-api's tests keep it current)",
     "fixture": "fixtures/synth.tgd",
-    "columns": ["id", "name", "kind", "level", "lat", "lon", "elevation", "parent", "tz", "iso"],
+    "columns": ["id", "name", "kind", "level", "lat", "lon", "elevation", "parent", "tz", "iso", "population", "population_kind"],
     "get": {
       "id": "tgd:np/18n8a6",
       "name": "Synthland",
       "kind": "country",
       "lat": 28.0,
-      "lon": 84.0
+      "lon": 84.0,
+      "population": 29164578,
+      "population_kind": "stated"
     },
     "search": {
       "query": "Synthland",
@@ -78,7 +80,7 @@
     },
     "open_with": {
       "about": "flip the byte at corrupt_at (inside the ELEVATION section): eager verification refuses the pack, lazy opens it; verify 99 and outline level 256 are invalid",
-      "corrupt_at": 173392, "bad_verify": 99, "bad_outline_level": 256,
+      "corrupt_at": 174032, "bad_verify": 99, "bad_outline_level": 256,
       "components": "point", "languages": "en, ne", "bad_components": "pointy",
       "about_components": "a pack opened with point alone answers get by ID; search needs the search component, MissingComponent"
     },

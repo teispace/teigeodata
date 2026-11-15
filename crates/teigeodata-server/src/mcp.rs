@@ -1665,6 +1665,8 @@ fn places_schema() -> Value {
                     "parent": { "type": nullable("string"), "description": "Its parent's ID; null for a root." },
                     "timezone": { "type": nullable("string"), "description": "Its IANA timezone, such as Asia/Kathmandu." },
                     "iso_code": { "type": "string", "description": "Its ISO 3166 code, for a country or unit that has one." },
+                    "population": { "type": "integer", "description": "Its number of people, when known." },
+                    "population_kind": { "type": "string", "description": "Where the number came from: stated (a source's count) or modelled (a population grid over an admin unit)." },
                     "meters": { "type": "number", "description": "Distance from the point or place asked about, metres." },
                     "bearing": { "type": "number", "description": "Degrees clockwise from north, from the place to the point asked about." },
                     "inside": { "type": "boolean", "description": "Whether the point asked about is inside the place's outline (reverse)." },

@@ -407,8 +407,9 @@ pub unsafe extern "C" fn tg_bearing_deg(
 /// while queries go on.
 ///
 /// Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`,
-/// `elevation`, `parent`, `tz` and `iso` (absent values are null), plus `score` for a search
-/// and `meters` and `bearing` for a reverse lookup.
+/// `elevation`, `parent`, `tz`, `iso`, `population` and `population_kind` (`stated` or
+/// `modelled`; absent values are null), plus `score` for a search and `meters` and `bearing`
+/// for a reverse lookup.
 ///
 /// Opaque at the C ABI: made by its constructors, freed once with `tg_engine_free`.
 #[derive(Debug)]

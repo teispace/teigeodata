@@ -71,6 +71,8 @@ pub use postal::PostalCode;
 pub use query::MAX_COUNTRY_FETCH;
 #[cfg(feature = "names")]
 pub use query::NameInfo;
+#[cfg(feature = "extra")]
+pub use query::Population;
 #[cfg(any(feature = "dem", feature = "dem-coarse"))]
 pub use query::{Datum, DemSource, Height};
 pub use query::{Hit, LOCALITY_RADIUS_M, Near, Place, SETTLEMENT_RADIUS_M, Scratch};
@@ -79,6 +81,8 @@ pub use search::{Focus, SearchOptions};
 #[cfg(feature = "admin")]
 pub use teigeodata_core::IsoCode;
 pub use teigeodata_format::component::Parts;
+#[cfg(feature = "extra")]
+pub use teigeodata_format::components::PopulationSource;
 #[cfg(feature = "elevation")]
 pub use teigeodata_format::elevation::HeightSource;
 #[cfg(feature = "names")]

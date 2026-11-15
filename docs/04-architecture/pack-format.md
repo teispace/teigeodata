@@ -965,8 +965,14 @@ up, the IDs are extension columns (D-335).
 - **Opening** checks every column's codec, structure and length (a field has as many values as
   the component has present rows); **the deep check** proves each bitmap's directory and that
   sorted rows increase and stay below the row count.
-- What each component and field number means is assigned with the forge (Phase 3), from the
-  schema.
+- What each component and field number means comes from the schema. Assigned:
+
+  | Component | Field | Meaning |
+  |---:|---:|---|
+  | 1 `population` (D-351) | 1 | the number of people |
+  | | 2 | where it came from: 1 stated (a source's count), 2 modelled (a population grid, D-123); 0 unstated |
+
+  `extract::merge` keeps every component of the kept rows, field by field.
 
 ### BLOBS
 

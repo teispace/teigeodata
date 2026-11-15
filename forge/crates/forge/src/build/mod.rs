@@ -385,6 +385,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let unnamed = keep_named(&mut places) + unnamed_clusters;
     let elevations = elevation::load(root, (&build, &g.sources), g.dem.as_deref(), &places)?;
 
+    let modelled_population = modelled.modelled(&places);
     let f = PackInputs::read(root, &a, &g.sources, &out_dir)?;
     let input = pack::Input {
         root,
@@ -407,6 +408,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         stated_tz: &f.stated_tz,
         iso: f.iso.as_ref(),
         tz_rules: rules.as_ref(),
+        modelled_population: &modelled_population,
     };
     let report = packs(
         &input,

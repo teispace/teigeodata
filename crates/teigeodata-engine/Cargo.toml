@@ -28,6 +28,7 @@ default = [
     "tz-rules",
     "postal",
     "substring",
+    "extra",
 ]
 # One feature per component (D-133, D-135, D-136): a build without one carries none of its
 # readers or queries, and a pack's sections of it are treated as not installed. `point` (IDs,
@@ -55,6 +56,9 @@ postal = []
 # code over `search` (the same reader), and the megabytes are the component's, which a client
 # installs only when it wants them.
 substring = ["search"]
+# Optional per-place fields (D-351): `Engine::population`, a place's number of people and
+# whether a source stated it or a population grid modelled it.
+extra = []
 # Indexes built on the device instead of downloaded (D-213): `derive::substring`, and with
 # `store` `derive::derive_installed`. Off by default: it adds the section writer.
 derive = ["substring", "teigeodata-format/write"]
@@ -89,6 +93,7 @@ fuzz = [
     "tz-rules",
     "postal",
     "substring",
+    "extra",
     "teigeodata-format/fuzz",
 ]
 
@@ -126,6 +131,10 @@ required-features = ["elevation", "admin", "names", "search", "timezone", "timez
 [[test]]
 name = "metamorphic"
 required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
+
+[[test]]
+name = "population"
+required-features = ["extra"]
 
 [[test]]
 name = "extract"

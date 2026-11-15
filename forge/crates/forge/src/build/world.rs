@@ -1606,6 +1606,11 @@ fn sections(
     if let Some(body) = teigeodata_format::elevation::encode_with(&heights, &sources).map_err(e)? {
         full.push((Kind::ELEVATION, Encoding::TABLE, n, body));
     }
+    // Countries', units' and cities' counts are their sources' (D-351): none is modelled.
+    let people = super::pack::populations(places, &BTreeSet::new());
+    if let Some(body) = teigeodata_format::components::encode_populations(&people).map_err(e)? {
+        full.push((Kind::COMPONENTS, Encoding::TABLE, n, body));
+    }
     full.extend(codes.section(row_of, places, |r| {
         rows.get(r as usize).and_then(|row| row.ns.country())
     })?);
@@ -1793,7 +1798,9 @@ fn verify(bytes: &[u8], places: &[&Place]) -> Result<(), String> {
         &teigeodata_format::names::Names::open(&sec(Kind::NAMES)?).map_err(e)?,
         &teigeodata_format::search::Search::open(&sec(Kind::SEARCH)?).map_err(e)?,
         &place_index::PlaceIndex::open(&sec(Kind::PLACE_INDEX)?, pl).map_err(e)?,
-    )
+    )?;
+    let people = super::pack::populations(places, &BTreeSet::new());
+    super::pack::verify_populations(bytes, &people, &mut String::new())
 }
 
 #[cfg(test)]
