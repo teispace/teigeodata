@@ -497,10 +497,16 @@ fn the_timezone_of_a_place_is_the_one_at_its_point() {
             .is_some()
     );
     let e = engine(&[whole]);
-    let mut with = 0;
+    let (mut with, mut areas) = (0, 0);
     for &id in &model.ids {
         let p = e.get(id).unwrap().unwrap();
         let of = e.tz_of(&p).unwrap().map(|z| z.id);
+        if p.kind == Some(PlaceKind::TimezoneArea) {
+            // An area is its own zone, whatever PLACE_TZ holds for its row.
+            assert_eq!(of, Some(id), "{id:?}");
+            areas += 1;
+            continue;
+        }
         assert_eq!(
             of,
             e.tz_at(p.point.to_e7()).unwrap().map(|z| z.id),
@@ -509,6 +515,44 @@ fn the_timezone_of_a_place_is_the_one_at_its_point() {
         with += usize::from(of.is_some());
     }
     assert!(with > model.ids.len() / 2, "{with} places with a zone");
+    assert!(areas > 0, "no timezone areas in the model");
+}
+
+/// A timezone area is its own zone even when `PLACE_TZ` records none for its row, as in the
+/// released world pack, which leaves the areas' own rows empty: `tz_of`, and so the `tz` column
+/// of every answer, names the area itself.
+#[test]
+fn a_timezone_area_is_its_own_zone() {
+    let mut model = synthetic(1200, 17);
+    let whole = model.encode();
+    let pack = teigeodata_format::Pack::open(&whole).unwrap();
+    let section = pack.section(teigeodata_format::Kind::PLACE_TZ).unwrap();
+    let tz = teigeodata_format::place_tz::PlaceTz::open(&section).unwrap();
+    let mut areas = Vec::new();
+    let zone_of: Vec<Option<u32>> = (0..model.ids.len())
+        .map(|r| {
+            if model.kinds[r] == PlaceKind::TimezoneArea {
+                areas.push(model.ids[r]);
+                None
+            } else {
+                tz.get(r)
+            }
+        })
+        .collect();
+    assert!(!areas.is_empty(), "no timezone areas in the model");
+    let body = teigeodata_format::place_tz::encode(&zone_of)
+        .unwrap()
+        .unwrap();
+    model.raw.push((
+        teigeodata_format::Kind::PLACE_TZ,
+        model.ids.len() as u64,
+        body,
+    ));
+    let e = engine(&[model.encode()]);
+    for id in areas {
+        let p = e.get(id).unwrap().unwrap();
+        assert_eq!(e.tz_of(&p).unwrap().map(|z| z.id), Some(id), "{id:?}");
+    }
 }
 
 /// `within_bbox` against a scan of the model: every place in the box, by ID, the first `limit`.

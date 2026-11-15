@@ -1451,7 +1451,8 @@ impl Engine {
     /// The timezone area of `place`: the one its own layer recorded for it at build time
     /// (`PLACE_TZ`, D-134), a few bits per place, so it needs no REGION; for a layer without
     /// `PLACE_TZ` installed, [`tz_at`](Self::tz_at) its point. Both give the same area for a
-    /// place of a full pack.
+    /// place of a full pack. A timezone area is its own zone, whatever `PLACE_TZ` holds for it
+    /// (a pack may leave the areas' own rows empty).
     ///
     /// # Errors
     /// [`Error::MissingComponent`] (`timezone`) if neither `timezone` nor `timezone-index` is
@@ -1459,6 +1460,9 @@ impl Engine {
     /// corrupt.
     #[cfg(any(feature = "timezone", feature = "timezone-index"))]
     pub fn tz_of(&self, place: &Place) -> Result<Option<Place>, Error> {
+        if place.kind == Some(PlaceKind::TimezoneArea) {
+            return Ok(Some(*place));
+        }
         let Some(i) = self.layers.iter().position(|l| l.id == place.layer) else {
             return Ok(None);
         };

@@ -423,7 +423,12 @@ impl Model {
             let body = region::link(&z.body, &z.rows).unwrap();
             let items = z.rows.len() as u64;
             let zones = Region::open(&Section::unpacked(Kind::REGION, items, &body)).unwrap();
-            if let Some(tz) = place_tz::encode_from(&zones, &self.points).unwrap() {
+            // A PLACE_TZ in `raw` replaces the one computed from the points.
+            let given = self.raw.iter().any(|s| s.0 == Kind::PLACE_TZ);
+            if let Some(tz) = place_tz::encode_from(&zones, &self.points)
+                .unwrap()
+                .filter(|_| !given)
+            {
                 bodies.push((Kind::PLACE_TZ, n, tz));
             }
             bodies.push((Kind::REGION, items, body));
