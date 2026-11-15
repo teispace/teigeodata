@@ -28,3 +28,7 @@ mutants.out*/
 /.claude/worktrees/
 /bindings/python/LICENSE
 /bindings/python/NOTICE
+
+# The docs examples (site/examples) build here.
+/site/examples/swift/Tour/.build/
+/site/examples/swift/Tour/Package.resolved

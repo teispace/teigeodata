@@ -107,6 +107,22 @@ func strings(_ blob: Data, _ name: String) -> [String?] {
     }
 }
 
+/// A number column read by this file's own helper, as `Double`s; nil for a string column.
+func rawNumbers(_ blob: Data, _ name: String, _ type: ColumnType) -> [Double]? {
+    switch type {
+    case .i32: column(blob, name, as: Int32.self).map { Double($0) }
+    case .u32: column(blob, name, as: UInt32.self).map { Double($0) }
+    case .i64: column(blob, name, as: Int64.self).map { Double($0) }
+    case .u64: column(blob, name, as: UInt64.self).map { Double($0) }
+    case .f32: column(blob, name, as: UInt32.self).map { Double(Float(bitPattern: $0)) }
+    case .f64: column(blob, name, as: UInt64.self).map { Double(bitPattern: $0) }
+    case .u8: column(blob, name, as: UInt8.self).map { Double($0) }
+    case .i16: column(blob, name, as: Int16.self).map { Double($0) }
+    case .u16: column(blob, name, as: UInt16.self).map { Double($0) }
+    case .utf8, .dict16, .dict32: nil
+    }
+}
+
 func expect(_ code: TeiGeodataError.Code, _ call: () throws -> Void) {
     do {
         try call()
@@ -230,6 +246,37 @@ public func runParity(_ path: String) async throws {
         check(strings(near, "id") == (r["ids"] as! [String]).map { $0 }, "reverse \(strings(near, "id"))")
         let m = Double(bitPattern: column(near, "meters", as: UInt64.self)[0])
         check(abs(m - (r["first_meters"] as! Double)) < 0.1, "meters \(m)")
+        // The Reader against this file's own reads of the layout (D-322).
+        var nullsSeen = 0
+        for result in [blob, near, try engine.ancestors((e["ancestors"] as! [String: Any])["id"] as! String)] {
+            let reader = try Reader(result)
+            check(reader.columns == columnNames(result), "reader columns")
+            let records = try reader.records()
+            check(records.count == reader.rows && Array(reader) == records, "reader records")
+            for name in reader.columns {
+                let values = try reader.column(name)
+                if reader.type(name) == .utf8 || reader.type(name) == .dict16 || reader.type(name) == .dict32 {
+                    check(try reader.strings(name) == strings(result, name), "reader strings \(name)")
+                    check(values.map { $0?.string } == strings(result, name), "reader column \(name)")
+                }
+                if let type = reader.type(name), let raw = rawNumbers(result, name, type) {
+                    check(try reader.numbers(name) == raw, "reader numbers \(name)")
+                    let nulls = try reader.nulls(name)
+                    check(values.enumerated().allSatisfy { nulls[$0.offset] || $0.element?.double == raw[$0.offset] },
+                          "reader column \(name)")
+                }
+                for (i, null) in try reader.nulls(name).enumerated() {
+                    check(null == (values[i] == nil) && records[i][name] == values[i], "reader null \(name) \(i)")
+                    if null { nullsSeen += 1 }
+                }
+            }
+        }
+        check(nullsSeen > 0, "no null value was checked")
+        check(try Reader(blob).values("lat", as: Double.self).reduce(0, +) == s["lat_sum"] as! Double, "reader lat")
+        check(try Reader(near).numbers("meters").first.map { abs($0 - m) < 1e-9 } == true, "reader meters")
+        expect(.corrupt) { _ = try Reader(Data("TGB1".utf8)) }
+        expect(.corrupt) { _ = try Reader(blob.prefix(blob.count - 8)) }
+        expect(.invalidArgument) { _ = try Reader(blob).values("lat", as: Float.self) }
         let a = e["admin_at"] as! [String: Any]
         let units = try engine.adminAt(a["lat"] as! Double, lon: a["lon"] as! Double)
         check(strings(units, "id") == (a["ids"] as! [String]).map { $0 }, "admin_at")

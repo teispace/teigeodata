@@ -130,6 +130,16 @@ const LANGS: &[Lang] = &[
         own: None,
     },
     Lang {
+        name: "swift",
+        tool: "swift",
+        needs: &["{ffi}"],
+        command: &["swift", "run", "-c", "release", "-q", "Tour", "{pack}"],
+        dir: "site/examples/swift/Tour",
+        env: &[],
+        links: &[],
+        own: None,
+    },
+    Lang {
         name: "cli",
         tool: "sh",
         needs: &["target/release/tgd"],
