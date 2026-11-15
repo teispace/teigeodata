@@ -86,7 +86,20 @@ jobs:
           cp "$pack" first.tgd
           rm "$dir/.key-${{ matrix.build }}"
           forge/target/fast/forge make ${{ matrix.cc }} --release "$RELEASE" ${{ matrix.flag }}
-          cmp first.tgd "$pack"
+          if ! cmp first.tgd "$pack"; then
+            # Name what differs, section by section and place by place, before failing.
+            cargo run --release --locked -q -p teigeodata-cli -- diff first.tgd "$pack" | head -200 || true
+            mkdir -p g-det && cp first.tgd "g-det/first.tgd" && cp "$pack" "g-det/second.tgd"
+            exit 1
+          fi
+      - name: G-det's two packs, when they differ
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.cc }}-${{ matrix.build }}-g-det
+          path: g-det/
+          retention-days: 5
+          if-no-files-found: ignore
       - name: G-lic and notices
         run: |
           cargo xtask check-pack data/build/pack/${{ matrix.cc }}/${{ matrix.cc }}-places-${{ matrix.build }}.tgd ${{ matrix.flag }}
