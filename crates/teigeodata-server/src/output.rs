@@ -363,7 +363,7 @@ pub fn pack(l: &Layer) -> Value {
         "address": l.address(),
         "component": l.component(),
         "release": l.release(),
-        "places": l.len(),
+        "places": l.rows(),
         "components": l.components().iter().map(teigeodata_engine::Component::name).collect::<Vec<_>>(),
         "attribution": l.attribution(),
     })

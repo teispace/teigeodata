@@ -159,8 +159,13 @@ async fn every_route_answers_with_its_attribution() {
     );
     let (s, j, _) = call(&app, "/packs", None).await;
     assert_eq!(
-        (s, &j["packs"][0]["attribution"]),
-        (StatusCode::OK, &Value::from(NOTICE))
+        (s, &j["packs"][0]["attribution"], &j["packs"][0]["places"]),
+        (
+            StatusCode::OK,
+            &Value::from(NOTICE),
+            &Value::from(model.ids.len())
+        ),
+        "{j}"
     );
     drop(app); // A mapped pack cannot be removed on Windows.
     std::fs::remove_dir_all(dir).unwrap();

@@ -226,6 +226,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Fixed
 
+- `/packs` and MCP's `packs` gave a pack's length in bytes as its `places`; they give its
+  number of places.
+
 - Java and Kotlin: `new Engine()` (or `Store`, `Job`) as a program's first call threw
   `UnsatisfiedLinkError`: a nested class is initialized without its outer class, so the native
   library was loaded only by a call on `TeiGeodata` first. Every handle class now loads it
