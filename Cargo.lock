@@ -2160,6 +2160,8 @@ dependencies = [
  "ed25519-dalek",
  "form_urlencoded",
  "getrandom 0.4.3",
+ "hyper",
+ "hyper-util",
  "rmcp",
  "serde",
  "serde_json",
@@ -2351,8 +2353,10 @@ dependencies = [
  "pin-project-lite",
  "sync_wrapper",
  "tokio",
+ "tokio-util",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]

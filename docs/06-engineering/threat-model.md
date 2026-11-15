@@ -126,8 +126,12 @@ A pack may come from anywhere: a mirror, a file someone sent, a corrupted disk.
 - **What must hold:**
   - Every query keeps its bounds (`Limits::SERVER`): 256 bytes of text, 50 results, a
     1,000 km radius and 20,000 outline vertices.
-  - A query string is at most 4 KiB (414 past it), a `/mcp` body at most 64 KiB, and a request
-    is answered within 10 s (503 past it).
+  - A query string is at most 4 KiB (414 past it), a `/mcp` body at most 64 KiB (413), and a
+    request is answered within 10 s (503 past it).
+  - Floods and slow clients are bounded (D-334). At most 1,024 connections are open; more wait
+    in the kernel's backlog. At most 256 requests are answered at once, and one past it is
+    refused at once (503, `Retry-After`). A request head must arrive within 10 s, which also
+    closes an idle HTTP/1 connection. HTTP/2 peers are pinged and get at most 32 streams.
   - A panic answers `internal` and never ends the process.
   - CORS is off unless configured.
   - `/mcp` refuses a foreign `Host` (rebinding) and any `Origin` not allowed, and holds no
@@ -139,18 +143,14 @@ A pack may come from anywhere: a mirror, a file someone sent, a corrupted disk.
   - `tests/http.rs::the_seams_gate_and_meter_and_a_panic_is_answered`.
   - `tests/mcp_http.rs::mcp_refuses_a_foreign_host_and_origin`.
   - The `server_query` and `mcp` fuzz targets.
-  - The load gate (`cargo xtask load`, D-321).
+  - `tests/limits.rs`, one test per bound, each red with its bound removed: in flight, the
+    `/mcp` body, a body that never ends, a slow head and an idle connection, the connection
+    cap.
+  - The load gate (`cargo xtask load`, D-321), within its budgets with the bounds in place.
   - The MCP conformance suite (`mcp-conformance.yml`).
-- **Open (8.2):**
-  - No test proves the 64 KiB `/mcp` body limit or the 10 s timeout.
-  - Nothing bounds the requests in flight. Queries run inline on the runtime's workers, so the
-    timeout cannot stop one that is already running, and a flood is bounded only by each
-    query's cost.
-  - Slow clients (headers or body sent byte by byte) are bounded only by the transport's
-    defaults.
-
-  Research first ([phase 8](../07-planning/phases/phase-8.md) 8.2), then a limit and a test
-  for each.
+- **Residual:** a query runs to its end after its timeout. Its cost is bounded by `Limits`
+  and measured by the load gate. TLS and per-client rate limits belong to a reverse proxy or
+  the seams ([server limits](../02-research/notes/server-limits.md)).
 
 ## 6. The local store and files
 
@@ -190,3 +190,4 @@ A pack may come from anywhere: a mirror, a file someone sent, a corrupted disk.
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-15 | Written: seven boundaries, their gates and the open gaps | D-331, phase 8.2 |
+| 2026-11-15 | §5: the server's flood and slow-client bounds, each with its test | D-334 |

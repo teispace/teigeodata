@@ -28,6 +28,8 @@ tgd serve --pack world-np-lite.tgd
 | `--store <dir>` | the platform's data directory | Serve the store's installed packs, and follow it as packs are installed or updated. |
 | `--follow <seconds>` | 5 | How often to read the store's journal; 0 never. |
 | `--timeout <seconds>` | 10 | A request taking longer is answered `unavailable`. |
+| `--max-connections <n>` | 1024 | The most connections kept open; more wait until one closes. |
+| `--max-in-flight <n>` | 256 | The most requests answered at once; one more is answered `unavailable` at once, with `Retry-After: 1`. |
 | `--cors-origin <origin>` | none | An origin browsers may call from; repeat for several. CORS is off by default. |
 | `--allow-install` | off | Let MCP clients install catalog packs into the store. |
 
@@ -134,6 +136,11 @@ The codes and their statuses are listed in the [reference](/docs/reference/http#
   the port.
 - **Limits are built in.** Every request is bounded (text length, `limit` at most 50, radius,
   time), so no request can make the server do unbounded work.
+- **Floods and slow clients are bounded too.** Connections and requests in flight are capped.
+  A request head must arrive within 10 seconds, and an idle connection is closed after the same
+  time. HTTP/2 peers are pinged and get at most 32 streams each. A request past the in-flight
+  cap is refused at once, never queued, so a client should retry after `Retry-After`. A reverse
+  proxy in front still does TLS and per-client rate limits.
 - **Updates without restarts.** Over a store, the server reads its journal every `--follow`
   seconds and serves newly installed or updated packs; queries in flight finish on the packs
   they started with.

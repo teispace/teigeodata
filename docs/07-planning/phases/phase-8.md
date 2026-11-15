@@ -123,9 +123,20 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   it, on every `cfg`. It fails on a block without an argument and on a file not reviewed (both
   planted); fast-check runs `--check`. The clippy lints `undocumented_unsafe_blocks` and
   `unnecessary_safety_comment` are on in every lint table
-- [ ] Resource limits on every server route and MCP tool (body, result count, time), a test per
-  limit. Found by the threat model: the `/mcp` body and the timeout have no test, requests in
-  flight are unbounded, slow clients are bounded only by the transport's defaults
+- [x] Resource limits on every server route and MCP tool (2026-11-15, D-334,
+  [research](../../02-research/notes/server-limits.md)). The threat model found that
+  `axum::serve` sets no hyper timer, so slow heads and idle connections were unbounded, and
+  that nothing capped requests in flight. `http::serve` is now its own accept loop with
+  hyper's bounds:
+  - a 10 s header timeout, which also closes idle connections;
+  - HTTP/2 pings and 32 streams;
+  - 1,024 connections.
+
+  Requests past 256 in flight are shed at once (503, `Retry-After`). `tests/limits.rs` has a
+  test per bound, each red with its bound removed. The load gate passes its budgets with the
+  bounds in place (world baseline, search at c=1: 17,137 req/s, 17,299 before). The first
+  version of the in-flight cap was per route (axum layers each route on its own), and the test
+  caught it
 - [ ] `zizmor` on every workflow in fast-check, findings fixed or each one justified
 - [ ] OpenSSF Scorecard weekly on `main`; the checks only the maintainer can satisfy listed
   for them
@@ -182,3 +193,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.1 mcp target done | D-331 |
 | 2026-11-15 | 8.1 campaign workflow and coverage gate built | D-331 |
 | 2026-11-15 | 8.2 threat model and unsafe audit done | D-333 |
+| 2026-11-15 | 8.2 server limits done | D-334 |

@@ -76,6 +76,8 @@ pub(crate) struct Options {
     pub(crate) cors: Vec<String>,
     pub(crate) follow_secs: u64,
     pub(crate) timeout_secs: u64,
+    pub(crate) max_connections: usize,
+    pub(crate) max_in_flight: usize,
     /// MCP clients may install the catalog's packs into the store.
     #[cfg_attr(
         not(feature = "mcp"),
@@ -109,6 +111,8 @@ pub(crate) fn run(
     let mut config = Config {
         cors_origins,
         timeout: Duration::from_secs(o.timeout_secs.max(1)),
+        max_connections: o.max_connections.max(1),
+        max_in_flight: o.max_in_flight.max(1),
         ..Config::default()
     };
     #[cfg(feature = "mcp")]

@@ -21,8 +21,15 @@
 //! [`Limits`]; a request timeout; a panic answers `internal` (500) and the server goes on.
 //! The engine's calls are short and bounded by their inputs, and they do not yield, so the
 //! timeout bounds the time a request waits, not an engine call already running.
+//!
+//! **Bounded against floods and slow clients** ([`serve`], D-334): at most
+//! [`Config::max_connections`] connections (more wait in the kernel's backlog), at most
+//! [`Config::max_in_flight`] requests answered at once (one past it is refused at once, 503
+//! with `Retry-After`), a request head sent within [`Config::header_timeout`] (which also closes
+//! an idle HTTP/1 connection), HTTP/2 peers pinged and at most 32 streams each.
 
 use std::net::SocketAddr;
+use std::pin::pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -53,6 +60,15 @@ pub struct Config {
     pub max_query_bytes: usize,
     /// How long a request may take before it is answered `unavailable` (503).
     pub timeout: Duration,
+    /// How long a client may take to send a request's head; an idle HTTP/1 connection is
+    /// closed after it too ([`serve`]).
+    pub header_timeout: Duration,
+    /// The most connections [`serve`] keeps open; at the cap it stops accepting, and new
+    /// connections wait in the kernel's backlog.
+    pub max_connections: usize,
+    /// The most requests answered at once; one past it is refused at once (`unavailable`, 503,
+    /// `Retry-After: 1`) rather than queued.
+    pub max_in_flight: usize,
     /// The origins a browser may call from (CORS); none, the default, sends no CORS headers.
     /// `/mcp` refuses a request from any other origin (MCP requires the check).
     pub cors_origins: Vec<HeaderValue>,
@@ -77,6 +93,9 @@ impl Default for Config {
             limits: Limits::SERVER,
             max_query_bytes: 4096,
             timeout: Duration::from_secs(10),
+            header_timeout: Duration::from_secs(10),
+            max_connections: 1024,
+            max_in_flight: 256,
             cors_origins: Vec::new(),
             #[cfg(feature = "mcp")]
             mcp: None,
@@ -99,9 +118,13 @@ pub struct App {
     pub config: Config,
 }
 
-/// The router over `app`, with its limits, timeout, CORS and panic guard.
+/// The router over `app`, with its limits, timeout, CORS, panic guard and load shedding.
 pub fn router(app: Arc<App>) -> Router {
     let timeout = app.config.timeout;
+    let in_flight = app
+        .config
+        .max_in_flight
+        .clamp(1, tokio::sync::Semaphore::MAX_PERMITS);
     let cors = (!app.config.cors_origins.is_empty()).then(|| {
         CorsLayer::new()
             // `POST` and these headers for `/mcp`; the other routes answer `GET` only.
@@ -146,13 +169,39 @@ pub fn router(app: Arc<App>) -> Router {
     .layer(CatchPanicLayer::custom(|_| {
         error(&QueryError::new(Code::Internal, "the server failed"))
     }))
+    // Outermost, so a request past the cap costs no more than its refusal. axum applies a
+    // layer to each route on its own, so the semaphore is made once and shared: a
+    // `ConcurrencyLimitLayer` would make one per route.
+    .layer(
+        tower::ServiceBuilder::new()
+            .layer(axum::error_handling::HandleErrorLayer::new(overloaded))
+            .load_shed()
+            .layer(tower::limit::GlobalConcurrencyLimitLayer::with_semaphore(
+                Arc::new(tokio::sync::Semaphore::new(in_flight)),
+            )),
+    )
+}
+
+/// The answer to a request past [`Config::max_in_flight`].
+async fn overloaded(_: tower::BoxError) -> Response {
+    let mut r = error(&QueryError::new(
+        Code::Unavailable,
+        "the server is answering as many requests as it may; ask again shortly",
+    ));
+    r.headers_mut().insert(
+        axum::http::header::RETRY_AFTER,
+        HeaderValue::from_static("1"),
+    );
+    r
 }
 
 /// Serves `app` on `listener` until `shutdown` resolves, following the store's journal every
-/// `follow_every` (D-172).
+/// `follow_every` (D-172). Each connection is bounded as the module says (D-334); at shutdown,
+/// accepting stops and requests in progress may finish within the request timeout.
 ///
 /// # Errors
-/// The listener's.
+/// None today: an accept error is waited out and the loop goes on. The `Result` is kept for
+/// errors a later listener may raise.
 pub async fn serve(
     listener: tokio::net::TcpListener,
     app: Arc<App>,
@@ -162,12 +211,82 @@ pub async fn serve(
     if let Some(every) = follow_every {
         crate::packs::spawn_follow(Arc::clone(&app.packs), every);
     }
-    axum::serve(
-        listener,
-        router(app).into_make_service_with_connect_info::<SocketAddr>(),
+    let header_timeout = app.config.header_timeout;
+    // Requests in progress at shutdown may finish, within a request's own bound.
+    let drain = app.config.timeout.saturating_add(Duration::from_secs(1));
+    let permits = Arc::new(tokio::sync::Semaphore::new(
+        app.config
+            .max_connections
+            .clamp(1, tokio::sync::Semaphore::MAX_PERMITS),
+    ));
+    let router = router(app);
+    let graceful = hyper_util::server::graceful::GracefulShutdown::new();
+    let mut shutdown = pin!(shutdown);
+    loop {
+        // At the cap, stop accepting: new connections wait in the kernel's backlog.
+        let permit = tokio::select! {
+            p = Arc::clone(&permits).acquire_owned() => match p {
+                Ok(p) => p,
+                Err(_) => break,
+            },
+            () = &mut shutdown => break,
+        };
+        let (stream, peer) = tokio::select! {
+            a = listener.accept() => match a {
+                Ok(a) => a,
+                Err(e) if is_connection_error(&e) => continue,
+                // Out of file descriptors or the like: wait, as axum does, then go on.
+                Err(_) => {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            },
+            () = &mut shutdown => break,
+        };
+        let _ = stream.set_nodelay(true);
+        let service = tower::ServiceExt::map_request(
+            router.clone(),
+            move |mut req: axum::http::Request<hyper::body::Incoming>| {
+                req.extensions_mut().insert(ConnectInfo(peer));
+                req.map(axum::body::Body::new)
+            },
+        );
+        let watcher = graceful.watcher();
+        tokio::spawn(async move {
+            let mut builder =
+                hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
+            builder
+                .http1()
+                .timer(hyper_util::rt::TokioTimer::new())
+                .header_read_timeout(header_timeout);
+            builder
+                .http2()
+                .timer(hyper_util::rt::TokioTimer::new())
+                .keep_alive_interval(Some(Duration::from_secs(20)))
+                .keep_alive_timeout(Duration::from_secs(20))
+                .max_concurrent_streams(32)
+                .enable_connect_protocol();
+            let conn = builder.serve_connection_with_upgrades(
+                hyper_util::rt::TokioIo::new(stream),
+                hyper_util::service::TowerToHyperService::new(service),
+            );
+            let _ = watcher.watch(conn.into_owned()).await;
+            drop(permit);
+        });
+    }
+    drop(listener);
+    let _ = tokio::time::timeout(drain, graceful.shutdown()).await;
+    Ok(())
+}
+
+/// An error of one connection, not of the listener.
+fn is_connection_error(e: &std::io::Error) -> bool {
+    matches!(
+        e.kind(),
+        std::io::ErrorKind::ConnectionRefused
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::ConnectionReset
     )
-    .with_graceful_shutdown(shutdown)
-    .await
 }
 
 /// A request's headers and peer, for the seams (MCP's `/mcp` reads them too).

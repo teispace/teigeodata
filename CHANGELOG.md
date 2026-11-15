@@ -26,6 +26,8 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - The weekly fuzzing campaign (`fuzz-campaign.yml`): every target for 3 hours with coverage
   reports, and its gate `cargo xtask fuzz-coverage`, which fails unless every section kind's
   decoder is reached (D-331).
+- `teigeodata_server::http::Config` gains `header_timeout`, `max_connections` and
+  `max_in_flight`, and `tgd serve` gains `--max-connections` and `--max-in-flight` (D-334).
 - `cargo xtask unsafe-audit`: the inventory of every `unsafe` in shipped code with its argument
   and the tests that reach it (`docs/06-engineering/unsafe-inventory.md`), and the
   [threat model](docs/06-engineering/threat-model.md) (D-333).
@@ -268,6 +270,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Fixed
 
+- `tgd serve` (`http::serve`) never timed out a slow request head or an idle connection, since
+  `axum::serve` sets no hyper timer, and did not cap connections or requests in flight. It now
+  bounds all four, and sheds requests past the cap with 503 and `Retry-After` (D-334).
 - `bindings/fixtures/outline.tgd` stored its hole counter-clockwise, against the format's rule
   (`Polygons::check` refused it; queries re-orient, so no answer changes): the hole's arcs are
   now reversed. Found when the fuzz seeds were held to the full check.

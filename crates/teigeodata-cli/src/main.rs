@@ -278,6 +278,13 @@ enum Command {
         /// Seconds a request may take before it is answered `unavailable`.
         #[arg(long, default_value_t = 10, value_name = "SECONDS")]
         timeout: u64,
+        /// The most connections kept open; more wait until one closes.
+        #[arg(long, default_value_t = 1024, value_name = "N")]
+        max_connections: usize,
+        /// The most requests answered at once; one past it is answered `unavailable` at once,
+        /// with `Retry-After`.
+        #[arg(long, default_value_t = 256, value_name = "N")]
+        max_in_flight: usize,
         /// Let MCP clients install the catalog's packs into the store (the `install` and
         /// `install_status` tools); off by default, as the server then writes to its disk.
         #[arg(long)]
@@ -760,6 +767,8 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             cors,
             follow,
             timeout,
+            max_connections,
+            max_in_flight,
             allow_install,
             packs,
         } => serve::run(
@@ -770,6 +779,8 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
                 cors,
                 follow_secs: follow,
                 timeout_secs: timeout,
+                max_connections,
+                max_in_flight,
                 allow_install,
             },
             out,
