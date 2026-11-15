@@ -1,0 +1,8 @@
+/node_modules
+/.source
+/.next/
+/out/
+*.tsbuildinfo
+next-env.d.ts
+/public/packs/
+/public/wasm/

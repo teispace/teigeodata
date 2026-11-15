@@ -1,0 +1,73 @@
+# The docs site (phase 7, ADR-0024, docs/02-research/notes/docs-site.md): Fumadocs on Next.js,
+# a static export served by GitHub Pages under /teigeodata/. Every push that touches the site
+# or what it is generated from builds it, type-checks it and checks every internal link; a
+# push to main deploys it once the maintainer has enabled Pages (source: GitHub Actions) and
+# set the repository variable DOCS_DEPLOY to true.
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - bindings/idl.json
+      - .github/workflows/docs.yml
+  pull_request:
+    paths:
+      - site/**
+      - bindings/idl.json
+      - .github/workflows/docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOCS_BASE_PATH: /teigeodata
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Links
+        run: node scripts/check-links.mjs out "$DOCS_BASE_PATH"
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site/out
+
+  deploy:
+    name: Deploy
+    needs: build
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DOCS_DEPLOY == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

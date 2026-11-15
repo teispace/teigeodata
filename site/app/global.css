@@ -1,0 +1,28 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+/* A teal from the hills: the accent of links, the active page and the logo. */
+:root {
+  --color-fd-primary: oklch(0.52 0.11 190);
+  --color-fd-ring: oklch(0.52 0.11 190);
+}
+.dark {
+  --color-fd-primary: oklch(0.78 0.11 185);
+  --color-fd-ring: oklch(0.78 0.11 185);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+body {
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Noto Sans Devanagari',
+    sans-serif;
+}
