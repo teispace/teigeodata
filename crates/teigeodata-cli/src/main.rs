@@ -100,8 +100,8 @@ enum Command {
         #[arg(short, long)]
         out: PathBuf,
         /// The components to keep, comma-separated, with what they need (point, elevation,
-        /// admin, names, search, timezone, timezone-index, boundaries, admin-index, postal,
-        /// dem, extra).
+        /// admin, names, search, substring, timezone, timezone-index, tz-rules, boundaries,
+        /// admin-index, postal, dem, dem-coarse, extra).
         #[arg(long, value_delimiter = ',', value_parser = component)]
         components: Vec<Component>,
         /// Keep the places in this box: west,south,east,north in degrees.

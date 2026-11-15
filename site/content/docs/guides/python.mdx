@@ -61,8 +61,8 @@ byte and keeps the packs updated.
 
 ## Read a result
 
-Every query returns a **result blob**: the rows as compact columns in one `bytes` object, read
-in place. `teigeodata.blob.Reader` reads it; iterating gives each row as a `dict` from column
+Every query returns a **result blob**: the rows as compact columns in one `Blob`, a buffer the
+library lends without a copy (`memoryview(blob)`; `bytes(blob)` copies it), read in place. `teigeodata.blob.Reader` reads it; iterating gives each row as a `dict` from column
 name to value, with `None` where a value is null:
 
 <include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#rows</include>
@@ -79,8 +79,9 @@ shape. The import:
 
 An `Engine` holds the packs it answers from. `open_file` memory-maps a pack file and
 adds it as a **layer**; the engine answers from every layer at once, and a higher layer wins
-where two disagree. Opening is cheap: only the head of the file is read and checked, and each
-section is verified against its hash the first time a query reads it.
+where two disagree. Opening is cheap: the head of the file is read and checked and the block hashes of large
+sections are proved; each section is verified against its hash the first time a query reads
+it.
 
 <include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#open</include>
 
@@ -168,8 +169,8 @@ Each country's ladder is in its profile on the [data pages](/docs/data).
 ## Reverse geocode a point
 
 `reverse` gives the places nearest a point, nearest first, each with `meters` (the
-great-circle distance) and `bearing` (degrees clockwise from north, from the point to the
-place).
+great-circle distance) and `bearing` (degrees clockwise from north, from the place to the
+point: "3.2 km at 45° from Pokhara").
 
 <include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#reverse</include>
 

@@ -596,7 +596,7 @@ public static final class Engine implements AutoCloseable {
 
         /**
          * The places nearest the place with this ID, not counting it, nearest first, at most
-         * `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+         * `limit`, with `meters` and `bearing` (from each place to it); no rows for an unknown ID.
          *
          * # Errors
          *
@@ -661,7 +661,7 @@ public static final class Engine implements AutoCloseable {
 
         /**
          * The places nearest the point, nearest first, at most `limit`, with `meters` and
-         * `bearing` (degrees from north) to each.
+         * `bearing` (degrees clockwise from north, from each place to the point).
          *
          * # Errors
          *
@@ -682,7 +682,7 @@ public static final class Engine implements AutoCloseable {
 
         /**
          * The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
-         * with `meters` and `bearing` to each.
+         * with `meters` and `bearing` (from each place to the point).
          *
          * # Errors
          *

@@ -1048,7 +1048,7 @@ public unsafe byte[] Children(string id);
 
 ## `nearby`
 
-The places nearest the place with this ID, not counting it, nearest first, at most `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+The places nearest the place with this ID, not counting it, nearest first, at most `limit`, with `meters` and `bearing` (from each place to it); no rows for an unknown ID.
 
 **Errors.** `ErrorCode::InvalidArgument` if `id` is not a place ID or `limit` exceeds `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
 
@@ -1288,7 +1288,7 @@ public unsafe byte[] SearchWith(string query, uint limit, SearchOptions? options
 
 ## `reverse`
 
-The places nearest the point, nearest first, at most `limit`, with `meters` and `bearing` (degrees from north) to each.
+The places nearest the point, nearest first, at most `limit`, with `meters` and `bearing` (degrees clockwise from north, from each place to the point).
 
 **Errors.** `ErrorCode::InvalidArgument` for a point off the globe or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
 
@@ -1368,7 +1368,7 @@ public unsafe byte[] Reverse(double lat, double lon, uint limit);
 
 ## `within_radius`
 
-The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`, with `meters` and `bearing` to each.
+The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`, with `meters` and `bearing` (from each place to the point).
 
 **Errors.** `ErrorCode::InvalidArgument` for a point off the globe, a negative or non-finite radius, or a `limit` above `LIMIT_MAX`; `ErrorCode::Corrupt` if a section read is corrupt.
 

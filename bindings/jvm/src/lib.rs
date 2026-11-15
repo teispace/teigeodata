@@ -880,7 +880,7 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
 }
 
 /// The places nearest the place with this ID, not counting it, nearest first, at most
-/// `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+/// `limit`, with `meters` and `bearing` (from each place to it); no rows for an unknown ID.
 ///
 /// # Errors
 ///
@@ -1020,7 +1020,7 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
 }
 
 /// The places nearest the point, nearest first, at most `limit`, with `meters` and
-/// `bearing` (degrees from north) to each.
+/// `bearing` (degrees clockwise from north, from each place to the point).
 ///
 /// # Errors
 ///
@@ -1055,7 +1055,7 @@ pub extern "system" fn Java_org_teispace_teigeodata_TeiGeodata_00024Engine_nativ
 }
 
 /// The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
-/// with `meters` and `bearing` to each.
+/// with `meters` and `bearing` (from each place to the point).
 ///
 /// # Errors
 ///

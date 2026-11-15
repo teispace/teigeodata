@@ -290,6 +290,10 @@ renamed the last parameters that broke the naming rule (see **Breaking**).
 
 ### Fixed
 
+- The documentation, read against the code for 1.0 (D-343): a reverse answer's `bearing` is from
+  the place to the point, several `--pack`s follow the layer rule rather than their order, the
+  Nominatim routes' supported parameters and differences are listed, and each language's guide
+  names its own API (Rust's the typed engine, WebAssembly's `openBytes` only).
 - `tgd verify --deep` and `teigeodata_format::check::sections` now run the `TZ_RULES` section's
   full check; it was skipped (D-335).
 - `tgd serve` (`http::serve`) never timed out a slow request head or an idle connection, since

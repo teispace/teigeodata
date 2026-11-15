@@ -356,7 +356,7 @@ int32_t tg_engine_children(const tg_engine *handle, const uint8_t *id, size_t id
 
 /*
  * The places nearest the place with this ID, not counting it, nearest first, at most
- * `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+ * `limit`, with `meters` and `bearing` (from each place to it); no rows for an unknown ID.
  *
  * # Errors
  *
@@ -390,7 +390,7 @@ int32_t tg_engine_search_with(const tg_engine *handle, const uint8_t *query, siz
 
 /*
  * The places nearest the point, nearest first, at most `limit`, with `meters` and
- * `bearing` (degrees from north) to each.
+ * `bearing` (degrees clockwise from north, from each place to the point).
  *
  * # Errors
  *
@@ -401,7 +401,7 @@ int32_t tg_engine_reverse(const tg_engine *handle, double lat, double lon, uint3
 
 /*
  * The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
- * with `meters` and `bearing` to each.
+ * with `meters` and `bearing` (from each place to the point).
  *
  * # Errors
  *

@@ -22,8 +22,9 @@ cargo install --locked --git https://github.com/teispace/teigeodata --tag v0.3.1
 Prebuilt binaries come with the first registry release. `tgd completions zsh` (or `bash`,
 `fish`, `powershell`, `elvish`) prints a completion script.
 
-Every query takes `--pack <file>` (repeat it for several packs, the first wins where they
-disagree). Without one, it answers from the packs installed in the [store](#the-store).
+Every query takes `--pack <file>` (repeat it for several packs). Where packs disagree, the
+[layer rule](/docs/concepts/packs#layers) decides, not their order: the newer release, then the
+more specific pack. Without one, it answers from the packs installed in the [store](#the-store).
 
 ## Look inside a pack
 
@@ -74,8 +75,9 @@ Every query prints JSON with `--json`: one record per place, nulls where a value
 
 ## From a point
 
-`reverse` gives the nearest places with their distance and bearing; `inside` marks a place whose
-area holds the point. `--in-country` never crosses a border.
+`reverse` gives the nearest places with their distance and bearing (from the place to the point,
+"3.2 km at 45° from Pokhara"); `inside` marks a place that holds the point: a unit by its
+outline, a settlement or locality within its radius of the point. `--in-country` never crosses a border.
 
 <include lang="sh" meta='title="tour.sh"'>../../examples/cli/tour.sh#reverse</include>
 
@@ -149,7 +151,7 @@ platform's data directory, or where `--store` or `TEIGEODATA_STORE` says.
 | Command | What it does |
 |---|---|
 | `tgd init` | Set up the store: the catalog's mirrors and its trusted root. |
-| `tgd refresh [countries]` | Fetch what changed in the catalog. |
+| `tgd refresh [--countries a,b]` | Fetch what changed in the catalog. |
 | `tgd catalog` | List the catalog's packs, offline. |
 | `tgd find <name>` | Find a place by name with the packs that hold it, offline: what to install for "Dubai". |
 | `tgd locate <lat> <lon>` | The countries at a point, with their packs. |

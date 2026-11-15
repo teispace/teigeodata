@@ -5,7 +5,8 @@ description: "teigeodata from C++17: RAII handles, exceptions with stable codes,
 
 `teigeodata.hpp` is a header-only C++17 layer over the C library: RAII handles, `std::string_view`
 arguments, exceptions with the stable error codes, and `teigeodata_reader.hpp` to read results
-with a range-based `for`.
+with a range-based `for`. Everything is in namespace `teigeodata`; the tour shortens it with
+`namespace tg = teigeodata;`.
 
 <Callout title="Every example on this page ran">
 The code below is cut from one program, [the tour](https://github.com/teispace/teigeodata/blob/main/site/examples/cpp/tour.cpp), which CI runs on the released
@@ -54,8 +55,9 @@ Keep the `Blob` alive while you read it: the reader and every `string_view` borr
 
 An `Engine` holds the packs it answers from. `open_file` memory-maps a pack file and
 adds it as a **layer**; the engine answers from every layer at once, and a higher layer wins
-where two disagree. Opening is cheap: only the head of the file is read and checked, and each
-section is verified against its hash the first time a query reads it.
+where two disagree. Opening is cheap: the head of the file is read and checked and the block hashes of large
+sections are proved; each section is verified against its hash the first time a query reads
+it.
 
 <include lang="cpp" meta='title="tour.cpp"'>../../../examples/cpp/tour.cpp#open</include>
 
@@ -83,7 +85,7 @@ typos, missing accents and abbreviations. A result row has the place columns (`i
 
 The `score` ranks the rows of one query and means nothing across queries. It adds how well the
 name matched to how important the place is, so a city ranks above a village of the same name.
-`limit` is at most 10,000 (`LIMIT_MAX`).
+`limit` is at most 10,000 (`teigeodata::LIMIT_MAX`).
 
 ## Narrow a search by its parent
 
@@ -143,8 +145,8 @@ Each country's ladder is in its profile on the [data pages](/docs/data).
 ## Reverse geocode a point
 
 `reverse` gives the places nearest a point, nearest first, each with `meters` (the
-great-circle distance) and `bearing` (degrees clockwise from north, from the point to the
-place).
+great-circle distance) and `bearing` (degrees clockwise from north, from the place to the
+point: "3.2 km at 45° from Pokhara").
 
 <include lang="cpp" meta='title="tour.cpp"'>../../../examples/cpp/tour.cpp#reverse</include>
 

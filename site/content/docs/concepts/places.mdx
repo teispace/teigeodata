@@ -17,7 +17,8 @@ Everything teigeodata answers is about **places**. A place has:
 | `tz` | Its IANA timezone. |
 | `iso` | The ISO 3166 code of a country (`NP`) or a subdivision (`NP-P4`). |
 
-Any of these but the ID, kind and point may be null where the data has no value.
+Any of these but the ID and point may be null where the data has no value; `kind` is null only
+for a kind newer than the reader.
 
 ## Kinds
 

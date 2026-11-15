@@ -107,17 +107,29 @@ map.addLayer({ id: "admin", type: "circle", source: "admin" });
 
 ## Nominatim-compatible
 
-`/search`, `/reverse` and `/lookup` speak Nominatim's API: the same parameters, and the
-`json`, `jsonv2` and `geojson` formats (JSONP is refused: use CORS). Point a Nominatim client, a geocoder
-plugin or a script at teigeodata and it works offline:
+`/search`, `/reverse` and `/lookup` speak Nominatim's API for the parameters its clients use,
+in the `json`, `jsonv2` and `geojson` formats (JSONP is refused: use CORS):
+
+| Route | Parameters |
+|---|---|
+| `/search` | `q`, or the structured `amenity`, `street`, `city`, `county`, `state`, `country`, `postalcode`; `limit` (at most 40, as Nominatim); `countrycodes`; `viewbox` and `bounded`; `addressdetails` |
+| `/reverse` | `lat`, `lon`, `zoom` (how coarse a place to answer); `addressdetails` (on by default) |
+| `/lookup` | `osm_ids`: up to 50 teigeodata IDs, comma-separated |
+
+Point a Nominatim client, a geocoder plugin or a script at teigeodata and it works offline:
 
 <include lang="sh" meta='title="tour.sh"'>../../../examples/cli/tour.sh#http-nominatim</include>
 
 <include lang="json" meta='title="Response"'>../../../examples/cli/out/http-nominatim.txt</include>
 
-A conformance corpus of real client requests is checked in CI. Differences from Nominatim:
-`place_id` is a teigeodata ID (a string), there is no `osm_type` or `osm_id`, and the address
-names the admin units by level as the country defines them.
+A conformance corpus of real client requests is checked in CI. Differences from Nominatim, where
+what cannot be filled is left out rather than faked:
+
+- `place_id` is a teigeodata ID (a string); there is no `osm_type`, `osm_id`, `class`, `type` or
+  `place_rank`, so `json` and `jsonv2` answer the same objects.
+- `boundingbox` is the place's point (south = north, west = east), not its extent; draw an
+  outline with the native `/boundary`.
+- The address names the admin units by level as the country defines them.
 
 ## Errors
 
@@ -137,8 +149,9 @@ The codes and their statuses are listed in the [reference](/docs/reference/http#
 - **Limits are built in.** Every request is bounded (text length, `limit` at most 50, radius,
   time), so no request can make the server do unbounded work.
 - **Floods and slow clients are bounded too.** Connections and requests in flight are capped.
-  A request head must arrive within 10 seconds, and an idle connection is closed after the same
-  time. HTTP/2 peers are pinged and get at most 32 streams each. A request past the in-flight
+  A request head must arrive within 10 seconds, and an idle HTTP/1 connection is closed after the
+  same time. HTTP/2 peers are pinged every 20 seconds (and dropped when they stop answering) and
+  get at most 32 streams each. A request past the in-flight
   cap is refused at once, never queued, so a client should retry after `Retry-After`. A reverse
   proxy in front still does TLS and per-client rate limits.
 - **Updates without restarts.** Over a store, the server reads its journal every `--follow`

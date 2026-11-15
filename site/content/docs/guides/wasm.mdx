@@ -74,27 +74,25 @@ the module once; call it before the first `Engine`:
 <include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#import</include>
 
 Whole columns read faster for large results: `reader.numbers("lat")` is a typed array viewing
-the blob, `reader.strings("name")` an array.
+the blob, `reader.strings("name")` an array. 64-bit integer columns read as `bigint`.
 
 ## Open a pack
 
-An `Engine` holds the packs it answers from. `openFile` memory-maps a pack file and
-adds it as a **layer**; the engine answers from every layer at once, and a higher layer wins
-where two disagree. Opening is cheap: only the head of the file is read and checked, and each
-section is verified against its hash the first time a query reads it.
+An `Engine` holds the packs it answers from. A page has no file system, so
+`engine.openBytes(bytes)` adds a pack from a `Uint8Array` as a **layer**: a download, an asset,
+or a file the user picked. The engine answers from every layer at once, and a higher layer wins
+where two disagree. Opening copies the bytes into the module's memory once and checks the head;
+each section is verified against its hash the first time a query reads it.
 
 <include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#open</include>
 
 <include lang="text" meta='title="Output"'>../../../examples/out/open.txt</include>
 
-- `openBytes` adds a pack from bytes already in memory (a download, an app asset, the
-  browser). `openFileRange` opens a pack stored uncompressed inside another file, such as an
-  Android APK.
-- Each `_with` form takes `OpenOptions`: precedence over the other packs, when sections are
-  verified (lazy, eager or trusted), whether the file is mapped or read, and which components,
-  languages and outline level to read.
-- `openFile` returns the layer's number; `remove` takes it out again while other threads
-  keep querying. One engine answers from any number of threads at once.
+- `openBytesWith` takes `OpenOptions`: precedence over the other packs, when sections are
+  verified (lazy, eager or trusted), and which components, languages and outline level to read.
+- `openBytes` returns the layer's number; `remove` takes it out again.
+- What needs a file system or threads is left out of this package: `openFile`, the store (its
+  downloads and updates) and the `…Async` forms. Fetch and cache packs yourself (below).
 
 ## Search by name
 
@@ -128,7 +126,7 @@ level 3) share the name, and both are in Bagmati.
 
 Many places share a name. `searchWith` takes `SearchOptions`: a **focus** point (the
 user's location, or the middle of the map they are looking at) ranks near places first. A place
-at the focus gains 30 points, one `focus_scale_m` away 15, and the gain keeps halving with
+at the focus gains 30 points, one `focusScaleM` away 15, and the gain keeps halving with
 distance (the default scale is 50 km).
 
 <include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#search-focus</include>
@@ -169,8 +167,8 @@ Each country's ladder is in its profile on the [data pages](/docs/data).
 ## Reverse geocode a point
 
 `reverse` gives the places nearest a point, nearest first, each with `meters` (the
-great-circle distance) and `bearing` (degrees clockwise from north, from the point to the
-place).
+great-circle distance) and `bearing` (degrees clockwise from north, from the place to the
+point: "3.2 km at 45° from Pokhara").
 
 <include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#reverse</include>
 

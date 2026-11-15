@@ -28,19 +28,21 @@ def pascal(name):
 
 
 # Each section: id (the tour's region and output file), title, prose before, prose after.
-# {m:name} is a method of Engine in the language's spelling; {f:name} a free function.
+# {m:name} is a method of Engine in the language's spelling; {f:name} a free function;
+# {c:name} a constant or type the language spells its own way (SPELL, or the entry's `spell`).
 SECTIONS = [
     (
         "open",
         "Open a pack",
         """An `Engine` holds the packs it answers from. {m:open_file} memory-maps a pack file and
 adds it as a **layer**; the engine answers from every layer at once, and a higher layer wins
-where two disagree. Opening is cheap: only the head of the file is read and checked, and each
-section is verified against its hash the first time a query reads it.""",
+where two disagree. Opening is cheap: the head of the file is read and checked and the block hashes of large
+sections are proved; each section is verified against its hash the first time a query reads
+it.""",
         """- {m:open_bytes} adds a pack from bytes already in memory (a download, an app asset, the
   browser). {m:open_file_range} opens a pack stored uncompressed inside another file, such as an
   Android APK.
-- Each `_with` form takes `OpenOptions`: precedence over the other packs, when sections are
+- Each {c:with} form takes {c:open_options}: precedence over the other packs, when sections are
   verified (lazy, eager or trusted), whether the file is mapped or read, and which components,
   languages and outline level to read.
 - {m:open_file} returns the layer's number; {m:remove} takes it out again while other threads
@@ -55,7 +57,7 @@ typos, missing accents and abbreviations. A result row has the place columns (`i
 `kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`) and a `score`.""",
         """The `score` ranks the rows of one query and means nothing across queries. It adds how well the
 name matched to how important the place is, so a city ranks above a village of the same name.
-`limit` is at most 10,000 (`LIMIT_MAX`).""",
+`limit` is at most 10,000 ({c:limit_max}).""",
     ),
     (
         "search-parent",
@@ -69,9 +71,9 @@ level 3) share the name, and both are in Bagmati.""",
     (
         "search-focus",
         "Rank by distance from a point",
-        """Many places share a name. {m:search_with} takes `SearchOptions`: a **focus** point (the
+        """Many places share a name. {m:search_with} takes {c:search_options}: a **focus** point (the
 user's location, or the middle of the map they are looking at) ranks near places first. A place
-at the focus gains 30 points, one `focus_scale_m` away 15, and the gain keeps halving with
+at the focus gains 30 points, one {c:focus_scale_m} away 15, and the gain keeps halving with
 distance (the default scale is 50 km).""",
         """Set `strict` to rank by how well the name matched first (exact, loose, prefix, one edit,
 substring, two edits, phonetic), then by importance and focus, instead of one combined score:
@@ -100,8 +102,8 @@ Each country's ladder is in its profile on the [data pages](/docs/data).""",
         "reverse",
         "Reverse geocode a point",
         """{m:reverse} gives the places nearest a point, nearest first, each with `meters` (the
-great-circle distance) and `bearing` (degrees clockwise from north, from the point to the
-place).""",
+great-circle distance) and `bearing` (degrees clockwise from north, from the place to the
+point: "3.2 km at 45° from Pokhara").""",
         """For the admin units that *hold* a point (its district, province and country) use
 {m:admin_at} below; reverse answers with what is *near* it.""",
     ),
@@ -207,9 +209,24 @@ NAMING = {
 }
 
 
+# Defaults by naming; an entry's `spell` overrides any of them.
+SPELL = {
+    "snake": {"with": "`_with`", "open_options": "`OpenOptions`", "search_options": "`SearchOptions`",
+              "limit_max": "`LIMIT_MAX`", "focus_scale_m": "`focus_scale_m`"},
+    "camel": {"with": "`…With`", "open_options": "`OpenOptions`", "search_options": "`SearchOptions`",
+              "limit_max": "`LIMIT_MAX`", "focus_scale_m": "`focusScaleM`"},
+    "pascal": {"with": "`…With`", "open_options": "`OpenOptions`", "search_options": "`SearchOptions`",
+               "limit_max": "`LimitMax`", "focus_scale_m": "`FocusScaleM`"},
+    "c": {"with": "`_with`", "open_options": "`tg_open_options`", "search_options": "`tg_search_options`",
+          "limit_max": "`TG_LIMIT_MAX`", "focus_scale_m": "`focus_scale_m`"},
+}
+
+
 def fill(text, lang):
     def method(m):
         kind, name = m.group(1), m.group(2)
+        if kind == "c":
+            return lang.get("spell", {}).get(name) or SPELL[lang["naming"]][name]
         if lang["naming"] == "c":
             return f"`tg_engine_{name}`" if kind == "m" else f"`tg_{name}`"
         spelled = NAMING[lang["naming"]](name)
@@ -217,7 +234,7 @@ def fill(text, lang):
             spelled = lang["free_prefix"] + spelled
         return f"`{spelled}`"
 
-    return re.sub(r"\{([mf]):([a-z_]+)\}", method, text)
+    return re.sub(r"\{([mfc]):([a-z_]+)\}", method, text)
 
 
 def include(path, region, code_lang, title=None):
@@ -299,11 +316,12 @@ byte and keeps the packs updated."""
             out.append(fill(after, lang).strip())
             out.append("")
     region, title, before, after = SECTIONS[-1]
+    before, after = lang.get("prose", {}).get(region, (before, after))
     out.append(f"## {title}")
     out.append("")
     out.append(fill(before, lang).strip())
     out.append("")
-    out.append(after.strip())
+    out.append(fill(after, lang).strip())
     out.append("")
     out.append(lang["errors"].strip())
     out.append("")
@@ -371,6 +389,82 @@ lang(
     tour_url=TOUR + "rust/tour.rs",
     # The typed engine's own calls where they differ from the bindings'.
     prose={
+        "open": (
+            """An `Engine` holds the packs it answers from, each as a **layer**. `Layer::open` maps a pack
+file and checks its head; `Engine::add` adds the layer and returns its `LayerId`. The engine
+answers from every layer at once, and a higher layer wins where two disagree. Opening is cheap:
+the head is read and checked, and the block hashes of large sections are proved; each section
+is verified against its hash the first time a query reads it.""",
+            """- `Layer::from_bytes` opens a pack from bytes already in memory (a download, an app asset).
+  `Layer::open_range` opens a pack stored uncompressed inside another file, such as an Android
+  APK.
+- `LayerOptions` sets the layer's `priority`, when sections are verified (`Verify::Lazy`,
+  `Eager` or `Trusted`), whether the file is mapped or read (`Load::Map`, `Load::Read`), and
+  which components, languages and outline level to read (`installed`,
+  `installed_parts`, `outline_level`).
+- `Engine::remove` takes a layer out again by its `LayerId`. For an engine that other threads
+  keep querying while layers come and go, see `Shared` below.""",
+        ),
+        "search": (
+            """`Engine::search` finds places by name, best first, into a `Vec<Hit>` you reuse; each `Hit`
+is a `Place` and its `score`. It matches every name a place has, in every script, and forgives
+spelling: काठमाडौं, Kathmandu and Kathamandu find the same city, and so do typos, missing accents
+and abbreviations. `Engine::search_with` takes `SearchOptions` too; the tour uses it throughout.""",
+            """The `score` ranks the hits of one query and means nothing across queries. It adds how well the
+name matched to how important the place is, so a city ranks above a village of the same name.
+The engine takes any `k`; the bindings cap `limit` at 10,000 (`LIMIT_MAX` in
+`teigeodata-api`).""",
+        ),
+        "search-focus": (
+            """Many places share a name. `SearchOptions::with_focus` takes a `Focus { at, scale_m }`: a
+point (the user's location, or the middle of the map they are looking at) that ranks near
+places first. A place at the focus gains 30 points, one `scale_m` away 15, and the gain keeps
+halving with distance.""",
+            """Set `SearchOptions::strict` to rank by how well the name matched first (exact, loose,
+prefix, one edit, substring, two edits, phonetic), then by importance and focus, instead of one
+combined score: useful for an autocomplete that must show exact matches on top.""",
+        ),
+        "get": (
+            """Every place has a stable ID such as `tgd:np/1xhb`: the country, then a short code; it parses
+into a `PlaceId`. IDs survive rebuilds of the data; when two places are merged, `Engine::get`
+on the retired ID answers with the survivor, so IDs you stored keep working.""",
+            """`Engine::elevation` is metres above mean sea level (EGM2008), `Engine::tz_of` the place's
+timezone area and `Engine::parent` the unit that holds it. Each returns an `Option`: `None`
+where the data has no value.""",
+        ),
+        "reverse": (
+            """`Engine::reverse` gives the places nearest a point, nearest first, as `Near` values: the
+`place`, `meters` (the great-circle distance) and `bearing_deg` (degrees clockwise from north,
+from the place to the point: "3.2 km at 45° from Pokhara").""",
+            """For the admin units that *hold* a point (its district, province and country) use
+`Engine::admin_at` below; reverse answers with what is *near* it.""",
+        ),
+        "timezone": (
+            """`Engine::tz_at` gives the timezone area at a point as the zone boundaries draw it, a `Place`
+whose name is the IANA zone (`Engine::zone_name` reads it from the zone rules, when the pack
+has them). With the zone, `Engine::tz_offset_at` gives the UTC offset at an instant (from the
+tzdb rules inside the pack, not from the operating system), and
+`Engine::tz_local_candidates` tells whether a wall-clock time exists: `Local::Unique`,
+`Local::Gap` (skipped by a daylight-saving change) or `Local::Overlap` (it happens twice),
+with the offsets before and after.""",
+            """`Engine::tz_version` names the tzdb release the rules come from, so you can tell when a pack
+is older than a rule change; `Engine::tz_zones` lists every zone the packs hold.""",
+        ),
+        "errors": (
+            """A query fails with the engine's `Error`; the bindings map it to their eight stable codes:""",
+            """| `Error` | Meaning | Bindings' code |
+|---|---|---|
+| `Io` | A file could not be read. | `Io` |
+| `Format` | The bytes are not a valid pack, or a section's structure is broken. | `Corrupt` |
+| `Integrity { address, kind }` | A section's bytes do not match its hash. | `Corrupt` |
+| `Range` | A section is missing or a byte range is outside it. | `Corrupt` |
+| `MissingComponent { address, component }` | The query needs a component the layer was installed without. | `MissingComponent` |
+
+Arguments are checked by their types before a query runs: a `Point` is in range when it is made,
+and a `PlaceId` or an `IsoCode` when it is parsed. The store (`teigeodata-sync`) has its own
+error type for the network and the catalog. A query that finds nothing is not an error: it
+returns `None` or no hits.""",
+        ),
         "distance": (
             """`meters_between` is the great-circle distance in metres (haversine on the WGS84 mean
 sphere, within about 0.5% of the ellipsoid), and `bearing_deg` the initial bearing from the
@@ -439,9 +533,18 @@ throughout. A point is checked when it is made, so the latitude error comes from
 `Point::from_degrees`:""",
     extras="""## Threads and updates
 
-`Engine` is `Send + Sync`: share it in an `Arc` and query from any number of threads. Adding or
-removing a layer publishes a new snapshot; queries already running finish on the one they
-started with.""",
+`Engine` is `Send + Sync`: share it in an `Arc` and query from any number of threads. To add or
+remove layers while other threads query, hold a `Shared`: `Shared::load` gives the snapshot a
+query runs on, and `Shared::update` changes a copy and publishes it atomically, so queries
+already running finish on the snapshot they started with:
+
+```rust
+use teigeodata_engine::{Engine, Layer, LayerOptions, Shared};
+
+let shared = Shared::new(Engine::new());
+let id = shared.update(|e| e.add(Layer::open("world-np-lite.tgd", LayerOptions::default()).unwrap()));
+let snapshot = shared.load(); // derefs to &Engine
+```""",
 )
 
 lang(
@@ -478,8 +581,8 @@ pip install teigeodata
 
 </Tab>
 </Tabs>""",
-    read="""Every query returns a **result blob**: the rows as compact columns in one `bytes` object, read
-in place. `teigeodata.blob.Reader` reads it; iterating gives each row as a `dict` from column
+    read="""Every query returns a **result blob**: the rows as compact columns in one `Blob`, a buffer the
+library lends without a copy (`memoryview(blob)`; `bytes(blob)` copies it), read in place. `teigeodata.blob.Reader` reads it; iterating gives each row as a `dict` from column
 name to value, with `None` where a value is null:
 
 <include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#rows</include>
@@ -553,7 +656,9 @@ for (const place of new Reader(engine.search("Pokhara", 3))) {
 
 For large results read whole columns: `reader.numbers("lat")` is a typed array of the column's
 own type (a `Float64Array` for `lat`) viewing the blob, `reader.strings("name")` an array,
-`reader.nulls("elevation")` which rows are null; `records()` gives every row at once. Numbers are JavaScript numbers (64-bit IDs are exact to 2^53).""",
+`reader.nulls("elevation")` which rows are null; `records()` gives every row at once. Numbers are
+JavaScript numbers, except 64-bit integer columns, which read as `bigint` (and as
+`BigInt64Array` or `BigUint64Array` columns).""",
     errors="""Errors are thrown as `Error`s with a `code` property, one of the names above:""",
     extras="""## Threads and the event loop
 
@@ -571,6 +676,20 @@ lang(
     naming="camel",
     files=[("JavaScript", "wasm/tour.mjs", "js")],
     tour_url=TOUR + "wasm/tour.mjs",
+    prose={
+        "open": (
+            """An `Engine` holds the packs it answers from. A page has no file system, so
+`engine.openBytes(bytes)` adds a pack from a `Uint8Array` as a **layer**: a download, an asset,
+or a file the user picked. The engine answers from every layer at once, and a higher layer wins
+where two disagree. Opening copies the bytes into the module's memory once and checks the head;
+each section is verified against its hash the first time a query reads it.""",
+            """- `openBytesWith` takes `OpenOptions`: precedence over the other packs, when sections are
+  verified (lazy, eager or trusted), and which components, languages and outline level to read.
+- `openBytes` returns the layer's number; `remove` takes it out again.
+- What needs a file system or threads is left out of this package: `openFile`, the store (its
+  downloads and updates) and the `…Async` forms. Fetch and cache packs yourself (below).""",
+        ),
+    },
     intro="""`@teispace/teigeodata-wasm` is the engine compiled to WebAssembly, for browsers, Web Workers,
 Deno, Bun, Node.js and Cloudflare Workers. The API is the [Node.js package's](/docs/guides/node);
 the difference is where packs come from: a page has no file system, so it opens a pack from its
@@ -610,7 +729,7 @@ the module once; call it before the first `Engine`:
 <include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#import</include>
 
 Whole columns read faster for large results: `reader.numbers("lat")` is a typed array viewing
-the blob, `reader.strings("name")` an array.""",
+the blob, `reader.strings("name")` an array. 64-bit integer columns read as `bigint`.""",
     errors="""Errors are thrown as `Error`s with a `code` property, one of the names above:""",
     extras="""## In a page
 
@@ -638,6 +757,7 @@ lang(
     title="Swift",
     description="teigeodata in iOS and macOS apps: offline search, reverse geocoding, timezones and elevation from Swift, with typed errors and async store calls.",
     naming="camel",
+    spell={"limit_max": "`TeiGeodata.limitMax`"},
     files=[("Swift", "swift/Tour/Sources/Tour/main.swift", "swift")],
     tour_url=TOUR + "swift/Tour/Sources/Tour/main.swift",
     intro="""The Swift package wraps the C library: on Apple platforms it links an XCFramework (iOS,
@@ -650,7 +770,7 @@ The release tags are the Swift releases. From the first release that carries the
 
 ```swift title="Package.swift"
 dependencies: [
-    .package(url: "https://github.com/teispace/teigeodata", from: "0.4.0"),
+    .package(url: "https://github.com/teispace/teigeodata", from: "1.0.0"),
 ],
 targets: [
     .target(name: "MyApp", dependencies: [.product(name: "TeiGeodata", package: "teigeodata")]),
@@ -701,7 +821,7 @@ are fast enough for the main actor; the store's blocking calls have `async` form
 ## Bundling a pack
 
 Add the `.tgd` file to the app's resources and open it in place:
-`engine.openFile(Bundle.main.path(forResource: "world-np-lite", ofType: "tgd")!)`. The file is
+`try engine.openFile(Bundle.main.path(forResource: "world-np-lite", ofType: "tgd")!)`. The file is
 memory-mapped, so it costs no heap.""",
 )
 
@@ -711,6 +831,7 @@ lang(
     title="Kotlin and Java",
     description="teigeodata on the JVM and Android: one library for Kotlin and Java, offline geocoding with rows as maps.",
     naming="camel",
+    spell={"limit_max": "`TeiGeodata.LIMIT_MAX`"},
     files=[
         ("Kotlin", "kotlin/Tour.kt", "kotlin"),
         ("Java", "java/Tour.java", "java"),
@@ -726,8 +847,8 @@ From the first registry release, on Maven Central:
 
 ```kotlin title="build.gradle.kts"
 dependencies {
-    implementation("com.teispace:teigeodata:0.4.0")            // desktop JVM
-    // implementation("com.teispace:teigeodata-android:0.4.0") // Android
+    implementation("com.teispace:teigeodata:1.0.0")            // desktop JVM
+    // implementation("com.teispace:teigeodata-android:1.0.0") // Android
 }
 ```
 
@@ -779,6 +900,7 @@ lang(
     title="Dart and Flutter",
     description="teigeodata in Flutter apps and Dart programs on Android, iOS, desktop and the web: offline places with rows as maps.",
     naming="camel",
+    spell={"limit_max": "`TeiGeodata.limitMax`"},
     files=[("Dart", "dart/bin/tour.dart", "dart")],
     tour_url=TOUR + "dart/bin/tour.dart",
     intro="""One package for Dart and Flutter on Android, iOS, macOS, Linux, Windows and the web. Natively
@@ -857,6 +979,7 @@ lang(
     title="Go",
     description="teigeodata from Go, with cgo or without it (purego): offline geocoding with typed column reads and rows as maps.",
     naming="pascal",
+    spell={"limit_max": "`tg.LimitMax`"},
     files=[("Go", "go/tour.go", "go")],
     tour_url=TOUR + "go/tour.go",
     intro="""The Go module calls the C library through cgo, or through
@@ -868,7 +991,8 @@ against the SHA-256 the module pins), then the system's.""",
 go get github.com/teispace/teigeodata/bindings/go
 ```
 
-The tags are the Go releases. Go 1.26 or later. Fetch the prebuilt library once (from the first
+The module's versions are the tags `bindings/go/vX.Y.Z`, made with each release. Go 1.26 or
+later. Fetch the prebuilt library once (from the first
 release that carries it):
 
 ```sh
@@ -958,11 +1082,13 @@ lang(
     title="C++",
     description="teigeodata from C++17: RAII handles, exceptions with stable codes, and a range-based reader for results.",
     naming="snake",
+    spell={"limit_max": "`teigeodata::LIMIT_MAX`"},
     files=[("C++", "cpp/tour.cpp", "cpp")],
     tour_url=TOUR + "cpp/tour.cpp",
     intro="""`teigeodata.hpp` is a header-only C++17 layer over the C library: RAII handles, `std::string_view`
 arguments, exceptions with the stable error codes, and `teigeodata_reader.hpp` to read results
-with a range-based `for`.""",
+with a range-based `for`. Everything is in namespace `teigeodata`; the tour shortens it with
+`namespace tg = teigeodata;`.""",
     install="""Install the [C package](/docs/guides/c#install): the C++ headers ship in it. Then
 compile as C++17 or later:
 
@@ -990,6 +1116,7 @@ lang(
     title=".NET",
     description="teigeodata from C# and every .NET language: source-generated P/Invoke, NativeAOT and trimming ready, spans over results.",
     naming="pascal",
+    spell={"limit_max": "`Geodata.LimitMax`"},
     files=[("C#", "dotnet/Program.cs", "csharp")],
     tour_url=TOUR + "dotnet/Program.cs",
     intro="""`Teispace.TeiGeodata` is the .NET binding: source-generated P/Invoke (`LibraryImport`) with
@@ -1033,8 +1160,9 @@ copy; `Strings("name")` and `Nulls("elevation")` read the rest.""",
     extras="""## Threads and async
 
 An `Engine` answers from any number of threads; `Dispose` frees it once no call holds it. The
-store's blocking calls have awaitable forms (`CatalogAsync`, `InstallPassAsync`, …), and a `Job`
-streams its progress with `ProgressAsync` and cancels through a `CancellationToken`.""",
+store's blocking calls have awaitable forms (`Store.OpenAsync`, `CatalogAsync`, `StatusAsync`,
+`RemoveAsync`, …), and a `Job` streams its progress with `ProgressAsync`, gives its result with
+`ResultAsync` and cancels through a `CancellationToken`.""",
 )
 
 def main():

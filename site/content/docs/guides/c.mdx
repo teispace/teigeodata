@@ -77,8 +77,9 @@ A `tg_str` points into the blob: copy it if you need it after `tg_bytes_free`.
 
 An `Engine` holds the packs it answers from. `tg_engine_open_file` memory-maps a pack file and
 adds it as a **layer**; the engine answers from every layer at once, and a higher layer wins
-where two disagree. Opening is cheap: only the head of the file is read and checked, and each
-section is verified against its hash the first time a query reads it.
+where two disagree. Opening is cheap: the head of the file is read and checked and the block hashes of large
+sections are proved; each section is verified against its hash the first time a query reads
+it.
 
 <include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c#open</include>
 
@@ -87,7 +88,7 @@ section is verified against its hash the first time a query reads it.
 - `tg_engine_open_bytes` adds a pack from bytes already in memory (a download, an app asset, the
   browser). `tg_engine_open_file_range` opens a pack stored uncompressed inside another file, such as an
   Android APK.
-- Each `_with` form takes `OpenOptions`: precedence over the other packs, when sections are
+- Each `_with` form takes `tg_open_options`: precedence over the other packs, when sections are
   verified (lazy, eager or trusted), whether the file is mapped or read, and which components,
   languages and outline level to read.
 - `tg_engine_open_file` returns the layer's number; `tg_engine_remove` takes it out again while other threads
@@ -106,7 +107,7 @@ typos, missing accents and abbreviations. A result row has the place columns (`i
 
 The `score` ranks the rows of one query and means nothing across queries. It adds how well the
 name matched to how important the place is, so a city ranks above a village of the same name.
-`limit` is at most 10,000 (`LIMIT_MAX`).
+`limit` is at most 10,000 (`TG_LIMIT_MAX`).
 
 ## Narrow a search by its parent
 
@@ -123,7 +124,7 @@ level 3) share the name, and both are in Bagmati.
 
 ## Rank by distance from a point
 
-Many places share a name. `tg_engine_search_with` takes `SearchOptions`: a **focus** point (the
+Many places share a name. `tg_engine_search_with` takes `tg_search_options`: a **focus** point (the
 user's location, or the middle of the map they are looking at) ranks near places first. A place
 at the focus gains 30 points, one `focus_scale_m` away 15, and the gain keeps halving with
 distance (the default scale is 50 km).
@@ -166,8 +167,8 @@ Each country's ladder is in its profile on the [data pages](/docs/data).
 ## Reverse geocode a point
 
 `tg_engine_reverse` gives the places nearest a point, nearest first, each with `meters` (the
-great-circle distance) and `bearing` (degrees clockwise from north, from the point to the
-place).
+great-circle distance) and `bearing` (degrees clockwise from north, from the place to the
+point: "3.2 km at 45° from Pokhara").
 
 <include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c#reverse</include>
 

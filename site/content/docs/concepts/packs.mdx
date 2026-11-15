@@ -11,7 +11,7 @@ forge from open sources, signed, and published in releases.
 
 A pack is laid out to be read where it lies: the engine memory-maps the file and reads the bytes
 it needs, with no parsing step and no copy into the heap. Opening a 15 MB pack reads its head
-(at most 16 KiB) and nothing else; a query touches only the pages it reads, which the operating
+(at most 16 KiB) and proves the block hashes of its large sections, and nothing else; a query touches only the pages it reads, which the operating
 system shares between processes and drops under memory pressure.
 
 - **Verified as it is read.** Every section carries a BLAKE3 hash in the head, and every 16 KiB
@@ -19,7 +19,8 @@ system shares between processes and drops under memory pressure.
   time a query reads it (`Verify::Lazy`); `Eager` checks everything when the pack opens.
 - **Signed.** Released packs are signed with Ed25519 over the head, which holds every section's
   hash. `tgd verify --key` checks a signature; the store checks every pack it installs against
-  the signed catalog.
+  the signed catalog. The data pre-releases published so far are not signed yet: check them by
+  the SHA-256 their release lists, until the signing key is made for 1.0.
 - **Forward compatible.** A reader skips sections it does not know, so older code keeps reading
   newer packs, and a pack states the oldest reader that can open it.
 
@@ -74,7 +75,8 @@ a tolerance in metres). `OpenOptions` and the store's install options take the s
 
 An engine answers from several packs at once; each is a **layer**. Where layers hold the same
 place, one rule decides which answers: the higher `priority` you give, then the newer release,
-then the more specific pack (a country over the world), and the baseline always last. So a
+then the more specific pack (a country over the world), then the pack's address as a last
+tie-break, and the baseline always last. So a
 detailed country pack overrides the world pack inside that country, while the world pack still
 answers everywhere else. The answers do not depend on the order the packs were added (a CI gate
 splits packs and compares). Typical stacks:

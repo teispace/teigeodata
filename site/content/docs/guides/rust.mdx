@@ -75,38 +75,41 @@ binding API (`Engine::search` returning a result blob).
 
 ## Open a pack
 
-An `Engine` holds the packs it answers from. `open_file` memory-maps a pack file and
-adds it as a **layer**; the engine answers from every layer at once, and a higher layer wins
-where two disagree. Opening is cheap: only the head of the file is read and checked, and each
-section is verified against its hash the first time a query reads it.
+An `Engine` holds the packs it answers from, each as a **layer**. `Layer::open` maps a pack
+file and checks its head; `Engine::add` adds the layer and returns its `LayerId`. The engine
+answers from every layer at once, and a higher layer wins where two disagree. Opening is cheap:
+the head is read and checked, and the block hashes of large sections are proved; each section
+is verified against its hash the first time a query reads it.
 
 <include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#open</include>
 
 <include lang="text" meta='title="Output"'>../../../examples/out/open.txt</include>
 
-- `open_bytes` adds a pack from bytes already in memory (a download, an app asset, the
-  browser). `open_file_range` opens a pack stored uncompressed inside another file, such as an
-  Android APK.
-- Each `_with` form takes `OpenOptions`: precedence over the other packs, when sections are
-  verified (lazy, eager or trusted), whether the file is mapped or read, and which components,
-  languages and outline level to read.
-- `open_file` returns the layer's number; `remove` takes it out again while other threads
-  keep querying. One engine answers from any number of threads at once.
+- `Layer::from_bytes` opens a pack from bytes already in memory (a download, an app asset).
+  `Layer::open_range` opens a pack stored uncompressed inside another file, such as an Android
+  APK.
+- `LayerOptions` sets the layer's `priority`, when sections are verified (`Verify::Lazy`,
+  `Eager` or `Trusted`), whether the file is mapped or read (`Load::Map`, `Load::Read`), and
+  which components, languages and outline level to read (`installed`,
+  `installed_parts`, `outline_level`).
+- `Engine::remove` takes a layer out again by its `LayerId`. For an engine that other threads
+  keep querying while layers come and go, see `Shared` below.
 
 ## Search by name
 
-`search` finds places by name, best first. It matches every name a place has, in every
-script, and forgives spelling: काठमाडौं, Kathmandu and Kathamandu find the same city, and so do
-typos, missing accents and abbreviations. A result row has the place columns (`id`, `name`,
-`kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`) and a `score`.
+`Engine::search` finds places by name, best first, into a `Vec<Hit>` you reuse; each `Hit`
+is a `Place` and its `score`. It matches every name a place has, in every script, and forgives
+spelling: काठमाडौं, Kathmandu and Kathamandu find the same city, and so do typos, missing accents
+and abbreviations. `Engine::search_with` takes `SearchOptions` too; the tour uses it throughout.
 
 <include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#search</include>
 
 <include lang="text" meta='title="Output"'>../../../examples/out/search.txt</include>
 
-The `score` ranks the rows of one query and means nothing across queries. It adds how well the
+The `score` ranks the hits of one query and means nothing across queries. It adds how well the
 name matched to how important the place is, so a city ranks above a village of the same name.
-`limit` is at most 10,000 (`LIMIT_MAX`).
+The engine takes any `k`; the bindings cap `limit` at 10,000 (`LIMIT_MAX` in
+`teigeodata-api`).
 
 ## Narrow a search by its parent
 
@@ -123,32 +126,32 @@ level 3) share the name, and both are in Bagmati.
 
 ## Rank by distance from a point
 
-Many places share a name. `search_with` takes `SearchOptions`: a **focus** point (the
-user's location, or the middle of the map they are looking at) ranks near places first. A place
-at the focus gains 30 points, one `focus_scale_m` away 15, and the gain keeps halving with
-distance (the default scale is 50 km).
+Many places share a name. `SearchOptions::with_focus` takes a `Focus { at, scale_m }`: a
+point (the user's location, or the middle of the map they are looking at) that ranks near
+places first. A place at the focus gains 30 points, one `scale_m` away 15, and the gain keeps
+halving with distance.
 
 <include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#search-focus</include>
 
 <include lang="text" meta='title="Output"'>../../../examples/out/search-focus.txt</include>
 
-Set `strict` to rank by how well the name matched first (exact, loose, prefix, one edit,
-substring, two edits, phonetic), then by importance and focus, instead of one combined score:
-useful for an autocomplete that must show exact matches on top.
+Set `SearchOptions::strict` to rank by how well the name matched first (exact, loose,
+prefix, one edit, substring, two edits, phonetic), then by importance and focus, instead of one
+combined score: useful for an autocomplete that must show exact matches on top.
 
 ## Get a place by its ID
 
-Every place has a stable ID such as `tgd:np/1xhb`: the country, then a short code. IDs
-survive rebuilds of the data; when two places are merged, `get` on the retired ID answers
-with the survivor, so IDs you stored keep working.
+Every place has a stable ID such as `tgd:np/1xhb`: the country, then a short code; it parses
+into a `PlaceId`. IDs survive rebuilds of the data; when two places are merged, `Engine::get`
+on the retired ID answers with the survivor, so IDs you stored keep working.
 
 <include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#get</include>
 
 <include lang="text" meta='title="Output"'>../../../examples/out/get.txt</include>
 
-`elevation` is metres above mean sea level (EGM2008), `tz` the IANA zone and `parent` the
-ID of the unit that holds the place. Any column may be null where the data has no value: read
-each through the reader, which gives your language's null.
+`Engine::elevation` is metres above mean sea level (EGM2008), `Engine::tz_of` the place's
+timezone area and `Engine::parent` the unit that holds it. Each returns an `Option`: `None`
+where the data has no value.
 
 ## Walk the admin hierarchy
 
@@ -165,16 +168,16 @@ Each country's ladder is in its profile on the [data pages](/docs/data).
 
 ## Reverse geocode a point
 
-`reverse` gives the places nearest a point, nearest first, each with `meters` (the
-great-circle distance) and `bearing` (degrees clockwise from north, from the point to the
-place).
+`Engine::reverse` gives the places nearest a point, nearest first, as `Near` values: the
+`place`, `meters` (the great-circle distance) and `bearing_deg` (degrees clockwise from north,
+from the place to the point: "3.2 km at 45° from Pokhara").
 
 <include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#reverse</include>
 
 <include lang="text" meta='title="Output"'>../../../examples/out/reverse.txt</include>
 
 For the admin units that *hold* a point (its district, province and country) use
-`admin_at` below; reverse answers with what is *near* it.
+`Engine::admin_at` below; reverse answers with what is *near* it.
 
 ## Find everything within a radius
 
@@ -210,18 +213,20 @@ not by the nearest centre. Disputed boundaries are drawn from one stated perspec
 
 ## Timezones: the zone, its offset and local times
 
-`tz_at` gives the IANA zone at a point as the zone boundaries draw it. With the zone,
-`tz_offset_at` gives the UTC offset at an instant (from the tzdb rules inside the pack, not
-from the operating system), and `tz_local` tells whether a wall-clock time exists: `unique`,
-`gap` (skipped by a daylight-saving change) or `overlap` (it happens twice), with the offsets
-before and after.
+`Engine::tz_at` gives the timezone area at a point as the zone boundaries draw it, a `Place`
+whose name is the IANA zone (`Engine::zone_name` reads it from the zone rules, when the pack
+has them). With the zone, `Engine::tz_offset_at` gives the UTC offset at an instant (from the
+tzdb rules inside the pack, not from the operating system), and
+`Engine::tz_local_candidates` tells whether a wall-clock time exists: `Local::Unique`,
+`Local::Gap` (skipped by a daylight-saving change) or `Local::Overlap` (it happens twice),
+with the offsets before and after.
 
 <include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#timezone</include>
 
 <include lang="text" meta='title="Output"'>../../../examples/out/timezone.txt</include>
 
-`tz_version` names the tzdb release the rules come from, so you can tell when a pack is
-older than a rule change; `tz_zones` lists every zone the packs hold.
+`Engine::tz_version` names the tzdb release the rules come from, so you can tell when a pack
+is older than a rule change; `Engine::tz_zones` lists every zone the packs hold.
 
 ## Elevation at any point
 
@@ -272,20 +277,20 @@ stored): the same bytes the servers and every binding's `boundary` answer.
 
 ## Errors
 
-A call fails with one of eight stable codes, the same in every language:
+A query fails with the engine's `Error`; the bindings map it to their eight stable codes:
 
-| Code | Meaning |
-|---|---|
-| `InvalidArgument` | An argument is outside its range: a latitude of 91, a limit over 10,000, a malformed ID. |
-| `MissingComponent` | The query needs a component the pack was installed without (search on a pack installed without `search`). |
-| `Corrupt` | The bytes are not a valid pack, or a section does not match its hash. |
-| `Io` | A file could not be read. |
-| `Network` | No mirror answered, or the connection broke (the store only). |
-| `Refused` | The store refused: the catalog did not verify, a pack is not installed or another needs it. |
-| `Cancelled` | A callback or a job was asked to stop. |
-| `Internal` | A bug inside teigeodata; a panic never crosses into your program. |
+| `Error` | Meaning | Bindings' code |
+|---|---|---|
+| `Io` | A file could not be read. | `Io` |
+| `Format` | The bytes are not a valid pack, or a section's structure is broken. | `Corrupt` |
+| `Integrity { address, kind }` | A section's bytes do not match its hash. | `Corrupt` |
+| `Range` | A section is missing or a byte range is outside it. | `Corrupt` |
+| `MissingComponent { address, component }` | The query needs a component the layer was installed without. | `MissingComponent` |
 
-A query that finds nothing is not an error: it returns no rows.
+Arguments are checked by their types before a query runs: a `Point` is in range when it is made,
+and a `PlaceId` or an `IsoCode` when it is parsed. The store (`teigeodata-sync`) has its own
+error type for the network and the catalog. A query that finds nothing is not an error: it
+returns `None` or no hits.
 
 Rust returns `Result`s: the tour's `main` returns `Result<(), Box<dyn Error>>` and uses `?`
 throughout. A point is checked when it is made, so the latitude error comes from
@@ -297,9 +302,18 @@ throughout. A point is checked when it is made, so the latitude error comes from
 
 ## Threads and updates
 
-`Engine` is `Send + Sync`: share it in an `Arc` and query from any number of threads. Adding or
-removing a layer publishes a new snapshot; queries already running finish on the one they
-started with.
+`Engine` is `Send + Sync`: share it in an `Arc` and query from any number of threads. To add or
+remove layers while other threads query, hold a `Shared`: `Shared::load` gives the snapshot a
+query runs on, and `Shared::update` changes a copy and publishes it atomically, so queries
+already running finish on the snapshot they started with:
+
+```rust
+use teigeodata_engine::{Engine, Layer, LayerOptions, Shared};
+
+let shared = Shared::new(Engine::new());
+let id = shared.update(|e| e.add(Layer::open("world-np-lite.tgd", LayerOptions::default()).unwrap()));
+let snapshot = shared.load(); // derefs to &Engine
+```
 
 ## The whole program
 

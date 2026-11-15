@@ -42,11 +42,11 @@ Every query that returns places has these columns:
 |---|---|---|
 | `id` | string | never |
 | `name` | string | the place has no name in the languages installed |
-| `kind` | string | never |
+| `kind` | string | the place's kind is one this reader does not know (a newer pack) |
 | `level` | integer | never (0 for anything that is not an admin unit) |
 | `lat`, `lon` | number (degrees) | never |
 | `elevation` | integer (metres, EGM2008) | no height is known |
-| `parent` | string (an ID) | a root (a country, a timezone area) |
+| `parent` | string (an ID) | a root (a country, a timezone area), or a pack without the admin hierarchy |
 | `tz` | string (an IANA zone) | the pack has no timezones there |
 | `iso` | string (ISO 3166) | the place has no ISO code |
 
@@ -55,7 +55,7 @@ and some queries add their own:
 | Query | Added columns |
 |---|---|
 | `search`, `search_with` | `score`: compares the rows of one query only |
-| `reverse`, `within_radius`, `nearby` | `meters` (great-circle distance), `bearing` (degrees clockwise from north) |
+| `reverse`, `within_radius`, `nearby` | `meters` (great-circle distance), `bearing` (degrees clockwise from north, from the place to the point) |
 | postal queries | `postal`, `scheme`, `code_kind`, `valid_from`, `valid_to` |
 
 Queries that do not return places have their own columns: `elevation_at` (`meters`, `source`,

@@ -79,8 +79,9 @@ can hold. Packs and places are also **resources**: `teigeodata://dataset/…`,
 
 Over a store, `tgd mcp` lists `install` and `install_status`, so an agent that finds a place
 outside the installed packs can offer to download its country. The person confirms the size
-through the client (elicitation) before a byte is fetched; a client that cannot ask installs only
-within a size the server allows. `tgd mcp --no-install` leaves the tools out; `tgd serve` lists
+through the client (elicitation) before a byte is fetched; with a client that cannot ask, the
+call installs only up to its own `max_bytes` (100 MB when left out), and a larger download answers
+with the size and asks the agent to call again with `max_bytes` raised to it. `tgd mcp --no-install` leaves the tools out; `tgd serve` lists
 them only with `--allow-install`.
 
 ## Try it

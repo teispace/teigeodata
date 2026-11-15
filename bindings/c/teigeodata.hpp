@@ -508,7 +508,7 @@ class Engine {
     Blob children(std::string_view id) const;
 
     /// The places nearest the place with this ID, not counting it, nearest first, at most
-    /// `limit`, with `meters` and `bearing`; no rows for an unknown ID.
+    /// `limit`, with `meters` and `bearing` (from each place to it); no rows for an unknown ID.
     ///
     /// # Errors
     ///
@@ -536,7 +536,7 @@ class Engine {
     Blob search_with(std::string_view query, std::uint32_t limit, const SearchOptions &options = {}) const;
 
     /// The places nearest the point, nearest first, at most `limit`, with `meters` and
-    /// `bearing` (degrees from north) to each.
+    /// `bearing` (degrees clockwise from north, from each place to the point).
     ///
     /// # Errors
     ///
@@ -545,7 +545,7 @@ class Engine {
     Blob reverse(double lat, double lon, std::uint32_t limit) const;
 
     /// The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`,
-    /// with `meters` and `bearing` to each.
+    /// with `meters` and `bearing` (from each place to the point).
     ///
     /// # Errors
     ///

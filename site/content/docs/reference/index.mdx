@@ -43,11 +43,11 @@ The [Engine page](/docs/reference/engine) has each method's declaration in every
 | [`parent`](/docs/reference/engine#parent) | The place's parent as the packs answer for it (one row), or no row for a root or an unknown ID. |
 | [`ancestors`](/docs/reference/engine#ancestors) | The place's ancestors, parent first up to the country; no rows for a root or an unknown ID. |
 | [`children`](/docs/reference/engine#children) | The place's children, by ID; no rows for a leaf or an unknown ID. |
-| [`nearby`](/docs/reference/engine#nearby) | The places nearest the place with this ID, not counting it, nearest first, at most `limit`, with `meters` and `bearing`; no rows for an unknown ID. |
+| [`nearby`](/docs/reference/engine#nearby) | The places nearest the place with this ID, not counting it, nearest first, at most `limit`, with `meters` and `bearing` (from each place to it); no rows for an unknown ID. |
 | [`search`](/docs/reference/engine#search) | Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named parent first. |
 | [`search_with`](/docs/reference/engine#search_with) | `search` ranked by `options`: near a focus point, or in strict match order. |
-| [`reverse`](/docs/reference/engine#reverse) | The places nearest the point, nearest first, at most `limit`, with `meters` and `bearing` (degrees from north) to each. |
-| [`within_radius`](/docs/reference/engine#within_radius) | The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`, with `meters` and `bearing` to each. |
+| [`reverse`](/docs/reference/engine#reverse) | The places nearest the point, nearest first, at most `limit`, with `meters` and `bearing` (degrees clockwise from north, from each place to the point). |
+| [`within_radius`](/docs/reference/engine#within_radius) | The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`, with `meters` and `bearing` (from each place to the point). |
 | [`admin_at`](/docs/reference/engine#admin_at) | The admin units holding the point, country first. |
 | [`elevation_at`](/docs/reference/engine#elevation_at) | The terrain height at the point, as one row: `meters` above the datum (bilinear between the DEM samples around it), `source` (the DEM product's key, null where the pack does not state it), `resolution_m` (the sample spacing north to south) and `datum` (`EGM2008`). |
 | [`postal_lookup`](/docs/reference/engine#postal_lookup) | The places postal code `code` names, one row per code and place, with the code's `postal`, `scheme`, `code_kind`, `valid_from` and `valid_to` columns. |

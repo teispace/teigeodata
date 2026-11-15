@@ -78,14 +78,17 @@ for (const place of new Reader(engine.search("Pokhara", 3))) {
 
 For large results read whole columns: `reader.numbers("lat")` is a typed array of the column's
 own type (a `Float64Array` for `lat`) viewing the blob, `reader.strings("name")` an array,
-`reader.nulls("elevation")` which rows are null; `records()` gives every row at once. Numbers are JavaScript numbers (64-bit IDs are exact to 2^53).
+`reader.nulls("elevation")` which rows are null; `records()` gives every row at once. Numbers are
+JavaScript numbers, except 64-bit integer columns, which read as `bigint` (and as
+`BigInt64Array` or `BigUint64Array` columns).
 
 ## Open a pack
 
 An `Engine` holds the packs it answers from. `openFile` memory-maps a pack file and
 adds it as a **layer**; the engine answers from every layer at once, and a higher layer wins
-where two disagree. Opening is cheap: only the head of the file is read and checked, and each
-section is verified against its hash the first time a query reads it.
+where two disagree. Opening is cheap: the head of the file is read and checked and the block hashes of large
+sections are proved; each section is verified against its hash the first time a query reads
+it.
 
 <include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs#open</include>
 
@@ -94,7 +97,7 @@ section is verified against its hash the first time a query reads it.
 - `openBytes` adds a pack from bytes already in memory (a download, an app asset, the
   browser). `openFileRange` opens a pack stored uncompressed inside another file, such as an
   Android APK.
-- Each `_with` form takes `OpenOptions`: precedence over the other packs, when sections are
+- Each `…With` form takes `OpenOptions`: precedence over the other packs, when sections are
   verified (lazy, eager or trusted), whether the file is mapped or read, and which components,
   languages and outline level to read.
 - `openFile` returns the layer's number; `remove` takes it out again while other threads
@@ -132,7 +135,7 @@ level 3) share the name, and both are in Bagmati.
 
 Many places share a name. `searchWith` takes `SearchOptions`: a **focus** point (the
 user's location, or the middle of the map they are looking at) ranks near places first. A place
-at the focus gains 30 points, one `focus_scale_m` away 15, and the gain keeps halving with
+at the focus gains 30 points, one `focusScaleM` away 15, and the gain keeps halving with
 distance (the default scale is 50 km).
 
 <include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs#search-focus</include>
@@ -173,8 +176,8 @@ Each country's ladder is in its profile on the [data pages](/docs/data).
 ## Reverse geocode a point
 
 `reverse` gives the places nearest a point, nearest first, each with `meters` (the
-great-circle distance) and `bearing` (degrees clockwise from north, from the point to the
-place).
+great-circle distance) and `bearing` (degrees clockwise from north, from the place to the
+point: "3.2 km at 45° from Pokhara").
 
 <include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs#reverse</include>
 

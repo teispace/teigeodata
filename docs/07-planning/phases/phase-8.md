@@ -247,8 +247,8 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 - [ ] `cargo-semver-checks` in `release.yml` from the first tag, beside the ABI gate (D-285).
   Built (2026-11-15): `cargo-semver-checks` 0.51.0 on every published crate against the last
   `v*` tag, a warning in a dry run. Open: its first run, in the 8.5 dry run
-- [ ] A docs audit: every guide, concept and reference page read against the code once; the
-  1.0 section of `CHANGELOG.md`
+- [x] A docs audit: every guide, concept and reference page read against the code once; the
+  1.0 section of `CHANGELOG.md` (2026-11-15, D-343)
 
 ### 8.5 The first data release
 
@@ -285,3 +285,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.3: Instruments in place of `samply`; profiles, two changes and the scaling gate done | D-338 |
 | 2026-11-15 | 8.3: suite C built (`tools/competitive`, `competitive.yml`); the parse change re-measured in its final form | D-340 |
 | 2026-11-15 | 8.4: the API review done, two parameters renamed; the CHANGELOG's 1.0 section | D-341 |
+| 2026-11-15 | 8.4: the docs audit done; the guides spell each language's own names | D-343 |
