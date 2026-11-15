@@ -10,10 +10,12 @@
  */
 #include <math.h> /* NAN only: no libm */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "parity_data.h"
 #include "teigeodata.h"
+#include "teigeodata_reader.h"
 
 static int failures = 0;
 #define CHECK(cond)                                                    \
@@ -97,6 +99,84 @@ static double column_num(tg_bytes blob, const char *name, uint32_t row) {
     case 10: { uint16_t v; memcpy(&v, at + 2 * row, 2); return v; }
     default: return NAN;
     }
+}
+
+/* The reader (teigeodata_reader.h) against this file's own reads of the layout (D-322); counts
+ * the null values it checked. */
+static void reader_matches(tg_bytes blob, uint32_t *nulls) {
+    tg_reader r;
+    CHECK(tg_reader_init(&r, blob.ptr, blob.len) == TG_OK && r.rows == blob_rows(blob));
+    for (int32_t c = 0; c < (int32_t)r.columns; c++) {
+        tg_str name = tg_reader_name(&r, c);
+        char cname[17] = {0};
+        memcpy(cname, name.ptr, name.len);
+        uint32_t f[6];
+        CHECK(column(blob, cname, f) && tg_reader_find(&r, cname) == c && tg_reader_type(&r, c) == f[0]);
+        for (uint32_t row = 0; row < r.rows; row++) {
+            bool null = tg_reader_is_null(&r, c, row);
+            if (null) (*nulls)++;
+            CHECK(null == (f[5] != 0 && ((blob.ptr[f[5] + row / 8] >> (row % 8)) & 1) == 0));
+            if (tg_reader_is_text(&r, c)) {
+                uint32_t len = 0;
+                const char *want = column_str(blob, cname, row, &len);
+                tg_str got = tg_reader_string(&r, c, row);
+                CHECK(null ? got.ptr == NULL : got.ptr == want && got.len == len);
+            } else {
+                CHECK(tg_reader_number(&r, c, row) == column_num(blob, cname, row));
+            }
+        }
+    }
+    CHECK(tg_reader_find(&r, "nope") == -1 && tg_reader_is_null(&r, -1, 0) && tg_reader_number(&r, -1, 0) == 0);
+    CHECK(tg_reader_string(&r, 0, r.rows).ptr == NULL);
+    CHECK(tg_reader_init(&r, blob.ptr, blob.len - 8) == TG_ERROR_CORRUPT && r.rows == 0);
+    CHECK(tg_reader_init(&r, (const uint8_t *)"TGB1", 4) == TG_ERROR_CORRUPT);
+}
+
+/* A copy of `blob` with the u32 or u16 at `at` set to `value`, in an 8-aligned buffer. */
+static uint8_t *patched(tg_bytes blob, size_t at, uint32_t value, size_t width) {
+    uint8_t *copy = malloc(blob.len);
+    if (copy == NULL) return NULL;
+    memcpy(copy, blob.ptr, blob.len);
+    for (size_t i = 0; i < width; i++) copy[at + i] = (uint8_t)(value >> (8 * i));
+    return copy;
+}
+
+/* The reader on blobs made wrong by one value: each is refused; a negative i16 reads as one. */
+static void reader_refuses(tg_bytes blob) {
+    tg_reader r;
+    int checked = 0;
+    for (uint32_t i = 0; i < blob.len / 40 && 16 + 40 * i + 40 <= blob.len; i++) {
+        uint32_t columns;
+        memcpy(&columns, blob.ptr + 8, 4);
+        if (i >= columns) break;
+        uint32_t f[6];
+        memcpy(f, blob.ptr + 16 + 40 * i + 16, sizeof f);
+        uint32_t rows = blob_rows(blob);
+        uint8_t *bad = NULL;
+        if (f[0] == 7) { /* the last offset past the strings */
+            bad = patched(blob, f[1] + 4 * rows, f[4] + 1, 4);
+        } else if (f[0] == 11 || f[0] == 12) { /* a code past the words */
+            uint32_t count;
+            memcpy(&count, blob.ptr + f[3], 4);
+            bad = patched(blob, f[1], count, f[0] == 11 ? 2 : 4);
+        } else if (f[0] == 9) { /* -5 in row 0, which is then not null */
+            uint8_t *neg = patched(blob, f[1], 0xFFFBu, 2);
+            CHECK(neg != NULL);
+            if (neg == NULL) continue;
+            if (f[5] != 0) neg[f[5]] |= 1;
+            CHECK(tg_reader_init(&r, neg, blob.len) == TG_OK);
+            CHECK(tg_reader_number(&r, (int32_t)i, 0) == -5.0 && tg_reader_int(&r, (int32_t)i, 0) == -5);
+            free(neg);
+            checked++;
+            continue;
+        } else {
+            continue;
+        }
+        CHECK(bad != NULL && tg_reader_init(&r, bad, blob.len) == TG_ERROR_CORRUPT);
+        free(bad);
+        checked++;
+    }
+    CHECK(checked >= 3);
 }
 
 static bool str_is(tg_bytes blob, const char *name, uint32_t row, const char *want) {
@@ -243,7 +323,17 @@ static void engine_queries(void) {
             TGP_ENGINE_REVERSE_IDS_ITEMS);
     CHECK(tg_engine_reverse(engine, TGP_ENGINE_REVERSE_LAT, TGP_ENGINE_REVERSE_LON, TGP_ENGINE_REVERSE_LIMIT, &out) == TG_OK);
     CHECK(distance(column_num(out, "meters", 0), TGP_ENGINE_REVERSE_FIRST_METERS) <= 0.1);
+    uint32_t nulls = 0;
+    reader_matches(out, &nulls);
     tg_bytes_free(out);
+    CHECK(tg_engine_ancestors(engine, TEXT(TGP_ENGINE_ANCESTORS_ID), &out) == TG_OK);
+    reader_matches(out, &nulls);
+    reader_refuses(out);
+    tg_bytes_free(out);
+    CHECK(tg_sample_rows(20, &out) == TG_OK);
+    reader_matches(out, &nulls);
+    tg_bytes_free(out);
+    CHECK(nulls > 0);
     IDS_ARE(tg_engine_admin_at(engine, TGP_ENGINE_ADMIN_AT_LAT, TGP_ENGINE_ADMIN_AT_LON, &ids_), TGP_ENGINE_ADMIN_AT_IDS_ITEMS);
     IDS_ARE(tg_engine_parent(engine, TEXT(TGP_ENGINE_PARENT_ID), &ids_), TGP_ENGINE_PARENT_IDS_ITEMS);
     IDS_ARE(tg_engine_ancestors(engine, TEXT(TGP_ENGINE_ANCESTORS_ID), &ids_), TGP_ENGINE_ANCESTORS_IDS_ITEMS);

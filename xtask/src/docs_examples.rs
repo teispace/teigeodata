@@ -156,6 +156,44 @@ const LANGS: &[Lang] = &[
         own: None,
     },
     Lang {
+        name: "c",
+        tool: "cc",
+        needs: &["{ffi}"],
+        command: &[
+            "sh",
+            "-c",
+            "mkdir -p target/docs-c && lib=$(dirname \"$1\") && \
+             cc -std=c11 -Wall -Wextra -Werror -pedantic site/examples/c/tour.c -Ibindings/c \
+             -L\"$lib\" -lteigeodata_ffi -Wl,-rpath,\"$lib\" -o target/docs-c/tour && \
+             target/docs-c/tour \"$0\"",
+            "{pack}",
+            "{root}/{ffi}",
+        ],
+        dir: "",
+        env: &[],
+        links: &[],
+        own: None,
+    },
+    Lang {
+        name: "cpp",
+        tool: "c++",
+        needs: &["{ffi}"],
+        command: &[
+            "sh",
+            "-c",
+            "mkdir -p target/docs-c && lib=$(dirname \"$1\") && \
+             c++ -std=c++17 -Wall -Wextra -Werror -pedantic -Wconversion site/examples/cpp/tour.cpp \
+             -Ibindings/c -L\"$lib\" -lteigeodata_ffi -Wl,-rpath,\"$lib\" -o target/docs-c/tour-cpp && \
+             target/docs-c/tour-cpp \"$0\"",
+            "{pack}",
+            "{root}/{ffi}",
+        ],
+        dir: "",
+        env: &[],
+        links: &[],
+        own: None,
+    },
+    Lang {
         name: "java",
         tool: "java",
         // The classes as the JVM step builds them (javac into bindings/jvm/build) and the JNI

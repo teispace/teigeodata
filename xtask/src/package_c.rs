@@ -6,6 +6,7 @@
 //! ```text
 //! include/teigeodata.h                  the generated header (lite: its features set to 0)
 //! include/teigeodata.hpp                the generated C++17 wrapper over it (5.8d)
+//! include/teigeodata_reader.h(pp)       the result reader, C99 and C++17, header-only (D-322)
 //! lib/libteigeodata.so.<abi>, .so       ELF: the shared library and its link name
 //! lib/libteigeodata.dylib               Apple: install name @rpath/libteigeodata.dylib
 //! bin/teigeodata.dll, lib/teigeodata.dll.lib, lib/teigeodata.lib    Windows
@@ -32,6 +33,8 @@ use std::process::Command;
 
 const HEADER: &str = "bindings/c/teigeodata.h";
 const CPP_HEADER: &str = "bindings/c/teigeodata.hpp";
+/// The hand-written result readers, copied as they are.
+const READERS: [&str; 2] = ["teigeodata_reader.h", "teigeodata_reader.hpp"];
 
 /// The kind of library files a target produces.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -292,6 +295,12 @@ fn stage_files(
     }
     std::fs::write(include.join("teigeodata.h"), header).map_err(|e| io(&include, e))?;
     copy(&plan.root.join(CPP_HEADER), &include.join("teigeodata.hpp"))?;
+    for file in READERS {
+        copy(
+            &plan.root.join("bindings/c").join(file),
+            &include.join(file),
+        )?;
+    }
     for file in ["LICENSE", "NOTICE"] {
         copy(&plan.root.join(file), &stage.join(file))?;
     }

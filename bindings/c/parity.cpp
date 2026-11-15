@@ -18,6 +18,7 @@
 
 #include "parity_data.h"
 #include "teigeodata.hpp"
+#include "teigeodata_reader.hpp"
 
 namespace tg = teigeodata;
 
@@ -151,6 +152,54 @@ static std::optional<double> num_at(const tg::Blob &b, const char *name, std::ui
 
 static double gap(double a, double b) { return a > b ? a - b : b - a; }
 
+/// Whether row `row` of column `name` is null, by this file's own read of the layout.
+static bool null_at(const tg::Blob &b, const char *name, std::uint32_t row) {
+    const auto f = column(b, name);
+    return f && (*f)[5] != 0 && ((b.data()[(*f)[5] + row / 8] >> (row % 8)) & 1) == 0;
+}
+
+/// The Reader against this file's own reads of the layout (D-322); counts null values checked.
+static void reader_matches(const tg::Blob &b, std::uint32_t &nulls) {
+    const tg::Reader reader(b);
+    CHECK(reader.rows() == rows(b) && reader.columns() == columns(b));
+    const auto records = reader.records();
+    CHECK(records.size() == reader.rows());
+    for (const std::string &name : reader.columns()) {
+        CHECK(reader.has(name));
+        const auto values = reader.column(name);
+        const auto is_null = reader.nulls(name);
+        const bool text = str_at(b, name.c_str(), 0).has_value() || (rows(b) > 0 && !num_at(b, name.c_str(), 0));
+        for (std::uint32_t r = 0; r < reader.rows(); r++) {
+            const bool null = null_at(b, name.c_str(), r);
+            if (null) nulls++;
+            CHECK(is_null[r] == null && reader[r].is_null(name) == null);
+            CHECK(std::holds_alternative<std::monostate>(values[r]) == null);
+            CHECK(records[r].at(name) == values[r] && reader[r][name] == values[r]);
+            if (null) continue;
+            if (text) {
+                const auto want = str_at(b, name.c_str(), r);
+                CHECK(want && reader[r].string(name) == std::string_view(*want));
+                CHECK(std::get<std::string_view>(values[r]) == *want);
+            } else {
+                const double want = num_at(b, name.c_str(), r).value_or(-1);
+                CHECK(reader[r].number(name) == want && reader.numbers(name)[r] == want);
+                const std::uint32_t type = (*column(b, name.c_str()))[0];
+                const bool floating = type == 5 || type == 6;
+                CHECK(std::holds_alternative<double>(values[r]) == floating);
+                const double got = floating ? std::get<double>(values[r])
+                                            : static_cast<double>(std::get<std::int64_t>(values[r]));
+                CHECK(got == want);
+                if (!floating) CHECK(reader[r].integer(name) == static_cast<std::int64_t>(want));
+            }
+        }
+    }
+    std::uint32_t seen = 0;
+    for (auto row : reader) CHECK(row.index() == seen++);
+    CHECK(seen == reader.rows() && !reader.has("nope"));
+    CHECK(code_of([&] { (void)reader.numbers("nope"); }) == tg::ErrorCode::InvalidArgument);
+    CHECK(code_of([&] { (void)tg::Reader(b.data(), b.size() - 8); }) == tg::ErrorCode::Corrupt);
+}
+
 static std::vector<std::uint8_t> read_file(const char *path) {
     std::ifstream in(path, std::ios::binary);
     return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(in), {});
@@ -228,6 +277,11 @@ static void engine_queries() {
     tg::Blob near = engine.reverse(TGP_ENGINE_REVERSE_LAT, TGP_ENGINE_REVERSE_LON, TGP_ENGINE_REVERSE_LIMIT);
     CHECK(strs(near, "id") == Strings{TGP_ENGINE_REVERSE_IDS_ITEMS});
     CHECK(gap(num_at(near, "meters", 0).value_or(0.0), TGP_ENGINE_REVERSE_FIRST_METERS) <= 0.1);
+    std::uint32_t nulls = 0;
+    reader_matches(near, nulls);
+    reader_matches(engine.ancestors(TGP_ENGINE_ANCESTORS_ID), nulls);
+    reader_matches(tg::sample_rows(20), nulls);
+    CHECK(nulls > 0);
     CHECK(strs(engine.admin_at(TGP_ENGINE_ADMIN_AT_LAT, TGP_ENGINE_ADMIN_AT_LON), "id") == Strings{TGP_ENGINE_ADMIN_AT_IDS_ITEMS});
     CHECK(strs(engine.parent(TGP_ENGINE_PARENT_ID), "id") == Strings{TGP_ENGINE_PARENT_IDS_ITEMS});
     CHECK(strs(engine.ancestors(TGP_ENGINE_ANCESTORS_ID), "id") == Strings{TGP_ENGINE_ANCESTORS_IDS_ITEMS});
