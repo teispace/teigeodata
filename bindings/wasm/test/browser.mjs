@@ -17,12 +17,12 @@ const full = name === "@teispace/teigeodata-wasm";
 
 const page = `<!doctype html><meta charset="utf-8"><script type="module">
 import * as tg from "/pkg/index.js";
-import { run } from "/checks.mjs";
+import { fixtures, run } from "/checks.mjs";
 try {
   await tg.init();
   const parity = await (await fetch("/parity.json")).json();
   const files = new Map();
-  for (const rel of [parity.engine.fixture, parity.engine.elevation_at.fixture, parity.tz.fixture]) {
+  for (const rel of fixtures(parity)) {
     files.set(rel, new Uint8Array(await (await fetch("/" + rel)).arrayBuffer()));
   }
   const n = run(tg, parity, (rel) => files.get(rel), { full: ${full} });

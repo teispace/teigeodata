@@ -40,15 +40,19 @@ Future<void> hybridMain(StreamChannel<Object?> channel) async {
     Platform.environment['TEIGEODATA_PARITY'] ?? '../parity.json',
   ).readAsStringSync();
   final parity = jsonDecode(text) as Map<String, dynamic>;
-  final engine = parity['engine'] as Map<String, dynamic>;
   final files = {
-    for (final rel in [
-      engine['fixture'] as String,
-      (engine['elevation_at'] as Map<String, dynamic>)['fixture'] as String,
-      (parity['tz'] as Map<String, dynamic>)['fixture'] as String,
-    ])
-      rel: base64.encode(File('../$rel').readAsBytesSync()),
+    for (final rel in fixtures(parity)) rel: base64.encode(File('../$rel').readAsBytesSync()),
   };
   channel.sink.add({'port': server.port, 'parity': text, 'files': files});
   // The server lives until the suite ends: the test runner kills this isolate then.
 }
+
+/// Every fixture parity.json names (each `fixture` key, at any depth).
+Set<String> fixtures(Object? value) => switch (value) {
+  Map<String, dynamic> m => {
+    for (final MapEntry(:key, :value) in m.entries)
+      ...(key == 'fixture' && value is String ? {value} : fixtures(value)),
+  },
+  List<dynamic> l => {for (final v in l) ...fixtures(v)},
+  _ => {},
+};

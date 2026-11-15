@@ -347,7 +347,10 @@ void checks(
     final m = engine.distance(dist['from'] as String, dist['to'] as String);
     expect((column(m, 'meters') as Float64List).single, closeTo(dist['meters'] as double, 1e-6));
     expect((column(m, 'bearing') as Float64List).single, closeTo(dist['bearing'] as double, 1e-6));
-    expect(column(engine.distance(dist['from'] as String, c['unknown_id'] as String), 'meters'), isEmpty);
+    expect(
+      column(engine.distance(dist['from'] as String, c['unknown_id'] as String), 'meters'),
+      isEmpty,
+    );
     final outlined = Engine(tg);
     open(outlined, c['fixture'] as String);
     final got = outlined.boundary(c['id'] as String, c['lod'] as int);

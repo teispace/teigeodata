@@ -5,6 +5,18 @@
 // without it: `MissingComponent`, or no rows for postal codes.
 
 /** Runs every check; returns the number run, or throws the first failure. */
+/** Every fixture parity.json names (each `fixture` key, at any depth): what a host must give `read`. */
+export function fixtures(parity) {
+  const out = new Set();
+  const walk = (v) => {
+    if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === "object")
+      for (const [k, x] of Object.entries(v)) k === "fixture" && typeof x === "string" ? out.add(x) : walk(x);
+  };
+  walk(parity);
+  return [...out];
+}
+
 export function run(tg, parity, read, { full }) {
   let n = 0;
   const fail = (what, got, want) => {

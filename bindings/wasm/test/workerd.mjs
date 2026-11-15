@@ -8,12 +8,13 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Miniflare } from "miniflare";
+import { fixtures as fixturesOf } from "./checks.mjs";
 
 const [pkg, parityPath] = process.argv.slice(2, 4).map((p) => resolve(p));
 const here = dirname(fileURLToPath(import.meta.url));
 const parity = JSON.parse(await readFile(parityPath, "utf8"));
 const name = JSON.parse(await readFile(join(pkg, "package.json"), "utf8")).name;
-const fixtures = [...new Set([parity.engine.fixture, parity.engine.elevation_at.fixture, parity.tz.fixture])];
+const fixtures = fixturesOf(parity);
 
 const stage = await mkdtemp(join(tmpdir(), "tg-workerd-"));
 try {
@@ -48,7 +49,7 @@ export default {
     modulesRules: [
       { type: "ESModule", include: ["**/*.js", "**/*.mjs"] },
       { type: "CompiledWasm", include: ["**/*.wasm"] },
-      { type: "Data", include: ["**/*.tgd"] },
+      { type: "Data", include: ["**/*.tgd", "**/*.bin"] },
       { type: "Text", include: ["**/*.json"] },
     ],
     compatibilityDate: "2026-07-30",
