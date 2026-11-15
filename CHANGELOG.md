@@ -14,7 +14,7 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 ### Added
 
 - A result `Reader` of one shape in every language (D-322): new in Node.js, WebAssembly,
-  Swift and Dart (`rows`, `columns`, `has`, `numbers`, `strings`, `nulls`, `column`,
+  Swift, Dart and Java (Kotlin) (`rows`, `columns`, `has`, `numbers`, `strings`, `nulls`, `column`,
   `records`, iteration); Go's gains `Column` and `Records`, Python's `has`, `column`,
   `records` and iteration.
 - `cargo xtask docs-examples`: runs every language's example program on the pinned public pack
@@ -224,6 +224,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Fixed
 
+- Java and Kotlin: `new Engine()` (or `Store`, `Job`) as a program's first call threw
+  `UnsatisfiedLinkError`: a nested class is initialized without its outer class, so the native
+  library was loaded only by a call on `TeiGeodata` first. Every handle class now loads it
+  (D-322).
 - `@teispace/teigeodata-wasm` on Node.js loaded its browser entry: the package `exports`
   conditions were written sorted, `default` before `node` (D-322).
 - `Shared::follow` (and `Engine::follow`) opens a store pack with the parts it was installed

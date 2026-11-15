@@ -126,6 +126,10 @@ public final class TeiGeodata {
 
 {{ javadoc(h.doc, "    ") -}}
     public static final class {{ h.name }} implements AutoCloseable {
+        static {
+            NativeLoader.load();
+        }
+
         private final long handle;
         /** Frees the handle if its owner was never closed and is unreachable (NativeCleaner). */
         private final NativeCleaner.Cleanable cleanable;

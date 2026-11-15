@@ -23,7 +23,21 @@ final class NativeLoader {
 
     private NativeLoader() {}
 
-    static void load() {
+    private static boolean loaded;
+
+    /**
+     * Loads the library once. Every class with native methods calls it from its static
+     * initializer: a nested class ({@code Engine}) is initialized without its outer class, so
+     * {@code new Engine()} as a program's first call must load the library too. A failed load
+     * is retried on the next call, so it reports its own error again.
+     */
+    static synchronized void load() {
+        if (loaded) return;
+        loadLibrary();
+        loaded = true;
+    }
+
+    private static void loadLibrary() {
         try {
             System.loadLibrary(NAME);
         } catch (UnsatisfiedLinkError notOnPath) {

@@ -273,6 +273,10 @@ public final class TeiGeodata {
      * and `meters` and `bearing` for a reverse lookup.
      */
 public static final class Engine implements AutoCloseable {
+        static {
+            NativeLoader.load();
+        }
+
         private final long handle;
         /** Frees the handle if its owner was never closed and is unreachable (NativeCleaner). */
         private final NativeCleaner.Cleanable cleanable;
@@ -978,6 +982,10 @@ public static final class Engine implements AutoCloseable {
      *   `download`, `disk` and `state`, null for a place no pack in the catalog covers.
      */
 public static final class Store implements AutoCloseable {
+        static {
+            NativeLoader.load();
+        }
+
         private final long handle;
         /** Frees the handle if its owner was never closed and is unreachable (NativeCleaner). */
         private final NativeCleaner.Cleanable cleanable;
@@ -1440,6 +1448,10 @@ public static final class Store implements AutoCloseable {
      * awaited result cancelling the job when the caller's task is cancelled.
      */
 public static final class Job implements AutoCloseable {
+        static {
+            NativeLoader.load();
+        }
+
         private final long handle;
         /** Frees the handle if its owner was never closed and is unreachable (NativeCleaner). */
         private final NativeCleaner.Cleanable cleanable;

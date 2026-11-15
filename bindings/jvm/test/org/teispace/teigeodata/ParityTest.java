@@ -22,6 +22,10 @@ public final class ParityTest {
     private ParityTest() {}
 
     public static void main(String[] args) throws Exception {
+        // The first call makes a handle: Engine loads the library itself, without TeiGeodata.
+        try (TeiGeodata.Engine first = new TeiGeodata.Engine()) {
+            check(first.layers() == 0, "a new engine has no layers");
+        }
         Map<?, ?> p = (Map<?, ?>) new Json(new String(read(new File(args[0])), StandardCharsets.UTF_8)).value();
         step("loaded parity.json");
         check(TeiGeodata.version().equals(p.get("version")), "version");
@@ -331,6 +335,8 @@ public final class ParityTest {
             check(strings(near, "id").equals(r.get("ids")), "reverse " + strings(near, "id"));
             double m = column(near, "meters").getDouble();
             check(Math.abs(m - ((Number) r.get("first_meters")).doubleValue()) < 0.1, "meters " + m);
+            checkReader(new byte[][] {near, engine.ancestors((String) ((Map<?, ?>) p.get("ancestors")).get("id")),
+                    TeiGeodata.sampleRows(20)});
             Map<?, ?> a = (Map<?, ?>) p.get("admin_at");
             byte[] units = engine.adminAt(((Number) a.get("lat")).doubleValue(), ((Number) a.get("lon")).doubleValue());
             check(strings(units, "id").equals(a.get("ids")), "admin_at");
@@ -415,6 +421,75 @@ public final class ParityTest {
                 // closed
             }
         }
+    }
+
+    /** The Reader against this file's own reads of the layout (D-322). */
+    static void checkReader(byte[][] blobs) {
+        int nullsSeen = 0;
+        for (byte[] blob : blobs) {
+            Reader reader = new Reader(blob);
+            check(reader.columns().equals(columnNames(blob)), "reader columns");
+            List<Map<String, Object>> records = reader.records();
+            check(records.size() == reader.rows(), "reader records");
+            List<Map<String, Object>> iterated = new ArrayList<>();
+            reader.forEach(iterated::add);
+            check(iterated.equals(records), "reader iteration");
+            for (String name : reader.columns()) {
+                check(reader.has(name), "reader has " + name);
+                boolean[] nulls = reader.nulls(name);
+                List<Object> values = reader.column(name);
+                boolean text = true;
+                try {
+                    check(Arrays.asList(reader.strings(name)).equals(strings(blob, name)), "reader strings " + name);
+                } catch (TeiGeodataException.InvalidArgument e) {
+                    text = false;
+                }
+                if (!text) {
+                    double[] numbers = reader.numbers(name);
+                    double[] raw = rawNumbers(blob, name);
+                    check(Arrays.equals(numbers, raw), "reader numbers " + name);
+                }
+                for (int r = 0; r < reader.rows(); r++) {
+                    check(nulls[r] == (values.get(r) == null), "reader null " + name + " " + r);
+                    check(java.util.Objects.equals(records.get(r).get(name), values.get(r)), "reader record " + name + " " + r);
+                    if (!text && !nulls[r]) {
+                        check(((Number) values.get(r)).doubleValue() == rawNumbers(blob, name)[r], "reader column " + name);
+                    }
+                    if (nulls[r]) nullsSeen++;
+                }
+            }
+        }
+        check(nullsSeen > 0, "no null value was checked");
+        check(!new Reader(blobs[0]).has("nope"), "reader has nope");
+        expect(TeiGeodataException.Corrupt.class, () -> new Reader("TGB1".getBytes(StandardCharsets.US_ASCII)), "well-formed");
+        expect(TeiGeodataException.Corrupt.class, () -> new Reader(Arrays.copyOf(blobs[0], blobs[0].length - 8)), "well-formed");
+        expect(TeiGeodataException.InvalidArgument.class, () -> new Reader(blobs[0]).numbers("name"), "numbers");
+    }
+
+    /** A number column read by this file's own helper, as doubles. */
+    static double[] rawNumbers(byte[] blob, String name) {
+        ByteBuffer b = ByteBuffer.wrap(blob).order(ByteOrder.LITTLE_ENDIAN);
+        int rows = b.getInt(4), columns = b.getInt(8);
+        for (int i = 0; i < columns; i++) {
+            int d = 16 + 40 * i;
+            if (!new String(blob, d, 16, StandardCharsets.UTF_8).replace("\0", "").equals(name)) continue;
+            int type = b.getInt(d + 16), at = b.getInt(d + 20);
+            double[] out = new double[rows];
+            for (int r = 0; r < rows; r++) {
+                switch (type) {
+                    case 1: out[r] = b.getInt(at + 4 * r); break;
+                    case 2: out[r] = Integer.toUnsignedLong(b.getInt(at + 4 * r)); break;
+                    case 3: case 4: out[r] = b.getLong(at + 8 * r); break;
+                    case 5: out[r] = b.getFloat(at + 4 * r); break;
+                    case 6: out[r] = b.getDouble(at + 8 * r); break;
+                    case 8: out[r] = blob[at + r] & 0xff; break;
+                    case 9: out[r] = b.getShort(at + 2 * r); break;
+                    default: out[r] = b.getShort(at + 2 * r) & 0xffff; break;
+                }
+            }
+            return out;
+        }
+        throw new AssertionError("no column " + name);
     }
 
     /** The column names of a v1 blob, in order. */

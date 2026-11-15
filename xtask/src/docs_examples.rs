@@ -156,6 +156,45 @@ const LANGS: &[Lang] = &[
         own: None,
     },
     Lang {
+        name: "java",
+        tool: "java",
+        // The classes as the JVM step builds them (javac into bindings/jvm/build) and the JNI
+        // library of the bindings workspace.
+        needs: &["bindings/jvm/build/org/teispace/teigeodata/Reader.class"],
+        command: &[
+            "java",
+            "--enable-native-access=ALL-UNNAMED",
+            "-Djava.library.path={root}/bindings/target/release",
+            "-cp",
+            "{root}/bindings/jvm/build",
+            "site/examples/java/Tour.java",
+            "{pack}",
+        ],
+        dir: "",
+        env: &[],
+        links: &[],
+        own: None,
+    },
+    Lang {
+        name: "kotlin",
+        tool: "kotlinc",
+        needs: &["bindings/jvm/build/org/teispace/teigeodata/Reader.class"],
+        command: &[
+            "sh",
+            "-c",
+            "kotlinc -Werror site/examples/kotlin/Tour.kt -cp \"$1/bindings/jvm/build\" \
+             -include-runtime -d \"$1/target/docs-kotlin/tour.jar\" && \
+             java --enable-native-access=ALL-UNNAMED -Djava.library.path=\"$1/bindings/target/release\" \
+             -cp \"$1/target/docs-kotlin/tour.jar:$1/bindings/jvm/build\" TourKt \"$0\"",
+            "{pack}",
+            "{root}",
+        ],
+        dir: "",
+        env: &[],
+        links: &[],
+        own: None,
+    },
+    Lang {
         name: "cli",
         tool: "sh",
         needs: &["target/release/tgd"],
