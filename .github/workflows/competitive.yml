@@ -40,11 +40,8 @@ jobs:
           persist-credentials: false
       - name: Toolchain (from rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          workspaces: |
-            . -> target
-            tools/competitive -> target
+      # No build cache: the job runs on release events, where a cache written by any branch
+      # could poison what is measured (zizmor cache-poisoning); a cold build is minutes.
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
