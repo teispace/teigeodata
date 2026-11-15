@@ -178,12 +178,16 @@ A pack may come from anywhere: a mirror, a file someone sent, a corrupted disk.
     environment. Each file has a CycloneDX SBOM, build provenance attested through Sigstore,
     and each attestation is verified before publishing (D-302 to D-305).
   - Commits are signed off (DCO), and the hooks refuse what the rules forbid.
-- **Shown by:** `cargo deny` (fast-check); the release dry run; the attestation verification
-  in `release.yml`.
-- **Open (8.2):**
-  - `zizmor` on every workflow in fast-check.
-  - OpenSSF Scorecard weekly on `main`.
-  - `cargo-semver-checks` from the first tag (8.4).
+- **Shown by:**
+  - `cargo deny` (fast-check).
+  - `zizmor` on every workflow (fast-check): findings fixed, or ignored inline with a reason.
+  - CodeQL on Rust, the workflows, JavaScript, TypeScript and Python (`codeql`).
+  - OpenSSF Scorecard weekly. Its Vulnerabilities check reads every lockfile, npm included.
+  - The release dry run, and the attestation verification in `release.yml`.
+  - `cargo-semver-checks` and the ABI gate on release
+    ([what 1.0 promises](semver.md)).
+- **Residual:** the checks only the maintainer can turn on: branch protection, required
+  review, and signed releases from the first tag.
 
 ## Changelog
 
@@ -191,3 +195,4 @@ A pack may come from anywhere: a mirror, a file someone sent, a corrupted disk.
 |---|---|---|
 | 2026-11-15 | Written: seven boundaries, their gates and the open gaps | D-331, phase 8.2 |
 | 2026-11-15 | §5: the server's flood and slow-client bounds, each with its test | D-334 |
+| 2026-11-15 | §7: zizmor, CodeQL and Scorecard are gates; the open rows closed | phase 8.2 |

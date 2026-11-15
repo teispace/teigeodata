@@ -3,7 +3,8 @@
 ## Reporting a vulnerability
 
 Please **do not open a public issue.** Use GitHub's private vulnerability reporting:
-**Security → Report a vulnerability** on this repository. We acknowledge reports within 72
+[report a vulnerability](https://github.com/teispace/teigeodata/security/advisories/new)
+(**Security → Report a vulnerability** on this repository). We acknowledge reports within 72
 hours, agree a fix and disclosure timeline with you, and credit you unless you prefer not.
 
 ## Scope

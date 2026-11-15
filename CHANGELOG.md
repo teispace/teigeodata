@@ -32,6 +32,7 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   and the tests that reach it (`docs/06-engineering/unsafe-inventory.md`), and the
   [threat model](docs/06-engineering/threat-model.md) (D-333).
 - `teigeodata_format::check::sections_where`: the full check of the sections a caller selects.
+- CodeQL code scanning (`codeql.yml`) and the OpenSSF Scorecard (`scorecard.yml`), weekly.
 - Extension columns (D-335): a column-table column with an ID from `0x8000`
   (`teigeodata_core::table::EXTENSION`) is skipped by a reader that does not know it, so a
   format minor can add optional columns; `Table::extensions` lists them. COMPONENTS IDs are 1

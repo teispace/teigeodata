@@ -1,0 +1,6 @@
+# OSV ignores for the forge's lockfile, which OpenSSF Scorecard's Vulnerabilities check reads.
+# cargo deny passes on it (2026-11-15), so only Scorecard needs this entry.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0186"
+reason = "memmap2 0.5.10 only through osmpbf 0.3.8 (its latest), which never calls the affected advise_range or flush_range functions; the readers use memmap2 0.9.12"

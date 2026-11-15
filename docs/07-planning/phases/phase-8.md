@@ -169,8 +169,25 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   bounds in place (world baseline, search at c=1: 17,137 req/s, 17,299 before). The first
   version of the in-flight cap was per route (axum layers each route on its own), and the test
   caught it
-- [ ] `zizmor` on every workflow in fast-check, findings fixed or each one justified
-- [ ] OpenSSF Scorecard weekly on `main`; the checks only the maintainer can satisfy listed
+- [x] `zizmor` on every workflow in fast-check, findings fixed or each one justified
+  (2026-11-15). The first run found one high finding: the WebAssembly tools action wrote
+  `GITHUB_PATH`, and `wasm-opt` is now linked into cargo's bin directory instead. It also gave
+  eight `self-repository` warnings (`./` reusable calls; the new `$/` form is not relied on
+  yet) and one `adhoc-packages` (the exact npm upgrade trusted publishing needs), each now
+  carrying an inline ignore with its reason
+- [x] OpenSSF Scorecard weekly on `main`; the checks only the maintainer can satisfy listed
+  (2026-11-15). First run 5.3 of 10 (run 43689300462). Fixed after it:
+  - Vulnerabilities: 25 npm advisories in the WebAssembly test runner (`undici` 7.28.0 and
+    `sharp` 0.35.2, pinned by miniflare), moved to 7.30.2 and 0.35.5 by `overrides`. One
+    unreached `memmap2` advisory in the forge has an `osv-scanner.toml` entry.
+  - SAST: the `codeql` workflow.
+  - Security-Policy: a reporting link.
+  - Pinned-Dependencies: `curl | sh` rustup in four Alpine jobs, now Alpine's signed `rustup`
+    package.
+
+  Left to the maintainer: Branch-Protection, Code-Review, CII-Best-Practices, and
+  Signed-Releases (the first release). Maintained (the repository's age) and CI-Tests (no
+  pull requests yet) come with time
   for them
 - [ ] The review's findings fixed, each with its test; `SECURITY.md` states the 1.0 support
   policy
