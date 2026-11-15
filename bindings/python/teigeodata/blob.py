@@ -7,15 +7,17 @@ blob when it made it.
 
 >>> b = Reader(engine.search("Kathmandu", 5))  # doctest: +SKIP
 >>> b.rows, b.strings("name")[0], b.numbers("lat")[0]  # doctest: +SKIP
+>>> for place in b:  # each row as a dict, None where null  # doctest: +SKIP
+...     print(place["name"], place["lat"])
 """
 
 from __future__ import annotations
 
 import struct
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Buffer  # Python 3.12; annotations only (3.11 is supported)
+    from collections.abc import Buffer, Iterator  # Buffer: 3.12; annotations only
 
 _FIXED = {1: "i", 2: "I", 3: "q", 4: "Q", 5: "f", 6: "d", 8: "B", 9: "h", 10: "H"}
 _UTF8, _DICT16, _DICT32 = 7, 11, 12
@@ -40,6 +42,10 @@ class Reader:
     def columns(self) -> list[str]:
         """The column names, in order."""
         return list(self._columns)
+
+    def has(self, name: str) -> bool:
+        """Whether there is a column called ``name``."""
+        return name in self._columns
 
     def numbers(self, name: str) -> memoryview:
         """A number column, viewed in place. A null row reads as zero: see ``nulls``."""
@@ -73,3 +79,23 @@ class Reader:
             raise TypeError(f"{name} is not a string column")
         nulls = self.nulls(name)
         return [None if nulls[r] else values[r] for r in range(rows)]
+
+    def column(self, name: str) -> list[Any]:
+        """A column with one value per row: ``str`` or a number, ``None`` where null."""
+        if self._columns[name][0] in (_UTF8, _DICT16, _DICT32):
+            return self.strings(name)
+        nulls = self.nulls(name)
+        return [None if nulls[r] else v for r, v in enumerate(self.numbers(name).tolist())]
+
+    def records(self) -> list[dict[str, Any]]:
+        """Every row as a dict, column name to value as ``column`` reads it."""
+        columns = {name: self.column(name) for name in self._columns}
+        return [{name: values[r] for name, values in columns.items()} for r in range(self.rows)]
+
+    def __iter__(self) -> Iterator[dict[str, Any]]:
+        """The rows as ``records`` gives them."""
+        return iter(self.records())
+
+    def __len__(self) -> int:
+        """The number of rows."""
+        return self.rows

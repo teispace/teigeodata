@@ -121,6 +121,27 @@ class Engine(unittest.TestCase):
         self.assertEqual(list(b.numbers("lat")), [g["lat"]])
         self.assertEqual(list(b.numbers("lon")), [g["lon"]])
 
+    def test_records(self) -> None:
+        nulls = 0
+        for blob in (self.engine.ancestors(self.p["ancestors"]["id"]), tg.sample_rows(50)):
+            b = Reader(blob)
+            records = b.records()
+            self.assertEqual(len(records), b.rows)
+            self.assertEqual(len(b), b.rows)
+            self.assertEqual(list(b), records)
+            for name in b.columns:
+                self.assertTrue(b.has(name))
+                is_null = b.nulls(name)
+                for r, record in enumerate(records):
+                    self.assertEqual(list(record), b.columns)
+                    if is_null[r]:
+                        nulls += 1
+                        self.assertIsNone(record[name], name)
+                    else:
+                        self.assertIsNotNone(record[name], name)
+        self.assertGreater(nulls, 0, "no null value was checked")
+        self.assertFalse(Reader(tg.sample_rows(1)).has("nope"))
+
     def test_queries(self) -> None:
         q = self.p["search"]
         hits = Reader(self.engine.search(q["query"], q["limit"]))

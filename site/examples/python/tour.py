@@ -14,15 +14,7 @@ from teigeodata.blob import Reader
 # region rows
 def rows(blob):
     """Each row of a result as a dict: column name to value, None where null."""
-    r = Reader(blob)
-    columns = {}
-    for name in r.columns:
-        try:
-            columns[name] = r.strings(name)
-        except TypeError:  # a number column
-            nulls = r.nulls(name)
-            columns[name] = [None if nulls[i] else v for i, v in enumerate(r.numbers(name))]
-    return [{name: values[i] for name, values in columns.items()} for i in range(r.rows)]
+    return Reader(blob).records()
 # endregion rows
 
 
