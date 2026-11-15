@@ -73,7 +73,9 @@ fuzzing time per target as an input).
   `teigeodata_server::fuzz` (D-313, `crates/teigeodata-server/tests/fuzz.rs`, run by fast-check's
   `check` job); `engine` in `teigeodata_engine::fuzz` (D-331, `crates/teigeodata-engine/tests/fuzz.rs`):
   every query on a seed pack with one or two sections edited and every hash right, the seeds
-  embedded from `bindings/fixtures/` and `fuzz/seeds/`. A crash input is kept as a test in the
+  embedded from `bindings/fixtures/` and `fuzz/seeds/`; `ffi` in `teigeodata_ffi::fuzz` (D-331,
+  `crates/teigeodata-ffi/tests/fuzz.rs`): every `Engine` function of the C ABI with fuzzed
+  arguments, a test failing when the ABI gains one it does not call. A crash input is kept as a test in the
   crate's `found_by_libfuzzer`. The corpus of each target is restored from the Actions cache, minimised
   with `cargo fuzz cmin` and saved again; a crash fails the job and uploads its input.
 - **miri**: ten parallel jobs under `cargo miri nextest` (core lib; format lib in three

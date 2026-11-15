@@ -21,6 +21,9 @@ store = ["teigeodata-api/store"]
 # Every pack component's queries (teigeodata-api's `components`, D-291); without it the
 # library answers only `point` queries.
 components = ["teigeodata-api/components"]
+# The C ABI's fuzz harness (D-331): every `Engine` function with arguments from fuzz bytes,
+# under `cargo test` and libFuzzer (`fuzz/fuzz_targets/ffi.rs`).
+fuzz = ["components"]
 
 [dependencies]
 teigeodata-api.workspace = true
@@ -51,3 +54,7 @@ print_stdout = "warn"
 print_stderr = "warn"
 indexing_slicing = "warn"
 allow_attributes_without_reason = "warn"
+
+[[test]]
+name = "fuzz"
+required-features = ["fuzz"]

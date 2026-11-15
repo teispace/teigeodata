@@ -390,6 +390,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "teigeodata-api"
+version = "0.3.1"
+dependencies = [
+ "teigeodata-blob",
+ "teigeodata-core",
+ "teigeodata-engine",
+ "teigeodata-format",
+ "teigeodata-names",
+]
+
+[[package]]
+name = "teigeodata-blob"
+version = "0.3.1"
+
+[[package]]
 name = "teigeodata-core"
 version = "0.3.1"
 
@@ -404,6 +419,13 @@ dependencies = [
  "teigeodata-format",
  "teigeodata-names",
  "teigeodata-sync",
+]
+
+[[package]]
+name = "teigeodata-ffi"
+version = "0.3.1"
+dependencies = [
+ "teigeodata-api",
 ]
 
 [[package]]
@@ -424,6 +446,7 @@ version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
  "teigeodata-engine",
+ "teigeodata-ffi",
  "teigeodata-format",
  "teigeodata-server",
  "teigeodata-sync",

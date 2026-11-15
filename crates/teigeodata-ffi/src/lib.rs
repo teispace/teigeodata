@@ -3,7 +3,8 @@
 //! Every exported function is generated from `teigeodata-api` into `generated.rs` by `cargo
 //! xtask bindings`; the header is `bindings/c/teigeodata.h`. The shared runtime (owned byte
 //! buffers, status codes, the per-thread last error, the panic guard) is `abi.rs`. Those two
-//! modules are the only places `unsafe` is allowed.
+//! modules, and the fuzz harness that calls the ABI as C does (`fuzz.rs`, feature `fuzz`), are
+//! the only places `unsafe` is allowed.
 //!
 //! **Contract for every function:**
 //! - It returns a status: `TG_OK` (0) or a `TG_ERROR_*` code. On failure, `tg_last_error`
@@ -20,4 +21,6 @@
 //! [boundary rules]: https://github.com/teispace/teigeodata/blob/main/docs/04-architecture/abi.md
 
 pub mod abi;
+#[cfg(feature = "fuzz")]
+pub mod fuzz;
 pub mod generated;

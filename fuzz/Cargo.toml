@@ -23,6 +23,7 @@ members = ["."]
 libfuzzer-sys = "0.4.13"
 teigeodata-format = { path = "../crates/teigeodata-format", features = ["fuzz"] }
 teigeodata-sync = { path = "../crates/teigeodata-sync", features = ["fuzz"] }
+teigeodata-ffi = { path = "../crates/teigeodata-ffi", default-features = false, features = ["fuzz"] }
 teigeodata-engine = { path = "../crates/teigeodata-engine", default-features = false, features = ["fuzz"] }
 teigeodata-server = { path = "../crates/teigeodata-server", default-features = false, features = ["fuzz"] }
 
@@ -123,6 +124,13 @@ bench = false
 [[bin]]
 name = "trust"
 path = "fuzz_targets/trust.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi"
+path = "fuzz_targets/ffi.rs"
 test = false
 doc = false
 bench = false

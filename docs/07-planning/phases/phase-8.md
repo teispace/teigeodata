@@ -76,8 +76,21 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
     unchanged.
   - **Run:** 300 s clean, 88,146 inputs (292 a second, each signed again with Ed25519),
     coverage 3,630, peak RSS 437 MB
-- [ ] `ffi`: the C ABI's strings and buffers (lengths, NUL bytes, invalid UTF-8, documented null
-  pointers) through the generated layer
+- [x] `ffi` (2026-11-15). `teigeodata_ffi::fuzz::abi` opens the four binding fixtures through
+  `tg_engine_open_bytes` and calls every one of the 33 `tg_engine_*` functions as C does. The
+  arguments come from the fuzz bytes:
+  - strings that are not UTF-8, hold NUL bytes, or are null with a length;
+  - real IDs, zones and codes, so calls reach the queries;
+  - coordinates that are NaN, infinite or past the poles, and limits up to `u32::MAX`;
+  - option records with any field set, missing layers and a null handle;
+  - file paths that cannot exist (hex-named, so nothing outside is read).
+
+  A stopped panic (`TG_ERROR_INTERNAL` with its own message) fails the harness. Every buffer is
+  freed. `the_harness_calls_every_engine_function` reads the generated ABI and fails on a
+  function the harness does not call (planted: `by_iso` removed). Store and job functions are
+  left out: they reach the file system and the network.
+  - **Run:** 300 s clean, 507,361 inputs, coverage 7,758, peak RSS 386 MB. `u32::MAX` limits
+    allocate nothing unbounded
 - [ ] `mcp`: JSON-RPC messages into the MCP request core
 - [ ] `fuzz-campaign.yml`: weekly and by dispatch, 3 h per target, a job each, with coverage
   reports as artifacts. Gate: every section kind's decoder reached, the coverage recorded here
@@ -142,3 +155,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.1 engine target done; two DEM, ARCS and POLYGONS faults fixed | D-332 |
 | 2026-11-15 | 8.1 payloads folded into the engine target; seeds hold every kind but BLOBS | D-332 |
 | 2026-11-15 | 8.1 trust target done | D-331 |
+| 2026-11-15 | 8.1 ffi target done | D-331 |
