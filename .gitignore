@@ -11,6 +11,7 @@
 !/fixtures/**/*.tgd
 !/bindings/fixtures/*.tgd
 !/fuzz/seeds/*.tgd
+!/crates/teigeodata-format/tests/data/format-0/*.tgd
 node_modules/
 .next/
 /site/out/
