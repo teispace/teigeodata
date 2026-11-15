@@ -464,9 +464,9 @@ queries:
   - id: np-0076
     class: exact_native
     query: "जनकपुर"
-    expect: { "geonames:1283318": 3 }
+    expect: { "geonames:1283318": 3, "codab:NP0217201": 3 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate; the municipality of its name is the same place (D-347)"
   - id: np-0077
     class: exact_native
     query: "जनगाँऊ"
@@ -490,9 +490,9 @@ queries:
   - id: np-0080
     class: exact_native
     query: "थिमि"
-    expect: { "geonames:8411054": 3 }
+    expect: { "geonames:8411054": 3, "codab:NP0326301": 3 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate; the municipality of its name is the same place (D-347)"
   - id: np-0081
     class: exact_native
     query: "दिक्तेल"
@@ -522,9 +522,9 @@ queries:
   - id: np-0085
     class: exact_native
     query: "धुलिखेल"
-    expect: { "geonames:1283448": 3 }
+    expect: { "geonames:1283448": 3, "codab:NP0324303": 3 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate; the municipality of its name is the same place (D-347)"
   - id: np-0086
     class: exact_native
     query: "नाम्चे"
@@ -546,9 +546,9 @@ queries:
   - id: np-0089
     class: exact_native
     query: "पोखरा उपमहानगरपालिका"
-    expect: { "geonames:1282898": 3 }
+    expect: { "geonames:1282898": 3, "codab:NP0439101": 3 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate; the municipality of its name is the same place (D-347)"
   - id: np-0090
     class: exact_native
     query: "फेरिचे"
@@ -558,9 +558,9 @@ queries:
   - id: np-0091
     class: exact_native
     query: "बनेपा"
-    expect: { "geonames:1283679": 3 }
+    expect: { "geonames:1283679": 3, "codab:NP0324302": 3 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate; the municipality of its name is the same place (D-347)"
   - id: np-0092
     class: exact_native
     query: "बाहुनटार"
@@ -570,15 +570,15 @@ queries:
   - id: np-0093
     class: exact_native
     query: "बिराटनगर"
-    expect: { "geonames:1283582": 3 }
+    expect: { "geonames:1283582": 3, "codab:NP0105101": 3 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate; the municipality of its name is the same place (D-347)"
   - id: np-0094
     class: exact_native
     query: "बुटवल"
-    expect: { "geonames:1283562": 3 }
+    expect: { "geonames:1283562": 3, "codab:NP0548201": 3 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate; the municipality of its name is the same place (D-347)"
   - id: np-0095
     class: exact_native
     query: "बेतिनी"
@@ -602,15 +602,15 @@ queries:
   - id: np-0098
     class: exact_native
     query: "भरतपुर"
-    expect: { "geonames:1283613": 3 }
+    expect: { "geonames:1283613": 3, "codab:NP0335101": 3 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate; the municipality of its name is the same place (D-347)"
   - id: np-0099
     class: exact_native
     query: "भिमदत्त"
-    expect: { "geonames:1283095": 3 }
+    expect: { "geonames:1283095": 3, "codab:NP0772302": 3 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate; the municipality of its name is the same place (D-347)"
   - id: np-0100
     class: exact_native
     query: "मकैसिंग"

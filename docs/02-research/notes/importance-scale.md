@@ -1,7 +1,7 @@
 ---
 title: "One importance scale for countries, regions and cities"
 status: accepted
-updated: 2026-11-14
+updated: 2026-11-15
 owner: forge
 revisit: 2027-05-14
 ---
@@ -115,6 +115,11 @@ the forge page's world-part flags (`--populations`); the next data release.
 - Unit counts come from Wikidata's best-rank statements, of varying years; a unit without one
   takes its level's typical count.
 - India's districts mostly lack a count; the city-first rule covers the common case.
+- Nepal's main build (2026-11-15, D-347): its local levels carry census counts, which this
+  note's lite measurements could not see. A municipality then outranks the city of its name by
+  one point, and a one-edit match on a populous one can outrank a better match (Q-028).
+  Flattening local levels back to D-124 cost prefix, ambiguous and exact Latin recall, so the
+  scale stays; the golden set accepts both records of the same place.
 
 ## 8. Versions checked
 
