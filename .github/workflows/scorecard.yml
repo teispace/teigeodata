@@ -1,0 +1,45 @@
+# OpenSSF Scorecard (phase 8.2, threat model §7, docs/06-engineering/ci.md): the supply-chain
+# checks a user can look up for this repository (pinned dependencies, token permissions,
+# branch protection, signed releases, fuzzing, SAST and more). Weekly on main and by dispatch.
+# The results are published to the OpenSSF API (the public badge) and uploaded to code
+# scanning. The action allows only a fixed set of steps and no top-level env or defaults.
+name: scorecard
+
+on:
+  schedule:
+    - cron: "29 4 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: scorecard
+  cancel-in-progress: false
+
+jobs:
+  analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # The results to code scanning, and the OIDC token that publishes them.
+      security-events: write
+      id-token: write
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scorecard
+          path: results.sarif
+          retention-days: 30
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: results.sarif
