@@ -38,10 +38,12 @@ How the code is versioned and tagged, so a consumer can pin it (TG-01, D-198). D
 ## Packs against code
 
 A pack and a reader meet through the [pack format](../04-architecture/pack-format.md), not the
-crate version: readers skip unknown section kinds and non-critical tags, and refuse a file
-whose `min_reader_major` is above their own. A new section (such as `TZ_RULES`) therefore needs
-no new code to keep older packs working, and older readers keep reading newer packs. Packs
-built for a release name the reader version they need in the catalog.
+crate version. The format is frozen at 1.0 (D-336): readers skip unknown section kinds,
+non-critical tags and extension columns (D-335), and refuse a file whose `min_reader_major`
+is above their own. A new section (such as `TZ_RULES`) therefore needs no new code to keep
+older packs working, and older readers keep reading newer packs. Packs built for a release
+name the reader version they need in the catalog, and a client refuses to download a pack
+that needs a newer reader than its own.
 
 ## Cutting a release
 

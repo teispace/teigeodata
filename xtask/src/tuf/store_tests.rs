@@ -1314,6 +1314,41 @@ fn an_older_release_is_refused() {
     assert_eq!(store.packs()[0].release, "2026.12.0");
 }
 
+/// A pack the catalog says needs a newer reader (`min_reader` above `READER_MAJOR`) is refused
+/// before anything is fetched or written, with the error opening it would give (D-336).
+#[test]
+fn a_pack_for_a_newer_reader_is_refused_before_download() {
+    let pack = pack_with("zz", "2026.12.0", 0);
+    let (mut entry, asset, _) = super::entry_of(&pack).unwrap();
+    entry.min_reader = teigeodata_format::READER_MAJOR + 1;
+    let fs = MemFs(Rc::default());
+    let mut store = Store::open(fs.clone()).unwrap().0;
+    let before = fs.0.borrow().ops;
+    let mut host = Mem::new(&asset, None);
+    let got = store.install(
+        &mut host,
+        &mut Mirrors::new(["m/"]),
+        "a",
+        &entry,
+        asset.len() as u64,
+        Components::all(),
+    );
+    let Err(teigeodata_sync::fetch::FetchError::Install(teigeodata_sync::Error::Pack(
+        teigeodata_format::Error::Version { min_reader_major },
+    ))) = got
+    else {
+        panic!("a pack for a newer reader installed: {got:?}")
+    };
+    assert_eq!(min_reader_major, teigeodata_format::READER_MAJOR + 1);
+    assert_eq!(host.served, 0, "nothing fetched");
+    assert_eq!(fs.0.borrow().ops, before, "nothing written");
+    assert_eq!(store.packs().len(), 0, "nothing installed");
+    // The reader's own major installs.
+    entry.min_reader = teigeodata_format::READER_MAJOR;
+    put_done(&mut store, &entry, &asset);
+    assert_eq!(store.packs().len(), 1);
+}
+
 /// A platform's passes (D-184): the store installs over [`Downloads`], the files a platform
 /// fetched; each pass answers `Needs` with every range still missing, which the "platform"
 /// then downloads. Returns the rounds, the bytes downloaded and the most ranges one round asked.

@@ -1,18 +1,21 @@
 ---
-title: "The .tgd pack format v1 (draft)"
-status: draft
-updated: 2026-11-11
+title: "The .tgd pack format 1.0"
+status: accepted
+updated: 2026-11-15
 ---
 
-# The .tgd pack format v1 (draft)
+# The .tgd pack format 1.0
 
 The byte-level contract between the builder (forge) and every reader. Decided by
 [ADR-0009](../03-decisions/adr/ADR-0009-pack-format.md). The research and its 14 A/B benchmarks
 are in [format, compression and indexing](../02-research/notes/format-compression-indexing.md).
 The logical model is the [data schema](../05-data/schema.md).
 
-**Status:** draft. Codecs marked *candidate* stay candidates until their benchmark (B1–B14) is
-recorded. The format freezes only when all are (D-029). Until then `format_major = 0`.
+**Status:** frozen at format 1.0 (D-029, D-336). Each codec was chosen by its benchmark, B1–B13
+recorded and B11-elsewhere and B14 retired with their reasons
+([the freeze](../02-research/notes/format-freeze.md)). Every 1.x reader reads every 1.x pack and
+every format-0 pack. A format minor adds only what an older reader skips, as the next section
+lists; anything else is a new major.
 
 ## Rules for the whole file
 
@@ -36,12 +39,14 @@ recorded. The format freezes only when all are (D-029). Until then `format_major
   refuses a UUID that does not match.
 - **Stable section bytes:** a section whose data did not change between releases keeps its
   bytes and hash, so an update downloads only changed sections. Its offset may move.
-- **Forward compatible:** readers skip unknown section kinds and unknown non-critical manifest
-  tags. A reader refuses a file whose `min_reader_major` is above its own.
+- **Forward compatible:** readers skip unknown section kinds, unknown non-critical manifest
+  tags and unknown extension columns (IDs from `0x8000`, D-335). A reader refuses a file whose
+  `min_reader_major` is above its own, and a client refuses to download one whose catalog entry
+  says so (D-336). A writer of format 1.x writes `min_reader_major = 1`.
 
 ## Layout
 
-Format 0.1, as built in `crates/teigeodata-format` (Phase 1).
+Format 1.0, as built in `crates/teigeodata-format`: the layout of format 0.1 (Phase 1), frozen.
 
 ```
 HEADER (128 B)                                   offset
@@ -94,7 +99,7 @@ The encoding is our own canonical TLV
 - **Tag 0** (with or without the critical bit) is reserved, as is section kind 0.
 - **Nesting:** a structured value, such as a column descriptor, is itself a TLV list.
 
-Tags known to format 0.1. A test fails if a tag in the code is missing here.
+Tags known to format 1.0. A test fails if a tag in the code is missing here.
 
 | Tag | Name | Value | Required |
 |---|---|---|---|
@@ -108,14 +113,16 @@ Tags known to format 0.1. A test fails if a tag in the code is missing here.
 | `0x0008` | `attribution` | UTF-8, 1–8,192 bytes, no control character but the line feed: the notices of the sources the pack was built from, one per line (D-126), signed with the head | |
 | `0x0009` | `tzdb` | as `release`: the tzdb release the pack's [TZ_RULES](#tz_rules) were compiled from (`2026f`, D-196); present exactly when the pack has TZ_RULES | |
 
-Still to add, with the sections that need them: dependencies (other packs by address and hash),
-versions (boundary and source releases; tzdb's is `tzdb`), the perspectives present, the components and
-levels of detail present, and per-column encoding descriptors (codec ID, grid scale, block size,
-parameters).
+Tags a format minor may still add, each without the critical bit so that older readers skip
+it: dependencies (other packs by address and hash; the catalog carries them today), source
+versions (tzdb's is `tzdb`), the perspectives present, and the levels of detail present. The
+per-column encoding descriptors first planned here live in each column table's directory
+(codec ID per column) and in each section's own parameter columns (DEM's steps, ARCS' scale),
+not in the manifest.
 
 ## Sections
 
-| # | Kind | Content | Component ([table](#components-of-a-pack)) | Codec (candidate until benchmarked) |
+| # | Kind | Content | Component ([table](#components-of-a-pack)) | Codec (its benchmark) |
 |---:|---|---|---|---|
 | 1 | IDMAP | each row's stable ID; ID → row | `point` | column table (D-075): sorted IDs and the row permutation; 0.35 B per place |
 | 2 | PLACES | point (1e-6° grid), kind, admin level, class code, flags; rows in Hilbert order | `point` | column table (D-074): 5.2 B per place on Nepal |
@@ -1054,6 +1061,7 @@ signature block is the one part not covered, and `verify_signature` checks it.
 
 ## Open items
 
-- The 14 benchmarks B1–B14 (catalogue in [benchmarks](../06-engineering/benchmarks.md)).
+- B11 outside Nepal and B14 measure the forge on the first non-Nepal and the world builds;
+  neither changes the bytes ([the freeze](../02-research/notes/format-freeze.md) §3.2).
 - Payloads added inside the frame fixed in Phase 1 (D-071): ARCS, POLYGONS and POLY_INDEX
   came with B10 (D-083), DEM with B11 (D-104) and POSTAL in 3.5 (D-105).

@@ -102,13 +102,45 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   - **Run:** 300 s clean, 167,048 inputs, coverage 5,215, peak RSS 453 MB.
   - **Not fuzzed here:** the JSON-RPC framing is rmcp's own (`=3.10.0`), and the
     `mcp-conformance` workflow tests it against the specification's suite
-- [ ] `fuzz-campaign.yml`: weekly and by dispatch, 3 h per target, a job each, with coverage
+- [x] `fuzz-campaign.yml`: weekly and by dispatch, 3 h per target, a job each, with coverage
   reports as artifacts. Gate: every section kind's decoder reached, the coverage recorded here
   - **Built (2026-11-15):** the workflow ([ci.md](../../06-engineering/ci.md#fuzzing-campaign))
     and its gate `cargo xtask fuzz-coverage`. The gate fails on a decoder no target reached and
     on a kind with no decoder entry (both planted). It read a real `llvm-cov` export locally
     (the `sections` target on whole-pack seeds, rightly red: that harness takes payloads)
-  - **Open:** the first run's coverage, recorded here
+  - **First run (2026-11-15, run 43685581742, a 300 s dispatch to prove the pipeline):** all
+    16 targets clean and the gate green. Every one of the 24 section kinds' decoders is
+    reached. The best target per decoder covers these shares of its lines (kinds that share
+    a file share a row):
+
+    | Decoder | Lines | Best target |
+    |---|---:|---|
+    | `region.rs` (REGION, ADMIN_REGION) | 74.6 % | engine |
+    | `blobs.rs` | 74.4 % | sections |
+    | `polygons.rs` | 73.6 % | engine |
+    | `place_index.rs` | 73.3 % | engine |
+    | `hierarchy.rs` | 67.8 % | sections |
+    | `postal.rs` | 63.8 % | engine |
+    | `arcs.rs` (ARCS, ARCS_OVERVIEW) | 63.4 % | engine |
+    | `places.rs` | 62.5 % | sections |
+    | `idmap.rs` | 59.8 % | sections |
+    | `iso_codes.rs` | 54.8 % | engine |
+    | `blocks.rs` | 53.7 % | transport_asset |
+    | `place_tz.rs` | 50.5 % | engine |
+    | `components.rs` | 48.1 % | engine |
+    | `tz_rules.rs` | 47.8 % | engine |
+    | `names.rs` | 45.4 % | engine |
+    | `redirects.rs` | 45.3 % | sections |
+    | `search.rs` (SEARCH, SUBSTRING) | 39.0 % | engine |
+    | `elevation.rs` | 39.0 % | engine |
+    | `dem.rs` (DEM, DEM_COARSE) | 37.6 % | engine |
+    | `poly_index.rs` | 35.5 % | engine |
+
+    - Inputs per target ranged from 17,276 (`transport_asset`) to 102.7 M (`manifest`).
+    - The weekly 3 h runs replace these numbers. Lines not reached are mostly the deep
+      checks' refusal branches and the writer-only code in the same files.
+    - The lowest three (`poly_index.rs`, `dem.rs`, `search.rs`) are the next seeds to add:
+      [ideas](../../01-product/ideas.md)
 
 ### 8.2 Security review
 
@@ -159,9 +191,18 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 
 - [ ] The 1.0 API review: every IDL item read once for name, shape and error; changes made
   before the freeze, each through the bindings' `--check`
-- [ ] The format freeze (Q-028): each of the format benchmarks B1–B14 recorded or retired with
+- [x] The format freeze (Q-028): each of the format benchmarks B1–B14 recorded or retired with
   its reason (D-029), then `FORMAT_MAJOR = 1`, `READER_MAJOR = 1` and `pack-format.md` out of
-  draft, with the fixtures and seeds written again
+  draft, with the fixtures and seeds written again. **Done (2026-11-15, D-335, D-336,
+  [research](../../02-research/notes/format-freeze.md)):**
+  - Twelve benchmarks recorded; B11 outside Nepal and B14 retired, since they measure the
+    forge, not the bytes.
+  - The audit found that every section refused an unknown column, which would have broken
+    older 1.x readers on any added column. Column IDs from `0x8000` up are now extension
+    columns that readers skip.
+  - It also found `tgd verify --deep` skipping `TZ_RULES`.
+  - Format-0 packs stay readable (`tests/compat.rs`), and a client refuses a pack for a newer
+    reader before downloading it.
 - [ ] `docs/06-engineering/semver.md`: what 1.0 promises (Rust API, C ABI, pack format, catalog,
   HTTP and MCP), MSRV and deprecation
 - [ ] `cargo-semver-checks` in `release.yml` from the first tag, beside the ABI gate (D-285).
@@ -197,6 +238,8 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.1 ffi target done | D-331 |
 | 2026-11-15 | 8.1 mcp target done | D-331 |
 | 2026-11-15 | 8.1 campaign workflow and coverage gate built | D-331 |
+| 2026-11-15 | 8.1 campaign: first run green, coverage recorded | D-331 |
+| 2026-11-15 | 8.4 format frozen at 1.0, extension columns | D-335, D-336 |
 | 2026-11-15 | 8.2 threat model and unsafe audit done | D-333 |
 | 2026-11-15 | 8.2 server limits done | D-334 |
 | 2026-11-15 | 8.4 gains the format freeze, Q-028 | the format is still major 0 and D-029's benchmarks are not all ticked |

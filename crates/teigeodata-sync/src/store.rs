@@ -486,6 +486,15 @@ impl<D: Fs> Store<D> {
         let want = set.into().closed();
         let set = want.set;
         let file = pack_name(entry, set)?;
+        // A pack this reader cannot open is refused before a byte is downloaded (D-336), with
+        // the error opening it would give.
+        if entry.min_reader > teigeodata_format::READER_MAJOR {
+            return Err(FetchError::Install(crate::Error::Pack(
+                teigeodata_format::Error::Version {
+                    min_reader_major: entry.min_reader,
+                },
+            )));
+        }
         // Never back to an older release (sync gate 1): the catalog is signed and fresh, but a
         // pack older than the installed one is refused here too.
         if let Some(old) = self.packs.iter().find(|r| {

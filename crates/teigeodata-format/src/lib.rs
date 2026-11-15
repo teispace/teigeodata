@@ -85,12 +85,15 @@ pub use signature::{SIGNATURE_DOMAIN, key_id};
 #[cfg(feature = "write")]
 pub use write::{Layout, Placed, Sign, Writer};
 
-/// The format major version this crate writes. 0 until the format freezes (D-029).
-pub const FORMAT_MAJOR: u16 = 0;
+/// The format major version this crate writes: 1 since the freeze (D-029, D-336). Every 1.x
+/// reader reads every 1.x pack; a minor adds only what an older reader skips (section kinds,
+/// manifest tags without the critical bit, extension columns).
+pub const FORMAT_MAJOR: u16 = 1;
 /// The format minor version this crate writes.
-pub const FORMAT_MINOR: u16 = 1;
-/// The newest `min_reader_major` this reader accepts.
-pub const READER_MAJOR: u16 = 0;
+pub const FORMAT_MINOR: u16 = 0;
+/// The newest `min_reader_major` this reader accepts. A format-0 pack (`min_reader_major` 0,
+/// the same layout) is read too.
+pub const READER_MAJOR: u16 = 1;
 
 /// A section kind. Unknown kinds are kept and skipped, so newer packs stay readable.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

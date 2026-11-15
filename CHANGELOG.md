@@ -309,6 +309,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Breaking
 
+- The pack format is 1.0 (D-336): packs written now have `format_major` and
+  `min_reader_major` 1, so a reader before this release refuses them. This release reads
+  every pack of earlier releases. `FORMAT_MAJOR`, `READER_MAJOR` and `FORMAT_MINOR` are 1, 1
+  and 0. A client no longer downloads a pack whose catalog entry needs a newer reader.
 - `fold` can fail: in a build without the `search` component it throws (returns)
   `MissingComponent`, as its Unicode tables belong to search (D-292). Swift calls it with
   `try`; the other languages throw unchecked, as from any other fallible call.
