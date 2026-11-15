@@ -269,8 +269,9 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 - [ ] The same packs through the signed catalog, after the key ceremony (phase 4.3)
 - [x] A dry run of `release.yml` end to end at the release commit: run 43719097976 on
   `chore/release-1.0.0` (the version bumped to 1.0.0 with `cargo xtask bump`, D-346), 53 jobs
-  green, the ABI and Rust API gates clean. Rerun on the branch once it is rebased for the
-  tag
+  green, the ABI and Rust API gates clean. Rerun on the rebased branch at tag `v1.0.0-rc.2`
+  (main 404a0cc, the population parity fix and the data release): run 43741537528, 52 jobs
+  green, 2026-11-16
 - [ ] The maintainer: the key ceremony (phase 4.3), the release environment and registry
   accounts (5.10c), Pages (`DOCS_DEPLOY`)
 
