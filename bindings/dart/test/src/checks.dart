@@ -192,6 +192,40 @@ void checks(
       (column(near, 'meters') as Float64List).first,
       closeTo(r['first_meters'] as double, 0.1),
     );
+    // The Reader against this file's own reads of the layout (D-322).
+    var nullsSeen = 0;
+    final anc = (e['ancestors'] as Map<String, dynamic>)['id'] as String;
+    for (final blob in [near, engine.ancestors(anc), lib().sampleRows(20)]) {
+      final reader = Reader(blob);
+      expect(reader.columns, columnNames(blob));
+      final records = reader.records();
+      expect(records.length, reader.rows);
+      expect(reader.toList(), records);
+      for (final name in reader.columns) {
+        final nulls = reader.nulls(name);
+        final values = reader.column(name);
+        try {
+          expect(reader.strings(name), strings(blob, name), reason: name);
+        } on InvalidArgumentException {
+          expect(reader.numbers(name), column(blob, name), reason: name);
+        }
+        for (var i = 0; i < reader.rows; i++) {
+          expect(values[i] == null, nulls[i], reason: '$name $i');
+          expect(records[i][name], values[i], reason: '$name $i');
+          if (nulls[i]) nullsSeen++;
+        }
+      }
+    }
+    expect(nullsSeen, greaterThan(0), reason: 'no null value was checked');
+    expect(
+      () => Reader(Uint8List.fromList(ascii.encode('TGB1'))),
+      throwsA(isA<CorruptException>()),
+    );
+    expect(
+      () => Reader(Uint8List.sublistView(near, 0, near.length - 8)),
+      throwsA(isA<CorruptException>()),
+    );
+    expect(() => Reader(near).numbers('name'), throwsA(isA<InvalidArgumentException>()));
     final a = e['admin_at'] as Map<String, dynamic>;
     expect(strings(engine.adminAt(a['lat'] as double, a['lon'] as double), 'id'), a['ids']);
     for (final (method, call) in [

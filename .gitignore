@@ -32,3 +32,5 @@ mutants.out*/
 # The docs examples (site/examples) build here.
 /site/examples/swift/Tour/.build/
 /site/examples/swift/Tour/Package.resolved
+/site/examples/dart/.dart_tool/
+/site/examples/dart/pubspec.lock

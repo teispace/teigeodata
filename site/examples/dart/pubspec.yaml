@@ -1,0 +1,11 @@
+name: teigeodata_tour
+description: The tour of the teigeodata guide, run on a released pack.
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  # This checkout's package; an application depends on the released one (see the Dart guide).
+  teigeodata:
+    path: ../../../bindings/dart

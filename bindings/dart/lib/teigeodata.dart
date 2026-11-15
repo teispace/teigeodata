@@ -4,4 +4,5 @@
 library;
 
 export 'src/bindings.g.dart' if (dart.library.js_interop) 'src/bindings_web.g.dart';
+export 'src/reader.dart';
 export 'src/types.g.dart' hide exceptionNamed, exceptionOf;

@@ -140,6 +140,22 @@ const LANGS: &[Lang] = &[
         own: None,
     },
     Lang {
+        name: "dart",
+        tool: "dart",
+        // The package's build hook builds the C library from this checkout (D-289).
+        needs: &[],
+        command: &[
+            "sh",
+            "-c",
+            "dart pub get >&2 && dart run bin/tour.dart \"$0\"",
+            "{pack}",
+        ],
+        dir: "site/examples/dart",
+        env: &[],
+        links: &[],
+        own: None,
+    },
+    Lang {
         name: "cli",
         tool: "sh",
         needs: &["target/release/tgd"],

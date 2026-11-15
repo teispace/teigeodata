@@ -13,9 +13,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Added
 
-- `Reader` in the Node.js and WebAssembly packages: reads a result blob in place (`rows`,
-  `columns`, `numbers` as typed arrays, `strings`, `nulls`, `column`, `records`, iteration)
-  (D-322).
+- A result `Reader` of one shape in every language (D-322): new in Node.js, WebAssembly,
+  Swift and Dart (`rows`, `columns`, `has`, `numbers`, `strings`, `nulls`, `column`,
+  `records`, iteration); Go's gains `Column` and `Records`, Python's `has`, `column`,
+  `records` and iteration.
 - `cargo xtask docs-examples`: runs every language's example program on the pinned public pack
   and checks its output (D-322).
 
