@@ -1,0 +1,2 @@
+tgd:np/2cn  Kathmandu  settlement 0
+tgd:np/2gm  Kathmandu  admin 3

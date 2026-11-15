@@ -1,0 +1,3 @@
+Bhrikuti Mandap  settlement  27.703020,85.319798  tgd:np/2ga  1298 m (model)  Asia/Kathmandu  167.6 m away at 151.9°
+Bagbazar  settlement  27.704485,85.318880  tgd:np/2g9  1298 m (model)  Asia/Kathmandu  353.9 m away at 151.4°
+Shahidgate  settlement  27.699626,85.317360  tgd:np/2cp  1295 m (model)  Asia/Kathmandu  393 m away at 54.3°

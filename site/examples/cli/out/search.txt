@@ -1,0 +1,3 @@
+Pokhara  settlement  28.266890,83.968000  tgd:np/1xhb  1006 m (model)  Asia/Kathmandu  score 132
+Pokhara  admin 3  28.209407,83.981817  tgd:np/1xnr  842 m (model)  Asia/Kathmandu  score 105
+Pokhara  settlement  28.063631,82.378569  tgd:np/15t1  612 m (model)  Asia/Kathmandu  score 90

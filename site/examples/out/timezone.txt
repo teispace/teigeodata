@@ -1,0 +1,3 @@
+Asia/Kathmandu 20700 s east of UTC, +0545 dst 0
+02:30 on 2026-03-08 in New York: gap -18000 -> -14400
+tzdb 2026f

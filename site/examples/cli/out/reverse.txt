@@ -1,0 +1,3 @@
+Narayanhiti Royal Palace  settlement  27.718504,85.320980  tgd:np/2h3  1309 m (model)  Asia/Kathmandu  330.8 m away at 116°  inside
+Gairidhara  settlement  27.719775,85.326454  tgd:np/2h2  1306 m (model)  Asia/Kathmandu  374.6 m away at 220.2°
+Naxal  settlement  27.714251,85.326034  tgd:np/2gh  1308 m (model)  Asia/Kathmandu  384.2 m away at 328.6°

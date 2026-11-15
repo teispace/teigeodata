@@ -1,0 +1,2 @@
+Kathmandu  settlement  27.701690,85.320600  tgd:np/2cn  1288 m (model)  Asia/Kathmandu  score 1144
+Kathmandu  admin 3  27.708951,85.324957  tgd:np/2gm  1308 m (model)  Asia/Kathmandu  score 1136

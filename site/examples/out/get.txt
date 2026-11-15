@@ -1,0 +1,3 @@
+Pokhara settlement
+at 28.266890, 83.968000, 1006 m
+timezone Asia/Kathmandu parent tgd:np/1xnr

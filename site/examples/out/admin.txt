@@ -1,0 +1,5 @@
+0  Nepal  NP
+1  Gandaki  NP-P4
+2  Kaski
+3  Pokhara
+NP-P4 is Gandaki tgd:np/2922

@@ -38,8 +38,13 @@ pages, the playground. Nothing names a country in code (P16): country pages come
   Node.js, the browser and other WebAssembly hosts, Go, .NET): install (today and from the
   registry), open a pack, every query, read results, errors, threads, bundling and
   downloading packs, platform notes; each backed by a program in `site/examples/<lang>/`
-- [ ] `cargo xtask docs-examples [--check]`: every example run on the pinned public pack, its
-  output compared with the checked-in output; in CI per language
+- [x] `cargo xtask docs-examples [--check]`: every example run on the pinned public pack, its
+  output compared with the checked-in output (D-322); Rust, Python, Node.js, WebAssembly and
+  the CLI so far
+- [ ] A result `Reader` of one shape in every language (D-322): Node.js and WebAssembly done;
+  Swift, Kotlin and Java, Dart, C, C++; `records` in Python, Go and .NET
+- [ ] The tours in Go, C, C++, Java, Kotlin, Swift, Dart and .NET; `docs-examples` in CI
+  per language
 - [ ] The servers: `tgd serve` (every route, Nominatim compatibility, deployment) and
   `tgd mcp` (clients' configuration, tools, resources, installs)
 
@@ -70,3 +75,4 @@ pages, the playground. Nothing names a country in code (P16): country pages come
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-15 | Phase 7 drafted from the docs-site research | M6 met (D-321) |
+| 2026-11-15 | A reader in every language added to 7.2 | The tours found most bindings cannot read a result (D-322) |

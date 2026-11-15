@@ -15,6 +15,7 @@ mod commit;
 mod corrections;
 mod data;
 mod docs;
+mod docs_examples;
 mod flutter_check;
 mod golden;
 mod ids;
@@ -143,6 +144,13 @@ Tasks:
   clean [--all]     Free disk: incremental caches and scratch of both workspaces (built
                     packs in data/build/ are kept); --all also removes data/build/ and
                     runs `cargo clean` in both. Fetched sources are kept.
+  docs-examples [--check|--bless] [--lang <a,b>] [--pack <path>] [--fetch]
+                    Phase 7: runs each language's tour (site/examples/<lang>/) on the pack
+                    site/data.json pins (--fetch downloads it to target/docs-data/ and checks
+                    its SHA-256) and compares what it prints with site/examples/tour.out;
+                    --check also checks the per-section files the pages include, --bless
+                    writes them from one language. Languages not built here are skipped
+                    and named.
   load <pack.tgd>… [--query <name>] [--secs <n>] [--tgd <path>] [--only <route>]… [--check <budget.toml>]
                     Phase 6.4 (D-320): builds tgd, serves each pack on loopback and drives
                     a route mix (search at 1, 16 and 64 connections, reverse, get, near,
@@ -192,6 +200,7 @@ fn main() -> ExitCode {
         "tuf" => report(tuf::run(rest)),
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
         "load" => report(load::run(&root, rest)),
+        "docs-examples" => report(docs_examples::run(&root, rest)),
         "sizes" if rest.iter().any(|a| a == "--tgd") => {
             report(sizes::tgd(&root, &root.join("target/sizes-tgd")))
         }

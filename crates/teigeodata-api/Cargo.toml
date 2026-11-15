@@ -72,3 +72,8 @@ zstd = { version = "0.14.3", default-features = false }
 
 [lints]
 workspace = true
+
+# The docs site's Rust tour (site/examples/rust), run by `cargo xtask docs-examples`.
+[[example]]
+name = "tour"
+path = "../../site/examples/rust/tour.rs"

@@ -1,0 +1,1 @@
+Asia/Kathmandu  timezone_area  28.397480,83.093537  tgd:np/1gce  Asia/Kathmandu  UTC+05:45 (+0545)

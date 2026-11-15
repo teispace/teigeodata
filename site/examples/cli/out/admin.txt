@@ -1,0 +1,4 @@
+Nepal  country NP  28.000000,84.000000  tgd:np/1wmc  1046 m (model)  Asia/Kathmandu
+Gandaki  admin 1 NP-P4  28.384514,84.035774  tgd:np/2922  2689 m (model)  Asia/Kathmandu
+Kaski  admin 2  28.345513,83.970886  tgd:np/295c  1231 m (model)  Asia/Kathmandu
+Pokhara  admin 3  28.209407,83.981817  tgd:np/1xnr  842 m (model)  Asia/Kathmandu

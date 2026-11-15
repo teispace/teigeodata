@@ -13,6 +13,12 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Added
 
+- `Reader` in the Node.js and WebAssembly packages: reads a result blob in place (`rows`,
+  `columns`, `numbers` as typed arrays, `strings`, `nulls`, `column`, `records`, iteration)
+  (D-322).
+- `cargo xtask docs-examples`: runs every language's example program on the pinned public pack
+  and checks its output (D-322).
+
 - `cargo xtask load`: a load test of `tgd serve` and its `/mcp` on real packs with `oha`,
   gated by `tools/load/budget.toml` (requests per second, p99, footprint and its growth)
   (D-320); `cargo xtask sizes --tgd` reports the binary with and without its servers.
@@ -217,6 +223,8 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Fixed
 
+- `@teispace/teigeodata-wasm` on Node.js loaded its browser entry: the package `exports`
+  conditions were written sorted, `default` before `node` (D-322).
 - `Shared::follow` (and `Engine::follow`) opens a store pack with the parts it was installed
   with (D-251); before, a pack of some parts was opened as whole, its parts not installed read
   as holes (D-311).

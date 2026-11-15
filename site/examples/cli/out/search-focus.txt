@@ -1,0 +1,3 @@
+Shivapur  settlement  28.531014,80.821273  tgd:np/2v99  153 m (model)  Asia/Kathmandu  score 105
+Shivapur  settlement  28.714055,80.986874  tgd:np/2raj  193 m (model)  Asia/Kathmandu  score 103
+Shivapur  settlement  28.506089,81.303187  tgd:np/2rkx  179 m (model)  Asia/Kathmandu  score 96

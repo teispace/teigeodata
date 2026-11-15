@@ -1,0 +1,4 @@
+world baseline 2026.11.14  (15641408 bytes, format 0.1, created 1970-01-01T00:00:00Z)
+unsigned
+licence: "cc-by-4.0"
+attribution: 11 notices

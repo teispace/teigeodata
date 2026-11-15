@@ -1,0 +1,3 @@
+[
+{"id":"tgd:np/1xhb","name":"Pokhara","kind":"settlement","admin_level":0,"lat":28.26689,"lon":83.968,"elevation":1006,"elevation_source":"model","parent":"tgd:np/1xnr","timezone":"Asia/Kathmandu"}
+]

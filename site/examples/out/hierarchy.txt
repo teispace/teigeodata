@@ -1,0 +1,5 @@
+admin 3  Pokhara
+admin 2  Kaski
+admin 1  Gandaki  NP-P4
+country 0  Nepal  NP
+Kaski has 5 children

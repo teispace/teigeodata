@@ -1,0 +1,70 @@
+=== inspect
+world baseline 2026.11.14  (15641408 bytes, format 0.1, created 1970-01-01T00:00:00Z)
+unsigned
+licence: "cc-by-4.0"
+attribution: 11 notices
+=== search
+Pokhara  settlement  28.266890,83.968000  tgd:np/1xhb  1006 m (model)  Asia/Kathmandu  score 132
+Pokhara  admin 3  28.209407,83.981817  tgd:np/1xnr  842 m (model)  Asia/Kathmandu  score 105
+Pokhara  settlement  28.063631,82.378569  tgd:np/15t1  612 m (model)  Asia/Kathmandu  score 90
+=== search-parent
+Kathmandu  settlement  27.701690,85.320600  tgd:np/2cn  1288 m (model)  Asia/Kathmandu  score 1144
+Kathmandu  admin 3  27.708951,85.324957  tgd:np/2gm  1308 m (model)  Asia/Kathmandu  score 1136
+=== search-focus
+Shivapur  settlement  28.531014,80.821273  tgd:np/2v99  153 m (model)  Asia/Kathmandu  score 105
+Shivapur  settlement  28.714055,80.986874  tgd:np/2raj  193 m (model)  Asia/Kathmandu  score 103
+Shivapur  settlement  28.506089,81.303187  tgd:np/2rkx  179 m (model)  Asia/Kathmandu  score 96
+=== get
+Pokhara  settlement  28.266890,83.968000  tgd:np/1xhb  1006 m (model)  Asia/Kathmandu
+=== json
+[
+{"id":"tgd:np/1xhb","name":"Pokhara","kind":"settlement","admin_level":0,"lat":28.26689,"lon":83.968,"elevation":1006,"elevation_source":"model","parent":"tgd:np/1xnr","timezone":"Asia/Kathmandu"}
+]
+=== reverse
+Narayanhiti Royal Palace  settlement  27.718504,85.320980  tgd:np/2h3  1309 m (model)  Asia/Kathmandu  330.8 m away at 116°  inside
+Gairidhara  settlement  27.719775,85.326454  tgd:np/2h2  1306 m (model)  Asia/Kathmandu  374.6 m away at 220.2°
+Naxal  settlement  27.714251,85.326034  tgd:np/2gh  1308 m (model)  Asia/Kathmandu  384.2 m away at 328.6°
+=== near
+Bhrikuti Mandap  settlement  27.703020,85.319798  tgd:np/2ga  1298 m (model)  Asia/Kathmandu  167.6 m away at 151.9°
+Bagbazar  settlement  27.704485,85.318880  tgd:np/2g9  1298 m (model)  Asia/Kathmandu  353.9 m away at 151.4°
+Shahidgate  settlement  27.699626,85.317360  tgd:np/2cp  1295 m (model)  Asia/Kathmandu  393 m away at 54.3°
+=== admin
+Nepal  country NP  28.000000,84.000000  tgd:np/1wmc  1046 m (model)  Asia/Kathmandu
+Gandaki  admin 1 NP-P4  28.384514,84.035774  tgd:np/2922  2689 m (model)  Asia/Kathmandu
+Kaski  admin 2  28.345513,83.970886  tgd:np/295c  1231 m (model)  Asia/Kathmandu
+Pokhara  admin 3  28.209407,83.981817  tgd:np/1xnr  842 m (model)  Asia/Kathmandu
+=== timezone
+Asia/Kathmandu  timezone_area  28.397480,83.093537  tgd:np/1gce  Asia/Kathmandu  UTC+05:45 (+0545)
+=== elevation
+1304.2 m above EGM2008 (NASADEM, 464 m spacing)
+=== geojson
+{"type":"FeatureCollection","attribution":"Made with Natural Earth (https://www.naturalearthdata.com), public domain\nGeoNames (https://www.geonames.org), CC BY 4.0\nTime zones: IANA Time Zone Database 2026f (public domain)\nWikidata (https://www.wikidata.org), CC0 1.0\nUnicode CLDR (https://cldr.unicode.org), Copyright © 1991-2026 Unicode, Inc., under the Unicode License v3\nLocal Government Directory, Ministry of Panchayati Raj, Government of India (https://lgdirectory.gov.in)\nAdministrative boundaries: Survey Department of Nepal and UN Resident Coordinator's Office in Nepal, via OCHA HDX (cod-ab-npl), CC BY-IGO 3.0\nElevation: NASADEM, NASA JPL and LP DAAC\nBuildings: Microsoft Global ML Building Footprints, CDLA-Permissive-2.0 (https://cdla.dev/permissive-2-0/)\nBuildings: Google Open Buildings v3 (Sirko et al. 2021, arXiv:2107.12283), CC BY 4.0\nCentral Bureau of Statistics (now National Statistics Office), Nepal, via Open Data Nepal (https://opendatanepal.com), Creative Commons Attribution","features":[
+{"type":"Feature","id":"tgd:np/1xhb","geometry":{"type":"Point","coordinates":[83.968,28.26689]},"properties":{"id":"tgd:np/1xhb","name":"Pokhara","kind":"settlement","admin_level":0,"elevation":1006,"elevation_source":"model","parent":"tgd:np/1xnr","timezone":"Asia/Kathmandu","score":132}}
+]}
+=== nominatim
+[
+  {
+    "address": {
+      "admin_level_1": "Gandaki",
+      "admin_level_2": "Kaski",
+      "admin_level_3": "Pokhara",
+      "country": "Nepal",
+      "country_code": "np"
+    },
+    "boundingbox": [
+      "28.210016",
+      "28.210016",
+      "83.987089",
+      "83.987089"
+    ],
+    "display_name": "Prithvi-chowk, Pokhara, Kaski, Gandaki, Nepal",
+    "lat": "28.210016",
+    "licence": "Made with Natural Earth (https://www.naturalearthdata.com), public domain; GeoNames (https://www.geonames.org), CC BY 4.0; Time zones: IANA Time Zone Database 2026f (public domain); Wikidata (https://www.wikidata.org), CC0 1.0; Unicode CLDR (https://cldr.unicode.org), Copyright © 1991-2026 Unicode, Inc., under the Unicode License v3; Local Government Directory, Ministry of Panchayati Raj, Government of India (https://lgdirectory.gov.in); Administrative boundaries: Survey Department of Nepal and UN Resident Coordinator's Office in Nepal, via OCHA HDX (cod-ab-npl), CC BY-IGO 3.0; Elevation: NASADEM, NASA JPL and LP DAAC; Buildings: Microsoft Global ML Building Footprints, CDLA-Permissive-2.0 (https://cdla.dev/permissive-2-0/); Buildings: Google Open Buildings v3 (Sirko et al. 2021, arXiv:2107.12283), CC BY 4.0; Central Bureau of Statistics (now National Statistics Office), Nepal, via Open Data Nepal (https://opendatanepal.com), Creative Commons Attribution",
+    "lon": "83.987089",
+    "name": "Prithvi-chowk",
+    "place_id": "tgd:np/1xnp"
+  }
+]
+=== extract
+wrote kathmandu.tgd: 938944 bytes, 14 sections, 1388 places; components point,elevation,admin,names,search,timezone,timezone-index,boundaries,admin-index,postal,dem,extra,tz-rules,substring,dem-coarse
+Kathmandu  settlement  27.701690,85.320600  tgd:np/2cn  1288 m (model)  Asia/Kathmandu  score 144

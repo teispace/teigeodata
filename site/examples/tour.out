@@ -1,0 +1,49 @@
+=== open
+layers: 1
+=== search
+tgd:np/1xhb  Pokhara  settlement  28.2669, 83.9680  score 132
+tgd:np/1xnr  Pokhara  admin  28.2094, 83.9818  score 105
+tgd:np/15t1  Pokhara  settlement  28.0636, 82.3786  score 90
+=== search-parent
+tgd:np/2cn  Kathmandu  settlement 0
+tgd:np/2gm  Kathmandu  admin 3
+=== search-focus
+tgd:np/2v99  Shivapur  28.5310, 80.8213
+tgd:np/2raj  Shivapur  28.7141, 80.9869
+tgd:np/2rkx  Shivapur  28.5061, 81.3032
+=== get
+Pokhara settlement
+at 28.266890, 83.968000, 1006 m
+timezone Asia/Kathmandu parent tgd:np/1xnr
+=== hierarchy
+admin 3  Pokhara
+admin 2  Kaski
+admin 1  Gandaki  NP-P4
+country 0  Nepal  NP
+Kaski has 5 children
+=== reverse
+Narayanhiti Royal Palace  331 m at 116°
+Gairidhara  375 m at 220°
+Naxal  384 m at 329°
+=== radius
+3 places within 500 m; farthest 384 m
+=== nearby
+Bhrikuti Mandap  168 m
+Bagbazar  354 m
+Shahidgate  393 m
+=== admin
+0  Nepal  NP
+1  Gandaki  NP-P4
+2  Kaski
+3  Pokhara
+NP-P4 is Gandaki tgd:np/2922
+=== timezone
+Asia/Kathmandu 20700 s east of UTC, +0545 dst 0
+02:30 on 2026-03-08 in New York: gap -18000 -> -14400
+tzdb 2026f
+=== elevation
+1304.2 m above EGM2008 (nasadem, 464 m grid)
+=== distance
+Kathmandu to Pokhara: 142.4 km
+=== errors
+invalid argument: (91, 0) is not a point: the latitude is outside -90 to 90 degrees
