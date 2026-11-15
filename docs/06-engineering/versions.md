@@ -28,6 +28,8 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | tokio | 1.54.1 | 2026-11-15 | crates.io | 2026-12-15 |
 | tower-http | 0.7.1 | 2026-11-15 | crates.io | 2026-12-15 |
 | tower (server tests, `util`) | 0.5.3 | 2026-11-15 | crates.io | 2026-12-15 |
+| rustc-demangle (xtask profile) | 0.1.28 | 2026-11-15 | crates.io | 2027-02-15 |
+| Instruments / `xctrace` (profiles, D-338) | 27.2 (27B52) | 2026-11-15 | `xctrace version` | with Xcode |
 | rmcp (MCP 2026-07-28, pin `=`) | 3.10.0 | 2026-11-15 | crates.io, GitHub releases | weekly |
 | getrandom (MCP cursor key) | 0.4.3 | 2026-11-15 | crates.io | 2026-12-15 |
 | oha (load generator) | 1.17.0 | 2026-11-15 | crates.io | 2027-02-15 |
@@ -119,6 +121,9 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | clap (`tgd`, derive, D-178) | 4.6.7 | 2026-11-11 | crates.io | 2026-12-11 |
 | clap_complete (`tgd completions`, 4.9e) | 4.6.11 | 2026-11-11 | crates.io | 2026-12-11 |
 | tough (`tools/tough-oracle`, the TUF differential, D-165) | 0.24.0 | 2026-11-10 | crates.io | 2026-12-10 |
+| `tools/competitive` (suite C, D-340): ureq, serde_json, tzf-rs | 3.5.2, 1.0.154, 2.3.0 | 2026-11-15 | crates.io | 2026-12-15 |
+| Nominatim (suite C rival; image `mediagis/nominatim:5.3` by digest) | 5.3.3 | 2026-11-15 | Docker Hub (tag updated 2026-10-26) | 2026-12-15 |
+| Photon (suite C rival; jar by SHA-256; Java 21) | 1.3.0 | 2026-11-15 | GitHub releases | 2026-12-15 |
 | serde-saphyr (xtask YAML) | 2.1.1 | 2026-11-06 | crates.io (serde_yaml is deprecated) | 2026-12-06 |
 | fst (search spike; own automaton, not its Levenshtein DFA) | 0.4.7 | 2026-11-06 | crates.io (last release 2021-06-06) | 2026-12-06 |
 | calamine (COD-AB workbooks, spikes) | 0.38.0 | 2026-11-06 | crates.io | 2026-12-06 |

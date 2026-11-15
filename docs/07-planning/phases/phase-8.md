@@ -194,15 +194,23 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 
 ### 8.3 Performance pass
 
-- [ ] A `samply` profile of each Q and L suite on Nepal's main pack and the world baseline; the
-  three largest self-time items per suite recorded in `docs/02-research/benches/phase-8.md`
-- [ ] Each change justified by its profile and landed with its instruction count and
-  wall-clock before and after
-- [ ] The scaling gate (`cargo xtask scaling`): throughput at 1, 2, 4 and 8 threads on one
-  `Shared` engine, recorded for the measured page
+- [x] A profile of each Q and L suite on Nepal's pack and the world baseline; the three largest
+  self-time items per suite recorded in [benches/phase-8](../../02-research/benches/phase-8.md).
+  **Changed (D-338):** Instruments' Time Profiler through `cargo xtask profile` in place of
+  `samply`, which is not installed; Nepal's lite pack stands in for its main pack, which is
+  rebuilt in CI only
+- [x] Each change justified by its profile and landed with its wall-clock before and after
+  (alternating A/B) and its instruction count from the `counts` workflow: `Sorted::find` in
+  `u64` (get −6% Nepal, −4% world), `Packed::parse`'s directory check vectorised (open −14%,
+  −17%); a direct-read block search rejected (+5% on Nepal)
+- [x] The scaling gate (`cargo xtask scaling`): throughput at 1, 2, 4 and 8 threads on one
+  `Shared` engine, recorded for the measured page (`site/data/measured/scaling.json`). Fails
+  under 1.5× at four threads; a planted global lock gave 0.76×
 - [ ] Suite C, the competitive report (`competitive.yml`, by dispatch on GitHub runners):
   Nominatim and Photon on Nepal's extract, `tzf-rs` and a GeoNames-backed library, on the
-  golden queries. Medians of repeated runs, with each rival's version and configuration
+  golden queries. Medians of repeated runs, with each rival's version and configuration.
+  **Built (D-340):** `tools/competitive` and the workflow; run locally in process and against
+  `tgd serve` (the two agree exactly). Done once the first run on GitHub has its report
 
 ### 8.4 Docs complete and the API frozen
 
@@ -271,3 +279,5 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.2 threat model and unsafe audit done | D-333 |
 | 2026-11-15 | 8.2 server limits done | D-334 |
 | 2026-11-15 | 8.4 gains the format freeze, Q-028 | the format is still major 0 and D-029's benchmarks are not all ticked |
+| 2026-11-15 | 8.3: Instruments in place of `samply`; profiles, two changes and the scaling gate done | D-338 |
+| 2026-11-15 | 8.3: suite C built (`tools/competitive`, `competitive.yml`); the parse change re-measured in its final form | D-340 |

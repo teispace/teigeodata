@@ -142,11 +142,20 @@ batches, and reports **binding time minus Rust time** as the marshalling cost.
 
 ### C: competitive (published with each release)
 
-Run on one documented machine with the same query files. Rivals: GeoNames-backed libraries,
-`tzf-rs`, Nominatim and Photon (local Docker), Pelias, and Overture through DuckDB. For each
-rival we report latency, size on disk, RAM, setup time and accuracy on the same golden set.
+Run on one GitHub runner with the same query files (`competitive.yml`, by hand and on each
+release; D-340, [suite C](../02-research/notes/competitive-suite.md)). Rivals: GeoNames' own
+points (what a GeoNames-backed library returns), `tzf-rs`, Nominatim and Photon, each from
+pinned inputs; Pelias and Overture through DuckDB later. For each rival the report gives
+where it puts the labelled places (by name, and by identity for GeoNames and teigeodata),
+golden-set recall by class, timezone agreement, latency, size on disk, RAM and setup time.
 Results include the rival's version and configuration, and we invite their maintainers to check
 them ([Competitive analysis](../02-research/notes/competitive-analysis.md)).
+
+```
+cargo build --release --manifest-path tools/competitive/Cargo.toml
+tools/competitive/target/release/competitive --cc np --pack <world-np-lite.tgd> \
+  --registry <np-ids-lite.tsv> [--geonames NP.txt] [--tgd URL] [--nominatim URL] [--photon URL]
+```
 
 ### D: data builds (forge)
 
@@ -191,9 +200,16 @@ benchmark.
 | Wall-clock | nightly `criterion` regressions with p < 0.01 open an issue | nightly |
 | Bindings | marshalling cost per call within its budget (set after spike S4) | nightly |
 | Release | full matrix, devices, and the competitive report attached to the release | release |
+| Scaling | one `Shared` engine at 4 threads reaches at least 1.5× one thread on a query mix (`cargo xtask scaling`, D-338) | before a release, by hand |
+
+Profiles: `cargo xtask profile <pack.tgd>…` records each Q and L suite with Instruments
+(macOS) and lists the items with the most self time; the method and the A/B rule for a change
+are in the [profiling note](../02-research/notes/profiling.md).
 
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-06 | Catalogue created | Maintainer asked for proper benchmarks across features, cases and bindings; [research](../02-research/notes/benchmarking.md) |
+| 2026-11-15 | The scaling gate and `cargo xtask profile` | Phase 8.3, D-338 |
+| 2026-11-15 | Suite C built: `tools/competitive` and `competitive.yml` | Phase 8.3; D-340 |

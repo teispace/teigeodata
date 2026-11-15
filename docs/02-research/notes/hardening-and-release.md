@@ -52,7 +52,7 @@ only the maintainer can do. It feeds [phase 8](../../07-planning/phases/phase-8.
   sync crate set and the format crate adopted on 2026-11-15).
 - **The performance pass profiles before it optimises** (quality bar: "every optimisation is
   preceded by a profile"). Each Q and L suite runs on the Nepal main pack and the world
-  baseline under `samply`; the three largest self-time items per suite are recorded; a change
+  baseline under a sampling profiler (Instruments, D-338); the three largest self-time items per suite are recorded; a change
   lands only with its instruction count (`counts.yml`) and wall-clock before and after. Two
   release gates are written in [benchmarks](../../06-engineering/benchmarks.md) but have never
   run: the **scaling** gate (query throughput with 1, 2, 4 and 8 threads on one `Shared`

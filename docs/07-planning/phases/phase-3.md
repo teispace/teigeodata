@@ -185,7 +185,13 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   - lite packs ship in every data release since `data-2026.11.13.2`
 - [x] G-tz: GeoNames' per-place `timezone` agrees with the pack's `PLACE_TZ`, at most 0.1%
   differ (D-139; Nepal main 0.030%, lite 0.010%, 2026-11-09)
-- [ ] `ACCURACY.md` for Nepal against held-out truth
+- [x] `ACCURACY.md` for Nepal against held-out truth (D-339): `cargo xtask accuracy` measures
+  the shipped pack against the 301-place sample, labelled in two blind passes by agents on
+  Sentinel-2 chips ([accuracy labels](../../02-research/notes/accuracy-labels.md)). Lite:
+  [`ACCURACY-lite.md`](../../../data/countries/np/ACCURACY-lite.md), horizontal P50 260 m, P90
+  939 m; two-thirds of lowland places within 500 m, a third of hill places within 150 m; the
+  passes agree within 63 m (P50) and 385 m (P90). The main build's page follows its next CI
+  build. The hill targets are finer than the labels can show
 
 ### 3.8 Exit review
 - [ ] M3 criteria met; progress updated
@@ -228,3 +234,4 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 | 2026-11-11 | 3.4: the DEM ships masked to the pack's units, terrain by `elevation_at` | D-192 |
 | 2026-11-11 | 3.5: point → postal code in the engine and `tgd postal` (D-200) | the SDK half of 3.5 |
 | 2026-11-11 | 3.4: summits as natural places with surveyed heights (D-201); the DEM section closed with the Nepal size | the DEM tiles fetched again |
+| 2026-11-15 | 3.7: Nepal's accuracy measured and generated (`cargo xtask accuracy`) | D-339 |

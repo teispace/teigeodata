@@ -1,7 +1,7 @@
 ---
 title: "Accuracy labels: how the 301 Nepal places are labelled"
-status: research
-updated: 2026-11-11
+status: accepted
+updated: 2026-11-15
 owner: teigeodata maintainers
 revisit: 2027-05-11
 ---
@@ -74,6 +74,21 @@ building points and the grid, write a PNG and the chip's transform) and
 
 - Phase 3 §3.7: `ACCURACY.md` follows the scores on this set.
 - Q-017 is answered by this method; the people-made set stays an idea.
+
+## 6a. What the labelling found (2026-11-15)
+
+- Pass 1: 299 chips (2 had no clear scene), labelled by three agents in parallel, each a
+  third of the sample, from one written brief: 222 marked with a settlement, 77 as showing
+  none (scattered houses with no core, or no buildings in the footprint data).
+- Pass 2: the 60 `second` rows, by a fourth agent that never saw pass 1, on mirrored chips with
+  the centre moved by (237 m, −173 m). Both passes marked a settlement for 41, both marked none
+  for 8, and they disagreed on whether there is one for 11 (18%). Where both marked one, the
+  marks are 63 m apart at P50 and 385 m at P90; 63% within 150 m, 90% within 500 m.
+- So the set judges errors of a few hundred metres, not the 150 m hill target: a P90 below the
+  labels' own P90 cannot be shown with it. The scores and that caveat are in each build's
+  generated page (`cargo xtask accuracy`, D-339).
+- The labellers' notes name the hard cases: two alike clusters at the same distance, a hamlet
+  inside a continuous built-up area, a dense bazaar just beyond the locator's cell.
 
 ## 7. Risks and open items
 
