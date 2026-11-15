@@ -48,11 +48,13 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 - [x] The settlement core and the weighted Weiszfeld consensus (D-091, D-096): agreement gate
   P90 146 m against 180 m, fatal on failure, proved on a planted mismatch
   ([forge](../../04-architecture/forge.md#settlement-core-and-consensus-core))
-- [ ] Elevation from the DEM at the consensus point, surveyed heights for summits (D-089):
-  moved to 3.4, which builds the DEM section the elevation is read from
+- [x] Elevation from the DEM at the consensus point, surveyed heights for summits (D-089):
+  done in 3.4 (place elevations D-111, summits D-201)
 - [x] The labelling sample: 301 Nepal places in `tests/golden/np-places.csv`, drawn by
   `forge labels sample` from GeoNames only, scored by `forge labels score` (D-062, D-096)
-- [ ] The labels themselves: maintainer task (Q-005); the core parameters are fitted on them
+- [x] The labels themselves (Q-005): delegated to agents (D-209), labelled blind in two passes
+  and scored on the shipped pack (D-339). The core parameters stay as fitted in D-096; fitting
+  them on these labels is in [ideas](../../01-product/ideas.md)
 
 ### 3.3 B10 geometry
 - [x] Topology stage: shared arcs, parents dissolved from children, Douglas–Peucker levels with
