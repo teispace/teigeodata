@@ -90,9 +90,19 @@ impl Sorted<'_> {
             if k >= kh {
                 return Some(high - 1);
             }
-            let span = u128::from(kh - kl).max(1);
-            let off = u128::from(k - kl) * (high - 1 - low) as u128 / span;
-            let g = (low + usize::try_from(off).unwrap_or(0)).clamp(low + 1, high - 2);
+            let span = (kh - kl).max(1);
+            let blocks = (high - 1 - low) as u64;
+            // In u64 when it fits, which is every real pack: a u128 division is a library
+            // call (phase 8.3 profile of the world baseline).
+            let off = (k - kl).checked_mul(blocks).map_or_else(
+                || {
+                    let wide = u128::from(k - kl) * u128::from(blocks) / u128::from(span);
+                    u64::try_from(wide).unwrap_or(u64::MAX)
+                },
+                |p| p / span,
+            );
+            let g =
+                (low + usize::try_from(off).unwrap_or(usize::MAX - low)).clamp(low + 1, high - 2);
             if self.block_key(g)? <= k {
                 if self.block_key(g + 1)? > k {
                     return Some(g);
