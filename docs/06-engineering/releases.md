@@ -49,14 +49,14 @@ that needs a newer reader than its own.
 ## Cutting a release
 
 1. Every gate of the [quality bar](quality-bar.md) is green on `main` in CI.
-2. Move the changelog's "Unreleased" section under the new version and date; bump
-   `workspace.package.version`, the bindings' version (`bindings/Cargo.toml`,
-   `bindings/parity.json`, `bindings/c/parity.c`, `bindings/dart/pubspec.yaml`,
-   `bindings/node/package.json`: each parity test checks it against the core's) and the
-   forge's path dependencies (`forge/crates/forge/Cargo.toml`); `cargo update -w` in every
-   workspace with a lockfile (`git ls-files '*Cargo.lock'`: the root, `bindings/`, `forge/`,
-   `fuzz/`, `tools/size-probe/`, `tools/tough-oracle/`; CI builds each with `--locked`); commit
-   `chore(repo): release vX.Y.Z`.
+2. Move the changelog's "Unreleased" section under the new version and date, then
+   `cargo xtask bump X.Y.Z`: it writes the version everywhere it is written by hand (the
+   workspaces and their path dependencies, the forge's, `bindings/parity.json`, the Dart
+   package and its example, the Node package, .NET's `Support.cs` and `.csproj`, the Go
+   loader) and runs `cargo update --workspace` in every workspace with a lockfile (CI builds
+   each with `--locked`). Then `cargo xtask bindings` (the parity data follows
+   `parity.json`); `check-workspace` (in the commit hook and CI) fails on any place left
+   behind (D-346). Commit `chore(repo): release vX.Y.Z`.
 3. Push, then run the `release` workflow on that commit: first as a dry run
    (`gh workflow run release.yml`), then for real
    (`gh workflow run release.yml -f dry_run=false`, approved in the `release` environment). It
@@ -97,6 +97,7 @@ Once the catalog is live, data releases go through it and these pre-releases sto
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-15 | `cargo xtask bump` writes the version everywhere; `check-workspace` holds every copy to it | D-346 |
 | 2026-11-15 | The `release` workflow tags and publishes a release with SBOMs, checksums and attestations; the build workflows no longer run on tags | phase 5.10a (D-302) |
 | 2026-11-12 | Data releases as GitHub pre-releases until the catalog is live; the first, `data-2026.11.12` | consumers need the data before the key ceremony (D-247) |
 | 2026-11-11 | The bindings' versions are part of a release (they were left at 0.0.0 by v0.1.0) | the parity test failed |

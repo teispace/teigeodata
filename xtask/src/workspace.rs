@@ -43,13 +43,13 @@ pub(crate) fn check(root: &Path) -> Result<String, Vec<String>> {
         }
     }
     problems.extend(unlisted(root));
-    if problems.is_empty() {
-        Ok(format!(
-            "workspace ok: {} lint tables match the main workspace",
+    let version = crate::version::check(root).map_err(|p| problems.extend(p));
+    match version {
+        Ok(v) if problems.is_empty() => Ok(format!(
+            "workspace ok: {} lint tables match the main workspace; {v}",
             TABLES.len()
-        ))
-    } else {
-        Err(problems)
+        )),
+        _ => Err(problems),
     }
 }
 

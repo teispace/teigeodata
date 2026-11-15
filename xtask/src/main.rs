@@ -49,6 +49,7 @@ mod sources;
 mod split;
 mod tuf;
 mod unsafe_audit;
+mod version;
 mod wire;
 mod workspace;
 mod xlit;
@@ -140,7 +141,12 @@ Tasks:
                     wire and per place, each column, names by language (and the names
                     section cut to --langs), outlines by admin level and level of detail.
   check-workspace   Check that the forge, bindings/ and the C ABI crate keep the main lint
-                    table (boundary crates may only lower unsafe_code to deny).
+                    table (boundary crates may only lower unsafe_code to deny), and that every
+                    file and lockfile names the workspace's version (bump --check).
+  bump <major.minor.patch> | bump --check
+                    Write the release version everywhere it is written by hand (the
+                    workspaces, the bindings' packages, .NET, Go, Dart, Node) and refresh
+                    every lockfile's workspace entries; --check fails on any that differs.
   mirror [<id>…] [--check]
                     Upload the stored bytes of pinned sources (every source with a
                     mirror_url when none are named) to the content-addressed release
@@ -248,6 +254,7 @@ fn main() -> ExitCode {
         "package-swift" => report(package_swift::run(&root, rest)),
         "pack-sizes" => report(breakdown::run(rest)),
         "check-workspace" => report(workspace::check(&root)),
+        "bump" => report(version::run(&root, rest)),
         "mirror" => report(mirror::run(&root, rest)),
         "ids" => report(ids::run(&root, rest)),
         "tuf" => report(tuf::run(rest)),
