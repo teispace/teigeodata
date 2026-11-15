@@ -69,6 +69,11 @@ print_stdout = "warn"
 print_stderr = "warn"
 indexing_slicing = "warn"
 allow_attributes_without_reason = "warn"
+# Every `unsafe` block says why it holds (`SAFETY:`), and no safe code claims one;
+# `cargo xtask unsafe-audit` lists them all (phase 8.2).
+undocumented_unsafe_blocks = "warn"
+unnecessary_safety_comment = "warn"
+unnecessary_safety_doc = "warn"
 
 # Dev builds fill disks (docs/06-engineering/resources.md): line tables for our crates, no
 # debug info for dependencies.

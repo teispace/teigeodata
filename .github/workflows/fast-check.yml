@@ -32,10 +32,12 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked
       - name: Tests
         run: cargo test --workspace --locked
-      - name: Query-parsing fuzz harness, seeded (nightly runs it under libFuzzer)
-        run: cargo test --locked -p teigeodata-server --features fuzz --test fuzz
+      - name: Query-parsing and MCP fuzz harnesses, seeded (nightly runs them under libFuzzer)
+        run: cargo test --locked -p teigeodata-server --features fuzz,mcp --test fuzz
       - name: Docs check
         run: cargo xtask check-docs
+      - name: The unsafe inventory is the code's
+        run: cargo xtask unsafe-audit --check
       - name: Country data and source lock
         run: cargo xtask check-data
       - name: Workspace lint tables

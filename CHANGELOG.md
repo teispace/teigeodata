@@ -26,6 +26,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - The weekly fuzzing campaign (`fuzz-campaign.yml`): every target for 3 hours with coverage
   reports, and its gate `cargo xtask fuzz-coverage`, which fails unless every section kind's
   decoder is reached (D-331).
+- `cargo xtask unsafe-audit`: the inventory of every `unsafe` in shipped code with its argument
+  and the tests that reach it (`docs/06-engineering/unsafe-inventory.md`), and the
+  [threat model](docs/06-engineering/threat-model.md) (D-333).
 - `teigeodata_format::check::sections_where`: the full check of the sections a caller selects.
 - A result `Reader` of one shape in every language (D-322): new in Node.js, WebAssembly,
   Swift, Dart, Java (Kotlin), C (`teigeodata_reader.h`) and C++ (`teigeodata_reader.hpp`),

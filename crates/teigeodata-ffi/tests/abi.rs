@@ -72,25 +72,25 @@ fn bad_arguments_fail_with_a_message() {
     assert!(msg.starts_with("text is not UTF-8"), "{msg}");
     // Reading clears it.
     assert_eq!(last_error(), (0, String::new()));
-    // SAFETY: null with a length is rejected before any read.
     assert_eq!(
+        // SAFETY: null with a length is rejected before any read.
         unsafe { tg_fold(ptr::null(), 3, &raw mut bytes) },
         TG_ERROR_INVALID_ARGUMENT
     );
     assert!(last_error().1.contains("null"));
-    // SAFETY: a null out pointer is rejected before any write.
     assert_eq!(
+        // SAFETY: a null out pointer is rejected before any write.
         unsafe { tg_fold(b"a".as_ptr(), 1, ptr::null_mut()) },
         TG_ERROR_INVALID_ARGUMENT
     );
-    // SAFETY: as above.
     assert_eq!(
+        // SAFETY: as above.
         unsafe { tg_sample_rows(TG_SAMPLE_ROWS_MAX + 1, &raw mut bytes) },
         TG_ERROR_INVALID_ARGUMENT
     );
     assert!(last_error().1.contains("at most"));
-    // SAFETY: a missing callback is rejected.
     assert_eq!(
+        // SAFETY: a missing callback is rejected.
         unsafe { tg_progress(1, None, ptr::null_mut(), &raw mut n) },
         TG_ERROR_INVALID_ARGUMENT
     );
@@ -122,15 +122,15 @@ fn callbacks_run_and_cancel() {
     let mut seen: Vec<u32> = Vec::new();
     let mut out = 0u32;
     let ctx = (&raw mut seen).cast::<c_void>();
-    // SAFETY: `count` matches the callback type and `ctx` is the `Vec` it expects.
     assert_eq!(
+        // SAFETY: `count` matches the callback type and `ctx` is the `Vec` it expects.
         unsafe { tg_progress(2, Some(count), ctx, &raw mut out) },
         TG_OK
     );
     assert_eq!((out, seen.as_slice()), (2, [1, 2].as_slice()));
     seen.clear();
-    // SAFETY: as above.
     assert_eq!(
+        // SAFETY: as above.
         unsafe { tg_progress(9, Some(count), ctx, &raw mut out) },
         TG_ERROR_CANCELLED
     );

@@ -45,6 +45,7 @@ mod sizes;
 mod sources;
 mod split;
 mod tuf;
+mod unsafe_audit;
 mod wire;
 mod workspace;
 mod xlit;
@@ -166,6 +167,11 @@ Tasks:
                     The fuzzing campaign's gate (phase 8.1): reads each target's llvm-cov
                     summary (<target>.json) and fails unless every section kind's decoder was
                     reached; prints the Markdown report.
+  unsafe-audit [--check]
+                    Phase 8.2: lists every unsafe block and impl of the shipped sources with
+                    its SAFETY argument and the tests that reach it, in
+                    docs/06-engineering/unsafe-inventory.md; fails on a block without an
+                    argument or a file not reviewed; --check fails when the page is stale.
   load <pack.tgd>… [--query <name>] [--secs <n>] [--tgd <path>] [--only <route>]… [--check <budget.toml>] [--record]
                     Phase 6.4 (D-320): builds tgd, serves each pack on loopback and drives
                     a route mix (search at 1, 16 and 64 connections, reverse, get, near,
@@ -227,6 +233,7 @@ fn main() -> ExitCode {
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
         "load" => report(load::run(&root, rest)),
         "fuzz-coverage" => report(fuzz_coverage::run(&root, rest)),
+        "unsafe-audit" => report(unsafe_audit::run(&root, rest)),
         "phone" => report(phone::run(&root, rest)),
         "playground" => report(playground::run(&root, rest)),
         "docs-examples" => report(docs_examples::run(&root, rest)),

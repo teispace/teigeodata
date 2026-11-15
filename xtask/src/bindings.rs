@@ -270,11 +270,15 @@ pub(crate) fn run(root: &Path, check: bool) -> Result<String, Vec<String>> {
             .iter()
             .map(|f| format!("{f} is out of date: run `cargo xtask bindings`"))
             .collect()),
-        (false, false) => Ok(format!(
-            "bindings: wrote {} of {n} files ({fns} functions): {}",
-            changed.len(),
-            changed.join(", ")
-        )),
+        (false, false) => {
+            // Generated code moves the `unsafe` blocks the inventory lists by line.
+            let audit = crate::unsafe_audit::run(root, &[])?;
+            Ok(format!(
+                "bindings: wrote {} of {n} files ({fns} functions): {}\n{audit}",
+                changed.len(),
+                changed.join(", ")
+            ))
+        }
     }
 }
 

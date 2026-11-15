@@ -40,6 +40,7 @@ ones on every pull request, the slow ones nightly, and all of them before a rele
 | mutants | `cargo mutants` on changed code; survivors reviewed | nightly |
 | coverage | line and branch coverage floors that only rise | nightly |
 | no-panic boundary | the FFI never unwinds; errors are values | PR |
+| unsafe audit | every `unsafe` block argued (`SAFETY:`), every file with `unsafe` reviewed and given its tests; the [inventory](unsafe-inventory.md) current (`cargo xtask unsafe-audit --check`, D-333) | PR |
 
 ## Data
 

@@ -112,12 +112,20 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 
 ### 8.2 Security review
 
-- [ ] `docs/06-engineering/threat-model.md`: each trust boundary of `SECURITY.md`'s scope, what
-  an attacker controls, what must hold, and the test or gate that shows it
-- [ ] `cargo xtask unsafe-audit`: every `unsafe` block with its `SAFETY:` argument and the test
-  that reaches it, written to the threat model; fails on a block without one (planted)
+- [x] [The threat model](../../06-engineering/threat-model.md) (2026-11-15): seven boundaries
+  (pack bytes, the update chain, the C ABI, the bindings, the servers, the store, the
+  pipeline), each with what an attacker controls, what must hold and the gates that show it.
+  Writing it found `store::pack_name`'s path check untested: now
+  `an_asset_name_never_leaves_the_store` (13 names, red without the `..` check). Its open rows
+  are the server limits below and zizmor, Scorecard and semver checks
+- [x] `cargo xtask unsafe-audit` (2026-11-15, D-333): [the inventory](../../06-engineering/unsafe-inventory.md)
+  of 264 blocks and impls in 8 files, each with its `SAFETY:` argument and the tests that reach
+  it, on every `cfg`. It fails on a block without an argument and on a file not reviewed (both
+  planted); fast-check runs `--check`. The clippy lints `undocumented_unsafe_blocks` and
+  `unnecessary_safety_comment` are on in every lint table
 - [ ] Resource limits on every server route and MCP tool (body, result count, time), a test per
-  limit
+  limit. Found by the threat model: the `/mcp` body and the timeout have no test, requests in
+  flight are unbounded, slow clients are bounded only by the transport's defaults
 - [ ] `zizmor` on every workflow in fast-check, findings fixed or each one justified
 - [ ] OpenSSF Scorecard weekly on `main`; the checks only the maintainer can satisfy listed
   for them
@@ -173,3 +181,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.1 ffi target done | D-331 |
 | 2026-11-15 | 8.1 mcp target done | D-331 |
 | 2026-11-15 | 8.1 campaign workflow and coverage gate built | D-331 |
+| 2026-11-15 | 8.2 threat model and unsafe audit done | D-333 |

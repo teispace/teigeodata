@@ -90,10 +90,11 @@ fn main() {
         }
     }
 
-    // SAFETY (all rows below): valid pointers for each call, buffers freed once.
+    // Every block below: valid pointers for each call, each buffer freed once.
     row(
         "c-abi",
         "noop",
+        // SAFETY: valid pointers for the call; each buffer is freed once.
         best(10_000_000, || unsafe {
             black_box(tg_noop());
         }),
@@ -102,6 +103,7 @@ fn main() {
     row(
         "c-abi",
         "fold",
+        // SAFETY: valid pointers for the call; each buffer is freed once.
         best(1_000_000, || unsafe {
             let mut out = TgBytes::EMPTY;
             black_box(tg_fold(text.as_ptr(), text.len(), &raw mut out));
@@ -111,6 +113,7 @@ fn main() {
     row(
         "c-abi",
         "sample_rows(1000)+sum",
+        // SAFETY: valid pointers for the call; each buffer is freed once.
         best(10_000, || unsafe {
             let mut out = TgBytes::EMPTY;
             tg_sample_rows(1000, &raw mut out);
@@ -118,6 +121,7 @@ fn main() {
             tg_bytes_free(out);
         }),
     );
+    // SAFETY: valid pointers for the call; each buffer is freed once.
     let per_cb = best(1_000, || unsafe {
         let mut n = 0;
         black_box(tg_progress(
