@@ -2,14 +2,18 @@
 
 Every change to the crates, by version. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
-[SemVer](https://semver.org/) with its 0.x rules: before 1.0.0 a minor release may break the
-public API, and every break is listed under **Breaking**. How releases are cut:
-[docs/06-engineering/releases.md](docs/06-engineering/releases.md).
-
-The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata-sync`, the
-`tgd` command line and its JSON output.
+[SemVer](https://semver.org/). From 1.0.0, [what 1.0 promises](docs/06-engineering/semver.md)
+says what each surface keeps across minor releases (the Rust API, the C ABI, the bindings, the
+pack format, the catalog, the HTTP and MCP servers, and `tgd`). Before it, the 0.x rules
+applied: a minor release could break the public API, and every break is listed under
+**Breaking**. How releases are cut: [docs/06-engineering/releases.md](docs/06-engineering/releases.md).
 
 ## [Unreleased]
+
+The 1.0.0 candidate. Every public surface now has its promise and its gate
+([what 1.0 promises](docs/06-engineering/semver.md)); the pack format is 1.0 and older packs
+stay readable; every public enum that may grow is `#[non_exhaustive]`; the 1.0 API review
+renamed the last parameters that broke the naming rule (see **Breaking**).
 
 ### Added
 
@@ -63,9 +67,22 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - `--record` on `package-wasm`, `sizes` and `load`, and `cargo xtask phone <layer.tgd>
   [--record]` (the phone-class bench with the example's own features): each writes its table,
   stamped with the day, commit, machine and load average, to `site/data/measured/` (D-326).
+- `cargo xtask profile <pack>… [--suite] [--secs]`: each query suite under Instruments' Time
+  Profiler, one suite per process, with the largest frames by self time and under our own
+  frames; `cargo xtask scaling <pack> [--record]`: one shared engine at 1, 2, 4 and 8 threads,
+  failing under 1.5× at four; the engine's `profile` and `scaling` examples (D-338).
+- `cargo xtask accuracy <cc> <pack>`: a shipped pack scored against the blind labels of
+  `tests/golden/<cc>-places.csv` and its second pass, written as the generated
+  `data/countries/<cc>/ACCURACY.md` (D-339).
+- Suite C, the competitive report: `tools/competitive` and `competitive.yml` ask teigeodata,
+  `tgd serve`, Nominatim, Photon, GeoNames' own points and `tzf-rs` the same questions (D-340).
 
 ### Changed
 
+- `teigeodata_format::Sorted::find` interpolates in `u64` and uses `u128` only when the
+  product overflows: `get` −6% on Nepal lite, −4% on the world baseline. `teigeodata_core::bitpack::Packed::parse`
+  checks a column's block directory as independent steps that vectorise: opening a pack −14%
+  and −17% (D-338).
 - `distance_m` calls the engine's `meters_between` instead of a second haversine of its own
   (D-324).
 - `cargo xtask load` names each pack in bold and right-aligns its figures, so its tables read
@@ -244,8 +261,6 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   `teigeodata-api`, `teigeodata-ffi` and the Python, Node and JVM crates holds the store;
   without it the C library is 949 KB instead of 3.1 MB (D-279).
 
-### Changed
-
 - `tgd`'s GeoJSON `attribution` and Nominatim `licence` name the packs the places came from,
   not every pack given, and are absent when nothing was found (D-311). `tgd near --radius`
   refuses a radius that is not positive and finite.
@@ -310,6 +325,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Breaking
 
+- The 1.0 API review (D-341): `Engine::within_radius` takes `radius_m`, not `meters`, as every
+  other distance parameter ends in `_m` (and `tgd serve` calls it `radius_m`); in Swift the
+  label is `radiusM:`, in Python the keyword `radius_m`, in .NET the named argument `radiusM`. `Engine::postal_prefix` takes
+  `prefix`, not `input`. Positional calls are unchanged.
 - 27 public enums are `#[non_exhaustive]` (D-337): errors such as `ErrorCode`, `ClientError`
   and `StoreError`; modes such as `Verify`, `Load` and the server's `Ask`; vocabularies such
   as `PlaceKind`, `Component`, `HeightSource` and `CodeKind`. A `match` on one outside its

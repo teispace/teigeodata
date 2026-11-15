@@ -214,8 +214,10 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 
 ### 8.4 Docs complete and the API frozen
 
-- [ ] The 1.0 API review: every IDL item read once for name, shape and error; changes made
-  before the freeze, each through the bindings' `--check`
+- [x] The 1.0 API review: every IDL item read once for name, shape and error; changes made
+  before the freeze, each through the bindings' `--check`. **Done (2026-11-15, D-341):**
+  `within_radius`'s `meters` is `radius_m` and `postal_prefix`'s `input` is `prefix`; the
+  rest kept, with the reasons in the decision
   - Found while writing `semver.md`: `teigeodata_api::ErrorCode` is an exhaustive enum, and the
     generated JVM glue matches it exhaustively, so a new error code would break callers. Make
     every public enum that may grow `#[non_exhaustive]`, with a fallback arm in each
@@ -281,3 +283,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.4 gains the format freeze, Q-028 | the format is still major 0 and D-029's benchmarks are not all ticked |
 | 2026-11-15 | 8.3: Instruments in place of `samply`; profiles, two changes and the scaling gate done | D-338 |
 | 2026-11-15 | 8.3: suite C built (`tools/competitive`, `competitive.yml`); the parse change re-measured in its final form | D-340 |
+| 2026-11-15 | 8.4: the API review done, two parameters renamed; the CHANGELOG's 1.0 section | D-341 |
