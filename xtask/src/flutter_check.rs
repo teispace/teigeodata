@@ -66,6 +66,10 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     // runner's simulator now and then hangs launching the app after a clean build (run
     // 43690656789: built in 143 s, then idle until the step's 30 minutes). The second try
     // starts from a freshly booted simulator and is announced, so a real hang still fails.
+    // Before it, the simulator's log of the app is printed, so a hang says where it stopped;
+    // on a CI runner, whose simulator is its own, the simulator is also erased, so the second
+    // try does not reuse a stuck install (runs 43700637931, 2026-11-15: both tries hung after
+    // the build). A local simulator is shared and never erased.
     let args = ["test", "integration_test", "-d", device.as_str()];
     let result = if ios {
         let mut r = stream_within(&example, flutter, &args, DEVICE_RUN);
@@ -73,9 +77,16 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
             println!(
                 "::warning::flutter-check: the iOS run failed or hung; rebooting the simulator and trying once more"
             );
+            app_log(&device);
             let _ = command(root, "xcrun", &["simctl", "shutdown", &device]);
+            if std::env::var_os("GITHUB_ACTIONS").is_some() {
+                command(root, "xcrun", &["simctl", "erase", &device])?;
+            }
             command(root, "xcrun", &["simctl", "bootstatus", &device, "-b"])?;
             r = stream_within(&example, flutter, &args, DEVICE_RUN);
+            if r.is_err() {
+                app_log(&device);
+            }
         }
         r
     } else {
@@ -89,6 +100,37 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     Ok(format!(
         "flutter-check: the example's integration test passed on {device}"
     ))
+}
+
+/// Prints the last ten minutes of the simulator's log from the app (`Runner`) and from the
+/// launch services that start it, at most 200 lines: why a run hung. Best effort.
+fn app_log(device: &str) {
+    let out = Command::new("xcrun")
+        .args([
+            "simctl",
+            "spawn",
+            device,
+            "log",
+            "show",
+            "--last",
+            "10m",
+            "--style",
+            "compact",
+            "--predicate",
+            r#"process == "Runner" OR (subsystem == "com.apple.FrontBoard" AND eventMessage CONTAINS "Runner")"#,
+        ])
+        .output();
+    let Ok(out) = out else { return };
+    let text = String::from_utf8_lossy(&out.stdout);
+    let lines: Vec<&str> = text.lines().collect();
+    println!(
+        "::group::flutter-check: the simulator's log of the app (last {} lines)",
+        lines.len().min(200)
+    );
+    for line in lines.iter().skip(lines.len().saturating_sub(200)) {
+        println!("{line}");
+    }
+    println!("::endgroup::");
 }
 
 /// The desktop Flutter device of this machine.
