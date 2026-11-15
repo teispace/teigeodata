@@ -30,8 +30,8 @@ Each surface has a gate, so a break is caught before a release, not reported aft
 
 - **Adding is never breaking for a careful caller.** A caller must ignore JSON fields it does
   not know, and must handle an error code it does not know. In Rust, every public enum that
-  may grow, error codes included, is `#[non_exhaustive]`; the 1.0 API review checks each one
-  ([phase 8.4](../07-planning/phases/phase-8.md)). In the bindings, an unknown code maps to the
+  may grow, error codes included, is `#[non_exhaustive]` (D-337). An enum that is closed by
+  definition, such as the TUF roles, stays exhaustive, and adding to one is a major release. In the bindings, an unknown code maps to the
   generic error.
 - **The pack format and the code version are separate.** A 1.x reader reads every 1.x pack,
   every format-0 pack, and every pack of a later 1.x data release. A client refuses to

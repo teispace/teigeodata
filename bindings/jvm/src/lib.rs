@@ -31,7 +31,6 @@ fn throw(env: &mut Env<'_>, e: &teigeodata_api::Error) -> jni::errors::Result<()
             jni_str!("org/teispace/teigeodata/TeiGeodataException$InvalidArgument")
         }
         ErrorCode::Cancelled => jni_str!("org/teispace/teigeodata/TeiGeodataException$Cancelled"),
-        ErrorCode::Internal => jni_str!("org/teispace/teigeodata/TeiGeodataException$Internal"),
         ErrorCode::Io => jni_str!("org/teispace/teigeodata/TeiGeodataException$Io"),
         ErrorCode::Corrupt => jni_str!("org/teispace/teigeodata/TeiGeodataException$Corrupt"),
         ErrorCode::MissingComponent => {
@@ -39,6 +38,8 @@ fn throw(env: &mut Env<'_>, e: &teigeodata_api::Error) -> jni::errors::Result<()
         }
         ErrorCode::Network => jni_str!("org/teispace/teigeodata/TeiGeodataException$Network"),
         ErrorCode::Refused => jni_str!("org/teispace/teigeodata/TeiGeodataException$Refused"),
+        // Internal, and any code a later library adds (`ErrorCode` is non-exhaustive).
+        _ => jni_str!("org/teispace/teigeodata/TeiGeodataException$Internal"),
     };
     env.throw_new(class, JNIString::from(e.message.as_str()))
 }

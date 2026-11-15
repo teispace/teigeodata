@@ -27,9 +27,11 @@ use teigeodata_api::ErrorCode;
 /// Throws the exception class of `e`'s code; the native method then returns a default.
 fn throw(env: &mut Env<'_>, e: &teigeodata_api::Error) -> jni::errors::Result<()> {
     let class = match e.code {
-{% for c in error_codes %}
+{% for c in error_codes %}{% if c.name != "Internal" %}
         ErrorCode::{{ c.name }} => jni_str!("org/teispace/teigeodata/TeiGeodataException${{ c.name }}"),
-{% endfor %}
+{% endif %}{% endfor %}
+        // Internal, and any code a later library adds (`ErrorCode` is non-exhaustive).
+        _ => jni_str!("org/teispace/teigeodata/TeiGeodataException$Internal"),
     };
     env.throw_new(class, JNIString::from(e.message.as_str()))
 }

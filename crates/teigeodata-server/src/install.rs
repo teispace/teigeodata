@@ -329,6 +329,7 @@ fn failure(e: &ClientError, root: &Path) -> QueryError {
     let code = match e {
         ClientError::Network(_) | ClientError::Cancelled => Code::Unavailable,
         ClientError::Refused(_) => Code::InvalidArgument,
+        _ => Code::Internal,
     };
     let message = e.to_string().replace(&*root.to_string_lossy(), "the store");
     QueryError::new(code, message)

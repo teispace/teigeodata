@@ -5,6 +5,7 @@
 /// What a place is. The finer `class` (city, village, peak) is a separate dictionary code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum PlaceKind {
     /// A country (admin level 0).
     Country = 1,

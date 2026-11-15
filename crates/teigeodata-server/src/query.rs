@@ -227,6 +227,7 @@ pub fn id(text: &str) -> Result<PlaceId, QueryError> {
 /// What a client asks about places. Each answers a list of [`Item`]s, printed by
 /// [`output::write`].
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum Ask {
     /// One place by ID; with `names`, every name it has.
     Get {
@@ -528,6 +529,7 @@ pub fn elevation(
 
 /// One end of a distance: a place by ID, or a point.
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum At {
     /// A place's ID.
     Place(String),
@@ -694,6 +696,7 @@ pub fn boundary(
 
 /// What a client asks about postal codes (D-200).
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum PostalAsk {
     /// A code to its places; with `prefix`, up to `limit` codes starting with it.
     Code {
@@ -755,10 +758,5 @@ pub fn postal(
 /// A postal code kind's name on the wire.
 #[must_use]
 pub const fn code_kind(kind: CodeKind) -> &'static str {
-    match kind {
-        CodeKind::Area => "area",
-        CodeKind::Part => "part",
-        CodeKind::PostOffice => "post_office",
-        CodeKind::Point => "point",
-    }
+    kind.name()
 }

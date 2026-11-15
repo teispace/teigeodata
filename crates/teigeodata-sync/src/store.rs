@@ -168,6 +168,7 @@ impl Record {
 
 /// Why a store operation failed.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum StoreError {
     /// The file system's error. The journal is untouched unless the commit itself succeeded.
     Io(io::Error),
@@ -236,6 +237,7 @@ impl From<FetchError> for StoreError {
 
 /// What [`Store::verify`] found.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Health {
     /// Every check passed.
     Good,
@@ -247,6 +249,20 @@ pub enum Health {
     Footer,
     /// These installed sections do not match their hashes (deep checks only).
     Sections(Vec<Kind>),
+}
+
+impl Health {
+    /// Its name in every output: `good`, `length`, `head`, `footer` or `sections`.
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::Good => "good",
+            Self::Length => "length",
+            Self::Head => "head",
+            Self::Footer => "footer",
+            Self::Sections(_) => "sections",
+        }
+    }
 }
 
 /// Bytes read at a time when hashing or copying a pack.

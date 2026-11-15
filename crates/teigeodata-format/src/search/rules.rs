@@ -35,6 +35,7 @@ pub const SPELLING: u8 = 5;
 
 /// One query rule.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Rule<'a> {
     /// The phonetic key the PHONETIC map was written with.
     Phonetic(&'a str),

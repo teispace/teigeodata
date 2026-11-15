@@ -75,12 +75,13 @@ fn error(e: teigeodata_api::Error) -> Error<Code> {
     let code = match e.code {
         ErrorCode::InvalidArgument => Code::InvalidArgument,
         ErrorCode::Cancelled => Code::Cancelled,
-        ErrorCode::Internal => Code::Internal,
         ErrorCode::Io => Code::Io,
         ErrorCode::Corrupt => Code::Corrupt,
         ErrorCode::MissingComponent => Code::MissingComponent,
         ErrorCode::Network => Code::Network,
         ErrorCode::Refused => Code::Refused,
+        // Internal, and any code a later library adds (`ErrorCode` is non-exhaustive).
+        _ => Code::Internal,
     };
     Error::new(code, e.message)
 }

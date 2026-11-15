@@ -3,7 +3,7 @@
 
 use teigeodata_blob::{Blob, Column};
 #[cfg(feature = "postal")]
-use teigeodata_engine::{CodeKind, PostalCode};
+use teigeodata_engine::PostalCode;
 use teigeodata_engine::{Engine, Error as EngineError, Place};
 
 use crate::{Error, ErrorCode, Result};
@@ -79,12 +79,7 @@ impl Postal {
         for c in codes {
             out.code.push(Some(c.code()));
             out.scheme.push(Some(c.scheme()));
-            out.kind.push(Some(match c.kind {
-                CodeKind::Area => "area",
-                CodeKind::Part => "part",
-                CodeKind::PostOffice => "post_office",
-                CodeKind::Point => "point",
-            }));
+            out.kind.push(Some(c.kind.name()));
             out.from.push(c.valid_from.unwrap_or(0));
             out.has_from.push(c.valid_from.is_some());
             out.to.push(c.valid_to.unwrap_or(0));

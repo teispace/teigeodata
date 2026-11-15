@@ -108,7 +108,8 @@ fn model(rows: &[Row]) -> Model {
                 let tag = match m {
                     SearchMap::Exact => EXACT,
                     SearchMap::Loose => LOOSE,
-                    SearchMap::Phonetic => return,
+                    // Phonetic keys, and any map added later, have no substring keys.
+                    _ => return,
                 };
                 if !k.is_empty() && k.len() < 255 {
                     let mut key = vec![tag];

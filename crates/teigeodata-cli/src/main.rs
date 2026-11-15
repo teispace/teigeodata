@@ -563,6 +563,7 @@ impl From<output::OutputError> for Fail {
         match e {
             output::OutputError::Io(e) => e.into(),
             output::OutputError::Engine(e) => e.into(),
+            other => Self::Refused(other.to_string()),
         }
     }
 }

@@ -76,6 +76,7 @@ pub const DICT16_MAX: usize = 1 << 16;
 /// Column types, as stored in a descriptor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
+#[non_exhaustive]
 pub enum Type {
     /// `i32` values.
     I32 = 1,
@@ -138,6 +139,7 @@ impl Type {
 
 /// A column handed to the encoder.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub enum Column<'a> {
     /// `i32` values.
     I32(&'a [i32]),
@@ -186,6 +188,7 @@ impl Column<'_> {
 
 /// Why a blob could not be built or read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Error {
     /// No columns, columns with different row counts, a null mask of the wrong length, or a
     /// nested [`Column::Nullable`].
@@ -537,6 +540,7 @@ pub struct Reader<'a> {
 
 /// One column of a [`Reader`].
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub enum View<'a> {
     /// `i32` values.
     I32(Fixed<'a, 4>),

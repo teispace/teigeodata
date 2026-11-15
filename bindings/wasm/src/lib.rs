@@ -33,12 +33,13 @@ fn error(e: teigeodata_api::Error) -> JsValue {
     let code = match e.code {
         ErrorCode::InvalidArgument => "InvalidArgument",
         ErrorCode::Cancelled => "Cancelled",
-        ErrorCode::Internal => "Internal",
         ErrorCode::Io => "Io",
         ErrorCode::Corrupt => "Corrupt",
         ErrorCode::MissingComponent => "MissingComponent",
         ErrorCode::Network => "Network",
         ErrorCode::Refused => "Refused",
+        // Internal, and any code a later library adds (`ErrorCode` is non-exhaustive).
+        _ => "Internal",
     };
     thrown(code, &e.message)
 }

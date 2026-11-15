@@ -31,9 +31,11 @@ fn thrown(code: &str, message: &str) -> JsValue {
 
 fn error(e: teigeodata_api::Error) -> JsValue {
     let code = match e.code {
-{% for c in error_codes %}
+{% for c in error_codes %}{% if c.name != "Internal" %}
         ErrorCode::{{ c.name }} => "{{ c.name }}",
-{% endfor %}
+{% endif %}{% endfor %}
+        // Internal, and any code a later library adds (`ErrorCode` is non-exhaustive).
+        _ => "Internal",
     };
     thrown(code, &e.message)
 }

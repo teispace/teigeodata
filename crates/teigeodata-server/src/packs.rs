@@ -16,6 +16,7 @@ use teigeodata_sync::store::{Dir, Store};
 
 /// Why a pack set could not be opened.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum PackError {
     /// A pack file could not be opened.
     Pack(PathBuf, Error),

@@ -78,9 +78,11 @@ impl Blob {
 
 fn error(e: teigeodata_api::Error) -> PyErr {
     match e.code {
-{% for c in error_codes %}
+{% for c in error_codes %}{% if c.name != "Internal" %}
         ErrorCode::{{ c.name }} => {{ c.name }}Error::new_err(e.message),
-{% endfor %}
+{% endif %}{% endfor %}
+        // Internal, and any code a later library adds (`ErrorCode` is non-exhaustive).
+        _ => InternalError::new_err(e.message),
     }
 }
 {% macro pyty(p) %}{% if p.ty == "bool" %}bool{% elif p.ty == "str" %}&str{% elif p.ty == "bytes" %}&[u8]{% elif p.ty == "callback" %}&Bound<'_, PyAny>{% elif p.ty == "handle" %}&Bound<'_, {{ p.handle }}>{% elif p.ty == "record" %}&Bound<'_, {{ p.record }}>{% else %}{{ p.ty }}{% endif %}{% endmacro %}

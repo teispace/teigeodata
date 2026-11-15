@@ -28,6 +28,7 @@ use teigeodata_engine::{Engine, Error, Height, HeightSource, Layer, LayerId, Pla
 
 /// Why writing an answer failed.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum OutputError {
     /// The writer failed (a closed pipe is [`io::ErrorKind::BrokenPipe`]).
     Io(io::Error),
@@ -345,6 +346,7 @@ pub fn close_collection(out: &mut dyn Write) -> Result<(), OutputError> {
 
 /// How a query's results are printed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Mode {
     /// One line a place, for a terminal.
     Text,

@@ -25,6 +25,7 @@ pub const SOURCE: u16 = 2;
 /// Where a place's stored height came from (TG-13, D-219).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum HeightSource {
     /// Surveyed: the height a survey or gazetteer states for the place (a summit's surveyed
     /// height, a gazetteer's `elevation`), kept because it agrees with the terrain model.

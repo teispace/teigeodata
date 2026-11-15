@@ -60,6 +60,7 @@ use crate::map::{Backing, Owned};
 
 /// When a layer's section hashes are checked.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Verify {
     /// On first use (D-078): a section under 1 MiB is hashed whole the first time a query
     /// needs it; a larger one has its block hashes proved when the layer opens and each 16 KiB
@@ -75,6 +76,7 @@ pub enum Verify {
 
 /// How a pack file becomes bytes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Load {
     /// Map the file (native, feature `mmap`); read it where mapping is not available. Only for
     /// files that follow the install rule: never written over while mapped (D-113).
@@ -637,6 +639,8 @@ impl<'a> QueryRules<'a> {
                 Rule::Drop(d) => r.drops.push(d),
                 Rule::Native { native, spelling } => r.natives.push((native, spelling)),
                 Rule::Spelling { from, to } => r.spellings.push((from, to)),
+                // A rule kind a later format adds is skipped, as the format skips it (D-335).
+                _ => {}
             }
         }
         // Stable: equal natives stay adjacent, in stored order.

@@ -58,6 +58,7 @@ impl From<ClientError> for Fail {
             ClientError::Network(m) => Self::Network(m),
             ClientError::Refused(m) => Self::Refused(m),
             ClientError::Cancelled => Self::Refused("cancelled".into()),
+            other => Self::Refused(other.to_string()),
         }
     }
 }

@@ -91,6 +91,7 @@ use places::Places;
 /// Error codes, stable across every language. Zero is success at the C ABI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
+#[non_exhaustive]
 pub enum ErrorCode {
     /// An argument is outside its documented range.
     InvalidArgument = 1,
@@ -221,6 +222,7 @@ impl SearchOptions {
 
 /// When a pack's sections are verified against their hashes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Verify {
     /// On first use: each section, or each 16 KiB block of a large one, is checked the first
     /// time a query reads it. Opening costs only the head checks.
@@ -234,6 +236,7 @@ pub enum Verify {
 
 /// How a pack file is loaded.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Load {
     /// Map the file into memory where the platform can, read it otherwise. The file must not
     /// be written over while it is open.

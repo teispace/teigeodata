@@ -38,6 +38,7 @@ pub const ROOT: &str = "root.json";
 
 /// A failed client call.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ClientError {
     /// The network failed: the same call may work later.
     Network(String),
@@ -230,6 +231,7 @@ impl Want {
 
 /// What the catalog says of a pack against the store.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PackState {
     /// Not installed.
     Available,

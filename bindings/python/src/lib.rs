@@ -135,12 +135,13 @@ fn error(e: teigeodata_api::Error) -> PyErr {
     match e.code {
         ErrorCode::InvalidArgument => InvalidArgumentError::new_err(e.message),
         ErrorCode::Cancelled => CancelledError::new_err(e.message),
-        ErrorCode::Internal => InternalError::new_err(e.message),
         ErrorCode::Io => IoError::new_err(e.message),
         ErrorCode::Corrupt => CorruptError::new_err(e.message),
         ErrorCode::MissingComponent => MissingComponentError::new_err(e.message),
         ErrorCode::Network => NetworkError::new_err(e.message),
         ErrorCode::Refused => RefusedError::new_err(e.message),
+        // Internal, and any code a later library adds (`ErrorCode` is non-exhaustive).
+        _ => InternalError::new_err(e.message),
     }
 }
 

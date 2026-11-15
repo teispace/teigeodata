@@ -200,6 +200,7 @@ pub fn join_key(s: &str) -> String {
 
 /// The search map a key belongs to (the SEARCH section's three maps, D-085).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum SearchMap {
     /// The fold.
     Exact,
@@ -339,6 +340,7 @@ pub fn is_native_script(s: &str) -> bool {
 /// (`phonetic_key`); keys are candidate generators, so false merges are expected and ranking
 /// or matching sorts them out.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PhoneticKey {
     /// `indic-v0`: Indic place names in Latin or Devanagari (names-and-search §5.3). Nasals
     /// are resolved before the non-initial A is dropped; Devanagari word-final schwa is

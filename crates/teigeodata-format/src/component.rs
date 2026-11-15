@@ -33,6 +33,7 @@ use crate::{Kind, Part};
 /// A component of a pack.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum Component {
     /// Stable IDs, coordinates, kinds, the spatial index and retired IDs.
     Point = 0,

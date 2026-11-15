@@ -26,6 +26,7 @@ impl From<ClientError> for Error {
             ClientError::Network(m) => Self::new(ErrorCode::Network, m),
             ClientError::Refused(m) => Self::new(ErrorCode::Refused, m),
             ClientError::Cancelled => Self::new(ErrorCode::Cancelled, "cancelled"),
+            other => Self::new(ErrorCode::Internal, other.to_string()),
         }
     }
 }
@@ -183,13 +184,7 @@ pub(crate) fn want(o: &InstallOptions) -> Result<Want> {
 }
 
 fn health(h: &Health) -> &'static str {
-    match h {
-        Health::Good => "good",
-        Health::Length => "length",
-        Health::Head => "head",
-        Health::Footer => "footer",
-        Health::Sections(_) => "sections",
-    }
+    h.name()
 }
 
 fn names(set: Components) -> String {

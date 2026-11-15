@@ -211,7 +211,11 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   - Found while writing `semver.md`: `teigeodata_api::ErrorCode` is an exhaustive enum, and the
     generated JVM glue matches it exhaustively, so a new error code would break callers. Make
     every public enum that may grow `#[non_exhaustive]`, with a fallback arm in each
-    generator
+    generator. **Done (2026-11-15, D-337):** 27 enums in 9 crates marked. The closed ones
+    stay exhaustive: the grid markers, FOR/delta/ramp, redirect fates, tz rule forms and
+    local times, FST walks and TUF roles. Two mappings that were copied in two crates are now
+    one: `CodeKind::name` and `Health::name`. Each binding maps an unknown code to
+    `Internal`
 - [x] The format freeze (Q-028): each of the format benchmarks B1–B14 recorded or retired with
   its reason (D-029), then `FORMAT_MAJOR = 1`, `READER_MAJOR = 1` and `pack-format.md` out of
   draft, with the fixtures and seeds written again. **Done (2026-11-15, D-335, D-336,

@@ -88,6 +88,7 @@ const FLAGS: u8 = UPPER | ADMIN_ALIGNED;
 
 /// What a record's code stands for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum CodeKind {
     /// The area of its place (an admin unit, a postal area).
     Area = 0,
@@ -100,6 +101,18 @@ pub enum CodeKind {
 }
 
 impl CodeKind {
+    /// Its name in every output (`area`, `part`, `post_office`, `point`): the one mapping the
+    /// API, the servers and the bindings share.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Area => "area",
+            Self::Part => "part",
+            Self::PostOffice => "post_office",
+            Self::Point => "point",
+        }
+    }
+
     /// The kind of `value`, if one.
     #[must_use]
     pub const fn from_u32(value: u32) -> Option<Self> {

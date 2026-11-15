@@ -310,6 +310,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Breaking
 
+- 27 public enums are `#[non_exhaustive]` (D-337): errors such as `ErrorCode`, `ClientError`
+  and `StoreError`; modes such as `Verify`, `Load` and the server's `Ask`; vocabularies such
+  as `PlaceKind`, `Component`, `HeightSource` and `CodeKind`. A `match` on one outside its
+  crate needs a `_` arm. New: `CodeKind::name` and `Health::name`.
 - The pack format is 1.0 (D-336): packs written now have `format_major` and
   `min_reader_major` 1, so a reader before this release refuses them. This release reads
   every pack of earlier releases. `FORMAT_MAJOR`, `READER_MAJOR` and `FORMAT_MINOR` are 1, 1

@@ -36,7 +36,8 @@ fn pack(address: &str, places: &[Spec<'_>], substring: bool) -> Vec<u8> {
                 let tag = match m {
                     teigeodata_names::SearchMap::Exact => EXACT,
                     teigeodata_names::SearchMap::Loose => LOOSE,
-                    teigeodata_names::SearchMap::Phonetic => return,
+                    // Phonetic keys, and any map added later, have no substring keys.
+                    _ => return,
                 };
                 let mut key = vec![tag];
                 key.extend_from_slice(k.as_bytes());

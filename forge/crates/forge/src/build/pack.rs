@@ -753,6 +753,8 @@ pub(super) fn add_keys(
             SearchMap::Exact => &mut maps.exact,
             SearchMap::Loose => &mut maps.loose,
             SearchMap::Phonetic => &mut maps.phonetic,
+            // A map a later `teigeodata-names` adds has no section here yet.
+            _ => return,
         };
         // Keys longer than the automaton allows are left out of search only.
         if k.len() < 255 {

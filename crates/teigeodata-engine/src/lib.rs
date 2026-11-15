@@ -178,6 +178,7 @@ impl From<teigeodata_format::Error> for Error {
 
 /// Where an answer came from (the engine note, §2): the baseline or an installed pack.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Tier<'e> {
     /// The embedded baseline.
     Baseline,

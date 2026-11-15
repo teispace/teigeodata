@@ -72,6 +72,7 @@ pub const ENCODING: &str = "zstd-seekable";
 
 /// Why a target's `custom` object was refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Error {
     /// No `custom` object.
     Missing,
