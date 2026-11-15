@@ -45,15 +45,20 @@ pub(crate) struct File {
     pub(crate) size: u64,
 }
 
-pub(crate) fn run(root: &Path, ids: &[String]) -> Result<String, Vec<String>> {
+pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     let one = |e: String| vec![e];
+    let check = args.iter().any(|a| a == "--check");
+    let ids: Vec<String> = args.iter().filter(|a| *a != "--check").cloned().collect();
     let text =
         fs::read_to_string(root.join("data/sources.lock")).map_err(|e| one(e.to_string()))?;
     let lock: Lock = toml::from_str(&text).map_err(|e| one(format!("data/sources.lock: {e}")))?;
-    let chosen = choose(&lock, ids).map_err(one)?;
+    let chosen = choose(&lock, &ids).map_err(one)?;
     let mut files = Vec::new();
     for s in &chosen {
         files.extend(files_of(root, s).map_err(one)?);
+    }
+    if check {
+        return verify(&files, &assets(root).map_err(one)?);
     }
     let store = root.join("data/cache/store/sha256");
     let mut problems = Vec::new();
@@ -102,6 +107,30 @@ pub(crate) fn run(root: &Path, ids: &[String]) -> Result<String, Vec<String>> {
         bytes.div_ceil(1_000_000),
         files.len() - todo.len()
     ))
+}
+
+/// `--check`: every pinned file of the chosen sources is on the mirror release. A source that
+/// names a mirror but was never uploaded builds only while its upstream keeps the file; this
+/// finds it before the upstream deletes it (two sources failed a build that way, 2026-11-15).
+fn verify(files: &[File], on_release: &BTreeSet<String>) -> Result<String, Vec<String>> {
+    let missing: Vec<String> = files
+        .iter()
+        .filter(|f| !on_release.contains(&f.sha256))
+        .map(|f| {
+            format!(
+                "{}: {} ({} B) is not on the `{TAG}` release: run `cargo xtask mirror {}`",
+                f.id, f.sha256, f.size, f.id
+            )
+        })
+        .collect();
+    if missing.is_empty() {
+        Ok(format!(
+            "mirror ok: {} files on the `{TAG}` release",
+            files.len()
+        ))
+    } else {
+        Err(missing)
+    }
 }
 
 /// The sources named by `ids`, or every source with a `mirror_url` when none are named.
@@ -245,7 +274,25 @@ pub(crate) fn gh(root: &Path, args: &[&str]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{File, Lock, choose, notes, tiles};
+    use std::collections::BTreeSet;
+
+    use super::{File, Lock, choose, notes, tiles, verify};
+
+    #[test]
+    fn check_names_each_file_missing_from_the_release() {
+        let f = |id: &str, h: &str| File {
+            id: id.to_owned(),
+            sha256: h.to_owned(),
+            size: 3,
+        };
+        let files = [f("a", "11"), f("b", "22"), f("b", "33")];
+        let on: BTreeSet<String> = ["11".to_owned(), "33".to_owned()].into();
+        let e = verify(&files, &on).unwrap_err();
+        assert_eq!(e.len(), 1);
+        assert!(e[0].starts_with("b: 22 "), "{e:?}");
+        let all: BTreeSet<String> = ["11", "22", "33"].map(str::to_owned).into();
+        assert!(verify(&files, &all).is_ok());
+    }
 
     const LOCK: &str = r#"
 [[source]]

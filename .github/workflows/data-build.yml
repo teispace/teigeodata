@@ -57,6 +57,12 @@ jobs:
         run: |
           cargo build --manifest-path forge/Cargo.toml --profile fast --bin forge --locked
           cargo build --release -p spike-s3-search --bin pack-eval --locked
+      - name: Every pinned source is on our mirror
+        # A source whose upstream moved or deleted its file builds only from the mirror; one
+        # that names a mirror but was never uploaded fails here, by name, not mid-fetch.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: cargo xtask mirror --check
       - name: ID registries of the last data release (D-261)
         # The published IDs: the build keeps them. A build no release has carried yet numbers
         # afresh, and says so; any other failure stops the job.

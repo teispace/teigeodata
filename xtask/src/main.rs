@@ -141,9 +141,11 @@ Tasks:
                     section cut to --langs), outlines by admin level and level of detail.
   check-workspace   Check that the forge, bindings/ and the C ABI crate keep the main lint
                     table (boundary crates may only lower unsafe_code to deny).
-  mirror [<id>…]    Upload the stored bytes of pinned sources (every source with a
+  mirror [<id>…] [--check]
+                    Upload the stored bytes of pinned sources (every source with a
                     mirror_url when none are named) to the content-addressed release
                     `sources`, one asset per file named by its SHA-256 (D-127); needs `gh`.
+                    --check uploads nothing and fails on each pinned file not there.
   ids save <build> <out> | ids restore [<tag>] [--build <build>] [--force]
                     The ID registries kept with the data releases (D-261): save writes
                     the world part's and every pack's into one archive; restore puts a
