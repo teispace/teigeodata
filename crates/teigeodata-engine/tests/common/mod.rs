@@ -855,3 +855,44 @@ pub fn outlined(country_only: bool) -> (Model, Vec<(u32, [i32; 4])>) {
     ];
     (m, shapes)
 }
+
+/// Probes drawn from a pack for the measuring examples: 4,096 IDs, points within about a
+/// kilometre of a place (not on it), and 512 place names, the same on every run.
+pub struct Probes {
+    pub ids: Vec<PlaceId>,
+    pub points: Vec<Point<E6>>,
+    pub points7: Vec<Point<E7>>,
+    pub queries: Vec<String>,
+}
+
+pub fn probes(bytes: &[u8]) -> Probes {
+    let model = Model::from_pack(bytes);
+    let mut r = Rng(12_345);
+    let n = 4_096;
+    let ids = (0..n)
+        .map(|_| model.ids[r.below(model.ids.len() as u64) as usize])
+        .collect();
+    let points: Vec<Point<E6>> = (0..n)
+        .map(|_| {
+            let p = model.points[r.below(model.points.len() as u64) as usize];
+            Point::from_units(
+                p.lat() + r.below(20_000) as i32 - 10_000,
+                p.lon() + r.below(20_000) as i32 - 10_000,
+            )
+            .unwrap()
+        })
+        .collect();
+    let points7 = points.iter().map(|p| p.to_e7()).collect();
+    let queries = (0..512)
+        .filter_map(|_| {
+            let row = r.below(model.names.len() as u64) as usize;
+            model.names[row].first().map(|x| x.text.clone())
+        })
+        .collect();
+    Probes {
+        ids,
+        points,
+        points7,
+        queries,
+    }
+}

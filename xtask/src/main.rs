@@ -8,6 +8,7 @@
 )]
 
 mod abi;
+mod accuracy;
 mod bindings;
 mod breakdown;
 mod clean;
@@ -38,9 +39,11 @@ mod parity;
 mod phone;
 mod playground;
 mod postal;
+mod profile;
 mod recipe;
 mod release;
 mod romanise;
+mod scaling;
 mod sizes;
 mod sources;
 mod split;
@@ -179,6 +182,21 @@ Tasks:
                     footprint; --check holds it to tools/load/budget.toml's per-pack
                     floors and ceilings (needs oha and curl); --record (every route) writes
                     the tables for the site's measured page.
+  accuracy <cc> <pack.tgd> [--registry <tsv>] [--write]
+                    Phase 3.7 (D-339): the country's ACCURACY.md, measured on the shipped
+                    pack against tests/golden/<cc>-places.csv (horizontal by stratum, the
+                    vertical part from position, the two labelling passes' agreement);
+                    --write writes data/countries/<cc>/ACCURACY.md.
+  profile <pack.tgd>… [--suite <name>]… [--secs <n>]
+                    Phase 8.3 (D-338): records each Q and L suite of the engine's profile
+                    example with Instruments' Time Profiler (macOS, xctrace) and prints the
+                    items with the most self time and the most time under each teigeodata
+                    frame; traces stay in target/profile/.
+  scaling <pack.tgd> [--secs <n>] [--record]
+                    Phase 8.3 (D-338): throughput of one Shared engine at 1, 2, 4 and 8
+                    threads on a query mix; fails when 4 threads reach under 1.5× one
+                    thread (a lock on the query path); --record writes the table for the
+                    site's measured page.
   phone <layer.tgd> [--factor <x>] [--record]
                     P1, G-phone: runs the engine's phone-class bench on a layer (open, first
                     queries, search a keystroke at a time, point queries, heap) scaled to a
@@ -204,6 +222,7 @@ fn main() -> ExitCode {
     let rest = args.get(1..).unwrap_or_default();
     match task {
         "abi" => report(abi::run(&root, rest)),
+        "accuracy" => report(accuracy::run(&root, rest)),
         "bindings" => report(bindings::run(&root, rest.iter().any(|a| a == "--check"))),
         "check-docs" => report(docs::check(&root)),
         "check-commit" => {
@@ -232,6 +251,8 @@ fn main() -> ExitCode {
         "tuf" => report(tuf::run(rest)),
         "clean" => report(clean::run(&root, rest.iter().any(|a| a == "--all"))),
         "load" => report(load::run(&root, rest)),
+        "profile" => report(profile::run(&root, rest)),
+        "scaling" => report(scaling::run(&root, rest)),
         "fuzz-coverage" => report(fuzz_coverage::run(&root, rest)),
         "unsafe-audit" => report(unsafe_audit::run(&root, rest)),
         "phone" => report(phone::run(&root, rest)),
