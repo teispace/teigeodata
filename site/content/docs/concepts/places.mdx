@@ -16,6 +16,7 @@ Everything teigeodata answers is about **places**. A place has:
 | `parent` | The ID of the smallest unit that holds it. |
 | `tz` | Its IANA timezone. |
 | `iso` | The ISO 3166 code of a country (`NP`) or a subdivision (`NP-P4`). |
+| `population` | Its number of people, with where it came from: `stated` by a source (a census or an estimate), or `modelled` from a population grid over an admin unit. |
 
 Any of these but the ID and point may be null where the data has no value; `kind` is null only
 for a kind newer than the reader.

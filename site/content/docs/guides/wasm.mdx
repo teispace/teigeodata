@@ -99,7 +99,8 @@ each section is verified against its hash the first time a query reads it.
 `search` finds places by name, best first. It matches every name a place has, in every
 script, and forgives spelling: काठमाडौं, Kathmandu and Kathamandu find the same city, and so do
 typos, missing accents and abbreviations. A result row has the place columns (`id`, `name`,
-`kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`) and a `score`.
+`kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`, `population`,
+`population_kind`) and a `score`.
 
 <include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#search</include>
 

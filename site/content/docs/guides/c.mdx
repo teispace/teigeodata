@@ -99,7 +99,8 @@ it.
 `tg_engine_search` finds places by name, best first. It matches every name a place has, in every
 script, and forgives spelling: काठमाडौं, Kathmandu and Kathamandu find the same city, and so do
 typos, missing accents and abbreviations. A result row has the place columns (`id`, `name`,
-`kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`) and a `score`.
+`kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`, `population`,
+`population_kind`) and a `score`.
 
 <include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c#search</include>
 

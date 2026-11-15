@@ -49,6 +49,8 @@ Every query that returns places has these columns:
 | `parent` | string (an ID) | a root (a country, a timezone area), or a pack without the admin hierarchy |
 | `tz` | string (an IANA zone) | the pack has no timezones there |
 | `iso` | string (ISO 3166) | the place has no ISO code |
+| `population` | integer (people) | no count is known, the place is a former unit, or the layer was installed without `extra` |
+| `population_kind` | string: `stated` (a source's count) or `modelled` (a population grid over an admin unit) | as `population` |
 
 and some queries add their own:
 
