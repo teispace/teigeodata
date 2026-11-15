@@ -65,7 +65,17 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
     fixture is fixed, and no parity answer changed, since queries re-orient.
   - **Run:** 300 s clean, 149,633 inputs, coverage 10,668 (8,506 without the checks), peak
     RSS 405 MB
-- [ ] `trust`: the TUF metadata parser and the catalog's `custom` fields
+- [x] `trust` (2026-11-15). A valid repository is built with fixed keys (`repo::*`): root,
+  targets with one catalog entry, snapshot and timestamp. One role is then attacked in one of
+  three ways: its file replaced by fuzz bytes, one value of its `signed` part changed and
+  signed again with its own key, or signed by a key no role lists. The roles after it are
+  rebuilt on the attacked file, so their hashes hold and the checks behind them are reached.
+  The chain loads as a client loads it, then the catalog.
+  - **Properties:** no panic; an untouched repository loads whole (red on a sample entry
+    whose seek table lay past the asset); an accepted entry reads back from its own `custom`
+    unchanged.
+  - **Run:** 300 s clean, 88,146 inputs (292 a second, each signed again with Ed25519),
+    coverage 3,630, peak RSS 437 MB
 - [ ] `ffi`: the C ABI's strings and buffers (lengths, NUL bytes, invalid UTF-8, documented null
   pointers) through the generated layer
 - [ ] `mcp`: JSON-RPC messages into the MCP request core
@@ -131,3 +141,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | Phase 8 drafted from the [hardening research](../../02-research/notes/hardening-and-release.md) | D-331 |
 | 2026-11-15 | 8.1 engine target done; two DEM, ARCS and POLYGONS faults fixed | D-332 |
 | 2026-11-15 | 8.1 payloads folded into the engine target; seeds hold every kind but BLOBS | D-332 |
+| 2026-11-15 | 8.1 trust target done | D-331 |

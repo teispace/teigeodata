@@ -67,7 +67,8 @@ fuzzing time per target as an input).
   default, inputs up to 4 KiB. The targets call the same `fn(&[u8])` harnesses that
   `cargo test` runs on seeded inputs on every PR (D-072, `crates/teigeodata-format/tests/fuzz.rs`):
   `open`, `round_trip`, `mutate`, `manifest`, `sections`, `bitpack`, `table` and `bits`, all in
-  `teigeodata_format::fuzz`; `transport_table`, `transport_asset` and `transport_frame` in
+  `teigeodata_format::fuzz`; `transport_table`, `transport_asset`, `transport_frame` and `trust` (the TUF update chain and
+  the catalog on a repository with one role attacked and signed again, D-331) in
   `teigeodata_sync::fuzz` (D-112, `crates/teigeodata-sync/tests/fuzz.rs`); `server_query` in
   `teigeodata_server::fuzz` (D-313, `crates/teigeodata-server/tests/fuzz.rs`, run by fast-check's
   `check` job); `engine` in `teigeodata_engine::fuzz` (D-331, `crates/teigeodata-engine/tests/fuzz.rs`):

@@ -50,6 +50,18 @@ fn frames() {
     drive(23, iterations(10_000), fuzz::frame);
 }
 
+#[test]
+fn attacked_repositories() {
+    drive(24, iterations(3_000), fuzz::trust);
+}
+
+/// The harness's baseline holds: with no role attacked (first byte 4), the chain loads and the
+/// catalog keeps its one entry.
+#[test]
+fn an_untouched_repository_loads_whole() {
+    fuzz::trust(&[4]);
+}
+
 /// Inputs libFuzzer found failing, kept so they stay fixed.
 #[test]
 fn found_by_libfuzzer() {

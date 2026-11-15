@@ -12,6 +12,8 @@
 //!   truncated asset, a changed frame byte. A client either refuses it, or gets each frame at
 //!   exactly its size and bytes that are the pack or that the pack's hashes refuse.
 //! - [`frame`]: the frame decoder never panics and never gives more than its stated length.
+//! - `trust` (with `repo`): the TUF update chain and the catalog on a repository with one role
+//!   attacked never panic, and an accepted entry reads back from its own `custom` value.
 
 #![allow(
     clippy::missing_panics_doc,
@@ -20,6 +22,11 @@
     clippy::cast_possible_truncation,
     reason = "test harnesses: a panic is how a property failure is reported, and inputs are bounded"
 )]
+
+#[cfg(feature = "repo")]
+mod trust;
+#[cfg(feature = "repo")]
+pub use trust::trust;
 
 use alloc::vec;
 use alloc::vec::Vec;

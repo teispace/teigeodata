@@ -40,7 +40,7 @@ store = ["fetch", "dep:libc", "dep:windows-sys"]
 # every binding (research note store-api).
 client = ["store", "http"]
 # The fuzz and property harnesses, shared by `cargo test` and cargo-fuzz (D-072).
-fuzz = ["write"]
+fuzz = ["write", "repo"]
 
 [dependencies]
 blake3 = { version = "1.8.7", default-features = false, optional = true }
