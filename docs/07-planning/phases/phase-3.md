@@ -164,18 +164,25 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
 - [ ] `not-same-as` (a cannot-link in conflation) when the first case needs it
 
 ### 3.7 Gates, lite and accuracy
-- [ ] G-det, G-lic, G-topo, G-pip, G-conf, G-corr, G-budget in CI. Written (D-128):
+- [x] G-det, G-lic, G-topo, G-pip, G-conf, G-corr, G-budget in CI. Written (D-128):
   `.github/workflows/data-build.yml` runs G-det (the build stage twice, `cmp`), G-lic
   (`cargo xtask check-pack`), G-corr (inside the build) and the golden gate per pack; it runs
   once the mirror release `sources` is published (D-127). G-budget in `forge make` (D-129);
   G-topo and G-pip in the topology and build stages (D-130); G-conf in conflate (D-131).
-  Every gate is written; the item closes on the first green `data-build` run
+  Every gate is written; the item closes on the first green `data-build` run. **Green:**
+  run 43039426887 (2026-11-11, `9014c16`), both packs (main, lite), every gate
 - [x] Attribution in every pack (D-031, D-126): each source's notice from `sources.lock`,
   carried in the signed manifest of every pack built from it (Copernicus and WorldPop in main);
   `Layer::attribution()`; the API and bindings expose it with the layer's metadata (phases 5–6)
-- [ ] The lite build from clean-room sources only. Every source passes the licence gate at
+- [x] The lite build from clean-room sources only. Every source passes the licence gate at
   ingest. Timezones from tzdb over the admin-0 outline (D-138, 2026-11-09); postal (Q-009)
-  and population (ADR-0030) remain main only
+  and population (ADR-0030) remain main only. **Done:**
+  - the schedule-time gate never opens a source outside the attribution-only classes, a
+    `--core` run included (`build::tests::a_pack_carries_the_notices_of_what_it_reads`, D-126);
+  - the claim area is digitised clean-room (D-206), heights come from NASADEM (D-132) and
+    timezones from tzdb (D-138);
+  - G-lic checks the built lite pack in `data-build`, green on run 43039426887;
+  - lite packs ship in every data release since `data-2026.11.13.2`
 - [x] G-tz: GeoNames' per-place `timezone` agrees with the pack's `PLACE_TZ`, at most 0.1%
   differ (D-139; Nepal main 0.030%, lite 0.010%, 2026-11-09)
 - [ ] `ACCURACY.md` for Nepal against held-out truth
