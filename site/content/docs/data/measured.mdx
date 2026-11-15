@@ -49,41 +49,41 @@ Baseline (subtracted): native 278.5 KiB, wasm32 16.1 KiB.
 
 `tgd serve` on loopback, each route driven by oha 1.17.0 for 5 s at each point, twice; round two is reported, and the footprint's growth across it is the leak check. `tools/load/budget.toml` sets each point's floor and ceiling.
 
-Measured 2026-11-15 on Darwin arm64, 10 cores (load average 25.33), commit [`53207ed`](https://github.com/teispace/teigeodata/commit/53207ed), by `cargo xtask load <pack> --check tools/load/budget.toml --record`.
+Measured 2026-11-15 on Darwin arm64, 10 cores (load average 22.79), commit [`3688d14`](https://github.com/teispace/teigeodata/commit/3688d14), by `cargo xtask load <pack> --check tools/load/budget.toml --record`.
 
 **np-places-lite**
 
 | Route | c | req/s | p50 ms | p99 ms | requests | failed |
 |---|--:|--:|--:|--:|--:|--:|
-| search | 1 | 12219 | 0.072 | 0.239 | 61115 | 0 |
-| search | 16 | 70885 | 0.187 | 0.841 | 354546 | 0 |
-| search | 64 | 73496 | 0.786 | 2.371 | 367592 | 0 |
-| reverse | 16 | 73870 | 0.184 | 0.759 | 369554 | 0 |
-| get | 16 | 80103 | 0.160 | 0.827 | 400750 | 0 |
-| near | 16 | 71768 | 0.184 | 0.851 | 358928 | 0 |
-| hierarchy | 16 | 87411 | 0.158 | 0.614 | 437179 | 0 |
-| boundary | 16 | 7815 | 1.689 | 11.264 | 39086 | 0 |
-| nominatim | 16 | 39409 | 0.298 | 1.598 | 197102 | 0 |
-| mcp search | 16 | 35526 | 0.375 | 1.674 | 177668 | 0 |
+| search | 1 | 4793 | 0.134 | 1.843 | 23979 | 0 |
+| search | 16 | 64215 | 0.191 | 1.054 | 321181 | 0 |
+| search | 64 | 61182 | 0.913 | 3.390 | 306084 | 0 |
+| reverse | 16 | 71036 | 0.174 | 1.007 | 355321 | 0 |
+| get | 16 | 84291 | 0.154 | 0.800 | 421732 | 0 |
+| near | 16 | 63304 | 0.194 | 1.110 | 316628 | 0 |
+| hierarchy | 16 | 90183 | 0.157 | 0.530 | 451085 | 0 |
+| boundary | 16 | 8875 | 1.551 | 8.369 | 44374 | 0 |
+| nominatim | 16 | 53444 | 0.256 | 1.011 | 267380 | 0 |
+| mcp search | 16 | 39315 | 0.370 | 1.216 | 196674 | 0 |
 
-footprint: 5472 KB idle, 16384 KB peak, -1024 KB across round two
+footprint: 5616 KB idle, 16384 KB peak, -3072 KB across round two
 
 **world-baseline-lite**
 
 | Route | c | req/s | p50 ms | p99 ms | requests | failed |
 |---|--:|--:|--:|--:|--:|--:|
-| search | 1 | 17299 | 0.050 | 0.147 | 86521 | 0 |
-| search | 16 | 94337 | 0.150 | 0.463 | 471944 | 0 |
-| search | 64 | 115871 | 0.517 | 1.375 | 579600 | 0 |
-| reverse | 16 | 64223 | 0.190 | 1.313 | 321276 | 0 |
-| get | 16 | 85069 | 0.155 | 0.697 | 425551 | 0 |
-| near | 16 | 84527 | 0.167 | 0.586 | 422859 | 0 |
-| hierarchy | 16 | 103093 | 0.140 | 0.403 | 515700 | 0 |
-| boundary | 16 | 56084 | 0.242 | 1.008 | 280621 | 0 |
-| nominatim | 16 | 88605 | 0.165 | 0.493 | 443204 | 0 |
-| mcp search | 16 | 56495 | 0.252 | 0.852 | 282557 | 0 |
+| search | 1 | 4129 | 0.103 | 1.951 | 20649 | 0 |
+| search | 16 | 73481 | 0.162 | 0.928 | 367581 | 0 |
+| search | 64 | 81055 | 0.676 | 2.875 | 405502 | 0 |
+| reverse | 16 | 58112 | 0.187 | 1.325 | 290656 | 0 |
+| get | 16 | 78654 | 0.149 | 0.930 | 393402 | 0 |
+| near | 16 | 53536 | 0.190 | 1.495 | 267787 | 0 |
+| hierarchy | 16 | 82638 | 0.142 | 0.950 | 413413 | 0 |
+| boundary | 16 | 31980 | 0.301 | 3.029 | 159944 | 0 |
+| nominatim | 16 | 69888 | 0.172 | 1.029 | 349665 | 0 |
+| mcp search | 16 | 42750 | 0.292 | 1.498 | 213764 | 0 |
 
-footprint: 4912 KB idle, 10240 KB peak, +0 KB across round two
+footprint: 5072 KB idle, 10240 KB peak, +0 KB across round two
 
 ## Phone-class estimates
 
