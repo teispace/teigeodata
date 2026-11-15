@@ -495,12 +495,12 @@ fn output(c: &mut Command) -> Result<String, String> {
 }
 
 fn print_report(out: &mut String, r: &Report) {
-    let _ = writeln!(out, "\n{}\n", r.pack);
+    let _ = writeln!(out, "\n**{}**\n", r.pack);
     let _ = writeln!(
         out,
         "| Route | c | req/s | p50 ms | p99 ms | requests | failed |"
     );
-    let _ = writeln!(out, "|---|---|---|---|---|---|---|");
+    let _ = writeln!(out, "|---|--:|--:|--:|--:|--:|--:|");
     for p in &r.points {
         let _ = writeln!(
             out,
