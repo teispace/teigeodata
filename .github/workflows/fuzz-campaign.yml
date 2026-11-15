@@ -83,7 +83,9 @@ jobs:
         run: |
           cargo +nightly fuzz coverage --target "$TARGET" ${{ matrix.target }} corpus/${{ matrix.target }}
           COV="$(rustc +nightly --print sysroot)/lib/rustlib/$TARGET/bin/llvm-cov"
-          BIN="target/$TARGET/coverage/$TARGET/release/${{ matrix.target }}"
+          # The first triple of the path is cargo-fuzz's own (a musl build), not the target's.
+          BIN="$(find target -path "*/coverage/$TARGET/release/${{ matrix.target }}" -type f | head -1)"
+          if [ -z "$BIN" ]; then echo "no coverage binary for ${{ matrix.target }}"; exit 1; fi
           PROF="coverage/${{ matrix.target }}/coverage.profdata"
           mkdir -p report
           "$COV" export -summary-only -instr-profile="$PROF" "$BIN" > "report/${{ matrix.target }}.json"
@@ -124,6 +126,7 @@ jobs:
         # The report goes to the job summary whether the gate passes or not.
         run: |
           status=0
+          mkdir -p coverage
           cargo xtask fuzz-coverage coverage > coverage/report.md 2>&1 || status=$?
           cat coverage/report.md
           cat coverage/report.md >> "$GITHUB_STEP_SUMMARY"
