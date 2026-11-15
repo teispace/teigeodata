@@ -423,20 +423,7 @@ fn edit_body(c: &mut Cursor<'_>, body: &mut Vec<u8>) {
 pub fn edit_section<'d>(seed: &[u8], data: &'d [u8]) -> Option<Edited<'d>> {
     let p = Pack::open(seed).ok()?;
     let mut c = Cursor(data);
-    let mut sections: Vec<_> = p
-        .sections()
-        .filter(|s| s.kind() != Kind::BLOCK_HASHES)
-        .map(|s| {
-            (
-                s.kind(),
-                s.part(),
-                s.encoding(),
-                s.item_count(),
-                s.decoded_length(),
-                s.bytes().to_vec(),
-            )
-        })
-        .collect();
+    let mut sections = bodies(&p);
     if sections.is_empty() {
         return None;
     }
@@ -455,6 +442,41 @@ pub fn edit_section<'d>(seed: &[u8], data: &'d [u8]) -> Option<Edited<'d>> {
             };
         }
     }
+    let pack = write_again(&p, &sections)?;
+    Some(Edited {
+        pack,
+        edited,
+        rest: c.rest(),
+    })
+}
+
+/// One section as [`write_again`] writes it: kind, part, encoding, item count, decoded length and
+/// body.
+pub type SectionBody = (Kind, crate::Part, Encoding, u64, u64, Vec<u8>);
+
+/// Every section of `p` but `BLOCK_HASHES` (the writer adds them again), for [`write_again`].
+#[must_use]
+pub fn bodies(p: &Pack<'_>) -> Vec<SectionBody> {
+    p.sections()
+        .filter(|s| s.kind() != Kind::BLOCK_HASHES)
+        .map(|s| {
+            (
+                s.kind(),
+                s.part(),
+                s.encoding(),
+                s.item_count(),
+                s.decoded_length(),
+                s.bytes().to_vec(),
+            )
+        })
+        .collect()
+}
+
+/// `p`'s head (manifest, build ID, time) with `sections` as its sections, written again with
+/// every hash right, or `None` if the writer refuses them. A raw section's decoded length is
+/// its length.
+#[must_use]
+pub fn write_again(p: &Pack<'_>, sections: &[SectionBody]) -> Option<Vec<u8>> {
     let m = p.manifest();
     let mut w = Writer::new(m.address(), m.component(), m.release()).ok()?;
     w.build_id(p.build_id()).created_unix(p.created_unix());
@@ -463,7 +485,7 @@ pub fn edit_section<'d>(seed: &[u8], data: &'d [u8]) -> Option<Edited<'d>> {
             w.manifest(tag, v).ok()?;
         }
     }
-    for (kind, part, encoding, items, decoded, body) in &sections {
+    for (kind, part, encoding, items, decoded, body) in sections {
         let len = body.len() as u64;
         let decoded = if *encoding == Encoding::RAW {
             len
@@ -485,12 +507,7 @@ pub fn edit_section<'d>(seed: &[u8], data: &'d [u8]) -> Option<Edited<'d>> {
                 .map(|s| s.5.as_slice())
         })
         .collect();
-    let pack = layout.assemble(&order).ok()?;
-    Some(Edited {
-        pack,
-        edited,
-        rest: c.rest(),
-    })
+    layout.assemble(&order).ok()
 }
 
 /// What [`edit_section`] returns.

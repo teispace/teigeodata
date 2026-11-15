@@ -14,6 +14,13 @@
 //! (D-077). IDs are strictly increasing and every length is a multiple of 4, so every body starts 4-byte
 //! aligned and a table has exactly one encoding. [`Table::parse`] checks the frame in O(columns);
 //! [`Table::column`] validates one column when a section opens it.
+//!
+//! **Extension columns** (D-335): IDs from [`EXTENSION`] (`0x8000`) up are optional additions a
+//! later format minor may define. A reader skips one it does not know, whatever its codec, so a
+//! pack that gains one stays readable by every reader of the same format major. [`Table::ids`]
+//! lists only the IDs below it, the columns a section's own layout names and refuses when
+//! unknown; [`Table::extensions`] lists the rest. A codec this reader does not know is refused
+//! below `EXTENSION` and makes an extension column read as absent.
 
 use core::fmt;
 
@@ -22,6 +29,9 @@ use crate::bits::{Bits, BitsError};
 
 const HEADER: usize = 4;
 const ENTRY: usize = 8;
+
+/// The first extension column ID: a reader skips an unknown column from here up (D-335).
+pub const EXTENSION: u16 = 0x8000;
 /// How a column's bytes are coded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -60,8 +70,9 @@ impl Codec {
 pub enum TableError {
     /// Shorter than the header or directory says.
     Truncated,
-    /// Reserved bytes are not zero, a codec is unknown, IDs are not strictly increasing, a
-    /// length is not a multiple of 4, or the lengths do not add up to the bodies.
+    /// Reserved bytes are not zero, a codec is unknown below [`EXTENSION`], IDs are not
+    /// strictly increasing, a length is not a multiple of 4, or the lengths do not add up to
+    /// the bodies.
     Directory,
     /// The section needs this column and the table has none.
     Missing(u16),
@@ -92,6 +103,8 @@ impl core::error::Error for TableError {}
 #[derive(Clone, Copy, Debug)]
 pub struct Table<'a> {
     directory: &'a [[u8; ENTRY]],
+    /// How many directory entries lie below [`EXTENSION`] (IDs increase, so they come first).
+    core: usize,
     bodies: &'a [u8],
 }
 
@@ -120,9 +133,13 @@ impl<'a> Table<'a> {
         let directory = directory.as_chunks::<ENTRY>().0;
         let mut total: usize = 0;
         let mut last: Option<u16> = None;
+        let mut core = 0;
         for &e in directory {
             let (id, codec, reserved, len) = entry(e);
-            if Codec::from_code(codec).is_none()
+            if id < EXTENSION {
+                core += 1;
+            }
+            if (id < EXTENSION && Codec::from_code(codec).is_none())
                 || reserved != 0
                 || len % 4 != 0
                 || last >= Some(id)
@@ -139,15 +156,28 @@ impl<'a> Table<'a> {
                 TableError::Directory
             });
         }
-        Ok(Self { directory, bodies })
+        Ok(Self {
+            directory,
+            core,
+            bodies,
+        })
     }
 
-    /// The column IDs, in increasing order.
+    /// The IDs of the section's own columns (below [`EXTENSION`]), in increasing order.
     pub fn ids(&self) -> impl ExactSizeIterator<Item = u16> + '_ {
-        self.directory.iter().map(|&e| entry(e).0)
+        let core = self.directory.get(..self.core).unwrap_or_default();
+        core.iter().map(|&e| entry(e).0)
     }
 
-    /// The codec and bytes of column `id`, or `None` if the table has no such column.
+    /// The IDs of the extension columns ([`EXTENSION`] and up), in increasing order. A reader
+    /// that does not know one skips it.
+    pub fn extensions(&self) -> impl ExactSizeIterator<Item = u16> + '_ {
+        let ext = self.directory.get(self.core..).unwrap_or_default();
+        ext.iter().map(|&e| entry(e).0)
+    }
+
+    /// The codec and bytes of column `id`, or `None` if the table has no such column or it is
+    /// an extension column of a codec this reader does not know.
     #[must_use]
     pub fn column_raw(&self, id: u16) -> Option<(Codec, &'a [u8])> {
         let mut start = 0;
@@ -274,7 +304,7 @@ pub fn encode_with(columns: &[(u16, Codec, &[u8])]) -> Result<alloc::vec::Vec<u8
     reason = "test inputs are cut from a 64-bit generator on purpose"
 )]
 mod tests {
-    use super::{Codec, Table, TableError, encode, encode_with};
+    use super::{Codec, EXTENSION, Table, TableError, encode, encode_with};
     use crate::bitpack::{self, Coding, PackError};
     use crate::bits::{self, BitsError};
     use std::vec::Vec;
@@ -368,6 +398,49 @@ mod tests {
         assert_eq!(
             t.column(1).err(),
             Some(TableError::Column(1, PackError::Header))
+        );
+    }
+
+    /// An extension column is skipped whatever its codec; below `EXTENSION` an unknown codec is
+    /// refused (D-335).
+    #[test]
+    fn an_unknown_extension_column_is_skipped() {
+        let a = bitpack::encode(&[1, 2, 3], Coding::For);
+        let ext = [7_u8; 8];
+        let with = |codec: u8, id: u16| {
+            let mut t = encode_with(&[(1, Codec::Bitpack, &a), (id, Codec::Bytes, &ext)])
+                .unwrap_or_default();
+            // The second directory entry's codec byte: header 4, one entry 8, then id u16.
+            if let Some(b) = t.get_mut(4 + 8 + 2) {
+                *b = codec;
+            }
+            t
+        };
+        let known = with(2, EXTENSION + 5);
+        let t = Table::parse(&known).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(t.ids().collect::<Vec<_>>(), [1]);
+        assert_eq!(t.extensions().collect::<Vec<_>>(), [EXTENSION + 5]);
+        assert_eq!(t.bytes(EXTENSION + 5), Ok(&ext[..]));
+
+        let future = with(200, EXTENSION + 5);
+        let t = Table::parse(&future).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(t.ids().collect::<Vec<_>>(), [1]);
+        assert_eq!(t.extensions().len(), 1);
+        assert_eq!(
+            t.column_raw(EXTENSION + 5),
+            None,
+            "an unknown codec reads as absent"
+        );
+        assert_eq!(
+            t.bytes(EXTENSION + 5),
+            Err(TableError::Missing(EXTENSION + 5))
+        );
+        assert!(t.column(1).is_ok(), "the section's own columns still read");
+
+        assert_eq!(
+            Table::parse(&with(200, EXTENSION - 1)).err(),
+            Some(TableError::Directory),
+            "an unknown codec below EXTENSION is refused"
         );
     }
 

@@ -1500,7 +1500,11 @@ pub fn table(data: &[u8]) {
     let mut bytes = Vec::new();
     let mut written = false;
     if mode & 0x80 != 0 {
+        // Sometimes IDs that straddle the extension range (D-335).
         let mut id = u16::from(c.u8());
+        if mode & 0x40 != 0 {
+            id = (frame::EXTENSION - 8).saturating_add(id % 16);
+        }
         let mut cols = Vec::new();
         for _ in 0..c.u8() % 6 {
             let n = c.below(limit(300, 40));
@@ -1528,9 +1532,19 @@ pub fn table(data: &[u8]) {
         return;
     };
     let ids: Vec<u16> = t.ids().collect();
+    let extensions: Vec<u16> = t.extensions().collect();
     assert!(
-        ids.windows(2).all(|w| w[0] < w[1]),
+        ids.iter()
+            .chain(&extensions)
+            .collect::<Vec<_>>()
+            .windows(2)
+            .all(|w| w[0] < w[1]),
         "column IDs not increasing"
+    );
+    assert!(
+        ids.iter().all(|&id| id < frame::EXTENSION)
+            && extensions.iter().all(|&id| id >= frame::EXTENSION),
+        "a column listed on the wrong side of EXTENSION"
     );
     let cols: Vec<(u16, Codec, &[u8])> = ids
         .iter()
@@ -1542,8 +1556,17 @@ pub fn table(data: &[u8]) {
             (id, k, b)
         })
         .collect();
-    let again = frame::encode_with(&cols).unwrap_or_else(|e| panic!("accepted columns: {e}"));
-    assert_eq!(again, bytes, "an accepted table is not canonical");
+    // An extension column of a codec this reader does not know reads as absent (D-335); the
+    // table is canonical with it, but cannot be written again without its codec.
+    let known: Vec<(u16, Codec, &[u8])> = extensions
+        .iter()
+        .filter_map(|&id| t.column_raw(id).map(|(k, b)| (id, k, b)))
+        .collect();
+    if known.len() == extensions.len() {
+        let all: Vec<_> = cols.iter().chain(&known).copied().collect();
+        let again = frame::encode_with(&all).unwrap_or_else(|e| panic!("accepted columns: {e}"));
+        assert_eq!(again, bytes, "an accepted table is not canonical");
+    }
     for &(id, k, b) in &cols {
         let packed = k == Codec::Bitpack && Packed::parse(b).is_ok();
         assert_eq!(t.column(id).is_ok(), packed);

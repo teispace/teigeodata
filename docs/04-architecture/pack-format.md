@@ -204,6 +204,12 @@ bodies    each column's bytes in directory order, back to back
 
 - IDs are strictly increasing; every length is a multiple of 4, so every column starts 4-byte
   aligned; the lengths add up to the rest of the section exactly.
+- **Extension columns** (D-335): IDs `0x8000` (`table::EXTENSION`) and up are optional columns a
+  later format minor may add to any section. A reader skips one it does not know, of any codec
+  (an unknown codec there reads as absent), so a pack that gains one stays readable by every
+  reader of the same major. Below `0x8000` a section's columns are strict: an unknown ID or
+  codec is refused, so a column that changes meaning is never ignored. Such a change needs a
+  new section kind or a new major.
 - Codec 0 is the B1 integer codec (D-073, `teigeodata_core::bitpack`): blocks of 128 values in
   4 interleaved lanes, one base and bit width per block, FOR or zigzag delta per column:
 
@@ -937,7 +943,8 @@ required `name`) first, so a display name is one O(1) read and one decode.
 
 Optional per-place fields, grouped into the schema's
 [components](../05-data/schema.md#components). `item_count` equals PLACES'. Column IDs are
-`component << 8 | field`; component 0 is reserved.
+`component << 8 | field`; component 0 is reserved, and components run from 1 to 127: from 128
+up, the IDs are extension columns (D-335).
 
 | Field | Column | |
 |---:|---|---|

@@ -32,6 +32,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   and the tests that reach it (`docs/06-engineering/unsafe-inventory.md`), and the
   [threat model](docs/06-engineering/threat-model.md) (D-333).
 - `teigeodata_format::check::sections_where`: the full check of the sections a caller selects.
+- Extension columns (D-335): a column-table column with an ID from `0x8000`
+  (`teigeodata_core::table::EXTENSION`) is skipped by a reader that does not know it, so a
+  format minor can add optional columns; `Table::extensions` lists them. COMPONENTS IDs are 1
+  to 127. `teigeodata_format::fuzz::{bodies, write_again}` rebuild a pack from its sections.
 - A result `Reader` of one shape in every language (D-322): new in Node.js, WebAssembly,
   Swift, Dart, Java (Kotlin), C (`teigeodata_reader.h`) and C++ (`teigeodata_reader.hpp`),
   both header-only and in the C package (`rows`, `columns`, `has`, `numbers`, `strings`, `nulls`, `column`,
@@ -270,6 +274,8 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Fixed
 
+- `tgd verify --deep` and `teigeodata_format::check::sections` now run the `TZ_RULES` section's
+  full check; it was skipped (D-335).
 - `tgd serve` (`http::serve`) never timed out a slow request head or an idle connection, since
   `axum::serve` sets no hyper timer, and did not cap connections or requests in flight. It now
   bounds all four, and sheds requests past the cap with 503 and `Retry-After` (D-334).

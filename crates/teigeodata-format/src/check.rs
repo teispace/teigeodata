@@ -3,7 +3,7 @@
 //! `check` reads every value, O(rows). Sections that read others are checked against them, as
 //! the engine opens them: `PLACE_INDEX` on PLACES, POLYGONS on ARCS and the row count,
 //! `POLY_INDEX` on POLYGONS and ARCS, REDIRECTS on IDMAP, POSTAL on the row count, ELEVATION,
-//! `PLACE_TZ` and HIERARCHY one row per place, `ISO_CODES` on the row count, `ARCS_OVERVIEW` against ARCS, `ADMIN_REGION` on
+//! `PLACE_TZ` and HIERARCHY one row per place, `TZ_RULES` on its own, `ISO_CODES` on the row count, `ARCS_OVERVIEW` against ARCS, `ADMIN_REGION` on
 //! ARCS when it reads its vertices from them; a section's block-hash list is proved against
 //! its hash. BLOBS frames are decoded with the `zstd` feature. No allocation.
 //!
@@ -28,6 +28,7 @@ use crate::postal::Postal;
 use crate::redirects::Redirects;
 use crate::region::Region;
 use crate::search::Search;
+use crate::tz_rules::TzRules;
 use crate::{Error, Kind, Pack, Part, Section};
 
 fn needs(kind: Kind, problem: &'static str) -> Error {
@@ -122,6 +123,7 @@ pub fn sections_where(
                     Postal::open(&s, r)?.check()?;
                 }
                 Kind::DEM | Kind::DEM_COARSE => Dem::open(&s)?.check()?,
+                Kind::TZ_RULES => TzRules::open(&s)?.check()?,
                 Kind::COMPONENTS => Components::open(&s)?.check()?,
                 Kind::BLOBS => {
                     let b = Blobs::open(&s)?;

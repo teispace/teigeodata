@@ -11,7 +11,9 @@
 use teigeodata_core::bitpack::{Coding, encode as packed};
 use teigeodata_core::bits;
 use teigeodata_core::table::{Codec, Table, encode_with};
-use teigeodata_format::components::{self, ComponentColumns, Components, PRESENCE, column};
+use teigeodata_format::components::{
+    self, ComponentColumns, Components, MAX_COMPONENT, PRESENCE, column,
+};
 use teigeodata_format::{Encoding, Error, Kind, Pack, Writer};
 
 struct Rng(u64);
@@ -89,7 +91,7 @@ fn round_trip_every_presence_form() {
             model(1, n, 1000, &mut rng),
             model(3, n, 700, &mut rng),
             model(4, n, 5, &mut rng),
-            model(200, n, 0, &mut rng),
+            model(127, n, 0, &mut rng),
         ];
         let body = encode(n, &models).unwrap();
         // The writer's choice of form, when it has one to make.
@@ -104,7 +106,7 @@ fn round_trip_every_presence_form() {
             let v = v.unwrap();
             v.check().unwrap();
             assert_eq!(v.rows(), n);
-            assert_eq!(v.ids().collect::<Vec<_>>(), [1, 3, 4, 200]);
+            assert_eq!(v.ids().collect::<Vec<_>>(), [1, 3, 4, 127]);
             assert!(v.component(2).is_none());
             for m in &models {
                 let c = v.component(m.id).unwrap();
@@ -175,11 +177,38 @@ fn the_writer_refuses_bad_input() {
         rows: &[1],
         fields: &[(1, &[5])],
     };
-    for ids in [[0, 1], [2, 2], [3, 2]] {
+    for ids in [[0, 1], [2, 2], [3, 2], [1, MAX_COMPONENT + 1]] {
         assert!(matches!(
             components::encode(10, &[c(ids[0]), c(ids[1])]),
             Err(Error::Write(_))
         ));
+    }
+}
+
+/// A component above `MAX_COMPONENT` is an extension column (D-335): skipped, whatever its
+/// codec, while the components below it read as before.
+#[test]
+fn an_extension_component_is_skipped() {
+    let rows: &[u32] = &[1, 4];
+    let values: &[u32] = &[7, 9];
+    let presence = packed(rows, Coding::For);
+    let field = packed(values, Coding::For);
+    let ext = column(MAX_COMPONENT + 1, 1);
+    for codec in [Codec::Bitpack, Codec::Bytes] {
+        let body = encode_with(&[
+            (column(1, PRESENCE), Codec::Bitpack, &presence),
+            (column(1, 1), Codec::Bitpack, &field),
+            (ext, codec, &[0xa5; 8]),
+        ])
+        .unwrap();
+        with_view(10, &body, |v| {
+            let v = v.unwrap();
+            v.check().unwrap();
+            assert_eq!(v.ids().collect::<Vec<_>>(), [1]);
+            assert!(v.component(MAX_COMPONENT + 1).is_none());
+            let f = v.component(1).unwrap().field(1).unwrap();
+            assert_eq!(f.get(4), Some(9));
+        });
     }
 }
 

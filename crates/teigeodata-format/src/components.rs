@@ -3,7 +3,9 @@
 //! have the component.
 //!
 //! A [column table](teigeodata_core::table) whose column IDs are `component << 8 | field`
-//! ([`column()`]). Component 0 is reserved. For each component:
+//! ([`column()`]). Component 0 is reserved, and components above [`MAX_COMPONENT`] (127) are
+//! extension columns (`table::EXTENSION` and up, D-335), which this reader skips. For each
+//! component:
 //!
 //! - field 0, [`PRESENCE`], says which rows have it, in the smallest of three forms (the writer
 //!   picks; B6 measured the crossover near 10% of rows):
@@ -27,6 +29,10 @@ use crate::{Error, Kind, Section, columns};
 
 /// The presence field of every component.
 pub const PRESENCE: u8 = 0;
+
+/// The largest component ID: from 128 up, `component << 8` is an extension column ID
+/// (`table::EXTENSION`, D-335), skipped by a reader that does not know it.
+pub const MAX_COMPONENT: u8 = 127;
 
 /// The column ID of `field` of `component`.
 #[must_use]
@@ -269,7 +275,7 @@ impl<'a> Field<'a> {
 #[cfg(feature = "write")]
 #[derive(Clone, Copy, Debug)]
 pub struct ComponentColumns<'v> {
-    /// The component ID, 1 to 255.
+    /// The component ID, 1 to [`MAX_COMPONENT`].
     pub id: u8,
     /// The rows that have it.
     pub rows: &'v [u32],
@@ -300,6 +306,9 @@ pub fn encode(
     for comp in components {
         if comp.id <= last {
             return Err(refuse("component IDs must be increasing and above 0"));
+        }
+        if comp.id > MAX_COMPONENT {
+            return Err(refuse("component IDs above 127 are extension columns"));
         }
         last = comp.id;
         // Rows at or past `rows` are refused by the bitmap's encoder, which every component
