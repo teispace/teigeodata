@@ -190,7 +190,7 @@ Tasks:
                     footprint; --check holds it to tools/load/budget.toml's per-pack
                     floors and ceilings (needs oha and curl); --record (every route) writes
                     the tables for the site's measured page.
-  accuracy <cc> <pack.tgd> [--registry <tsv>] [--write]
+  accuracy <cc> <pack.tgd> [--registry <tsv>] [--places <tsv>] [--write]
                     Phase 3.7 (D-339): the country's ACCURACY.md, measured on the shipped
                     pack against tests/golden/<cc>-places.csv (horizontal by stratum, the
                     vertical part from position, the two labelling passes' agreement);

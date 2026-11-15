@@ -1,4 +1,4 @@
-//! `cargo xtask accuracy <cc> <pack.tgd> [--registry <tsv>] [--write]`: a country's
+//! `cargo xtask accuracy <cc> <pack.tgd> [--registry <tsv>] [--places <tsv>] [--write]`: a country's
 //! `ACCURACY.md`, measured on the shipped pack against the labelled sample
 //! (`tests/golden/<cc>-places.csv`, D-209, [accuracy labels](../../docs/02-research/notes/accuracy-labels.md)).
 //!
@@ -16,7 +16,8 @@
 //!   far apart their marks are: the noise of the labels themselves.
 //!
 //! `--write` writes `data/countries/<cc>/ACCURACY.md` for a main pack and `ACCURACY-lite.md`
-//! for a lite one; without it the page is printed.
+//! for a lite one; without it the page is printed. `--places` also writes each labelled place's
+//! point, label and distance, to compare two builds place by place.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
@@ -26,7 +27,8 @@ use std::path::{Path, PathBuf};
 use teigeodata_core::{E7, Namespace, PlaceId, Point};
 use teigeodata_engine::{Engine, Layer, LayerOptions, Scratch};
 
-const USAGE: &str = "usage: cargo xtask accuracy <cc> <pack.tgd> [--registry <tsv>] [--write]";
+const USAGE: &str =
+    "usage: cargo xtask accuracy <cc> <pack.tgd> [--registry <tsv>] [--places <tsv>] [--write]";
 
 /// The D-062 horizontal targets (P90, metres) by terrain.
 const LOWLAND_M: f64 = 500.0;
@@ -41,6 +43,27 @@ struct Row {
     terrain: String,
     /// The label, or `None` where the labeller saw no settlement.
     label: Option<(f64, f64)>,
+    /// The locator cell's corner (the source point truncated to 0.01°), where the sample has
+    /// one: the labeller's chip is centred on the middle of that cell.
+    locator: Option<(f64, f64)>,
+}
+
+/// Half the side of the chip the labeller saw, metres: 2 km square, 4 km for a town
+/// ([accuracy labels](../../docs/02-research/notes/accuracy-labels.md)).
+fn chip_half_m(class: &str) -> f64 {
+    if class == "town" { 2_000.0 } else { 1_000.0 }
+}
+
+/// Whether `at` lies outside the chip of `r`: no label could be near it.
+fn outside_chip(r: &Row, at: (f64, f64)) -> bool {
+    let Some((lat, lon)) = r.locator else {
+        return false;
+    };
+    let centre = (lat + 0.005, lon + 0.005);
+    let half = chip_half_m(&r.class);
+    let north = meters((at.0, centre.1), centre);
+    let east = meters((centre.0, at.1), centre);
+    north > half || east > half
 }
 
 /// Splits one CSV line (fields quoted when they hold a comma or a quote).
@@ -79,11 +102,17 @@ fn rows(file: &Path, lat: usize, lon: usize, labeller: usize) -> Result<Vec<Row>
                 _ => return Err(format!("{}: line {}: bad label", file.display(), i + 1)),
             },
         };
+        // The sample's locator columns (4, 5); a second pass's file has none.
+        let locator = match (lat, get(4).parse::<f64>(), get(5).parse::<f64>()) {
+            (7, Ok(a), Ok(b)) if a.is_finite() && b.is_finite() => Some((a, b)),
+            _ => None,
+        };
         out.push(Row {
             id: get(0).to_owned(),
             class: get(2).to_owned(),
             terrain: get(3).to_owned(),
             label,
+            locator,
         });
     }
     Ok(out)
@@ -158,12 +187,13 @@ struct Stratum {
 }
 
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
-    let (mut cc, mut pack, mut reg, mut write) = (None, None, None, false);
+    let (mut cc, mut pack, mut reg, mut places, mut write) = (None, None, None, None, false);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--write" => write = true,
             "--registry" => reg = Some(PathBuf::from(it.next().ok_or(vec![USAGE.into()])?)),
+            "--places" => places = Some(PathBuf::from(it.next().ok_or(vec![USAGE.into()])?)),
             p if !p.starts_with("--") && cc.is_none() => cc = Some(p.to_owned()),
             p if !p.starts_with("--") && pack.is_none() => pack = Some(PathBuf::from(p)),
             _ => return Err(vec![USAGE.into()]),
@@ -172,7 +202,10 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     let (Some(cc), Some(pack)) = (cc, pack) else {
         return Err(vec![USAGE.into()]);
     };
-    let page = page(root, &cc, &pack, reg.as_deref()).map_err(|e| vec![e])?;
+    let (page, each) = page(root, &cc, &pack, reg.as_deref()).map_err(|e| vec![e])?;
+    if let Some(out) = places {
+        fs::write(&out, each).map_err(|e| vec![format!("{}: {e}", out.display())])?;
+    }
     if write {
         // The main build's page is `ACCURACY.md`; the lite build's `ACCURACY-lite.md`.
         let file = if page.contains(", lite build") {
@@ -187,9 +220,14 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     Ok(page)
 }
 
-/// The page for `cc` measured on `pack`.
+/// The page for `cc` measured on `pack`, and a TSV of each labelled place (`--places`).
 #[allow(clippy::too_many_lines, reason = "one page, written top to bottom")]
-fn page(root: &Path, cc: &str, pack: &Path, reg: Option<&Path>) -> Result<String, String> {
+fn page(
+    root: &Path,
+    cc: &str,
+    pack: &Path,
+    reg: Option<&Path>,
+) -> Result<(String, String), String> {
     let name = pack
         .file_name()
         .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
@@ -218,7 +256,8 @@ fn page(root: &Path, cc: &str, pack: &Path, reg: Option<&Path>) -> Result<String
     let golden = root.join("tests/golden");
     let first = rows(&golden.join(format!("{cc}-places.csv")), 7, 8, 9)?;
     let mut by: BTreeMap<String, Stratum> = BTreeMap::new();
-    let (mut missing, mut no_height) = (Vec::new(), 0_usize);
+    let (mut missing, mut no_height, mut outside) = (Vec::new(), 0_usize, Vec::new());
+    let mut each = String::from("id\tclass\tterrain\tlat\tlon\tlabel_lat\tlabel_lon\tmeters\n");
     for r in &first {
         let st = by.entry(format!("{}, {}", r.class, r.terrain)).or_default();
         let Some(label) = r.label else {
@@ -237,7 +276,16 @@ fn page(root: &Path, cc: &str, pack: &Path, reg: Option<&Path>) -> Result<String
             continue;
         };
         let at = (place.point.lat_degrees(), place.point.lon_degrees());
-        st.horizontal.push(meters(at, label));
+        let m = meters(at, label);
+        if outside_chip(r, at) {
+            outside.push(format!("`{}` ({m:.0} m)", r.id));
+        }
+        st.horizontal.push(m);
+        let _ = writeln!(
+            each,
+            "{}\t{}\t{}\t{:.6}\t{:.6}\t{:.6}\t{:.6}\t{m:.0}",
+            r.id, r.class, r.terrain, at.0, at.1, label.0, label.1
+        );
         let here = engine
             .elevation(&place)
             .map_err(|e| format!("{}: {e}", r.id))?;
@@ -381,7 +429,25 @@ fn page(root: &Path, cc: &str, pack: &Path, reg: Option<&Path>) -> Result<String
          - The sample is small per stratum; a stratum of under 10 places is a hint, not a \
            measurement."
     );
-    Ok(p)
+    // The chip is centred on the source record's own point: a build that moves a place out of
+    // it is scored against a label that could not be near its point.
+    let _ = write!(
+        p,
+        "- Each labeller's image was centred on the source record's own point (2 km across, \
+         4 km for a town), so a label always lies near that point. A build that moves a place \
+         further, to where another source puts it, is scored as wrong even where it is right. "
+    );
+    if outside.is_empty() {
+        let _ = writeln!(p, "No point of this pack lies outside its image.");
+    } else {
+        let _ = writeln!(
+            p,
+            "{} of this pack's points lie outside the image their label was made on: {}.",
+            outside.len(),
+            outside.join(", ")
+        );
+    }
+    Ok((p, each))
 }
 
 /// The agreement of the two passes on the rows both saw.
@@ -425,7 +491,7 @@ fn agreement(first: &[Row], second: &[Row]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Row, agreement, q, registry, split};
+    use super::{Row, agreement, outside_chip, q, registry, split};
 
     fn row(id: &str, label: Option<(f64, f64)>) -> Row {
         Row {
@@ -433,7 +499,25 @@ mod tests {
             class: "hamlet".into(),
             terrain: "hill".into(),
             label,
+            locator: Some((27.70, 85.30)),
         }
+    }
+
+    #[test]
+    fn a_point_outside_the_labellers_image_is_found() {
+        // The image is centred on (27.705, 85.305), 2 km across for a hamlet, 4 km for a town.
+        let mut r = row("a", None);
+        assert!(!outside_chip(&r, (27.705, 85.305)));
+        // 0.008983° of latitude is 1 km: 900 m north is inside, 1.1 km north is not.
+        assert!(!outside_chip(&r, (27.705 + 0.008_085, 85.305)));
+        assert!(outside_chip(&r, (27.705 + 0.009_881, 85.305)));
+        // East and west count the same way; a town's image is twice as wide.
+        assert!(outside_chip(&r, (27.705, 85.305 - 0.012)));
+        r.class = "town".into();
+        assert!(!outside_chip(&r, (27.705, 85.305 - 0.012)));
+        // A row without a locator (a second pass) is never outside.
+        r.locator = None;
+        assert!(!outside_chip(&r, (0.0, 0.0)));
     }
 
     #[test]

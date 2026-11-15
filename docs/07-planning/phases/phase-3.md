@@ -115,9 +115,19 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   DEM. Nepal main: 2,726 natural places, 672 surveyed heights taken, 117 refused, 125 across
   the border left out; the DEM under-reads the summits taken by 15 m (P50), 82 m (P90);
   Everest 8,849 m
-- [ ] Review the consensus point where it moves a hill settlement far from its records: the
+- [x] Review the consensus point where it moves a hill settlement far from its records: the
   height there differs from GeoNames' SRTM3 by more than 100 m for 14,597 records (P90 130 m,
   26 m at the records' own points); review with the consensus gate
+  - Reviewed 2026-11-15 (D-348) on the CI-built main pack against the blind labels
+    (`cargo xtask accuracy --places`): main's and lite's points are 25 m apart at P50, 403 m
+    at P90, 18 of 222 more than 500 m. Against the labels main is more than 100 m worse at 25
+    places and better at 11 (hills 15 and 10, lowland 10 and 1); horizontal P50 362 m against
+    lite's 260 m, P90 958 m against 939 m.
+  - The labels favour the record's own point by construction: each image was centred on it.
+    Pokhara is 6.1 km from its label in main because main follows OpenStreetMap's node to the
+    city centre, which is right; the label sits beside GeoNames' point in the north. Each
+    page now names the points outside their label's image.
+  - What is left goes to the core's refit on the blind labels ([ideas](../../01-product/ideas.md))
 
 ### 3.5 Postal
 - [x] `data/countries/np/postal.yaml`, the POSTAL section (D-090, D-105), its queries and the
@@ -196,8 +206,10 @@ of its inputs, and deterministic; nothing in it names Nepal (P16).
   Sentinel-2 chips ([accuracy labels](../../02-research/notes/accuracy-labels.md)). Lite:
   [`ACCURACY-lite.md`](../../../data/countries/np/ACCURACY-lite.md), horizontal P50 260 m, P90
   939 m; two-thirds of lowland places within 500 m, a third of hill places within 150 m; the
-  passes agree within 63 m (P50) and 385 m (P90). The main build's page follows its next CI
-  build. The hill targets are finer than the labels can show
+  passes agree within 63 m (P50) and 385 m (P90). Main
+  ([`ACCURACY.md`](../../../data/countries/np/ACCURACY.md), CI run 43719616814): P50 362 m, P90
+  958 m; vertical from position P90 107 m (lite 98 m). The hill targets are finer than the
+  labels can show
 
 ### 3.8 Exit review
 - [ ] M3 criteria met; progress updated

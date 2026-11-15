@@ -95,6 +95,11 @@ building points and the grid, write a PNG and the chip's transform) and
 - Two alike clusters within the locator's kilometre: the label may take the wrong one; the
   second pass and the notes show where.
 - Clouds and terrain shadow in the hills: the scene choice prefers October to January.
+- The image is centred on the source record's own point (GeoNames for this sample), so the
+  labels favour a build that keeps that point. Measured 2026-11-15 (D-348): Pokhara's label
+  sits beside GeoNames' point, 6.1 km north of the city centre where OpenStreetMap and the
+  main build put it. A point outside its label's image cannot be judged by the label; each
+  generated page names them. A second set centred on another source's point removes the bias.
 
 ## 8. Versions checked
 

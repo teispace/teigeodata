@@ -50,3 +50,4 @@ The pack's elevation of each place against the terrain height the same pack give
 - The same noise enters the vertical table: on a hillside a label a few hundred metres off reads a terrain height tens of metres off, so the hill rows are an upper bound on the error from position.
 - Places marked as showing no settlement (scattered houses, no buildings in the footprint data) are not scored: the sample says nothing about where those names belong.
 - The sample is small per stratum; a stratum of under 10 places is a hint, not a measurement.
+- Each labeller's image was centred on the source record's own point (2 km across, 4 km for a town), so a label always lies near that point. A build that moves a place further, to where another source puts it, is scored as wrong even where it is right. No point of this pack lies outside its image.
