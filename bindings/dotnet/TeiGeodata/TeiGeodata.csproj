@@ -16,7 +16,7 @@
     <Deterministic>true</Deterministic>
 
     <PackageId>Teispace.TeiGeodata</PackageId>
-    <Version>0.3.1</Version>
+    <Version>1.0.0</Version>
     <Authors>Teispace</Authors>
     <Description>Accurate, offline places: the .NET binding of teigeodata.</Description>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

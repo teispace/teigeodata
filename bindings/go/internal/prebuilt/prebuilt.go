@@ -15,7 +15,7 @@ import (
 
 // Version is the library version this module's generated code calls. The loader refuses a
 // library of another version.
-const Version = "0.3.1"
+const Version = "1.0.0"
 
 // Base is where releases are downloaded from: Base + "/v" + Version + "/" + Asset(triple).
 const Base = "https://github.com/teispace/teigeodata/releases/download"
