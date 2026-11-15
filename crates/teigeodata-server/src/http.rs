@@ -41,7 +41,6 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
-use tower_http::timeout::TimeoutLayer;
 
 use crate::body::{Asked, Page, answer};
 use crate::compat::{self, Route};
@@ -162,10 +161,12 @@ pub fn router(app: Arc<App>) -> Router {
     if let Some(c) = cors {
         r = r.layer(c);
     }
-    r.layer(TimeoutLayer::with_status_code(
-        StatusCode::SERVICE_UNAVAILABLE,
-        timeout,
-    ))
+    // A request past `timeout` gets the JSON `unavailable` error, as every other failure does.
+    r.layer(
+        tower::ServiceBuilder::new()
+            .layer(axum::error_handling::HandleErrorLayer::new(timed_out))
+            .layer(tower::timeout::TimeoutLayer::new(timeout)),
+    )
     .layer(CatchPanicLayer::custom(|_| {
         error(&QueryError::new(Code::Internal, "the server failed"))
     }))
@@ -180,6 +181,14 @@ pub fn router(app: Arc<App>) -> Router {
                 Arc::new(tokio::sync::Semaphore::new(in_flight)),
             )),
     )
+}
+
+/// The answer to a request past [`Config::timeout`].
+async fn timed_out(_: tower::BoxError) -> Response {
+    error(&QueryError::new(
+        Code::Unavailable,
+        "the request took longer than the server allows; ask again, or ask for less",
+    ))
 }
 
 /// The answer to a request past [`Config::max_in_flight`].

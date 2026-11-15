@@ -3,7 +3,7 @@
 //!
 //! - requests in flight past `max_in_flight` are refused at once (503, `Retry-After`);
 //! - a `/mcp` body past 64 KiB is refused (413);
-//! - a body that never ends is answered at the request timeout (503);
+//! - a body that never ends is answered at the request timeout (503, the JSON `unavailable` error);
 //! - a request head sent slower than `header_timeout` loses its connection, and so does an idle
 //!   keep-alive connection;
 //! - a connection past `max_connections` is not served until one closes;
@@ -288,16 +288,22 @@ async fn a_body_that_never_ends_is_answered_at_the_timeout() {
     )
     .await
     .unwrap();
-    let mut buf = [0_u8; 512];
-    let n = tokio::time::timeout(Duration::from_secs(5), s.read(&mut buf))
-        .await
-        .expect("answered at the timeout")
-        .unwrap();
-    assert!(
-        buf[..n].starts_with(b"HTTP/1.1 503"),
-        "{}",
-        String::from_utf8_lossy(&buf[..n])
-    );
+    let mut buf = [0_u8; 1024];
+    let mut n = 0;
+    // The status line, then the body: the same JSON error as every other failure.
+    while n < buf.len() {
+        let got = tokio::time::timeout(Duration::from_secs(5), s.read(&mut buf[n..]))
+            .await
+            .expect("answered at the timeout")
+            .unwrap();
+        n += got;
+        if got == 0 || buf[..n].ends_with(b"}\n") {
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&buf[..n]);
+    assert!(text.starts_with("HTTP/1.1 503"), "{text}");
+    assert!(text.contains(r#""code":"unavailable""#), "{text}");
     assert!(start.elapsed() >= timeout.saturating_sub(SLACK));
     drop(s);
     server.stop().await;

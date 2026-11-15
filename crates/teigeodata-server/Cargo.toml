@@ -23,13 +23,13 @@ form_urlencoded = { version = "1.2.2", optional = true }
 # The HTTP server (feature `http`, D-309).
 axum = { version = "0.8.9", default-features = false, features = ["http1", "http2", "tokio", "query"], optional = true }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "time", "macros", "sync"], optional = true }
-tower-http = { version = "0.7.1", features = ["catch-panic", "cors", "timeout"], optional = true }
+tower-http = { version = "0.7.1", features = ["catch-panic", "cors"], optional = true }
 # The accept loop: hyper's connection bounds (header timeout, HTTP/2 pings and streams) that
 # `axum::serve` does not expose, and the requests-in-flight cap (server limits note, D-334).
 # All three are axum's own dependencies already.
 hyper = { version = "1.12.0", default-features = false, features = ["server", "http1", "http2"], optional = true }
 hyper-util = { version = "0.1.21", default-features = false, features = ["server-auto", "server-graceful", "service", "tokio"], optional = true }
-tower = { version = "0.5.3", default-features = false, features = ["limit", "load-shed", "util"], optional = true }
+tower = { version = "0.5.3", default-features = false, features = ["limit", "load-shed", "timeout", "util"], optional = true }
 # The MCP server (feature `mcp`): the official Rust SDK, pinned exactly (weekly releases; an
 # update is reviewed against its changelog, servers note §7).
 rmcp = { version = "=3.10.0", default-features = false, features = ["server", "transport-io"], optional = true }
