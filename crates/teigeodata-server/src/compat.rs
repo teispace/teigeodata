@@ -359,8 +359,10 @@ pub(crate) const MAX_LOOKUP: usize = 50;
 /// A failure as Nominatim answers it: `{"error": {"code": <status>, "message": …}}`.
 #[cfg(feature = "http")]
 pub(crate) fn error_body(e: &QueryError) -> Vec<u8> {
-    serde_json::to_vec(&json!({
+    let mut body = serde_json::to_vec(&json!({
         "error": { "code": e.code.http_status(), "message": e.message }
     }))
-    .unwrap_or_default()
+    .unwrap_or_default();
+    body.push(b'\n');
+    body
 }

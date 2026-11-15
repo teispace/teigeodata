@@ -171,6 +171,45 @@ async fn every_route_answers_with_its_attribution() {
     std::fs::remove_dir_all(dir).unwrap();
 }
 
+/// The raw body of `uri`.
+async fn raw(app: &Arc<App>, uri: &str) -> Vec<u8> {
+    let mut req = Request::get(uri).body(Body::empty()).unwrap();
+    req.extensions_mut()
+        .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 9))));
+    let res = router(Arc::clone(app)).oneshot(req).await.unwrap();
+    axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap()
+        .to_vec()
+}
+
+#[tokio::test]
+async fn every_body_ends_with_a_newline() {
+    let (app, model, dir) = app(Seams::default());
+    let id = model.ids[0];
+    for uri in [
+        "/health".to_owned(),
+        "/packs".to_owned(),
+        format!("/v1/get?id={id}"),
+        format!("/v1/get?id={id}&format=geojson"),
+        "/v1/elevation?lat=27.5&lon=85".to_owned(),
+        "/v1/admin?lat=91&lon=0".to_owned(),
+        "/v1/nothing".to_owned(),
+        "/search?q=Synthland&format=jsonv2".to_owned(),
+        "/reverse?lat=91&lon=0&format=jsonv2".to_owned(),
+    ] {
+        let body = raw(&app, &uri).await;
+        assert_eq!(
+            body.last(),
+            Some(&b'\n'),
+            "{uri}: {}",
+            String::from_utf8_lossy(&body)
+        );
+    }
+    drop(app);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 #[tokio::test]
 async fn every_failure_answers_its_code_and_status() {
     let (app, model, dir) = app(Seams::default());

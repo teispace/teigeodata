@@ -195,10 +195,11 @@ fn json(status: StatusCode, body: Vec<u8>, content_type: &'static str) -> Respon
 }
 
 fn error(e: &QueryError) -> Response {
-    let body = serde_json::to_vec(&serde_json::json!({
+    let mut body = serde_json::to_vec(&serde_json::json!({
         "error": { "code": e.code.name(), "message": e.message }
     }))
     .unwrap_or_default();
+    body.push(b'\n');
     let status =
         StatusCode::from_u16(e.code.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     json(status, body, "application/json")
@@ -230,11 +231,9 @@ async fn packs(
         return error(&e);
     }
     let e = app.packs.load();
-    json(
-        StatusCode::OK,
-        serde_json::to_vec(&crate::output::packs(&e)).unwrap_or_default(),
-        "application/json",
-    )
+    let mut body = serde_json::to_vec(&crate::output::packs(&e)).unwrap_or_default();
+    body.push(b'\n');
+    json(StatusCode::OK, body, "application/json")
 }
 
 async fn v1(

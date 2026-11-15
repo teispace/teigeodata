@@ -228,6 +228,7 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 - `/packs` and MCP's `packs` gave a pack's length in bytes as its `places`; they give its
   number of places.
+- The HTTP server's failures and `/packs` end with a newline, as every other answer does.
 
 - Java and Kotlin: `new Engine()` (or `Store`, `Job`) as a program's first call threw
   `UnsatisfiedLinkError`: a nested class is initialized without its outer class, so the native
