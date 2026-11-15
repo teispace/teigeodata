@@ -45,6 +45,19 @@ Measured 2026-11-15 on Darwin arm64, 10 cores (load average 7.04), commit [`25ad
 
 Baseline (subtracted): native 278.5 KiB, wasm32 16.1 KiB.
 
+## Scaling across threads
+
+Throughput of one shared engine on `np-places-lite.tgd`: each thread takes the current snapshot for every query, as a server's handlers do, and runs `get`, `reverse` (10 nearest), `admin_at`, `tz_at` and `search` (10 hits) in turn. The best of three rounds per thread count. The gate fails when four threads reach less than 1.5× one thread, the mark of a lock on the query path; the machine is shared and mixes performance and efficiency cores, so the figures are a floor.
+
+Measured 2026-11-15 on Darwin arm64, 10 cores (load average 6.54), commit [`668ec58`](https://github.com/teispace/teigeodata/commit/668ec58), by `cargo xtask scaling np-places-lite.tgd --record`.
+
+| Threads | Queries/s | Speed-up | Efficiency |
+|---:|---:|---:|---:|
+| 1 | 207739 | 1.00× | 100% |
+| 2 | 416120 | 2.00× | 100% |
+| 4 | 811143 | 3.90× | 98% |
+| 8 | 1267633 | 6.10× | 76% |
+
 ## Server load
 
 `tgd serve` on loopback, each route driven by oha 1.17.0 for 5 s at each point, twice; round two is reported, and the footprint's growth across it is the leak check. `tools/load/budget.toml` sets each point's floor and ceiling.

@@ -96,12 +96,13 @@ rounds per thread count. The gate fails below 1.5× at four threads.
 
 | Threads | Nepal lite, queries/s | Speed-up | World baseline, speed-up |
 |--:|--:|--:|--:|
-| 1 | 154,299 | 1.00× | 1.00× |
-| 2 | 274,538 | 1.78× | 2.04× |
-| 4 | 552,217 | 3.58× | 3.08× |
-| 8 | 690,875 | 4.48× | 6.90× |
+| 1 | 207,739 | 1.00× | 1.00× |
+| 2 | 416,120 | 2.00× | 2.04× |
+| 4 | 811,143 | 3.90× | 3.08× |
+| 8 | 1,267,633 | 6.10× | 6.90× |
 
-Close to linear up to four threads on Nepal; past six threads the work spills onto the
+Close to linear up to four threads on Nepal (recorded at load average 6.5; an earlier run at
+16 gave 1.78×, 3.58× and 4.48×); past six threads the work spills onto the
 efficiency cores, and other projects' builds held some performance cores throughout. The planted fault (a `Mutex` around every query) gave 0.76× at four threads
 and failed the gate. The Nepal table is the site's
 [measured page](../../../site/data/measured/scaling.json) record.

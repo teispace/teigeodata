@@ -4,8 +4,8 @@
   "intro": "Throughput of one shared engine on `np-places-lite.tgd`: each thread takes the current snapshot for every query, as a server's handlers do, and runs `get`, `reverse` (10 nearest), `admin_at`, `tz_at` and `search` (10 hits) in turn. The best of three rounds per thread count. The gate fails when four threads reach less than 1.5× one thread, the mark of a lock on the query path; the machine is shared and mixes performance and efficiency cores, so the figures are a floor.",
   "command": "cargo xtask scaling np-places-lite.tgd --record",
   "date": "2026-11-15",
-  "commit": "67494d1+changes",
+  "commit": "668ec58",
   "machine": "Darwin arm64, 10 cores",
-  "load": "16.33",
-  "table": "| Threads | Queries/s | Speed-up | Efficiency |\n|---:|---:|---:|---:|\n| 1 | 154299 | 1.00× | 100% |\n| 2 | 274538 | 1.78× | 89% |\n| 4 | 552217 | 3.58× | 89% |\n| 8 | 690875 | 4.48× | 56% |"
+  "load": "6.54",
+  "table": "| Threads | Queries/s | Speed-up | Efficiency |\n|---:|---:|---:|---:|\n| 1 | 207739 | 1.00× | 100% |\n| 2 | 416120 | 2.00× | 100% |\n| 4 | 811143 | 3.90× | 98% |\n| 8 | 1267633 | 6.10× | 76% |"
 }
