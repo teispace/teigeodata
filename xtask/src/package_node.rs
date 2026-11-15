@@ -79,11 +79,12 @@ const PLATFORMS: &[Platform] = &[
 ];
 
 /// The main package's files from `bindings/node` (generated entries, the loader).
-const MAIN_FILES: [&str; 5] = [
+const MAIN_FILES: [&str; 6] = [
     "index.js",
     "index.mjs",
     "index.d.ts",
     "native.js",
+    "reader.js",
     "target.js",
 ];
 
@@ -215,19 +216,22 @@ fn main_json(version: &str) -> String {
         "keywords": ["geodata", "gazetteer", "geocoding", "offline", "timezone", "napi"],
         "main": "./index.js",
         "types": "./index.d.ts",
-        "exports": {
-            ".": {
-                "types": "./index.d.ts",
-                "import": "./index.mjs",
-                "require": "./index.js",
-            },
-            "./package.json": "./package.json",
-        },
         "files": files,
         "engines": { "node": ">=22" },
         "optionalDependencies": optional,
     });
-    pretty(&manifest)
+    Manifest {
+        fields: &manifest,
+        exports: MainExports {
+            main: MainConditions {
+                types: "./index.d.ts",
+                import: "./index.mjs",
+                require: "./index.js",
+            },
+            package: "./package.json",
+        },
+    }
+    .text()
 }
 
 fn platform_json(p: &Platform, version: &str) -> String {
@@ -272,6 +276,41 @@ fn platform_readme(p: &Platform) -> String {
          it.\n",
         p.suffix, p.suffix
     )
+}
+
+/// `package.json`'s `exports` of the main package. A struct, not a `json!` map: hosts match
+/// conditions in the order written, and a `serde_json` map sorts its keys.
+#[derive(serde::Serialize)]
+struct MainExports {
+    #[serde(rename = ".")]
+    main: MainConditions,
+    #[serde(rename = "./package.json")]
+    package: &'static str,
+}
+
+/// TypeScript takes `types` first.
+#[derive(serde::Serialize)]
+struct MainConditions {
+    types: &'static str,
+    import: &'static str,
+    require: &'static str,
+}
+
+/// A manifest: `fields`, then `exports` in its own order.
+#[derive(serde::Serialize)]
+pub(crate) struct Manifest<'a, E: serde::Serialize> {
+    #[serde(flatten)]
+    pub(crate) fields: &'a serde_json::Value,
+    pub(crate) exports: E,
+}
+
+impl<E: serde::Serialize> Manifest<'_, E> {
+    /// The manifest as `package.json` text.
+    pub(crate) fn text(&self) -> String {
+        let mut text = serde_json::to_string_pretty(self).unwrap_or_default();
+        text.push('\n');
+        text
+    }
 }
 
 fn pretty(v: &serde_json::Value) -> String {
@@ -324,6 +363,10 @@ mod tests {
         assert_eq!(optional.len(), PLATFORMS.len());
         assert!(optional.values().all(|v| v == "1.2.3"));
         assert_eq!(m["exports"]["."]["import"], "./index.mjs");
+        // Conditions match in order: TypeScript wants `types` first.
+        let text = main_json("1.2.3");
+        let at = |key: &str| text.find(&format!("\"{key}\": \"./")).unwrap();
+        assert!(at("types") < at("import") && at("import") < at("require"));
     }
 
     #[test]

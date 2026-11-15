@@ -5,6 +5,7 @@
 import load from "./teigeodata_wasm.js";
 
 export * from "./teigeodata_wasm.js";
+export { Reader } from "./reader.js";
 
 /** Most rows `sample_rows` builds in one call. */
 export const SAMPLE_ROWS_MAX = 1000000;

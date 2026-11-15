@@ -5,6 +5,7 @@
 import load from "./teigeodata_wasm.js";
 
 export * from "./teigeodata_wasm.js";
+export { Reader } from "./reader.js";
 {% for c in constants %}
 
 /** {{ c.doc | join(" ") }} */

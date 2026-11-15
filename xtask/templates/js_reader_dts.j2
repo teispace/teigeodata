@@ -1,0 +1,35 @@
+
+/** A value of a result's column: a string, a number, a `bigint` for 64-bit integers, or null. */
+export type Value = string | number | bigint | null;
+
+/**
+ * A view of one result (every query's blob): its rows and named columns, read in place.
+ *
+ * ```js
+ * for (const place of new Reader(engine.search("Pokhara", 3))) console.log(place.name, place.lat);
+ * ```
+ */
+export class Reader implements Iterable<Record<string, Value>> {
+  /** `blob`: a result as a query returned it. */
+  constructor(blob: Uint8Array | ArrayBuffer);
+  /** The number of rows. */
+  readonly rows: number;
+  /** The column names, in order. */
+  readonly columns: string[];
+  /** Whether the result has a column called `name`. */
+  has(name: string): boolean;
+  /**
+   * A number column as its typed array, viewed in place; a null row reads as 0 (see
+   * `nulls`). 64-bit integer columns are `BigInt64Array` or `BigUint64Array`.
+   */
+  numbers(name: string): Int32Array | Uint32Array | BigInt64Array | BigUint64Array | Float32Array | Float64Array | Uint8Array | Int16Array | Uint16Array;
+  /** Per row, whether the column is null there. */
+  nulls(name: string): boolean[];
+  /** A string column, with `null` for a null row. */
+  strings(name: string): (string | null)[];
+  /** Any column as an array of its values, `null` where null. */
+  column(name: string): Value[];
+  /** Every row as an object: column name to value, `null` where null. */
+  records(): Record<string, Value>[];
+  [Symbol.iterator](): Iterator<Record<string, Value>>;
+}

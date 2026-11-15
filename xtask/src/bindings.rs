@@ -82,6 +82,16 @@ const TARGETS: &[Target] = &[
         fmt: Fmt::None,
     },
     Target {
+        template: "node.reader.js.j2",
+        output: "bindings/node/reader.js",
+        fmt: Fmt::None,
+    },
+    Target {
+        template: "wasm.reader.js.j2",
+        output: "bindings/wasm/js/reader.js",
+        fmt: Fmt::None,
+    },
+    Target {
         template: "wasm.rs.j2",
         output: "bindings/wasm/src/lib.rs",
         fmt: Fmt::Rust,

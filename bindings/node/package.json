@@ -11,6 +11,7 @@
     "index.mjs",
     "index.d.ts",
     "native.js",
+    "reader.js",
     "target.js",
     "teigeodata.node"
   ],

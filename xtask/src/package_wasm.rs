@@ -50,7 +50,13 @@ const VARIANTS: &[Variant] = &[
 ];
 
 /// The files a package carries besides the module: wasm-bindgen's glue and the entries.
-const ENTRIES: [&str; 4] = ["index.js", "index.d.ts", "node.js", "workerd.js"];
+const ENTRIES: [&str; 5] = [
+    "index.js",
+    "index.d.ts",
+    "node.js",
+    "workerd.js",
+    "reader.js",
+];
 
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     let (mut only, mut test) = (None, false);
@@ -166,29 +172,50 @@ fn package_json(v: &Variant, version: &str) -> String {
         "homepage": "https://github.com/teispace/teigeodata",
         "keywords": ["geodata", "gazetteer", "geocoding", "offline", "timezone", "webassembly"],
         "type": "module",
-        "exports": {
-            ".": {
-                "types": "./index.d.ts",
-                "workerd": "./workerd.js",
-                "node": "./node.js",
-                "default": "./index.js",
-            },
-            "./teigeodata_wasm_bg.wasm": "./teigeodata_wasm_bg.wasm",
-            "./package.json": "./package.json",
-        },
         "main": "./node.js",
         "types": "./index.d.ts",
         "sideEffects": ["./node.js", "./workerd.js"],
         "files": [
-            "index.js", "index.d.ts", "node.js", "workerd.js", "teigeodata_wasm.js",
+            "index.js", "index.d.ts", "node.js", "workerd.js", "reader.js", "teigeodata_wasm.js",
             "teigeodata_wasm.d.ts", "teigeodata_wasm_bg.wasm", "teigeodata_wasm_bg.wasm.d.ts",
             "LICENSE", "NOTICE", "README.md",
         ],
         "engines": { "node": ">=22" },
     });
-    let mut text = serde_json::to_string_pretty(&manifest).unwrap_or_default();
-    text.push('\n');
-    text
+    crate::package_node::Manifest {
+        fields: &manifest,
+        exports: Exports {
+            main: Conditions {
+                types: "./index.d.ts",
+                workerd: "./workerd.js",
+                node: "./node.js",
+                default: "./index.js",
+            },
+            wasm: "./teigeodata_wasm_bg.wasm",
+            package: "./package.json",
+        },
+    }
+    .text()
+}
+
+/// `package.json`'s `exports`, in the order hosts match them (a `json!` map sorts its keys).
+#[derive(serde::Serialize)]
+struct Exports {
+    #[serde(rename = ".")]
+    main: Conditions,
+    #[serde(rename = "./teigeodata_wasm_bg.wasm")]
+    wasm: &'static str,
+    #[serde(rename = "./package.json")]
+    package: &'static str,
+}
+
+/// Node.js and bundlers take the first condition that applies: `default` last, `types` first.
+#[derive(serde::Serialize)]
+struct Conditions {
+    types: &'static str,
+    workerd: &'static str,
+    node: &'static str,
+    default: &'static str,
 }
 
 fn readme(v: &Variant) -> String {
@@ -290,5 +317,16 @@ mod tests {
         assert_eq!(e["workerd"], "./workerd.js");
         assert_eq!(e["node"], "./node.js");
         assert_eq!(e["default"], "./index.js");
+    }
+
+    #[test]
+    fn the_conditions_are_written_in_the_order_hosts_match_them() {
+        // Node.js and bundlers take the first condition that applies: `default` must come
+        // last, or Node.js loads the browser entry and `init()` fetches (found by the docs'
+        // WebAssembly tour); TypeScript wants `types` first.
+        let text = package_json(&VARIANTS[0], "1.2.3");
+        let at = |key: &str| text.find(&format!("\"{key}\": \"./")).unwrap();
+        assert!(at("types") < at("workerd") && at("workerd") < at("node"));
+        assert!(at("node") < at("default"));
     }
 }

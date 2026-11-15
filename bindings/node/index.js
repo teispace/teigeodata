@@ -33,4 +33,7 @@ if (native.Job) {
   };
 }
 
+// Reader reads a result in place (reader.js).
+native.Reader = require("./reader.js").Reader;
+
 module.exports = native;

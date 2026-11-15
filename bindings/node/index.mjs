@@ -18,4 +18,5 @@ export const {
   Engine,
   Store,
   Job,
+  Reader,
 } = tg;
