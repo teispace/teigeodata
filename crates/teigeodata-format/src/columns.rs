@@ -62,6 +62,16 @@ fn check_len(
     }
 }
 
+/// The length of a column of boundaries over `n` items (each item's start, then the end):
+/// `n + 1`, refused when an item count from an untrusted head leaves no room for it.
+pub(crate) fn boundaries(kind: Kind, id: u16, n: usize) -> Result<usize, Error> {
+    n.checked_add(1).ok_or(Error::Payload {
+        kind: kind.0,
+        column: id,
+        problem: "the item count is too large",
+    })
+}
+
 pub(crate) fn map(kind: Kind, e: TableError) -> Error {
     let (column, problem) = match e {
         TableError::Truncated => (0, "the column table is truncated"),

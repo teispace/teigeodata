@@ -423,6 +423,7 @@ name = "teigeodata-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
+ "teigeodata-engine",
  "teigeodata-format",
  "teigeodata-server",
  "teigeodata-sync",

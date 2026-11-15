@@ -371,6 +371,121 @@ fn fix_lengths(b: &mut [u8]) {
     }
 }
 
+/// A section's bytes, edited: bytes set, 4- and 8-byte fields set to boundary values (counts,
+/// offsets and lengths are such fields), the end cut or grown. Edits land mostly in the first
+/// 256 bytes, where sections keep their column headers.
+fn edit_body(c: &mut Cursor<'_>, body: &mut Vec<u8>) {
+    for _ in 0..=(c.u8() % 3) {
+        let span = if c.u8() < 192 {
+            body.len().min(256)
+        } else {
+            body.len()
+        };
+        match c.u8() % 4 {
+            0 if span > 0 => {
+                let at = c.below(span);
+                body[at] = c.u8();
+            }
+            1 | 2 if span >= 4 => {
+                let size = if c.u8() & 1 == 0 { 4 } else { 8 };
+                let at = c.below(span.saturating_sub(size - 1).max(1)) & !3;
+                let old = read_le(body, at, size);
+                let v = match c.u8() % 7 {
+                    0 => 0,
+                    1 => 1,
+                    2 => old.wrapping_add(1),
+                    3 => old.wrapping_sub(1),
+                    4 => old.wrapping_mul(2),
+                    5 => u64::MAX,
+                    _ => c.u64(),
+                };
+                write_le(body, at, size, v);
+            }
+            _ => {
+                let n = 1 + usize::from(c.u8() % 64);
+                if c.u8() & 1 == 0 {
+                    body.truncate(body.len().saturating_sub(n));
+                } else {
+                    body.extend(core::iter::repeat_n(c.u8(), n));
+                }
+            }
+        }
+    }
+}
+
+/// A valid pack `seed` with one or two of its sections edited ([`edit_body`], sometimes the
+/// item count too), written again by the writer, unsigned, so every hash holds: the reader's
+/// structure checks pass and what reads the section's contents is reached. Returns the pack
+/// and the fuzz bytes left over, or `None` when `seed` is not a pack or the writer refuses
+/// the edit (a raw section's lengths cannot disagree). Used by the engine's harness.
+#[must_use]
+pub fn edit_section<'d>(seed: &[u8], data: &'d [u8]) -> Option<(Vec<u8>, &'d [u8])> {
+    let p = Pack::open(seed).ok()?;
+    let mut c = Cursor(data);
+    let mut sections: Vec<_> = p
+        .sections()
+        .filter(|s| s.kind() != Kind::BLOCK_HASHES)
+        .map(|s| {
+            (
+                s.kind(),
+                s.part(),
+                s.encoding(),
+                s.item_count(),
+                s.decoded_length(),
+                s.bytes().to_vec(),
+            )
+        })
+        .collect();
+    if sections.is_empty() {
+        return None;
+    }
+    for _ in 0..=(c.u8() % 2) {
+        let n = sections.len();
+        let s = &mut sections[c.below(n)];
+        edit_body(&mut c, &mut s.5);
+        if c.u8() % 8 == 0 {
+            s.3 = match c.u8() % 4 {
+                0 => 0,
+                1 => s.3.wrapping_add(1),
+                2 => s.3.wrapping_sub(1),
+                _ => u64::from(c.u32()),
+            };
+        }
+    }
+    let m = p.manifest();
+    let mut w = Writer::new(m.address(), m.component(), m.release()).ok()?;
+    w.build_id(p.build_id()).created_unix(p.created_unix());
+    for (tag, v) in m.entries() {
+        if ![Tag::ADDRESS, Tag::COMPONENT, Tag::RELEASE].contains(&tag) {
+            w.manifest(tag, v).ok()?;
+        }
+    }
+    for (kind, part, encoding, items, decoded, body) in &sections {
+        let len = body.len() as u64;
+        let decoded = if *encoding == Encoding::RAW {
+            len
+        } else {
+            *decoded
+        };
+        let hash = *blake3::hash(body).as_bytes();
+        w.section_part(*kind, *part, *encoding, *items, decoded, len, hash)
+            .ok()?;
+    }
+    let layout = w.layout(false).ok()?;
+    let order: Vec<&[u8]> = layout
+        .placed()
+        .iter()
+        .filter_map(|pl| {
+            sections
+                .iter()
+                .find(|s| (s.0, s.1) == (pl.kind, pl.part))
+                .map(|s| s.5.as_slice())
+        })
+        .collect();
+    let bytes = layout.assemble(&order).ok()?;
+    Some((bytes, c.rest()))
+}
+
 /// A valid pack, edited (bytes, named fields with boundary values, inserted or deleted bytes),
 /// usually resealed so the checks behind the head hash are reached, then [`open`].
 pub fn mutate(data: &[u8]) {

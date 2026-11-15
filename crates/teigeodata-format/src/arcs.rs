@@ -136,7 +136,8 @@ impl<'a> Arcs<'a> {
             .filter(|&n| n < u32::MAX as usize)
             .ok_or_else(|| fail(0, "the arc count does not fit"))?;
         let k = kind;
-        let start = columns::required(&table, k, START, Some(arcs + 1))?;
+        let start =
+            columns::required(&table, k, START, Some(columns::boundaries(k, START, arcs)?))?;
         let base_x = columns::required(&table, k, BASE_X, Some(arcs))?;
         let base_y = columns::required(&table, k, BASE_Y, Some(arcs))?;
         let dx = columns::required(&table, k, DX, None)?;
@@ -767,7 +768,7 @@ impl ArcChunks {
                     c.min = (c.min.0.min(xy.0), c.min.1.min(xy.1));
                     c.max = (c.max.0.max(xy.0), c.max.1.max(xy.1));
                     c.last = xy;
-                    c.end = n + 1;
+                    c.end = n.saturating_add(1);
                     if v.is_multiple_of(BLOCK_LEN) && v + 1 < range.end {
                         chunks.push(*c);
                         cur = None;
@@ -780,7 +781,7 @@ impl ArcChunks {
                         first: xy,
                         last: xy,
                         start: n,
-                        end: n + 1,
+                        end: n.saturating_add(1),
                     });
                 }
             }

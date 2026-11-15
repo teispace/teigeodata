@@ -611,11 +611,12 @@ impl Stream<'_> {
 pub type Check<'c> = dyn FnMut(core::ops::Range<usize>) -> bool + 'c;
 
 impl<'a> Dem<'a> {
-    /// Opens the section: frame, columns and lengths, in O(columns + grids).
+    /// Opens the section: frame, columns and lengths, and every grid, model and threshold
+    /// checked (a query shifts by a grid's tile side), in O(columns + grids).
     ///
     /// # Errors
-    /// [`Error::Payload`] if it is not a DEM column table, or a column is missing, unknown,
-    /// malformed or of the wrong length.
+    /// [`Error::Payload`] if it is not a DEM column table, a column is missing, unknown,
+    /// malformed or of the wrong length, or a grid, model or threshold is invalid.
     pub fn open(section: &Section<'a>) -> Result<Self, Error> {
         // DEM_COARSE (D-225) has DEM's layout: one reader for both.
         let kind = if section.kind() == Kind::DEM_COARSE {
@@ -644,7 +645,12 @@ impl<'a> Dem<'a> {
             col(TILE_LOG2)?,
             columns::required(&table, kind, TILE_START, Some(grids + 1))?,
         ];
-        let offsets = columns::required(&table, kind, OFFSETS, Some(tiles + 1))?;
+        let offsets = columns::required(
+            &table,
+            kind,
+            OFFSETS,
+            Some(columns::boundaries(kind, OFFSETS, tiles)?),
+        )?;
         let models = table.bytes(MODELS).map_err(|e| columns::map(kind, e))?;
         if models.len() != FAMILY * SYMBOLS * 2 {
             return Err(fail(MODELS, "the model family is not 64 × 64 frequencies"));
@@ -653,7 +659,7 @@ impl<'a> Dem<'a> {
         let mut thresholds = [0; 7];
         ctx.decode_all(&mut thresholds);
         let payload = table.bytes(PAYLOAD).map_err(|e| columns::map(kind, e))?;
-        Ok(Self {
+        let dem = Self {
             cols,
             source,
             grids,
@@ -665,7 +671,9 @@ impl<'a> Dem<'a> {
                 small: small_contexts(&thresholds),
                 payload,
             },
-        })
+        };
+        dem.check_frame()?;
+        Ok(dem)
     }
 
     /// The number of grids.
@@ -838,14 +846,11 @@ impl<'a> Dem<'a> {
         s.q.get(..n)
     }
 
-    /// Checks everything a reader relies on: the grids (tile sides 16 to 64, positive steps,
-    /// a known datum, inside the globe, tile counts that add up), the offsets, the model family
-    /// (every model sums to 4,096), the thresholds, and every present tile decoded whole with
-    /// its rANS state back at its start and every byte used. O(samples).
-    ///
-    /// # Errors
-    /// [`Error::Payload`] naming the first column that fails.
-    pub fn check(&self) -> Result<(), Error> {
+    /// The checks of [`Dem::open`], O(grids): the grids (tile sides 16 to 64, positive steps, a
+    /// known datum, inside the globe, tile counts that add up), the model family (every model
+    /// sums to 4,096) and the thresholds. Every query relies on them (a tile side is a shift),
+    /// so a section that `open` accepts never makes a query misbehave.
+    fn check_frame(&self) -> Result<(), Error> {
         let mut first = 0_u64;
         for g in 0..self.grids {
             let grid = self
@@ -887,6 +892,29 @@ impl<'a> Dem<'a> {
                 "the grids' tiles do not add up to the tile count",
             ));
         }
+        for m in 0..FAMILY {
+            if (0..SYMBOLS).map(|k| self.coder.freq(m, k)).sum::<u32>() != SCALE {
+                return Err(fail(MODELS, "a model does not sum to 4096"));
+            }
+        }
+        if self
+            .coder
+            .thresholds
+            .windows(2)
+            .any(|w| w.first() > w.get(1))
+        {
+            return Err(fail(CONTEXTS, "the thresholds decrease"));
+        }
+        Ok(())
+    }
+
+    /// Checks what [`Dem::open`] leaves to it: the offsets, and every present tile decoded
+    /// whole with its rANS state back at its start and every byte used. O(samples). The grids,
+    /// the model family and the thresholds are checked on open.
+    ///
+    /// # Errors
+    /// [`Error::Payload`] naming the first column that fails.
+    pub fn check(&self) -> Result<(), Error> {
         let mut last = 0;
         for t in 0..=self.tiles {
             let o = self
@@ -905,19 +933,6 @@ impl<'a> Dem<'a> {
             .ok_or_else(|| fail(OFFSETS, "the last offset is past the payload"))?;
         if tail.len() >= 4 || tail.iter().any(|&b| b != 0) {
             return Err(fail(PAYLOAD, "bytes after the last tile"));
-        }
-        for m in 0..FAMILY {
-            if (0..SYMBOLS).map(|k| self.coder.freq(m, k)).sum::<u32>() != SCALE {
-                return Err(fail(MODELS, "a model does not sum to 4096"));
-            }
-        }
-        if self
-            .coder
-            .thresholds
-            .windows(2)
-            .any(|w| w.first() > w.get(1))
-        {
-            return Err(fail(CONTEXTS, "the thresholds decrease"));
         }
         let mut s = DemScratch::new();
         for t in 0..self.tiles {

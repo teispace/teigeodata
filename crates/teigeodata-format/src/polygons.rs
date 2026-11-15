@@ -107,7 +107,7 @@ impl<'a> Polygons<'a> {
             .ok_or_else(|| fail(0, "the polygon count does not fit"))?;
         let k = Kind::POLYGONS;
         let row = columns::required(&table, k, ROW, Some(n))?;
-        let parts = columns::required(&table, k, PARTS, Some(n + 1))?;
+        let parts = columns::required(&table, k, PARTS, Some(columns::boundaries(k, PARTS, n)?))?;
         let rings = columns::required(&table, k, RINGS, None)?;
         let refs_start = columns::required(&table, k, REFS_START, None)?;
         let refs = columns::required(&table, k, REFS, None)?;

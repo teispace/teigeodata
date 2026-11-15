@@ -450,7 +450,8 @@ fn a_grid_states_its_source() {
         assert_eq!(dem::Source::from_code(s.code()), Some(s));
     }
     let unknown = section(Grid { source: 99, ..grid }, &codes);
-    assert!(open(&unknown, 2).check().is_err());
+    // Refused on open: a query must never read a grid `check` would refuse.
+    assert!(Dem::open(&Section::unpacked(Kind::DEM, 2, &unknown)).is_err());
 }
 
 fn coarse_open(body: &[u8], tiles: u64) -> Dem<'_> {

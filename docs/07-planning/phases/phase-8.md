@@ -39,10 +39,21 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 
   Both were harness faults. Their inputs replay in each crate's `found_by_libfuzzer` test; the
   `mutate` one fails with its fix reverted (2026-11-15)
-- [ ] `engine`: one mutated section of a synthetic pack with every kind, rewritten by the writer
-  so its hashes hold, opened with `Layer::from_bytes` and asked every query. No panic, bounded
-  allocation, typed errors only. It runs under `cargo test` (seeded) and libFuzzer. Planted: a
-  panic in one decoder is found within 300 s
+- [x] `engine` (2026-11-15). One or two sections of a seed pack are edited and the pack is
+  rewritten by the writer so its hashes hold (`teigeodata_format::fuzz::edit_section`, one
+  mutator beside `mutate`). The pack is opened with `Layer::from_bytes` and asked every query.
+  It runs under `cargo test` (seeded, five seeds) and libFuzzer (nightly matrix, 13 targets).
+  - **Seeds:** the four binding fixtures and `fuzz/seeds/extra.tgd` (SUBSTRING, DEM_COARSE),
+    blessed by `tests/fuzz.rs`. A test fails if the seeds lack a kind the engine reads.
+  - **Two reader faults found in the first minutes**, each fixed and kept in
+    `found_by_libfuzzer` (red with the fix reverted):
+    - an item count near 2^64 overflowed `count + 1` in DEM, ARCS and POLYGONS
+      (`columns::boundaries`);
+    - a DEM grid's tile side was checked only by `check`, which queries never run, so a query
+      shifted by 2^200. `Dem::open` now checks every grid, model and threshold, in O(grids).
+  - **Then a clean run:** 300 s, 331,057 inputs, coverage 8,506, peak RSS 403 MB (this machine,
+    2026-11-15). The real faults stand in for the planted one: the target reaches the decoders'
+    arithmetic
 - [ ] `payloads`: the 17 section kinds not yet fuzzed get their `open` and `check`, and a
   section `check` accepts never makes a query fail untyped
 - [ ] `trust`: the TUF metadata parser and the catalog's `custom` fields
@@ -109,3 +120,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | Date | Change | Why |
 |---|---|---|
 | 2026-11-15 | Phase 8 drafted from the [hardening research](../../02-research/notes/hardening-and-release.md) | D-331 |
+| 2026-11-15 | 8.1 engine target done; two DEM, ARCS and POLYGONS faults fixed | D-332 |

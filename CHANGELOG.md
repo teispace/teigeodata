@@ -13,6 +13,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Added
 
+- `teigeodata-engine` feature `fuzz`: `fuzz::engine`, every query on a pack with edited
+  sections whose hashes hold, run nightly by libFuzzer (`fuzz/fuzz_targets/engine.rs`) and on
+  seeded inputs by `cargo test` (D-331); `teigeodata_format::fuzz::edit_section` builds such
+  packs.
 - A result `Reader` of one shape in every language (D-322): new in Node.js, WebAssembly,
   Swift, Dart, Java (Kotlin), C (`teigeodata_reader.h`) and C++ (`teigeodata_reader.hpp`),
   both header-only and in the C package (`rows`, `columns`, `has`, `numbers`, `strings`, `nulls`, `column`,
@@ -251,6 +255,11 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Fixed
 
+- A pack whose DEM, ARCS or POLYGONS states an item count near 2^64, or whose DEM has a grid
+  with an invalid tile side, step, datum, source, model or threshold, no longer panics a
+  query: `Dem::open` checks every grid, model and threshold (O(grids)) and the three readers
+  refuse a count with no room for its end boundary. Found by the new `engine` fuzz target
+  (D-331).
 - `tz_at` and every answer's `tz` column named no zone in a world timezone area (`tz` was null
   at New York or Shanghai, set only where a country's pack recorded its own area): a timezone
   area is now its own zone, whatever `PLACE_TZ` holds for its row (D-327).

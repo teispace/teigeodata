@@ -41,6 +41,8 @@ pub mod derive;
 mod discover;
 #[cfg(feature = "store")]
 mod follow;
+#[cfg(feature = "fuzz")]
+pub mod fuzz;
 #[cfg(feature = "admin")]
 mod iso;
 mod layer;

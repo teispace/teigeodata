@@ -73,6 +73,24 @@ mmap = ["dep:memmap2"]
 # Embed the baseline pack (`BASELINE`, `Engine::with_baseline`): the file at the absolute path in
 # `TEIGEODATA_BASELINE`, built by `forge embed`. Off by default: it adds the file's size.
 baseline = []
+# The fuzz harness (D-331): every query on a pack with edited sections, under `cargo test` and
+# libFuzzer (`fuzz/fuzz_targets/engine.rs`).
+fuzz = [
+    "elevation",
+    "admin",
+    "names",
+    "search",
+    "timezone",
+    "timezone-index",
+    "boundaries",
+    "admin-index",
+    "dem",
+    "dem-coarse",
+    "tz-rules",
+    "postal",
+    "substring",
+    "teigeodata-format/fuzz",
+]
 
 [dependencies]
 teigeodata-core.workspace = true
@@ -93,6 +111,10 @@ arc-swap = "1.9.4"
 
 # The tests and the example that use every query need every component's feature; `built`
 # runs under any set of features.
+[[test]]
+name = "fuzz"
+required-features = ["fuzz"]
+
 [[test]]
 name = "alloc"
 required-features = ["elevation", "admin", "names", "search", "timezone", "timezone-index", "admin-index"]
