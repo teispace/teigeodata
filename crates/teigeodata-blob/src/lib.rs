@@ -759,7 +759,7 @@ impl<'a> Reader<'a> {
     ///
     /// [`Error::Malformed`] if anything is out of bounds, misaligned, of the wrong length, not
     /// UTF-8, if the offsets of strings are not monotonic char boundaries, if a code is outside
-    /// its dictionary, or if a bitmap sets a bit past the last row.
+    /// its dictionary, if a bitmap sets a bit past the last row, or if it has no column.
     pub fn new(bytes: &'a [u8]) -> Result<Self, Error> {
         let check = || -> Option<Self> {
             let magic = bytes.get(..4)?;
@@ -767,6 +767,9 @@ impl<'a> Reader<'a> {
             (v0 || magic == MAGIC).then_some(())?;
             let rows = u32_at(bytes, 4)?;
             let columns = u32_at(bytes, 8)?;
+            // At least one column, as `encode` writes: with none, nothing would bound the
+            // row count, which a crafted header could set to billions.
+            (columns > 0).then_some(())?;
             (u32_at(bytes, 12)? == bytes.len()).then_some(())?;
             let floor = HEADER.checked_add(columns.checked_mul(DESCRIPTOR)?)?;
             (floor <= bytes.len()).then_some(())?;
@@ -920,6 +923,20 @@ mod tests {
     use alloc::vec::Vec;
 
     const ELEV: Column<'static> = Column::I16(&[1400, 9, -3]);
+
+    /// A header with no column cannot bound its row count: the Go reader's fuzzer found one
+    /// asking for 540 million rows, which a reader that builds records allocates (D-349).
+    #[test]
+    fn a_blob_without_columns_is_malformed() {
+        let mut b = vec![0_u8; HEADER];
+        b[..4].copy_from_slice(b"TGB1");
+        b[4..8].copy_from_slice(&540_029_488_u32.to_le_bytes());
+        b[12..16].copy_from_slice(&u32::try_from(HEADER).unwrap().to_le_bytes());
+        assert_eq!(Reader::new(&b).err(), Some(Error::Malformed));
+        b[..4].copy_from_slice(b"TGB0");
+        assert_eq!(Reader::new(&b).err(), Some(Error::Malformed));
+        assert!(Reader::new(sample().as_bytes()).is_ok());
+    }
 
     fn sample() -> Blob {
         Blob::encode(&[

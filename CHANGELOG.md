@@ -290,6 +290,7 @@ renamed the last parameters that broke the naming rule (see **Breaking**).
 
 ### Fixed
 
+- Every result-blob reader refuses a blob with no column (D-349). Such a header could name billions of rows that no column bounds, and Go's `Reader.Records` would build a record for each until memory ran out. Found by the Go reader's fuzzer; no valid blob is affected.
 - The documentation, read against the code for 1.0 (D-343): a reverse answer's `bearing` is from
   the place to the point, several `--pack`s follow the layer rule rather than their order, the
   Nominatim routes' supported parameters and differences are listed, and each language's guide

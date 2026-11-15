@@ -9,6 +9,7 @@ package teigeodata_test
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -778,6 +779,20 @@ func TestJobCancel(t *testing.T) {
 	}
 	if time.Since(at) > 2*time.Second || !job.IsEnded() {
 		t.Fatal("cancel took", time.Since(at))
+	}
+}
+
+// A header with no column cannot bound its row count; the fuzzer found one asking for 540
+// million rows (D-349). It is refused before anything is built.
+func TestReaderRefusesNoColumns(t *testing.T) {
+	for _, magic := range []string{"TGB1", "TGB0"} {
+		b := make([]byte, 16)
+		copy(b, magic)
+		binary.LittleEndian.PutUint32(b[4:], 540_029_488)
+		binary.LittleEndian.PutUint32(b[12:], 16)
+		if _, err := tg.NewReader(b); err != tg.ErrMalformed {
+			t.Fatalf("%s: got %v, want ErrMalformed", magic, err)
+		}
 	}
 }
 

@@ -84,7 +84,9 @@ func NewReader(data []byte) (*Reader, error) {
 	}
 	rows := int(u32(data, 4))
 	count := int(u32(data, 8))
-	if int(u32(data, 12)) != len(data) || count > (len(data)-header)/descriptor {
+	// At least one column (the encoder writes none without): with none, nothing would bound
+	// the row count, and a crafted header could ask for billions of empty records.
+	if int(u32(data, 12)) != len(data) || count == 0 || count > (len(data)-header)/descriptor {
 		return nil, ErrMalformed
 	}
 	floor := header + count*descriptor

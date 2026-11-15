@@ -59,7 +59,8 @@ final class Reader with IterableMixin<Map<String, Object?>> {
     final v0 = magic == 'TGB0';
     if (!v0 && magic != 'TGB1') bad();
     final rows = v.getUint32(4, Endian.little), count = v.getUint32(8, Endian.little);
-    if (v.getUint32(12, Endian.little) != size || count > (size - 16) ~/ 40) bad();
+    // At least one column: with none, nothing would bound the row count.
+    if (v.getUint32(12, Endian.little) != size || count == 0 || count > (size - 16) ~/ 40) bad();
     final floor = 16 + count * 40;
     bool inside(int at, int n) => at >= floor && at % 8 == 0 && at <= size && n <= size - at;
     final columns = <_Column>[];

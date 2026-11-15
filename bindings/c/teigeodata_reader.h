@@ -136,7 +136,8 @@ static inline int32_t tg_reader_init(tg_reader *r, const uint8_t *data, size_t l
     bool v0 = memcmp(data, "TGB0", 4) == 0;
     if (!v0 && memcmp(data, "TGB1", 4) != 0) return 5;
     uint32_t rows = tg_reader_u32_(data, 4), count = tg_reader_u32_(data, 8);
-    if (tg_reader_u32_(data, 12) != len || count > TG_READER_COLUMNS_MAX || count > (len - 16) / 40) return 5;
+    /* At least one column: with none, nothing would bound the row count. */
+    if (tg_reader_u32_(data, 12) != len || count == 0 || count > TG_READER_COLUMNS_MAX || count > (len - 16) / 40) return 5;
     size_t floor = 16 + 40 * (size_t)count;
     tg_reader probe = {data, len, rows, count};
     for (uint32_t i = 0; i < count; i++) {

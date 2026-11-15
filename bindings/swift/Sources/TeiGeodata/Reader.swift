@@ -164,7 +164,8 @@ public struct Reader: Sendable, Sequence {
         guard v0 || magic == Array("TGB1".utf8) else { return nil }
         let u32 = { (at: Int) in Int(UInt32.load(raw, at)) }
         let rows = u32(4), count = u32(8)
-        guard u32(12) == size, count <= (size - 16) / 40 else { return nil }
+        // At least one column: with none, nothing would bound the row count.
+        guard u32(12) == size, count > 0, count <= (size - 16) / 40 else { return nil }
         let floor = 16 + count * 40
         let inside = { (at: Int, n: Int) in at >= floor && at % 8 == 0 && n >= 0 && at <= size && n <= size - at }
         var columns: [Column] = []

@@ -85,7 +85,8 @@ the file, line and column.
 ## 3. Results: the blob
 
 A result with rows crosses as one blob (`teigeodata-blob`, format v1, D-068 and D-275):
-- a 16-byte header (magic `TGB1`, row count, column count, total length);
+- a 16-byte header (magic `TGB1`, row count, column count of at least one, total length; a blob
+  without columns is malformed, since nothing would bound its row count, D-349);
 - 40-byte column descriptors: name, type, the data region, an auxiliary region and a null
   bitmap;
 - the regions, each on an 8-byte boundary.

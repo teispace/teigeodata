@@ -84,7 +84,8 @@ public sealed class BlobReader : IEnumerable<IReadOnlyDictionary<string, object?
         }
         uint rows = U32(data, 4);
         uint count = U32(data, 8);
-        if (U32(data, 12) != (uint)data.Length || count > (uint)((data.Length - Header) / Descriptor) || rows > int.MaxValue - 1)
+        // At least one column: with none, nothing would bound the row count.
+        if (U32(data, 12) != (uint)data.Length || count == 0 || count > (uint)((data.Length - Header) / Descriptor) || rows > int.MaxValue - 1)
         {
             throw Malformed();
         }
