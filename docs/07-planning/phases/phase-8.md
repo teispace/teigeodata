@@ -262,8 +262,11 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 - [x] Each place's population in the packs and every API (D-351): COMPONENTS component 1, the
   forge writes and reads it back (G-pop), the engine, the API columns `population` and
   `population_kind`, `tgd` and the servers; found missing while staging the data release
-- [ ] Nepal's main and lite packs as a data release, through the catalog, with their accuracy
-  summary: rebuilt in CI with populations
+- [x] Nepal's main and lite packs as a data release with their accuracy summary, rebuilt in CI
+  with populations: [data-2026.11.15](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.15)
+  (a GitHub pre-release from `data-build` run 43733977409 at `6b234d4`; every asset's digest
+  checked against the run's `SHA256SUMS`; lite has the places of data-2026.11.14 by `tgd diff`)
+- [ ] The same packs through the signed catalog, after the key ceremony (phase 4.3)
 - [x] A dry run of `release.yml` end to end at the release commit: run 43719097976 on
   `chore/release-1.0.0` (the version bumped to 1.0.0 with `cargo xtask bump`, D-346), 53 jobs
   green, the ABI and Rust API gates clean. Rerun on the branch once it is rebased for the
@@ -297,3 +300,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.4: the API review done, two parameters renamed; the CHANGELOG's 1.0 section | D-341 |
 | 2026-11-15 | 8.4: the docs audit done; the guides spell each language's own names | D-343 |
 | 2026-11-15 | 8.5: populations shipped before the data release (the schema promised them; no pack had them) | D-351 |
+| 2026-11-15 | 8.5: the data release split into the pre-release (done, data-2026.11.15) and the catalog (after the key ceremony) | D-247 |
