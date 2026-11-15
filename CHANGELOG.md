@@ -16,7 +16,7 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 - A result `Reader` of one shape in every language (D-322): new in Node.js, WebAssembly,
   Swift, Dart, Java (Kotlin), C (`teigeodata_reader.h`) and C++ (`teigeodata_reader.hpp`),
   both header-only and in the C package (`rows`, `columns`, `has`, `numbers`, `strings`, `nulls`, `column`,
-  `records`, iteration); Go's gains `Column` and `Records`, Python's `has`, `column`,
+  `records`, iteration); Go's gains `Has`, `Column` and `Records`, Python's `has`, `column`,
   `records` and iteration, .NET's `BlobReader` `Has`, `Numbers`, `Column`, `Records` and
   iteration.
 - `cargo xtask docs-examples`: runs every language's example program on the pinned public pack

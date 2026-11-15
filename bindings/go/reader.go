@@ -153,6 +153,9 @@ func (r *Reader) index(name string) int {
 // Rows is the number of rows.
 func (r *Reader) Rows() int { return r.rows }
 
+// Has reports whether there is a column called name.
+func (r *Reader) Has(name string) bool { return r.index(name) >= 0 }
+
 // Columns are the column names, in order.
 func (r *Reader) Columns() []string {
 	names := make([]string, len(r.columns))

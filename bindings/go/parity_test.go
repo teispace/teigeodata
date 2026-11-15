@@ -761,6 +761,9 @@ func TestRecords(t *testing.T) {
 			t.Fatalf("%d records, want %d", len(records), r.Rows())
 		}
 		for _, name := range r.Columns() {
+			if !r.Has(name) {
+				t.Fatalf("Has(%q) is false for a column the blob has", name)
+			}
 			isNull := must(r.Nulls(name))
 			typ, _ := r.Type(name)
 			var want []any
@@ -793,6 +796,9 @@ func TestRecords(t *testing.T) {
 		t.Fatal("no null value was checked")
 	}
 	r := must(tg.NewReader(must(tg.SampleRows(1))))
+	if r.Has("nope") || r.Has("") {
+		t.Fatal("Has is true for a column the blob does not have")
+	}
 	if _, err := r.Column("nope"); err == nil {
 		t.Fatal("a missing column read")
 	}
