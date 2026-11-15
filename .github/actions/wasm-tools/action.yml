@@ -28,4 +28,7 @@ runs:
         echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  $f" | sha256sum -c
         tar xzf "$f" -C "$RUNNER_TEMP"
         rm "$f"
-        echo "$RUNNER_TEMP/binaryen-version_133/bin" >> "$GITHUB_PATH"
+        # Linked into cargo's bin directory, already on PATH: no write to GITHUB_PATH.
+        mkdir -p "$HOME/.cargo/bin"
+        ln -sf "$RUNNER_TEMP/binaryen-version_133/bin/wasm-opt" "$HOME/.cargo/bin/wasm-opt"
+        wasm-opt --version

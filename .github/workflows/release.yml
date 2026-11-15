@@ -72,22 +72,22 @@ jobs:
 
   c:
     needs: version
-    uses: ./.github/workflows/c-package.yml
+    uses: ./.github/workflows/c-package.yml # zizmor: ignore[self-repository] the same commit; the $/ form is too new to rely on
   apple:
     needs: version
-    uses: ./.github/workflows/apple.yml
+    uses: ./.github/workflows/apple.yml # zizmor: ignore[self-repository] the same commit; the $/ form is too new to rely on
   jvm:
     needs: version
-    uses: ./.github/workflows/jvm.yml
+    uses: ./.github/workflows/jvm.yml # zizmor: ignore[self-repository] the same commit; the $/ form is too new to rely on
   python:
     needs: version
-    uses: ./.github/workflows/python.yml
+    uses: ./.github/workflows/python.yml # zizmor: ignore[self-repository] the same commit; the $/ form is too new to rely on
   node:
     needs: version
-    uses: ./.github/workflows/node.yml
+    uses: ./.github/workflows/node.yml # zizmor: ignore[self-repository] the same commit; the $/ form is too new to rely on
   wasm:
     needs: version
-    uses: ./.github/workflows/wasm.yml
+    uses: ./.github/workflows/wasm.yml # zizmor: ignore[self-repository] the same commit; the $/ form is too new to rely on
 
   # Every file of the release in one place, with its SBOMs and checksums, attested and verified.
   assemble:
@@ -435,7 +435,7 @@ jobs:
       - name: npm 11.5.1 or later (trusted publishing)
         run: |
           node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a==11&&(b>5||(b==5&&c>=1)))?0:1)' "$(npm --version)" \
-            || npm install -g npm@12.2.2
+            || npm install -g npm@12.2.2 # zizmor: ignore[adhoc-packages] an exact version, for trusted publishing
           npm --version
       - name: Publish (a version already there is skipped)
         run: |
