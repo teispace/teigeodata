@@ -233,14 +233,27 @@ impl<'a> Packed<'a> {
         if pad.iter().any(|&b| b != 0) {
             return Err(PackError::Directory);
         }
-        // Offsets must follow from the widths, so every block lies inside the payload.
-        let mut next: u64 = 0;
-        for (&w, off) in widths.iter().zip(offsets) {
-            if w > 32 || u64::from(le(*off)) != next {
-                return Err(PackError::Directory);
-            }
-            next += u64::from(w) * L as u64;
+        // Offsets must follow from the widths, so every block lies inside the payload: the
+        // first is 0 and each is the one before plus its block's words. Each step is checked
+        // on its own, without stopping early, so the loop vectorises (phase 8.3: as a running
+        // sum it was 30–40% of opening a pack).
+        let at = |o: &[u8; 4]| u64::from(le(*o));
+        let steps = widths
+            .iter()
+            .zip(offsets.iter().zip(offsets.iter().skip(1)))
+            .fold(true, |ok, (&w, (a, b))| {
+                let step = (w <= 32) & (at(a) + u64::from(w) * L as u64 == at(b));
+                ok & step
+            });
+        let first = offsets.first().is_none_or(|o| at(o) == 0);
+        let last = widths.last().is_none_or(|&w| w <= 32);
+        if !(steps && first && last) {
+            return Err(PackError::Directory);
         }
+        let next = match (offsets.last(), widths.last()) {
+            (Some(o), Some(&w)) => at(o) + u64::from(w) * L as u64,
+            _ => 0,
+        };
         let (payload, tail) = rest.as_chunks::<4>();
         if !tail.is_empty() || payload.len() as u64 != next {
             return Err(PackError::Directory);
@@ -903,9 +916,50 @@ mod tests {
         let mut b = good.clone();
         b[32] = 33;
         assert_eq!(Packed::parse(&b).err(), Some(PackError::Directory));
-        let mut b = good;
+        let mut b = good.clone();
         b[8 + 12 + 4] ^= 1; // the second block's offset
         assert_eq!(Packed::parse(&b).err(), Some(PackError::Directory));
+        // Faults the offsets alone cannot show: the later offsets and the payload are made to
+        // agree with the edit, so only the width or the first-offset rule refuses it.
+        let shifted = |width_of: Option<usize>, first: u32| {
+            let mut b = good.clone();
+            let (offsets, widths) = (8 + 12, 8 + 12 + 12);
+            let mut extra = first;
+            if let Some(block) = width_of {
+                extra += 4 * (33 - u32::from(b[widths + block]));
+                b[widths + block] = 33;
+            }
+            let after = width_of.map_or(0, |block| block + 1);
+            for k in 0..3 {
+                let shift = if k == 0 {
+                    first
+                } else if k >= after {
+                    extra
+                } else {
+                    0
+                };
+                let at = offsets + 4 * k;
+                let v = u32::from_le_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]]) + shift;
+                b[at..at + 4].copy_from_slice(&v.to_le_bytes());
+            }
+            b.extend(core::iter::repeat_n(0, 4 * extra as usize));
+            Packed::parse(&b).err()
+        };
+        assert_eq!(
+            shifted(Some(0), 0),
+            Some(PackError::Directory),
+            "a middle width of 33"
+        );
+        assert_eq!(
+            shifted(Some(2), 0),
+            Some(PackError::Directory),
+            "a last width of 33"
+        );
+        assert_eq!(
+            shifted(None, 4),
+            Some(PackError::Directory),
+            "a first offset of 4"
+        );
     }
 
     #[test]
