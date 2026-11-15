@@ -1,6 +1,6 @@
 ---
 title: MCP server
-description: tgd mcp gives AI agents teigeodata's queries as read-only MCP tools, offline, with attribution on every answer.
+description: tgd mcp gives AI agents teigeodata's queries as MCP tools, offline, with attribution on every answer.
 ---
 
 The [Model Context Protocol](https://modelcontextprotocol.io) lets an AI agent call tools. `tgd mcp`
@@ -47,7 +47,7 @@ The server speaks MCP 2026-07-28 and 2025-11-25, and older clients too.
 
 ## Tools
 
-Every tool is read-only (`readOnlyHint`), declares its output schema, and returns the same
+Every tool but `install` is read-only (`readOnlyHint`), declares its output schema, and returns the same
 JSON as structured content and as text, with the attribution of the packs that answered.
 
 | Tool | What it answers |
@@ -68,6 +68,8 @@ JSON as structured content and as text, with the attribution of the packs that a
 | `packs` | The packs served, with their components and attribution. |
 | `coverage` | The catalog's packs that cover a point (a server over a store). |
 | `install`, `install_status` | Install catalog packs into the store, after the person confirms the size (a server over a store that allows it). |
+
+Every argument, bound and answer field is in the [MCP tools reference](/docs/reference/mcp).
 
 Long answers are paged with signed cursors, so an agent can never be handed more than its context
 can hold. Packs and places are also **resources**: `teigeodata://dataset/…`,

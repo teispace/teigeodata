@@ -94,7 +94,8 @@ pub struct Record<'a> {
     pub name: Option<&'a str>,
     /// Its kind (`city`, `country`, ...).
     pub kind: Option<&'static str>,
-    /// Its admin level: 0 for a point, 1 for a country, deeper units after.
+    /// Its admin level: 1 for a country's first-level units, deeper units after; 0 for a
+    /// country and for a place that is not an admin unit.
     pub admin_level: u8,
     /// Latitude, WGS84 degrees (left out of a GeoJSON feature's properties).
     #[serde(skip_serializing_if = "Option::is_none")]

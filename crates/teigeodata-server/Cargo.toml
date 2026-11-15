@@ -82,3 +82,7 @@ required-features = ["http"]
 
 [lints]
 workspace = true
+
+[[test]]
+name = "reference"
+required-features = ["http", "mcp", "store"]

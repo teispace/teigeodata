@@ -21,6 +21,10 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
   iteration.
 - `cargo xtask docs-examples`: runs every language's example program on the pinned public pack
   and checks its output (D-322).
+- The API, HTTP and MCP reference of the site, generated: the API's from each binding's own
+  declaration macros by `cargo xtask bindings`, the servers' from `teigeodata_server::http::ENDPOINTS`
+  (a route table a test holds to the parser) and `mcp::tool_definitions` and
+  `mcp::resource_templates` (D-323).
 
 - `cargo xtask load`: a load test of `tgd serve` and its `/mcp` on real packs with `oha`,
   gated by `tools/load/budget.toml` (requests per second, p99, footprint and its growth)
@@ -226,6 +230,9 @@ The stable surface is the public Rust API of `teigeodata-engine` and `teigeodata
 
 ### Fixed
 
+- The MCP `search` tool said `strict` keeps every word in order; it ranks by how well the name
+  matched first, as everywhere else. The place fields of every tool's output schema now say
+  what each holds.
 - `/packs` and MCP's `packs` gave a pack's length in bytes as its `places`; they give its
   number of places.
 - The HTTP server's failures and `/packs` end with a newline, as every other answer does.

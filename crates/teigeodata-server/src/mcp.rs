@@ -822,28 +822,7 @@ impl ServerHandler for Mcp {
         _: RequestContext<RoleServer>,
     ) -> impl Future<Output = Result<ListResourceTemplatesResult, ErrorData>> + MaybeSendFuture + '_
     {
-        let items = vec![
-            ResourceTemplate::new(format!("{PLACE}{{id}}"), "place")
-                .with_title("A place")
-                .with_description(
-                    "A place by its ID (tgd:np/1xhb), with every name, as a GeoJSON feature",
-                )
-                .with_mime_type("application/geo+json"),
-            ResourceTemplate::new(format!("{BOUNDARY}{{id}}{{?lod}}"), "boundary")
-                .with_title("A place's outline")
-                .with_description(
-                    "A place's outline as a GeoJSON feature, simplified to level of detail `lod` \
-                     (0 finest to 6 coarsest)",
-                )
-                .with_mime_type("application/geo+json"),
-            ResourceTemplate::new(format!("{DATASET}{{address}}/{{component}}"), "dataset")
-                .with_title("A pack")
-                .with_description(
-                    "A pack (np/places): its release, places, installed components and \
-                     attribution",
-                )
-                .with_mime_type("application/json"),
-        ];
+        let items = resource_templates();
         std::future::ready(Ok(ListResourceTemplatesResult::with_all_items(items)
             .with_ttl_ms(TOOLS_TTL_MS)
             .with_cache_scope(CacheScope::Public)))
@@ -1006,7 +985,8 @@ fn with_port(origin: &str) -> String {
     }
 }
 
-const INSTRUCTIONS: &str = "Offline place data. Find places by name with `search`, by \
+/// What the server tells a client about itself (`instructions`).
+pub const INSTRUCTIONS: &str = "Offline place data. Find places by name with `search`, by \
 coordinates with `reverse` and `admin_at`, around a place with `nearby`; climb with \
 `hierarchy` and descend with `children`. Places are named by IDs such as tgd:np/1xhb: pass \
 them to `get_place`, `lookup`, `nearby`, `timezone` or read teigeodata://place/{id}. \
@@ -1419,6 +1399,41 @@ fn percent_decoded(s: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
+/// The resource templates, as `resources/templates/list` gives them.
+#[must_use]
+pub fn resource_templates() -> Vec<ResourceTemplate> {
+    vec![
+        ResourceTemplate::new(format!("{PLACE}{{id}}"), "place")
+            .with_title("A place")
+            .with_description(
+                "A place by its ID (tgd:np/1xhb), with every name, as a GeoJSON feature",
+            )
+            .with_mime_type("application/geo+json"),
+        ResourceTemplate::new(format!("{BOUNDARY}{{id}}{{?lod}}"), "boundary")
+            .with_title("A place's outline")
+            .with_description(
+                "A place's outline as a GeoJSON feature, simplified to level of detail `lod` \
+                 (0 finest to 6 coarsest)",
+            )
+            .with_mime_type("application/geo+json"),
+        ResourceTemplate::new(format!("{DATASET}{{address}}/{{component}}"), "dataset")
+            .with_title("A pack")
+            .with_description(
+                "A pack (np/places): its release, places, installed components and \
+                 attribution",
+            )
+            .with_mime_type("application/json"),
+    ]
+}
+
+/// Every tool's definition, the store's and the installer's included, in [`TOOLS`] order: what
+/// `tools/list` gives on a server that has them all, and what the reference page is generated
+/// from.
+#[must_use]
+pub fn tool_definitions(limits: &Limits) -> Vec<Tool> {
+    tools(limits)
+}
+
 /// The tools' definitions, their bounds from `limits`.
 #[allow(clippy::too_many_lines, reason = "one table: the tools' definitions")]
 fn tools(limits: &Limits) -> Vec<Tool> {
@@ -1459,10 +1474,10 @@ fn tools(limits: &Limits) -> Vec<Tool> {
         def(
             "search",
             "Search places by name",
-            "Places matching a name, best first. \"Name, Parent\" ranks places under a parent of that name first. `focus` ranks places near a point higher (scale_km: how far counts as near, default 50). `strict`: every word, in order.",
+            "Places matching a name, best first. \"Name, Parent\" ranks places under a parent of that name first. `focus` ranks places near a point higher (scale_km: how far counts as near, default 50). `strict` ranks by how well the name matched (exact, then loose, prefix, one edit) before importance and nearness.",
             json!({
                 "query": { "type": "string", "minLength": 1, "maxLength": limits.text_bytes, "description": "The name, in any script, such as Pokhara or पोखरा." },
-                "limit": limit, "cursor": cursor, "strict": { "type": "boolean", "default": false },
+                "limit": limit, "cursor": cursor, "strict": { "type": "boolean", "default": false, "description": "Rank by match quality first." },
                 "focus": { "type": "object", "properties": { "lat": lat, "lon": lon, "scale_km": { "type": "number", "exclusiveMinimum": 0, "default": 50 } }, "required": ["lat", "lon"] },
             }),
             &["query"],
@@ -1629,33 +1644,36 @@ fn places_schema() -> Value {
             "results": { "type": "array", "items": {
                 "type": "object",
                 "properties": {
-                    "id": { "type": "string" },
-                    "name": { "type": nullable("string") },
-                    "kind": { "type": nullable("string") },
-                    "admin_level": { "type": "integer" },
-                    "lat": { "type": "number" },
-                    "lon": { "type": "number" },
+                    "id": { "type": "string", "description": "Its stable ID, such as tgd:np/1xhb." },
+                    "name": { "type": nullable("string"), "description": "Its canonical name." },
+                    "kind": { "type": nullable("string"), "description": "Its kind, such as settlement or admin." },
+                    "admin_level": { "type": "integer", "description": "1 for a country's first-level units, deeper units after; 0 for a country and for a place that is not an admin unit." },
+                    "lat": { "type": "number", "description": "Latitude, WGS84 degrees." },
+                    "lon": { "type": "number", "description": "Longitude, WGS84 degrees." },
                     "elevation": { "type": nullable("integer"), "description": "Metres above EGM2008." },
-                    "elevation_source": { "type": "string" },
-                    "parent": { "type": nullable("string") },
-                    "timezone": { "type": nullable("string") },
-                    "iso_code": { "type": "string" },
-                    "meters": { "type": "number" },
-                    "bearing": { "type": "number", "description": "Degrees clockwise from north." },
-                    "inside": { "type": "boolean" },
-                    "score": { "type": "integer" },
-                    "names": { "type": "array", "items": { "type": "object", "properties": {
-                        "text": { "type": "string" }, "lang": { "type": "string" },
-                        "kind": { "type": "string" }, "origin": { "type": "string" },
-                        "machine": { "type": "boolean" } }, "required": ["text", "origin", "machine"] } },
-                    "utc_offset": { "type": "string" },
-                    "tz_abbr": { "type": "string" },
-                    "is_dst": { "type": "boolean" },
+                    "elevation_source": { "type": "string", "description": "Where the height came from: surveyed or model, when stated." },
+                    "parent": { "type": nullable("string"), "description": "Its parent's ID; null for a root." },
+                    "timezone": { "type": nullable("string"), "description": "Its IANA timezone, such as Asia/Kathmandu." },
+                    "iso_code": { "type": "string", "description": "Its ISO 3166 code, for a country or unit that has one." },
+                    "meters": { "type": "number", "description": "Distance from the point or place asked about, metres." },
+                    "bearing": { "type": "number", "description": "Degrees clockwise from north, from the place to the point asked about." },
+                    "inside": { "type": "boolean", "description": "Whether the point asked about is inside the place's outline (reverse)." },
+                    "score": { "type": "integer", "description": "Its search score, comparable only within one query." },
+                    "names": { "type": "array", "description": "Every name, canonical first (get_place with names).", "items": { "type": "object", "properties": {
+                        "text": { "type": "string" },
+                        "lang": { "type": "string", "description": "A BCP 47 tag, such as ne-Deva." },
+                        "kind": { "type": "string", "description": "The name's type." },
+                        "origin": { "type": "string", "description": "Where the name came from." },
+                        "machine": { "type": "boolean", "description": "Made by a machine (a romanisation, a transliteration or a donor label): an app may show it differently." } },
+                        "required": ["text", "origin", "machine"] } },
+                    "utc_offset": { "type": "string", "description": "The UTC offset at the instant asked, such as +05:45 (timezone)." },
+                    "tz_abbr": { "type": "string", "description": "The zone's abbreviation at that instant." },
+                    "is_dst": { "type": "boolean", "description": "Whether daylight saving time is in force at that instant." },
                 },
                 "required": ["id", "name", "kind", "admin_level", "elevation", "parent", "timezone"],
             } },
-            "attribution": { "type": nullable("string") },
-            "next_cursor": { "type": "string" },
+            "attribution": { "type": nullable("string"), "description": "The credits of the packs that answered: show them wherever the data is shown." },
+            "next_cursor": { "type": "string", "description": "Pass as `cursor` to the same tool for the next page; absent on the last." },
         },
         "required": ["results", "attribution"],
     })

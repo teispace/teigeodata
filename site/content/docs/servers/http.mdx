@@ -40,24 +40,26 @@ tgd serve --pack world-np-lite.tgd
 Every route is `GET /v1/<query>` with query parameters, and answers
 `{"results": [...], "attribution": "..."}` (or `"result"` for one value). `limit` defaults to 10.
 
-| Route | Parameters | Answers |
-|---|---|---|
-| `/v1/search` | `q`, `limit`, `focus=lat,lon`, `scale_km`, `strict` | Places matching a name, best first, with `score`. |
-| `/v1/get` | `id`, `names` | One place; `names=1` adds every name with its language. |
-| `/v1/lookup` | `ids` (comma-separated) | Places by ID, in the order asked. |
-| `/v1/reverse` | `lat`, `lon`, `limit`, `in_country` | The nearest places with `meters`, `bearing` and `inside`. |
-| `/v1/near` | `id`, `limit`, `radius_m` | The places nearest a place. |
-| `/v1/admin` | `lat`, `lon` | The admin units holding the point, country first. |
-| `/v1/hierarchy` | `id` | A place's ancestors, parent first. |
-| `/v1/children` | `id`, `limit` | A place's children. |
-| `/v1/tz` | `id` or `lat`, `lon`; `t` (Unix seconds, default now) | The timezone with its offset, abbreviation and DST flag at `t`. |
-| `/v1/elevation` | `lat`, `lon` | The terrain height, its datum, source and grid spacing. |
-| `/v1/distance` | `from`, `to` (each `lat,lon` or an ID) | The great-circle distance and initial bearing. |
-| `/v1/postal` | `code`, `scheme`, `prefix`, `limit`, or `lat`, `lon` | Postal codes and their places. |
-| `/v1/boundary` | `id`, `lod` (0 finest to 6) | A unit's outline as GeoJSON. |
-| `/v1/coverage` | `lat`, `lon`, `radius_m` | The catalog's packs that cover a point (a server over a store). |
-| `/packs` | | The packs served, with their components, places and attribution. |
-| `/health` | | `{"status": "ok", "layers": n}`. |
+| Route | Answers |
+|---|---|
+| `/v1/search` | Places matching a name, best first, with `score`. |
+| `/v1/get` | One place; `names=1` adds every name with its language. |
+| `/v1/lookup` | Places by ID, in the order asked. |
+| `/v1/reverse` | The nearest places with `meters`, `bearing` and `inside`. |
+| `/v1/near` | The places nearest a place. |
+| `/v1/admin` | The admin units holding the point, country first. |
+| `/v1/hierarchy` | A place's ancestors, parent first. |
+| `/v1/children` | A place's children. |
+| `/v1/tz` | The timezone with its offset, abbreviation and DST flag at `t`. |
+| `/v1/elevation` | The terrain height, its datum, source and grid spacing. |
+| `/v1/distance` | The great-circle distance and initial bearing. |
+| `/v1/postal` | Postal codes and their places. |
+| `/v1/boundary` | A unit's outline as GeoJSON. |
+| `/v1/coverage` | The catalog's packs that cover a point (a server over a store). |
+| `/packs` | The packs served, with their components, places and attribution. |
+| `/health` | `{"status": "ok", "layers": n}`. |
+
+Every parameter of every route, with its bounds and default, is in the [HTTP API reference](/docs/reference/http).
 
 Search:
 
@@ -123,15 +125,7 @@ A failure answers a stable code and an HTTP status:
 
 <include lang="json" meta='title="Response"'>../../../examples/cli/out/http-error.txt</include>
 
-| Code | Status | When |
-|---|---|---|
-| `invalid_argument` | 400 | A parameter is missing or out of range. |
-| `out_of_bounds` | 400, 414 | A limit, radius or text over the server's bounds. |
-| `not_found` | 404 | No such place, or no such route. |
-| `missing_component` | 501 | The packs were installed without what the query needs. |
-| `rate_limited`, `unauthenticated`, `forbidden` | 429, 401, 403 | Reserved for a deployment that adds limits or keys; the server alone never answers them. |
-| `unavailable` | 503 | The request took longer than `--timeout`. |
-| `internal` | 500 | A bug; a panic is caught and answered, never a dropped connection. |
+The codes and their statuses are listed in the [reference](/docs/reference/http#errors): `invalid_argument` and `out_of_bounds` answer 400, `not_found` 404, `missing_component` 501, `unavailable` 503 and `internal` 500.
 
 ## Deploying it
 
