@@ -55,7 +55,9 @@ jobs:
           - { os: windows-latest, suffix: win32-x64-msvc, file: teigeodata_node.dll }
           - { os: windows-11-arm, suffix: win32-arm64-msvc, file: teigeodata_node.dll }
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    # Time queued for a macOS runner counted against 40 minutes in a release and cancelled the
+    # darwin addons before they started (2026-11-16): 90, as python.yml.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
