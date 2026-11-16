@@ -62,6 +62,8 @@ extend-exclude = [
   "LICENSE",
   "DCO",
   "CODE_OF_CONDUCT.md",
+  # Reviewed names: place names, reviewers' fault codes (`ba_va`) and source URLs (D-359).
+  "data/countries/*/reviewed-names.tsv",
   # Generated from the pack: ISO 3166 codes and source names (`cargo xtask data-pages`).
   "site/content/docs/data/coverage.mdx",
   "site/content/docs/data/countries/*.mdx",
