@@ -11,8 +11,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "CTeiGeodata",
-            url: "https://github.com/teispace/teigeodata/releases/download/v1.0.1/CTeiGeodata.xcframework.zip",
-            checksum: "5db82ea075d68b6b022866e90b3d97d90415c87cfa2141bbe21f00a9b4b36edb"
+            url: "https://github.com/teispace/teigeodata/releases/download/v1.1.0/CTeiGeodata.xcframework.zip",
+            checksum: "ac65dc283f39fa5d39181baa14d910d348e2c705f3b3bc31d53416249b78ef81"
         ),
         .target(
             name: "TeiGeodata",
