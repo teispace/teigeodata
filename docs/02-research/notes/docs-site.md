@@ -28,11 +28,13 @@ on.
   `llms-full.txt` and a Markdown copy of every page for agents.
 - **No network at build time beyond npm:** system font stack instead of `next/font/google`;
   no analytics, no third-party scripts. The playground's map draws only our own data.
-- **Deploy:** GitHub Pages as a project site, `https://teispace.github.io/teigeodata/`
-  (`basePath: '/teigeodata'`), by `actions/upload-pages-artifact` 5.0.0 and
-  `actions/deploy-pages` 5.0.1 from a `docs` workflow. The build runs on every push that
-  touches the site; deploying needs the maintainer to enable Pages (source: GitHub Actions)
-  and set the repository variable `DOCS_DEPLOY=true`.
+- **Deploy (D-353, 2026-11-16):** Vercel, project `teigeodata-docs` in the `teispace` team, at
+  `https://teigeodata.teispace.com`: the landing page at `/`, the docs at `/docs`, the
+  playground at `/playground` (no base path). CI builds and checks the static export, then
+  force-pushes it as one commit to the branch `docs-site`; Vercel, connected to the repository
+  with `docs-site` as its production branch, no build step and every other branch ignored,
+  serves it. No token or secret. GitHub Pages is left to the signed catalog (ADR-0037). The
+  first plan was GitHub Pages under `/teigeodata/`; one repository has one Pages site.
 - **Examples are programs, not snippets.** Every example on the site is a file under
   `site/examples/<language>/` that is built and run against a real released pack
   (`world-np-lite.tgd` of `data-2026.11.14.3`, CC BY 4.0, 15.6 MB, pinned by SHA-256); its

@@ -14,7 +14,7 @@ Developers need guides per language, a generated reference, data pages and live 
 
 ## Decision
 
-The site is built with Fumadocs (Next.js), deployed as a static export to GitHub Pages. The API reference is generated from the IDL; measured pages from gates; per-country pages from the data. An in-browser playground runs the WASM build with MapLibre and real packs.
+The site is built with Fumadocs (Next.js), deployed as a static export to Vercel at `teigeodata.teispace.com` (D-353; first planned for GitHub Pages, which the signed catalog now uses). The API reference is generated from the IDL; measured pages from gates; per-country pages from the data. An in-browser playground runs the WASM build with MapLibre and real packs.
 
 ## Consequences
 

@@ -41,7 +41,8 @@ offline machine (network off, ideally a fresh account), run the copied binary as
 3. Sign it with two root keys, one medium at a time:
    `cargo xtask tuf sign metadata/1.root.json --role root --key <medium>/r1.key`, then `r2`.
 4. Create the `catalog` branch with `metadata/`'s contents at its root, and serve it with
-   GitHub Pages. `1.root.json` is also the trusted root apps ship.
+   GitHub Pages (this repository's Pages site is the catalog's alone; the docs are on Vercel,
+   D-353). `1.root.json` is also the trusted root apps ship.
 5. Create the GitHub environment `catalog-timestamp` with deployment branch `main`, add the
    timestamp key's hex as the secret `TUF_TIMESTAMP_KEY`, and set the repository variable
    `CATALOG_LIVE` to `true`. Delete the timestamp key file afterwards.

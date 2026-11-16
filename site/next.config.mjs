@@ -2,8 +2,9 @@ import { createMDX } from 'fumadocs-mdx/next';
 
 const withMDX = createMDX();
 
-// The site is a static export (`out/`), served by GitHub Pages as a project site under
-// `/teigeodata/`; `DOCS_BASE_PATH` is set by the docs workflow and empty for `next dev`.
+// The site is a static export (`out/`), served by Vercel at the root of
+// https://teigeodata.teispace.com (D-353): the landing page at `/`, the docs at `/docs`.
+// `DOCS_BASE_PATH` is only for hosting it under a sub-path.
 const basePath = process.env.DOCS_BASE_PATH ?? '';
 
 /** @type {import('next').NextConfig} */
