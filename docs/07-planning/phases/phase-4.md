@@ -384,6 +384,12 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     local levels take their current Nepali names, the CBS name kept as the former official one
     (D-244); a unit's labels lose their type word and a query may end in one
     (D-243); names distinct by text and language (D-242)
+  - [ ] Tithipatra's name review (2026-11-12; 357 rows, their `teigeodata-name-corrections.tsv`):
+    a reviewed name table per country keyed by stable ID, each row guarded by the current
+    text, as the chain's top tier with its own origin; `sure` rows as written, `likely` where
+    a government list agrees, `judgement` and `uncertain` read again; provinces and the CBS
+    conversion artefacts first; then a data release and the error rates against the TSV
+    (planned 2026-11-16)
   - [x] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
     model trained in the forge on the build's licence class; gate G-xlit with floors
     (`forge xlit-eval ne-Latn-Deva`: cbs 44.7%, wd 36.2% folded; D-222, 2026-11-12). Open: the
