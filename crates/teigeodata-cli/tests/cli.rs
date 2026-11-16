@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 use serde_json::Value;
-use teigeodata_format::{Encoding, Kind, Pack, Tag, Writer, key_id, signer};
+use teigeodata_format::{Encoding, Kind, Pack, Part, Tag, Writer, key_id, signer};
 
 const ATTRIBUTION: &str = "© OpenStreetMap contributors, ODbL 1.0\nGeoNames, CC BY 4.0";
 
@@ -251,6 +251,64 @@ fn extract_by_component_copies_the_closed_set_as_stored() {
     );
 }
 
+/// A component extract of a pack with block hashes (a section of 1 MiB or more) and several
+/// parts of one kind keeps every part and writes its own hashes. Before 2026-11-16 it copied
+/// the source's `BLOCK_HASHES` and folded every part into the base one: "a section kind was given
+/// twice", found extracting Nepal's lite pack without its terrain.
+#[test]
+fn extract_by_component_keeps_parts_and_rewrites_block_hashes() {
+    let d = dir("extract-parts");
+    let bytes = common::synthetic(600, 3).encode();
+    let src = Pack::open(&bytes).unwrap();
+    let names = src.section(Kind::NAMES).unwrap();
+    let second = Part(1 << 16);
+    let big = vec![7u8; (1 << 20) + 100];
+    let mut sections: Vec<(Kind, Part, Encoding, u64, &[u8])> = src
+        .sections()
+        .filter(|s| s.kind() != Kind::BLOCK_HASHES)
+        .map(|s| (s.kind(), s.part(), s.encoding(), s.item_count(), s.bytes()))
+        .collect();
+    sections.push((
+        Kind::NAMES,
+        second,
+        names.encoding(),
+        names.item_count(),
+        names.bytes(),
+    ));
+    sections.push((Kind::DEM, Part::BASE, Encoding::RAW, 1, big.as_slice()));
+    let mut w = Writer::new("np", "places", "2026.11.0").unwrap();
+    w.manifest(Tag::LICENCE, b"odbl").unwrap();
+    let file = w.pack_parts(&sections, None).unwrap();
+    let p = d.join("parts.tgd");
+    std::fs::write(&p, &file).unwrap();
+    let out = d.join("no-dem.tgd");
+    ok(&["extract", s(&p), "-o", s(&out), "--components", "search"]);
+    let kept = std::fs::read(&out).unwrap();
+    let kept = Pack::open(&kept).unwrap();
+    assert_eq!(
+        kept.parts(Kind::NAMES).count(),
+        2,
+        "both parts of NAMES kept"
+    );
+    assert!(kept.part(Kind::NAMES, second).is_some());
+    assert!(kept.section(Kind::DEM).is_none(), "terrain left out");
+    ok(&["verify", s(&out)]);
+    // With the terrain kept, the big section is covered by the extract's own block hashes.
+    let all = d.join("all.tgd");
+    ok(&[
+        "extract",
+        s(&p),
+        "-o",
+        s(&all),
+        "--components",
+        "search,dem",
+    ]);
+    let all = std::fs::read(&all).unwrap();
+    let all = Pack::open(&all).unwrap();
+    assert_eq!(all.parts(Kind::BLOCK_HASHES).count(), 1);
+    assert_eq!(all.section(Kind::DEM).unwrap().bytes().len(), big.len());
+}
+
 #[test]
 fn extract_by_box_keeps_the_places_in_it_with_their_chains() {
     let d = dir("extract-box");
@@ -427,6 +485,80 @@ fn a_tiny_box_keeps_its_places_whole_chain() {
         assert_eq!(k["parent"], parent, "{k}: the chain is cut");
         at = by_id(parent);
     }
+}
+
+/// A box extract keeps the terrain tiles that touch the box and drops the rest: before
+/// 2026-11-16 it copied the whole grid, so the Kathmandu Valley out of Nepal's pack weighed
+/// 70 MB, 68 MB of it terrain.
+#[test]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "tile numbers of a point on the globe"
+)]
+fn extract_by_box_crops_the_terrain() {
+    let d = dir("extract-dem");
+    let bytes = common::synthetic(600, 3).encode();
+    let src = Pack::open(&bytes).unwrap();
+    let full: Vec<Value> = {
+        let p = d.join("places.tgd");
+        std::fs::write(&p, &bytes).unwrap();
+        ok(&["export", s(&p)])
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect()
+    };
+    let (la, lo) = (
+        full[0]["lat"].as_f64().unwrap(),
+        full[0]["lon"].as_f64().unwrap(),
+    );
+    // 64″ tiles: the place's tile, with 40 more to the east of it.
+    let row = ((90.0 - la) * 3600.0 / 64.0).floor() as u32;
+    let col = ((lo + 180.0) * 3600.0 / 64.0).floor() as u32;
+    let dem = plane_dem(row, col, 41);
+    let mut sections: Vec<(Kind, Encoding, u64, &[u8])> = src
+        .sections()
+        .filter(|s| s.kind() != Kind::BLOCK_HASHES)
+        .map(|s| (s.kind(), s.encoding(), s.item_count(), s.bytes()))
+        .collect();
+    sections.push((Kind::DEM, Encoding::TABLE, 41, &dem));
+    let mut w = Writer::new("np", "places", "2026.11.0").unwrap();
+    w.manifest(Tag::LICENCE, b"odbl").unwrap();
+    let p = d.join("terrain.tgd");
+    std::fs::write(&p, w.pack(&sections, None).unwrap()).unwrap();
+    // A box of a few metres around the place, in the west half of its tile.
+    let out = d.join("box.tgd");
+    let bbox = format!("{},{},{},{}", lo - 1e-5, la - 1e-5, lo + 1e-5, la + 1e-5);
+    ok(&["extract", s(&p), "-o", s(&out), "--bbox", &bbox]);
+    ok(&["verify", s(&out), "--deep"]);
+    let kept = std::fs::read(&out).unwrap();
+    let kept = Pack::open(&kept).unwrap();
+    let section = kept.section(Kind::DEM).unwrap();
+    assert!(
+        section.item_count() <= 2,
+        "{} tiles kept",
+        section.item_count()
+    );
+    // The height at the place reads the same from both.
+    let (lat, lon) = (format!("{la:.7}"), format!("{lo:.7}"));
+    assert_eq!(
+        ok(&["elevation", &lat, &lon, "--pack", s(&p)]),
+        ok(&["elevation", &lat, &lon, "--pack", s(&out)])
+    );
+    // A tile 30 columns east is gone.
+    let far = format!("{:.7}", -180.0 + (f64::from(col) + 30.5) * 64.0 / 3600.0);
+    assert_eq!(
+        tgd(&["elevation", &lat, &far, "--pack", s(&p)])
+            .status
+            .code(),
+        Some(0)
+    );
+    assert_eq!(
+        tgd(&["elevation", &lat, &far, "--pack", s(&out)])
+            .status
+            .code(),
+        Some(1)
+    );
 }
 
 /// Every record `export` writes for the pack at `p`.
@@ -635,19 +767,18 @@ fn every_command_has_help_and_completions() {
     assert_eq!(tgd(&["completions", "tcsh"]).status.code(), Some(2));
 }
 
-#[test]
-fn elevation_reads_the_packs_terrain() {
+/// A DEM section of one row of `width` 64 × 64 tiles at 1″ from global tile (`row0`, `col0`),
+/// each a plane 1,000 m high rising 2 m a column.
+fn plane_dem(row0: u32, col0: u32, width: u32) -> Vec<u8> {
     use teigeodata_format::dem::{self, DATUM_EGM2008, Family, Grid, GridInput, THRESHOLDS};
-    let d = dir("elevation");
-    // One 64 × 64 tile at tile (3,496, 14,400): a plane 1,000 m high rising 2 m a column.
     let q: Vec<i32> = (0..4096).map(|i| 500 + i % 64).collect();
     let family = Family::standard();
     let code = dem::encode_tile(&q, 6, &family, &THRESHOLDS, &dem::TileOptions::default()).unwrap();
     let grid = Grid {
-        tile_row0: 3_496,
-        tile_col0: 14_400,
+        tile_row0: row0,
+        tile_col0: col0,
         tile_rows: 1,
-        tile_cols: 1,
+        tile_cols: width,
         lat_step: 10,
         lon_step: 10,
         step_mm: 2_000,
@@ -656,8 +787,8 @@ fn elevation_reads_the_packs_terrain() {
         tile_log2: 6,
         first_tile: 0,
     };
-    let tiles = [Some(code.as_slice())];
-    let body = dem::encode(
+    let tiles = vec![Some(code.as_slice()); width as usize];
+    dem::encode(
         &[GridInput {
             grid,
             tiles: &tiles,
@@ -665,7 +796,13 @@ fn elevation_reads_the_packs_terrain() {
         &family,
         &THRESHOLDS,
     )
-    .unwrap();
+    .unwrap()
+}
+
+#[test]
+fn elevation_reads_the_packs_terrain() {
+    let d = dir("elevation");
+    let body = plane_dem(3_496, 14_400, 1);
     let pack = d.join("dem.tgd");
     let bytes = Writer::new("np", "places", "2026.11.0")
         .unwrap()

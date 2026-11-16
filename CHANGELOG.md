@@ -10,6 +10,15 @@ applied: a minor release could break the public API, and every break is listed u
 
 ## [Unreleased]
 
+### Fixed
+
+- `tgd extract --components` of a pack with several parts of one kind or with block hashes
+  (any section of 1 MiB or more) failed with "a section kind was given twice": it now keeps
+  every part and writes its own block hashes.
+- `tgd extract --bbox` keeps only the terrain tiles that touch the box, copied as stored,
+  instead of the whole grid: the Kathmandu Valley out of Nepal's lite pack is 1.5 MB, not
+  70 MB, with the same heights inside the box.
+
 ## [1.0.0] - 2026-11-16
 
 The first stable release. Every public surface now has its promise and its gate

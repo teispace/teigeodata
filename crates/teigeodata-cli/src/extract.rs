@@ -4,8 +4,8 @@
 //!   copied as stored: same bytes, same hashes, so a store could install either.
 //! - **By box:** the places whose point is in the box, with every ancestor (so each kept place
 //!   keeps its chain, D-143) and its timezone area (so it keeps its zone, D-151), re-encoded by
-//!   `teigeodata_format::extract` (D-145), boundaries at level of detail `lod`. DEM is copied
-//!   whole (it is keyed by coordinates); REGION, POSTAL, REDIRECTS, COMPONENTS and BLOBS are
+//!   `teigeodata_format::extract` (D-145), boundaries at level of detail `lod`. Terrain keeps
+//!   the tiles that touch the box, copied as stored (`dem::mask`); REGION, POSTAL, REDIRECTS, COMPONENTS and BLOBS are
 //!   keyed by rows the slice renumbers, so they are left out and named on standard error.
 //!
 //! The manifest is the source's (its attribution above all), unsigned, with the component
@@ -16,12 +16,13 @@ use std::io::Write;
 use std::path::Path;
 
 use teigeodata_format::component::{Component, Components};
-use teigeodata_format::extract::{self, Body};
+use teigeodata_format::dem::{self, Dem, Grid};
+use teigeodata_format::extract;
 use teigeodata_format::hierarchy::Hierarchy;
 use teigeodata_format::place_tz::PlaceTz;
 use teigeodata_format::places::Places;
 use teigeodata_format::region::Options as RegionOptions;
-use teigeodata_format::{Encoding, Kind, Pack, Tag, Writer};
+use teigeodata_format::{Encoding, Kind, Pack, Part, Tag, Writer};
 
 use crate::Fail;
 use crate::pack::{open, read};
@@ -36,6 +37,35 @@ pub(crate) struct Bbox {
 }
 
 impl Bbox {
+    /// Whether tile (`row`, `col`) of `grid`'s global tile grid overlaps the box widened by
+    /// two samples on each side, so a height read by interpolation at the box's edge finds
+    /// its neighbours.
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "tile edges in degrees, well within f64"
+    )]
+    fn touches_tile(self, grid: &Grid, row: u32, col: u32) -> bool {
+        // Steps are in 0.1″: degrees = step / 36,000. Rows count down from 90°N, columns
+        // east from 180°W.
+        let side = grid.side() as f64;
+        let lat_step = f64::from(grid.lat_step) / 36_000.0;
+        let lon_step = f64::from(grid.lon_step) / 36_000.0;
+        let north = 90.0 - f64::from(row) * side * lat_step;
+        let south = north - side * lat_step;
+        let west = -180.0 + f64::from(col) * side * lon_step;
+        let east = west + side * lon_step;
+        let (pad_lat, pad_lon) = (2.0 * lat_step, 2.0 * lon_step);
+        let deg = |v: i32| f64::from(v) / 1e6;
+        let lat_in = south <= deg(self.north) + pad_lat && north >= deg(self.south) - pad_lat;
+        let overlaps = |w: f64, e: f64| west <= e + pad_lon && east >= w - pad_lon;
+        let lon_in = if self.west <= self.east {
+            overlaps(deg(self.west), deg(self.east))
+        } else {
+            overlaps(deg(self.west), 180.0) || overlaps(-180.0, deg(self.east))
+        };
+        lat_in && lon_in
+    }
+
     fn holds(self, lat: i32, lon: i32) -> bool {
         let lon_in = if self.west <= self.east {
             self.west <= lon && lon <= self.east
@@ -180,22 +210,44 @@ pub(crate) fn run(
     } else {
         Components::of(opts.components).closed()
     };
-    let mut bodies: Vec<Body> = match opts.bbox {
+    // Each kept section with its part of its kind (ADR-0040): a pack may hold several parts of
+    // one kind (names by language, outlines by level of detail).
+    let mut bodies: Vec<(Kind, Part, Encoding, u64, Vec<u8>)> = match opts.bbox {
         Some(b) => {
             let keep = rows_in(&pack, b).map_err(bad)?;
-            let mut v =
-                extract::rows(&pack, &keep, opts.lod, &RegionOptions::default()).map_err(bad)?;
-            // Terrain grids are kept whole: they are keyed by coordinates, not rows.
+            let mut v: Vec<_> = extract::rows(&pack, &keep, opts.lod, &RegionOptions::default())
+                .map_err(bad)?
+                .into_iter()
+                .map(|(k, e, n, body)| (k, Part::BASE, e, n, body))
+                .collect();
+            // Terrain is keyed by coordinates: the tiles that touch the box are kept, codes
+            // copied as stored, so every kept sample reads back exactly.
             for kind in [Kind::DEM, Kind::DEM_COARSE] {
-                if let Some(dem) = pack.section(kind) {
-                    v.push((kind, dem.encoding(), dem.item_count(), dem.bytes().to_vec()));
+                if let Some(section) = pack.section(kind) {
+                    let dem = Dem::open(&section).map_err(bad)?;
+                    if let Some((body, n)) =
+                        dem::mask(&dem, |g, r, c| b.touches_tile(g, r, c)).map_err(bad)?
+                    {
+                        v.push((kind, Part::BASE, section.encoding(), n, body));
+                    }
                 }
             }
             v
         }
+        // Every section as it is, but the source's block hashes: the writer hashes what it
+        // writes, and a second BLOCK_HASHES would be a kind given twice.
         None => pack
             .sections()
-            .map(|s| (s.kind(), s.encoding(), s.item_count(), s.bytes().to_vec()))
+            .filter(|s| s.kind() != Kind::BLOCK_HASHES)
+            .map(|s| {
+                (
+                    s.kind(),
+                    s.part(),
+                    s.encoding(),
+                    s.item_count(),
+                    s.bytes().to_vec(),
+                )
+            })
             .collect(),
     };
     let had: Vec<Kind> = pack.sections().map(|s| s.kind()).collect();
@@ -208,11 +260,11 @@ pub(crate) fn run(
         .collect();
     left_out.dedup();
     let w = writer(&pack, opts).map_err(|e| Fail::of(from.display(), e))?;
-    let refs: Vec<(Kind, Encoding, u64, &[u8])> = bodies
+    let refs: Vec<(Kind, Part, Encoding, u64, &[u8])> = bodies
         .iter()
-        .map(|(k, en, n, b)| (*k, *en, *n, b.as_slice()))
+        .map(|(k, p, en, n, b)| (*k, *p, *en, *n, b.as_slice()))
         .collect();
-    let file = w.pack(&refs, None).map_err(bad)?;
+    let file = w.pack_parts(&refs, None).map_err(bad)?;
     // Written beside the target, then renamed: a cut-off run leaves no half pack.
     let tmp = to.with_extension("tgd.part");
     std::fs::write(&tmp, &file).map_err(|e| Fail::of(tmp.display(), e))?;
