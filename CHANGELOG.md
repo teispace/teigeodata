@@ -10,6 +10,12 @@ applied: a minor release could break the public API, and every break is listed u
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-17
+
+Reviewed names as their own tier of the names chain, Government of Nepal data admitted and
+credited, and the fixes found publishing 1.0.1. The first release published from CI by
+trusted publishing on every registry.
+
 ### Fixed
 
 - Dart: the build hook's helpers moved to `lib/src/hook/`, as pub.dev accepts only
@@ -616,7 +622,8 @@ The first tagged version. Everything below is new.
 
 None: no version was released before this one.
 
-[Unreleased]: https://github.com/teispace/teigeodata/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/teispace/teigeodata/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/teispace/teigeodata/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/teispace/teigeodata/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/teispace/teigeodata/compare/v0.3.1...v1.0.0
 [0.3.1]: https://github.com/teispace/teigeodata/compare/v0.3.0...v0.3.1

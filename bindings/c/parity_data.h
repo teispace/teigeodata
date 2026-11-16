@@ -285,6 +285,6 @@
 #define TGP_TZ_ZONES_ITEMS "America/New_York", "Asia/Kathmandu"
 #define TGP_TZ_ZONES_0 "America/New_York"
 #define TGP_TZ_ZONES_1 "Asia/Kathmandu"
-#define TGP_VERSION "1.0.1"
+#define TGP_VERSION "1.1.0"
 
 #endif /* TEIGEODATA_PARITY_DATA_H */
