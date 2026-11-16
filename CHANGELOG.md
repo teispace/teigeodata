@@ -10,6 +10,12 @@ applied: a minor release could break the public API, and every break is listed u
 
 ## [Unreleased]
 
+### Fixed
+
+- Dart: the build hook's helpers moved to `lib/src/hook/`, as pub.dev accepts only
+  `hook/build.dart` and `hook/link.dart`; the pub.dev 1.0.1 is published from that commit (D-361).
+- Release: npm publishes the tarballs by path (`./dist/…`), platform packages first.
+
 ### Added
 
 - Name origin `reviewed` (11): a name a person corrected against a cited source.

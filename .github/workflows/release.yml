@@ -286,7 +286,7 @@ jobs:
       - name: The release commit
         run: |
           cargo xtask release-pin "$RUNNER_TEMP/dist"
-          git add -A bindings/dart/hook/src/prebuilt_hashes.dart bindings/go/internal/prebuilt/prebuilt.go Package.swift
+          git add -A bindings/dart/lib/src/hook/prebuilt_hashes.dart bindings/go/internal/prebuilt/prebuilt.go Package.swift
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -s -q -m "chore(repo): release v$VERSION"
           git show --stat HEAD

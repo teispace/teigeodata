@@ -1,7 +1,7 @@
 //! `cargo xtask release-pin <dist>`: pins a release's prebuilt files into the packages that
 //! download them (phase 5.10, D-304). Run by the `release` workflow on the files it built:
 //!
-//! - `bindings/dart/hook/src/prebuilt_hashes.dart`: the SHA-256 of each target's library, which
+//! - `bindings/dart/lib/src/hook/prebuilt_hashes.dart`: the SHA-256 of each target's library, which
 //!   the Dart hook checks before it uses a downloaded one (D-289);
 //! - `bindings/go/internal/prebuilt/prebuilt.go`: the same map for the Go loader (D-297);
 //! - `Package.swift` at the root: the Swift package as released, its `binaryTarget` naming the
@@ -35,7 +35,7 @@ pub(crate) const PREBUILT_TARGETS: [&str; 14] = [
     "x86_64-unknown-linux-musl",
 ];
 
-const DART: &str = "bindings/dart/hook/src/prebuilt_hashes.dart";
+const DART: &str = "bindings/dart/lib/src/hook/prebuilt_hashes.dart";
 const GO: &str = "bindings/go/internal/prebuilt/prebuilt.go";
 const SWIFT: &str = "Package.swift";
 const RELEASES: &str = "https://github.com/teispace/teigeodata/releases/download";
@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn every_target_the_hook_and_loader_name_is_pinned() {
         let dart = std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../bindings/dart/hook/src/target.dart"),
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../bindings/dart/lib/src/hook/target.dart"),
         )
         .unwrap_or_default();
         // Dart has no musl target (Flutter's Linux is glibc); Go has.

@@ -43,7 +43,7 @@ prebuilt download, a build from source as the fallback. Spike S5 asks:
   The raw `@Native` call is about 0.5 ns dearer, which looks like the lazily resolved address,
   and is lost in the API's own work. The row and fold differences are within the noise of a
   loaded machine.
-- **Our own hook, not `native_toolchain_rust`.** `hook/build.dart` (with `hook/src/`, about 200
+- **Our own hook, not `native_toolchain_rust`.** `hook/build.dart` (with `lib/src/hook/`, about 200
   lines) picks the library, first match wins:
   1. `hooks.user_defines.teigeodata.library`: a file already built (any variant, lite included);
   2. `hooks.user_defines.teigeodata.source`, or the package sitting in the repository: `cargo
@@ -51,8 +51,12 @@ prebuilt download, a build from source as the fallback. Spike S5 asks:
      the cache with every other build), with `--target` only when cross-building;
   3. otherwise, or with `prebuilt: true`: the release's library for the target, downloaded
      once into the hook's shared output folder and used only if its SHA-256 matches the one
-     pinned in `hook/src/prebuilt_hashes.dart`. `prebuilt_base` points at a mirror.
+     pinned in `lib/src/hook/prebuilt_hashes.dart`. `prebuilt_base` points at a mirror.
 
+  pub.dev accepts only `hook/build.dart` and `hook/link.dart` under `hook/` ("Hook files are
+  experimental and `hook/src/prebuilt.dart` is not allowed yet", its server on 2026-11-16; the
+  local `dart pub publish --dry-run` does not check it), so the helpers live in
+  `lib/src/hook/` and the hook imports them as `package:teigeodata/src/hook/…` (D-361).
   The hook's dependencies are the cargo `.d` file's sources and `Cargo.lock`, so an unchanged
   build is skipped: a second `dart test` took 2 s.
 - **Flutter bundles it on every platform tried.** `cargo xtask flutter-check` makes the

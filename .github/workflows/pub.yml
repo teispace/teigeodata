@@ -34,7 +34,7 @@ jobs:
         run: |
           v=$(sed -n 's/^version: //p' pubspec.yaml)
           test "v$v" = "$GITHUB_REF_NAME"
-          grep -q "'x86_64-unknown-linux-gnu': '" hook/src/prebuilt_hashes.dart
+          grep -q "'x86_64-unknown-linux-gnu': '" lib/src/hook/prebuilt_hashes.dart
       - name: Publish (a version already there is skipped)
         working-directory: bindings/dart
         run: |

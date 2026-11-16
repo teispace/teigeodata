@@ -7,14 +7,14 @@
 // 2. `hooks.user_defines.teigeodata.source`, or this package inside the teigeodata repository:
 //    built from source with cargo (`crates/teigeodata-c`), Rust from `rust-toolchain.toml`.
 // 3. Otherwise, or with `prebuilt: true`, the release's prebuilt library for the target,
-//    checked against its pinned SHA-256 (hook/src/prebuilt_hashes.dart).
+//    checked against its pinned SHA-256 (lib/src/hook/prebuilt_hashes.dart).
 import 'dart:io';
 
 import 'package:code_assets/code_assets.dart';
 import 'package:hooks/hooks.dart';
 
-import 'src/prebuilt.dart';
-import 'src/target.dart';
+import 'package:teigeodata/src/hook/prebuilt.dart';
+import 'package:teigeodata/src/hook/target.dart';
 
 void main(List<String> args) async {
   await build(args, (input, output) async {
