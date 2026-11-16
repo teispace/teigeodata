@@ -31,6 +31,9 @@ pub(crate) struct Data {
     pub(crate) file: String,
     pub(crate) bytes: u64,
     pub(crate) sha256: String,
+    /// The pack's licence (SPDX), where the record names it.
+    #[serde(default)]
+    pub(crate) licence: String,
     url: String,
 }
 
@@ -429,8 +432,21 @@ pub(crate) fn pinned(root: &Path, data: &Data, fetch: bool) -> Result<PathBuf, V
             return Err(vec![format!("curl {} exited with {status}", data.url)]);
         }
     }
+    let digest = sha256_file(&path)?;
+    if digest != data.sha256 {
+        return Err(vec![format!(
+            "{}: SHA-256 {digest}, pinned to {}",
+            rel(root, &path),
+            data.sha256
+        )]);
+    }
+    Ok(path)
+}
+
+/// The SHA-256 of a file, as lowercase hex, read 1 MiB at a time.
+pub(crate) fn sha256_file(path: &Path) -> Result<String, Vec<String>> {
     let mut hasher = Sha256::new();
-    let mut file = fs::File::open(&path).map_err(|e| vec![format!("{}: {e}", path.display())])?;
+    let mut file = fs::File::open(path).map_err(|e| vec![format!("{}: {e}", path.display())])?;
     let mut buf = vec![0u8; 1 << 20];
     loop {
         let n = file
@@ -441,21 +457,13 @@ pub(crate) fn pinned(root: &Path, data: &Data, fetch: bool) -> Result<PathBuf, V
         }
         hasher.update(buf.get(..n).unwrap_or_default());
     }
-    let digest = hasher
+    Ok(hasher
         .finalize()
         .iter()
         .fold(String::with_capacity(64), |mut s, b| {
             let _ = write!(s, "{b:02x}");
             s
-        });
-    if digest != data.sha256 {
-        return Err(vec![format!(
-            "{}: SHA-256 {digest}, site/data.json pins {}",
-            rel(root, &path),
-            data.sha256
-        )]);
-    }
-    Ok(path)
+        }))
 }
 
 /// Why `lang` cannot run here, if it cannot.

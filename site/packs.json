@@ -1,0 +1,166 @@
+{
+  "$comment": "The playground's catalog of packs a reader can add at run time (D-357). Each pack is `tgd extract <source> <extract…>` of a pinned release asset; `cargo xtask playground` fetches the source, runs the extract and fails unless the result has the SHA-256 written here (an extract is deterministic). `bbox` is where the pack holds data, drawn on the map.",
+  "sources": {
+    "np-places-lite": {
+      "release": "data-2026.11.15",
+      "file": "np-places-lite.tgd",
+      "bytes": 87532288,
+      "sha256": "2d737a3241d5622e69b7edd0f8280c1494c6831f30bbf91806896c07e024e924",
+      "licence": "CC-BY-4.0",
+      "url": "https://github.com/teispace/teigeodata/releases/download/data-2026.11.15/np-places-lite.tgd"
+    }
+  },
+  "packs": [
+    {
+      "id": "np-places",
+      "title": "Nepal, every place",
+      "summary": "All 95,716 places of the newest release with their population, search inside words and outlines at four levels of detail; where both packs hold a place, this one answers.",
+      "source": "np-places-lite",
+      "extract": [
+        "--components",
+        "point,elevation,admin,names,search,substring,timezone,timezone-index,tz-rules,boundaries,admin-index,postal,dem-coarse,extra",
+        "--name",
+        "places-noterrain"
+      ],
+      "bbox": [
+        80.05,
+        26.34,
+        88.21,
+        30.45
+      ],
+      "contents": [
+        "95,716 places",
+        "population",
+        "search inside words",
+        "outlines, 4 levels"
+      ],
+      "bytes": 18985344,
+      "sha256": "c1cfe0ed0230c740b96073b62c33a91be74bc347665e9153b25027a1ed24f533"
+    },
+    {
+      "id": "terrain-kathmandu",
+      "title": "Kathmandu Valley terrain",
+      "summary": "NASADEM heights on a 31 m grid for the valley, in place of the base pack's 464 m grid.",
+      "source": "np-places-lite",
+      "extract": [
+        "--components",
+        "dem",
+        "--bbox",
+        "85.18,27.55,85.57,27.82",
+        "--name",
+        "terrain-kathmandu"
+      ],
+      "bbox": [
+        85.18,
+        27.55,
+        85.57,
+        27.82
+      ],
+      "contents": [
+        "terrain, 31 m"
+      ],
+      "bytes": 466244,
+      "sha256": "a5a18be474ab8fcfc0a352877bcb185aa2f437fe85e88443651ae05e98046411"
+    },
+    {
+      "id": "terrain-pokhara",
+      "title": "Pokhara and Annapurna terrain",
+      "summary": "NASADEM heights on a 31 m grid from Phewa Lake to the Annapurna range.",
+      "source": "np-places-lite",
+      "extract": [
+        "--components",
+        "dem",
+        "--bbox",
+        "83.75,28.12,84.15,28.65",
+        "--name",
+        "terrain-pokhara"
+      ],
+      "bbox": [
+        83.75,
+        28.12,
+        84.15,
+        28.65
+      ],
+      "contents": [
+        "terrain, 31 m"
+      ],
+      "bytes": 1254560,
+      "sha256": "dfe1d04be46c70da02e726aea6675c31597f345daa42b69ccca754ebfcdc06ea"
+    },
+    {
+      "id": "terrain-everest",
+      "title": "Everest and Khumbu terrain",
+      "summary": "NASADEM heights on a 31 m grid from Lukla to the summit of Sagarmatha.",
+      "source": "np-places-lite",
+      "extract": [
+        "--components",
+        "dem",
+        "--bbox",
+        "86.55,27.65,87.15,28.1",
+        "--name",
+        "terrain-everest"
+      ],
+      "bbox": [
+        86.55,
+        27.65,
+        87.15,
+        28.1
+      ],
+      "contents": [
+        "terrain, 31 m"
+      ],
+      "bytes": 1518048,
+      "sha256": "a66b930c3731e880a594c7c48a11fe9516086372fbbff56065289167b09b0dda"
+    },
+    {
+      "id": "terrain-chitwan",
+      "title": "Chitwan terrain",
+      "summary": "NASADEM heights on a 31 m grid for the Inner Terai valley and the national park.",
+      "source": "np-places-lite",
+      "extract": [
+        "--components",
+        "dem",
+        "--bbox",
+        "84.1,27.45,84.75,27.75",
+        "--name",
+        "terrain-chitwan"
+      ],
+      "bbox": [
+        84.1,
+        27.45,
+        84.75,
+        27.75
+      ],
+      "contents": [
+        "terrain, 31 m"
+      ],
+      "bytes": 668864,
+      "sha256": "dabdf26d9475c8024eb1a2def2006c4f0fc863aae61f0eed830444578f471e60"
+    },
+    {
+      "id": "terrain-lumbini",
+      "title": "Lumbini terrain",
+      "summary": "NASADEM heights on a 31 m grid around the birthplace of the Buddha.",
+      "source": "np-places-lite",
+      "extract": [
+        "--components",
+        "dem",
+        "--bbox",
+        "83.15,27.4,83.4,27.6",
+        "--name",
+        "terrain-lumbini"
+      ],
+      "bbox": [
+        83.15,
+        27.4,
+        83.4,
+        27.6
+      ],
+      "contents": [
+        "terrain, 31 m"
+      ],
+      "bytes": 138964,
+      "sha256": "d1c333162a33aa46ae4cb330719b9054593d2d0d2b668f574f9183bc938194a7"
+    }
+  ]
+}
