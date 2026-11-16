@@ -181,7 +181,7 @@ export function SiteFooter() {
       <div className="border-t">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-6 text-xs text-fd-muted-foreground md:flex-row md:items-center md:justify-between">
           <p>
-            © {new Date().getFullYear()} {site.org.legalName}. Code under Apache-2.0.
+            © {new Date().getFullYear()} {site.org.name}. Code under Apache-2.0.
           </p>
           <p className="max-w-xl md:text-right">
             Data: the main build under ODbL (© OpenStreetMap contributors and others), the lite build
