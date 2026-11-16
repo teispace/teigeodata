@@ -74,8 +74,9 @@ hand, each owned by the team `teispace/Teispace Core` with the trusted publisher
 packages published by hand, the team `developers` read-write on each; the trusted publisher on
 `teigeodata` (pending until a CI publish), the other 10 by `npm trust github`. pub.dev:
 `teigeodata` under `teispace.com` (from `main`'s d3f94aa, D-361), automated publishing from
-`v{{version}}` tags in environment `release`. PyPI and Maven Central published from CI. 1.1.0 is
-the first release to publish everywhere from CI.
+`v{{version}}` tags in environment `release`. PyPI and Maven Central published from CI. **1.1.0 published everywhere from CI** (run
+43931508857, pub.dev run 43943423993): crates.io, npm (with SLSA provenance), PyPI, Maven Central,
+Go and pub.dev by trusted publishing, no tokens.
 
 A registry not set up yet fails only its own job; the GitHub release and the other registries
 are unaffected, and a re-run publishes what is missing (every publish step skips a version
