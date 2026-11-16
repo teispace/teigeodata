@@ -1,6 +1,9 @@
 // The playground, run: serves the built site (`out/`) under its base path, opens the playground
 // in headless Chromium, loads the pack and checks a search, a place and two points against the
-// answers the tours print (site/examples/out/), so the page shows what every language shows.
+// answers the tours print (site/examples/out/), so the page shows what every language shows;
+// then the card a point opens on the map, and a pack of the catalog added while it runs (D-357):
+// downloaded once, sharper terrain answering, and opened again from the browser's store after a
+// reload, with no second download.
 // It fails on a console error, a failed request, or any request to another origin except
 // OpenStreetMap's tiles, which it answers itself with an empty tile (CI does not load OSM's
 // servers): every query runs in the page (docs/02-research/notes/docs-playground.md).
@@ -90,6 +93,10 @@ try {
   page.on('response', (r) => {
     if (r.status() >= 400) problems.push(`${r.status()}: ${r.url()}`);
   });
+  let packDownloads = 0;
+  page.on('request', (r) => {
+    if (r.url().endsWith('/playground/packs/terrain-kathmandu.tgd')) packDownloads++;
+  });
 
   const t = Date.now();
   await page.goto(`${origin}${base}/playground/`);
@@ -122,6 +129,22 @@ try {
   const heightText = await page.getByTestId('height').textContent();
   await expect(`height ${heightText}`, async () => heightText?.startsWith(`${height} m`));
 
+  // The card on the map at the point: the nearest place, and the same height.
+  const card = page.getByTestId('popover');
+  await card.waitFor({ timeout: 10_000 }).catch(() => problems.push('no card on the map at the point'));
+  const cardHeight = await page.getByTestId('popover-height').textContent().catch(() => '');
+  await expect(`the card's height ${cardHeight}`, async () => cardHeight?.replace(',', '').startsWith(`${height} m`));
+
+  // A pack added while it runs: the card offers the valley's 31 m terrain; once added, the
+  // height there comes from it.
+  await page.getByTestId('popover-add').click();
+  await page.getByTestId('height').filter({ hasText: '31 m grid' }).waitFor({ timeout: 30_000 }).catch(() => {
+    problems.push('the Kathmandu Valley terrain did not answer after it was added');
+  });
+  await page.getByTestId('packs-button').click();
+  const added = await page.getByTestId('pack-terrain-kathmandu').getAttribute('data-state');
+  await expect(`the terrain pack is ${added}`, async () => added === 'added');
+
   // A point outside the country in full: the world's zone areas answer their zone too.
   await page.evaluate(() => (location.hash = 'at=40.7128,-74.006'));
   await page.getByTestId('zone').filter({ hasText: 'America/New_York' }).waitFor({ timeout: 10_000 }).catch(() => {
@@ -129,9 +152,19 @@ try {
   });
 
   await expect('the map is drawn (Leaflet, with tiles)', async () => (await page.locator('.leaflet-container').count()) === 1 && tiles > 0);
+
+  // A reload opens the added pack again from the browser's store, not the network.
+  await page.reload();
+  await page.getByTestId('load').click();
+  await page.getByTestId('ready').waitFor({ timeout: 120_000 });
+  await page.evaluate((at) => (location.hash = `at=${at}`), tourPoint);
+  await page.getByTestId('height').filter({ hasText: '31 m grid' }).waitFor({ timeout: 10_000 }).catch(() => {
+    problems.push('the added pack was not opened again after a reload');
+  });
+  await expect(`one download of the pack, ${packDownloads}`, async () => packDownloads === 1);
   if (!problems.length) {
     console.log(
-      `playground ok: loaded in ${loaded} ms; search, place, ${zone}, ${height} m, a world zone; ${tiles} tiles stubbed, no other request left ${origin}`,
+      `playground ok: loaded in ${loaded} ms; search, place, ${zone}, ${height} m, the card, a pack added and kept, a world zone; ${tiles} tiles stubbed, no other request left ${origin}`,
     );
   }
 } finally {

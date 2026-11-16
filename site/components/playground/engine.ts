@@ -1,10 +1,28 @@
-// The playground's engine: the @teispace/teigeodata-wasm package and the pinned pack, both
-// served from this site (`cargo xtask playground` writes them to public/playground/). The
-// package is imported at run time from its own files, so the page runs exactly what a user
-// installs, and nothing is fetched from anywhere but this site.
+// The playground's engine: the @teispace/teigeodata-wasm package, the pinned pack and the
+// catalog of packs a reader can add at run time, all served from this site (`cargo xtask
+// playground` writes them to public/playground/). The package is imported at run time from its
+// own files, so the page runs exactly what a user installs, and nothing is fetched from anywhere
+// but this site. An added pack is checked by SHA-256, kept in Cache Storage for the next visit
+// (offline too), and opened as a layer above the base pack (D-357).
 
 import type { Feature, FeatureCollection } from 'geojson';
 import { basePath } from '@/lib/shared';
+
+/** A pack of the catalog (`site/packs.json`, as `cargo xtask playground` cut it). */
+export interface CatalogEntry {
+  id: string;
+  title: string;
+  summary: string;
+  /** Where it holds data: west, south, east, north. */
+  bbox: [number, number, number, number];
+  contents: string[];
+  bytes: number;
+  sha256: string;
+  /** Relative to the playground's directory. */
+  file: string;
+  release: string;
+  licence: string;
+}
 
 /** What `cargo xtask playground` wrote beside the files. */
 export interface Manifest {
@@ -15,6 +33,7 @@ export interface Manifest {
   package: string;
   version: string;
   engine_bytes: number;
+  catalog: CatalogEntry[];
 }
 
 /** A row of a result, by column name (see the reference's result columns). */
@@ -30,6 +49,8 @@ export interface SearchOptions {
 /** The engine methods the playground calls; each answers a result blob. */
 export interface Engine {
   openBytes(bytes: Uint8Array): number;
+  openBytesWith(bytes: Uint8Array, options?: { priority?: number }): number;
+  remove(layer: number): boolean;
   layers(): number;
   tzVersion(): string;
   get(id: string): Uint8Array;
@@ -44,6 +65,7 @@ export interface Engine {
   elevationAt(lat: number, lon: number): Uint8Array;
   tzAt(lat: number, lon: number): Uint8Array;
   tzOffsetAt(zone: string, unixSeconds: number): Uint8Array;
+  postalAt(lat: number, lon: number): Uint8Array;
   byIso(code: string): Uint8Array;
   boundary(id: string, lod: number): Uint8Array;
   distance(from: string, to: string): Uint8Array;
@@ -123,13 +145,7 @@ export async function load(manifest: Manifest, onProgress: (p: Progress) => void
   );
 
   onProgress({ phase: 'verify' });
-  await timed('SHA-256 of the pack', async () => {
-    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-    const hex = Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
-    if (hex !== manifest.sha256) {
-      throw new Error(`${manifest.file}: SHA-256 ${hex}, expected ${manifest.sha256}`);
-    }
-  });
+  await timed('SHA-256 of the pack', () => check(bytes, manifest.sha256, manifest.file));
 
   onProgress({ phase: 'open' });
   const engine = new mod.Engine();
@@ -173,6 +189,109 @@ async function download(
   }
   if (at !== total) throw new Error(`${url}: ${at} bytes, expected ${total}`);
   return out;
+}
+
+async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function check(bytes: Uint8Array<ArrayBuffer>, expected: string, name: string) {
+  const hex = await sha256(bytes);
+  if (hex !== expected) throw new Error(`${name}: SHA-256 ${hex}, expected ${expected}`);
+}
+
+/** Where added packs are kept between visits; a new name drops every older copy. */
+const STORE = 'teigeodata-playground-packs-v1';
+
+/** Cache Storage, where the browser has it (a secure context); otherwise packs last a visit. */
+async function store(): Promise<Cache | null> {
+  try {
+    return 'caches' in globalThis ? await caches.open(STORE) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A stored copy is keyed by its file and SHA-256, so a new cut of a pack is a new key. */
+const keyOf = (entry: CatalogEntry) => `${playgroundBase}/${entry.file}?sha256=${entry.sha256}`;
+
+/** The IDs of the catalog's packs this browser has kept. */
+export async function storedPacks(catalog: CatalogEntry[]): Promise<Set<string>> {
+  const cache = await store();
+  const ids = new Set<string>();
+  if (!cache) return ids;
+  for (const entry of catalog) {
+    if (await cache.match(keyOf(entry))) ids.add(entry.id);
+  }
+  return ids;
+}
+
+export type PackProgress =
+  | { phase: 'download'; loaded: number; total: number }
+  | { phase: 'verify' }
+  | { phase: 'open' };
+
+/** An added pack: its layer in the engine and what it took. */
+export interface Added {
+  layer: number;
+  /** Read from this browser's store, not the network. */
+  stored: boolean;
+  timings: { label: string; ms: number }[];
+}
+
+/**
+ * Adds a pack of the catalog: from this browser's store when it holds it, otherwise downloaded;
+ * checked by SHA-256 either way; kept for the next visit; opened above the base pack (priority
+ * 1), so where both hold a place the added, newer one answers.
+ */
+export async function addPack(engine: Engine, entry: CatalogEntry, onProgress: (p: PackProgress) => void): Promise<Added> {
+  const timings: { label: string; ms: number }[] = [];
+  const timed = async <T>(label: string, f: () => Promise<T> | T): Promise<T> => {
+    const t = performance.now();
+    const value = await f();
+    timings.push({ label, ms: performance.now() - t });
+    return value;
+  };
+  const cache = await store();
+  const key = keyOf(entry);
+  let bytes: Uint8Array<ArrayBuffer> | null = null;
+  let stored = false;
+  const kept = await cache?.match(key);
+  if (kept) {
+    bytes = await timed('read from the store', async () => new Uint8Array(await kept.arrayBuffer()));
+    stored = true;
+  }
+  if (!bytes || bytes.length !== entry.bytes) {
+    stored = false;
+    bytes = await timed(`download ${entry.file}`, () =>
+      download(`${playgroundBase}/${entry.file}`, entry.bytes, (loaded) => onProgress({ phase: 'download', loaded, total: entry.bytes })),
+    );
+  }
+  onProgress({ phase: 'verify' });
+  try {
+    const verified = bytes;
+    await timed('SHA-256', () => check(verified, entry.sha256, entry.file));
+  } catch (e) {
+    await cache?.delete(key);
+    throw e;
+  }
+  if (!stored && cache) {
+    try {
+      await cache.put(key, new Response(bytes, { headers: { 'content-type': 'application/octet-stream' } }));
+    } catch {
+      // Over the browser's quota: the pack lasts this visit.
+    }
+  }
+  onProgress({ phase: 'open' });
+  const opened = bytes;
+  const layer = await timed('engine.openBytesWith(pack, { priority: 1 })', () => engine.openBytesWith(opened, { priority: 1 }));
+  return { layer, stored, timings };
+}
+
+/** Drops a pack's stored copy. */
+export async function forgetPack(entry: CatalogEntry) {
+  await (await store())?.delete(keyOf(entry));
 }
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';

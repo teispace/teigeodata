@@ -384,6 +384,18 @@ html.tg-motion [data-reveal][data-shown] .tg-type {
   }
 }
 
+/* A flight scales what is drawn with the map: it fades out for the flight and back in, sharp,
+   where the map lands (PlaygroundMap.fly). */
+.tg-playground .leaflet-overlay-pane,
+.tg-playground .leaflet-tooltip-pane {
+  transition: opacity 0.25s var(--tg-ease);
+}
+.tg-playground .tg-flying .leaflet-overlay-pane,
+.tg-playground .tg-flying .leaflet-tooltip-pane {
+  opacity: 0;
+  transition-duration: 0.12s;
+}
+
 /* What is drawn on the map, coloured by the theme. */
 .tg-map-world {
   stroke: color-mix(in oklab, var(--color-fd-foreground) 35%, transparent);
@@ -501,10 +513,133 @@ html.tg-motion [data-reveal][data-shown] .tg-type {
   display: none;
 }
 
+/* Places by kind: a country or a unit in the primary colour, natural features in green,
+   localities smaller and lighter. */
+.tg-map-place.tg-kind-natural {
+  fill: oklch(0.62 0.13 160);
+}
+.tg-map-place.tg-kind-locality {
+  fill: color-mix(in oklab, var(--color-fd-primary) 70%, var(--color-fd-background));
+}
+.tg-map-place.tg-kind-country,
+.tg-map-place.tg-kind-admin {
+  stroke-width: 2.5;
+}
+
+/* A dot's name beside it: text with a halo, no box, so many read at once. */
+.leaflet-tooltip.tg-map-name {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-fd-foreground);
+  text-shadow:
+    0 0 2px var(--color-fd-background),
+    0 0 4px var(--color-fd-background),
+    0 0 6px var(--color-fd-background);
+  white-space: nowrap;
+}
+.leaflet-tooltip.tg-map-name::before {
+  display: none;
+}
+.leaflet-tooltip.tg-map-name-selected {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* The reader's position: a dot with a halo, inside a circle as wide as the fix is uncertain. */
+.tg-map-me span {
+  position: absolute;
+  inset: 2px;
+  border-radius: 9999px;
+  background: oklch(0.62 0.19 255);
+  border: 3px solid white;
+  box-shadow:
+    0 0 0 6px oklch(0.62 0.19 255 / 0.22),
+    0 2px 6px rgb(0 0 0 / 0.3);
+}
+.tg-map-accuracy {
+  stroke: oklch(0.62 0.19 255);
+  stroke-width: 1;
+  stroke-opacity: 0.5;
+  fill: oklch(0.62 0.19 255);
+  fill-opacity: 0.1;
+}
+
+/* Where the catalog's packs hold data. */
+.tg-map-area {
+  stroke: var(--color-fd-primary);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 5;
+  fill: var(--color-fd-primary);
+  fill-opacity: 0.04;
+  transition:
+    fill-opacity 0.2s,
+    stroke-width 0.2s;
+}
+.tg-map-area-added {
+  stroke-dasharray: none;
+  stroke-opacity: 0.6;
+  fill-opacity: 0.02;
+}
+.tg-map-area-hi {
+  stroke-width: 2.5;
+  fill-opacity: 0.14;
+}
+
+/* The card on the map: Leaflet's popup, restyled as the site's frosted surface. */
+.tg-popup .leaflet-popup-content-wrapper {
+  @apply backdrop-blur-2xl backdrop-saturate-150;
+  background: color-mix(in oklab, var(--color-fd-card) 94%, transparent);
+  color: var(--color-fd-foreground);
+  border: 1px solid color-mix(in oklab, var(--color-fd-border) 90%, transparent);
+  border-radius: 1rem;
+  box-shadow: var(--tg-window-shadow);
+  padding: 0;
+}
+.tg-popup .leaflet-popup-content {
+  margin: 0;
+  padding: 14px;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  width: 336px !important;
+}
+.tg-popup .leaflet-popup-content p {
+  margin: 0;
+}
+.tg-popup .leaflet-popup-tip {
+  background: color-mix(in oklab, var(--color-fd-card) 94%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-fd-border) 90%, transparent);
+  box-shadow: none;
+}
+.tg-popup.leaflet-popup {
+  animation: tg-pop 0.22s var(--tg-ease) both;
+  transform-origin: 50% 100%;
+}
+@keyframes tg-pop {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+    scale: 0.97;
+  }
+}
+@media (max-width: 767px) {
+  .tg-popup .leaflet-popup-content {
+    width: min(336px, calc(100vw - 64px)) !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tg-map-pin-ping {
     animation: none;
     display: none;
+  }
+  .tg-popup.leaflet-popup {
+    animation: none;
   }
 }
 

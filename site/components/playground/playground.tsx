@@ -1,33 +1,60 @@
 'use client';
 
 // The playground: every query of the WebAssembly engine on the pinned pack, in this browser,
-// over a Leaflet map of OpenStreetMap's tiles. Each answer shows the calls that produced it, as
-// code to copy, and how long they took. Only the tiles come from elsewhere; with the base map
-// off, nothing leaves the page.
+// over a Leaflet map of OpenStreetMap's tiles. A click answers in a card on the map; more packs
+// (a country in full, sharper terrain) can be added while it runs, checked, kept for the next
+// visit and opened as layers. Each answer shows the calls that produced it, as code to copy, and
+// how long they took. Only the tiles come from elsewhere; with the base map off, nothing leaves
+// the page.
 
 import 'leaflet/dist/leaflet.css';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type { Geometry } from 'geojson';
 import { DynamicCodeBlock } from 'fumadocs-ui/components/dynamic-codeblock';
 import {
+  ArrowUpRight,
   Check,
   ChevronDown,
   Code2,
+  Copy,
   Crosshair,
+  Download,
+  HardDrive,
   Layers,
   Link2,
   Loader2,
   LocateFixed,
+  Maximize2,
   MousePointerClick,
+  Mountain,
+  Package,
+  PanelLeft,
   Radius,
   Ruler,
   Search,
   ShieldCheck,
+  Trash2,
   X,
   Zap,
 } from 'lucide-react';
-import { fetchManifest, formatBytes, formatMs, load, time, type Loaded, type Manifest, type Progress, type Row } from './engine';
+import {
+  addPack,
+  fetchManifest,
+  forgetPack,
+  formatBytes,
+  formatMs,
+  load,
+  storedPacks,
+  time,
+  type CatalogEntry,
+  type Loaded,
+  type Manifest,
+  type PackProgress,
+  type Progress,
+  type Row,
+} from './engine';
 import { createMap, type Basemap, type PlaygroundMap, type Point } from './map';
 
 type Status =
@@ -64,8 +91,19 @@ interface PointView {
   zone?: Row;
   offset?: Row;
   height?: Row;
+  postal: Row[];
   nearest: Row[];
+  timings: Timed[];
 }
+
+/** A pack of the catalog in this visit. */
+type PackState =
+  | { state: 'loading'; progress: PackProgress }
+  | { state: 'added'; layer: number; stored: boolean; ms: number }
+  | { state: 'error'; message: string };
+
+/** The card on the map: what is at a point, or a place picked on the map. */
+type Popover = { kind: 'point'; at: { lat: number; lon: number } } | { kind: 'place'; at: { lat: number; lon: number } };
 
 interface Outline {
   vertices: number;
@@ -197,6 +235,8 @@ export function Playground() {
   const mapRef = useRef<PlaygroundMap | null>(null);
   const loadedRef = useRef<Loaded | null>(null);
   const pinRef = useRef<{ lat: number; lon: number } | null>(null);
+  /** The map follows the results once typing pauses, not on every keystroke. */
+  const fitTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const searchRef = useRef<HTMLInputElement>(null);
   const clickRef = useRef<(lat: number, lon: number) => void>(() => {});
   const pickRef = useRef<(id: string, at?: { lat: number; lon: number }) => void>(() => {});
@@ -216,6 +256,36 @@ export function Playground() {
   const [layersOpen, setLayersOpen] = useState(false);
   const [codeOpen, setCodeOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [packs, setPacks] = useState<Record<string, PackState>>({});
+  const [stored, setStored] = useState<ReadonlySet<string>>(new Set());
+  const [packsOpen, setPacksOpen] = useState(false);
+  const [hoverPack, setHoverPack] = useState<string | null>(null);
+  const [popover, setPopover] = useState<Popover | null>(null);
+  const [popupEl, setPopupEl] = useState<HTMLDivElement | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const packsRef = useRef(packs);
+  packsRef.current = packs;
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const pointRef = useRef<PointView | null>(null);
+  pointRef.current = point;
+  const popoverRef = useRef(popover);
+  popoverRef.current = popover;
+
+  // The popover's content is rendered by React into an element Leaflet places on the map.
+  useEffect(() => setPopupEl(document.createElement('div')), []);
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !popupEl) return;
+    if (popover) m.openPopup(popover.at, popupEl, () => setPopover(null));
+    else m.closePopup();
+  }, [popover, popupEl]);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -304,7 +374,8 @@ export function Playground() {
         });
         const shown = results.map((r) => toPoint(r)).filter(isPoint);
         m?.setPlaces(shown, pick);
-        if (!near) m?.fitPoints(shown);
+        clearTimeout(fitTimer.current);
+        if (!near) fitTimer.current = setTimeout(() => m?.fitPoints(shown), 350);
       } catch (e) {
         setSearch({ query, results: [], error: (e as Error).message });
       }
@@ -326,7 +397,8 @@ export function Playground() {
     };
 
   const openPoint = useCallback(
-    (latIn: number, lonIn: number, move = false) => {
+    (latIn: number, lonIn: number, opts: { move?: boolean; popover?: boolean; quiet?: boolean } = {}) => {
+      const { move = false, popover: card = false, quiet = false } = opts;
       const l = loadedRef.current;
       const m = mapRef.current;
       if (!l) return;
@@ -339,9 +411,10 @@ export function Playground() {
       const now = Math.floor(Date.now() / 1000);
       const [offset] = zone ? run('tzOffsetAt', () => l.rows(l.engine.tzOffsetAt(str(zone.tz), now)), [] as Row[]) : [];
       const [height] = run('elevationAt', () => l.rows(l.engine.elevationAt(lat, lon)), [] as Row[]);
+      const postal = run('postalAt', () => l.rows(l.engine.postalAt(lat, lon)), [] as Row[]);
       const nearest = run('reverse', () => l.rows(l.engine.reverse(lat, lon, 5)), [] as Row[]);
       pinRef.current = { lat, lon };
-      if (m) {
+      if (m && !quiet) {
         m.setPin({ lat, lon });
         m.setOutline(null, { fillOpacity: settingsRef.current.fill, weight: settingsRef.current.weight });
         m.setMarks({});
@@ -353,7 +426,7 @@ export function Playground() {
         );
         if (move) m.flyTo(lat, lon, 11);
       }
-      setPoint({ lat, lon, admin, zone, offset, height, nearest });
+      setPoint({ lat, lon, admin, zone, offset, height, postal, nearest, timings });
       setAction({
         title: 'At a point',
         timings,
@@ -363,22 +436,26 @@ export function Playground() {
           `const [area] = new Reader(engine.tzAt(lat, lon)).records();`,
           `const [offset] = new Reader(engine.tzOffsetAt(area.tz, Math.floor(Date.now() / 1000))).records();`,
           `const [height] = new Reader(engine.elevationAt(lat, lon)).records();`,
+          `const postal = new Reader(engine.postalAt(lat, lon)).records();`,
           `const nearest = new Reader(engine.reverse(lat, lon, 5)).records();`,
         ].join('\n'),
       });
+      if (quiet) return;
       setView('point');
+      if (card) setPopover({ kind: 'point', at: { lat, lon } });
       history.replaceState(null, '', `#at=${lat},${lon}`);
     },
     [pick],
   );
 
   const openPlace = useCallback(
-    (id: string, lodIn?: number) => {
+    (id: string, lodIn?: number, opts: { popover?: boolean } = {}) => {
       const l = loadedRef.current;
       const m = mapRef.current;
       if (!l) return;
       const s = settingsRef.current;
       const lod = lodIn ?? s.lod;
+      clearTimeout(fitTimer.current);
       const timings: Timed[] = [];
       const run = runner(timings);
       const [record] = run('get', () => l.rows(l.engine.get(id)), [] as Row[]);
@@ -421,11 +498,14 @@ export function Playground() {
           ].filter(isPoint),
           pick,
         );
-        if (lodIn === undefined) {
+        // Picked on the map, the view stays where the reader is looking and a card opens there.
+        if (lodIn === undefined && !opts.popover) {
           if (outline) m.fitGeometry(outline.geometry);
           else if (here) m.flyTo(here.lat, here.lon, 12);
         }
       }
+      if (opts.popover && here) setPopover({ kind: 'place', at: { lat: here.lat, lon: here.lon } });
+      else if (lodIn === undefined) setPopover(null);
       setPlace({ id, place: record, ancestors, children, nearby, outline, fromPin });
       setAction({
         title: str(record.name) || 'A place',
@@ -508,12 +588,13 @@ export function Playground() {
   clickRef.current = (lat, lon) => {
     if (tool === 'measure') runMeasure(lat, lon);
     else if (tool === 'radius') runRadius(lat, lon);
-    else openPoint(lat, lon);
+    else openPoint(lat, lon, { popover: true });
   };
-  // With Measure or Radius on, a place on the map is a point like any other.
+  // With Measure or Radius on, a place on the map is a point like any other; with Inspect, a
+  // place picked on the map opens in a card where it is.
   pickRef.current = (id, at) => {
     if (at && tool !== 'inspect') clickRef.current(at.lat, at.lon);
-    else openPlace(id);
+    else openPlace(id, undefined, { popover: !!at });
   };
 
   // A new level of detail redraws the open place's outline in place.
@@ -537,7 +618,7 @@ export function Playground() {
     } else if (key === 'at') {
       const [lat, lon] = value.split(',').map(Number);
       if (lat !== undefined && lon !== undefined && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90) {
-        openPoint(lat, lon, true);
+        openPoint(lat, lon, { move: true, popover: true });
       }
     } else if (key === 'place' && value) {
       openPlace(value);
@@ -561,11 +642,77 @@ export function Playground() {
       }
       if (e.key === 'Escape') {
         setLayersOpen(false);
+        setPacksOpen(false);
+        setPopover(null);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  /** Answers what is open again: an added or removed pack changes the answers. */
+  const refresh = useCallback(() => {
+    const p = pointRef.current;
+    if (viewRef.current === 'point' && p) openPoint(p.lat, p.lon, { quiet: true });
+    if (viewRef.current === 'search') runSearch(searchRef.current?.value ?? '');
+  }, [openPoint, runSearch]);
+
+  const addOne = useCallback(
+    async (entry: CatalogEntry, opts: { quiet?: boolean } = {}) => {
+      const l = loadedRef.current;
+      const now = packsRef.current[entry.id];
+      if (!l || now?.state === 'loading' || now?.state === 'added') return;
+      setPacks((p) => ({ ...p, [entry.id]: { state: 'loading', progress: { phase: 'download', loaded: 0, total: entry.bytes } } }));
+      try {
+        const added = await addPack(l.engine, entry, (progress) =>
+          setPacks((p) => ({ ...p, [entry.id]: { state: 'loading', progress } })),
+        );
+        const ms = added.timings.reduce((a, t) => a + t.ms, 0);
+        setPacks((p) => ({ ...p, [entry.id]: { state: 'added', layer: added.layer, stored: added.stored, ms } }));
+        setStored((s) => new Set(s).add(entry.id));
+        if (!opts.quiet) {
+          setAction({
+            title: `Added ${entry.title}`,
+            timings: added.timings,
+            code: [
+              `const bytes = new Uint8Array(await (await fetch(${quote(entry.file)})).arrayBuffer());`,
+              `// check the SHA-256 the catalog names before opening it`,
+              `const layer = engine.openBytesWith(bytes, { priority: 1 }); // wins where packs overlap`,
+              `// later: engine.remove(layer);`,
+            ].join('\n'),
+          });
+          setToast(`${entry.title}: ${added.stored ? 'opened from this browser' : `${formatBytes(entry.bytes)} downloaded, checked and kept`}`);
+        }
+        refresh();
+      } catch (e) {
+        setPacks((p) => ({ ...p, [entry.id]: { state: 'error', message: (e as Error).message } }));
+      }
+    },
+    [refresh],
+  );
+
+  const removeOne = useCallback(
+    async (entry: CatalogEntry, forget: boolean) => {
+      const l = loadedRef.current;
+      const now = packsRef.current[entry.id];
+      if (l && now?.state === 'added') l.engine.remove(now.layer);
+      setPacks((p) => {
+        const next = { ...p };
+        delete next[entry.id];
+        return next;
+      });
+      if (forget) {
+        await forgetPack(entry);
+        setStored((s) => {
+          const next = new Set(s);
+          next.delete(entry.id);
+          return next;
+        });
+      }
+      refresh();
+    },
+    [refresh],
+  );
 
   const start = useCallback(async () => {
     if (!manifest) return;
@@ -574,16 +721,21 @@ export function Playground() {
       const l = await load(manifest, (progress) => setStatus({ state: 'loading', progress }));
       loadedRef.current = l;
       setLoaded(l);
+      // Packs added on an earlier visit open again from this browser, before the first answer.
+      const kept = await storedPacks(manifest.catalog);
+      setStored(kept);
+      for (const entry of manifest.catalog) if (kept.has(entry.id)) await addOne(entry, { quiet: true });
       setStatus({ state: 'ready' });
       if (location.hash.length > 1) followHash();
       else searchRef.current?.focus();
     } catch (e) {
       setStatus({ state: 'error', message: (e as Error).message });
     }
-  }, [manifest, followHash]);
+  }, [manifest, followHash, addOne]);
 
   const chooseTool = (t: Tool) => {
     setTool(t);
+    setPopover(null);
     mapRef.current?.setMarks({});
     if (t === 'measure') {
       setMeasure({});
@@ -594,12 +746,38 @@ export function Playground() {
   };
 
   const locate = () => {
-    navigator.geolocation?.getCurrentPosition(
-      (p) => openPoint(p.coords.latitude, p.coords.longitude, true),
-      () => {},
-      { enableHighAccuracy: false, timeout: 8000 },
+    if (!navigator.geolocation) {
+      setToast('This browser cannot tell where you are.');
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        setLocating(false);
+        const { latitude: lat, longitude: lon, accuracy } = p.coords;
+        mapRef.current?.setLocation({ lat, lon, accuracy });
+        setTool('inspect');
+        openPoint(lat, lon, { move: true, popover: true });
+      },
+      (e) => {
+        setLocating(false);
+        setToast(e.code === e.PERMISSION_DENIED ? 'Location is blocked for this site: allow it in the browser to use it.' : 'Your location could not be found.');
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
     );
   };
+
+  // The catalog's areas are drawn while the packs card is open, and where a pack is added.
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !loaded) return;
+    m.setAreas(
+      loaded.manifest.catalog
+        .filter((e) => packsOpen || packs[e.id]?.state === 'added')
+        .filter((e) => e.id !== 'np-places' || hoverPack === e.id)
+        .map((e) => ({ id: e.id, bbox: e.bbox, state: packs[e.id]?.state === 'added' ? 'added' : 'available', highlight: hoverPack === e.id })),
+    );
+  }, [loaded, packs, packsOpen, hoverPack]);
 
   const copyLink = () => {
     void navigator.clipboard?.writeText(location.href).then(() => {
@@ -698,7 +876,7 @@ export function Playground() {
                 {view === 'radius' && <RadiusPanel view={radius} settings={settings} set={set} onPick={openPlace} />}
               </div>
             </div>
-            <Credits manifest={loaded.manifest} basemap={settings.basemap} />
+            <Credits manifest={loaded.manifest} basemap={settings.basemap} added={loaded.manifest.catalog.filter((e) => packs[e.id]?.state === 'added')} />
           </aside>
 
           {/* Tools */}
@@ -730,17 +908,87 @@ export function Playground() {
 
           {/* Map actions */}
           <div className="absolute top-3 right-3 z-[500] flex flex-col gap-2">
-            <IconButton label="Layers and style" onClick={() => setLayersOpen((o) => !o)} active={layersOpen}>
+            <IconButton
+              label="Layers and style"
+              onClick={() => {
+                setLayersOpen((o) => !o);
+                setPacksOpen(false);
+              }}
+              active={layersOpen}
+            >
               <Layers className="size-4" />
             </IconButton>
+            <IconButton
+              label="Packs: add data while it runs"
+              onClick={() => {
+                setPacksOpen((o) => !o);
+                setLayersOpen(false);
+              }}
+              active={packsOpen}
+              testid="packs-button"
+              badge={Object.values(packs).filter((p) => p.state === 'added').length}
+            >
+              <Package className="size-4" />
+            </IconButton>
             <IconButton label="My location" onClick={locate}>
-              <LocateFixed className="size-4" />
+              {locating ? <Loader2 className="size-4 animate-spin" /> : <LocateFixed className="size-4" />}
             </IconButton>
             <IconButton label={copied ? 'Link copied' : 'Copy a link to this view'} onClick={copyLink}>
               {copied ? <Check className="size-4 text-fd-primary" /> : <Link2 className="size-4" />}
             </IconButton>
           </div>
           {layersOpen && <LayersCard settings={settings} set={set} onClose={() => setLayersOpen(false)} hasPlace={!!place} />}
+          {packsOpen && (
+            <PacksCard
+              loaded={loaded}
+              packs={packs}
+              stored={stored}
+              onAdd={(e) => void addOne(e)}
+              onRemove={(e, forget) => void removeOne(e, forget)}
+              onHover={setHoverPack}
+              onShow={(e) => mapRef.current?.fitBox(e.bbox)}
+              onClose={() => setPacksOpen(false)}
+            />
+          )}
+
+          {/* The card on the map */}
+          {popupEl &&
+            popover &&
+            createPortal(
+              popover.kind === 'point' ? (
+                <PointCard
+                  view={point}
+                  catalog={loaded.manifest.catalog}
+                  packs={packs}
+                  onAdd={(e) => void addOne(e)}
+                  onPlace={(id) => openPlace(id)}
+                  onDetails={() => setView('point')}
+                  onResize={() => mapRef.current?.updatePopup()}
+                  onClose={() => setPopover(null)}
+                />
+              ) : (
+                <PlaceCard
+                  view={place}
+                  onDetails={() => setView('place')}
+                  onZoom={() => {
+                    if (place?.outline) mapRef.current?.fitGeometry(place.outline.geometry);
+                    else if (place) mapRef.current?.flyTo(num(place.place.lat), num(place.place.lon), 13);
+                  }}
+                  onClose={() => setPopover(null)}
+                />
+              ),
+              popupEl,
+            )}
+
+          {toast && (
+            <p
+              role="status"
+              className="tg-glass tg-fade absolute bottom-6 left-1/2 z-[700] max-w-[min(90vw,480px)] -translate-x-1/2 rounded-full px-4 py-2 text-center text-xs md:left-[calc(50%+208px)]"
+              data-testid="toast"
+            >
+              {toast}
+            </p>
+          )}
 
           {/* The inspector */}
           {action && (
@@ -780,7 +1028,21 @@ export function Playground() {
   );
 }
 
-function IconButton({ label, onClick, active, children }: { label: string; onClick: () => void; active?: boolean; children: ReactNode }) {
+function IconButton({
+  label,
+  onClick,
+  active,
+  children,
+  testid,
+  badge,
+}: {
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+  children: ReactNode;
+  testid?: string;
+  badge?: number;
+}) {
   return (
     <button
       type="button"
@@ -788,9 +1050,15 @@ function IconButton({ label, onClick, active, children }: { label: string; onCli
       aria-label={label}
       title={label}
       aria-pressed={active}
-      className={`tg-glass flex size-10 items-center justify-center rounded-xl transition-colors hover:text-fd-primary ${active ? 'text-fd-primary' : 'text-fd-foreground'}`}
+      data-testid={testid}
+      className={`tg-glass relative flex size-10 items-center justify-center rounded-xl transition-colors hover:text-fd-primary ${active ? 'text-fd-primary' : 'text-fd-foreground'}`}
     >
       {children}
+      {!!badge && (
+        <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-fd-primary text-[10px] font-semibold text-fd-primary-foreground tabular-nums">
+          {badge}
+        </span>
+      )}
     </button>
   );
 }
@@ -1141,6 +1409,7 @@ function Stat({ label, children, testid }: { label: string; children: ReactNode;
 function PointPanel({ view, onPick }: { view: PointView | null; onPick: (id: string) => void }) {
   if (!view) return <Empty icon={<MousePointerClick className="size-5" />}>Click anywhere on the map.</Empty>;
   const { zone, offset, height } = view;
+  const code = view.postal[0];
   return (
     <div className="space-y-5" data-testid="point-panel">
       <p className="font-mono text-sm">
@@ -1175,6 +1444,12 @@ function PointPanel({ view, onPick }: { view: PointView | null; onPick: (id: str
             <span className="text-fd-muted-foreground">No terrain here</span>
           )}
         </Stat>
+        {code && (
+          <Stat label="Postal code">
+            <strong className="font-semibold">{str(code.postal)}</strong>
+            <span className="block text-xs text-fd-muted-foreground">{str(code.name)}</span>
+          </Stat>
+        )}
       </div>
       <Section title="Admin units, country first" count={view.admin.length}>
         {view.admin.length ? (
@@ -1337,15 +1612,408 @@ function RadiusPanel({ view, settings, set, onPick }: { view: RadiusView | null;
   );
 }
 
-function Credits({ manifest, basemap }: { manifest: Manifest; basemap: Basemap }) {
+function Credits({ manifest, basemap, added }: { manifest: Manifest; basemap: Basemap; added: CatalogEntry[] }) {
+  const releases = [...new Set(added.map((e) => e.release))].filter((r) => r !== manifest.release);
   return (
     <p className="border-t px-4 py-2.5 text-[11px] leading-relaxed text-fd-muted-foreground">
-      Data: teigeodata lite, {manifest.release}, CC BY 4.0 (
+      Data: teigeodata lite, {[manifest.release, ...releases].join(' and ')}, CC BY 4.0 (
       <Link className="text-fd-primary hover:underline" href="/docs/concepts/licences">
         credits
       </Link>
       ).{' '}
       {basemap === 'osm' ? 'Tiles © OpenStreetMap contributors.' : 'No tiles: the map is the pack’s own outlines.'}
     </p>
+  );
+}
+
+const inBox = (bbox: CatalogEntry['bbox'], lat: number, lon: number) =>
+  lon >= bbox[0] && lat >= bbox[1] && lon <= bbox[2] && lat <= bbox[3];
+
+const isTerrain = (e: CatalogEntry) => e.contents.some((c) => c.startsWith('terrain'));
+
+function clockAt(zone: string) {
+  try {
+    return new Intl.DateTimeFormat(undefined, { timeZone: zone, timeStyle: 'short' }).format(new Date());
+  } catch {
+    return '';
+  }
+}
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={() =>
+        void navigator.clipboard?.writeText(text).then(() => {
+          setDone(true);
+          setTimeout(() => setDone(false), 1200);
+        })
+      }
+      className="rounded-md p-1 text-fd-muted-foreground transition-colors hover:bg-fd-accent hover:text-fd-foreground"
+    >
+      {done ? <Check className="size-3.5 text-fd-primary" /> : <Copy className="size-3.5" />}
+    </button>
+  );
+}
+
+function Fact({ label, value, note, testid }: { label: string; value: ReactNode; note?: ReactNode; testid?: string }) {
+  return (
+    <div className="min-w-0 rounded-lg bg-fd-secondary/60 px-2.5 py-2">
+      <p className="text-[10.5px] font-medium tracking-wide text-fd-muted-foreground uppercase">{label}</p>
+      <p className="mt-0.5 truncate text-sm font-semibold tabular-nums" data-testid={testid}>
+        {value}
+      </p>
+      {note && <p className="truncate text-[11px] text-fd-muted-foreground">{note}</p>}
+    </div>
+  );
+}
+
+/** What is at a clicked point, on the map: the nearest place, its units, height, time, code. */
+function PointCard({
+  view,
+  catalog,
+  packs,
+  onAdd,
+  onPlace,
+  onDetails,
+  onResize,
+  onClose,
+}: {
+  view: PointView | null;
+  catalog: CatalogEntry[];
+  packs: Record<string, PackState>;
+  onAdd: (e: CatalogEntry) => void;
+  onPlace: (id: string) => void;
+  onDetails: () => void;
+  onResize: () => void;
+  onClose: () => void;
+}) {
+  // Leaflet sizes the card when it opens; new content (a pack added) needs a new measure.
+  useEffect(() => onResize(), [view, packs, onResize]);
+  if (!view) return null;
+  const top = view.nearest[0];
+  const path = [...view.admin].reverse().map((r) => str(r.name));
+  const { zone, offset, height } = view;
+  const code = view.postal[0];
+  const sharper =
+    !height || num(height.resolution_m) > 100 ? catalog.find((e) => isTerrain(e) && inBox(e.bbox, view.lat, view.lon)) : undefined;
+  const sharperState = sharper ? packs[sharper.id] : undefined;
+  const total = view.timings.reduce((a, t) => a + t.ms, 0);
+  const coords = `${view.lat.toFixed(5)}, ${view.lon.toFixed(5)}`;
+  return (
+    <div className="tg-pop space-y-3" data-testid="popover">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-fd-primary">
+            {top ? (num(top.meters) < 30 ? 'Here' : `Nearest place · ${distanceText(num(top.meters))} ${compass(num(top.bearing))}`) : 'A point'}
+          </p>
+          <h3 className="mt-0.5 truncate text-[17px] leading-snug font-semibold tracking-tight" data-testid="popover-title">
+            {top ? str(top.name) : coords}
+          </h3>
+          <p className="truncate text-xs text-fd-muted-foreground">{path.length ? path.join(' · ') : 'Open water, or outside every outline'}</p>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close" className="-mt-0.5 -mr-1 rounded-md p-1 text-fd-muted-foreground hover:bg-fd-accent">
+          <X className="size-4" />
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        <Fact
+          label="Elevation"
+          testid="popover-height"
+          value={height ? `${num(height.meters).toLocaleString('en', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} m` : '–'}
+          note={height ? `${str(height.source)} · ${fixed(height.resolution_m, 0)} m grid` : 'No terrain here'}
+        />
+        <Fact
+          label="Local time"
+          value={zone ? clockAt(str(zone.tz)) : '–'}
+          note={zone ? `${offset ? `${offsetText(num(offset.seconds))} · ` : ''}${str(zone.tz)}` : 'No zone'}
+        />
+        {code && <Fact label="Postal code" value={str(code.postal)} note={str(code.name)} />}
+      </div>
+      <div className="flex items-center justify-between gap-2 rounded-lg bg-fd-secondary/60 px-2.5 py-1.5">
+        <span className="font-mono text-[12.5px] tabular-nums">{coords}</span>
+        <span className="inline-flex items-center gap-1 text-[11px] text-fd-muted-foreground">
+          WGS84 <CopyButton text={coords} label="Copy the coordinates" />
+        </span>
+      </div>
+      {sharper && sharperState?.state !== 'added' && (
+        <div className="flex items-center gap-2.5 rounded-lg border border-fd-primary/30 bg-fd-primary/8 px-2.5 py-2">
+          <Mountain className="size-4 shrink-0 text-fd-primary" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-xs leading-snug">
+            <strong className="font-semibold">31 m terrain</strong> <span className="text-fd-muted-foreground">for {sharper.title.replace(/ terrain$/, '')}</span>
+          </p>
+          <button
+            type="button"
+            onClick={() => onAdd(sharper)}
+            disabled={sharperState?.state === 'loading'}
+            data-testid="popover-add"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full bg-fd-primary px-2.5 text-[11px] font-semibold text-fd-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {sharperState?.state === 'loading' ? <Loader2 className="size-3 animate-spin" /> : <Download className="size-3" />}
+            {formatBytes(sharper.bytes)}
+          </button>
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-2 border-t pt-2.5">
+        <div className="flex min-w-0 gap-1.5">
+          {top && (
+            <button
+              type="button"
+              onClick={() => onPlace(str(top.id))}
+              className="inline-flex h-8 max-w-[150px] items-center gap-1 rounded-full bg-fd-foreground px-3 text-xs font-medium text-fd-background transition-opacity hover:opacity-90"
+            >
+              <span className="truncate">Open {str(top.name)}</span>
+              <ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onDetails}
+            className="inline-flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium text-fd-muted-foreground transition-colors hover:text-fd-foreground"
+          >
+            <PanelLeft className="size-3.5" aria-hidden="true" /> Details
+          </button>
+        </div>
+        <span
+          className="inline-flex shrink-0 items-center gap-1 text-[11px] whitespace-nowrap text-fd-muted-foreground"
+          title={`${view.timings.length} queries: ${view.timings.map((t) => `${t.label} ${formatMs(t.ms)}`).join(', ')}`}
+        >
+          <Zap className="size-3 text-fd-primary" aria-hidden="true" />
+          <span className="tabular-nums text-fd-foreground">{formatMs(total)}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** A place picked on the map, in a card where it is. */
+function PlaceCard({ view, onDetails, onZoom, onClose }: { view: PlaceView | null; onDetails: () => void; onZoom: () => void; onClose: () => void }) {
+  if (!view) return null;
+  const p = view.place;
+  const path = view.ancestors.map((a) => str(a.name));
+  const population = p.population !== null && p.population !== undefined ? num(p.population) : NaN;
+  return (
+    <div className="tg-pop space-y-3" data-testid="popover">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-fd-primary">
+            {str(p.kind).charAt(0).toUpperCase() + str(p.kind).slice(1)}
+            {p.kind === 'admin' ? ` · level ${str(p.level)}` : ''}
+          </p>
+          <h3 className="mt-0.5 truncate text-[17px] leading-snug font-semibold tracking-tight" data-testid="popover-title">
+            {str(p.name)}
+          </h3>
+          <p className="truncate text-xs text-fd-muted-foreground">{path.length ? path.join(' · ') : 'A top-level place'}</p>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close" className="-mt-0.5 -mr-1 rounded-md p-1 text-fd-muted-foreground hover:bg-fd-accent">
+          <X className="size-4" />
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        <Fact
+          label="Population"
+          value={Number.isFinite(population) ? population.toLocaleString('en') : '–'}
+          note={p.population_kind ? str(p.population_kind) : 'Not known'}
+        />
+        <Fact label="Elevation" value={p.elevation === null || p.elevation === undefined ? '–' : `${fixed(p.elevation, 0)} m`} note={str(p.tz) || undefined} />
+        <Fact
+          label="ID"
+          value={<span className="font-mono text-[12.5px]">{view.id}</span>}
+          note={
+            <span className="inline-flex items-center gap-1">
+              Stable across releases <CopyButton text={view.id} label="Copy the ID" />
+            </span>
+          }
+        />
+        <Fact
+          label={view.outline ? 'Outline' : 'Children'}
+          value={view.outline ? `${view.outline.vertices.toLocaleString('en')} pts` : view.children.length.toLocaleString('en')}
+          note={view.outline ? `level of detail ${view.outline.lod}` : 'places under it'}
+        />
+      </div>
+      <div className="flex gap-1.5 border-t pt-2.5">
+        <button
+          type="button"
+          onClick={onDetails}
+          className="inline-flex h-8 items-center gap-1 rounded-full bg-fd-foreground px-3 text-xs font-medium text-fd-background transition-opacity hover:opacity-90"
+        >
+          <PanelLeft className="size-3.5" aria-hidden="true" /> Details
+        </button>
+        <button
+          type="button"
+          onClick={onZoom}
+          className="inline-flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium text-fd-muted-foreground transition-colors hover:text-fd-foreground"
+        >
+          <Maximize2 className="size-3.5" aria-hidden="true" /> Zoom to it
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** The catalog: packs to add while the playground runs, each checked, kept and layered. */
+function PacksCard({
+  loaded,
+  packs,
+  stored,
+  onAdd,
+  onRemove,
+  onHover,
+  onShow,
+  onClose,
+}: {
+  loaded: Loaded;
+  packs: Record<string, PackState>;
+  stored: ReadonlySet<string>;
+  onAdd: (e: CatalogEntry) => void;
+  onRemove: (e: CatalogEntry, forget: boolean) => void;
+  onHover: (id: string | null) => void;
+  onShow: (e: CatalogEntry) => void;
+  onClose: () => void;
+}) {
+  const { manifest } = loaded;
+  const kept = manifest.catalog.filter((e) => stored.has(e.id));
+  return (
+    <div
+      className="tg-glass tg-fade absolute top-3 right-16 z-[600] flex max-h-[calc(100%-1.5rem)] w-[min(400px,calc(100vw-5rem))] flex-col overflow-hidden rounded-2xl"
+      role="dialog"
+      aria-label="Packs"
+      data-testid="packs"
+    >
+      <div className="flex items-start justify-between gap-3 border-b p-4">
+        <div>
+          <p className="text-sm font-semibold">Packs</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-fd-muted-foreground">
+            Add data while it runs: downloaded once, checked by SHA-256, kept in this browser for offline use, and opened as a layer
+            over the base pack.
+          </p>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close" className="rounded-md p-1 text-fd-muted-foreground hover:bg-fd-accent">
+          <X className="size-4" />
+        </button>
+      </div>
+      <ul className="tg-scroll min-h-0 flex-1 divide-y overflow-y-auto" onMouseLeave={() => onHover(null)}>
+        <li className="flex items-center gap-3 px-4 py-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-fd-secondary text-fd-muted-foreground">
+            <Layers className="size-4" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">World and Nepal · base</p>
+            <p className="truncate text-xs text-fd-muted-foreground">
+              {manifest.file} · {formatBytes(manifest.bytes)} · {manifest.release}
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <Check className="size-3.5" aria-hidden="true" /> Open
+          </span>
+        </li>
+        {manifest.catalog.map((e) => {
+          const s = packs[e.id];
+          const share = s?.state === 'loading' ? (s.progress.phase === 'download' ? s.progress.loaded / s.progress.total : 1) : 0;
+          return (
+            <li key={e.id} className="px-4 py-3" onMouseEnter={() => onHover(e.id)} data-testid={`pack-${e.id}`} data-state={s?.state ?? 'available'}>
+              <div className="flex items-start gap-3">
+                <span
+                  className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${s?.state === 'added' ? 'bg-fd-primary text-fd-primary-foreground' : 'bg-fd-primary/10 text-fd-primary'}`}
+                >
+                  {isTerrain(e) ? <Mountain className="size-4" aria-hidden="true" /> : <Package className="size-4" aria-hidden="true" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-medium">{e.title}</p>
+                    <span className="shrink-0 text-xs tabular-nums text-fd-muted-foreground">{formatBytes(e.bytes)}</span>
+                  </div>
+                  <p className="mt-0.5 text-xs leading-relaxed text-fd-muted-foreground">{e.summary}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {e.contents.map((c) => (
+                      <span key={c} className="rounded-full border px-2 py-0.5 text-[10.5px] text-fd-muted-foreground">
+                        {c}
+                      </span>
+                    ))}
+                    <span className="rounded-full border px-2 py-0.5 font-mono text-[10.5px] text-fd-muted-foreground">{e.release}</span>
+                  </div>
+                  {s?.state === 'loading' && (
+                    <div className="mt-2.5 space-y-1" aria-live="polite">
+                      <div className="flex justify-between text-[11px] text-fd-muted-foreground">
+                        <span>{s.progress.phase === 'download' ? 'Downloading' : s.progress.phase === 'verify' ? 'Checking its SHA-256' : 'Opening'}</span>
+                        {s.progress.phase === 'download' && (
+                          <span className="tabular-nums">
+                            {formatBytes(s.progress.loaded)} of {formatBytes(s.progress.total)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="h-1 overflow-hidden rounded-full bg-fd-secondary">
+                        <div className="h-full rounded-full bg-fd-primary transition-[width] duration-200" style={{ width: `${(share * 100).toFixed(1)}%` }} />
+                      </div>
+                    </div>
+                  )}
+                  {s?.state === 'error' && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{s.message}</p>}
+                  <div className="mt-2.5 flex items-center gap-1.5">
+                    {s?.state === 'added' ? (
+                      <>
+                        <span className="inline-flex h-7 items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                          <Check className="size-3" aria-hidden="true" /> Added · {formatMs(s.ms)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onRemove(e, false)}
+                          className="inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium text-fd-muted-foreground transition-colors hover:text-fd-foreground"
+                        >
+                          <X className="size-3" aria-hidden="true" /> Remove
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onAdd(e)}
+                        disabled={s?.state === 'loading'}
+                        data-testid={`add-${e.id}`}
+                        className="inline-flex h-7 items-center gap-1 rounded-full bg-fd-foreground px-2.5 text-[11px] font-semibold text-fd-background transition-opacity hover:opacity-90 disabled:opacity-60"
+                      >
+                        {s?.state === 'loading' ? (
+                          <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+                        ) : stored.has(e.id) ? (
+                          <HardDrive className="size-3" aria-hidden="true" />
+                        ) : (
+                          <Download className="size-3" aria-hidden="true" />
+                        )}
+                        {stored.has(e.id) ? 'Open, kept here' : `Add · ${formatBytes(e.bytes)}`}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onShow(e)}
+                      className="inline-flex h-7 items-center gap-1 rounded-full px-2 text-[11px] font-medium text-fd-muted-foreground transition-colors hover:bg-fd-accent hover:text-fd-foreground"
+                    >
+                      <Maximize2 className="size-3" aria-hidden="true" /> Show
+                    </button>
+                    {stored.has(e.id) && (
+                      <button
+                        type="button"
+                        onClick={() => onRemove(e, true)}
+                        aria-label={`Forget the kept copy of ${e.title}`}
+                        title="Forget the kept copy"
+                        className="ml-auto rounded-full p-1.5 text-fd-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600"
+                      >
+                        <Trash2 className="size-3.5" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="border-t px-4 py-2.5 text-[11px] leading-relaxed text-fd-muted-foreground">
+        {kept.length
+          ? `Kept in this browser: ${kept.length} ${kept.length === 1 ? 'pack' : 'packs'}, ${formatBytes(kept.reduce((a, e) => a + e.bytes, 0))}. `
+          : ''}
+        Cut from release assets by <code>tgd extract</code>; CC BY 4.0, credits in each pack.
+      </p>
+    </div>
   );
 }

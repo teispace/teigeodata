@@ -2,8 +2,8 @@
 # a static export served by Vercel at https://teigeodata.teispace.com (D-353; GitHub Pages
 # serves the signed catalog). Every push that touches the site
 # or what it is generated from builds it, type-checks it, checks every internal link and runs
-# the playground in Chromium on the WebAssembly package built from the same commit
-# (docs/02-research/notes/docs-playground.md). A push to main, once the repository variable
+# the playground in Chromium on the WebAssembly package built from the same commit, with the
+# catalog's packs cut by this commit's `tgd extract` (docs/02-research/notes/docs-playground.md). A push to main, once the repository variable
 # DOCS_DEPLOY is true, force-pushes the built site as one commit to the branch `docs-site`;
 # the Vercel project, connected to the repository with `docs-site` as its production branch
 # and no build step, serves it. No token or secret: Vercel's GitHub app deploys the branch.
@@ -25,6 +25,9 @@ on:
       - bindings/wasm/**
       - xtask/src/playground.rs
       - xtask/src/package_wasm.rs
+      - xtask/src/docs_examples.rs
+      # The catalog's packs are cut by `tgd extract` (site/packs.json, D-357).
+      - crates/teigeodata-cli/**
       - .github/actions/wasm-tools/**
       - .github/workflows/docs.yml
   pull_request:
@@ -41,6 +44,9 @@ on:
       - bindings/wasm/**
       - xtask/src/playground.rs
       - xtask/src/package_wasm.rs
+      - xtask/src/docs_examples.rs
+      # The catalog's packs are cut by `tgd extract` (site/packs.json, D-357).
+      - crates/teigeodata-cli/**
       - .github/actions/wasm-tools/**
       - .github/workflows/docs.yml
   workflow_dispatch:
@@ -78,7 +84,7 @@ jobs:
         run: python3 scripts/guides.py --check
       - name: Install
         run: npm ci
-      - name: The playground's engine, pack and map worker
+      - name: The playground's engine, pack and catalog of packs
         working-directory: .
         run: cargo xtask playground --fetch
       - name: Build
