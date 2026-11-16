@@ -1,0 +1,704 @@
+# Install (/docs/getting-started/install)
+
+teigeodata is one Rust engine with a binding for each language, generated from one
+definition: the calls, their arguments and the columns they return are the same everywhere.
+Pick your language; every page of these docs remembers it.
+
+## Add the package [#add-the-package]
+
+<Tabs groupId="lang" persist items={["Rust","Python","Node.js","Browser","Swift","Kotlin","Java","Dart","Go","C","C++","C#"]}>
+<Tab value="Rust">
+teigeodata is written in Rust, and Rust gets the engine itself: typed places, typed IDs and
+points, and queries that write into buffers you reuse, so a warm query allocates nothing. Every
+other language reaches the same engine through a generated binding.
+
+```sh
+cargo add teigeodata-core teigeodata-engine
+```
+
+The crates on crates.io: `teigeodata-core`, `-engine`, `-sync` (the store), `-api`, `-server`,
+`-cli` (`tgd`) and what they need, all at the same version.
+
+The minimum Rust version is the one `rust-toolchain.toml` pins. `teigeodata-engine`'s default
+features read packs from files (`mmap`); `teigeodata-sync` adds the store (download, verify,
+update); the core crates build for `no_std` targets.
+</Tab>
+
+<Tab value="Python">
+The Python package is a native extension (PyO3) over the Rust engine, with type stubs. One
+`abi3` wheel per platform serves CPython 3.11 and later; free-threaded builds (3.14t, 3.15t) get
+their own wheels and run queries in parallel without the GIL.
+
+<Tabs items={["PyPI","From a checkout"]}>
+<Tab value="PyPI">
+```sh
+pip install teigeodata
+```
+
+Wheels for Linux (glibc and musl), macOS and Windows on x64 and Arm64.
+</Tab>
+
+<Tab value="From a checkout">
+To build from a checkout instead (a Rust toolchain is all it needs;
+`rust-toolchain.toml` pins the version):
+
+```sh
+git clone https://github.com/teispace/teigeodata && cd teigeodata
+git checkout v1.1.0
+PYO3_BUILD_EXTENSION_MODULE=1 cargo build --release -p teigeodata-python --manifest-path bindings/Cargo.toml
+cp bindings/target/release/libteigeodata_python.so bindings/python/teigeodata/_native.abi3.so   # .dylib on macOS
+export PYTHONPATH=$PWD/bindings/python
+```
+
+Or build a wheel with [maturin](https://www.maturin.rs): `pip install ./bindings/python`.
+</Tab>
+</Tabs>
+</Tab>
+
+<Tab value="Node.js">
+`teigeodata` is a native addon (N-API, napi-rs layout) with TypeScript types: one
+prebuilt addon per platform, installed as an optional dependency, so `npm install` downloads only
+yours. It runs on Node.js, and on Bun and Deno through their N-API support. For browsers and
+edge workers use the WebAssembly package (the **Browser** tab), which has the same API.
+
+<Tabs items={["npm","From a checkout"]}>
+<Tab value="npm">
+```sh
+npm install teigeodata
+```
+
+npm installs the native addon for your platform with it (`@teispace/teigeodata-<platform>`).
+</Tab>
+
+<Tab value="From a checkout">
+To build from a checkout instead (a Rust toolchain is all it needs;
+`rust-toolchain.toml` pins the version):
+
+```sh
+git clone https://github.com/teispace/teigeodata && cd teigeodata
+git checkout v1.1.0
+cargo build --release -p teigeodata-node --manifest-path bindings/Cargo.toml
+cp bindings/target/release/libteigeodata_node.so bindings/node/teigeodata.node   # .dylib on macOS
+npm install ./bindings/node
+```
+
+`cargo xtask package-node` makes the packages as they are published, under `target/node/`.
+</Tab>
+</Tabs>
+
+Node.js 22 or later. The package is ESM and CommonJS (`require` works too).
+</Tab>
+
+<Tab value="Browser">
+`teigeodata-wasm` is the engine compiled to WebAssembly, for browsers, Web Workers,
+Deno, Bun, Node.js and Cloudflare Workers. The API is the Node.js package's (the **Node.js** tab);
+the difference is where packs come from: a page has no file system, so it opens a pack from its
+bytes. After that one download, every query runs locally. The [playground](/playground) is this
+package in a page: every query on the pack below, with the code each answer came from.
+
+<Tabs items={["npm","From a checkout"]}>
+<Tab value="npm">
+```sh
+npm install teigeodata-wasm          # every component
+npm install teigeodata-wasm-lookup   # no name search: a smaller module
+```
+</Tab>
+
+<Tab value="From a checkout">
+To build from a checkout instead (a Rust toolchain is all it needs;
+`rust-toolchain.toml` pins the version):
+
+```sh
+git clone https://github.com/teispace/teigeodata && cd teigeodata
+git checkout v1.1.0
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.130 --locked
+cargo xtask package-wasm          # needs binaryen's wasm-opt; writes target/wasm/full/
+npm install ./target/wasm/full
+```
+</Tab>
+</Tabs>
+
+Two packages, the same API. The full module is at most 256 KiB gzipped (a CI gate); the
+`-lookup` one leaves out name search and is at most 150 KiB, for apps that only reverse geocode,
+read timezones or look places up by ID.
+</Tab>
+
+<Tab value="Swift">
+The Swift package wraps the C library: on Apple platforms it links an XCFramework (iOS,
+the iOS simulators, macOS), on Linux the library you build. Swift 6 with typed throws; every
+handle is `Sendable`.
+
+<Tabs items={["Swift Package Manager","From a checkout"]}>
+<Tab value="Swift Package Manager">
+The release tags are the Swift releases; each one fetches the release's XCFramework and checks
+its checksum:
+
+```swift title="Package.swift"
+dependencies: [
+    .package(url: "https://github.com/teispace/teigeodata", from: "1.1.0"),
+],
+targets: [
+    .target(name: "MyApp", dependencies: [.product(name: "TeiGeodata", package: "teigeodata")]),
+]
+```
+
+In Xcode: File › Add Package Dependencies, and the repository URL.
+</Tab>
+
+<Tab value="From a checkout">
+To build from a checkout instead (a Rust toolchain is all it needs;
+`rust-toolchain.toml` pins the version):
+
+```sh
+git clone https://github.com/teispace/teigeodata && cd teigeodata
+git checkout v1.1.0
+cargo build --release -p teigeodata-ffi        # the C library the package links
+```
+
+and depend on `bindings/swift` by path, linking `target/release` as the tour's
+[Package.swift](https://github.com/teispace/teigeodata/blob/main/site/examples/swift/Tour/Package.swift)
+does. `cargo xtask package-swift` makes the XCFramework the release ships.
+</Tab>
+</Tabs>
+
+iOS 15, macOS 12, and Linux.
+</Tab>
+
+<Tab value="Kotlin">
+One library serves Kotlin and Java, on desktop JVMs (Java 17 or later) and on Android (API 24
+or later). It calls the native library through JNI; the JAR carries it for each desktop
+platform, the AAR for each Android ABI (arm64-v8a, armeabi-v7a, x86_64, 16 KB page aligned).
+
+<Tabs items={["Gradle","From a checkout"]}>
+<Tab value="Gradle">
+On Maven Central:
+
+```kotlin title="build.gradle.kts"
+dependencies {
+    implementation("com.teispace:teigeodata:1.1.0")            // desktop JVM
+    // implementation("com.teispace:teigeodata-android:1.1.0") // Android
+}
+```
+</Tab>
+
+<Tab value="From a checkout">
+To build from a checkout instead (a Rust toolchain is all it needs;
+`rust-toolchain.toml` pins the version):
+
+```sh
+git clone https://github.com/teispace/teigeodata && cd teigeodata
+git checkout v1.1.0
+cargo xtask package-jvm --desktop         # target/jvm/teigeodata-<version>.jar
+cargo xtask package-jvm --android         # target/jvm/teigeodata-<version>.aar (needs the NDK)
+```
+</Tab>
+</Tabs>
+</Tab>
+
+<Tab value="Java">
+One library serves Kotlin and Java, on desktop JVMs (Java 17 or later) and on Android (API 24
+or later). It calls the native library through JNI; the JAR carries it for each desktop
+platform, the AAR for each Android ABI (arm64-v8a, armeabi-v7a, x86_64, 16 KB page aligned).
+
+<Tabs items={["Gradle","From a checkout"]}>
+<Tab value="Gradle">
+On Maven Central:
+
+```kotlin title="build.gradle.kts"
+dependencies {
+    implementation("com.teispace:teigeodata:1.1.0")            // desktop JVM
+    // implementation("com.teispace:teigeodata-android:1.1.0") // Android
+}
+```
+</Tab>
+
+<Tab value="From a checkout">
+To build from a checkout instead (a Rust toolchain is all it needs;
+`rust-toolchain.toml` pins the version):
+
+```sh
+git clone https://github.com/teispace/teigeodata && cd teigeodata
+git checkout v1.1.0
+cargo xtask package-jvm --desktop         # target/jvm/teigeodata-<version>.jar
+cargo xtask package-jvm --android         # target/jvm/teigeodata-<version>.aar (needs the NDK)
+```
+</Tab>
+</Tabs>
+</Tab>
+
+<Tab value="Dart">
+One package for Dart and Flutter on Android, iOS, macOS, Linux, Windows and the web. Natively
+it calls the C library through FFI, supplied by the package's build hook; on the web (dart2js or
+dart2wasm) the same classes run on the WebAssembly module.
+
+<Tabs items={["pub.dev","From the repository"]}>
+<Tab value="pub.dev">
+```sh
+dart pub add teigeodata      # or: flutter pub add teigeodata
+```
+</Tab>
+
+<Tab value="From the repository">
+```yaml title="pubspec.yaml"
+dependencies:
+  teigeodata:
+    git:
+      url: https://github.com/teispace/teigeodata
+      ref: v1.1.0
+      path: bindings/dart
+```
+
+To build the library with cargo instead of downloading it, point the build hook at a checkout:
+
+```yaml title="pubspec.yaml"
+hooks:
+  user_defines:
+    teigeodata:
+      source: path/to/teigeodata
+```
+</Tab>
+</Tabs>
+
+Dart 3.10 or later (Flutter 3.38 or later). The build hook fetches the prebuilt library for the
+target and checks it against the SHA-256 the package pins; `library:` names one you built,
+`prebuilt_base:` a mirror.
+</Tab>
+
+<Tab value="Go">
+The Go module calls the C library through cgo, or through
+[purego](https://github.com/ebitengine/purego) when built with `CGO_ENABLED=0`, so it cross-compiles
+without a C toolchain. The library is loaded at run time: the file passed to `LoadLibrary`, then
+the one `TEIGEODATA_LIB` names, then the release's prebuilt library in the user cache (checked
+against the SHA-256 the module pins), then the system's.
+
+```sh
+go get github.com/teispace/teigeodata/bindings/go
+```
+
+The module's versions are the tags `bindings/go/vX.Y.Z`, made with each release. Go 1.26 or
+later. Fetch the release's prebuilt library once:
+
+```sh
+go run github.com/teispace/teigeodata/bindings/go/cmd/teigeodata-fetch
+```
+
+or build it from a checkout and name it:
+
+```sh
+cargo build --release -p teigeodata-ffi
+export TEIGEODATA_LIB=$PWD/target/release/libteigeodata_ffi.so   # .dylib on macOS, .dll on Windows
+```
+</Tab>
+
+<Tab value="C">
+The C library is the ABI every other binding builds on: plain functions, opaque handles,
+status codes, and no global state but each thread's last error. Its header is checked against the
+last release's on every change, so a minor release never breaks a program built against it.
+
+<Tabs items={["Release package","From a checkout"]}>
+<Tab value="Release package">
+From the [release](https://github.com/teispace/teigeodata/releases/latest): unpack `teigeodata-c-<version>-<target>.tar.gz`, which holds the headers,
+the shared and static libraries, a pkg-config file and a CMake package.
+
+```sh
+cc tour.c $(pkg-config --cflags --libs teigeodata) -o tour
+```
+
+```cmake title="CMakeLists.txt"
+find_package(teigeodata REQUIRED)
+target_link_libraries(tour PRIVATE teigeodata::teigeodata)
+```
+</Tab>
+
+<Tab value="From a checkout">
+To build from a checkout instead (a Rust toolchain is all it needs;
+`rust-toolchain.toml` pins the version):
+
+```sh
+git clone https://github.com/teispace/teigeodata && cd teigeodata
+git checkout v1.1.0
+cargo xtask package-c        # target/package/teigeodata-c-<version>-<target>/
+```
+</Tab>
+</Tabs>
+</Tab>
+
+<Tab value="C++">
+`teigeodata.hpp` is a header-only C++17 layer over the C library: RAII handles, `std::string_view`
+arguments, exceptions with the stable error codes, and `teigeodata_reader.hpp` to read results
+with a range-based `for`. Everything is in namespace `teigeodata`; the tour shortens it with
+`namespace tg = teigeodata;`.
+
+Install the C package (the **C** tab): the C++ headers ship in it. Then
+compile as C++17 or later:
+
+```sh
+c++ -std=c++17 tour.cpp $(pkg-config --cflags --libs teigeodata) -o tour
+```
+</Tab>
+
+<Tab value="C#">
+`Teispace.TeiGeodata` is the .NET binding: source-generated P/Invoke (`LibraryImport`) with
+no marshalling at run time, compatible with NativeAOT and trimming. The package carries the
+native library for Windows, macOS and Linux (glibc and musl) on x64 and Arm64.
+
+<Tabs items={["From a checkout","NuGet"]}>
+<Tab value="NuGet">
+Not on NuGet yet. Once it is:
+
+```sh
+dotnet add package Teispace.TeiGeodata
+```
+</Tab>
+
+<Tab value="From a checkout">
+To build from a checkout instead (a Rust toolchain is all it needs;
+`rust-toolchain.toml` pins the version):
+
+```sh
+git clone https://github.com/teispace/teigeodata && cd teigeodata
+git checkout v1.1.0
+cargo xtask package-dotnet    # target/dotnet/Teispace.TeiGeodata.<version>.nupkg
+```
+
+and add `target/dotnet` as a package source, or reference
+`bindings/dotnet/TeiGeodata/TeiGeodata.csproj` as the tour's project does.
+</Tab>
+</Tabs>
+
+.NET 10 or later.
+</Tab>
+</Tabs>
+
+<Callout title="Registries">
+Every release is published to crates.io, PyPI, npm, Maven Central, pub.dev and the Go module
+proxy from CI, by trusted publishing, with provenance where the registry records it. Swift
+installs from the release tags; C from the release archives. The .NET package is built and
+tested but not yet on NuGet: build it from a checkout.
+</Callout>
+
+## Get a pack [#get-a-pack]
+
+Queries read **packs**: signed, memory-mapped files of places. The examples use the world
+lite pack: the world's countries, first-level units and cities of 5,000 or more, India's
+districts and statutory towns, and Nepal in full, 172,339 places named in Nepali, Hindi and
+English (15.6 MB, CC BY 4.0):
+
+```sh
+curl -LO https://github.com/teispace/teigeodata/releases/download/data-2026.11.14.3/world-np-lite.tgd
+shasum -a 256 world-np-lite.tgd   # 243ae55509a538b1f61da50994a791cc78e7deb70bb4bf743b9f59d458cbe3f3
+```
+
+Which pack to choose, and how an app ships or downloads one: [packs](/docs/concepts/packs) and
+[the store](/docs/concepts/store).
+
+## Read a result [#read-a-result]
+
+Every query returns its rows as one **result blob**: compact columns in a single buffer,
+read in place without copying. Each language's reader turns a row into its own natural type
+and a null into its own null:
+
+<Tabs groupId="lang" persist items={["Rust","Python","Node.js","Browser","Swift","Kotlin","Java","Dart","Go","C","C++","C#"]}>
+<Tab value="Rust">
+The Rust engine returns typed values, not result blobs: a `Place` holds its ID, kind, admin
+level and point, and the rest (its name, ISO code, elevation, timezone) is read on demand from
+the engine, into a buffer you pass. The tour gathers what it prints in one helper:
+
+```rust title="tour.rs"
+/// What the tour prints of a place: its name, kind and the rest read on demand.
+struct Described {
+    id: String,
+    name: String,
+    kind: &'static str,
+    level: u8,
+    lat: f64,
+    lon: f64,
+    iso: String,
+}
+
+fn describe(engine: &Engine, place: &Place) -> Result<Described, Box<dyn Error>> {
+    let mut buf = [0u8; 1024];
+    Ok(Described {
+        id: place.id.to_string(),
+        name: engine.name(place, &mut buf)?.unwrap_or_default().to_owned(),
+        kind: place.kind.map_or("", |k| k.name()),
+        level: place.admin_level,
+        lat: place.point.lat_degrees(),
+        lon: place.point.lon_degrees(),
+        iso: engine
+            .iso_code(place)?
+            .map(|c| c.to_string())
+            .unwrap_or_default(),
+    })
+}
+```
+
+Queries that return several places write into a `Vec` you own and reuse (`hits`, `near`,
+`places` in the tour), with a `Scratch` for the search's working memory. Points are fixed-point
+(`Point<E6>`, `Point<E7>`): `Point::from_degrees` checks the range once, so a query never sees
+an invalid coordinate.
+
+If you want the same blobs every binding gets, `teigeodata-api` wraps this engine with the
+binding API (`Engine::search` returning a result blob).
+</Tab>
+
+<Tab value="Python">
+Every query returns a **result blob**: the rows as compact columns in one `Blob`, a buffer the
+library lends without a copy (`memoryview(blob)`; `bytes(blob)` copies it), read in place. `teigeodata.blob.Reader` reads it; iterating gives each row as a `dict` from column
+name to value, with `None` where a value is null:
+
+```python title="tour.py"
+def rows(blob):
+    """Each row of a result as a dict: column name to value, None where null."""
+    return Reader(blob).records()
+```
+
+For large results read whole columns instead: `reader.numbers("lat")` is a `memoryview` of the
+blob (no copy),
+`reader.strings("name")` a list, `reader.nulls("elevation")` which rows are null, and
+`reader.column("level")` one value per row. `reader.rows` and `reader.columns` describe the
+shape. The import:
+
+```python title="tour.py"
+import teigeodata
+from teigeodata.blob import Reader
+```
+</Tab>
+
+<Tab value="Node.js">
+Every query returns a **result blob** (a `Buffer`): the rows as compact columns, read in
+place. `Reader` reads it, and iterating gives each row as a plain object, with `null` where a
+value is null:
+
+```js title="tour.mjs"
+import { Engine, Reader, bearingDeg, distanceM } from "teigeodata";
+```
+
+```js
+for (const place of new Reader(engine.search("Pokhara", 3))) {
+  console.log(place.name, place.lat, place.lon);
+}
+```
+
+For large results read whole columns: `reader.numbers("lat")` is a typed array of the column's
+own type (a `Float64Array` for `lat`) viewing the blob, `reader.strings("name")` an array,
+`reader.nulls("elevation")` which rows are null; `records()` gives every row at once. Numbers are
+JavaScript numbers, except 64-bit integer columns, which read as `bigint` (and as
+`BigInt64Array` or `BigUint64Array` columns).
+</Tab>
+
+<Tab value="Browser">
+Every query returns a **result blob** (a `Uint8Array`), read in place by `Reader`; iterating
+gives each row as a plain object, with `null` where a value is null. `init()` loads and compiles
+the module once; call it before the first `Engine`:
+
+```js title="tour.mjs"
+import { init, Engine, Reader, bearingDeg, distanceM } from "teigeodata-wasm";
+
+await init(); // loads the module once; at once on Node.js, Bun and Workers
+```
+
+Whole columns read faster for large results: `reader.numbers("lat")` is a typed array viewing
+the blob, `reader.strings("name")` an array. 64-bit integer columns read as `bigint`.
+</Tab>
+
+<Tab value="Swift">
+Every query returns a **result blob** (`Data`): the rows as compact columns, read in place.
+`Reader` reads it, and iterating gives a `Record` per row, with typed accessors that return
+`nil` where a value is null:
+
+```swift
+for place in try Reader(engine.search("Pokhara", 3)) {
+    print(place.string("name") ?? "", place.double("lat") ?? 0)
+}
+```
+
+`place["level"]` is a `Value` (`.int`, `.uint`, `.double`, `.string`) when you want the raw
+kind. For large results read whole columns: `reader.numbers("lat")`, `reader.strings("name")`,
+`reader.nulls("elevation")`.
+
+```swift title="main.swift"
+import Foundation
+import TeiGeodata
+```
+</Tab>
+
+<Tab value="Kotlin">
+Every query returns a **result blob** (`byte[]`): the rows as compact columns, read in place.
+`Reader` reads it; iterating gives each row as a `Map<String, Object>` in column order, with
+`null` where a value is null. Values are `String`, `Integer`, `Long`, `Float` or `Double`, by the
+column's type:
+
+```kotlin
+for (place in Reader(engine.search("Pokhara", 3))) {
+    println("${place["name"]} ${place["lat"]}")
+}
+```
+
+For large results read whole columns: `numbers("lat")` is a `double[]`, `strings("name")` a
+`String[]`, `nulls("elevation")` a `boolean[]`.
+</Tab>
+
+<Tab value="Java">
+Every query returns a **result blob** (`byte[]`): the rows as compact columns, read in place.
+`Reader` reads it; iterating gives each row as a `Map<String, Object>` in column order, with
+`null` where a value is null. Values are `String`, `Integer`, `Long`, `Float` or `Double`, by the
+column's type:
+
+```kotlin
+for (place in Reader(engine.search("Pokhara", 3))) {
+    println("${place["name"]} ${place["lat"]}")
+}
+```
+
+For large results read whole columns: `numbers("lat")` is a `double[]`, `strings("name")` a
+`String[]`, `nulls("elevation")` a `boolean[]`.
+</Tab>
+
+<Tab value="Dart">
+Every query returns a **result blob** (`Uint8List`): the rows as compact columns, read in
+place. `Reader` reads it; iterating gives each row as a `Map<String, Object?>`, with `null` where
+a value is null. Dart records make the numbers easy to pull out:
+
+```dart
+for (final p in Reader(engine.search('Pokhara', 3))) {
+  final (lat, lon) = (p['lat'] as double, p['lon'] as double);
+  print('${p['name']} $lat, $lon');
+}
+```
+
+`Reader(blob).single` takes the one row of a lookup. Whole columns: `numbers('lat')`,
+`strings('name')`, `nulls('elevation')`.
+
+```dart title="tour.dart"
+import 'dart:convert';
+
+import 'package:teigeodata/teigeodata.dart';
+
+```
+</Tab>
+
+<Tab value="Go">
+Every query returns a **result blob** (`[]byte`), read in place by `NewReader`. `Records()`
+gives each row as a `Record` (a `map[string]any`, `nil` where null); the tour reads every
+result through one helper:
+
+```go title="tour.go"
+// rows reads a result: every row as a Record (column name to value, nil where null).
+func rows(blob []byte, err error) []tg.Record {
+	if err != nil {
+		log.Fatal(err)
+	}
+	r, err := tg.NewReader(blob)
+	if err != nil {
+		log.Fatal(err)
+	}
+	records, err := r.Records()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return records
+}
+
+```
+
+Typed column reads avoid the maps for large results: `r.Strings("name")`,
+`tg.Values[float64](r, "lat")` (a slice viewing the blob, no copy), `r.Nulls("elevation")`.
+</Tab>
+
+<Tab value="C">
+Every query writes a **result blob** into a `tg_bytes` you free with `tg_bytes_free`.
+`teigeodata_reader.h` (header-only, C99) reads it in place: `tg_reader_init` checks the layout
+once, then `tg_reader_find` names a column and `tg_reader_string`, `tg_reader_number`,
+`tg_reader_int` and `tg_reader_is_null` read a row of it without allocating. The tour wraps them
+in a few helpers:
+
+```c title="tour.c"
+#define TEXT(s) (const uint8_t *)(s), strlen(s)
+
+/* Exits with the thread's last error when a call failed. */
+static void check(int32_t status) {
+    if (status == TG_OK) return;
+    tg_bytes message = {0};
+    tg_last_error(&message);
+    fprintf(stderr, "error %d: %.*s\n", (int)status, (int)message.len, (const char *)message.ptr);
+    tg_bytes_free(message);
+    exit(1);
+}
+
+/* A reader over a result the call just wrote into `blob`. */
+static tg_reader reader(int32_t status, const tg_bytes *blob) {
+    check(status);
+    tg_reader r;
+    check(tg_reader_init(&r, blob->ptr, blob->len));
+    return r;
+}
+
+/* Column `name` of row `row`: a string ("" where null), a number, an integer. */
+static tg_str str(const tg_reader *r, const char *name, uint32_t row) {
+    tg_str s = tg_reader_string(r, tg_reader_find(r, name), row);
+    if (s.ptr == NULL) s.ptr = "";
+    return s;
+}
+static double num(const tg_reader *r, const char *name, uint32_t row) {
+    return tg_reader_number(r, tg_reader_find(r, name), row);
+}
+static long long integer(const tg_reader *r, const char *name, uint32_t row) {
+    return (long long)tg_reader_int(r, tg_reader_find(r, name), row);
+}
+#define S(r, name, row) (int)str(r, name, row).len, str(r, name, row).ptr
+```
+
+A `tg_str` points into the blob: copy it if you need it after `tg_bytes_free`.
+</Tab>
+
+<Tab value="C++">
+Every query returns a `tg::Blob` (the result's bytes, freed when it goes out of scope).
+`tg::Reader` reads it in place; iterating gives a `Row` per row with `string`, `number` and
+`integer` accessors that return `std::optional` (empty where null):
+
+```cpp title="tour.cpp"
+const tg::Blob hits = engine.search("Pokhara", 3);
+for (auto p : tg::Reader(hits)) {
+    std::cout << *p.string("id") << "  " << *p.string("name") << "  " << *p.string("kind") << "  "
+              << fixed(p.number("lat"), 4) << ", " << fixed(p.number("lon"), 4) << "  score "
+              << *p.integer("score") << '\n';
+}
+```
+
+Keep the `Blob` alive while you read it: the reader and every `string_view` borrow it, and a
+`Reader` cannot be made from a temporary. `records()` gives each row as a `std::map` of
+`std::variant` values; `numbers`, `strings` and `nulls` read whole columns.
+</Tab>
+
+<Tab value="C#">
+Every query returns a **result blob** (`byte[]`), read in place by `BlobReader`; iterating
+gives each row as an `IReadOnlyDictionary<string, object?>`, `null` where a value is null:
+
+```csharp
+foreach (var place in new BlobReader(engine.Search("Pokhara", 3)))
+    Console.WriteLine($"{place["name"]} {place["lat"]}");
+```
+
+For large results, `Values<double>("lat")` is a `ReadOnlySpan<double>` over the blob itself, no
+copy; `Strings("name")` and `Nulls("elevation")` read the rest.
+</Tab>
+</Tabs>
+
+## Names in your language [#names-in-your-language]
+
+The docs name calls as Rust, Python and C++ spell them (`tz_at`, `search_with`). Each
+binding spells them in its language's style:
+
+| Style | Languages | Example |
+|---|---|---|
+| `snake_case` | Rust, Python, C++ | `tz_at`, `search_with` |
+| `camelCase` | Node.js, Browser, Swift, Kotlin, Java, Dart | `tzAt`, `searchWith` |
+| `PascalCase` | Go, C# | `TzAt`, `SearchWith` |
+| `tg_engine_` prefix | C | `tg_engine_tz_at`, `tg_engine_search_with` |
+
+## Next [#next]
+
+- [Open a pack](/docs/guides/open), then [search](/docs/guides/search).
+- [Use cases](/docs/tutorials): a search box, a GPS fix to an address, local time anywhere.

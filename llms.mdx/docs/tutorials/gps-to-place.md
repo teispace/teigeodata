@@ -1,0 +1,57 @@
+# A GPS fix to a place (/docs/tutorials/gps-to-place)
+
+A phone reports a latitude and longitude; the user wants to read where they are. Two queries
+answer it: **reverse** gives what is *near* the point, and **admin units at a point** gives what
+*holds* it. Together they make a label such as "331 m SE of Narayanhiti Royal Palace · Kathmandu, Bagmati".
+
+<Steps>
+<Step>
+### Find the nearest places [#find-the-nearest-places]
+
+`reverse` gives the places nearest the point, nearest first, each with `meters` and `bearing`
+(degrees clockwise from north, from the place to the point).
+
+<TourCode region="reverse" />
+
+The first row is the "near" part of the label. To say "north-east of", turn the bearing into
+one of eight directions: `["N", "NE", "E", "SE", "S", "SW", "W", "NW"][round(bearing / 45) % 8]`.
+</Step>
+
+<Step>
+### Find the units that hold the point [#find-the-units-that-hold-the-point]
+
+`admin_at` tests the point against the admin boundaries and answers every unit it is inside,
+country first. Near a border, the answer is the side the point is on, not the nearest centre.
+
+<TourCode region="admin" />
+</Step>
+
+<Step>
+### Put the label together [#put-the-label-together]
+
+Take the nearest place with its distance and direction, then the units from the lowest level
+up, leaving out the ones a reader does not need (most apps drop the ward, and the country at
+home). For the point in step 1 (bearing 116°, so south-east):
+
+```text
+331 m SE of Narayanhiti Royal Palace · Kathmandu, Bagmati
+```
+
+The units are the same for every point in them, so an app tracking a moving user can keep the
+last answer until the point leaves the lowest unit.
+</Step>
+
+<Step>
+### Everything within a radius [#everything-within-a-radius]
+
+For "what is around me" lists, `within_radius` gives every place within a distance, nearest
+first, with the same columns:
+
+<TourCode region="radius" />
+</Step>
+</Steps>
+
+## Next [#next]
+
+- [Reverse geocoding](/docs/guides/reverse) and [admin units](/docs/guides/admin) in full.
+- [Outlines on a map](/docs/tutorials/map-outlines): draw the unit the user is in.

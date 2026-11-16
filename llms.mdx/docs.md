@@ -1,0 +1,57 @@
+# Introduction (/docs)
+
+teigeodata answers questions about places, on the device, with no network and no API key:
+
+- **Search by name** in any script and spelling: काठमाडौं, Kathmandu and Kathamandu find the
+  same city; `"Kathmandu, Bagmati"` ranks the one in Bagmati first; a focus point ranks what is
+  near the user.
+- **Reverse geocode** a point to the nearest places, with distance and bearing, and to every
+  admin unit that holds it, from the country down to the lowest level the data has.
+- **Timezones**: the IANA zone at any point as its boundaries draw it, the UTC offset at any
+  instant from tzdb rules carried in the pack, and whether a local time is skipped or repeated.
+- **Elevation** of every place, and the terrain height at any point.
+- **The hierarchy, ISO 3166 codes, postal codes** and stable IDs that survive data updates.
+
+The data is cleaned, deduplicated and merged from the best open sources, and ships as **packs**:
+compact, memory-mapped files, every section hashed and checked as it is read (and signed, from
+the first catalog release). Bundle one in your app, or download a country when a user
+needs it. Every pack credits its sources, and you may keep and redistribute what it answers.
+
+To try it before installing anything, open the [playground](/playground): the WebAssembly
+engine and a released pack in your browser, every query with the code that produced it.
+
+## One engine, every language [#one-engine-every-language]
+
+The engine is written in Rust. Rust, C, C++, Swift, Kotlin, Java, Dart, Python, Node.js, the
+browser (WebAssembly), Go and .NET call it through bindings generated from one description of
+the API, so each query, option and error code is the same everywhere. Every guide shows each
+language in a tab: pick yours once and every page remembers it.
+
+There is also a [command line](/docs/cli), an [HTTP server](/docs/servers/http) (native JSON,
+GeoJSON and Nominatim-compatible routes) and an [MCP server](/docs/servers/mcp) that gives AI
+agents the same queries as tools.
+
+## Where to start [#where-to-start]
+
+<Cards>
+<Card title="Quickstart" href="/docs/getting-started" description="A pack and your first answers in five minutes." />
+
+<Card title="Install" href="/docs/getting-started/install" description="Add the package in your language and read a result." />
+
+<Card title="Use cases" href="/docs/tutorials" description="Step by step: a search box, a GPS fix to an address, local time anywhere, offline downloads." />
+
+<Card title="Guides" href="/docs/guides/search" description="Every query, task by task, in every language." />
+
+<Card title="Concepts" href="/docs/concepts" description="Places and IDs, packs and components, results, the store, accuracy." />
+
+<Card title="Reference" href="/docs/reference" description="Every call, its arguments, columns and errors." />
+</Cards>
+
+## Status [#status]
+
+The code is at 1.1, on every package registry, and the data is published as pre-releases (the
+latest is `data-2026.11.15`, Nepal's main and lite packs with populations). Nepal is covered in full, with the world's countries, first-level units
+and cities of 5,000 or more, and India's districts and towns; coverage grows by data releases,
+India next. The packages are on crates.io, PyPI, npm, Maven Central, pub.dev and the Go module
+proxy; Swift installs from the release tags and C from the release archives
+([install](/docs/getting-started/install)). The .NET package is not on NuGet yet.

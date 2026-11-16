@@ -1,0 +1,61 @@
+# teigeodata
+
+- [Introduction](/llms.mdx/docs.md): What teigeodata is, what it answers, and where to start.
+
+- **Getting started**
+- [Quickstart](/llms.mdx/docs/getting-started.md): Download a pack, run your first queries from the command line, then from your language.
+- [Install](/llms.mdx/docs/getting-started/install.md): Add teigeodata to a project in your language, and read the results a query returns.
+
+- **Use cases**
+- [Overview](/llms.mdx/docs/tutorials.md): Step-by-step walkthroughs of what apps build with teigeodata, each in every language, with code that ran.
+- [A place search box](/llms.mdx/docs/tutorials/search-box.md): Build an autocomplete for places that understands every script and spelling, ranks places near the user first, and answers each keystroke in about a millisecond on a phone.
+- [A GPS fix to a place](/llms.mdx/docs/tutorials/gps-to-place.md): Turn a latitude and longitude into "331 m SE of Narayanhiti Royal Palace, Kathmandu, Bagmati": the nearest places with distance and bearing, and the admin units that hold the point.
+- [Local time anywhere](/llms.mdx/docs/tutorials/local-time.md): The IANA timezone at any point, its UTC offset at any instant, and whether a local time is skipped or repeated, from the tzdb rules in the pack rather than the device's.
+- [Outlines on a map](/llms.mdx/docs/tutorials/map-outlines.md): Find the admin unit a user is in and draw its outline on MapLibre, Leaflet or OpenLayers, at a level of detail that suits the zoom.
+- [In the browser](/llms.mdx/docs/tutorials/in-the-browser.md): Run the WebAssembly engine in a page or a Web Worker, cache the pack for offline visits, and answer every query locally.
+- [Replace a Nominatim server](/llms.mdx/docs/tutorials/replace-nominatim.md): Serve Nominatim-compatible search, reverse and lookup from one pack with tgd serve, so existing clients keep working, using a few megabytes of memory.
+
+- **Guides**
+- [Open a pack](/llms.mdx/docs/guides/open.md): Open a pack from a file or from bytes, add and remove layers, and choose what is verified and read.
+- [Search by name](/llms.mdx/docs/guides/search.md): Find places by name in every script, narrow by parent, rank by distance from a point, and tune an autocomplete.
+- [Places and the hierarchy](/llms.mdx/docs/guides/places.md): Look a place up by its stable ID, and walk its admin units up to the country and down to its children.
+- [Reverse geocoding](/llms.mdx/docs/guides/reverse.md): From a point to the places near it: the nearest few, everything within a radius, and the places around a place.
+- [Admin units at a point](/llms.mdx/docs/guides/admin.md): Every admin unit that holds a point, country first, and countries and subdivisions by their ISO 3166 codes.
+- [Outlines](/llms.mdx/docs/guides/boundaries.md): A unit's outline as GeoJSON at a level of detail, ready for MapLibre, Leaflet, OpenLayers, Shapely or Turf.
+- [Timezones](/llms.mdx/docs/guides/timezones.md): The IANA zone at a point, its UTC offset at an instant, and whether a local time exists, from the tzdb rules in the pack.
+- [Elevation](/llms.mdx/docs/guides/elevation.md): The terrain height at any point, in metres above EGM2008, from the finest grid installed.
+- [Distance and bearing](/llms.mdx/docs/guides/distance.md): The great-circle distance and initial bearing between two points or two places.
+- [Errors](/llms.mdx/docs/guides/errors.md): The eight stable error codes, the same in every language, and how each language raises them.
+- [Threads and platforms](/llms.mdx/docs/guides/threads.md): Sharing an engine between threads, async calls, and what each platform needs: Android assets, Flutter, the browser.
+- [The example programs](/llms.mdx/docs/guides/examples.md): The whole program behind every snippet in these docs, in each language, and how to run it.
+
+- **Command line and servers**
+- [Command line](/llms.mdx/docs/cli.md): tgd inspects, verifies, cuts and queries packs, manages the store, and serves packs over HTTP and MCP.
+- [HTTP server](/llms.mdx/docs/servers/http.md): tgd serve answers every query over HTTP as JSON or GeoJSON, with Nominatim-compatible routes, from packs on local disk.
+- [MCP server](/llms.mdx/docs/servers/mcp.md): tgd mcp gives AI agents teigeodata's queries as MCP tools, offline, with attribution on every answer.
+
+- **Concepts**
+- [Concepts](/llms.mdx/docs/concepts.md): The few ideas behind every query, in every language.
+- [Places and IDs](/llms.mdx/docs/concepts/places.md): What a place is in teigeodata, its kinds and admin levels, and why its ID never changes.
+- [Packs and components](/llms.mdx/docs/concepts/packs.md): What is inside a pack, how it is verified, the components you can leave out, and how packs stack as layers.
+- [Results](/llms.mdx/docs/concepts/results.md): Every query returns its rows as named columns in one compact blob, read in place by the same Reader in every language.
+- [The store](/llms.mdx/docs/concepts/store.md): How an app finds, downloads, verifies, updates and removes packs on the user's device, offline once installed.
+- [Accuracy](/llms.mdx/docs/concepts/accuracy.md): How good each kind of answer is, how it is measured and gated, and the perspective on disputed borders.
+- [Licences](/llms.mdx/docs/concepts/licences.md): Apache-2.0 code, ODbL and CC BY 4.0 data, and what you must credit when you ship a pack or show its answers.
+
+- **Data**
+- [Data](/llms.mdx/docs/data.md): What the packs hold today, release by release, with their sources, sizes and licences.
+- [Coverage](/llms.mdx/docs/data/coverage.md): Every country in the released pack, with its places by kind and admin level, read from the pack itself.
+- Countries
+  - [India](/llms.mdx/docs/data/countries/in.md): What teigeodata holds for India: its places, admin levels, heights, timezones, names and sources.
+  - [Nepal](/llms.mdx/docs/data/countries/np.md): What teigeodata holds for Nepal: its places, admin levels, heights, timezones, names and sources.
+- [Measured](/llms.mdx/docs/data/measured.md): Sizes and speed as the gates measured them, each with its date, machine and commit.
+
+- **Reference**
+- [Reference](/llms.mdx/docs/reference.md): Every function, method, record and error of the API, with its documentation and its declaration in each language.
+- [Engine](/llms.mdx/docs/reference/engine.md): Open packs answering place queries.
+- [Store and Job](/llms.mdx/docs/reference/store.md): A store of installed packs in one directory: its signed catalog, its packs and their journal, shared by every language and the command line (research note store-api).
+- [Functions](/llms.mdx/docs/reference/functions.md): The library's free functions, outside any engine.
+- [Types, constants and errors](/llms.mdx/docs/reference/types.md): The options records, their enums, the limits and every error code, as each language names them.
+- [HTTP API](/llms.mdx/docs/reference/http.md): Every route of tgd serve with its parameters, generated from the server's route table.
+- [MCP tools](/llms.mdx/docs/reference/mcp.md): Every tool and resource of tgd mcp with its arguments and answer, generated from the server's own definitions.

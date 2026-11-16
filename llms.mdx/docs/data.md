@@ -1,0 +1,71 @@
+# Data (/docs/data)
+
+Coverage grows by data releases: Nepal first, then India, South Asia, Asia, the USA and the rest
+of the world. Every release is built from a commit on `main`, keeps every published ID, and
+lists its checksums.
+
+## The latest release: data-2026.11.14.3 [#the-latest-release-data-202611143]
+
+| File | What | Places | Disk | Wire |
+|---|---|--:|--:|--:|
+| [`world-np-lite.tgd`](https://github.com/teispace/teigeodata/releases/download/data-2026.11.14.3/world-np-lite.tgd) | The world's countries, first-level units and cities of 5,000 or more; India's districts and statutory towns; Nepal in full. Names in Nepali, Hindi and English. | 172,339 | 15.6 MB | 9.8 MB |
+| [`baseline-lite.tgd`](https://github.com/teispace/teigeodata/releases/download/data-2026.11.14.3/baseline-lite.tgd) | The baseline to ship in an app: countries, first-level units, cities of 15,000 or more. | | 5.0 MB | |
+| [`points-en-lite.tgd`](https://github.com/teispace/teigeodata/releases/download/data-2026.11.14.3/points-en-lite.tgd) | The baseline's points and English names alone. | | 1.9 MB | |
+
+All three are the **lite build** (CC BY 4.0). Check them with the release's `SHA256SUMS`:
+
+```sh
+shasum -a 256 -c SHA256SUMS
+```
+
+The release notes and each file's summary are on the
+[release page](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.14.3).
+
+### Inside world-np-lite.tgd [#inside-world-np-litetgd]
+
+Every component's bytes, and every country's places by kind and admin level, are on the
+[coverage page](/docs/data/coverage), read from the pack itself.
+
+Places with a name in each language:
+
+| Places | Rows | Nepali | Hindi | English |
+|---|--:|--:|--:|--:|
+| Nepal | 95,715 | 99.9% | 0.4% | 0.3% |
+| The rest of the world | 76,247 | 2.7% | 20.2% | 12.7% |
+
+## Countries [#countries]
+
+| Country | Today | Levels |
+|---|---|---|
+| [Nepal](/docs/data/countries/np) | In full: provinces, districts and local levels with their boundaries, the provinces' ISO codes, wards, about 90,000 settlements, localities (toles, chowks) and natural features (peaks, passes), every one with a height. | country, province, district, local level, ward |
+| [India](/docs/data/countries/in) | Districts and statutory towns, with the states' current ISO codes. Full coverage is next. | country, state, district |
+| Every other country | The country, its first-level units with ISO codes and boundaries, and its cities of 5,000 or more. | country, first level |
+
+Every country, with its places by kind and level, is on the [coverage page](/docs/data/coverage).
+Each country's rules (its admin ladder, the spellings of its generic terms, its sources and its
+perspective on borders) are data in
+[`data/countries`](https://github.com/teispace/teigeodata/tree/main/data/countries), each rule
+with its source.
+
+## Sources [#sources]
+
+The lite build reads only public-domain and attribution-only sources:
+
+| Source | What it gives | Licence |
+|---|---|---|
+| Natural Earth | Country and first-level outlines | Public domain |
+| GeoNames | Cities and settlements, alternative names | CC BY 4.0 |
+| Wikidata | Nepal's places and their links between sources; the world's names in Nepali and Hindi with English aliases; ISO codes; units' populations | CC0 1.0 |
+| IANA tz database | Timezones and their rules | Public domain |
+| Unicode CLDR | Current ISO 3166 subdivision codes | Unicode License v3 |
+| OCHA HDX COD-AB (Nepal) | Nepal's provinces, districts and local levels | CC BY-IGO 3.0 |
+| Nepal's Central Bureau of Statistics, via Open Data Nepal | Codes and Nepali names | Creative Commons Attribution |
+| India's Local Government Directory | India's districts and towns | Free reproduction with acknowledgement |
+| NASADEM | Terrain heights | Public domain (NASA) |
+| Microsoft and Google building footprints | Where settlements' cores are | CDLA-Permissive 2.0, CC BY 4.0 |
+
+The main build adds OpenStreetMap (ODbL), Overture's divisions for the world's countries and
+first-level units (ODbL), timezone-boundary-builder's zone outlines (ODbL), WorldPop's modelled
+populations (CC BY 4.0, kept to the main build) and Copernicus GLO-30 heights. Every source is pinned
+by version and SHA-256, and every pack lists the notices of the sources it was built from: see
+[licences](/docs/concepts/licences).

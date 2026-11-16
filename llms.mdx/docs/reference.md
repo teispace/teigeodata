@@ -1,0 +1,119 @@
+# Reference (/docs/reference)
+
+The API is defined once, in Rust (`teigeodata-api`), and every binding is generated from that
+definition, so this reference is generated from it too: each entry gives the documentation
+written in the API and the declaration each language's binding is written with. It holds
+33 engine methods, 22
+store and job methods and 8 functions.
+
+Names follow each language's style; the entries use the Rust ones:
+
+| Rust, Python, C++ | JavaScript, Swift, Java, Kotlin, Dart | Go, .NET | C |
+|---|---|---|---|
+| `search_with` | `searchWith` | `SearchWith` | `tg_engine_search_with` |
+| `admin_at` | `adminAt` | `AdminAt` | `tg_engine_admin_at` |
+| `tz_offset_at` | `tzOffsetAt` | `TzOffsetAt` | `tg_engine_tz_offset_at` |
+
+Queries return a [result blob](/docs/concepts/results) read with each language's `Reader`.
+The servers have their own reference: every route of the [HTTP API](/docs/reference/http)
+and every tool of the [MCP server](/docs/reference/mcp), generated from the servers' own
+definitions.
+
+## Engine [#engine]
+
+The [Engine page](/docs/reference/engine) has each method's declaration in every language.
+
+| Name | What |
+|---|---|
+| [`new`](/docs/reference/engine#new) | An engine with no packs. |
+| [`open_file`](/docs/reference/engine#open_file) | Opens the pack at `path` (memory-mapped) and adds it. |
+| [`open_file_with`](/docs/reference/engine#open_file_with) | Opens the pack at `path` with these options and adds it. |
+| [`open_file_range`](/docs/reference/engine#open_file_range) | Opens the pack stored whole in `length` bytes at `offset` of the file at `path` (memory-mapped) and adds it: a pack bundled as an uncompressed asset of an Android app (`noCompress`; the path is the APK, the offset and length its `AssetFileDescriptor`'s), or one inside any container that stores it uncompressed. |
+| [`open_file_range_with`](/docs/reference/engine#open_file_range_with) | As `open_file_range`, with these options. |
+| [`open_bytes`](/docs/reference/engine#open_bytes) | Adds a pack from its bytes (copied). |
+| [`open_bytes_with`](/docs/reference/engine#open_bytes_with) | Adds a pack from its bytes (copied) with these options. |
+| [`remove`](/docs/reference/engine#remove) | Removes the pack with this layer ID; false if no pack has it. |
+| [`layers`](/docs/reference/engine#layers) | The number of packs. |
+| [`get`](/docs/reference/engine#get) | The place with this ID (`tgd:np/1`), or no row; a retired ID gives its survivor. |
+| [`parent`](/docs/reference/engine#parent) | The place's parent as the packs answer for it (one row), or no row for a root or an unknown ID. |
+| [`ancestors`](/docs/reference/engine#ancestors) | The place's ancestors, parent first up to the country; no rows for a root or an unknown ID. |
+| [`children`](/docs/reference/engine#children) | The place's children, by ID; no rows for a leaf or an unknown ID. |
+| [`nearby`](/docs/reference/engine#nearby) | The places nearest the place with this ID, not counting it, nearest first, at most `limit`, with `meters` and `bearing` (from each place to it); no rows for an unknown ID. |
+| [`search`](/docs/reference/engine#search) | Places matching `query`, best first, at most `limit`; "Name, Parent" ranks a named parent first. |
+| [`search_with`](/docs/reference/engine#search_with) | `search` ranked by `options`: near a focus point, or in strict match order. |
+| [`reverse`](/docs/reference/engine#reverse) | The places nearest the point, nearest first, at most `limit`, with `meters` and `bearing` (degrees clockwise from north, from each place to the point). |
+| [`within_radius`](/docs/reference/engine#within_radius) | The places within `radius_m` metres of the point (great-circle), nearest first, at most `limit`, with `meters` and `bearing` (from each place to the point). |
+| [`admin_at`](/docs/reference/engine#admin_at) | The admin units holding the point, country first. |
+| [`elevation_at`](/docs/reference/engine#elevation_at) | The terrain height at the point, as one row: `meters` above the datum (bilinear between the DEM samples around it), `source` (the DEM product's key, null where the pack does not state it), `resolution_m` (the sample spacing north to south) and `datum` (`EGM2008`). |
+| [`postal_lookup`](/docs/reference/engine#postal_lookup) | The places postal code `code` names, one row per code and place, with the code's `postal`, `scheme`, `code_kind`, `valid_from` and `valid_to` columns. |
+| [`postal_prefix`](/docs/reference/engine#postal_prefix) | Up to `limit` postal codes starting with `prefix`, with their places (autocomplete), in code order per scheme; `scheme` as in `postal_lookup`. |
+| [`postal_codes_of`](/docs/reference/engine#postal_codes_of) | The postal codes of the place with this ID; no rows for an unknown ID. |
+| [`postal_at`](/docs/reference/engine#postal_at) | The postal codes of the point: those of the deepest admin unit holding it that an admin-aligned scheme gives codes to, with its parts (a ward's code; the point is in one of them). |
+| [`tz_at`](/docs/reference/engine#tz_at) | The time-zone area holding the point (one row; its `tz` column is the IANA zone), or no row where no pack answers. |
+| [`tz_offset_at`](/docs/reference/engine#tz_offset_at) | The UTC offset in force in `zone` (a tzdb name or link, `Asia/Kathmandu`) at `unix_seconds`, from the first layer whose zone rules hold the zone: one row with `seconds` east of UTC, `dst` (1 when tzdb counts it as daylight saving time) and `abbr` (`+0545`, `EDT`); no row where no layer holds the zone. |
+| [`tz_local`](/docs/reference/engine#tz_local) | The offsets a civil time may have in `zone`: one row with `kind` (`unique`, `gap` for a time a transition skips, `overlap` for one that happens twice), `before` and `after` in seconds east of UTC (the offsets before and after the transition: for an overlap the earlier and the later instant's; for a unique time both the same); no row where no layer holds the zone. |
+| [`tz_zones`](/docs/reference/engine#tz_zones) | Every zone name (tzdb names and links) the layers' zone rules hold, in byte order: one `zone` column. |
+| [`tz_rules_start`](/docs/reference/engine#tz_rules_start) | The earliest instant `zone`'s rules cover, in Unix seconds: one `unix` row (its first transition, before which tzdb knows only local mean time; the year −9,999 for a zone that never changed); no row where no layer holds the zone. |
+| [`tz_version`](/docs/reference/engine#tz_version) | The tzdb release (`2026f`) of the first layer with zone rules; empty without rules. |
+| [`by_iso`](/docs/reference/engine#by_iso) | The place whose ISO 3166 code is `code` (`NP`, `NP-P3`, either case), or no row. |
+| [`boundary`](/docs/reference/engine#boundary) | The outline of the place with this ID at level of detail `lod`, as one row: `id`, `lod` (the level read: 0 from a pack stored at full resolution only), `tolerance_m` (how far it may stray from the full-resolution outline), `vertices` and `geojson`, an RFC 7946 Feature ready for a map: a `Polygon` or `MultiPolygon` (outer rings counterclockwise, holes clockwise), or the place's `Point` when it has no outline. |
+| [`distance`](/docs/reference/engine#distance) | The great-circle distance between the places with these IDs, as one row: `meters` on the mean Earth sphere and `bearing`, the initial bearing from `from` to `to` in degrees clockwise from north. |
+
+## Store [#store]
+
+The [Store page](/docs/reference/store#store) has each method's declaration in every language.
+
+| Name | What |
+|---|---|
+| [`create`](/docs/reference/store#create) | Sets up a store at `root` and opens it: the metadata mirrors `repo` and asset mirrors `assets` (comma-separated URLs), and `trusted_root`, the catalog's root metadata, which becomes its trust anchor once it verifies by itself. |
+| [`open`](/docs/reference/store#open) | Opens the store at `root`, finishing or undoing an install a crash cut short. |
+| [`damaged`](/docs/reference/store#damaged) | The packs found damaged when the store was opened, comma-separated; empty when none. |
+| [`catalog`](/docs/reference/store#catalog) | The verified catalog as stored, one row per pack, with its state against the store. |
+| [`status`](/docs/reference/store#status) | Each installed pack and its health, from a full check of every byte when `deep`. |
+| [`pin`](/docs/reference/store#pin) | Pins the pack (kept when room is made), or unpins it. |
+| [`remove`](/docs/reference/store#remove) | Removes the packs and the dependencies nothing else needs; returns what was removed. |
+| [`find`](/docs/reference/store#find) | The places named `query` in `engine` (one over a world pack the app ships, the installed packs, or both), best first, each with the catalog's packs that cover it: what to install for "Dubai". |
+| [`locate`](/docs/reference/store#locate) | The countries within `radius_m` metres of a point in `engine`, each with the catalog's packs that cover the point: what to install for where the user stands. |
+| [`engine`](/docs/reference/store#engine) | An engine over the installed packs, each opened with the components and languages installed. |
+| [`refresh`](/docs/reference/store#refresh) | Refreshes the catalog for the countries (comma-separated ISO codes) and every country installed. |
+| [`install`](/docs/reference/store#install) | Installs the packs with `options`, dependencies first, refreshing the catalog for their countries. |
+| [`install_pass`](/docs/reference/store#install_pass) | One pass of an install whose bytes a platform's own download service fetches, for downloads that must go on while the app is suspended. |
+| [`update`](/docs/reference/store#update) | Updates the packs (every installed one when empty) to the catalog's releases, keeping the components and languages installed. |
+| [`repair`](/docs/reference/store#repair) | Checks the pack in full and, unless it is whole, fetches what it lacks. |
+
+## Job [#job]
+
+A job's methods are on the [Store page](/docs/reference/store#job).
+
+| Name | What |
+|---|---|
+| [`wait_progress`](/docs/reference/store#wait_progress) | Waits until the progress moves past `seq` (from `seq`), the job ends, or `timeout_ms` passes; returns the sequence then. |
+| [`seq`](/docs/reference/store#seq) | The progress's sequence number: it moves on with every change. |
+| [`done_bytes`](/docs/reference/store#done_bytes) | Bytes received so far. |
+| [`total_bytes`](/docs/reference/store#total_bytes) | Bytes expected, from the catalog's sizes: never below the bytes received, and equal to them once the job ends. |
+| [`is_ended`](/docs/reference/store#is_ended) | Whether the job has ended (done, failed or cancelled); its result is then ready. |
+| [`cancel`](/docs/reference/store#cancel) | Asks the job to stop at its next request or chunk; it then fails with `ErrorCode::Cancelled` and leaves the store as it was. |
+| [`result`](/docs/reference/store#result) | The job's result, waiting for it to end. |
+
+## Functions [#functions]
+
+The [functions page](/docs/reference/functions) has each declaration in every language.
+
+| Name | What |
+|---|---|
+| [`version`](/docs/reference/functions#version) | The library version, from its package metadata. |
+| [`components`](/docs/reference/functions#components) | The components this build answers, in table order, comma-separated (`point, elevation, admin`). |
+| [`noop`](/docs/reference/functions#noop) | Does nothing. |
+| [`fold`](/docs/reference/functions#fold) | The search fold of a name: NFKD, lower case, optional accents dropped by script, spaces collapsed, recomposed to NFC. |
+| [`sample_rows`](/docs/reference/functions#sample_rows) | Builds `rows` deterministic sample places as a blob with the columns `id` (`u32`), `lat` and `lon` (`f64`, degrees), `elevation` (`f32`, metres) and `name` (UTF-8). |
+| [`progress`](/docs/reference/functions#progress) | Calls `on_step` once per step with the step number, from 1 to `steps`, on the calling thread, and returns the number of steps run. |
+| [`distance_m`](/docs/reference/functions#distance_m) | Great-circle distance in metres between two points in degrees, by the haversine formula on the mean Earth sphere (error up to about 0.5% against the ellipsoid), as every query measures it, with the same digits on every platform. |
+| [`bearing_deg`](/docs/reference/functions#bearing_deg) | The initial great-circle bearing from the first point to the second, in degrees clockwise from true north in `[0, 360)`; 0 for one point twice or from a pole. |
+
+## Types, constants and errors [#types-constants-and-errors]
+
+Every record, enum, constant and error code is on the [types page](/docs/reference/types):
+
+[`SearchOptions`](/docs/reference/types#searchoptions), [`OpenOptions`](/docs/reference/types#openoptions), [`InstallOptions`](/docs/reference/types#installoptions);
+[`Verify`](/docs/reference/types#verify), [`Load`](/docs/reference/types#load);
+[constants](/docs/reference/types#constants) and [error codes](/docs/reference/types#errors).
