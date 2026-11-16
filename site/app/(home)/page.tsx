@@ -21,7 +21,8 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 import { Contours } from '@/components/contours';
 import { CopyCommand } from '@/components/copy-command';
 import { JsonLd } from '@/components/json-ld';
-import { ButtonLink, delay, Eyebrow, Section, Shot, Words } from '@/components/landing';
+import { ButtonLink, delay, Eyebrow, Section, Words } from '@/components/landing';
+import { Film } from '@/components/film';
 import { QueryCard, type Query } from '@/components/query-card';
 import { output, region } from '@/lib/examples';
 import { faqPage, ogImage, organization, pageMetadata, softwareLibrary, website } from '@/lib/seo';
@@ -245,12 +246,11 @@ export default function HomePage() {
         <div className="mx-auto w-full max-w-6xl px-6 pb-20 md:pb-28">
           <div data-hero="" style={delay(460)}>
             <div data-scene="enter" data-end="0.1" className="tg-hero-shot">
-              <Link href="/playground/" aria-label="Open the playground" className="block">
-                <Shot
-                  name="playground"
-                  alt="The playground: Bagmati Province's outline on an OpenStreetMap map, with its coordinates, elevation, timezone, ISO code and the places nearby, each answered in under a millisecond"
-                />
-              </Link>
+              <Film
+                name="playground"
+                href="/playground/"
+                alt="The playground, recorded: a search for Pokhara, its outline on an OpenStreetMap map, a click answered in a card on the map, 31 m terrain added while it runs, the places within 5 km, and a measured line"
+              />
             </div>
           </div>
         </div>

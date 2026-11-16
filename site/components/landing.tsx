@@ -1,46 +1,11 @@
 import Link from 'next/link';
 import { type CSSProperties, Fragment, type ReactNode } from 'react';
 import { Logo } from './logo';
-import { asset, site } from '@/lib/site';
+import { site } from '@/lib/site';
 
 /** Animation delay (ms) for `data-reveal` and `data-hero` elements. */
 export function delay(ms: number): CSSProperties {
   return { '--tg-delay': ms } as CSSProperties;
-}
-
-/**
- * A screenshot of the site in its window frame, light and dark (`public/shots/<name>-*.webp`,
- * written by `scripts/shots.mjs`); the theme shows the matching one.
- */
-export function Shot({
-  name,
-  alt,
-  priority,
-  width = 2160,
-  height = 1266,
-}: {
-  name: string;
-  alt: string;
-  priority?: boolean;
-  width?: number;
-  height?: number;
-}) {
-  const common = {
-    alt,
-    width,
-    height,
-    decoding: 'async' as const,
-    loading: priority ? ('eager' as const) : ('lazy' as const),
-    ...(priority ? { fetchPriority: 'high' as const } : {}),
-  };
-  return (
-    <div className="tg-window overflow-hidden rounded-[10px] border bg-fd-card md:rounded-2xl">
-      {/* eslint-disable-next-line @next/next/no-img-element -- static export, pre-sized screenshots */}
-      <img src={asset(`/shots/${name}-light.webp`)} {...common} className="block h-auto w-full dark:hidden" />
-      {/* eslint-disable-next-line @next/next/no-img-element -- static export, pre-sized screenshots */}
-      <img src={asset(`/shots/${name}-dark.webp`)} {...common} alt="" className="hidden h-auto w-full dark:block" />
-    </div>
-  );
 }
 
 /** A section's label, typed out as it is revealed. */
