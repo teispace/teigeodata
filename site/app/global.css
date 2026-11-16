@@ -507,3 +507,24 @@ html.tg-motion [data-reveal][data-shown] .tg-type {
     display: none;
   }
 }
+
+/* The hero screenshot starts tipped back and flattens as it rises into view (<Scenes> sets
+   --p, 0 to 1); at rest, or without motion, it is flat. */
+.tg-hero-shot {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.tg-hero-shot img {
+  -webkit-user-drag: none;
+}
+html.tg-motion .tg-hero-shot > * {
+  transform-origin: 50% 0;
+  transform: perspective(1800px) rotateX(calc((1 - var(--p, 1)) * 18deg)) scale(calc(0.92 + var(--p, 1) * 0.08));
+  will-change: transform;
+}
+.tg-hero-shot a {
+  transition: filter 0.4s var(--tg-ease);
+}
+.tg-hero-shot a:hover {
+  filter: brightness(1.03);
+}

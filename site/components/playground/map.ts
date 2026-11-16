@@ -49,8 +49,7 @@ export class PlaygroundMap {
       minZoom: 2,
       maxZoom: 18,
       zoomControl: false,
-      zoomSnap: 0.25,
-      zoomDelta: 0.5,
+      // Whole zoom levels only: a tile scaled to a fractional zoom shows hairline seams.
       wheelPxPerZoomLevel: 90,
       worldCopyJump: true,
       attributionControl: true,

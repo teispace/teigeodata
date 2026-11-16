@@ -21,7 +21,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 import { Contours } from '@/components/contours';
 import { CopyCommand } from '@/components/copy-command';
 import { JsonLd } from '@/components/json-ld';
-import { ButtonLink, delay, Eyebrow, Section, Words } from '@/components/landing';
+import { ButtonLink, delay, Eyebrow, Section, Shot, Words } from '@/components/landing';
 import { QueryCard, type Query } from '@/components/query-card';
 import { output, region } from '@/lib/examples';
 import { faqPage, ogImage, organization, pageMetadata, softwareLibrary, website } from '@/lib/seo';
@@ -193,7 +193,7 @@ export default function HomePage() {
         <div className="absolute inset-0 -z-10 opacity-70 dark:opacity-50">
           <Contours />
         </div>
-        <div className="mx-auto grid w-full max-w-6xl items-center gap-14 px-6 pt-16 pb-20 md:pt-24 lg:grid-cols-[1.05fr_1fr] lg:pb-28">
+        <div className="mx-auto grid w-full max-w-6xl items-center gap-14 px-6 pt-16 pb-14 md:pt-24 lg:grid-cols-[1.05fr_1fr] lg:pb-16">
           <div className="min-w-0">
             <Link
               href={site.releases}
@@ -240,6 +240,18 @@ export default function HomePage() {
           </div>
           <div data-hero="" style={delay(320)} className="min-w-0">
             <QueryCard queries={queries} />
+          </div>
+        </div>
+        <div className="mx-auto w-full max-w-6xl px-6 pb-20 md:pb-28">
+          <div data-hero="" style={delay(460)}>
+            <div data-scene="enter" data-end="0.1" className="tg-hero-shot">
+              <Link href="/playground/" aria-label="Open the playground" className="block">
+                <Shot
+                  name="playground"
+                  alt="The playground: Bagmati Province's outline on an OpenStreetMap map, with its coordinates, elevation, timezone, ISO code and the places nearby, each answered in under a millisecond"
+                />
+              </Link>
+            </div>
           </div>
         </div>
       </section>
