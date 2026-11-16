@@ -151,6 +151,9 @@ pub enum Origin {
     Donor,
     /// A standard's locale data, such as CLDR's territory names.
     Standard,
+    /// Read by a person against the sources and corrected: a country's reviewed names, the top
+    /// of the names chain (D-359).
+    Reviewed,
     /// A code this reader does not know.
     Other(u32),
 }
@@ -171,6 +174,7 @@ impl Origin {
             Self::Transliteration => 8,
             Self::Donor => 9,
             Self::Standard => 10,
+            Self::Reviewed => 11,
             Self::Other(c) => c,
         }
     }
@@ -190,6 +194,7 @@ impl Origin {
             8 => Self::Transliteration,
             9 => Self::Donor,
             10 => Self::Standard,
+            11 => Self::Reviewed,
             c => Self::Other(c),
         }
     }
@@ -209,6 +214,7 @@ impl Origin {
             Self::Transliteration => "transliteration",
             Self::Donor => "donor",
             Self::Standard => "standard",
+            Self::Reviewed => "reviewed",
             Self::Other(_) => "other",
         }
     }

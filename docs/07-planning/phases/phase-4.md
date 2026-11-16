@@ -389,7 +389,12 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     text, as the chain's top tier with its own origin; `sure` rows as written, `likely` where
     a government list agrees, `judgement` and `uncertain` read again; provinces and the CBS
     conversion artefacts first; then a data release and the error rates against the TSV
-    (planned 2026-11-16; [research](../../02-research/notes/reviewed-names.md))
+    (planned 2026-11-16; [research](../../02-research/notes/reviewed-names.md)). Done
+    2026-11-16 (D-359): the tier (`reviewed-names.tsv`, `forge reviewed-import`, origin
+    `reviewed` 11, gate G-reviewed on stale rows); Nepal's 286 rows imported, 81 apply to the
+    lite pack, 42 wait for a second reading, 163 main only (share-alike or Government of
+    Nepal sources, Q-034). Open: the second reading of the 42, a data release with the rates,
+    the 71 rows of other countries with the world builds
   - [x] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
     model trained in the forge on the build's licence class; gate G-xlit with floors
     (`forge xlit-eval ne-Latn-Deva`: cbs 44.7%, wd 36.2% folded; D-222, 2026-11-12). Open: the
@@ -536,3 +541,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-14 | TG-15 step 4: ISO 3166 codes on every world part | D-271 |
 | 2026-11-14 | TG-15 step 4 done: codes, names measured, India's golden set 47/47 | D-270, D-271 |
 | 2026-11-14 | 4.7: the first real release pair measured; delta packs wait for a record-changing release | D-273 |
+| 2026-11-16 | TG-14: reviewed names as a tier, keyed by stable ID, guarded, licence-classed by source | D-359 |

@@ -1,6 +1,6 @@
 ---
 title: "Reviewed names: a consumer's name review as a tier of the names chain"
-status: research
+status: accepted
 updated: 2026-11-16
 owner: maintainer's agents
 revisit: 2027-05-16
@@ -18,7 +18,7 @@ stale, and how is the result measured? This feeds the TG-14 step in
 
 ## 2. Summary and recommendation
 
-**Proposed (to be measured before it is accepted):**
+**Accepted and built (D-359, 2026-11-16).** What changed from the proposal is in §3a.
 
 - A per-country table, `data/countries/<cc>/reviewed-names.tsv` (P16: countries are data), one
   row per name: the place's stable ID, the name's language, the text it replaces (the guard),
@@ -54,11 +54,30 @@ stale, and how is the result measured? This feeds the TG-14 step in
   places a name right after the canonical one so a reader asking for the language takes it
   first; the reviewed tier reuses that placement.
 
+## 3a. Findings from building it (2026-11-16)
+
+- **IDs are numbered per build.** The lite and main registries share no serials for Nepal
+  (0 of 286 rows' keys agree), while source keys are shared. So the table stores the source
+  keys, resolved once by `forge reviewed-import --ids <registry> --build <b>`, and records the
+  build it was reviewed against; a stale guard fails only that build.
+- **Licence of the source decides the build.** A correction copies one spelling from its
+  source, so the lite build takes only rows whose source is attribution-only or the
+  reviewer's own judgement (contributed under CC0). The community list
+  (`sagautam5/local-states-nepal`) is MIT but scraped from Wikipedia: share-alike by
+  CLEAN_ROOM.md rule 6. The Election Commission's lookups and the Constitution are Government
+  of Nepal works (Copyright Act 2059, s. 40) with no open licence stated: main only, Q-034.
+  Each source is classified once, by prefix, in `reviewed-sources.yaml`; an unclassified
+  source is refused at import.
+- **Counts (Nepal, 286 rows):** cc0 judgement 114, official proprietary 139, official cc-by
+  6, share-alike 27. Against the released lite pack: 81 applied, 42 held for a second
+  reading, 163 main only, 0 stale; against main's guards 269 present, 15 already right,
+  2 stale (both main only). 71 rows are other countries' places and wait for those builds.
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Verdict |
 |---|---|---|---|
-| A reviewed-names table keyed by stable ID, a tier of the chain | One file per country, the consumer's own format, guards, applied in one place | A new origin code and a resolver through the registry | **Proposed** |
+| A reviewed-names table keyed by stable ID, a tier of the chain | One file per country, the consumer's own format, guards, applied in one place | A new origin code and a resolver through the registry | **Chosen** |
 | One correction file per row (`add-name` + `remove-name`) | No new code | 357 files; source keys instead of IDs; no confidence | Rejected |
 | Fix each source's text upstream (Wikidata, CBS) | Fixes it for everyone | Slow, and CBS publishes no corrections | Also do, where a source takes edits; not instead |
 
@@ -83,6 +102,7 @@ name and rates sent to the consumer.
 | Thing | Version | Checked on | Where |
 |---|---|---|---|
 | Tithipatra's review | 2026-11-12, 357 rows | 2026-11-16 | their `teigeodata-name-corrections.tsv` |
+| Nepal Copyright Act 2059 | as amended | 2026-11-16 | [WIPO Lex](https://www.wipo.int/wipolex/en/text/189129) |
 
 ## 9. Sources
 

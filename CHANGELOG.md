@@ -10,6 +10,13 @@ applied: a minor release could break the public API, and every break is listed u
 
 ## [Unreleased]
 
+### Added
+
+- Name origin `reviewed` (11): a name a person corrected against a cited source.
+- The forge's reviewed-names tier: `data/countries/<cc>/reviewed-names.tsv`, written by
+  `forge reviewed-import`, applied by stable source key with a guard, gate G-reviewed on
+  stale rows; only attribution-only sources reach the lite build (D-359).
+
 ## [1.0.1] - 2026-11-16
 
 The first release on every registry (crates.io, npm, PyPI, pub.dev, Maven Central); Swift and

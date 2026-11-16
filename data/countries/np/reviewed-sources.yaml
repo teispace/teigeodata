@@ -1,0 +1,34 @@
+# The licence class of each source a name reviewer cites (D-359), read by
+# `forge reviewed-import`; a source no prefix covers is refused, so each is classified once by a
+# person. Classes as in CLEAN_ROOM.md; only attribution-only classes reach the lite build.
+# `official`: the source is an official list, so an English spelling it gives may replace the
+# canonical name.
+schema: teigeodata/reviewed-sources/v1
+
+# The reviewer's own reading. The review is Teispace's work, contributed under CC0.
+judgement: cc0
+
+sources:
+  # Open Data Nepal's records of the CBS code lists: "Creative Commons Attribution" (as the
+  # pinned cbs-np-local-levels and cbs-np-districts in sources.lock).
+  - prefix: "https://opendatanepal.com/"
+    class: cc-by
+    official: true
+  # The Election Commission's 2079 lookups. A Government of Nepal work (Copyright Act 2059,
+  # section 40) with no open licence stated: main only until Q-034 decides otherwise.
+  - prefix: "https://result.election.gov.np/"
+    class: proprietary
+    official: true
+  # The Constitution's text. Laws are not plainly excluded by section 4 of the Act: main only
+  # until Q-034 decides otherwise.
+  - prefix: "Constitution of Nepal"
+    class: proprietary
+    official: true
+  # MIT, but "collected from wikipedia and various Nepal government sites" (its README,
+  # 2026-11-16): an attribution-only source built from share-alike data is share-alike
+  # (CLEAN_ROOM.md rule 6).
+  - prefix: "https://github.com/sagautam5/local-states-nepal"
+    class: share-alike
+  # Nepali Wikipedia: CC BY-SA.
+  - prefix: "https://ne.wikipedia.org/"
+    class: share-alike

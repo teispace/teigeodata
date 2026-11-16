@@ -51,6 +51,7 @@ pub(crate) mod official;
 mod pack;
 mod population;
 mod postal;
+pub(crate) mod reviewed;
 mod sources;
 mod split;
 pub(crate) mod tz_rules;
@@ -379,6 +380,8 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         &mut places,
     )?;
     let transliterated = xlit_fill::run(root, &profile.transliterate, &mut places)?;
+    // The top of the names chain, after every other tier so its guards see the final names.
+    let reviewed = reviewed::run(root, &a.cc, a.build_name(), &mut places)?;
     let zones = zone_places(root, &lock, g.tz.as_deref(), coverage, &a)?;
     let rules = tz_rules::compile(root, &lock, g.tz.as_deref(), &zones)?;
     places.extend(zones.places.iter().cloned());
@@ -426,6 +429,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     summary.push_str(&corrected);
     summary.push_str(&donated);
     summary.push_str(&transliterated);
+    summary.push_str(&reviewed);
     if let Some(e) = &elevations {
         summary.push_str(&e.summary(&build, &g.sources, &places)?);
     }
