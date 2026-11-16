@@ -82,7 +82,12 @@ try {
     if (m.type() === 'error') problems.push(`console: ${m.text()}`);
   });
   page.on('pageerror', (e) => problems.push(`page: ${e.message}`));
-  page.on('requestfailed', (r) => problems.push(`failed: ${r.url()} ${r.failure()?.errorText ?? ''}`));
+  page.on('requestfailed', (r) => {
+    const error = r.failure()?.errorText ?? '';
+    // Leaflet cancels the tiles of a view it has left; that is not a failure.
+    if (error === 'net::ERR_ABORTED' && r.url().startsWith('https://tile.openstreetmap.org/')) return;
+    problems.push(`failed: ${r.url()} ${error}`);
+  });
   page.on('request', (r) => {
     const u = r.url();
     const other = new URL(u).origin;
