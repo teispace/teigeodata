@@ -463,7 +463,9 @@ jobs:
           npm --version
       - name: Publish (a version already there is skipped)
         run: |
-          for p in dist/*.tgz; do
+          # `./`: npm reads `dist/x.tgz` as a GitHub repository (`dist/x.tgz.git`), not a file.
+          # Platform addons first, so the main package's optional dependencies exist.
+          for p in ./dist/teispace-teigeodata-*.tgz ./dist/teigeodata-wasm-lookup-*.tgz ./dist/teigeodata-wasm-[0-9]*.tgz ./dist/teigeodata-[0-9]*.tgz; do
             name=$(tar -xzOf "$p" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0)).name')
             if npm view "$name@$VERSION" version >/dev/null 2>&1; then echo "$name@$VERSION: already published"; continue; fi
             npm publish --access public "$p"
