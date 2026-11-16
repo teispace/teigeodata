@@ -55,7 +55,7 @@ environment `release`. Names are those of D-211.
 **State (2026-11-16, D-358):** GitHub done (environment `release` with the maintainer as
 reviewer, `main` and `v*` only; its five secrets; the deploy key `release`; release
 immutability on; crates.io granted access to the `teispace` organisation). Maven Central:
-namespace `com.teispace` registered, TXT record on `teispace.com` added, verification pending;
+namespace `com.teispace` verified (TXT record on `teispace.com`; a check requested before the record existed stayed pending until cancelled and requested again);
 the signing key is RSA 4096 `5BA1 99A9 F59E E7E3 01D9 4250 CCF0 66EF 6E5F 481F`
 (`Teispace <info@teispace.com>`, no expiry), on keyserver.ubuntu.com and keys.openpgp.org.
 PyPI: account `teispace`, pending publisher for `teigeodata` added. npm: org `teispace`, its
