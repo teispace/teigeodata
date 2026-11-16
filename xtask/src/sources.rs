@@ -13,9 +13,9 @@ const SCHEMA: &str = "teigeodata/sources/v1";
 /// The licence classes of `CLEAN_ROOM.md` rule 1.
 /// The classes the lite build may read (`CLEAN_ROOM.md` rule 2): the first seven of
 /// [`CLASSES`]. The forge's licence gate holds the same list (a test compares them).
-pub(crate) const LITE: &[&str] = CLASSES.split_at(7).0;
+pub(crate) const LITE: &[&str] = CLASSES.split_at(8).0;
 
-pub(crate) const CLASSES: [&str; 11] = [
+pub(crate) const CLASSES: [&str; 12] = [
     "public-domain",
     "cc0",
     "cc-by",
@@ -23,6 +23,7 @@ pub(crate) const CLASSES: [&str; 11] = [
     "odc-by",
     "godl",
     "cdla-permissive",
+    "government",
     "odbl",
     "share-alike",
     "non-commercial",

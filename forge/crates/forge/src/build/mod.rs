@@ -88,7 +88,9 @@ use units::{Level, admin_places, country_place};
 use zones::{Zones, zone_places};
 
 /// The licence classes the lite build may read (`CLEAN_ROOM.md` rule 2).
-pub(crate) const LITE: [&str; 7] = [
+/// `government`: a government's own work with no open licence stated, admitted per source by a
+/// recorded decision and credited (D-360).
+pub(crate) const LITE: [&str; 8] = [
     "public-domain",
     "cc0",
     "cc-by",
@@ -96,6 +98,7 @@ pub(crate) const LITE: [&str; 7] = [
     "odc-by",
     "godl",
     "cdla-permissive",
+    "government",
 ];
 
 /// What the command line asks for.
@@ -381,7 +384,8 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     )?;
     let transliterated = xlit_fill::run(root, &profile.transliterate, &mut places)?;
     // The top of the names chain, after every other tier so its guards see the final names.
-    let reviewed = reviewed::run(root, &a.cc, a.build_name(), &mut places)?;
+    let (reviewed, credits) = reviewed::run(root, &a.cc, a.build_name(), &mut places)?;
+    let attribution = with_credits(&g.attribution, &credits)?;
     let zones = zone_places(root, &lock, g.tz.as_deref(), coverage, &a)?;
     let rules = tz_rules::compile(root, &lock, g.tz.as_deref(), &zones)?;
     places.extend(zones.places.iter().cloned());
@@ -407,7 +411,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         elevation: elevations.as_ref(),
         // The country's area, its DEM's mask (D-192).
         outline: &first_level(&units.levels),
-        attribution: &g.attribution,
+        attribution: &attribution,
         stated_tz: &f.stated_tz,
         iso: f.iso.as_ref(),
         tz_rules: rules.as_ref(),
@@ -436,7 +440,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     naming.write(&out_dir, a.build_name())?;
     modelled.write(&out_dir, a.build_name())?;
     finish(
-        (summary, &report, &g.attribution),
+        (summary, &report, &attribution),
         (root, &out_dir, &f.file),
         a.build_name(),
         t,
@@ -608,6 +612,27 @@ fn notices(lock: &Lock, read: &[&str]) -> Result<String, String> {
     if text.len() > teigeodata_format::MAX_TEXT {
         return Err(format!(
             "the sources' notices are {} bytes, over the manifest's {}",
+            text.len(),
+            teigeodata_format::MAX_TEXT
+        ));
+    }
+    Ok(text)
+}
+
+/// The sources' notices with the credits of the reviewed names applied (D-360), each line once.
+fn with_credits(notices: &str, credits: &[String]) -> Result<String, String> {
+    let mut text = notices.to_owned();
+    for c in credits {
+        if !text.lines().any(|l| l == c) {
+            if !text.is_empty() {
+                text.push('\n');
+            }
+            text.push_str(c);
+        }
+    }
+    if text.len() > teigeodata_format::MAX_TEXT {
+        return Err(format!(
+            "the notices with the reviewed names' credits are {} bytes, over the manifest's {}",
             text.len(),
             teigeodata_format::MAX_TEXT
         ));

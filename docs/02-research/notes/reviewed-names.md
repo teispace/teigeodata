@@ -65,13 +65,19 @@ stale, and how is the result measured? This feeds the TG-14 step in
   reviewer's own judgement (contributed under CC0). The community list
   (`sagautam5/local-states-nepal`) is MIT but scraped from Wikipedia: share-alike by
   CLEAN_ROOM.md rule 6. The Election Commission's lookups and the Constitution are Government
-  of Nepal works (Copyright Act 2059, s. 40) with no open licence stated: main only, Q-034.
+  of Nepal works (Copyright Act 2059, s. 40) with no open licence stated; the maintainer
+  admitted them in both builds as the class `government`, credited (D-360). Main refuses
+  share-alike evidence too (ADR-0030), so a row cited only to Wikipedia or the scraped list
+  applies nowhere.
   Each source is classified once, by prefix, in `reviewed-sources.yaml`; an unclassified
   source is refused at import.
-- **Counts (Nepal, 286 rows):** cc0 judgement 114, official proprietary 139, official cc-by
-  6, share-alike 27. Against the released lite pack: 81 applied, 42 held for a second
-  reading, 163 main only, 0 stale; against main's guards 269 present, 15 already right,
-  2 stale (both main only). 71 rows are other countries' places and wait for those builds.
+- **Counts (Nepal, 286 rows, after D-360):** cc0 judgement 114, government 142, cc-by 6,
+  share-alike 24. Against the released lite pack: 205 applied, 15 already right, 42 held
+  for a second reading, 24 refused, 0 stale. Two guards (np/1cwc, np/23sf) had gone stale:
+  the pack's text had changed, the Election Commission's lookup still confirms the
+  corrections, so the guards were updated by hand and the re-read recorded in `review`. A
+  re-import writes the reviewer's guard back; read such rows again after one. 71 rows are
+  other countries' places and wait for those builds.
 
 ## 4. Options compared
 

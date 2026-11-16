@@ -391,9 +391,9 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     conversion artefacts first; then a data release and the error rates against the TSV
     (planned 2026-11-16; [research](../../02-research/notes/reviewed-names.md)). Done
     2026-11-16 (D-359): the tier (`reviewed-names.tsv`, `forge reviewed-import`, origin
-    `reviewed` 11, gate G-reviewed on stale rows); Nepal's 286 rows imported, 81 apply to the
-    lite pack, 42 wait for a second reading, 163 main only (share-alike or Government of
-    Nepal sources, Q-034). Open: the second reading of the 42, a data release with the rates,
+    `reviewed` 11, gate G-reviewed on stale rows); Nepal's 286 rows imported; with Government
+    of Nepal data admitted and credited (D-360) 205 apply to the lite pack, 15 are already
+    right, 42 wait for a second reading, 24 are refused (share-alike only). Open: the second reading of the 42, a data release with the rates,
     the 71 rows of other countries with the world builds
   - [x] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
     model trained in the forge on the build's licence class; gate G-xlit with floors

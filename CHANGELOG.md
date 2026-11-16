@@ -16,6 +16,10 @@ applied: a minor release could break the public API, and every break is listed u
 - The forge's reviewed-names tier: `data/countries/<cc>/reviewed-names.tsv`, written by
   `forge reviewed-import`, applied by stable source key with a guard, gate G-reviewed on
   stale rows; only attribution-only sources reach the lite build (D-359).
+- Licence class `government`: a government's own work with no open licence stated, admitted
+  per source by a recorded decision and credited; Nepal's Election Commission lookups and
+  Constitution are the first (D-360). Reviewed names credit their sources in the pack's
+  notices.
 
 ## [1.0.1] - 2026-11-16
 

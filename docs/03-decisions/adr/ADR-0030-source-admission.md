@@ -26,6 +26,7 @@ build admits classes as follows:
 | share-alike other than ODbL (CC BY-SA) | **no** (cannot be relicensed as ODbL) | **no** |
 | non-commercial (GADM, UN SALB / gbAuthoritative, SHRUG, FABDEM) | **no** | **no** |
 | custom terms | case by case, recorded in the source's page | case by case |
+| a government's own work, no open licence stated (`government`) | yes, credited, when a recorded decision admits it (D-360: Nepal's) | yes, the same |
 
 Specific rulings (2026-11-06):
 

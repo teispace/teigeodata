@@ -20,7 +20,8 @@
 //! - **already:** the corrected text is there and the guarded one is not (fixed upstream);
 //! - **held:** a `likely` row on the reviewer's judgement alone, or any `uncertain` row, until a
 //!   second reading is recorded in its `review` column;
-//! - **not in lite:** in the lite build, a row with no lite-clean source (`CLEAN_ROOM.md` rule 3);
+//! - **refused:** no source of a class this build may read (`CLEAN_ROOM.md` rule 3, ADR-0030:
+//!   lite reads attribution-only classes, main also `ODbL`, neither share-alike);
 //! - **absent:** no place of this build holds any of its keys;
 //! - **stale:** the place holds neither text. In the build the table was reviewed against (its
 //!   `# build:` line) a stale row fails the build, so a changed source is read again instead of
@@ -268,7 +269,8 @@ enum Outcome {
     Applied,
     Already,
     Held,
-    NotLite,
+    /// Its sources' licence class is one this build may not read (`CLEAN_ROOM.md`, ADR-0030).
+    Refused,
     Absent,
     Stale,
 }
@@ -344,10 +346,12 @@ pub(super) fn run(
     cc: &str,
     build: &str,
     places: &mut [Place],
-) -> Result<String, String> {
+) -> Result<(String, Vec<String>), String> {
     let Some(table) = load(root, cc)? else {
-        return Ok(String::new());
+        return Ok((String::new(), Vec::new()));
     };
+    let sources = read_sources(root, cc)?
+        .ok_or_else(|| format!("{cc}: {FILE} needs {SOURCES} to credit its sources"))?;
     let by_key: BTreeMap<&str, usize> = places
         .iter()
         .enumerate()
@@ -357,12 +361,15 @@ pub(super) fn run(
         })
         .collect();
     let lite = build == "lite";
+    // Lite reads attribution-only classes; main also ODbL; neither reads share-alike,
+    // non-commercial or proprietary evidence (ADR-0030).
+    let admitted = |class: &str| LITE.contains(&class) || (!lite && class == "odbl");
     let mut plan = Vec::with_capacity(table.rows.len());
     for r in &table.rows {
         let outcome = if r.waits() {
             Err(Outcome::Held)
-        } else if lite && !LITE.contains(&r.class.as_str()) {
-            Err(Outcome::NotLite)
+        } else if !admitted(&r.class) {
+            Err(Outcome::Refused)
         } else {
             holder(&by_key, &r.keys).ok_or(Outcome::Absent)
         };
@@ -391,20 +398,29 @@ pub(super) fn run(
         }
         return Err(e);
     }
-    Ok(summary(&table, build, &outcomes))
+    // Every applied name's sources are credited in the pack's notices (D-360).
+    let mut credited: Vec<String> = Vec::new();
+    for r in outcomes.get(&Outcome::Applied).into_iter().flatten() {
+        for c in credits(&sources, &r.source) {
+            if !credited.iter().any(|k| k == c) {
+                credited.push(c.to_owned());
+            }
+        }
+    }
+    Ok((summary(&table, build, &outcomes), credited))
 }
 
 fn summary(table: &Table, build: &str, outcomes: &BTreeMap<Outcome, Vec<&Row>>) -> String {
     let n = |o| outcomes.get(&o).map_or(0, Vec::len);
     let mut out = format!(
         "Reviewed names (D-359), {} rows reviewed against {}: {} applied, {} already right, {} held \
-         for a second reading, {} not lite-clean, {} on places not in this build, {} stale.\n",
+         for a second reading, {} from sources this build may not read, {} on places not in this build, {} stale.\n",
         table.rows.len(),
         table.build,
         n(Outcome::Applied),
         n(Outcome::Already),
         n(Outcome::Held),
-        n(Outcome::NotLite),
+        n(Outcome::Refused),
         n(Outcome::Absent),
         n(Outcome::Stale),
     );
@@ -440,6 +456,10 @@ struct Source {
     class: String,
     #[serde(default)]
     official: bool,
+    /// The notice a pack carries when a name from this source is applied: required for every
+    /// class but public domain and CC0 (D-360).
+    #[serde(default)]
+    credit: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -452,7 +472,56 @@ struct Sources {
     list: Vec<Source>,
 }
 
-/// The class of a row's sources (` ; `-separated): the first lite-clean one, else the first;
+/// The country's source classification, checked: its schema, and a credit for every source
+/// whose class asks for one. `None` when the country has none.
+fn read_sources(root: &Path, cc: &str) -> Result<Option<Sources>, String> {
+    let path = root.join("data/countries").join(cc).join(SOURCES);
+    let text = match fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+    let s: Sources =
+        serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    if s.schema != "teigeodata/reviewed-sources/v1" {
+        return Err(format!(
+            "{}: schema must be teigeodata/reviewed-sources/v1",
+            path.display()
+        ));
+    }
+    for k in &s.list {
+        let free = matches!(k.class.as_str(), "public-domain" | "cc0");
+        let credit = k.credit.as_deref().map(str::trim).unwrap_or_default();
+        if !free && credit.is_empty() {
+            return Err(format!(
+                "{}: {} is {}, so it needs a credit",
+                path.display(),
+                k.prefix,
+                k.class
+            ));
+        }
+        if credit.contains('\n') {
+            return Err(format!(
+                "{}: {}: a credit is one line",
+                path.display(),
+                k.prefix
+            ));
+        }
+    }
+    Ok(Some(s))
+}
+
+/// The credits of a row's sources, in order.
+fn credits<'a>(s: &'a Sources, source: &str) -> impl Iterator<Item = &'a str> {
+    source
+        .split(" ; ")
+        .map(str::trim)
+        .filter_map(|one| s.list.iter().find(|k| one.starts_with(&k.prefix)))
+        .filter_map(|k| k.credit.as_deref().map(str::trim))
+}
+
+/// The class of a row's sources (` ; `-separated): the first lite-clean one, else `odbl`,
+/// else the first;
 /// and whether any is an official list. A source no prefix covers is refused, so every source
 /// is classified once by a person.
 fn classify(s: &Sources, source: &str) -> Result<(String, bool), String> {
@@ -474,6 +543,7 @@ fn classify(s: &Sources, source: &str) -> Result<(String, bool), String> {
     let class = classes
         .iter()
         .find(|c| LITE.contains(&c.as_str()))
+        .or_else(|| classes.iter().find(|c| *c == "odbl"))
         .or_else(|| classes.first())
         .ok_or("a row with no source")?
         .clone();
@@ -507,18 +577,8 @@ pub(crate) fn import(root: &Path, args: &[String]) -> Result<String, String> {
     )
     .map_err(|e| format!("{ids_path}: {e}"))?;
     let dir = root.join("data/countries").join(cc);
-    let sources_path = dir.join(SOURCES);
-    let sources: Sources = serde_saphyr::from_str(
-        &fs::read_to_string(&sources_path)
-            .map_err(|e| format!("{}: {e}", sources_path.display()))?,
-    )
-    .map_err(|e| format!("{}: {e}", sources_path.display()))?;
-    if sources.schema != "teigeodata/reviewed-sources/v1" {
-        return Err(format!(
-            "{}: schema must be teigeodata/reviewed-sources/v1",
-            sources_path.display()
-        ));
-    }
+    let sources = read_sources(root, cc)?
+        .ok_or_else(|| format!("{}: missing", dir.join(SOURCES).display()))?;
     let text = fs::read_to_string(input).map_err(|e| format!("{input}: {e}"))?;
     let kept: BTreeMap<(String, String, String), String> = load(root, cc)?
         .map(|t| t.rows)
@@ -683,13 +743,25 @@ mod tests {
         .render()
     }
 
+    const TEST_SOURCES: &str = "schema: teigeodata/reviewed-sources/v1\njudgement: cc0\nsources:\n  - prefix: \"https://a\"\n    class: government\n    official: true\n    credit: \"A ministry, https://a\"\n";
+
     fn run_on(text: &str, build: &str, places: &mut [Place]) -> Result<String, String> {
+        run_with(text, TEST_SOURCES, build, places).map(|(summary, _)| summary)
+    }
+
+    fn run_with(
+        text: &str,
+        sources: &str,
+        build: &str,
+        places: &mut [Place],
+    ) -> Result<(String, Vec<String>), String> {
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!("tg-reviewed-{}-{n}", std::process::id()));
         let cc = dir.join("data/countries/xx");
         fs::create_dir_all(&cc).unwrap();
         fs::write(cc.join(FILE), text).unwrap();
+        fs::write(cc.join(SOURCES), sources).unwrap();
         let out = run(&dir, "xx", build, places);
         let _ = fs::remove_dir_all(&dir);
         out
@@ -764,12 +836,27 @@ mod tests {
     }
 
     #[test]
-    fn lite_skips_rows_without_a_clean_source_and_absent_places_are_counted() {
+    fn builds_skip_rows_from_sources_they_may_not_read_and_count_absent_places() {
         let mut r = row("ne", "क", "ख", Confidence::Sure, "https://a");
         r.class = "share-alike".into();
         let mut ps = vec![place("a", &[("Ka", None), ("क", Some("ne"))])];
         let out = run_on(&table("lite", vec![r.clone()]), "lite", &mut ps).unwrap();
-        assert!(out.contains("1 not lite-clean"), "{out}");
+        assert!(
+            out.contains("1 from sources this build may not read"),
+            "{out}"
+        );
+        // Main refuses share-alike evidence too, and reads ODbL.
+        let out = run_on(&table("lite", vec![r.clone()]), "main", &mut ps).unwrap();
+        assert!(
+            out.contains("1 from sources this build may not read"),
+            "{out}"
+        );
+        r.class = "odbl".into();
+        let out = run_on(&table("lite", vec![r.clone()]), "lite", &mut ps).unwrap();
+        assert!(
+            out.contains("1 from sources this build may not read"),
+            "{out}"
+        );
         let mut other = vec![place("b", &[("Kha", None)])];
         let out = run_on(&table("lite", vec![r]), "main", &mut other).unwrap();
         assert!(out.contains("1 on places not in this build"), "{out}");
@@ -831,11 +918,13 @@ mod tests {
                     prefix: "https://wiki/".into(),
                     class: "share-alike".into(),
                     official: false,
+                    credit: None,
                 },
                 Source {
                     prefix: "https://gov/".into(),
                     class: "cc-by".into(),
                     official: true,
+                    credit: Some("Gov".into()),
                 },
             ],
         };
@@ -849,5 +938,39 @@ mod tests {
         );
         assert_eq!(classify(&s, JUDGEMENT).unwrap(), ("cc0".into(), false));
         assert!(classify(&s, "https://elsewhere/").is_err());
+    }
+
+    #[test]
+    fn applied_names_credit_their_sources_and_uncredited_classes_are_refused() {
+        let mut ps = vec![place("a", &[("Lahachok", None), ("लहचोक", Some("ne"))])];
+        let t = table(
+            "lite",
+            vec![row(
+                "ne",
+                "लहचोक",
+                "लहाचोक",
+                Confidence::Sure,
+                "https://a/x",
+            )],
+        );
+        let (_, credits) = run_with(&t, TEST_SOURCES, "lite", &mut ps).unwrap();
+        assert_eq!(credits, vec!["A ministry, https://a".to_owned()]);
+        // A held row credits nothing.
+        let mut ps = vec![place("a", &[("Lahachok", None), ("लहचोक", Some("ne"))])];
+        let held = table(
+            "lite",
+            vec![row(
+                "ne",
+                "लहचोक",
+                "लहाचोक",
+                Confidence::Uncertain,
+                "https://a/x",
+            )],
+        );
+        let (_, none) = run_with(&held, TEST_SOURCES, "lite", &mut ps).unwrap();
+        assert_eq!(none, Vec::<String>::new());
+        let bare = TEST_SOURCES.replace("    credit: \"A ministry, https://a\"\n", "");
+        let e = run_with(&t, &bare, "lite", &mut ps).unwrap_err();
+        assert!(e.contains("needs a credit"), "{e}");
     }
 }

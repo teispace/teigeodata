@@ -8,7 +8,9 @@ must never read data whose licence would make the result share-alike or non-comm
 
 1. Every source adapter declares a **licence class**: `public-domain`, `cc0`, `cc-by`,
    `cc-by-igo`, `odc-by`, `godl`, `cdla-permissive` (CDLA-Permissive 2.0) (and similar
-   attribution-only), `odbl`, `share-alike`,
+   attribution-only), `government` (a government's own work with no open licence stated,
+   admitted per source by a recorded maintainer decision and credited like an attribution-only
+   source; D-360), `odbl`, `share-alike`,
    `non-commercial`, `proprietary`.
 2. The lite build may read only attribution-only classes (and public domain). `odbl`,
    `share-alike`, `non-commercial` and `proprietary` are refused **at ingest**, before any step,
