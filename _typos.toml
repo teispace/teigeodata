@@ -6,6 +6,8 @@ extend-ignore-re = [
   "general category `Nd`",
   # ISO 3166-2 subdivision codes (NP-BA, IN-UT).
   "\\b[A-Z]{2}-[A-Z0-9]{1,3}\\b",
+  # Fumadocs' element IDs (`#nd-nav`).
+  "#nd-[a-z-]+",
 ]
 
 [default.extend-words]
