@@ -1,9 +1,9 @@
 //! `cargo xtask playground [--fetch] [--no-build]`: writes what the site's playground loads to
 //! `site/public/playground/` (git-ignored; phase 7.6,
 //! [research](../../docs/02-research/notes/docs-playground.md)): the full WebAssembly package
-//! built from this commit, the pinned pack checked by SHA-256, `MapLibre`'s worker, and a
-//! `manifest.json` that names them. The page loads these files from its own origin at run time,
-//! so it runs exactly the files a user installs and sends nothing anywhere.
+//! built from this commit, the pinned pack checked by SHA-256, and a `manifest.json` that names
+//! them. The page loads these files from its own origin at run time, so it runs exactly the files
+//! a user installs; every query runs in the page (only the map's tiles come from OpenStreetMap).
 
 use std::fs;
 use std::path::Path;
@@ -27,9 +27,6 @@ const ENGINE: [&str; 6] = [
     "NOTICE",
 ];
 
-/// `MapLibre`'s worker, self-contained, from the site's own `node_modules` (`npm ci` first).
-const WORKER: &str = "site/node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs";
-
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     let (mut fetch, mut build) = (false, true);
     for a in args {
@@ -38,12 +35,6 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
             "--no-build" => build = false,
             _ => return Err(vec![USAGE.to_owned()]),
         }
-    }
-    let worker = root.join(WORKER);
-    if !worker.is_file() {
-        return Err(vec![format!(
-            "{WORKER} is missing: run `npm ci` in site/ first"
-        )]);
     }
     let data = data(root)?;
     let pack = pinned(root, &data, fetch)?;
@@ -64,7 +55,6 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     for f in ENGINE {
         bytes += copy(&package.join(f), &engine.join(f))?;
     }
-    copy(&worker, &out.join("maplibre-gl-worker.mjs"))?;
     copy(&pack, &out.join(&data.file))?;
     let manifest = serde_json::json!({
         "release": data.release,
@@ -81,7 +71,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     fs::write(out.join("manifest.json"), text)
         .map_err(|e| vec![format!("{OUT}/manifest.json: {e}")])?;
     Ok(format!(
-        "playground: {OUT}/ holds the engine {version} ({bytes} B), {} ({} B, {}) and MapLibre's worker",
+        "playground: {OUT}/ holds the engine {version} ({bytes} B) and {} ({} B, {})",
         data.file, data.bytes, data.release
     ))
 }

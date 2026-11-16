@@ -5,7 +5,7 @@ import { Playground } from '@/components/playground/playground';
 export const metadata: Metadata = pageMetadata({
   title: 'Playground',
   description:
-    'Every query of teigeodata in your browser: search, reverse, admin units, timezones, elevation, nearby places and outlines, run by the WebAssembly engine on a released pack. Nothing leaves the page.',
+    'Every query of teigeodata : search, reverse, admin units, timezones, elevation, nearby places, outlines, distances and radii on an OpenStreetMap map, run by the WebAssembly engine on a released pack in your browser.',
   path: '/playground/',
   image: ogImage(['playground']),
 });

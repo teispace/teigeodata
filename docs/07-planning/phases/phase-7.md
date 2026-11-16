@@ -86,7 +86,7 @@ pages, the playground. Nothing names a country in code (P16): country pages come
   release's summary until the forge writes its gate figures as JSON
 
 ### 7.6 The playground
-- [x] The WebAssembly build over the public layer, in the browser, with MapLibre drawing the
+- [x] The WebAssembly build over the public layer, in the browser, with MapLibre (Leaflet over OpenStreetMap's tiles since D-356) drawing the
   pack's own outlines: search, reverse, admin, timezone, elevation, nearby, boundary (D-328;
   [research](../../02-research/notes/docs-playground.md)). `cargo xtask playground` writes its
   files; `site/scripts/check-playground.mjs` runs it in Chromium in the docs workflow. Building

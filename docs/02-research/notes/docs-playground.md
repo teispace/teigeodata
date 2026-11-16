@@ -1,7 +1,7 @@
 ---
 title: "The playground of the docs site"
 status: accepted
-updated: 2026-11-15
+updated: 2026-11-16
 owner: maintainer's agents
 revisit: 2027-05-15
 ---
@@ -28,14 +28,13 @@ static export without a tile or glyph server, what the page shows, and what prov
 - **The engine is loaded at run time from those files** (`import()` of the package's own
   `index.js`, which loads `teigeodata_wasm_bg.wasm` beside it), not bundled: the page runs the
   exact files a user installs, and the 254 kB module is fetched only by the playground.
-- **The map is drawn from the pack.** MapLibre GL JS 6.18.0 with a style of no external source:
-  a background, every country's outline from `byIso` and `boundary` (237 countries, 283,408
-  vertices, built in 80 ms on Node.js, measured below), the selected place's outline, and the
-  results as circles. No labels, because labels need a glyph server; names are in the panel and
-  in popups. MapLibre's worker is copied beside the engine and named with `setWorkerUrl`, so it
-  is a file of the site, not a `blob:` built from the bundle's URL.
-- **Nothing leaves the page.** Every request is to the site's own origin; the check below fails
-  on any other.
+- **The map is Leaflet 1.9.4 over OpenStreetMap's tiles** (revised 2026-11-16, D-356; §10):
+  the maintainer asked for a familiar map that pins what a search or a click finds. A layer
+  switch keeps the first design available: "Pack only" draws every country's outline from the
+  pack with no tiles at all. Results, the pin, outlines, measured lines and radii are SVG with a
+  class, so the site's theme colours them through CSS.
+- **Only tiles leave the page.** Every other request is to the site's own origin; the check
+  stubs `tile.openstreetmap.org` and fails on any other host. With "Pack only", nothing leaves.
 - **The pack is loaded on request**, with its size on the button (15.6 MB), a progress bar, and
   its SHA-256 checked in the browser (`crypto.subtle.digest`) against `site/data.json` before it
   is opened; the engine then checks every section's BLAKE3 as it reads it.
@@ -91,7 +90,7 @@ static export without a tile or glyph server, what the page shows, and what prov
 | Fetch the pack from the release | No copy | Blocked by CORS (§3) | Rejected |
 | Engine from npm or a CDN | No Rust in the docs job | Not published yet; a CDN is a third party | Rejected until 5.10c; a CDN never |
 | Check the built package into git | No build | Binary drift on every API change | Rejected |
-| A raster or vector basemap (OpenStreetMap tiles, a hosted style) | Familiar map | A third party sees every view; tile usage policies; not our data | Rejected |
+| A raster or vector basemap (OpenStreetMap tiles, a hosted style) | Familiar map | A third party sees every view; tile usage policies; not our data | Rejected 2026-11-15; **chosen 2026-11-16** with a pack-only switch (§10) |
 | The engine in a Web Worker | The page never waits on a query | Queries take micro- to milliseconds (phone bench: keystroke p99 0.2 ms here); a message per query costs more than most queries | Not now; revisit if a query blocks |
 
 ## 5. What we build ourselves, and why
@@ -99,9 +98,10 @@ static export without a tile or glyph server, what the page shows, and what prov
 - `xtask/src/playground.rs`: `cargo xtask playground [--fetch]` builds the full package (the
   `package-wasm` code path), takes the pinned pack (the `docs-examples` code path, SHA-256
   checked), and writes `site/public/playground/` (git-ignored): the package's browser files, its
-  `LICENSE` and `NOTICE`, the pack, MapLibre's worker, and `manifest.json` (release, file, bytes,
+  `LICENSE` and `NOTICE`, the pack, and `manifest.json` (release, file, bytes,
   SHA-256, package version).
-- `site/app/(home)/playground/` and `site/components/playground/`: the page.
+- `site/app/(tool)/playground/` (a layout with no footer, so the map fills the window) and
+  `site/components/playground/`: the page.
 - `site/scripts/check-playground.mjs`: the browser check.
 - `.github/actions/wasm-tools`: the wasm32 target, wasm-bindgen and binaryen as one composite
   action, used by the wasm and docs workflows instead of two copies.
@@ -122,14 +122,44 @@ changes to the crates and bindings too, since the playground runs them.
 
 | Thing | Version | Checked on | Where |
 |---|---|---|---|
-| maplibre-gl | 6.18.0 (2026-11-11) | 2026-11-15 | npm |
+| leaflet | 1.9.4 (latest stable; 2.0.0-beta.4 not stable) | 2026-11-16 | npm |
+| @types/leaflet | 1.9.22 | 2026-11-16 | npm |
 | playwright | 1.65.1 (2026-11-14) | 2026-11-15 | npm |
 | Pinned pack | data-2026.11.14.3 `world-np-lite.tgd` | 2026-11-15 | `site/data.json` |
 
 ## 9. Sources
 
 - [docs-site research](docs-site.md) §2 (the playground's outline) and §3 (GitHub Pages limits).
-- MapLibre GL JS 6.18.0, `dist/maplibre-gl.mjs` (worker URL resolution, `setWorkerUrl`) and its
-  style specification (`glyphs` for `text-field`).
+- OpenStreetMap Foundation, Tile Usage Policy, <https://operations.osmfoundation.org/policies/tiles/>,
+  read 2026-11-16.
+- Leaflet 1.9.4 reference, <https://leafletjs.com/reference.html>.
 - [Node and WebAssembly packaging](node-wasm-packaging.md): the package's files and `init()`.
 - GitHub Docs, "About GitHub Pages": usage limits.
+
+## 10. Revision 2026-11-16: Leaflet over OpenStreetMap's tiles
+
+The maintainer asked for OpenStreetMap and Leaflet, with a pin where a search or a click lands,
+and for a full-screen, full-featured playground (D-356). What changed and why:
+
+- **Leaflet 1.9.4 replaces MapLibre GL 6.18.0.** Raster tiles need no WebGL, no worker file and
+  no glyph server; the bundle loses MapLibre's 296 kB module and its 147 kB worker, and
+  `cargo xtask playground` no longer copies a worker. Leaflet is loaded by `import()` only on
+  this page.
+- **The OpenStreetMap tile policy** (read 2026-11-16) asks for: visible attribution (bottom
+  right, never under the panel; the panel's footer credits it too), a valid Referer (the site
+  sets no Referrer-Policy, so browsers send the origin), caching by the server's headers (the
+  browser's cache), no bulk download or prefetch (Leaflet loads only the tiles in view), and no
+  no-cache headers (none sent). A playground's traffic is light; a hosted tier would use its
+  own tile source.
+- **Privacy:** the tile server sees which tiles a viewer loads, so the intro says so, and the
+  "Pack only" basemap draws the pack's own country outlines with no tiles, as before.
+- **Dark mode** inverts the tiles with a CSS filter (`.dark .tg-map-tiles`), as tile styles
+  have no dark variant on the standard server.
+- **The page:** a full-bleed map; a floating panel (search, point, place, measure, radius) that
+  becomes a bottom sheet on a phone; tools Inspect, Measure and Radius; a layers card (basemap,
+  country outlines, the outline's level of detail, fill, stroke, children, lines to the nearest
+  places); a code dock with each call and its time; settings kept in `localStorage`; links by
+  hash (`#q=`, `#at=`, `#place=`). Fits and flights leave room for the panel.
+- **Proved:** `check-playground.mjs` stubs the tiles and requires Leaflet's container with tiles
+  drawn; with tiles never added it fails ("the map is drawn (Leaflet, with tiles)").
+

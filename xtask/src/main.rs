@@ -212,8 +212,8 @@ Tasks:
   playground [--fetch] [--no-build]
                     Phase 7.6: writes what the site's playground loads to
                     site/public/playground/ (git-ignored): the full WebAssembly package built
-                    from this commit, the pinned pack (SHA-256 checked; --fetch downloads it),
-                    MapLibre's worker (npm ci in site/ first) and manifest.json.
+                    from this commit, the pinned pack (SHA-256 checked; --fetch downloads it)
+                    and manifest.json.
   sizes [--native|--wasm] [--record]
                     Z2: the bytes each feature set of core and format adds to a linked
                     library, native and wasm32, raw and gzipped (tools/size-probe); --record

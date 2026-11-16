@@ -39,6 +39,7 @@ export interface Engine {
   search(query: string, limit: number): Uint8Array;
   searchWith(query: string, limit: number, options?: SearchOptions): Uint8Array;
   reverse(lat: number, lon: number, limit: number): Uint8Array;
+  withinRadius(lat: number, lon: number, radiusM: number, limit: number): Uint8Array;
   adminAt(lat: number, lon: number): Uint8Array;
   elevationAt(lat: number, lon: number): Uint8Array;
   tzAt(lat: number, lon: number): Uint8Array;

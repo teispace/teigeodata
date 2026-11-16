@@ -48,8 +48,9 @@ on.
   checked-in reports by an xtask, checked in, drift-checked.
 - **Playground:** the `@teispace/teigeodata-wasm` build (the same files as the npm package)
   over the public layer, fetched once and opened with `Engine.openBytes`; search, reverse,
-  admin, timezone, elevation, nearby, with MapLibre GL 6.18.0 drawing results over a map made
-  from the pack itself. Nothing is sent anywhere.
+  admin, timezone, elevation, nearby, measure and radius, drawn with Leaflet 1.9.4 over
+  OpenStreetMap's tiles, or over the pack's own outlines with no tiles (D-356; the playground
+  note §10). Only tiles leave the page.
 
 - **Landing page and SEO (D-354):** the landing page follows teitunnel's (motion, sections,
   pill buttons, footer); every number on it comes from a gate's record or the released pack,
@@ -156,7 +157,7 @@ static search index is budgeted (gzip at most 300 KB) once the pages exist.
 | react, react-dom | 19.3.1 | 2026-11-15 | `npm view` |
 | tailwindcss | 4.3.5 | 2026-11-15 | `npm view` |
 | typescript | 7.0.2 | 2026-11-15 | `npm view` |
-| maplibre-gl | 6.18.0 | 2026-11-15 | `npm view` |
+| leaflet | 1.9.4 | 2026-11-16 | `npm view` |
 | actions/upload-pages-artifact | 5.0.0 | 2026-11-15 | GitHub releases |
 | actions/deploy-pages | 5.0.1 | 2026-11-15 | GitHub releases |
 

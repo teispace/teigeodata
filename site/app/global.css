@@ -297,3 +297,213 @@ html.tg-motion [data-reveal][data-shown] .tg-type {
     transform: none;
   }
 }
+
+/* ---- Playground ------------------------------------------------------------------------ */
+.tg-glass {
+  /* Frosted, not see-through: a near-solid surface with a strong blur behind it. The blur goes
+     through Tailwind's utilities; a plain backdrop-filter declaration here was dropped by the
+     CSS pipeline. */
+  @apply backdrop-blur-2xl backdrop-saturate-150;
+  border: 1px solid color-mix(in oklab, var(--color-fd-border) 90%, transparent);
+  background: color-mix(in oklab, var(--color-fd-card) 93%, transparent);
+  box-shadow: var(--tg-window-shadow);
+}
+
+.tg-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--color-fd-foreground) 18%, transparent) transparent;
+}
+
+.tg-range {
+  accent-color: var(--color-fd-primary);
+  height: 1rem;
+}
+
+.tg-playground .leaflet-container {
+  background: color-mix(in oklab, var(--color-fd-background) 92%, var(--color-fd-primary));
+  font-family: inherit;
+}
+/* The map element carries data-tool and is Leaflet's container: a pointer to inspect, a
+   crosshair to measure or draw a radius, Leaflet's grabbing hand while dragging. */
+.tg-playground .leaflet-container.leaflet-grab[data-tool='inspect'] {
+  cursor: pointer;
+}
+.tg-playground .leaflet-container.leaflet-grab[data-tool='measure'],
+.tg-playground .leaflet-container.leaflet-grab[data-tool='radius'] {
+  cursor: crosshair;
+}
+.tg-playground .leaflet-container.leaflet-dragging[data-tool] {
+  cursor: grabbing;
+}
+
+/* OpenStreetMap's tiles, darkened for the dark theme. */
+.dark .tg-map-tiles {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.6);
+}
+
+.tg-playground .leaflet-control-zoom,
+.tg-playground .leaflet-bar {
+  border: 1px solid var(--color-fd-border) !important;
+  border-radius: 0.75rem !important;
+  overflow: hidden;
+  box-shadow: var(--tg-window-shadow) !important;
+}
+.tg-playground .leaflet-bar a {
+  background: color-mix(in oklab, var(--color-fd-background) 90%, transparent);
+  color: var(--color-fd-foreground);
+  border-bottom-color: var(--color-fd-border);
+  width: 36px;
+  height: 36px;
+  line-height: 36px;
+}
+.tg-playground .leaflet-bar a:hover {
+  background: var(--color-fd-accent);
+}
+.tg-playground .leaflet-control-attribution {
+  background: color-mix(in oklab, var(--color-fd-background) 80%, transparent);
+  color: var(--color-fd-muted-foreground);
+  border-top-left-radius: 0.5rem;
+  font-size: 10px;
+}
+.tg-playground .leaflet-control-attribution a {
+  color: var(--color-fd-foreground);
+}
+.tg-playground .leaflet-control-scale-line {
+  background: color-mix(in oklab, var(--color-fd-background) 80%, transparent);
+  border-color: var(--color-fd-muted-foreground);
+  color: var(--color-fd-foreground);
+}
+@media (min-width: 768px) {
+  .tg-playground .leaflet-bottom.leaflet-left {
+    left: 412px;
+  }
+}
+@media (max-width: 767px) {
+  .tg-playground .leaflet-bottom {
+    bottom: 52%;
+  }
+}
+
+/* What is drawn on the map, coloured by the theme. */
+.tg-map-world {
+  stroke: color-mix(in oklab, var(--color-fd-foreground) 35%, transparent);
+  stroke-width: 0.8;
+  fill: color-mix(in oklab, var(--color-fd-foreground) 4%, transparent);
+}
+.tg-map-outline {
+  stroke: var(--color-fd-primary);
+  fill: var(--color-fd-primary);
+  stroke-linejoin: round;
+  transition: fill-opacity 0.2s;
+}
+.tg-map-place {
+  stroke: var(--color-fd-background);
+  stroke-width: 2;
+  fill: var(--color-fd-primary);
+  fill-opacity: 0.95;
+  transition:
+    r 0.2s,
+    fill 0.2s;
+  cursor: pointer;
+}
+.tg-map-place:hover {
+  fill: var(--color-fd-foreground);
+}
+.tg-map-child {
+  fill: color-mix(in oklab, var(--color-fd-primary) 60%, var(--color-fd-background));
+  stroke-width: 1;
+}
+.tg-map-selected {
+  fill: var(--color-fd-foreground);
+  stroke: var(--color-fd-primary);
+  stroke-width: 3;
+}
+.tg-map-near {
+  fill: oklch(0.7 0.16 60);
+}
+.tg-map-spoke {
+  stroke: var(--color-fd-foreground);
+  stroke-opacity: 0.55;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 5;
+  fill: none;
+}
+.tg-map-measure {
+  stroke: var(--color-fd-primary);
+  stroke-width: 3;
+  stroke-dasharray: 8 6;
+  fill: none;
+}
+.tg-map-measure-dot {
+  fill: var(--color-fd-background);
+  stroke: var(--color-fd-primary);
+  stroke-width: 3;
+}
+.tg-map-radius {
+  stroke: var(--color-fd-primary);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  fill: var(--color-fd-primary);
+  fill-opacity: 0.08;
+}
+
+.tg-map-pin {
+  position: relative;
+}
+.tg-map-pin-dot,
+.tg-map-pin-ping {
+  position: absolute;
+  inset: 4px;
+  border-radius: 9999px;
+}
+.tg-map-pin-dot {
+  background: var(--color-fd-primary);
+  border: 3px solid var(--color-fd-background);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+}
+.tg-map-pin-ping {
+  background: var(--color-fd-primary);
+  animation: tg-ping 2s var(--tg-ease) infinite;
+}
+
+.leaflet-tooltip.tg-map-tip,
+.leaflet-tooltip.tg-map-label {
+  border: 1px solid var(--color-fd-border);
+  background: color-mix(in oklab, var(--color-fd-background) 92%, transparent);
+  color: var(--color-fd-foreground);
+  border-radius: 0.6rem;
+  box-shadow: var(--tg-window-shadow);
+  font-family: inherit;
+}
+.leaflet-tooltip.tg-map-tip {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.leaflet-tooltip.tg-map-tip span {
+  display: block;
+  color: var(--color-fd-muted-foreground);
+  font-size: 11px;
+}
+.leaflet-tooltip.tg-map-label {
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: none;
+}
+.leaflet-tooltip.tg-map-label-strong {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-color: var(--color-fd-primary);
+}
+.leaflet-tooltip-top.tg-map-tip::before,
+.leaflet-tooltip.tg-map-label::before {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tg-map-pin-ping {
+    animation: none;
+    display: none;
+  }
+}

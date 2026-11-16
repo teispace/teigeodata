@@ -38,7 +38,7 @@ export function cards(): Card[] {
       slug: ['playground'],
       eyebrow: 'Playground',
       title: 'Every query, in your browser',
-      description: 'The WebAssembly engine on a released pack. Nothing leaves the page.',
+      description: 'The WebAssembly engine on a released pack, in your browser, on an OpenStreetMap map.',
     },
     ...source.getPages().map((page) => ({
       slug: ['docs', ...page.slugs],

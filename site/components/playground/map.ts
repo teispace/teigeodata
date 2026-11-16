@@ -1,124 +1,14 @@
-// The playground's map: MapLibre GL JS over a style with no external source. The base map is
-// every country's outline from the pack; results are circles; names are in the panel and in
-// popups, since labels on the map would need a glyph server. MapLibre's worker is the site's
-// copy (public/playground/), named with setWorkerUrl.
+// The playground's map: Leaflet over OpenStreetMap's tiles, or over the pack's own country
+// outlines with no tiles at all. Everything drawn on it (results, the pin, outlines, lines,
+// circles) is SVG with a class, so the site's theme colours it through CSS
+// (`.tg-map-*` in app/global.css) and it follows light and dark mode with no repaint.
 
-import type { Feature, FeatureCollection, Geometry, Position } from 'geojson';
-import type { GeoJSONSource, LngLatBoundsLike, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl';
-import { playgroundBase } from './engine';
+import type { Feature, FeatureCollection, Geometry } from 'geojson';
+import type * as Leaflet from 'leaflet';
 
-export const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
+type L = typeof Leaflet;
 
-/** The theme's colours, resolved to what MapLibre parses (`rgb(…)`), from the site's tokens. */
-export function themeColors() {
-  const style = getComputedStyle(document.documentElement);
-  // A colour in any CSS syntax (the tokens are `lab()` and `oklch()`) painted on one pixel and
-  // read back as sRGB, which every MapLibre version parses.
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 1;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  const resolve = (token: string, fallback: string): readonly number[] => {
-    const value = style.getPropertyValue(token).trim() || fallback;
-    if (!ctx) return [127, 127, 127];
-    ctx.clearRect(0, 0, 1, 1);
-    ctx.fillStyle = fallback;
-    ctx.fillStyle = value;
-    ctx.fillRect(0, 0, 1, 1);
-    const [r = 0, g = 0, b = 0] = ctx.getImageData(0, 0, 1, 1).data;
-    return [r, g, b];
-  };
-  const rgb = ([r, g, b]: readonly number[], alpha = 1) => `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  /** `a` moved towards `b` by `t`: the sea is the land tinted with the primary colour. */
-  const mix = (a: readonly number[], b: readonly number[], t: number) =>
-    a.map((v, i) => Math.round(v + ((b[i] ?? v) - v) * t));
-  const page = resolve('--color-fd-background', '#ffffff');
-  const text = resolve('--color-fd-foreground', '#111111');
-  const primary = resolve('--color-fd-primary', '#2563eb');
-  const muted = resolve('--color-fd-muted-foreground', '#667085');
-  // Land a shade towards the text colour, sea a shade towards the primary: apart in both themes.
-  return {
-    sea: rgb(mix(page, primary, 0.16)),
-    land: rgb(mix(page, text, 0.06)),
-    border: rgb(muted, 0.6),
-    text: rgb(text),
-    primary: rgb(primary),
-  };
-}
-
-export type Colors = ReturnType<typeof themeColors>;
-
-export function style(c: Colors): StyleSpecification {
-  return {
-    version: 8,
-    sources: {
-      world: { type: 'geojson', data: EMPTY },
-      outline: { type: 'geojson', data: EMPTY },
-      places: { type: 'geojson', data: EMPTY },
-      pin: { type: 'geojson', data: EMPTY },
-    },
-    layers: [
-      { id: 'sea', type: 'background', paint: { 'background-color': c.sea } },
-      { id: 'land', type: 'fill', source: 'world', paint: { 'fill-color': c.land } },
-      {
-        id: 'borders',
-        type: 'line',
-        source: 'world',
-        paint: { 'line-color': c.border, 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.4, 6, 1.2] },
-      },
-      { id: 'outline-fill', type: 'fill', source: 'outline', paint: { 'fill-color': c.primary, 'fill-opacity': 0.12 } },
-      { id: 'outline-line', type: 'line', source: 'outline', paint: { 'line-color': c.primary, 'line-width': 2 } },
-      {
-        id: 'places',
-        type: 'circle',
-        source: 'places',
-        paint: {
-          'circle-radius': ['case', ['==', ['get', 'role'], 'selected'], 7, 5],
-          'circle-color': ['case', ['==', ['get', 'role'], 'selected'], c.primary, c.land],
-          'circle-stroke-color': c.primary,
-          'circle-stroke-width': 2,
-        },
-      },
-      {
-        id: 'pin',
-        type: 'circle',
-        source: 'pin',
-        paint: { 'circle-radius': 6, 'circle-color': c.text, 'circle-stroke-color': c.land, 'circle-stroke-width': 2 },
-      },
-    ],
-  };
-}
-
-/** Repaints the layers in the theme's current colours (light and dark). */
-export function repaint(map: MapLibreMap, c: Colors) {
-  map.setPaintProperty('sea', 'background-color', c.sea);
-  map.setPaintProperty('land', 'fill-color', c.land);
-  map.setPaintProperty('borders', 'line-color', c.border);
-  map.setPaintProperty('outline-fill', 'fill-color', c.primary);
-  map.setPaintProperty('outline-line', 'line-color', c.primary);
-  map.setPaintProperty('places', 'circle-color', ['case', ['==', ['get', 'role'], 'selected'], c.primary, c.land]);
-  map.setPaintProperty('places', 'circle-stroke-color', c.primary);
-  map.setPaintProperty('pin', 'circle-color', c.text);
-  map.setPaintProperty('pin', 'circle-stroke-color', c.land);
-}
-
-export async function createMap(container: HTMLElement): Promise<MapLibreMap> {
-  const maplibre = await import('maplibre-gl');
-  maplibre.setWorkerUrl(`${location.origin}${playgroundBase}/maplibre-gl-worker.mjs`);
-  return new maplibre.Map({
-    container,
-    style: style(themeColors()),
-    center: [84.1, 28.3],
-    zoom: 5.2,
-    attributionControl: false,
-    dragRotate: false,
-    pitchWithRotate: false,
-    renderWorldCopies: false,
-  });
-}
-
-export function setData(map: MapLibreMap, source: string, data: FeatureCollection) {
-  (map.getSource(source) as GeoJSONSource | undefined)?.setData(data);
-}
+export type Basemap = 'osm' | 'none';
 
 export interface Point {
   id: string;
@@ -126,58 +16,222 @@ export interface Point {
   kind: string;
   lat: number;
   lon: number;
-  role?: 'selected' | 'result';
+  /** How it is drawn: a result, the selected place, a child of it, or a place near the pin. */
+  role?: 'result' | 'selected' | 'child' | 'near';
 }
 
-export function points(list: Point[]): FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: list.map(
-      (p): Feature => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
-        properties: { id: p.id, name: p.name, kind: p.kind, role: p.role ?? 'result' },
-      }),
-    ),
-  };
+export interface OutlineStyle {
+  fillOpacity: number;
+  weight: number;
 }
 
-/** The bounds of a geometry, or of points, padded for a single point. */
-export function bounds(geometries: Geometry[]): LngLatBoundsLike | null {
-  let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
-  const visit = ([x, y]: Position) => {
-    if (x === undefined || y === undefined) return;
-    w = Math.min(w, x);
-    e = Math.max(e, x);
-    s = Math.min(s, y);
-    n = Math.max(n, y);
-  };
-  const walk = (g: Geometry) => {
-    switch (g.type) {
-      case 'Point':
-        visit(g.coordinates);
-        break;
-      case 'MultiPoint':
-      case 'LineString':
-        g.coordinates.forEach(visit);
-        break;
-      case 'MultiLineString':
-      case 'Polygon':
-        g.coordinates.forEach((r) => r.forEach(visit));
-        break;
-      case 'MultiPolygon':
-        g.coordinates.forEach((p) => p.forEach((r) => r.forEach(visit)));
-        break;
-      case 'GeometryCollection':
-        g.geometries.forEach(walk);
-        break;
+const ESCAPE: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const escape = (s: string) => s.replace(/[&<>"']/g, (c) => ESCAPE[c] ?? c);
+
+/** The map and its layers; one per playground. */
+export class PlaygroundMap {
+  readonly map: Leaflet.Map;
+  private readonly L: L;
+  private tiles: Leaflet.TileLayer;
+  private readonly world: Leaflet.GeoJSON;
+  private readonly places: Leaflet.LayerGroup;
+  private readonly outline: Leaflet.GeoJSON;
+  private readonly lines: Leaflet.LayerGroup;
+  private readonly marks: Leaflet.LayerGroup;
+  private pin: Leaflet.Marker | null = null;
+  private basemap: Basemap = 'osm';
+
+  constructor(L: L, element: HTMLElement) {
+    this.L = L;
+    this.map = L.map(element, {
+      center: [28.2, 84.1],
+      zoom: 6,
+      minZoom: 2,
+      maxZoom: 18,
+      zoomControl: false,
+      zoomSnap: 0.25,
+      zoomDelta: 0.5,
+      wheelPxPerZoomLevel: 90,
+      worldCopyJump: true,
+      attributionControl: true,
+    });
+    this.map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
+    L.control.zoom({ position: 'bottomright' }).addTo(this.map);
+    L.control.scale({ position: 'bottomleft', imperial: false }).addTo(this.map);
+    this.tiles = this.osm();
+    this.world = L.geoJSON(undefined, { interactive: false, style: { className: 'tg-map-world' } }).addTo(this.map);
+    this.outline = L.geoJSON(undefined, { interactive: false, style: { className: 'tg-map-outline' } }).addTo(this.map);
+    this.lines = L.layerGroup().addTo(this.map);
+    this.marks = L.layerGroup().addTo(this.map);
+    this.places = L.layerGroup().addTo(this.map);
+    this.setBasemap('osm');
+  }
+
+  private osm() {
+    return this.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      className: 'tg-map-tiles',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    });
+  }
+
+  setBasemap(kind: Basemap) {
+    this.basemap = kind;
+    if (kind === 'osm') this.tiles.addTo(this.map);
+    else this.tiles.remove();
+    this.map.getContainer().dataset.basemap = kind;
+  }
+
+  setWorld(world: FeatureCollection | null, visible: boolean) {
+    this.world.clearLayers();
+    if (world && visible) this.world.addData(world);
+  }
+
+  setPlaces(list: Point[], onPick: (id: string, at: { lat: number; lon: number }) => void) {
+    this.places.clearLayers();
+    const L = this.L;
+    for (const p of list) {
+      const role = p.role ?? 'result';
+      const marker = L.circleMarker([p.lat, p.lon], {
+        radius: role === 'selected' ? 8 : role === 'child' ? 4 : 6,
+        className: `tg-map-place tg-map-${role}`,
+        bubblingMouseEvents: false,
+      });
+      marker.bindTooltip(
+        `<strong>${escape(p.name)}</strong><span>${escape(p.kind)} · ${escape(p.id)}</span>`,
+        { className: 'tg-map-tip', direction: 'top', offset: [0, -6] },
+      );
+      marker.on('click', () => onPick(p.id, { lat: p.lat, lon: p.lon }));
+      marker.addTo(this.places);
     }
-  };
-  geometries.forEach(walk);
-  if (!Number.isFinite(w)) return null;
-  const pad = e - w < 0.02 && n - s < 0.02 ? 0.05 : 0;
-  return [
-    [w - pad, s - pad],
-    [e + pad, n + pad],
-  ];
+  }
+
+  setPin(at: { lat: number; lon: number } | null) {
+    this.pin?.remove();
+    this.pin = null;
+    if (!at) return;
+    const icon = this.L.divIcon({
+      className: 'tg-map-pin',
+      html: '<span class="tg-map-pin-ping"></span><span class="tg-map-pin-dot"></span>',
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
+    this.pin = this.L.marker([at.lat, at.lon], { icon, interactive: false, keyboard: false }).addTo(this.map);
+  }
+
+  setOutline(geometry: Geometry | null, style: OutlineStyle) {
+    this.outline.clearLayers();
+    if (geometry) this.outline.addData({ type: 'Feature', geometry, properties: {} } as Feature);
+    this.styleOutline(style);
+  }
+
+  styleOutline(style: OutlineStyle) {
+    this.outline.setStyle({ fillOpacity: style.fillOpacity, weight: style.weight, className: 'tg-map-outline' });
+  }
+
+  /** Lines from a point to others, each labelled with its distance. */
+  setSpokes(from: { lat: number; lon: number } | null, to: { lat: number; lon: number; label: string }[]) {
+    this.lines.clearLayers();
+    if (!from) return;
+    for (const t of to) {
+      this.L.polyline(
+        [
+          [from.lat, from.lon],
+          [t.lat, t.lon],
+        ],
+        { className: 'tg-map-spoke', interactive: false },
+      )
+        .bindTooltip(escape(t.label), { permanent: true, className: 'tg-map-label', direction: 'center' })
+        .addTo(this.lines);
+    }
+  }
+
+  /** A measured line between two points, or a radius around one. */
+  setMarks(marks: { line?: [{ lat: number; lon: number }, { lat: number; lon: number }, string]; circle?: { lat: number; lon: number; m: number }; start?: { lat: number; lon: number } }) {
+    this.marks.clearLayers();
+    const L = this.L;
+    if (marks.start) {
+      L.circleMarker([marks.start.lat, marks.start.lon], { radius: 5, className: 'tg-map-measure-dot', interactive: false }).addTo(this.marks);
+    }
+    if (marks.line) {
+      const [a, b, label] = marks.line;
+      L.polyline(
+        [
+          [a.lat, a.lon],
+          [b.lat, b.lon],
+        ],
+        { className: 'tg-map-measure', interactive: false },
+      )
+        .bindTooltip(escape(label), { permanent: true, className: 'tg-map-label tg-map-label-strong', direction: 'center' })
+        .addTo(this.marks);
+      for (const p of [a, b]) {
+        L.circleMarker([p.lat, p.lon], { radius: 5, className: 'tg-map-measure-dot', interactive: false }).addTo(this.marks);
+      }
+    }
+    if (marks.circle) {
+      L.circle([marks.circle.lat, marks.circle.lon], { radius: marks.circle.m, className: 'tg-map-radius', interactive: false }).addTo(this.marks);
+    }
+  }
+
+  /** Pixels the floating panel covers on the left; 0 when it is a bottom sheet. */
+  private panelInset() {
+    return this.map.getContainer().clientWidth >= 768 ? 412 : 0;
+  }
+
+  private fitOptions(maxZoom: number) {
+    const left = this.panelInset();
+    return { paddingTopLeft: [left + 48, 72] as [number, number], paddingBottomRight: [48, 48] as [number, number], maxZoom, duration: 0.7 };
+  }
+
+  fitGeometry(geometry: Geometry, maxZoom = 13) {
+    const layer = this.L.geoJSON({ type: 'Feature', geometry, properties: {} } as Feature);
+    const box = layer.getBounds();
+    if (box.isValid()) this.map.flyToBounds(box, this.fitOptions(maxZoom));
+  }
+
+  /** Frames a radius; `smooth` flies, otherwise it snaps (for a slider being dragged). */
+  fitCircle(at: { lat: number; lon: number }, m: number, smooth: boolean) {
+    const box = this.L.latLng(at.lat, at.lon).toBounds(m * 2);
+    const o = this.fitOptions(16);
+    if (smooth) this.map.flyToBounds(box, o);
+    else this.map.fitBounds(box, { ...o, animate: false });
+  }
+
+  fitPoints(list: { lat: number; lon: number }[], maxZoom = 9) {
+    if (!list.length) return;
+    const box = this.L.latLngBounds(list.map((p) => [p.lat, p.lon] as [number, number]));
+    const [best] = list;
+    if (best && this.map.getBounds().contains([best.lat, best.lon]) && list.length > 1) return;
+    this.map.flyToBounds(box, this.fitOptions(maxZoom));
+  }
+
+  /** Flies so the point lands in the middle of the map the panel leaves visible. */
+  flyTo(lat: number, lon: number, zoom: number) {
+    const z = Math.max(this.map.getZoom(), zoom);
+    const shift = this.panelInset() / 2;
+    const at = this.map.unproject(this.map.project([lat, lon], z).subtract([shift, 0]), z);
+    this.map.flyTo(at, z, { duration: 0.7 });
+  }
+
+  center() {
+    const c = this.map.getCenter();
+    return { lat: c.lat, lon: c.lng };
+  }
+
+  get currentBasemap() {
+    return this.basemap;
+  }
+
+  remove() {
+    this.map.remove();
+  }
+}
+
+/** Creates the map once Leaflet is loaded (it touches `window`, so never on the server). */
+export async function createMap(element: HTMLElement, cancelled: () => boolean): Promise<PlaygroundMap | null> {
+  const L = (await import('leaflet')).default;
+  // React mounts effects twice in development: the first call is cancelled by the time Leaflet
+  // has loaded, and must not claim the element the second one draws into.
+  if (cancelled()) return null;
+  return new PlaygroundMap(L, element);
 }
