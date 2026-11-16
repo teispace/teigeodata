@@ -66,7 +66,7 @@ Asia/Kathmandu  timezone_area  28.397480,83.093537  tgd:np/1gce  Asia/Kathmandu 
   }
 ]
 === extract
-wrote kathmandu.tgd: 938944 bytes, 14 sections, 1388 places; components point,elevation,admin,names,search,timezone,timezone-index,boundaries,admin-index,postal,dem,extra,tz-rules,substring,dem-coarse
+wrote kathmandu.tgd: 428900 bytes, 14 sections, 1388 places; components point,elevation,admin,names,search,timezone,timezone-index,boundaries,admin-index,postal,dem,extra,tz-rules,substring,dem-coarse
 Kathmandu  settlement  27.701690,85.320600  tgd:np/2cn  1288 m (model)  Asia/Kathmandu  score 144
 === http-health
 {"status":"ok","layers":1}
