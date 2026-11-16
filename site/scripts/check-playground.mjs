@@ -135,6 +135,13 @@ try {
   const cardHeight = await page.getByTestId('popover-height').textContent().catch(() => '');
   await expect(`the card's height ${cardHeight}`, async () => cardHeight?.replace(',', '').startsWith(`${height} m`));
 
+  // Its close button closes it, and no new card opens where the button was.
+  await card.getByRole('button', { name: 'Close' }).click();
+  await page.waitForTimeout(400);
+  await expect('the card closes from its close button', async () => (await card.count()) === 0);
+  await page.evaluate(() => (location.hash = 'at=27.7173,85.324'));
+  await card.waitFor({ timeout: 10_000 }).catch(() => problems.push('no card on the map after it was closed'));
+
   // A pack added while it runs: the card offers the valley's 31 m terrain; once added, the
   // height there comes from it.
   await page.getByTestId('popover-add').click();

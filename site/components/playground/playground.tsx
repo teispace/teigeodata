@@ -274,7 +274,14 @@ export function Playground() {
   popoverRef.current = popover;
 
   // The popover's content is rendered by React into an element Leaflet places on the map.
-  useEffect(() => setPopupEl(document.createElement('div')), []);
+  // A click in the card stays in the card: React may unmount its target before the click reaches
+  // the map, and Leaflet, finding the target outside the popup, would take it for a map click
+  // and open a new card where the close button was.
+  useEffect(() => {
+    const el = document.createElement('div');
+    el.addEventListener('click', (e) => e.stopPropagation());
+    setPopupEl(el);
+  }, []);
   useEffect(() => {
     const m = mapRef.current;
     if (!m || !popupEl) return;
