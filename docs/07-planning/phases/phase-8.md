@@ -277,8 +277,11 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 
 ### 8.6 Exit review
 
-- [ ] v1.0.0 tagged and published on GitHub (D-352: registries off) and checked from a scratch
-  project with the `git` + `tag` dependency
+- [x] v1.0.0 tagged and published on GitHub (D-352: registries off) and checked from a scratch
+  project with the `git` + `tag` dependency: [release run 43841066655](https://github.com/teispace/teigeodata/actions/runs/43841066655)
+  (52 jobs green; registries skipped), tag at the release commit `5f7d916`, 79 files; the C
+  archive's `SHA256SUMS` line and attestation verified; a new project on `tag = "v1.0.0"`
+  opens `np-places-lite.tgd` of data-2026.11.15 and reads Nepal 29,164,578 (stated), 2026-11-16
 - [ ] The registries from the existing tag, once the maintainer has tested the release: a
   `release.yml` mode that publishes a tagged version's registries; installs from every
   registry checked

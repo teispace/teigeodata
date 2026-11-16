@@ -370,7 +370,7 @@ needs; `rust-toolchain.toml` pins the version):
 
 ```sh
 git clone https://github.com/teispace/teigeodata && cd teigeodata
-git checkout v0.3.1
+git checkout v1.0.0
 """
 
 LANGS = []
@@ -496,8 +496,8 @@ other language reaches the same engine through a generated binding.""",
 
 ```toml title="Cargo.toml"
 [dependencies]
-teigeodata-core = { git = "https://github.com/teispace/teigeodata", tag = "v0.3.1" }
-teigeodata-engine = { git = "https://github.com/teispace/teigeodata", tag = "v0.3.1" }
+teigeodata-core = { git = "https://github.com/teispace/teigeodata", tag = "v1.0.0" }
+teigeodata-engine = { git = "https://github.com/teispace/teigeodata", tag = "v1.0.0" }
 ```
 
 </Tab>
@@ -924,7 +924,7 @@ dependencies:
   teigeodata:
     git:
       url: https://github.com/teispace/teigeodata
-      ref: v0.3.1
+      ref: v1.0.0
       path: bindings/dart
 ```
 

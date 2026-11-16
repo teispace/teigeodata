@@ -23,7 +23,7 @@ needs; `rust-toolchain.toml` pins the version):
 
 ```sh
 git clone https://github.com/teispace/teigeodata && cd teigeodata
-git checkout v0.3.1
+git checkout v1.0.0
 PYO3_BUILD_EXTENSION_MODULE=1 cargo build --release -p teigeodata-python --manifest-path bindings/Cargo.toml
 cp bindings/target/release/libteigeodata_python.so bindings/python/teigeodata/_native.abi3.so   # .dylib on macOS
 export PYTHONPATH=$PWD/bindings/python

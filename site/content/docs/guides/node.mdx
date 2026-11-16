@@ -24,7 +24,7 @@ needs; `rust-toolchain.toml` pins the version):
 
 ```sh
 git clone https://github.com/teispace/teigeodata && cd teigeodata
-git checkout v0.3.1
+git checkout v1.0.0
 cargo build --release -p teigeodata-node --manifest-path bindings/Cargo.toml
 cp bindings/target/release/libteigeodata_node.so bindings/node/teigeodata.node   # .dylib on macOS
 npm install ./bindings/node
