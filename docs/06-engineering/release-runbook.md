@@ -72,7 +72,7 @@ team `developers`. pub.dev: publisher `teispace.com`.
 **State (2026-11-17):** 1.0.1 is on every registry. crates.io: the 9 crates published by
 hand, each owned by the team `teispace/Teispace Core` with the trusted publisher. npm: the 11
 packages published by hand, the team `developers` read-write on each; the trusted publisher on
-`teigeodata` (pending until a CI publish), the other 10 by `npm trust github`. pub.dev:
+`teigeodata`, the other 10 by `npm trust github`; all 11 used by the 1.1.0 CI publish. pub.dev:
 `teigeodata` under `teispace.com` (from `main`'s d3f94aa, D-361), automated publishing from
 `v{{version}}` tags in environment `release`. PyPI and Maven Central published from CI. **1.1.0 published everywhere from CI** (run
 43931508857, pub.dev run 43943423993): crates.io, npm (with SLSA provenance), PyPI, Maven Central,

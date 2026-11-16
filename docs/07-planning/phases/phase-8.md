@@ -272,8 +272,9 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   green, the ABI and Rust API gates clean. Rerun on the rebased branch at tag `v1.0.0-rc.2`
   (main 404a0cc, the population parity fix and the data release): run 43741537528, 52 jobs
   green, 2026-11-16
-- [ ] The maintainer: the key ceremony (phase 4.3), the release environment and registry
-  accounts (5.10c), Pages (`DOCS_DEPLOY`)
+- [x] The release environment and registry accounts (5.10c), set up with the maintainer
+  2026-11-16; the runbook records them
+- [ ] The maintainer: the key ceremony (phase 4.3), Pages (`DOCS_DEPLOY`)
 
 ### 8.6 Exit review
 
@@ -282,9 +283,11 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   (52 jobs green; registries skipped), tag at the release commit `5f7d916`, 79 files; the C
   archive's `SHA256SUMS` line and attestation verified; a new project on `tag = "v1.0.0"`
   opens `np-places-lite.tgd` of data-2026.11.15 and reads Nepal 29,164,578 (stated), 2026-11-16
-- [ ] The registries from the existing tag, once the maintainer has tested the release: a
-  `release.yml` mode that publishes a tagged version's registries; installs from every
-  registry checked
+- [x] The registries: 1.0.1 (D-358) published on every registry, the first publish per
+  registry by hand (pub.dev from `main`, D-361), installs checked; **1.1.0 published everywhere
+  from CI by trusted publishing** ([run 43931508857](https://github.com/teispace/teigeodata/actions/runs/43931508857),
+  pub.dev run 43943423993), 2026-11-16. A new patch release replaced the planned "publish an
+  existing tag" mode: simpler, and it proved trusted publishing end to end
 - [ ] M8 criteria met, each with its evidence; progress updated
 
 ## Changelog
@@ -310,3 +313,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.5: populations shipped before the data release (the schema promised them; no pack had them) | D-351 |
 | 2026-11-15 | 8.5: the data release split into the pre-release (done, data-2026.11.15) and the catalog (after the key ceremony) | D-247 |
 | 2026-11-16 | 8.6: v1.0.0 on GitHub first, the registries after the maintainer's test | D-352 |
+| 2026-11-17 | 8.5 registry accounts and 8.6 registries checked: 1.0.1 by hand, 1.1.0 from CI | The release replaced the planned tag-republish mode |
