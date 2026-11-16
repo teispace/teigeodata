@@ -52,6 +52,16 @@ environment `release`. Names are those of D-211.
    a GPG key whose public half is on `keys.openpgp.org`.
 7. **Go and Swift** need nothing: the tags are the release.
 
+**State (2026-11-16, D-358):** GitHub done (environment `release` with the maintainer as
+reviewer, `main` and `v*` only; its five secrets; the deploy key `release`; release
+immutability on; crates.io granted access to the `teispace` organisation). Maven Central:
+namespace `com.teispace` registered, TXT record on `teispace.com` added, verification pending;
+the signing key is RSA 4096 `5BA1 99A9 F59E E7E3 01D9 4250 CCF0 66EF 6E5F 481F`
+(`Teispace <info@teispace.com>`, no expiry), on keyserver.ubuntu.com and keys.openpgp.org.
+PyPI: account `teispace`, pending publisher for `teigeodata` added. npm: org `teispace`, its
+team `developers`. pub.dev: publisher `teispace.com`. Left: the first publishes by hand on
+crates.io, npm and pub.dev from the 1.0.1 tag, then their trusted publishers.
+
 A registry not set up yet fails only its own job; the GitHub release and the other registries
 are unaffected, and a re-run publishes what is missing (every publish step skips a version
 that is already there).
