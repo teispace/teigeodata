@@ -116,6 +116,7 @@ const PLACES: &[Place] = &[
         "\"",
         1,
     ),
+    place("site/lib/site.ts", "  version: '", "version: '", "'", 1),
 ];
 
 /// A generated file that must agree too: `cargo xtask bindings` writes it.
