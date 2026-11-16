@@ -24,36 +24,24 @@ engine and a released pack in your browser, every query with the code that produ
 
 ## One engine, every language
 
-The engine is written in Rust. Every other language calls it through a binding generated from
-one description of the API, so each query, option and error code is the same everywhere, and
-every guide on this site runs the same program and prints the same output.
+The engine is written in Rust. Rust, C, C++, Swift, Kotlin, Java, Dart, Python, Node.js, the
+browser (WebAssembly), Go and .NET call it through bindings generated from one description of
+the API, so each query, option and error code is the same everywhere. Every guide shows each
+language in a tab: pick yours once and every page remembers it.
 
-<Cards>
-  <Card title="Rust" href="/docs/guides/rust" />
-  <Card title="Python" href="/docs/guides/python" />
-  <Card title="Node.js" href="/docs/guides/node" />
-  <Card title="Browser (WebAssembly)" href="/docs/guides/wasm" />
-  <Card title="Swift" href="/docs/guides/swift" />
-  <Card title="Kotlin and Java" href="/docs/guides/kotlin-java" />
-  <Card title="Dart and Flutter" href="/docs/guides/dart-flutter" />
-  <Card title="Go" href="/docs/guides/go" />
-  <Card title="C" href="/docs/guides/c" />
-  <Card title="C++" href="/docs/guides/cpp" />
-  <Card title=".NET" href="/docs/guides/dotnet" />
-  <Card title="Command line" href="/docs/cli" />
-</Cards>
-
-There is also an [HTTP server](/docs/servers/http) (native JSON, GeoJSON and
-Nominatim-compatible routes) and an [MCP server](/docs/servers/mcp) that gives AI agents the same
-queries as tools.
+There is also a [command line](/docs/cli), an [HTTP server](/docs/servers/http) (native JSON,
+GeoJSON and Nominatim-compatible routes) and an [MCP server](/docs/servers/mcp) that gives AI
+agents the same queries as tools.
 
 ## Where to start
 
 <Cards>
-  <Card title="Getting started" href="/docs/getting-started" description="A pack and your first queries in five minutes." />
+  <Card title="Quickstart" href="/docs/getting-started" description="A pack and your first answers in five minutes." />
+  <Card title="Install" href="/docs/getting-started/install" description="Add the package in your language and read a result." />
+  <Card title="Use cases" href="/docs/tutorials" description="Step by step: a search box, a GPS fix to an address, local time anywhere, offline downloads." />
+  <Card title="Guides" href="/docs/guides/search" description="Every query, task by task, in every language." />
   <Card title="Concepts" href="/docs/concepts" description="Places and IDs, packs and components, results, the store, accuracy." />
-  <Card title="Reference" href="/docs/reference" description="Every query, its arguments, columns and errors." />
-  <Card title="Data" href="/docs/data" description="What the packs hold today, their sources and licences." />
+  <Card title="Reference" href="/docs/reference" description="Every call, its arguments, columns and errors." />
 </Cards>
 
 ## Status
@@ -62,5 +50,5 @@ The code is at `v1.0.0`, released on GitHub, and the data is published as pre-re
 latest is `data-2026.11.15`, Nepal's main and lite packs with populations). Nepal is covered in full, with the world's countries, first-level units
 and cities of 5,000 or more, and India's districts and towns; coverage grows by data releases,
 India next. The package registries (crates.io, PyPI, npm, Maven Central, pub.dev, NuGet) are
-filled from the first registry release; until then each guide shows how to build from a
-checkout, and Go and Swift install from the repository's tags.
+filled from the first registry release; until then the [install page](/docs/getting-started/install) shows how to build from the
+`v1.0.0` tag, and Go and Swift install from the repository's tags.

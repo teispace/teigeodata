@@ -1,5 +1,4 @@
 {
-  "title": "Languages",
-  "defaultOpen": true,
-  "pages": ["rust", "python", "node", "wasm", "swift", "kotlin-java", "dart-flutter", "go", "c", "cpp", "dotnet"]
+  "title": "Guides",
+  "pages": ["open", "search", "places", "reverse", "admin", "boundaries", "timezones", "elevation", "distance", "errors", "threads", "examples"]
 }

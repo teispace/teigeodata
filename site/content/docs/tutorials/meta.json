@@ -1,0 +1,4 @@
+{
+  "title": "Use cases",
+  "pages": ["index", "search-box", "gps-to-place", "local-time", "map-outlines", "in-the-browser", "replace-nominatim"]
+}

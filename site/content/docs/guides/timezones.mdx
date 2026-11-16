@@ -1,0 +1,95 @@
+---
+title: Timezones
+description: "The IANA zone at a point, its UTC offset at an instant, and whether a local time exists, from the tzdb rules in the pack."
+---
+
+<Callout title="Every example ran">
+Each snippet is cut from one program per language, [the tour](https://github.com/teispace/teigeodata/tree/main/site/examples),
+which CI runs on the released pack `world-np-lite.tgd` (`data-2026.11.14.3`) and checks line by
+line against the output shown. The output is the same in every language. Pick your language
+once: every page remembers it.
+</Callout>
+
+`tz_at` gives the IANA zone at a point as the zone boundaries draw it. With the zone,
+`tz_offset_at` gives the UTC offset at an instant (from the tzdb rules inside the pack, not
+from the operating system), and `tz_local` tells whether a wall-clock time exists: `unique`,
+`gap` (skipped by a daylight-saving change) or `overlap` (it happens twice), with the offsets
+before and after.
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "Node.js", "Browser", "Swift", "Kotlin", "Java", "Dart", "Go", "C", "C++", "C#"]}>
+<Tab value="Rust">
+
+`tz_at` answers the timezone area as a `Place`; `Engine::zone_name` reads its IANA name.
+Local times are `Engine::tz_local_candidates`: `Local::Unique`, `Local::Gap` or
+`Local::Overlap`.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#timezone</include>
+
+</Tab>
+<Tab value="Python">
+
+<include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#timezone</include>
+
+</Tab>
+<Tab value="Node.js">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs#timezone</include>
+
+</Tab>
+<Tab value="Browser">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#timezone</include>
+
+</Tab>
+<Tab value="Swift">
+
+<include lang="swift" meta='title="main.swift"'>../../../examples/swift/Tour/Sources/Tour/main.swift#timezone</include>
+
+</Tab>
+<Tab value="Kotlin">
+
+<include lang="kotlin" meta='title="Tour.kt"'>../../../examples/kotlin/Tour.kt#timezone</include>
+
+</Tab>
+<Tab value="Java">
+
+<include lang="java" meta='title="Tour.java"'>../../../examples/java/Tour.java#timezone</include>
+
+</Tab>
+<Tab value="Dart">
+
+<include lang="dart" meta='title="tour.dart"'>../../../examples/dart/bin/tour.dart#timezone</include>
+
+</Tab>
+<Tab value="Go">
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#timezone</include>
+
+</Tab>
+<Tab value="C">
+
+<include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c#timezone</include>
+
+</Tab>
+<Tab value="C++">
+
+<include lang="cpp" meta='title="tour.cpp"'>../../../examples/cpp/tour.cpp#timezone</include>
+
+</Tab>
+<Tab value="C#">
+
+<include lang="csharp" meta='title="Program.cs"'>../../../examples/dotnet/Program.cs#timezone</include>
+
+</Tab>
+</Tabs>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/timezone.txt</include>
+
+`tz_version` names the tzdb release the rules come from, so you can tell when a pack is
+older than a rule change; `tz_zones` lists every zone the packs hold.
+
+## Next
+
+- [Reference](/docs/reference): every query, its columns and its errors.
+- [Errors](/docs/guides/errors): the eight codes and how each language raises them.
+- [Concepts](/docs/concepts): places and IDs, packs and components, results, the store.

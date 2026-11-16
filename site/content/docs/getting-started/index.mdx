@@ -1,0 +1,150 @@
+---
+title: Quickstart
+description: Download a pack, run your first queries from the command line, then from your language.
+---
+
+This page takes you from nothing to answers in a few minutes: a pack, the `tgd` command line to
+look inside it, and the same queries from code.
+
+<Steps>
+<Step>
+
+### Get a pack
+
+A pack is one file. The world lite pack holds the world's countries, first-level units and
+cities of 5,000 or more, India's districts and statutory towns, and Nepal in full: 172,339
+places named in Nepali, Hindi and English, with heights, admin units, timezones and boundaries.
+
+```sh
+curl -LO https://github.com/teispace/teigeodata/releases/download/data-2026.11.14.3/world-np-lite.tgd
+shasum -a 256 world-np-lite.tgd
+# 243ae55509a538b1f61da50994a791cc78e7deb70bb4bf743b9f59d458cbe3f3  world-np-lite.tgd
+```
+
+It is 15.6 MB on disk and 9.8 MB compressed on the wire, under CC BY 4.0: you may ship it in an
+app, with the credits it carries.
+
+</Step>
+<Step>
+
+### Install the command line
+
+`tgd` inspects, verifies and queries packs, and serves them over HTTP and MCP. Build it from
+the repository (a Rust toolchain is all it needs):
+
+```sh
+cargo install --locked --git https://github.com/teispace/teigeodata --tag v1.0.0 teigeodata-cli
+```
+
+Release builds for macOS, Linux and Windows come with the first registry release.
+
+</Step>
+<Step>
+
+### Ask it something
+
+<include lang="sh" meta='title="Search"'>../../../examples/cli/tour.sh#search</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/cli/out/search.txt</include>
+
+The first is the city (a settlement), the second the metropolitan municipality that holds it
+(an admin unit at level 3), the third a smaller settlement of the same name farther west. `tgd:np/1xhb` is
+the city's stable ID. From a point:
+
+<include lang="sh" meta='title="Admin units at a point"'>../../../examples/cli/tour.sh#admin</include>
+
+<include lang="text" meta='title="Output"'>../../../examples/cli/out/admin.txt</include>
+
+The [command-line guide](/docs/cli) shows every query.
+
+</Step>
+<Step>
+
+### Use it from code
+
+[Install the package for your language](/docs/getting-started/install), then follow the
+guides, which open this same pack and run every query with its output in each language:
+
+<Cards>
+  <Card title="Open a pack" href="/docs/guides/open" />
+  <Card title="Search by name" href="/docs/guides/search" />
+  <Card title="Reverse geocoding" href="/docs/guides/reverse" />
+  <Card title="Timezones" href="/docs/guides/timezones" />
+</Cards>
+
+The search above, from code:
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "Node.js", "Browser", "Swift", "Kotlin", "Java", "Dart", "Go", "C", "C++", "C#"]}>
+<Tab value="Rust">
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#search</include>
+
+</Tab>
+<Tab value="Python">
+
+<include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#search</include>
+
+</Tab>
+<Tab value="Node.js">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs#search</include>
+
+</Tab>
+<Tab value="Browser">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#search</include>
+
+</Tab>
+<Tab value="Swift">
+
+<include lang="swift" meta='title="main.swift"'>../../../examples/swift/Tour/Sources/Tour/main.swift#search</include>
+
+</Tab>
+<Tab value="Kotlin">
+
+<include lang="kotlin" meta='title="Tour.kt"'>../../../examples/kotlin/Tour.kt#search</include>
+
+</Tab>
+<Tab value="Java">
+
+<include lang="java" meta='title="Tour.java"'>../../../examples/java/Tour.java#search</include>
+
+</Tab>
+<Tab value="Dart">
+
+<include lang="dart" meta='title="tour.dart"'>../../../examples/dart/bin/tour.dart#search</include>
+
+</Tab>
+<Tab value="Go">
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#search</include>
+
+</Tab>
+<Tab value="C">
+
+<include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c#search</include>
+
+</Tab>
+<Tab value="C++">
+
+<include lang="cpp" meta='title="tour.cpp"'>../../../examples/cpp/tour.cpp#search</include>
+
+</Tab>
+<Tab value="C#">
+
+<include lang="csharp" meta='title="Program.cs"'>../../../examples/dotnet/Program.cs#search</include>
+
+</Tab>
+</Tabs>
+
+</Step>
+</Steps>
+
+## What to read next
+
+- [Places and IDs](/docs/concepts/places): what a place is, its kinds and levels, and why IDs
+  stay stable.
+- [Packs and components](/docs/concepts/packs): what is inside a pack and how to ship only the
+  parts you use.
+- [Results](/docs/concepts/results): the columns every query returns and how to read them fast.
+- [Licences](/docs/concepts/licences): what you must credit, and where.

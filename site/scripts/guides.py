@@ -1,5 +1,6 @@
-"""Writes site/content/docs/guides/<lang>.mdx: one guide per language, every query section
-drawn from that language's tour (site/examples) and the output every tour prints.
+"""Writes the task guides (site/content/docs/guides/<task>.mdx) and the install page: each
+section's prose once, every language's code from its tour (site/examples) in a tab of one group,
+and the output every tour prints.
 
 The guides share their prose, so it lives here once: edit this file, not the pages, then run
 `python3 site/scripts/guides.py`. `--check` fails when a page differs from what this writes."""
@@ -244,45 +245,175 @@ def include(path, region, code_lang, title=None):
     return f'<include lang="{code_lang}"{meta}>{target}</include>'
 
 
-def code_block(lang, region):
-    files = lang["files"]
-    if len(files) == 1:
-        label, path, code_lang = files[0]
-        return include(f"{EX}/{path}", region, code_lang, os.path.basename(path))
-    parts = [f"<Tabs groupId=\"lang\" persist items={{{[f[0] for f in files]!r}}}>".replace("'", '"')]
-    for label, path, code_lang in files:
+# The tab each language's code sits under. One group (`lang`) on every page, kept across pages
+# and visits, so a reader picks their language once.
+TAB = {
+    "rust": "Rust",
+    "python": "Python",
+    "node": "Node.js",
+    "wasm": "Browser",
+    "swift": "Swift",
+    "dart": "Dart",
+    "go": "Go",
+    "c": "C",
+    "cpp": "C++",
+    "dotnet": "C#",
+}
+
+
+def tabs_of():
+    """Every (language entry, tab label, file, code language), in the order the tabs show."""
+    out = []
+    for lang in LANGS:
+        for label, path, code_lang in lang["files"]:
+            out.append((lang, label if len(lang["files"]) > 1 else TAB[lang["key"]], path, code_lang))
+    return out
+
+
+def tabs(bodies):
+    """Language tabs: `bodies` is a list of (label, mdx)."""
+    items = json.dumps([label for label, _ in bodies], ensure_ascii=False)
+    parts = [f'<Tabs groupId="lang" persist items={{{items}}}>']
+    for label, body in bodies:
         parts.append(f'<Tab value="{label}">\n')
-        parts.append(include(f"{EX}/{path}", region, code_lang, os.path.basename(path)))
+        parts.append(body.strip())
         parts.append("\n</Tab>")
     parts.append("</Tabs>")
     return "\n".join(parts)
 
 
-def page(lang):
+def per_lang(body):
+    """One tab per label (Kotlin and Java share an entry, so they share its text)."""
     out = []
-    out.append("---")
-    out.append(f"title: {lang['title']}")
-    out.append("description: " + json.dumps(lang["description"], ensure_ascii=False))
-    out.append("---")
+    for lang in LANGS:
+        labels = [f[0] for f in lang["files"]] if len(lang["files"]) > 1 else [TAB[lang["key"]]]
+        text = body(lang)
+        if text:
+            out += [(label, text) for label in labels]
+    return tabs(out)
+
+
+def demote(text):
+    """A language's own `## Heading` sections as bold lines, so they sit inside a tab."""
+    return re.sub(r"^## (.+)$", r"**\1**", text, flags=re.M)
+
+
+# What the neutral prose calls things: the bindings' snake_case names, as Rust, Python and C++
+# spell them; the install page says how each language spells them.
+NEUTRAL = {"key": "neutral", "naming": "snake"}
+
+EXAMPLES_RAN = """<Callout title="Every example ran">
+Each snippet is cut from one program per language, [the tour](https://github.com/teispace/teigeodata/tree/main/site/examples),
+which CI runs on the released pack `world-np-lite.tgd` (`data-2026.11.14.3`) and checks line by
+line against the output shown. The output is the same in every language. Pick your language
+once: every page remembers it.
+</Callout>"""
+
+SECTION = {region: (title, before, after) for region, title, before, after in SECTIONS}
+
+# The task pages: (slug, title, description, lead, regions).
+PAGES = [
+    ("open", "Open a pack", "Open a pack from a file or from bytes, add and remove layers, and choose what is verified and read.",
+     "", ["open"]),
+    ("search", "Search by name", "Find places by name in every script, narrow by parent, rank by distance from a point, and tune an autocomplete.",
+     "Search finds places by any of their names, forgives spelling, and ranks the right place first. Three forms, from the simplest:", ["search", "search-parent", "search-focus"]),
+    ("places", "Places and the hierarchy", "Look a place up by its stable ID, and walk its admin units up to the country and down to its children.",
+     "", ["get", "hierarchy"]),
+    ("reverse", "Reverse geocoding", "From a point to the places near it: the nearest few, everything within a radius, and the places around a place.",
+     "Three ways to ask what is near, each nearest first with its distance and bearing:", ["reverse", "radius", "nearby"]),
+    ("admin", "Admin units at a point", "Every admin unit that holds a point, country first, and countries and subdivisions by their ISO 3166 codes.",
+     "", ["admin"]),
+    ("boundaries", "Outlines", "A unit's outline as GeoJSON at a level of detail, ready for MapLibre, Leaflet, OpenLayers, Shapely or Turf.",
+     "", ["boundary"]),
+    ("timezones", "Timezones", "The IANA zone at a point, its UTC offset at an instant, and whether a local time exists, from the tzdb rules in the pack.",
+     "", ["timezone"]),
+    ("elevation", "Elevation", "The terrain height at any point, in metres above EGM2008, from the finest grid installed.",
+     "", ["elevation"]),
+    ("distance", "Distance and bearing", "The great-circle distance and initial bearing between two points or two places.",
+     "", ["distance"]),
+]
+
+
+def section_body(region, lang_override=None):
+    """The neutral prose of a section, then each language's code (and its own prose, where the
+    language differs), then the output every language printed."""
+    title, before, after = SECTION[region]
+    out = [fill(before, NEUTRAL).strip(), ""]
+    bodies = []
+    for lang, label, path, code_lang in tabs_of():
+        body = []
+        own = lang.get("prose", {}).get(region)
+        if own and own[0]:
+            body.append(fill(own[0], lang).strip())
+            body.append("")
+        body.append(include(f"{EX}/{path}", region, code_lang, os.path.basename(path)))
+        if own and own[1]:
+            body.append("")
+            body.append(fill(own[1], lang).strip())
+        bodies.append((label, "\n".join(body)))
+    out.append(tabs(bodies))
     out.append("")
-    out.append(lang["intro"].strip())
+    out.append(include(f"{EX}/out/{region}.txt", None, "text", "Output"))
     out.append("")
-    out.append(
-        """<Callout title="Every example on this page ran">
-The code below is cut from one program, [the tour]({tour}), which CI runs on the released
-public pack `world-np-lite.tgd` (`data-2026.11.14.3`) and checks line by line against the
-output shown here. The output is the same in every language.
-</Callout>""".replace("{tour}", lang["tour_url"])
+    if after:
+        out.append(fill(after, NEUTRAL).strip())
+        out.append("")
+    return out
+
+
+def front(title, description):
+    return ["---", f"title: {title}", "description: " + json.dumps(description, ensure_ascii=False), "---", ""]
+
+
+def task_page(slug, title, description, lead, regions):
+    out = front(title, description)
+    if lead:
+        out += [lead, ""]
+    out += [EXAMPLES_RAN, ""]
+    if len(regions) == 1:
+        out += section_body(regions[0])
+    else:
+        for region in regions:
+            out += [f"## {SECTION[region][0]}", ""]
+            out += section_body(region)
+    out += NEXT
+    return "\n".join(out)
+
+
+NEXT = [
+    "## Next",
+    "",
+    """- [Reference](/docs/reference): every query, its columns and its errors.
+- [Errors](/docs/guides/errors): the eight codes and how each language raises them.
+- [Concepts](/docs/concepts): places and IDs, packs and components, results, the store.""",
+    "",
+]
+
+
+def install_page():
+    out = front(
+        "Install",
+        "Add teigeodata to a project in your language, and read the results a query returns.",
     )
-    out.append("")
-    out.append("## Install")
-    out.append("")
-    out.append(lang["install"].strip())
-    out.append("")
-    out.append("## Get a pack")
-    out.append("")
-    out.append(
-        """Queries read **packs**: signed, memory-mapped files of places. This guide uses the world
+    out += [
+        """teigeodata is one Rust engine with a binding for each language, generated from one
+definition: the calls, their arguments and the columns they return are the same everywhere.
+Pick your language; every page of these docs remembers it.""",
+        "",
+        "## Add the package",
+        "",
+    ]
+    out.append(per_lang(lambda l: l["intro"].strip() + "\n\n" + l["install"].strip()))
+    out += [
+        "",
+        """<Callout title="Registries">
+v1.0.0 is released on GitHub. The registry packages (crates.io, PyPI, npm, Maven Central,
+pub.dev, NuGet) follow; until then each tab shows how to build from the `v1.0.0` tag.
+</Callout>""",
+        "",
+        "## Get a pack",
+        "",
+        """Queries read **packs**: signed, memory-mapped files of places. The examples use the world
 lite pack: the world's countries, first-level units and cities of 5,000 or more, India's
 districts and statutory towns, and Nepal in full, 172,339 places named in Nepali, Hindi and
 English (15.6 MB, CC BY 4.0):
@@ -292,75 +423,99 @@ curl -LO https://github.com/teispace/teigeodata/releases/download/data-2026.11.1
 shasum -a 256 world-np-lite.tgd   # 243ae55509a538b1f61da50994a791cc78e7deb70bb4bf743b9f59d458cbe3f3
 ```
 
-An app ships a pack inside its bundle, or downloads one when a user needs it. Once the signed
-catalog is live, the [store](/docs/concepts/store) does that download for you: it verifies every
-byte and keeps the packs updated."""
-    )
-    out.append("")
-    out.append("## Read a result")
-    out.append("")
-    out.append(lang["read"].strip())
-    out.append("")
-    for region, title, before, after in SECTIONS:
-        if region == "errors":
-            continue
-        before, after = lang.get("prose", {}).get(region, (before, after))
-        out.append(f"## {title}")
-        out.append("")
-        out.append(fill(before, lang).strip())
-        out.append("")
-        out.append(code_block(lang, region))
-        out.append("")
-        out.append(include(f"{EX}/out/{region}.txt", None, "text", "Output"))
-        out.append("")
-        if after:
-            out.append(fill(after, lang).strip())
-            out.append("")
-    region, title, before, after = SECTIONS[-1]
-    before, after = lang.get("prose", {}).get(region, (before, after))
-    out.append(f"## {title}")
-    out.append("")
-    out.append(fill(before, lang).strip())
-    out.append("")
-    out.append(fill(after, lang).strip())
-    out.append("")
-    out.append(lang["errors"].strip())
-    out.append("")
-    out.append(code_block(lang, "errors"))
-    out.append("")
-    out.append(include(f"{EX}/out/errors.txt", None, "text", "Output"))
-    out.append("")
-    if lang.get("extras"):
-        out.append(lang["extras"].strip())
-        out.append("")
-    out.append("## The whole program")
-    out.append("")
-    out.append(
-        """Run it from a checkout of the repository, which builds what the language needs, fetches
-the pinned pack and compares the output:
+Which pack to choose, and how an app ships or downloads one: [packs](/docs/concepts/packs) and
+[the store](/docs/concepts/store).""",
+        "",
+        "## Read a result",
+        "",
+        """Every query returns its rows as one **result blob**: compact columns in a single buffer,
+read in place without copying. Each language's reader turns a row into its own natural type
+and a null into its own null:""",
+        "",
+    ]
+    out.append(per_lang(lambda l: l["read"]))
+    out += [
+        "",
+        "## Names in your language",
+        "",
+        """The docs name calls as Rust, Python and C++ spell them (`tz_at`, `search_with`). Each
+binding spells them in its language's style:
 
-```sh
-cargo xtask docs-examples --fetch --check --lang {key}
-```
+| Style | Languages | Example |
+|---|---|---|
+| `snake_case` | Rust, Python, C++ | `tz_at`, `search_with` |
+| `camelCase` | Node.js, Browser, Swift, Kotlin, Java, Dart | `tzAt`, `searchWith` |
+| `PascalCase` | Go, C# | `TzAt`, `SearchWith` |
+| `tg_engine_` prefix | C | `tg_engine_tz_at`, `tg_engine_search_with` |""",
+        "",
+        "## Next",
+        "",
+        """- [Open a pack](/docs/guides/open), then [search](/docs/guides/search).
+- [Use cases](/docs/tutorials): a search box, a GPS fix to an address, local time anywhere.""",
+        "",
+    ]
+    return "\n".join(out)
 
-<Accordions>
-<Accordion title="{file}">
-{code}
-</Accordion>
-</Accordions>""".replace("{key}", lang["key"])
-        .replace("{file}", ", ".join(os.path.basename(f[1]) for f in lang["files"]))
-        .replace("{code}", "\n\n".join(include(f"{EX}/{f[1]}", None, f[2], os.path.basename(f[1])) for f in lang["files"]))
+
+def errors_page():
+    region = "errors"
+    title, before, after = SECTION[region]
+    out = front("Errors", "The eight stable error codes, the same in every language, and how each language raises them.")
+    out += [fill(before, NEUTRAL).strip(), "", fill(after, NEUTRAL).strip(), "", "## In your language", ""]
+    bodies = []
+    for lang, label, path, code_lang in tabs_of():
+        body = [lang["errors"].strip(), ""]
+        own = lang.get("prose", {}).get(region)
+        if own:
+            body += [fill(own[0], lang).strip(), "", fill(own[1], lang).strip(), ""]
+        body.append(include(f"{EX}/{path}", region, code_lang, os.path.basename(path)))
+        bodies.append((label, "\n".join(body)))
+    out.append(tabs(bodies))
+    out += ["", include(f"{EX}/out/errors.txt", None, "text", "Output"), ""]
+    return "\n".join(out)
+
+
+def threads_page():
+    out = front(
+        "Threads and platforms",
+        "Sharing an engine between threads, async calls, and what each platform needs: Android assets, Flutter, the browser.",
     )
-    out.append("")
-    out.append("## Next")
-    out.append("")
-    out.append(
-        """- [Concepts](/docs/concepts): places and IDs, packs and components, results, the store.
-- [Reference](/docs/reference): every query, its columns and its errors.
-- [Data](/docs/data): what each country's packs hold, with their sources and measured accuracy."""
-    )
+    out += [
+        """One engine answers from any number of threads at once, and opening a pack maps it once
+for all of them. What changes by language is how you share it and how the store's long calls
+(download, install, update) run without blocking:""",
+        "",
+    ]
+    out.append(per_lang(lambda l: demote(l.get("extras", ""))))
     out.append("")
     return "\n".join(out)
+
+
+def examples_page():
+    out = front("The example programs", "The whole program behind every snippet in these docs, in each language, and how to run it.")
+    out += [
+        """Every snippet in these docs is a region of one program per language. CI runs each on the
+released pack and compares its output line by line. Run one from a checkout, which builds what
+the language needs and fetches the pinned pack:
+
+```sh
+cargo xtask docs-examples --fetch --check --lang python   # or rust, node, wasm, swift, kotlin, dart, go, c, cpp, dotnet
+```""",
+        "",
+    ]
+    out.append(tabs([(label, include(f"{EX}/{path}", None, code_lang, os.path.basename(path))) for _, label, path, code_lang in tabs_of()]))
+    out += ["", "The output, the same for every language:", "", include(f"{EX}/tour.out", None, "text", "tour.out"), ""]
+    return "\n".join(out)
+
+
+def pages():
+    """Every generated page: path under content/docs → text."""
+    out = {f"guides/{slug}.mdx": task_page(slug, title, d, lead, regions) for slug, title, d, lead, regions in PAGES}
+    out["guides/errors.mdx"] = errors_page()
+    out["guides/threads.mdx"] = threads_page()
+    out["guides/examples.mdx"] = examples_page()
+    out["getting-started/install.mdx"] = install_page()
+    return out
 
 
 TOUR = "https://github.com/teispace/teigeodata/blob/main/site/examples/"
@@ -389,70 +544,45 @@ lang(
     files=[("Rust", "rust/tour.rs", "rust")],
     tour_url=TOUR + "rust/tour.rs",
     # The typed engine's own calls where they differ from the bindings'.
+    # The typed engine's own calls where they differ from the bindings': each note says only
+    # what is different in Rust, inside the Rust tab.
     prose={
         "open": (
-            """An `Engine` holds the packs it answers from, each as a **layer**. `Layer::open` maps a pack
-file and checks its head; `Engine::add` adds the layer and returns its `LayerId`. The engine
-answers from every layer at once, and a higher layer wins where two disagree. Opening is cheap:
-the head is read and checked, and the block hashes of large sections are proved; each section
-is verified against its hash the first time a query reads it.""",
-            """- `Layer::from_bytes` opens a pack from bytes already in memory (a download, an app asset).
-  `Layer::open_range` opens a pack stored uncompressed inside another file, such as an Android
-  APK.
-- `LayerOptions` sets the layer's `priority`, when sections are verified (`Verify::Lazy`,
-  `Eager` or `Trusted`), whether the file is mapped or read (`Load::Map`, `Load::Read`), and
-  which components, languages and outline level to read (`installed`,
-  `installed_parts`, `outline_level`).
-- `Engine::remove` takes a layer out again by its `LayerId`. For an engine that other threads
-  keep querying while layers come and go, see `Shared` below.""",
+            """`Layer::open` maps the file and checks its head; `Engine::add` adds the layer and returns
+its `LayerId`. `Layer::from_bytes` and `Layer::open_range` open bytes in memory and a pack inside
+another file; `LayerOptions` holds the priority, `Verify`, `Load` and the parts to read.""",
+            """`Engine::remove` takes a layer out by its `LayerId`. For layers that come and go while
+other threads query, see `Shared` in [threads](/docs/guides/threads).""",
         ),
         "search": (
-            """`Engine::search` finds places by name, best first, into a `Vec<Hit>` you reuse; each `Hit`
-is a `Place` and its `score`. It matches every name a place has, in every script, and forgives
-spelling: काठमाडौं, Kathmandu and Kathamandu find the same city, and so do typos, missing accents
-and abbreviations. `Engine::search_with` takes `SearchOptions` too; the tour uses it throughout.""",
-            """The `score` ranks the hits of one query and means nothing across queries. It adds how well the
-name matched to how important the place is, so a city ranks above a village of the same name.
-The engine takes any `k`; the bindings cap `limit` at 10,000 (`LIMIT_MAX` in
-`teigeodata-api`).""",
+            """`Engine::search_with` writes `Hit`s (a `Place` and its `score`) into a `Vec` you reuse,
+with a `Scratch` for its working memory, so a warm search allocates nothing. The engine takes
+any `k`; the bindings cap `limit` at `LIMIT_MAX` in `teigeodata-api`.""",
+            "",
         ),
         "search-focus": (
-            """Many places share a name. `SearchOptions::with_focus` takes a `Focus { at, scale_m }`: a
-point (the user's location, or the middle of the map they are looking at) that ranks near
-places first. A place at the focus gains 30 points, one `scale_m` away 15, and the gain keeps
-halving with distance.""",
-            """Set `SearchOptions::strict` to rank by how well the name matched first (exact, loose,
-prefix, one edit, substring, two edits, phonetic), then by importance and focus, instead of one
-combined score: useful for an autocomplete that must show exact matches on top.""",
+            """The focus is `SearchOptions::with_focus(Focus { at, scale_m })`; `SearchOptions::strict`
+sets the strict order.""",
+            "",
         ),
         "get": (
-            """Every place has a stable ID such as `tgd:np/1xhb`: the country, then a short code; it parses
-into a `PlaceId`. IDs survive rebuilds of the data; when two places are merged, `Engine::get`
-on the retired ID answers with the survivor, so IDs you stored keep working.""",
-            """`Engine::elevation` is metres above mean sea level (EGM2008), `Engine::tz_of` the place's
-timezone area and `Engine::parent` the unit that holds it. Each returns an `Option`: `None`
-where the data has no value.""",
+            """IDs parse into a `PlaceId`. A `Place` holds its ID, kind, level and point; read the rest on
+demand: `Engine::elevation`, `Engine::tz_of`, `Engine::parent`, each an `Option`.""",
+            "",
         ),
         "reverse": (
-            """`Engine::reverse` gives the places nearest a point, nearest first, as `Near` values: the
-`place`, `meters` (the great-circle distance) and `bearing_deg` (degrees clockwise from north,
-from the place to the point: "3.2 km at 45° from Pokhara").""",
-            """For the admin units that *hold* a point (its district, province and country) use
-`Engine::admin_at` below; reverse answers with what is *near* it.""",
+            """Results are `Near` values: the `place`, `meters` and `bearing_deg`, written into a `Vec`
+you reuse.""",
+            "",
         ),
         "timezone": (
-            """`Engine::tz_at` gives the timezone area at a point as the zone boundaries draw it, a `Place`
-whose name is the IANA zone (`Engine::zone_name` reads it from the zone rules, when the pack
-has them). With the zone, `Engine::tz_offset_at` gives the UTC offset at an instant (from the
-tzdb rules inside the pack, not from the operating system), and
-`Engine::tz_local_candidates` tells whether a wall-clock time exists: `Local::Unique`,
-`Local::Gap` (skipped by a daylight-saving change) or `Local::Overlap` (it happens twice),
-with the offsets before and after.""",
-            """`Engine::tz_version` names the tzdb release the rules come from, so you can tell when a pack
-is older than a rule change; `Engine::tz_zones` lists every zone the packs hold.""",
+            """`tz_at` answers the timezone area as a `Place`; `Engine::zone_name` reads its IANA name.
+Local times are `Engine::tz_local_candidates`: `Local::Unique`, `Local::Gap` or
+`Local::Overlap`.""",
+            "",
         ),
         "errors": (
-            """A query fails with the engine's `Error`; the bindings map it to their eight stable codes:""",
+            """A query fails with the engine's `Error`; the bindings map it to their eight codes:""",
             """| `Error` | Meaning | Bindings' code |
 |---|---|---|
 | `Io` | A file could not be read. | `Io` |
@@ -463,29 +593,18 @@ is older than a rule change; `Engine::tz_zones` lists every zone the packs hold.
 
 Arguments are checked by their types before a query runs: a `Point` is in range when it is made,
 and a `PlaceId` or an `IsoCode` when it is parsed. The store (`teigeodata-sync`) has its own
-error type for the network and the catalog. A query that finds nothing is not an error: it
-returns `None` or no hits.""",
+error type for the network and the catalog.""",
         ),
         "distance": (
-            """`meters_between` is the great-circle distance in metres (haversine on the WGS84 mean
-sphere, within about 0.5% of the ellipsoid), and `bearing_deg` the initial bearing from the
-first point to the second, in degrees clockwise from north. Both take degrees and need no
-pack; between two places, pass their points.""",
-            """The bindings' `distance` takes two place IDs and answers both in one row. The bearing
-is the direction you set off in: on a great circle it changes along the way.""",
+            """The free functions are `meters_between` and `bearing_deg`, taking degrees; between two
+places, pass their points.""",
+            "",
         ),
         "boundary": (
-            """`Engine::boundary` decodes a unit's outline at a level of detail into an `Outline` you
-reuse: its rings, its points and the level's `tolerance_cm`. It returns the layer that held it,
-or `None` (and an empty outline) for a place without one. `Outline::write_geojson` writes the
-geometry as RFC 7946 GeoJSON (outer rings counterclockwise, holes clockwise, seven decimals as
-stored): the same bytes the servers and every binding's `boundary` answer.""",
-            """- **Level of detail.** Level 0 is full resolution; 1 to 6 are coarser, each within its
-  tolerance, with neighbouring units still sharing their borders at every level. A pack stored
-  at full resolution only (the lite packs) reads every level as 0. Draw a coarser level; keep 0
-  for measuring.
-- `Engine::boundary_vertices` counts an outline's vertices without decoding it, and
-  `admin_at` tests a point against the same outlines without building them.""",
+            """`Engine::boundary` decodes the outline into an `Outline` you reuse (its rings, points and
+`tolerance_cm`) and returns the layer that held it; `Outline::write_geojson` writes the same
+GeoJSON every binding answers. `Engine::boundary_vertices` counts vertices without decoding.""",
+            "",
         ),
     },
     intro="""teigeodata is written in Rust, and Rust gets the engine itself: typed places, typed IDs and
@@ -617,7 +736,7 @@ lang(
     intro="""`@teispace/teigeodata` is a native addon (N-API, napi-rs layout) with TypeScript types: one
 prebuilt addon per platform, installed as an optional dependency, so `npm install` downloads only
 yours. It runs on Node.js, and on Bun and Deno through their N-API support. For browsers and
-edge workers use the [WebAssembly package](/docs/guides/wasm), which has the same API.""",
+edge workers use the WebAssembly package (the **Browser** tab), which has the same API.""",
     install="""<Tabs items={["From a checkout (today)", "npm"]}>
 <Tab value="From a checkout (today)">
 
@@ -679,20 +798,14 @@ lang(
     tour_url=TOUR + "wasm/tour.mjs",
     prose={
         "open": (
-            """An `Engine` holds the packs it answers from. A page has no file system, so
-`engine.openBytes(bytes)` adds a pack from a `Uint8Array` as a **layer**: a download, an asset,
-or a file the user picked. The engine answers from every layer at once, and a higher layer wins
-where two disagree. Opening copies the bytes into the module's memory once and checks the head;
-each section is verified against its hash the first time a query reads it.""",
-            """- `openBytesWith` takes `OpenOptions`: precedence over the other packs, when sections are
-  verified (lazy, eager or trusted), and which components, languages and outline level to read.
-- `openBytes` returns the layer's number; `remove` takes it out again.
-- What needs a file system or threads is left out of this package: `openFile`, the store (its
-  downloads and updates) and the `…Async` forms. Fetch and cache packs yourself (below).""",
+            """A page has no file system: `engine.openBytes(bytes)` opens a pack from a `Uint8Array` (a
+download, an asset, a file the user picked), copying it into the module's memory once.
+`openFile`, the store and the `…Async` forms are left out of this package.""",
+            "",
         ),
     },
     intro="""`@teispace/teigeodata-wasm` is the engine compiled to WebAssembly, for browsers, Web Workers,
-Deno, Bun, Node.js and Cloudflare Workers. The API is the [Node.js package's](/docs/guides/node);
+Deno, Bun, Node.js and Cloudflare Workers. The API is the Node.js package's (the **Node.js** tab);
 the difference is where packs come from: a page has no file system, so it opens a pack from its
 bytes. After that one download, every query runs locally. The [playground](/playground) is this
 package in a page: every query on the pack below, with the code each answer came from.""",
@@ -1090,7 +1203,7 @@ lang(
 arguments, exceptions with the stable error codes, and `teigeodata_reader.hpp` to read results
 with a range-based `for`. Everything is in namespace `teigeodata`; the tour shortens it with
 `namespace tg = teigeodata;`.""",
-    install="""Install the [C package](/docs/guides/c#install): the C++ headers ship in it. Then
+    install="""Install the C package (the **C** tab): the C++ headers ship in it. Then
 compile as C++17 or later:
 
 ```sh
@@ -1166,13 +1279,15 @@ store's blocking calls have awaitable forms (`Store.OpenAsync`, `CatalogAsync`, 
 `ResultAsync` and cancels through a `CancellationToken`.""",
 )
 
+DOCS = f"{ROOT}/content/docs"
+
+
 def main():
     check = "--check" in sys.argv[1:]
     stale = []
-    os.makedirs(OUT, exist_ok=True)
-    for lang in LANGS:
-        path = f"{OUT}/{lang['slug']}.mdx"
-        text = page(lang)
+    written = pages()
+    for rel, text in written.items():
+        path = f"{DOCS}/{rel}"
         if check:
             try:
                 with open(path, encoding="utf-8") as f:
@@ -1181,11 +1296,16 @@ def main():
             except FileNotFoundError:
                 stale.append(path)
             continue
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
+    # Nothing else may live among the generated guides.
+    for name in sorted(os.listdir(OUT)):
+        if name.endswith(".mdx") and f"guides/{name}" not in written:
+            stale.append(f"{OUT}/{name} (not generated: remove it)")
     if stale:
         sys.exit("stale guides (run python3 site/scripts/guides.py):\n  " + "\n  ".join(stale))
-    print(f"guides {'ok' if check else 'written'}: {len(LANGS)}")
+    print(f"guides {'ok' if check else 'written'}: {len(written)} pages, {len(tabs_of())} languages")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,55 @@
+---
+title: "Outlines on a map"
+description: "Find the admin unit a user is in and draw its outline on MapLibre, Leaflet or OpenLayers, at a level of detail that suits the zoom."
+---
+
+Show the user the district or municipality they are in, outlined on a map. The outline comes
+from the pack as a GeoJSON Feature, the format every web map library reads.
+
+<Steps>
+<Step>
+
+### Find the unit
+
+`admin_at` gives every unit that holds the point, country first. Pick the level you want to
+draw: a district for an overview, the lowest level for a neighbourhood.
+
+<TourCode region="admin" />
+
+</Step>
+<Step>
+
+### Get its outline
+
+`boundary` answers the unit's outline as one row: `geojson` (an RFC 7946 Feature), the `lod`
+read, its `tolerance_m` and the number of `vertices`. Level 0 is full resolution; 1 to 6 are
+coarser, and neighbouring units still share their borders at every level.
+
+<TourCode region="boundary" />
+
+A country at level 0 can be megabytes: draw a coarser level, and keep 0 for measuring.
+
+</Step>
+<Step>
+
+### Draw it
+
+The Feature goes to the map as it is. In MapLibre GL JS:
+
+```js
+map.addSource("unit", { type: "geojson", data: JSON.parse(row.geojson) });
+map.addLayer({ id: "unit-fill", type: "fill", source: "unit", paint: { "fill-color": "#0b6e6e", "fill-opacity": 0.12 } });
+map.addLayer({ id: "unit-line", type: "line", source: "unit", paint: { "line-color": "#0b6e6e", "line-width": 2 } });
+```
+
+Leaflet's `L.geoJSON(feature)`, OpenLayers' `GeoJSON` format, Shapely's `shape()`, Turf and
+JTS read it too. The [playground](/playground) draws outlines this way.
+
+</Step>
+</Steps>
+
+## Next
+
+- [Outlines](/docs/guides/boundaries) in full, with every level of detail.
+- [Accuracy](/docs/concepts/accuracy#boundaries-and-perspective): where the boundaries come
+  from, and the perspective on disputed ones.

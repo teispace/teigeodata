@@ -1,0 +1,56 @@
+---
+title: "Replace a Nominatim server"
+description: "Serve Nominatim-compatible search, reverse and lookup from one pack with tgd serve, so existing clients keep working, using a few megabytes of memory."
+---
+
+Clients written for Nominatim (geocoder plugins, mobile SDKs, scripts) call `/search`,
+`/reverse` and `/lookup`. `tgd serve` answers those routes from a pack, alongside its own JSON
+and GeoJSON API, with no database to import and no rate limit but your own.
+
+<Steps>
+<Step>
+
+### Install the command line
+
+```sh
+cargo install --locked --git https://github.com/teispace/teigeodata --tag v1.0.0 teigeodata-cli
+```
+
+</Step>
+<Step>
+
+### Get a pack and serve it
+
+```sh
+curl -LO https://github.com/teispace/teigeodata/releases/download/data-2026.11.14.3/world-np-lite.tgd
+tgd serve world-np-lite.tgd
+```
+
+The server binds to loopback by default; put it behind your reverse proxy to expose it.
+
+</Step>
+<Step>
+
+### Point the client at it
+
+Clients set Nominatim's base URL to the server's. A search, as a client sends it:
+
+<include lang="sh" meta='title="tour.sh"'>../../../examples/cli/tour.sh#http-nominatim</include>
+
+<include lang="json" meta='title="Response"'>../../../examples/cli/out/http-nominatim.txt</include>
+
+</Step>
+<Step>
+
+### Check what it holds
+
+`/search` takes `q` or the structured fields, `limit` (at most 40, as Nominatim),
+`countrycodes`, `viewbox` and `bounded`; `/reverse` takes `lat`, `lon` and `zoom`. The
+[HTTP server page](/docs/servers/http#nominatim-compatible) lists every parameter and
+what differs from Nominatim.
+
+</Step>
+</Steps>
+
+Measured on loopback, a pack answers tens of thousands of Nominatim searches a second with a
+peak footprint of about 16 MB ([server load](/docs/data/measured#server-load)).

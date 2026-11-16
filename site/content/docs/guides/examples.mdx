@@ -1,0 +1,79 @@
+---
+title: The example programs
+description: "The whole program behind every snippet in these docs, in each language, and how to run it."
+---
+
+Every snippet in these docs is a region of one program per language. CI runs each on the
+released pack and compares its output line by line. Run one from a checkout, which builds what
+the language needs and fetches the pinned pack:
+
+```sh
+cargo xtask docs-examples --fetch --check --lang python   # or rust, node, wasm, swift, kotlin, dart, go, c, cpp, dotnet
+```
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "Node.js", "Browser", "Swift", "Kotlin", "Java", "Dart", "Go", "C", "C++", "C#"]}>
+<Tab value="Rust">
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs</include>
+
+</Tab>
+<Tab value="Python">
+
+<include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py</include>
+
+</Tab>
+<Tab value="Node.js">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs</include>
+
+</Tab>
+<Tab value="Browser">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs</include>
+
+</Tab>
+<Tab value="Swift">
+
+<include lang="swift" meta='title="main.swift"'>../../../examples/swift/Tour/Sources/Tour/main.swift</include>
+
+</Tab>
+<Tab value="Kotlin">
+
+<include lang="kotlin" meta='title="Tour.kt"'>../../../examples/kotlin/Tour.kt</include>
+
+</Tab>
+<Tab value="Java">
+
+<include lang="java" meta='title="Tour.java"'>../../../examples/java/Tour.java</include>
+
+</Tab>
+<Tab value="Dart">
+
+<include lang="dart" meta='title="tour.dart"'>../../../examples/dart/bin/tour.dart</include>
+
+</Tab>
+<Tab value="Go">
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go</include>
+
+</Tab>
+<Tab value="C">
+
+<include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c</include>
+
+</Tab>
+<Tab value="C++">
+
+<include lang="cpp" meta='title="tour.cpp"'>../../../examples/cpp/tour.cpp</include>
+
+</Tab>
+<Tab value="C#">
+
+<include lang="csharp" meta='title="Program.cs"'>../../../examples/dotnet/Program.cs</include>
+
+</Tab>
+</Tabs>
+
+The output, the same for every language:
+
+<include lang="text" meta='title="tour.out"'>../../../examples/tour.out</include>

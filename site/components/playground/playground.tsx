@@ -583,8 +583,8 @@ function Intro({ manifest, status, onStart }: { manifest: Manifest | null; statu
       {status.state === 'loading' && <ProgressBar progress={status.progress} />}
       <p className="text-xs text-fd-muted-foreground">
         The same calls work in an app: see the{' '}
-        <Link className="text-fd-primary" href="/docs/guides/wasm">
-          browser guide
+        <Link className="text-fd-primary" href="/docs/getting-started/install/">
+          install guide (Browser tab)
         </Link>{' '}
         and the{' '}
         <Link className="text-fd-primary" href="/docs/reference">

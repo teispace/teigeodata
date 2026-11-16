@@ -103,7 +103,7 @@ const footerColumns: { title: string; links: [string, string][] }[] = [
     title: 'Library',
     links: [
       ['Getting started', '/docs/getting-started/'],
-      ['Guides by language', '/docs/guides/rust/'],
+      ['Install', '/docs/getting-started/install/'],
       ['Reference', '/docs/reference/'],
       ['Command line', '/docs/cli/'],
       ['Playground', '/playground/'],

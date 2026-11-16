@@ -1,0 +1,253 @@
+---
+title: Search by name
+description: "Find places by name in every script, narrow by parent, rank by distance from a point, and tune an autocomplete."
+---
+
+Search finds places by any of their names, forgives spelling, and ranks the right place first. Three forms, from the simplest:
+
+<Callout title="Every example ran">
+Each snippet is cut from one program per language, [the tour](https://github.com/teispace/teigeodata/tree/main/site/examples),
+which CI runs on the released pack `world-np-lite.tgd` (`data-2026.11.14.3`) and checks line by
+line against the output shown. The output is the same in every language. Pick your language
+once: every page remembers it.
+</Callout>
+
+## Search by name
+
+`search` finds places by name, best first. It matches every name a place has, in every
+script, and forgives spelling: काठमाडौं, Kathmandu and Kathamandu find the same city, and so do
+typos, missing accents and abbreviations. A result row has the place columns (`id`, `name`,
+`kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`, `population`,
+`population_kind`) and a `score`.
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "Node.js", "Browser", "Swift", "Kotlin", "Java", "Dart", "Go", "C", "C++", "C#"]}>
+<Tab value="Rust">
+
+`Engine::search_with` writes `Hit`s (a `Place` and its `score`) into a `Vec` you reuse,
+with a `Scratch` for its working memory, so a warm search allocates nothing. The engine takes
+any `k`; the bindings cap `limit` at `LIMIT_MAX` in `teigeodata-api`.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#search</include>
+
+</Tab>
+<Tab value="Python">
+
+<include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#search</include>
+
+</Tab>
+<Tab value="Node.js">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs#search</include>
+
+</Tab>
+<Tab value="Browser">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#search</include>
+
+</Tab>
+<Tab value="Swift">
+
+<include lang="swift" meta='title="main.swift"'>../../../examples/swift/Tour/Sources/Tour/main.swift#search</include>
+
+</Tab>
+<Tab value="Kotlin">
+
+<include lang="kotlin" meta='title="Tour.kt"'>../../../examples/kotlin/Tour.kt#search</include>
+
+</Tab>
+<Tab value="Java">
+
+<include lang="java" meta='title="Tour.java"'>../../../examples/java/Tour.java#search</include>
+
+</Tab>
+<Tab value="Dart">
+
+<include lang="dart" meta='title="tour.dart"'>../../../examples/dart/bin/tour.dart#search</include>
+
+</Tab>
+<Tab value="Go">
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#search</include>
+
+</Tab>
+<Tab value="C">
+
+<include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c#search</include>
+
+</Tab>
+<Tab value="C++">
+
+<include lang="cpp" meta='title="tour.cpp"'>../../../examples/cpp/tour.cpp#search</include>
+
+</Tab>
+<Tab value="C#">
+
+<include lang="csharp" meta='title="Program.cs"'>../../../examples/dotnet/Program.cs#search</include>
+
+</Tab>
+</Tabs>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/search.txt</include>
+
+The `score` ranks the rows of one query and means nothing across queries. It adds how well the
+name matched to how important the place is, so a city ranks above a village of the same name.
+`limit` is at most 10,000 (`LIMIT_MAX`).
+
+## Narrow a search by its parent
+
+Write the place's parent after a comma, as people do: `"Kathmandu, Bagmati"`. Places
+inside a unit of that name rank first; the parent can be any ancestor (a district, a province,
+a country) and is matched with the same tolerance as the name.
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "Node.js", "Browser", "Swift", "Kotlin", "Java", "Dart", "Go", "C", "C++", "C#"]}>
+<Tab value="Rust">
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#search-parent</include>
+
+</Tab>
+<Tab value="Python">
+
+<include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#search-parent</include>
+
+</Tab>
+<Tab value="Node.js">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs#search-parent</include>
+
+</Tab>
+<Tab value="Browser">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#search-parent</include>
+
+</Tab>
+<Tab value="Swift">
+
+<include lang="swift" meta='title="main.swift"'>../../../examples/swift/Tour/Sources/Tour/main.swift#search-parent</include>
+
+</Tab>
+<Tab value="Kotlin">
+
+<include lang="kotlin" meta='title="Tour.kt"'>../../../examples/kotlin/Tour.kt#search-parent</include>
+
+</Tab>
+<Tab value="Java">
+
+<include lang="java" meta='title="Tour.java"'>../../../examples/java/Tour.java#search-parent</include>
+
+</Tab>
+<Tab value="Dart">
+
+<include lang="dart" meta='title="tour.dart"'>../../../examples/dart/bin/tour.dart#search-parent</include>
+
+</Tab>
+<Tab value="Go">
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#search-parent</include>
+
+</Tab>
+<Tab value="C">
+
+<include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c#search-parent</include>
+
+</Tab>
+<Tab value="C++">
+
+<include lang="cpp" meta='title="tour.cpp"'>../../../examples/cpp/tour.cpp#search-parent</include>
+
+</Tab>
+<Tab value="C#">
+
+<include lang="csharp" meta='title="Program.cs"'>../../../examples/dotnet/Program.cs#search-parent</include>
+
+</Tab>
+</Tabs>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/search-parent.txt</include>
+
+The city (a settlement, level 0) and the metropolitan municipality (an admin unit at
+level 3) share the name, and both are in Bagmati.
+
+## Rank by distance from a point
+
+Many places share a name. `search_with` takes `SearchOptions`: a **focus** point (the
+user's location, or the middle of the map they are looking at) ranks near places first. A place
+at the focus gains 30 points, one `focus_scale_m` away 15, and the gain keeps halving with
+distance (the default scale is 50 km).
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "Node.js", "Browser", "Swift", "Kotlin", "Java", "Dart", "Go", "C", "C++", "C#"]}>
+<Tab value="Rust">
+
+The focus is `SearchOptions::with_focus(Focus { at, scale_m })`; `SearchOptions::strict`
+sets the strict order.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#search-focus</include>
+
+</Tab>
+<Tab value="Python">
+
+<include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#search-focus</include>
+
+</Tab>
+<Tab value="Node.js">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs#search-focus</include>
+
+</Tab>
+<Tab value="Browser">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#search-focus</include>
+
+</Tab>
+<Tab value="Swift">
+
+<include lang="swift" meta='title="main.swift"'>../../../examples/swift/Tour/Sources/Tour/main.swift#search-focus</include>
+
+</Tab>
+<Tab value="Kotlin">
+
+<include lang="kotlin" meta='title="Tour.kt"'>../../../examples/kotlin/Tour.kt#search-focus</include>
+
+</Tab>
+<Tab value="Java">
+
+<include lang="java" meta='title="Tour.java"'>../../../examples/java/Tour.java#search-focus</include>
+
+</Tab>
+<Tab value="Dart">
+
+<include lang="dart" meta='title="tour.dart"'>../../../examples/dart/bin/tour.dart#search-focus</include>
+
+</Tab>
+<Tab value="Go">
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#search-focus</include>
+
+</Tab>
+<Tab value="C">
+
+<include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c#search-focus</include>
+
+</Tab>
+<Tab value="C++">
+
+<include lang="cpp" meta='title="tour.cpp"'>../../../examples/cpp/tour.cpp#search-focus</include>
+
+</Tab>
+<Tab value="C#">
+
+<include lang="csharp" meta='title="Program.cs"'>../../../examples/dotnet/Program.cs#search-focus</include>
+
+</Tab>
+</Tabs>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/search-focus.txt</include>
+
+Set `strict` to rank by how well the name matched first (exact, loose, prefix, one edit,
+substring, two edits, phonetic), then by importance and focus, instead of one combined score:
+useful for an autocomplete that must show exact matches on top.
+
+## Next
+
+- [Reference](/docs/reference): every query, its columns and its errors.
+- [Errors](/docs/guides/errors): the eight codes and how each language raises them.
+- [Concepts](/docs/concepts): places and IDs, packs and components, results, the store.

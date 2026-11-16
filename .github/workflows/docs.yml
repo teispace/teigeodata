@@ -124,7 +124,7 @@ jobs:
         run: |
           cd out
           # Static files as built; Vercel serves them with no build step.
-          printf '%s\n' '{"buildCommand": "", "installCommand": "", "framework": null, "outputDirectory": "."}' > vercel.json
+          test -f vercel.json # site/public/vercel.json: no build, redirects
           git init -q -b docs-site
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

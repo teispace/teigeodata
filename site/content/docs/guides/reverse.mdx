@@ -1,0 +1,236 @@
+---
+title: Reverse geocoding
+description: "From a point to the places near it: the nearest few, everything within a radius, and the places around a place."
+---
+
+Three ways to ask what is near, each nearest first with its distance and bearing:
+
+<Callout title="Every example ran">
+Each snippet is cut from one program per language, [the tour](https://github.com/teispace/teigeodata/tree/main/site/examples),
+which CI runs on the released pack `world-np-lite.tgd` (`data-2026.11.14.3`) and checks line by
+line against the output shown. The output is the same in every language. Pick your language
+once: every page remembers it.
+</Callout>
+
+## Reverse geocode a point
+
+`reverse` gives the places nearest a point, nearest first, each with `meters` (the
+great-circle distance) and `bearing` (degrees clockwise from north, from the place to the
+point: "3.2 km at 45° from Pokhara").
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "Node.js", "Browser", "Swift", "Kotlin", "Java", "Dart", "Go", "C", "C++", "C#"]}>
+<Tab value="Rust">
+
+Results are `Near` values: the `place`, `meters` and `bearing_deg`, written into a `Vec`
+you reuse.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#reverse</include>
+
+</Tab>
+<Tab value="Python">
+
+<include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#reverse</include>
+
+</Tab>
+<Tab value="Node.js">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs#reverse</include>
+
+</Tab>
+<Tab value="Browser">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#reverse</include>
+
+</Tab>
+<Tab value="Swift">
+
+<include lang="swift" meta='title="main.swift"'>../../../examples/swift/Tour/Sources/Tour/main.swift#reverse</include>
+
+</Tab>
+<Tab value="Kotlin">
+
+<include lang="kotlin" meta='title="Tour.kt"'>../../../examples/kotlin/Tour.kt#reverse</include>
+
+</Tab>
+<Tab value="Java">
+
+<include lang="java" meta='title="Tour.java"'>../../../examples/java/Tour.java#reverse</include>
+
+</Tab>
+<Tab value="Dart">
+
+<include lang="dart" meta='title="tour.dart"'>../../../examples/dart/bin/tour.dart#reverse</include>
+
+</Tab>
+<Tab value="Go">
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#reverse</include>
+
+</Tab>
+<Tab value="C">
+
+<include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c#reverse</include>
+
+</Tab>
+<Tab value="C++">
+
+<include lang="cpp" meta='title="tour.cpp"'>../../../examples/cpp/tour.cpp#reverse</include>
+
+</Tab>
+<Tab value="C#">
+
+<include lang="csharp" meta='title="Program.cs"'>../../../examples/dotnet/Program.cs#reverse</include>
+
+</Tab>
+</Tabs>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/reverse.txt</include>
+
+For the admin units that *hold* a point (its district, province and country) use
+`admin_at` below; reverse answers with what is *near* it.
+
+## Find everything within a radius
+
+`within_radius` gives the places within a distance of a point, nearest first, with the
+same `meters` and `bearing` columns, at most `limit` of them.
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "Node.js", "Browser", "Swift", "Kotlin", "Java", "Dart", "Go", "C", "C++", "C#"]}>
+<Tab value="Rust">
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#radius</include>
+
+</Tab>
+<Tab value="Python">
+
+<include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#radius</include>
+
+</Tab>
+<Tab value="Node.js">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs#radius</include>
+
+</Tab>
+<Tab value="Browser">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#radius</include>
+
+</Tab>
+<Tab value="Swift">
+
+<include lang="swift" meta='title="main.swift"'>../../../examples/swift/Tour/Sources/Tour/main.swift#radius</include>
+
+</Tab>
+<Tab value="Kotlin">
+
+<include lang="kotlin" meta='title="Tour.kt"'>../../../examples/kotlin/Tour.kt#radius</include>
+
+</Tab>
+<Tab value="Java">
+
+<include lang="java" meta='title="Tour.java"'>../../../examples/java/Tour.java#radius</include>
+
+</Tab>
+<Tab value="Dart">
+
+<include lang="dart" meta='title="tour.dart"'>../../../examples/dart/bin/tour.dart#radius</include>
+
+</Tab>
+<Tab value="Go">
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#radius</include>
+
+</Tab>
+<Tab value="C">
+
+<include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c#radius</include>
+
+</Tab>
+<Tab value="C++">
+
+<include lang="cpp" meta='title="tour.cpp"'>../../../examples/cpp/tour.cpp#radius</include>
+
+</Tab>
+<Tab value="C#">
+
+<include lang="csharp" meta='title="Program.cs"'>../../../examples/dotnet/Program.cs#radius</include>
+
+</Tab>
+</Tabs>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/radius.txt</include>
+
+## Find places near a place
+
+`nearby` is reverse geocoding from a place you already have: the places nearest it,
+itself left out.
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "Node.js", "Browser", "Swift", "Kotlin", "Java", "Dart", "Go", "C", "C++", "C#"]}>
+<Tab value="Rust">
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#nearby</include>
+
+</Tab>
+<Tab value="Python">
+
+<include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#nearby</include>
+
+</Tab>
+<Tab value="Node.js">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs#nearby</include>
+
+</Tab>
+<Tab value="Browser">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#nearby</include>
+
+</Tab>
+<Tab value="Swift">
+
+<include lang="swift" meta='title="main.swift"'>../../../examples/swift/Tour/Sources/Tour/main.swift#nearby</include>
+
+</Tab>
+<Tab value="Kotlin">
+
+<include lang="kotlin" meta='title="Tour.kt"'>../../../examples/kotlin/Tour.kt#nearby</include>
+
+</Tab>
+<Tab value="Java">
+
+<include lang="java" meta='title="Tour.java"'>../../../examples/java/Tour.java#nearby</include>
+
+</Tab>
+<Tab value="Dart">
+
+<include lang="dart" meta='title="tour.dart"'>../../../examples/dart/bin/tour.dart#nearby</include>
+
+</Tab>
+<Tab value="Go">
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#nearby</include>
+
+</Tab>
+<Tab value="C">
+
+<include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c#nearby</include>
+
+</Tab>
+<Tab value="C++">
+
+<include lang="cpp" meta='title="tour.cpp"'>../../../examples/cpp/tour.cpp#nearby</include>
+
+</Tab>
+<Tab value="C#">
+
+<include lang="csharp" meta='title="Program.cs"'>../../../examples/dotnet/Program.cs#nearby</include>
+
+</Tab>
+</Tabs>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/nearby.txt</include>
+
+## Next
+
+- [Reference](/docs/reference): every query, its columns and its errors.
+- [Errors](/docs/guides/errors): the eight codes and how each language raises them.
+- [Concepts](/docs/concepts): places and IDs, packs and components, results, the store.

@@ -308,7 +308,7 @@ export default function HomePage() {
               Every snippet here is cut from a guide&apos;s program that ran on the released pack.
             </p>
             <div className="mt-8">
-              <ButtonLink href="/docs/guides/rust/">
+              <ButtonLink href="/docs/getting-started/install/">
                 Pick your language guide <ArrowRight className="size-4" />
               </ButtonLink>
             </div>

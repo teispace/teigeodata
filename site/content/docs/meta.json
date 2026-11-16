@@ -2,14 +2,20 @@
   "title": "teigeodata",
   "pages": [
     "index",
-    "getting-started",
+    "---Getting started---",
+    "...getting-started",
+    "---Use cases---",
+    "...tutorials",
     "---Guides---",
-    "guides",
+    "...guides",
+    "---Command line and servers---",
     "cli",
-    "servers",
-    "---Learn---",
-    "concepts",
-    "reference",
-    "data"
+    "...servers",
+    "---Concepts---",
+    "...concepts",
+    "---Data---",
+    "...data",
+    "---Reference---",
+    "...reference"
   ]
 }

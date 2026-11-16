@@ -1,0 +1,103 @@
+---
+title: Outlines
+description: "A unit's outline as GeoJSON at a level of detail, ready for MapLibre, Leaflet, OpenLayers, Shapely or Turf."
+---
+
+<Callout title="Every example ran">
+Each snippet is cut from one program per language, [the tour](https://github.com/teispace/teigeodata/tree/main/site/examples),
+which CI runs on the released pack `world-np-lite.tgd` (`data-2026.11.14.3`) and checks line by
+line against the output shown. The output is the same in every language. Pick your language
+once: every page remembers it.
+</Callout>
+
+`boundary` answers a unit's outline as one row: `geojson`, an RFC 7946 Feature (a
+Polygon or MultiPolygon, outer rings counterclockwise and holes clockwise, seven decimals as
+stored), with the `lod` read, its `tolerance_m` and the number of `vertices`. A place with no
+outline answers its point as the geometry; an unknown ID answers no row.
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "Node.js", "Browser", "Swift", "Kotlin", "Java", "Dart", "Go", "C", "C++", "C#"]}>
+<Tab value="Rust">
+
+`Engine::boundary` decodes the outline into an `Outline` you reuse (its rings, points and
+`tolerance_cm`) and returns the layer that held it; `Outline::write_geojson` writes the same
+GeoJSON every binding answers. `Engine::boundary_vertices` counts vertices without decoding.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#boundary</include>
+
+</Tab>
+<Tab value="Python">
+
+<include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#boundary</include>
+
+</Tab>
+<Tab value="Node.js">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs#boundary</include>
+
+</Tab>
+<Tab value="Browser">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#boundary</include>
+
+</Tab>
+<Tab value="Swift">
+
+<include lang="swift" meta='title="main.swift"'>../../../examples/swift/Tour/Sources/Tour/main.swift#boundary</include>
+
+</Tab>
+<Tab value="Kotlin">
+
+<include lang="kotlin" meta='title="Tour.kt"'>../../../examples/kotlin/Tour.kt#boundary</include>
+
+</Tab>
+<Tab value="Java">
+
+<include lang="java" meta='title="Tour.java"'>../../../examples/java/Tour.java#boundary</include>
+
+</Tab>
+<Tab value="Dart">
+
+<include lang="dart" meta='title="tour.dart"'>../../../examples/dart/bin/tour.dart#boundary</include>
+
+</Tab>
+<Tab value="Go">
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#boundary</include>
+
+</Tab>
+<Tab value="C">
+
+<include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c#boundary</include>
+
+</Tab>
+<Tab value="C++">
+
+<include lang="cpp" meta='title="tour.cpp"'>../../../examples/cpp/tour.cpp#boundary</include>
+
+</Tab>
+<Tab value="C#">
+
+<include lang="csharp" meta='title="Program.cs"'>../../../examples/dotnet/Program.cs#boundary</include>
+
+</Tab>
+</Tabs>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/boundary.txt</include>
+
+The Feature goes to a map as it is: MapLibre's and Leaflet's GeoJSON sources, OpenLayers,
+Shapely's `shape()`, Turf and JTS all read it.
+
+- **Level of detail.** `lod` 0 is full resolution; 1 to 6 are coarser, each within its
+  `tolerance_m`, with neighbouring units still sharing their borders at every level. A pack
+  stored at full resolution only (the lite packs) answers every level as 0. A country at level 0
+  can be megabytes: draw a coarser level, and keep 0 for measuring.
+- `lod` above 6 is `InvalidArgument`; a pack installed without `boundaries` is
+  `MissingComponent`.
+- Whether a point is *inside* a unit is `admin_at`, which tests the same outlines without
+  building them.
+
+## Next
+
+- [Reference](/docs/reference): every query, its columns and its errors.
+- [Errors](/docs/guides/errors): the eight codes and how each language raises them.
+- [Concepts](/docs/concepts): places and IDs, packs and components, results, the store.

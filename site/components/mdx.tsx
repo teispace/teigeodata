@@ -5,6 +5,7 @@ import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 import { File, Files, Folder } from 'fumadocs-ui/components/files';
 import { TypeTable } from 'fumadocs-ui/components/type-table';
 import type { MDXComponents } from 'mdx/types';
+import { TourCode } from './tour-code';
 
 export function getMDXComponents(components?: MDXComponents) {
   return {
@@ -19,6 +20,7 @@ export function getMDXComponents(components?: MDXComponents) {
     Files,
     Folder,
     TypeTable,
+    TourCode,
     ...components,
   } satisfies MDXComponents;
 }

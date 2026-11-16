@@ -1,0 +1,95 @@
+---
+title: Distance and bearing
+description: "The great-circle distance and initial bearing between two points or two places."
+---
+
+<Callout title="Every example ran">
+Each snippet is cut from one program per language, [the tour](https://github.com/teispace/teigeodata/tree/main/site/examples),
+which CI runs on the released pack `world-np-lite.tgd` (`data-2026.11.14.3`) and checks line by
+line against the output shown. The output is the same in every language. Pick your language
+once: every page remembers it.
+</Callout>
+
+`distance_m` is the great-circle distance in metres (haversine on the WGS84 mean
+sphere, within about 0.5% of the ellipsoid), and `bearing_deg` the initial bearing from the
+first point to the second, in degrees clockwise from north. Neither needs a pack. Between two
+places you already have, `distance` takes their IDs and answers one row with `meters` and
+`bearing`.
+
+<Tabs groupId="lang" persist items={["Rust", "Python", "Node.js", "Browser", "Swift", "Kotlin", "Java", "Dart", "Go", "C", "C++", "C#"]}>
+<Tab value="Rust">
+
+The free functions are `meters_between` and `bearing_deg`, taking degrees; between two
+places, pass their points.
+
+<include lang="rust" meta='title="tour.rs"'>../../../examples/rust/tour.rs#distance</include>
+
+</Tab>
+<Tab value="Python">
+
+<include lang="python" meta='title="tour.py"'>../../../examples/python/tour.py#distance</include>
+
+</Tab>
+<Tab value="Node.js">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/node/tour.mjs#distance</include>
+
+</Tab>
+<Tab value="Browser">
+
+<include lang="js" meta='title="tour.mjs"'>../../../examples/wasm/tour.mjs#distance</include>
+
+</Tab>
+<Tab value="Swift">
+
+<include lang="swift" meta='title="main.swift"'>../../../examples/swift/Tour/Sources/Tour/main.swift#distance</include>
+
+</Tab>
+<Tab value="Kotlin">
+
+<include lang="kotlin" meta='title="Tour.kt"'>../../../examples/kotlin/Tour.kt#distance</include>
+
+</Tab>
+<Tab value="Java">
+
+<include lang="java" meta='title="Tour.java"'>../../../examples/java/Tour.java#distance</include>
+
+</Tab>
+<Tab value="Dart">
+
+<include lang="dart" meta='title="tour.dart"'>../../../examples/dart/bin/tour.dart#distance</include>
+
+</Tab>
+<Tab value="Go">
+
+<include lang="go" meta='title="tour.go"'>../../../examples/go/tour.go#distance</include>
+
+</Tab>
+<Tab value="C">
+
+<include lang="c" meta='title="tour.c"'>../../../examples/c/tour.c#distance</include>
+
+</Tab>
+<Tab value="C++">
+
+<include lang="cpp" meta='title="tour.cpp"'>../../../examples/cpp/tour.cpp#distance</include>
+
+</Tab>
+<Tab value="C#">
+
+<include lang="csharp" meta='title="Program.cs"'>../../../examples/dotnet/Program.cs#distance</include>
+
+</Tab>
+</Tabs>
+
+<include lang="text" meta='title="Output"'>../../../examples/out/distance.txt</include>
+
+`distance` answers no row when either ID is unknown. From a point to a place, pass the
+place's `lat` and `lon` to `distance_m`. The bearing is the direction you set off in: on a
+great circle it changes along the way, so the bearing back is not the reverse of this one.
+
+## Next
+
+- [Reference](/docs/reference): every query, its columns and its errors.
+- [Errors](/docs/guides/errors): the eight codes and how each language raises them.
+- [Concepts](/docs/concepts): places and IDs, packs and components, results, the store.
