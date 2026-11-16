@@ -163,3 +163,61 @@ and for a full-screen, full-featured playground (D-356). What changed and why:
 - **Proved:** `check-playground.mjs` stubs the tiles and requires Leaflet's container with tiles
   drawn; with tiles never added it fails ("the map is drawn (Leaflet, with tiles)").
 
+
+## 11. Revision 2026-11-16: packs at run time, a card on the map
+
+The maintainer asked for a click's answer on the map itself, any pack downloadable while the
+playground runs, a more professional location and nearby dots, and a real recording of the
+playground on the landing page (D-357). What was built, measured and why:
+
+- **Where a pack can come from.** A release asset cannot be fetched by a page (§3: no CORS
+  header on the redirect), so the site hosts copies, as it does for the pinned pack. Hosting
+  Nepal's full lite pack (87.5 MB, 68.4 MB of it terrain) for every visitor was rejected; the
+  options compared were (a) publishing smaller packs as a new data release, (b) cutting them at
+  build time with `tgd extract` from a pinned asset. (b) won: no release for a page, and the
+  cut is **deterministic** (the same SHA-256 on every run, measured twice), so
+  `site/packs.json` pins each output and `cargo xtask playground` fails on any difference
+  (proved: a changed digit fails it).
+- **Terrain by region needed a fix first.** `tgd extract --bbox` copied the whole terrain grid
+  (the Kathmandu Valley out of Nepal's pack weighed 70.1 MB); it now keeps the tiles that touch
+  the box, codes copied as stored (`dem::mask`), so heights inside are exact: 1.5 MB for the
+  valley with its places, 466 kB for its terrain alone, the same height at the centre and
+  corners as the full pack (1,310.9 m at 27.7172, 85.3240). A component extract of a pack with
+  parts or block hashes failed ("a section kind was given twice") and now keeps every part.
+- **The catalog (2026-11-16):** Nepal's places of `data-2026.11.15` without terrain
+  (18,985,344 B: 95,716 places with population, search inside words, outlines at four levels of
+  detail) and 31 m NASADEM terrain for the Kathmandu Valley (466,244 B), Pokhara and Annapurna
+  (1,254,560 B), Everest and Khumbu (1,518,048 B), Chitwan (668,864 B) and Lumbini
+  (138,964 B). The lite Nepal pack has no postal section; the card shows a postal code only
+  where a pack has one.
+- **Adding a pack:** download with progress, SHA-256 in the browser, kept in Cache Storage
+  (keyed by file and digest, so a new cut is a new key) and opened with
+  `openBytesWith(bytes, { priority: 1 })`: the engine's precedence (developer priority first)
+  makes the added pack answer where both hold a place; `remove(layer)` takes it out, and
+  "forget" drops the kept copy. On the next visit, kept packs open from the store before the
+  first answer, with no download (the check counts one request). Measured locally: the
+  terrain opened in 14 ms, Nepal's 19 MB in 143 ms; from the store, ready in 1.9 s with both.
+- **The card on the map** is Leaflet's popup restyled as the site's frosted surface, its content
+  rendered by React through a portal: the nearest place with distance and direction, the units
+  holding the point, the height with its grid and source, local time and offset, a postal code
+  where a pack has one, the coordinates to copy, and, where the base pack answers from the
+  464 m grid and the catalog has terrain, an offer to add it. A place picked on the map opens
+  in a card where it is, without moving the map. A card waits for a flight to end, so it is
+  placed where the map stops, clear of the panel and the tool bar.
+- **Flights:** Leaflet scales vector layers with the map during `flyTo`, so a dot became a
+  blurred disc many times its size; the drawing now fades out for a flight and back in, sharp.
+  Search fits the map to its results once typing pauses (350 ms), not on every keystroke.
+- **Location** draws a dot inside a circle as wide as the fix's accuracy and opens the card
+  there; a refusal says how to allow it. Dots are sized by kind (country and unit largest,
+  locality smallest, natural features green) with their names beside them while 12 or fewer.
+- **Proved:** `check-playground.mjs` now also requires the card at the tours' point with the
+  tours' height, adds the valley's terrain from the card and requires the 31 m grid to answer,
+  then reloads and requires the pack to answer again with no second download. With the store's
+  lookup broken the check fails ("the added pack was not opened again after a reload").
+- **The landing page's recording:** `site/scripts/video.mjs` drives the built playground in
+  Playwright with a drawn cursor (a search, a place, a click and its card, terrain added, a
+  radius, a measured line), records it, trims the loading, crops below the site's bar and
+  encodes 1280×750 H.264 (CRF 26) and VP9 (CRF 36), about 2 MB per theme for 26 s, with a
+  poster from the first frame. The page loads only the theme's video, only near the screen,
+  pauses it off screen, never starts it with Reduce Motion, and has a pause button (WCAG 2.2.2).
+  It replaces the screenshot and `shots.mjs`.

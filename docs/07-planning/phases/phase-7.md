@@ -91,6 +91,9 @@ pages, the playground. Nothing names a country in code (P16): country pages come
   [research](../../02-research/notes/docs-playground.md)). `cargo xtask playground` writes its
   files; `site/scripts/check-playground.mjs` runs it in Chromium in the docs workflow. Building
   it found world timezone areas answering no zone (D-327, fixed in the engine)
+- [x] Packs of a catalog added while it runs (cut by `tgd extract`, pinned by SHA-256, kept in
+  the browser), a card on the map at every click, location, and its recording on the landing
+  page (D-357, [§11 of the note](../../02-research/notes/docs-playground.md#11-revision-2026-11-16-packs-at-run-time-a-card-on-the-map))
 
 ### 7.7 Exit review
 - [x] M7 criteria met (2026-11-15, D-330), each against the [roadmap](../roadmap.md):
