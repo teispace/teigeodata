@@ -7,7 +7,7 @@ export const site = {
   /** The home page's title: what people search for, in plain words. */
   title: 'teigeodata: offline geocoding and place data for every language',
   description:
-    'An open-source geodata SDK: search, reverse geocoding, the admin hierarchy to the lowest level, boundaries, local names, exact IANA timezones and elevation, in small signed packs that work offline. One API in Rust, C, C++, Swift, Kotlin, Java, Dart, Python, Node.js, WebAssembly, Go and .NET.',
+    'An open-source geodata SDK: search, reverse geocoding, the admin hierarchy to the lowest level, boundaries, local names, exact IANA timezones, elevation and postal codes, in small verified packs that work offline. One API in Rust, C, C++, Swift, Kotlin, Java, Dart, Python, Node.js, WebAssembly, Go and .NET.',
   keywords: [
     'offline geocoding',
     'reverse geocoding',
@@ -34,8 +34,8 @@ export const site = {
   changelog: `${repoUrl}/blob/main/CHANGELOG.md`,
   license: `${repoUrl}/blob/main/LICENSE`,
   /** The library's release the site documents. */
-  version: '1.0.0',
-  versionDate: '2026-11-16',
+  version: '1.1.0',
+  versionDate: '2026-11-17',
   org: {
     name: 'Teispace',
     legalName: 'Teispace Technology Private Limited',

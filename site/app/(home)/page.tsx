@@ -7,10 +7,13 @@ import {
   Database,
   FileCheck2,
   Globe2,
+  Hash,
   Languages,
   Layers,
   Mountain,
   Network,
+  Radar,
+  Shapes,
   Search,
   ShieldCheck,
   Sparkles,
@@ -63,32 +66,68 @@ const features = [
     icon: Search,
     title: 'Search in every script',
     body: 'काठमाडौं, Kathmandu and Kathamandu find the same place. "Name, Parent" ranks the place in that parent first; a focus point ranks what is near.',
+    href: '/docs/guides/search/',
   },
   {
     icon: Globe2,
     title: 'Reverse geocoding',
     body: 'From a point to the nearest places with distance and bearing, and to every admin unit that holds it, country first.',
+    href: '/docs/guides/reverse/',
   },
   {
     icon: Layers,
     title: 'The whole hierarchy',
-    body: 'Country, province, district, local level and ward: every unit with its ISO code, parents, children and outline.',
+    body: 'Country, province, district, local level and ward: every unit with its ISO 3166 code, parents and children, and an ID that survives data updates.',
+    href: '/docs/guides/places/',
+  },
+  {
+    icon: Shapes,
+    title: 'Boundaries',
+    body: 'Any unit’s outline as a GeoJSON Feature at the detail you ask for, ready for MapLibre, Leaflet, OpenLayers, Shapely or Turf.',
+    href: '/docs/guides/boundaries/',
   },
   {
     icon: Clock,
     title: 'Exact timezones',
-    body: 'The IANA zone at any point as its boundaries draw it; offsets and transitions from the tzdb rules in the pack, not the device.',
+    body: 'The IANA zone at any point as its boundaries draw it; offsets, transitions and skipped or repeated local times from the tzdb rules in the pack.',
+    href: '/docs/guides/timezones/',
   },
   {
     icon: Mountain,
     title: 'Elevation',
     body: 'A height for every place and at any point: metres above EGM2008, interpolated between samples, with its source named.',
+    href: '/docs/guides/elevation/',
+  },
+  {
+    icon: Hash,
+    title: 'Postal codes',
+    body: 'Look a code up, complete one as it is typed, list a unit’s codes, or find the code at a point, with each code’s scheme and validity.',
+    href: '/docs/reference/engine/#postal_lookup',
+  },
+  {
+    icon: Radar,
+    title: 'Nearby and distance',
+    body: 'The places within a radius of a point or nearest a place, nearest first; great-circle distance and bearing between any two.',
+    href: '/docs/guides/distance/',
   },
   {
     icon: Languages,
-    title: 'Local names',
-    body: 'Names in each language and script, written ones kept apart from transliterations, spellings checked against each country’s lexicon.',
+    title: 'Local names and population',
+    body: 'Names in each language and script, written ones kept apart from transliterations, corrections reviewed against cited sources; population with where it came from.',
+    href: '/docs/concepts/places/',
   },
+];
+
+// One package per ecosystem; each is published from CI by trusted publishing.
+const installs = [
+  { name: 'Rust', command: 'cargo add teigeodata-engine' },
+  { name: 'Python', command: 'pip install teigeodata' },
+  { name: 'Node.js', command: 'npm install teigeodata' },
+  { name: 'Browser', command: 'npm install teigeodata-wasm' },
+  { name: 'Dart', command: 'dart pub add teigeodata' },
+  { name: 'Kotlin, Java', command: 'com.teispace:teigeodata' },
+  { name: 'Go', command: 'go get github.com/teispace/teigeodata/bindings/go' },
+  { name: 'CLI', command: 'cargo install --locked teigeodata-cli' },
 ];
 
 const languages: { name: string; lang: string; file: string; guide: string }[] = [
@@ -117,8 +156,8 @@ const pipeline = [
   },
   {
     icon: FileCheck2,
-    title: 'A signed pack',
-    body: 'One compact file per country or region: every section hashed, the whole signed, its sources credited inside.',
+    title: 'A verified pack',
+    body: 'One compact file per country or region: every section hashed and checked as it is read, its sources credited inside.',
   },
   {
     icon: Boxes,
@@ -131,7 +170,7 @@ const ways = [
   {
     icon: WifiOff,
     title: 'In your app, offline',
-    body: 'Bundle a pack, or let the store download, verify and keep the countries your users pick.',
+    body: 'Bundle a pack and every query runs on the device. The store downloads, verifies and keeps the countries your users pick.',
     href: '/docs/concepts/store/',
     cta: 'The store',
   },
@@ -154,11 +193,11 @@ const ways = [
 const faq = [
   {
     q: 'What is teigeodata?',
-    a: 'An open-source geodata SDK. It answers where places are and what is at a point (search, reverse geocoding, the admin hierarchy, boundaries, timezones and elevation) from compact signed packs that work offline, with the same API in twelve languages.',
+    a: 'An open-source geodata SDK. It answers where places are and what is at a point (search, reverse geocoding, the admin hierarchy, boundaries, timezones, elevation and postal codes) from compact verified packs that work offline, with the same API in twelve languages.',
   },
   {
     q: 'Does it need a network connection or an API key?',
-    a: 'No. Every query runs on a pack on the device or server. A network is only used to download a pack, and the store verifies each one against a signed catalog before it is used.',
+    a: 'No. Every query runs on a pack on the device or server, and every section of a pack is hashed and checked as it is read. A network is only used to download a pack; the store, which fetches countries on demand from a signed catalog, goes live with the first catalog release.',
   },
   {
     q: 'Which countries are covered?',
@@ -206,7 +245,7 @@ export default function HomePage() {
                 v{site.version}
               </span>
               <span className="text-fd-muted-foreground group-hover:text-fd-foreground">
-                The first stable release is out
+                On every package registry
               </span>
               <ArrowRight className="size-3 text-fd-muted-foreground transition-transform group-hover:translate-x-0.5" />
             </Link>
@@ -223,8 +262,8 @@ export default function HomePage() {
               className="mt-6 max-w-xl text-lg text-fd-muted-foreground text-pretty"
             >
               Search, reverse geocoding, the admin hierarchy down to the ward, boundaries, local
-              names, exact timezones and elevation, cleaned from the best open sources into small
-              signed packs. One API for twelve languages, no server and no API key.
+              names, timezones, elevation and postal codes, cleaned from the best open sources into
+              small verified packs. One API for twelve languages, no server and no API key.
             </p>
             <div data-hero="" style={delay(280)} className="mt-9 flex flex-wrap items-center gap-3">
               <ButtonLink href="/docs/getting-started/" primary>
@@ -288,17 +327,20 @@ export default function HomePage() {
         id="features"
         eyebrow="What it answers"
         title="Everything an app needs to know about a place"
-        lead="Six kinds of question, each answered in microseconds from a file on the device, with the source of every value named."
+        lead="Nine kinds of question, each answered on the device from a memory-mapped file, with the source of every value named."
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map(({ icon: Icon, title, body }, i) => (
-            <div key={title} data-reveal="" style={delay((i % 3) * 90)} className="tg-card p-6">
+          {features.map(({ icon: Icon, title, body, href }, i) => (
+            <Link key={title} href={href} data-reveal="" style={delay((i % 3) * 90)} className="tg-card group flex flex-col p-6">
               <span className="inline-flex size-10 items-center justify-center rounded-xl border bg-fd-background text-fd-primary">
                 <Icon className="size-5" aria-hidden="true" />
               </span>
               <h3 className="mt-5 font-semibold">{title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-fd-muted-foreground">{body}</p>
-            </div>
+              <p className="mt-2 flex-1 text-sm leading-relaxed text-fd-muted-foreground">{body}</p>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-fd-primary">
+                The guide <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+              </span>
+            </Link>
           ))}
         </div>
       </Section>
@@ -306,7 +348,7 @@ export default function HomePage() {
       {/* Code */}
       <section id="languages" className="border-y bg-fd-card/30">
         <div className="mx-auto grid w-full max-w-6xl gap-12 px-6 py-20 md:py-28 lg:grid-cols-[0.85fr_1.15fr]">
-          <div data-reveal="" className="lg:sticky lg:top-24 lg:self-start">
+          <div data-reveal="" className="min-w-0 lg:sticky lg:top-24 lg:self-start">
             <Eyebrow text="One API, twelve languages" />
             <h2 className="text-3xl font-semibold tracking-tight text-balance md:text-5xl">
               <Words>The same call wherever you write code</Words>
@@ -319,6 +361,14 @@ export default function HomePage() {
             <p className="mt-4 text-sm text-fd-muted-foreground">
               Every snippet here is cut from a guide&apos;s program that ran on the released pack.
             </p>
+            <dl className="mt-6 divide-y overflow-hidden rounded-xl border bg-fd-background/60 font-mono text-[12.5px]">
+              {installs.map(({ name, command }) => (
+                <div key={name} className="flex flex-col gap-0.5 px-4 py-2 sm:flex-row sm:gap-3">
+                  <dt className="shrink-0 font-sans text-xs leading-5 text-fd-muted-foreground sm:w-24">{name}</dt>
+                  <dd className="min-w-0 overflow-x-auto whitespace-nowrap">{command}</dd>
+                </div>
+              ))}
+            </dl>
             <div className="mt-8">
               <ButtonLink href="/docs/getting-started/install/">
                 Pick your language guide <ArrowRight className="size-4" />
@@ -403,7 +453,7 @@ export default function HomePage() {
             </p>
             <ul className="mt-8 space-y-4 text-sm">
               {[
-                [ShieldCheck, 'Signed and verified', 'Every section hashed, every pack signed; the store checks each byte before use.'],
+                [ShieldCheck, 'Verified as it is read', 'Every section hashed and checked before a query uses it; packs are signed from the first catalog release.'],
                 [FileCheck2, 'Yours to store and ship', 'Main build under ODbL, lite build under CC BY 4.0, every source credited.'],
                 [Globe2, 'One stated perspective', "Disputed borders drawn from Nepal's official map of 2020, recorded with sources."],
               ].map(([Icon, title, body]) => {

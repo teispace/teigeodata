@@ -2,38 +2,66 @@
 
 **Accurate, offline place data for developers.** Coordinates, elevation, the full admin
 hierarchy down to the lowest level, boundaries, local names, exact IANA timezones, postal codes
-and population, cleaned and deduplicated from the best open sources. It ships as small, signed
-packs that you bundle at build time or download at runtime, with one API in every major language.
+and population, cleaned and deduplicated from the best open sources. It ships as small packs,
+every section hashed and checked as it is read, that you bundle at build time or download at
+run time, with one API in every major language.
 
 **The open, offline gazetteer you are allowed to keep.** Commercial geocoding APIs limit how
 long you may store their results; teigeodata's data is yours to store, ship and redistribute
 under its licence.
 
 A [Teispace](https://github.com/teispace) project. Code under Apache-2.0; data under ODbL, with
-a CC-BY 4.0 lite build.
+a CC-BY 4.0 lite build. **Docs, guides and a playground:**
+[teigeodata.teispace.com](https://teigeodata.teispace.com).
 
-> **Status:** Phases 3 and 4 (Nepal data, the engine and sync). No data release yet; the
-> crates are tagged for early consumers ([CHANGELOG.md](CHANGELOG.md),
-> [releases](docs/06-engineering/releases.md)). See [progress](docs/08-progress/progress.md)
-> and the [roadmap](docs/07-planning/roadmap.md).
+> **Status:** 1.1 is released on every package registry ([CHANGELOG.md](CHANGELOG.md)). Nepal
+> is covered in full, with the world's countries, first-level units and cities of 5,000 or
+> more, and India's districts and towns; coverage grows by data releases, India next. Data
+> packs are GitHub pre-releases until the signed catalog goes live. See
+> [progress](docs/08-progress/progress.md) and the [roadmap](docs/07-planning/roadmap.md).
 
-## What it will do
+## Install
 
-- **Search** across scripts and spellings: काठमाडौं, Kathmandu, Kathamandu and Kantipur find the
-  same place; typos and abbreviations too.
-- **Reverse geocode** a point to ward, municipality, district, province and country.
-- **Timezone** at any point, exactly as the IANA boundaries draw it, with offsets and
-  transitions.
+| Language | Package |
+|---|---|
+| Rust | `cargo add teigeodata-engine` |
+| Python | `pip install teigeodata` |
+| Node.js | `npm install teigeodata` |
+| Browser (WebAssembly) | `npm install teigeodata-wasm` (or `teigeodata-wasm-lookup`, without name search) |
+| Dart and Flutter | `dart pub add teigeodata` |
+| Kotlin, Java, Android | `com.teispace:teigeodata`, `com.teispace:teigeodata-android` on Maven Central |
+| Swift | Swift Package Manager, `https://github.com/teispace/teigeodata` |
+| Go | `go get github.com/teispace/teigeodata/bindings/go` |
+| C, C++ | the release archives `teigeodata-c-<version>-<target>` (pkg-config and CMake) |
+| .NET | from a checkout; not on NuGet yet |
+| Command line (`tgd`) | `cargo install --locked teigeodata-cli` |
+
+Then [get a pack and ask it something](https://teigeodata.teispace.com/docs/getting-started).
+
+## What it does
+
+- **Search** across scripts and spellings: काठमाडौं, Kathmandu and Kathamandu find the same
+  place; "Name, Parent" ranks the place in that parent first; a focus point ranks what is near.
+- **Reverse geocode** a point to the nearest places, and to every admin unit holding it, from
+  the country down to the ward.
+- **The hierarchy**: every unit with its ISO 3166 code, parents and children, and stable IDs that
+  survive data updates.
+- **Boundaries** as GeoJSON at the level of detail you ask for.
+- **Timezones** at any point, exactly as the IANA boundaries draw it, with offsets, transitions
+  and skipped or repeated local times from the tzdb rules in the pack.
 - **Elevation** for every place, and at any point with an elevation pack.
-- **Boundaries** at several levels of detail, ready for MapLibre, Google Maps or flutter_map.
-- **Postal codes**, current and former, in both directions.
-- **Offline first:** Nepal in a few MB inside your app; your users download Dubai when they need
-  it; packs merge live, update by delta, and are verified.
-- **Same API everywhere:** Rust, C, C++, Node, WASM, Dart and Flutter, Python, Java and Kotlin,
-  Android, Swift, .NET, Go, plus an MCP server and a CLI.
-- **Tree-shakable:** pay only for the capabilities and data you use.
+- **Postal codes**: look up, autocomplete, a unit's codes, the code at a point.
+- **Nearby and distance**: places within a radius or nearest a place; distance and bearing.
+- **Local names** in each language and script, with reviewed corrections, and **population**
+  with its source.
+- **Offline first:** bundle a pack, or let the store download, verify and keep the countries a
+  user picks.
+- **Same API everywhere:** Rust, C, C++, Swift, Kotlin, Java, Dart and Flutter, Python, Node.js,
+  WebAssembly, Go and .NET, plus a CLI, an HTTP server (with Nominatim-compatible routes) and
+  an MCP server for AI agents.
+- **Tree-shakable:** pay only for the components and data you use.
 
-Coverage starts with Nepal, then India, South Asia, Asia, the USA and the rest of the world.
+Coverage grows from Nepal to India, South Asia, Asia, the USA and the rest of the world.
 
 ## Documentation
 

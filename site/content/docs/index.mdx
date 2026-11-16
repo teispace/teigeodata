@@ -16,7 +16,8 @@ teigeodata answers questions about places, on the device, with no network and no
 - **The hierarchy, ISO 3166 codes, postal codes** and stable IDs that survive data updates.
 
 The data is cleaned, deduplicated and merged from the best open sources, and ships as **packs**:
-signed, compact, memory-mapped files. Bundle one in your app, or download a country when a user
+compact, memory-mapped files, every section hashed and checked as it is read (and signed, from
+the first catalog release). Bundle one in your app, or download a country when a user
 needs it. Every pack credits its sources, and you may keep and redistribute what it answers.
 
 To try it before installing anything, open the [playground](/playground): the WebAssembly
