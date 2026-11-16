@@ -51,6 +51,12 @@ on.
   admin, timezone, elevation, nearby, with MapLibre GL 6.18.0 drawing results over a map made
   from the pack itself. Nothing is sent anywhere.
 
+- **Landing page and SEO (D-354):** the landing page follows teitunnel's (motion, sections,
+  pill buttons, footer); every number on it comes from a gate's record or the released pack,
+  and its code is cut from the example programs at build time. Each page has a canonical URL,
+  an Open Graph card rendered at build (`app/og`), JSON-LD, and a place in `sitemap.xml`;
+  `robots.txt` welcomes AI crawlers by name, as `llms.txt` does.
+
 ## 3. Findings
 
 **Fumadocs (npm, 2026-11-15).** `fumadocs-core` and `fumadocs-ui` 16.19.3 (published

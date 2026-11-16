@@ -26,3 +26,274 @@ body {
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Noto Sans Devanagari',
     sans-serif;
 }
+
+/* ---- Site pages: tokens ------------------------------------------------------------- */
+:root {
+  --tg-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tg-window-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.04), 0 2px 6px rgb(0 0 0 / 0.06), 0 24px 64px -12px rgb(0 0 0 / 0.18);
+}
+.dark {
+  --tg-window-shadow:
+    0 0 0 0.5px rgb(255 255 255 / 0.06), 0 2px 6px rgb(0 0 0 / 0.3), 0 24px 64px -12px rgb(0 0 0 / 0.6);
+}
+
+.tg-window {
+  box-shadow: var(--tg-window-shadow);
+}
+
+html {
+  scroll-padding-top: 4.5rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Keyboard focus, visible on every link and button of the site pages. */
+:where(#nd-home-layout) :is(a, button, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-fd-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* The landing page's header sits on the hero: no rule until the page scrolls under it. */
+#nd-home-layout #nd-nav > div:not([class*='bg-fd-background']) {
+  border-color: transparent;
+}
+
+/* A faint grid, faded out towards the edges. */
+.tg-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--color-fd-foreground) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-fd-foreground) 6%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black, transparent);
+}
+
+.tg-contours {
+  color: var(--color-fd-primary);
+  mask-image: radial-gradient(ellipse 80% 75% at 60% 35%, black 30%, transparent 85%);
+}
+
+/* A glow that drifts slowly behind the hero. */
+.tg-glow {
+  --tg-glow: 18%;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--color-fd-primary) var(--tg-glow), transparent), transparent);
+  filter: blur(40px);
+}
+.dark .tg-glow {
+  --tg-glow: 35%;
+}
+
+/* Text with the accent running through it. */
+.tg-gradient-text {
+  background: linear-gradient(100deg, var(--color-fd-foreground) 20%, var(--color-fd-primary) 60%, var(--color-fd-foreground) 95%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* A card with a hairline that lights up under the pointer. */
+.tg-card {
+  position: relative;
+  border-radius: 1rem;
+  border: 1px solid var(--color-fd-border);
+  background: color-mix(in oklab, var(--color-fd-card) 80%, transparent);
+  transition:
+    border-color 0.3s var(--tg-ease),
+    transform 0.3s var(--tg-ease),
+    background-color 0.3s var(--tg-ease);
+}
+.tg-card:hover {
+  border-color: color-mix(in oklab, var(--color-fd-primary) 45%, var(--color-fd-border));
+  transform: translateY(-2px);
+}
+
+/* ---- Motion ----------------------------------------------------------------------------
+ * Everything is visible without JavaScript or with Reduce Motion: `html.tg-motion` is set
+ * before the first paint only when animating is welcome, and <Motion> reveals elements as
+ * they scroll into view.
+ */
+@keyframes tg-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tg-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tg-drift {
+  0%,
+  100% {
+    transform: translate3d(-4%, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(4%, 3%, 0) scale(1.08);
+  }
+}
+
+@keyframes tg-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes tg-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  80%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@keyframes tg-flow {
+  to {
+    background-position: 200% 0;
+  }
+}
+
+.tg-fade {
+  animation: tg-fade 0.4s var(--tg-ease) both;
+}
+
+html.tg-motion .tg-glow {
+  animation: tg-drift 18s ease-in-out infinite;
+}
+
+/* Contours draw themselves in, inner rings first. */
+html.tg-motion .tg-contours path {
+  stroke-dasharray: 1;
+  animation: tg-draw 2.4s var(--tg-ease) both;
+  animation-delay: calc(var(--k, 0) * 70ms + 150ms);
+}
+
+.tg-ping {
+  animation: tg-ping 2.4s var(--tg-ease) infinite;
+}
+
+/* A line that carries a pulse from one step to the next. */
+.tg-wire {
+  background: linear-gradient(90deg, transparent, var(--color-fd-primary), transparent) 0 0 / 50% 100% no-repeat,
+    var(--color-fd-border);
+}
+html.tg-motion .tg-wire {
+  background-repeat: repeat-x;
+  background-size:
+    50% 100%,
+    100% 100%;
+  animation: tg-flow 3s linear infinite;
+}
+
+/* Hiding again (scrolling back up) is quick; showing takes its time, in the order each
+   element's `--tg-delay` sets. */
+html.tg-motion [data-reveal] {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 0.45s var(--tg-ease),
+    transform 0.45s var(--tg-ease),
+    filter 0.45s var(--tg-ease);
+}
+
+html.tg-motion [data-reveal][data-shown] {
+  opacity: 1;
+  transform: none;
+  transition-duration: 0.8s;
+  transition-delay: calc(var(--tg-delay, 0) * 1ms);
+}
+
+html.tg-motion [data-reveal='blur'] {
+  filter: blur(12px);
+  transform: translateY(10px) scale(0.985);
+}
+
+html.tg-motion [data-reveal='blur'][data-shown] {
+  filter: none;
+  transform: none;
+  transition-duration: 0.9s;
+}
+
+html.tg-motion [data-reveal='scale'] {
+  transform: scale(0.94);
+}
+
+/* The hero plays on load rather than on scroll. */
+html.tg-motion [data-hero] {
+  animation: tg-rise 0.9s var(--tg-ease) both;
+  animation-delay: calc(var(--tg-delay, 0) * 1ms);
+}
+
+/* Section titles: each word rises in; eyebrows type themselves. */
+.tg-rise-word {
+  display: inline-block;
+}
+
+html.tg-motion [data-reveal] .tg-rise-word {
+  opacity: 0;
+  transform: translateY(0.55em);
+  transition:
+    opacity 0.3s var(--tg-ease),
+    transform 0.35s var(--tg-ease);
+}
+
+html.tg-motion [data-reveal][data-shown] .tg-rise-word {
+  opacity: 1;
+  transform: none;
+  transition-duration: 0.7s, 0.8s;
+  transition-delay: calc(80ms + var(--i, 0) * 45ms);
+}
+
+html.tg-motion [data-reveal] .tg-type {
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.3s var(--tg-ease);
+}
+
+html.tg-motion [data-reveal][data-shown] .tg-type {
+  clip-path: inset(0);
+  transition: clip-path calc(var(--len, 12) * 38ms) steps(var(--len, 12), end);
+}
+
+/* Reduce Motion wins over everything above, even when it is turned on after the page loads. */
+@media (prefers-reduced-motion: reduce) {
+  html.tg-motion [data-reveal],
+  html.tg-motion [data-hero],
+  html.tg-motion [data-reveal] .tg-rise-word,
+  html.tg-motion [data-reveal] .tg-type {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    clip-path: none;
+    animation: none;
+    transition: none;
+  }
+  html.tg-motion :is(.tg-glow, .tg-wire, .tg-contours path),
+  .tg-ping,
+  .tg-fade {
+    animation: none;
+  }
+  .tg-card:hover {
+    transform: none;
+  }
+}

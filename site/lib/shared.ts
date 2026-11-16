@@ -1,7 +1,7 @@
 export const appName = 'teigeodata';
 export const docsRoute = '/docs';
 
-/** The path the site is served under (`/teigeodata` on GitHub Pages, empty in `next dev`). */
+/** The path the site is served under: empty at https://teigeodata.teispace.com (D-353). */
 export const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
 export const gitConfig = {
