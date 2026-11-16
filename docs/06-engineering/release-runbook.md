@@ -29,23 +29,31 @@ environment `release`. Names are those of D-211.
 2. **crates.io:** the first version of each crate is published by hand, since a trusted
    publisher can be added only to a crate that exists. From the release's tag, with the
    maintainer's token, in this order: `teigeodata-core`, `-blob`, `-names`, `-format`, `-sync`,
-   `-engine`, `-api`, `-cli` (`cargo publish -p <crate>`). Then, on each crate's settings page,
+   `-engine`, `-api`, `-server`, `-cli` (`cargo publish -p <crate>`). crates.io allows a few new
+   crates at once, then about one per 10 minutes (HTTP 429): wait and retry. Then, on each crate's settings page,
    add the trusted publisher: repository `teispace/teigeodata`, workflow `release.yml`,
    environment `release`.
-   Every crate is owned by Teispace: `cargo owner --add github:teispace:teispace-core <crate>`.
+   Every crate is owned by Teispace: `cargo owner --add github:teispace:teispace-core <crate>`
+   needs a token with the `change-owners` scope; the crate's settings page (Add Owner) does not.
 3. **npm:** the organisation `teispace` (D-358: `teigeodata`, `teigeodata-wasm` and
    `teigeodata-wasm-lookup` unscoped, owned by the organisation; the per-platform addons
    `@teispace/teigeodata-<platform>`). Each package of the release (`dist/*.tgz`: the
    main package, its per-platform addons, the WebAssembly package) is published once by hand
-   (`npm publish --access public <file>`), then given the trusted publisher (organisation
-   `teispace`, repository `teigeodata`, workflow `release.yml`, environment `release`).
+   (`npm publish --access public ./<file>`: without `./` npm reads `dist/x.tgz` as a GitHub
+   repository), then given the trusted publisher (organisation `teispace`, repository
+   `teigeodata`, workflow `release.yml`, environment `release`, "Allow npm publish" ticked: the
+   workflow publishes directly, behind the environment's approval). `npm trust github <package>
+   --file release.yml --repo teispace/teigeodata --env release --allow-publish --yes` does the
+   same from the command line. A new trusted publisher is pending until a CI publish uses it
+   within about a day; if it lapses, create it again before the release.
    The unscoped packages are put under the organisation once (`npm access grant read-write
    teispace:developers <package>`).
 4. **PyPI:** a pending trusted publisher for the project `teigeodata` (owner `teispace`,
    repository `teigeodata`, workflow `release.yml`, environment `release`): PyPI creates the
    project on the first upload.
-5. **pub.dev:** the first version by hand from the release's tag (`dart pub publish` in
-   `bindings/dart`, under the `teispace.com` verified publisher), then on the package's admin
+5. **pub.dev:** the first version by hand (`dart pub publish` in `bindings/dart`; the server
+   accepts only `hook/build.dart` and `hook/link.dart` under `hook/`, D-361), then moved to the
+   `teispace.com` verified publisher (irreversible) by the uploading account, then on the package's admin
    page: automated publishing from GitHub Actions, repository `teispace/teigeodata`, tag
    pattern `v{{version}}`, required environment `release`.
 6. **Maven Central:** the namespace `com.teispace` verified (DNS TXT), a Portal user token, and
@@ -59,8 +67,15 @@ namespace `com.teispace` verified (TXT record on `teispace.com`; a check request
 the signing key is RSA 4096 `5BA1 99A9 F59E E7E3 01D9 4250 CCF0 66EF 6E5F 481F`
 (`Teispace <info@teispace.com>`, no expiry), on keyserver.ubuntu.com and keys.openpgp.org.
 PyPI: account `teispace`, pending publisher for `teigeodata` added. npm: org `teispace`, its
-team `developers`. pub.dev: publisher `teispace.com`. Left: the first publishes by hand on
-crates.io, npm and pub.dev from the 1.0.1 tag, then their trusted publishers.
+team `developers`. pub.dev: publisher `teispace.com`.
+
+**State (2026-11-17):** 1.0.1 is on every registry. crates.io: the 9 crates published by
+hand, each owned by the team `teispace/Teispace Core` with the trusted publisher. npm: the 11
+packages published by hand, the team `developers` read-write on each; the trusted publisher on
+`teigeodata` (pending until a CI publish), the other 10 by `npm trust github`. pub.dev:
+`teigeodata` under `teispace.com` (from `main`'s d3f94aa, D-361), automated publishing from
+`v{{version}}` tags in environment `release`. PyPI and Maven Central published from CI. 1.1.0 is
+the first release to publish everywhere from CI.
 
 A registry not set up yet fails only its own job; the GitHub release and the other registries
 are unaffected, and a re-run publishes what is missing (every publish step skips a version
