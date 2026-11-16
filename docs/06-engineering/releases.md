@@ -68,7 +68,13 @@ that needs a newer reader than its own.
    the release commit with the root `Package.swift` (D-304), and every registry's own check
    runs first. Check one: `gh attestation verify <file> --repo teispace/teigeodata`. The
    registries, their one-time setup and the checks after a release:
-   [the runbook](release-runbook.md) (D-305).
+   [the runbook](release-runbook.md) (D-305). A release on GitHub alone, before the registries
+   are set up: `-f dry_run=false -f registries=false`. The job's own token pushes the release
+   commit and the tags, so no deploy key is needed and no workflow starts from the tag push
+   (`pub.yml` stays still); crates.io, npm, PyPI, Maven Central and the Go proxy are skipped.
+   Swift and Go install from the tag and the release's files (D-352). Publishing the
+   registries afterwards from that tag is not built yet: the version job refuses a tagged
+   version (phase 8, 8.6).
 4. Check from a scratch project: `cargo build` with the `git` + `tag` dependency above, then
    open a pack with `Layer::open` and answer a `get`.
 

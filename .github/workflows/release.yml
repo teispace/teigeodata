@@ -11,6 +11,10 @@ on:
         description: Build, attest and check everything, publish nothing
         type: boolean
         default: true
+      registries:
+        description: Publish to the registries too (off, a real run publishes the GitHub release only)
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -335,7 +339,9 @@ jobs:
   # ---- A real run (dry_run off), each job approved in the `release` environment ----
   #
   # The release commit on `main` and the tags `vX.Y.Z` (Swift, pub.dev) and
-  # `bindings/go/vX.Y.Z` (Go), pushed with the deploy key so the tag push starts `pub.yml`; then
+  # `bindings/go/vX.Y.Z` (Go), pushed with the deploy key so the tag push starts `pub.yml`
+  # (with `registries` off, by the job's own token instead, whose push starts no workflow, so
+  # nothing reaches a registry: Swift and Go install from the tag and the release); then
   # a draft release with every file, published (an immutable release takes assets only as a
   # draft). `main` must still be the dispatched commit, or the push is refused and nothing is
   # published.
@@ -353,7 +359,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked] this job pushes with these credentials
         with:
-          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+          ssh-key: ${{ inputs.registries && secrets.RELEASE_DEPLOY_KEY || '' }}
           fetch-depth: 0
           filter: blob:none
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -397,7 +403,7 @@ jobs:
   # crates.io trusted publishing (no stored token), after the GitHub release.
   crates:
     needs: [version, packages, github-release]
-    if: ${{ !cancelled() && needs.packages.result == 'success' && (inputs.dry_run || needs.github-release.result == 'success') }}
+    if: ${{ !cancelled() && needs.packages.result == 'success' && (inputs.dry_run || (inputs.registries && needs.github-release.result == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: ${{ inputs.dry_run && 'dry-run' || 'release' }}
@@ -431,7 +437,7 @@ jobs:
 
   # npm through trusted publishing (provenance is published with it).
   npm:
-    if: ${{ !inputs.dry_run }}
+    if: ${{ !inputs.dry_run && inputs.registries }}
     needs: [version, github-release]
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -465,7 +471,7 @@ jobs:
 
   # PyPI through trusted publishing, with PEP 740 attestations (only from a top-level workflow).
   pypi:
-    if: ${{ !inputs.dry_run }}
+    if: ${{ !inputs.dry_run && inputs.registries }}
     needs: [version, github-release]
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -490,7 +496,7 @@ jobs:
   # Maven Central: no OIDC, so a Portal user token and a GPG key, secrets of the `release`
   # environment. The bundle is signed, uploaded, validated and published by the Portal.
   maven:
-    if: ${{ !inputs.dry_run }}
+    if: ${{ !inputs.dry_run && inputs.registries }}
     needs: [version, github-release]
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -559,7 +565,7 @@ jobs:
 
   # Go: the module is the tag; asking the proxy for it makes it available at once.
   go:
-    if: ${{ !inputs.dry_run }}
+    if: ${{ !inputs.dry_run && inputs.registries }}
     needs: [version, github-release]
     runs-on: ubuntu-latest
     timeout-minutes: 10

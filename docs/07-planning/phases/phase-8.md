@@ -277,7 +277,11 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 
 ### 8.6 Exit review
 
-- [ ] v1.0.0 tagged and published; installs from every registry checked
+- [ ] v1.0.0 tagged and published on GitHub (D-352: registries off) and checked from a scratch
+  project with the `git` + `tag` dependency
+- [ ] The registries from the existing tag, once the maintainer has tested the release: a
+  `release.yml` mode that publishes a tagged version's registries; installs from every
+  registry checked
 - [ ] M8 criteria met, each with its evidence; progress updated
 
 ## Changelog
@@ -302,3 +306,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.4: the docs audit done; the guides spell each language's own names | D-343 |
 | 2026-11-15 | 8.5: populations shipped before the data release (the schema promised them; no pack had them) | D-351 |
 | 2026-11-15 | 8.5: the data release split into the pre-release (done, data-2026.11.15) and the catalog (after the key ceremony) | D-247 |
+| 2026-11-16 | 8.6: v1.0.0 on GitHub first, the registries after the maintainer's test | D-352 |

@@ -5,4 +5,4 @@ rules:
     ignore:
       # npm 11.5.1 or later for trusted publishing, when the runner's is older: an exact
       # version from the registry the job publishes to.
-      - release.yml:456
+      - release.yml:462
