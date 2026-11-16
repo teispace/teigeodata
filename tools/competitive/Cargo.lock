@@ -872,11 +872,11 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-core"
-version = "1.0.0"
+version = "1.0.1"
 
 [[package]]
 name = "teigeodata-engine"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "arc-swap",
  "libm",
@@ -888,7 +888,7 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-format"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "blake3",
  "libm",
@@ -898,7 +898,7 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-names"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "libm",
  "unicode-normalization",

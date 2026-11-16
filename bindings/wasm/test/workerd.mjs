@@ -33,7 +33,7 @@ export default {
   async fetch() {
     try {
       await tg.init();
-      const n = run(tg, JSON.parse(parity), (rel) => files.get(rel), { full: ${name === "@teispace/teigeodata-wasm"} });
+      const n = run(tg, JSON.parse(parity), (rel) => files.get(rel), { full: ${name === "teigeodata-wasm"} });
       return Response.json({ ok: true, n, components: tg.components() });
     } catch (e) {
       return Response.json({ ok: false, error: String((e && e.stack) || e) });

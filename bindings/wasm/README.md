@@ -9,8 +9,8 @@ Two npm packages, each a set of pack components with the same API:
 
 | Package | Components | Budget (module, gzip -9) |
 |---|---|---|
-| `@teispace/teigeodata-wasm` | every one | 262,144 B |
-| `@teispace/teigeodata-wasm-lookup` | every one but `search` and `substring` (no `fold`) | 153,600 B |
+| `teigeodata-wasm` | every one | 262,144 B |
+| `teigeodata-wasm-lookup` | every one but `search` and `substring` (no `fold`) | 153,600 B |
 
 ## Build and test
 

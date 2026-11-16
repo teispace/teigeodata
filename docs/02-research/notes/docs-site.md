@@ -46,7 +46,7 @@ on.
   fails on drift, so the reference cannot fall behind the API.
 - **Per-country and measured pages** are generated from `data/countries/` and the gates'
   checked-in reports by an xtask, checked in, drift-checked.
-- **Playground:** the `@teispace/teigeodata-wasm` build (the same files as the npm package)
+- **Playground:** the `teigeodata-wasm` build (the same files as the npm package)
   over the public layer, fetched once and opened with `Engine.openBytes`; search, reverse,
   admin, timezone, elevation, nearby, measure and radius, drawn with Leaflet 1.9.4 over
   OpenStreetMap's tiles, or over the pack's own outlines with no tiles (D-356; the playground

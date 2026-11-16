@@ -529,7 +529,7 @@ dependencies = [
 
 [[package]]
 name = "teigeodata-blob"
-version = "1.0.0"
+version = "1.0.1"
 
 [[package]]
 name = "tiny-keccak"

@@ -733,7 +733,7 @@ lang(
     free_prefix="",
     files=[("JavaScript", "node/tour.mjs", "js")],
     tour_url=TOUR + "node/tour.mjs",
-    intro="""`@teispace/teigeodata` is a native addon (N-API, napi-rs layout) with TypeScript types: one
+    intro="""`teigeodata` is a native addon (N-API, napi-rs layout) with TypeScript types: one
 prebuilt addon per platform, installed as an optional dependency, so `npm install` downloads only
 yours. It runs on Node.js, and on Bun and Deno through their N-API support. For browsers and
 edge workers use the WebAssembly package (the **Browser** tab), which has the same API.""",
@@ -755,7 +755,7 @@ npm install ./bindings/node
 From the first registry release:
 
 ```sh
-npm install @teispace/teigeodata
+npm install teigeodata
 ```
 
 </Tab>
@@ -804,7 +804,7 @@ download, an asset, a file the user picked), copying it into the module's memory
             "",
         ),
     },
-    intro="""`@teispace/teigeodata-wasm` is the engine compiled to WebAssembly, for browsers, Web Workers,
+    intro="""`teigeodata-wasm` is the engine compiled to WebAssembly, for browsers, Web Workers,
 Deno, Bun, Node.js and Cloudflare Workers. The API is the Node.js package's (the **Node.js** tab);
 the difference is where packs come from: a page has no file system, so it opens a pack from its
 bytes. After that one download, every query runs locally. The [playground](/playground) is this
@@ -826,8 +826,8 @@ npm install ./target/wasm/full
 From the first registry release:
 
 ```sh
-npm install @teispace/teigeodata-wasm          # every component
-npm install @teispace/teigeodata-wasm-lookup   # no name search: a smaller module
+npm install teigeodata-wasm          # every component
+npm install teigeodata-wasm-lookup   # no name search: a smaller module
 ```
 
 </Tab>
@@ -848,7 +848,7 @@ the blob, `reader.strings("name")` an array. 64-bit integer columns read as `big
     extras="""## In a page
 
 ```js
-import { init, Engine, Reader } from "@teispace/teigeodata-wasm";
+import { init, Engine, Reader } from "teigeodata-wasm";
 
 await init();
 const engine = new Engine();

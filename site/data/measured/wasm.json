@@ -7,5 +7,5 @@
   "commit": "25ad7e5",
   "machine": "Darwin arm64, 10 cores",
   "load": "10.36",
-  "table": "| Package | Holds | Module | gzip -9 | Budget | Headroom |\n|---|---|--:|--:|--:|--:|\n| `@teispace/teigeodata-wasm` | every component | 605118 B | 253910 B | 262144 B | 3.1% |\n| `@teispace/teigeodata-wasm-lookup` | every query at a point or by ID | 380167 B | 145724 B | 153600 B | 5.1% |"
+  "table": "| Package | Holds | Module | gzip -9 | Budget | Headroom |\n|---|---|--:|--:|--:|--:|\n| `teigeodata-wasm` | every component | 605118 B | 253910 B | 262144 B | 3.1% |\n| `teigeodata-wasm-lookup` | every query at a point or by ID | 380167 B | 145724 B | 153600 B | 5.1% |"
 }

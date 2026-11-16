@@ -10,6 +10,18 @@ applied: a minor release could break the public API, and every break is listed u
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-16
+
+The first release on every registry (crates.io, npm, PyPI, pub.dev, Maven Central); Swift and
+Go install from its tag as before.
+
+### Changed
+
+- The npm packages are `teigeodata`, `teigeodata-wasm` and `teigeodata-wasm-lookup` (the
+  names on crates.io, PyPI and pub.dev), owned by the Teispace organisation; the per-platform
+  addons the main package installs stay scoped, `@teispace/teigeodata-<platform>`. Neither was
+  on npm before this release.
+
 ### Fixed
 
 - `tgd extract --components` of a pack with several parts of one kind or with block hashes
@@ -587,7 +599,8 @@ The first tagged version. Everything below is new.
 
 None: no version was released before this one.
 
-[Unreleased]: https://github.com/teispace/teigeodata/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/teispace/teigeodata/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/teispace/teigeodata/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/teispace/teigeodata/compare/v0.3.1...v1.0.0
 [0.3.1]: https://github.com/teispace/teigeodata/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/teispace/teigeodata/compare/v0.2.0...v0.3.0

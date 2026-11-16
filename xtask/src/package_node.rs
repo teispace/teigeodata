@@ -1,5 +1,5 @@
 //! `cargo xtask package-node`: the Node.js packages (5.7c, D-294), in the napi-rs layout. The
-//! main package `@teispace/teigeodata` holds the generated entries and the loader and names a
+//! main package `teigeodata` holds the generated entries and the loader and names a
 //! platform package per platform in `optionalDependencies`; each platform package,
 //! `@teispace/teigeodata-<suffix>`, holds one prebuilt addon and the `os`, `cpu` and `libc`
 //! fields npm installs it by. They are assembled under `target/node/<folder>/`.
@@ -17,7 +17,10 @@ use crate::package_c::{command, version};
 
 const USAGE: &str = "usage: cargo xtask package-node [--addons <dir>] [--test]";
 
-const MAIN: &str = "@teispace/teigeodata";
+const MAIN: &str = "teigeodata";
+/// The per-platform packages, `@teispace/teigeodata-<suffix>`: scoped so only Teispace can
+/// publish one (D-358), installed by `MAIN` and never named by a user.
+const PLATFORM: &str = "@teispace/teigeodata";
 
 /// A platform the addon is built for: its package suffix (napi-rs names) and npm's fields.
 struct Platform {
@@ -130,7 +133,12 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         write(&dir.join("package.json"), &platform_json(p, &version))?;
         write(&dir.join("README.md"), &platform_readme(p))?;
         let size = fs::metadata(dir.join(&file)).map_or(0, |m| m.len());
-        let _ = writeln!(report, "{MAIN}-{}: {size} B, {}", p.suffix, dir.display());
+        let _ = writeln!(
+            report,
+            "{PLATFORM}-{}: {size} B, {}",
+            p.suffix,
+            dir.display()
+        );
     }
     let main = out.join("teigeodata");
     mkdir(&main)?;
@@ -197,7 +205,7 @@ fn host_addon(root: &Path) -> Result<(&'static Platform, PathBuf), Vec<String>> 
 fn main_json(version: &str) -> String {
     let optional: serde_json::Map<String, serde_json::Value> = PLATFORMS
         .iter()
-        .map(|p| (format!("{MAIN}-{}", p.suffix), version.into()))
+        .map(|p| (format!("{PLATFORM}-{}", p.suffix), version.into()))
         .collect();
     let mut files: Vec<&str> = MAIN_FILES.to_vec();
     files.extend(["LICENSE", "NOTICE", "README.md"]);
@@ -237,7 +245,7 @@ fn main_json(version: &str) -> String {
 fn platform_json(p: &Platform, version: &str) -> String {
     let file = format!("teigeodata.{}.node", p.suffix);
     let mut manifest = serde_json::json!({
-        "name": format!("{MAIN}-{}", p.suffix),
+        "name": format!("{PLATFORM}-{}", p.suffix),
         "version": version,
         "description": format!("The teigeodata Node.js addon for {}; installed by {MAIN}.", p.suffix),
         "license": "Apache-2.0",
@@ -265,14 +273,14 @@ fn main_readme() -> String {
          arm64. npm installs only the platform package this machine needs.\n\n```js\nimport {{ \
          Engine }} from \"{MAIN}\";\n\nconst engine = new Engine();\nengine.openFile(\"np.tgd\");\n\
          const places = engine.reverse(27.7, 85.3, 5); // a columnar blob (Buffer)\n```\n\nOn \
-         another platform, or in a browser or a Worker, use `@teispace/teigeodata-wasm`.\n\n\
+         another platform, or in a browser or a Worker, use `teigeodata-wasm`.\n\n\
          Documentation: https://github.com/teispace/teigeodata\n"
     )
 }
 
 fn platform_readme(p: &Platform) -> String {
     format!(
-        "# {MAIN}-{}\n\nThe prebuilt teigeodata addon for {}. Install `{MAIN}`, which loads \
+        "# {PLATFORM}-{}\n\nThe prebuilt teigeodata addon for {}. Install `{MAIN}`, which loads \
          it.\n",
         p.suffix, p.suffix
     )

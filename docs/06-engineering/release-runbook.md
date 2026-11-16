@@ -32,10 +32,15 @@ environment `release`. Names are those of D-211.
    `-engine`, `-api`, `-cli` (`cargo publish -p <crate>`). Then, on each crate's settings page,
    add the trusted publisher: repository `teispace/teigeodata`, workflow `release.yml`,
    environment `release`.
-3. **npm:** the scope `@teispace`. Each package of the release (`dist/teispace-*.tgz`: the
+   Every crate is owned by Teispace: `cargo owner --add github:teispace:teispace-core <crate>`.
+3. **npm:** the organisation `teispace` (D-358: `teigeodata`, `teigeodata-wasm` and
+   `teigeodata-wasm-lookup` unscoped, owned by the organisation; the per-platform addons
+   `@teispace/teigeodata-<platform>`). Each package of the release (`dist/*.tgz`: the
    main package, its per-platform addons, the WebAssembly package) is published once by hand
    (`npm publish --access public <file>`), then given the trusted publisher (organisation
    `teispace`, repository `teigeodata`, workflow `release.yml`, environment `release`).
+   The unscoped packages are put under the organisation once (`npm access grant read-write
+   teispace:developers <package>`).
 4. **PyPI:** a pending trusted publisher for the project `teigeodata` (owner `teispace`,
    repository `teigeodata`, workflow `release.yml`, environment `release`): PyPI creates the
    project on the first upload.
@@ -70,7 +75,7 @@ that is already there).
 
 - `gh release view vX.Y.Z` lists every file; `gh attestation verify <file> --repo
   teispace/teigeodata` passes on any of them; `sha256sum -c SHA256SUMS` in a folder of them.
-- `cargo info teigeodata-engine@X.Y.Z`; `npm view @teispace/teigeodata@X.Y.Z`; `pip download
+- `cargo info teigeodata-engine@X.Y.Z`; `npm view teigeodata@X.Y.Z`; `pip download
   teigeodata==X.Y.Z --no-deps`; `https://pub.dev/packages/teigeodata/versions/X.Y.Z`;
   `https://repo1.maven.org/maven2/com/teispace/teigeodata/X.Y.Z/`;
   `go list -m github.com/teispace/teigeodata/bindings/go@vX.Y.Z`; a scratch Swift package

@@ -214,7 +214,7 @@ language.
 
 The Dart package runs in a browser, compiled by dart2js or dart2wasm (Flutter web uses
 either), on the WebAssembly build: `bindings_web.g.dart`, generated from the same IDL, gives
-the native layer's classes over `@teispace/teigeodata-wasm`, and `package:teigeodata` exports
+the native layer's classes over `teigeodata-wasm`, and `package:teigeodata` exports
 it in place of the native layer where `dart:js_interop` exists. The errors, enums and option
 records are one definition for both (`types.g.dart`), so one app's code compiles everywhere:
 
@@ -225,7 +225,7 @@ engine.openBytes(packBytes); // on the web, from fetch or OPFS
 ```
 
 - **Serving the module:** the app serves the files of the npm package
-  `@teispace/teigeodata-wasm` (`index.js`, `teigeodata_wasm.js`, `teigeodata_wasm_bg.wasm`)
+  `teigeodata-wasm` (`index.js`, `teigeodata_wasm.js`, `teigeodata_wasm_bg.wasm`)
   together, by default in `teigeodata_wasm/` beside the page (in Flutter, `web/teigeodata_wasm/`),
   or names their place: `TeiGeodata.init(module: Uri.parse('/assets/tg/index.js'))`. The
   `.wasm` file is served as `application/wasm`. Nothing is fetched from anywhere else.

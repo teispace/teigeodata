@@ -112,7 +112,7 @@ Measured 2026-11-14 on this Mac (wasm32-unknown-unknown, the `wasm` profile: `op
   (`native.js`, `target.js`) against napi-rs 3.10.12's generated loader of several hundred: we
   need eight platforms, no WASI fallback and no FreeBSD, Android or OpenHarmony branches.
 - **`index.mjs`**, generated from the IDL: Node.js cannot see named exports through
-  `module.exports = native`, so without it `import { Engine } from "@teispace/teigeodata"`
+  `module.exports = native`, so without it `import { Engine } from "teigeodata"`
   fails.
 
 ## 6. Impact on the plan

@@ -1,4 +1,4 @@
-// The playground's engine: the @teispace/teigeodata-wasm package, the pinned pack and the
+// The playground's engine: the teigeodata-wasm package, the pinned pack and the
 // catalog of packs a reader can add at run time, all served from this site (`cargo xtask
 // playground` writes them to public/playground/). The package is imported at run time from its
 // own files, so the page runs exactly what a user installs, and nothing is fetched from anywhere

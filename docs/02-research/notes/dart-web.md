@@ -19,7 +19,7 @@ has, so one app's code compiles for every platform. Feeds the last item of 5.5 a
 
 A third generated Dart file, `bindings_web.g.dart`, implements the native layer's classes
 (`TeiGeodata`, `Engine`, the exceptions, enums and option records) over the module of
-`@teispace/teigeodata-wasm` through `dart:js_interop`. The package exports it in place of
+`teigeodata-wasm` through `dart:js_interop`. The package exports it in place of
 the native layer with a conditional export (`if (dart.library.js_interop)`). The types both
 layers share move to `types.g.dart`, so they have one definition. The only addition to the
 API is `TeiGeodata.init({Uri? module})`: on the web it loads the module (once), natively it

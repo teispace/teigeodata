@@ -183,7 +183,7 @@ jobs:
           ls -l
           for f in "teigeodata-c-$VERSION-"* "teigeodata-$VERSION-"* CTeiGeodata.xcframework.zip CTeiGeodata.xcframework.zip.checksum \
                    teigeodata-*"$VERSION"*.jar teigeodata-*"$VERSION"*.aar "teigeodata-$VERSION-"*.whl \
-                   "teispace-teigeodata-$VERSION.tgz" "teispace-teigeodata-wasm-$VERSION.tgz"; do
+                   "teigeodata-$VERSION.tgz" "teigeodata-wasm-$VERSION.tgz" "teigeodata-wasm-lookup-$VERSION.tgz" "teispace-teigeodata-"*"-$VERSION.tgz"; do
             compgen -G "$f" >/dev/null || { echo "::error::missing: $f"; exit 1; }
           done
       - name: SBOMs (CycloneDX) of every crate the artifacts are built from
@@ -233,12 +233,12 @@ jobs:
       - name: The Node.js binding's SBOM, attested for its package
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
-          subject-path: dist/teispace-teigeodata-${{ env.VERSION }}.tgz
+          subject-path: dist/teigeodata-${{ env.VERSION }}.tgz
           sbom-path: dist/sbom/teigeodata-node.cdx.json
       - name: The WebAssembly binding's SBOM, attested for its packages
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
-          subject-path: dist/teispace-teigeodata-wasm-*.tgz
+          subject-path: dist/teigeodata-wasm-*.tgz
           sbom-path: dist/sbom/teigeodata-wasm.cdx.json
       - name: Every attestation verifies
         env:
@@ -314,7 +314,7 @@ jobs:
           node-version: 26
       - name: npm
         run: |
-          for p in "$RUNNER_TEMP"/dist/teispace-*.tgz; do npm publish --dry-run --access public "$p"; done
+          for p in "$RUNNER_TEMP"/dist/*.tgz; do npm publish --dry-run --access public "$p"; done
       - name: PyPI
         run: pipx run twine==7.0.0 check --strict "$RUNNER_TEMP"/dist/*.whl
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
@@ -463,7 +463,7 @@ jobs:
           npm --version
       - name: Publish (a version already there is skipped)
         run: |
-          for p in dist/teispace-*.tgz; do
+          for p in dist/*.tgz; do
             name=$(tar -xzOf "$p" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0)).name')
             if npm view "$name@$VERSION" version >/dev/null 2>&1; then echo "$name@$VERSION: already published"; continue; fi
             npm publish --access public "$p"

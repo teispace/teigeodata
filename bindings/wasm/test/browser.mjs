@@ -13,7 +13,7 @@ const wanted = (process.argv[4] ?? "chromium,firefox,webkit").split(",");
 const here = dirname(fileURLToPath(import.meta.url));
 const bindings = dirname(parityPath);
 const name = JSON.parse(await readFile(join(pkg, "package.json"), "utf8")).name;
-const full = name === "@teispace/teigeodata-wasm";
+const full = name === "teigeodata-wasm";
 
 const page = `<!doctype html><meta charset="utf-8"><script type="module">
 import * as tg from "/pkg/index.js";

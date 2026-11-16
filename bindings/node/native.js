@@ -24,7 +24,7 @@ function load() {
   if (!suffix) {
     throw new Error(
       `teigeodata has no addon for ${process.platform}-${process.arch}; ` +
-        "@teispace/teigeodata-wasm runs everywhere",
+        "teigeodata-wasm runs everywhere",
     );
   }
   const name = `@teispace/teigeodata-${suffix}`;

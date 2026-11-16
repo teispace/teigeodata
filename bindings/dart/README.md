@@ -33,7 +33,7 @@ final blob = engine.search('Kathmandu', 5); // a TGB1 result blob
 ```
 
 **On the web** (dart2js or dart2wasm) the same classes run on the WebAssembly build. Serve the
-files of the npm package `@teispace/teigeodata-wasm` (`index.js`, `teigeodata_wasm.js`,
+files of the npm package `teigeodata-wasm` (`index.js`, `teigeodata_wasm.js`,
 `teigeodata_wasm_bg.wasm`) in `teigeodata_wasm/` beside the page (in Flutter,
 `web/teigeodata_wasm/`), or pass their place to `TeiGeodata.init(module: ...)`. The web opens
 packs from their bytes (`openBytes`); the store and `openFile` need a file system and are

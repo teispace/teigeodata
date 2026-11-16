@@ -2,7 +2,7 @@
 // Usage: node tour.mjs world-np-lite.tgd
 
 // #region import
-import { Engine, Reader, bearingDeg, distanceM } from "@teispace/teigeodata";
+import { Engine, Reader, bearingDeg, distanceM } from "teigeodata";
 // #endregion import
 
 const pack = process.argv[2];

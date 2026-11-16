@@ -4,7 +4,7 @@
 
 import { readFileSync } from "node:fs";
 // #region import
-import { init, Engine, Reader, bearingDeg, distanceM } from "@teispace/teigeodata-wasm";
+import { init, Engine, Reader, bearingDeg, distanceM } from "teigeodata-wasm";
 
 await init(); // loads the module once; at once on Node.js, Bun and Workers
 // #endregion import

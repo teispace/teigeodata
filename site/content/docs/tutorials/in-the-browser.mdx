@@ -3,7 +3,7 @@ title: "In the browser"
 description: "Run the WebAssembly engine in a page or a Web Worker, cache the pack for offline visits, and answer every query locally."
 ---
 
-`@teispace/teigeodata-wasm` is the engine compiled to WebAssembly: the same calls as the
+`teigeodata-wasm` is the engine compiled to WebAssembly: the same calls as the
 Node.js package, at most 256 KiB gzipped, or 150 KiB without name search. A page has no file
 system, so it opens a pack from its bytes; after that one download, every query runs locally.
 The [playground](/playground) is this package in a page.
@@ -25,7 +25,7 @@ package's `exports` pick the right entry for browsers, Node.js, Deno and Cloudfl
 `init()` loads and compiles the module once; then open the pack's bytes:
 
 ```js
-import { init, Engine, Reader } from "@teispace/teigeodata-wasm";
+import { init, Engine, Reader } from "teigeodata-wasm";
 
 await init();
 const engine = new Engine();

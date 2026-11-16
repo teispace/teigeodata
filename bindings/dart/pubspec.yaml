@@ -1,6 +1,6 @@
 name: teigeodata
 description: Accurate, offline places. The Dart binding of teigeodata over its C ABI.
-version: 1.0.0
+version: 1.0.1
 repository: https://github.com/teispace/teigeodata
 
 environment:

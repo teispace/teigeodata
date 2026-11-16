@@ -112,7 +112,7 @@ const LANGS: &[Lang] = &[
         dir: "",
         env: &[],
         links: &[(
-            "site/examples/node/node_modules/@teispace/teigeodata",
+            "site/examples/node/node_modules/teigeodata",
             "bindings/node",
         )],
         own: None,
@@ -125,7 +125,7 @@ const LANGS: &[Lang] = &[
         dir: "",
         env: &[],
         links: &[(
-            "site/examples/wasm/node_modules/@teispace/teigeodata-wasm",
+            "site/examples/wasm/node_modules/teigeodata-wasm",
             "target/wasm/full",
         )],
         own: None,

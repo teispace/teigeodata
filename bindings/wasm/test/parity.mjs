@@ -15,5 +15,5 @@ await tg.init();
 const parity = JSON.parse(readFileSync(parityPath, "utf8"));
 const read = (rel) => new Uint8Array(readFileSync(join(dirname(parityPath), rel)));
 const name = JSON.parse(readFileSync(join(pkg, "package.json"), "utf8")).name;
-const n = run(tg, parity, read, { full: name === "@teispace/teigeodata-wasm" });
+const n = run(tg, parity, read, { full: name === "teigeodata-wasm" });
 console.log(`${host}: ${name} parity ok (${n} checks; ${tg.components()})`);

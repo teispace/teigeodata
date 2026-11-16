@@ -92,7 +92,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         "file": data.file,
         "bytes": data.bytes,
         "sha256": data.sha256,
-        "package": "@teispace/teigeodata-wasm",
+        "package": "teigeodata-wasm",
         "version": version,
         "engine_bytes": bytes,
         "catalog": catalog,

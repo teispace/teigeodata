@@ -32,14 +32,14 @@ struct Variant {
 const VARIANTS: &[Variant] = &[
     Variant {
         name: "full",
-        package: "@teispace/teigeodata-wasm",
+        package: "teigeodata-wasm",
         description: "Accurate, offline places in WebAssembly: every query, search included.",
         features: None,
         budget_gz: 262_144,
     },
     Variant {
         name: "lookup",
-        package: "@teispace/teigeodata-wasm-lookup",
+        package: "teigeodata-wasm-lookup",
         description: "Accurate, offline places in WebAssembly: every query at a point or by ID, \
                       without search.",
         features: Some(
@@ -352,7 +352,7 @@ mod tests {
         assert!(
             VARIANTS
                 .iter()
-                .all(|v| v.package.starts_with("@teispace/teigeodata-wasm"))
+                .all(|v| v.package.starts_with("teigeodata-wasm"))
         );
     }
 
@@ -360,7 +360,7 @@ mod tests {
     fn the_manifest_names_an_entry_per_host() {
         let m: serde_json::Value =
             serde_json::from_str(&package_json(&VARIANTS[1], "1.2.3")).unwrap();
-        assert_eq!(m["name"], "@teispace/teigeodata-wasm-lookup");
+        assert_eq!(m["name"], "teigeodata-wasm-lookup");
         assert_eq!(m["version"], "1.2.3");
         let e = &m["exports"]["."];
         assert_eq!(e["workerd"], "./workerd.js");

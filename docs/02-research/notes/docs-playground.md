@@ -12,7 +12,7 @@ revisit: 2027-05-15
 
 Phase 7.6: a page where a reader tries every query on a released pack in the browser, with a
 map, before installing anything. The [docs-site note](docs-site.md) §2 fixed the outline: the
-`@teispace/teigeodata-wasm` build over the public layer, opened with `Engine.openBytes`, MapLibre
+`teigeodata-wasm` build over the public layer, opened with `Engine.openBytes`, MapLibre
 drawing results over a map made from the pack itself, nothing sent anywhere. This note settles
 what that leaves open: where the browser gets the pack and the engine, how MapLibre runs in a
 static export without a tile or glyph server, what the page shows, and what proves it works.
