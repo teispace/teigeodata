@@ -42,3 +42,8 @@ mutants.out*/
 
 # The playground's engine, pack and worker (`cargo xtask playground`).
 /site/public/playground/
+
+# Signing keys and revocation certificates never enter the repository.
+*.asc
+*.rev
+*.gpg
