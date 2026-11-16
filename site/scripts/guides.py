@@ -11,6 +11,9 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# The released version, from the workspace manifest, so the install page follows each release.
+with open(f"{os.path.dirname(ROOT)}/Cargo.toml", encoding="utf-8") as f:
+    VERSION = re.search(r'^version = "([^"]+)"', f.read(), re.M).group(1)
 OUT = f"{ROOT}/content/docs/guides"
 EX = "../../../examples"  # from content/docs/guides/x.mdx to site/examples
 
@@ -407,8 +410,10 @@ Pick your language; every page of these docs remembers it.""",
     out += [
         "",
         """<Callout title="Registries">
-v1.0.0 is released on GitHub. The registry packages (crates.io, PyPI, npm, Maven Central,
-pub.dev, NuGet) follow; until then each tab shows how to build from the `v1.0.0` tag.
+Every release is published to crates.io, PyPI, npm, Maven Central, pub.dev and the Go module
+proxy from CI, by trusted publishing, with provenance where the registry records it. Swift
+installs from the release tags; C from the release archives. The .NET package is built and
+tested but not yet on NuGet: build it from a checkout.
 </Callout>""",
         "",
         "## Get a pack",
@@ -454,7 +459,7 @@ binding spells them in its language's style:
 - [Use cases](/docs/tutorials): a search box, a GPS fix to an address, local time anywhere.""",
         "",
     ]
-    return "\n".join(out)
+    return "\n".join(out).replace("@VERSION@", VERSION)
 
 
 def errors_page():
@@ -520,12 +525,12 @@ def pages():
 
 TOUR = "https://github.com/teispace/teigeodata/blob/main/site/examples/"
 
-FROM_CHECKOUT = """Until the registries are live, build from a checkout (a Rust toolchain is all it
-needs; `rust-toolchain.toml` pins the version):
+FROM_CHECKOUT = """To build from a checkout instead (a Rust toolchain is all it needs;
+`rust-toolchain.toml` pins the version):
 
 ```sh
 git clone https://github.com/teispace/teigeodata && cd teigeodata
-git checkout v1.0.0
+git checkout v@VERSION@
 """
 
 LANGS = []
@@ -610,27 +615,12 @@ GeoJSON every binding answers. `Engine::boundary_vertices` counts vertices witho
     intro="""teigeodata is written in Rust, and Rust gets the engine itself: typed places, typed IDs and
 points, and queries that write into buffers you reuse, so a warm query allocates nothing. Every
 other language reaches the same engine through a generated binding.""",
-    install="""<Tabs items={["Git tag (today)", "crates.io"]}>
-<Tab value="Git tag (today)">
-
-```toml title="Cargo.toml"
-[dependencies]
-teigeodata-core = { git = "https://github.com/teispace/teigeodata", tag = "v1.0.0" }
-teigeodata-engine = { git = "https://github.com/teispace/teigeodata", tag = "v1.0.0" }
-```
-
-</Tab>
-<Tab value="crates.io">
-
-The crates (`teigeodata-core`, `-engine`, `-sync`, `-api`, `-server`, `-cli` and what they
-need) are published to crates.io from the first registry release:
-
-```sh
+    install="""```sh
 cargo add teigeodata-core teigeodata-engine
 ```
 
-</Tab>
-</Tabs>
+The crates on crates.io: `teigeodata-core`, `-engine`, `-sync` (the store), `-api`, `-server`,
+`-cli` (`tgd`) and what they need, all at the same version.
 
 The minimum Rust version is the one `rust-toolchain.toml` pins. `teigeodata-engine`'s default
 features read packs from files (`mmap`); `teigeodata-sync` adds the store (download, verify,
@@ -678,8 +668,17 @@ lang(
     intro="""The Python package is a native extension (PyO3) over the Rust engine, with type stubs. One
 `abi3` wheel per platform serves CPython 3.11 and later; free-threaded builds (3.14t, 3.15t) get
 their own wheels and run queries in parallel without the GIL.""",
-    install="""<Tabs items={["From a checkout (today)", "PyPI"]}>
-<Tab value="From a checkout (today)">
+    install="""<Tabs items={["PyPI", "From a checkout"]}>
+<Tab value="PyPI">
+
+```sh
+pip install teigeodata
+```
+
+Wheels for Linux (glibc and musl), macOS and Windows on x64 and Arm64.
+
+</Tab>
+<Tab value="From a checkout">
 
 """
     + FROM_CHECKOUT
@@ -689,15 +688,6 @@ export PYTHONPATH=$PWD/bindings/python
 ```
 
 Or build a wheel with [maturin](https://www.maturin.rs): `pip install ./bindings/python`.
-
-</Tab>
-<Tab value="PyPI">
-
-From the first registry release:
-
-```sh
-pip install teigeodata
-```
 
 </Tab>
 </Tabs>""",
@@ -737,8 +727,17 @@ lang(
 prebuilt addon per platform, installed as an optional dependency, so `npm install` downloads only
 yours. It runs on Node.js, and on Bun and Deno through their N-API support. For browsers and
 edge workers use the WebAssembly package (the **Browser** tab), which has the same API.""",
-    install="""<Tabs items={["From a checkout (today)", "npm"]}>
-<Tab value="From a checkout (today)">
+    install="""<Tabs items={["npm", "From a checkout"]}>
+<Tab value="npm">
+
+```sh
+npm install teigeodata
+```
+
+npm installs the native addon for your platform with it (`@teispace/teigeodata-<platform>`).
+
+</Tab>
+<Tab value="From a checkout">
 
 """
     + FROM_CHECKOUT
@@ -748,15 +747,6 @@ npm install ./bindings/node
 ```
 
 `cargo xtask package-node` makes the packages as they are published, under `target/node/`.
-
-</Tab>
-<Tab value="npm">
-
-From the first registry release:
-
-```sh
-npm install teigeodata
-```
 
 </Tab>
 </Tabs>
@@ -809,8 +799,16 @@ Deno, Bun, Node.js and Cloudflare Workers. The API is the Node.js package's (the
 the difference is where packs come from: a page has no file system, so it opens a pack from its
 bytes. After that one download, every query runs locally. The [playground](/playground) is this
 package in a page: every query on the pack below, with the code each answer came from.""",
-    install="""<Tabs items={["From a checkout (today)", "npm"]}>
-<Tab value="From a checkout (today)">
+    install="""<Tabs items={["npm", "From a checkout"]}>
+<Tab value="npm">
+
+```sh
+npm install teigeodata-wasm          # every component
+npm install teigeodata-wasm-lookup   # no name search: a smaller module
+```
+
+</Tab>
+<Tab value="From a checkout">
 
 """
     + FROM_CHECKOUT
@@ -818,16 +816,6 @@ package in a page: every query on the pack below, with the code each answer came
 cargo install wasm-bindgen-cli --version 0.2.130 --locked
 cargo xtask package-wasm          # needs binaryen's wasm-opt; writes target/wasm/full/
 npm install ./target/wasm/full
-```
-
-</Tab>
-<Tab value="npm">
-
-From the first registry release:
-
-```sh
-npm install teigeodata-wasm          # every component
-npm install teigeodata-wasm-lookup   # no name search: a smaller module
 ```
 
 </Tab>
@@ -880,11 +868,12 @@ handle is `Sendable`.""",
     install="""<Tabs items={["Swift Package Manager", "From a checkout"]}>
 <Tab value="Swift Package Manager">
 
-The release tags are the Swift releases. From the first release that carries the XCFramework:
+The release tags are the Swift releases; each one fetches the release's XCFramework and checks
+its checksum:
 
 ```swift title="Package.swift"
 dependencies: [
-    .package(url: "https://github.com/teispace/teigeodata", from: "1.0.0"),
+    .package(url: "https://github.com/teispace/teigeodata", from: "@VERSION@"),
 ],
 targets: [
     .target(name: "MyApp", dependencies: [.product(name: "TeiGeodata", package: "teigeodata")]),
@@ -954,20 +943,20 @@ lang(
     intro="""One library serves Kotlin and Java, on desktop JVMs (Java 17 or later) and on Android (API 24
 or later). It calls the native library through JNI; the JAR carries it for each desktop
 platform, the AAR for each Android ABI (arm64-v8a, armeabi-v7a, x86_64, 16 KB page aligned).""",
-    install="""<Tabs items={["Gradle", "From a checkout (today)"]}>
+    install="""<Tabs items={["Gradle", "From a checkout"]}>
 <Tab value="Gradle">
 
-From the first registry release, on Maven Central:
+On Maven Central:
 
 ```kotlin title="build.gradle.kts"
 dependencies {
-    implementation("com.teispace:teigeodata:1.0.0")            // desktop JVM
-    // implementation("com.teispace:teigeodata-android:1.0.0") // Android
+    implementation("com.teispace:teigeodata:@VERSION@")            // desktop JVM
+    // implementation("com.teispace:teigeodata-android:@VERSION@") // Android
 }
 ```
 
 </Tab>
-<Tab value="From a checkout (today)">
+<Tab value="From a checkout">
 
 """
     + FROM_CHECKOUT
@@ -1020,29 +1009,26 @@ lang(
     intro="""One package for Dart and Flutter on Android, iOS, macOS, Linux, Windows and the web. Natively
 it calls the C library through FFI, supplied by the package's build hook; on the web (dart2js or
 dart2wasm) the same classes run on the WebAssembly module.""",
-    install="""<Tabs items={["pub.dev", "From a checkout (today)"]}>
+    install="""<Tabs items={["pub.dev", "From the repository"]}>
 <Tab value="pub.dev">
-
-From the first registry release:
 
 ```sh
 dart pub add teigeodata      # or: flutter pub add teigeodata
 ```
 
 </Tab>
-<Tab value="From a checkout (today)">
+<Tab value="From the repository">
 
 ```yaml title="pubspec.yaml"
 dependencies:
   teigeodata:
     git:
       url: https://github.com/teispace/teigeodata
-      ref: v1.0.0
+      ref: v@VERSION@
       path: bindings/dart
 ```
 
-With no release library to download yet, point the build hook at a checkout to build it with
-cargo:
+To build the library with cargo instead of downloading it, point the build hook at a checkout:
 
 ```yaml title="pubspec.yaml"
 hooks:
@@ -1106,8 +1092,7 @@ go get github.com/teispace/teigeodata/bindings/go
 ```
 
 The module's versions are the tags `bindings/go/vX.Y.Z`, made with each release. Go 1.26 or
-later. Fetch the prebuilt library once (from the first
-release that carries it):
+later. Fetch the release's prebuilt library once:
 
 ```sh
 go run github.com/teispace/teigeodata/bindings/go/cmd/teigeodata-fetch
@@ -1147,10 +1132,10 @@ lang(
     intro="""The C library is the ABI every other binding builds on: plain functions, opaque handles,
 status codes, and no global state but each thread's last error. Its header is checked against the
 last release's on every change, so a minor release never breaks a program built against it.""",
-    install="""<Tabs items={["Release package", "From a checkout (today)"]}>
+    install="""<Tabs items={["Release package", "From a checkout"]}>
 <Tab value="Release package">
 
-From the first release: unpack `teigeodata-c-<version>-<target>.tar.gz`, which holds the headers,
+From the [release](https://github.com/teispace/teigeodata/releases/latest): unpack `teigeodata-c-<version>-<target>.tar.gz`, which holds the headers,
 the shared and static libraries, a pkg-config file and a CMake package.
 
 ```sh
@@ -1163,7 +1148,7 @@ target_link_libraries(tour PRIVATE teigeodata::teigeodata)
 ```
 
 </Tab>
-<Tab value="From a checkout (today)">
+<Tab value="From a checkout">
 
 """
     + FROM_CHECKOUT
@@ -1236,17 +1221,17 @@ lang(
     intro="""`Teispace.TeiGeodata` is the .NET binding: source-generated P/Invoke (`LibraryImport`) with
 no marshalling at run time, compatible with NativeAOT and trimming. The package carries the
 native library for Windows, macOS and Linux (glibc and musl) on x64 and Arm64.""",
-    install="""<Tabs items={["NuGet", "From a checkout (today)"]}>
+    install="""<Tabs items={["From a checkout", "NuGet"]}>
 <Tab value="NuGet">
 
-From the first registry release:
+Not on NuGet yet. Once it is:
 
 ```sh
 dotnet add package Teispace.TeiGeodata
 ```
 
 </Tab>
-<Tab value="From a checkout (today)">
+<Tab value="From a checkout">
 
 """
     + FROM_CHECKOUT

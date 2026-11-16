@@ -234,7 +234,7 @@ export default function HomePage() {
             </div>
             <div data-hero="" style={delay(380)} className="mt-6 max-w-full">
               <CopyCommand
-                command="cargo add teigeodata-engine --git https://github.com/teispace/teigeodata --tag v1.0.0"
+                command="cargo add teigeodata-engine"
                 label="Copy the install command"
               />
             </div>

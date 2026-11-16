@@ -338,11 +338,21 @@ fn bump(root: &Path, to: &str) -> Result<String, Vec<String>> {
             problems.push(format!("{lock}: `cargo update --workspace` failed"));
         }
     }
+    // The site's install page shows the version it reads from Cargo.toml: write it again.
+    let guides = Command::new("python3")
+        .current_dir(root)
+        .arg("site/scripts/guides.py")
+        .status();
+    if !matches!(guides, Ok(s) if s.success()) {
+        problems.push(
+            "site/scripts/guides.py failed: the install page keeps the old version".to_owned(),
+        );
+    }
     if !problems.is_empty() {
         return Err(problems);
     }
     Ok(format!(
-        "bumped {from} to {to}: {changed} lines, {} lockfiles. Next: `cargo xtask bindings` \
+        "bumped {from} to {to}: {changed} lines, {} lockfiles, the install page. Next: `cargo xtask bindings` \
          (the parity data), the CHANGELOG's section, then `cargo xtask bump --check`",
         locks.len()
     ))
