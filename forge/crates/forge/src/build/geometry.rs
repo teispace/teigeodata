@@ -104,6 +104,8 @@ pub(super) fn sections(
     let mut linked: Vec<(u8, u32, &Poly)> = g
         .polys
         .iter()
+        // Filler pieces of a derived level (D-363) complete their parent: no place, no polygon.
+        .filter(|p| !p.pcode.starts_with(topo::pov::FILLER))
         .map(|p| {
             let k = key(p, country)?;
             let row = row_of

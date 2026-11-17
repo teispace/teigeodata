@@ -633,10 +633,10 @@ queries:
     source: "generated: unique native-script alternate"
   - id: np-0103
     class: exact_native
-    query: "मिरकोट गोरखा"
+    query: "मिरकोट"
     expect: { "geonames:8469125": 3 }
     max_rank: 1
-    source: "generated: unique native-script alternate"
+    source: "generated: unique native-script alternate, regraded: the alternate carried its district as a qualifier, removed by the reviewed names (D-359)"
   - id: np-0104
     class: exact_native
     query: "मेघौली"
