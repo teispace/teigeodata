@@ -1096,9 +1096,9 @@ queries:
   - id: np-0180
     class: typo
     query: "Shuddhdohan"
-    expect: { "codab:NP0549404": 3 }
+    expect: { "codab:NP0549404": 3, "codab:NP0548402": 3 }
     max_rank: 5
-    source: "generated: one keyboard edit"
+    source: "generated: one keyboard edit, regraded: Rupandehi's local level is also Shuddhodhan by its official name (reviewed names, D-359), so either answers"
   - id: np-0181
     class: typo
     query: "Sibaartha"
