@@ -285,7 +285,9 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 - [ ] `teigeodata-wasm` `store` feature and `store-worker`: install, update, remove, pin, repair,
   status over `fetch` and OPFS; browser tests (Chromium, Firefox, WebKit) against a local CORS
   mirror and a throwaway-key catalog
-- [ ] `extract --languages` and boundaries per area (TG-26), the app pack's size measured
+- [x] TG-26 as a forge profile, not `extract` (search keys must be rebuilt with each country's
+  keying rules, which live in the forge): `data/embed/app.yaml`, a part may leave its outlines
+  out; measured 2026-11-17 in [sizes](../../05-data/sizes.md#embedded-layers-built-from-profiles)
 - [ ] A public page on running a mirror (TG-24); the catalog live after the key ceremony
 
 ### 8.6 Exit review
@@ -328,3 +330,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-17 | 8.5 registry accounts and 8.6 registries checked: 1.0.1 by hand, 1.1.0 from CI | The release replaced the planned tag-republish mode |
 
 | 2026-11-17 | 8.5b: packs at run time (TG-24 to TG-26), the browser store's research | D-362 |
+| 2026-11-17 | 8.5b: TG-26 by a profile rather than `extract` | The search keys need the forge's keying rules |
