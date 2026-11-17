@@ -1,0 +1,15 @@
+# Nepal's app pack from the main build (TG-27, D-363): every Nepal place, with boundaries down to
+# the ward (OpenStreetMap's wards cut to COD-AB's local levels, ODbL), outlines simplified at
+# 50 m, names in Nepali, English, Hindi and Sanskrit, place heights but no terrain grid. No
+# world part: the world comes from the `app` layer beside it.
+about: >-
+  Nepal for an app, from the main build: every place, boundaries down to the ward at 50 m,
+  named in Nepali, English, Hindi and Sanskrit.
+build: main
+components: [point, elevation, admin, names, search, timezone, tz-rules, boundaries, admin-index]
+languages: [ne-Deva, en, hi-Deva, sa-Deva]
+world: none
+countries:
+  np: { rows: all, tolerance_m: 50 }
+address: app-np
+wire_kb: 20000

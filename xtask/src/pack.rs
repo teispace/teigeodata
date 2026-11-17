@@ -3,7 +3,9 @@
 //! licence (`odbl` main, `cc-by-4.0` lite, ADR-0002) and carries the sources' notices; in a
 //! lite pack every notice belongs only to sources whose licence class the lite build may read
 //! (`CLEAN_ROOM.md` rule 2). A notice no pinned source states is refused: the pack cannot say
-//! where it came from.
+//! where it came from. A reviewed name's source (D-359) is stated by its country's
+//! `reviewed-sources.yaml`, whose `credit` counts as a notice when the build reads its class
+//! (D-360).
 //!
 //! G-wire (D-135): the pack's wire bytes per component ([`crate::wire`]) add up to its
 //! transport asset, and each component the country budgets (`wire_kb`) fits.
@@ -21,6 +23,49 @@ use crate::sources::LITE;
 struct Lock {
     #[serde(default, rename = "source")]
     sources: Vec<Source>,
+    /// The reviewed names' sources with a credit, from every country (D-360).
+    #[serde(skip)]
+    credits: Vec<Source>,
+}
+
+/// A country's `reviewed-sources.yaml`: only what G-lic reads.
+#[derive(Deserialize)]
+struct Reviewed {
+    sources: Vec<ReviewedSource>,
+}
+
+#[derive(Deserialize)]
+struct ReviewedSource {
+    prefix: String,
+    class: String,
+    #[serde(default)]
+    credit: Option<String>,
+}
+
+/// Every country's reviewed-name sources that carry a credit, as sources of notices.
+fn reviewed_credits(root: &Path) -> Result<Vec<Source>, String> {
+    let dir = root.join("data/countries");
+    let mut out = Vec::new();
+    let mut entries: Vec<_> = fs::read_dir(&dir)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .filter_map(Result::ok)
+        .map(|e| e.path().join("reviewed-sources.yaml"))
+        .filter(|p| p.is_file())
+        .collect();
+    entries.sort();
+    for path in entries {
+        let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let r: Reviewed =
+            serde_saphyr::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        out.extend(r.sources.into_iter().filter_map(|s| {
+            s.credit.map(|c| Source {
+                id: format!("reviewed source {}", s.prefix),
+                licence_class: s.class,
+                attribution: c.trim().to_owned(),
+            })
+        }));
+    }
+    Ok(out)
 }
 
 #[derive(Deserialize)]
@@ -47,7 +92,9 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     let pack = Pack::open_verified(&bytes).map_err(|e| one(format!("{path}: {e}")))?;
     let lock_text =
         fs::read_to_string(root.join("data/sources.lock")).map_err(|e| one(e.to_string()))?;
-    let lock: Lock = toml::from_str(&lock_text).map_err(|e| one(format!("sources.lock: {e}")))?;
+    let mut lock: Lock =
+        toml::from_str(&lock_text).map_err(|e| one(format!("sources.lock: {e}")))?;
+    lock.credits = reviewed_credits(root).map_err(one)?;
     let m = pack.manifest();
     let problems = check(m.text(Tag::LICENCE), m.attribution(), lite, &lock);
     if !problems.is_empty() {
@@ -135,10 +182,13 @@ fn check(licence: Option<&str>, attribution: Option<&str>, lite: bool, lock: &Lo
         problems.push("no attribution: every pack carries its sources' notices (D-126)".into());
         return problems;
     };
+    // A reviewed source's credit counts only when the build reads its class (D-360).
+    let reads = |class: &str| LITE.contains(&class) || (!lite && class == "odbl");
     for line in text.lines() {
         let owners: Vec<&Source> = lock
             .sources
             .iter()
+            .chain(lock.credits.iter().filter(|s| reads(&s.licence_class)))
             .filter(|s| s.attribution == line)
             .collect();
         if owners.is_empty() {
@@ -198,6 +248,29 @@ attribution = "GeoNames, CC BY 4.0"
             check(Some("odbl"), Some("Someone else"), false, &lock)[0].contains("no pinned source")
         );
         assert!(check(Some("odbl"), None, false, &lock)[0].contains("no attribution"));
+    }
+
+    #[test]
+    fn a_reviewed_sources_credit_counts_when_the_build_reads_it() {
+        let mut lock: Lock = toml::from_str(LOCK).unwrap();
+        let credit = |class: &str, text: &str| super::Source {
+            id: "reviewed".into(),
+            licence_class: class.into(),
+            attribution: text.into(),
+        };
+        lock.credits = vec![credit("government", "Gov"), credit("share-alike", "Wiki")];
+        let none: [String; 0] = [];
+        let gov = Some("GeoNames, CC BY 4.0\nGov");
+        assert_eq!(check(Some("cc-by-4.0"), gov, true, &lock), none);
+        assert_eq!(check(Some("odbl"), gov, false, &lock), none);
+        let wiki = Some("GeoNames, CC BY 4.0\nWiki");
+        assert!(check(Some("odbl"), wiki, false, &lock)[0].contains("no pinned source"));
+    }
+
+    #[test]
+    fn the_reviewed_sources_files_read() {
+        let credits = super::reviewed_credits(&super::super::workspace_root()).unwrap();
+        assert!(credits.iter().any(|s| s.licence_class == "government"));
     }
 
     /// The lite classes here and in the forge's licence gate are one list.

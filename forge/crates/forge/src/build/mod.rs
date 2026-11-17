@@ -370,7 +370,6 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     admin.added = link_admins(&mut places, std::mem::take(&mut admin.links));
     naming::drop_qualified(&mut places, &mut naming);
     naming::cut_unit_type_words(&mut places, &profile.type_words, &mut naming);
-    let numbered_names = naming::numbered_names(&mut places, &units.numbered);
     let coverage = units.coverage.ok_or("the boundary source has no units")?;
     let modelled = population::run(g.grid.as_slice(), &units.levels, coverage, &mut places)?;
     let out_dir = build.join("pack").join(&a.cc);
@@ -388,16 +387,22 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         &mut places,
     )?;
     let corrected = corrections::run(root, who, &g.sources, &mut places, &units.levels, &out_dir)?;
-    let donated = donor::run(
-        root,
-        (&a.cc, &profile.romanise),
-        &profile.donors,
-        &profile.type_words,
-        &mut places,
-    )?;
-    let transliterated = xlit_fill::run(root, &profile.transliterate, &mut places)?;
+    // Units named by number take their parent's names after every tier (below), so the donor
+    // and transliteration tiers neither fill them nor count them (G-donor, D-363).
+    let (donated, transliterated) = naming::without(&mut places, &units.numbered, |rest| {
+        let donated = donor::run(
+            root,
+            (&a.cc, &profile.romanise),
+            &profile.donors,
+            &profile.type_words,
+            rest,
+        )?;
+        let transliterated = xlit_fill::run(root, &profile.transliterate, rest)?;
+        Ok::<_, String>((donated, transliterated))
+    })?;
     // The top of the names chain, after every other tier so its guards see the final names.
     let (reviewed, credits) = reviewed::run(root, &a.cc, a.build_name(), &mut places)?;
+    let numbered_names = naming::numbered_names(&mut places, &units.numbered);
     let attribution = with_credits(&g.attribution, &credits)?;
     let zones = zone_places(root, &lock, g.tz.as_deref(), coverage, &a)?;
     let rules = tz_rules::compile(root, &lock, g.tz.as_deref(), &zones)?;

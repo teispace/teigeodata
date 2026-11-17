@@ -440,6 +440,21 @@ mod qualified_tests {
         assert_eq!(naming.type_words_cut, 2);
     }
 
+    #[test]
+    fn numbered_units_are_held_out_and_keep_their_rows() {
+        let mut places: Vec<Place> = ["a", "w1", "b", "w2", "c"]
+            .iter()
+            .map(|k| place(k, PlaceKind::Admin, &[k]))
+            .collect();
+        let numbered = [("w1".to_owned(), 1), ("w2".to_owned(), 2)];
+        let seen = super::without(&mut places, &numbered, |rest| {
+            rest.iter().map(|p| p.key.clone()).collect::<Vec<_>>()
+        });
+        assert_eq!(seen, ["a", "b", "c"]);
+        let keys: Vec<&str> = places.iter().map(|p| p.key.as_str()).collect();
+        assert_eq!(keys, ["a", "w1", "b", "w2", "c"]);
+    }
+
     fn place(key: &str, kind: PlaceKind, names: &[&str]) -> Place {
         Place {
             key: key.into(),
@@ -538,10 +553,44 @@ fn digits(n: u32, lang: Option<&str>) -> String {
     })
 }
 
+/// Runs `f` on `places` without the units named by number (`numbered`), which keep their rows.
+pub(super) fn without<T>(
+    places: &mut Vec<Place>,
+    numbered: &[(String, u32)],
+    f: impl FnOnce(&mut [Place]) -> T,
+) -> T {
+    if numbered.is_empty() {
+        return f(places);
+    }
+    let keys: BTreeSet<&str> = numbered.iter().map(|(k, _)| k.as_str()).collect();
+    let held_out: Vec<bool> = places
+        .iter()
+        .map(|p| keys.contains(p.key.as_str()))
+        .collect();
+    let (mut held, mut rest) = (
+        Vec::with_capacity(keys.len()),
+        Vec::with_capacity(places.len()),
+    );
+    for (p, &h) in std::mem::take(places).into_iter().zip(&held_out) {
+        if h {
+            held.push(p);
+        } else {
+            rest.push(p);
+        }
+    }
+    let out = f(&mut rest);
+    let (mut held, mut rest) = (held.into_iter(), rest.into_iter());
+    *places = held_out
+        .iter()
+        .filter_map(|&h| if h { held.next() } else { rest.next() })
+        .collect();
+    out
+}
+
 /// Names of units named by number within their parent (a derived set's wards, D-363): each
 /// of the parent's names in a language, with `-` and the number in that language's digits
-/// ("कीर्तिपुर-३" beside the source's "Kirtipur-3"). Run after the parent's names are final
-/// (unit-type words cut), so a ward never repeats "नगरपालिका". Returns how many were added.
+/// ("कीर्तिपुर-३" beside the source's "Kirtipur-3"). Run after every names tier, so a ward
+/// takes its parent's final names and never repeats "नगरपालिका". Returns how many were added.
 pub(super) fn numbered_names(places: &mut [Place], numbered: &[(String, u32)]) -> usize {
     let index: BTreeMap<&str, usize> = places
         .iter()

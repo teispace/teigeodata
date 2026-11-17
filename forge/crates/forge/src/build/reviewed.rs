@@ -398,10 +398,11 @@ pub(super) fn run(
         }
         return Err(e);
     }
-    // Every applied name's sources are credited in the pack's notices (D-360).
+    // Every applied name's sources that this build reads are credited in the pack's notices
+    // (D-360); a source it may not read, cited beside one it reads, gave the name nothing.
     let mut credited: Vec<String> = Vec::new();
     for r in outcomes.get(&Outcome::Applied).into_iter().flatten() {
-        for c in credits(&sources, &r.source) {
+        for c in credits(&sources, &r.source, admitted) {
             if !credited.iter().any(|k| k == c) {
                 credited.push(c.to_owned());
             }
@@ -511,12 +512,17 @@ fn read_sources(root: &Path, cc: &str) -> Result<Option<Sources>, String> {
     Ok(Some(s))
 }
 
-/// The credits of a row's sources, in order.
-fn credits<'a>(s: &'a Sources, source: &str) -> impl Iterator<Item = &'a str> {
+/// The credits of a row's sources whose class `admitted` takes, in order.
+fn credits<'a>(
+    s: &'a Sources,
+    source: &str,
+    admitted: impl Fn(&str) -> bool,
+) -> impl Iterator<Item = &'a str> {
     source
         .split(" ; ")
         .map(str::trim)
         .filter_map(|one| s.list.iter().find(|k| one.starts_with(&k.prefix)))
+        .filter(move |k| admitted(&k.class))
         .filter_map(|k| k.credit.as_deref().map(str::trim))
 }
 
@@ -938,6 +944,18 @@ mod tests {
         );
         assert_eq!(classify(&s, JUDGEMENT).unwrap(), ("cc0".into(), false));
         assert!(classify(&s, "https://elsewhere/").is_err());
+        // A source the build does not read is not credited, though the row cites it.
+        let mut s = s;
+        if let Some(w) = s.list.first_mut() {
+            w.credit = Some("Wiki".into());
+        }
+        let lite = |c: &str| LITE.contains(&c);
+        let cited = "https://wiki/x ; https://gov/y";
+        assert_eq!(credits(&s, cited, lite).collect::<Vec<_>>(), ["Gov"]);
+        assert_eq!(
+            credits(&s, cited, |_| true).collect::<Vec<_>>(),
+            ["Wiki", "Gov"]
+        );
     }
 
     #[test]

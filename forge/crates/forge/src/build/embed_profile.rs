@@ -16,8 +16,9 @@
 //!   pack later changes nothing a person chose), an optional outline `tolerance_m`, and
 //!   `outlines: none` to leave its boundaries out (its places keep everything else);
 //! - `world`: the world part's city list (`geonames-cities5000` for cities of 5,000 or more,
-//!   TG-13), the default list when absent; `world_tolerance_m` and `world_outlines` cut the
-//!   world part's boundaries as a country's (TG-26);
+//!   TG-13), the default list when absent, or `none` for a layer of its countries alone
+//!   (TG-27); `world_tolerance_m` and `world_outlines` cut the world part's boundaries as a
+//!   country's (TG-26);
 //! - `wire_kb`: the layer's budget on the wire (the transport asset, zstd 19).
 //!
 //! The world part comes first, then the countries by code; a later part's row replaces an
@@ -65,7 +66,8 @@ struct File {
     machine_names: Machine,
     #[serde(default)]
     countries: BTreeMap<String, Country>,
-    /// The world part's city list (`forge world --cities`); the default list when absent.
+    /// The world part's city list (`forge world --cities`); the default list when absent;
+    /// [`NO_WORLD`] for no world part.
     #[serde(default)]
     world: Option<String>,
     /// The world part's label chain (`forge world --labels`, D-221).
@@ -596,8 +598,40 @@ fn components(names: &[String]) -> Result<Components, String> {
     Ok(Components::of(&list).closed())
 }
 
+/// `world: none`: a layer of the profile's countries alone, without the world part.
+const NO_WORLD: &str = "none";
+
 /// The world part, then each country by code, as the profile cuts it.
 fn inputs(root: &Path, p: &File, build: &str) -> Result<Vec<Input>, String> {
+    let read = |f: &Path| fs::read(f).map_err(|e| format!("{}: {e}", f.display()));
+    let mut out = Vec::new();
+    if p.world.as_deref() != Some(NO_WORLD) {
+        out.push(world_input(root, p, build)?);
+    } else if p.countries.is_empty() {
+        return Err("`world: none` with no country leaves the layer empty".to_owned());
+    }
+    for (cc, c) in &p.countries {
+        let f = match c.rows {
+            Rows::Slice => root.join(format!(
+                "data/build/baseline/{cc}/{cc}-baseline-{build}.tgd"
+            )),
+            Rows::All => root.join(format!("data/build/pack/{cc}/{cc}-places-{build}.tgd")),
+        };
+        out.push(Input {
+            name: format!(
+                "{cc} ({})",
+                if c.rows == Rows::All { "all" } else { "slice" }
+            ),
+            bytes: outlined(read(&f)?, c.outlines)?,
+            tolerance_m: c.tolerance_m,
+            cc: Some(cc.clone()),
+        });
+    }
+    Ok(out)
+}
+
+/// The world part as the profile cuts it.
+fn world_input(root: &Path, p: &File, build: &str) -> Result<Input, String> {
     let read = |f: &Path| fs::read(f).map_err(|e| format!("{}: {e}", f.display()));
     let extra: Vec<&str> = p
         .world_alternates
@@ -619,30 +653,12 @@ fn inputs(root: &Path, p: &File, build: &str) -> Result<Vec<Input>, String> {
     let world = root.join(format!(
         "data/build/baseline/world/world-baseline-{build}{variant}.tgd"
     ));
-    let mut out = vec![Input {
+    Ok(Input {
         name: "world".into(),
         bytes: outlined(read(&world)?, p.world_outlines)?,
         tolerance_m: p.world_tolerance_m,
         cc: None,
-    }];
-    for (cc, c) in &p.countries {
-        let f = match c.rows {
-            Rows::Slice => root.join(format!(
-                "data/build/baseline/{cc}/{cc}-baseline-{build}.tgd"
-            )),
-            Rows::All => root.join(format!("data/build/pack/{cc}/{cc}-places-{build}.tgd")),
-        };
-        out.push(Input {
-            name: format!(
-                "{cc} ({})",
-                if c.rows == Rows::All { "all" } else { "slice" }
-            ),
-            bytes: outlined(read(&f)?, c.outlines)?,
-            tolerance_m: c.tolerance_m,
-            cc: Some(cc.clone()),
-        });
-    }
-    Ok(out)
+    })
 }
 
 fn all_rows(p: &Pack<'_>) -> Result<Vec<u32>, String> {
