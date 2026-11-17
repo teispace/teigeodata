@@ -276,6 +276,18 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   2026-11-16; the runbook records them
 - [ ] The maintainer: the key ceremony (phase 4.3), Pages (`DOCS_DEPLOY`)
 
+### 8.5b Packs at run time on every platform (TG-24, TG-25, TG-26; D-362)
+
+- [x] Research: [the store in the browser](../../02-research/notes/browser-store.md): an async
+  driver in a Worker over the sans-I/O cores, OPFS, Web Locks, the baseline first
+- [ ] Refresh and store policy as sans-I/O plans in `teigeodata-sync`, the native client moved
+  onto them with its tests unchanged
+- [ ] `teigeodata-wasm` `store` feature and `store-worker`: install, update, remove, pin, repair,
+  status over `fetch` and OPFS; browser tests (Chromium, Firefox, WebKit) against a local CORS
+  mirror and a throwaway-key catalog
+- [ ] `extract --languages` and boundaries per area (TG-26), the app pack's size measured
+- [ ] A public page on running a mirror (TG-24); the catalog live after the key ceremony
+
 ### 8.6 Exit review
 
 - [x] v1.0.0 tagged and published on GitHub (D-352: registries off) and checked from a scratch
@@ -314,3 +326,5 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-15 | 8.5: the data release split into the pre-release (done, data-2026.11.15) and the catalog (after the key ceremony) | D-247 |
 | 2026-11-16 | 8.6: v1.0.0 on GitHub first, the registries after the maintainer's test | D-352 |
 | 2026-11-17 | 8.5 registry accounts and 8.6 registries checked: 1.0.1 by hand, 1.1.0 from CI | The release replaced the planned tag-republish mode |
+
+| 2026-11-17 | 8.5b: packs at run time (TG-24 to TG-26), the browser store's research | D-362 |
