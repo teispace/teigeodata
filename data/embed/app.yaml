@@ -18,6 +18,8 @@ world_towns: [in]
 # The world part answers by point; `admin_at` abroad needs its boundaries back
 # (`world_tolerance_m` instead of `world_outlines: none`).
 world_outlines: none
+# Its own name in the manifest, with the data release's version from `--release` (TG-26).
+address: app
 countries:
   np: { rows: all, tolerance_m: 20 }
 wire_kb: 10000

@@ -94,6 +94,11 @@ struct File {
     /// Whether the world part keeps its boundaries (TG-26).
     #[serde(default)]
     world_outlines: Outlines,
+    /// The layer's own manifest address (TG-26): with it the layer is named apart from the
+    /// world part it was cut from and takes the release given by `--release`; without it the
+    /// layer keeps the world part's address and release (the `baseline` profile).
+    #[serde(default)]
+    address: Option<String>,
     wire_kb: u64,
 }
 
@@ -146,9 +151,15 @@ struct Input {
     cc: Option<String>,
 }
 
-pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, String> {
+pub(super) fn run(
+    root: &Path,
+    name: &str,
+    key: Option<&str>,
+    release: Option<&str>,
+) -> Result<String, String> {
     let t = Instant::now();
     let (path, p) = read_profile(root, name)?;
+    let named = layer_name(&p, release).map_err(|e| format!("{}: {e}", path.display()))?;
     let build = p.build.as_str();
     let wanted = components(&p.components).map_err(|e| format!("{}: {e}", path.display()))?;
     let inputs = inputs(root, &p, build)?;
@@ -243,9 +254,25 @@ pub(super) fn run(root: &Path, name: &str, key: Option<&str>) -> Result<String, 
         &p,
         (&inputs, &packs),
         &sections,
-        (key, tzdb.as_deref()),
+        (key, tzdb.as_deref(), named),
         (t, &outlines),
     )
+}
+
+/// The layer's own address and release, when the profile names an address: the release is
+/// `--release`'s, required then; a release without an address is refused.
+fn layer_name<'a>(
+    p: &'a File,
+    release: Option<&'a str>,
+) -> Result<Option<(&'a str, &'a str)>, String> {
+    match (p.address.as_deref(), release) {
+        (Some(a), Some(r)) => Ok(Some((a, r))),
+        (Some(a), None) => Err(format!("the layer `{a}` needs `--release <release>`")),
+        (None, Some(_)) => {
+            Err("`--release` names a layer with its own `address`; the profile has none".to_owned())
+        }
+        (None, None) => Ok(None),
+    }
 }
 
 /// The profile `data/embed/<name>.yaml` and its path; its build is `lite` or `main`.
@@ -403,11 +430,11 @@ fn finish(
     p: &File,
     (inputs, packs): (&[Input], &[Pack<'_>]),
     sections: &[extract::Body],
-    key: (Option<&str>, Option<&str>),
+    (key, tzdb, named): (Option<&str>, Option<&str>, Option<(&str, &str)>),
     (t, outlines): (Instant, &str),
 ) -> Result<String, String> {
     let build = p.build.as_str();
-    let out = super::embed::write(packs, sections, key, root)?;
+    let out = super::embed::write(packs, sections, (key, tzdb, named), root)?;
     super::baseline::check(&out, super::embed::rows_of(sections))?;
     let replaced = super::embed::check_ids(packs, &out)?;
     let asset =
@@ -829,6 +856,29 @@ mod tests {
             (m.manifest().address(), m.manifest().release()),
             ("np", "2026.11.0")
         );
+    }
+
+    #[test]
+    fn a_layer_with_an_address_needs_its_own_release() {
+        let file = |extra: &str| -> super::File {
+            serde_saphyr::from_str(&format!(
+                "about: x\nbuild: lite\ncomponents: [point]\nwire_kb: 1\n{extra}"
+            ))
+            .unwrap()
+        };
+        let named = file("address: app-np\n");
+        assert_eq!(
+            super::layer_name(&named, Some("2026.11.18")).unwrap(),
+            Some(("app-np", "2026.11.18"))
+        );
+        assert!(
+            super::layer_name(&named, None)
+                .unwrap_err()
+                .contains("--release")
+        );
+        let plain = file("");
+        assert_eq!(super::layer_name(&plain, None).unwrap(), None);
+        assert!(super::layer_name(&plain, Some("2026.11.18")).is_err());
     }
 
     #[test]

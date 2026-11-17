@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! forge embed [--lite] [--key <seed-file>]
-//! forge embed --profile <name> [--key <seed-file>]
+//! forge embed --profile <name> [--key <seed-file>] [--release <release>]
 //! ```
 //!
 //! Merges the world part (`forge world`) and every country's slice (`forge baseline <cc>`) of
@@ -40,6 +40,7 @@ struct Args {
     lite: bool,
     key: Option<String>,
     profile: Option<String>,
+    release: Option<String>,
 }
 
 fn parse(args: &[String]) -> Result<Args, String> {
@@ -47,6 +48,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
         lite: false,
         key: None,
         profile: None,
+        release: None,
     };
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -55,6 +57,9 @@ fn parse(args: &[String]) -> Result<Args, String> {
             "--key" => a.key = Some(it.next().ok_or("--key needs a seed file")?.clone()),
             "--profile" => {
                 a.profile = Some(it.next().ok_or("--profile needs a name")?.clone());
+            }
+            "--release" => {
+                a.release = Some(it.next().ok_or("--release needs a release")?.clone());
             }
             other => return Err(format!("forge embed: unknown argument {other}")),
         }
@@ -90,7 +95,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let t = Instant::now();
     let a = parse(args)?;
     if let Some(name) = &a.profile {
-        return super::embed_profile::run(root, name, a.key.as_deref());
+        return super::embed_profile::run(root, name, a.key.as_deref(), a.release.as_deref());
     }
     let build = if a.lite { "lite" } else { "main" };
     let dir = root.join("data/build/baseline");
@@ -131,7 +136,12 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     // as a profile's are (D-224), so the shipped baseline equals the `baseline` profile's.
     let (tzdb, body) = super::embed_profile::tz_rules(root, super::world::DEFAULT_TZ, &sections)?;
     sections.push(body);
-    let out = write(&packs, &sections, (a.key.as_deref(), Some(&tzdb)), root)?;
+    let out = write(
+        &packs,
+        &sections,
+        (a.key.as_deref(), Some(&tzdb), None),
+        root,
+    )?;
     super::baseline::check(&out, rows_of(&sections))?;
     let replaced = check_ids(&packs, &out)?;
     let file = dir.join(format!("baseline-{build}.tgd"));
@@ -159,16 +169,18 @@ pub(super) fn rows_of(sections: &[extract::Body]) -> usize {
         .unwrap_or(0)
 }
 
-/// The world part's address, release and licence; every part's attribution, each line once.
+/// The world part's address and release, or the layer's own (`named`); the world part's
+/// licence; every part's attribution, each line once.
 pub(super) fn write(
     packs: &[Pack<'_>],
     sections: &[extract::Body],
-    (key, tzdb): (Option<&str>, Option<&str>),
+    (key, tzdb, named): (Option<&str>, Option<&str>, Option<(&str, &str)>),
     root: &Path,
 ) -> Result<Vec<u8>, String> {
     let e = |e: teigeodata_format::Error| e.to_string();
     let world = packs.first().ok_or("no parts")?.manifest();
-    let mut w = Writer::new(world.address(), "baseline", world.release()).map_err(e)?;
+    let (address, release) = named.unwrap_or((world.address(), world.release()));
+    let mut w = Writer::new(address, "baseline", release).map_err(e)?;
     let mut seen = BTreeSet::new();
     let mut notices = String::new();
     for p in packs {
