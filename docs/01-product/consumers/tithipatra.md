@@ -56,9 +56,9 @@ Placed by D-362. TG-24 and TG-25 are P0; the browser comes first.
 
 | TG | Request | Status | Notes |
 |---|---|---|---|
-| TG-20 | Modelled populations in the lite pack | planned: next Nepal data release | |
+| TG-20 | Modelled populations in the lite pack | planned: next Nepal data release | Reported 2026-11-17: lite gives Lumbini Province 2,078 people |
 | TG-21 | A city's own population, not its district's | planned: next Nepal data release | Kathmandu's level-3 unit carries the district's count |
-| TG-22 | Former units marked as former | planned: next Nepal data release | The old development regions sit at level 1 |
+| TG-22 | Former units marked as former | planned: next Nepal data release | The old development regions sit at level 1; the former zones ("Bagmati zone") answer as current units (reported 2026-11-17) |
 | TG-23 | Names per language in `export --format ndjson` | planned | As `get --names --json` gives them |
 | TG-24 | The signed catalog live, and a mirror the catalog trusts | blocked on the key ceremony (maintainer) | Store, verifier and multi-mirror fetch are built. Mirror layout sent: metadata `N.root.json`, `timestamp.json`, `V.snapshot.json`, `V.targets.json`, `V.<role>.json`; assets `<address>.<component>.<release>.<hash8>.tgd.zst` with `Range` (206); CORS for browsers. A public "running a mirror" page follows |
 | TG-25 | The store in the browser (fetch, Cache Storage or IndexedDB, Worker, the baseline first) | research done ([note](../../02-research/notes/browser-store.md)): OPFS and an async Worker driver | Not built: `teigeodata-wasm` opens bytes only. The verify and install core is `no_std` and sans-I/O; missing are a fetch transport, a storage backend and a Worker entry |
@@ -66,6 +66,11 @@ Placed by D-362. TG-24 and TG-25 are P0; the browser comes first.
 | TG-27 | Nepal's wards with outlines, so `admin_at` names the ward | planned (D-363): main build, two packs | The consumer takes ODbL for Nepal. Neither build has a ward (their level-4 places are the former village development committees); OpenStreetMap has 6,741 ward relations, so the main build gains an OSM boundary stage for a country's deepest level. App data: Nepal main (wards simplified, ne/en/hi/sa, no DEM) plus the world lite layer, sizes at 50 m and 100 m once built. Lite stays open (Q-035) |
 | TG-28 | Nepali and Hindi names for the world's cities | partly there: the app pack carries GeoNames and CLDR/Wikidata labels in ne and hi | Measured 2026-11-17 on the app pack: लण्डन, दिल्ली, टोकियो, न्यूयोर्क, पेरिस find their cities; लन्डन (half न) does not, and लंदन is the Hindi form. Needs Devanagari spelling folds in the search keys (nasal forms, ण/न) from the lexicons, and the Wikidata labels as alternates, not only fallbacks |
 | TG-29 | Hindi and Sanskrit names across Nepal's pack | partly there: the app pack has Sanskrit on 121 Nepal places | No pinned source covers Sanskrit widely; Hindi follows Wikidata labels. Coverage grows with sources, measured per release |
+| TG-30 | One ID for a place in lite and main | planned (Q-038) | The two lines' registries diverged against D-094: Kathmandu is `tgd:np/2453` in lite and `3131` in main, and no serial matches. Source keys match 95,444 of 95,726 lite places (99.7 %), 271 tie, 11 share none (data-2026.11.15 registries, measured 2026-11-17). Today the cross-pack key is a source key (`wikidata`, else `geonames`); a lite-to-main bridge file ships with the next release |
+| TG-31 | One reviewed spelling across a place's levels | planned: reviewed names (D-359) | Kathmandu is काठमाण्डौ on the settlement and काठमाडौँ on the metropolitan city; the reviewed form becomes canonical on every level, the other an alternate |
+| TG-32 | Landmarks as their own class | research: a new kind is a format change | Narayanhiti Royal Palace is a settlement. The schema has seven kinds and no landmark; GeoNames' spot features need their own kind or a mapping to `locality` |
+| TG-33 | The coarse terrain grid as an optional layer pack | planned: next data release | `dem-coarse` (D-225, 518 kB on the wire for Nepal) published beside the app packs, installed only when asked |
+| TG-34 | The app layer under its own name and release | done (73296e3) | A profile's `address` names the layer; `forge embed --release` gives its release. data-2026.11.17 still reads `world` 2026.11.15; the next release carries `app` and its own version |
 
 ## Questions back
 
