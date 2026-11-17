@@ -13,9 +13,11 @@
 //!   is always kept; every kept name carries its origin, so an app can show machine names apart;
 //! - `countries`: per country code, `rows: slice` (the country's baseline slice, `forge
 //!   baseline`) or `rows: all` (every place of its pack, with the pack's IDs, so installing the
-//!   pack later changes nothing a person chose), and an optional outline `tolerance_m`;
+//!   pack later changes nothing a person chose), an optional outline `tolerance_m`, and
+//!   `outlines: none` to leave its boundaries out (its places keep everything else);
 //! - `world`: the world part's city list (`geonames-cities5000` for cities of 5,000 or more,
-//!   TG-13), the default list when absent;
+//!   TG-13), the default list when absent; `world_tolerance_m` and `world_outlines` cut the
+//!   world part's boundaries as a country's (TG-26);
 //! - `wire_kb`: the layer's budget on the wire (the transport asset, zstd 19).
 //!
 //! The world part comes first, then the countries by code; a later part's row replaces an
@@ -86,7 +88,25 @@ struct File {
     /// The timezone source whose tzdb release compiles `tz-rules` (D-224); the world part's.
     #[serde(default)]
     tz: Option<String>,
+    /// The world part's outline tolerance, as a country's `tolerance_m` (TG-26).
+    #[serde(default)]
+    world_tolerance_m: Option<u32>,
+    /// Whether the world part keeps its boundaries (TG-26).
+    #[serde(default)]
+    world_outlines: Outlines,
     wire_kb: u64,
+}
+
+/// `outlines`: whether a part keeps its boundaries (TG-26). Without them its places keep every
+/// other section; `admin_at` answers only where another part's boundaries reach.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum Outlines {
+    /// Kept, at the part's tolerance.
+    #[default]
+    Keep,
+    /// Left out.
+    None,
 }
 
 #[derive(Deserialize)]
@@ -95,6 +115,8 @@ struct Country {
     rows: Rows,
     #[serde(default)]
     tolerance_m: Option<u32>,
+    #[serde(default)]
+    outlines: Outlines,
 }
 
 /// `machine_names`: what becomes of the names a program wrote.
@@ -572,8 +594,8 @@ fn inputs(root: &Path, p: &File, build: &str) -> Result<Vec<Input>, String> {
     ));
     let mut out = vec![Input {
         name: "world".into(),
-        bytes: read(&world)?,
-        tolerance_m: None,
+        bytes: outlined(read(&world)?, p.world_outlines)?,
+        tolerance_m: p.world_tolerance_m,
         cc: None,
     }];
     for (cc, c) in &p.countries {
@@ -588,7 +610,7 @@ fn inputs(root: &Path, p: &File, build: &str) -> Result<Vec<Input>, String> {
                 "{cc} ({})",
                 if c.rows == Rows::All { "all" } else { "slice" }
             ),
-            bytes: read(&f)?,
+            bytes: outlined(read(&f)?, c.outlines)?,
             tolerance_m: c.tolerance_m,
             cc: Some(cc.clone()),
         });
@@ -603,6 +625,40 @@ fn all_rows(p: &Pack<'_>) -> Result<Vec<u32>, String> {
     u32::try_from(n)
         .map(|n| (0..n).collect())
         .map_err(|_| "too many rows".to_owned())
+}
+
+/// A part's pack as the merge takes it: as it is, or without the sections of `boundaries` and
+/// `admin-index` (a part without a section gives its rows none of it, [`extract::merge`]).
+fn outlined(bytes: Vec<u8>, outlines: Outlines) -> Result<Vec<u8>, String> {
+    if outlines == Outlines::Keep {
+        return Ok(bytes);
+    }
+    let pack = Pack::open_verified(&bytes).map_err(|e| e.to_string())?;
+    let drop: Vec<Kind> = [Component::Boundaries, Component::AdminIndex]
+        .iter()
+        .flat_map(|c| c.kinds().iter().copied())
+        .chain([Kind::BLOCK_HASHES])
+        .collect();
+    let m = pack.manifest();
+    let mut w = teigeodata_format::Writer::new(m.address(), m.component(), m.release())
+        .map_err(|e| e.to_string())?;
+    for (tag, value) in m.entries() {
+        if ![
+            teigeodata_format::Tag::ADDRESS,
+            teigeodata_format::Tag::COMPONENT,
+            teigeodata_format::Tag::RELEASE,
+        ]
+        .contains(&tag)
+        {
+            w.manifest(tag, value).map_err(|e| e.to_string())?;
+        }
+    }
+    let refs: Vec<(Kind, teigeodata_format::Part, Encoding, u64, &[u8])> = pack
+        .sections()
+        .filter(|s| !drop.contains(&s.kind()))
+        .map(|s| (s.kind(), s.part(), s.encoding(), s.item_count(), s.bytes()))
+        .collect();
+    w.pack_parts(&refs, None).map_err(|e| e.to_string())
 }
 
 /// The level of detail of a part's outlines: the finest within `tolerance_m`, full without one.
@@ -734,6 +790,45 @@ mod tests {
             1,
             &person
         ));
+    }
+
+    #[test]
+    fn a_part_without_outlines_keeps_every_other_section() {
+        use teigeodata_format::{Encoding, Kind, Pack, Writer};
+        let mut w = Writer::new("np", "places", "2026.11.0").unwrap();
+        let sections: [(Kind, &[u8]); 3] = [
+            (Kind::PLACES, b"places"),
+            (Kind::ARCS, b"arcs"),
+            (Kind::ADMIN_REGION, b"index"),
+        ];
+        for (k, b) in sections {
+            w.section_bytes(k, Encoding::RAW, 1, b).unwrap();
+        }
+        let pack = w
+            .layout(false)
+            .unwrap()
+            .assemble(&[b"places", b"arcs", b"index"])
+            .unwrap();
+        let kinds = |b: &[u8]| -> Vec<Kind> {
+            Pack::open_verified(b)
+                .unwrap()
+                .sections()
+                .map(|s| s.kind())
+                .collect()
+        };
+        assert_eq!(
+            super::outlined(pack.clone(), super::Outlines::Keep).unwrap(),
+            pack
+        );
+        let cut = super::outlined(pack, super::Outlines::None).unwrap();
+        let left = kinds(&cut);
+        assert!(left.contains(&Kind::PLACES));
+        assert!(!left.contains(&Kind::ARCS) && !left.contains(&Kind::ADMIN_REGION));
+        let m = Pack::open_verified(&cut).unwrap();
+        assert_eq!(
+            (m.manifest().address(), m.manifest().release()),
+            ("np", "2026.11.0")
+        );
     }
 
     #[test]
