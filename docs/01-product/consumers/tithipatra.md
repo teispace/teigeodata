@@ -50,6 +50,20 @@ labels. Plan: [embedded layer](../../02-research/notes/embedded-layer.md).
 | TG-19 | `reverse` with distance, bearing, inside | done (D-223, D-237, D-238) | Each `Near` carries `meters` and `bearing_deg` (from the place to the point, clockwise from north); `Engine::mark_inside(at, &mut scratch, &mut near)` sets `inside` for every country and unit among the answers with one `admin_at`. `Engine::reverse_in_country(at, k, …)` keeps the answer to the country holding the point, as the MVP's border rule did: by Birgunj (26.985, 84.880) the plain `reverse` names Raxaul, `reverse_in_country` names Birgunj; a point inside India names Raxaul, not the Nepali village across the line. `tgd reverse --in-country`. Point query p99 on a low-end phone 0.45 ms with it (G-phone). A settlement or locality with no outline holds the point when it is the nearest of its kind and within 750 m or 700 m (`SETTLEMENT_RADIUS_M`, `LOCALITY_RADIUS_M`, measured on building footprints): 10 m from a village is inside, 1.9 km is near |
 | TG-10 | Coarse elevation layer | done (D-225) | Component `dem-coarse`: Nepal at 15″ (about 464 m), 518 kB on the wire; error against the 1″ DEM P50 15.9 m, P90 61 m; in the `tithipatra` layer. `Height.resolution_m` says which grid answered |
 
+## Addendum 2: city ranking and run-time packs (2026-11-16, 2026-11-17)
+
+Placed by D-362. TG-24 and TG-25 are P0; the browser comes first.
+
+| TG | Request | Status | Notes |
+|---|---|---|---|
+| TG-20 | Modelled populations in the lite pack | planned: next Nepal data release | |
+| TG-21 | A city's own population, not its district's | planned: next Nepal data release | Kathmandu's level-3 unit carries the district's count |
+| TG-22 | Former units marked as former | planned: next Nepal data release | The old development regions sit at level 1 |
+| TG-23 | Names per language in `export --format ndjson` | planned | As `get --names --json` gives them |
+| TG-24 | The signed catalog live, and a mirror the catalog trusts | blocked on the key ceremony (maintainer) | Store, verifier and multi-mirror fetch are built. Mirror layout sent: metadata `N.root.json`, `timestamp.json`, `V.snapshot.json`, `V.targets.json`, `V.<role>.json`; assets `<address>.<component>.<release>.<hash8>.tgd.zst` with `Range` (206); CORS for browsers. A public "running a mirror" page follows |
+| TG-25 | The store in the browser (fetch, Cache Storage or IndexedDB, Worker, the baseline first) | research next | Not built: `teigeodata-wasm` opens bytes only. The verify and install core is `no_std` and sans-I/O; missing are a fetch transport, a storage backend and a Worker entry |
+| TG-26 | An app-sized pack: Nepal in full, the world's cities of 5,000+ and first-level units, ne/en/hi/sa | planned: `extract --languages` and boundaries per area | Scope refined 2026-11-17: `admin_at` must answer in Nepal down to the ward, so Nepal keeps its boundaries simplified for point-in-polygon; elsewhere none, or levels 0–1 heavily simplified (both sizes stated); India's districts and towns with their delta. Measured from `world-np-lite` (15.64 MB): with no boundaries at all 11.85 MB, 6.76 MB gzipped. Needs `extract` to take languages and a boundary level of detail per area |
+
 ## Questions back
 
 - TG-02: the codes come from a per-entry call, `iso_code(&place)`, not inside `admin_at`'s and
@@ -72,3 +86,4 @@ labels. Plan: [embedded layer](../../02-research/notes/embedded-layer.md).
 | 2026-11-11 | First reply: every TG placed in the plan | Tithipatra's brief (D-193) |
 | 2026-11-11 | TG-06 done; both TG-06 questions stay open | D-199 |
 | 2026-11-11 | Addendum 1 accepted and placed; TG-11 done | D-213 |
+| 2026-11-17 | Addendum 2 placed: TG-20 to TG-26 | D-362 |
