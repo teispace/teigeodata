@@ -291,6 +291,11 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   keying rules, which live in the forge): `data/embed/app.yaml`, a part may leave its outlines
   out; measured 2026-11-17 in [sizes](../../05-data/sizes.md#embedded-layers-built-from-profiles)
 - [ ] A public page on running a mirror (TG-24); the catalog live after the key ceremony
+- [ ] TG-27 (D-363): research note on assembling OSM boundary relations into areas (multipolygon
+  rules, invalid rings, matching to the boundary source's parents, ID reuse); then a main-build
+  stage giving a country's deepest admin level outlines from OSM (Nepal: 6,741 wards), a
+  `build.yaml` key, licence-gated; then an app profile for Nepal main (wards at 50 m and 100 m,
+  ne/en/hi/sa, no DEM) beside the world lite layer, both sizes measured
 
 ### 8.6 Exit review
 
@@ -333,3 +338,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 
 | 2026-11-17 | 8.5b: packs at run time (TG-24 to TG-26), the browser store's research | D-362 |
 | 2026-11-17 | 8.5b: TG-26 by a profile rather than `extract` | The search keys need the forge's keying rules |
+| 2026-11-17 | 8.5b: TG-27, ward outlines from OSM in the main build, app data as two packs | D-363 |
