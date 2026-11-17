@@ -21,10 +21,12 @@ without breaking the shared-arc topology (B10) and its parent check (G-topo)?
   keeps them out of lite.
 - A new stage, `deepest`, reads one OSM admin level from the pinned extract and assembles
   its relations into rings.
-- It cuts each area to the boundary source's finest unit that holds most of it, using the
-  same overlay as the world's first-level units (`topo::pov::cut`, D-150).
-- It gives narrow leftover slivers to the neighbouring area and keeps wider gaps as
-  fillers. It then writes the result as one more level of the boundary set.
+- It overlays the areas and the boundary source's finest units in one planar arrangement
+  (`topo::faces`): every ring is snap-rounded together, noded, and walked into faces. Each
+  face is labelled by its unit and by the area holding it.
+- It gives narrow faces to the neighbouring area and keeps wider gaps as fillers. A ward is
+  the union of its faces, so neighbours share their edges exactly. It then writes the result
+  as one more level of the boundary set.
 - The topology and the build read the derived set as they read COD-AB, so every level
   still nests exactly and shares one arc set.
 - **Correction, 2026-11-17:** neither build had a single ward before this. The 2,622 (lite)
@@ -66,7 +68,7 @@ hundreds of metres, and some leave holes.
 |---|---|---|---|
 | A. Wards as a separate layer, not in the topology | small change | a point can fall in a ward of one local level and inside another local level; two arc sets; `admin_at` disagrees with itself | no |
 | B. OSM as the whole boundary source (levels 1–4) | one consistent source | replaces COD-AB's P-codes (IDs) and its official lines; ODbL for every level | no |
-| C. Cut OSM wards to COD-AB's local levels, fill the rest, and dissolve the parents from them | levels nest exactly; COD-AB lines and P-codes kept; one arc set; reuses `pov::cut` | an overlay per ward; ward lines move to COD-AB's along local-level borders | **chosen** |
+| C. Cut OSM wards to COD-AB's local levels, fill the rest, and dissolve the parents from them | levels nest exactly; COD-AB lines and P-codes kept; one arc set | ward lines move to COD-AB's along local-level borders | **chosen** |
 
 ## 5. What we build ourselves, and why
 
@@ -75,24 +77,37 @@ hundreds of metres, and some leave holes.
   only boundary geometry, never the whole node table. It joins member ways into closed
   rings by node ID and reads them even–odd. A relation whose ways do not close is
   reported and left out.
-- **`topo::deepest`:** works on each area in turn.
-  - It takes the number from its tag (`ward`), or failing that from the trailing digits of
-    its name.
-  - It is cut to the finest unit holding most of it (`pov::cut`). Two areas with the same
-    number in one unit are dissolved into one.
-  - Each unit's remainder is split into parts. A part narrower than `SLIVER_M` on average
-    (mean width `2A/P`) goes to the area sharing the most border with it
-    (`pov::best_neighbour`).
-  - Any other part becomes a filler (code `~…`): no place, but it keeps the unit equal to
-    the union of its children.
-  - Each area's code is the unit's P-code plus the 2-digit number: Nepal's ward code, which
+- **`topo::faces`:** one planar arrangement of every ring, the areas' and the units'
+  together. Rings are snap-rounded on one grid and noded, half-edges are sorted around each
+  vertex by exact integer angle, and faces are walked. Each clockwise cycle (an island's
+  outside) becomes a hole of the smallest face of another component that encloses it.
+  `rings_of` turns a set of faces back into rings by cancelling twin edges.
+- **`topo::deepest`:** labels and groups the faces.
+  - An area's number comes from its tag (`ward`), or failing that from the trailing digits
+    of its name, within 1–99 (OSM holds `ward=1433`).
+  - A face takes the unit it lies in, and the area that holds most of it within that unit.
+    Two areas with the same number in one unit become one ward.
+  - A face narrower than `SLIVER_M` (60 m) on average (mean width `2A/P`) joins the
+    neighbour it shares the longest border with, in up to eight passes.
+  - Any other face with no area becomes a filler (code `~…`): no place, but the unit stays
+    equal to the union of its children.
+  - Each ward's code is the unit's P-code plus the 2-digit number: Nepal's ward code, which
     is also the ward's postal part (D-090).
   - Its English name follows the recipe's pattern (`{parent}-{number}`). The build adds the
-    parent's other names with the number in that script's digits.
+    parent's other names with the number in that script's digits (CLDR default numbering).
+- **Why one arrangement, not an overlay per ward:** the first build cut each ward with
+  `pov::cut` (D-150). Overlays run piece by piece snap their edges differently, so two
+  neighbours could overlap by a hair and an edge could border three units; G-topo failed.
+  With one arrangement every edge exists once, and the topology stage passes at 0.021 m
+  maximum deviation.
 - **The derived set:** written to `data/build/deepest/<admin>+<source>/` as the boundary
   source's own GeoJSON levels plus the new one. The topology stage reads it with a parent
   tolerance measured on the overlay's noise, not COD-AB's 1 m. The build reads it as its
   admin source.
+- **Measured on Nepal, 2026-11-17:** 6,723 OSM areas read and 18 left out (their ways do
+  not close); 6,717 numbered wards; 32 areas with no number. Fillers cover 12,240 km²: the
+  22 national parks and 7,666 km² of mountain areas inside municipalities with wards. The
+  stage takes about 60 s and a 481 MB peak. Topology: 8,081 polygons on 25,187 arcs.
 - **What must prove it:**
   - G-topo passes, with every local level equal to its wards plus fillers.
   - Ward count and coverage are reported per run.
