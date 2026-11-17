@@ -384,7 +384,16 @@ pub(super) fn verify(p: &Pack<'_>, rows: &[&Place], g: &Geometry) -> Result<Stri
     let a = Arcs::open(&p.section(Kind::ARCS).ok_or("no ARCS")?).map_err(e)?;
     let admin = Region::open_on_arcs(&p.section(Kind::ADMIN_REGION).ok_or("no ADMIN_REGION")?, &a)
         .map_err(e)?;
-    let pip = pip(&admin, &polys, &levels, rows)?;
+    // A derived level with filler pieces (D-363) covers its parents only in part.
+    let partial: Vec<bool> = levels
+        .iter()
+        .map(|&l| {
+            g.polys
+                .iter()
+                .any(|p| p.level == l && p.pcode.starts_with(topo::pov::FILLER))
+        })
+        .collect();
+    let pip = pip(&admin, &polys, (&levels, &partial), rows)?;
     let parts = verify_parts(p, (&admin, &polys), &levels, rows)?;
     Ok(format!(
         "{line}; every current admin unit and the country has its polygon.\n\n{pip}{parts}"
@@ -577,6 +586,15 @@ fn verify_parts(
     ))
 }
 
+/// Whether a place's units per level (`per`) are one at each level, or one down to a
+/// `partial` level and none from there on.
+fn levels_held(per: &[u8], partial: &[bool]) -> bool {
+    let held = per.iter().take_while(|&&n| n == 1).count();
+    held > 0
+        && per.iter().skip(held).all(|&n| n == 0)
+        && (held == per.len() || partial.get(held).copied().unwrap_or(false))
+}
+
 /// The largest share of settlements and localities outside every admin unit (G-pip): the
 /// source extracts reach past the border (Nepal 2026.11.0: 180 of 96,805, 0.19%, median 536 m
 /// out, 170 within 5 km); more means a boundary or a point source has gone wrong.
@@ -584,12 +602,13 @@ const MAX_OUTSIDE: f64 = 0.005;
 
 /// G-pip on the written pack: every settlement and locality inside the admin coverage lies
 /// in exactly one unit of each level, and its parent is the deepest of them; places outside
-/// every unit are counted, the first listed, and capped at [`MAX_OUTSIDE`]. Returns a line
-/// for the summary.
+/// every unit are counted, the first listed, and capped at [`MAX_OUTSIDE`]. A `partial`
+/// level (a derived level with fillers, D-363) may hold no unit at a place, and then neither
+/// may any level below it. Returns a line for the summary.
 fn pip(
     admin: &Region<'_>,
     polys: &Polygons<'_>,
-    levels: &[u8],
+    (levels, partial): (&[u8], &[bool]),
     rows: &[&Place],
 ) -> Result<String, String> {
     let mut group_of = vec![0_usize; polys.len()];
@@ -606,6 +625,7 @@ fn pip(
     };
     let mut got = [0_u32; region::MAX_SET];
     let (mut checked, mut outside, mut wrong) = (0_usize, Vec::new(), Vec::new());
+    let mut in_filler = 0_usize;
     for r in rows
         .iter()
         .filter(|r| matches!(r.kind, PlaceKind::Settlement | PlaceKind::Locality))
@@ -622,9 +642,12 @@ fn pip(
         for &i in held {
             per[group_of[i as usize]] += 1;
         }
-        if per.iter().any(|&n| n != 1) {
+        if !levels_held(&per, partial) {
             wrong.push(format!("{}: units per level {per:?}", r.key));
             continue;
+        }
+        if per.contains(&0) {
+            in_filler += 1;
         }
         let deepest = held.iter().copied().max_by_key(|&i| group_of[i as usize]);
         let want = deepest.and_then(|i| key_of(i as usize));
@@ -654,7 +677,7 @@ fn pip(
         ));
     }
     Ok(format!(
-        "G-pip: {checked} settlements and localities each lie in one unit of every level, the deepest their parent; {} ({:.2}%) outside every unit, first {:?}.",
+        "G-pip: {checked} settlements and localities each lie in one unit of every level, the deepest their parent ({in_filler} in a filler of a partial level, which holds none there); {} ({:.2}%) outside every unit, first {:?}.",
         outside.len(),
         share * 100.0,
         outside.iter().take(8).collect::<Vec<_>>()
@@ -785,4 +808,22 @@ pub(crate) fn measure_pack(root: &Path, name: &str) -> Result<String, String> {
         bytes.len(),
         sizes.join(", ")
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::levels_held;
+
+    #[test]
+    fn a_partial_level_may_hold_no_unit_and_nothing_below_it() {
+        let wards = [false, false, false, false, true];
+        assert!(levels_held(&[1, 1, 1, 1, 1], &wards));
+        assert!(levels_held(&[1, 1, 1, 1, 0], &wards));
+        // A complete level may not be skipped, nor a unit held below a gap, nor two held.
+        assert!(!levels_held(&[1, 1, 1, 0, 0], &wards));
+        assert!(!levels_held(&[1, 1, 0, 1, 1], &wards));
+        assert!(!levels_held(&[1, 1, 1, 2, 1], &wards));
+        assert!(!levels_held(&[0, 0, 0, 0, 0], &wards));
+        assert!(!levels_held(&[1, 1, 1, 1, 0], &[false; 5]));
+    }
 }
