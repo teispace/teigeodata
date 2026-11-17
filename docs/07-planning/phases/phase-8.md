@@ -296,6 +296,16 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   stage giving a country's deepest admin level outlines from OSM (Nepal: 6,741 wards), a
   `build.yaml` key, licence-gated; then an app profile for Nepal main (wards at 50 m and 100 m,
   ne/en/hi/sa, no DEM) beside the world lite layer, both sizes measured
+  - [x] Research note ([ward-boundaries](../../02-research/notes/ward-boundaries.md)), the stage
+    (`read::osm_areas`, `topo::faces`, `topo::deepest`, `forge deepest <cc>`), `build.yaml`
+    `deepest:`; 6,717 wards, G-topo 0.021 m (86788be)
+  - [x] Fixes found by CI (D-364): ward names after every names tier, reviewed credits in G-lic,
+    fillers draw no polygon, G-pip allows a filler gap and a parent on a shared border; golden
+    regrades for Mirkot and Shuddhodhan; lite green in run 44073019704
+  - [x] Profiles `app` (`address: app`), `app-np` (50 m) and `app-np-100` (100 m), `world: none`,
+    `forge embed --release`
+  - [ ] Main green in CI (run 44077137298 at 346ffc2), then: the world part, the three layers,
+    `admin_at` gives the ward, both sizes, the data release, tell the consumer
 
 ### 8.6 Exit review
 
@@ -339,3 +349,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-17 | 8.5b: packs at run time (TG-24 to TG-26), the browser store's research | D-362 |
 | 2026-11-17 | 8.5b: TG-26 by a profile rather than `extract` | The search keys need the forge's keying rules |
 | 2026-11-17 | 8.5b: TG-27, ward outlines from OSM in the main build, app data as two packs | D-363 |
+| 2026-11-17 | 8.5b: TG-27 sub-steps, the CI fixes and the release steps left | D-364 |
