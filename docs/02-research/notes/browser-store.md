@@ -1,6 +1,6 @@
 ---
 title: "The store in the browser"
-status: research
+status: accepted
 updated: 2026-11-17
 owner: teigeodata maintainers
 revisit: 2027-05-17
@@ -148,6 +148,44 @@ lite pack without boundaries at 11.85 MB.
 - An install killed partway (the tab closed) resumes or rolls back on the next open.
 - Memory and time to open: Nepal's lite pack and the TG-26 app pack, in Chrome and Safari.
 - Two tabs never write at the same time.
+
+### 5b. Embedding: the store writes, any wasm reads (added 2026-11-17)
+
+An app may hold its engine inside its own wasm (a host core built on `teigeodata-engine`), so
+the store must not bring a second engine. The contract, option (a) of the consumer's review:
+
+- **The store worker only writes.** It owns `staging/`, `packs/` and the index, and holds the
+  store's Web Lock. It never needs an engine of its own.
+- **Installed files never change.** Each installed pack is a file named by its content
+  (`<address>.<component>.<release>.<hash8>.tgd`). An update installs a new file, so a reader's
+  file never changes under it.
+- **The index is the commit.** It lists the installed packs with each one's file name, length,
+  head hash and installed parts, plus a generation number. It is written to a temporary file
+  and moved over the old one. A reader sees the old set until that move, then the new one.
+- **Readers announce themselves.** The store posts `{generation}` on a `BroadcastChannel`
+  after each swap. A reader holds a *shared* Web Lock named for the generation it has open, and
+  takes the new one before releasing the old. The store deletes a generation's unused files
+  only once it can take that generation's lock *exclusively*, so files in use are never
+  deleted.
+- **Reading is not exclusive.** A reader opens a pack with `getFile()` (Chrome 86, Firefox
+  111, Safari 15.2) and reads ranges with `Blob.slice().arrayBuffer()`. A sync access handle
+  locks the file, and the shared modes are Chrome 121+ only (MDN, 2026-11-17).
+- **Lazy by section.**
+  - A reader reads the head first, checks it against the head hash in the index, then reads
+    only the sections of the components it opens, each checked against the head's BLAKE3 as it
+    arrives. Bytes outside those sections never enter memory.
+  - This needs an engine entry that opens a pack from its head and a set of section buffers.
+    Today's `open_bytes` takes the whole file; the store's sparse files already allow the
+    rest. Per-query page faults are not possible this way, since reads are async; Chrome's
+    `read-only` sync handles could add that later.
+- **What the npm package gives a host:**
+  - the store worker;
+  - a small reader module (index, generation lock, head check, section reads) that hands
+    verified buffers to whichever engine the host holds;
+  - the index format, documented and versioned.
+
+  A host in Rust can use the same reader logic from `teigeodata-sync` (the index and the
+  checks are `no_std`).
 
 ## 6. Impact on the plan
 

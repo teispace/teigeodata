@@ -282,6 +282,8 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   driver in a Worker over the sans-I/O cores, OPFS, Web Locks, the baseline first
 - [ ] Refresh and store policy as sans-I/O plans in `teigeodata-sync`, the native client moved
   onto them with its tests unchanged
+- [ ] An engine entry that opens a pack from its head and a set of section buffers (lazy by
+  section, for a host's own wasm, note §5b)
 - [ ] `teigeodata-wasm` `store` feature and `store-worker`: install, update, remove, pin, repair,
   status over `fetch` and OPFS; browser tests (Chromium, Firefox, WebKit) against a local CORS
   mirror and a throwaway-key catalog
