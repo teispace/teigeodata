@@ -586,6 +586,44 @@ fn verify_parts(
     ))
 }
 
+/// How far from a place G-pip looks for its parent's unit when the unit at the point is
+/// another: 10 × 1e-7°, about 1 m, the topology's parent tolerance (`MAX_PARENT_M`).
+const BORDER_E7: i32 = 10;
+
+/// Whether `parent`'s unit holds a point within [`BORDER_E7`] of `at`: the place lies on a
+/// border its parent shares.
+fn on_border_of<'k>(
+    admin: &Region<'_>,
+    at: Point<E7>,
+    parent: Option<&str>,
+    key_of: &impl Fn(usize) -> Option<&'k str>,
+) -> bool {
+    let Some(parent) = parent else {
+        return false;
+    };
+    let mut got = [0_u32; region::MAX_SET];
+    let (lon, lat) = (at.lon(), at.lat());
+    [
+        (1, 0),
+        (-1, 0),
+        (0, 1),
+        (0, -1),
+        (1, 1),
+        (1, -1),
+        (-1, 1),
+        (-1, -1),
+    ]
+    .iter()
+    .filter_map(|&(dx, dy)| Point::<E7>::from_units(lat + dy * BORDER_E7, lon + dx * BORDER_E7))
+    .any(|p| {
+        let n = admin.regions_at(p, &mut got);
+        got.get(..n)
+            .unwrap_or_default()
+            .iter()
+            .any(|&i| key_of(i as usize) == Some(parent))
+    })
+}
+
 /// Whether a place's units per level (`per`) are one at each level, or one down to a
 /// `partial` level and none from there on.
 fn levels_held(per: &[u8], partial: &[bool]) -> bool {
@@ -625,7 +663,7 @@ fn pip(
     };
     let mut got = [0_u32; region::MAX_SET];
     let (mut checked, mut outside, mut wrong) = (0_usize, Vec::new(), Vec::new());
-    let mut in_filler = 0_usize;
+    let (mut in_filler, mut on_border) = (0_usize, 0_usize);
     for r in rows
         .iter()
         .filter(|r| matches!(r.kind, PlaceKind::Settlement | PlaceKind::Locality))
@@ -651,7 +689,11 @@ fn pip(
         }
         let deepest = held.iter().copied().max_by_key(|&i| group_of[i as usize]);
         let want = deepest.and_then(|i| key_of(i as usize));
-        if r.parent.as_deref() != want {
+        if r.parent.as_deref() != want && on_border_of(admin, at, r.parent.as_deref(), &key_of) {
+            // A point on the line two units share (a junction on a road that is a ward's
+            // border) is either unit's; the assignment and the index may break the tie apart.
+            on_border += 1;
+        } else if r.parent.as_deref() != want {
             wrong.push(format!(
                 "{}: parent {:?}, its point is in {want:?}",
                 r.key, r.parent
@@ -677,7 +719,7 @@ fn pip(
         ));
     }
     Ok(format!(
-        "G-pip: {checked} settlements and localities each lie in one unit of every level, the deepest their parent ({in_filler} in a filler of a partial level, which holds none there); {} ({:.2}%) outside every unit, first {:?}.",
+        "G-pip: {checked} settlements and localities each lie in one unit of every level, the deepest their parent ({on_border} on a border, whose parent is a unit within {BORDER_E7} × 1e-7° of the point; {in_filler} in a filler of a partial level, which holds none there); {} ({:.2}%) outside every unit, first {:?}.",
         outside.len(),
         share * 100.0,
         outside.iter().take(8).collect::<Vec<_>>()
