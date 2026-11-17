@@ -44,6 +44,22 @@ struct Recipe {
     /// The country's slice of the embedded baseline (D-145).
     #[serde(default)]
     baseline: Option<Baseline>,
+    /// A deeper admin level from OpenStreetMap (D-363).
+    #[serde(default)]
+    deepest: Option<Deepest>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Deepest {
+    /// The pinned OSM extract.
+    source: String,
+    /// OSM's `admin_level` of the areas: 3 to 11.
+    osm_admin_level: u8,
+    /// The tag holding an area's number.
+    number: String,
+    /// The name pattern: it holds `{parent}` and `{number}`.
+    name: String,
 }
 
 #[derive(Deserialize)]
@@ -89,17 +105,9 @@ fn extent_ok(text: &str) -> bool {
             && south >= -90.0 && north <= 90.0)
 }
 
-/// Problems in one recipe; `pinned` are the source IDs of `data/sources.lock`.
-pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
-    let r: Recipe = match serde_saphyr::from_str(text) {
-        Ok(r) => r,
-        Err(e) => return vec![format!("not a valid recipe: {e}")],
-    };
-    let mut out = Vec::new();
-    if r.schema != SCHEMA {
-        out.push(format!("schema is `{}`, expected `{SCHEMA}`", r.schema));
-    }
-    let mut named: Vec<(&str, &str)> = vec![("admin source", r.admin.as_str())];
+/// Every source the recipe names, with what it is for.
+fn named(r: &Recipe) -> Vec<(&'static str, &str)> {
+    let mut named: Vec<(&'static str, &str)> = vec![("admin source", r.admin.as_str())];
     named.extend(r.timezones.iter().map(|t| ("timezone source", t.as_str())));
     for p in &r.points {
         named.push(("points source", p.source.as_str()));
@@ -117,7 +125,37 @@ pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
             .iter()
             .map(|b| ("baseline city list", b.cities.as_str())),
     );
-    for (what, id) in named {
+    named.extend(
+        r.deepest
+            .iter()
+            .map(|d| ("deeper level's extract", d.source.as_str())),
+    );
+    named
+}
+
+/// What is wrong with a `deepest` key, if anything.
+fn deepest_problem(d: &Deepest) -> Option<String> {
+    (!(3..=11).contains(&d.osm_admin_level)
+        || d.number.is_empty()
+        || !d.name.contains("{parent}")
+        || !d.name.contains("{number}"))
+    .then(|| {
+        "deepest: osm_admin_level is 3 to 11, number names a tag, name holds {parent} and {number}"
+            .to_string()
+    })
+}
+
+/// Problems in one recipe; `pinned` are the source IDs of `data/sources.lock`.
+pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
+    let r: Recipe = match serde_saphyr::from_str(text) {
+        Ok(r) => r,
+        Err(e) => return vec![format!("not a valid recipe: {e}")],
+    };
+    let mut out = Vec::new();
+    if r.schema != SCHEMA {
+        out.push(format!("schema is `{}`, expected `{SCHEMA}`", r.schema));
+    }
+    for (what, id) in named(&r) {
         if !pinned.contains(id) {
             out.push(format!("{what} `{id}` is not pinned in data/sources.lock"));
         }
@@ -180,6 +218,7 @@ pub(crate) fn check_text(text: &str, pinned: &BTreeSet<String>) -> Vec<String> {
     {
         out.push("baseline: tolerance_m is 50 to 5,000 metres".into());
     }
+    out.extend(r.deepest.as_ref().and_then(deepest_problem));
     for (name, &kb) in &r.wire_kb {
         if teigeodata_format::component::Component::from_name(name).is_none() || kb == 0 {
             out.push(format!(
@@ -224,6 +263,18 @@ mod tests {
         assert_eq!(check_text(&wire, &pinned), Vec::<String>::new());
         for bad in ["points: 550", "point: 0"] {
             let text = format!("{good}wire_kb: {{ {bad} }}\n");
+            assert!(!check_text(&text, &pinned).is_empty(), "{bad}");
+        }
+        let deep = format!(
+            "{good}deepest: {{ source: x, osm_admin_level: 9, number: ward, name: \"{{parent}}-{{number}}\" }}\n"
+        );
+        assert_eq!(check_text(&deep, &pinned), Vec::<String>::new());
+        for bad in [
+            "source: z, osm_admin_level: 9, number: ward, name: \"{parent}-{number}\"",
+            "source: x, osm_admin_level: 2, number: ward, name: \"{parent}-{number}\"",
+            "source: x, osm_admin_level: 9, number: ward, name: \"{parent}\"",
+        ] {
+            let text = format!("{good}deepest: {{ {bad} }}\n");
             assert!(!check_text(&text, &pinned).is_empty(), "{bad}");
         }
         let zero = format!("{good}budget: {{ rss_mb: 0, disk_mb: 2000 }}\n");

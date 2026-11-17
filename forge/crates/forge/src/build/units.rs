@@ -23,6 +23,8 @@ pub(super) struct Units {
     /// Coarsest level first.
     pub(super) levels: Vec<Level>,
     pub(super) coverage: Option<(i32, i32, i32, i32)>,
+    /// Units named by number within their parent (a derived set's wards, D-363): key and number.
+    pub(super) numbered: Vec<(String, u32)>,
 }
 
 /// One admin level's polygons with a grid index over their boxes.
@@ -51,18 +53,25 @@ impl Level {
 /// 0.1° cells: a few polygons per cell at local-unit scale (as `pip`).
 pub(super) const CELL_E7: i32 = 1_000_000;
 
-pub(super) fn admin_places(root: &Path, lock: &Lock, source: &str) -> Result<Units, String> {
-    let zip = lock.path(root, source)?;
+pub(super) fn admin_places(root: &Path, lock: &Lock, set: &str) -> Result<Units, String> {
+    let zip = crate::topo::deepest::set_path(root, lock, set)?;
     let mut numbers = boundaries::levels(&zip)?;
     numbers.sort_unstable();
     let mut places = Vec::new();
     let mut levels: Vec<Level> = Vec::new();
     let mut coverage: Option<(i32, i32, i32, i32)> = None;
+    let mut numbered = Vec::new();
     for &level in numbers.iter().filter(|&&l| l > 0) {
         let mut units = boundaries::read(&zip, level)?;
         units.sort_by(|a, b| a.pcode.cmp(&b.pcode));
         let (mut keys, mut polys) = (Vec::new(), Vec::new());
+        // A filler of a derived set (D-363) is land no unit of its level holds: no place, and
+        // a point there takes the unit one level up.
+        units.retain(|u| !u.pcode.starts_with(crate::topo::pov::FILLER));
         for u in units {
+            if let Some(n) = u.number {
+                numbered.push((format!("admin:{}", u.pcode), n));
+            }
             // National codes, not the source ID: a new boundary release keeps the IDs.
             let key = format!("admin:{}", u.pcode);
             let point = u
@@ -108,6 +117,7 @@ pub(super) fn admin_places(root: &Path, lock: &Lock, source: &str) -> Result<Uni
         places,
         levels,
         coverage,
+        numbered,
     })
 }
 

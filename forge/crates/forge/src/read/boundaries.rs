@@ -22,6 +22,9 @@ pub(crate) struct Unit {
     pub(crate) parents: Vec<String>,
     /// The area the source states, km² (`area_sqkm`), if any.
     pub(crate) area_km2: Option<f64>,
+    /// Its number within its parent (`adm<level>_number`), for a unit named by number, such
+    /// as a ward of a derived set (D-363).
+    pub(crate) number: Option<u32>,
 }
 
 #[derive(Deserialize)]
@@ -46,29 +49,61 @@ enum Geometry {
     },
 }
 
-/// The admin levels present in a boundary set, ascending.
+/// The admin levels present in a boundary set, ascending: a zipped set, or a derived set's
+/// directory (D-363: its own level files over the set in `base.zip`).
 pub(crate) fn levels(zip_path: &Path) -> Result<Vec<u8>, String> {
+    if zip_path.is_dir() {
+        let mut levels = levels(&zip_path.join(BASE))?;
+        for entry in
+            std::fs::read_dir(zip_path).map_err(|e| format!("{}: {e}", zip_path.display()))?
+        {
+            let name = entry.map_err(|e| e.to_string())?.file_name();
+            levels.extend(name.to_str().and_then(level_of));
+        }
+        levels.sort_unstable();
+        levels.dedup();
+        return Ok(levels);
+    }
     let file = File::open(zip_path).map_err(|e| format!("{}: {e}", zip_path.display()))?;
     let archive = zip::ZipArchive::new(file).map_err(|e| format!("{}: {e}", zip_path.display()))?;
     let mut levels: Vec<u8> = archive
         .file_names()
         .filter_map(Result::ok)
-        .filter(|n| !n.contains("_em"))
-        .filter_map(|n| {
-            n.strip_suffix(".geojson")?
-                .rsplit_once("admin")?
-                .1
-                .parse()
-                .ok()
-        })
+        .filter_map(|n| level_of(&n))
         .collect();
     levels.sort_unstable();
     levels.dedup();
     Ok(levels)
 }
 
-/// Reads the units of one level.
+/// A derived set's copy of the set it extends.
+pub(crate) const BASE: &str = "base.zip";
+
+/// The level of a file `…admin<level>.geojson`, not a generalised `_em` one.
+fn level_of(name: &str) -> Option<u8> {
+    if name.contains("_em") {
+        return None;
+    }
+    name.strip_suffix(".geojson")?
+        .rsplit_once("admin")?
+        .1
+        .parse()
+        .ok()
+}
+
+/// Reads the units of one level: from a derived set's own file when it has one, else from the
+/// set it extends.
 pub(crate) fn read(zip_path: &Path, level: u8) -> Result<Vec<Unit>, String> {
+    if zip_path.is_dir() {
+        let own = zip_path.join(format!("admin{level}.geojson"));
+        if !own.is_file() {
+            return read(&zip_path.join(BASE), level);
+        }
+        let file = File::open(&own).map_err(|e| format!("{}: {e}", own.display()))?;
+        let c: Collection = serde_json::from_reader(BufReader::with_capacity(1 << 20, file))
+            .map_err(|e| format!("{}: {e}", own.display()))?;
+        return Ok(units(&c, level));
+    }
     let file = File::open(zip_path).map_err(|e| format!("{}: {e}", zip_path.display()))?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|e| format!("{}: {e}", zip_path.display()))?;
@@ -82,6 +117,11 @@ pub(crate) fn read(zip_path: &Path, level: u8) -> Result<Vec<Unit>, String> {
     let reader = archive.by_name(&entry).map_err(|e| e.to_string())?;
     let c: Collection = serde_json::from_reader(BufReader::with_capacity(1 << 20, reader))
         .map_err(|e| format!("{entry}: {e}"))?;
+    Ok(units(&c, level))
+}
+
+/// The units of one level's collection, sorted by code.
+fn units(c: &Collection, level: u8) -> Vec<Unit> {
     let prop = |f: &Feature, k: &str| {
         f.properties
             .get(&format!("adm{level}_{k}"))
@@ -112,11 +152,16 @@ pub(crate) fn read(zip_path: &Path, level: u8) -> Result<Vec<Unit>, String> {
                     .properties
                     .get("area_sqkm")
                     .and_then(serde_json::Value::as_f64),
+                number: f
+                    .properties
+                    .get(&format!("adm{level}_number"))
+                    .and_then(serde_json::Value::as_u64)
+                    .and_then(|n| u32::try_from(n).ok()),
             }
         })
         .collect();
     units.sort_by(|a, b| a.pcode.cmp(&b.pcode));
-    Ok(units)
+    units
 }
 
 /// A feature's rings on the 1e-7° grid. A multipolygon's parts become rings of one even-odd
@@ -176,6 +221,7 @@ pub(crate) fn read_geoboundaries(path: &Path) -> Result<(u8, Vec<Unit>), String>
             polygon: Polygon { rings: rings(f) },
             parents,
             area_km2: None,
+            number: None,
         });
     }
     units.sort_by(|a, b| a.pcode.cmp(&b.pcode));

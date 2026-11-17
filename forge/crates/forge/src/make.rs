@@ -86,6 +86,10 @@ pub(crate) struct Recipe {
     /// The country's slice of the embedded baseline (D-145), made after the build.
     #[serde(default)]
     pub(crate) baseline: Option<Baseline>,
+    /// A deeper admin level from OpenStreetMap, cut to the boundary source's finest units
+    /// (D-363); a build reads it only when its licence gate allows the extract.
+    #[serde(default)]
+    pub(crate) deepest: Option<topo::deepest::Spec>,
 }
 
 #[derive(Deserialize)]
@@ -134,6 +138,7 @@ impl Recipe {
             .chain(&self.dem)
             .chain(&self.population)
             .chain(self.baseline.iter().map(|b| &b.cities))
+            .chain(self.deepest.iter().map(|d| &d.source))
             .chain(postal);
         for id in all {
             if !out.contains(&id.as_str()) {
@@ -481,17 +486,62 @@ fn core_stages(
     Ok(Some((run, k)))
 }
 
-/// The admin source's shared arcs and polygons (B10), the same for main and lite; its key.
-fn topology_stage(root: &Path, admin: &str, lock: &Lock, r: &mut Runner) -> Result<String, String> {
-    let k = key(&[b"topology", CODE_TOPOLOGY, &pinned(lock, &[admin])?]);
-    let dir = root.join("data/build/topology").join(admin);
-    r.step(
-        &format!("topology {admin}"),
-        (&dir, ".key", None),
-        &k,
-        || topo::run(root, admin),
-    )?;
-    Ok(k)
+/// The admin source's shared arcs and polygons (B10): the boundary source's own, or with the
+/// recipe's deeper level when the build may read it (D-363); the set's name and its key.
+fn topology_stage(
+    root: &Path,
+    recipe: &Recipe,
+    lock: &Lock,
+    lite: bool,
+    r: &mut Runner,
+) -> Result<(String, String), String> {
+    let admin = recipe.admin.as_str();
+    let deepest = match &recipe.deepest {
+        Some(d) if first_allowed(std::slice::from_ref(&d.source), lock, lite)?.is_some() => Some(d),
+        _ => None,
+    };
+    let (set, dk) = match deepest {
+        Some(d) => {
+            let set = topo::deepest::set_name(admin, d);
+            let spec = format!(
+                "{}\0{}\0{}\0{}",
+                d.source, d.osm_admin_level, d.number, d.name
+            );
+            let dk = key(&[
+                b"deepest",
+                CODE_TOPOLOGY,
+                &pinned(lock, &[admin, d.source.as_str()])?,
+                spec.as_bytes(),
+            ]);
+            let dir = root.join("data/build/deepest").join(&set);
+            r.step(&format!("deepest {set}"), (&dir, ".key", None), &dk, || {
+                topo::deepest::run(root, admin, d)
+            })?;
+            (set, dk)
+        }
+        None => (admin.to_string(), String::new()),
+    };
+    let k = key(&[
+        b"topology",
+        CODE_TOPOLOGY,
+        &pinned(lock, &[admin])?,
+        dk.as_bytes(),
+    ]);
+    let dir = root.join("data/build/topology").join(&set);
+    r.step(&format!("topology {set}"), (&dir, ".key", None), &k, || {
+        topo::run(root, &set)
+    })?;
+    Ok((set, k))
+}
+
+/// `forge deepest <cc>`: the recipe's deeper level alone (D-363).
+pub(crate) fn deepest(root: &Path, cc: &str) -> Result<String, String> {
+    let recipe = Recipe::read(&root.join("data/countries").join(cc))?;
+    let d = recipe
+        .deepest
+        .as_ref()
+        .ok_or_else(|| format!("{cc}: build.yaml names no `deepest` level"))?;
+    topo::deepest::run(root, &recipe.admin, d)
 }
 
 /// The box of whole-degree tiles that covers an extent `west,south,east,north`: the tiles
@@ -708,7 +758,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     // buildings and core: the consensus points with the settlement core (D-091).
     let core_key = core_stages(root, &recipe, &lock, &ck, &sources, lite, &mut r)?;
 
-    let tk = topology_stage(root, &recipe.admin, &lock, &mut r)?;
+    let (set, tk) = topology_stage(root, &recipe, &lock, lite, &mut r)?;
     let dem_key = dem_stage(root, &recipe, &lock, lite, &mut r)?;
 
     // build: the conflation (and core), the topology, the admin and timezone sources, the
@@ -720,8 +770,12 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     }
     let tz = tz_of(&recipe, &lock, lite)?;
     build_args.extend(recipe_args(&recipe, tz, dem_of(&recipe, &lock, lite)?));
+    if let Some((_, source)) = set.split_once('+') {
+        build_args.extend(["--deepest".to_string(), source.to_string()]);
+    }
     build_args.extend(sources.iter().cloned());
     let mut inputs: Vec<&str> = vec![recipe.admin.as_str()];
+    inputs.extend(set.split_once('+').map(|(_, s)| s));
     inputs.extend(tz);
     let rules = rule_sources(&lock, tz)?;
     inputs.extend(rules.iter().map(String::as_str));

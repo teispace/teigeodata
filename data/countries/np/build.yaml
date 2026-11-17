@@ -4,6 +4,11 @@
 schema: teigeodata/build/v1
 # Admin units: OCHA COD-AB (levels 1 to 4).
 admin: codab-np-geojson
+# The wards (D-363): OSM's `admin_level=9` relations, cut to COD-AB's local levels as level 4.
+# OSM is ODbL, so only the main build reads them; lite keeps COD-AB's levels. A ward's code is
+# its local level's P-code and the 2-digit number (its postal part, D-090), its name
+# "<local level>-<number>" (the address form "Kirtipur-3").
+deepest: { source: geofabrik-np, osm_admin_level: 9, number: ward, name: "{parent}-{number}" }
 # Timezone sources in priority order (D-138): a build takes the first its licence gate allows.
 # Main: timezone-boundary-builder (ODbL). Lite: tzdb (public domain), whose zone.tab gives Nepal
 # one zone, Asia/Kathmandu, over the admin-0 outline of `admin`.

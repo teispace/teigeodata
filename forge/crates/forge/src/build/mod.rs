@@ -122,17 +122,19 @@ pub(crate) struct Args {
     pub(crate) dem: Option<String>,
     /// The population grid of admin units' modelled population (D-123).
     pub(crate) population: Option<String>,
+    /// The OSM extract of a deeper admin level joined to the boundary source (D-363).
+    pub(crate) deepest: Option<String>,
     pub(crate) sources: Vec<String>,
 }
 
 impl Args {
     pub(crate) fn parse(args: &[String]) -> Result<Self, String> {
-        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--tz-first <zone,...>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--topology] [--dem <tileset>] [--population <grid>] [--split] <points-source> <points-source> [...]";
+        let usage = "usage: forge build <cc> --release <version> --admin <boundary-source> [--tz <timezone-source>] [--tz-first <zone,...>] [--lite] [--key <seed-file>] [--ids <registry>] [--core <buildings-run>] [--topology] [--dem <tileset>] [--population <grid>] [--deepest <osm-source>] [--split] <points-source> <points-source> [...]";
         let mut it = args.iter();
         let cc = it.next().ok_or(usage)?.clone();
         let (mut release, mut admin, mut tz, mut key, mut ids, mut core, mut lite) =
             (None, None, None, None, None, None, false);
-        let (mut topology, mut dem, mut population) = (false, None, None);
+        let (mut topology, mut dem, mut population, mut deepest) = (false, None, None, None);
         let mut tz_first = Vec::new();
         let mut sources = Vec::new();
         while let Some(a) = it.next() {
@@ -147,6 +149,7 @@ impl Args {
                 "--core" => core = Some(value()?),
                 "--dem" => dem = Some(value()?),
                 "--population" => population = Some(value()?),
+                "--deepest" => deepest = Some(value()?),
                 "--lite" => lite = true,
                 "--topology" => topology = true,
                 s if s.starts_with("--") => return Err(format!("unknown flag `{s}`; {usage}")),
@@ -169,8 +172,17 @@ impl Args {
             topology,
             dem,
             population,
+            deepest,
             sources,
         })
+    }
+
+    /// The boundary set the build reads: the boundary source, or it with the deeper level of
+    /// the `deepest` stage (D-363).
+    pub(crate) fn boundary_set(&self) -> String {
+        self.deepest
+            .as_ref()
+            .map_or_else(|| self.admin.clone(), |d| format!("{}+{d}", self.admin))
     }
 
     pub(crate) fn build_name(&self) -> &'static str {
@@ -258,7 +270,7 @@ fn add_country(
 /// The admin source's shared-boundary topology when the build asks for it (`--topology`).
 fn topology(root: &Path, a: &Args) -> Result<Option<geometry::Geometry>, String> {
     a.topology
-        .then(|| geometry::load(root, &a.admin))
+        .then(|| geometry::load(root, &a.boundary_set()))
         .transpose()
 }
 
@@ -320,7 +332,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
 
     let build = root.join("data/build");
     let profile = Profile::read(root, &a.cc)?;
-    let units = admin_places(root, &lock, &a.admin)?;
+    let units = admin_places(root, &lock, &a.boundary_set())?;
     let core = a.core.as_ref().map_or_else(
         || Ok(BTreeMap::new()),
         |b| core_points(&build, &a.sources, b),
@@ -358,6 +370,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     admin.added = link_admins(&mut places, std::mem::take(&mut admin.links));
     naming::drop_qualified(&mut places, &mut naming);
     naming::cut_unit_type_words(&mut places, &profile.type_words, &mut naming);
+    let numbered_names = naming::numbered_names(&mut places, &units.numbered);
     let coverage = units.coverage.ok_or("the boundary source has no units")?;
     let modelled = population::run(g.grid.as_slice(), &units.levels, coverage, &mut places)?;
     let out_dir = build.join("pack").join(&a.cc);
@@ -428,6 +441,13 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     summary.push_str(&naming.line());
     summary.push_str(&modelled.report);
     summary.push_str(&admin.line());
+    if !units.numbered.is_empty() {
+        let _ = writeln!(
+            summary,
+            "- Numbered units (D-363): {} from the derived set, {numbered_names} names from their parents' names.",
+            units.numbered.len()
+        );
+    }
     summary.push_str(&dedupe::report(&merged, &out_dir, a.build_name())?);
     summary.push_str(&officials);
     summary.push_str(&corrected);
@@ -540,11 +560,12 @@ fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
         .iter()
         .filter_map(|s| allowed(s).map(|ok| ok.then(|| s.clone())).transpose())
         .collect::<Result<_, _>>()?;
-    if !allowed(&a.admin)? {
-        return Err(format!(
-            "the boundary source {} is not allowed in this build",
-            a.admin
-        ));
+    for id in std::iter::once(&a.admin).chain(&a.deepest) {
+        if !allowed(id)? {
+            return Err(format!(
+                "the boundary source {id} is not allowed in this build"
+            ));
+        }
     }
     let tz = match &a.tz {
         Some(id) if allowed(id)? => Some(id.clone()),

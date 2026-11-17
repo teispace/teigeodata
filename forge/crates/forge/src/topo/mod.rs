@@ -26,6 +26,8 @@
 )]
 
 pub(crate) mod arcs;
+pub(crate) mod deepest;
+pub(crate) mod faces;
 pub(crate) mod measure;
 pub(crate) mod pov;
 pub(crate) mod quantize;
@@ -93,7 +95,7 @@ fn src(level: u8, u: boundaries::Unit) -> Src {
 /// The units of a boundary source: a zipped COD-AB set (one file per level), or a plain
 /// Natural Earth admin-0 file (one level, coded by `ADM0_A3`, D-147).
 fn read_units(zip: &Path) -> Result<Vec<Src>, String> {
-    if natural_earth::is_plain(zip)? {
+    if !zip.is_dir() && natural_earth::is_plain(zip)? {
         return Ok(natural_earth::read(zip)?
             .into_iter()
             .map(|c| Src {
@@ -115,6 +117,44 @@ fn read_units(zip: &Path) -> Result<Vec<Src>, String> {
         );
     }
     Ok(out)
+}
+
+/// Closes zero-width seams: snap rounding can route two edges of one unit onto one grid line
+/// in opposite directions (two parts a fraction of a grid unit apart, a cut source's noise,
+/// D-363), and the arcs stage refuses an edge run three times. Such a unit's rings are replaced
+/// by their union, which drops the seam and keeps every vertex. Returns the rings, still
+/// grouped by unit, and how many units changed.
+fn close_seams(rings: &[(u32, Vec<V>)]) -> (Vec<(u32, Vec<V>)>, usize) {
+    let mut out = Vec::with_capacity(rings.len());
+    let mut changed = 0;
+    for group in rings.chunk_by(|a, b| a.0 == b.0) {
+        let Some(&(unit, _)) = group.first() else {
+            continue;
+        };
+        let mut edges: std::collections::HashSet<(V, V)> = std::collections::HashSet::new();
+        for (_, r) in group {
+            for (k, &a) in r.iter().enumerate() {
+                if let Some(&b) = r.get(k + 1).or_else(|| r.first()) {
+                    edges.insert((a, b));
+                }
+            }
+        }
+        if !edges
+            .iter()
+            .any(|&(a, b)| a != b && edges.contains(&(b, a)))
+        {
+            out.extend(group.iter().cloned());
+            continue;
+        }
+        changed += 1;
+        let owned: Vec<Vec<V>> = group.iter().map(|(_, r)| r.clone()).collect();
+        out.extend(
+            pov::dissolve(&[owned.as_slice()])
+                .into_iter()
+                .map(|r| (unit, r)),
+        );
+    }
+    (out, changed)
 }
 
 /// Renumbers arcs by the Hilbert key of their first vertex (then their vertices), so the
@@ -342,8 +382,15 @@ const fn f(n: usize) -> f64 {
 /// `forge topology <boundary-source>`.
 pub(crate) fn run(root: &Path, source: &str) -> Result<String, String> {
     let lock = Lock::read(&root.join("data/sources.lock"))?;
-    let units = read_units(&lock.path(root, source)?)?;
-    stage(root, source, &units, MAX_PARENT_M)
+    let units = read_units(&deepest::set_path(root, &lock, source)?)?;
+    // A derived set's deepest level comes from an overlay (D-363): its parents dissolve
+    // within the overlay's noise, not the source's 1 m.
+    let max_parent_m = if source.contains('+') {
+        deepest::MAX_PARENT_M
+    } else {
+        MAX_PARENT_M
+    };
+    stage(root, source, &units, max_parent_m)
 }
 
 /// A world unit for [`run_world`]: its code, its country's index and its rings.
@@ -421,6 +468,7 @@ pub(crate) fn run_geoboundaries(root: &Path, file: &Path, name: &str) -> Result<
 
 /// The stage on read units; `source` names the output directory. A dissolved parent may lie
 /// at most `max_parent_m` from the source's own (G-topo).
+#[allow(clippy::too_many_lines, reason = "the stage's steps, in order")]
 fn stage(root: &Path, source: &str, units: &[Src], max_parent_m: f64) -> Result<String, String> {
     let t = Instant::now();
     let finest = units.iter().map(|u| u.level).max().ok_or("no units")?;
@@ -435,10 +483,17 @@ fn stage(root: &Path, source: &str, units: &[Src], max_parent_m: f64) -> Result<
         })
         .collect();
     let (rings, snapped) = snap::snap_round(&rings);
+    let (rings, seams) = close_seams(&rings);
     let (built, mut refs) = arcs::build(&rings)?;
     let arcs = sort_arcs(built, &mut refs);
     let mut s = format!("# topology: {source}\n\n");
     snap_line(&mut s, &snapped);
+    if seams > 0 {
+        let _ = writeln!(
+            s,
+            "- {seams} units had a zero-width seam after snap rounding (an edge run both ways), closed by a union.\n"
+        );
+    }
     let full: Vec<(V, V)> = arcs
         .iter()
         .flat_map(|a| a.windows(2).map(|w| (w[0], w[1])))

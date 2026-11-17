@@ -126,6 +126,10 @@ fn stage(root: &Path, args: &[String]) -> Option<Result<String, String>> {
         "world" => build::world::run(root, args.get(1..).unwrap_or_default()),
         "embed" => build::embed::run(root, args.get(1..).unwrap_or_default()),
         "make" => make::run(root, args.get(1..).unwrap_or_default()),
+        "deepest" => match args.get(1) {
+            Some(cc) => make::deepest(root, cc),
+            None => Err("usage: forge deepest <cc>".into()),
+        },
         "labels" => match (args.get(1).map(String::as_str), args.get(2..).unwrap_or_default()) {
             (Some("sample"), [cc, src, per, seed]) => match per.parse::<usize>() {
                 Ok(n) => labels::sample(root, cc, src, n, seed),

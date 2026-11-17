@@ -504,3 +504,103 @@ mod qualified_tests {
         assert_eq!(qualified_head("Bara, "), None);
     }
 }
+
+/// The digit zero of a language's default numbering system (CLDR `defaultNumberingSystem`,
+/// CLDR 46 `numbers.json`), for the languages whose default is not Latin digits: a numbered
+/// unit's name in that language writes its number so. Every other language, Hindi included
+/// (`latn`), writes `0`–`9`.
+const NATIVE_ZERO: [(&str, char); 10] = [
+    ("ne", '\u{0966}'),
+    ("mr", '\u{0966}'),
+    ("sa", '\u{0966}'),
+    ("bn", '\u{09E6}'),
+    ("as", '\u{09E6}'),
+    ("my", '\u{1040}'),
+    ("dz", '\u{0F20}'),
+    ("ar", '\u{0660}'),
+    ("fa", '\u{06F0}'),
+    ("ps", '\u{06F0}'),
+];
+
+/// `n` in the digits of `lang` (a BCP 47 tag; its language subtag decides).
+fn digits(n: u32, lang: Option<&str>) -> String {
+    let base = lang.and_then(|l| l.split(['-', '_']).next());
+    let zero = NATIVE_ZERO
+        .iter()
+        .find(|(l, _)| Some(*l) == base)
+        .map(|&(_, z)| z);
+    let latin = n.to_string();
+    zero.map_or(latin.clone(), |z| {
+        latin
+            .chars()
+            .filter_map(|c| c.to_digit(10).and_then(|d| char::from_u32(z as u32 + d)))
+            .collect()
+    })
+}
+
+/// Names of units named by number within their parent (a derived set's wards, D-363): each
+/// of the parent's names in a language, with `-` and the number in that language's digits
+/// ("कीर्तिपुर-३" beside the source's "Kirtipur-3"). Run after the parent's names are final
+/// (unit-type words cut), so a ward never repeats "नगरपालिका". Returns how many were added.
+pub(super) fn numbered_names(places: &mut [Place], numbered: &[(String, u32)]) -> usize {
+    let index: BTreeMap<&str, usize> = places
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p.key.as_str(), i))
+        .collect();
+    let mut adds: Vec<(usize, Vec<PlaceName>)> = Vec::new();
+    for (key, n) in numbered {
+        let Some(&i) = index.get(key.as_str()) else {
+            continue;
+        };
+        let Some(parent) = places
+            .get(i)
+            .and_then(|p| p.parent.as_deref())
+            .and_then(|k| index.get(k))
+            .and_then(|&j| places.get(j))
+        else {
+            continue;
+        };
+        let own = places
+            .get(i)
+            .map(|p| p.names.as_slice())
+            .unwrap_or_default();
+        let names: Vec<PlaceName> = parent
+            .names
+            .iter()
+            .filter(|m| m.lang.is_some())
+            .filter(|m| m.kind != Some(NameType::Historical))
+            .map(|m| PlaceName {
+                text: format!("{}-{}", m.text, digits(*n, m.lang.as_deref())),
+                lang: m.lang.clone(),
+                kind: m.kind,
+                origin: m.origin,
+            })
+            .filter(|m| !own.iter().any(|o| o.same(m)))
+            .collect();
+        adds.push((i, names));
+    }
+    let mut added = 0;
+    for (i, mut names) in adds {
+        if let Some(p) = places.get_mut(i) {
+            names.dedup_by(|a, b| a.same(b));
+            added += names.len();
+            p.names.extend(names);
+        }
+    }
+    added
+}
+
+#[cfg(test)]
+mod numbered_tests {
+    use super::digits;
+
+    #[test]
+    fn a_number_takes_its_languages_digits() {
+        assert_eq!(digits(13, Some("ne")), "१३");
+        assert_eq!(digits(13, Some("ne-Deva")), "१३");
+        assert_eq!(digits(13, Some("hi")), "13");
+        assert_eq!(digits(7, Some("en")), "7");
+        assert_eq!(digits(7, None), "7");
+    }
+}

@@ -5,6 +5,7 @@ pub(crate) mod boundaries;
 pub(crate) mod geonames;
 pub(crate) mod natural_earth;
 mod osm;
+pub(crate) mod osm_areas;
 pub(crate) mod overture;
 pub(crate) mod table;
 pub(crate) mod wikidata;
