@@ -38,8 +38,9 @@ impl Future for Wait<'_> {
     }
 }
 
-/// A file system whose every directory call waits once (OPFS).
-struct Web(MemFs, Rc<Cell<u32>>);
+/// A file system whose every directory call waits once (OPFS), and which refuses to remove
+/// a file a reader holds (a Web Lock).
+struct Web(MemFs, Rc<Cell<u32>>, Rc<std::cell::RefCell<Vec<String>>>);
 
 impl AsyncFs for Web {
     type File = MemFile;
@@ -62,6 +63,9 @@ impl AsyncFs for Web {
     }
     async fn remove(&mut self, path: &str) -> io::Result<()> {
         Wait(false, &self.1).await;
+        if self.2.borrow().iter().any(|h| h == path) {
+            return Err(io::Error::other("a reader holds it"));
+        }
         self.0.remove(path)
     }
     async fn create_dir(&mut self, path: &str) -> io::Result<()> {
@@ -135,7 +139,10 @@ fn the_client_core_runs_over_a_file_system_and_network_that_wait() {
     };
 
     // Not set up: refused, naming init.
-    let Err(e) = block_on(Session::open(Web(disk.clone(), Rc::clone(&waits)), net())) else {
+    let Err(e) = block_on(Session::open(
+        Web(disk.clone(), Rc::clone(&waits), Rc::default()),
+        net(),
+    )) else {
         panic!("a store not set up opened");
     };
     assert!(
@@ -143,7 +150,7 @@ fn the_client_core_runs_over_a_file_system_and_network_that_wait() {
         "{e}"
     );
 
-    let mut fs = Web(disk.clone(), Rc::clone(&waits));
+    let mut fs = Web(disk.clone(), Rc::clone(&waits), Rc::default());
     block_on(session::init(
         &mut fs,
         &["m".into()],
@@ -171,7 +178,11 @@ fn the_client_core_runs_over_a_file_system_and_network_that_wait() {
     assert_eq!(st.packs.len(), 2);
 
     // A reopen of the same disk reads the same packs from the journal; offline works.
-    let (mut s, _) = block_on(Session::open(Web(disk, Rc::clone(&waits)), net())).unwrap();
+    let (mut s, _) = block_on(Session::open(
+        Web(disk, Rc::clone(&waits), Rc::default()),
+        net(),
+    ))
+    .unwrap();
     assert_eq!(s.packs().len(), 2);
     assert!(block_on(s.offline(NOW)).is_ok());
 
@@ -186,4 +197,54 @@ fn the_client_core_runs_over_a_file_system_and_network_that_wait() {
     gone.sort();
     assert_eq!(gone, ["alpha", "beta"]);
     assert_eq!(s.packs().len(), 0);
+}
+
+#[test]
+fn a_file_a_reader_holds_stays_until_it_is_let_go() {
+    let disk = MemFs(Rc::default());
+    let waits = Rc::new(Cell::new(0));
+    let held: Rc<std::cell::RefCell<Vec<String>>> = Rc::default();
+    let (meta, assets) = published("2026.11.0", &[("alpha", &[])]);
+    let net = || Net {
+        meta: meta.clone(),
+        assets: assets.clone(),
+        waits: Rc::clone(&waits),
+        got: 0,
+    };
+    let web = || Web(disk.clone(), Rc::clone(&waits), Rc::clone(&held));
+    let mut fs = web();
+    block_on(session::init(
+        &mut fs,
+        &["m/".into()],
+        &["a/".into()],
+        &root_file(1, 10),
+        NOW,
+    ))
+    .unwrap();
+    let (mut s, _) = block_on(Session::open(fs, net())).unwrap();
+    block_on(s.install(&["alpha.places.tgd".into()], &Want::default(), false, NOW)).unwrap();
+    let file = format!("packs/{}", s.packs()[0].file);
+    drop(s);
+
+    // A reader holds the file: the removal commits, the file stays, and the store still opens.
+    held.borrow_mut().push(file.clone());
+    let (mut s, _) = block_on(Session::open(web(), net())).unwrap();
+    assert_eq!(block_on(s.remove("alpha.places.tgd")).unwrap().len(), 1);
+    drop(s);
+    let (s, _) = block_on(Session::open(web(), net())).unwrap();
+    assert_eq!(s.packs().len(), 0);
+    assert!(
+        disk.clone().len(&file).unwrap().is_some(),
+        "a held file stays"
+    );
+    drop(s);
+
+    // Let go: the next open removes it.
+    held.borrow_mut().clear();
+    let (s, _) = block_on(Session::open(web(), net())).unwrap();
+    assert_eq!(s.packs().len(), 0);
+    assert!(
+        disk.clone().len(&file).unwrap().is_none(),
+        "the file goes once let go"
+    );
 }

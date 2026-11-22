@@ -70,12 +70,15 @@ const VARIANTS: &[Variant] = &[
 const STORE: &str = "store";
 
 /// The files of the store variant that the full package carries under `store/`.
-const NESTED: [&str; 9] = [
+const NESTED: [&str; 12] = [
     "index.js",
     "index.d.ts",
     "node.js",
     "workerd.js",
     "reader.js",
+    "opfs.js",
+    "opfs.d.ts",
+    WORKER,
     "teigeodata_wasm.js",
     "teigeodata_wasm.d.ts",
     "teigeodata_wasm_bg.wasm",
@@ -95,13 +98,18 @@ fn nest(wasm: &Path) -> Result<(), Vec<String>> {
 }
 
 /// The files a package carries besides the module: wasm-bindgen's glue and the entries.
-const ENTRIES: [&str; 5] = [
+const ENTRIES: [&str; 7] = [
     "index.js",
     "index.d.ts",
     "node.js",
     "workerd.js",
     "reader.js",
+    "opfs.js",
+    "opfs.d.ts",
 ];
+
+/// The store variant's worker (D-376), beside its entries.
+const WORKER: &str = "store-worker.js";
 
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     let (mut only, mut test, mut record) = (None, false, false);
@@ -252,6 +260,9 @@ fn package(root: &Path, v: &Variant, version: &str) -> Result<PathBuf, Vec<Strin
     for f in ENTRIES {
         copy(&js.join(f), &dir.join(f))?;
     }
+    if v.name == STORE {
+        copy(&js.join(WORKER), &dir.join(WORKER))?;
+    }
     for f in ["LICENSE", "NOTICE"] {
         copy(&root.join(f), &dir.join(f))?;
     }
@@ -282,7 +293,8 @@ fn package_json(v: &Variant, version: &str) -> String {
         "types": "./index.d.ts",
         "sideEffects": ["./node.js", "./workerd.js"],
         "files": [
-            "index.js", "index.d.ts", "node.js", "workerd.js", "reader.js", "teigeodata_wasm.js",
+            "index.js", "index.d.ts", "node.js", "workerd.js", "reader.js", "opfs.js",
+            "opfs.d.ts", "teigeodata_wasm.js",
             "teigeodata_wasm.d.ts", "teigeodata_wasm_bg.wasm", "teigeodata_wasm_bg.wasm.d.ts",
             "LICENSE", "NOTICE", "README.md",
         ],
@@ -306,6 +318,10 @@ fn package_json(v: &Variant, version: &str) -> String {
                 default: "./index.js",
             },
             wasm: "./teigeodata_wasm_bg.wasm",
+            opfs: Plain {
+                types: "./opfs.d.ts",
+                default: "./opfs.js",
+            },
             store: (v.name == "full").then_some(Conditions {
                 types: "./store/index.d.ts",
                 workerd: "./store/workerd.js",
@@ -313,6 +329,7 @@ fn package_json(v: &Variant, version: &str) -> String {
                 default: "./store/index.js",
             }),
             store_wasm: (v.name == "full").then_some("./store/teigeodata_wasm_bg.wasm"),
+            store_worker: (v.name == "full").then_some("./store/store-worker.js"),
             package: "./package.json",
         },
     }
@@ -326,6 +343,9 @@ struct Exports {
     main: Conditions,
     #[serde(rename = "./teigeodata_wasm_bg.wasm")]
     wasm: &'static str,
+    /// The store over the Origin Private File System, and its reader (D-376).
+    #[serde(rename = "./opfs")]
+    opfs: Plain,
     /// The full package's store variant (D-375).
     #[serde(rename = "./store", skip_serializing_if = "Option::is_none")]
     store: Option<Conditions>,
@@ -334,8 +354,20 @@ struct Exports {
         skip_serializing_if = "Option::is_none"
     )]
     store_wasm: Option<&'static str>,
+    #[serde(
+        rename = "./store/store-worker.js",
+        skip_serializing_if = "Option::is_none"
+    )]
+    store_worker: Option<&'static str>,
     #[serde(rename = "./package.json")]
     package: &'static str,
+}
+
+/// A module with no per-host entry: its types and itself.
+#[derive(serde::Serialize)]
+struct Plain {
+    types: &'static str,
+    default: &'static str,
 }
 
 /// Node.js and bundlers take the first condition that applies: `default` last, `types` first.
@@ -513,7 +545,13 @@ mod tests {
         assert!(
             NESTED
                 .iter()
-                .all(|f| ENTRIES.contains(f) || f.starts_with("teigeodata_wasm"))
+                .all(|f| ENTRIES.contains(f) || *f == WORKER || f.starts_with("teigeodata_wasm"))
+        );
+        assert_eq!(full["exports"]["./opfs"]["default"], "./opfs.js");
+        assert_eq!(lookup["exports"]["./opfs"]["types"], "./opfs.d.ts");
+        assert_eq!(
+            full["exports"]["./store/store-worker.js"],
+            "./store/store-worker.js"
         );
         assert!(VARIANTS.iter().any(|v| v.name == STORE));
     }

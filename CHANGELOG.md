@@ -30,6 +30,15 @@ applied: a minor release could break the public API, and every break is listed u
   client over a host's files (OPFS sync access handles) and `fetch`, with the native store's
   results; `parseJournal`. API: `rows` (feature `store-core`), the store's results as blobs
   for every store; sync: `store::render_journal`, `policy::path_of` (D-375).
+- Wasm: `store-worker.js`, the browser store's worker over the origin's private file system,
+  and `opfs.js` in every package: `opfsHost`, `openInstalled` (the installed packs in any
+  engine, each file held by a shared Web Lock) and `storeWorker` (D-376).
+
+### Fixed
+
+- Sync: a store opens while a pack file it no longer lists cannot be removed yet (a reader
+  holds it), and a commit cut between a removal and a move is finished on the next open
+  instead of leaving the store empty (D-376).
 
 ## [1.1.0] - 2026-11-17
 

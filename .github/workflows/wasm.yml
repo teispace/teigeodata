@@ -128,6 +128,9 @@ jobs:
       - name: Parity from each package in each browser
         run: |
           for v in full lookup; do node bindings/wasm/test/browser.mjs "target/wasm/$v" bindings/parity.json; done
+      # The browser store (D-376): its worker over the origin's private file system.
+      - name: The store in each browser
+        run: node bindings/wasm/test/browser-store.mjs target/wasm/full bindings/fixtures
 
   dart-web:
     name: Dart on the web (dart2js, dart2wasm)

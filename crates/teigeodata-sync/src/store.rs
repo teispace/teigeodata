@@ -543,7 +543,11 @@ impl<D: Fs> Store<D> {
     pub fn read_packs(fs: &mut D) -> io::Result<Vec<Record>> {
         match fs.read(JOURNAL)? {
             Some(bytes) => parse_journal(&bytes),
-            None => Ok(Vec::new()),
+            // A commit cut between a removal and a move, as `open` finishes it (D-376).
+            None => Ok(fs
+                .read(JOURNAL_TMP)?
+                .and_then(|b| parse_journal(&b).ok())
+                .unwrap_or_default()),
         }
     }
 
@@ -705,15 +709,31 @@ impl<D: AsyncFs> AsyncStore<D> {
             fs.create_dir(d).await?;
         }
         fs.sync_dir("").await?;
+        // A file system whose replace is a removal then a move (OPFS in some browsers, D-376)
+        // can be cut between the two: no journal, and a whole staged one. The commit was under
+        // way, its files are in place: it is finished. A staged journal beside the journal, or
+        // a cut one, is an install that never committed, and goes.
+        let mut journal = fs.read(JOURNAL).await?;
+        if journal.is_none()
+            && let Some(staged) = fs.read(JOURNAL_TMP).await?
+            && parse_journal(&staged).is_ok()
+        {
+            fs.rename(JOURNAL_TMP, JOURNAL).await?;
+            fs.sync_dir("").await?;
+            journal = Some(staged);
+        }
         fs.remove(JOURNAL_TMP).await?;
-        let packs = match fs.read(JOURNAL).await? {
+        let packs = match journal {
             Some(bytes) => parse_journal(&bytes)?,
             None => Vec::new(),
         };
         let mut rec = Recovered::default();
         for name in fs.list(PACKS).await? {
-            if !packs.iter().any(|r| r.file == name) {
-                fs.remove(&alloc::format!("{PACKS}/{name}")).await?;
+            // A file the file system will not remove yet (a reader holds it, D-376) stays for
+            // a later open; the store opens all the same.
+            if !packs.iter().any(|r| r.file == name)
+                && fs.remove(&alloc::format!("{PACKS}/{name}")).await.is_ok()
+            {
                 rec.removed.push(name);
             }
         }
@@ -1860,6 +1880,31 @@ mod derive_tests {
             .unwrap()
             .replace("\"version\":3", "\"version\":9");
         assert!(super::parse_journal(old.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn a_commit_cut_between_removal_and_move_is_finished() {
+        let (root, st, r) = store("cut", &pack());
+        drop(st);
+        // The journal removed, the staged one whole: what a replace by removal then move
+        // leaves when it is cut.
+        std::fs::rename(root.join(JOURNAL), root.join(JOURNAL_TMP)).unwrap();
+        let mut dir = Dir::new(&root).unwrap();
+        assert_eq!(
+            Store::read_packs(&mut dir).unwrap(),
+            core::slice::from_ref(&r)
+        );
+        let (st, rec) = Store::open(Dir::new(&root).unwrap()).unwrap();
+        assert_eq!(st.packs(), [r]);
+        assert_eq!(rec.removed.len(), 0, "the pack file stays");
+        assert!(root.join(JOURNAL).exists() && !root.join(JOURNAL_TMP).exists());
+        drop(st);
+        // A cut staged journal with no journal is not a commit: the store is empty.
+        std::fs::remove_file(root.join(JOURNAL)).unwrap();
+        std::fs::write(root.join(JOURNAL_TMP), b"{\"version\"").unwrap();
+        let (st, _) = Store::open(Dir::new(&root).unwrap()).unwrap();
+        assert_eq!(st.packs().len(), 0);
+        assert!(!root.join(JOURNAL_TMP).exists());
     }
 
     #[test]

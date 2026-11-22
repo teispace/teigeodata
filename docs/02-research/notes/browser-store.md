@@ -168,6 +168,12 @@ the store must not bring a second engine. The contract, option (a) of the consum
 - **The index is the commit.** It lists the installed packs with each one's file name, length,
   head hash and installed parts, plus a generation number. It is written to a temporary file
   and moved over the old one. A reader sees the old set until that move, then the new one.
+- **As built (D-376, 2026-11-22):** a reader holds a shared Web Lock per pack file it has
+  open (`teigeodata-store:<root>:<file>`), not per generation, and the writer removes a file
+  only when it takes that lock exclusively; the BroadcastChannel carries `{root, changed}`.
+  OPFS `move()` does not replace a file in every browser, so the host removes the target
+  first when a move fails, and the store's open commits a whole staged journal it finds with
+  no journal. The plan as researched:
 - **Readers announce themselves.** The store posts `{generation}` on a `BroadcastChannel`
   after each swap. A reader holds a *shared* Web Lock named for the generation it has open, and
   takes the new one before releasing the old. The store deletes a generation's unused files
