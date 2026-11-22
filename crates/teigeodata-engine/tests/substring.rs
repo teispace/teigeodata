@@ -18,7 +18,7 @@ use common::{Model, OwnedName};
 use teigeodata_core::{E7, Namespace, PlaceId, PlaceKind, Point};
 use teigeodata_engine::{Component, Components, Engine, Layer, LayerOptions, Scratch, Verify};
 use teigeodata_format::search::{EXACT, LOOSE};
-use teigeodata_names::search_keys;
+use teigeodata_names::{fold_1_0, search_keys};
 
 /// A place: its ID serial, names and importance.
 type Spec<'a> = (u64, &'a [&'a str], u8);
@@ -26,13 +26,33 @@ type Spec<'a> = (u64, &'a [&'a str], u8);
 /// A pack of `places` keyed as the forge keys them (SEARCH's exact and loose maps, and
 /// SUBSTRING when `substring`), all at one point.
 fn pack(address: &str, places: &[Spec<'_>], substring: bool) -> Vec<u8> {
+    pack_keyed(address, places, substring, |name, out| {
+        search_keys(name, &[], None, out);
+    })
+}
+
+/// [`pack`] keyed as a forge of 1.0 or 1.1 keyed names: under [`fold_1_0`] alone (D-378).
+fn pack_1_0(address: &str, places: &[Spec<'_>]) -> Vec<u8> {
+    pack_keyed(address, places, false, |name, out| {
+        let f = fold_1_0(name).unwrap_or_else(|| teigeodata_names::fold(name));
+        out(teigeodata_names::SearchMap::Loose, f.replace(' ', ""));
+        out(teigeodata_names::SearchMap::Exact, f);
+    })
+}
+
+fn pack_keyed(
+    address: &str,
+    places: &[Spec<'_>],
+    substring: bool,
+    keyer: impl Fn(&str, &mut dyn FnMut(teigeodata_names::SearchMap, String)),
+) -> Vec<u8> {
     let ns = Namespace::from_country(*b"np").unwrap();
     let n = places.len();
     let mut keys: BTreeMap<Vec<u8>, BTreeSet<u32>> = BTreeMap::new();
     for (row, (_, names, _)) in places.iter().enumerate() {
         let row = row as u32;
         for name in *names {
-            search_keys(name, &[], None, |m, k| {
+            keyer(name, &mut |m, k| {
                 let tag = match m {
                     teigeodata_names::SearchMap::Exact => EXACT,
                     teigeodata_names::SearchMap::Loose => LOOSE,
@@ -279,4 +299,26 @@ fn a_row_a_higher_layer_claims_stays_hidden() {
     e.add(layer(pack("np", &base, true), None, 0));
     e.add(layer(pack("np-delta", &renamed, true), None, 10));
     assert_eq!(serials(&e, "khara"), [99]);
+}
+
+#[test]
+fn the_wider_nasal_fold_meets_packs_of_either_fold() {
+    // London stored as लन्डन and as लण्डन (D-378). In a pack keyed now, every spelling finds
+    // both. In a pack keyed under the fold of 1.0, लन्डन still finds both (its own key under the
+    // old fold, the other under the new), and the others find what 1.0 found.
+    const LONDON: u64 = 41;
+    const LONDON2: u64 = 42;
+    let places: [Spec<'_>; 2] = [(LONDON, &["लन्डन"], 100), (LONDON2, &["लण्डन"], 90)];
+    let engine = |bytes| {
+        let mut e = Engine::new();
+        e.add(layer(bytes, None, 0));
+        e
+    };
+    let now = engine(pack("np", &places, false));
+    for q in ["लन्डन", "लण्डन", "लंडन"] {
+        assert_eq!(serials(&now, q), [LONDON, LONDON2], "{q}");
+    }
+    let old = engine(pack_1_0("np", &places));
+    assert_eq!(serials(&old, "लन्डन"), [LONDON, LONDON2]);
+    assert_eq!(serials(&old, "लण्डन"), [LONDON2]);
 }

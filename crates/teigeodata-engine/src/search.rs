@@ -164,11 +164,48 @@ struct Query<'q> {
     loose: &'q str,
     fuzzy: Option<(&'q Fuzzy, Option<char>)>,
     abbr: Option<&'q str>,
+    /// The query under the fold of 1.0 and 1.1 and its loose key, where it differs: a pack
+    /// built before D-378 keys a name under that fold.
+    old: Option<(&'q str, &'q str)>,
     /// The layer's query rules.
     rules: &'q QueryRules<'q>,
     /// How to rank, and the layer's places when there is a focus.
     opts: &'q SearchOptions,
     places: Option<&'q Places<'q>>,
+}
+
+/// Appends the rows `search` keys under the query's exact, machine, loose and 1.0 folds (D-378),
+/// and within the fuzzy automaton's edits, each with its bonus.
+fn key_hits(
+    search: &Search<'_>,
+    (q, loose, old): (&str, &str, Option<(&str, &str)>),
+    fuzzy: Option<(&Fuzzy, Option<char>)>,
+    rows: &mut Vec<(u32, i32)>,
+) {
+    let add = |ordinal: Option<u32>, bonus: i32, rows: &mut Vec<(u32, i32)>| {
+        if let Some(o) = ordinal {
+            search.rows_of(o, |r| {
+                rows.push((r, bonus));
+                ControlFlow::Continue(())
+            });
+        }
+    };
+    add(search.get(EXACT, q), EXACT_BONUS, rows);
+    add(search.get(MACHINE, q), MACHINE_BONUS, rows);
+    // A loose lookup reads the loose list and its exact twin (D-086).
+    add(search.get(LOOSE, loose), LOOSE_BONUS, rows);
+    add(search.get(EXACT, loose), LOOSE_BONUS, rows);
+    if let Some((old_q, old_loose)) = old {
+        add(search.get(EXACT, old_q), EXACT_BONUS, rows);
+        add(search.get(LOOSE, old_loose), LOOSE_BONUS, rows);
+    }
+    if let Some((f, anchor)) = fuzzy {
+        search.walk(EXACT, f, anchor, usize::MAX, |o, edits| {
+            let bonus = FUZZY_BONUS - FUZZY_PER_EDIT * i32::from(edits);
+            add(Some(o), bonus, rows);
+            ControlFlow::Continue(())
+        });
+    }
 }
 
 fn hit_less(a: &HitCand, b: &HitCand) -> bool {
@@ -243,6 +280,21 @@ impl Engine {
         let mut loose = core::mem::take(&mut s.loose);
         loose.clear();
         loose.extend(q.chars().filter(|&c| c != ' '));
+        // The 1.0 fold differs only around Devanagari's न with a virama (D-378): only then is it
+        // computed, so other queries allocate nothing more.
+        let old_fold = if name.contains('\u{0928}') && name.contains('\u{094D}') {
+            teigeodata_names::fold_1_0(name)
+        } else {
+            None
+        };
+        let old_q = old_fold
+            .as_deref()
+            .map(|f| match (abbr, f.rsplit_once(' ')) {
+                (Some(_), Some((stem, _))) if !stem.is_empty() => stem,
+                _ => f,
+            });
+        let old_loose: Option<String> = old_q.map(|o| o.chars().filter(|&c| c != ' ').collect());
+        let old = old_q.zip(old_loose.as_deref());
         let chars = q.chars().count();
         let fuzzy = if (FUZZY_MIN..=MAX_CHARS).contains(&chars) {
             Fuzzy::new(q, 1)
@@ -277,6 +329,7 @@ impl Engine {
                     loose: &loose,
                     fuzzy: walk,
                     abbr,
+                    old,
                     rules: &v.rules,
                     opts,
                     places: v.places.as_ref(),
@@ -318,6 +371,7 @@ impl Engine {
             loose,
             fuzzy,
             abbr,
+            old,
             rules,
             opts,
             places,
@@ -338,27 +392,7 @@ impl Engine {
                 &mut s.rows,
                 (&mut s.form, &mut s.pkey, &mut s.keybuf),
             );
-            let rows = &mut s.rows;
-            let add = |ordinal: Option<u32>, bonus: i32, rows: &mut Vec<(u32, i32)>| {
-                if let Some(o) = ordinal {
-                    search.rows_of(o, |r| {
-                        rows.push((r, bonus));
-                        ControlFlow::Continue(())
-                    });
-                }
-            };
-            add(search.get(EXACT, q), EXACT_BONUS, rows);
-            add(search.get(MACHINE, q), MACHINE_BONUS, rows);
-            // A loose lookup reads the loose list and its exact twin (D-086).
-            add(search.get(LOOSE, loose), LOOSE_BONUS, rows);
-            add(search.get(EXACT, loose), LOOSE_BONUS, rows);
-            if let Some((f, anchor)) = fuzzy {
-                search.walk(EXACT, f, anchor, usize::MAX, |o, edits| {
-                    let bonus = FUZZY_BONUS - FUZZY_PER_EDIT * i32::from(edits);
-                    add(Some(o), bonus, rows);
-                    ControlFlow::Continue(())
-                });
-            }
+            key_hits(search, (q, loose, old), fuzzy, &mut s.rows);
         }
         let rows = &mut s.rows;
         let search = base;

@@ -34,6 +34,14 @@ applied: a minor release could break the public API, and every break is listed u
   and `opfs.js` in every package: `opfsHost`, `openInstalled` (the installed packs in any
   engine, each file held by a shared Web Lock) and `storeWorker` (D-376).
 
+### Changed
+
+- Names: the search fold turns Devanagari's न with a virama before a stop of any class into the
+  anusvara, as Nepali and Hindi write a loanword's n (`लन्डन` finds लण्डन's London,
+  `काउन्टी` = `काउंटी`). Packs keep each such name's key under the 1.0 fold too, and the engine
+  searches a query under it too, so packs and engines of 1.0 and 1.1 still meet; new:
+  `fold_1_0` (D-378).
+
 ### Fixed
 
 - Sync: a store opens while a pack file it no longer lists cannot be removed yet (a reader

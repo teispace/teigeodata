@@ -87,9 +87,12 @@ fn brahmic_offset(c: char) -> Option<(u32, u32)> {
 /// The five class nasals (ङ ञ ण न म) before a stop of their own class are the anusvara
 /// written out (हिन्दी = हिंदी); the velar ङ is also written for the anusvara before any
 /// consonant (मङ्सिर = मंसिर, हङ्सपुर = हंसपुर); and a nasal with a virama at the end of a
-/// word is a half-typed conjunct, so a typed prefix meets the folded name. Other clusters stay
-/// (न्य in न्यूयोर्क, कन्या). One rule per script, no country.
-fn nasal_conjunct(nasal: char, virama: char, next: Option<char>) -> Option<char> {
+/// word is a half-typed conjunct, so a typed prefix meets the folded name. In Devanagari the
+/// dental न is also written for the anusvara before a stop of any class, as Nepali and Hindi
+/// write a loanword's n (लन्डन = लंडन, काउन्टी = काउंटी; D-378); not before a non-stop, and
+/// म keeps its own class (नाम्चे, इम्जा: a real m). Other clusters stay (न्य in न्यूयोर्क,
+/// कन्या). One rule per script, no country. `wide` off is the fold of 1.0 and 1.1.
+fn nasal_conjunct(nasal: char, virama: char, next: Option<char>, wide: bool) -> Option<char> {
     let (block, n) = brahmic_offset(nasal)?;
     if !matches!(n, 0x19 | 0x1E | 0x23 | 0x28 | 0x2E)
         || brahmic_offset(virama) != Some((block, 0x4D))
@@ -105,6 +108,15 @@ fn nasal_conjunct(nasal: char, virama: char, next: Option<char>) -> Option<char>
         Some((b, k)) if b == block && (n - 4..n).contains(&k) => Some(anusvara),
         // the velar nasal before any consonant
         Some((b, k)) if b == block && n == 0x19 && (0x15..=0x39).contains(&k) => Some(anusvara),
+        // Devanagari's dental nasal before a stop of any class (D-378)
+        Some((0x0900, k))
+            if wide
+                && n == 0x28
+                && (0x15..=0x2D).contains(&k)
+                && !matches!(k, 0x19 | 0x1E | 0x23 | 0x28) =>
+        {
+            Some(anusvara)
+        }
         Some((b, _)) if b == block => None,
         // not a letter of this script: the end of the word
         _ if next.is_alphanumeric() || unicode_normalization::char::is_combining_mark(next) => None,
@@ -123,7 +135,20 @@ pub fn fold(s: &str) -> String {
     if s.is_ascii() {
         return fold_ascii(s);
     }
-    fold_full(s)
+    fold_full(s, true)
+}
+
+/// The fold of releases 1.0 and 1.1, before D-378 widened the nasal rule, or `None` where it
+/// equals [`fold`]. Packs built since carry a name's key under this fold too, so an older
+/// engine finds them, and the engine searches a query under it too, so it finds names in a
+/// pack built before. ASCII text never differs.
+#[must_use]
+pub fn fold_1_0(s: &str) -> Option<String> {
+    if s.is_ascii() {
+        return None;
+    }
+    let old = fold_full(s, false);
+    (old != fold_full(s, true)).then_some(old)
 }
 
 /// [`fold`] for ASCII: lower-cased runs of `[A-Za-z0-9]` joined by single spaces.
@@ -142,8 +167,8 @@ fn fold_ascii(s: &str) -> String {
     out
 }
 
-/// [`fold`] for any text.
-fn fold_full(s: &str) -> String {
+/// [`fold`] for any text; `wide` off gives [`fold_1_0`]'s rule.
+fn fold_full(s: &str, wide: bool) -> String {
     let mut chars: Vec<char> = Vec::with_capacity(s.len());
     for c in s.nfkd() {
         if matches!(c, '\u{200C}' | '\u{200D}') {
@@ -173,7 +198,7 @@ fn fold_full(s: &str) -> String {
                 && !space
                 && let Some(a) = chars
                     .get(i)
-                    .and_then(|&v| nasal_conjunct(c, v, chars.get(i + 1).copied()))
+                    .and_then(|&v| nasal_conjunct(c, v, chars.get(i + 1).copied(), wide))
             {
                 out.push(a);
                 i += 1;
@@ -213,7 +238,9 @@ pub enum SearchMap {
 /// Calls `out` with every search key of `name` (D-052, D-086): its fold (exact); the fold
 /// without spaces, and again with each droppable suffix removed (loose); and its phonetic key
 /// when the profile names one. `droppable` holds the profile's droppable suffixes, folded.
-/// Keys may repeat or be empty; the SEARCH writer drops empty ones.
+/// Where [`fold_1_0`] differs, its fold is an exact and a loose key too, so an engine of 1.0
+/// or 1.1 still finds the name (D-378). Keys may repeat or be empty; the SEARCH writer drops
+/// empty ones.
 pub fn search_keys(
     name: &str,
     droppable: &[String],
@@ -229,6 +256,10 @@ pub fn search_keys(
     }
     if let Some(p) = phonetic {
         out(SearchMap::Phonetic, p.key(name));
+    }
+    if let Some(old) = fold_1_0(name) {
+        out(SearchMap::Loose, old.replace(' ', ""));
+        out(SearchMap::Exact, old);
     }
     out(SearchMap::Exact, f);
 }
@@ -675,7 +706,7 @@ fn inherent(chars: &[char], i: usize) -> Option<char> {
 
 #[cfg(test)]
 mod fold_tests {
-    use super::{fold, fold_ascii, fold_full};
+    use super::{fold, fold_1_0, fold_ascii, fold_full};
     use alloc::string::String;
 
     /// The ASCII fast path equals the full fold: every string of one or two ASCII characters,
@@ -690,7 +721,7 @@ mod fold_tests {
                 if b < 128 {
                     buf.push(char::from(b));
                 }
-                assert_eq!(fold_ascii(&buf), fold_full(&buf), "{buf:?}");
+                assert_eq!(fold_ascii(&buf), fold_full(&buf, true), "{buf:?}");
             }
         }
         let mut state = 0x2545_f491_4f6c_dd1d_u64;
@@ -711,7 +742,7 @@ mod fold_tests {
                 };
                 buf.push(char::from(c));
             }
-            assert_eq!(fold_ascii(&buf), fold_full(&buf), "{buf:?}");
+            assert_eq!(fold_ascii(&buf), fold_full(&buf, true), "{buf:?}");
         }
         assert_eq!(fold("  St. Mary's--ROAD 12 "), "st mary s road 12");
     }
@@ -742,6 +773,20 @@ mod fold_tests {
         assert_eq!(fold("कन्या"), "कन्या");
         assert_eq!(fold("सम्राट"), "सम्राट");
         assert_eq!(fold("বন্দর"), "বংদর");
+        // Devanagari's न before a stop of any class (D-378); म keeps its class; Bengali's
+        // dental nasal keeps it too; 1.0's fold is kept for older packs.
+        assert_eq!(fold("लन्डन"), fold("लण्डन"));
+        assert_eq!(fold("लन्डन"), "लंडन");
+        assert_eq!(fold("काउन्टी"), fold("काउंटी"));
+        assert_eq!(fold("कन्काई"), "कंकाइ");
+        assert_eq!(fold("नाम्चे"), "नाम्चे");
+        assert_eq!(fold("इम्जा"), "इम्जा");
+        assert_eq!(fold("अन्य"), "अन्य");
+        assert_eq!(fold("ইন্টার"), "ইন্টার");
+        assert_eq!(fold_1_0("लन्डन").as_deref(), Some("लन्डन"));
+        assert_eq!(fold_1_0("लण्डन"), None);
+        assert_eq!(fold_1_0("हिन्दी"), None);
+        assert_eq!(fold_1_0("London"), None);
         // Vowel length and the candra vowels fold.
         assert_eq!(fold("न्यूयोर्क"), fold("न्युयोर्क"));
         assert_eq!(fold("न्यूयॉर्क"), fold("न्युयोर्क"));
@@ -836,6 +881,16 @@ mod search_key_tests {
             [
                 s(SearchMap::Exact, "pokhara"),
                 s(SearchMap::Loose, "pokhara")
+            ]
+        );
+        // A name the 1.0 fold keys otherwise gets that key too (D-378).
+        assert_eq!(
+            keys("लन्डन", &[], None),
+            [
+                s(SearchMap::Exact, "लंडन"),
+                s(SearchMap::Exact, "लन्डन"),
+                s(SearchMap::Loose, "लंडन"),
+                s(SearchMap::Loose, "लन्डन")
             ]
         );
     }
