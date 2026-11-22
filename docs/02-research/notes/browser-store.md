@@ -187,6 +187,22 @@ the store must not bring a second engine. The contract, option (a) of the consum
   A host in Rust can use the same reader logic from `teigeodata-sync` (the index and the
   checks are `no_std`).
 
+### 5c. Plans as one async core (added 2026-11-22, D-369)
+
+§5 asked for sans-I/O *plans*: state machines the caller feeds ("fetch this file; here are
+the bytes"). Writing the refresh walk that way (root rotations, the committed snapshot as a
+floor, every held role, mirror fallback with demotion) means a second copy of its control
+flow as explicit states, where a missed transition is a silent bug. Compared:
+
+| Option | One copy of the logic | Native path | Browser path | Runtime deps |
+|---|---|---|---|---|
+| Hand-written plans (state machines) | No: the walk is re-expressed as states | feeds the plan from `Fs`/`Transport` | feeds it from `fetch`/OPFS | none |
+| **One `async` core over an I/O trait** | **Yes** | **`block_on` with a no-op waker: the sync adapter's futures are ready at once** | **awaits `fetch` and OPFS promises (wasm-bindgen-futures)** | **none (`Waker::noop`, Rust 1.85)** |
+
+The core is still free of I/O: it only awaits the trait's methods, so it is the plan, written
+as straight-line code. Chosen: the async core. The native functions keep their signatures and
+their tests, which then prove both drivers run one path.
+
 ## 6. Impact on the plan
 
 - A new step for TG-25, in phase 8 next to TG-24:

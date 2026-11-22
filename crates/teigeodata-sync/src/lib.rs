@@ -65,6 +65,8 @@ mod holes;
 pub mod install;
 #[cfg(feature = "repo")]
 pub mod measure;
+#[cfg(feature = "fetch")]
+pub mod meta;
 #[cfg(feature = "store")]
 pub mod refresh;
 #[cfg(feature = "repo")]

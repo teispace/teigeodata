@@ -670,7 +670,6 @@ impl Mirrors {
     }
 
     /// Counts an attempt on mirror `i` that failed on the network or the protocol.
-    #[cfg(feature = "store")]
     pub(crate) fn failed(&mut self, i: usize) {
         if let Some(m) = self.list.get_mut(i) {
             m.failures += 1;
@@ -678,7 +677,6 @@ impl Mirrors {
     }
 
     /// Counts an attempt on mirror `i` whose bytes were refused.
-    #[cfg(feature = "store")]
     pub(crate) fn refused(&mut self, i: usize) {
         if let Some(m) = self.list.get_mut(i) {
             m.refused += 1;
@@ -686,7 +684,6 @@ impl Mirrors {
     }
 
     /// The base URL of mirror `i`.
-    #[cfg(feature = "store")]
     pub(crate) fn base(&self, i: usize) -> Option<&str> {
         self.list.get(i).map(|m| m.base.as_str())
     }
