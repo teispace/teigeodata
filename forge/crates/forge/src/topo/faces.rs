@@ -45,7 +45,7 @@ pub(crate) struct Face {
 }
 
 /// The half-plane (upper incl. +x axis, lower) of a direction, then the cross product.
-fn ccw(a: (i64, i64), b: (i64, i64)) -> Ordering {
+pub(crate) fn ccw(a: (i64, i64), b: (i64, i64)) -> Ordering {
     let half = |d: (i64, i64)| u8::from(d.1 < 0 || (d.1 == 0 && d.0 < 0));
     half(a).cmp(&half(b)).then_with(|| {
         let cross = i128::from(a.0) * i128::from(b.1) - i128::from(a.1) * i128::from(b.0);

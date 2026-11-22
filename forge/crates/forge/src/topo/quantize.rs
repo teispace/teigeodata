@@ -12,6 +12,7 @@
 //! ([`super::simplify::bad_pair`]), so the result is the same on every machine.
 
 use std::cell::Cell;
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 use teigeodata_core::{E7, Point};
@@ -19,6 +20,7 @@ use teigeodata_format::arcs::Arcs;
 use teigeodata_format::extract::ArcRewrite;
 
 use super::arcs::V;
+use super::faces::ccw;
 use super::simplify::crossings;
 
 /// The grid's largest share of the tolerance (D-229): the world's 500 m level snaps to 1e-4°
@@ -136,11 +138,81 @@ fn snap_one(arc: &[Point<E7>], g: i64, exact_nodes: &BTreeSet<V>) -> Option<Vec<
     }
     let closed = arc.first() == arc.last();
     let ok = if closed {
-        out.len() >= 4 && out.first() == out.last()
+        // A closed arc is a whole ring: it keeps its turn and some area. A small triangle's
+        // vertex can cross its far edge without any two segments crossing away from a shared
+        // end, which the pair guard below would not see.
+        out.len() >= 4 && out.first() == out.last() && signed(&out).signum() == signed(arc).signum()
     } else {
         out.len() >= 2 && out.first() != out.last()
     };
     ok.then_some(out)
+}
+
+/// The arcs at every node (an end shared by three or more arc ends) whose counter-clockwise
+/// order around it differs between the exact arcs and the candidates (`None`: the arc as it
+/// is), or where two candidate ends leave in one direction.
+fn turned_nodes(arcs: &[Vec<Point<E7>>], cand: &[Option<Vec<Point<E7>>>]) -> Vec<usize> {
+    type Dir = (i64, i64);
+    let dir = |from: &Point<E7>, to: &Point<E7>| -> Dir {
+        (
+            i64::from(to.lon()) - i64::from(from.lon()),
+            i64::from(to.lat()) - i64::from(from.lat()),
+        )
+    };
+    // Each arc end at its exact node: (node, arc, exact direction, candidate direction).
+    let mut ends: Vec<(V, usize, Dir, Dir)> = Vec::with_capacity(arcs.len() * 2);
+    for (a, (arc, c)) in arcs.iter().zip(cand).enumerate() {
+        let new = c.as_deref().unwrap_or(arc);
+        let (Some(s), Some(s1), Some(e), Some(e1), Some(ns), Some(ns1), Some(ne), Some(ne1)) = (
+            arc.first(),
+            arc.get(1),
+            arc.last(),
+            arc.len().checked_sub(2).and_then(|i| arc.get(i)),
+            new.first(),
+            new.get(1),
+            new.last(),
+            new.len().checked_sub(2).and_then(|i| new.get(i)),
+        ) else {
+            continue;
+        };
+        ends.push(((s.lon(), s.lat()), a, dir(s, s1), dir(ns, ns1)));
+        ends.push(((e.lon(), e.lat()), a, dir(e, e1), dir(ne, ne1)));
+    }
+    ends.sort_unstable_by_key(|e| e.0);
+    let mut out = Vec::new();
+    for group in ends.chunk_by(|x, y| x.0 == y.0).filter(|g| g.len() >= 3) {
+        let mut exact: Vec<usize> = (0..group.len()).collect();
+        exact.sort_by(|&i, &j| ccw(group[i].2, group[j].2).then(i.cmp(&j)));
+        let mut new = exact.clone();
+        new.sort_by(|&i, &j| ccw(group[i].3, group[j].3).then(i.cmp(&j)));
+        let tie = new
+            .windows(2)
+            .any(|w| matches!(w, [i, j] if ccw(group[*i].3, group[*j].3) == Ordering::Equal));
+        // The same cyclic order: `new` is `exact` turned to start where `exact`'s first is.
+        let at = new
+            .iter()
+            .position(|&i| Some(&i) == exact.first())
+            .unwrap_or(0);
+        let same = new.iter().cycle().skip(at).take(new.len()).eq(exact.iter());
+        if tie || !same {
+            out.extend(group.iter().map(|e| e.1));
+        }
+    }
+    out
+}
+
+/// Twice the signed area of a closed run of points (positive counter-clockwise), exact; zero
+/// for no area.
+fn signed(ring: &[Point<E7>]) -> i128 {
+    ring.windows(2)
+        .map(|w| match w {
+            [a, b] => {
+                i128::from(a.lon()) * i128::from(b.lat())
+                    - i128::from(b.lon()) * i128::from(a.lat())
+            }
+            _ => 0,
+        })
+        .sum()
 }
 
 /// Snaps `arcs` to the grid of 10^k units of 1e-7°, guarded (see the [module](self)).
@@ -196,6 +268,18 @@ pub(crate) fn snap(arcs: &mut [Vec<Point<E7>>], k: u32) -> Quantized {
                     exact_nodes.extend(arcs[a].first().map(node));
                     exact_nodes.extend(arcs[a].last().map(node));
                 }
+            }
+        }
+        // Around every node the arcs keep their counter-clockwise order: with no crossings
+        // and every closed arc keeping its turn, each ring then keeps its orientation. A thin
+        // lens between two arcs can turn over with no two segments crossing away from a
+        // shared end.
+        for a in turned_nodes(arcs, &cand) {
+            if !exact[a] {
+                exact[a] = true;
+                changed = true;
+                exact_nodes.extend(arcs[a].first().map(node));
+                exact_nodes.extend(arcs[a].last().map(node));
             }
         }
         if !changed {
@@ -260,6 +344,36 @@ mod tests {
         let q = snap(&mut arcs, 3);
         assert_eq!(q.exact, 2);
         assert_eq!(arcs, [a, b]);
+    }
+
+    #[test]
+    fn a_ring_that_would_turn_over_keeps_its_exact_points() {
+        // Counter-clockwise exactly; on a 1,000-unit grid the third vertex rounds past the
+        // first edge and the triangle runs clockwise, with no two segments crossing.
+        let ring = vec![p(1_135, 852), p(-569, -112), p(-244, 99), p(1_135, 852)];
+        let mut arcs = vec![ring.clone()];
+        assert_eq!(snap(&mut arcs, 3).exact, 1);
+        assert_eq!(arcs[0], ring);
+    }
+
+    #[test]
+    fn a_lens_that_would_turn_over_keeps_its_exact_points() {
+        // Two arcs from A to B bound a thin lens; A and B each meet a third arc. On a
+        // 1,000-unit grid C rounds below the line A–B, the lens runs clockwise, and no two
+        // segments cross away from a shared end: only the order of the arcs around A shows it.
+        let (a, b, c) = (p(0, 0), p(900, 2_000), p(480, 1_000));
+        let straight = vec![a, b];
+        let bent = vec![a, c, b];
+        let mut arcs = vec![
+            straight.clone(),
+            bent.clone(),
+            vec![a, p(0, -2_000)],
+            vec![b, p(900, 4_000)],
+        ];
+        let q = snap(&mut arcs, 3);
+        assert!(q.exact >= 2, "{q:?}");
+        assert_eq!(arcs[0], straight);
+        assert_eq!(arcs[1], bent);
     }
 
     #[test]

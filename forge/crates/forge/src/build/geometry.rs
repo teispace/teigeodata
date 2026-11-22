@@ -513,7 +513,12 @@ fn verify_parts(
         let arcs = Arcs::open(&of(Kind::ARCS)?).map_err(err)?;
         arcs.check().map_err(err)?;
         let mine = Polygons::open(&s).map_err(err)?;
-        mine.check(&arcs, rows.len()).map_err(err)?;
+        mine.check(&arcs, rows.len()).map_err(|e| {
+            format!(
+                "outline part {part} (levels to {deepest}, level of detail {lod}): {e}{}",
+                misturned(&mine, &arcs, rows)
+            )
+        })?;
         PolyIndex::open(&of(Kind::POLY_INDEX)?, &mine)
             .and_then(|i| i.check(&mine, &arcs))
             .map_err(err)?;
@@ -726,6 +731,47 @@ fn pip(
     ))
 }
 
+/// The polygons whose part does not start with a counter-clockwise outer ring followed by
+/// clockwise holes, as a suffix for an error: polygon index, row (and key, when `rows` has
+/// it), part, ring, its vertices and twice its area. Empty when none.
+fn misturned(polys: &Polygons<'_>, arcs: &Arcs<'_>, rows: &[&Place]) -> String {
+    let mut out = Vec::new();
+    for i in 0..polys.len() {
+        for (k, part) in polys.parts(i).into_iter().flatten().enumerate() {
+            let Some(rings) = polys.rings(part) else {
+                continue;
+            };
+            let start = rings.start;
+            for r in rings {
+                let pts: Vec<(i32, i32)> =
+                    polys.ring(arcs, r, 0).map(|v| (v.lon(), v.lat())).collect();
+                let a2 = topo::arcs::area2(&pts);
+                if (r == start) != (a2 > 0) {
+                    let row = polys.row(i);
+                    let key = row
+                        .and_then(|r| rows.get(r as usize))
+                        .map_or(String::new(), |p| format!(" {}", p.key));
+                    out.push(format!(
+                        "polygon {i} (row {row:?}{key}) part {k} ring {}: {} vertices on {} arcs, area2 {a2}, points {:?}",
+                        r - start,
+                        pts.len(),
+                        polys.refs(r).count(),
+                        pts.iter().take(8).collect::<Vec<_>>()
+                    ));
+                }
+            }
+        }
+        if out.len() >= 5 {
+            break;
+        }
+    }
+    if out.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", out.join("; "))
+    }
+}
+
 /// The geometry sections' own checks (POLYGONS against `rows` place rows), the overview
 /// against ARCS, and `ADMIN_REGION` against `POLY_INDEX` at every label point and at `probes`.
 /// Returns a line for the summary.
@@ -734,7 +780,9 @@ fn check(p: &Pack<'_>, rows: usize, probes: &[Point<E7>]) -> Result<String, Stri
     let a = Arcs::open(&p.section(Kind::ARCS).ok_or("no ARCS")?).map_err(e)?;
     a.check().map_err(e)?;
     let polys = Polygons::open(&p.section(Kind::POLYGONS).ok_or("no POLYGONS")?).map_err(e)?;
-    polys.check(&a, rows).map_err(e)?;
+    polys
+        .check(&a, rows)
+        .map_err(|err| format!("{err}{}", misturned(&polys, &a, &[])))?;
     let index =
         PolyIndex::open(&p.section(Kind::POLY_INDEX).ok_or("no POLY_INDEX")?, &polys).map_err(e)?;
     index.check(&polys, &a).map_err(e)?;
