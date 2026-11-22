@@ -5,6 +5,15 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+# Every crate, not only workspace members: the scope CI's cargo-deny applies (D-367).
+unmaintained = "all"
+# Each ignore names its decision and when to look again.
+ignore = [
+  # chrono is unmaintained (no vulnerability, no fixed version). It comes only through rmcp and
+  # schemars (the MCP server) and arrow/parquet (the forge); every rmcp release requires it.
+  # D-367: review when rmcp or arrow moves to jiff or time, and at each dependency update.
+  { id = "RUSTSEC-2026-0543", reason = "unmaintained, transitive via rmcp and arrow; D-367" },
+]
 
 [licenses]
 version = 2
