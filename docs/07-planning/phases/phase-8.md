@@ -340,7 +340,7 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   - [x] TG-31: one spelling across a place's levels (D-377: काठमाडौं, three reviewed rows)
   - [ ] TG-32: landmarks as their own kind (research first: a new kind is a format change)
   - [x] Q-037: Devanagari spelling folds in search (D-378: न before any stop, both folds kept)
-  - [ ] Q-036: the world part's unit names in English (`Dubay` → Dubai)
+  - [x] Q-036: the world part's unit names in English (D-379: `name_en` less the unit's type; 886 units)
   - [ ] TG-14's 42 held rows read a second time
   - [ ] The Nepal data release with these, from CI, its error rates, the consumer told
 

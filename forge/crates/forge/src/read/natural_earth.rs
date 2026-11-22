@@ -10,6 +10,7 @@
 //! `longitude`/`latitude`), and `FCLASS_NP`, Nepal's point of view's class for the unit
 //! (`Unrecognized` for a unit that view does not recognise).
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
@@ -207,12 +208,14 @@ pub(crate) fn read(path: &Path) -> Result<Vec<Country>, String> {
 pub(crate) fn read_admin1(path: &Path) -> Result<Vec<Unit>, String> {
     let c = collection(path)?;
     let mut out = Vec::with_capacity(c.features.len());
+    let mut types = Vec::with_capacity(c.features.len());
     for f in &c.features {
         let code = text(f, "adm1_code")
             .ok_or_else(|| format!("{}: a feature without adm1_code", path.display()))?;
         let adm0 = text(f, "adm0_a3").ok_or_else(|| format!("{code}: no adm0_a3"))?;
         // Empty for Natural Earth's unnamed placeholders (`+99?` codes, "minor island").
         let names = names(f, false);
+        types.push(text(f, "type_en"));
         #[allow(
             clippy::cast_possible_truncation,
             clippy::cast_sign_loss,
@@ -231,6 +234,7 @@ pub(crate) fn read_admin1(path: &Path) -> Result<Vec<Unit>, String> {
             code,
         });
     }
+    english_first(&mut out, &types);
     out.sort_by(|a, b| a.code.cmp(&b.code));
     if let Some(code) = out.windows(2).find_map(|w| match w {
         [a, b] if a.code == b.code => Some(a.code.clone()),
@@ -240,6 +244,80 @@ pub(crate) fn read_admin1(path: &Path) -> Result<Vec<Unit>, String> {
     }
     Ok(out)
 }
+
+/// The unit's English name, from `name_en` (Wikidata's English label) with the unit's own
+/// `type_en` taken off ("Emirate of Dubai" → "Dubai", "Bagmati Zone" → "Bagmati"); `None`
+/// when it is `name` up to case and accents, or one word of `name` ("North" of "North
+/// Lebanon").
+fn english_of(names: &[(Option<&'static str>, String)], kind: Option<&str>) -> Option<String> {
+    let (None, name) = names.first()? else {
+        return None;
+    };
+    let en = names
+        .iter()
+        .find(|(l, _)| *l == Some("en"))
+        .map(|(_, t)| t.trim())?;
+    let fold = teigeodata_names::fold;
+    let mut c = en.to_string();
+    if let Some(kind) = kind.filter(|k| !k.is_empty()) {
+        // The type and its last word ("Administrative Zone", "Zone").
+        let last = kind.rsplit(' ').next().unwrap_or(kind);
+        for t in [kind, last] {
+            let lower = c.to_lowercase();
+            let t = t.to_lowercase();
+            if let Some(rest) = lower.strip_prefix(&format!("{t} of ")) {
+                c = c.split_off(c.len() - rest.len());
+            } else if lower.ends_with(&format!(" {t}")) {
+                c.truncate(c.len() - t.len() - 1);
+            }
+        }
+    }
+    let c = c.trim();
+    let f = fold(c);
+    if c.is_empty()
+        || f == fold(name)
+        || (!f.contains(' ') && fold(name).split(' ').any(|w| w == f))
+    {
+        return None;
+    }
+    Some(c.to_string())
+}
+
+/// Natural Earth's `name` is often a romanisation, not English ("Dubay", "Xizang", "Vilniaus";
+/// Q-036, D-379): each unit's English name becomes its first, `name` kept after it. A
+/// one-word English name that units of three or more countries share is a generic word
+/// ("Central", "Southern"), not a name, so `name` stays first there. One rule over the file,
+/// no country.
+fn english_first(units: &mut [Unit], types: &[Option<String>]) {
+    let chosen: Vec<Option<String>> = units
+        .iter()
+        .zip(types)
+        .map(|(u, t)| english_of(&u.names, t.as_deref()))
+        .collect();
+    let mut countries: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
+    for (u, c) in units.iter().zip(&chosen) {
+        if let Some(c) = c.as_deref().filter(|c| !c.contains(' ')) {
+            countries
+                .entry(teigeodata_names::fold(c))
+                .or_default()
+                .insert(&u.adm0);
+        }
+    }
+    let generic: BTreeSet<String> = countries
+        .into_iter()
+        .filter(|(_, c)| c.len() >= GENERIC_COUNTRIES)
+        .map(|(w, _)| w)
+        .collect();
+    for (u, c) in units.iter_mut().zip(chosen) {
+        let Some(c) = c.filter(|c| !generic.contains(&teigeodata_names::fold(c))) else {
+            continue;
+        };
+        u.names.insert(0, (None, c));
+    }
+}
+
+/// Units of this many countries sharing a one-word English name make it a generic word.
+const GENERIC_COUNTRIES: usize = 3;
 
 /// A feature's rings on the 1e-7° grid; a multipolygon's parts become rings of one even-odd
 /// polygon, as in [`super::boundaries`].
@@ -263,6 +341,63 @@ mod tests {
     #![allow(clippy::unwrap_used, reason = "test code")]
 
     use super::*;
+
+    fn unit(adm0: &str, name: &str, en: &str) -> Unit {
+        Unit {
+            code: format!("{adm0}-{name}"),
+            adm0: adm0.into(),
+            wikidata: None,
+            geonames: None,
+            names: vec![(None, name.into()), (Some("en"), en.into())],
+            label: None,
+            unrecognized: false,
+            iso: None,
+            polygon: Polygon { rings: Vec::new() },
+        }
+    }
+
+    #[test]
+    fn a_unit_s_english_name_comes_first() {
+        let first = |u: &Unit| u.names[0].1.clone();
+        let mut units = vec![
+            unit("ARE", "Dubay", "Emirate of Dubai"),
+            unit("NPL", "Bagmati", "Bagmati Zone"),
+            unit("LBN", "North Lebanon", "North"),
+            unit("CHN", "Xizang", "Tibet"),
+            unit("ISR", "HaMerkaz", "Central"),
+            unit("BHR", "Al Wusta", "Central"),
+            unit("ZZZ", "Kesk", "Central"),
+            unit("UKR", "Kiev", "Kyiv"),
+        ];
+        let types = [
+            Some("Emirate".to_string()),
+            Some("Administrative Zone".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(String::new()),
+        ];
+        english_first(&mut units, &types);
+        let got: Vec<String> = units.iter().map(first).collect();
+        assert_eq!(
+            got,
+            [
+                "Dubai",
+                "Bagmati",
+                "North Lebanon",
+                "Tibet",
+                "HaMerkaz",
+                "Al Wusta",
+                "Kesk",
+                "Kyiv"
+            ]
+        );
+        // The source name stays, after the English one.
+        assert_eq!(units[0].names[1].1, "Dubay");
+        assert_eq!(units[1].names.len(), 2);
+    }
 
     #[test]
     fn a_feature_with_its_names_codes_and_rings() {

@@ -41,6 +41,8 @@ Djibouti	tgd:dj/5	1	-	the country before its capital
 Panama	tgd:pa/18	1	-	the country before the province
 Guatemala	tgd:gt/3z	1	-	the country before the department
 Kuwait	tgd:kw/p	1	-	the country before Kuwait City
+Dubai	tgd:ae/2f	1	-	the city before the emirate, which takes its English name Dubai, not Dubay (Q-036, D-379)
+Dubay	tgd:ae/2g	1	-	the emirate by its Natural Earth name, kept as an alternate (D-379)
 Brazil	tgd:br/29c	1	-	country
 India	tgd:in/2nn	1	-	country
 Tunisia	tgd:tn/z	1	-	country
