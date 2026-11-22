@@ -128,6 +128,32 @@ fn importance(p: &Place) -> u8 {
     u8::try_from((base + pop).min(255)).unwrap_or(u8::MAX)
 }
 
+/// Lowers each unit named by number within its parent ([`NUMBERED`], [`is_numbered`]).
+fn numbered_low(rows: &[&Place], importance: &mut [u8]) {
+    let row_of: BTreeMap<&str, &Place> = rows.iter().map(|p| (p.key.as_str(), *p)).collect();
+    for (p, i) in rows.iter().zip(importance.iter_mut()) {
+        let parent = p.parent.as_deref().and_then(|k| row_of.get(k));
+        if parent.is_some_and(|q| is_numbered(p, q)) {
+            *i = (*i).min(NUMBERED);
+        }
+    }
+}
+
+/// Whether unit `p` is named by number within its unit `parent`: one of its names is one of the
+/// parent's, `-` and digits of any script ("Kirtipur-3", "कीर्तिपुर-३").
+fn is_numbered(p: &Place, parent: &Place) -> bool {
+    p.kind == PlaceKind::Admin
+        && parent.kind == PlaceKind::Admin
+        && p.names.iter().any(|n| {
+            parent.names.iter().any(|m| {
+                n.text
+                    .strip_prefix(m.text.as_str())
+                    .and_then(|r| r.strip_prefix('-'))
+                    .is_some_and(|d| !d.is_empty() && d.chars().all(char::is_numeric))
+            })
+        })
+}
+
 /// Whether `p` is a city whose name a unit holding it may share ([`below_their_city`]).
 fn is_city(p: &Place) -> bool {
     p.kind == PlaceKind::Settlement && rank_of(p) >= CITY_RANK && p.flags & places::FLAG_FORMER == 0
@@ -286,6 +312,13 @@ const RANK_BONUS: [u8; 5] = [0, 0, 0, 14, 24];
 
 /// The importance of every former unit: below a settlement with no population, above a locality.
 const FORMER: u8 = 25;
+
+/// The importance of a unit named by number within its parent ("Kirtipur-3", a ward, D-363):
+/// below a former unit, above a locality. Its name is its parent's plus a number, so a search
+/// for the parent's name matches each of its numbered units too (a prefix, or a typo of one);
+/// at a unit's weight they filled the list where a settlement of that name belonged. A query
+/// with the number still finds the unit: only its exact key holds the number.
+const NUMBERED: u8 = 20;
 
 pub(super) fn e6(p: (i32, i32)) -> Result<Point<E6>, String> {
     Point::<E7>::from_units(p.1, p.0)
@@ -832,6 +865,7 @@ pub(super) fn name_sections(
     below_their_city(rows, shared.values(), &mut importance);
     let shared = shared_keys(rows, &maps, |p| p.kind == PlaceKind::Country);
     below_their_country(rows, shared.values(), &mut importance);
+    numbered_low(rows, &mut importance);
     let rules = query_rules(profile);
     let units: Vec<u8> = rows
         .iter()
@@ -1729,6 +1763,43 @@ mod tests {
             rank,
             parent: None,
             sources: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_unit_named_by_number_ranks_below_a_settlement() {
+        let named = |key: &str, level, parent: Option<&str>, names: &[&str]| {
+            let mut p = place(PlaceKind::Admin, level, 0, Some(5_000));
+            p.key = key.into();
+            p.parent = parent.map(Into::into);
+            p.names = names
+                .iter()
+                .map(|t| crate::build::PlaceName {
+                    text: (*t).into(),
+                    lang: None,
+                    kind: None,
+                    origin: crate::build::Origin::default(),
+                })
+                .collect();
+            p
+        };
+        let list = [
+            named("m", 3, None, &["Kirtipur", "कीर्तिपुर"]),
+            named("w3", 4, Some("m"), &["Kirtipur-3", "कीर्तिपुर-३"]),
+            named("w4", 4, Some("m"), &["कीर्तिपुर-४"]),
+            named("other", 4, Some("m"), &["Kirtipur East"]),
+            named("dash", 4, Some("m"), &["Kirtipur-"]),
+            named("loose", 4, None, &["Kirtipur-5"]),
+        ];
+        let rows: Vec<&Place> = list.iter().collect();
+        let mut imp: Vec<u8> = rows.iter().map(|p| importance(p)).collect();
+        let before = imp.clone();
+        super::numbered_low(&rows, &mut imp);
+        let settlement = importance(&place(PlaceKind::Settlement, 0, 0, None));
+        assert!(imp[1] < settlement && imp[2] < settlement, "{imp:?}");
+        assert_eq!(imp[1], super::NUMBERED);
+        for i in [0, 3, 4, 5] {
+            assert_eq!(imp[i], before[i], "row {i}");
         }
     }
 
