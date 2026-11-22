@@ -225,22 +225,26 @@ pub(super) fn absorb(kept: &mut Place, dropped: Place) {
 
 /// Writes `merged-<build>.tsv` beside the pack and returns the summary line.
 pub(super) fn report(
+    joined: &[(String, String, f64)],
     merged: &[(String, String, f64)],
     out_dir: &std::path::Path,
     build: &str,
 ) -> Result<String, String> {
     use std::fmt::Write as _;
     let mut tsv = String::from(
-        "# Same-name places within 100 m merged into one (D-116).\nkept\tmerged\tmetres\n",
+        "# Places that are one place, merged into the kept one: `near`, same-name places within 100 m (D-116); `spot`, a GeoNames locality within 1 km of the same-name landmark it repeats (D-381).\nkept\tmerged\tmetres\trule\n",
     );
-    for (k, d, m) in merged {
-        let _ = writeln!(tsv, "{k}\t{d}\t{m:.0}");
+    for (rule, rows) in [("spot", joined), ("near", merged)] {
+        for (k, d, m) in rows {
+            let _ = writeln!(tsv, "{k}\t{d}\t{m:.0}\t{rule}");
+        }
     }
     let file = out_dir.join(format!("merged-{build}.tsv"));
     std::fs::write(&file, tsv).map_err(|e| format!("{}: {e}", file.display()))?;
     Ok(format!(
-        "Same place (D-116): {} same-name settlements and localities within {SAME_M} m merged into another, listed in `merged-{build}.tsv`.\n",
-        merged.len()
+        "Same place (D-116): {} same-name settlements and localities within {SAME_M} m merged into another; {} GeoNames localities joined the landmark they repeat, within {SPOT_M} m (D-381). Both in `merged-{build}.tsv`.\n",
+        merged.len(),
+        joined.len()
     ))
 }
 

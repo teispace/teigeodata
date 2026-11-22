@@ -359,8 +359,8 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         (&namer, profile.phonetic),
         (&fixes, a.lite),
     )?;
-    let mut merged = dedupe::join_spots(&mut clustered, &spots);
-    merged.extend(dedupe::merge_near(&mut clustered));
+    let joined = dedupe::join_spots(&mut clustered, &spots);
+    let merged = dedupe::merge_near(&mut clustered);
     let unit_count = units.places.len();
     let mut places: Vec<Place> = units.places;
     places.extend(clustered);
@@ -457,7 +457,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
             units.numbered.len()
         );
     }
-    summary.push_str(&dedupe::report(&merged, &out_dir, a.build_name())?);
+    summary.push_str(&dedupe::report(&joined, &merged, &out_dir, a.build_name())?);
     summary.push_str(&officials);
     summary.push_str(&corrected);
     summary.push_str(&donated);

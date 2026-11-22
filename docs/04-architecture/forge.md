@@ -485,7 +485,9 @@ ID registry `<cc>-ids-<main|lite>.tsv` from the `conflate` output of the same so
 - **Former units (D-118).** A stated link joins a settlement and a former admin unit after
   the model (shared name key, within 10 km); former units rank below settlements in search.
 - **Same place (D-116).** Same-name settlements and localities within 100 m after the core
-  are merged into the one with more records; `merged-<build>.tsv` lists each merge.
+  are merged into the one with more records. First, a place held only by unpopulated GeoNames
+  localities joins the nearest landmark of its name within 1 km (D-381: GeoNames repeats
+  landmarks so). `merged-<build>.tsv` lists each merge with its rule (`near` or `spot`).
 - **Admin records (D-110).** A cluster of admin records only (GeoNames `A.*`) links to the
   current unit it names (name key and containment, the source's level first, else the named
   unit whose outline is nearest, within 30 km: of the source's level, or of any level for a
