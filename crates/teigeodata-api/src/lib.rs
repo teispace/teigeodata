@@ -68,6 +68,7 @@ macro_rules! built {
 }
 
 mod places;
+mod sections;
 #[cfg(feature = "store")]
 mod store;
 
@@ -84,6 +85,9 @@ use teigeodata_engine::PostalCode;
 use teigeodata_engine::{Civil, Local};
 use teigeodata_engine::{Hit, Layer, LayerOptions, Near, Place, Scratch, Shared};
 use teigeodata_format::Part;
+/// What the store installed of a pack ([`Engine::store_selection`]), for
+/// [`Engine::installed_sections`] and [`Engine::open_installed`]: Rust and WebAssembly only.
+pub use teigeodata_format::component::Selection as StoreSelection;
 use teigeodata_format::component::{Component, Components, MAX_LANGUAGES, Parts};
 
 use places::Places;

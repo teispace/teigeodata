@@ -20,6 +20,10 @@ applied: a minor release could break the public API, and every break is listed u
   unchanged (D-369); the pack driver too, `fetch::AsyncTransport`, `install_from_async` and
   `update_from_async` (D-371); the store too, `store::AsyncStore` over `store::AsyncFs`, with
   `Store` its synchronous facade, and `store::parse_journal` for readers (D-372).
+- Wasm: a reader of an installed pack, `installedSections` and `Engine.openInstalled`, which
+  open only the sections a journal record's components hold; `Engine.openSections`; Rust API:
+  the same in `Engine::open_installed`, `Engine::open_sections`, and format:
+  `PackHead::holds` (D-373).
 
 ## [1.1.0] - 2026-11-17
 

@@ -296,8 +296,11 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
     journal is the index readers follow, pack files never change meaning, and a file a reader
     holds is left for the next recovery; every store test, the crash tests among them, passes
     unchanged
-  - [ ] c. `teigeodata-wasm` `store` feature: the store over JavaScript I/O (OPFS, `fetch`),
-    and the reader (index, head check, `Layer::from_sections`)
+  - [x] c1. The reader in every wasm package (D-373, 2026-11-22): `installedSections` names
+    the byte ranges of a journal record's components from the pack's head, and
+    `Engine.openInstalled` opens them as a layer, checked against the head
+  - [ ] c2. `teigeodata-wasm` `store` feature: the store over JavaScript I/O (OPFS, `fetch`),
+    a separate package variant
   - [ ] d. `store-worker.js` (Web Lock, OPFS, `fetch`, messages) and browser tests in CI
     (Playwright: Chromium, Firefox, WebKit) against a local CORS mirror and a throwaway-key
     catalog
@@ -375,4 +378,5 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-22 | 8.5b: the sans-I/O plans become one async core over an I/O trait | D-369 |
 | 2026-11-22 | 8.5b: a layer from its head and section buffers | D-370 |
 | 2026-11-22 | 8.5b b: the browser store is the native store over an async file trait, not a second layout | D-372 |
+| 2026-11-22 | 8.5b c split: c1 the reader in every package, c2 the store as its own variant | D-373 |
 | 2026-11-22 | 8.5b: the wasm store split into five sub-steps (async pack driver, browser layout, wasm exports, worker and browser tests, docs) | the pack driver's transport is the async part |

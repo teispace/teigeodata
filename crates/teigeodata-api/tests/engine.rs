@@ -127,6 +127,81 @@ fn open() -> (Engine, common::Model) {
     (engine, model)
 }
 
+/// A pack opened from its head and its point, names and search sections alone answers a
+/// search as the whole pack does (D-370); a section moved by a byte is refused as corrupt.
+#[test]
+fn a_pack_from_its_head_and_sections_answers_as_the_whole() {
+    use teigeodata_format::Pack;
+    use teigeodata_format::component::Component;
+    let model = synthetic(400, 11);
+    let bytes = model.encode();
+    let whole = Engine::new();
+    whole.open_bytes(&bytes).unwrap();
+    let pack = Pack::open(&bytes).unwrap();
+    let base = bytes.as_ptr() as usize;
+    let kept = [Component::Point, Component::Names, Component::Search];
+    let mut first = bytes.len();
+    let mut sections = Vec::new();
+    for s in pack.sections() {
+        let at = s.bytes().as_ptr() as usize - base;
+        first = first.min(at);
+        if Component::of(s.kind()).is_some_and(|c| kept.contains(&c)) {
+            sections.push((at as u64, Box::<[u8]>::from(s.bytes())));
+        }
+    }
+    let options = OpenOptions {
+        components: "point,names,search".into(),
+        verify: Verify::Eager,
+        ..OpenOptions::default()
+    };
+    let part = Engine::new();
+    let head = &bytes[..first];
+    let len = bytes.len() as u64;
+    assert_eq!(
+        part.open_sections(head, len, sections.clone(), &options),
+        Ok(0)
+    );
+    let id = model.ids[7].to_string();
+    let name = strings(&whole.get(&id).unwrap(), "name")[0]
+        .clone()
+        .unwrap();
+    assert_ne!(rows(&whole.search(&name, 5).unwrap()), 0);
+    for q in [name.as_str(), "zz"] {
+        assert_eq!(
+            strings(&part.search(q, 5).unwrap(), "id"),
+            strings(&whole.search(q, 5).unwrap(), "id"),
+            "{q}"
+        );
+    }
+    // As the store's reader does: the sections its journal record holds, from a prefix.
+    let want = teigeodata_format::component::Components::of(&kept).into();
+    assert_eq!(
+        Engine::installed_sections(&bytes[..64], len, want),
+        Ok(None)
+    );
+    let ranges = Engine::installed_sections(head, len, want)
+        .unwrap()
+        .unwrap();
+    let read: Vec<(u64, Box<[u8]>)> = ranges
+        .iter()
+        .map(|&(o, l)| (o, bytes[o as usize..(o + l) as usize].into()))
+        .collect();
+    assert_eq!(read.len(), sections.len());
+    let installed = Engine::new();
+    installed
+        .open_installed(head, len, read, want, &OpenOptions::default())
+        .unwrap();
+    assert_eq!(
+        strings(&installed.search(&name, 5).unwrap(), "id"),
+        strings(&whole.search(&name, 5).unwrap(), "id")
+    );
+    sections[0].0 += 1;
+    let e = Engine::new()
+        .open_sections(head, len, sections, &options)
+        .unwrap_err();
+    assert_eq!(e.code, ErrorCode::Corrupt);
+}
+
 #[test]
 fn get_returns_one_row_with_every_column() {
     let (engine, model) = open();

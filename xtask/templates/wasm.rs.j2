@@ -3,7 +3,8 @@
 //! Workers: the functions of `teigeodata-api` and the `Engine` over packs held as bytes. Names
 //! become camelCase in JavaScript; a failed call throws an `Error` whose `code` is the error
 //! code's name, as in Node.js. Left out: what needs a file system or threads (`openFile`, the
-//! store and its jobs); a page fetches a pack and opens its bytes.
+//! native store and its jobs); a page fetches a pack and opens its bytes, or its head and some
+//! sections (`openSections`, written by hand in `sections.rs`).
 #![allow(
     unsafe_code,
     reason = "wasm-bindgen's macros expand to its audited glue; this file has no unsafe of its own"
@@ -20,6 +21,8 @@
 use js_sys::{Error, Function, Reflect};
 use teigeodata_api::ErrorCode;
 use wasm_bindgen::prelude::*;
+
+pub mod sections;
 
 /// A thrown `Error` with the error code's name as its `code`, as in Node.js.
 fn thrown(code: &str, message: &str) -> JsValue {

@@ -185,6 +185,12 @@ the store must not bring a second engine. The contract, option (a) of the consum
     `Pack::open_sections` (D-370, 2026-11-22). The head and every section held are checked
     against the table; each section is verified against the signed head as `Verify` says. Per-query page faults are not possible this way, since reads are async; Chrome's
     `read-only` sync handles could add that later.
+  - In JavaScript (D-373, 2026-11-22): `installedSections(prefix, record)` reads the head
+    from a prefix of the file (64 kB covers it; `undefined` asks for more) and returns the
+    `[offset, length, …]` of the sections the journal record's components and parts hold;
+    `Engine.openInstalled(head, record, offsets, sections)` opens them as a layer whose
+    installed set is the record's, so a call outside it throws `MissingComponent`. Which
+    sections a set holds is `PackHead::holds`, one rule for the store and the reader.
 - **What the npm package gives a host:**
   - the store worker;
   - a small reader module (index, generation lock, head check, section reads) that hands

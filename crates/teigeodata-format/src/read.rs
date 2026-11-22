@@ -593,6 +593,25 @@ impl<'a> Pack<'a> {
 }
 
 impl<'a> PackHead<'a> {
+    /// Whether an install of `want` holds section `kind`, part `part`, of this pack: its
+    /// components' sections of the parts it holds, sections of no component, and
+    /// `BLOCK_HASHES` when it covers one of them. The store writes exactly these sections and
+    /// leaves the rest as holes; a reader of the store reads exactly these.
+    pub fn holds(&self, want: crate::component::Selection) -> impl Fn(Kind, Part) -> bool + use<> {
+        let blocked = self.sections().any(|s| {
+            want.holds(s.kind, s.part)
+                && s.kind != Kind::BLOCK_HASHES
+                && s.length >= crate::blocks::MIN_COVERED
+        });
+        move |kind, part| {
+            if kind == Kind::BLOCK_HASHES {
+                blocked
+            } else {
+                want.holds(kind, part)
+            }
+        }
+    }
+
     /// Checks a pack's head: `bytes` is the file or any prefix of it that holds the whole head
     /// (the head frame), and `file_len` the file's length. Every check of [`Pack::open_head`]
     /// but the footer's (whose fields copy the header's) and the padding past `bytes`.

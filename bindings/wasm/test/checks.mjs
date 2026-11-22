@@ -138,6 +138,30 @@ export function run(tg, parity, read, { full }) {
   throws("bad components", () => points.openBytesWith(fixture, { components: ow.bad_components }), "InvalidArgument");
   points.free();
 
+  // As the browser store's reader opens an installed pack (D-370): the sections its journal
+  // record holds, from a prefix of the file doubled until it holds the head.
+  const record = { set: ["point", "names", "search"], pack_len: fixture.length };
+  let prefix = 64;
+  let ranges;
+  while ((ranges = tg.installedSections(fixture.subarray(0, prefix), record)) === undefined) prefix *= 2;
+  const offsets = new Float64Array(ranges.length / 2);
+  const bodies = [];
+  for (let i = 0; i < ranges.length; i += 2) {
+    offsets[i / 2] = ranges[i];
+    bodies.push(fixture.slice(ranges[i], ranges[i] + ranges[i + 1]));
+  }
+  ok("installedSections leaves sections out", sum(bodies.map((b) => b.length)) < fixture.length);
+  const lazy = new tg.Engine();
+  eq("openInstalled", lazy.openInstalled(fixture.subarray(0, prefix), record, offsets, bodies, { verify: "eager" }), 0);
+  eq("openInstalled get", strings(lazy.get(p.get.id), "id"), [p.get.id]);
+  needs("search", "openInstalled search", () => lazy.search(p.search.query, p.search.limit),
+    (r) => eq("openInstalled search", strings(r, "id")[0], p.search.first_id));
+  throws("openInstalled without admin", () => lazy.ancestors(p.get.id), "MissingComponent");
+  throws("openInstalled a bad record", () => lazy.openInstalled(fixture, { set: ["pointy"], pack_len: 1 }, offsets, bodies), "InvalidArgument");
+  offsets[0] += 1;
+  throws("openSections a moved section", () => lazy.openSections(fixture.subarray(0, prefix), fixture.length, offsets, bodies), "Corrupt");
+  lazy.free();
+
   const postal = (what, query, check) => {
     if (built.has("postal")) check(query());
     else eq(`${what} without postal`, strings(query(), "postal").length, 0);

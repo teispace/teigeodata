@@ -1040,7 +1040,7 @@ impl<D: AsyncFs> AsyncStore<D> {
         if !deep {
             return Ok(Health::Good);
         }
-        let wanted = held(&h, r.selection());
+        let wanted = h.holds(r.selection());
         let mut bad = Vec::new();
         let mut buf = alloc::vec![0_u8; CHUNK];
         for s in h.sections() {
@@ -1113,7 +1113,7 @@ impl<D: AsyncFs> AsyncStore<D> {
             set,
             parts: r.parts,
         };
-        let (was, now) = (held(&h, r.selection()), held(&h, grown));
+        let (was, now) = (h.holds(r.selection()), h.holds(grown));
         if now(Kind::BLOCK_HASHES, Part::BASE) && !was(Kind::BLOCK_HASHES, Part::BASE) {
             return Err(derive(
                 "the pack would need BLOCK_HASHES, which only a download brings",
@@ -1593,24 +1593,6 @@ fn derive_sections<'h, F: Read + Seek>(
     Ok((targets, inputs))
 }
 
-/// Whether an install of `want` holds section `kind`, part `part`, of the pack `h` heads: its
-/// components' sections of the parts it holds, sections of no component, and `BLOCK_HASHES`
-/// when it covers one of them.
-fn held(h: &PackHead<'_>, want: Selection) -> impl Fn(Kind, Part) -> bool + use<> {
-    let blocked = h.sections().any(|s| {
-        want.holds(s.kind, s.part)
-            && s.kind != Kind::BLOCK_HASHES
-            && s.length >= teigeodata_format::blocks::MIN_COVERED
-    });
-    move |kind, part| {
-        if kind == Kind::BLOCK_HASHES {
-            blocked
-        } else {
-            want.holds(kind, part)
-        }
-    }
-}
-
 /// Punches every range of the staged pack that an install of `set` never writes: the sections
 /// it does not hold and the gaps around them, never the head, a held section or the footer
 /// (D-189). A file whose head does not read is left as it is: the install checked it already.
@@ -1621,7 +1603,7 @@ fn hollow<F: StoreFile>(f: &mut F, pack_len: u64, want: Selection) -> io::Result
     let Ok(h) = PackHead::parse(&head, pack_len) else {
         return Ok(());
     };
-    let wanted = held(&h, want);
+    let wanted = h.holds(want);
     let Some(mut at) = h.sections().next().map(|s| s.offset) else {
         return Ok(());
     };
