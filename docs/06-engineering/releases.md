@@ -91,6 +91,9 @@ comes first), data is released by hand as a GitHub pre-release (D-247):
    is at hand. Never the `.key-*` file or the TSV reports. Always `ids-<build>.tar.gz`
    (`cargo xtask ids save <build> <file>`): the ID registries the files were numbered with, so
    the next build keeps every published ID (D-261; `cargo xtask ids restore` puts them back).
+   With both lines' archives at hand, also `ids-bridge.tar.gz` (`cargo xtask ids bridges
+   ids-lite.tar.gz ids-main.tar.gz ids-bridge.tar.gz`): each namespace's lite IDs to main's
+   (D-368). Releases are immutable once published: attach every file before publishing.
 4. The notes say what each file is (rows, wire size), the code commit or tag that reads it
    (`git` dependency with `rev` or `tag`), the licence with the attribution, that it is outside
    the signed catalog, and how to verify the checksums.
@@ -105,6 +108,7 @@ Once the catalog is live, data releases go through it and these pre-releases sto
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-22 | Data releases carry the lite-to-main ID bridge | D-368 |
 | 2026-11-17 | `bump` also writes the site's version and its install page | The site showed 1.0.0 after 1.1.0 |
 | 2026-11-15 | `cargo xtask bump` writes the version everywhere; `check-workspace` holds every copy to it | D-346 |
 | 2026-11-15 | The `release` workflow tags and publishes a release with SBOMs, checksums and attestations; the build workflows no longer run on tags | phase 5.10a (D-302) |

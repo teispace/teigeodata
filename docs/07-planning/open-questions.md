@@ -1,7 +1,7 @@
 ---
 title: "Open questions"
 status: living
-updated: 2026-11-15
+updated: 2026-11-22
 ---
 
 # Open questions
@@ -28,5 +28,4 @@ move it to the [decision log](../03-decisions/log.md) and delete it here.
 | Q-035 | Where do Nepal's ward boundaries come from? Neither pack has a ward: its 2,622 (lite) and 2,806 (main) level-4 places are the former village development committees (GeoNames `ADM4H`, D-110), corrected 2026-11-17, so `admin_at` stops at the local level (found by TG-26, 2026-11-17) | Main build: OpenStreetMap's 6,741 ward relations (D-363). Lite: still no open layer: Open Knowledge Nepal's LocalBoundaries (CC BY 4.0) stops at local levels, a GitHub shapefile states no licence or source; ask the Survey Department about terms. Until then lite gives the nearest ward by `reverse` | Research |
 | Q-036 | Natural Earth's admin-1 `name` spells some units in a romanisation, not English (`Dubay` for Dubai, found 2026-11-17): which field names the world part's units? | Check `name_en` and the Wikidata English label against `name` on every unit, take the English one as canonical and keep `name` as an alternate; measure the world golden set | Research (next world build) |
 | Q-037 | Which Devanagari spelling variants should search fold? `लन्डन` misses London (stored `लण्डन`, Hindi `लंदन`), found by TG-28 on 2026-11-17 | Research the Nepali and Hindi orthography rules (anusvara and half-nasal, ण/न, ड/द in loanwords) and put the folds in the language data, not in code (P16); measure recall and false matches on the Nepal golden set before shipping | Research |
-| Q-038 | Lite and main number a country's places apart (TG-30): D-094 meant one registry, but each line keeps its own and no serial matches (found 2026-11-17). How do the lines share IDs without breaking released ones? | Lite's serials collide with main's, so lite cannot simply retire into main's. Options: re-key lite to main's serials once, with a bridge file for old lite IDs; or keep two lines and ship a bridge file each release. Measure what each breaks for an installed app before choosing | Research (next Nepal release) |
 | Q-039 | Which Devanagari spelling is canonical when official lists disagree (TG-31)? Kathmandu: काठमाण्डौ (the Election Commission's and CBS's local-level lists), काठमाडौं (the Election Commission's district list), काठमाडौँ (CBS's district list), checked 2026-11-17 | Find a ruling source: the Nepal Academy's orthography for chandrabindu and anusvara and for ण्ड against ड in this name, the metropolitan city's own usage, the gazette notice that named the local level. Then write a rule in the lexicon (one place, every level), not a one-off row | Research (next Nepal release) |

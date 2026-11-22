@@ -578,8 +578,7 @@ A build reads the previous registry with `--ids` and writes the updated one:
    (D-267). A world build that would retire more than 1% of its holder's serials fails
    unless `--allow-retire`.
 
-The release order is main, then lite on main's registry; the lite registry is the release's
-registry, the input of the next main build. Measured on Nepal on 2026-11-07:
+**Two lines (D-368).** D-094 ran main, then lite on main's registry, so lite shared main's IDs. CI's data build runs the two builds in parallel, each on its own released registry (D-261), and their first builds numbered apart: each line now keeps its own registry and its IDs are stable within it. `cargo xtask ids bridges` maps every namespace's lite IDs to main's for each release. The shared-registry run measured on Nepal on 2026-11-07, kept for the record:
 
 | Run | Kept | New | Retired | Redirects |
 |---|---:|---:|---:|---:|
@@ -588,8 +587,7 @@ registry, the input of the next main build. Measured on Nepal on 2026-11-07:
 | main on lite's registry | 96,844 | 0 | 0 | 0 |
 | main without OSM (a test of retirement) | 91,272 | 0 | 18 merged, 5,667 tombstones | 5,685 |
 
-The registry is 3.5 MB, 0.42 MB with `zstd -19`. Publishing it with each release and pinning
-it in `sources.lock` comes with the catalog (step 3.7).
+The registry is 3.5 MB, 0.42 MB with `zstd -19`. Each data release carries both lines' registries (D-261) and their bridge (D-368).
 
 ### Split builds (`--split`)
 

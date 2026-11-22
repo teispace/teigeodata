@@ -16,6 +16,9 @@
 //!   lite serial to the live main serial sharing most of its source keys, the smaller key set
 //!   breaking a tie. A tie left, or no shared key, maps to nothing and says which. A retired
 //!   lite ID is not listed: a lite pack's REDIRECTS give its successor first.
+//! - `bridges <ids-lite.tar.gz> <ids-main.tar.gz> <out.tar.gz>`: `bridge` for every namespace
+//!   both lines number (a country pack's registry, else the world part's; `world` is namespace
+//!   0), from two `save` archives; every data release ships it (D-368).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -29,7 +32,8 @@ const HEADER: &str = "# teigeodata id registry";
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     let one = |e: String| vec![e];
     let usage = "usage: cargo xtask ids save <lite|main> <out.tar.gz> | ids restore [<tag>] \
-                 [--build <lite|main>] [--force] | ids bridge <cc> <lite.tsv> <main.tsv> <out.tsv>";
+                 [--build <lite|main>] [--force] | ids bridge <cc> <lite.tsv> <main.tsv> <out.tsv> \
+                 | ids bridges <ids-lite.tar.gz> <ids-main.tar.gz> <out.tar.gz>";
     match args.first().map(String::as_str) {
         Some("save") => match (args.get(1), args.get(2)) {
             (Some(build), Some(out)) => save(root, build, Path::new(out)).map_err(one),
@@ -38,6 +42,12 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         Some("bridge") => match (args.get(1), args.get(2), args.get(3), args.get(4)) {
             (Some(cc), Some(lite), Some(main), Some(out)) => {
                 bridge(cc, Path::new(lite), Path::new(main), Path::new(out)).map_err(one)
+            }
+            _ => Err(one(usage.into())),
+        },
+        Some("bridges") => match (args.get(1), args.get(2), args.get(3)) {
+            (Some(lite), Some(main), Some(out)) => {
+                bridges(Path::new(lite), Path::new(main), Path::new(out)).map_err(one)
             }
             _ => Err(one(usage.into())),
         },
@@ -140,14 +150,129 @@ fn bridge_serials(
         .collect()
 }
 
+/// The namespace a registry file names: a country code, or `world` (namespace 0).
+fn namespace(cc: &str) -> Result<teigeodata_core::Namespace, String> {
+    if cc == "world" {
+        return Ok(teigeodata_core::Namespace::WORLD);
+    }
+    <[u8; 2]>::try_from(cc.as_bytes())
+        .ok()
+        .and_then(teigeodata_core::Namespace::from_country)
+        .ok_or_else(|| format!("{cc}: not a two-letter country code or `world`"))
+}
+
+/// Each namespace's registry in one line's extracted archive (`dir`), by namespace: a country
+/// pack's (`pack/<cc>/<cc>-ids-<build>.tsv`) over the world part's
+/// (`baseline/world/world-ids-<build>/<cc>.tsv`), since the world part numbers a pack country
+/// through the pack's registry.
+fn line_registries(dir: &Path, build: &str) -> Result<BTreeMap<String, PathBuf>, String> {
+    let mut out = BTreeMap::new();
+    let world = dir.join(format!("baseline/world/world-ids-{build}"));
+    if world.is_dir() {
+        for e in fs::read_dir(&world).map_err(|e| format!("{}: {e}", world.display()))? {
+            let p = e.map_err(|e| e.to_string())?.path();
+            if let Some(cc) = p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.strip_suffix(".tsv"))
+            {
+                out.insert(cc.to_string(), p.clone());
+            }
+        }
+    }
+    let packs = dir.join("pack");
+    if packs.is_dir() {
+        for e in fs::read_dir(&packs).map_err(|e| format!("{}: {e}", packs.display()))? {
+            let d = e.map_err(|e| e.to_string())?.path();
+            let Some(cc) = d.file_name().and_then(|n| n.to_str()).map(str::to_string) else {
+                continue;
+            };
+            let f = d.join(format!("{cc}-ids-{build}.tsv"));
+            if f.is_file() {
+                out.insert(cc, f);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// `ids bridges`: the bridge of every namespace both lines number, from two `ids save`
+/// archives, into one archive of `<ns>-ids-bridge.tsv` files (D-368).
+fn bridges(lite: &Path, main: &Path, out: &Path) -> Result<String, String> {
+    let tmp = std::env::temp_dir().join(format!("xtask-bridges-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&tmp);
+    let untar = |archive: &Path, to: &Path| -> Result<(), String> {
+        fs::create_dir_all(to).map_err(|e| format!("{}: {e}", to.display()))?;
+        let status = Command::new("tar")
+            .arg("-xzf")
+            .arg(archive)
+            .arg("-C")
+            .arg(to)
+            .status()
+            .map_err(|e| format!("tar: {e}"))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("{}: tar failed: {status}", archive.display()))
+        }
+    };
+    let run = || -> Result<String, String> {
+        let (l, m, o) = (tmp.join("lite"), tmp.join("main"), tmp.join("out"));
+        untar(lite, &l)?;
+        untar(main, &m)?;
+        let (lr, mr) = (line_registries(&l, "lite")?, line_registries(&m, "main")?);
+        fs::create_dir_all(&o).map_err(|e| format!("{}: {e}", o.display()))?;
+        let mut files = Vec::new();
+        let mut lines = Vec::new();
+        for (cc, lf) in &lr {
+            let Some(mf) = mr.get(cc) else { continue };
+            let name = format!("{cc}-ids-bridge.tsv");
+            lines.push(bridge(cc, lf, mf, &o.join(&name))?);
+            files.push(name);
+        }
+        if files.is_empty() {
+            return Err("no namespace is numbered by both lines".into());
+        }
+        let out = if out.is_absolute() {
+            out.to_path_buf()
+        } else {
+            std::env::current_dir()
+                .map_err(|e| e.to_string())?
+                .join(out)
+        };
+        let status = Command::new("tar")
+            .env("COPYFILE_DISABLE", "1")
+            .arg("-czf")
+            .arg(&out)
+            .arg("-C")
+            .arg(&o)
+            .args(&files)
+            .status()
+            .map_err(|e| format!("tar: {e}"))?;
+        if !status.success() {
+            return Err(format!("tar failed: {status}"));
+        }
+        let only_lite = lr.keys().filter(|k| !mr.contains_key(*k)).count();
+        let only_main = mr.keys().filter(|k| !lr.contains_key(*k)).count();
+        Ok(format!(
+            "ids: {} bridges → {} ({only_lite} namespaces only in lite, {only_main} only in main)\n{}",
+            files.len(),
+            out.display(),
+            lines
+                .iter()
+                .map(|l| l.rsplit('/').next().unwrap_or(l).to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+        ))
+    };
+    let r = run();
+    let _ = fs::remove_dir_all(&tmp);
+    r
+}
+
 /// `ids bridge`: writes the lite-to-main bridge of country `cc` (see the module docs).
 fn bridge(cc: &str, lite: &Path, main: &Path, out: &Path) -> Result<String, String> {
-    let code: [u8; 2] = cc
-        .as_bytes()
-        .try_into()
-        .map_err(|_| format!("{cc}: not a two-letter country code"))?;
-    let ns = teigeodata_core::Namespace::from_country(code)
-        .ok_or_else(|| format!("{cc}: not a two-letter country code"))?;
+    let ns = namespace(cc)?;
     let read = |p: &Path| fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()));
     let (lite_text, main_text) = (read(lite)?, read(main)?);
     let at = |p: &Path, e: String| format!("{}: {e}", p.display());
@@ -159,7 +284,7 @@ fn bridge(cc: &str, lite: &Path, main: &Path, out: &Path) -> Result<String, Stri
             .ok_or_else(|| format!("serial {serial}: not an ID"))
     };
     let mut text = format!(
-        "{BRIDGE_HEADER}: {cc} lite to main (TG-30). Columns: lite ID, main ID (empty when none), \
+        "{BRIDGE_HEADER}: {cc} lite to main (D-368). Columns: lite ID, main ID (empty when none), \
          how: `keys N` shared, `tie`, or `none`.\n"
     );
     let (mut to, mut tie, mut none) = (0, 0, 0);
@@ -407,7 +532,7 @@ fn newest_with(root: &Path, asset: &str) -> Result<String, String> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, reason = "tests")]
 mod tests {
-    use super::{Bridged, bridge_serials, live_serials, place, registries};
+    use super::{Bridged, bridge_serials, bridges, live_serials, namespace, place, registries};
     use std::fs;
     use std::path::Path;
 
@@ -483,5 +608,102 @@ mod tests {
             ]
         );
         assert!(live_serials("1\tlite\tgeonames:1\n").is_err());
+    }
+
+    #[test]
+    fn bridges_cover_every_namespace_both_lines_number() {
+        let base = std::env::temp_dir().join(format!("xtask-bridges-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let h = "# teigeodata id registry 1\n";
+        // np: a pack registry in both lines, and a world file in lite that the pack overrides;
+        // world: namespace 0; us: only in lite; tk: only in main.
+        write(
+            &base,
+            "lite/pack/np/np-ids-lite.tsv",
+            &format!("{h}1\tlite\tgeonames:1\n"),
+        );
+        write(
+            &base,
+            "lite/baseline/world/world-ids-lite/np.tsv",
+            &format!("{h}1\tlite\tgeonames:9\n"),
+        );
+        write(
+            &base,
+            "lite/baseline/world/world-ids-lite/world.tsv",
+            &format!("{h}1\tlite\tne:sea\n"),
+        );
+        write(
+            &base,
+            "lite/baseline/world/world-ids-lite/us.tsv",
+            &format!("{h}1\tlite\tgeonames:5\n"),
+        );
+        write(
+            &base,
+            "main/pack/np/np-ids-main.tsv",
+            &format!("{h}7\tmain\tgeonames:1 osm:node/1\n"),
+        );
+        write(
+            &base,
+            "main/baseline/world/world-ids-main/world.tsv",
+            &format!("{h}3\tmain\tne:sea\n"),
+        );
+        write(
+            &base,
+            "main/baseline/world/world-ids-main/tk.tsv",
+            &format!("{h}1\tmain\tgeonames:6\n"),
+        );
+        let tar = |dir: &str, out: &str| {
+            let ok = std::process::Command::new("tar")
+                .env("COPYFILE_DISABLE", "1")
+                .arg("-czf")
+                .arg(base.join(out))
+                .arg("-C")
+                .arg(base.join(dir))
+                .arg(".")
+                .status()
+                .unwrap()
+                .success();
+            assert!(ok);
+        };
+        tar("lite", "ids-lite.tar.gz");
+        tar("main", "ids-main.tar.gz");
+        let out = base.join("bridge.tar.gz");
+        let said = bridges(
+            &base.join("ids-lite.tar.gz"),
+            &base.join("ids-main.tar.gz"),
+            &out,
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        assert!(
+            said.contains("2 bridges") && said.contains("1 namespaces only in lite"),
+            "{said}"
+        );
+        let x = base.join("x");
+        fs::create_dir_all(&x).unwrap();
+        assert!(
+            std::process::Command::new("tar")
+                .arg("-xzf")
+                .arg(&out)
+                .arg("-C")
+                .arg(&x)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let np = fs::read_to_string(x.join("np-ids-bridge.tsv")).unwrap();
+        assert!(
+            np.lines().any(|l| l == "tgd:np/1\ttgd:np/7\tkeys 1"),
+            "{np}"
+        );
+        let world = fs::read_to_string(x.join("world-ids-bridge.tsv")).unwrap();
+        assert!(
+            world
+                .lines()
+                .any(|l| l == "tgd:world/1\ttgd:world/3\tkeys 1"),
+            "{world}"
+        );
+        assert!(!x.join("us-ids-bridge.tsv").exists() && !x.join("tk-ids-bridge.tsv").exists());
+        assert!(namespace("xyz").is_err() && namespace("np").is_ok());
+        let _ = fs::remove_dir_all(&base);
     }
 }
