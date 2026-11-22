@@ -701,6 +701,7 @@ mod tests {
             kind: PlaceKind::Settlement,
             admin_level: 0,
             flags: 0,
+            class: 0,
             point: (853_000_000, 277_000_000),
             names: names
                 .iter()

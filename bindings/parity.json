@@ -58,7 +58,7 @@
   "engine": {
     "about": "Queries on bindings/fixtures/synth.tgd, the engine's synthetic pack (teigeodata-api's tests keep it current)",
     "fixture": "fixtures/synth.tgd",
-    "columns": ["id", "name", "kind", "level", "lat", "lon", "elevation", "parent", "tz", "iso", "population", "population_kind"],
+    "columns": ["id", "name", "kind", "level", "lat", "lon", "elevation", "parent", "tz", "iso", "population", "population_kind", "class"],
     "get": {
       "id": "tgd:np/18n8a6",
       "name": "Synthland",

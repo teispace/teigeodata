@@ -285,7 +285,7 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   `block_on` and its tests unchanged (`meta`, `policy`; done 2026-11-22)
 - [x] An engine entry that opens a pack from its head and a set of section buffers (lazy by
   section, for a host's own wasm, note §5b): `Layer::from_sections`, D-370, 2026-11-22
-- [ ] `teigeodata-wasm` `store` feature and `store-worker`: install, update, remove, pin, repair,
+- [x] `teigeodata-wasm` `store` feature and `store-worker`: install, update, remove, pin, repair,
   status over `fetch` and OPFS; browser tests (Chromium, Firefox, WebKit) against a local CORS
   mirror and a throwaway-key catalog
   - [x] a. The pack driver (`fetch::install_from`, `update_from`) as one async core over an
@@ -338,7 +338,7 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   - [x] TG-30: IDs across lite and main (D-368, the bridge in data-2026.11.22); TG-33 and
     TG-34 released in data-2026.11.22
   - [x] TG-31: one spelling across a place's levels (D-377: काठमाडौं, three reviewed rows)
-  - [ ] TG-32: landmarks as their own kind (research first: a new kind is a format change)
+  - [x] TG-32: landmarks (D-381: `locality` with a class from one growable list, no format change)
   - [x] Q-037: Devanagari spelling folds in search (D-378: न before any stop, both folds kept)
   - [x] Q-036: the world part's unit names in English (D-379: `name_en` less the unit's type; 886 units)
   - [x] TG-14's 42 held rows read a second time where a rule decides (D-380: 11 apply; 31 wait for a person)

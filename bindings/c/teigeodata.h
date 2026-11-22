@@ -226,7 +226,7 @@ int32_t tg_distance_m(double lat1, double lon1, double lat2, double lon2, double
  */
 int32_t tg_bearing_deg(double lat1, double lon1, double lat2, double lon2, double *out);
 
-/* Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine answers from any number of threads at once, and adding a pack publishes a new snapshot while queries go on.  Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`, `population` and `population_kind` (`stated` or `modelled`; absent values are null), plus `score` for a search and `meters` and `bearing` for a reverse lookup. */
+/* Open packs answering place queries (D-141, D-274). Every method takes `&self`: one engine answers from any number of threads at once, and adding a pack publishes a new snapshot while queries go on.  Place results are blobs with the columns `id`, `name`, `kind`, `level`, `lat`, `lon`, `elevation`, `parent`, `tz`, `iso`, `population`, `population_kind` (`stated` or `modelled`) and `class` (a landmark's class, such as `temple`; D-381); absent values are null. A search adds `score`, and a reverse lookup adds `meters` and `bearing`. */
 
 /* Frees a handle. NULL does nothing. No call on it may be in flight. */
 void tg_engine_free(tg_engine *handle);

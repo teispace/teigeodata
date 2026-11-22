@@ -224,6 +224,8 @@ pub(crate) struct Place {
     pub(crate) admin_level: u8,
     /// PLACES flag bits (`places::FLAG_FORMER`).
     pub(crate) flags: u32,
+    /// Its class code (`teigeodata_core::class`, D-381), 0 for none.
+    pub(crate) class: u32,
     /// (lon, lat) on the 1e-7° grid.
     pub(crate) point: (i32, i32),
     /// Canonical first.

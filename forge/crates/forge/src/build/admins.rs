@@ -280,6 +280,7 @@ mod tests {
             kind: PlaceKind::Admin,
             admin_level: 3,
             flags: 0,
+            class: 0,
             point: (500_000, 500_000),
             names: vec![PlaceName {
                 text: "Mahankal".into(),

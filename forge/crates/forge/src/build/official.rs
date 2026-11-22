@@ -486,6 +486,7 @@ mod tests {
             kind: teigeodata_core::PlaceKind::Admin,
             admin_level: 3,
             flags: 0,
+            class: 0,
             point: (0, 0),
             names: names
                 .iter()

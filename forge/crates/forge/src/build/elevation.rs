@@ -738,6 +738,7 @@ mod tests {
             rank: 0,
             parent: None,
             flags: 0,
+            class: 0,
             sources: Vec::new(),
         }
     }

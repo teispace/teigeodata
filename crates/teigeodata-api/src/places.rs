@@ -106,6 +106,7 @@ pub(crate) struct Places {
     population: Vec<u32>,
     has_population: Vec<bool>,
     population_kind: Arena,
+    class: Arena,
     /// Search scores, when the query has them.
     pub(crate) score: Option<Vec<i32>>,
     /// Distances in metres and bearings in degrees, when the query has them.
@@ -179,6 +180,7 @@ impl Places {
         self.population.push(people.map_or(0, |p| p.0));
         self.has_population.push(people.is_some());
         self.population_kind.push(people.and_then(|p| p.1));
+        self.class.push(installed(engine.class(place))?);
         Ok(())
     }
 
@@ -195,7 +197,8 @@ impl Places {
     /// The blob: `id`, `name`, `kind` (dictionary), `level` (`u8`), `lat`, `lon` (`f64`),
     /// `elevation` (`i16`, nullable), `parent` (ID, nullable), `tz` and `iso` (dictionaries,
     /// nullable), `population` (`u32`, nullable) and `population_kind` (`stated` or
-    /// `modelled`, nullable; D-351), then `score`, `meters` and `bearing` when the query set them, and for a
+    /// `modelled`, nullable; D-351), `class` (dictionary, nullable: `temple`, `palace`, …;
+    /// D-381), then `score`, `meters` and `bearing` when the query set them, and for a
     /// postal query `postal` (the code), `scheme`, `code_kind` (`area`, `part`, `post_office`,
     /// `point`), `valid_from` and `valid_to` (days since 1970-01-01, nullable).
     pub(crate) fn blob(&self) -> Result<Blob> {
@@ -207,6 +210,8 @@ impl Places {
             (Column::Utf8(&parent), Column::Dict(&tz), Column::Dict(&iso));
         let source = self.population_kind.strs();
         let (people_c, source_c) = (Column::U32(&self.population), Column::Dict(&source));
+        let class = self.class.strs();
+        let class_c = Column::Dict(&class);
         let mut columns = vec![
             ("id", Column::Utf8(&id)),
             ("name", Column::Nullable(&name_c, &self.name.present)),
@@ -226,6 +231,7 @@ impl Places {
                 "population_kind",
                 Column::Nullable(&source_c, &self.population_kind.present),
             ),
+            ("class", Column::Nullable(&class_c, &self.class.present)),
         ];
         if let Some(score) = &self.score {
             columns.push(("score", Column::I32(score)));

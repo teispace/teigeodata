@@ -721,6 +721,7 @@ mod tests {
             kind,
             admin_level: level,
             flags: 0,
+            class: 0,
             point: (x, x),
             names: Vec::new(),
             population: None,

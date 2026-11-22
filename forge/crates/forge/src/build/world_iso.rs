@@ -333,6 +333,7 @@ mod tests {
             kind,
             admin_level: u8::from(kind == PlaceKind::Admin),
             flags: 0,
+            class: 0,
             point: (0, 0),
             names: vec![PlaceName {
                 text: key.into(),

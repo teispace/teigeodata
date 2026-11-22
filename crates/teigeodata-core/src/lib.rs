@@ -49,6 +49,7 @@ pub(crate) const fn cases(n: usize) -> usize {
 
 pub mod bitpack;
 pub mod bits;
+pub mod class;
 pub mod fsst;
 mod grid;
 mod hilbert;

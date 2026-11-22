@@ -212,6 +212,7 @@ mod tests {
             kind,
             admin_level: level,
             flags,
+            class: 0,
             point: (0, 0),
             names: vec![PlaceName {
                 text: key.into(),

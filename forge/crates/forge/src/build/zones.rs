@@ -137,6 +137,7 @@ fn to_places(zones: Vec<(String, Vec<Vec<[i32; 2]>>)>) -> Result<Zones, String> 
             kind: PlaceKind::TimezoneArea,
             admin_level: 0,
             flags: 0,
+            class: 0,
             point,
             names: vec![PlaceName {
                 text: tzid,

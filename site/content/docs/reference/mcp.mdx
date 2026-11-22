@@ -398,6 +398,7 @@ The answer of every place tool: a page of `results`, the `next_cursor` of the ne
 | `results[].parent` | string or null | Its parent's ID; null for a root. |
 | `results[].timezone` | string or null | Its IANA timezone, such as Asia/Kathmandu. |
 | `results[].bearing` | number | Degrees clockwise from north, from the place to the point asked about. |
+| `results[].class` | string | Its class, when it has one: a landmark's (temple, palace, monastery, shrine, religious_site, monument, museum, historic_site, castle, ruin, pagoda, mosque, church, airport). |
 | `results[].elevation_source` | string | Where the height came from: surveyed or model, when stated. |
 | `results[].inside` | boolean | Whether the point asked about is inside the place's outline (reverse). |
 | `results[].is_dst` | boolean | Whether daylight saving time is in force at that instant. |

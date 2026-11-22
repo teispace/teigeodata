@@ -182,6 +182,7 @@ mod tests {
             kind,
             admin_level: 0,
             flags: 0,
+            class: 0,
             point: (850_000_000, lat_e7),
             names: vec![PlaceName {
                 text: name.into(),

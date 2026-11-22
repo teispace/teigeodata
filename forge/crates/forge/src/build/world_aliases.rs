@@ -195,6 +195,7 @@ mod tests {
             kind,
             admin_level: 0,
             flags: 0,
+            class: 0,
             point: (0, 0),
             names: vec![PlaceName {
                 text: name.into(),

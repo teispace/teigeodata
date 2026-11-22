@@ -331,6 +331,7 @@ pub(super) fn places_section(rows: &[&Place], points: &[Point<E6>]) -> Result<Ve
     let kinds: Vec<PlaceKind> = rows.iter().map(|p| p.kind).collect();
     let levels: Vec<u8> = rows.iter().map(|p| p.admin_level).collect();
     let flags: Vec<u32> = rows.iter().map(|p| p.flags).collect();
+    let classes: Vec<u32> = rows.iter().map(|p| p.class).collect();
     let cols = PlaceColumns {
         points,
         kinds: &kinds,
@@ -339,8 +340,12 @@ pub(super) fn places_section(rows: &[&Place], points: &[Point<E6>]) -> Result<Ve
         } else {
             &[]
         },
+        classes: if classes.iter().any(|&c| c != 0) {
+            &classes
+        } else {
+            &[]
+        },
         flags: &flags,
-        ..PlaceColumns::default()
     };
     places::encode(&cols).map_err(|e| e.to_string())
 }
@@ -1757,6 +1762,7 @@ mod tests {
             kind,
             admin_level,
             flags: 0,
+            class: 0,
             point: (0, 0),
             names: Vec::new(),
             population,

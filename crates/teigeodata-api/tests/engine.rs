@@ -224,7 +224,8 @@ fn get_returns_one_row_with_every_column() {
             "tz",
             "iso",
             "population",
-            "population_kind"
+            "population_kind",
+            "class"
         ]
     );
     assert_eq!(strings(&blob, "id"), [Some(id)]);

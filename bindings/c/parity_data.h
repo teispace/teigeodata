@@ -73,8 +73,8 @@
 #define TGP_ENGINE_CHILDREN_IDS_5 "tgd:np/qz1beh"
 #define TGP_ENGINE_CHILDREN_IDS_6 "tgd:np/vasbex"
 #define TGP_ENGINE_CHILDREN_IDS_7 "tgd:np/y02ha8"
-#define TGP_ENGINE_COLUMNS_COUNT 12
-#define TGP_ENGINE_COLUMNS_ITEMS "id", "name", "kind", "level", "lat", "lon", "elevation", "parent", "tz", "iso", "population", "population_kind"
+#define TGP_ENGINE_COLUMNS_COUNT 13
+#define TGP_ENGINE_COLUMNS_ITEMS "id", "name", "kind", "level", "lat", "lon", "elevation", "parent", "tz", "iso", "population", "population_kind", "class"
 #define TGP_ENGINE_COLUMNS_0 "id"
 #define TGP_ENGINE_COLUMNS_1 "name"
 #define TGP_ENGINE_COLUMNS_2 "kind"
@@ -87,6 +87,7 @@
 #define TGP_ENGINE_COLUMNS_9 "iso"
 #define TGP_ENGINE_COLUMNS_10 "population"
 #define TGP_ENGINE_COLUMNS_11 "population_kind"
+#define TGP_ENGINE_COLUMNS_12 "class"
 #define TGP_ENGINE_DISTANCE_BEARING 106.74628026303373
 #define TGP_ENGINE_DISTANCE_FROM "tgd:np/18n8a6"
 #define TGP_ENGINE_DISTANCE_METERS 157883.1040944845

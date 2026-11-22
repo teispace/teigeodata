@@ -17,6 +17,7 @@ use super::units::deepest;
 use crate::aliases::rules::Rules;
 use crate::build::Level;
 use crate::names::Namer;
+use crate::read::geonames::landmark_class;
 use std::collections::BTreeMap;
 use std::path::Path;
 use teigeodata_core::PlaceKind;
@@ -202,9 +203,27 @@ pub(super) fn link_admins(places: &mut [Place], links: Vec<admins::Link>) -> usi
     added
 }
 
+/// The landmark class code of a cluster (TG-32, D-381): its landmark record's class, unless a
+/// record makes it an admin unit or a settlement in its own right. A `GeoNames` populated
+/// locality or section (`P.PPLL`, `P.PPLX`) beside a landmark of the same name is the landmark
+/// (Narayanhiti Royal Palace is both a `P.PPLL` and an `S.PAL`).
+pub(super) fn landmark(recs: &[(&Rec, &str, usize)]) -> Option<u32> {
+    let code = recs
+        .iter()
+        .filter(|(r, _, _)| r.kind == "landmark")
+        .find_map(|(r, _, _)| r.class.strip_prefix("S.").and_then(landmark_class))
+        .and_then(teigeodata_core::class::class_code)?;
+    let other = recs.iter().any(|(r, _, _)| {
+        r.kind == "admin"
+            || (r.kind == "populated_place" && !matches!(r.class.as_str(), "P.PPLL" | "P.PPLX"))
+    });
+    (!other).then_some(code)
+}
+
 /// A cluster's kind, admin level and flags; `None` for a cluster that is not a place of its
 /// own (an admin cluster linked to its unit, D-110, or a kind the build does not keep). A
-/// cluster with a settlement is a settlement, then a locality, an admin unit, a natural feature.
+/// landmark is a locality (D-381); otherwise a cluster with a settlement is a settlement, then
+/// a locality, an admin unit, a natural feature.
 pub(super) fn place_kind(
     recs: &[(&Rec, &str, usize)],
     names: &[BTreeMap<String, Vec<PlaceName>>],
@@ -212,6 +231,9 @@ pub(super) fn place_kind(
     units: (&admins::Units<'_>, &Rules<'_>),
     admin: &mut AdminCounts,
 ) -> Option<(PlaceKind, u8, u32)> {
+    if landmark(recs).is_some() {
+        return Some((PlaceKind::Locality, 0, 0));
+    }
     if recs.iter().any(|(r, _, _)| r.kind == "populated_place") {
         return Some((PlaceKind::Settlement, 0, 0));
     }
@@ -418,6 +440,7 @@ pub(super) fn cluster_places(
             kind,
             admin_level: level,
             flags,
+            class: landmark(&recs).unwrap_or(0),
             point,
             names: all,
             population: recs.iter().find_map(|(r, _, _)| r.population),
@@ -483,4 +506,43 @@ pub(super) struct Group {
     pub(super) members: Vec<(usize, String)>,
     /// The first source's point.
     pub(super) seed: (i32, i32),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Rec, landmark};
+
+    fn rec(kind: &str, class: &str) -> Rec {
+        Rec {
+            kind: kind.into(),
+            class: class.into(),
+            name: "Narayanhiti Royal Palace".into(),
+            point: Some((853_209_800, 277_185_040)),
+            population: None,
+        }
+    }
+
+    #[test]
+    fn a_landmark_is_its_own_class_unless_a_settlement_or_unit_is_there() {
+        let class = |recs: &[Rec]| {
+            let refs: Vec<(&Rec, &str, usize)> = recs.iter().map(|r| (r, "x", 0)).collect();
+            landmark(&refs).and_then(teigeodata_core::class::class_name)
+        };
+        // The palace with GeoNames' populated locality of its name: a palace (TG-32).
+        let palace = [rec("populated_place", "P.PPLL"), rec("landmark", "S.PAL")];
+        assert_eq!(class(&palace), Some("palace"));
+        assert_eq!(class(&[rec("landmark", "S.TMPL")]), Some("temple"));
+        // A village or an admin unit of the name stays what it is.
+        assert_eq!(
+            class(&[rec("populated_place", "P.PPL"), rec("landmark", "S.TMPL")]),
+            None
+        );
+        assert_eq!(
+            class(&[rec("admin", "A.ADM3"), rec("landmark", "S.TMPL")]),
+            None
+        );
+        // No landmark record, or a spot feature that is not one.
+        assert_eq!(class(&[rec("populated_place", "P.PPLL")]), None);
+        assert_eq!(class(&[rec("other", "S.HTL")]), None);
+    }
 }

@@ -309,6 +309,7 @@ mod tests {
             kind: PlaceKind::Admin,
             admin_level: 1,
             flags: 0,
+            class: 0,
             point: (0, 0),
             names: vec![PlaceName {
                 text: key.to_string(),

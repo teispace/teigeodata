@@ -351,6 +351,7 @@ mod tests {
             kind: teigeodata_core::PlaceKind::TimezoneArea,
             admin_level: 0,
             flags: 0,
+            class: 0,
             point: (0, 0),
             names: Vec::new(),
             population: None,

@@ -5,7 +5,8 @@
 //! - **Native** (`--json`, NDJSON): `id`, `name`, `kind`, `admin_level`, `lat`, `lon`,
 //!   `elevation` (m), `elevation_source` (`surveyed` or `model`, when stated), `parent` (ID), `timezone` (its area's name), `iso_code` (ISO 3166, a
 //!   country's or unit's, only when it has one, D-197), `population` and `population_kind`
-//!   (`stated` or `modelled`, D-351; only when known), and for a query `meters` (distance),
+//!   (`stated` or `modelled`, D-351; only when known), `class` (`temple`, `palace`, …, D-381;
+//!   only when it has one), and for a query `meters` (distance),
 //!   `bearing` (degrees clockwise from north, from the place to the point asked about) and
 //!   `inside` (whether the point is in a country's or unit's outline; `reverse`, TG-19), or
 //!   `score` (search).
@@ -126,6 +127,9 @@ pub struct Record<'a> {
     /// grid, D-123).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub population_kind: Option<&'static str>,
+    /// Its class (`temple`, `palace`, …; D-381), when it has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub class: Option<&'static str>,
     /// Distance from the point asked about, metres (one decimal).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meters: Option<f64>,
@@ -295,6 +299,7 @@ pub fn record<'b>(
         iso_code: installed(engine.iso_code(place))?.map(Shown),
         population: people.map(|p| p.people),
         population_kind: people.and_then(|p| p.source).map(PopulationSource::name),
+        class: engine.class(place)?,
         meters: item.meters.map(|m| (m * 10.0).round() / 10.0),
         bearing: item.bearing.map(|b| (b * 10.0).round() / 10.0),
         inside: item.inside,
@@ -490,6 +495,9 @@ fn text(out: &mut dyn Write, r: &Record<'_>) -> Result<(), OutputError> {
     )?;
     if r.admin_level > 0 {
         write!(out, " {}", r.admin_level)?;
+    }
+    if let Some(c) = r.class {
+        write!(out, " {c}")?;
     }
     if let Some(c) = &r.iso_code {
         write!(out, " {}", c.0)?;

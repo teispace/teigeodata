@@ -34,7 +34,7 @@ from; this page gathers them in one place and does not override them.
 |---|---|---|
 | `kind` | enum, *required* | `country`, `admin` (with `admin_level`), `settlement`, `locality`, `natural`, `postal_area`, `timezone_area` |
 | `admin_level` | u8 | 0 = country, then the national ladder. Nepal: 1 province (प्रदेश), 2 district (जिल्ला), 3 local level (पालिका), 4 ward (वडा) |
-| `class` | dictionary code | Finer class: `city`, `town`, `village`, `hamlet`, `tole`, `metropolitan_city`, `rural_municipality`, `peak`, `pass`, `river`, … |
+| `class` | dictionary code | Finer class, one list for every country, which only grows (`teigeodata_core::class`, D-381). Landmarks (TG-32): `palace`, `temple`, `monastery`, `shrine`, `religious_site`, `monument`, `museum`, `historic_site`, `castle`, `ruin`, `pagoda`, `mosque`, `church`, `airport`, each a `locality`. Planned: `city`, `town`, `village`, `peak`, `pass`, … |
 | `national_type` | string | The country's own type name as recorded (for example `Gaunpalika`) |
 
 ## Position and elevation ([ADR-0007](../03-decisions/adr/ADR-0007-accuracy-model.md))

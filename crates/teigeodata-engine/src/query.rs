@@ -572,6 +572,23 @@ impl Engine {
             .and_then(|h| h.source(place.row as usize)))
     }
 
+    /// The class of `place` (D-381): `temple`, `palace`, … (`teigeodata_core::class`); `None`
+    /// for a place without one or a code this reader's list does not have.
+    ///
+    /// # Errors
+    /// [`Error::Integrity`] if PLACES is corrupt.
+    pub fn class(&self, place: &Place) -> Result<Option<&'static str>, Error> {
+        let Some(l) = self.layer(place.layer) else {
+            return Ok(None);
+        };
+        l.ensure(Kind::PLACES)?;
+        Ok(l.views()
+            .places
+            .as_ref()
+            .and_then(|p| p.class(place.row as usize))
+            .and_then(teigeodata_core::class::class_name))
+    }
+
     /// The number of people of `place` and where it came from (D-351), from its layer's
     /// `extra` component; `None` where it is unknown or the layer has no populations.
     ///

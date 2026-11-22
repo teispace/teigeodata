@@ -12,6 +12,9 @@ applied: a minor release could break the public API, and every break is listed u
 
 ### Added
 
+- Engine and every binding: a place's class (`Engine::class`; a nullable `class` column in
+  place blobs; `class` in the server's and MCP's records). Landmarks are `locality` places with a
+  class such as `palace`, `temple` or `airport`, one growable list for every country (D-381).
 - Engine: `Layer::from_sections` opens a pack from its head and some of its sections, each in
   its own buffer, so the sections not read stay out of memory; format:
   `Pack::open_sections` and `Pack::check_blocks` (D-370).

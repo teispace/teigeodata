@@ -51,6 +51,28 @@ pub(crate) fn read(
     Ok(out)
 }
 
+/// The landmark class (`teigeodata_core::class`) of a `GeoNames` spot feature code (class `S`),
+/// or `None` for a spot feature that is not one (a hotel, a school, a bridge).
+pub(crate) fn landmark_class(code: &str) -> Option<&'static str> {
+    Some(match code {
+        "PAL" => "palace",
+        "TMPL" => "temple",
+        "MSTY" | "CVNT" => "monastery",
+        "SHRN" => "shrine",
+        "RLG" | "CTRR" => "religious_site",
+        "MNMT" => "monument",
+        "MUS" => "museum",
+        "HSTS" | "ANS" => "historic_site",
+        "CSTL" | "FT" => "castle",
+        "RUIN" => "ruin",
+        "PGDA" => "pagoda",
+        "MSQE" => "mosque",
+        "CH" => "church",
+        "AIRP" => "airport",
+        _ => return None,
+    })
+}
+
 /// geonameid, name, asciiname, alternatenames, latitude, longitude, feature class, feature
 /// code, country code, cc2, admin1–4, population, elevation, dem, timezone, modification date.
 fn main_row(line: &str, ids: &mut BTreeSet<u64>, out: &mut Output) {
@@ -82,6 +104,8 @@ fn main_row(line: &str, ids: &mut BTreeSet<u64>, out: &mut Output) {
         ("A", _) => "admin",
         // Point features with a height of their own (D-201); ranges and ridges are not.
         ("T", "PK" | "MT" | "HLL" | "VLC" | "PASS" | "SDL") => "natural",
+        // Landmarks (TG-32, D-381): their class from `landmark_class`.
+        ("S", code) if landmark_class(code).is_some() => "landmark",
         _ => "other",
     };
     out.records.push(Record {
