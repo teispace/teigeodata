@@ -438,7 +438,13 @@ fn finish(
     let build = p.build.as_str();
     let out = super::embed::write(packs, sections, (key, tzdb, named), root)?;
     super::baseline::check(&out, super::embed::rows_of(sections))?;
-    let replaced = super::embed::check_ids(packs, &out)?;
+    // A layer of no rows (only `dem-coarse`, TG-33) has no IDs to check.
+    let rowless = !sections.iter().any(|s| s.0 == Kind::PLACES);
+    let replaced = if rowless {
+        0
+    } else {
+        super::embed::check_ids(packs, &out)?
+    };
     let asset =
         transport::encode(&out, |d| zstd::bulk::compress(d, 19).ok()).map_err(|e| e.to_string())?;
     let m = Measured::of(&out, &asset).map_err(|e| e.to_string())?;

@@ -1,0 +1,12 @@
+# Nepal's coarse terrain grid as its own optional layer (TG-33, D-225): installed only when an
+# app asks for heights between places. From the lite build (NASADEM, public domain), so it
+# stacks beside either Nepal pack.
+about: >-
+  Nepal's coarse terrain grid: heights anywhere in the country, for an app that installs it.
+build: lite
+components: [dem-coarse]
+world: none
+countries:
+  np: { rows: all }
+address: dem-coarse-np
+wire_kb: 1000
