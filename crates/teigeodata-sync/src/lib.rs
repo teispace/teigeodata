@@ -68,6 +68,8 @@ pub mod measure;
 #[cfg(feature = "fetch")]
 pub mod meta;
 #[cfg(feature = "store")]
+pub mod policy;
+#[cfg(feature = "store")]
 pub mod refresh;
 #[cfg(feature = "repo")]
 pub mod repo;

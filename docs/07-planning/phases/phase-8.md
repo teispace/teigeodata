@@ -280,9 +280,9 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 
 - [x] Research: [the store in the browser](../../02-research/notes/browser-store.md): an async
   driver in a Worker over the sans-I/O cores, OPFS, Web Locks, the baseline first
-- [ ] Refresh and store policy as one async core in `teigeodata-sync` over an I/O trait
+- [x] Refresh and store policy as one async core in `teigeodata-sync` over an I/O trait
   (D-369: the plan written as straight-line code), the native client driving it with
-  `block_on` and its tests unchanged
+  `block_on` and its tests unchanged (`meta`, `policy`; done 2026-11-22)
 - [ ] An engine entry that opens a pack from its head and a set of section buffers (lazy by
   section, for a host's own wasm, note §5b)
 - [ ] `teigeodata-wasm` `store` feature and `store-worker`: install, update, remove, pin, repair,

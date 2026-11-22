@@ -17,10 +17,10 @@ use teigeodata_sync::trust::{self, Trusted};
 
 use super::store_tests::{Crash, MemFs};
 
-const NOW: i64 = 1_794_268_800;
-const YEAR: i64 = 365 * 86_400;
+pub(super) const NOW: i64 = 1_794_268_800;
+pub(super) const YEAR: i64 = 365 * 86_400;
 
-fn key(seed: u8) -> SigningKey {
+pub(super) fn key(seed: u8) -> SigningKey {
     SigningKey::from_bytes(&[seed; 32])
 }
 
@@ -33,7 +33,7 @@ fn one(seed: u8) -> RoleKeys {
 
 /// Root `version`: root keys 1, 2, 3 (threshold 2), timestamp key `ts`, snapshot 20, targets 30;
 /// signed by keys 1 and 2.
-fn root_file(version: u64, ts: u8) -> Vec<u8> {
+pub(super) fn root_file(version: u64, ts: u8) -> Vec<u8> {
     root_keys(version, &[ts])
 }
 

@@ -774,6 +774,8 @@ pub(crate) fn verify(
 #[cfg(test)]
 mod install_tests;
 #[cfg(test)]
+mod policy_tests;
+#[cfg(test)]
 mod refresh_tests;
 #[cfg(test)]
 mod store_tests;

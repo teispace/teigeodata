@@ -14,93 +14,28 @@
 
 use alloc::borrow::ToOwned;
 use alloc::format;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt;
-use core::ops::Range;
+use core::future::{Future, ready};
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 use teigeodata_format::Part;
-use teigeodata_format::component::{Component, Components, MAX_LANGUAGES, Parts, Selection};
+use teigeodata_format::component::Selection;
 
 use crate::catalog::{self, Entry};
 use crate::fetch::{Downloads, FetchError, Mirrors, Transport, Ureq};
-use crate::install::Installed;
-use crate::refresh::{self, RefreshError, Refreshed};
-use crate::store::{Dir, Health, Record, Store, StoreError};
+use crate::meta::block_on;
+use crate::policy::{self, Outcome, Packs, target};
+pub use crate::policy::{ClientError, Done, PackState, Pending, Report, Result, Want, split};
+use crate::refresh::{self, Refreshed};
+use crate::store::{Dir, Health, Record, Store};
 use crate::trust::Trusted;
 
 /// The store's configuration, written by [`init`].
 pub const CONFIG: &str = "config.json";
 /// The trust anchor [`init`] was given.
 pub const ROOT: &str = "root.json";
-
-/// A failed client call.
-#[derive(Debug)]
-#[non_exhaustive]
-pub enum ClientError {
-    /// The network failed: the same call may work later.
-    Network(String),
-    /// The call cannot be done as asked: a refusal, a verification failure, a missing pack.
-    Refused(String),
-    /// The work was cancelled; the store is as it was before it.
-    Cancelled,
-}
-
-impl ClientError {
-    fn of(what: impl fmt::Display, e: impl fmt::Display) -> Self {
-        Self::Refused(format!("{what}: {e}"))
-    }
-}
-
-impl fmt::Display for ClientError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Network(m) | Self::Refused(m) => f.write_str(m),
-            Self::Cancelled => f.write_str("cancelled"),
-        }
-    }
-}
-
-impl std::error::Error for ClientError {}
-
-impl From<RefreshError> for ClientError {
-    fn from(e: RefreshError) -> Self {
-        match e {
-            RefreshError::Network {
-                error: FetchError::Cancelled,
-                ..
-            } => Self::Cancelled,
-            RefreshError::Network { .. } => Self::Network(e.to_string()),
-            e => Self::Refused(e.to_string()),
-        }
-    }
-}
-
-impl From<FetchError> for ClientError {
-    fn from(e: FetchError) -> Self {
-        if matches!(e, FetchError::Cancelled) {
-            Self::Cancelled
-        } else if matches!(e, FetchError::Transport(_) | FetchError::Status(_)) {
-            Self::Network(e.to_string())
-        } else {
-            Self::Refused(e.to_string())
-        }
-    }
-}
-
-impl From<StoreError> for ClientError {
-    fn from(e: StoreError) -> Self {
-        match e {
-            StoreError::Fetch(f) => f.into(),
-            e => Self::Refused(e.to_string()),
-        }
-    }
-}
-
-/// A client call's result.
-pub type Result<T> = core::result::Result<T, ClientError>;
 
 /// Seconds since the Unix epoch, for the catalog's expiry checks.
 #[must_use]
@@ -152,13 +87,6 @@ pub fn path_of(name: &str) -> String {
     }
 }
 
-/// The address and component of a catalog path.
-#[must_use]
-pub fn split(path: &str) -> (&str, &str) {
-    let stem = path.strip_suffix(".tgd").unwrap_or(path);
-    stem.split_once('.').unwrap_or((stem, "places"))
-}
-
 /// A names part for people: its language (`ne`), `*` for the rest, `base` for the base.
 #[must_use]
 pub fn language(p: Part) -> String {
@@ -196,112 +124,6 @@ pub fn init(root: &Path, repo: &[String], assets: &[String], trusted_root: &[u8]
             .map_err(|e| ClientError::of(path.display(), e))?;
     }
     Ok(())
-}
-
-/// What an install takes of each pack it names: components (every one when empty) and, when
-/// asked, only some languages and one outline part (D-253).
-#[derive(Clone, Debug, Default)]
-pub struct Want {
-    /// The components named.
-    pub components: Vec<Component>,
-    /// The languages besides the base names; `None` for every one.
-    pub languages: Option<Vec<Part>>,
-    /// The deepest admin level and the tolerance in metres of the one outline part.
-    pub outline: Option<(u8, u32)>,
-}
-
-impl Want {
-    /// The components: those named, with names and boundaries when languages or an outline
-    /// are asked for, closed by what they need; every one when none is named.
-    #[must_use]
-    pub fn set(&self) -> Components {
-        if self.components.is_empty() {
-            return Components::all();
-        }
-        let mut set = Components::of(&self.components);
-        if self.languages.is_some() {
-            set = set.union(Components::of(&[Component::Names]));
-        }
-        if self.outline.is_some() {
-            set = set.union(Components::of(&[Component::Boundaries]));
-        }
-        set.closed()
-    }
-}
-
-/// What the catalog says of a pack against the store.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum PackState {
-    /// Not installed.
-    Available,
-    /// Installed at the catalog's release.
-    Installed,
-    /// Installed at another release.
-    Update,
-}
-
-impl PackState {
-    /// What `entry` is against the installed `packs`.
-    #[must_use]
-    pub fn of(entry: &Entry, packs: &[Record]) -> Self {
-        match packs
-            .iter()
-            .find(|r| r.address == entry.address && r.component == entry.component)
-        {
-            None => Self::Available,
-            Some(r) if r.head == entry.head => Self::Installed,
-            Some(_) => Self::Update,
-        }
-    }
-
-    /// `available`, `installed` or `update`.
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Available => "available",
-            Self::Installed => "installed",
-            Self::Update => "update",
-        }
-    }
-}
-
-/// One pack an install or update reached.
-#[derive(Debug)]
-pub struct Done {
-    /// Its catalog path.
-    pub path: String,
-    /// The release now installed.
-    pub release: String,
-    /// What was fetched, reused and kept; `None` when it was installed already.
-    pub installed: Option<Installed>,
-}
-
-/// A pack a platform still has to download (D-184): the ranges of its asset missing from
-/// `dir`, each to be saved there under [`Downloads::name`].
-#[derive(Debug)]
-pub struct Pending {
-    /// Its catalog path.
-    pub pack: String,
-    /// The asset's URL on each mirror.
-    pub urls: Vec<String>,
-    /// The asset's length.
-    pub length: u64,
-    /// The directory its ranges go into.
-    pub dir: PathBuf,
-    /// The ranges still missing.
-    pub ranges: Vec<Range<u64>>,
-}
-
-/// What an install did.
-#[derive(Debug, Default)]
-pub struct Report {
-    /// Each pack reached, dependencies first.
-    pub done: Vec<Done>,
-    /// What a platform's downloads still lack; empty without downloads.
-    pub pending: Vec<Pending>,
-    /// The network error when the catalog could not be refreshed and the stored one was used.
-    pub stale_catalog: Option<String>,
 }
 
 /// What a repair found and did.
@@ -464,28 +286,11 @@ impl<N: Transport> Client<N> {
         pin: bool,
         downloads: Option<&Path>,
     ) -> Result<Report> {
-        let mut report = Report::default();
-        let t = self.catalog_for(paths, &mut report)?;
-        if let Some(m) = &report.stale_catalog {
-            // The refresh failed and the stored catalog lacks a pack asked for: the network,
-            // not the pack, is why it cannot be installed.
-            if let Some(p) = paths
-                .iter()
-                .find(|p| !t.trusted_targets().any(|(q, _)| q == p.as_str()))
-            {
-                return Err(ClientError::Network(format!(
-                    "{m}; {p} is not in the stored catalog"
-                )));
-            }
-        }
-        for p in paths {
-            self.install_one(&t, p, Some(want), true, downloads, &mut report)?;
-            if pin && self.store.packs().iter().any(|r| r.key() == *p) {
-                let (a, c) = split(p);
-                self.store.pin(a, c, true)?;
-            }
-        }
-        Ok(report)
+        let mut native = Native {
+            client: self,
+            downloads,
+        };
+        block_on(policy::install(&mut native, paths, want, pin))
     }
 
     /// Updates the packs at `paths` (every installed one when empty) to the catalog's
@@ -494,28 +299,11 @@ impl<N: Transport> Client<N> {
     /// # Errors
     /// [`ClientError::Refused`] for a path not installed, else as [`Client::install`].
     pub fn update(&mut self, paths: &[String]) -> Result<Vec<Done>> {
-        let paths: Vec<String> = if paths.is_empty() {
-            self.store.packs().iter().map(Record::key).collect()
-        } else {
-            paths.to_vec()
+        let mut native = Native {
+            client: self,
+            downloads: None,
         };
-        let t = self.refresh(&[])?.trusted;
-        let mut report = Report::default();
-        for p in &paths {
-            if !self.store.packs().iter().any(|r| r.key() == *p) {
-                return Err(ClientError::Refused(format!("{p}: not installed")));
-            }
-            let (entry, _) = target(&t, p)?;
-            if self
-                .store
-                .packs()
-                .iter()
-                .any(|r| r.key() == *p && r.head != entry.head)
-            {
-                self.install_one(&t, p, None, true, None, &mut report)?;
-            }
-        }
-        Ok(report.done)
+        block_on(policy::update(&mut native, paths))
     }
 
     /// Removes the pack at `path` and the dependencies nothing else needs. Returns what was
@@ -590,161 +378,103 @@ impl<N: Transport> Client<N> {
         }
         Ok(Status { catalog, packs })
     }
+}
 
-    /// The catalog for installing `paths`: refreshed for their countries, or the stored one
-    /// when the network fails (an install then fails at the network itself).
-    fn catalog_for(&mut self, paths: &[String], report: &mut Report) -> Result<Trusted> {
-        let want: Vec<String> = paths
-            .iter()
-            .filter_map(|p| catalog::country_of(p.split('.').next().unwrap_or_default()))
-            .map(|cc| String::from_utf8_lossy(&cc).into_owned())
-            .collect();
-        match self.refresh(&want) {
-            Ok(r) => Ok(r.trusted),
-            Err(ClientError::Network(m)) => {
-                report.stale_catalog = Some(m);
-                self.offline()
-            }
-            Err(e) => Err(e),
-        }
+/// The native store's operations for the policy: the store directory, the mirrors over the
+/// client's transport or a platform's downloads (D-184), each future ready at once.
+struct Native<'a, N: Transport> {
+    client: &'a mut Client<N>,
+    downloads: Option<&'a Path>,
+}
+
+impl<N: Transport> Packs for Native<'_, N> {
+    fn packs(&self) -> &[Record] {
+        self.client.store.packs()
     }
 
-    /// Installs `path` with `want` added to what is installed (or the installed selection, or
-    /// everything), its dependencies first.
-    fn install_one(
+    fn refresh(&mut self, want: &[String]) -> impl Future<Output = Result<Trusted>> {
+        ready(self.client.refresh(want).map(|r| r.trusted))
+    }
+
+    fn offline(&mut self) -> impl Future<Output = Result<Trusted>> {
+        ready(self.client.offline())
+    }
+
+    fn install(
         &mut self,
-        t: &Trusted,
-        path: &str,
-        want: Option<&Want>,
+        entry: &Entry,
+        asset_len: u64,
+        set: Selection,
+    ) -> impl Future<Output = Result<Outcome>> {
+        ready(self.install_now(entry, asset_len, set))
+    }
+
+    fn mark(
+        &mut self,
+        address: &str,
+        component: &str,
         asked: bool,
-        downloads: Option<&Path>,
-        report: &mut Report,
-    ) -> Result<()> {
-        let (entry, asset_len) = target(t, path)?;
-        for dep in &entry.deps {
-            if !self.store.packs().iter().any(|r| r.key() == *dep) {
-                self.install_one(t, dep, None, false, downloads, report)?;
-            }
-        }
-        let installed = self.store.packs().iter().find(|r| r.key() == path).cloned();
-        let set = selection(&entry, want, installed.as_ref())?;
-        if installed
-            .as_ref()
-            .is_some_and(|r| r.head == entry.head && r.selection() == set)
-        {
-            report.done.push(Done {
-                path: path.to_owned(),
-                release: entry.release.clone(),
-                installed: None,
-            });
-            return Ok(());
-        }
-        let done = if let Some(dir) = downloads {
-            // A platform's pass (D-184): the files it downloaded, or what is still missing.
-            let at = dir.join(&entry.file);
-            let mut parts =
-                Downloads::open(&at, asset_len).map_err(|e| ClientError::of(at.display(), e))?;
-            let mut mirrors = Mirrors::new(["downloads/"]);
-            match self.store.install(
-                &mut parts,
-                &mut mirrors,
-                &entry.file,
-                &entry,
-                asset_len,
-                set,
-            ) {
-                Err(FetchError::Needs(ranges)) => {
-                    report.pending.push(Pending {
-                        pack: path.to_owned(),
-                        urls: self
-                            .assets
-                            .iter()
-                            .map(|m| format!("{m}{}", entry.file))
-                            .collect(),
-                        length: asset_len,
-                        dir: at,
-                        ranges,
-                    });
-                    return Ok(());
-                }
-                r => r?,
-            }
-        } else {
-            let mut mirrors = Mirrors::new(self.assets.clone());
-            self.net.expect(entry.size_of(set.set).wire);
-            self.store.install(
-                &mut self.net,
-                &mut mirrors,
-                &entry.file,
-                &entry,
-                asset_len,
-                set,
-            )?
-        };
-        if let Some(dir) = downloads {
-            // Committed: the downloaded files are no longer needed.
-            let _ = std::fs::remove_dir_all(dir.join(&entry.file));
-        }
-        if !asked && installed.is_none() {
-            self.store.mark(&entry.address, &entry.component, false)?;
-        }
-        report.done.push(Done {
-            path: path.to_owned(),
-            release: entry.release.clone(),
-            installed: Some(done),
-        });
-        Ok(())
+    ) -> impl Future<Output = Result<()>> {
+        ready(
+            self.client
+                .store
+                .mark(address, component, asked)
+                .map_err(Into::into),
+        )
+    }
+
+    fn pin(
+        &mut self,
+        address: &str,
+        component: &str,
+        on: bool,
+    ) -> impl Future<Output = Result<()>> {
+        ready(
+            self.client
+                .store
+                .pin(address, component, on)
+                .map_err(Into::into),
+        )
     }
 }
 
-/// The catalog entry at `path` and its asset's length.
-fn target(t: &Trusted, path: &str) -> Result<(Entry, u64)> {
-    let (_, target) = t
-        .trusted_targets()
-        .find(|(p, _)| *p == path)
-        .ok_or_else(|| ClientError::Refused(format!("{path}: not in the catalog")))?;
-    let entry = Entry::from_target(path, target).map_err(|e| ClientError::of(path, e))?;
-    Ok((entry, target.length))
-}
-
-/// What to install of `entry`: `want` added to what is `installed` (components added, the
-/// parts it names replaced), or what is installed (an update, a dependency), or everything;
-/// closed and resolved on the pack.
-fn selection(entry: &Entry, want: Option<&Want>, installed: Option<&Record>) -> Result<Selection> {
-    let set = match (want, installed) {
-        (Some(w), r) => {
-            let mut parts = r.map_or(Parts::ALL, |r| r.parts);
-            if let Some(l) = &w.languages {
-                parts = parts.languages(l).ok_or_else(|| {
-                    ClientError::Refused(format!("at most {MAX_LANGUAGES} languages"))
-                })?;
-            }
-            if let Some((level, t)) = w.outline {
-                parts = parts.outline(entry.outline_for(level, t));
-            }
-            Selection {
-                set: r.map_or(w.set(), |r| w.set().union(r.set)),
-                parts,
-            }
-        }
-        (None, Some(r)) => {
-            // An update keeps the outline part, or, when the new release no longer has it,
-            // takes the same levels at full resolution.
-            let mut sel = r.selection();
-            if let Some((level, _)) = r.parts.outline_part().and_then(Part::outline_levels)
-                && !entry
-                    .parts
+impl<N: Transport> Native<'_, N> {
+    fn install_now(&mut self, entry: &Entry, asset_len: u64, set: Selection) -> Result<Outcome> {
+        let c = &mut *self.client;
+        let Some(dir) = self.downloads else {
+            let mut mirrors = Mirrors::new(c.assets.clone());
+            c.net.expect(entry.size_of(set.set).wire);
+            let done =
+                c.store
+                    .install(&mut c.net, &mut mirrors, &entry.file, entry, asset_len, set)?;
+            return Ok(Outcome::Installed(done));
+        };
+        // A platform's pass (D-184): the files it downloaded, or what is still missing.
+        let at = dir.join(&entry.file);
+        let mut parts =
+            Downloads::open(&at, asset_len).map_err(|e| ClientError::of(at.display(), e))?;
+        let mut mirrors = Mirrors::new(["downloads/"]);
+        match c
+            .store
+            .install(&mut parts, &mut mirrors, &entry.file, entry, asset_len, set)
+        {
+            Err(FetchError::Needs(ranges)) => Ok(Outcome::Pending(Pending {
+                pack: entry.path(),
+                urls: c
+                    .assets
                     .iter()
-                    .any(|p| Some(p.part) == r.parts.outline_part())
-            {
-                sel.parts = sel.parts.outline(entry.outline_for(level, 0));
+                    .map(|m| format!("{m}{}", entry.file))
+                    .collect(),
+                length: asset_len,
+                dir: at,
+                ranges,
+            })),
+            r => {
+                let done = r?;
+                // Committed: the downloaded files are no longer needed.
+                let _ = std::fs::remove_dir_all(&at);
+                Ok(Outcome::Installed(done))
             }
-            sel
         }
-        (None, None) => Components::all().into(),
-    };
-    Ok(Selection {
-        parts: entry.resolve(set.parts),
-        ..set.closed()
-    })
+    }
 }
