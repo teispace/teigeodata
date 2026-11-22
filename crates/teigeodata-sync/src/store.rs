@@ -177,9 +177,37 @@ pub trait AsyncFs {
     async fn list(&mut self, path: &str) -> io::Result<Vec<String>>;
 }
 
+impl<F: Fs + ?Sized> Fs for &mut F {
+    type File = F::File;
+    fn open(&mut self, path: &str) -> io::Result<F::File> {
+        (**self).open(path)
+    }
+    fn read(&mut self, path: &str) -> io::Result<Option<Vec<u8>>> {
+        (**self).read(path)
+    }
+    fn len(&mut self, path: &str) -> io::Result<Option<u64>> {
+        (**self).len(path)
+    }
+    fn rename(&mut self, from: &str, to: &str) -> io::Result<()> {
+        (**self).rename(from, to)
+    }
+    fn remove(&mut self, path: &str) -> io::Result<()> {
+        (**self).remove(path)
+    }
+    fn create_dir(&mut self, path: &str) -> io::Result<()> {
+        (**self).create_dir(path)
+    }
+    fn sync_dir(&mut self, path: &str) -> io::Result<()> {
+        (**self).sync_dir(path)
+    }
+    fn list(&mut self, path: &str) -> io::Result<Vec<String>> {
+        (**self).list(path)
+    }
+}
+
 /// An [`Fs`] as an [`AsyncFs`] whose futures are ready at once.
 #[derive(Debug)]
-struct SyncFs<D: Fs>(D);
+pub(crate) struct SyncFs<D: Fs>(pub(crate) D);
 
 impl<D: Fs> AsyncFs for SyncFs<D> {
     type File = D::File;

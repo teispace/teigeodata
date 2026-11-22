@@ -86,6 +86,61 @@ pub trait MetaIo {
     async fn fetch(&mut self, url: &str, max: u64, out: &mut Vec<u8>) -> Result<(), FetchError>;
 }
 
+/// The effects of a refresh in a store: its [`AsyncFs`](crate::store::AsyncFs) under `meta/`
+/// and a network, for a driver that has those two (the native client's, the browser
+/// worker's). [`MetaIo::put`] writes `meta/tmp`, syncs it, renames it over the file and syncs
+/// the directory.
+#[cfg(feature = "store")]
+#[derive(Debug)]
+pub struct StoreIo<'a, D, T> {
+    /// The store's files.
+    pub fs: &'a mut D,
+    /// The metadata hosts.
+    pub net: &'a mut T,
+}
+
+#[cfg(feature = "store")]
+impl<D: crate::store::AsyncFs, T: crate::fetch::AsyncTransport> MetaIo for StoreIo<'_, D, T> {
+    async fn read(&mut self, path: &str) -> io::Result<Option<Vec<u8>>> {
+        self.fs.read(path).await
+    }
+
+    async fn put(&mut self, path: &str, data: &[u8]) -> io::Result<()> {
+        use crate::store::StoreFile as _;
+        use std::io::Write as _;
+        const TMP: &str = "meta/tmp";
+        self.fs.remove(TMP).await?;
+        let mut f = self.fs.open(TMP).await?;
+        f.set_len(0)?;
+        f.write_all(data)?;
+        f.sync()?;
+        drop(f);
+        self.fs.rename(TMP, path).await?;
+        let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
+        self.fs.sync_dir(dir).await
+    }
+
+    async fn remove(&mut self, path: &str) -> io::Result<()> {
+        self.fs.remove(path).await
+    }
+
+    async fn list(&mut self, dir: &str) -> io::Result<Vec<String>> {
+        self.fs.list(dir).await
+    }
+
+    async fn create_dir(&mut self, path: &str) -> io::Result<()> {
+        self.fs.create_dir(path).await
+    }
+
+    async fn sync_dir(&mut self, path: &str) -> io::Result<()> {
+        self.fs.sync_dir(path).await
+    }
+
+    async fn fetch(&mut self, url: &str, max: u64, out: &mut Vec<u8>) -> Result<(), FetchError> {
+        self.net.fetch(url, max, out).await
+    }
+}
+
 /// Runs a future whose every await is ready at once (a synchronous driver's), on this thread.
 ///
 /// A future that waits on something is polled again until it is done: no driver in this crate

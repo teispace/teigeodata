@@ -145,6 +145,12 @@ pub trait AsyncTransport {
         sink(buf)?;
         Ok(got)
     }
+
+    /// As [`Transport::fetch`]: a whole metadata file.
+    ///
+    /// # Errors
+    /// As [`Transport::fetch`].
+    async fn fetch(&mut self, url: &str, max: u64, out: &mut Vec<u8>) -> Result<(), FetchError>;
 }
 
 /// A [`Transport`] as an [`AsyncTransport`] whose futures are ready at once.
@@ -168,6 +174,15 @@ impl<T: Transport> AsyncTransport for Ready<'_, T> {
         sink: &mut dyn FnMut(&[u8]) -> Result<(), FetchError>,
     ) -> impl Future<Output = Result<Got, FetchError>> {
         ready(self.0.get_streamed(url, range, buf, sink))
+    }
+
+    fn fetch(
+        &mut self,
+        url: &str,
+        max: u64,
+        out: &mut Vec<u8>,
+    ) -> impl Future<Output = Result<(), FetchError>> {
+        ready(self.0.fetch(url, max, out))
     }
 }
 
