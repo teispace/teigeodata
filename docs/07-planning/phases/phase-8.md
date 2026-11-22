@@ -304,8 +304,11 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
     regrades for Mirkot and Shuddhodhan; lite green in run 44073019704
   - [x] Profiles `app` (`address: app`), `app-np` (50 m) and `app-np-100` (100 m), `world: none`,
     `forge embed --release`
-  - [ ] Main green in CI (run 44077137298 at 346ffc2), then: the world part, the three layers,
-    `admin_at` gives the ward, both sizes, the data release, tell the consumer
+  - [x] Main green locally after run 44077137298 failed on POLYGONS (D-365): snapping keeps
+    every ring's turn, numbered units rank below settlements, population counts land no ward
+    holds, the point budget 700 kB
+  - [ ] Main green in CI, then: the world part, the three layers, `admin_at` gives the ward,
+    both sizes, the data release, tell the consumer
 
 ### 8.6 Exit review
 
@@ -350,3 +353,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-17 | 8.5b: TG-26 by a profile rather than `extract` | The search keys need the forge's keying rules |
 | 2026-11-17 | 8.5b: TG-27, ward outlines from OSM in the main build, app data as two packs | D-363 |
 | 2026-11-17 | 8.5b: TG-27 sub-steps, the CI fixes and the release steps left | D-364 |
+| 2026-11-22 | 8.5b: TG-27's main build green locally | D-365 |

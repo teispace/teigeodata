@@ -43,9 +43,10 @@ buildings:
 # in MB, about 1.5× the measured run (2026-11-09: 964 MB peak, 609 MB of output).
 budget: { rss_mb: 1500, disk_mb: 1000 }
 # G-wire (D-135): what a client downloads for a component with what it needs, in kB, checked
-# by `cargo xtask check-pack`. Points only (IDs, lat/lon, the spatial index): 0.55 MB (D-133).
+# by `cargo xtask check-pack`. Points only (IDs, lat/lon, the spatial index): 0.7 MB (D-133;
+# D-365: the wards' new stable IDs widen IDMAP, 538 → 641 kB).
 # The coarse terrain grid for phones: 1 MB (TG-10, D-225).
-wire_kb: { point: 550, dem-coarse: 1000 }
+wire_kb: { point: 700, dem-coarse: 1000 }
 # The country's slice of the embedded baseline (D-145): the country, its provinces and every
 # GeoNames city over 15,000 people (G-base: all in the pack), outlines at the pack's finest
 # level within 500 m (D-144).
