@@ -110,6 +110,41 @@ pub trait Transport {
     }
 }
 
+/// A borrowed [`Transport`] is one, so a driver can own or borrow its transport.
+impl<T: Transport + ?Sized> Transport for &mut T {
+    fn get(&mut self, url: &str, range: Range<u64>, out: &mut Vec<u8>) -> Result<Got, FetchError> {
+        (**self).get(url, range, out)
+    }
+
+    fn get_streamed(
+        &mut self,
+        url: &str,
+        range: Range<u64>,
+        buf: &mut Vec<u8>,
+        sink: &mut dyn FnMut(&[u8]) -> Result<(), FetchError>,
+    ) -> Result<Got, FetchError> {
+        (**self).get_streamed(url, range, buf, sink)
+    }
+
+    fn fetch(&mut self, url: &str, max: u64, out: &mut Vec<u8>) -> Result<(), FetchError> {
+        (**self).fetch(url, max, out)
+    }
+
+    fn fetch_streamed(
+        &mut self,
+        url: &str,
+        max: u64,
+        out: &mut Vec<u8>,
+        on_chunk: &mut dyn FnMut(usize) -> Result<(), FetchError>,
+    ) -> Result<(), FetchError> {
+        (**self).fetch_streamed(url, max, out, on_chunk)
+    }
+
+    fn expect(&mut self, bytes: u64) {
+        (**self).expect(bytes);
+    }
+}
+
 /// The ranged requests of an install, awaited: [`Transport`] for a driver whose network is
 /// asynchronous (a browser's `fetch`). The driver is one ([`install_from_async`]); the
 /// synchronous functions run it over a [`Transport`], whose futures are ready at once (D-369).
@@ -151,12 +186,19 @@ pub trait AsyncTransport {
     /// # Errors
     /// As [`Transport::fetch`].
     async fn fetch(&mut self, url: &str, max: u64, out: &mut Vec<u8>) -> Result<(), FetchError>;
+
+    /// As [`Transport::expect`]; the default ignores it.
+    fn expect(&mut self, bytes: u64) {
+        let _ = bytes;
+    }
 }
 
-/// A [`Transport`] as an [`AsyncTransport`] whose futures are ready at once.
-pub(crate) struct Ready<'a, T: Transport>(pub(crate) &'a mut T);
+/// A [`Transport`] as an [`AsyncTransport`] whose futures are ready at once; owned or borrowed
+/// (`Ready(&mut t)`).
+#[derive(Debug)]
+pub struct Ready<T: Transport>(pub T);
 
-impl<T: Transport> AsyncTransport for Ready<'_, T> {
+impl<T: Transport> AsyncTransport for Ready<T> {
     fn get(
         &mut self,
         url: &str,
@@ -183,6 +225,10 @@ impl<T: Transport> AsyncTransport for Ready<'_, T> {
         out: &mut Vec<u8>,
     ) -> impl Future<Output = Result<(), FetchError>> {
         ready(self.0.fetch(url, max, out))
+    }
+
+    fn expect(&mut self, bytes: u64) {
+        self.0.expect(bytes);
     }
 }
 

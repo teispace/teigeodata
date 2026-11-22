@@ -6,12 +6,10 @@
 //! them (D-369). The walk, the layout and the commit order are [`crate::meta`]'s, the writes
 //! [`meta::StoreIo`]'s, as in a browser.
 
-use alloc::vec::Vec;
-use core::ops::Range;
-
-use crate::fetch::{FetchError, Got, Mirrors, Ready, Transport};
+use crate::fetch::{Mirrors, Ready, Transport};
 use crate::meta::{self, StoreIo};
 pub use crate::meta::{RefreshError, Refreshed};
+use crate::session::Offline;
 use crate::store::{Fs, SyncFs};
 use crate::trust::Trusted;
 
@@ -41,24 +39,10 @@ pub fn refresh<D: Fs, T: Transport>(
 /// # Errors
 /// As [`meta::load`].
 pub fn load<D: Fs>(fs: &mut D, shipped: &[u8], now: i64) -> Result<Trusted, RefreshError> {
-    let (mut fs, mut none) = (SyncFs(fs), NoNetwork);
-    let mut net = Ready(&mut none);
+    let (mut fs, mut net) = (SyncFs(fs), Ready(Offline));
     let mut io = StoreIo {
         fs: &mut fs,
         net: &mut net,
     };
     meta::block_on(meta::load(&mut io, shipped, now))
-}
-
-/// The transport of [`load`], which reads only the store.
-struct NoNetwork;
-
-impl Transport for NoNetwork {
-    fn get(&mut self, _: &str, _: Range<u64>, _: &mut Vec<u8>) -> Result<Got, FetchError> {
-        Err(FetchError::Response("offline"))
-    }
-
-    fn fetch(&mut self, _: &str, _: u64, _: &mut Vec<u8>) -> Result<(), FetchError> {
-        Err(FetchError::Response("offline"))
-    }
 }

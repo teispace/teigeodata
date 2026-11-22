@@ -192,6 +192,10 @@ fn sys(file: &File, offset: u64, len: u64) -> io::Result<u64> {
     target_os = "android",
     windows
 )))]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "the signature of every platform's hole punch"
+)]
 fn sys(_: &File, _: u64, _: u64) -> io::Result<u64> {
     Ok(0)
 }

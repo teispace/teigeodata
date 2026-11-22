@@ -24,6 +24,8 @@ applied: a minor release could break the public API, and every break is listed u
   open only the sections a journal record's components hold; `Engine.openSections`; Rust API:
   the same in `Engine::open_installed`, `Engine::open_sections`, and format:
   `PackHead::holds` (D-373).
+- Sync: the store's client as one async core, `session::Session` with `session::init`, which
+  the native `Client` runs; `fetch::Ready` and `store::SyncFs` are public (D-374).
 
 ## [1.1.0] - 2026-11-17
 

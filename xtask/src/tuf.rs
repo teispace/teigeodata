@@ -778,6 +778,8 @@ mod policy_tests;
 #[cfg(test)]
 mod refresh_tests;
 #[cfg(test)]
+mod session_tests;
+#[cfg(test)]
 mod store_tests;
 #[cfg(test)]
 mod tests;

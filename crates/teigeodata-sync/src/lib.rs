@@ -74,6 +74,8 @@ pub mod refresh;
 #[cfg(feature = "repo")]
 pub mod repo;
 #[cfg(feature = "store")]
+pub mod session;
+#[cfg(feature = "store")]
 pub mod store;
 pub mod transport;
 #[cfg(feature = "trust")]

@@ -207,7 +207,7 @@ impl<F: Fs + ?Sized> Fs for &mut F {
 
 /// An [`Fs`] as an [`AsyncFs`] whose futures are ready at once.
 #[derive(Debug)]
-pub(crate) struct SyncFs<D: Fs>(pub(crate) D);
+pub struct SyncFs<D: Fs>(pub D);
 
 impl<D: Fs> AsyncFs for SyncFs<D> {
     type File = D::File;

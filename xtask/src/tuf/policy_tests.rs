@@ -19,8 +19,12 @@ use super::install_tests::{Mem, pack_at};
 use super::refresh_tests::{NOW, YEAR, key, root_file};
 use super::store_tests::MemFs;
 
-/// A catalog at `release` of packs (address, deps): the trusted metadata and each asset.
-fn catalog(release: &str, packs: &[(&str, &[&str])]) -> (Trusted, BTreeMap<String, Vec<u8>>) {
+/// A repository at `release` of packs (address, deps), as a metadata mirror serves it
+/// (`timestamp.json`, `1.snapshot.json`, `1.targets.json`), and each asset by its file name.
+pub(super) fn published(
+    release: &str,
+    packs: &[(&str, &[&str])],
+) -> (BTreeMap<String, Vec<u8>>, BTreeMap<String, Vec<u8>>) {
     let mut files = BTreeMap::new();
     let mut assets = BTreeMap::new();
     for (address, deps) in packs {
@@ -47,10 +51,21 @@ fn catalog(release: &str, packs: &[(&str, &[&str])]) -> (Trusted, BTreeMap<Strin
     )
     .unwrap();
     let ts = sign(&timestamp(1, NOW + YEAR, &sn, 1).unwrap(), &[&key(10)]).unwrap();
+    let meta = BTreeMap::from([
+        ("1.targets.json".to_owned(), tg),
+        ("1.snapshot.json".to_owned(), sn),
+        ("timestamp.json".to_owned(), ts),
+    ]);
+    (meta, assets)
+}
+
+/// A catalog at `release` of packs (address, deps): the trusted metadata and each asset.
+fn catalog(release: &str, packs: &[(&str, &[&str])]) -> (Trusted, BTreeMap<String, Vec<u8>>) {
+    let (meta, assets) = published(release, packs);
     let mut t = Trusted::new(&root_file(1, 10), NOW).unwrap();
-    t.update_timestamp(&ts).unwrap();
-    t.update_snapshot(&sn, false).unwrap();
-    t.update_targets(&tg).unwrap();
+    t.update_timestamp(&meta["timestamp.json"]).unwrap();
+    t.update_snapshot(&meta["1.snapshot.json"], false).unwrap();
+    t.update_targets(&meta["1.targets.json"]).unwrap();
     (t, assets)
 }
 

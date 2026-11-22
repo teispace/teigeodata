@@ -16,26 +16,21 @@ use alloc::borrow::ToOwned;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::future::{Future, ready};
 use std::path::{Path, PathBuf};
 
-use serde_json::{Value, json};
 use teigeodata_format::Part;
 use teigeodata_format::component::Selection;
 
 use crate::catalog::{self, Entry};
-use crate::fetch::{Downloads, FetchError, Mirrors, Transport, Ureq};
+use crate::fetch::{Downloads, FetchError, Mirrors, Ready, Transport, Ureq};
 use crate::meta::block_on;
-use crate::policy::{self, Outcome, Packs, target};
+use crate::policy::{self, Outcome, Packs};
 pub use crate::policy::{ClientError, Done, PackState, Pending, Report, Result, Want, split};
 use crate::refresh::{self, Refreshed};
-use crate::store::{Dir, Health, Record, Store};
+use crate::session::{At, Session, config_json, parse_config};
+pub use crate::session::{CONFIG, ROOT, Repaired, Status};
+use crate::store::{AsyncStore, Dir, Record, Store, SyncFs};
 use crate::trust::Trusted;
-
-/// The store's configuration, written by [`init`].
-pub const CONFIG: &str = "config.json";
-/// The trust anchor [`init`] was given.
-pub const ROOT: &str = "root.json";
 
 /// Seconds since the Unix epoch, for the catalog's expiry checks.
 #[must_use]
@@ -63,15 +58,6 @@ pub fn catalog_at(root: &Path) -> Result<(Trusted, Vec<Record>)> {
     let trusted = refresh::load(&mut dir, &shipped, now())?;
     let packs = Store::read_packs(&mut dir).map_err(|e| ClientError::of(root.display(), e))?;
     Ok((trusted, packs))
-}
-
-/// A mirror base ends with `/`, so a file name joins it.
-fn base(url: &str) -> String {
-    if url.ends_with('/') {
-        url.to_owned()
-    } else {
-        format!("{url}/")
-    }
 }
 
 /// The catalog path a person names: `np` is `np.places.tgd`, `np.dem` is `np.dem.tgd`, and a
@@ -115,8 +101,7 @@ pub fn language(p: Part) -> String {
 pub fn init(root: &Path, repo: &[String], assets: &[String], trusted_root: &[u8]) -> Result<()> {
     Trusted::new(trusted_root, now()).map_err(|e| ClientError::of("the trusted root", e))?;
     std::fs::create_dir_all(root).map_err(|e| ClientError::of(root.display(), e))?;
-    let config = json!({ "repo": repo, "assets": assets });
-    let config = serde_json::to_vec_pretty(&config).map_err(|e| ClientError::of(CONFIG, e))?;
+    let config = config_json(repo, assets)?;
     for (name, data) in [(ROOT, trusted_root), (CONFIG, config.as_slice())] {
         let (path, tmp) = (root.join(name), root.join(format!("{name}.tmp")));
         std::fs::write(&tmp, data)
@@ -126,33 +111,13 @@ pub fn init(root: &Path, repo: &[String], assets: &[String], trusted_root: &[u8]
     Ok(())
 }
 
-/// What a repair found and did.
-#[derive(Debug)]
-pub struct Repaired {
-    /// The pack's health before.
-    pub health: Health,
-    /// Bytes fetched to repair it; `None` when it was whole.
-    pub fetched: Option<u64>,
-}
-
-/// The store's state.
-#[derive(Debug)]
-pub struct Status {
-    /// The catalog's timestamp version and expiry (Unix seconds); `None` before a refresh.
-    pub catalog: Option<(u64, i64)>,
-    /// Each installed pack and its health.
-    pub packs: Vec<(Record, Health)>,
-}
-
-/// An open store: its packs, its catalog's trust anchor, its mirrors and its transport.
+/// An open store: its packs, its catalog's trust anchor, its mirrors and its transport. The
+/// [`Session`] core over the store directory and a [`Transport`], each future ready at once
+/// (D-374).
 #[derive(Debug)]
 pub struct Client<N: Transport = Ureq> {
     root: PathBuf,
-    store: Store<Dir>,
-    shipped: Vec<u8>,
-    repo: Vec<String>,
-    assets: Vec<String>,
-    net: N,
+    session: Session<SyncFs<Dir>, Ready<N>>,
 }
 
 impl Client<Ureq> {
@@ -179,27 +144,15 @@ impl<N: Transport> Client<N> {
                 at(CONFIG).display()
             ))
         })?;
-        let config: Value = serde_json::from_slice(&config)
-            .map_err(|e| ClientError::of(at(CONFIG).display(), e))?;
-        let list = |k: &str| -> Vec<String> {
-            config
-                .get(k)
-                .and_then(Value::as_array)
-                .map(|a| a.iter().filter_map(Value::as_str).map(base).collect())
-                .unwrap_or_default()
-        };
+        let mirrors = parse_config(&config, at(CONFIG).display())?;
         let shipped =
             std::fs::read(at(ROOT)).map_err(|e| ClientError::of(at(ROOT).display(), e))?;
         let dir = Dir::new(root).map_err(|e| ClientError::of(root.display(), e))?;
-        let (store, recovered) =
-            Store::open(dir).map_err(|e| ClientError::of(root.display(), e))?;
+        let (store, recovered) = block_on(AsyncStore::open(SyncFs(dir)))
+            .map_err(|e| ClientError::of(root.display(), e))?;
         let client = Self {
             root: root.to_path_buf(),
-            store,
-            shipped,
-            repo: list("repo"),
-            assets: list("assets"),
-            net,
+            session: Session::new(store, shipped, mirrors, Ready(net)),
         };
         Ok((client, recovered.damaged))
     }
@@ -213,7 +166,7 @@ impl<N: Transport> Client<N> {
     /// The installed packs.
     #[must_use]
     pub fn packs(&self) -> &[Record] {
-        self.store.packs()
+        self.session.packs()
     }
 
     /// Where an installed pack's file is.
@@ -227,7 +180,7 @@ impl<N: Transport> Client<N> {
 
     /// The transport, for a caller that watches it.
     pub fn net(&mut self) -> &mut N {
-        &mut self.net
+        &mut self.session.net().0
     }
 
     /// The verified catalog, from the store alone.
@@ -235,7 +188,7 @@ impl<N: Transport> Client<N> {
     /// # Errors
     /// [`ClientError::Refused`] if the stored metadata does not verify.
     pub fn offline(&mut self) -> Result<Trusted> {
-        Ok(refresh::load(self.store.fs(), &self.shipped, now())?)
+        block_on(self.session.offline(now()))
     }
 
     /// The catalog refreshed from the mirrors, with the roles of `want` (country codes) and of
@@ -245,30 +198,13 @@ impl<N: Transport> Client<N> {
     /// [`ClientError::Network`] if no mirror answers, [`ClientError::Refused`] if what they
     /// send does not verify.
     pub fn refresh(&mut self, want: &[String]) -> Result<Refreshed> {
-        let mut want: Vec<String> = want.to_vec();
-        for r in self.store.packs() {
-            if let Some(cc) = catalog::country_of(&r.address) {
-                want.push(String::from_utf8_lossy(&cc).into_owned());
-            }
-        }
-        want.sort();
-        want.dedup();
-        let refs: Vec<&str> = want.iter().map(String::as_str).collect();
-        let mut mirrors = Mirrors::new(self.repo.clone());
-        Ok(refresh::refresh(
-            self.store.fs(),
-            &mut self.net,
-            &mut mirrors,
-            &self.shipped,
-            now(),
-            &refs,
-        )?)
+        block_on(self.session.refresh(want, now()))
     }
 
     /// What the catalog says of `entry` against the store.
     #[must_use]
     pub fn state(&self, entry: &Entry) -> PackState {
-        PackState::of(entry, self.store.packs())
+        self.session.state(entry)
     }
 
     /// Installs the packs at `paths` (catalog paths) with `want` added to what is installed,
@@ -286,11 +222,15 @@ impl<N: Transport> Client<N> {
         pin: bool,
         downloads: Option<&Path>,
     ) -> Result<Report> {
-        let mut native = Native {
-            client: self,
-            downloads,
+        let now = now();
+        let Some(dir) = downloads else {
+            return block_on(self.session.install(paths, want, pin, now));
         };
-        block_on(policy::install(&mut native, paths, want, pin))
+        let mut pass = Downloaded {
+            at: self.session.at(now),
+            dir,
+        };
+        block_on(policy::install(&mut pass, paths, want, pin))
     }
 
     /// Updates the packs at `paths` (every installed one when empty) to the catalog's
@@ -299,11 +239,7 @@ impl<N: Transport> Client<N> {
     /// # Errors
     /// [`ClientError::Refused`] for a path not installed, else as [`Client::install`].
     pub fn update(&mut self, paths: &[String]) -> Result<Vec<Done>> {
-        let mut native = Native {
-            client: self,
-            downloads: None,
-        };
-        block_on(policy::update(&mut native, paths))
+        block_on(self.session.update(paths, now()))
     }
 
     /// Removes the pack at `path` and the dependencies nothing else needs. Returns what was
@@ -312,8 +248,7 @@ impl<N: Transport> Client<N> {
     /// # Errors
     /// [`ClientError::Refused`] if it is not installed or another pack needs it.
     pub fn remove(&mut self, path: &str) -> Result<Vec<Record>> {
-        let (a, c) = split(path);
-        Ok(self.store.remove(a, c)?)
+        block_on(self.session.remove(path))
     }
 
     /// Pins the pack at `path` (kept when room is made), or unpins it.
@@ -321,8 +256,7 @@ impl<N: Transport> Client<N> {
     /// # Errors
     /// [`ClientError::Refused`] if it is not installed.
     pub fn pin(&mut self, path: &str, on: bool) -> Result<()> {
-        let (a, c) = split(path);
-        Ok(self.store.pin(a, c, on)?)
+        block_on(self.session.pin(path, on))
     }
 
     /// Checks the pack at `path` in full and, unless it is whole, fetches what it lacks.
@@ -330,34 +264,7 @@ impl<N: Transport> Client<N> {
     /// # Errors
     /// [`ClientError::Network`] or [`ClientError::Refused`].
     pub fn repair(&mut self, path: &str) -> Result<Repaired> {
-        let (a, c) = split(path);
-        let health = self.store.verify(a, c, true)?;
-        if health == Health::Good {
-            return Ok(Repaired {
-                health,
-                fetched: None,
-            });
-        }
-        let release = self
-            .store
-            .packs()
-            .iter()
-            .find(|r| r.key() == path)
-            .map(|r| r.release.clone())
-            .unwrap_or_default();
-        let t = match self.offline() {
-            Ok(t) if target(&t, path).is_ok_and(|(e, _)| e.release == release) => t,
-            _ => self.refresh(&[])?.trusted,
-        };
-        let (entry, asset_len) = target(&t, path)?;
-        let mut mirrors = Mirrors::new(self.assets.clone());
-        let done =
-            self.store
-                .repair(&mut self.net, &mut mirrors, &entry.file, &entry, asset_len)?;
-        Ok(Repaired {
-            health,
-            fetched: Some(done.fetched),
-        })
+        block_on(self.session.repair(path, now()))
     }
 
     /// The catalog's freshness and each installed pack's health, from a full check when
@@ -366,102 +273,52 @@ impl<N: Transport> Client<N> {
     /// # Errors
     /// [`ClientError::Refused`] if a pack cannot be read.
     pub fn status(&mut self, deep: bool) -> Result<Status> {
-        let catalog = self
-            .offline()
-            .ok()
-            .and_then(|t| t.timestamp().map(|x| (x.common.version, x.common.expires)));
-        let records: Vec<Record> = self.store.packs().to_vec();
-        let mut packs = Vec::with_capacity(records.len());
-        for r in records {
-            let health = self.store.verify(&r.address, &r.component, deep)?;
-            packs.push((r, health));
-        }
-        Ok(Status { catalog, packs })
+        block_on(self.session.status(deep, now()))
     }
 }
 
-/// The native store's operations for the policy: the store directory, the mirrors over the
-/// client's transport or a platform's downloads (D-184), each future ready at once.
-struct Native<'a, N: Transport> {
-    client: &'a mut Client<N>,
-    downloads: Option<&'a Path>,
+/// A platform's pass (D-184) for the policy: the session's operations, except that an install
+/// reads the asset ranges a platform downloaded into a directory and reports what is missing.
+struct Downloaded<'a, N: Transport> {
+    at: At<'a, SyncFs<Dir>, Ready<N>>,
+    dir: &'a Path,
 }
 
-impl<N: Transport> Packs for Native<'_, N> {
+impl<N: Transport> Packs for Downloaded<'_, N> {
     fn packs(&self) -> &[Record] {
-        self.client.store.packs()
+        self.at.packs()
     }
 
-    fn refresh(&mut self, want: &[String]) -> impl Future<Output = Result<Trusted>> {
-        ready(self.client.refresh(want).map(|r| r.trusted))
+    async fn refresh(&mut self, want: &[String]) -> Result<Trusted> {
+        self.at.refresh(want).await
     }
 
-    fn offline(&mut self) -> impl Future<Output = Result<Trusted>> {
-        ready(self.client.offline())
+    async fn offline(&mut self) -> Result<Trusted> {
+        self.at.offline().await
     }
 
-    fn install(
-        &mut self,
-        entry: &Entry,
-        asset_len: u64,
-        set: Selection,
-    ) -> impl Future<Output = Result<Outcome>> {
-        ready(self.install_now(entry, asset_len, set))
-    }
-
-    fn mark(
-        &mut self,
-        address: &str,
-        component: &str,
-        asked: bool,
-    ) -> impl Future<Output = Result<()>> {
-        ready(
-            self.client
-                .store
-                .mark(address, component, asked)
-                .map_err(Into::into),
-        )
-    }
-
-    fn pin(
-        &mut self,
-        address: &str,
-        component: &str,
-        on: bool,
-    ) -> impl Future<Output = Result<()>> {
-        ready(
-            self.client
-                .store
-                .pin(address, component, on)
-                .map_err(Into::into),
-        )
-    }
-}
-
-impl<N: Transport> Native<'_, N> {
-    fn install_now(&mut self, entry: &Entry, asset_len: u64, set: Selection) -> Result<Outcome> {
-        let c = &mut *self.client;
-        let Some(dir) = self.downloads else {
-            let mut mirrors = Mirrors::new(c.assets.clone());
-            c.net.expect(entry.size_of(set.set).wire);
-            let done =
-                c.store
-                    .install(&mut c.net, &mut mirrors, &entry.file, entry, asset_len, set)?;
-            return Ok(Outcome::Installed(done));
-        };
-        // A platform's pass (D-184): the files it downloaded, or what is still missing.
-        let at = dir.join(&entry.file);
+    async fn install(&mut self, entry: &Entry, asset_len: u64, set: Selection) -> Result<Outcome> {
+        let at = self.dir.join(&entry.file);
         let mut parts =
             Downloads::open(&at, asset_len).map_err(|e| ClientError::of(at.display(), e))?;
         let mut mirrors = Mirrors::new(["downloads/"]);
-        match c
-            .store
-            .install(&mut parts, &mut mirrors, &entry.file, entry, asset_len, set)
-        {
+        let session = &mut *self.at.session;
+        let r = session
+            .store()
+            .install(
+                &mut Ready(&mut parts),
+                &mut mirrors,
+                &entry.file,
+                entry,
+                asset_len,
+                set,
+            )
+            .await;
+        match r {
             Err(FetchError::Needs(ranges)) => Ok(Outcome::Pending(Pending {
                 pack: entry.path(),
-                urls: c
-                    .assets
+                urls: session
+                    .assets()
                     .iter()
                     .map(|m| format!("{m}{}", entry.file))
                     .collect(),
@@ -476,5 +333,13 @@ impl<N: Transport> Native<'_, N> {
                 Ok(Outcome::Installed(done))
             }
         }
+    }
+
+    async fn mark(&mut self, address: &str, component: &str, asked: bool) -> Result<()> {
+        self.at.mark(address, component, asked).await
+    }
+
+    async fn pin(&mut self, address: &str, component: &str, on: bool) -> Result<()> {
+        self.at.pin(address, component, on).await
     }
 }
