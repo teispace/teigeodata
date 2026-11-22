@@ -104,11 +104,17 @@ outlines (4.8 MB), the substring and search indexes (3.7 MB), the point-to-unit 
 | `app` (TG-26, 2026-11-17: the world's cities of 5,000+, units and India's towns by point, all of Nepal with outlines at 20 m; names ne-Deva, en, hi-Deva, sa-Deva; no `dem-coarse`) | 172,339 | 12,550,872 | 7,039,780 |
 | `app` with the world's outlines as the world part stores them | 172,339 | 15,121,112 | 9,239,475 |
 | `app` without India's districts and towns | 170,882 | 12,392,984 | 6,942,512 |
+| `app` (2026-11-22, data-2026.11.22) | 172,339 | 12,549,720 | 7,037,564 |
+| `app-world` (D-366: `app` without Nepal in full and without outlines, to stack under a country pack) | 76,624 | 5,481,896 | 3,133,101 |
+| `app-np` (main build, D-363: all of Nepal, wards at 50 m; no world part) | 108,995 | 10,235,920 | 6,520,540 |
+| `app-np-100` (the same, outlines at 100 m) | 108,995 | 9,185,808 | 5,513,639 |
+| `dem-coarse-np` (TG-33: Nepal's coarse terrain grid alone, no rows) | 0 | 527,424 | 518,561 |
 
 ## Changelog
 
 | Date | Change | Why |
 |---|---|---|
+| 2026-11-22 | `app-world`, `app-np`, `app-np-100` and `dem-coarse-np` measured | D-366 |
 | 2026-11-17 | The `app` profile (TG-26) and its variants measured; a part may leave its outlines out | D-362 |
 | 2026-11-13 | Countries named in Nepali by CLDR 49 with their short and variant forms (237 of 248, from 160): `tithipatra` 9,240,757 → 9,240,708 B wire | D-257 |
 | 2026-11-13 | India's 762 districts and 4,128 statutory towns in the world part (695 new rows, 3,433 cities given their official name): `tithipatra` 9,240,708 → 9,326,040 B wire | D-259 |
