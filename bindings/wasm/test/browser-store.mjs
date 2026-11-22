@@ -18,7 +18,8 @@ const page = `<!doctype html><meta charset="utf-8"><script type="module">
 import * as tg from "/pkg/index.js";
 import { fileLock, openInstalled, storeLock, storeWorker } from "/pkg/opfs.js";
 let checks = 0;
-const check = (ok, what) => { if (!ok) throw new Error("store check failed: " + what); checks++; };
+let step = "start";
+const check = (ok, what) => { step = what; if (!ok) throw new Error("store check failed: " + what); checks++; };
 const rows = (blob, name) => new tg.Reader(blob).strings(name);
 const worker = () => storeWorker(new Worker("/pkg/store/store-worker.js", { type: "module" }));
 const fileIn = async (root, path) => {
@@ -86,7 +87,8 @@ try {
   await (await navigator.storage.getDirectory()).removeEntry(root, { recursive: true });
   window.result = { ok: true, checks };
 } catch (e) {
-  window.result = { ok: false, error: String((e && e.stack) || e) };
+  // WebKit's stack holds no message: give the step, the code and the message as well.
+  window.result = { ok: false, error: `after "${step}": ${e && e.code ? e.code + " " : ""}${e && e.message ? e.message : e}\n${(e && e.stack) || ""}` };
 }
 </script>`;
 

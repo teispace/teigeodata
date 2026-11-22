@@ -18,12 +18,13 @@ how good the data is, and how it is gated, is on [accuracy](/docs/concepts/accur
 
 Each npm package's module after `wasm-opt -Oz`, raw and gzipped at level 9. `cargo xtask package-wasm` fails a build whose gzipped module is over its budget.
 
-Measured 2026-11-15 on Darwin arm64, 10 cores (load average 10.36), commit [`25ad7e5`](https://github.com/teispace/teigeodata/commit/25ad7e5), by `cargo xtask package-wasm --record`.
+Measured 2026-11-22 on Darwin arm64, 10 cores (load average 3.61), commit `abc1741` with uncommitted changes, by `cargo xtask package-wasm --record`.
 
 | Package | Holds | Module | gzip -9 | Budget | Headroom |
 |---|---|--:|--:|--:|--:|
-| `teigeodata-wasm` | every component | 605118 B | 253910 B | 262144 B | 3.1% |
-| `teigeodata-wasm-lookup` | every query at a point or by ID | 380167 B | 145724 B | 153600 B | 5.1% |
+| `teigeodata-wasm` | every component | 618248 B | 260232 B | 262144 B | 0.7% |
+| `teigeodata-wasm-lookup` | every query at a point or by ID | 393404 B | 152297 B | 153600 B | 0.8% |
+| `teigeodata-wasm/store` | every component and the store | 1001302 B | 424094 B | 450560 B | 5.9% |
 
 ## Library bytes per feature set
 
