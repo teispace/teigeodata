@@ -158,7 +158,8 @@ static void reader_refuses(tg_bytes blob) {
         } else if (f[0] == 11 || f[0] == 12) { /* a code past the words */
             uint32_t count;
             memcpy(&count, blob.ptr + f[3], 4);
-            bad = patched(blob, f[1], count, f[0] == 11 ? 2 : 4);
+            /* code 0 of no words is an all-null column's, which is valid */
+            bad = patched(blob, f[1], count == 0 ? 1 : count, f[0] == 11 ? 2 : 4);
         } else if (f[0] == 9) { /* -5 in row 0, which is then not null */
             uint8_t *neg = patched(blob, f[1], 0xFFFBu, 2);
             CHECK(neg != NULL);
