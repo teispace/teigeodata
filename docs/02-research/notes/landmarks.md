@@ -75,6 +75,10 @@ the same list later, with no format change.
   main's world part is rebuilt.
 - GeoNames' spot rows are sparse outside a few countries, so most countries start with few
   landmarks. OSM's `historic`, `tourism` and `amenity` tags are the next source.
+- A locality spelled apart from its landmark does not join it: GeoNames' "Tribhuwan
+  International Airport" (`P.PPLL` 7962278) stays a settlement beside the airport "Tribhuvan
+  International Airport" (`S.AIRP` 1282644), 600 m apart. A `same-as` correction joins such a
+  pair (ADR-0036); measured after data-2026.11.22.2, in the next Nepal release.
 - A shrine or temple sharing a village's point and name stays a village (the cluster rule), so a
   few landmarks are missed rather than villages lost.
 
