@@ -157,7 +157,7 @@ geonames:7799394 wikidata:Q7286118	tgd:np/12vt	settlement	ne	राजघाट,
 wikidata:Q3423051	tgd:np/14kd	settlement	ne	बघवन	बन्धुवन | बघवन	wrong_place	uncertain	cc0		judgement	
 geonames:1283605 wikidata:Q3419631	tgd:np/14r9	settlement	ne	ठोरी (सुवर्णपुर)	ठोरी	qualifier	sure	government	yes	https://result.election.gov.np/JSONFiles/Election2079/Local/Lookup/localbodies.json ; https://github.com/sagautam5/local-states-nepal (dataset/municipalities) ; https://ne.wikipedia.org/wiki/नेपालका_स्थानीय_तहहरू	
 wikidata:Q3420267	tgd:np/14td	settlement	ne	गुठीपसौरनी	गुठीपर्सौनी	typo	sure	cc0		judgement	
-wikidata:Q56276418	tgd:np/153b	settlement	en	Gadhawa Rural Municipality	Gadhawa	type_word	likely	cc0		judgement	
+wikidata:Q56276418	tgd:np/153b	settlement	en	Gadhawa Rural Municipality	Gadhawa	type_word	likely	cc0		judgement	agents 2026-11-22: the guard is the corrected name with the local level's type word, which a settlement does not carry (D-380)
 wikidata:Q56276418	tgd:np/153b	settlement	ne	गढवा गाउँपालिका	गढवा	type_word	sure	cc0		judgement	
 wikidata:Q3417356	tgd:np/16e3	settlement	ne	पवननगर, दाङ	पवननगर	qualifier	sure	cc0		judgement	
 geonames:7988810	tgd:np/16vj	settlement	ne	पन्चरुखे	पाँचरुखे	nasal	likely	cc0		judgement	
@@ -170,8 +170,8 @@ geonames:10316709	tgd:np/1ez	settlement	ne	पन्चकन्या	पञ्
 geonames:7802309 wikidata:Q3416515	tgd:np/1f99	settlement	ne	थबाङ्ग	थबाङ | थवाङ	nasal	uncertain	government	yes	https://result.election.gov.np/JSONFiles/Election2079/Local/Lookup/localbodies.json ; https://github.com/sagautam5/local-states-nepal (dataset/municipalities) ; https://ne.wikipedia.org/wiki/नेपालका_स्थानीय_तहहरू	
 geonames:7954507 wikidata:Q5267570	tgd:np/1gkb	settlement	ne	देविस्थान, बागलुङ	देवीस्थान	qualifier	sure	cc0		judgement	
 geonames:7800065 wikidata:Q3418368	tgd:np/1h4v	settlement	ne	अमरभुमी	अमरभूमि	vowel_length	sure	cc0		judgement	
-wikidata:Q65410263	tgd:np/1hrm	settlement	en	Chhatrakot Rural Municipality	Chhatrakot	type_word	likely	cc0		judgement	
-wikidata:Q65410597	tgd:np/1hvw	settlement	en	Rurukshetra Rural Municipality	Rurukshetra	type_word	likely	cc0		judgement	
+wikidata:Q65410263	tgd:np/1hrm	settlement	en	Chhatrakot Rural Municipality	Chhatrakot	type_word	likely	cc0		judgement	agents 2026-11-22: the guard is the corrected name with the local level's type word, which a settlement does not carry (D-380)
+wikidata:Q65410597	tgd:np/1hvw	settlement	en	Rurukshetra Rural Municipality	Rurukshetra	type_word	likely	cc0		judgement	agents 2026-11-22: the guard is the corrected name with the local level's type word, which a settlement does not carry (D-380)
 wikidata:Q65410597	tgd:np/1hvw	settlement	ne	रुरुक्षेत्र गाउँपालिका	रुरुक्षेत्र	type_word	sure	government	yes	https://result.election.gov.np/JSONFiles/Election2079/Local/Lookup/localbodies.json	
 geonames:7939115 wikidata:Q3418249	tgd:np/1mha	settlement	ne	लोहारपानी गा.वि.स.	लोहारपानी	type_word	sure	cc0		judgement	
 geonames:7959990	tgd:np/1nkq	settlement	ne	बिजयनगर	विजयनगर	ba_va	likely	government	yes	https://result.election.gov.np/JSONFiles/Election2079/Local/Lookup/localbodies.json ; https://github.com/sagautam5/local-states-nepal (dataset/municipalities) ; https://ne.wikipedia.org/wiki/नेपालका_स्थानीय_तहहरू	
@@ -180,9 +180,9 @@ geonames:7987438 wikidata:Q6781060	tgd:np/1q29	settlement	ne	मर्याद�
 geonames:7802334 wikidata:Q3420221	tgd:np/1q7y	settlement	ne	तिलोत्तमा नगरपालिका	आनन्दवन	wrong_place	likely	cc0		judgement	
 geonames:8002311 wikidata:Q7676910	tgd:np/1xt9	settlement	ne	टक्सार, स्याङ्जा	टक्सार	qualifier	sure	cc0		judgement	
 geonames:13137137	tgd:np/1ykk	settlement	ne	मऊडाँडा	मौडाँडा | मउडाँडा	vowel_quality	uncertain	cc0		judgement	
-wikidata:Q29580595	tgd:np/1z57	settlement	en	Myagde Rural Municipality	Myagde	type_word	likely	cc0		judgement	
-wikidata:Q105227425	tgd:np/1zgj	settlement	en	Bulingtar Rural Municipality	Bulingtar	type_word	likely	cc0		judgement	
-wikidata:Q105227425	tgd:np/1zgj	settlement	ne	बुलिङटार गाउँपालिका	बुलिङटार	type_word	likely	cc0		judgement	
+wikidata:Q29580595	tgd:np/1z57	settlement	en	Myagde Rural Municipality	Myagde	type_word	likely	cc0		judgement	agents 2026-11-22: the guard is the corrected name with the local level's type word, which a settlement does not carry (D-380)
+wikidata:Q105227425	tgd:np/1zgj	settlement	en	Bulingtar Rural Municipality	Bulingtar	type_word	likely	cc0		judgement	agents 2026-11-22: the guard is the corrected name with the local level's type word, which a settlement does not carry (D-380)
+wikidata:Q105227425	tgd:np/1zgj	settlement	ne	बुलिङटार गाउँपालिका	बुलिङटार	type_word	likely	cc0		judgement	agents 2026-11-22: the guard is the corrected name with the local level's type word, which a settlement does not carry (D-380)
 geonames:7972775 wikidata:Q3412940	tgd:np/1zh2	settlement	ne	बुलिङ्गटार	बुलिङटार	nasal	likely	government	yes	https://result.election.gov.np/JSONFiles/Election2079/Local/Lookup/localbodies.json ; https://github.com/sagautam5/local-states-nepal (dataset/municipalities) ; https://ne.wikipedia.org/wiki/नेपालका_स्थानीय_तहहरू	
 geonames:7802105 wikidata:Q6379881	tgd:np/209g	settlement	ne	कावासोती नगरपालिका	कावासोती	type_word	sure	cc0		judgement	
 geonames:7948586	tgd:np/22y8	settlement	ne	जनगाँऊ	जनगाउँ	typo	sure	cc0		judgement	
@@ -192,8 +192,8 @@ geonames:8469125 wikidata:Q15253554	tgd:np/26e3	settlement	ne	मिरकोट
 geonames:8004475 wikidata:Q7380196	tgd:np/27n7	settlement	ne	रुपाकोट, तनहुँ	रुपाकोट	qualifier	sure	cc0		judgement	
 geonames:7969477 wikidata:Q679263	tgd:np/28wh	settlement	ne	नर	नार	vowel_length	likely	cc0		judgement	
 geonames:7961111 wikidata:Q592998	tgd:np/29b6	settlement	ne	माछापुच्छ्र्े	माछापुच्छ्रे	encoding	sure	share-alike		https://github.com/sagautam5/local-states-nepal (dataset/municipalities) ; https://ne.wikipedia.org/wiki/नेपालका_स्थानीय_तहहरू	
-wikidata:Q32945470	tgd:np/29k7	settlement	en	Modi Rural Municipality	Modi	type_word	likely	cc0		judgement	
-wikidata:Q32945470	tgd:np/29k7	settlement	ne	मोदी गाउँपालिका	मोदी	type_word	likely	cc0		judgement	
+wikidata:Q32945470	tgd:np/29k7	settlement	en	Modi Rural Municipality	Modi	type_word	likely	cc0		judgement	agents 2026-11-22: the guard is the corrected name with the local level's type word, which a settlement does not carry (D-380)
+wikidata:Q32945470	tgd:np/29k7	settlement	ne	मोदी गाउँपालिका	मोदी	type_word	likely	cc0		judgement	agents 2026-11-22: the guard is the corrected name with the local level's type word, which a settlement does not carry (D-380)
 geonames:1282772 wikidata:Q55888221	tgd:np/2bb0	settlement	ne	सिंजा गाउँपालिका	सिंजा	type_word	sure	cc-by	yes	https://opendatanepal.com/dataset/geographical-codes-for-states-districts-and-local-bodies	
 geonames:7940976 wikidata:Q3421893	tgd:np/2d15	settlement	ne	सितौला गाविस	सितौला	type_word	sure	cc0		judgement	
 geonames:7799148 wikidata:Q3424559	tgd:np/2dhh	settlement	ne	रानीशिखर गाविस	रानीशिखर	type_word	sure	cc0		judgement	
@@ -202,7 +202,7 @@ geonames:7970206 wikidata:Q3416682	tgd:np/2dsd	settlement	ne	कटौजपा�
 geonames:7799157 wikidata:Q3423943	tgd:np/2e27	settlement	ne	रिठाचौपाता गाविस	रिठाचौपाता	type_word	sure	cc0		judgement	
 geonames:7940186	tgd:np/2e2h	settlement	ne	घोपते	घोप्टे	aspirate	likely	cc0		judgement	
 geonames:7798985 wikidata:Q3410425	tgd:np/2e2k	settlement	ne	बोहरीगाउँ गाविस	बोहरीगाउँ	type_word	sure	cc0		judgement	
-wikidata:Q104855629	tgd:np/2edx	settlement	en	Duhun Rural Municipality	Duhun	type_word	likely	cc0		judgement	
+wikidata:Q104855629	tgd:np/2edx	settlement	en	Duhun Rural Municipality	Duhun	type_word	likely	cc0		judgement	agents 2026-11-22: the guard is the corrected name with the local level's type word, which a settlement does not carry (D-380)
 geonames:7800424 wikidata:Q3565765	tgd:np/2ewp	settlement	ne	नागार्जुन गाविस	नागार्जुन	type_word	sure	cc0		judgement	
 geonames:7986494	tgd:np/2f5m	settlement	ne	खाक्ले	खाक्लाई | खक्लै	vowel_quality	uncertain	cc0		judgement	
 geonames:7980567 wikidata:Q3419860	tgd:np/2f72	settlement	ne	सर्माली गाविस	सर्माली	type_word	sure	cc0		judgement	
@@ -211,7 +211,7 @@ wikidata:Q7418627	tgd:np/2faz	settlement	ne	शंकरपुर,बैतड�
 geonames:1283695 wikidata:Q3426413	tgd:np/2g30	settlement	ne	बगरकोट गाविस	बगरकोट	type_word	sure	cc0		judgement	
 geonames:7971961 wikidata:Q602819	tgd:np/2g9y	settlement	ne	दुर्गास्थान गाविस	दुर्गास्थान	type_word	sure	cc0		judgement	
 geonames:7935589 wikidata:Q4881908	tgd:np/2gvg	settlement	ne	बेलापुर गाविस	बेलापुर	type_word	sure	cc0		judgement	
-wikidata:Q97169178	tgd:np/2h2j	settlement	en	Sigas Rural Municipality	Sigas	type_word	likely	cc0		judgement	
+wikidata:Q97169178	tgd:np/2h2j	settlement	en	Sigas Rural Municipality	Sigas	type_word	likely	cc0		judgement	agents 2026-11-22: the guard is the corrected name with the local level's type word, which a settlement does not carry (D-380)
 wikidata:Q97169178	tgd:np/2h2j	settlement	ne	सिगास गाउँपालिका	सिगास	type_word	sure	cc0		judgement	
 geonames:7800438 wikidata:Q3425398	tgd:np/2h7h	settlement	ne	थालाकाडा गाविस	थालाकाडा	type_word	sure	cc0		judgement	
 geonames:7971149 wikidata:Q3410235	tgd:np/2h8j	settlement	ne	ढुङगाड गाविस	ढुङगाड	type_word	sure	cc0		judgement	
@@ -253,7 +253,7 @@ geonames:7991096 wikidata:Q6355757	tgd:np/ksq	settlement	ne	कमलपुर �
 wikidata:Q11751364	tgd:np/nem	settlement	ne	कुरुले	कुरुलेतेनुपा	truncated	likely	cc0		judgement	
 geonames:7977523 wikidata:Q3425475	tgd:np/nfv	settlement	ne	मौवा(पाँचथर)	मौवा	qualifier	sure	cc0		judgement	
 geonames:7970412	tgd:np/nny	settlement	ne	धंखेती	धानखेती	vowel_length	likely	cc0		judgement	
-wikidata:Q43280792	tgd:np/pp1	settlement	en	Jahada Rural Municipality	Jahada	type_word	likely	cc0		judgement	
+wikidata:Q43280792	tgd:np/pp1	settlement	en	Jahada Rural Municipality	Jahada	type_word	likely	cc0		judgement	agents 2026-11-22: the guard is the corrected name with the local level's type word, which a settlement does not carry (D-380)
 wikidata:Q43280792	tgd:np/pp1	settlement	ne	जहदा गाउँपालिका	जहदा	type_word	sure	cc0		judgement	
 geonames:7802574 wikidata:Q3421631	tgd:np/q4d	settlement	ne	हरिनगरा	हरिनगर	typo	sure	government	yes	https://result.election.gov.np/JSONFiles/Election2079/Local/Lookup/localbodies.json ; https://github.com/sagautam5/local-states-nepal (dataset/municipalities) ; https://ne.wikipedia.org/wiki/नेपालका_स्थानीय_तहहरू	
 geonames:7997850 wikidata:Q42896767	tgd:np/q4e	settlement	ne	हरिनगरा	हरिनगर	typo	sure	government	yes	https://result.election.gov.np/JSONFiles/Election2079/Local/Lookup/localbodies.json ; https://github.com/sagautam5/local-states-nepal (dataset/municipalities) ; https://ne.wikipedia.org/wiki/नेपालका_स्थानीय_तहहरू	
