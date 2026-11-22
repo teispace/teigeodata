@@ -39,6 +39,15 @@ nullable `class` column.
   PPLX), is not a landmark: a palace's name shared with a village must not turn the village into
   a landmark.
 
+- GeoNames repeats many landmarks as an unpopulated locality (`P.PPLL`) of the same name
+  nearby. Nepal, measured 2026-11-22: 55 same-name pairs of a landmark and such a locality, all
+  within 929 m (Narayanhiti Royal Palace 210 m, Swayambhunath 247 m, Meghauli Airport 480 m);
+  the next pairs are 2 km and more apart and are other places. Conflation never merges two
+  records of one source, so CI's first build had both: the palace as a settlement and as a
+  locality. A place held only by such localities now joins the nearest same-name landmark
+  within 1 km (`dedupe::join_spots`) and its ID resolves to it. A populated `P.PPL` of the
+  landmark's name (Pashupatinath, 356 m from the temple) is a settlement and stays.
+
 ## 4. Options compared
 
 | Option | Strengths | Weaknesses | Verdict |

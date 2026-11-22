@@ -19,6 +19,7 @@ use crate::build::Level;
 use crate::names::Namer;
 use crate::read::geonames::landmark_class;
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::path::Path;
 use teigeodata_core::PlaceKind;
 use teigeodata_format::places;
@@ -41,6 +42,9 @@ pub(super) struct Clustered {
     pub(super) abroad: Vec<(String, PlaceKind, String, f64)>,
     pub(super) naming: Naming,
     pub(super) admin: AdminCounts,
+    /// The keys of places held only by unpopulated `GeoNames` localities ([`spot`]): the ones
+    /// [`super::dedupe::join_spots`] may join to a landmark of their name.
+    pub(super) spots: BTreeSet<String>,
 }
 
 /// How far a summit on the border may lie outside the country's units and still be the
@@ -220,6 +224,20 @@ pub(super) fn landmark(recs: &[(&Rec, &str, usize)]) -> Option<u32> {
     (!other).then_some(code)
 }
 
+/// Whether a cluster is only unpopulated `GeoNames` localities or sections (`P.PPLL`,
+/// `P.PPLX`): `GeoNames` often repeats a landmark so, beside its `S` record (Narayanhiti Royal
+/// Palace is `P.PPLL` 7962153 and `S.PAL` 10276878, 210 m apart). Conflation keeps them apart,
+/// as two records of one source never merge.
+pub(super) fn spot(recs: &[(&Rec, &str, usize)]) -> bool {
+    !recs.is_empty()
+        && recs.iter().all(|(r, id, _)| {
+            id.starts_with("geonames:")
+                && r.kind == "populated_place"
+                && matches!(r.class.as_str(), "P.PPLL" | "P.PPLX")
+                && r.population.is_none_or(|p| p <= 0)
+        })
+}
+
 /// A cluster's kind, admin level and flags; `None` for a cluster that is not a place of its
 /// own (an admin cluster linked to its unit, D-110, or a kind the build does not keep). A
 /// landmark is a locality (D-381); otherwise a cluster with a settlement is a settlement, then
@@ -386,7 +404,8 @@ pub(super) fn cluster_places(
     rules.finish();
     let unit_index = admins::Units::new(&units.places, levels, &rules);
     let mut admin = AdminCounts::default();
-    let (mut out, mut unnamed, mut held, mut abroad) = (Vec::new(), 0_usize, 0_usize, Vec::new());
+    let (mut out, mut unnamed, mut held, mut abroad, mut spots) =
+        (Vec::new(), 0_usize, 0_usize, Vec::new(), BTreeSet::new());
     let mut naming = Naming::default();
     for (
         owner,
@@ -435,6 +454,7 @@ pub(super) fn cluster_places(
             abroad.push((cluster, kind, name, outside_m(levels, point)));
             continue;
         };
+        spots.extend(spot(&recs).then(|| cluster.clone()));
         out.push(Place {
             key: cluster,
             kind,
@@ -461,6 +481,7 @@ pub(super) fn cluster_places(
         abroad,
         naming,
         admin,
+        spots,
     })
 }
 

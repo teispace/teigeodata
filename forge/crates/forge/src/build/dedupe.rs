@@ -13,7 +13,7 @@
 //! population when it has none. Groups are compared by a sweep in latitude, so a common name
 //! costs its own sort, not all pairs.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use teigeodata_core::PlaceKind;
 use teigeodata_names::fold;
@@ -115,6 +115,82 @@ pub(super) fn merge_near(places: &mut Vec<Place>) -> Vec<(String, String, f64)> 
     merged
 }
 
+/// How far a `GeoNames` locality may lie from the landmark it repeats (D-381): of Nepal's 55
+/// same-name pairs of an unpopulated `P.PPLL` and a landmark, all are within 929 m, and the next
+/// are 2 km and more apart, other places (measured 2026-11-22).
+pub(super) const SPOT_M: f64 = 1_000.0;
+
+/// `SPOT_M` in 1e-7° of latitude, rounded up.
+const SPOT_WINDOW_E7: i32 = 90_000;
+
+/// Joins each spot (a place held only by unpopulated `GeoNames` localities, keyed in `spots`)
+/// to the nearest landmark of the same folded name within [`SPOT_M`]: the landmark keeps its
+/// class and takes the spot's records, so the spot's ID resolves to it. Landmarks never join
+/// each other here, so two temples of one name stay two. Returns (landmark key, spot key,
+/// metres), sorted.
+pub(super) fn join_spots(
+    places: &mut Vec<Place>,
+    spots: &BTreeSet<String>,
+) -> Vec<(String, String, f64)> {
+    let key_of = |p: &Place| {
+        p.names
+            .first()
+            .map(|n| fold(&n.text))
+            .filter(|k| !k.is_empty())
+    };
+    let mut landmarks: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, p) in places.iter().enumerate() {
+        if p.class != 0
+            && let Some(k) = key_of(p)
+        {
+            landmarks.entry(k).or_default().push(i);
+        }
+    }
+    if landmarks.is_empty() {
+        return Vec::new();
+    }
+    // (spot, landmark, metres) for each spot with a landmark in reach.
+    let mut pairs: Vec<(usize, usize, f64)> = Vec::new();
+    for (i, p) in places.iter().enumerate() {
+        if p.class != 0 || !spots.contains(&p.key) {
+            continue;
+        }
+        let Some(near) = key_of(p).and_then(|k| landmarks.get(&k)) else {
+            continue;
+        };
+        let best = near
+            .iter()
+            .filter_map(|&j| {
+                let q = places.get(j)?;
+                ((q.point.1 - p.point.1).abs() <= SPOT_WINDOW_E7)
+                    .then(|| (j, haversine_e7(p.point, q.point)))
+            })
+            .filter(|&(_, d)| d <= SPOT_M)
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        if let Some((j, d)) = best {
+            pairs.push((i, j, d));
+        }
+    }
+    if pairs.is_empty() {
+        return Vec::new();
+    }
+    let key = |i: usize| places.get(i).map(|p| p.key.clone()).unwrap_or_default();
+    let mut joined: Vec<(String, String, f64)> =
+        pairs.iter().map(|&(i, j, d)| (key(j), key(i), d)).collect();
+    let mut taken: Vec<Option<Place>> = places.drain(..).map(Some).collect();
+    for &(i, j, _) in &pairs {
+        let Some(spot) = taken.get_mut(i).and_then(Option::take) else {
+            continue;
+        };
+        if let Some(Some(landmark)) = taken.get_mut(j) {
+            absorb(landmark, spot);
+        }
+    }
+    *places = taken.into_iter().flatten().collect();
+    joined.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    joined
+}
+
 /// Whether place `a` is kept over place `b`.
 fn better(places: &[Place], a: usize, b: usize) -> bool {
     let rank = |i: usize| {
@@ -172,7 +248,9 @@ pub(super) fn report(
 mod tests {
     use teigeodata_core::PlaceKind;
 
-    use super::{Place, merge_near};
+    use std::collections::BTreeSet;
+
+    use super::{Place, join_spots, merge_near};
     use crate::build::PlaceName;
 
     /// 1e-7° of latitude is about 1.11 cm: 9,000 units ≈ 100 m.
@@ -235,6 +313,34 @@ mod tests {
         ];
         assert_eq!(merge_near(&mut places), Vec::new());
         assert_eq!(places.len(), 5);
+    }
+
+    #[test]
+    fn a_spot_joins_the_nearest_landmark_of_its_name() {
+        let (s, l) = (PlaceKind::Settlement, PlaceKind::Locality);
+        let temple = |key: &str, lat_e7: i32| Place {
+            class: 2,
+            ..place(key, "Kālikā Temple", l, lat_e7, 1)
+        };
+        let mut places = vec![
+            temple("t1", 280_000_000),
+            temple("t2", 280_040_000), // about 445 m north of t1
+            place("s1", "Kalika Temple", s, 280_036_000, 1), // 44 m from t2, 400 m from t1
+            place("s2", "Kalika Temple", s, 280_200_000, 1), // 1.8 km from t2: stays
+            place("v", "Kalika Temple", s, 280_001_000, 1), // not a spot: stays
+        ];
+        let spots: BTreeSet<String> = ["s1", "s2"].map(String::from).into();
+        let joined = join_spots(&mut places, &spots);
+        assert_eq!(keys(&places), ["s2", "t1", "t2", "v"]);
+        assert_eq!(joined.len(), 1);
+        assert_eq!((joined[0].0.as_str(), joined[0].1.as_str()), ("t2", "s1"));
+        let t2 = places.iter().find(|p| p.key == "t2").unwrap();
+        assert_eq!(t2.class, 2);
+        assert!(t2.sources.contains(&"s1/0".to_string()));
+        // Without a landmark, nothing joins.
+        let mut plain = vec![place("s1", "Kalika Temple", s, 280_000_000, 1)];
+        assert_eq!(join_spots(&mut plain, &spots), Vec::new());
+        assert_eq!(plain.len(), 1);
     }
 
     #[test]
