@@ -148,7 +148,7 @@ pub trait AsyncTransport {
 }
 
 /// A [`Transport`] as an [`AsyncTransport`] whose futures are ready at once.
-struct Ready<'a, T: Transport>(&'a mut T);
+pub(crate) struct Ready<'a, T: Transport>(pub(crate) &'a mut T);
 
 impl<T: Transport> AsyncTransport for Ready<'_, T> {
     fn get(

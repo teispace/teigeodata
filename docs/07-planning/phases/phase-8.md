@@ -291,9 +291,11 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   - [x] a. The pack driver (`fetch::install_from`, `update_from`) as one async core over an
     async transport, the staging file still synchronous (a worker's OPFS sync access handle
     is); the sync functions keep their signatures and tests (D-371, 2026-11-22)
-  - [ ] b. The browser store's layout in `teigeodata-sync` (note §5b): files named by content,
-    the index as the commit with a generation, over an async file trait; a `policy::Packs`;
-    crash tests over an in-memory file system, as the native store's
+  - [x] b. The browser store's layout is the native store's (D-372, 2026-11-22): `AsyncStore`
+    over an async file trait (`AsyncFs`) is the one store, `Store` its synchronous facade; the
+    journal is the index readers follow, pack files never change meaning, and a file a reader
+    holds is left for the next recovery; every store test, the crash tests among them, passes
+    unchanged
   - [ ] c. `teigeodata-wasm` `store` feature: the store over JavaScript I/O (OPFS, `fetch`),
     and the reader (index, head check, `Layer::from_sections`)
   - [ ] d. `store-worker.js` (Web Lock, OPFS, `fetch`, messages) and browser tests in CI
@@ -372,4 +374,5 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-22 | 8.5b: TG-27 released with the world layer, terrain layer and ID bridge | D-366 |
 | 2026-11-22 | 8.5b: the sans-I/O plans become one async core over an I/O trait | D-369 |
 | 2026-11-22 | 8.5b: a layer from its head and section buffers | D-370 |
+| 2026-11-22 | 8.5b b: the browser store is the native store over an async file trait, not a second layout | D-372 |
 | 2026-11-22 | 8.5b: the wasm store split into five sub-steps (async pack driver, browser layout, wasm exports, worker and browser tests, docs) | the pack driver's transport is the async part |

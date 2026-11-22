@@ -33,6 +33,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
+use core::future::{Future, ready};
 use std::io::{self, Read, Seek, Write};
 
 use serde_json::{Map, Value};
@@ -43,8 +44,12 @@ use teigeodata_format::{Kind, PackHead, Part, SectionEntry};
 pub type DeriveInput = (Kind, Part, u64, Vec<u8>);
 
 use crate::catalog::{self, Entry};
-use crate::fetch::{Asset, FetchError, Mirrors, Transport, install_from, update_from};
+use crate::fetch::{
+    Asset, AsyncTransport, FetchError, Mirrors, Ready, Transport, install_from_async,
+    update_from_async,
+};
 use crate::install::Installed;
+use crate::meta::block_on;
 
 /// A file the store writes.
 pub trait StoreFile: Read + Write + Seek {
@@ -115,6 +120,93 @@ pub trait Fs {
     /// # Errors
     /// The file system's.
     fn list(&mut self, path: &str) -> io::Result<Vec<String>>;
+}
+
+/// [`Fs`], awaited: the file system of a store whose directory calls are asynchronous (a
+/// browser's Origin Private File System, where opening, moving and listing are promises). Its
+/// files stay synchronous ([`StoreFile`]: a worker's OPFS sync access handle reads and writes
+/// at offsets at once). [`AsyncStore`] runs over it; [`Store`] runs the same code over an [`Fs`]
+/// (D-372).
+#[allow(
+    async_fn_in_trait,
+    reason = "drivers are single-threaded (a browser worker) or ready at once (block_on); no Send bound is wanted"
+)]
+pub trait AsyncFs {
+    /// Its files.
+    type File: StoreFile;
+    /// As [`Fs::open`].
+    ///
+    /// # Errors
+    /// The file system's.
+    async fn open(&mut self, path: &str) -> io::Result<Self::File>;
+    /// As [`Fs::read`].
+    ///
+    /// # Errors
+    /// The file system's.
+    async fn read(&mut self, path: &str) -> io::Result<Option<Vec<u8>>>;
+    /// As [`Fs::len`].
+    ///
+    /// # Errors
+    /// The file system's.
+    async fn len(&mut self, path: &str) -> io::Result<Option<u64>>;
+    /// As [`Fs::rename`].
+    ///
+    /// # Errors
+    /// The file system's.
+    async fn rename(&mut self, from: &str, to: &str) -> io::Result<()>;
+    /// As [`Fs::remove`]. A file a reader still holds may refuse; the store then leaves it for
+    /// the next recovery.
+    ///
+    /// # Errors
+    /// The file system's.
+    async fn remove(&mut self, path: &str) -> io::Result<()>;
+    /// As [`Fs::create_dir`].
+    ///
+    /// # Errors
+    /// The file system's.
+    async fn create_dir(&mut self, path: &str) -> io::Result<()>;
+    /// As [`Fs::sync_dir`]; a no-op where the storage is durable by itself.
+    ///
+    /// # Errors
+    /// The file system's.
+    async fn sync_dir(&mut self, path: &str) -> io::Result<()>;
+    /// As [`Fs::list`].
+    ///
+    /// # Errors
+    /// The file system's.
+    async fn list(&mut self, path: &str) -> io::Result<Vec<String>>;
+}
+
+/// An [`Fs`] as an [`AsyncFs`] whose futures are ready at once.
+#[derive(Debug)]
+struct SyncFs<D: Fs>(D);
+
+impl<D: Fs> AsyncFs for SyncFs<D> {
+    type File = D::File;
+    fn open(&mut self, path: &str) -> impl Future<Output = io::Result<D::File>> {
+        ready(self.0.open(path))
+    }
+    fn read(&mut self, path: &str) -> impl Future<Output = io::Result<Option<Vec<u8>>>> {
+        ready(self.0.read(path))
+    }
+    fn len(&mut self, path: &str) -> impl Future<Output = io::Result<Option<u64>>> {
+        ready(self.0.len(path))
+    }
+    fn rename(&mut self, from: &str, to: &str) -> impl Future<Output = io::Result<()>> {
+        ready(self.0.rename(from, to))
+    }
+    fn remove(&mut self, path: &str) -> impl Future<Output = io::Result<()>> {
+        ready(self.0.remove(path))
+    }
+    fn create_dir(&mut self, path: &str) -> impl Future<Output = io::Result<()>> {
+        ready(self.0.create_dir(path))
+    }
+    fn sync_dir(&mut self, path: &str) -> impl Future<Output = io::Result<()>> {
+        ready(self.0.sync_dir(path))
+    }
+    fn list(&mut self, path: &str) -> impl Future<Output = io::Result<Vec<String>>> {
+        ready(self.0.list(path))
+    }
 }
 
 /// One installed pack, as the journal records it.
@@ -382,13 +474,180 @@ pub struct Recovered {
     pub damaged: Vec<String>,
 }
 
-/// The installed packs under one root.
+/// The installed packs under one root, over an [`AsyncFs`]: the store's one implementation
+/// (D-372). [`Store`] is the same over a synchronous [`Fs`].
 #[derive(Debug)]
-pub struct Store<D: Fs> {
+pub struct AsyncStore<D: AsyncFs> {
     fs: D,
     packs: Vec<Record>,
     /// Last-use times changed since the last commit.
     dirty: bool,
+}
+
+/// The installed packs under one root, over a synchronous [`Fs`]: [`AsyncStore`] whose
+/// futures are ready at once, run with [`block_on`]. Every method is [`AsyncStore`]'s.
+#[derive(Debug)]
+pub struct Store<D: Fs>(AsyncStore<SyncFs<D>>);
+
+impl<D: Fs> Store<D> {
+    /// As [`AsyncStore::open`].
+    ///
+    /// # Errors
+    /// As [`AsyncStore::open`].
+    pub fn open(fs: D) -> io::Result<(Self, Recovered)> {
+        let (s, rec) = block_on(AsyncStore::open(SyncFs(fs)))?;
+        Ok((Self(s), rec))
+    }
+
+    /// The installed packs.
+    #[must_use]
+    pub fn packs(&self) -> &[Record] {
+        self.0.packs()
+    }
+
+    /// The packs the journal lists now, read without opening the store: nothing is recovered,
+    /// created or removed, so a reader beside the process that installs (a server following
+    /// the store, D-172) never disturbs an install in progress. The journal is replaced whole
+    /// by a rename, so a read sees one committed version.
+    ///
+    /// # Errors
+    /// The file system's, or [`io::ErrorKind::InvalidData`] for a journal that does not parse.
+    pub fn read_packs(fs: &mut D) -> io::Result<Vec<Record>> {
+        match fs.read(JOURNAL)? {
+            Some(bytes) => parse_journal(&bytes),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    /// The path of an installed pack's file, relative to the root.
+    #[must_use]
+    pub fn path_of(record: &Record) -> String {
+        AsyncStore::<SyncFs<D>>::path_of(record)
+    }
+
+    /// The file system, for reading installed packs.
+    pub fn fs(&mut self) -> &mut D {
+        &mut self.0.fs_mut().0
+    }
+
+    /// As [`AsyncStore::install`].
+    ///
+    /// # Errors
+    /// As [`AsyncStore::install`].
+    pub fn install<T: Transport>(
+        &mut self,
+        transport: &mut T,
+        mirrors: &mut Mirrors,
+        path: &str,
+        entry: &Entry,
+        asset_len: u64,
+        set: impl Into<Selection>,
+    ) -> Result<Installed, FetchError> {
+        let mut t = Ready(transport);
+        block_on(self.0.install(&mut t, mirrors, path, entry, asset_len, set))
+    }
+
+    /// As [`AsyncStore::need`].
+    ///
+    /// # Errors
+    /// As [`AsyncStore::need`].
+    pub fn need(&mut self, entry: &Entry, set: Components) -> Result<u64, StoreError> {
+        block_on(self.0.need(entry, set))
+    }
+
+    /// As [`AsyncStore::make_room`].
+    ///
+    /// # Errors
+    /// As [`AsyncStore::make_room`].
+    pub fn make_room(
+        &mut self,
+        entry: &Entry,
+        set: Components,
+        available: u64,
+        quota: Option<u64>,
+    ) -> Result<Vec<Record>, StoreError> {
+        block_on(self.0.make_room(entry, set, available, quota))
+    }
+
+    /// As [`AsyncStore::remove`].
+    ///
+    /// # Errors
+    /// As [`AsyncStore::remove`].
+    pub fn remove(&mut self, address: &str, component: &str) -> Result<Vec<Record>, StoreError> {
+        block_on(self.0.remove(address, component))
+    }
+
+    /// As [`AsyncStore::pin`].
+    ///
+    /// # Errors
+    /// As [`AsyncStore::pin`].
+    pub fn pin(&mut self, address: &str, component: &str, pinned: bool) -> Result<(), StoreError> {
+        block_on(self.0.pin(address, component, pinned))
+    }
+
+    /// As [`AsyncStore::mark`].
+    ///
+    /// # Errors
+    /// As [`AsyncStore::mark`].
+    pub fn mark(&mut self, address: &str, component: &str, asked: bool) -> Result<(), StoreError> {
+        block_on(self.0.mark(address, component, asked))
+    }
+
+    /// As [`AsyncStore::touch`].
+    pub fn touch(&mut self, address: &str, component: &str, now: u64) -> bool {
+        self.0.touch(address, component, now)
+    }
+
+    /// As [`AsyncStore::save`].
+    ///
+    /// # Errors
+    /// As [`AsyncStore::save`].
+    pub fn save(&mut self) -> io::Result<()> {
+        block_on(self.0.save())
+    }
+
+    /// As [`AsyncStore::verify`].
+    ///
+    /// # Errors
+    /// As [`AsyncStore::verify`].
+    pub fn verify(
+        &mut self,
+        address: &str,
+        component: &str,
+        deep: bool,
+    ) -> Result<Health, StoreError> {
+        block_on(self.0.verify(address, component, deep))
+    }
+
+    /// As [`AsyncStore::derive`].
+    ///
+    /// # Errors
+    /// As [`AsyncStore::derive`].
+    pub fn derive(
+        &mut self,
+        address: &str,
+        component: &str,
+        add: Component,
+        build: impl FnOnce(&[DeriveInput]) -> Result<Vec<(Part, Vec<u8>)>, String>,
+    ) -> Result<(), StoreError> {
+        block_on(self.0.derive(address, component, add, build))
+    }
+
+    /// As [`AsyncStore::repair`].
+    ///
+    /// # Errors
+    /// As [`AsyncStore::repair`].
+    pub fn repair<T: Transport>(
+        &mut self,
+        transport: &mut T,
+        mirrors: &mut Mirrors,
+        path: &str,
+        entry: &Entry,
+        asset_len: u64,
+    ) -> Result<Installed, StoreError> {
+        let mut t = Ready(transport);
+        block_on(self.0.repair(&mut t, mirrors, path, entry, asset_len))
+    }
 }
 
 const JOURNAL: &str = "journal";
@@ -407,34 +666,34 @@ fn invalid(what: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, what)
 }
 
-impl<D: Fs> Store<D> {
+impl<D: AsyncFs> AsyncStore<D> {
     /// Opens the store and recovers from any interrupted install.
     ///
     /// # Errors
     /// The file system's, or [`io::ErrorKind::InvalidData`] for a journal that does not parse:
     /// nothing is removed then, since the journal is the only record of what is installed.
-    pub fn open(mut fs: D) -> io::Result<(Self, Recovered)> {
+    pub async fn open(mut fs: D) -> io::Result<(Self, Recovered)> {
         for d in [PACKS, STAGING] {
-            fs.create_dir(d)?;
+            fs.create_dir(d).await?;
         }
-        fs.sync_dir("")?;
-        fs.remove(JOURNAL_TMP)?;
-        let packs = match fs.read(JOURNAL)? {
-            Some(bytes) => parse(&bytes)?,
+        fs.sync_dir("").await?;
+        fs.remove(JOURNAL_TMP).await?;
+        let packs = match fs.read(JOURNAL).await? {
+            Some(bytes) => parse_journal(&bytes)?,
             None => Vec::new(),
         };
         let mut rec = Recovered::default();
-        for name in fs.list(PACKS)? {
+        for name in fs.list(PACKS).await? {
             if !packs.iter().any(|r| r.file == name) {
-                fs.remove(&alloc::format!("{PACKS}/{name}"))?;
+                fs.remove(&alloc::format!("{PACKS}/{name}")).await?;
                 rec.removed.push(name);
             }
         }
         if !rec.removed.is_empty() {
-            fs.sync_dir(PACKS)?;
+            fs.sync_dir(PACKS).await?;
         }
         for r in &packs {
-            if fs.len(&alloc::format!("{PACKS}/{}", r.file))? != Some(r.pack_len) {
+            if fs.len(&alloc::format!("{PACKS}/{}", r.file)).await? != Some(r.pack_len) {
                 rec.damaged.push(r.file.clone());
             }
         }
@@ -454,20 +713,6 @@ impl<D: Fs> Store<D> {
         &self.packs
     }
 
-    /// The packs the journal lists now, read without opening the store: nothing is recovered,
-    /// created or removed, so a reader beside the process that installs (a server following
-    /// the store, D-172) never disturbs an install in progress. The journal is replaced whole
-    /// by a rename, so a read sees one committed version.
-    ///
-    /// # Errors
-    /// The file system's, or [`io::ErrorKind::InvalidData`] for a journal that does not parse.
-    pub fn read_packs(fs: &mut D) -> io::Result<Vec<Record>> {
-        match fs.read(JOURNAL)? {
-            Some(bytes) => parse(&bytes),
-            None => Ok(Vec::new()),
-        }
-    }
-
     /// The path of an installed pack's file, relative to the root.
     #[must_use]
     pub fn path_of(record: &Record) -> String {
@@ -475,7 +720,7 @@ impl<D: Fs> Store<D> {
     }
 
     /// The file system, for reading installed packs.
-    pub fn fs(&mut self) -> &mut D {
+    pub const fn fs_mut(&mut self) -> &mut D {
         &mut self.fs
     }
 
@@ -490,7 +735,7 @@ impl<D: Fs> Store<D> {
     /// [`FetchError`]: the install's, [`FetchError::Older`] for a release older than the
     /// installed one, or [`FetchError::Io`] for the file system. The journal is untouched by any
     /// failure before the commit.
-    pub fn install<T: Transport>(
+    pub async fn install<T: AsyncTransport>(
         &mut self,
         transport: &mut T,
         mirrors: &mut Mirrors,
@@ -523,7 +768,7 @@ impl<D: Fs> Store<D> {
             });
         }
         let staging = alloc::format!("{STAGING}/{file}.part");
-        let mut f = self.fs.open(&staging)?;
+        let mut f = self.fs.open(&staging).await?;
         // An update reads the release it replaces and fetches only what changed (D-174).
         let replaced = self
             .packs
@@ -533,19 +778,18 @@ impl<D: Fs> Store<D> {
             })
             .map(Self::path_of);
         let mut previous = match replaced {
-            Some(p) if self.fs.len(&p)?.is_some() => Some(self.fs.open(&p)?),
+            Some(p) if self.fs.len(&p).await?.is_some() => Some(self.fs.open(&p).await?),
             _ => None,
         };
-        let done = match previous.as_mut() {
-            Some(old) => {
-                let asset = Asset {
-                    path,
-                    entry,
-                    len: asset_len,
-                };
-                update_from(transport, mirrors, asset, want, &mut f, old)?
-            }
-            None => install_from(transport, mirrors, path, entry, asset_len, want, &mut f)?,
+        let asset = Asset {
+            path,
+            entry,
+            len: asset_len,
+        };
+        let done = if let Some(old) = previous.as_mut() {
+            update_from_async(transport, mirrors, asset, want, &mut f, old).await?
+        } else {
+            install_from_async(transport, mirrors, asset, want, &mut f).await?
         };
         drop(previous);
         f.set_len(done.pack_len)?;
@@ -558,9 +802,9 @@ impl<D: Fs> Store<D> {
         f.sync()?;
         drop(f);
         let target = alloc::format!("{PACKS}/{file}");
-        self.fs.rename(&staging, &target)?;
-        self.fs.sync_dir(PACKS)?;
-        self.fs.sync_dir(STAGING)?;
+        self.fs.rename(&staging, &target).await?;
+        self.fs.sync_dir(PACKS).await?;
+        self.fs.sync_dir(STAGING).await?;
         let mut packs = self.packs.clone();
         let old = packs
             .iter()
@@ -584,9 +828,9 @@ impl<D: Fs> Store<D> {
             used: old.as_ref().map_or(latest, |o| o.used.max(latest)),
         });
         packs.sort_by(|a, b| (&a.address, &a.component).cmp(&(&b.address, &b.component)));
-        self.commit(packs)?;
+        self.commit(packs).await?;
         if let Some(old) = old {
-            self.retire(&[old]);
+            self.retire(&[old]).await;
         }
         Ok(done)
     }
@@ -597,9 +841,9 @@ impl<D: Fs> Store<D> {
     ///
     /// # Errors
     /// [`StoreError::Io`], or [`StoreError::Fetch`] for an unsafe asset name.
-    pub fn need(&mut self, entry: &Entry, set: Components) -> Result<u64, StoreError> {
+    pub async fn need(&mut self, entry: &Entry, set: Components) -> Result<u64, StoreError> {
         let staged = alloc::format!("{STAGING}/{}.part", pack_name(entry, set)?);
-        let have = self.fs.len(&staged)?.unwrap_or(0);
+        let have = self.fs.len(&staged).await?.unwrap_or(0);
         Ok(entry.size_of(set).disk.saturating_sub(have))
     }
 
@@ -609,14 +853,14 @@ impl<D: Fs> Store<D> {
     ///
     /// # Errors
     /// [`StoreError::Short`] when it cannot fit (nothing removed), or [`StoreError::Io`].
-    pub fn make_room(
+    pub async fn make_room(
         &mut self,
         entry: &Entry,
         set: Components,
         available: u64,
         quota: Option<u64>,
     ) -> Result<Vec<Record>, StoreError> {
-        let need = self.need(entry, set)?;
+        let need = self.need(entry, set).await?;
         let mut keep = entry.deps.clone();
         keep.push(entry.path());
         let order = plan_room(
@@ -628,7 +872,7 @@ impl<D: Fs> Store<D> {
                 keep: &keep,
             },
         )?;
-        self.drop_packs(&order)
+        self.drop_packs(&order).await
     }
 
     /// Removes the pack of `address` and `component`, and then every pack installed as a
@@ -637,7 +881,11 @@ impl<D: Fs> Store<D> {
     /// # Errors
     /// [`StoreError::NotInstalled`], [`StoreError::Needed`] when another installed pack depends
     /// on it, or [`StoreError::Io`].
-    pub fn remove(&mut self, address: &str, component: &str) -> Result<Vec<Record>, StoreError> {
+    pub async fn remove(
+        &mut self,
+        address: &str,
+        component: &str,
+    ) -> Result<Vec<Record>, StoreError> {
         let i = self.find(address, component)?;
         let key = catalog::path(address, component);
         if let Some(by) = self.packs.iter().find(|r| r.deps.contains(&key)) {
@@ -660,15 +908,20 @@ impl<D: Fs> Store<D> {
                 None => break,
             }
         }
-        self.drop_packs(&gone)
+        self.drop_packs(&gone).await
     }
 
     /// Pins or unpins a pack. A pinned pack is never evicted.
     ///
     /// # Errors
     /// [`StoreError::NotInstalled`] or [`StoreError::Io`].
-    pub fn pin(&mut self, address: &str, component: &str, pinned: bool) -> Result<(), StoreError> {
-        self.set(address, component, |r| r.pinned = pinned)
+    pub async fn pin(
+        &mut self,
+        address: &str,
+        component: &str,
+        pinned: bool,
+    ) -> Result<(), StoreError> {
+        self.set(address, component, |r| r.pinned = pinned).await
     }
 
     /// Marks a pack as asked for (`true`) or as installed for another pack (`false`), which
@@ -678,8 +931,13 @@ impl<D: Fs> Store<D> {
     ///
     /// # Errors
     /// [`StoreError::NotInstalled`] or [`StoreError::Io`].
-    pub fn mark(&mut self, address: &str, component: &str, asked: bool) -> Result<(), StoreError> {
-        self.set(address, component, |r| r.asked = asked)
+    pub async fn mark(
+        &mut self,
+        address: &str,
+        component: &str,
+        asked: bool,
+    ) -> Result<(), StoreError> {
+        self.set(address, component, |r| r.asked = asked).await
     }
 
     /// Records a use of a pack at `now` (the caller's clock, seconds), in memory: it is saved
@@ -702,9 +960,9 @@ impl<D: Fs> Store<D> {
     ///
     /// # Errors
     /// The file system's.
-    pub fn save(&mut self) -> io::Result<()> {
+    pub async fn save(&mut self) -> io::Result<()> {
         if self.dirty {
-            self.commit(self.packs.clone())?;
+            self.commit(self.packs.clone()).await?;
         }
         Ok(())
     }
@@ -718,7 +976,7 @@ impl<D: Fs> Store<D> {
     ///
     /// # Errors
     /// [`StoreError::NotInstalled`] or [`StoreError::Io`].
-    pub fn verify(
+    pub async fn verify(
         &mut self,
         address: &str,
         component: &str,
@@ -730,10 +988,10 @@ impl<D: Fs> Store<D> {
             .cloned()
             .ok_or(StoreError::NotInstalled)?;
         let path = Self::path_of(&r);
-        if self.fs.len(&path)? != Some(r.pack_len) {
+        if self.fs.len(&path).await? != Some(r.pack_len) {
             return Ok(Health::Length);
         }
-        let mut f = self.fs.open(&path)?;
+        let mut f = self.fs.open(&path).await?;
         let Some(head) = crate::fetch::read_head(&mut f, r.pack_len)? else {
             return Ok(Health::Head);
         };
@@ -796,7 +1054,7 @@ impl<D: Fs> Store<D> {
     /// installed, the component is more than one kind, a part is missing or does not match its
     /// hash, or
     /// the pack would need `BLOCK_HASHES` it does not hold (download then); [`StoreError::Io`].
-    pub fn derive(
+    pub async fn derive(
         &mut self,
         address: &str,
         component: &str,
@@ -818,7 +1076,7 @@ impl<D: Fs> Store<D> {
         }
         let set = r.set.union(Components::of(&[add])).closed();
         let path = Self::path_of(&r);
-        let mut old = self.fs.open(&path)?;
+        let mut old = self.fs.open(&path).await?;
         let head = crate::fetch::read_head(&mut old, r.pack_len)?
             .ok_or_else(|| derive("the pack's head does not read"))?;
         let h = PackHead::parse(&head, r.pack_len)
@@ -853,7 +1111,7 @@ impl<D: Fs> Store<D> {
         }
         let file = name_with(&r.file, r.set, set)?;
         let staging = alloc::format!("{STAGING}/{file}.part");
-        let mut f = self.fs.open(&staging)?;
+        let mut f = self.fs.open(&staging).await?;
         f.set_len(0)?;
         f.set_len(r.pack_len)?;
         // The head, every held section and the footer, a chunk at a time; then the new one.
@@ -877,16 +1135,17 @@ impl<D: Fs> Store<D> {
         f.sync()?;
         drop(f);
         self.fs
-            .rename(&staging, &alloc::format!("{PACKS}/{file}"))?;
-        self.fs.sync_dir(PACKS)?;
-        self.fs.sync_dir(STAGING)?;
+            .rename(&staging, &alloc::format!("{PACKS}/{file}"))
+            .await?;
+        self.fs.sync_dir(PACKS).await?;
+        self.fs.sync_dir(STAGING).await?;
         let mut packs = self.packs.clone();
         if let Some(p) = packs.iter_mut().find(|p| p.file == r.file) {
             p.set = set;
             p.file = file;
         }
-        self.commit(packs)?;
-        self.retire(&[r]);
+        self.commit(packs).await?;
+        self.retire(&[r]).await;
         Ok(())
     }
 
@@ -900,7 +1159,7 @@ impl<D: Fs> Store<D> {
     /// # Errors
     /// [`StoreError::NotInstalled`]; [`StoreError::Fetch`] when `entry` is another release or
     /// the install fails; [`StoreError::Io`].
-    pub fn repair<T: Transport>(
+    pub async fn repair<T: AsyncTransport>(
         &mut self,
         transport: &mut T,
         mirrors: &mut Mirrors,
@@ -920,10 +1179,10 @@ impl<D: Fs> Store<D> {
         }
         let target = Self::path_of(&r);
         let staging = alloc::format!("{STAGING}/{}.part", r.file);
-        let mut f = self.fs.open(&staging)?;
+        let mut f = self.fs.open(&staging).await?;
         if f.seek(io::SeekFrom::End(0))? == 0 {
             // Start from the installed bytes; whatever does not check is fetched again.
-            let mut from = self.fs.open(&target)?;
+            let mut from = self.fs.open(&target).await?;
             let mut buf = alloc::vec![0_u8; CHUNK];
             loop {
                 let n = from.read(&mut buf)?;
@@ -933,22 +1192,19 @@ impl<D: Fs> Store<D> {
                 f.write_all(chunk)?;
             }
         }
-        let done = install_from(
-            transport,
-            mirrors,
+        let asset = Asset {
             path,
             entry,
-            asset_len,
-            r.selection(),
-            &mut f,
-        )?;
+            len: asset_len,
+        };
+        let done = install_from_async(transport, mirrors, asset, r.selection(), &mut f).await?;
         f.set_len(done.pack_len)?;
         hollow(&mut f, done.pack_len, r.selection())?;
         f.sync()?;
         drop(f);
-        self.fs.rename(&staging, &target)?;
-        self.fs.sync_dir(PACKS)?;
-        self.fs.sync_dir(STAGING)?;
+        self.fs.rename(&staging, &target).await?;
+        self.fs.sync_dir(PACKS).await?;
+        self.fs.sync_dir(STAGING).await?;
         Ok(done)
     }
 
@@ -959,7 +1215,7 @@ impl<D: Fs> Store<D> {
             .ok_or(StoreError::NotInstalled)
     }
 
-    fn set(
+    async fn set(
         &mut self,
         address: &str,
         component: &str,
@@ -974,11 +1230,11 @@ impl<D: Fs> Store<D> {
                 return Ok(());
             }
         }
-        Ok(self.commit(packs)?)
+        Ok(self.commit(packs).await?)
     }
 
     /// Commits the journal without the packs at `indices`, then deletes their files.
-    fn drop_packs(&mut self, indices: &[usize]) -> Result<Vec<Record>, StoreError> {
+    async fn drop_packs(&mut self, indices: &[usize]) -> Result<Vec<Record>, StoreError> {
         if indices.is_empty() {
             return Ok(Vec::new());
         }
@@ -988,37 +1244,38 @@ impl<D: Fs> Store<D> {
             .cloned()
             .enumerate()
             .partition(|(i, _)| indices.contains(i));
-        self.commit(stay.into_iter().map(|(_, r)| r).collect())?;
+        self.commit(stay.into_iter().map(|(_, r)| r).collect())
+            .await?;
         let gone: Vec<Record> = gone.into_iter().map(|(_, r)| r).collect();
-        self.retire(&gone);
+        self.retire(&gone).await;
         Ok(gone)
     }
 
     /// Deletes the files of packs no longer in the journal. Best effort: a mapped file on
     /// Windows cannot go yet, and recovery removes it later.
-    fn retire(&mut self, old: &[Record]) {
+    async fn retire(&mut self, old: &[Record]) {
         let mut any = false;
         for o in old {
             if self.packs.iter().all(|r| r.file != o.file) {
-                any |= self.fs.remove(&Self::path_of(o)).is_ok();
+                any |= self.fs.remove(&Self::path_of(o)).await.is_ok();
             }
         }
         if any {
-            let _ = self.fs.sync_dir(PACKS);
+            let _ = self.fs.sync_dir(PACKS).await;
         }
     }
 
     /// Writes `packs` as the journal (temp file, sync, rename, sync the root) and makes them
     /// the store's.
-    fn commit(&mut self, packs: Vec<Record>) -> io::Result<()> {
+    async fn commit(&mut self, packs: Vec<Record>) -> io::Result<()> {
         let bytes = render(&packs);
-        let mut t = self.fs.open(JOURNAL_TMP)?;
+        let mut t = self.fs.open(JOURNAL_TMP).await?;
         t.set_len(0)?;
         t.write_all(&bytes)?;
         t.sync()?;
         drop(t);
-        self.fs.rename(JOURNAL_TMP, JOURNAL)?;
-        self.fs.sync_dir("")?;
+        self.fs.rename(JOURNAL_TMP, JOURNAL).await?;
+        self.fs.sync_dir("").await?;
         self.packs = packs;
         self.dirty = false;
         Ok(())
@@ -1159,7 +1416,12 @@ fn parts_of_json(v: &Value) -> Option<Parts> {
     Some(p)
 }
 
-fn parse(bytes: &[u8]) -> io::Result<Vec<Record>> {
+/// The installed packs a journal lists: for a reader of a store it does not own (a host's wasm
+/// beside the browser store's worker, note §5b), which then opens each file it needs.
+///
+/// # Errors
+/// [`io::ErrorKind::InvalidData`] for a journal that does not parse.
+pub fn parse_journal(bytes: &[u8]) -> io::Result<Vec<Record>> {
     let bad = || invalid("the journal does not parse");
     let v: Value = serde_json::from_slice(bytes).map_err(|_| bad())?;
     let version = v.get("version").and_then(Value::as_u64);
@@ -1574,12 +1836,12 @@ mod derive_tests {
                 .unwrap()
                 .contains("\"version\":3")
         );
-        assert_eq!(super::parse(&bytes).unwrap(), [r.clone()]);
+        assert_eq!(super::parse_journal(&bytes).unwrap(), [r.clone()]);
         // A version-2 reader's view: the same records, minus the parts, must not pass as 3.
         let old = core::str::from_utf8(&bytes)
             .unwrap()
             .replace("\"version\":3", "\"version\":9");
-        assert!(super::parse(old.as_bytes()).is_err());
+        assert!(super::parse_journal(old.as_bytes()).is_err());
     }
 
     #[test]

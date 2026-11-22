@@ -18,7 +18,8 @@ applied: a minor release could break the public API, and every break is listed u
 - Sync: the catalog refresh (`meta`) and the store policy (`policy`) as one async core over
   an I/O trait, which the native client runs with `meta::block_on`; the client's API is
   unchanged (D-369); the pack driver too, `fetch::AsyncTransport`, `install_from_async` and
-  `update_from_async` (D-371).
+  `update_from_async` (D-371); the store too, `store::AsyncStore` over `store::AsyncFs`, with
+  `Store` its synchronous facade, and `store::parse_journal` for readers (D-372).
 
 ## [1.1.0] - 2026-11-17
 

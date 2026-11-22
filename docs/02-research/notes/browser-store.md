@@ -154,6 +154,12 @@ lite pack without boundaries at 11.85 MB.
 An app may hold its engine inside its own wasm (a host core built on `teigeodata-engine`), so
 the store must not bring a second engine. The contract, option (a) of the consumer's review:
 
+- **Built as the native store over an async file trait** (D-372, 2026-11-22): the rules below
+  are the native store's already. Pack files are named per release and component set and never
+  change meaning; the journal (`journal`, replaced by a rename) is the index, and its
+  `parse_journal` is public for readers; a removal the file system refuses (a reader still
+  holds the file) is left for the next recovery, which deletes every file the journal does
+  not list. The generation lock below lives in the worker's `AsyncFs.remove`.
 - **The store worker only writes.** It owns `staging/`, `packs/` and the index, and holds the
   store's Web Lock. It never needs an engine of its own.
 - **Installed files never change.** Each installed pack is a file named by its content
