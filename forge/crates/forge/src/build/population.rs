@@ -1,6 +1,6 @@
 //! Modelled population of admin units (D-123): a population grid summed over each unit.
 //!
-//! Each grid cell with people counts once, in the finest unit holding its centre; a unit's
+//! Each grid cell with people counts once, in the deepest unit holding its centre; a unit's
 //! population is the sum over it and its descendants, so the levels add up exactly. A stated
 //! count (a linked record's, often a census) stays when it is within [`PLAUSIBLE`] of the
 //! modelled one; otherwise the modelled one replaces it: a linked record can carry another
@@ -122,8 +122,11 @@ pub(super) fn run(
     Ok(Outcome { report, rows })
 }
 
-/// Sums the grids `paths` over the finest of `levels` inside `bbox` (1e-7°, as the units'
-/// coverage), then up each unit's parent chain in `places`.
+/// Sums the grids `paths` over `levels` inside `bbox` (1e-7°, as the units' coverage): each
+/// cell into the deepest unit that holds it, then up each unit's parent chain in `places`. A
+/// level with fillers (a derived set's wards, D-363) leaves land to the level above: summed
+/// over the finest level alone, a local level with no ward (a national park) took no modelled
+/// count and kept a linked record's wrong one, and a filler's people were lost to its parent.
 pub(super) fn model(
     paths: &[PathBuf],
     levels: &[Level],
@@ -131,14 +134,17 @@ pub(super) fn model(
     (x0, y0, x1, y1): (i32, i32, i32, i32),
 ) -> Result<Modelled, String> {
     let mut m = Modelled::default();
-    let Some(finest) = levels.last() else {
+    if levels.is_empty() {
         return Ok(m);
-    };
-    let mut sums = vec![0.0_f64; finest.polys.len()];
+    }
+    let mut sums: Vec<Vec<f64>> = levels
+        .iter()
+        .map(|l| vec![0.0_f64; l.polys.len()])
+        .collect();
     let e7 = |v: i32| f64::from(v) / 1e7;
     for path in paths {
         // Consecutive cells mostly fall in the same unit: try the last one first.
-        let mut last: Option<usize> = None;
+        let mut last: Option<(usize, usize)> = None;
         raster::for_each_positive(path, (e7(x0), e7(y0), e7(x1), e7(y1)), |lon, lat, v| {
             #[allow(
                 clippy::cast_possible_truncation,
@@ -147,33 +153,70 @@ pub(super) fn model(
             let p = ((lon * 1e7).round() as i32, (lat * 1e7).round() as i32);
             m.cells += 1;
             m.total += v;
-            let holds = |i: usize| finest.polys.get(i).is_some_and(|q| q.contains(p.0, p.1));
-            let hit = last
-                .filter(|&i| holds(i))
-                .or_else(|| finest.index.candidates(p.0, p.1).find(|&i| holds(i)));
-            match hit.and_then(|i| sums.get_mut(i).map(|s| (i, s))) {
-                Some((i, s)) => {
+            let hit = deepest_holding(levels, p, last);
+            match hit.and_then(|(l, i)| sums.get_mut(l)?.get_mut(i).map(|s| ((l, i), s))) {
+                Some((li, s)) => {
                     *s += v;
-                    last = Some(i);
+                    last = Some(li);
                 }
                 None => m.outside += v,
             }
         })?;
     }
+    up_chains(levels, &sums, places, &mut m.by_key);
+    Ok(m)
+}
+
+/// The unit holding `p` at the deepest level that has one, as (level, polygon); `last` is the
+/// previous cell's, tried first when it is of the deepest level.
+fn deepest_holding(
+    levels: &[Level],
+    p: (i32, i32),
+    last: Option<(usize, usize)>,
+) -> Option<(usize, usize)> {
+    let holds = |(l, i): (usize, usize)| {
+        levels
+            .get(l)
+            .and_then(|lv| lv.polys.get(i))
+            .is_some_and(|q| q.contains(p.0, p.1))
+    };
+    last.filter(|&li| li.0 + 1 == levels.len() && holds(li))
+        .or_else(|| {
+            levels.iter().enumerate().rev().find_map(|(l, lv)| {
+                lv.index
+                    .candidates(p.0, p.1)
+                    .map(|i| (l, i))
+                    .find(|&li| holds(li))
+            })
+        })
+}
+
+/// Adds each unit's own sum (`sums`, per level and polygon) to it and every unit up its
+/// parent chain in `places`.
+fn up_chains(
+    levels: &[Level],
+    sums: &[Vec<f64>],
+    places: &[Place],
+    by_key: &mut HashMap<String, f64>,
+) {
     let parent: HashMap<&str, Option<&str>> = places
         .iter()
         .map(|p| (p.key.as_str(), p.parent.as_deref()))
         .collect();
-    for (key, &s) in finest.keys.iter().zip(&sums) {
-        let mut at = Some(key.as_str());
-        // A parent chain is at most as long as the levels; the bound guards a cycle.
-        for _ in 0..=levels.len() {
-            let Some(k) = at else { break };
-            *m.by_key.entry(k.to_string()).or_default() += s;
-            at = parent.get(k).copied().flatten();
+    for (level, sums) in levels.iter().zip(sums) {
+        for (key, &s) in level.keys.iter().zip(sums) {
+            if s == 0.0 {
+                continue;
+            }
+            let mut at = Some(key.as_str());
+            // A parent chain is at most as long as the levels; the bound guards a cycle.
+            for _ in 0..=levels.len() {
+                let Some(k) = at else { break };
+                *by_key.entry(k.to_string()).or_default() += s;
+                at = parent.get(k).copied().flatten();
+            }
         }
     }
-    Ok(m)
 }
 
 /// Gives every current admin unit its population: the stated one when the modelled one is
@@ -278,6 +321,68 @@ mod tests {
             parent: parent.map(str::to_string),
             sources: Vec::new(),
         }
+    }
+
+    /// A unit's key and its box (min x, min y, max x, max y).
+    type Unit<'a> = (&'a str, (i32, i32, i32, i32));
+
+    fn level(number: u8, units: &[Unit<'_>]) -> crate::build::units::Level {
+        let polys: Vec<crate::geom::Polygon> = units
+            .iter()
+            .map(|&(_, (x0, y0, x1, y1))| crate::geom::Polygon {
+                rings: vec![vec![(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)]],
+            })
+            .collect();
+        crate::build::units::Level {
+            number,
+            keys: units.iter().map(|(k, _)| (*k).to_string()).collect(),
+            index: crate::geom::GridIndex::new(&polys, 100),
+            polys,
+        }
+    }
+
+    #[test]
+    fn land_no_finer_unit_holds_counts_in_the_unit_above() {
+        // m holds wards w1 and w2 on its west half; its east half is a filler's. p, beside
+        // it, has no ward at all (a national park).
+        let levels = [
+            level(3, &[("m", (0, 0, 200, 100)), ("p", (200, 0, 300, 100))]),
+            level(4, &[("w1", (0, 0, 50, 100)), ("w2", (50, 0, 100, 100))]),
+        ];
+        let at = |p| super::deepest_holding(&levels, p, None);
+        assert_eq!(at((10, 10)), Some((1, 0)));
+        assert_eq!(at((60, 10)), Some((1, 1)));
+        assert_eq!(at((150, 10)), Some((0, 0)), "filler land: the local level");
+        assert_eq!(at((250, 10)), Some((0, 1)), "no ward: the local level");
+        assert_eq!(at((350, 10)), None);
+        // The previous cell's unit is tried first only at the deepest level.
+        assert_eq!(
+            super::deepest_holding(&levels, (10, 10), Some((0, 0))),
+            Some((1, 0))
+        );
+        assert_eq!(
+            super::deepest_holding(&levels, (60, 10), Some((1, 0))),
+            Some((1, 1))
+        );
+
+        let mut m = unit("m", None, None);
+        m.admin_level = 3;
+        let mut p = unit("p", None, None);
+        p.admin_level = 3;
+        let places = [
+            m,
+            p,
+            unit("w1", Some("m"), None),
+            unit("w2", Some("m"), None),
+        ];
+        let sums = vec![vec![30.0, 7.0], vec![10.0, 20.0]];
+        let mut by_key = std::collections::HashMap::new();
+        super::up_chains(&levels, &sums, &places, &mut by_key);
+        let got = |k: &str| by_key.get(k).copied();
+        assert_eq!(
+            (got("m"), got("p"), got("w1"), got("w2")),
+            (Some(60.0), Some(7.0), Some(10.0), Some(20.0))
+        );
     }
 
     #[test]
