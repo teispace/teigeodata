@@ -157,6 +157,9 @@ Tasks:
                     the world part's and every pack's into one archive; restore puts a
                     release's back (the newest data release's by default), keeping a
                     local one that differs unless --force; needs `gh`.
+  ids bridge <cc> <lite.tsv> <main.tsv> <out.tsv>
+                    Lite's IDs to main's (TG-30): each live lite ID to the main ID sharing
+                    most of its source keys; a tie or no shared key maps to nothing.
   tuf <command>     The catalog repository (D-163): keygen, pubkey, root, sign,
                     release, timestamp, verify; `cargo xtask tuf` lists them.
   clean [--all]     Free disk: incremental caches and scratch of both workspaces (built

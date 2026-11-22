@@ -11,7 +11,14 @@
 //! - `restore [<tag>] [--build <build>] [--force]`: the archive of release `<tag>`, else of the
 //!   newest `data-*` release that has one. A local registry that differs is kept and reported
 //!   unless `--force`, so a newer local registry is never overwritten by accident.
+//! - `bridge <cc> <lite.tsv> <main.tsv> <out.tsv>`: lite's IDs to main's (TG-30, Q-038). The
+//!   two builds keep their own registries, so one place has two IDs; the bridge maps each live
+//!   lite serial to the live main serial sharing most of its source keys, the smaller key set
+//!   breaking a tie. A tie left, or no shared key, maps to nothing and says which. A retired
+//!   lite ID is not listed: a lite pack's REDIRECTS give its successor first.
 
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -22,10 +29,16 @@ const HEADER: &str = "# teigeodata id registry";
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     let one = |e: String| vec![e];
     let usage = "usage: cargo xtask ids save <lite|main> <out.tar.gz> | ids restore [<tag>] \
-                 [--build <lite|main>] [--force]";
+                 [--build <lite|main>] [--force] | ids bridge <cc> <lite.tsv> <main.tsv> <out.tsv>";
     match args.first().map(String::as_str) {
         Some("save") => match (args.get(1), args.get(2)) {
             (Some(build), Some(out)) => save(root, build, Path::new(out)).map_err(one),
+            _ => Err(one(usage.into())),
+        },
+        Some("bridge") => match (args.get(1), args.get(2), args.get(3), args.get(4)) {
+            (Some(cc), Some(lite), Some(main), Some(out)) => {
+                bridge(cc, Path::new(lite), Path::new(main), Path::new(out)).map_err(one)
+            }
             _ => Err(one(usage.into())),
         },
         Some("restore") => {
@@ -45,6 +58,133 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         }
         _ => Err(one(usage.into())),
     }
+}
+
+/// The bridge file's first line.
+const BRIDGE_HEADER: &str = "# teigeodata id bridge 1";
+
+/// A registry's live serials (held by some build now) and their source keys.
+fn live_serials(text: &str) -> Result<Vec<(u64, BTreeSet<&str>)>, String> {
+    let mut lines = text.lines().enumerate();
+    if !lines.next().is_some_and(|(_, l)| l.starts_with(HEADER)) {
+        return Err(format!("not an ID registry (first line `{HEADER} 1`)"));
+    }
+    let mut out = Vec::new();
+    for (i, line) in lines {
+        let mut cols = line.split('\t');
+        let (Some(serial), Some(state), Some(keys)) = (cols.next(), cols.next(), cols.next())
+        else {
+            return Err(format!("line {}: needs three tab-separated columns", i + 1));
+        };
+        if state == "x" || state.starts_with('>') {
+            continue;
+        }
+        let serial = serial
+            .parse()
+            .map_err(|_| format!("line {}: bad serial", i + 1))?;
+        out.push((serial, keys.split(' ').filter(|k| !k.is_empty()).collect()));
+    }
+    Ok(out)
+}
+
+/// What a lite serial maps to.
+#[derive(Debug, PartialEq, Eq)]
+enum Bridged {
+    /// The main serial, with the keys the two share.
+    To(u64, usize),
+    /// Several main serials share as many keys, with key sets of one size.
+    Tie,
+    /// No main serial shares a key.
+    None,
+}
+
+/// Each lite serial's main serial ([`Bridged`]), in lite's order.
+fn bridge_serials(
+    lite: &[(u64, BTreeSet<&str>)],
+    main: &[(u64, BTreeSet<&str>)],
+) -> Vec<(u64, Bridged)> {
+    let mut by_key: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+    for (i, (_, keys)) in main.iter().enumerate() {
+        for k in keys {
+            by_key.entry(k).or_default().push(i);
+        }
+    }
+    lite.iter()
+        .map(|(serial, keys)| {
+            let mut shared: BTreeMap<usize, usize> = BTreeMap::new();
+            for k in keys {
+                for &i in by_key.get(k).into_iter().flatten() {
+                    *shared.entry(i).or_default() += 1;
+                }
+            }
+            // Most shared keys first, then the smaller key set (fewer keys the lite place lacks).
+            let rank = |(&i, &n): (&usize, &usize)| {
+                (
+                    n,
+                    core::cmp::Reverse(main.get(i).map_or(usize::MAX, |m| m.1.len())),
+                )
+            };
+            let best = shared.iter().map(rank).max();
+            let at_best: Vec<usize> = shared
+                .iter()
+                .filter(|e| Some(rank(*e)) == best)
+                .map(|(&i, _)| i)
+                .collect();
+            let to = match (at_best.as_slice(), best) {
+                ([i], Some((n, _))) => main.get(*i).map_or(Bridged::None, |m| Bridged::To(m.0, n)),
+                ([], _) => Bridged::None,
+                _ => Bridged::Tie,
+            };
+            (*serial, to)
+        })
+        .collect()
+}
+
+/// `ids bridge`: writes the lite-to-main bridge of country `cc` (see the module docs).
+fn bridge(cc: &str, lite: &Path, main: &Path, out: &Path) -> Result<String, String> {
+    let code: [u8; 2] = cc
+        .as_bytes()
+        .try_into()
+        .map_err(|_| format!("{cc}: not a two-letter country code"))?;
+    let ns = teigeodata_core::Namespace::from_country(code)
+        .ok_or_else(|| format!("{cc}: not a two-letter country code"))?;
+    let read = |p: &Path| fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()));
+    let (lite_text, main_text) = (read(lite)?, read(main)?);
+    let at = |p: &Path, e: String| format!("{}: {e}", p.display());
+    let lite_rows = live_serials(&lite_text).map_err(|e| at(lite, e))?;
+    let main_rows = live_serials(&main_text).map_err(|e| at(main, e))?;
+    let id = |serial: u64| {
+        teigeodata_core::PlaceId::new(ns, serial)
+            .map(|i| i.to_string())
+            .ok_or_else(|| format!("serial {serial}: not an ID"))
+    };
+    let mut text = format!(
+        "{BRIDGE_HEADER}: {cc} lite to main (TG-30). Columns: lite ID, main ID (empty when none), \
+         how: `keys N` shared, `tie`, or `none`.\n"
+    );
+    let (mut to, mut tie, mut none) = (0, 0, 0);
+    for (serial, b) in bridge_serials(&lite_rows, &main_rows) {
+        let (main_id, how) = match b {
+            Bridged::To(m, n) => {
+                to += 1;
+                (id(m)?, format!("keys {n}"))
+            }
+            Bridged::Tie => {
+                tie += 1;
+                (String::new(), "tie".into())
+            }
+            Bridged::None => {
+                none += 1;
+                (String::new(), "none".into())
+            }
+        };
+        let _ = writeln!(text, "{}\t{main_id}\t{how}", id(serial)?);
+    }
+    fs::write(out, text).map_err(|e| format!("{}: {e}", out.display()))?;
+    Ok(format!(
+        "{}: {to} lite IDs to a main ID, {tie} ties, {none} with no shared key",
+        out.display()
+    ))
 }
 
 fn check_build(build: &str) -> Result<(), String> {
@@ -267,7 +407,7 @@ fn newest_with(root: &Path, asset: &str) -> Result<String, String> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, reason = "tests")]
 mod tests {
-    use super::{place, registries};
+    use super::{Bridged, bridge_serials, live_serials, place, registries};
     use std::fs;
     use std::path::Path;
 
@@ -309,5 +449,39 @@ mod tests {
         write(&from, "pack/xx/xx-ids-lite.tsv", "nope");
         assert!(registries(&from, "lite").is_err());
         fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn the_bridge_takes_most_shared_keys_then_the_smaller_set_and_names_ties() {
+        let lite = "# teigeodata id registry 1\n\
+            1\tlite\tgeonames:1 wikidata:Q1\n\
+            2\tlite\tgeonames:2\n\
+            3\tlite\tgeonames:3\n\
+            4\tlite\tgeonames:4\n\
+            5\t>1\tgeonames:5\n\
+            6\tx\tgeonames:6\n\
+            7\tlite\tgeonames:7 wikidata:Q7\n";
+        let main = "# teigeodata id registry 1\n\
+            10\tmain\tgeonames:1 osm:node/1 wikidata:Q1\n\
+            11\tmain\tgeonames:2 osm:node/2\n\
+            12\tmain\tgeonames:2 osm:node/3 osm:way/3\n\
+            13\tmain\tgeonames:3 osm:node/4\n\
+            14\tmain\tgeonames:3 osm:node/5\n\
+            15\tx\tgeonames:4\n\
+            16\tmain\tgeonames:7\n\
+            17\tmain\twikidata:Q7 osm:node/7\n";
+        let (l, m) = (live_serials(lite).unwrap(), live_serials(main).unwrap());
+        assert_eq!(l.len(), 5, "retired and gone lite serials are left out");
+        assert_eq!(
+            bridge_serials(&l, &m),
+            [
+                (1, Bridged::To(10, 2)),
+                (2, Bridged::To(11, 1)),
+                (3, Bridged::Tie),
+                (4, Bridged::None),
+                (7, Bridged::To(16, 1)),
+            ]
+        );
+        assert!(live_serials("1\tlite\tgeonames:1\n").is_err());
     }
 }
