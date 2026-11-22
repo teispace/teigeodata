@@ -17,10 +17,16 @@
 //! pack whose sections are unchanged (same kind, hash and length) is put together from the old
 //! file, checked against the new release's signed hashes like a fetched frame, and only then
 //! written; the rest is fetched. A wrong or damaged old file costs bytes, never correctness.
+//!
+//! The driver is one async core (D-371): [`install_from_async`] and [`update_from_async`] await
+//! an [`AsyncTransport`] (a browser's `fetch`), and the synchronous functions run the same core
+//! over a [`Transport`] with [`crate::meta::block_on`]. The staging file stays synchronous: a
+//! worker's OPFS sync access handle reads and writes at offsets without awaiting.
 
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
+use core::future::{Future, ready};
 use core::ops::Range;
 use std::io::{Read, Seek, SeekFrom, Write};
 
@@ -30,6 +36,7 @@ use teigeodata_format::{FOOTER_SIZE, PackHead};
 use crate::Error;
 use crate::catalog::Entry;
 use crate::install::{Install, Installed};
+use crate::meta::block_on;
 
 /// What a response said about the asset, besides its bytes.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -100,6 +107,67 @@ pub trait Transport {
     /// for a transport that reports progress. The default ignores it.
     fn expect(&mut self, bytes: u64) {
         let _ = bytes;
+    }
+}
+
+/// The ranged requests of an install, awaited: [`Transport`] for a driver whose network is
+/// asynchronous (a browser's `fetch`). The driver is one ([`install_from_async`]); the
+/// synchronous functions run it over a [`Transport`], whose futures are ready at once (D-369).
+#[allow(
+    async_fn_in_trait,
+    reason = "drivers are single-threaded (a browser worker) or ready at once (block_on); no Send bound is wanted"
+)]
+pub trait AsyncTransport {
+    /// As [`Transport::get`].
+    ///
+    /// # Errors
+    /// As [`Transport::get`].
+    async fn get(
+        &mut self,
+        url: &str,
+        range: Range<u64>,
+        out: &mut Vec<u8>,
+    ) -> Result<Got, FetchError>;
+
+    /// As [`Transport::get_streamed`]; the default fetches the whole range and hands it over
+    /// once.
+    ///
+    /// # Errors
+    /// As [`Transport::get_streamed`].
+    async fn get_streamed(
+        &mut self,
+        url: &str,
+        range: Range<u64>,
+        buf: &mut Vec<u8>,
+        sink: &mut dyn FnMut(&[u8]) -> Result<(), FetchError>,
+    ) -> Result<Got, FetchError> {
+        let got = self.get(url, range, buf).await?;
+        sink(buf)?;
+        Ok(got)
+    }
+}
+
+/// A [`Transport`] as an [`AsyncTransport`] whose futures are ready at once.
+struct Ready<'a, T: Transport>(&'a mut T);
+
+impl<T: Transport> AsyncTransport for Ready<'_, T> {
+    fn get(
+        &mut self,
+        url: &str,
+        range: Range<u64>,
+        out: &mut Vec<u8>,
+    ) -> impl Future<Output = Result<Got, FetchError>> {
+        ready(self.0.get(url, range, out))
+    }
+
+    fn get_streamed(
+        &mut self,
+        url: &str,
+        range: Range<u64>,
+        buf: &mut Vec<u8>,
+        sink: &mut dyn FnMut(&[u8]) -> Result<(), FetchError>,
+    ) -> impl Future<Output = Result<Got, FetchError>> {
+        ready(self.0.get_streamed(url, range, buf, sink))
     }
 }
 
@@ -231,7 +299,16 @@ pub fn install<T: Transport, F: Read + Write + Seek>(
     set: impl Into<Selection>,
     staging: &mut F,
 ) -> Result<Installed, FetchError> {
-    run(transport, url, entry, asset_len, set.into(), staging, None)
+    let mut t = Ready(transport);
+    block_on(run(
+        &mut t,
+        url,
+        entry,
+        asset_len,
+        set.into(),
+        staging,
+        None,
+    ))
 }
 
 /// A file the driver reads an earlier release from (D-174).
@@ -251,7 +328,7 @@ pub struct Asset<'a> {
     pub len: u64,
 }
 
-fn run<T: Transport, F: Read + Write + Seek>(
+async fn run<T: AsyncTransport, F: Read + Write + Seek>(
     transport: &mut T,
     url: &str,
     entry: &Entry,
@@ -262,16 +339,12 @@ fn run<T: Transport, F: Read + Write + Seek>(
 ) -> Result<Installed, FetchError> {
     let mut inst = Install::new(entry, asset_len, set);
     let mut same = SameAsset::new(asset_len);
-    let mut get = |transport: &mut T, range: Range<u64>, out: &mut Vec<u8>| {
-        let got = transport.get(url, range, out)?;
-        same.check(got)
-    };
     let [t, h] = inst.first()?;
     let (mut table, mut head) = (Vec::new(), Vec::new());
     // Both at once when a platform must download them (D-184).
     let mut needs = Needs::default();
-    needs.take(get(transport, t, &mut table))?;
-    needs.take(get(transport, h, &mut head))?;
+    needs.take(got(transport, url, &mut same, t, &mut table).await)?;
+    needs.take(got(transport, url, &mut same, h, &mut head).await)?;
     needs.done()?;
     let mut buf = Vec::new();
     // Taken before start writes the head: what the last attempt left.
@@ -291,7 +364,7 @@ fn run<T: Transport, F: Read + Write + Seek>(
             let Some(f) = inst.remaining().into_iter().next() else {
                 break;
             };
-            get(transport, f.compressed.clone(), &mut buf)?;
+            got(transport, url, &mut same, f.compressed.clone(), &mut buf).await?;
             inst.feed(&f, &buf, |at, b| write(staging, at, b))?;
         }
         let frames: Vec<usize> = plan.iter().flat_map(|f| f.frames.clone()).collect();
@@ -335,8 +408,10 @@ fn run<T: Transport, F: Read + Write + Seek>(
             acc.drain(..used);
             Ok(())
         };
-        let got = transport.get_streamed(url, f.compressed.clone(), &mut buf, &mut feed);
-        if needs.take(got.and_then(|g| same.check(g)))? && next != parts.len() {
+        let r = transport
+            .get_streamed(url, f.compressed.clone(), &mut buf, &mut feed)
+            .await;
+        if needs.take(r.and_then(|g| same.check(g)))? && next != parts.len() {
             return Err(FetchError::Response("the body is not the range's length"));
         }
     }
@@ -346,6 +421,18 @@ fn run<T: Transport, F: Read + Write + Seek>(
     done.kept -= reused;
     done.reused = reused;
     Ok(done)
+}
+
+/// One range of the asset at `url` into `out`, held to the install's asset by `same`.
+async fn got<T: AsyncTransport>(
+    transport: &mut T,
+    url: &str,
+    same: &mut SameAsset,
+    range: Range<u64>,
+    out: &mut Vec<u8>,
+) -> Result<(), FetchError> {
+    let g = transport.get(url, range, out).await?;
+    same.check(g)
 }
 
 /// Holds every response of one install to the same asset: the catalog's length, and one `ETag`
@@ -726,7 +813,52 @@ pub fn install_from<T: Transport, F: Read + Write + Seek>(
         entry,
         len: asset_len,
     };
-    from_mirrors(transport, mirrors, asset, set.into(), staging, None)
+    let mut t = Ready(transport);
+    block_on(from_mirrors(
+        &mut t,
+        mirrors,
+        asset,
+        set.into(),
+        staging,
+        None,
+    ))
+}
+
+/// [`install_from`] over an [`AsyncTransport`]: the same driver, awaited.
+///
+/// # Errors
+/// As [`install_from`].
+pub async fn install_from_async<T: AsyncTransport, F: Read + Write + Seek>(
+    transport: &mut T,
+    mirrors: &mut Mirrors,
+    asset: Asset<'_>,
+    set: impl Into<Selection>,
+    staging: &mut F,
+) -> Result<Installed, FetchError> {
+    from_mirrors(transport, mirrors, asset, set.into(), staging, None).await
+}
+
+/// [`update_from`] over an [`AsyncTransport`]: the same driver, awaited.
+///
+/// # Errors
+/// As [`update_from`].
+pub async fn update_from_async<T: AsyncTransport, F: Read + Write + Seek>(
+    transport: &mut T,
+    mirrors: &mut Mirrors,
+    asset: Asset<'_>,
+    set: impl Into<Selection>,
+    staging: &mut F,
+    previous: &mut dyn Previous,
+) -> Result<Installed, FetchError> {
+    from_mirrors(
+        transport,
+        mirrors,
+        asset,
+        set.into(),
+        staging,
+        Some(previous),
+    )
+    .await
 }
 
 /// [`install_from`] for an update (D-174): `previous` is the installed release being replaced
@@ -743,17 +875,18 @@ pub fn update_from<T: Transport, F: Read + Write + Seek>(
     staging: &mut F,
     previous: &mut dyn Previous,
 ) -> Result<Installed, FetchError> {
-    from_mirrors(
-        transport,
+    let mut t = Ready(transport);
+    block_on(from_mirrors(
+        &mut t,
         mirrors,
         asset,
         set.into(),
         staging,
         Some(previous),
-    )
+    ))
 }
 
-fn from_mirrors<T: Transport, F: Read + Write + Seek>(
+async fn from_mirrors<T: AsyncTransport, F: Read + Write + Seek>(
     transport: &mut T,
     mirrors: &mut Mirrors,
     asset: Asset<'_>,
@@ -768,7 +901,7 @@ fn from_mirrors<T: Transport, F: Read + Write + Seek>(
         };
         let url = alloc::format!("{}{}", m.base, asset.path);
         let prev = previous.as_deref_mut();
-        match run(transport, &url, asset.entry, asset.len, set, staging, prev) {
+        match run(transport, &url, asset.entry, asset.len, set, staging, prev).await {
             Ok(done) => return Ok(done),
             Err(e @ (FetchError::Io(_) | FetchError::Needs(_))) => return Err(e),
             Err(e @ FetchError::Install(_)) => {

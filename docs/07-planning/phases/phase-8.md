@@ -288,6 +288,18 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 - [ ] `teigeodata-wasm` `store` feature and `store-worker`: install, update, remove, pin, repair,
   status over `fetch` and OPFS; browser tests (Chromium, Firefox, WebKit) against a local CORS
   mirror and a throwaway-key catalog
+  - [x] a. The pack driver (`fetch::install_from`, `update_from`) as one async core over an
+    async transport, the staging file still synchronous (a worker's OPFS sync access handle
+    is); the sync functions keep their signatures and tests (D-371, 2026-11-22)
+  - [ ] b. The browser store's layout in `teigeodata-sync` (note §5b): files named by content,
+    the index as the commit with a generation, over an async file trait; a `policy::Packs`;
+    crash tests over an in-memory file system, as the native store's
+  - [ ] c. `teigeodata-wasm` `store` feature: the store over JavaScript I/O (OPFS, `fetch`),
+    and the reader (index, head check, `Layer::from_sections`)
+  - [ ] d. `store-worker.js` (Web Lock, OPFS, `fetch`, messages) and browser tests in CI
+    (Playwright: Chromium, Firefox, WebKit) against a local CORS mirror and a throwaway-key
+    catalog
+  - [ ] e. Docs: the store page's "In the browser" section, the npm README
 - [x] TG-26 as a forge profile, not `extract` (search keys must be rebuilt with each country's
   keying rules, which live in the forge): `data/embed/app.yaml`, a part may leave its outlines
   out; measured 2026-11-17 in [sizes](../../05-data/sizes.md#embedded-layers-built-from-profiles)
@@ -360,3 +372,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-22 | 8.5b: TG-27 released with the world layer, terrain layer and ID bridge | D-366 |
 | 2026-11-22 | 8.5b: the sans-I/O plans become one async core over an I/O trait | D-369 |
 | 2026-11-22 | 8.5b: a layer from its head and section buffers | D-370 |
+| 2026-11-22 | 8.5b: the wasm store split into five sub-steps (async pack driver, browser layout, wasm exports, worker and browser tests, docs) | the pack driver's transport is the async part |
