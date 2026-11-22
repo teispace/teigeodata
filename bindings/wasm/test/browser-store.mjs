@@ -88,7 +88,7 @@ try {
   window.result = { ok: true, checks };
 } catch (e) {
   // WebKit's stack holds no message: give the step, the code and the message as well.
-  window.result = { ok: false, error: `after "${step}": ${e && e.code ? e.code + " " : ""}${e && e.message ? e.message : e}\n${(e && e.stack) || ""}` };
+  window.result = { ok: false, error: 'after "' + step + '": ' + (e && e.code ? e.code + ' ' : '') + (e && e.message ? e.message : e) + ' | ' + ((e && e.stack) || '') };
 }
 </script>`;
 
