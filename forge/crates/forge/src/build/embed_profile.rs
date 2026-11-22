@@ -24,7 +24,9 @@
 //! The world part comes first, then the countries by code; a later part's row replaces an
 //! earlier one of the same ID ([`extract::merge`]). SUBSTRING, when asked for, is rebuilt from
 //! the merged NAMES with the format's one builder, the same bytes a device derives.
-//! `dem-coarse` carries every part's coarse terrain grid, codes copied (D-225).
+//! `dem-coarse` carries every part's coarse terrain grid, codes copied (D-225). REDIRECTS carries
+//! every part's retired IDs whose survivor is in the layer, and its tombstones (D-382), so an ID
+//! kept from an earlier release still answers.
 //!
 //! Gates: every ID of every part is one row with the last part's point and ISO code; the pack
 //! reads back verified with valid geometry; the transport asset fits `wire_kb`.
@@ -241,6 +243,7 @@ pub(super) fn run(
         extract::merge(&list, &super::baseline::region_options()).map_err(|e| e.to_string())?;
     sections.retain(|s| Component::of(s.0).is_none_or(|c| wanted.contains(c)));
     sections.extend(coarse_terrain(&packs, wanted)?);
+    sections.extend(redirects(&packs, wanted)?);
     let tzdb = derived(root, &p, wanted, &mut sections)?;
     refuse_missing(&path, &p, &sections)?;
     let outlines = inputs
@@ -340,6 +343,50 @@ fn coarse_terrain(packs: &[Pack<'_>], wanted: Components) -> Result<Option<extra
     Ok(teigeodata_format::dem::concat(&dems)
         .map_err(|e| format!("DEM_COARSE: {e}"))?
         .map(|(body, n)| (Kind::DEM_COARSE, Encoding::TABLE, n, body)))
+}
+
+/// REDIRECTS of the layer: every part's retired IDs whose survivor is a current place of the
+/// layer, and its tombstones, so an ID a person kept from an earlier release still answers
+/// (ADR-0008, D-382). A layer keeps every row of every part, so its current IDs are the parts'. A
+/// later part's fate of a retired ID wins, as its rows do; an ID current in any part is not
+/// retired. `None` when no part retires any ID or the layer has no `point`.
+fn redirects(packs: &[Pack<'_>], wanted: Components) -> Result<Option<extract::Body>, String> {
+    use teigeodata_format::idmap::IdMap;
+    use teigeodata_format::redirects::{self, Fate, Redirects};
+    if !wanted.contains(Component::Point) {
+        return Ok(None);
+    }
+    let maps: Vec<IdMap<'_>> = packs
+        .iter()
+        .filter_map(|p| p.section(Kind::IDMAP))
+        .map(|s| IdMap::open(&s).map_err(|e| format!("IDMAP: {e}")))
+        .collect::<Result<_, _>>()?;
+    let current = |id| maps.iter().any(|m| m.row(id).is_some());
+    let mut fates = BTreeMap::new();
+    for s in packs.iter().filter_map(|p| p.section(Kind::REDIRECTS)) {
+        let r = Redirects::open(&s).map_err(|e| format!("REDIRECTS: {e}"))?;
+        for (old, fate) in r.iter() {
+            let new = match fate {
+                Fate::Redirect(new) if current(new) => Some(new),
+                Fate::Redirect(_) => continue,
+                Fate::Tombstone => None,
+            };
+            if !current(old) {
+                fates.insert(old, new);
+            }
+        }
+    }
+    if fates.is_empty() {
+        return Ok(None);
+    }
+    let pairs: Vec<_> = fates.into_iter().collect();
+    let body = redirects::encode(&pairs).map_err(|e| format!("REDIRECTS: {e}"))?;
+    Ok(Some((
+        Kind::REDIRECTS,
+        Encoding::TABLE,
+        pairs.len() as u64,
+        body,
+    )))
 }
 
 /// The sections the layer derives instead of merging: SUBSTRING from its names (D-218) and
@@ -878,6 +925,58 @@ mod tests {
             (m.manifest().address(), m.manifest().release()),
             ("np", "2026.11.0")
         );
+    }
+
+    #[test]
+    fn a_layer_keeps_its_parts_redirects_to_its_own_places() {
+        use teigeodata_core::PlaceId;
+        use teigeodata_format::component::{Component, Components};
+        use teigeodata_format::{Encoding, Kind, Pack, Writer, idmap, redirects};
+        let id = |n: u64| PlaceId::from_raw(n).unwrap();
+        let pack = |ids: &[u64], moved: &[(u64, Option<u64>)]| -> Vec<u8> {
+            let ids: Vec<PlaceId> = ids.iter().map(|&n| id(n)).collect();
+            let moved: Vec<_> = moved.iter().map(|&(o, n)| (id(o), n.map(id))).collect();
+            let bodies = [
+                idmap::encode(&ids).unwrap(),
+                redirects::encode(&moved).unwrap(),
+            ];
+            let mut w = Writer::new("np", "places", "2026.11.0").unwrap();
+            w.section_bytes(Kind::IDMAP, Encoding::TABLE, ids.len() as u64, &bodies[0])
+                .unwrap();
+            w.section_bytes(
+                Kind::REDIRECTS,
+                Encoding::TABLE,
+                moved.len() as u64,
+                &bodies[1],
+            )
+            .unwrap();
+            let parts: Vec<&[u8]> = bodies.iter().map(Vec::as_slice).collect();
+            w.layout(false).unwrap().assemble(&parts).unwrap()
+        };
+        // 11's survivor is in no part and is left out; 2 is current in the first part, so the
+        // second part's redirect of it is not kept; the second part's fate of 10 wins.
+        let a = pack(&[1, 2], &[(10, Some(1)), (11, Some(99)), (12, None)]);
+        let b = pack(&[3], &[(10, Some(3)), (2, Some(3))]);
+        let packs = [
+            Pack::open_verified(&a).unwrap(),
+            Pack::open_verified(&b).unwrap(),
+        ];
+        let point = Components::of(&[Component::Point]);
+        let (kind, _, n, body) = super::redirects(&packs, point).unwrap().unwrap();
+        assert_eq!((kind, n), (Kind::REDIRECTS, 2));
+        assert_eq!(
+            body,
+            redirects::encode(&[(id(10), Some(id(3))), (id(12), None)]).unwrap()
+        );
+        // A layer without `point`, or parts that retire nothing, carry none.
+        assert!(
+            super::redirects(&packs, Components::NONE)
+                .unwrap()
+                .is_none()
+        );
+        let plain = pack(&[1], &[]);
+        let plain = [Pack::open_verified(&plain).unwrap()];
+        assert!(super::redirects(&plain, point).unwrap().is_none());
     }
 
     #[test]
