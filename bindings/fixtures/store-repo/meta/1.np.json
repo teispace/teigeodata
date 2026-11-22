@@ -1,0 +1,84 @@
+{
+  "signatures": [
+    {
+      "keyid": "a303a72316a605f7b653e8403253f265a650c24df098ebd34a181437990979d9",
+      "sig": "8f649472f50c61f4a4901b5ab83ad53689f1e1d2e2d89ddd263ed6ac1d5076401106c76a948be0546e058767b6043ef2e09e639f1a65c3379776ac7cefa58105"
+    }
+  ],
+  "signed": {
+    "_type": "targets",
+    "expires": "2036-01-01T00:00:00Z",
+    "spec_version": "1.0.31",
+    "targets": {
+      "np.places.tgd": {
+        "custom": {
+          "address": "np",
+          "bbox": [
+            800000000,
+            260000000,
+            880000000,
+            300000000
+          ],
+          "component": "places",
+          "deps": [],
+          "file": "np.places.2026.11.0.065cf3cd.tgd.zst",
+          "licence": "ODbL-1.0",
+          "min_reader": 1,
+          "pack": {
+            "head": "e70388f26a934e6d3c0161182d64dca9",
+            "length": 172668
+          },
+          "release": "2026.11.0",
+          "schema": 1,
+          "sizes": {
+            "admin": [
+              221,
+              448
+            ],
+            "admin-index": [
+              9575,
+              120064
+            ],
+            "elevation": [
+              186,
+              320
+            ],
+            "names": [
+              700,
+              1152
+            ],
+            "point": [
+              1575,
+              4416
+            ],
+            "search": [
+              979,
+              1344
+            ],
+            "timezone": [
+              101,
+              156
+            ],
+            "timezone-index": [
+              3323,
+              43584
+            ]
+          },
+          "transport": {
+            "encoding": "zstd-seekable",
+            "head": [
+              681,
+              1152
+            ],
+            "seek_table": 113
+          }
+        },
+        "hashes": {
+          "sha256": "065cf3cd2569f23fbd78482904c0b34985ea0887bca41ef32dab79a0923b6722"
+        },
+        "length": 17454
+      }
+    },
+    "version": 1
+  }
+}

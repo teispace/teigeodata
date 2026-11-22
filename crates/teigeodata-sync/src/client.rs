@@ -12,7 +12,6 @@
 //! [`Client::status`] never touch the network. Nothing here prints: warnings come back in the
 //! results.
 
-use alloc::borrow::ToOwned;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -21,11 +20,13 @@ use std::path::{Path, PathBuf};
 use teigeodata_format::Part;
 use teigeodata_format::component::Selection;
 
-use crate::catalog::{self, Entry};
+use crate::catalog::Entry;
 use crate::fetch::{Downloads, FetchError, Mirrors, Ready, Transport, Ureq};
 use crate::meta::block_on;
 use crate::policy::{self, Outcome, Packs};
-pub use crate::policy::{ClientError, Done, PackState, Pending, Report, Result, Want, split};
+pub use crate::policy::{
+    ClientError, Done, PackState, Pending, Report, Result, Want, path_of, split,
+};
 use crate::refresh::{self, Refreshed};
 use crate::session::{At, Session, config_json, parse_config};
 pub use crate::session::{CONFIG, ROOT, Repaired, Status};
@@ -58,19 +59,6 @@ pub fn catalog_at(root: &Path) -> Result<(Trusted, Vec<Record>)> {
     let trusted = refresh::load(&mut dir, &shipped, now())?;
     let packs = Store::read_packs(&mut dir).map_err(|e| ClientError::of(root.display(), e))?;
     Ok((trusted, packs))
-}
-
-/// The catalog path a person names: `np` is `np.places.tgd`, `np.dem` is `np.dem.tgd`, and a
-/// path ending in `.tgd` is itself.
-#[must_use]
-pub fn path_of(name: &str) -> String {
-    match name.strip_suffix(".tgd") {
-        Some(_) => name.to_owned(),
-        None => match name.split_once('.') {
-            Some((a, c)) => catalog::path(a, c),
-            None => catalog::path(name, "places"),
-        },
-    }
 }
 
 /// A names part for people: its language (`ne`), `*` for the rest, `base` for the base.

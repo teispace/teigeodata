@@ -13,7 +13,8 @@ use std::process::Command;
 use crate::measured::Record;
 use crate::package_c::{command, version};
 
-const USAGE: &str = "usage: cargo xtask package-wasm [--variant full|lookup] [--test] [--record]";
+const USAGE: &str =
+    "usage: cargo xtask package-wasm [--variant full|lookup|store] [--test] [--record]";
 
 /// The wasm-bindgen version `bindings/wasm/Cargo.toml` pins; the CLI must match it.
 const WASM_BINDGEN: &str = "0.2.130";
@@ -26,6 +27,8 @@ struct Variant {
     description: &'static str,
     /// `None` is every component (the crate's default features).
     features: Option<&'static str>,
+    /// What it holds, for the size table.
+    holds: &'static str,
     budget_gz: u64,
 }
 
@@ -35,6 +38,7 @@ const VARIANTS: &[Variant] = &[
         package: "teigeodata-wasm",
         description: "Accurate, offline places in WebAssembly: every query, search included.",
         features: None,
+        holds: "every component",
         budget_gz: 262_144,
     },
     Variant {
@@ -46,9 +50,49 @@ const VARIANTS: &[Variant] = &[
             "names,admin,elevation,timezone,timezone-index,boundaries,admin-index,dem,\
              dem-coarse,tz-rules,postal,extra",
         ),
+        holds: "every query at a point or by ID",
         budget_gz: 153_600,
     },
+    Variant {
+        name: "store",
+        // Shipped inside `teigeodata-wasm` as its `store` subpath (D-375): one npm package.
+        package: "teigeodata-wasm/store",
+        description: "Accurate, offline places in WebAssembly, every query, with the browser's \
+                      store: signed packs installed into the Origin Private File System.",
+        features: Some("components,store"),
+        holds: "every component and the store",
+        // 440 KiB: measured 423,840 B on 2026-11-22 (D-375).
+        budget_gz: 450_560,
+    },
 ];
+
+/// The variant shipped as the full package's `store` subpath.
+const STORE: &str = "store";
+
+/// The files of the store variant that the full package carries under `store/`.
+const NESTED: [&str; 9] = [
+    "index.js",
+    "index.d.ts",
+    "node.js",
+    "workerd.js",
+    "reader.js",
+    "teigeodata_wasm.js",
+    "teigeodata_wasm.d.ts",
+    "teigeodata_wasm_bg.wasm",
+    "teigeodata_wasm_bg.wasm.d.ts",
+];
+
+/// Moves the store variant's package into the full one's `store/` (its `package.json`
+/// declares the subpath): one npm package, two modules, an app loads the one it imports.
+fn nest(wasm: &Path) -> Result<(), Vec<String>> {
+    let (from, to) = (wasm.join(STORE), wasm.join("full").join(STORE));
+    let _ = fs::remove_dir_all(&to);
+    fs::create_dir_all(&to).map_err(|e| vec![format!("{}: {e}", to.display())])?;
+    for f in NESTED {
+        copy(&from.join(f), &to.join(f))?;
+    }
+    fs::remove_dir_all(&from).map_err(|e| vec![format!("{}: {e}", from.display())])
+}
 
 /// The files a package carries besides the module: wasm-bindgen's glue and the entries.
 const ENTRIES: [&str; 5] = [
@@ -70,9 +114,13 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
             _ => return Err(vec![USAGE.to_owned()]),
         }
     }
+    // The full package carries the store variant as its `store` subpath, so it builds both.
     let variants: Vec<&Variant> = VARIANTS
         .iter()
-        .filter(|v| only.as_deref().is_none_or(|o| o == v.name))
+        .filter(|v| {
+            only.as_deref()
+                .is_none_or(|o| o == v.name || (o == "full" && v.name == STORE))
+        })
         .collect();
     if variants.is_empty() || (record && only.is_some()) {
         return Err(vec![format!("{USAGE} (--record measures every variant)")]);
@@ -84,7 +132,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     let mut table = String::from(
         "| Package | Holds | Module | gzip -9 | Budget | Headroom |\n|---|---|--:|--:|--:|--:|\n",
     );
-    for v in variants {
+    for v in &variants {
         let dir = package(root, v, &version)?;
         let wasm = fs::read(dir.join("teigeodata_wasm_bg.wasm"))
             .map_err(|e| vec![format!("{}: {e}", dir.display())])?;
@@ -105,15 +153,24 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
             table,
             "| `{}` | {} | {} B | {gz} B | {} B | {:.1}% |",
             v.package,
-            v.features
-                .map_or("every component", |_| "every query at a point or by ID"),
+            v.holds,
             wasm.len(),
             v.budget_gz,
             percent(v.budget_gz - gz, v.budget_gz)
         );
         if test {
             report.push_str(&parity(root, &dir)?);
+            if v.name == "store" {
+                report.push_str(&store_checks(root, &dir)?);
+            }
         }
+    }
+    if variants.iter().any(|v| v.name == "full") && variants.iter().any(|v| v.name == STORE) {
+        nest(&root.join("target/wasm"))?;
+        let _ = writeln!(
+            report,
+            "the store variant is teigeodata-wasm's `store` subpath"
+        );
     }
     if record {
         let written = Record::new(
@@ -231,6 +288,14 @@ fn package_json(v: &Variant, version: &str) -> String {
         ],
         "engines": { "node": ">=22" },
     });
+    let mut manifest = manifest;
+    if v.name == "full"
+        && let Some(files) = manifest
+            .get_mut("files")
+            .and_then(serde_json::Value::as_array_mut)
+    {
+        files.push("store/".into());
+    }
     crate::package_node::Manifest {
         fields: &manifest,
         exports: Exports {
@@ -241,6 +306,13 @@ fn package_json(v: &Variant, version: &str) -> String {
                 default: "./index.js",
             },
             wasm: "./teigeodata_wasm_bg.wasm",
+            store: (v.name == "full").then_some(Conditions {
+                types: "./store/index.d.ts",
+                workerd: "./store/workerd.js",
+                node: "./store/node.js",
+                default: "./store/index.js",
+            }),
+            store_wasm: (v.name == "full").then_some("./store/teigeodata_wasm_bg.wasm"),
             package: "./package.json",
         },
     }
@@ -254,6 +326,14 @@ struct Exports {
     main: Conditions,
     #[serde(rename = "./teigeodata_wasm_bg.wasm")]
     wasm: &'static str,
+    /// The full package's store variant (D-375).
+    #[serde(rename = "./store", skip_serializing_if = "Option::is_none")]
+    store: Option<Conditions>,
+    #[serde(
+        rename = "./store/teigeodata_wasm_bg.wasm",
+        skip_serializing_if = "Option::is_none"
+    )]
+    store_wasm: Option<&'static str>,
     #[serde(rename = "./package.json")]
     package: &'static str,
 }
@@ -275,10 +355,21 @@ fn readme(v: &Variant) -> String {
          Bun and Workers)\nconst engine = new Engine();\nengine.openBytes(new Uint8Array(await \
          (await fetch(\"np.tgd\")).arrayBuffer()));\nconst places = engine.reverse(27.7, 85.3, \
          5); // a columnar blob (Uint8Array)\n```\n\nDocumentation: \
-         https://github.com/teispace/teigeodata\n",
-        v.package, v.description, v.package
+         https://github.com/teispace/teigeodata\n{}",
+        v.package,
+        v.description,
+        v.package,
+        if v.name == "full" { STORE_README } else { "" }
     )
 }
+
+/// The full package's README on its `store` subpath.
+const STORE_README: &str = "\n## The browser store: `teigeodata-wasm/store`\n\nThe same API with \
+    `Store`: signed packs installed, updated and removed in the Origin Private File System, \
+    resumable and checked against the signed catalog, as the native store does. It is its own \
+    module, loaded only when imported.\n\n```js\nimport { init, Store } from \
+    \"teigeodata-wasm/store\";\n\nawait init();\nconst store = await Store.open(host); // \
+    host: files and fetch (StoreHost)\nawait store.install(\"np\");\n```\n";
 
 /// Runs the parity test from `dir` on each JavaScript host found; at least Node.js must run.
 fn parity(root: &Path, dir: &Path) -> Result<String, Vec<String>> {
@@ -304,6 +395,27 @@ fn parity(root: &Path, dir: &Path) -> Result<String, Vec<String>> {
         }
         command(root, host, &args)?;
         let _ = writeln!(out, "  {host}: parity ok");
+    }
+    Ok(out)
+}
+
+/// The browser store's checks (`bindings/wasm/test/store.mjs`) on Node.js and Bun, against
+/// the signed repository in `bindings/fixtures/store-repo`.
+fn store_checks(root: &Path, dir: &Path) -> Result<String, Vec<String>> {
+    let test = root
+        .join("bindings/wasm/test/store.mjs")
+        .display()
+        .to_string();
+    let fixtures = root.join("bindings/fixtures").display().to_string();
+    let pkg = dir.display().to_string();
+    let mut out = String::new();
+    for host in ["node", "bun"] {
+        if Command::new(host).arg("--version").output().is_err() {
+            let _ = writeln!(out, "  {host}: not installed, store checks not run");
+            continue;
+        }
+        command(root, host, &[&test, &pkg, &fixtures])?;
+        let _ = writeln!(out, "  {host}: store ok");
     }
     Ok(out)
 }
@@ -377,5 +489,32 @@ mod tests {
         let at = |key: &str| text.find(&format!("\"{key}\": \"./")).unwrap();
         assert!(at("types") < at("workerd") && at("workerd") < at("node"));
         assert!(at("node") < at("default"));
+    }
+
+    #[test]
+    fn the_full_package_carries_the_store_as_a_subpath() {
+        let full: serde_json::Value =
+            serde_json::from_str(&package_json(&VARIANTS[0], "1.2.3")).unwrap();
+        assert_eq!(full["exports"]["./store"]["node"], "./store/node.js");
+        assert_eq!(
+            full["exports"]["./store/teigeodata_wasm_bg.wasm"],
+            "./store/teigeodata_wasm_bg.wasm"
+        );
+        assert!(
+            full["files"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|f| f == "store/")
+        );
+        let lookup: serde_json::Value =
+            serde_json::from_str(&package_json(&VARIANTS[1], "1.2.3")).unwrap();
+        assert!(lookup["exports"].get("./store").is_none());
+        assert!(
+            NESTED
+                .iter()
+                .all(|f| ENTRIES.contains(f) || f.starts_with("teigeodata_wasm"))
+        );
+        assert!(VARIANTS.iter().any(|v| v.name == STORE));
     }
 }

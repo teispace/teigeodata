@@ -7,29 +7,18 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 
 use teigeodata_blob::{Blob, Column};
 use teigeodata_engine::{Layer, LayerOptions};
-use teigeodata_format::Part;
-use teigeodata_format::component::{Component, Components};
+use teigeodata_format::component::Components;
 use teigeodata_sync::catalog::Catalog;
-use teigeodata_sync::client::{self, Client, ClientError, Done, Pending, Want};
+use teigeodata_sync::client::{Client, Pending, Want};
 use teigeodata_sync::fetch::{Downloads, Ureq};
-use teigeodata_sync::store::{Health, Record};
 use teigeodata_sync::watch::{Watch, Watched};
 
-use crate::{Engine, Error, ErrorCode, InstallOptions, Result};
+use crate::rows::blob;
+pub(crate) use crate::rows::{done, paths, removed};
+use crate::{Engine, Error, ErrorCode, InstallOptions, Result, rows};
 
 /// The transport every store uses: HTTPS, watched by the job running.
 pub(crate) type Net = Watched<Ureq>;
-
-impl From<ClientError> for Error {
-    fn from(e: ClientError) -> Self {
-        match e {
-            ClientError::Network(m) => Self::new(ErrorCode::Network, m),
-            ClientError::Refused(m) => Self::new(ErrorCode::Refused, m),
-            ClientError::Cancelled => Self::new(ErrorCode::Cancelled, "cancelled"),
-            other => Self::new(ErrorCode::Internal, other.to_string()),
-        }
-    }
-}
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     // A panic inside a job is caught and reported; the state it leaves is the store's own,
@@ -37,8 +26,35 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn blob(columns: &[(&str, Column<'_>)]) -> Result<Blob> {
-    Blob::encode(columns).map_err(|e| Error::new(ErrorCode::Internal, e.to_string()))
+/// What [`InstallOptions`] asks of each pack.
+pub(crate) fn want(o: &InstallOptions) -> Result<Want> {
+    rows::want(
+        &o.components,
+        &o.languages,
+        o.outline_level,
+        o.outline_tolerance_m,
+    )
+}
+
+/// The verified catalog against the store: one row per pack.
+pub(crate) fn catalog(c: &mut Client<Net>) -> Result<Blob> {
+    let t = c.offline()?;
+    rows::catalog(&t, c.packs())
+}
+
+/// Each installed pack and its health.
+pub(crate) fn status(c: &mut Client<Net>, deep: bool) -> Result<Blob> {
+    rows::status(&c.status(deep)?)
+}
+
+/// A refresh: the catalog's timestamp version, and what was fetched.
+pub(crate) fn refresh(c: &mut Client<Net>, countries: &[String]) -> Result<Blob> {
+    rows::refresh(&c.refresh(countries)?)
+}
+
+/// A repair: the pack's health before, and the bytes fetched (0 when it was whole).
+pub(crate) fn repaired(c: &mut Client<Net>, path: &str) -> Result<Blob> {
+    rows::repaired(path, &c.repair(path)?)
 }
 
 /// A store's shared state: one client, so its jobs run one at a time.
@@ -129,153 +145,6 @@ pub(crate) fn spawn(
     job
 }
 
-/// The catalog paths of a comma-separated list of packs (`np`, `np.dem`, `np.places.tgd`).
-pub(crate) fn paths(packs: &str) -> Vec<String> {
-    packs
-        .split(',')
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .map(client::path_of)
-        .collect()
-}
-
-/// What [`InstallOptions`] asks of each pack.
-pub(crate) fn want(o: &InstallOptions) -> Result<Want> {
-    let invalid = |m: String| Error::new(ErrorCode::InvalidArgument, m);
-    let list = |s: &str| -> Vec<String> {
-        s.split(',')
-            .map(str::trim)
-            .filter(|x| !x.is_empty())
-            .map(str::to_owned)
-            .collect()
-    };
-    let mut components = Vec::new();
-    for name in list(&o.components) {
-        components.push(
-            Component::from_name(&name)
-                .ok_or_else(|| invalid(format!("`{name}` is not a component")))?,
-        );
-    }
-    let languages = if o.languages.trim().is_empty() {
-        None
-    } else {
-        let mut keys = Vec::new();
-        for tag in list(&o.languages) {
-            keys.push(
-                Part::language(&tag)
-                    .ok_or_else(|| invalid(format!("`{tag}` is not a language tag")))?,
-            );
-        }
-        Some(keys)
-    };
-    let outline = match o.outline_level {
-        None => None,
-        Some(level) => Some((
-            u8::try_from(level)
-                .map_err(|_| invalid(format!("outline level {level} is above 255")))?,
-            o.outline_tolerance_m,
-        )),
-    };
-    Ok(Want {
-        components,
-        languages,
-        outline,
-    })
-}
-
-fn health(h: &Health) -> &'static str {
-    h.name()
-}
-
-fn names(set: Components) -> String {
-    set.iter()
-        .map(Component::name)
-        .collect::<Vec<_>>()
-        .join(",")
-}
-
-/// The verified catalog against the store: one row per pack.
-pub(crate) fn catalog(c: &mut Client<Net>) -> Result<Blob> {
-    let t = c.offline()?;
-    let (cat, _) = Catalog::trusted(&t);
-    let rows: Vec<_> = cat.entries().map(|(_, e)| e).collect();
-    let path: Vec<String> = rows.iter().map(|e| e.path()).collect();
-    let path: Vec<&str> = path.iter().map(String::as_str).collect();
-    let release: Vec<&str> = rows.iter().map(|e| e.release.as_str()).collect();
-    let all: Vec<_> = rows.iter().map(|e| e.size_of(Components::all())).collect();
-    let download: Vec<u64> = all.iter().map(|s| s.wire).collect();
-    let disk: Vec<u64> = all.iter().map(|s| s.disk).collect();
-    let components: Vec<String> = rows
-        .iter()
-        .map(|e| {
-            e.sizes
-                .keys()
-                .map(|c| c.name())
-                .collect::<Vec<_>>()
-                .join(",")
-        })
-        .collect();
-    let components: Vec<&str> = components.iter().map(String::as_str).collect();
-    let licence: Vec<&str> = rows.iter().map(|e| e.licence.as_str()).collect();
-    let state: Vec<&str> = rows.iter().map(|e| c.state(e).name()).collect();
-    blob(&[
-        ("path", Column::Utf8(&path)),
-        ("release", Column::Dict(&release)),
-        ("download", Column::U64(&download)),
-        ("disk", Column::U64(&disk)),
-        ("components", Column::Dict(&components)),
-        ("licence", Column::Dict(&licence)),
-        ("state", Column::Dict(&state)),
-    ])
-}
-
-/// Each installed pack and its health.
-pub(crate) fn status(c: &mut Client<Net>, deep: bool) -> Result<Blob> {
-    let st = c.status(deep)?;
-    let path: Vec<String> = st.packs.iter().map(|(r, _)| r.key()).collect();
-    let path: Vec<&str> = path.iter().map(String::as_str).collect();
-    let release: Vec<&str> = st.packs.iter().map(|(r, _)| r.release.as_str()).collect();
-    let bytes: Vec<u64> = st.packs.iter().map(|(r, _)| r.pack_len).collect();
-    let pinned: Vec<u8> = st.packs.iter().map(|(r, _)| u8::from(r.pinned)).collect();
-    let asked: Vec<u8> = st.packs.iter().map(|(r, _)| u8::from(r.asked)).collect();
-    let health: Vec<&str> = st.packs.iter().map(|(_, h)| health(h)).collect();
-    let components: Vec<String> = st.packs.iter().map(|(r, _)| names(r.set)).collect();
-    let components: Vec<&str> = components.iter().map(String::as_str).collect();
-    blob(&[
-        ("path", Column::Utf8(&path)),
-        ("release", Column::Dict(&release)),
-        ("bytes", Column::U64(&bytes)),
-        ("pinned", Column::U8(&pinned)),
-        ("asked", Column::U8(&asked)),
-        ("health", Column::Dict(&health)),
-        ("components", Column::Dict(&components)),
-    ])
-}
-
-/// The packs an install or update reached, dependencies first.
-pub(crate) fn done(rows: &[Done]) -> Result<Blob> {
-    let path: Vec<&str> = rows.iter().map(|d| d.path.as_str()).collect();
-    let release: Vec<&str> = rows.iter().map(|d| d.release.as_str()).collect();
-    let n = |f: fn(&teigeodata_sync::install::Installed) -> u64| -> Vec<u64> {
-        rows.iter()
-            .map(|d| d.installed.as_ref().map_or(0, f))
-            .collect()
-    };
-    let (fetched, reused, kept) = (n(|i| i.fetched), n(|i| i.reused), n(|i| i.kept));
-    let changed: Vec<u8> = rows
-        .iter()
-        .map(|d| u8::from(d.installed.is_some()))
-        .collect();
-    blob(&[
-        ("path", Column::Utf8(&path)),
-        ("release", Column::Dict(&release)),
-        ("fetched", Column::U64(&fetched)),
-        ("reused", Column::U64(&reused)),
-        ("kept", Column::U64(&kept)),
-        ("changed", Column::U8(&changed)),
-    ])
-}
-
 /// What a platform still has to download after a pass (D-184): one row per missing range of
 /// an asset, with the file to save it as. No rows: the pass installed every pack.
 pub(crate) fn pending(packs: &[Pending]) -> Result<Blob> {
@@ -314,39 +183,6 @@ pub(crate) fn pending(packs: &[Pending]) -> Result<Blob> {
         ("start", Column::U64(&start)),
         ("end", Column::U64(&end)),
         ("file", Column::Utf8(&file)),
-    ])
-}
-
-/// The packs removed.
-pub(crate) fn removed(gone: &[Record]) -> Result<Blob> {
-    let path: Vec<String> = gone.iter().map(Record::key).collect();
-    let path: Vec<&str> = path.iter().map(String::as_str).collect();
-    let release: Vec<&str> = gone.iter().map(|r| r.release.as_str()).collect();
-    blob(&[
-        ("path", Column::Utf8(&path)),
-        ("release", Column::Dict(&release)),
-    ])
-}
-
-/// A refresh: the catalog's timestamp version, and what was fetched.
-pub(crate) fn refresh(c: &mut Client<Net>, countries: &[String]) -> Result<Blob> {
-    let r = c.refresh(countries)?;
-    let version = r.trusted.timestamp().map_or(0, |t| t.common.version);
-    let files = u64::try_from(r.fetched.len()).unwrap_or(u64::MAX);
-    blob(&[
-        ("timestamp", Column::U64(&[version])),
-        ("files", Column::U64(&[files])),
-        ("bytes", Column::U64(&[r.bytes])),
-    ])
-}
-
-/// A repair: the pack's health before, and the bytes fetched (0 when it was whole).
-pub(crate) fn repaired(c: &mut Client<Net>, path: &str) -> Result<Blob> {
-    let r = c.repair(path)?;
-    blob(&[
-        ("path", Column::Utf8(&[path])),
-        ("health", Column::Dict(&[health(&r.health)])),
-        ("fetched", Column::U64(&[r.fetched.unwrap_or(0)])),
     ])
 }
 

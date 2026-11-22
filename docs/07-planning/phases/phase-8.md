@@ -299,9 +299,9 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   - [x] c1. The reader in every wasm package (D-373, 2026-11-22): `installedSections` names
     the byte ranges of a journal record's components from the pack's head, and
     `Engine.openInstalled` opens them as a layer, checked against the head
-  - [ ] c2. `teigeodata-wasm` `store` feature: the store over JavaScript I/O (OPFS, `fetch`),
-    a separate package variant. Done: the client as one async core, `session::Session`, which
-    the native client runs (D-374, 2026-11-22)
+  - [x] c2. `teigeodata-wasm` `store` feature: the store over JavaScript I/O (OPFS, `fetch`),
+    shipped as `teigeodata-wasm/store` (D-375, 2026-11-22), on the client as one async core,
+    `session::Session`, which the native client runs (D-374)
   - [ ] d. `store-worker.js` (Web Lock, OPFS, `fetch`, messages) and browser tests in CI
     (Playwright: Chromium, Firefox, WebKit) against a local CORS mirror and a throwaway-key
     catalog
@@ -381,4 +381,5 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-22 | 8.5b b: the browser store is the native store over an async file trait, not a second layout | D-372 |
 | 2026-11-22 | 8.5b c split: c1 the reader in every package, c2 the store as its own variant | D-373 |
 | 2026-11-22 | 8.5b c2: the store's client as one async core | D-374 |
+| 2026-11-22 | 8.5b c2: the browser store as the full package's `store` subpath, not a new package | D-375 |
 | 2026-11-22 | 8.5b: the wasm store split into five sub-steps (async pack driver, browser layout, wasm exports, worker and browser tests, docs) | the pack driver's transport is the async part |

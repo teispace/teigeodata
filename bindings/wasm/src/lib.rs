@@ -4,7 +4,8 @@
 //! become camelCase in JavaScript; a failed call throws an `Error` whose `code` is the error
 //! code's name, as in Node.js. Left out: what needs a file system or threads (`openFile`, the
 //! native store and its jobs); a page fetches a pack and opens its bytes, or its head and some
-//! sections (`openSections`, written by hand in `sections.rs`).
+//! sections (`openSections`, written by hand in `sections.rs`). The `store` variant adds the
+//! browser's store (`Store` over a host's files and `fetch`, in `store.rs`, D-375).
 #![allow(
     unsafe_code,
     reason = "wasm-bindgen's macros expand to its audited glue; this file has no unsafe of its own"
@@ -23,6 +24,8 @@ use teigeodata_api::ErrorCode;
 use wasm_bindgen::prelude::*;
 
 pub mod sections;
+#[cfg(feature = "store")]
+pub mod store;
 
 /// A thrown `Error` with the error code's name as its `code`, as in Node.js.
 fn thrown(code: &str, message: &str) -> JsValue {

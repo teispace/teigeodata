@@ -4,8 +4,8 @@
   "intro": "Each npm package's module after `wasm-opt -Oz`, raw and gzipped at level 9. `cargo xtask package-wasm` fails a build whose gzipped module is over its budget.",
   "command": "cargo xtask package-wasm --record",
   "date": "2026-11-22",
-  "commit": "18cba64+changes",
+  "commit": "3ed3315+changes",
   "machine": "Darwin arm64, 10 cores",
-  "load": "3.00",
-  "table": "| Package | Holds | Module | gzip -9 | Budget | Headroom |\n|---|---|--:|--:|--:|--:|\n| `teigeodata-wasm` | every component | 618248 B | 260232 B | 262144 B | 0.7% |\n| `teigeodata-wasm-lookup` | every query at a point or by ID | 393404 B | 152297 B | 153600 B | 0.8% |"
+  "load": "4.30",
+  "table": "| Package | Holds | Module | gzip -9 | Budget | Headroom |\n|---|---|--:|--:|--:|--:|\n| `teigeodata-wasm` | every component | 618248 B | 260232 B | 262144 B | 0.7% |\n| `teigeodata-wasm-lookup` | every query at a point or by ID | 393404 B | 152297 B | 153600 B | 0.8% |\n| `teigeodata-wasm/store` | every component and the store | 1000388 B | 423840 B | 450560 B | 5.9% |"
 }

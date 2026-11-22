@@ -58,7 +58,7 @@ const PLACES: &[Place] = &[
         "teigeodata-",
         "version = \"",
         "\"",
-        1,
+        2,
     ),
     place(
         "forge/crates/forge/Cargo.toml",

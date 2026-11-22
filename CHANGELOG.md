@@ -26,6 +26,10 @@ applied: a minor release could break the public API, and every break is listed u
   `PackHead::holds` (D-373).
 - Sync: the store's client as one async core, `session::Session` with `session::init`, which
   the native `Client` runs; `fetch::Ready` and `store::SyncFs` are public (D-374).
+- Wasm: the browser store, `import { Store } from "teigeodata-wasm/store"`: the native store's
+  client over a host's files (OPFS sync access handles) and `fetch`, with the native store's
+  results; `parseJournal`. API: `rows` (feature `store-core`), the store's results as blobs
+  for every store; sync: `store::render_journal`, `policy::path_of` (D-375).
 
 ## [1.1.0] - 2026-11-17
 

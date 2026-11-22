@@ -456,3 +456,16 @@ fn selection(entry: &Entry, want: Option<&Want>, installed: Option<&Record>) -> 
         ..set.closed()
     })
 }
+
+/// The catalog path a person names: `np` is `np.places.tgd`, `np.dem` is `np.dem.tgd`, and a
+/// path ending in `.tgd` is itself.
+#[must_use]
+pub fn path_of(name: &str) -> String {
+    match name.strip_suffix(".tgd") {
+        Some(_) => name.to_owned(),
+        None => match name.split_once('.') {
+            Some((a, c)) => catalog::path(a, c),
+            None => catalog::path(name, "places"),
+        },
+    }
+}

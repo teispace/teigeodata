@@ -68,6 +68,8 @@ macro_rules! built {
 }
 
 mod places;
+#[cfg(feature = "store-core")]
+pub mod rows;
 mod sections;
 #[cfg(feature = "store")]
 mod store;

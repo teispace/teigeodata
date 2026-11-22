@@ -1296,7 +1296,7 @@ impl<D: AsyncFs> AsyncStore<D> {
     /// Writes `packs` as the journal (temp file, sync, rename, sync the root) and makes them
     /// the store's.
     async fn commit(&mut self, packs: Vec<Record>) -> io::Result<()> {
-        let bytes = render(&packs);
+        let bytes = render_journal(&packs);
         let mut t = self.fs.open(JOURNAL_TMP).await?;
         t.set_len(0)?;
         t.write_all(&bytes)?;
@@ -1379,7 +1379,10 @@ pub fn pack_name(entry: &Entry, set: Components) -> Result<String, FetchError> {
     Ok(name)
 }
 
-fn render(packs: &[Record]) -> Vec<u8> {
+/// The journal's bytes for `packs`: what [`parse_journal`] reads back, for a host that hands
+/// the index to a reader (the browser's store, D-375).
+#[must_use]
+pub fn render_journal(packs: &[Record]) -> Vec<u8> {
     let list: Vec<Value> = packs
         .iter()
         .map(|r| {
@@ -1714,7 +1717,8 @@ mod derive_tests {
     use teigeodata_format::{Encoding, Kind, Pack, Part, Section, Writer};
 
     use super::{
-        DeriveInput, Dir, JOURNAL, JOURNAL_TMP, PACKS, Record, Store, StoreError, render, set_tag,
+        DeriveInput, Dir, JOURNAL, JOURNAL_TMP, PACKS, Record, Store, StoreError, render_journal,
+        set_tag,
     };
 
     /// Every suffix of 3 or more bytes of a lowercase ASCII name: the test's key rule.
@@ -1822,7 +1826,11 @@ mod derive_tests {
             pinned: false,
             used: 0,
         };
-        std::fs::write(root.join(JOURNAL), render(core::slice::from_ref(&r))).unwrap();
+        std::fs::write(
+            root.join(JOURNAL),
+            render_journal(core::slice::from_ref(&r)),
+        )
+        .unwrap();
         let (st, _) = Store::open(Dir::new(&root).unwrap()).unwrap();
         (root, st, r)
     }
@@ -1830,7 +1838,7 @@ mod derive_tests {
     #[test]
     fn a_record_of_some_parts_round_trips_and_raises_the_journal_version() {
         let (_, _, mut r) = store("parts", &pack());
-        let whole = render(core::slice::from_ref(&r));
+        let whole = render_journal(core::slice::from_ref(&r));
         assert!(
             core::str::from_utf8(&whole)
                 .unwrap()
@@ -1840,7 +1848,7 @@ mod derive_tests {
             .languages(&[Part::REST, Part::language("ne").unwrap()])
             .unwrap()
             .outline(Part::outline(2, 3).unwrap());
-        let bytes = render(core::slice::from_ref(&r));
+        let bytes = render_journal(core::slice::from_ref(&r));
         assert!(
             core::str::from_utf8(&bytes)
                 .unwrap()

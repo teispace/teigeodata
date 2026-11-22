@@ -15,7 +15,8 @@ test = false
 doctest = false
 
 # One feature per pack component, as teigeodata-api's (D-291): a variant of the npm package is
-# a set of them (`cargo xtask package-wasm`). No store: it needs a file system and threads.
+# a set of them (`cargo xtask package-wasm`). `store` adds the browser's store (D-375): the
+# store's client over the host's files (OPFS) and `fetch`, its own package variant.
 [features]
 default = ["components"]
 components = ["teigeodata-api/components"]
@@ -33,12 +34,15 @@ tz-rules = ["teigeodata-api/tz-rules"]
 postal = ["teigeodata-api/postal"]
 substring = ["teigeodata-api/substring"]
 extra = ["teigeodata-api/extra"]
+store = ["teigeodata-api/store-core", "dep:teigeodata-sync", "dep:wasm-bindgen-futures"]
 
 [dependencies]
 teigeodata-api.workspace = true
 # The CLI that writes the JavaScript glue must be this exact version.
 wasm-bindgen = "=0.2.130"
 js-sys = "=0.3.107"
+teigeodata-sync = { workspace = true, optional = true, features = ["store"] }
+wasm-bindgen-futures = { version = "=0.4.80", optional = true }
 
 [lints]
 workspace = true

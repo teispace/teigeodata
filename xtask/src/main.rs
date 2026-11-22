@@ -118,7 +118,7 @@ Tasks:
                     addon; --addons takes teigeodata.<suffix>.node for every platform,
                     else this machine's addon is built and packaged; --test installs them
                     as npm would and runs the parity checks.
-  package-wasm [--variant full|lookup] [--test] [--record]
+  package-wasm [--variant full|lookup|store] [--test] [--record]
                     The WebAssembly npm packages (D-293): each variant (a set of
                     components, D-291) built, through wasm-bindgen --target web and
                     wasm-opt -Oz, with the per-host entries, under target/wasm/<variant>/;

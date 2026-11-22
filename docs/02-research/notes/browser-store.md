@@ -191,6 +191,11 @@ the store must not bring a second engine. The contract, option (a) of the consum
     `Engine.openInstalled(head, record, offsets, sections)` opens them as a layer whose
     installed set is the record's, so a call outside it throws `MissingComponent`. Which
     sections a set holds is `PackHead::holds`, one rule for the store and the reader.
+- **The store in JavaScript (D-375, 2026-11-22):** `teigeodata-wasm/store` exports `Store`,
+  the native client core over a `StoreHost` (files shaped as sync access handles, directory
+  calls as promises, `get` and `fetch`). A worker passes OPFS handles straight through; the
+  network is the host's `fetch`, checked in Rust. Its module is 423,840 B gzipped, beside the
+  full package's 260,232 B, and loads only when imported.
 - **What the npm package gives a host:**
   - the store worker;
   - a small reader module (index, generation lock, head check, section reads) that hands

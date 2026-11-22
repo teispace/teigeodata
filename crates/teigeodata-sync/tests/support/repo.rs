@@ -86,6 +86,12 @@ pub(crate) type Host = Arc<Mutex<BTreeMap<String, Vec<u8>>>>;
 /// Release `v` of `packs` on `host`: assets, Nepal's role, top-level targets, snapshot and
 /// timestamp, as `tuf release` lays them out (consistent snapshots).
 pub(crate) fn publish(host: &Host, v: u64, packs: &[Vec<u8>]) {
+    publish_until(host, v, packs, now() + YEAR, now() + 14 * 86_400);
+}
+
+/// [`publish`] with the roles expiring at `expires` and the timestamp at `ts_expires` (Unix
+/// seconds): a repository that stays valid as a checked-in fixture.
+pub(crate) fn publish_until(host: &Host, v: u64, packs: &[Vec<u8>], expires: i64, ts_expires: i64) {
     let mut h = host.lock().unwrap();
     let mut files: Files = BTreeMap::new();
     for p in packs {
@@ -107,7 +113,6 @@ pub(crate) fn publish(host: &Host, v: u64, packs: &[Vec<u8>]) {
         .keys()
         .map(|&cc| country_role(cc, one(30)))
         .collect();
-    let expires = now() + YEAR;
     let tg = sign(
         &targets_delegating(v, expires, &top, &delegated).unwrap(),
         &[&key(30)],
@@ -125,11 +130,7 @@ pub(crate) fn publish(host: &Host, v: u64, packs: &[Vec<u8>]) {
         .map(|(n, b)| (n.as_str(), b.as_slice(), v))
         .collect();
     let sn = sign(&snapshot_listing(v, expires, &refs).unwrap(), &[&key(20)]).unwrap();
-    let ts = sign(
-        &timestamp(v, now() + 14 * 86_400, &sn, v).unwrap(),
-        &[&key(10)],
-    )
-    .unwrap();
+    let ts = sign(&timestamp(v, ts_expires, &sn, v).unwrap(), &[&key(10)]).unwrap();
     h.insert(format!("meta/{v}.targets.json"), tg);
     h.insert(format!("meta/{v}.snapshot.json"), sn);
     h.insert("meta/timestamp.json".into(), ts);

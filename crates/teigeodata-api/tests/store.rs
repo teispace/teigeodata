@@ -21,7 +21,7 @@ mod repo_support;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use repo_support::{Host, pack, pack_of, publish, root_file, serve, serve_at};
+use repo_support::{Host, pack, pack_of, publish, publish_until, root_file, serve, serve_at};
 use teigeodata_api::{Blob, ErrorCode, InstallOptions, Job, Store};
 use teigeodata_blob::{Reader, View};
 
@@ -420,6 +420,53 @@ fn the_bindings_store_root_is_current() {
         std::fs::read(path).unwrap() == bytes,
         "{path} is stale: rerun with TEIGEODATA_WRITE_FIXTURE=1"
     );
+}
+
+/// `bindings/fixtures/store-repo/`, a signed repository the browser store's test installs
+/// from (`bindings/wasm/test/store.mjs`): release 1 of the synthetic Nepal pack, under the
+/// keys of `store-root.json`, expiring in 2036; `TEIGEODATA_WRITE_FIXTURE=1` rewrites it.
+#[test]
+fn the_bindings_store_repo_is_current() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bindings/fixtures/store-repo");
+    let host = Host::default();
+    publish_until(
+        &host,
+        1,
+        &[pack_of(60, "2026.11.0", false)],
+        2_082_758_400,
+        2_082_758_400,
+    );
+    let files = host.lock().unwrap().clone();
+    if std::env::var_os("TEIGEODATA_WRITE_FIXTURE").is_some() {
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, bytes) in &files {
+            let at = dir.join(path);
+            std::fs::create_dir_all(at.parent().unwrap()).unwrap();
+            std::fs::write(at, bytes).unwrap();
+        }
+    }
+    let mut held = Vec::new();
+    for sub in ["meta", "assets"] {
+        for e in std::fs::read_dir(dir.join(sub)).unwrap() {
+            held.push(format!(
+                "{sub}/{}",
+                e.unwrap().file_name().to_str().unwrap()
+            ));
+        }
+    }
+    held.sort();
+    assert_eq!(
+        held,
+        files.keys().cloned().collect::<Vec<_>>(),
+        "{}",
+        dir.display()
+    );
+    for (path, bytes) in &files {
+        assert!(
+            std::fs::read(dir.join(path)).unwrap() == *bytes,
+            "{path} is stale: rerun with TEIGEODATA_WRITE_FIXTURE=1"
+        );
+    }
 }
 
 /// The store section of `bindings/parity.json`, which every language checks, holds what Rust

@@ -102,6 +102,7 @@ jobs:
       - name: Parity from each package
         run: |
           for v in full lookup; do node bindings/wasm/test/parity.mjs "target/wasm/$v" bindings/parity.json; done
+          node bindings/wasm/test/store.mjs target/wasm/full/store bindings/fixtures
 
   browsers:
     name: Chromium, Firefox and WebKit
