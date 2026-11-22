@@ -333,6 +333,17 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
     `admin_at` gives OSM's ward at four points; the lite-to-main bridge; released as
     [data-2026.11.22](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.22)
 
+- [ ] The consumer's second review (TG-30..34) and the open name questions, then one data
+  release with them:
+  - [x] TG-30: IDs across lite and main (D-368, the bridge in data-2026.11.22); TG-33 and
+    TG-34 released in data-2026.11.22
+  - [x] TG-31: one spelling across a place's levels (D-377: काठमाडौं, three reviewed rows)
+  - [ ] TG-32: landmarks as their own kind (research first: a new kind is a format change)
+  - [ ] Q-037: Devanagari spelling folds in search, kept in the language data
+  - [ ] Q-036: the world part's unit names in English (`Dubay` → Dubai)
+  - [ ] TG-14's 42 held rows read a second time
+  - [ ] The Nepal data release with these, from CI, its error rates, the consumer told
+
 ### 8.6 Exit review
 
 - [x] v1.0.0 tagged and published on GitHub (D-352: registries off) and checked from a scratch
@@ -384,6 +395,7 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-22 | 8.5b c split: c1 the reader in every package, c2 the store as its own variant | D-373 |
 | 2026-11-22 | 8.5b c2: the store's client as one async core | D-374 |
 | 2026-11-22 | 8.5b c2: the browser store as the full package's `store` subpath, not a new package | D-375 |
+| 2026-11-22 | 8.5b: the consumer's second review and the open name questions listed as steps ahead of the next data release; TG-31 decided | D-377 |
 | 2026-11-22 | 8.5b: the mirror page published; the mirror item split from the live catalog, which waits on the ceremony; TG-27's parent ticked (all its steps were done) | - |
 | 2026-11-22 | 8.5b d: the store worker; per-file read locks replace the generation lock | D-376 |
 | 2026-11-22 | 8.5b e: the browser store documented; TG-24 to TG-26's store work done | - |
