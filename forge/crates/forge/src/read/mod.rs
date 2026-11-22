@@ -22,14 +22,7 @@ pub(crate) fn run(root: &Path, reader: &str, ids: &[String]) -> Result<String, S
     let lock = Lock::read(&root.join("data/sources.lock"))?;
     let first = ids.first().ok_or("name at least one source")?;
     let main = lock.get(first)?;
-    let path_of = |id: &str| -> Result<std::path::PathBuf, String> {
-        let p = lock.path(root, id)?;
-        if p.is_file() {
-            Ok(p)
-        } else {
-            Err(format!("{id} is not fetched yet: forge fetch {id}"))
-        }
-    };
+    let path_of = |id: &str| lock.path(root, id);
     let t = Instant::now();
     let mut out: Output = match reader {
         "geonames" => {

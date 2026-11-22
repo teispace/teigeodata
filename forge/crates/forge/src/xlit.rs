@@ -211,14 +211,7 @@ fn fetched_in<'l>(
     root: &'l Path,
     lock: &'l Lock,
 ) -> impl Fn(&str) -> Result<std::path::PathBuf, String> + 'l {
-    move |source: &str| {
-        let p = lock.path(root, source)?;
-        if p.is_file() {
-            Ok(p)
-        } else {
-            Err(format!("{source} is not fetched yet: forge fetch {source}"))
-        }
-    }
+    move |source: &str| lock.path(root, source)
 }
 
 /// Every source profile `id`'s shipping model reads: its gate's training texts and pairs, in

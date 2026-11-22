@@ -55,8 +55,16 @@ impl Lock {
     }
 
     /// Where source `id`'s pinned file is stored.
+    ///
+    /// A source not in the store is refused by name, with the command that fetches it: a read
+    /// that failed later would say only "No such file or directory".
     pub(crate) fn path(&self, root: &Path, id: &str) -> Result<PathBuf, String> {
-        self.get(id).map(|s| crate::fetch::store_path(root, s))
+        let p = crate::fetch::store_path(root, self.get(id)?);
+        if p.is_file() {
+            Ok(p)
+        } else {
+            Err(format!("{id} is not fetched yet: forge fetch {id}"))
+        }
     }
 }
 
@@ -95,7 +103,30 @@ pub(crate) fn repin(text: &str, id: &str, sha256: &str, size: u64, date: &str) -
 
 #[cfg(test)]
 mod tests {
-    use super::repin;
+    use super::{Lock, repin};
+
+    #[test]
+    fn a_source_not_in_the_store_is_refused_by_name() {
+        let lock: Lock = toml::from_str(
+            "[[source]]\nid = \"a\"\nkind = \"file\"\nurl = \"u\"\nsha256 = \"abc\"\nsize = 1\n\
+             licence_class = \"open\"\nattribution = \"n\"\n",
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        let root = std::env::temp_dir().join(format!("forge-lock-{}", std::process::id()));
+        let dir = root.join("data/cache/store/sha256");
+        std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            lock.path(&root, "a"),
+            Err("a is not fetched yet: forge fetch a".to_string())
+        );
+        std::fs::write(dir.join("abc"), b"x").unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(lock.path(&root, "a"), Ok(dir.join("abc")));
+        assert!(
+            lock.path(&root, "b")
+                .is_err_and(|e| e.contains("no source `b`"))
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     const TEXT: &str = "# c\n[[source]]\nid = \"a\"\nsha256 = \"x\"\nsize = 1\nretrieved = \"2026-01-01\"\n\n[[source]]\nid = \"b\"\nsha256 = \"y\"\nsize = 2\nretrieved = \"2026-01-01\"\n";
 
