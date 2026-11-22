@@ -1,0 +1,24 @@
+# The world for an app beside a country pack (TG-27, D-366): the `app` layer without Nepal in
+# full and without boundaries, so it stacks under Nepal's main-build pack (`app-np`) without
+# carrying a second copy of Nepal: the world's countries, first-level units and cities of 5,000
+# or more by point, India's districts and towns, names in Nepali, English, Hindi and Sanskrit.
+# The world part's Nepal rows (its slice: the country, provinces and cities) stay, so the layer
+# also stands alone.
+about: >-
+  The world for an app, beside a country pack: countries, first-level units and cities of 5,000
+  or more by point, named in Nepali, English, Hindi and Sanskrit.
+build: lite
+components: [point, elevation, admin, names, search, timezone, tz-rules]
+# Nepali, Hindi and Sanskrit in Devanagari only: GeoNames tags romanisations `ne` (D-215).
+languages: [ne-Deva, en, hi-Deva, sa-Deva]
+world: geonames-cities5000
+world_alternates: geonames-alternate-names
+world_aliases: [wikidata-aliases-en]
+world_labels: [cldr-49-ne, wikidata-labels-ne, wikidata-labels-hi]
+world_towns: [in]
+# The world part answers by point; `admin_at` abroad needs its boundaries back
+# (`world_tolerance_m` instead of `world_outlines: none`).
+world_outlines: none
+# Its own name in the manifest, with the data release's version from `--release` (TG-26).
+address: app-world
+wire_kb: 4000
