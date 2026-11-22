@@ -305,7 +305,7 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   - [x] d. `store-worker.js` (Web Lock, OPFS, `fetch`, messages) and browser tests in CI
     (Playwright: Chromium, Firefox, WebKit) against a local CORS mirror and a throwaway-key
     catalog (D-376, 2026-11-22: `opfs.js` for the host and the reader, per-file read locks)
-  - [ ] e. Docs: the store page's "In the browser" section, the npm README
+  - [x] e. Docs: the store page's "In the browser" section, the npm README (2026-11-22)
 - [x] TG-26 as a forge profile, not `extract` (search keys must be rebuilt with each country's
   keying rules, which live in the forge): `data/embed/app.yaml`, a part may leave its outlines
   out; measured 2026-11-17 in [sizes](../../05-data/sizes.md#embedded-layers-built-from-profiles)
@@ -383,4 +383,5 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-22 | 8.5b c2: the store's client as one async core | D-374 |
 | 2026-11-22 | 8.5b c2: the browser store as the full package's `store` subpath, not a new package | D-375 |
 | 2026-11-22 | 8.5b d: the store worker; per-file read locks replace the generation lock | D-376 |
+| 2026-11-22 | 8.5b e: the browser store documented; TG-24 to TG-26's store work done | - |
 | 2026-11-22 | 8.5b: the wasm store split into five sub-steps (async pack driver, browser layout, wasm exports, worker and browser tests, docs) | the pack driver's transport is the async part |

@@ -38,8 +38,9 @@ engine.openBytes(bytes);
 
 ### Keep the pack for offline visits
 
-Serve the pack with a long `Cache-Control` and a content hash in its name, or keep it in the
-Cache API or the origin private file system (OPFS), so a later visit opens it with no network.
+Serve the pack with a long `Cache-Control` and a content hash in its name, so a later visit
+opens it with no network. To install packs as the user needs them, verified and resumable, use
+the browser store (`teigeodata-wasm/store`): see [the store](/docs/concepts/store#in-the-browser).
 
 </Step>
 <Step>

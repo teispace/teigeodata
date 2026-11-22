@@ -57,6 +57,46 @@ splits an install so the platform's own download service fetches the bytes (a ba
 `URLSession`, `WorkManager`): each pass lists the byte ranges still missing, the platform fetches
 them into files, and the next pass verifies and installs what arrived.
 
+## In the browser
+
+`teigeodata-wasm/store` is the same store in a page's origin: the same journal, recovery,
+signed catalog and resumable installs, with the files in the origin private file system (OPFS)
+and the network through `fetch`. It is its own module inside the `teigeodata-wasm` package, so
+a page that only reads packs never loads it.
+
+The store writes from a dedicated Web Worker, `store-worker.js`, since only a worker can write
+OPFS files at an offset. Any page or worker reads what it installed, with any engine:
+
+```js
+import { init, Engine, Reader, installedSections } from "teigeodata-wasm";
+import { openInstalled, storeLock, storeWorker } from "teigeodata-wasm/opfs";
+
+const store = storeWorker(
+  new Worker(new URL("teigeodata-wasm/store/store-worker.js", import.meta.url), { type: "module" }),
+);
+const root = "teigeodata"; // the store's directory in the origin private file system
+await store.init(root, [catalogUrl], [assetsUrl], trustedRoot); // once
+await store.open(root);
+await store.install("np", { components: "point,names,search" });
+
+await init();
+const engine = new Engine();
+const installed = await openInstalled(engine, installedSections, root);
+new Reader(engine.search("Pokhara", 5)).records();
+
+// After the store changes, open again and let go of the old files.
+new BroadcastChannel(storeLock(root)).onmessage = () => { /* reopen, then installed.close() */ };
+```
+
+- **Lazy by section.** `openInstalled` reads each pack's head, then only the sections of the
+  components installed, each checked against the head.
+- **Files in use are kept.** A reader holds a shared Web Lock on each file it has open. A
+  removal or an update leaves such a file until it is let go, and the next call removes it.
+- **One writer at a time.** Each call runs under the store's Web Lock on a store opened afresh,
+  so tabs share one store and each sees the others' installs.
+- **Mirrors on another origin** must allow it (CORS) and expose `Content-Range` and `ETag`.
+  Range requests need no preflight.
+
 ## From the command line
 
 `tgd init`, `refresh`, `catalog`, `find`, `locate`, `install`, `update`, `remove`, `pin`,
