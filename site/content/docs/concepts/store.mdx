@@ -95,7 +95,7 @@ new BroadcastChannel(storeLock(root)).onmessage = () => { /* reopen, then instal
 - **One writer at a time.** Each call runs under the store's Web Lock on a store opened afresh,
   so tabs share one store and each sees the others' installs.
 - **Mirrors on another origin** must allow it (CORS) and expose `Content-Range` and `ETag`.
-  Range requests need no preflight.
+  Range requests need no preflight. See [running a mirror](/docs/concepts/mirrors).
 
 ## From the command line
 

@@ -1,4 +1,12 @@
 {
   "title": "Concepts",
-  "pages": ["places", "packs", "results", "store", "accuracy", "licences"]
+  "pages": [
+    "places",
+    "packs",
+    "results",
+    "store",
+    "mirrors",
+    "accuracy",
+    "licences"
+  ]
 }

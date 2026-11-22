@@ -1,0 +1,132 @@
+---
+title: Running a mirror
+description: Serve teigeodata's signed catalog and packs from your own host, for browser apps, private networks or speed. Trust never depends on the mirror.
+---
+
+A **mirror** serves the same files as teigeodata's own hosts: the signed catalog's metadata
+and the packs' assets. Apps check every byte against the catalog's signatures and hashes, so a
+mirror needs no trust and holds no key. A mirror that serves a wrong or old file is refused and
+the store moves to the next one.
+
+Run one when:
+
+- **Browser apps** need the packs: GitHub's release assets send no CORS headers, so a page
+  cannot read them.
+- **A private network** has no route to GitHub, or the app should not reach out to it.
+- **Speed or quota**: a host near your users, or one you already pay for.
+
+<Callout type="warn" title="The catalog is not live yet">
+The signed catalog goes live with its first release, after the offline key ceremony. Until
+then, the files a mirror serves exist only in tests; this page is the layout they will have.
+</Callout>
+
+## What a mirror serves
+
+Two bases, which may be one host or two. A store is set up with a list of each
+([`tgd init`](/docs/cli#the-store), `Store.create`, or `init` in the browser) and tries them in
+order.
+
+**The metadata** (the `repo` base), flat under it:
+
+| File | What it is | Cache |
+|---|---|---|
+| `timestamp.json` | the newest timestamp: names the snapshot; re-signed daily | a few minutes at most |
+| `N.root.json` | each root, by version (`1.root.json`, `2.root.json`, …) | forever |
+| `V.snapshot.json` | each snapshot, by version | forever |
+| `V.targets.json` | each top-level targets, by version | forever |
+| `V.<role>.json` | each country's delegated role, by version (`3.np.json`) | forever |
+
+A store reads `timestamp.json`, then only the versioned files it names. A file that is not
+there is a `404`; a store looks for the next root (`N+1.root.json`) on every refresh, and the
+`404` tells it there is none.
+
+**The assets** (the `assets` base), flat under it, one per pack component and release:
+
+```
+<address>.<component>.<release>.<hash8>.tgd.zst
+np.places.2026.11.0.065cf3cd.tgd.zst
+```
+
+A name is never reused for other bytes, so every asset can be cached forever.
+
+## What the host must do
+
+- **Metadata** answers `200` with the whole file. `Content-Encoding: gzip` is fine: the store
+  decodes it and caps a file's size after decoding.
+- **Assets** answer a `Range: bytes=a-b` request with `206 Partial Content`, a
+  `Content-Range` that matches the request, and exactly those bytes. A `200` to a ranged
+  request is refused. The store asks for `Accept-Encoding: identity`; do not compress assets.
+- **One `ETag` per asset.** An install checks that every range comes from the same asset (no
+  `If-Range` is needed); a host that sends no `ETag` still works, held to the asset's length
+  and hashes.
+- **Redirects** are followed with the `Range` header kept, so an object store behind a
+  redirect works.
+- **For browser apps** on another origin: `Access-Control-Allow-Origin` for the app's origin
+  (or `*`) on both bases, and `Access-Control-Expose-Headers: Content-Range, ETag`. A
+  `Range` request needs no preflight.
+
+## Keeping it current
+
+Copy the catalog's metadata and the release assets, metadata last:
+
+1. Copy every asset not already on the mirror (assets are immutable, so a copy never
+   replaces one).
+2. Copy the versioned metadata files (`*.root.json`, `*.snapshot.json`, `*.targets.json`,
+   `*.<role>.json`).
+3. Copy `timestamp.json` last. It is the commit point: a store that reads the new timestamp
+   finds every file it names already there.
+
+The timestamp is re-signed every day and expires in 14 days, so sync at least daily (hourly is
+better). A mirror that stops syncing becomes stale, and stores refuse its timestamp once it has
+expired, then use the next mirror. Old files may stay; removing them is optional.
+
+## Example configurations
+
+nginx serves ranges and an `ETag` for static files by default:
+
+```nginx
+map $uri $teigeodata_cache {
+    ~/timestamp\.json$  "max-age=300";
+    default             "max-age=31536000, immutable";
+}
+server {
+    server_name mirror.example.com;
+    location / {
+        root /srv/teigeodata;          # meta/ and assets/ under it
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Expose-Headers "Content-Range, ETag" always;
+        add_header Cache-Control $teigeodata_cache always;
+    }
+}
+```
+
+Caddy:
+
+```caddy
+mirror.example.com {
+    root * /srv/teigeodata
+    header Access-Control-Allow-Origin "*"
+    header Access-Control-Expose-Headers "Content-Range, ETag"
+    header /meta/timestamp.json Cache-Control "max-age=300"
+    file_server
+}
+```
+
+An object store (S3, R2, GCS) serves ranges itself; set a CORS rule that allows `GET` from
+your app's origins and exposes `Content-Range` and `ETag`.
+
+## Checking a mirror
+
+Set up a scratch store against it and read the catalog through it:
+
+```sh
+tgd init --store /tmp/mirror-check --repo https://mirror.example.com/meta/ \
+  --assets https://mirror.example.com/assets/ --root 1.root.json
+tgd refresh --store /tmp/mirror-check
+tgd install np --store /tmp/mirror-check --components point
+tgd status --store /tmp/mirror-check --deep
+```
+
+`refresh` checks the whole signed chain and `install` every byte of the pack; `status --deep`
+reads the installed file back against its hashes. For browser apps, also open a page on the
+app's origin and install from there: CORS problems show only in a browser.

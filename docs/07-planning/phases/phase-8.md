@@ -309,8 +309,10 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 - [x] TG-26 as a forge profile, not `extract` (search keys must be rebuilt with each country's
   keying rules, which live in the forge): `data/embed/app.yaml`, a part may leave its outlines
   out; measured 2026-11-17 in [sizes](../../05-data/sizes.md#embedded-layers-built-from-profiles)
-- [ ] A public page on running a mirror (TG-24); the catalog live after the key ceremony
-- [ ] TG-27 (D-363): research note on assembling OSM boundary relations into areas (multipolygon
+- [x] A public page on running a mirror (TG-24): [running a mirror](https://teigeodata.teispace.com/docs/concepts/mirrors)
+  (layout, HTTP rules, sync order, server examples, a check), 2026-11-22
+- [ ] The catalog live through a mirror, after the key ceremony
+- [x] TG-27 (D-363): research note on assembling OSM boundary relations into areas (multipolygon
   rules, invalid rings, matching to the boundary source's parents, ID reuse); then a main-build
   stage giving a country's deepest admin level outlines from OSM (Nepal: 6,741 wards), a
   `build.yaml` key, licence-gated; then an app profile for Nepal main (wards at 50 m and 100 m,
@@ -382,6 +384,7 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-22 | 8.5b c split: c1 the reader in every package, c2 the store as its own variant | D-373 |
 | 2026-11-22 | 8.5b c2: the store's client as one async core | D-374 |
 | 2026-11-22 | 8.5b c2: the browser store as the full package's `store` subpath, not a new package | D-375 |
+| 2026-11-22 | 8.5b: the mirror page published; the mirror item split from the live catalog, which waits on the ceremony; TG-27's parent ticked (all its steps were done) | - |
 | 2026-11-22 | 8.5b d: the store worker; per-file read locks replace the generation lock | D-376 |
 | 2026-11-22 | 8.5b e: the browser store documented; TG-24 to TG-26's store work done | - |
 | 2026-11-22 | 8.5b: the wasm store split into five sub-steps (async pack driver, browser layout, wasm exports, worker and browser tests, docs) | the pack driver's transport is the async part |
