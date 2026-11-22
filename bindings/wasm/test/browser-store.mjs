@@ -6,7 +6,8 @@
 // the page's reader by section, a removal while the reader holds the file (the file stays),
 // the next open removing it once let go, and two workers sharing one store.
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { chromium, firefox, webkit } from "playwright";
 
@@ -137,7 +138,10 @@ let failed = false;
 try {
   for (const [browser, kind] of [["chromium", chromium], ["firefox", firefox], ["webkit", webkit]]) {
     if (!wanted.includes(browser)) continue;
-    const b = await kind.launch();
+    // A persistent profile: WebKit refuses OPFS in an ephemeral one ("unknown transient
+    // reason"), and Playwright's default contexts are ephemeral.
+    const profile = await mkdtemp(join(tmpdir(), `tg-store-${browser}-`));
+    const b = await kind.launchPersistentContext(profile);
     try {
       const tab = await b.newPage();
       tab.on("pageerror", (e) => console.error(`${browser}: ${e}`));
@@ -145,13 +149,14 @@ try {
       await tab.goto(origin);
       await tab.waitForFunction(() => window.result, null, { timeout: 120_000 });
       const r = await tab.evaluate(() => window.result);
-      if (r.ok) console.log(`${browser} ${b.version()}: teigeodata-wasm/store in the browser ok (${r.checks} checks)`);
+      if (r.ok) console.log(`${browser} ${b.browser()?.version() ?? ""}: teigeodata-wasm/store in the browser ok (${r.checks} checks)`);
       else {
         failed = true;
         console.error(`${browser}: ${r.error}`);
       }
     } finally {
       await b.close();
+      await rm(profile, { recursive: true, force: true });
     }
   }
 } finally {
