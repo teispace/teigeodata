@@ -49,8 +49,10 @@ O(head): 52 µs warm for a 1 GiB pack, where proving at open took 4.9 ms
 **`unsafe`.** `teigeodata-format` and every other runtime crate keep `forbid(unsafe_code)`. The
 engine is the one boundary crate: its lint table is the workspace table with `unsafe_code =
 "deny"`, and only `src/map.rs` allows it, for two things: `Mmap::map`, and extending the borrow
-of the backing bytes to `'static` inside `Owned`, which keeps the views next to the bytes they
-borrow. The views are dropped before the backing, never escape with the `'static` lifetime
+of the backing bytes to `'static` inside `Owned` (one helper, `stable`, for heap, mapped or
+static data only), which keeps the views next to the bytes they borrow. A layer opened with
+`Layer::from_sections` (D-370) owns its head and each section in its own buffer, plus an index
+of borrows into them; the buffers are boxed, so they stay put when the backing moves. The views are dropped before the backing, never escape with the `'static` lifetime
 (`Owned::views` returns them for the borrow of `self`), and a compile-time check proves `Views`
 is covariant, so shortening the lifetime is sound.
 

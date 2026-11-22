@@ -71,6 +71,42 @@ fn holed(bytes: &[u8], installed: Components) -> Vec<u8> {
     out
 }
 
+/// Sections held apart: each one's file offset and bytes.
+type Sections = Vec<(u64, Box<[u8]>)>;
+
+/// The head of `bytes` and its sections inside `installed`, each in its own buffer, as a
+/// reader of the browser store holds them; `BLOCK_HASHES` too when [`holed`] keeps it.
+fn sections_of(bytes: &[u8], installed: Components) -> (Vec<u8>, Sections) {
+    let kept = holed(bytes, installed);
+    let pack = Pack::open(bytes).unwrap();
+    let base = bytes.as_ptr() as usize;
+    let mut head_end = bytes.len();
+    let mut out = Vec::new();
+    for s in pack.sections() {
+        let at = s.bytes().as_ptr() as usize - base;
+        head_end = head_end.min(at);
+        let held = &kept[at..at + s.bytes().len()];
+        if held == s.bytes() && !s.bytes().is_empty() {
+            out.push((at as u64, held.into()));
+        }
+    }
+    (bytes[..head_end].to_vec(), out)
+}
+
+fn open_sections(bytes: &[u8], installed: Components, verify: Verify) -> Engine {
+    let (head, sections) = sections_of(bytes, installed);
+    let options = LayerOptions {
+        installed: Some(installed),
+        verify,
+        ..LayerOptions::default()
+    };
+    let mut e = Engine::new();
+    let layer = Layer::from_sections(head, bytes.len() as u64, sections, options).unwrap();
+    assert_eq!(layer.len(), bytes.len());
+    e.add(layer);
+    e
+}
+
 fn open(bytes: Vec<u8>, installed: Option<Components>, verify: Verify) -> Engine {
     let mut e = Engine::new();
     let options = LayerOptions {
@@ -288,8 +324,69 @@ fn each_component_set_answers_as_the_whole_pack_or_names_what_is_missing() {
                 },
             };
             assert_eq!(got, want, "{list:?}, {verify:?}");
+            // From its head and its own sections alone: the same answers.
+            let e = open_sections(&whole, set, verify);
+            assert_eq!(e.layers().next().unwrap().components(), present, "{list:?}");
+            let got = answers(&e, &probe, &points, &queries);
+            assert_eq!(got, want, "sections: {list:?}, {verify:?}");
         }
     }
+}
+
+#[test]
+fn sections_are_checked_against_the_head() {
+    let whole = with_blobs(&synthetic(300, 5).encode());
+    let set = Components::of(&[Component::Point, Component::Names, Component::Extra]);
+    let (head, sections) = sections_of(&whole, set);
+    assert!(
+        sections.iter().any(|(_, b)| b.len() >= 2 << 20),
+        "the blobs are given"
+    );
+    let options = |verify| LayerOptions {
+        installed: Some(set),
+        verify,
+        ..LayerOptions::default()
+    };
+    let len = whole.len() as u64;
+    // Held apart, the bytes not installed stay out of memory.
+    let in_memory: usize = head.len() + sections.iter().map(|(_, b)| b.len()).sum::<usize>();
+    assert!(in_memory < whole.len(), "{in_memory} of {}", whole.len());
+    // A section that is not one of the table's, by offset or by length: refused.
+    let mut moved = sections.clone();
+    moved[0].0 += 1;
+    let e = Layer::from_sections(head.clone(), len, moved, options(Verify::Lazy)).unwrap_err();
+    assert!(matches!(e, Error::Format(_)), "{e}");
+    let mut short = sections.clone();
+    short[0].1 = short[0].1[1..].into();
+    let e = Layer::from_sections(head.clone(), len, short, options(Verify::Lazy)).unwrap_err();
+    assert!(matches!(e, Error::Format(_)), "{e}");
+    // A head cut before its end, or a file length that is not the head's: refused.
+    assert!(
+        Layer::from_sections(
+            &head[..head.len() / 2],
+            len,
+            sections.clone(),
+            options(Verify::Lazy)
+        )
+        .is_err()
+    );
+    assert!(
+        Layer::from_sections(
+            head.clone(),
+            len + 1,
+            sections.clone(),
+            options(Verify::Lazy)
+        )
+        .is_err()
+    );
+    // One byte changed in a section given: an eager open refuses it.
+    let mut bad = sections.clone();
+    let i = bad.len() - 1;
+    let mut b = bad[i].1.to_vec();
+    b[7] ^= 1;
+    bad[i].1 = b.into();
+    assert!(Layer::from_sections(head.clone(), len, bad, options(Verify::Eager)).is_err());
+    Layer::from_sections(head, len, sections, options(Verify::Eager)).unwrap();
 }
 
 #[test]

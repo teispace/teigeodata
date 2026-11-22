@@ -10,6 +10,15 @@ applied: a minor release could break the public API, and every break is listed u
 
 ## [Unreleased]
 
+### Added
+
+- Engine: `Layer::from_sections` opens a pack from its head and some of its sections, each in
+  its own buffer, so the sections not read stay out of memory; format:
+  `Pack::open_sections` and `Pack::check_blocks` (D-370).
+- Sync: the catalog refresh (`meta`) and the store policy (`policy`) as one async core over
+  an I/O trait, which the native client runs with `meta::block_on`; the client's API is
+  unchanged (D-369).
+
 ## [1.1.0] - 2026-11-17
 
 Reviewed names as their own tier of the names chain, Government of Nepal data admitted and

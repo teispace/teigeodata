@@ -12,8 +12,12 @@ use crate::{Encoding, Error, Kind, Manifest, Part, READER_MAJOR};
 /// An open, structurally valid pack, borrowing its bytes.
 #[derive(Debug)]
 pub struct Pack<'a> {
+    /// The file, or a prefix holding its head when opened from sections.
     bytes: &'a [u8],
     head: PackHead<'a>,
+    /// The sections held apart from `bytes` ([`Pack::open_sections`]): each section's file
+    /// offset and bytes, by offset.
+    apart: &'a [(u64, &'a [u8])],
 }
 
 /// A pack's head, checked without the rest of the file: the header, the section table, the
@@ -320,7 +324,7 @@ impl<'a> Pack<'a> {
     /// The first problem found, as an [`Error`].
     pub fn open(bytes: &'a [u8]) -> Result<Self, Error> {
         let pack = Self::open_head(bytes)?;
-        crate::blocks::check(pack.section(Kind::BLOCK_HASHES), pack.sections())?;
+        pack.check_blocks()?;
         Ok(pack)
     }
 
@@ -349,7 +353,56 @@ impl<'a> Pack<'a> {
         if footer.head_hash != head.header.head_hash {
             return Err(Error::HeadHash);
         }
-        Ok(Self { bytes, head })
+        Ok(Self {
+            bytes,
+            head,
+            apart: &[],
+        })
+    }
+
+    /// Opens a pack from its head and some of its sections, each held in its own buffer, so
+    /// the bytes of the sections not read never enter memory (a reader that fetches ranges or
+    /// reads a browser's files, the [browser store](https://github.com/teispace/teigeodata/blob/main/docs/02-research/notes/browser-store.md#5b-embedding-the-store-writes-any-wasm-reads-added-2026-11-17)).
+    /// `head` is the file's first bytes, at least its head frame (header, section table,
+    /// manifest, signature); `file_len` the file's length; `sections` each section's file
+    /// offset and its bytes, by offset, each exactly one section of the table. A section neither
+    /// in `head` nor in `sections` reads as empty, as a hole would read as zeros: the checks of
+    /// [`Pack::open_head`], which read no section's bytes, but the footer's, whose fields copy
+    /// the header's. Hash a section given with [`Section::verify`] before trusting it.
+    ///
+    /// # Errors
+    /// As [`Pack::open_head`]; [`Error::Length`] if a section given is out of order or is not
+    /// exactly a section of the table.
+    pub fn open_sections(
+        head: &'a [u8],
+        file_len: u64,
+        sections: &'a [(u64, &'a [u8])],
+    ) -> Result<Self, Error> {
+        let parsed = PackHead::parse(head, file_len)?;
+        let mut last: Option<u64> = None;
+        for (offset, bytes) in sections {
+            let fits = parsed
+                .sections()
+                .any(|e| e.offset == *offset && e.length == bytes.len() as u64);
+            if !fits || last.is_some_and(|l| l >= *offset) {
+                return Err(Error::Length);
+            }
+            last = Some(*offset);
+        }
+        Ok(Self {
+            bytes: head,
+            head: parsed,
+            apart: sections,
+        })
+    }
+
+    /// Checks the `BLOCK_HASHES` list against the sections it covers, as [`Pack::open`] does
+    /// (the list's structure; the blocks are proven when read).
+    ///
+    /// # Errors
+    /// As [`Pack::open`]'s check of the list.
+    pub fn check_blocks(&self) -> Result<(), Error> {
+        crate::blocks::check(self.section(Kind::BLOCK_HASHES), self.sections())
     }
 
     /// The head: section table, manifest and signature.
@@ -446,7 +499,13 @@ impl<'a> Pack<'a> {
             item_count: e.item_count,
             decoded_length: e.decoded_length,
             hash: e.hash,
-            bytes: self.bytes.get(start..end).unwrap_or_default(),
+            bytes: self.bytes.get(start..end).unwrap_or_else(|| {
+                self.apart
+                    .binary_search_by_key(&e.offset, |(o, _)| *o)
+                    .ok()
+                    .and_then(|i| self.apart.get(i))
+                    .map_or(&[][..], |(_, b)| *b)
+            }),
         }
     }
 
@@ -526,7 +585,7 @@ impl<'a> Pack<'a> {
         Some((s.get(..8)?.try_into().ok()?, s.get(8..72)?.try_into().ok()?))
     }
 
-    /// The pack's bytes.
+    /// The pack's bytes; its head alone when opened with [`Pack::open_sections`].
     #[must_use]
     pub const fn as_bytes(&self) -> &'a [u8] {
         self.bytes

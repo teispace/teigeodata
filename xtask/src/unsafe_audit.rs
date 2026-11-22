@@ -41,7 +41,8 @@ const EVIDENCE: &[(&str, &str)] = &[
         "Every engine test that opens a layer from a file or bytes; `tests/verify.rs` (a file \
          replaced or resized is seen by `Layer::unchanged`); Miri on the format reader the \
          views wrap (nightly `miri`); the `engine` fuzz target (nightly), through \
-         `Layer::from_bytes`",
+         `Layer::from_bytes`; `tests/components.rs` through `Layer::from_sections` (each \
+         section in its own buffer)",
     ),
     (
         "crates/teigeodata-sync/src/holes.rs",

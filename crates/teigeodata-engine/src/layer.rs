@@ -58,7 +58,7 @@ use teigeodata_format::{Bbox, Kind, Pack, Part, release_cmp};
 use teigeodata_names::PhoneticKey;
 
 use crate::Error;
-use crate::map::{Backing, Owned};
+use crate::map::{Backing, Owned, Source};
 
 /// When a layer's section hashes are checked.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -381,11 +381,25 @@ impl<'a> Views<'a> {
     /// block-hash list is proved (D-142), and no section of a component outside `installed` is
     /// read.
     #[allow(clippy::too_many_lines, reason = "one view per section kind, in order")]
-    pub(crate) fn open(bytes: &'a [u8], reads: Reads) -> Result<Self, Error> {
+    pub(crate) fn open(src: Source<'a>, reads: Reads) -> Result<Self, Error> {
         // A partial install may have holes, BLOCK_HASHES among them: only the head is read.
-        let pack = match reads.installed {
-            None => Pack::open(bytes)?,
-            Some(_) => Pack::open_head(bytes)?,
+        let pack = match (src, reads.installed) {
+            (Source::Whole(bytes), None) => Pack::open(bytes)?,
+            (Source::Whole(bytes), Some(_)) => Pack::open_head(bytes)?,
+            (
+                Source::Sections {
+                    head,
+                    file_len,
+                    sections,
+                },
+                installed,
+            ) => {
+                let pack = Pack::open_sections(head, file_len, sections)?;
+                if installed.is_none() {
+                    pack.check_blocks()?;
+                }
+                pack
+            }
         };
         let missing = missing(&pack, reads.installed)?;
         let parts = reads.parts.resolve(|p| pack.part(Kind::NAMES, p).is_some());
@@ -766,6 +780,34 @@ impl Layer {
         Self::with(Backing::Heap(bytes.into()), options, None)
     }
 
+    /// Opens a pack from its head and some of its sections, each in its own buffer, so the
+    /// sections not read never enter memory: a reader that fetches ranges, or a host's wasm
+    /// reading the browser store's files (note §5b). `head` is the file's first bytes, at least
+    /// its head frame; `file_len` the file's length; `sections` each section's file offset and
+    /// bytes, each exactly one section of the pack's table. Give the sections of the components
+    /// in `options.installed` (every one when `None`, with `BLOCK_HASHES`) and their parts, and
+    /// `BLOCK_HASHES` for a section of 1 MiB or more; a section not given reads as not
+    /// installed. Each section is verified against the signed head as [`Verify`] says.
+    ///
+    /// # Errors
+    /// [`Error::Format`] if the head is not a valid pack head or a section given is not one of
+    /// its sections; as [`Layer::from_bytes`] otherwise.
+    pub fn from_sections(
+        head: impl Into<Box<[u8]>>,
+        file_len: u64,
+        sections: impl IntoIterator<Item = (u64, Box<[u8]>)>,
+        options: LayerOptions,
+    ) -> Result<Self, Error> {
+        let mut sections: Vec<(u64, Box<[u8]>)> = sections.into_iter().collect();
+        sections.sort_unstable_by_key(|(o, _)| *o);
+        let backing = Backing::Sections {
+            head: head.into(),
+            file_len,
+            sections: sections.into_boxed_slice(),
+        };
+        Self::with(backing, options, None)
+    }
+
     /// Opens a pack that lives for the whole program (an embedded baseline).
     ///
     /// # Errors
@@ -896,16 +938,17 @@ impl Layer {
         self.owned.views().places.map_or(0, |p| p.len())
     }
 
-    /// The pack's length in bytes.
+    /// The pack's length in bytes: the file's, also when only some sections are held
+    /// ([`Layer::from_sections`]).
     #[must_use]
     pub fn len(&self) -> usize {
-        self.owned.bytes().len()
+        usize::try_from(self.owned.file_len()).unwrap_or(usize::MAX)
     }
 
     /// Whether the pack is empty (never, for an open pack).
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.owned.bytes().is_empty()
+        self.owned.file_len() == 0
     }
 
     /// Whether the file it was opened from still has the length and modification time it had

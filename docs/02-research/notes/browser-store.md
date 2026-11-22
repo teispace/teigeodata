@@ -174,9 +174,10 @@ the store must not bring a second engine. The contract, option (a) of the consum
   - A reader reads the head first, checks it against the head hash in the index, then reads
     only the sections of the components it opens, each checked against the head's BLAKE3 as it
     arrives. Bytes outside those sections never enter memory.
-  - This needs an engine entry that opens a pack from its head and a set of section buffers.
-    Today's `open_bytes` takes the whole file; the store's sparse files already allow the
-    rest. Per-query page faults are not possible this way, since reads are async; Chrome's
+  - This needs an engine entry that opens a pack from its head and a set of section buffers:
+    `Layer::from_sections(head, file_len, sections, options)` over
+    `Pack::open_sections` (D-370, 2026-11-22). The head and every section held are checked
+    against the table; each section is verified against the signed head as `Verify` says. Per-query page faults are not possible this way, since reads are async; Chrome's
     `read-only` sync handles could add that later.
 - **What the npm package gives a host:**
   - the store worker;

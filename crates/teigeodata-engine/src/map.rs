@@ -27,6 +27,19 @@ use std::path::Path;
 use crate::Error;
 use crate::layer::Views;
 
+/// The bytes [`Views::open`] opens.
+#[derive(Clone, Copy)]
+pub(crate) enum Source<'a> {
+    /// The whole file (holes where sections are not installed).
+    Whole(&'a [u8]),
+    /// A head and some sections ([`teigeodata_format::Pack::open_sections`]).
+    Sections {
+        head: &'a [u8],
+        file_len: u64,
+        sections: &'a [(u64, &'a [u8])],
+    },
+}
+
 /// Where a layer's bytes live.
 pub(crate) enum Backing {
     /// A read-only mapping of an installed pack file.
@@ -36,6 +49,16 @@ pub(crate) enum Backing {
     Heap(Box<[u8]>),
     /// Bytes that live for the whole program, such as an embedded baseline.
     Static(&'static [u8]),
+    /// A pack's head and some of its sections, each in its own buffer
+    /// ([`Layer::from_sections`](crate::Layer::from_sections)).
+    Sections {
+        /// The file's first bytes, at least its head frame.
+        head: Box<[u8]>,
+        /// The file's length.
+        file_len: u64,
+        /// Each section held: its file offset and bytes, by offset.
+        sections: Box<[(u64, Box<[u8]>)]>,
+    },
 }
 
 impl core::fmt::Debug for Backing {
@@ -44,6 +67,7 @@ impl core::fmt::Debug for Backing {
             #[cfg(all(feature = "mmap", not(target_arch = "wasm32")))]
             Self::Mapped(_) => "mapped",
             Self::Heap(_) => "heap",
+            Self::Sections { .. } => "sections",
             Self::Static(_) => "static",
         };
         write!(f, "{kind} ({} bytes)", self.bytes().len())
@@ -58,6 +82,15 @@ impl Backing {
             Self::Mapped(m) => m,
             Self::Heap(b) => b,
             Self::Static(s) => s,
+            Self::Sections { head, .. } => head,
+        }
+    }
+
+    /// The pack file's length: the bytes held, or the whole file's for sections.
+    pub(crate) fn file_len(&self) -> u64 {
+        match self {
+            Self::Sections { file_len, .. } => *file_len,
+            b => b.bytes().len() as u64,
         }
     }
 
@@ -151,8 +184,14 @@ fn check_range(file: &File, offset: u64, length: u64) -> io::Result<()> {
 
 /// A layer's bytes and the views over them.
 pub(crate) struct Owned {
-    // Declared before `backing`, so dropped first: no view outlives the bytes.
+    // Declared before `index` and `backing`, so dropped first: no view outlives the bytes.
     views: Views<'static>,
+    /// For [`Backing::Sections`]: each section's offset and bytes, borrowed from `backing`.
+    #[allow(
+        dead_code,
+        reason = "held for the views, which borrow it; never read directly"
+    )]
+    index: Box<[(u64, &'static [u8])]>,
     backing: Backing,
 }
 
@@ -169,24 +208,53 @@ const fn covariant<'s>(v: &'s Views<'static>) -> &'s Views<'s> {
     v
 }
 
+/// `r` with its lifetime extended: only for data on the heap, in a mapping or static, owned by
+/// an [`Owned`] that outlives every borrow (see [`Owned::new`]).
+fn stable<T: ?Sized>(r: &T) -> &'static T {
+    #[allow(
+        unsafe_code,
+        reason = "B13/D-113: the views borrow bytes owned by the same struct; the bytes \
+                  never move (a mapping, a boxed slice or a static slice, never the struct's \
+                  own fields) and outlive the views (field order), `Views::open` is \
+                  lifetime-generic so it keeps no other copy, and `Owned::views` shortens the \
+                  lifetime to the owner's borrow"
+    )]
+    // SAFETY: see the reason above and the module documentation.
+    unsafe {
+        &*core::ptr::from_ref::<T>(r)
+    }
+}
+
 impl Owned {
     /// Opens the views over `backing`'s bytes.
     ///
     /// # Errors
     /// As [`Views::open`].
     pub(crate) fn new(backing: Backing, reads: crate::layer::Reads) -> Result<Self, Error> {
-        let bytes: &[u8] = backing.bytes();
-        #[allow(
-            unsafe_code,
-            reason = "B13/D-113: the views borrow bytes owned by the same struct; the bytes \
-                      never move (a mapping, a boxed slice or a static slice) and outlive the \
-                      views (field order), `Views::open` is lifetime-generic so it keeps no \
-                      other copy, and `Owned::views` shortens the lifetime to the owner's borrow"
-        )]
-        // SAFETY: see the reason above and the module documentation.
-        let bytes: &'static [u8] = unsafe { &*core::ptr::from_ref::<[u8]>(bytes) };
-        let views = Views::open(bytes, reads)?;
-        Ok(Self { views, backing })
+        let (views, index) = if let Backing::Sections {
+            head,
+            file_len,
+            sections,
+        } = &backing
+        {
+            // Each borrow is of a boxed buffer, which stays put when `backing` moves.
+            let index: Box<[(u64, &'static [u8])]> =
+                sections.iter().map(|(o, b)| (*o, stable(&**b))).collect();
+            let src = Source::Sections {
+                head: stable(&**head),
+                file_len: *file_len,
+                sections: stable(&*index),
+            };
+            (Views::open(src, reads)?, index)
+        } else {
+            let src = Source::Whole(stable(backing.bytes()));
+            (Views::open(src, reads)?, Box::default())
+        };
+        Ok(Self {
+            views,
+            index,
+            backing,
+        })
     }
 
     /// The views, borrowed from the owner.
@@ -194,9 +262,9 @@ impl Owned {
         covariant(&self.views)
     }
 
-    /// The bytes.
-    pub(crate) fn bytes(&self) -> &[u8] {
-        self.backing.bytes()
+    /// The pack file's length.
+    pub(crate) fn file_len(&self) -> u64 {
+        self.backing.file_len()
     }
 
     /// Whether the bytes are a mapping.

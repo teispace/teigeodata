@@ -283,8 +283,8 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 - [x] Refresh and store policy as one async core in `teigeodata-sync` over an I/O trait
   (D-369: the plan written as straight-line code), the native client driving it with
   `block_on` and its tests unchanged (`meta`, `policy`; done 2026-11-22)
-- [ ] An engine entry that opens a pack from its head and a set of section buffers (lazy by
-  section, for a host's own wasm, note §5b)
+- [x] An engine entry that opens a pack from its head and a set of section buffers (lazy by
+  section, for a host's own wasm, note §5b): `Layer::from_sections`, D-370, 2026-11-22
 - [ ] `teigeodata-wasm` `store` feature and `store-worker`: install, update, remove, pin, repair,
   status over `fetch` and OPFS; browser tests (Chromium, Firefox, WebKit) against a local CORS
   mirror and a throwaway-key catalog
@@ -359,3 +359,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-22 | 8.5b: TG-27's main build green locally | D-365 |
 | 2026-11-22 | 8.5b: TG-27 released with the world layer, terrain layer and ID bridge | D-366 |
 | 2026-11-22 | 8.5b: the sans-I/O plans become one async core over an I/O trait | D-369 |
+| 2026-11-22 | 8.5b: a layer from its head and section buffers | D-370 |
