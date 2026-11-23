@@ -456,6 +456,8 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
   518 kB on the wire for Nepal; `elevation_at` falls back to it; G-dem-coarse (D-225, 2026-11-12)
 
 ### 4.10 Exit review
+Scope (D-393): M4 closes before any data wave is planned. TG-15 (India) and TG-14's India tier
+are W1's; TG-14's consumer name review does not block.
 - [ ] M4 criteria met, each with its evidence; progress updated
 
 ## Changelog
@@ -559,3 +561,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-23 | 4.7: delta packs decided on the first record-changing pair | D-385 |
 | 2026-11-23 | 4.3: the catalog is live; the upload item ticked, sharding replaced by one release per catalog release | D-384 |
 | 2026-11-23 | 4.7: delta packs built and read by the engine; shipping them is a new item | D-391 |
+| 2026-11-23 | M4's scope: India's items move to W1, the consumer's name review does not block | D-393 |
