@@ -10,7 +10,8 @@
 //!   parity checks from the JAR with no `java.library.path`, so the JAR's loader is what finds
 //!   the library.
 //! - `--android-test`: the parity checks on a running emulator or device (`adb`), from a dex of
-//!   the classes and the test, through `app_process`.
+//!   the classes and the test, through `app_process`; then a real APK holding a pack stored
+//!   uncompressed, installed and run by `am instrument`, opens it in place (D-306, D-400).
 //! - `--maven [<dir>] [--sign]`: the Maven Central bundle of the JAR and the AAR in `<dir>`
 //!   (default `target/jvm`), see [`crate::maven`].
 
@@ -341,10 +342,11 @@ fn android_test(root: &Path, out: &Path) -> Result<String, Vec<String>> {
         .map(|e| e.path())
         .collect();
     versions.sort();
-    let d8 = versions
+    let build_tools = versions
         .last()
-        .map(|v| v.join("d8"))
+        .cloned()
         .ok_or_else(|| vec!["no Android build-tools".to_owned()])?;
+    let d8 = build_tools.join("d8");
     let classes_dir = out.join("android-test-classes");
     classes(root, &classes_dir, true)?;
     let dex = out.join("android-test-dex");
@@ -426,8 +428,9 @@ fn android_test(root: &Path, out: &Path) -> Result<String, Vec<String>> {
     // The test's progress lines go to stderr, merged into the same stream above; the exit
     // status is its own line.
     if text.contains("jvm parity ok") && text.lines().any(|l| l.trim() == "exit=0") {
+        let apk = apk_test(root, out, Path::new(&sdk), &build_tools, &lib)?;
         Ok(format!(
-            "parity passed on Android ({abi}) through app_process"
+            "parity passed on Android ({abi}) through app_process; {apk}"
         ))
     } else {
         Err(vec![format!(
@@ -435,6 +438,247 @@ fn android_test(root: &Path, out: &Path) -> Result<String, Vec<String>> {
             device_log(root)
         )])
     }
+}
+
+/// The package of the APK test.
+const APK_PACKAGE: &str = "org.teispace.teigeodata.apktest";
+
+/// D-306 inside a real APK (`bindings/jvm/test-android`): an APK holding the tz fixture as an
+/// asset stored uncompressed (`aapt2 -0 tgd`), the binding's classes with `ApkTest` and the
+/// library `lib`, signed with a throwaway key, installed and run by `am instrument`.
+fn apk_test(
+    root: &Path,
+    out: &Path,
+    sdk: &Path,
+    build_tools: &Path,
+    lib: &Path,
+) -> Result<String, Vec<String>> {
+    let err = |e: std::io::Error| vec![e.to_string()];
+    let dir = out.join("apk-test");
+    let _ = std::fs::remove_dir_all(&dir);
+    for d in ["classes", "dex", "assets", "stage"] {
+        std::fs::create_dir_all(dir.join(d)).map_err(err)?;
+    }
+    let mut platforms: Vec<PathBuf> = std::fs::read_dir(sdk.join("platforms"))
+        .map_err(|e| vec![format!("{}/platforms: {e}", sdk.display())])?
+        .filter_map(Result::ok)
+        .map(|e| e.path().join("android.jar"))
+        .filter(|p| p.is_file())
+        .collect();
+    platforms.sort();
+    let android_jar = platforms
+        .last()
+        .ok_or_else(|| vec!["no Android platform with android.jar".to_owned()])?
+        .display()
+        .to_string();
+    apk_dex(root, &dir, build_tools, &android_jar)?;
+    let apk = apk_package(root, &dir, build_tools, &android_jar, lib)?;
+    // Install, run, uninstall.
+    let _ = adb_out(root, &["uninstall", APK_PACKAGE]);
+    adb_setup(root, &["install", "-r", "-t", &apk.display().to_string()])?;
+    let text = adb_out(
+        root,
+        &[
+            "shell",
+            "am",
+            "instrument",
+            "-w",
+            &format!("{APK_PACKAGE}/org.teispace.teigeodata.ApkTest"),
+        ],
+    )
+    .unwrap_or_else(|e| e.join("\n"));
+    let _ = adb_out(root, &["uninstall", APK_PACKAGE]);
+    let result = text
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("INSTRUMENTATION_RESULT: result="))
+        .unwrap_or("")
+        .to_owned();
+    if result.starts_with("apk ok") && text.contains("INSTRUMENTATION_CODE: -1") {
+        Ok(result)
+    } else {
+        Err(vec![format!(
+            "the APK test failed:\n{text}\ndevice log:\n{}",
+            device_log(root)
+        )])
+    }
+}
+
+/// The binding's classes and `ApkTest`, compiled against the platform and dexed into
+/// `dir/dex`.
+fn apk_dex(
+    root: &Path,
+    dir: &Path,
+    build_tools: &Path,
+    android_jar: &str,
+) -> Result<(), Vec<String>> {
+    let s = |p: &Path| p.display().to_string();
+    // The classes: the binding and the test, against the platform's API.
+    let mut sources = java_files(&root.join("bindings/jvm/java"))?;
+    sources.extend(java_files(&root.join("bindings/jvm/test-android"))?);
+    let mut args: Vec<String> = vec![
+        "--release".into(),
+        "17".into(),
+        "-Xlint:all,-options".into(),
+        "-Werror".into(),
+        "-cp".into(),
+        android_jar.to_owned(),
+        "-d".into(),
+        s(&dir.join("classes")),
+    ];
+    args.extend(sources.iter().map(|p| s(p)));
+    command(
+        root,
+        "javac",
+        &args.iter().map(String::as_str).collect::<Vec<_>>(),
+    )?;
+    let mut args: Vec<String> = vec![
+        "--release".into(),
+        "--min-api".into(),
+        MIN_SDK.into(),
+        "--lib".into(),
+        android_jar.to_owned(),
+        "--output".into(),
+        s(&dir.join("dex")),
+    ];
+    args.extend(walk_classes(&dir.join("classes"))?.iter().map(|p| s(p)));
+    command(
+        root,
+        &s(&build_tools.join("d8")),
+        &args.iter().map(String::as_str).collect::<Vec<_>>(),
+    )?;
+
+    Ok(())
+}
+
+/// The signed test APK: the manifest and the asset stored uncompressed, then the code and the
+/// library, aligned and signed with a throwaway key.
+fn apk_package(
+    root: &Path,
+    dir: &Path,
+    build_tools: &Path,
+    android_jar: &str,
+    lib: &Path,
+) -> Result<PathBuf, Vec<String>> {
+    let err = |e: std::io::Error| vec![e.to_string()];
+    let s = |p: &Path| p.display().to_string();
+    // The APK: manifest and the asset, stored uncompressed, then the code and the library.
+    std::fs::copy(
+        root.join("bindings/fixtures/tz.tgd"),
+        dir.join("assets/tz.tgd"),
+    )
+    .map_err(err)?;
+    let manifest = dir.join("AndroidManifest.xml");
+    std::fs::write(
+        &manifest,
+        format!(
+            "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" \
+             package=\"{APK_PACKAGE}\">\n  <application android:hasCode=\"true\" \
+             android:extractNativeLibs=\"true\" />\n  <instrumentation \
+             android:name=\"org.teispace.teigeodata.ApkTest\" \
+             android:targetPackage=\"{APK_PACKAGE}\" />\n</manifest>\n"
+        ),
+    )
+    .map_err(err)?;
+    let unaligned = dir.join("unaligned.apk");
+    command(
+        root,
+        &s(&build_tools.join("aapt2")),
+        &[
+            "link",
+            "-o",
+            &s(&unaligned),
+            "-I",
+            android_jar,
+            "--manifest",
+            &s(&manifest),
+            "-A",
+            &s(&dir.join("assets")),
+            "-0",
+            "tgd",
+            "--min-sdk-version",
+            MIN_SDK,
+            "--target-sdk-version",
+            MIN_SDK,
+            "--version-code",
+            "1",
+        ],
+    )?;
+    let stage = dir.join("stage");
+    std::fs::copy(dir.join("dex/classes.dex"), stage.join("classes.dex")).map_err(err)?;
+    let abi = lib
+        .parent()
+        .and_then(Path::file_name)
+        .ok_or_else(|| vec![format!("{}: no ABI folder", lib.display())])?;
+    let lib_dir = stage.join("lib").join(abi);
+    std::fs::create_dir_all(&lib_dir).map_err(err)?;
+    std::fs::copy(lib, lib_dir.join(LIB)).map_err(err)?;
+    let zip = Command::new("zip")
+        .current_dir(&stage)
+        .args(["-q", "-r", &s(&unaligned), "classes.dex", "lib"])
+        .status()
+        .map_err(|e| vec![format!("zip: {e}")])?;
+    if !zip.success() {
+        return Err(vec!["zip failed".to_owned()]);
+    }
+    let aligned = dir.join("aligned.apk");
+    command(
+        root,
+        &s(&build_tools.join("zipalign")),
+        &["-p", "-f", "4", &s(&unaligned), &s(&aligned)],
+    )?;
+    apk_sign(root, dir, build_tools, &aligned)
+}
+
+/// `aligned`, signed with a throwaway key generated here.
+fn apk_sign(
+    root: &Path,
+    dir: &Path,
+    build_tools: &Path,
+    aligned: &Path,
+) -> Result<PathBuf, Vec<String>> {
+    let s = |p: &Path| p.display().to_string();
+    let ks = dir.join("test.keystore");
+    command(
+        root,
+        "keytool",
+        &[
+            "-genkeypair",
+            "-noprompt",
+            "-keystore",
+            &s(&ks),
+            "-storepass",
+            "android",
+            "-keypass",
+            "android",
+            "-alias",
+            "test",
+            "-keyalg",
+            "RSA",
+            "-keysize",
+            "2048",
+            "-validity",
+            "1",
+            "-dname",
+            "CN=teigeodata apk test",
+        ],
+    )?;
+    let apk = dir.join("apk-test.apk");
+    command(
+        root,
+        &s(&build_tools.join("apksigner")),
+        &[
+            "sign",
+            "--ks",
+            &s(&ks),
+            "--ks-pass",
+            "pass:android",
+            "--out",
+            &s(&apk),
+            &s(aligned),
+        ],
+    )?;
+
+    Ok(apk)
 }
 
 /// What the device logged about a failed run: a crash, or the reason the process was killed.

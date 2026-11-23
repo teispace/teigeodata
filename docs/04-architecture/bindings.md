@@ -208,7 +208,11 @@ place, mapped, with no copy:
 `open_file_range` refuses a range that is not inside the file (`Io`) and a range that is not
 exactly one pack (`Corrupt`: the header names the pack's length). The parity suites open
 `bindings/fixtures/embedded.bin`, a pack at an odd offset between filler bytes, in every
-language.
+language. Inside a real APK, `cargo xtask package-jvm --android-test` builds one holding the tz
+fixture stored uncompressed, installs it and runs `ApkTest` (`bindings/jvm/test-android`) by
+`am instrument`: the descriptor names the APK, and the range opened by that path and by the
+file it names reads what a copy on disk does (D-400; on the emulators of the `jvm` workflow,
+API 24 and 35). An APK whose asset is compressed fails it, as `openFd` refuses it.
 
 ## 8. Dart on the web (D-307)
 

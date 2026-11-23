@@ -229,11 +229,9 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
     registry's check, 79 files' attestations verified).
 - [x] Not blocking M5, recorded:
   - 5.5d tree-shaking waits on Dart linking code assets statically (recheck 2027-01-15);
-  - 5.10c, the first real release, waits on the maintainer's registry setup
-    ([runbook](../../06-engineering/release-runbook.md));
-  - the APK path of D-306 (`/proc/self/fd` of an `AssetFileDescriptor`) is not yet run inside
-    a real APK here: the engine side (a pack at an odd offset of another file) passes in every
-    language; an APK harness is an open item;
+  - 5.10c, the first real release: done with v1.2.0 (D-390);
+  - the APK path of D-306 (`/proc/self/fd` of an `AssetFileDescriptor`): done 2026-11-23
+    (D-400), an APK built, installed and run on the emulators by `package-jvm --android-test`;
   - further .NET work is parked (D-299).
 - [x] Progress updated; Phase 6 starts with its research
 - [ ] Maintainer review: asynchronous, does not block Phase 6 (as D-069, D-080 and D-087)
@@ -271,3 +269,4 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 | 2026-11-14 | 5.10 in three sub-steps after research: one `release.yml` calls the build workflows; trusted publishing where a registry has it; the workflow makes the release commit for SwiftPM's checksum | plan |
 | 2026-11-15 | 5.10a built (D-302); 5.10b built (D-303, D-304): the release also ships each library alone, since the Dart hook and the Go loader download them and nothing built them for Android and iOS | plan |
 | 2026-11-23 | 5.10c ticked: v1.2.0 went out on every registry by the real path | D-390 |
+| 2026-11-23 | The APK path of D-306 run inside a real APK on the emulators | D-400 |
