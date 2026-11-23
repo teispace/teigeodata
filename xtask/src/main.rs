@@ -149,8 +149,9 @@ Tasks:
                     every lockfile's workspace entries; --check fails on any that differs.
   mirror [<id>…] [--check]
                     Upload the stored bytes of pinned sources (every source with a
-                    mirror_url when none are named) to the content-addressed release
-                    `sources`, one asset per file named by its SHA-256 (D-127); needs `gh`.
+                    mirror_url when none are named) to the content-addressed release its
+                    mirror_url names, one asset per file named by its SHA-256 (D-127); a
+                    new release is a draft until uploaded, then published (D-387); needs `gh`.
                     --check uploads nothing and fails on each pinned file not there.
   ids save <build> <out> | ids restore [<tag>] [--build <build>] [--force]
                     The ID registries kept with the data releases (D-261): save writes

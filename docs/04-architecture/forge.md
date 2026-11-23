@@ -91,11 +91,13 @@ country with no folder.
 
 **Moving sources.** GeoNames dumps, Wikidata snapshots, the Microsoft building index and
 SlideRule subsets change in place and have no dated archive. They carry `moving = true` and
-must have a `mirror_url` (`check-data`): the GitHub release `sources` of this repository, one
-asset per file named by its SHA-256 (`…/releases/download/sources/{sha256}`).
-`cargo xtask mirror [<id>…]` uploads the stored bytes of the named sources (every mirrored
-source by default), skipping assets already there, and lists the sources' notices in the
-release notes (D-127).
+must have a `mirror_url` (`check-data`): a GitHub release of this repository, one asset per
+file named by its SHA-256 (`…/releases/download/<tag>/{sha256}`). The first is `sources`;
+releases here are immutable once published, so a source pinned later names a new release,
+`sources-<date>` (D-387). `cargo xtask mirror [<id>…]` uploads the stored bytes of the named
+sources (every mirrored source by default) to the release each `mirror_url` names, skipping
+assets already there; a new release is created as a draft, filled, then published, its notes
+listing the sources' notices (D-127). `mirror --check` finds every pinned file on its release.
 
 ## Readers
 

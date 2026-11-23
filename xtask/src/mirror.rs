@@ -1,9 +1,13 @@
 //! `cargo xtask mirror <id>…`: uploads the stored bytes of pinned sources to our content-addressed
-//! mirror (D-043, D-127), the GitHub release `sources`, one asset per file named by its SHA-256.
-//! A source's `mirror_url` (`…/releases/download/sources/{sha256}`) then serves the pinned
-//! bytes to every build, CI included, after the upstream moves. A tileset uploads every pinned
-//! tile. Assets already on the release are skipped; the release notes list the notices of the
-//! sources it holds (their licences ask for them with the data).
+//! mirror (D-043, D-127), GitHub releases of this repository holding one asset per file named by
+//! its SHA-256. A source's `mirror_url` (`…/releases/download/<tag>/{sha256}`) names its release
+//! and then serves the pinned bytes to every build, CI included, after the upstream moves. A
+//! tileset uploads every pinned tile. Assets already on a release are skipped; the release notes
+//! list the notices of the sources it holds (their licences ask for them with the data).
+//!
+//! Releases on this repository are immutable once published (D-387): the first mirror release,
+//! `sources`, takes no new asset. A newly pinned source names a new release, `sources-<date>`;
+//! the command creates it as a draft, uploads, then publishes it, after which it is fixed too.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -12,8 +16,8 @@ use std::process::Command;
 
 use serde::Deserialize;
 
-/// The release that holds the mirror.
-pub(crate) const TAG: &str = "sources";
+/// The first mirror release; later ones are `sources-<date>` (D-387).
+const FIRST: &str = "sources";
 
 /// Files per `gh release upload` call.
 const BATCH: usize = 16;
@@ -58,7 +62,16 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
         files.extend(files_of(root, s).map_err(one)?);
     }
     if check {
-        return verify(&files, &assets(root).map_err(one)?);
+        let mut on = BTreeSet::new();
+        for (tag, _) in by_release(&chosen, &files).map_err(one)? {
+            on.extend(
+                listed(root, &tag)
+                    .map_err(one)?
+                    .map(|r| r.assets)
+                    .unwrap_or_default(),
+            );
+        }
+        return verify(&files, &on);
     }
     let store = root.join("data/cache/store/sha256");
     let mut problems = Vec::new();
@@ -74,25 +87,39 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, Vec<String>> {
     if !problems.is_empty() {
         return Err(problems);
     }
-    let existing = assets(root).map_err(one)?;
-    let todo: Vec<PathBuf> = files
-        .iter()
-        .filter(|f| !existing.contains(&f.sha256))
-        .map(|f| store.join(&f.sha256))
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
-    let all: Vec<&Source> = lock
-        .sources
-        .iter()
-        .filter(|s| s.mirror_url.is_some() || chosen.iter().any(|c| c.id == s.id))
-        .collect();
-    gh(root, &["release", "edit", TAG, "--notes", &notes(&all)]).map_err(one)?;
-    for batch in todo.chunks(BATCH) {
-        let mut args = vec!["release", "upload", TAG];
-        let paths: Vec<String> = batch.iter().map(|p| p.display().to_string()).collect();
-        args.extend(paths.iter().map(String::as_str));
-        gh(root, &args).map_err(one)?;
+    let mut existing = BTreeSet::new();
+    let mut todo: Vec<PathBuf> = Vec::new();
+    for (tag, group) in by_release(&chosen, &files).map_err(one)? {
+        let all: Vec<&Source> = lock
+            .sources
+            .iter()
+            .filter(|s| tag_of(s).ok().flatten().as_deref() == Some(tag.as_str()))
+            .collect();
+        let release = release(root, &tag, &notes(&all)).map_err(one)?;
+        let new: Vec<PathBuf> = group
+            .iter()
+            .filter(|f| !release.assets.contains(&f.sha256))
+            .map(|f| store.join(&f.sha256))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        if !new.is_empty() && release.immutable {
+            return Err(one(format!(
+                "the release `{tag}` is published and immutable: point the new sources' \
+                 mirror_url at a new release, `{FIRST}-<date>` (D-387)"
+            )));
+        }
+        for batch in new.chunks(BATCH) {
+            let mut args = vec!["release", "upload", tag.as_str()];
+            let paths: Vec<String> = batch.iter().map(|p| p.display().to_string()).collect();
+            args.extend(paths.iter().map(String::as_str));
+            gh(root, &args).map_err(one)?;
+        }
+        if release.draft {
+            gh(root, &["release", "edit", &tag, "--draft=false"]).map_err(one)?;
+        }
+        existing.extend(release.assets);
+        todo.extend(new);
     }
     let bytes: u64 = files
         .iter()
@@ -118,14 +145,14 @@ fn verify(files: &[File], on_release: &BTreeSet<String>) -> Result<String, Vec<S
         .filter(|f| !on_release.contains(&f.sha256))
         .map(|f| {
             format!(
-                "{}: {} ({} B) is not on the `{TAG}` release: run `cargo xtask mirror {}`",
+                "{}: {} ({} B) is not on its mirror release: run `cargo xtask mirror {}`",
                 f.id, f.sha256, f.size, f.id
             )
         })
         .collect();
     if missing.is_empty() {
         Ok(format!(
-            "mirror ok: {} files on the `{TAG}` release",
+            "mirror ok: {} files on the mirror releases",
             files.len()
         ))
     } else {
@@ -219,41 +246,104 @@ fn notes(sources: &[&Source]) -> String {
     out
 }
 
-/// The asset names already on the mirror release, creating the release when it is missing.
-fn assets(root: &Path) -> Result<BTreeSet<String>, String> {
-    let listed = Command::new("gh")
+/// The release a source's `mirror_url` names (`…/releases/download/<tag>/{sha256}`), if any.
+fn tag_of(s: &Source) -> Result<Option<String>, String> {
+    let Some(url) = s.mirror_url.as_deref().filter(|u| !u.is_empty()) else {
+        return Ok(None);
+    };
+    let tag = url
+        .strip_suffix("/{sha256}")
+        .and_then(|u| u.rsplit_once("/releases/download/"))
+        .map(|(_, t)| t)
+        .filter(|t| !t.is_empty() && !t.contains('/'))
+        .ok_or_else(|| {
+            format!(
+                "{}: mirror_url is not …/releases/download/<tag>/{{sha256}}",
+                s.id
+            )
+        })?;
+    Ok(Some(tag.to_string()))
+}
+
+/// The files grouped by the release their source's `mirror_url` names; a chosen source with
+/// none goes to the first release, as before D-387.
+fn by_release<'f>(
+    chosen: &[&Source],
+    files: &'f [File],
+) -> Result<std::collections::BTreeMap<String, Vec<&'f File>>, String> {
+    let mut out = std::collections::BTreeMap::<String, Vec<&File>>::new();
+    for s in chosen {
+        let tag = tag_of(s)?.unwrap_or_else(|| FIRST.to_string());
+        let group = out.entry(tag).or_default();
+        group.extend(files.iter().filter(|f| f.id == s.id));
+    }
+    Ok(out)
+}
+
+/// A mirror release as GitHub has it.
+struct Release {
+    assets: BTreeSet<String>,
+    draft: bool,
+    immutable: bool,
+}
+
+/// The release `tag`, or None when it does not exist.
+fn listed(root: &Path, tag: &str) -> Result<Option<Release>, String> {
+    let out = Command::new("gh")
         .args([
             "release",
             "view",
-            TAG,
+            tag,
             "--json",
-            "assets",
+            "assets,isDraft,isImmutable",
             "-q",
-            ".assets[].name",
+            "[.isDraft, .isImmutable] + [.assets[].name] | .[]",
         ])
         .current_dir(root)
         .output()
         .map_err(|e| format!("gh: {e}"))?;
-    if !listed.status.success() {
-        gh(
-            root,
-            &[
-                "release",
-                "create",
-                TAG,
-                "--prerelease",
-                "--title",
-                "Source mirror",
-                "--notes",
-                "Content-addressed mirror of pinned build inputs.",
-            ],
-        )?;
-        return Ok(BTreeSet::new());
+    if !out.status.success() {
+        return Ok(None);
     }
-    Ok(String::from_utf8_lossy(&listed.stdout)
-        .lines()
-        .map(str::to_string)
-        .collect())
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut lines = text.lines();
+    let draft = lines.next() == Some("true");
+    let immutable = lines.next() == Some("true");
+    Ok(Some(Release {
+        assets: lines.map(str::to_string).collect(),
+        draft,
+        immutable,
+    }))
+}
+
+/// The release `tag` with `notes`: created as a draft when missing (so assets can be added
+/// before it is published and fixed), its notes updated while it is still a draft.
+fn release(root: &Path, tag: &str, notes: &str) -> Result<Release, String> {
+    if let Some(r) = listed(root, tag)? {
+        if r.draft {
+            gh(root, &["release", "edit", tag, "--notes", notes])?;
+        }
+        return Ok(r);
+    }
+    gh(
+        root,
+        &[
+            "release",
+            "create",
+            tag,
+            "--draft",
+            "--prerelease",
+            "--title",
+            "Source mirror",
+            "--notes",
+            notes,
+        ],
+    )?;
+    Ok(Release {
+        assets: BTreeSet::new(),
+        draft: true,
+        immutable: false,
+    })
 }
 
 pub(crate) fn gh(root: &Path, args: &[&str]) -> Result<(), String> {
@@ -276,7 +366,7 @@ pub(crate) fn gh(root: &Path, args: &[&str]) -> Result<(), String> {
 mod tests {
     use std::collections::BTreeSet;
 
-    use super::{File, Lock, choose, notes, tiles, verify};
+    use super::{File, Lock, choose, notes, tag_of, tiles, verify};
 
     #[test]
     fn check_names_each_file_missing_from_the_release() {
@@ -355,5 +445,21 @@ attribution = "C, CDLA"
         let n = notes(&all);
         assert_eq!(n.matches("- A, CC BY\n").count(), 1);
         assert!(n.contains("- C, CDLA\n") && n.contains("SHA-256"));
+    }
+
+    #[test]
+    fn each_source_names_its_mirror_release() {
+        let lock: Lock = toml::from_str(&LOCK.replace(
+            "https://m/{sha256}",
+            "https://github.com/o/r/releases/download/sources-2026.11.23/{sha256}",
+        ))
+        .unwrap();
+        assert_eq!(
+            tag_of(&lock.sources[0]).unwrap().as_deref(),
+            Some("sources-2026.11.23")
+        );
+        assert_eq!(tag_of(&lock.sources[1]).unwrap(), None);
+        let bad: Lock = toml::from_str(LOCK).unwrap();
+        assert!(tag_of(&bad.sources[0]).is_err());
     }
 }
