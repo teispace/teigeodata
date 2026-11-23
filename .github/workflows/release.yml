@@ -437,7 +437,7 @@ jobs:
       - name: npm 11.5.1 or later (trusted publishing)
         run: |
           node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a==11&&(b>5||(b==5&&c>=1)))?0:1)' "$(npm --version)" \
-            || npm install -g npm@12.2.2
+            || npm install -g npm@12.2.2 # zizmor: ignore[adhoc-packages] npm itself, pinned exact: trusted publishing needs 11.5.1 or later
           npm --version
       - name: Publish (a version already there is skipped)
         run: |
