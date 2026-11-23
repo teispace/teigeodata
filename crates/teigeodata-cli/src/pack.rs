@@ -11,7 +11,7 @@ use teigeodata_format::component::Component;
 use teigeodata_format::idmap::IdMap;
 use teigeodata_format::names::Names;
 use teigeodata_format::places::Places;
-use teigeodata_format::{Encoding, Kind, Pack, Tag, key_id};
+use teigeodata_format::{Encoding, Kind, Pack, Part, SectionLabel, Tag, key_id};
 
 use crate::Fail;
 
@@ -99,6 +99,7 @@ fn describe(path: &Path, pack: &Pack<'_>, len: usize) -> Value {
             *by_component.entry(component_of(s.kind())).or_default() += bytes;
             json!({
                 "kind": s.kind().to_string(),
+                "part": s.part().to_string(),
                 "component": component_of(s.kind()),
                 "encoding": encoding(s.encoding()),
                 "items": s.item_count(),
@@ -166,14 +167,14 @@ pub(crate) fn inspect(path: &Path, as_json: bool, out: &mut dyn Write) -> Result
     }
     writeln!(
         out,
-        "\n{:<14} {:<14} {:<6} {:>10} {:>12} {:>12}",
+        "\n{:<26} {:<14} {:<6} {:>10} {:>12} {:>12}",
         "section", "component", "enc", "items", "bytes", "decoded"
     )?;
     for s in pack.sections() {
         writeln!(
             out,
-            "{:<14} {:<14} {:<6} {:>10} {:>12} {:>12}",
-            s.kind().to_string(),
+            "{:<26} {:<14} {:<6} {:>10} {:>12} {:>12}",
+            SectionLabel(s.kind(), s.part()).to_string(),
             component_of(s.kind()),
             encoding(s.encoding()),
             s.item_count(),
@@ -357,17 +358,18 @@ struct SectionChange {
     new_bytes: Option<usize>,
 }
 
+/// Each section by kind and part (ADR-0040): a kind split into parts, such as NAMES by
+/// language, is compared part by part.
 fn section_changes(old: &Pack<'_>, new: &Pack<'_>) -> Vec<SectionChange> {
-    let kinds: std::collections::BTreeSet<u32> = old
+    let keys: std::collections::BTreeSet<(u32, u32)> = old
         .sections()
         .chain(new.sections())
-        .map(|s| s.kind().0)
+        .map(|s| (s.kind().0, s.part().0))
         .collect();
-    kinds
-        .into_iter()
-        .map(|k| {
-            let kind = Kind(k);
-            let (before, after) = (old.section(kind), new.section(kind));
+    keys.into_iter()
+        .map(|(k, p)| {
+            let (kind, part) = (Kind(k), Part(p));
+            let (before, after) = (old.part(kind, part), new.part(kind, part));
             let change = match (&before, &after) {
                 (Some(x), Some(y)) if x.hash() == y.hash() => "same",
                 (Some(_), Some(_)) => "changed",
@@ -375,7 +377,7 @@ fn section_changes(old: &Pack<'_>, new: &Pack<'_>) -> Vec<SectionChange> {
                 (_, None) => "removed",
             };
             SectionChange {
-                kind: kind.to_string(),
+                kind: SectionLabel(kind, part).to_string(),
                 change,
                 old_bytes: before.map(|s| s.bytes().len()),
                 new_bytes: after.map(|s| s.bytes().len()),
@@ -394,7 +396,7 @@ fn print_diff(
     for s in sections.iter().filter(|s| s.change != "same") {
         writeln!(
             out,
-            "  {:<14} {:<8} {} -> {} bytes",
+            "  {:<26} {:<8} {} -> {} bytes",
             s.kind,
             s.change,
             bytes(s.old_bytes),

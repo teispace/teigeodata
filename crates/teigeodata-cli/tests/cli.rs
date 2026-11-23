@@ -117,6 +117,59 @@ fn inspect_shows_the_manifest_sections_and_components() {
     assert!(text.contains("attribution: 2 notices"), "{text}");
 }
 
+/// A kind split into parts (ADR-0040) is compared and listed part by part: a change in the
+/// `ne` names alone shows as that part, the base part unchanged (it hid as "unchanged" when
+/// only a kind's base part was compared).
+#[test]
+fn diff_and_inspect_show_each_part() {
+    let d = dir("diff-parts");
+    let model = common::synthetic(50, 3).encode();
+    let base = Pack::open(&model).unwrap();
+    let write = |name: &str, ne: &[u8]| {
+        let mut sections: Vec<(Kind, Part, Encoding, u64, &[u8])> = base
+            .sections()
+            .filter(|s| s.kind() != Kind::BLOCK_HASHES)
+            .map(|s| (s.kind(), s.part(), s.encoding(), s.item_count(), s.bytes()))
+            .collect();
+        sections.push((
+            Kind::NAMES,
+            Part::language("ne").unwrap(),
+            Encoding::RAW,
+            1,
+            ne,
+        ));
+        let mut w = Writer::new("np", "places", "2026.11.0").unwrap();
+        w.manifest(Tag::LICENCE, b"odbl").unwrap();
+        let path = d.join(name);
+        std::fs::write(&path, w.pack_parts(&sections, None).unwrap()).unwrap();
+        path
+    };
+    let (old, new) = (
+        write("old.tgd", b"ne names"),
+        write("new.tgd", b"ne names, changed"),
+    );
+    let j = json(&["diff", s(&old), s(&new), "--json"]);
+    let change = |kind: &str| {
+        j["sections"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|x| x["kind"] == kind)
+            .map(|x| x["change"].clone())
+    };
+    assert_eq!(change("NAMES"), Some(Value::from("same")), "{j}");
+    assert_eq!(change("NAMES `ne`"), Some(Value::from("changed")), "{j}");
+    let text = ok(&["inspect", s(&new)]);
+    assert!(text.contains("NAMES `ne`"), "{text}");
+    let parts: Vec<Value> = json(&["inspect", s(&new), "--json"])["sections"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["part"].clone())
+        .collect();
+    assert!(parts.contains(&Value::from("ne")) && parts.contains(&Value::from("base")));
+}
+
 #[test]
 fn verify_checks_hashes_values_and_the_signature() {
     let d = dir("verify");
