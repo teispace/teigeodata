@@ -18,85 +18,21 @@ A short status. The numbers and evidence live in each phase file and the
 | 2 Indexes | **M2 met** 2026-11-07 (D-087) | [phase 2 §2.4](../07-planning/phases/phase-2.md#24-exit-review) |
 | 3 Forge and Nepal data | **M3 met** 2026-11-15 (D-350): both Nepal builds reproducible in CI with every gate green, `ACCURACY.md` for each on the CI-built packs (D-348); open, not blocking: Q-009 (lite postal codes), the maintainer's corrections review, Q-028 (its data side done 2026-11-23: census 2021 counts for the local levels, D-386; the ranking lever left is settlements' populations) | [phase 3 §3.8](../07-planning/phases/phase-3.md#38-exit-review), [accuracy](../../data/countries/np/ACCURACY.md), [accuracy (lite)](../../data/countries/np/ACCURACY-lite.md) |
 | 4 Engine, baseline and sync | **M4 met** 2026-11-23 (D-398): delta packs ship as the default update (D-395); TG-15 and TG-14's India tier go to W1 (D-393) | [phase 4 §4.10](../07-planning/phases/phase-4.md#410-exit-review) |
-| 5 Boundary and bindings | **M5 met** 2026-11-15 (D-308); open, not blocking: 5.5d (Dart static linking), 5.10c (the first real release, on the maintainer's setup), the APK path of D-306 on a real APK | [phase 5 §5.11](../07-planning/phases/phase-5.md#511-exit-review) |
+| 5 Boundary and bindings | **M5 met** 2026-11-15 (D-308); 5.10c done by the 1.2.0 release (D-390); open, not blocking: 5.5d (Dart static linking), the APK path of D-306 on a real APK | [phase 5 §5.11](../07-planning/phases/phase-5.md#511-exit-review) |
 | 6 Servers | **M6 met** 2026-11-15 (D-321): HTTP and MCP servers over one request core, conformance in CI, load gated, hosted seams | [phase 6 §6.5](../07-planning/phases/phase-6.md#65-exit-review) |
 | 7 Docs site | **M7 met** 2026-11-15 (D-330): the site, guides in every language with tours that ran, the generated reference, coverage, country and measured pages, the playground (D-328); since then the site moved to Vercel at teigeodata.teispace.com (D-353) with a landing page and SEO (D-354), docs by task with every language in tabs (D-355), and a full-screen playground on Leaflet and OpenStreetMap (D-356), then packs added while it runs, a card on the map at every click and a real recording of it on the landing page (D-357); open, not blocking: registry installs after the registries | [phase 7 §7.7](../07-planning/phases/phase-7.md#77-exit-review) |
 | 8 Hardening and release | **M8 met** 2026-11-23 (D-390): hardening, the 1.0 promise, Nepal's data in the live catalog, 1.2.0 on every registry. History: 8.1: fuzz targets and the weekly campaign (D-331, D-332). 8.2: threat model, unsafe inventory (D-333), server bounds (D-334), zizmor and Scorecard (5.3 of 10 on its first run; what is left is the maintainer's), CodeQL. 8.3: profiles of every suite with `cargo xtask profile`, two measured speed-ups, and the scaling gate (D-338); suite C, the competitive report (D-340), first run 2026-11-15. 8.4: the pack format frozen at 1.0 (D-335, D-336), [what 1.0 promises](../06-engineering/semver.md), growable enums `#[non_exhaustive]` (D-337), the API review (D-341), the CHANGELOG's 1.0 section, the docs audit (D-343). 8.5: every pinned source checked on the mirror before a data build (D-342); Nepal's main build green in CI (D-347), M3 met (D-350), the 1.0.0 dry run green with the API and ABI gates clean (D-346); a blob reader fix found by Go's fuzzer (D-349); each place's population in the packs and every API (D-351), found missing while staging the release; the data release [data-2026.11.15](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.15) (Nepal main and lite with populations, from CI); the release dry run green on `v1.0.0-rc.2` (run 43741537528, 52 jobs); **v1.0.0 released on GitHub** 2026-11-16 (D-352, registries off; [release](https://github.com/teispace/teigeodata/releases/tag/v1.0.0)). **1.0.1, the first registry release** (D-358): every account and secret set up 2026-11-16, its dry run on `main` (run 43888817407). 1.0.1 on every registry (first publishes by hand, D-361 for pub.dev); **1.1.0 published everywhere from CI by trusted publishing** 2026-11-16 (run 43931508857; `Origin::Reviewed`, government sources D-360). TG-14's reviewed names built (D-359); next a second reading of the 42 held rows and a data release with the error rates. 8.5b (D-362): the browser store researched; TG-26's app-sized layer released as [data-2026.11.17](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.17) (172,339 places, 7.04 MB on the wire); app data becomes two packs, Nepal main with ward outlines from OSM (D-363): the ward stage built (6,717 wards, one planar arrangement, G-topo 0.021 m); the first CI build found four fixes (D-364: ward names after every names tier, reviewed credits in G-lic, a layer's own name and release, `world: none`); lite green in CI (run 44073019704); main green after four fixes (D-365: snapping keeps each ring's turn, numbered units rank low, population over land no ward holds, the point budget 700 kB; CI run 44981453398); released as [data-2026.11.22](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.22) (D-366): `app-np` with wards (6.52 MB on the wire, 5.51 at 100 m) beside `app-world` (3.13 MB), the terrain as its own layer (519 kB) and the lite-to-main ID bridge ([phase 8 §8.5b](../07-planning/phases/phase-8.md)). The consumer's review added TG-30..34: IDs across lite and main (answered by D-368: two ID lines, a bridge in every data release), one reviewed spelling, landmarks, the terrain pack (released), the layer's name (released). chrono's unmaintained advisory is ignored with a review trigger (D-367); a source missing from the store is named with its fetch. 8.5b step 1 done (D-369): the catalog refresh (`meta`) and the store policy (`policy`) are one async core over an I/O trait, the native client drives them with `block_on`, every test unchanged; `Layer::from_sections` opens a pack from its head and section buffers (D-370); the pack driver (D-371) and the store (D-372) are async cores too, and the browser store keeps the native layout; every wasm package reads an installed pack by section (`installedSections`, `Engine.openInstalled`, D-373); the client is one async core, `session::Session` (D-374); the browser store ships as `teigeodata-wasm/store` (D-375: 424,094 B gzipped, its checks on Node.js and Bun); its worker over OPFS with per-file read locks, in Chromium, Firefox and WebKit (D-376), documented on the store page. 8.5b's store work is done, green in WebKit too (a persistent profile, 054d799). The mirror page; Kathmandu काठमाडौं on every level (D-377, TG-31); the wider nasal fold (D-378, Q-037); the world part's first-level units in English (D-379, Q-036); 11 of TG-14's 42 held rows (D-380); landmarks as `locality` with a class (D-381, TG-32). Released as [data-2026.11.22.2](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.22.2) (packs from CI run 45031540294; layers that answer their parts' retired IDs, D-382). The key ceremony done and the signed catalog live, read by **1.2.0, released on every registry** 2026-11-23 (D-383, D-384; the API gate's find fixed by D-388); census 2021 populations for Nepal's local levels (D-386). | [phase 8](../07-planning/phases/phase-8.md) |
 
-- **Now (Phase 3):** the Nepal main pack has 100,358 places with heights (D-111), admin
-  records linked (D-110), same-place merges (D-116), the first corrections (D-117), modelled
-  unit populations (D-123), settlement rank (D-124) and a source's duplicates joined (D-125);
-  golden on the product's search recall@1 0.859, pass 0.924; every pack carries its sources'
-  notices (D-126); the `data-build` workflow runs G-det, G-lic and the golden gate per pack
-  (D-128), `forge make` gates its budget (D-129), and the stages gate topology and place assignment
-  (D-130), and conflation precision and recall (D-131); lite has heights from NASADEM (D-132); heights are their own ELEVATION section (D-133) and a place's timezone its own 444-byte PLACE_TZ section (D-134); every section belongs to one component and `check-pack` gates wire bytes per component (G-wire, D-135: points-only Nepal 522 kB); the engine opens a pack installed with any component set and names a missing one (D-136), 4.1b; a Cargo feature per component cuts the points-only engine to 60.9 KiB gzip (D-137); lite has timezones from tzdb (D-138), and G-tz checks them against GeoNames (D-139). Next: 3.7 (the lite build from clean-room sources
-  only, `ACCURACY.md`). The CI data build needs the input mirror (D-127): the maintainer
-  approves publishing the `sources` release, then `cargo xtask mirror` uploads about 1.45 GB (NASADEM added, D-132).
-- **In parallel (Phase 4):** the engine (4.1, D-113, D-114; Nepal timings in
-  [phase-4 benches](../02-research/benches/phase-4.md#nepal-main-pack)) and the transport
-  (4.4, D-112) are on `main`; the product's search is at parity with the spike (D-121:
-  recall@1 0.797, p50 6.7 µs); radius queries and the in-pack hierarchy (D-140), `Shared`
-  snapshots (D-141), L1/L4/L5 measured to 10 layers and 1 GiB, open O(head) with block-hash
-  lists proved on first read (D-142); `parent`, `ancestors` and `children` across packs by
-  ancestor stubs (D-143), search contexts split-invariant; baseline sources researched
-  (D-144); Nepal's baseline slice built by `forge baseline` (D-145: 53 rows, 159 kB main),
-  level-1 units now under their country (D-146); the world part's countries and cities by
-  `forge world` (D-147: 3.77 MB, 98.46% of cities answered by `admin_at`), the topology stage
-  at world scale (D-148); the locator (`countries_near`, `missing_packs`) by distance on the
-  stored outlines, no country missed over 109,659 border probes at 1 km, 11.9 µs a query
-  (D-149); world admin 1 cut to the Nepal view (D-150: 4,571 units, world part 5.73 MB,
-  cities under their unit); world timezones from the units, no geometry (D-151: 361 zones,
-  30 kB, `tz_at` agrees with a city's own zone at 97.57% of cities); slices keep the names
-  their world row would (D-152: Nepal's slice 73 kB, −54%); the baseline ships as one merged
-  file (D-153: `forge embed`, 5.90 MB, the engine's `baseline` feature), and the world meets each
-  pack country on its slice's line (D-154: every place answers as the layers do); main's
-  world admin 0 and 1 come from Overture's OSM-derived divisions (D-155): the world's land
-  thinned as one partition, units owned by the Nepal view where it differs by at least 15 km
-  (D-156), islets under the tolerance's square left out at 2 km (D-157: 5.60 MB merged, 3,877
-  units, locator radius 3 km, 0 probes missed), and a region ranked below the city of its name
-  (D-158); thinning on sorted, banded records (122 s, 2.46 GB peak); the TUF client
-  `sync::trust` (D-159), the catalog's `custom` schema v1 (D-160) and the differential against
-  python-tuf (D-161), sizes that match G-wire and SHA-256 targets (D-162), and the repository
-  tooling `xtask tuf` with the timestamp workflow, off until the first ceremony (D-163), and
-  discovery: the engine as the catalog's `Resolver`, `Catalog::find` (D-164), and the
-  differential against `tough` (D-165); 4.5: the layout from the head frame alone (D-166) and
-  the sans-I/O installer that checks every block before writing it (D-167), and the
-  `Transport` trait with its `ureq` default (D-168), and resume by frame with the staging file
-  as its own record (D-169), and mirrors with demotion (D-170), and the store: atomic install, journal and
-  recovery, crash-tested at every step (D-171); 4.6: the storage manager (quota, LRU eviction
-  with pins and dependency protection, journal version 2) and the snapshot swap
-  `Shared::follow` (D-172), and offline `verify(deep)` and repair by resuming over a copy
-  (D-173); 4.7: updates reuse every unchanged frame of the replaced release (D-174); 4.8: the
-  gate register, packs refuse an older release, and gate 12 measured red on a generated world
-  (1.42 MB gzip, D-175); the catalog delegated by country, gate 12 green (largest role 220 KB
-  gzip, D-176), both oracles agreeing over the country roles (D-177); 4.9: the CLI researched (D-178) and the catalog refresh `sync::refresh` with the timestamp as the commit point (D-179), `tgd`'s pack commands (D-180), its queries with native, GeoJSON and Nominatim output (D-181), its store commands from `init` to `remove`, end to end over HTTP (D-182), and its completions, guide and timings (D-183); gate 14's seam, installs in passes over the files a platform downloaded, with macOS `URLSession` keeping `Range` in the background and across a redirect (D-184), the iOS simulator surviving an app killed mid-download (D-185), and Android UIDT and the browser's OPFS doing the same (D-186): sync gate 14 green by hand; gate 8 with `tgd` itself killed mid-install, which made installs stream frame by frame (D-187); a world-size install whose block-hash list spans frames, run nightly (D-188); a partial install takes only its sections' space on disk, holes punched where APFS would fill them (D-189), Windows too, with a Windows CI job (D-190). Next: the two-release delta measurement needs two Nepal builds; the release upload and the first
-  ceremony wait for the maintainer; the world byte-identity check after the thinning change
-  waits for the inputs to be fetched again.
-- **First consumer brief (Tithipatra, D-193, [reply](../01-product/consumers/tithipatra.md),
-  phase 4 §4.9b):** done: a place's box and outline (TG-04, D-194), a height names its DEM
-  product, spacing and datum (TG-07, D-195), zone rules from the outlines' own tzdb release
-  (TG-03, D-196), ISO 3166 codes (TG-02, D-197), the release policy and the `v0.1.0` tag
-  (TG-01, D-198), zones before 1970 researched (TG-08: backzone adds nothing for South Asia).
-  Point → postal code in the engine and `tgd postal` (3.5, D-200); substring search (TG-06,
-  D-199: Nepal SUBSTRING 2.56 MB, golden substring class 9 of 9 at rank 3). Waiting: Nepal and
-  India data releases (TG-05, maintainer steps).
-- **Terrain (D-192):** packs carry the DEM masked to their units and the tiles around every
-  place with a height; `elevation_at` and `tgd elevation` answer any point; Nepal main DEM
-  64.2 MB of a 78.8 MB pack, points-only download 536 kB. Summits are `natural` places with
-  their surveyed heights where they agree with the DEM (D-201: 2,726, Everest 8,849 m); names
-  carrying their context are dropped (D-202). Lite: 80.2 MB pack (NASADEM DEM 68.4 MB),
-  points-only download 501 kB, golden recall@1 0.829, 210 s and 1.56 GB peak to build.
-- **Split builds (D-191):** `forge make <cc> --split` writes one pack per province with its
-  ancestor stubs, proved against the country pack; Nepal 7 parts, 1.16× the pack. Tiles for
-  India are W1.
-- **Size ideas to measure:** the timezone REGION (17% of the main pack) and the finest admin
-  arcs ([ideas](../01-product/ideas.md)).
-- **Maintainer answers (2026-11-11, D-203 to D-212):** mirror approved; lite keeps NASADEM;
-  postcodes main only until Nepal Post opens them; lite claim area digitised from the 2020
-  map; ODbL comparisons allowed as gates; corrections approved; labels delegated to agents;
-  full key ceremony; all registry names reserved (the maintainer signs in); GitHub private
-  reporting; the browser host deferred, GitHub Releases only (D-212). **Waiting on the maintainer:**
-  the key ceremony, registry sign-ins (later, before the first public release), sending the Nepal Post request.
+- **Now (2026-11-23):** every phase exit, M0 to M8, is met; v1.2.0 is on every registry and the
+  signed catalog is live (D-383, D-384, D-390). Delta packs are the default update (D-395); the
+  first live delta comes with the next data release. Data waves (India first) are planned only
+  after the items below are closed (D-393).
+- **Open, the project's own:** Q-028's ranking lever (a settlement and the unit it names);
+  the second reading of TG-14's 42 held name rows and a data release with the error rates;
+  the transliterator's v1 targets (TG-14); see [open questions](../07-planning/open-questions.md).
+- **Open, waiting outside the project:** Nepal Post's postcode licence (Q-009); a ward layer
+  with stated terms for lite (Q-035); Dart static linking for 5.5d (recheck 2027-01-15); the
+  maintainer's asynchronous phase reviews and the corrections review (phase 3 §3.6).
 
 ## Session log
 
@@ -197,3 +133,5 @@ A short status. The numbers and evidence live in each phase file and the
 | 2026-11-16 | **v1.0.0 on GitHub** (D-352: `release.yml` input `registries`, off): run 43841066655 green, tag `v1.0.0` and `bindings/go/v1.0.0` at the release commit `5f7d916`, 79 files attested; checked from a new project on the tag reading data-2026.11.15. The site's guides install `v1.0.0`. The registries follow the maintainer's test | [phase 8 §8.6](../07-planning/phases/phase-8.md#86-exit-review) |
 | 2026-11-16 | D-357: the playground's catalog of packs (Nepal's places without terrain, 31 m terrain for five regions, cut by `tgd extract` and pinned by SHA-256), added while it runs and kept in the browser; a card on the map at every click; location; the landing page's recording (`video.mjs`, `film.tsx`). Fixed on the way: `tgd extract --bbox` copied the whole terrain grid, a component extract of a pack with parts failed | [playground note §11](../02-research/notes/docs-playground.md#11-revision-2026-11-16-packs-at-run-time-a-card-on-the-map) |
 | 2026-11-17 | TG-26: profile `app` (a part may leave its outlines out), released as data-2026.11.17 from 52892e6 (verified from a fresh download). TG-27..29 placed; Nepal wards: neither build has outlines, OSM has 6,741 ward relations, so the main build gains an OSM boundary stage (D-363); Devanagari spelling folds asked (Q-037) | Next: the TG-27 research note and stage, then TG-25 |
+| 2026-11-22 | Nepal main with wards green (D-365) and the app data release (D-366); the store, catalog refresh, policy and driver as one async core (D-369..374); the browser store `teigeodata-wasm/store` and its OPFS worker (D-375, D-376); Kathmandu काठमाडौं on every level (D-377), the न fold (D-378), English first-level names (D-379), landmarks as a class (D-381); released as data-2026.11.22.2 | the key ceremony; M8 review |
+| 2026-11-23 | The catalog's key vault and the live catalog (D-383, D-384); census 2021 local-level counts (D-386), the mirror across releases (D-387); **v1.2.0 on every registry**; **M8 met** (D-390); delta packs decided, built, read (D-385, D-391), their query rules (D-394) and shipped as the default update (D-395); no `tgd merge` (D-396); settlement catchment rejected for Q-028 (D-392); **M4 met** (D-397, D-398) | close the project's own open items, then plan W1 (D-393) |

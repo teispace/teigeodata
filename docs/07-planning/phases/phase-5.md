@@ -175,7 +175,7 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
   (874 µs)
 
 ### 5.10 Release pipeline
-- [ ] Per-ecosystem publish jobs with provenance on every artifact; the dry run on GitHub (S9).
+- [x] Per-ecosystem publish jobs with provenance on every artifact; the dry run on GitHub (S9).
   Publishing itself needs the maintainer's accounts and namespaces (`com.teispace`, npm
   `@teispace`, PyPI, pub.dev, NuGet). [Research](../../02-research/notes/release-pipeline.md):
   one `release.yml` calling the build workflows, registry steps in its own jobs
@@ -192,11 +192,11 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
     bundle. Done 2026-11-15: in run 43629194780 every registry's check passed: `cargo publish
     --dry-run` for the eight crates, `npm publish --dry-run`, `twine check --strict`,
     `dart pub publish --dry-run`, `swift package dump-package`, `go vet`, the Maven bundle)
-  - [ ] 5.10c the real path behind the `release` environment, and the maintainer's runbook
+  - [x] 5.10c the real path behind the `release` environment, and the maintainer's runbook
     (built, D-305: the release commit and tags pushed atomically with a deploy key so the tag
     starts `pub.yml`, every registry publish idempotent, the Maven signing proven with a
-    throwaway key; [runbook](../../06-engineering/release-runbook.md). The first real release
-    waits on the maintainer's setup)
+    throwaway key; [runbook](../../06-engineering/release-runbook.md). Done 2026-11-23: v1.2.0
+    published on every registry by this path, D-390)
 
 ### 5.11 Exit review
 - [x] M5 criteria met (2026-11-15, D-308), each against the [roadmap](../roadmap.md):
@@ -270,3 +270,4 @@ own package format, passes the parity suite and has its benchmark row. Nothing n
 | 2026-11-14 | 5.9 done: the 1,000-row query is a radius query (text search returns a few dozen best hits), decoded in each language (D-301) | plan |
 | 2026-11-14 | 5.10 in three sub-steps after research: one `release.yml` calls the build workflows; trusted publishing where a registry has it; the workflow makes the release commit for SwiftPM's checksum | plan |
 | 2026-11-15 | 5.10a built (D-302); 5.10b built (D-303, D-304): the release also ships each library alone, since the Dart hook and the Go loader download them and nothing built them for Android and iOS | plan |
+| 2026-11-23 | 5.10c ticked: v1.2.0 went out on every registry by the real path | D-390 |
