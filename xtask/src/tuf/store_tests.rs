@@ -789,7 +789,8 @@ fn a_version_1_journal_is_read_and_upgraded() {
     // A journal from a newer version is refused, and nothing is removed.
     let mut f = fs.clone().open("journal").unwrap();
     f.set_len(0).unwrap();
-    f.write_all(b"{\"version\":4,\"packs\":[]}").unwrap();
+    // Version 4 (deltas, D-395) is the newest a store reads.
+    f.write_all(b"{\"version\":5,\"packs\":[]}").unwrap();
     assert!(Store::open(fs.clone()).is_err());
     assert_eq!(fs.clone().list("packs").unwrap().len(), 1);
 }
