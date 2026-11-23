@@ -261,10 +261,12 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] Section re-download over frames (S3): `fetch::update_from`, used by `Store::install`
   over the release it replaces; unchanged frames read from the old file and checked against
   the new signed hashes (2026-11-11, D-174)
-- [ ] Two real consecutive Nepal releases: bytes for section re-download against delta packs
+- [x] Two real consecutive Nepal releases: bytes for section re-download against delta packs
   (and zstd patches, dropped unless this disagrees); decision recorded
   - first pair measured (D-273, 2026-11-14): a layout release, 11.4 % of the asset by section
     re-download; the delta-pack decision waits for a release that changes records
+  - second pair (D-385, 2026-11-23): 240 of 109,169 places changed; section re-download
+    66.7 % of the asset, a delta pack about 0.17 %: delta packs win, about 400 times
 - [ ] If delta packs win: forge emission, compaction policy, L5 with delta layers
 
 ### 4.8 The 15 sync gates
@@ -544,3 +546,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-14 | 4.7: the first real release pair measured; delta packs wait for a record-changing release | D-273 |
 | 2026-11-16 | TG-14: reviewed names as a tier, keyed by stable ID, guarded, licence-classed by source | D-359 |
 | 2026-11-23 | 4.3: the first ceremony is one command with an encrypted vault on the everyday machine | D-383 |
+| 2026-11-23 | 4.7: delta packs decided on the first record-changing pair | D-385 |

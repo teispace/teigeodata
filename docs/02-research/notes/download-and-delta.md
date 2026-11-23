@@ -1,7 +1,7 @@
 ---
 title: "Download and delta: transport compression, ranged downloads, updates"
 status: research
-updated: 2026-11-14
+updated: 2026-11-23
 owner: research-agent
 revisit: 2027-02-09
 ---
@@ -395,6 +395,28 @@ least 6.3 MB by section re-download when rows reorder (an added or moved place),
 times more; a rename alone changes only the name parts (NAMES, SEARCH, SUBSTRING: 5.6 MB
 here). The decision waits for the first release that changes records (the next data
 correction of a country), measured with the same example (D-273).
+
+### 3.8 The second pair: a release that changes records (2026-11-23, D-385)
+
+`app-np` from `data-2026.11.22` (release 2026.11.22) to `data-2026.11.22.2` (2026.11.23),
+measured with `examples/delta_measure.rs` at zstd 19, with the change counted by `tgd diff`:
+
+- **Changed places:** 240 of 109,169 (0.22 %): 176 added, 2 removed, 60 moved, 3 renamed,
+  52 retyped, some in more than one kind. These are the landmark joins and classes (D-381)
+  and Kathmandu's spelling (D-377).
+- **Rows reorder:** an added or moved place does, so every place-keyed section changes.
+  Only the outlines and their indexes (ADMIN_REGION, ARCS, POLY_INDEX) are reused.
+
+| | Bytes | Share |
+|---|--:|--:|
+| Whole asset | 6,542,546 | 100 % |
+| Section re-download fetches | 4,362,532 | 66.7 % |
+| Place-keyed sections (ELEVATION, HIERARCHY, IDMAP, NAMES, PLACES, PLACE_TZ, SEARCH) | 4,082,601 | 37.4 B a place |
+| A delta pack of the 240 changed places (the same sections' bytes a place, plus a head) | about 11,000 | 0.17 % |
+
+**Delta packs win by about 400 times** on a record-changing release, as the first pair's model
+predicted (D-273: about 100 times at 1 % of places). zstd patches stay dropped. The delta pack's
+size is a model until the forge emits one; its gate measures the real bytes against this.
 
 ## 4. Options compared
 
