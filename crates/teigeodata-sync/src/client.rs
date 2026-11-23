@@ -20,8 +20,9 @@ use std::path::{Path, PathBuf};
 use teigeodata_format::Part;
 use teigeodata_format::component::Selection;
 
-use crate::catalog::Entry;
+use crate::catalog::{self, Entry};
 use crate::fetch::{Downloads, FetchError, Mirrors, Ready, Transport, Ureq};
+use crate::install::Installed;
 use crate::meta::block_on;
 use crate::policy::{self, Outcome, Packs};
 pub use crate::policy::{
@@ -30,7 +31,7 @@ pub use crate::policy::{
 use crate::refresh::{self, Refreshed};
 use crate::session::{At, Session, config_json, parse_config};
 pub use crate::session::{CONFIG, ROOT, Repaired, Status};
-use crate::store::{AsyncStore, Dir, Record, Store, SyncFs};
+use crate::store::{AsyncStore, DeltaRecord, Dir, Record, Store, SyncFs};
 use crate::trust::Trusted;
 
 /// Seconds since the Unix epoch, for the catalog's expiry checks.
@@ -41,7 +42,8 @@ pub fn now() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
 }
 
-/// The verified catalog stored at `root` and the packs its journal lists, read without
+/// The verified catalog stored at `root` and the packs its journal lists as they answer (each
+/// with its delta's release and head, D-395), read without
 /// opening the store: nothing is recovered, created or removed, so a reader beside the process
 /// that installs (a server answering `coverage`, D-318) never disturbs it. Offline.
 ///
@@ -57,8 +59,9 @@ pub fn catalog_at(root: &Path) -> Result<(Trusted, Vec<Record>)> {
     })?;
     let mut dir = Dir::new(root).map_err(|e| ClientError::of(root.display(), e))?;
     let trusted = refresh::load(&mut dir, &shipped, now())?;
-    let packs = Store::read_packs(&mut dir).map_err(|e| ClientError::of(root.display(), e))?;
-    Ok((trusted, packs))
+    let (packs, deltas) =
+        Store::read_journal(&mut dir).map_err(|e| ClientError::of(root.display(), e))?;
+    Ok((trusted, crate::store::current(&packs, &deltas)))
 }
 
 /// A names part for people: its language (`ne`), `*` for the rest, `base` for the base.
@@ -164,6 +167,29 @@ impl<N: Transport> Client<N> {
     pub fn pack_path(&self, record: &Record) -> Result<PathBuf> {
         let dir = Dir::new(&self.root).map_err(|e| ClientError::of(self.root.display(), e))?;
         Ok(dir.pack_path(record))
+    }
+
+    /// The installed packs as they answer: each with its delta's release and head when one is
+    /// installed above it (D-395).
+    #[must_use]
+    pub fn current(&self) -> Vec<Record> {
+        self.session.current()
+    }
+
+    /// The installed deltas (D-395): each is opened as a layer, with its selection, beside its
+    /// base.
+    #[must_use]
+    pub fn deltas(&self) -> &[DeltaRecord] {
+        self.session.deltas()
+    }
+
+    /// Where an installed delta's file is.
+    ///
+    /// # Errors
+    /// [`ClientError::Refused`] if the store's directory cannot be read.
+    pub fn delta_path(&self, delta: &DeltaRecord) -> Result<PathBuf> {
+        let dir = Dir::new(&self.root).map_err(|e| ClientError::of(self.root.display(), e))?;
+        Ok(dir.delta_path(delta))
     }
 
     /// The transport, for a caller that watches it.
@@ -285,23 +311,60 @@ impl<N: Transport> Packs for Downloaded<'_, N> {
         self.at.offline().await
     }
 
+    #[allow(
+        clippy::unused_async_trait_impl,
+        reason = "this driver is ready at once: its store calls run under block_on"
+    )]
     async fn install(&mut self, entry: &Entry, asset_len: u64, set: Selection) -> Result<Outcome> {
+        self.fetched(entry, asset_len, |store, t, mirrors| {
+            block_on(store.install(t, mirrors, &entry.file, entry, asset_len, set))
+        })
+    }
+
+    async fn mark(&mut self, address: &str, component: &str, asked: bool) -> Result<()> {
+        self.at.mark(address, component, asked).await
+    }
+
+    async fn pin(&mut self, address: &str, component: &str, on: bool) -> Result<()> {
+        self.at.pin(address, component, on).await
+    }
+
+    fn deltas(&self) -> &[DeltaRecord] {
+        self.at.deltas()
+    }
+
+    #[allow(
+        clippy::unused_async_trait_impl,
+        reason = "this driver is ready at once: its store calls run under block_on"
+    )]
+    async fn install_delta(&mut self, delta: &catalog::Delta) -> Result<Option<Outcome>> {
+        self.fetched(&delta.entry, delta.length, |store, t, mirrors| {
+            block_on(store.install_delta(t, mirrors, delta))
+        })
+        .map(Some)
+    }
+}
+
+impl<N: Transport> Downloaded<'_, N> {
+    /// Runs `op` (an install of `entry`, its asset `asset_len` bytes) over the platform's
+    /// downloads of the asset (D-184): committed, the downloads go; short of ranges, they are
+    /// what the platform still has to download.
+    fn fetched(
+        &mut self,
+        entry: &Entry,
+        asset_len: u64,
+        op: impl FnOnce(
+            &mut AsyncStore<SyncFs<Dir>>,
+            &mut Ready<&mut Downloads>,
+            &mut Mirrors,
+        ) -> core::result::Result<Installed, FetchError>,
+    ) -> Result<Outcome> {
         let at = self.dir.join(entry.name());
         let mut parts =
             Downloads::open(&at, asset_len).map_err(|e| ClientError::of(at.display(), e))?;
         let mut mirrors = Mirrors::new(["downloads/"]);
         let session = &mut *self.at.session;
-        let r = session
-            .store()
-            .install(
-                &mut Ready(&mut parts),
-                &mut mirrors,
-                &entry.file,
-                entry,
-                asset_len,
-                set,
-            )
-            .await;
+        let r = op(session.store(), &mut Ready(&mut parts), &mut mirrors);
         match r {
             Err(FetchError::Needs(ranges)) => Ok(Outcome::Pending(Pending {
                 pack: entry.path(),
@@ -321,13 +384,5 @@ impl<N: Transport> Packs for Downloaded<'_, N> {
                 Ok(Outcome::Installed(done))
             }
         }
-    }
-
-    async fn mark(&mut self, address: &str, component: &str, asked: bool) -> Result<()> {
-        self.at.mark(address, component, asked).await
-    }
-
-    async fn pin(&mut self, address: &str, component: &str, on: bool) -> Result<()> {
-        self.at.pin(address, component, on).await
     }
 }

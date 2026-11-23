@@ -21,6 +21,12 @@ applied: a minor release could break the public API, and every break is listed u
   base together; a base answers search by its delta's query rules.
 - Format: manifest tag `delta_of` (0x000A) and `extract::rows_outlined`, a slice whose
   ancestors are stubs without outlines.
+- Sync: delta packs ship (D-395). The catalog lists a pack's deltas in `custom.deltas`
+  (`catalog::Delta`); an update takes the delta from the installed release when it costs at most
+  a quarter of the pack, else updates by section; `Store::install_delta` installs one, crash-safe,
+  in the journal's `deltas` (version 4, written only with a delta); `store::current`,
+  `Client::deltas`, `Client::delta_path` and `Engine::follow_with` open and report it. `tgd status`
+  shows `delta_of`. `cargo xtask tuf release --delta` lists a delta in its pack's entry.
 
 ## [1.2.0] - 2026-11-23
 

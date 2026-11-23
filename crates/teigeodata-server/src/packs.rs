@@ -4,7 +4,7 @@
 //! server keeps answering while `tgd install`, `update` or `remove` runs beside it.
 //!
 //! The server never opens the store for writing: it reads the journal alone
-//! ([`Store::read_packs`]), so it never recovers, creates or removes a file an install in
+//! ([`Store::read_journal`]), so it never recovers, creates or removes a file an install in
 //! progress is writing. Pack files are mapped (`Load::Map`, D-113): a pack the store replaces
 //! or removes stays mapped until the last query that holds it ends.
 
@@ -121,9 +121,9 @@ impl Packs {
         let Some((root, dir)) = &self.store else {
             return Ok(Followed::default());
         };
-        let records =
-            Store::read_packs(&mut dir.clone()).map_err(|e| PackError::Store(root.clone(), e))?;
-        Ok(self.shared.follow(dir, &records, options()))
+        let (records, deltas) =
+            Store::read_journal(&mut dir.clone()).map_err(|e| PackError::Store(root.clone(), e))?;
+        Ok(self.shared.follow_with(dir, &records, &deltas, options()))
     }
 }
 

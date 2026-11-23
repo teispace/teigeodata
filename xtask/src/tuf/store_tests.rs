@@ -11,7 +11,7 @@ use std::rc::Rc;
 use teigeodata_format::component::Component;
 use teigeodata_format::component::Components;
 use teigeodata_format::{Kind, Pack};
-use teigeodata_sync::catalog::Entry;
+use teigeodata_sync::catalog::{Delta, Entry};
 use teigeodata_sync::fetch::Mirrors;
 use teigeodata_sync::store::{Fs, Health, Record, Room, Store, StoreError, StoreFile, plan_room};
 
@@ -343,6 +343,148 @@ fn the_store_survives_a_crash_at_every_step() {
         2,
         "crashes before and after the commit both happen"
     );
+}
+
+/// A delta pack of `address` from `from` to `release`, as `tgd delta` labels one (D-391).
+fn delta_pack(address: &str, from: &str, release: &str) -> Vec<u8> {
+    let places: Vec<u8> = (0..9_000_u32).map(|i| (i % 7) as u8).collect();
+    let mut w = teigeodata_format::Writer::new(address, "places", release).unwrap();
+    w.manifest(teigeodata_format::Tag::LICENCE, b"odbl")
+        .unwrap();
+    w.manifest(teigeodata_format::Tag::DELTA_OF, from.as_bytes())
+        .unwrap();
+    w.pack(
+        &[(Kind::PLACES, teigeodata_format::Encoding::RAW, 1, &places)],
+        None,
+    )
+    .unwrap()
+}
+
+/// A delta (D-395) crashed at any step of its install leaves the base alone or the base with
+/// the whole delta listed, never an unlisted file; the install then completes. An update of
+/// the base by section drops the delta and its file in the same commit.
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one story: crashes, the retry, then the update"
+)]
+fn a_delta_install_survives_a_crash_at_every_step() {
+    let a = pack_of("2026.11.0");
+    let (ea, xa, _) = super::entry_of(&a).unwrap();
+    let d = delta_pack("zz", "2026.11.0", "2026.12.0");
+    let (ed, xd, hd) = super::entry_of(&d).unwrap();
+    let sha: [u8; 32] = hd["sha256"].as_slice().try_into().unwrap();
+    let delta = Delta::new("2026.11.0".into(), xd.len() as u64, sha, ed, [7; 16]);
+    let all = Components::all();
+    let fresh = || {
+        let fs = MemFs(Rc::default());
+        let mut store = Store::open(fs.clone()).unwrap().0;
+        let mut host = Mem::new(&xa, None);
+        store
+            .install(
+                &mut host,
+                &mut Mirrors::new(["m/"]),
+                "a",
+                &ea,
+                xa.len() as u64,
+                all,
+            )
+            .unwrap();
+        fs.0.borrow_mut().reboot(Crash::Lose);
+        fs
+    };
+    let put_delta = |fs: &MemFs| {
+        let mut store = Store::open(fs.clone())?.0;
+        let mut host = Mem::new(&xd, None);
+        store
+            .install_delta(&mut host, &mut Mirrors::new(["m/"]), &delta)
+            .map_err(|e| io::Error::other(e.to_string()))
+    };
+    // The deltas listed, each file's bytes, and the files in packs/.
+    let deltas = |fs: &MemFs| {
+        let (mut store, rec) = Store::open(fs.clone()).unwrap();
+        assert!(rec.damaged.is_empty(), "{rec:?}");
+        let listed: Vec<Vec<u8>> = store
+            .deltas()
+            .to_vec()
+            .iter()
+            .map(|x| {
+                assert_eq!(x.of, "2026.11.0");
+                assert_eq!(x.answers, [7; 16]);
+                store
+                    .fs()
+                    .read(&Store::<MemFs>::delta_path_of(x))
+                    .unwrap()
+                    .unwrap()
+            })
+            .collect();
+        (listed, store.fs().list("packs").unwrap())
+    };
+    let fs = fresh();
+    let before = fs.0.borrow().ops;
+    put_delta(&fs).unwrap();
+    let steps = fs.0.borrow().ops - before;
+    assert!(steps > 5, "{steps}");
+    let (listed, files) = deltas(&fs);
+    assert!(
+        listed == std::slice::from_ref(&d) && files.len() == 2,
+        "{files:?}"
+    );
+    let mut seen = BTreeSet::new();
+    for how in [Crash::Lose, Crash::Keep] {
+        for k in 0..steps {
+            let fs = fresh();
+            let at = fs.0.borrow().ops + k;
+            fs.0.borrow_mut().crash_at = Some(at);
+            let committed = put_delta(&fs).is_ok();
+            fs.0.borrow_mut().reboot(how);
+            let (listed, files) = deltas(&fs);
+            assert!(
+                listed.is_empty() || listed == std::slice::from_ref(&d),
+                "{how:?} {k}"
+            );
+            assert_eq!(files.len(), 1 + listed.len(), "{how:?} {k}: {files:?}");
+            assert!(
+                !committed || listed.len() == 1,
+                "{how:?} {k}: Ok, yet no delta"
+            );
+            seen.insert(listed.len());
+            put_delta(&fs).unwrap();
+            fs.0.borrow_mut().reboot(Crash::Lose);
+            assert_eq!(
+                deltas(&fs).0,
+                std::slice::from_ref(&d),
+                "{how:?} {k}: after retry"
+            );
+        }
+    }
+    assert_eq!(
+        seen.len(),
+        2,
+        "crashes before and after the commit both happen"
+    );
+    // An update of the base by section: the delta and its file go with the old release.
+    let b = pack_of("2026.12.1");
+    let (eb, xb, _) = super::entry_of(&b).unwrap();
+    let mut store = Store::open(fs.clone()).unwrap().0;
+    store
+        .install(
+            &mut Mem::new(&xb, None),
+            &mut Mirrors::new(["m/"]),
+            "a",
+            &eb,
+            xb.len() as u64,
+            all,
+        )
+        .unwrap();
+    assert_eq!(store.deltas(), []);
+    assert_eq!(store.fs().list("packs").unwrap().len(), 1);
+    // A delta whose base is not installed is refused, and nothing changes.
+    let e = store
+        .install_delta(&mut Mem::new(&xd, None), &mut Mirrors::new(["m/"]), &delta)
+        .unwrap_err();
+    assert!(e.to_string().contains("base"), "{e}");
+    assert_eq!(store.fs().list("packs").unwrap().len(), 1);
 }
 
 #[test]

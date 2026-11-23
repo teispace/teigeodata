@@ -29,7 +29,9 @@ a network.
 - **Survives crashes.** An install that a crash or a kill cuts short is finished or undone the
   next time the store opens; the installed packs are never half-written.
 - **Updates and evicts.** `update` moves installed packs to the catalog's releases, keeping the
-  components and languages installed. Pinned packs are kept when room is made; `remove` takes a
+  components and languages installed. Where the catalog lists a delta from the installed
+  release, it fetches only the places that changed (often about 1 % of the pack) and reads
+  them above the installed pack; otherwise it fetches the sections that changed. Pinned packs are kept when room is made; `remove` takes a
   pack out with the dependencies nothing else needs.
 - **Gives you an engine.** `engine()` opens every installed pack, with the parts installed.
 

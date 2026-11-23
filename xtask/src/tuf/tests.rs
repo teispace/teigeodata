@@ -358,3 +358,81 @@ fn verify_refuses_a_role_that_lists_another_country() {
     );
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+/// `--delta` (D-395): a delta pack of a released pack is listed in its entry, its asset written
+/// beside the pack's, and `verify` checks both; a delta of a pack the release does not publish,
+/// or a pack that is not a delta, is refused and leaves the repository as it was.
+#[test]
+fn a_release_lists_its_deltas() {
+    let dir = scratch("deltas");
+    let (repo, assets) = (dir.join("metadata"), dir.join("assets"));
+    root(&repo, &[1, 2, 3], 10);
+    let r1 = repo.join("1.root.json");
+    sign_file(&r1, RoleName::Root, &key(1)).unwrap();
+    sign_file(&r1, RoleName::Root, &key(2)).unwrap();
+    release(
+        &repo,
+        &assets,
+        &[pack(&dir, "2026.11.0", 7)],
+        &keys(10),
+        NOW,
+    )
+    .unwrap();
+    let delta = |from: &str, release: &str| {
+        let places = vec![3_u8; 5_000];
+        let mut w = Writer::new("zz", "places", release).unwrap();
+        w.manifest(Tag::LICENCE, b"odbl").unwrap();
+        w.manifest(Tag::DELTA_OF, from.as_bytes()).unwrap();
+        let p = dir.join(format!("delta-{from}-{release}.tgd"));
+        std::fs::write(
+            &p,
+            w.pack(&[(Kind::PLACES, Encoding::RAW, 1, &places)], None)
+                .unwrap(),
+        )
+        .unwrap();
+        p
+    };
+    let p2 = pack(&dir, "2026.12.0", 9);
+    let listed = |extra: &[PathBuf]| {
+        super::release_in(
+            &repo,
+            &assets,
+            std::slice::from_ref(&p2),
+            &keys(10),
+            NOW + DAY,
+            None,
+            extra,
+        )
+    };
+    // Not of this release, and not a delta: refused.
+    let e = listed(&[delta("2026.11.0", "2026.12.5")]).unwrap_err();
+    assert!(e.contains("does not publish"), "{e}");
+    let e = listed(&[pack(&dir, "2026.12.0", 9)]).unwrap_err();
+    assert!(e.contains("not a delta"), "{e}");
+    assert!(
+        !repo.join("2.targets.json").exists(),
+        "a refusal writes nothing"
+    );
+    let out = listed(&[delta("2026.11.0", "2026.12.0")]).unwrap();
+    assert!(out.contains("delta from 2026.11.0"), "{out}");
+    // The client reads the entry and its delta back; verify checks the delta's asset.
+    let (path, target) = {
+        let role: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(repo.join("2.zz.json")).unwrap()).unwrap();
+        let (p, v) = role["signed"]["targets"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .next()
+            .unwrap();
+        (p.clone(), v.clone())
+    };
+    let deltas = target["custom"]["deltas"].as_array().unwrap();
+    assert_eq!(deltas.len(), 1, "{path}");
+    assert_eq!(deltas[0]["from"], "2026.11.0");
+    let file = deltas[0]["file"].as_str().unwrap().to_owned();
+    assert!(verify(&repo, Some(&assets), NOW + DAY, 7).is_ok());
+    std::fs::write(assets.join(&file), b"not the delta").unwrap();
+    let e = verify(&repo, Some(&assets), NOW + DAY, 7).unwrap_err();
+    assert!(e.contains("not its asset"), "{e}");
+}

@@ -149,6 +149,38 @@
     "licence": {
       "type": "string",
       "pattern": "^[A-Za-z0-9.+-]{1,64}$"
+    },
+    "deltas": {
+      "description": "Delta packs of this release (D-395), one per base release: each is the delta's own custom object (its address, component and release are this pack's) with the release it is read above and its transport asset's length and SHA-256.",
+      "type": "array",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#"
+          },
+          {
+            "type": "object",
+            "required": [
+              "from",
+              "length",
+              "sha256"
+            ],
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "length": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        ]
+      }
     }
   },
   "$defs": {

@@ -22,16 +22,29 @@ export interface InstalledRecord {
   parts?: { languages?: number[]; outline?: number };
 }
 
+/** A delta as the store's journal records it (D-395): read above its base, `of` its release. */
+export interface InstalledDelta {
+  address: string;
+  component: string;
+  of: string;
+  release: string;
+  set: string[];
+  file: string;
+  pack_len: number;
+  head: string;
+  parts?: { languages?: number[]; outline?: number };
+}
+
 /** A `StoreHost` (`teigeodata-wasm/store`) over the directory `root`, in a dedicated worker. */
 export function opfsHost(
   root: string,
   options?: { fetch?: typeof globalThis.fetch },
 ): Promise<unknown>;
 
-/** What `openInstalled` opened: a layer per pack, its record, and `close()` to let go of the files. */
+/** What `openInstalled` opened: a layer per file, its record (the packs, then the deltas), and `close()` to let go of the files. */
 export interface Installed {
   layers: number[];
-  packs: InstalledRecord[];
+  packs: (InstalledRecord | InstalledDelta)[];
   close(): void;
 }
 

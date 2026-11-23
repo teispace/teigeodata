@@ -275,15 +275,17 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   the engine reads a delta above its base (L5). On the second pair it is 0.98 % of the asset,
   68 times less than section re-download. The gate: base and delta answer as the newer release
   for every ID and probe
-- [ ] Delta packs shipped: the release emits a delta against each release a client may hold,
-  the catalog lists it, the store installs it above its base and drops superseded deltas; a
-  compaction policy (re-download by section past a bound on deltas or bytes)
+- [x] Delta packs shipped (D-395, 2026-11-23): the release lists a delta from each of the last
+  3 releases (`tuf release --delta`), the catalog carries them in `custom.deltas`, the store
+  installs one above its base and replaces it with the next; compaction is the update by
+  section, taken when no delta from the base is listed or it would cost over a quarter of the
+  pack. Search rules travel in a delta (D-394)
 
 ### 4.8 The 15 sync gates
-- [ ] Each gate of ADR-0037 (register: [sync gates](../../06-engineering/sync-gates.md); 11
-  green, 12 red until 4.3's delegation, 11 and 14 open) (listed in [offline loading and
-  trust](../../02-research/notes/offline-loading-and-trust.md) §6) built, first shown to fail on
-  a deliberate violation, then green in CI
+- [x] Each gate of ADR-0037 (register: [sync gates](../../06-engineering/sync-gates.md))
+  (listed in [offline loading and trust](../../02-research/notes/offline-loading-and-trust.md)
+  §6) built, first shown to fail on a deliberate violation, then green in CI: 14 green and gate
+  13 a measurement (2026-11-23; gate 11 last, D-395)
 - [x] A world-size install: a section over 512 MiB, so `BLOCK_HASHES` spans frames and its
   one-fetch rule (D-170) is exercised; a planted split list fails it (2026-11-11, D-188). It
   runs in `nightly`, not the data build: it needs no data, and the data build waits on the
@@ -303,7 +305,8 @@ Research: [the CLI and the catalog refresh](../../02-research/notes/cli.md) (D-1
   served on localhost with range requests (D-182)
 - [x] (e) Every command run and its output read; `--help`, completions, the docs (the crate's
   README until Phase 7); timings of open, query and install (D-183)
-- [ ] `merge` (compaction) once 4.7 decides on delta packs
+- [x] ~~`merge` (compaction)~~: not built (D-396). Compaction is the update by section, which
+  yields the signed newer pack itself; a merged pack could not match its signed hash
 
 ### 4.9b Consumer requests
 
@@ -562,3 +565,5 @@ are W1's; TG-14's consumer name review does not block.
 | 2026-11-23 | 4.3: the catalog is live; the upload item ticked, sharding replaced by one release per catalog release | D-384 |
 | 2026-11-23 | 4.7: delta packs built and read by the engine; shipping them is a new item | D-391 |
 | 2026-11-23 | M4's scope: India's items move to W1, the consumer's name review does not block | D-393 |
+| 2026-11-23 | 4.7: delta packs shipped; search rules travel in a delta | D-394, D-395 |
+| 2026-11-23 | 4.9: `merge` dropped; compaction is the update by section | D-396 |

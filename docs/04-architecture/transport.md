@@ -264,6 +264,33 @@ writes of bytes other than the final pack's). Four planted faults (write before 
 footer, reused counted as kept, the store not seeding) are caught; a fifth, reading a changed
 section from the old file, is no fault, since the check rejects it and the frame is fetched.
 
+### By a delta pack (D-395)
+
+A pack's catalog entry may list delta packs in `custom.deltas`, one per base release: each
+is the delta's own entry (as `custom`) with `from`, and its transport asset's `length` and
+`sha256` (`catalog::Delta::list`). An update of what is installed takes the delta from the
+installed release when one is listed and it costs at most a quarter (`policy::DELTA_SHARE`) of
+the pack's bytes for the installed selection; otherwise it updates by section as above, which
+makes the newer release the base again (compaction).
+
+`Store::install_delta` installs a delta like a pack (staged, checked frame by frame against its
+signed head and hashes, renamed, committed) with its base's selection, and records it in the
+journal's `deltas` list beside `packs` (version 4, written only when a delta is installed):
+address, component, `of` (the base's release), release, set, parts, file, length, its own head
+and `answers` (the head of the whole pack it answers as, which an update compares). A delta is
+kept only while its base is installed at `of` with the same selection: any commit that changes
+the base drops it and removes its file, and recovery drops one whose file is missing or cut.
+`store::current` gives the packs as they answer (each with its delta's release and head), for
+the catalog's states and `status`. `Engine::follow_with`, the CLI, the API, the server and the
+browser opener (`openInstalled`) open each delta as a layer with its selection; the engine's
+precedence puts it above its base (D-391).
+
+Gates: `tgd update` takes a published delta, fetching under a quarter of the pack, and the store
+answers as the newer release; a second delta from the same base replaces it; a release with no
+delta from the base updates by section and drops the delta and its file (the test fails when
+the client ignores deltas). A crash at every step of a delta's install leaves the base alone or
+with the whole delta listed, never an unlisted file.
+
 ## Writing it (feature `write`)
 
 `transport::write(pack, compress, sink)` streams the asset frame by frame with bounded memory.

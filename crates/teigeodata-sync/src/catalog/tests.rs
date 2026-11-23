@@ -9,7 +9,8 @@ use teigeodata_core::Point;
 use teigeodata_format::component::{Component, Components, Parts, Selection};
 use teigeodata_format::{Bbox, Part};
 
-use super::{BlockHashes, Entry, Error, PartSize, Size, file_name, path};
+use super::{BlockHashes, Delta, Entry, Error, PartSize, Size, file_name, path};
+use crate::trust::lower_hex;
 use crate::trust::{Target, canonical_json};
 
 const ASSET_LEN: u64 = 8_227_234;
@@ -453,8 +454,15 @@ fn the_json_schema_matches_the_reader() {
         out.sort();
         out
     };
-    let written = entry_with_parts().to_custom();
+    let mut written = entry_with_parts().to_custom();
+    // A pack with deltas lists them too (D-395).
+    let delta = Delta::new("2026.10.0".into(), 9_000, SHA256, entry(), entry().head);
+    written
+        .as_object_mut()
+        .unwrap()
+        .insert("deltas".into(), json!([delta.to_json()]));
     assert_eq!(names(&schema["properties"]), names(&written));
+    written.as_object_mut().unwrap().remove("deltas");
     let mut no_bbox = written.clone();
     no_bbox.as_object_mut().unwrap().remove("bbox");
     no_bbox.as_object_mut().unwrap().remove("block_hashes");
@@ -487,6 +495,82 @@ fn the_json_schema_matches_the_reader() {
         schema["properties"]["transport"]["properties"]["encoding"]["const"],
         json!(super::ENCODING)
     );
+}
+
+/// A delta's entry for `from`: the pack's own entry, its asset `len` bytes with `sha`.
+fn delta_of(from: &str, len: u64, sha: [u8; 32]) -> Delta {
+    let mut e = entry();
+    e.file = file_name("np", "places", "2026.11.0", &sha);
+    e.seek_table = 40;
+    e.head_frame = Size {
+        wire: 300,
+        disk: 512,
+    };
+    e.block_hashes = None;
+    e.pack_length = 70_000;
+    for s in e.sizes.values_mut() {
+        *s = Size {
+            wire: 100,
+            disk: 1_000,
+        };
+    }
+    Delta::new(from.into(), len, sha, e, entry().head)
+}
+
+fn with_deltas(list: Value) -> Target {
+    with(|m| {
+        m.insert("deltas".into(), list);
+    })
+}
+
+#[test]
+fn deltas_round_trip_and_disagreeing_ones_are_refused() {
+    let of = entry();
+    let (a, b) = (
+        delta_of("2026.10.0", 9_000, [7; 32]),
+        delta_of("2026.9.1", 12_000, [8; 32]),
+    );
+    let t = with_deltas(json!([a.to_json(), b.to_json()]));
+    assert_eq!(
+        Delta::list("np.places.tgd", &t, &of).unwrap(),
+        [a.clone(), b]
+    );
+    // None listed: none.
+    assert_eq!(
+        Delta::list("np.places.tgd", &with(|_| {}), &of).unwrap(),
+        []
+    );
+    // Its file must agree with its own SHA-256, as a pack's must.
+    let mut wrong = a.to_json();
+    wrong["sha256"] = json!(lower_hex(&[9; 32]));
+    assert!(Delta::list("np.places.tgd", &with_deltas(json!([wrong])), &of).is_err());
+    // Not from a newer or the same release, not twice from one base, not of another release.
+    for from in ["2026.11.0", "2026.12.0", "not a release!"] {
+        let bad = delta_of(from, 9_000, [7; 32]);
+        assert!(
+            Delta::list("np.places.tgd", &with_deltas(json!([bad.to_json()])), &of).is_err(),
+            "{from}"
+        );
+    }
+    let twice = with_deltas(json!([a.to_json(), a.to_json()]));
+    assert!(Delta::list("np.places.tgd", &twice, &of).is_err());
+    let mut other = a.clone();
+    other.entry.release = "2026.11.1".into();
+    other.entry.file = file_name("np", "places", "2026.11.1", &[7; 32]);
+    assert!(Delta::list("np.places.tgd", &with_deltas(json!([other.to_json()])), &of).is_err());
+    // A list that is not one, and a field missing.
+    assert!(Delta::list("np.places.tgd", &with_deltas(json!({})), &of).is_err());
+    for k in ["from", "length", "sha256", "pack"] {
+        let mut wrong = a.to_json();
+        wrong.as_object_mut().unwrap().remove(k);
+        assert!(
+            Delta::list("np.places.tgd", &with_deltas(json!([wrong])), &of).is_err(),
+            "{k}"
+        );
+    }
+    // An entry with deltas still reads as itself: an older reader ignores them.
+    let one = with_deltas(json!([a.to_json()]));
+    assert_eq!(Entry::from_target("np.places.tgd", &one).unwrap(), of);
 }
 
 #[test]

@@ -22,7 +22,7 @@ use core::ops::Range;
 use std::io::{self, Write};
 
 use serde_json::{Value, json};
-use teigeodata_format::component::Selection;
+use teigeodata_format::component::{Components, Selection};
 
 use crate::catalog::{self, Entry};
 use crate::fetch::{AsyncTransport, FetchError, Got, Mirrors, Ready, Transport};
@@ -30,7 +30,7 @@ use crate::meta::{self, Refreshed, StoreIo};
 use crate::policy::{
     self, ClientError, Done, Outcome, PackState, Packs, Report, Result, Want, split, target,
 };
-use crate::store::{AsyncFs, AsyncStore, Health, Record, StoreFile};
+use crate::store::{AsyncFs, AsyncStore, DeltaRecord, Health, Record, StoreFile};
 use crate::trust::Trusted;
 
 /// The store's configuration, written by [`init`].
@@ -189,6 +189,12 @@ impl<D: AsyncFs, N: AsyncTransport> Session<D, N> {
         self.store.packs()
     }
 
+    /// The installed deltas (D-395).
+    #[must_use]
+    pub fn deltas(&self) -> &[DeltaRecord] {
+        self.store.deltas()
+    }
+
     /// The store.
     pub const fn store(&mut self) -> &mut AsyncStore<D> {
         &mut self.store
@@ -245,7 +251,14 @@ impl<D: AsyncFs, N: AsyncTransport> Session<D, N> {
     /// What the catalog says of `entry` against the store.
     #[must_use]
     pub fn state(&self, entry: &Entry) -> PackState {
-        PackState::of(entry, self.store.packs())
+        PackState::of(entry, &self.current())
+    }
+
+    /// The installed packs as they answer: each with its delta's release and head when one is
+    /// installed above it (D-395, [`store::current`](crate::store::current)).
+    #[must_use]
+    pub fn current(&self) -> Vec<Record> {
+        crate::store::current(self.store.packs(), self.store.deltas())
     }
 
     /// Installs the packs at `paths` (catalog paths) with `want` added to what is installed,
@@ -375,6 +388,23 @@ impl<D: AsyncFs, N: AsyncTransport> Session<D, N> {
             .await?;
         Ok(Outcome::Installed(done))
     }
+
+    /// Installs `delta` above its installed base from the session's mirrors (D-395).
+    async fn install_delta(&mut self, delta: &catalog::Delta) -> Result<Outcome> {
+        let mut mirrors = Mirrors::new(self.mirrors.assets.clone());
+        let set = self
+            .store
+            .packs()
+            .iter()
+            .find(|r| r.key() == delta.entry.path() && r.release == delta.from)
+            .map_or_else(|| Selection::from(Components::all()), Record::selection);
+        self.net.expect(delta.entry.size_of(set).wire);
+        let done = self
+            .store
+            .install_delta(&mut self.net, &mut mirrors, delta)
+            .await?;
+        Ok(Outcome::Installed(done))
+    }
 }
 
 /// A session's operations for the policy ([`Packs`]) at one time.
@@ -409,6 +439,14 @@ impl<D: AsyncFs, N: AsyncTransport> Packs for At<'_, D, N> {
 
     async fn pin(&mut self, address: &str, component: &str, on: bool) -> Result<()> {
         Ok(self.session.store.pin(address, component, on).await?)
+    }
+
+    fn deltas(&self) -> &[DeltaRecord] {
+        self.session.store.deltas()
+    }
+
+    async fn install_delta(&mut self, delta: &catalog::Delta) -> Result<Option<Outcome>> {
+        self.session.install_delta(delta).await.map(Some)
     }
 }
 

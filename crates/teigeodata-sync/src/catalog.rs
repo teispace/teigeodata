@@ -474,6 +474,119 @@ impl Size {
     }
 }
 
+/// A delta pack the catalog lists for a pack (D-395): the places that changed since `from`, read
+/// as a layer above an installed pack of that release (D-391). Listed in the pack's
+/// `custom.deltas`, one object per base release: the delta's own entry (the fields of
+/// `custom`) with `from`, and its transport asset's `length` and `sha256`. It is signed with the
+/// rest of `custom`, so it is trusted as its pack is.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Delta {
+    /// The release it is read above.
+    pub from: String,
+    /// Its transport asset's length in bytes.
+    pub length: u64,
+    /// Its transport asset's SHA-256.
+    pub sha256: [u8; 32],
+    /// Its own entry: the newer release's address, component and release; its file, sizes and
+    /// head.
+    pub entry: Entry,
+    /// The head of the pack it answers as with its base: the listing entry's.
+    pub answers: [u8; 16],
+}
+
+impl Delta {
+    /// A delta from `from` whose asset is `length` bytes with `sha256`, described by `entry`,
+    /// listed by the pack whose head is `answers`.
+    #[must_use]
+    pub const fn new(
+        from: String,
+        length: u64,
+        sha256: [u8; 32],
+        entry: Entry,
+        answers: [u8; 16],
+    ) -> Self {
+        Self {
+            from,
+            length,
+            sha256,
+            entry,
+            answers,
+        }
+    }
+
+    /// The deltas the target at `target_path` lists, checked against the pack's own entry
+    /// (`of`): each of its address, component and release, from an older release, one per base;
+    /// none when it lists none.
+    ///
+    /// # Errors
+    /// [`Error`] for a malformed list or delta, or one that disagrees with `of`.
+    pub fn list(target_path: &str, target: &Target, of: &Entry) -> Result<Vec<Self>, Error> {
+        let Some(list) = target.custom.as_ref().and_then(|c| c.get("deltas")) else {
+            return Ok(Vec::new());
+        };
+        let list = list.as_array().ok_or(Error::Field("deltas"))?;
+        let mut out: Vec<Self> = Vec::with_capacity(list.len());
+        for d in list {
+            let m = d.as_object().ok_or(Error::Field("deltas"))?;
+            let from = text(m, "from").map_err(|_| Error::Field("deltas.from"))?;
+            let length = u(m, "deltas.length", "length")?;
+            let sha256: [u8; 32] = m
+                .get("sha256")
+                .and_then(Value::as_str)
+                .and_then(hex32)
+                .ok_or(Error::Field("deltas.sha256"))?;
+            let mut hashes = crate::trust::Hashes::new();
+            hashes.insert("sha256".to_owned(), sha256.to_vec());
+            let own = Target {
+                length,
+                hashes,
+                custom: Some(d.clone()),
+            };
+            let entry = Entry::from_target(target_path, &own)?;
+            if entry.release != of.release
+                || !name_like(from.as_bytes(), true)
+                || !teigeodata_format::release_cmp(&from, &of.release).is_lt()
+                || out.iter().any(|o| o.from == from)
+            {
+                return Err(Error::Field("deltas.from"));
+            }
+            out.push(Self {
+                from,
+                length,
+                sha256,
+                entry,
+                answers: of.head,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Its object in `custom.deltas`, as release tooling writes it.
+    #[must_use]
+    pub fn to_json(&self) -> Value {
+        let mut v = self.entry.to_custom();
+        if let Value::Object(m) = &mut v {
+            m.insert("from".to_owned(), self.from.clone().into());
+            m.insert("length".to_owned(), self.length.into());
+            m.insert("sha256".to_owned(), lower_hex(&self.sha256).into());
+        }
+        v
+    }
+}
+
+/// 64 hex digits as 32 bytes.
+fn hex32(s: &str) -> Option<[u8; 32]> {
+    let mut out = [0_u8; 32];
+    if s.len() != 64 {
+        return None;
+    }
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(s.get(2 * i..2 * i + 2)?, 16).ok()?;
+    }
+    Some(out)
+}
+
 fn obj<'a>(m: &'a Map<String, Value>, k: &'static str) -> Result<&'a Map<String, Value>, Error> {
     m.get(k).and_then(Value::as_object).ok_or(Error::Field(k))
 }

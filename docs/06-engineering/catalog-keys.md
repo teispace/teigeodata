@@ -97,6 +97,18 @@ cargo xtask tuf release catalog/main --assets out/assets --folder catalog-2026.1
   --timestamp-key ~/teigeodata-keys/keys/timestamp.key.age
 ```
 
+**Deltas** (D-395). For each pack, make a delta from each of the last 3 releases a client may
+hold, from the two whole packs (the older ones are the catalog's earlier assets):
+
+```
+tgd delta app-np-2026.11.22.tgd app-np-2026.11.23.tgd -o app-np-from-2026.11.22.tgd
+```
+
+`tgd delta` refuses a pair a delta cannot carry; such a pack gets no delta from that release,
+and its clients update by section. Pass each delta to the release with `--delta
+app-np-from-2026.11.22.tgd`: it is listed in its pack's entry and its asset written beside the
+pack's.
+
 It does the following:
 
 - writes each pack's transport asset as `address.component.release.hash8.tgd.zst` into

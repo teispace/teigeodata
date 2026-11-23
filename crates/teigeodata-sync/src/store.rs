@@ -286,6 +286,79 @@ impl Record {
     }
 }
 
+/// An installed delta pack (D-395): the places that changed since its base, an installed pack
+/// of release `of`, read as a layer above it (D-391). It is installed with its base's
+/// selection, and kept only while its base is installed at that release with that selection:
+/// any commit that changes the base drops it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct DeltaRecord {
+    /// Its base's address.
+    pub address: String,
+    /// Its base's component in the ADR-0010 sense.
+    pub component: String,
+    /// The release of the base it is read above.
+    pub of: String,
+    /// Its own release: the release the base and the delta answer as.
+    pub release: String,
+    /// The components installed: its base's.
+    pub set: Components,
+    /// The parts installed: its base's.
+    pub parts: Parts,
+    /// Its file in `packs/`.
+    pub file: String,
+    /// Its length.
+    pub pack_len: u64,
+    /// The first 16 bytes of its head's BLAKE3, from the catalog.
+    pub head: [u8; 16],
+    /// The head of the whole pack its base and it answer as, from the catalog: what an update
+    /// compares.
+    pub answers: [u8; 16],
+}
+
+impl DeltaRecord {
+    /// What it holds, as its base: a layer opens it with these.
+    #[must_use]
+    pub const fn selection(&self) -> Selection {
+        Selection {
+            set: self.set,
+            parts: self.parts,
+        }
+    }
+
+    /// Its base's catalog path, `address.component.tgd`.
+    #[must_use]
+    pub fn key(&self) -> String {
+        catalog::path(&self.address, &self.component)
+    }
+
+    /// Whether `r` is its base: the same pack at release `of`, with the same selection.
+    #[must_use]
+    pub fn is_over(&self, r: &Record) -> bool {
+        r.address == self.address
+            && r.component == self.component
+            && r.release == self.of
+            && r.selection() == self.selection()
+    }
+}
+
+/// The installed packs as they answer (D-395): each with the release and head of the delta
+/// installed above it, if any; its file, length and marks are its own.
+#[must_use]
+pub fn current(packs: &[Record], deltas: &[DeltaRecord]) -> Vec<Record> {
+    packs
+        .iter()
+        .map(|r| match deltas.iter().find(|d| d.is_over(r)) {
+            Some(d) => Record {
+                release: d.release.clone(),
+                head: d.answers,
+                ..r.clone()
+            },
+            None => r.clone(),
+        })
+        .collect()
+}
+
 /// Why a store operation failed.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -508,6 +581,8 @@ pub struct Recovered {
 pub struct AsyncStore<D: AsyncFs> {
     fs: D,
     packs: Vec<Record>,
+    /// The installed deltas, each over one of `packs` (D-395).
+    deltas: Vec<DeltaRecord>,
     /// Last-use times changed since the last commit.
     dirty: bool,
 }
@@ -533,6 +608,45 @@ impl<D: Fs> Store<D> {
         self.0.packs()
     }
 
+    /// The installed deltas (D-395), each above one of [`packs`](Self::packs).
+    #[must_use]
+    pub fn deltas(&self) -> &[DeltaRecord] {
+        self.0.deltas()
+    }
+
+    /// As [`AsyncStore::install_delta`].
+    ///
+    /// # Errors
+    /// As [`AsyncStore::install_delta`].
+    pub fn install_delta<T: Transport>(
+        &mut self,
+        transport: &mut T,
+        mirrors: &mut Mirrors,
+        delta: &catalog::Delta,
+    ) -> Result<Installed, FetchError> {
+        let mut t = Ready(transport);
+        block_on(self.0.install_delta(&mut t, mirrors, delta))
+    }
+
+    /// The packs and the deltas (D-395) the journal lists now, from one read of it, as
+    /// [`read_packs`](Self::read_packs) reads the packs.
+    ///
+    /// # Errors
+    /// As [`read_packs`](Self::read_packs).
+    pub fn read_journal(fs: &mut D) -> io::Result<(Vec<Record>, Vec<DeltaRecord>)> {
+        let both = |b: &[u8]| -> io::Result<(Vec<Record>, Vec<DeltaRecord>)> {
+            Ok((parse_journal(b)?, parse_deltas(b)?))
+        };
+        match fs.read(JOURNAL)? {
+            Some(bytes) => both(&bytes),
+            // A commit cut between a removal and a move, as `open` finishes it (D-376).
+            None => Ok(fs
+                .read(JOURNAL_TMP)?
+                .and_then(|b| both(&b).ok())
+                .unwrap_or_default()),
+        }
+    }
+
     /// The packs the journal lists now, read without opening the store: nothing is recovered,
     /// created or removed, so a reader beside the process that installs (a server following
     /// the store, D-172) never disturbs an install in progress. The journal is replaced whole
@@ -555,6 +669,12 @@ impl<D: Fs> Store<D> {
     #[must_use]
     pub fn path_of(record: &Record) -> String {
         AsyncStore::<SyncFs<D>>::path_of(record)
+    }
+
+    /// The path of an installed delta's file, relative to the root.
+    #[must_use]
+    pub fn delta_path_of(delta: &DeltaRecord) -> String {
+        alloc::format!("{PACKS}/{}", delta.file)
     }
 
     /// The file system, for reading installed packs.
@@ -693,6 +813,10 @@ const VERSION: u64 = 2;
 /// `parts`. Written only when a record needs it, so a reader that knows 2 refuses such a
 /// journal instead of reading a hollow part as whole.
 const VERSION_PARTS: u64 = 3;
+/// The version of a journal with an installed delta (D-395): 3 plus the top-level `deltas`.
+/// Written only when a delta is installed, so a reader that knows 3 refuses such a journal
+/// instead of answering as the older release unknowingly.
+const VERSION_DELTAS: u64 = 4;
 
 fn invalid(what: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, what)
@@ -723,15 +847,28 @@ impl<D: AsyncFs> AsyncStore<D> {
             journal = Some(staged);
         }
         fs.remove(JOURNAL_TMP).await?;
-        let packs = match journal {
-            Some(bytes) => parse_journal(&bytes)?,
-            None => Vec::new(),
+        let (packs, mut deltas) = match journal {
+            Some(bytes) => (parse_journal(&bytes)?, parse_deltas(&bytes)?),
+            None => (Vec::new(), Vec::new()),
         };
+        // A delta whose file is missing or cut is dropped: its base answers as its own release
+        // until the next update (D-395).
+        let listed = deltas.len();
+        let mut kept = Vec::with_capacity(listed);
+        for d in deltas {
+            if fs.len(&alloc::format!("{PACKS}/{}", d.file)).await? == Some(d.pack_len)
+                && packs.iter().any(|r| d.is_over(r))
+            {
+                kept.push(d);
+            }
+        }
+        deltas = kept;
         let mut rec = Recovered::default();
         for name in fs.list(PACKS).await? {
             // A file the file system will not remove yet (a reader holds it, D-376) stays for
             // a later open; the store opens all the same.
             if !packs.iter().any(|r| r.file == name)
+                && !deltas.iter().any(|d| d.file == name)
                 && fs.remove(&alloc::format!("{PACKS}/{name}")).await.is_ok()
             {
                 rec.removed.push(name);
@@ -745,20 +882,28 @@ impl<D: AsyncFs> AsyncStore<D> {
                 rec.damaged.push(r.file.clone());
             }
         }
-        Ok((
-            Self {
-                fs,
-                packs,
-                dirty: false,
-            },
-            rec,
-        ))
+        let mut store = Self {
+            fs,
+            packs,
+            deltas,
+            dirty: false,
+        };
+        if store.deltas.len() != listed {
+            store.commit(store.packs.clone()).await?;
+        }
+        Ok((store, rec))
     }
 
     /// The installed packs.
     #[must_use]
     pub fn packs(&self) -> &[Record] {
         &self.packs
+    }
+
+    /// The installed deltas (D-395), each above one of [`packs`](Self::packs).
+    #[must_use]
+    pub fn deltas(&self) -> &[DeltaRecord] {
+        &self.deltas
     }
 
     /// The path of an installed pack's file, relative to the root.
@@ -880,6 +1025,101 @@ impl<D: AsyncFs> AsyncStore<D> {
         if let Some(old) = old {
             self.retire(&[old]).await;
         }
+        Ok(done)
+    }
+
+    /// Installs the delta `delta` (D-395) above the installed pack of its address and component
+    /// at release `delta.from`, with that pack's selection, from `mirrors`, and commits it,
+    /// replacing the pack's earlier delta. The delta is staged and checked frame by frame
+    /// against its signed head and hashes, as a pack is. On success the base and the delta
+    /// answer as `delta.entry.release`.
+    ///
+    /// # Errors
+    /// [`FetchError::Install`] when no installed pack is its base or a reader cannot open it;
+    /// else as [`install`](Self::install). The journal is untouched by any failure before the
+    /// commit.
+    pub async fn install_delta<T: AsyncTransport>(
+        &mut self,
+        transport: &mut T,
+        mirrors: &mut Mirrors,
+        delta: &catalog::Delta,
+    ) -> Result<Installed, FetchError> {
+        let entry = &delta.entry;
+        let base = self
+            .packs
+            .iter()
+            .find(|r| {
+                r.address == entry.address
+                    && r.component == entry.component
+                    && r.release == delta.from
+            })
+            .cloned()
+            .ok_or(FetchError::Install(crate::Error::Install(
+                "no installed pack is the delta's base",
+            )))?;
+        if entry.min_reader > teigeodata_format::READER_MAJOR {
+            return Err(FetchError::Install(crate::Error::Pack(
+                teigeodata_format::Error::Version {
+                    min_reader_major: entry.min_reader,
+                },
+            )));
+        }
+        let want = base.selection();
+        let file = pack_name(entry, want.set)?;
+        if base.file == file {
+            return Err(FetchError::Install(crate::Error::Install(
+                "a delta named as its base",
+            )));
+        }
+        let staging = alloc::format!("{STAGING}/{file}.part");
+        let mut f = self.fs.open(&staging).await?;
+        let asset = Asset {
+            path: &entry.file,
+            entry,
+            len: delta.length,
+        };
+        let done = install_from_async(transport, mirrors, asset, want, &mut f).await?;
+        f.set_len(done.pack_len)?;
+        let want = Selection {
+            set: want.set,
+            parts: done.parts,
+        };
+        hollow(&mut f, done.pack_len, want)?;
+        f.sync()?;
+        drop(f);
+        self.fs
+            .rename(&staging, &alloc::format!("{PACKS}/{file}"))
+            .await?;
+        self.fs.sync_dir(PACKS).await?;
+        self.fs.sync_dir(STAGING).await?;
+        let mut deltas: Vec<DeltaRecord> = self
+            .deltas
+            .iter()
+            .filter(|d| d.address != base.address || d.component != base.component)
+            .cloned()
+            .collect();
+        let old: Vec<DeltaRecord> = self
+            .deltas
+            .iter()
+            .filter(|d| d.address == base.address && d.component == base.component)
+            .cloned()
+            .collect();
+        deltas.push(DeltaRecord {
+            address: base.address.clone(),
+            component: base.component.clone(),
+            of: base.release.clone(),
+            release: entry.release.clone(),
+            // As its base: the parts resolve alike on both, or the delta is dropped.
+            set: base.set,
+            parts: base.parts,
+            file,
+            pack_len: done.pack_len,
+            head: entry.head,
+            answers: delta.answers,
+        });
+        deltas.sort_by(|a, b| (&a.address, &a.component).cmp(&(&b.address, &b.component)));
+        self.commit_with(self.packs.clone(), deltas).await?;
+        self.retire_deltas(&old).await;
         Ok(done)
     }
 
@@ -1314,9 +1554,43 @@ impl<D: AsyncFs> AsyncStore<D> {
     }
 
     /// Writes `packs` as the journal (temp file, sync, rename, sync the root) and makes them
-    /// the store's.
+    /// the store's, with the deltas still over one of them (D-395); the files of the deltas it
+    /// drops are removed after.
     async fn commit(&mut self, packs: Vec<Record>) -> io::Result<()> {
-        let bytes = render_journal(&packs);
+        let (kept, dropped): (Vec<DeltaRecord>, Vec<DeltaRecord>) = self
+            .deltas
+            .iter()
+            .cloned()
+            .partition(|d| packs.iter().any(|r| d.is_over(r)));
+        self.commit_with(packs, kept).await?;
+        self.retire_deltas(&dropped).await;
+        Ok(())
+    }
+
+    /// Deletes the files of deltas no longer in the journal, as [`retire`](Self::retire).
+    async fn retire_deltas(&mut self, old: &[DeltaRecord]) {
+        let mut any = false;
+        for o in old {
+            if self.deltas.iter().all(|d| d.file != o.file) {
+                any |= self
+                    .fs
+                    .remove(&alloc::format!("{PACKS}/{}", o.file))
+                    .await
+                    .is_ok();
+            }
+        }
+        if any {
+            let _ = self.fs.sync_dir(PACKS).await;
+        }
+    }
+
+    /// Writes `packs` and `deltas` as the journal and makes them the store's.
+    async fn commit_with(
+        &mut self,
+        packs: Vec<Record>,
+        deltas: Vec<DeltaRecord>,
+    ) -> io::Result<()> {
+        let bytes = render_journal_with(&packs, &deltas);
         let mut t = self.fs.open(JOURNAL_TMP).await?;
         t.set_len(0)?;
         t.write_all(&bytes)?;
@@ -1325,6 +1599,7 @@ impl<D: AsyncFs> AsyncStore<D> {
         self.fs.rename(JOURNAL_TMP, JOURNAL).await?;
         self.fs.sync_dir("").await?;
         self.packs = packs;
+        self.deltas = deltas;
         self.dirty = false;
         Ok(())
     }
@@ -1410,6 +1685,12 @@ pub fn pack_name(entry: &Entry, set: Components) -> Result<String, FetchError> {
 /// the index to a reader (the browser's store, D-375).
 #[must_use]
 pub fn render_journal(packs: &[Record]) -> Vec<u8> {
+    render_journal_with(packs, &[])
+}
+
+/// The journal of `packs` and the `deltas` above them (D-395), as the store writes it.
+#[must_use]
+pub fn render_journal_with(packs: &[Record], deltas: &[DeltaRecord]) -> Vec<u8> {
     let list: Vec<Value> = packs
         .iter()
         .map(|r| {
@@ -1435,13 +1716,38 @@ pub fn render_journal(packs: &[Record]) -> Vec<u8> {
         })
         .collect();
     let mut top = Map::new();
-    let version = if packs.iter().any(|r| r.parts != Parts::ALL) {
+    let version = if !deltas.is_empty() {
+        VERSION_DELTAS
+    } else if packs.iter().any(|r| r.parts != Parts::ALL) {
         VERSION_PARTS
     } else {
         VERSION
     };
     top.insert("version".into(), version.into());
     top.insert("packs".into(), list.into());
+    if !deltas.is_empty() {
+        let list: Vec<Value> = deltas
+            .iter()
+            .map(|d| {
+                let mut m = Map::new();
+                m.insert("address".into(), d.address.clone().into());
+                m.insert("component".into(), d.component.clone().into());
+                m.insert("of".into(), d.of.clone().into());
+                m.insert("release".into(), d.release.clone().into());
+                let set: Vec<Value> = d.set.iter().map(|c| c.name().into()).collect();
+                m.insert("set".into(), set.into());
+                if d.parts != Parts::ALL {
+                    m.insert("parts".into(), parts_json(d.parts));
+                }
+                m.insert("file".into(), d.file.clone().into());
+                m.insert("pack_len".into(), d.pack_len.into());
+                m.insert("head".into(), crate::trust::lower_hex(&d.head).into());
+                m.insert("answers".into(), crate::trust::lower_hex(&d.answers).into());
+                Value::Object(m)
+            })
+            .collect();
+        top.insert("deltas".into(), list.into());
+    }
     let mut out = serde_json::to_vec(&Value::Object(top)).unwrap_or_default();
     out.push(b'\n');
     out
@@ -1483,29 +1789,15 @@ pub fn parse_journal(bytes: &[u8]) -> io::Result<Vec<Record>> {
     let bad = || invalid("the journal does not parse");
     let v: Value = serde_json::from_slice(bytes).map_err(|_| bad())?;
     let version = v.get("version").and_then(Value::as_u64);
-    if !matches!(version, Some(1 | VERSION | VERSION_PARTS)) {
+    if !matches!(version, Some(1 | VERSION | VERSION_PARTS | VERSION_DELTAS)) {
         return Err(invalid("the journal's version is unknown"));
     }
     let v1 = version == Some(1);
     let text = |r: &Value, k: &str| r.get(k).and_then(Value::as_str).map(String::from);
     let mut out = Vec::new();
     for r in v.get("packs").and_then(Value::as_array).ok_or_else(bad)? {
-        let mut set = Components::default();
-        for c in r.get("set").and_then(Value::as_array).ok_or_else(bad)? {
-            let c = c.as_str().and_then(Component::from_name).ok_or_else(bad)?;
-            set = set.union(Components::of(&[c]));
-        }
-        let hex = text(r, "head").ok_or_else(bad)?;
-        let mut head = [0_u8; 16];
-        if hex.len() != 32 {
-            return Err(bad());
-        }
-        for (i, b) in head.iter_mut().enumerate() {
-            *b = hex
-                .get(2 * i..2 * i + 2)
-                .and_then(|h| u8::from_str_radix(h, 16).ok())
-                .ok_or_else(bad)?;
-        }
+        let set = set_of(r).ok_or_else(bad)?;
+        let head = hex16(r, "head").ok_or_else(bad)?;
         // Version 1 had no marks: a pack asked for, unpinned, never used.
         let (deps, asked, pinned, used) = if v1 {
             (Vec::new(), true, false, 0)
@@ -1531,15 +1823,78 @@ pub fn parse_journal(bytes: &[u8]) -> io::Result<Vec<Record>> {
             release: text(r, "release").ok_or_else(bad)?,
             set,
             parts,
-            file: text(r, "file")
-                .filter(|f| !f.contains('/') && !f.starts_with('.'))
-                .ok_or_else(bad)?,
+            file: file_of(r).ok_or_else(bad)?,
             pack_len: r.get("pack_len").and_then(Value::as_u64).ok_or_else(bad)?,
             head,
             deps,
             asked,
             pinned,
             used,
+        });
+    }
+    Ok(out)
+}
+
+/// A journal record's component set.
+fn set_of(r: &Value) -> Option<Components> {
+    let mut set = Components::default();
+    for c in r.get("set")?.as_array()? {
+        set = set.union(Components::of(&[Component::from_name(c.as_str()?)?]));
+    }
+    Some(set)
+}
+
+/// A journal record's 16-byte hash at `k`: 32 hex digits.
+fn hex16(r: &Value, k: &str) -> Option<[u8; 16]> {
+    let hex = r.get(k)?.as_str()?;
+    let mut out = [0_u8; 16];
+    if hex.len() != 32 {
+        return None;
+    }
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(hex.get(2 * i..2 * i + 2)?, 16).ok()?;
+    }
+    Some(out)
+}
+
+/// A journal record's file: a name in `packs/`, never a path.
+fn file_of(r: &Value) -> Option<String> {
+    r.get("file")?
+        .as_str()
+        .filter(|f| !f.is_empty() && !f.contains('/') && !f.contains('\\') && !f.starts_with('.'))
+        .map(String::from)
+}
+
+/// The installed deltas a journal lists (D-395); none for a journal before version 4.
+///
+/// # Errors
+/// [`io::ErrorKind::InvalidData`] for a journal that does not parse.
+pub fn parse_deltas(bytes: &[u8]) -> io::Result<Vec<DeltaRecord>> {
+    let bad = || invalid("the journal's deltas do not parse");
+    let v: Value = serde_json::from_slice(bytes).map_err(|_| bad())?;
+    let Some(list) = v.get("deltas") else {
+        return Ok(Vec::new());
+    };
+    if v.get("version").and_then(Value::as_u64) != Some(VERSION_DELTAS) {
+        return Err(bad());
+    }
+    let text = |r: &Value, k: &str| r.get(k).and_then(Value::as_str).map(String::from);
+    let mut out = Vec::new();
+    for r in list.as_array().ok_or_else(bad)? {
+        out.push(DeltaRecord {
+            address: text(r, "address").ok_or_else(bad)?,
+            component: text(r, "component").ok_or_else(bad)?,
+            of: text(r, "of").ok_or_else(bad)?,
+            release: text(r, "release").ok_or_else(bad)?,
+            set: set_of(r).ok_or_else(bad)?,
+            parts: match r.get("parts") {
+                None => Parts::ALL,
+                Some(p) => parts_of_json(p).ok_or_else(bad)?,
+            },
+            file: file_of(r).ok_or_else(bad)?,
+            pack_len: r.get("pack_len").and_then(Value::as_u64).ok_or_else(bad)?,
+            head: hex16(r, "head").ok_or_else(bad)?,
+            answers: hex16(r, "answers").ok_or_else(bad)?,
         });
     }
     Ok(out)
@@ -1566,6 +1921,12 @@ impl Dir {
     #[must_use]
     pub fn pack_path(&self, record: &Record) -> std::path::PathBuf {
         self.at(PACKS).join(&record.file)
+    }
+
+    /// The file of an installed delta (D-395).
+    #[must_use]
+    pub fn delta_path(&self, delta: &DeltaRecord) -> std::path::PathBuf {
+        self.at(PACKS).join(&delta.file)
     }
 
     /// The directory of the installed packs.

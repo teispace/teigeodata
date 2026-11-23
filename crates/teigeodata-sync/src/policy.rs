@@ -23,7 +23,7 @@ use crate::catalog::{self, Entry};
 use crate::fetch::FetchError;
 use crate::install::Installed;
 use crate::meta::RefreshError;
-use crate::store::{Record, StoreError};
+use crate::store::{DeltaRecord, Record, StoreError};
 use crate::trust::Trusted;
 
 /// A failed client call.
@@ -248,6 +248,45 @@ pub trait Packs {
     /// # Errors
     /// [`ClientError::Refused`] if it is not installed.
     async fn pin(&mut self, address: &str, component: &str, on: bool) -> Result<()>;
+    /// The installed deltas (D-395). None for a driver that installs none.
+    fn deltas(&self) -> &[DeltaRecord] {
+        &[]
+    }
+    /// Installs `delta` above its installed base (D-395); `None` for a driver that installs no
+    /// deltas, which then updates by section.
+    ///
+    /// # Errors
+    /// The network's or the store's.
+    async fn install_delta(&mut self, delta: &catalog::Delta) -> Result<Option<Outcome>> {
+        let _ = delta;
+        Ok(None)
+    }
+}
+
+/// A delta takes the place of an update by section only while it fetches at most this share of
+/// what the update could fetch (D-395): past it, the update by section makes the newer release
+/// the base again (compaction).
+pub const DELTA_SHARE: u64 = 4;
+
+/// The delta of `entry` (at `path` in `t`) above `base`, installed with `set`, when the catalog
+/// lists one from the base's release and it costs at most a [`DELTA_SHARE`]th of the pack's
+/// bytes for `set` (D-395).
+fn delta_for(
+    t: &Trusted,
+    path: &str,
+    entry: &Entry,
+    base: &Record,
+    set: Selection,
+) -> Result<Option<catalog::Delta>> {
+    let (_, target) = t
+        .trusted_targets()
+        .find(|(p, _)| *p == path)
+        .ok_or_else(|| ClientError::Refused(format!("{path}: not in the catalog")))?;
+    let deltas = catalog::Delta::list(path, target, entry).map_err(|e| ClientError::of(path, e))?;
+    let whole = entry.size_of(set).wire;
+    Ok(deltas.into_iter().find(|d| {
+        d.from == base.release && d.entry.size_of(set).wire.saturating_mul(DELTA_SHARE) <= whole
+    }))
 }
 
 /// Installs the packs at `paths` (catalog paths) with `want` added to what is installed,
@@ -376,15 +415,35 @@ async fn install_one<P: Packs>(
     let (entry, asset_len) = target(t, path)?;
     let installed = p.packs().iter().find(|r| r.key() == path).cloned();
     let set = selection(&entry, want, installed.as_ref())?;
-    if installed
-        .as_ref()
-        .is_some_and(|r| r.head == entry.head && r.selection() == set)
-    {
+    // What the pack answers as: its delta's release when one is installed above it (D-395).
+    let head = installed.as_ref().map(|r| {
+        p.deltas()
+            .iter()
+            .find(|d| d.is_over(r))
+            .map_or(r.head, |d| d.answers)
+    });
+    if installed.as_ref().is_some_and(|r| r.selection() == set) && head == Some(entry.head) {
         report.done.push(Done {
             path: path.to_owned(),
             release: entry.release.clone(),
             installed: None,
         });
+        return Ok(());
+    }
+    // An update of what is installed takes a delta above the installed release when the
+    // catalog lists one worth taking (D-395).
+    if let Some(r) = installed.as_ref().filter(|r| r.selection() == set)
+        && let Some(delta) = delta_for(t, path, &entry, r, set)?
+        && let Some(outcome) = p.install_delta(&delta).await?
+    {
+        match outcome {
+            Outcome::Installed(done) => report.done.push(Done {
+                path: path.to_owned(),
+                release: entry.release.clone(),
+                installed: Some(done),
+            }),
+            Outcome::Pending(pending) => report.pending.push(pending),
+        }
         return Ok(());
     }
     let done = match p.install(&entry, asset_len, set).await? {

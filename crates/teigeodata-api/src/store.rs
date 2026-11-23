@@ -39,7 +39,7 @@ pub(crate) fn want(o: &InstallOptions) -> Result<Want> {
 /// The verified catalog against the store: one row per pack.
 pub(crate) fn catalog(c: &mut Client<Net>) -> Result<Blob> {
     let t = c.offline()?;
-    rows::catalog(&t, c.packs())
+    rows::catalog(&t, &c.current())
 }
 
 /// Each installed pack and its health.
@@ -186,17 +186,19 @@ pub(crate) fn pending(packs: &[Pending]) -> Result<Blob> {
     ])
 }
 
-/// The engine over the installed packs, each opened with its installed components and parts.
+/// The engine over the installed packs, each opened with its installed components and parts,
+/// and each installed delta above its base (D-395).
 pub(crate) fn engine(c: &Client<Net>) -> Result<Engine> {
     let engine = Engine::new();
-    for r in c.packs() {
-        let path = c.pack_path(r)?;
+    let packs = c.packs().iter().map(|r| (c.pack_path(r), r.selection()));
+    let deltas = c.deltas().iter().map(|d| (c.delta_path(d), d.selection()));
+    for (path, sel) in packs.chain(deltas) {
         let options = LayerOptions {
-            installed: Some(r.set),
-            installed_parts: r.parts,
+            installed: Some(sel.set),
+            installed_parts: sel.parts,
             ..LayerOptions::default()
         };
-        engine.add(Layer::open(&path, options)?);
+        engine.add(Layer::open(&path?, options)?);
     }
     Ok(engine)
 }

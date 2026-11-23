@@ -479,6 +479,42 @@ reverse, admin units, the timezone, countries near and search at every probe.
 - Each check was shown to fail on a deliberate fault: no shadowing, no merge, importance not
   compared, and the older pack in the delta's place.
 
+### 3.10 Shipping delta packs (2026-11-23, D-395)
+
+How a delta reaches a client, decided on the code as it stands (1.2.0).
+
+- **Bases, not chains.** A client keeps its whole pack (the base) and at most one delta above
+  it. Each release publishes, for its entry, a delta from each of the last releases a client
+  may hold as its base, each made from two whole packs. A client on base R0 with δ(R0→R1) that
+  sees R2 replaces δ(R0→R1) with δ(R0→R2). Chained deltas (δ(R1→R2) over δ(R0→R1)) were set
+  aside: the engine's merge reads one delta over one base, and a chain's errors would add up.
+- **Compaction.** A delta from an old base grows with every release. The client takes a delta
+  only while it costs at most a quarter of what the update by section would fetch at most (the
+  entry's bytes for the installed selection); past that, or when no delta from its base is
+  listed, it updates by section (D-174) and the base becomes the newer release with no delta.
+  The release lists deltas from the last 3 releases only, which bounds what it builds.
+- **The catalog** (schema v1 grows, old readers ignore it): the pack's target gets
+  `custom.deltas`, a list of objects, one per base release. Each is the delta's own entry
+  (the same fields as `custom`: file, pack, transport, sizes, min_reader, licence, deps) plus
+  `from` (the base release), `length` and `sha256` (its transport asset's). It is signed with
+  the targets role like the rest of `custom`, so a delta is trusted as its pack is: the head
+  hash and the block hashes chain every byte to the signature. The asset is the delta in the
+  same seekable transport, named like any asset.
+- **The API stays additive** (the Rust API gate, D-389): `Entry` and `store::Record` are
+  exhaustive structs, so neither gains a field. `catalog::deltas(target)` reads the list, and the
+  journal keeps the installed deltas in a list of their own beside `packs` (journal version 4,
+  written only when a delta is installed, so an older reader refuses it rather than answer the
+  older release unknowingly).
+- **The store** installs a delta like a pack: staged, verified frame by frame against its head
+  and block hashes, renamed into `packs/`, committed in the journal. Removing, re-installing
+  or updating the base by section drops its delta in the same commit. A delta is installed with
+  its base's selection.
+- **Openers** (the CLI, the API, `Engine::follow`, the server, the wasm store) open each delta
+  file as a layer with its base's selection; the engine's precedence puts it above its base.
+- **Release tooling.** `tgd delta` builds each delta; `cargo xtask tuf release … --delta D.tgd`
+  attaches it to the entry of the pack whose release it is. A pair `tgd delta` refuses gets no
+  delta, and its clients update by section.
+
 ## 4. Options compared
 
 **Transport form.**
@@ -517,7 +553,8 @@ reverse, admin units, the timezone, countries near and search at every probe.
 3. **Streaming verify-then-write** using `Pack::blocks` (D-078) on decoded frames.
    Proof: a planted bad byte in each frame is caught before it is written.
 4. **Delta packs** (D-391, §3.9): `tgd delta` builds one from two whole releases; the engine
-   reads it above its base. The forge's emission and the catalog's entries are still to come.
+   reads it above its base. Shipping them (§3.10, D-395): the catalog's `deltas`, the store's
+   journal, the client's choice between a delta and an update by section.
    Proof: the older release with its delta answers as the newer one for every ID and probe.
 
 ## 6. Impact on the plan

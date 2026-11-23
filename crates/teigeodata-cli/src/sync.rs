@@ -73,14 +73,16 @@ pub(crate) fn open(root: &Path) -> Result<Client, Fail> {
 }
 
 /// The engine over the installed packs, each opened with its installed components and parts,
-/// and the packs `extra`.
+/// each installed delta above its base (D-395), and the packs `extra`.
 pub(crate) fn engine(c: &Client, extra: &[PathBuf]) -> Result<Engine, Fail> {
     let mut e = Engine::new();
-    for r in c.packs() {
-        let path = c.pack_path(r)?;
+    let packs = c.packs().iter().map(|r| (c.pack_path(r), r.selection()));
+    let deltas = c.deltas().iter().map(|d| (c.delta_path(d), d.selection()));
+    for (path, sel) in packs.chain(deltas) {
+        let path = path?;
         let options = LayerOptions {
-            installed: Some(r.set),
-            installed_parts: r.parts,
+            installed: Some(sel.set),
+            installed_parts: sel.parts,
             ..LayerOptions::default()
         };
         e.add(Layer::open(&path, options).map_err(|x| Fail::of(path.display(), x))?);
@@ -407,9 +409,12 @@ pub(crate) fn status(
     let mut bad = 0_usize;
     for (r, health) in &st.packs {
         bad += usize::from(*health != Health::Good);
+        // A pack with a delta above it answers as the delta's release (D-395).
+        let delta = s.deltas().iter().find(|d| d.is_over(r));
         rows.push(json!({
             "path": r.key(),
-            "release": r.release,
+            "release": delta.map_or(&r.release, |d| &d.release),
+            "delta_of": delta.map(|d| &d.of),
             "components": r.set.iter().map(Component::name).collect::<Vec<_>>(),
             "parts": parts_json(r.parts),
             "bytes": r.pack_len,

@@ -9,7 +9,8 @@
 
 use std::path::PathBuf;
 
-use teigeodata_sync::store::{Dir, Record};
+use teigeodata_format::component::Selection;
+use teigeodata_sync::store::{DeltaRecord, Dir, Record};
 
 use crate::{Engine, Error, Layer, LayerOptions, Shared};
 
@@ -33,8 +34,25 @@ impl Engine {
     /// whose open fails is reported in [`Followed::failed`]; with the same journal, a second
     /// call changes nothing more.
     pub fn follow(&mut self, dir: &Dir, packs: &[Record], options: LayerOptions) -> Followed {
+        self.follow_with(dir, packs, &[], options)
+    }
+
+    /// [`follow`](Self::follow) with the store's installed deltas (D-395): each is opened, with
+    /// its selection, as a layer that the engine's precedence puts above its base.
+    pub fn follow_with(
+        &mut self,
+        dir: &Dir,
+        packs: &[Record],
+        deltas: &[DeltaRecord],
+        options: LayerOptions,
+    ) -> Followed {
         let root = dir.packs_dir();
-        let wanted: Vec<PathBuf> = packs.iter().map(|r| dir.pack_path(r)).collect();
+        let listed: Vec<(PathBuf, Selection)> = packs
+            .iter()
+            .map(|r| (dir.pack_path(r), r.selection()))
+            .chain(deltas.iter().map(|d| (dir.delta_path(d), d.selection())))
+            .collect();
+        let wanted: Vec<&PathBuf> = listed.iter().map(|(p, _)| p).collect();
         let mut out = Followed::default();
         // Gone from the journal, or its file replaced since it was opened (a repair, D-172):
         // dropped here, and a listed one opened again below.
@@ -43,7 +61,7 @@ impl Engine {
             .filter_map(|l| {
                 let p = l.path()?;
                 (p.parent() == Some(root.as_path())
-                    && (!wanted.iter().any(|w| w == p) || !l.unchanged()))
+                    && (!wanted.iter().any(|w| *w == p) || !l.unchanged()))
                 .then(|| (l.id(), p.to_path_buf()))
             })
             .collect();
@@ -51,13 +69,13 @@ impl Engine {
             self.remove(id);
             out.closed.push(path);
         }
-        for (r, path) in packs.iter().zip(wanted) {
+        for (path, sel) in listed {
             if self.layers().any(|l| l.path() == Some(path.as_path())) {
                 continue;
             }
             let opts = LayerOptions {
-                installed: Some(r.set),
-                installed_parts: r.parts,
+                installed: Some(sel.set),
+                installed_parts: sel.parts,
                 ..options
             };
             match Layer::open(&path, opts) {
@@ -77,8 +95,20 @@ impl Shared {
     /// snapshot, and the dropped packs stay mapped until the last one ends. Nothing is
     /// published when nothing changed.
     pub fn follow(&self, dir: &Dir, packs: &[Record], options: LayerOptions) -> Followed {
+        self.follow_with(dir, packs, &[], options)
+    }
+
+    /// [`follow`](Self::follow) with the store's installed deltas (D-395), as
+    /// [`Engine::follow_with`].
+    pub fn follow_with(
+        &self,
+        dir: &Dir,
+        packs: &[Record],
+        deltas: &[DeltaRecord],
+        options: LayerOptions,
+    ) -> Followed {
         let r: Result<Followed, Followed> = self.try_update(|e| {
-            let f = e.follow(dir, packs, options);
+            let f = e.follow_with(dir, packs, deltas, options);
             if f.opened.is_empty() && f.closed.is_empty() {
                 Err(f)
             } else {

@@ -175,14 +175,16 @@ function holdShared(name) {
 
 /**
  * Opens the packs installed in the store `root` in `engine` (any teigeodata engine), reading
- * only the sections each one's installed components hold. `installedSections` is the
- * package's. Each pack file is held by a shared Web Lock until `close()`, so the store never
- * deletes a file this engine reads. Returns `{ layers, packs, close }`.
+ * only the sections each one's installed components hold, and each installed delta, which the
+ * engine reads above its base (D-395). `installedSections` is the package's. Each file is held
+ * by a shared Web Lock until `close()`, so the store never deletes a file this engine reads.
+ * Returns `{ layers, packs, close }`; `packs` lists the deltas after the packs.
  */
 export async function openInstalled(engine, installedSections, root) {
   const dir = await rootDir(root);
   const journal = await fileOf(dir, "journal");
-  const packs = journal ? JSON.parse(await journal.text()).packs : [];
+  const listed = journal ? JSON.parse(await journal.text()) : {};
+  const packs = [...(listed.packs ?? []), ...(listed.deltas ?? [])];
   const releases = [];
   const layers = [];
   try {

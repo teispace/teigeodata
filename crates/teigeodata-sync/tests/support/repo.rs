@@ -92,22 +92,72 @@ pub(crate) fn publish(host: &Host, v: u64, packs: &[Vec<u8>]) {
 /// [`publish`] with the roles expiring at `expires` and the timestamp at `ts_expires` (Unix
 /// seconds): a repository that stays valid as a checked-in fixture.
 pub(crate) fn publish_until(host: &Host, v: u64, packs: &[Vec<u8>], expires: i64, ts_expires: i64) {
+    publish_full(host, v, packs, &[], expires, ts_expires);
+}
+
+/// [`publish`] with delta packs (`tgd delta`, D-395), each listed in its pack's entry.
+pub(crate) fn publish_deltas(host: &Host, v: u64, packs: &[Vec<u8>], deltas: &[Vec<u8>]) {
+    publish_full(host, v, packs, deltas, now() + YEAR, now() + 14 * 86_400);
+}
+
+fn publish_full(
+    host: &Host,
+    v: u64,
+    packs: &[Vec<u8>],
+    deltas: &[Vec<u8>],
+    expires: i64,
+    ts_expires: i64,
+) {
     let mut h = host.lock().unwrap();
-    let mut files: Files = BTreeMap::new();
-    for p in packs {
+    let encode = |p: &[u8]| {
         let asset =
             teigeodata_sync::transport::encode(p, |d| zstd::bulk::compress(d, 3).ok()).unwrap();
         let entry = teigeodata_sync::measure::entry(p, &asset).unwrap();
+        (asset, entry)
+    };
+    let encoded: Vec<_> = packs.iter().map(|p| encode(p)).collect();
+    let mut listed: BTreeMap<String, Vec<serde_json::Value>> = BTreeMap::new();
+    for d in deltas {
+        let from = Pack::open(d)
+            .unwrap()
+            .manifest()
+            .delta_of()
+            .unwrap()
+            .to_owned();
+        let (asset, entry) = encode(d);
+        let sha: [u8; 32] = repo::target_hashes(&asset)["sha256"]
+            .as_slice()
+            .try_into()
+            .unwrap();
+        let of = encoded
+            .iter()
+            .find(|(_, e)| e.path() == entry.path())
+            .unwrap();
+        let delta =
+            teigeodata_sync::catalog::Delta::new(from, asset.len() as u64, sha, entry, of.1.head);
+        listed
+            .entry(delta.entry.path())
+            .or_default()
+            .push(delta.to_json());
+        h.insert(format!("assets/{}", delta.entry.file), asset);
+    }
+    let mut files: Files = BTreeMap::new();
+    for (asset, entry) in encoded {
+        let mut custom = entry.to_custom();
+        if let Some(list) = listed.remove(&entry.path()) {
+            custom["deltas"] = serde_json::Value::Array(list);
+        }
         files.insert(
             entry.path(),
             TargetFile {
                 length: asset.len() as u64,
                 hashes: repo::target_hashes(&asset),
-                custom: Some(entry.to_custom()),
+                custom: Some(custom),
             },
         );
         h.insert(format!("assets/{}", entry.file), asset);
     }
+    assert!(listed.is_empty(), "a delta of a pack not published");
     let (top, countries) = repo::by_country(files);
     let delegated: Vec<_> = countries
         .keys()

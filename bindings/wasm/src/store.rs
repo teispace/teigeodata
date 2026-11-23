@@ -516,7 +516,7 @@ impl Store {
     pub fn catalog(&self) -> Promise {
         self.run(|mut c| async move {
             let r = match c.offline(now()).await {
-                Ok(t) => bytes(rows::catalog(&t, c.packs())),
+                Ok(t) => bytes(rows::catalog(&t, &c.current())),
                 Err(e) => Err(client(e)),
             };
             (c, r)

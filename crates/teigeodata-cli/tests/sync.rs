@@ -25,7 +25,7 @@ use std::sync::atomic::Ordering;
 use serde_json::Value;
 use teigeodata_format::{Encoding, Kind, Part, Tag, Writer};
 
-use repo_support::{Host, pack, pack_of, publish, root_file, serve, serve_counted};
+use repo_support::{Host, pack, pack_of, publish, publish_deltas, root_file, serve, serve_counted};
 
 fn dir(name: &str) -> PathBuf {
     let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("sync-{name}"));
@@ -273,6 +273,114 @@ fn an_update_keeps_the_components_installed() {
         serde_json::json!(["point", "names", "search"])
     );
     assert_eq!(s["packs"][0]["health"], "Good");
+}
+
+/// `tgd delta old new` (D-391) in `d`, as `name`.
+fn delta_pack(d: &Path, old: &[u8], new: &[u8], name: &str) -> Vec<u8> {
+    let (o, n, out) = (
+        d.join(format!("{name}-old.tgd")),
+        d.join(format!("{name}-new.tgd")),
+        d.join(format!("{name}.tgd")),
+    );
+    std::fs::write(&o, old).unwrap();
+    std::fs::write(&n, new).unwrap();
+    let run = Command::new(env!("CARGO_BIN_EXE_tgd"))
+        .args(["delta", o.to_str().unwrap(), n.to_str().unwrap(), "-o"])
+        .arg(&out)
+        .output()
+        .unwrap();
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    std::fs::read(&out).unwrap()
+}
+
+/// The files in the store's `packs/`.
+fn files_in(store: &Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(store.join("packs"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    v.sort();
+    v
+}
+
+/// Delta packs shipped (D-395): an update takes the catalog's delta from the installed release,
+/// fetching a small share of the pack, and the store answers as the newer release; a later
+/// delta from the same base replaces it; a release with no delta from the base is an update by
+/// section, which drops the delta and its file.
+#[test]
+fn an_update_takes_a_delta_and_compacts_past_it() {
+    let d = dir("delta-update");
+    let host: Host = Arc::default();
+    let r0 = pack("2026.11.0", false);
+    publish(&host, 1, std::slice::from_ref(&r0));
+    let url = serve(Arc::clone(&host));
+    let store = store_for("delta-store", &url);
+    let whole = fetched(&ok(&store, &["install", "np"]));
+    // The place the newer releases move, as the store answers it.
+    let id = common::synthetic(700, 3).ids[5].to_string();
+    let lat = |store: &Path| {
+        json(store, &["get", &id, "--json"])[0]["lat"]
+            .as_f64()
+            .unwrap()
+    };
+    let before = lat(&store);
+
+    // 2026.12.0 moves it, with a delta from 2026.11.0.
+    let r1 = pack("2026.12.0", true);
+    publish_deltas(
+        &host,
+        2,
+        std::slice::from_ref(&r1),
+        &[delta_pack(&d, &r0, &r1, "d1")],
+    );
+    let out = ok(&store, &["update"]);
+    assert!(out.contains("2026.12.0"), "{out}");
+    let by_delta = fetched(&out);
+    assert!(by_delta * 4 <= whole, "{by_delta} of {whole}");
+    let s = json(&store, &["status", "--json", "--deep"]);
+    assert_eq!(s["packs"][0]["release"], "2026.12.0", "{s}");
+    assert_eq!(s["packs"][0]["delta_of"], "2026.11.0", "{s}");
+    assert_eq!(s["packs"][0]["health"], "Good");
+    assert!((lat(&store) - before - 0.01).abs() < 1e-6);
+    assert_eq!(
+        json(&store, &["catalog", "--json"])[0]["state"],
+        "installed"
+    );
+    // Up to date: nothing is fetched again.
+    let again = ok(&store, &["update"]);
+    assert!(!again.contains("fetched"), "{again}");
+    assert_eq!(files_in(&store).len(), 2, "the base and its delta");
+    let first = files_in(&store);
+
+    // 2026.12.1, with a delta from the same base: it replaces the first delta.
+    let r2 = pack("2026.12.1", true);
+    publish_deltas(
+        &host,
+        3,
+        std::slice::from_ref(&r2),
+        &[delta_pack(&d, &r0, &r2, "d2")],
+    );
+    assert!(ok(&store, &["update"]).contains("2026.12.1"));
+    let s = json(&store, &["status", "--json"]);
+    assert_eq!(s["packs"][0]["release"], "2026.12.1");
+    assert_eq!(s["packs"][0]["delta_of"], "2026.11.0");
+    let second = files_in(&store);
+    assert_eq!(second.len(), 2);
+    assert_eq!(first[0..1], second[0..1], "{first:?} {second:?}");
+
+    // 2026.12.2 lists no delta from 2026.11.0: an update by section, the delta gone.
+    publish(&host, 4, &[pack("2026.12.2", true)]);
+    assert!(ok(&store, &["update"]).contains("2026.12.2"));
+    let s = json(&store, &["status", "--json", "--deep"]);
+    assert_eq!(s["packs"][0]["release"], "2026.12.2");
+    assert!(s["packs"][0]["delta_of"].is_null(), "{s}");
+    assert_eq!(s["packs"][0]["health"], "Good");
+    assert_eq!(files_in(&store).len(), 1);
+    assert!((lat(&store) - before - 0.01).abs() < 1e-6);
 }
 
 /// A Nepal pack whose names and outlines are split into parts (ADR-0040), of incompressible

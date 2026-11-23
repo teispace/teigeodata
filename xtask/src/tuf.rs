@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use ed25519_dalek::SigningKey;
 use serde_json::Value;
 use teigeodata_format::Pack;
-use teigeodata_sync::catalog::Entry;
+use teigeodata_sync::catalog::{Delta, Entry};
 use teigeodata_sync::repo::{self, Files, RoleKeys, TargetFile};
 use teigeodata_sync::trust::{Envelope, Hashes, RoleName, Trusted};
 
@@ -52,9 +52,12 @@ cargo xtask tuf <command>
   sign <file> --role root|timestamp|snapshot|targets --key KEY
                                          adds a signature in place
   release <repo> --assets DIR --pack P.tgd… --targets-key KEY --snapshot-key KEY
-       --timestamp-key KEY [--folder TAG] assets and catalog entries from packs; new targets,
+       --timestamp-key KEY [--folder TAG] [--delta D.tgd…]
+                                         assets and catalog entries from packs; new targets,
                                          snapshot and timestamp; --folder: the assets sit in
-                                         the GitHub release TAG under the mirror base
+                                         the GitHub release TAG under the mirror base;
+                                         --delta: a delta pack (`tgd delta`) of a pack
+                                         released here, listed in its entry (D-395)
   timestamp <repo> --key KEY [--days 14] a fresh timestamp for the same snapshot
   verify <repo> [--assets DIR] [--min-days 7]
                                          the whole chain with the client, every entry, the assets
@@ -127,6 +130,10 @@ fn dispatch(args: &[String]) -> Result<String, String> {
             },
             now,
             a.opt("--folder"),
+            &a.all("--delta")
+                .iter()
+                .map(PathBuf::from)
+                .collect::<Vec<_>>(),
         ),
         Some("world-catalog") => world_catalog(&a),
         Some("timestamp") => timestamp(
@@ -687,11 +694,71 @@ pub(crate) fn release(
     keys: &Keys,
     now: i64,
 ) -> Result<String, String> {
-    release_in(repo, assets, packs, keys, now, None)
+    release_in(repo, assets, packs, keys, now, None, &[])
+}
+
+/// Writes `asset` as `name` in `assets`, never over an asset with other bytes.
+fn put_asset(assets: &Path, name: &str, asset: &[u8]) -> Result<(), String> {
+    let dest = assets.join(name);
+    match fs::read(&dest) {
+        Ok(old) if old != asset => Err(format!("{} exists with other bytes", dest.display())),
+        Ok(_) => Ok(()),
+        Err(_) => write(&dest, asset),
+    }
+}
+
+/// The delta packs `deltas` (made by `tgd delta`, D-391) as catalog deltas by pack path, their
+/// assets written to `assets` (D-395). Each must be of a pack in `packs` and of its release.
+fn deltas_of(
+    deltas: &[PathBuf],
+    packs: &[(String, String, [u8; 16])],
+    assets: &Path,
+    folder: Option<&str>,
+) -> Result<BTreeMap<String, Vec<Delta>>, String> {
+    let mut out: BTreeMap<String, Vec<Delta>> = BTreeMap::new();
+    for p in deltas {
+        let at = |e: String| format!("{}: {e}", p.display());
+        let bytes = read(p)?;
+        let from = Pack::open(&bytes)
+            .map_err(|e| at(e.to_string()))?
+            .manifest()
+            .delta_of()
+            .map(str::to_owned)
+            .ok_or_else(|| at("not a delta pack (`tgd delta` makes one)".into()))?;
+        let (mut entry, asset, hashes) = entry_of(&bytes).map_err(at)?;
+        let Some(&(_, _, answers)) = packs
+            .iter()
+            .find(|(p, r, _)| *p == entry.path() && *r == entry.release)
+        else {
+            return Err(at(format!(
+                "a delta to {} {}, which this release does not publish",
+                entry.path(),
+                entry.release
+            )));
+        };
+        let sha256: [u8; 32] = hashes
+            .get("sha256")
+            .and_then(|h| h.as_slice().try_into().ok())
+            .ok_or_else(|| at("no sha256".into()))?;
+        put_asset(assets, entry.name(), &asset)?;
+        if let Some(f) = folder {
+            entry.file = format!("{f}/{}", entry.file);
+        }
+        let path = entry.path();
+        out.entry(path).or_default().push(Delta::new(
+            from,
+            asset.len() as u64,
+            sha256,
+            entry,
+            answers,
+        ));
+    }
+    Ok(out)
 }
 
 /// A release whose assets sit in `folder` under the mirror base (D-384): the GitHub release
-/// of that tag. The assets are still written flat into `assets`, for its upload.
+/// of that tag. The assets are still written flat into `assets`, for its upload. Each of
+/// `deltas` is listed in its pack's entry (D-395).
 pub(crate) fn release_in(
     repo: &Path,
     assets: &Path,
@@ -699,27 +766,41 @@ pub(crate) fn release_in(
     keys: &Keys,
     now: i64,
     folder: Option<&str>,
+    deltas: &[PathBuf],
 ) -> Result<String, String> {
     if packs.is_empty() {
         return Err("no --pack".into());
     }
     fs::create_dir_all(assets).map_err(|e| format!("{}: {e}", assets.display()))?;
+    let mut entries = Vec::with_capacity(packs.len());
+    for p in packs {
+        entries.push(entry_of(&read(p)?).map_err(|e| format!("{}: {e}", p.display()))?);
+    }
+    let published: Vec<(String, String, [u8; 16])> = entries
+        .iter()
+        .map(|(e, _, _)| (e.path(), e.release.clone(), e.head))
+        .collect();
+    let mut deltas = deltas_of(deltas, &published, assets, folder)?;
     let Current {
         mut files,
         versions: [targets_v, snapshot_v, timestamp_v],
         roles: published,
     } = current(repo)?;
     let mut out = String::new();
-    for p in packs {
-        let (mut entry, asset, hashes) =
-            entry_of(&read(p)?).map_err(|e| format!("{}: {e}", p.display()))?;
+    for (p, (mut entry, asset, hashes)) in packs.iter().zip(entries) {
         if let Some(f) = folder {
             entry.file = format!("{f}/{}", entry.file);
+        }
+        let mut custom = entry.to_custom();
+        let listed = deltas.remove(&entry.path()).unwrap_or_default();
+        if let (false, Value::Object(m)) = (listed.is_empty(), &mut custom) {
+            let list: Vec<Value> = listed.iter().map(Delta::to_json).collect();
+            m.insert("deltas".to_owned(), Value::Array(list));
         }
         let file = TargetFile {
             length: asset.len() as u64,
             hashes,
-            custom: Some(entry.to_custom()),
+            custom: Some(custom),
         };
         // The client must read what we write.
         let target = teigeodata_sync::trust::Target {
@@ -728,15 +809,20 @@ pub(crate) fn release_in(
             custom: file.custom.clone(),
         };
         Entry::from_target(&entry.path(), &target).map_err(|e| format!("{}: {e}", p.display()))?;
-        let dest = assets.join(entry.name());
-        match fs::read(&dest) {
-            Ok(old) if old != asset => {
-                return Err(format!("{} exists with other bytes", dest.display()));
-            }
-            Ok(_) => {}
-            Err(_) => write(&dest, &asset)?,
+        let read_back = Delta::list(&entry.path(), &target, &entry)
+            .map_err(|e| format!("{}: {e}", p.display()))?;
+        if read_back != listed {
+            return Err(format!("{}: its deltas do not read back", p.display()));
         }
+        put_asset(assets, entry.name(), &asset)?;
         let _ = writeln!(out, "{} → {} ({} B)", entry.path(), entry.file, asset.len());
+        for d in &listed {
+            let _ = writeln!(
+                out,
+                "  delta from {} → {} ({} B)",
+                d.from, d.entry.file, d.length
+            );
+        }
         files.insert(entry.path(), file);
     }
     let expires = now + OFFLINE_DAYS * DAY;
@@ -885,6 +971,22 @@ pub(crate) fn verify(
         if let Some(dir) = assets {
             t.verify_target(path, &read(&dir.join(entry.name()))?)
                 .map_err(e(path))?;
+        }
+        // Its deltas (D-395), and each one's asset.
+        for d in Delta::list(path, target, &entry).map_err(|err| format!("{path}: {err}"))? {
+            if let Some(dir) = assets {
+                let asset = read(&dir.join(d.entry.name()))?;
+                let sha = repo::target_hashes(&asset);
+                if asset.len() as u64 != d.length
+                    || sha.get("sha256").map(Vec::as_slice) != Some(d.sha256.as_slice())
+                {
+                    return Err(format!(
+                        "{path}: the delta from {} is not its asset",
+                        d.from
+                    ));
+                }
+            }
+            bytes += d.length;
         }
         bytes += target.length;
         count += 1;
