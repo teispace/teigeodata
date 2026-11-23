@@ -17,7 +17,7 @@ use teigeodata_names::KeyBuf;
 
 use crate::layer::QueryRules;
 use crate::query::{Hit, HitCand, PrefixCand, Scratch, index, merge};
-use crate::{Engine, Error};
+use crate::{Engine, Error, Layer};
 
 // Match bonuses, added to the importance (0 to 255): S3's, one set for every country (D-052).
 const EXACT_BONUS: i32 = 60;
@@ -324,13 +324,14 @@ impl Engine {
                 }
                 let start = s.hits.len();
                 let walk = fuzzy.as_ref().map(|f| (f, anchor));
+                let rules = self.ruled_by(i).map_or(&v.rules, |o| &o.views().rules);
                 let query = Query {
                     q,
                     loose: &loose,
                     fuzzy: walk,
                     abbr,
                     old,
-                    rules: &v.rules,
+                    rules,
                     opts,
                     places: v.places.as_ref(),
                 };
@@ -664,11 +665,20 @@ impl Engine {
         }
     }
 
+    /// The delta above layer `i` whose query rules layer `i` answers by, when layer `i` is its
+    /// base: the newer release's rules (D-394). `None` answers by layer `i`'s own.
+    fn ruled_by(&self, i: usize) -> Option<&Layer> {
+        self.delta_over(i)
+            .and_then(|j| self.layers.get(j).map(|d| &**d))
+            .filter(|d| d.views().search.is_some())
+    }
+
     /// Whether some layer's rules name `abbreviation` as a unit type's.
     fn names_unit(&self, abbreviation: &str) -> bool {
-        self.layers
-            .iter()
-            .any(|l| l.views().rules.unit(abbreviation).is_some())
+        // A base below its delta has the delta's rules instead (D-394).
+        self.layers.iter().enumerate().any(|(i, l)| {
+            self.delta_over(i).is_none() && l.views().rules.unit(abbreviation).is_some()
+        })
     }
 }
 

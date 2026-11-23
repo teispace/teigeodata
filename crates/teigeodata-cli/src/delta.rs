@@ -13,9 +13,11 @@
 //! two answer as the newer pack does.
 //!
 //! The sections a delta cannot carry are keyed by rows or by area rather than by place
-//! (`REGION`, `POSTAL`, `DEM`, `SUBSTRING`, `TZ_RULES`, `BLOBS`, `ARCS_OVERVIEW`), and so are the search
-//! rules: when any of them differs, the delta is refused, and the newer pack is installed
-//! whole or by section.
+//! (`DEM`, `SUBSTRING`, `BLOBS`, `ARCS_OVERVIEW`; `REGION` and `POSTAL` when what they say of a
+//! place changed; `TZ_RULES` when a zone is gone), and so are the search rules that shape
+//! stored keys (droppable suffixes, the phonetic key): when any of them differs, the delta is
+//! refused, and the newer pack is installed whole or by section. The query-only rules travel:
+//! the engine answers a delta's base by the delta's rules (D-394).
 
 use std::collections::BTreeSet;
 use std::io::Write;
@@ -32,6 +34,7 @@ use teigeodata_format::postal::{self, Postal};
 use teigeodata_format::redirects::{self, Fate, Redirects};
 use teigeodata_format::region::{self, Options as RegionOptions, Region};
 use teigeodata_format::search::Search;
+use teigeodata_format::search::rules::Rule;
 use teigeodata_format::tz_rules::TzRules;
 use teigeodata_format::{Encoding, Kind, Pack, Part, Tag, Writer};
 use teigeodata_server::output::{self, Bufs, Item};
@@ -183,9 +186,18 @@ fn uncarried(
             out.push(kind.to_string());
         }
     }
+    // The rules that shape stored keys (droppable suffixes, the phonetic key) must agree: the
+    // older pack's keys stay in use for the places the delta leaves to it. The other rules act
+    // on the query only, and the delta's own replace the older pack's (D-394).
     let rules = |p: &Pack<'_>| -> Result<BTreeSet<String>, teigeodata_format::Error> {
         Ok(search_of(p)?
-            .map(|x| x.rules().iter().map(|r| format!("{r:?}")).collect())
+            .map(|x| {
+                x.rules()
+                    .iter()
+                    .filter(|r| matches!(r, Rule::Drop(_) | Rule::Phonetic(_)))
+                    .map(|r| format!("{r:?}"))
+                    .collect()
+            })
             .unwrap_or_default())
     };
     let (ra, rb) = (rules(old)?, rules(new)?);
@@ -194,7 +206,7 @@ fn uncarried(
             x.difference(y).cloned().collect::<Vec<_>>().join("; ")
         };
         out.push(format!(
-            "SEARCH's query rules (only before: {}; only after: {})",
+            "SEARCH's key rules (only before: {}; only after: {})",
             only(&ra, &rb),
             only(&rb, &ra)
         ));

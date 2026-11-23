@@ -446,12 +446,17 @@ size is a model until the forge emits one; its gate measures the real bytes agai
   - other sections keyed by row or area (SUBSTRING, DEM, BLOBS, `ARCS_OVERVIEW`, a REGION or
     POSTAL that changed meaning);
   - an outline removed;
-  - the search rules, which each layer applies to its own keys.
+  - the search rules that shaped the keys the base stored: droppable suffixes and the phonetic
+    key.
+- **Query rules travel** (D-394). The other rules (unit-type words, native generics and their
+  Latin spellings, spelling conventions) act on the query only. The delta carries the newer
+  release's in its SEARCH, and the engine answers a delta's base by them instead of its own.
 
   TZ_RULES travels whole, as the first layer that holds a zone answers for it.
 
-Measured on the second pair, with the search rules' difference set aside (this pair dropped
-भन्ज्याङ's spellings, so the tool refuses it as it should):
+Measured on the second pair. It dropped भन्ज्याङ's spellings, a query rule; the tool refused
+it until query rules travelled (D-394), and now builds it. The gate passes on it with search
+(109,171 IDs, 4,096 points, 512 queries alike, 2026-11-23):
 
 | | Bytes | Share |
 |---|--:|--:|

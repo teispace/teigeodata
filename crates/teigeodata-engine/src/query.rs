@@ -443,6 +443,18 @@ impl Engine {
         Ok(false)
     }
 
+    /// The delta layer above layer `i` that names `i`'s release as its base, for the same
+    /// address and component (D-391); `None` when layer `i` is not such a base.
+    #[cfg(feature = "search")]
+    pub(crate) fn delta_over(&self, i: usize) -> Option<usize> {
+        let l = self.layers.get(i)?;
+        self.layers.get(..i)?.iter().position(|d| {
+            d.delta_of() == Some(l.release())
+                && d.address() == l.address()
+                && d.component() == l.component()
+        })
+    }
+
     /// Whether a delta layer above layer `i` decides `id` where outlines are read (D-391): it
     /// holds an outline of its own for it, or retires it. Such a place's copy in layer `i` holds
     /// the point it holds only as the older release drew it, so it is left out of answers read

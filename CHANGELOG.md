@@ -14,10 +14,11 @@ applied: a minor release could break the public API, and every break is listed u
 
 - CLI: `tgd delta <older> <newer> -o <out>` writes a delta pack (D-391): the places that
   changed between two releases of a pack, read as a layer above the older. On Nepal's app pack
-  it is about 1 % of the asset. Pairs that differ in what a delta cannot carry are refused.
+  it is about 1 % of the asset. Pairs that differ in what a delta cannot carry are refused;
+  changed query rules travel in the delta (D-394).
 - Engine: delta layers. `Layer::delta_of` names the release a delta is read above; admin units
   at a point, countries near a point and the timezone at a point answer from a delta and its
-  base together.
+  base together; a base answers search by its delta's query rules.
 - Format: manifest tag `delta_of` (0x000A) and `extract::rows_outlined`, a slice whose
   ancestors are stubs without outlines.
 

@@ -308,9 +308,63 @@ fn what_a_delta_cannot_carry_is_refused() {
     assert!(e.contains("whole packs"), "{e}");
 }
 
-/// The gate on real packs: `TEIGEODATA_DELTA=old,new,delta[,nosearch]` (paths; `nosearch` when
-/// the pair's query rules differ and the delta was built anyway, to measure). Every ID, 4,096
-/// points near places and a grid over the packs' box; the probe queries unless `nosearch`.
+#[test]
+fn the_newer_query_rules_travel_and_key_rules_are_refused() {
+    use teigeodata_format::search::rules::{self, Rule};
+    let d = dir("rules");
+    let mut m = common::synthetic(300, 5);
+    m.release = "2026.11.0".into();
+    let ob = m.encode();
+    // The newer release changes no place, only its query rules: a native generic with a Latin
+    // spelling that ends one settlement's name, so a query in the native script finds it.
+    let linked = m.linked_rows();
+    let row = (1..m.ids.len())
+        .find(|&r| {
+            let t = &m.names[r][0].text;
+            !linked.contains(&(r as u32))
+                && !t.contains(' ')
+                && m.names.iter().flatten().filter(|n| &n.text == t).count() == 1
+        })
+        .unwrap();
+    let name = teigeodata_names::fold(&m.names[row][0].text).replace(' ', "");
+    let cut = name.char_indices().rev().nth(1).unwrap().0;
+    let (stem, tail) = name.split_at(cut);
+    let query = format!("{stem}चोक");
+    m.rules = Some(
+        rules::encode(&[Rule::Native {
+            native: "चोक",
+            spelling: tail,
+        }])
+        .unwrap(),
+    );
+    m.release = "2026.11.1".into();
+    let nb = m.encode();
+    let (op, np) = (write(&d, "old.tgd", &ob), write(&d, "new.tgd", &nb));
+    let db = delta(&op, &np, &d.join("delta.tgd")).unwrap();
+    let newer = engine(&[&nb]);
+    let layered = engine(&[&ob, &db]);
+    let mut queries = common::probes(&nb).queries;
+    queries.push(query.clone());
+    answers_alike(&newer, &layered, &ids_of(&[&m]), &grid(8), &queries);
+    // The rule finds the place, and the older pack alone does not: the gate can fail.
+    let (mut sc, mut hits) = (Scratch::default(), Vec::new());
+    let found = |e: &Engine, sc: &mut Scratch, hits: &mut Vec<teigeodata_engine::Hit>| {
+        e.search(&query, 10, sc, hits).unwrap();
+        hits.iter().any(|h| h.place.id == m.ids[row])
+    };
+    assert!(found(&layered, &mut sc, &mut hits), "{query}");
+    assert!(!found(&engine(&[&ob]), &mut sc, &mut hits), "{query}");
+    // A droppable suffix shapes the keys the older pack stored: refused.
+    m.rules = Some(rules::encode(&[Rule::Drop("chowk")]).unwrap());
+    m.release = "2026.11.2".into();
+    let kp = write(&d, "keys.tgd", &m.encode());
+    let e = delta(&op, &kp, &d.join("x.tgd")).unwrap_err();
+    assert!(e.contains("key rules"), "{e}");
+}
+
+/// The gate on real packs: `TEIGEODATA_DELTA=old,new,delta[,nosearch]` (paths; `nosearch` to
+/// leave search out). Every ID, 4,096 points near places and a grid over the packs' box; the
+/// probe queries unless `nosearch`.
 #[test]
 #[ignore = "needs real packs: TEIGEODATA_DELTA=old,new,delta"]
 fn real_packs_answer_alike() {
