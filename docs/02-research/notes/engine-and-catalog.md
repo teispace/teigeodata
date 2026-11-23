@@ -1,7 +1,7 @@
 ---
 title: "Engine and catalog: layered packs, the baseline, discovery by name"
-status: research
-updated: 2026-11-10
+status: accepted
+updated: 2026-11-23
 owner: research-agent
 revisit: 2027-02-09
 ---

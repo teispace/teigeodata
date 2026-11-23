@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: engine, baseline and sync"
-status: draft
+status: accepted
 updated: 2026-11-23
 ---
 
@@ -29,7 +29,9 @@ call (ADR-0012).
 
 ### 4.0 Research
 - [x] The two notes above, beside offline loading and trust and block hashes (2026-11-09)
-- [ ] Decision-log rows for what the notes recommend, as each is confirmed by its step
+- [x] Decision-log rows for what the notes recommend, as each is confirmed by its step (D-397,
+  2026-11-23: every recommendation mapped to its row; the world gazetteer pack, data only, goes
+  to the data waves)
 
 ### 4.1 Engine
 - [x] `teigeodata-engine`: mapped packs (B13: where `unsafe` for mmap lives, SIGBUS on a
@@ -377,7 +379,8 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 - [x] TG-13: world cities of 5,000 with heights and their source: `forge world --cities
   geonames-cities5000` (69,972 cities), ELEVATION's SOURCE column, `Engine::elevation_source`
   (D-219, 2026-11-11)
-- [ ] TG-14: Nepali and English names for every place: research done (D-215). Steps:
+- [ ] TG-14: Nepali and English names for every place: research done (D-215). Nepal's part is
+  done; India's tier goes to W1 and the consumer's review continues without blocking M4 (D-393). Steps:
   - [x] GeoNames' Latin-script `ne` names are never taken as Nepali: every stored name
     carries the script of its text, and a profile asks for `ne-Deva` (D-215, 2026-11-11)
   - [x] World places: Wikidata `ne`, then `hi`, labels by `wikidata:`/`geonames:` key,
@@ -387,15 +390,15 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     Nepal's places by key (`wikidata-np`) and the world's (`wikidata-labels-ne`, `-hi`), CLDR
     49 `ne.xml` for country names, first in the label chain, its short and variant forms kept
     (`cldr-49-ne`, origin `standard`; 237 of 248 countries named, D-257, 2026-11-13)
-  - [ ] the chain in the forge, each name's origin in its record (`rule`), with a coverage
+  - [x] the chain in the forge, each name's origin in its record (`rule`), with a coverage
     report per step (TG-11's names table). Done: origins in `RULE` (D-227), tier 6 (the
     canonical name transliterated, marked machine, searched apart; 99.0% of Nepal named,
     D-228, 2026-11-12), tier 1 (official names by a reviewed code crosswalk with an alignment
     gate: 715 local levels and 71 districts, D-232, D-234, 2026-11-12); tier 2 is in already
     (Nepal's Wikidata snapshot carries every language's labels); the 6 districts the CBS file
     loses (Nawalparasi East and West, Rukum East and West, Kailali, Kanchanpur) named from
-    Wikidata once Rukum East and Nawalparasi West link by outline (D-239). Open: tier 4
-    for India (Nepal's built, D-236). Done: the `machine_names: keep | drop` profile option
+    Wikidata once Rukum East and Nawalparasi West link by outline (D-239). Tier 4 for India
+    goes to W1 (Nepal's built, D-236; D-393). Done: the `machine_names: keep | drop` profile option
     (D-256, 2026-11-13); the 38 renamed
     local levels take their current Nepali names, the CBS name kept as the former official one
     (D-244); a unit's labels lose their type word and a query may end in one
@@ -420,7 +423,8 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     names the gap (the layer summary's table per country, 2026-11-12; `tithipatra`: Nepal
     1.1% `ne-Deva`, D-227)
 - [x] TG-16: outline tolerance measured (Nepal stays at 20 m), outlines snapped to their level's decimal grid, 64-edge index leaves: `tithipatra` 9.21 MB wire (D-229, D-230)
-- [ ] TG-15: India: research done (D-216, D-217), revised by measurement (D-258). Steps:
+- [ ] TG-15: India: research done (D-216, D-217), revised by measurement (D-258). Steps 1 to 5
+  done; step 6 goes to W1 with India's pack (D-393). Steps:
   - [x] 1. Sources pinned and mirrored: LGD's states, districts, sub-districts, urban local
     bodies and their coverage (`lgd-in-*`, Parquet, hashes equal to the mirror's own
     metadata), GeoNames `IN` (`geonames-in`; the world alternate names are pinned already),
@@ -461,7 +465,17 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 ### 4.10 Exit review
 Scope (D-393): M4 closes before any data wave is planned. TG-15 (India) and TG-14's India tier
 are W1's; TG-14's consumer name review does not block.
-- [ ] M4 criteria met, each with its evidence; progress updated
+- [x] M4 criteria met, each with its evidence; progress updated (D-398, 2026-11-23)
+
+| M4 criterion | Evidence |
+|---|---|
+| Layered engine | Layers, precedence and routing (D-113, D-114); the shared pack set on `arc-swap` (D-141); a delta read above its base (D-391) and its query rules (D-394) |
+| Embedded baseline | The world part and its gates, size gate Z1 at 8 MB (D-144..158) |
+| Catalog | TUF catalog and roles (D-159..163, D-175, D-176); keys in one vault and the live catalog, signed daily (D-383, D-384) |
+| Download and storage managers | Client, store, journal and policy (D-166..172, D-184..186); the browser store over OPFS (D-375, D-376) |
+| Delta updates, section re-download first | Update by section first (D-174); deltas decided, built, read and shipped as the default update with compaction by section (D-385, D-391, D-394, D-395) |
+| The 15 sync gates of ADR-0037 | All green in [sync gates](../../06-engineering/sync-gates.md); gate 13 is a measurement |
+| CLI `tgd` complete | Pack, query, store and finishing commands (D-180..183); `tgd delta` (D-391); no `tgd merge` (D-396) |
 
 ## Changelog
 
@@ -567,3 +581,4 @@ are W1's; TG-14's consumer name review does not block.
 | 2026-11-23 | M4's scope: India's items move to W1, the consumer's name review does not block | D-393 |
 | 2026-11-23 | 4.7: delta packs shipped; search rules travel in a delta | D-394, D-395 |
 | 2026-11-23 | 4.9: `merge` dropped; compaction is the update by section | D-396 |
+| 2026-11-23 | Exit review: M4 met (D-398); phase accepted | every criterion has its evidence; TG-15 and TG-14's India tier go to W1 (D-393) |

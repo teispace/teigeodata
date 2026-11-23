@@ -1,6 +1,6 @@
 ---
 title: "Download and delta: transport compression, ranged downloads, updates"
-status: research
+status: accepted
 updated: 2026-11-23
 owner: research-agent
 revisit: 2027-02-09

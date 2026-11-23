@@ -1,7 +1,7 @@
 ---
 title: "Integrity for large sections: lazy per-block verification (B12)"
-status: research
-updated: 2026-11-07
+status: accepted
+updated: 2026-11-23
 owner: maintainer's agents
 revisit: 2027-05-07
 ---
