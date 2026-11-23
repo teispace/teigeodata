@@ -16,6 +16,7 @@
 //!
 //! [CLI note]: https://github.com/teispace/teigeodata/blob/main/docs/02-research/notes/cli.md
 
+mod delta;
 mod export;
 mod extract;
 mod pack;
@@ -90,6 +91,18 @@ enum Command {
         /// Print JSON instead of text.
         #[arg(long)]
         json: bool,
+    },
+    /// Write a delta pack: the places that changed from an older release of a pack to a newer
+    /// one, read as a layer above the older (D-391). Refused when the releases differ in what a
+    /// delta cannot carry.
+    Delta {
+        /// The older release.
+        old: PathBuf,
+        /// The newer release.
+        new: PathBuf,
+        /// The file to write.
+        #[arg(short, long)]
+        out: PathBuf,
     },
     /// Write a smaller pack: some components, the places in a box (with their ancestors and
     /// timezone areas), or both.
@@ -609,6 +622,7 @@ fn run(cli: Cli, out: &mut dyn Write) -> Result<(), Fail> {
             limit,
             json,
         } => pack::diff(&old, &new, limit, json, out),
+        Command::Delta { old, new, out: to } => delta::run(&old, &new, &to, out),
         Command::Extract {
             pack,
             out: to,

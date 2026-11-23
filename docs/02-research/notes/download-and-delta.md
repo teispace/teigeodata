@@ -418,6 +418,62 @@ measured with `examples/delta_measure.rs` at zstd 19, with the change counted by
 predicted (D-273: about 100 times at 1 % of places). zstd patches stay dropped. The delta pack's
 size is a model until the forge emits one; its gate measures the real bytes against this.
 
+### 3.9 The delta pack as built (2026-11-23, D-391)
+
+`tgd delta <older> <newer> -o <out>` builds the delta from two whole releases of one pack.
+
+- **What changed.** A place changed when anything the engine answers about it differs: its
+  record with every name, its class, its search importance and unit type, or its outline at full
+  resolution. On the second pair that is 281 places (more than `tgd diff`'s 240, as it also
+  counts heights, parents and population).
+- **What the delta holds.** The newer release's rows of the changed places, with every row they
+  refer to: ancestors, timezone areas and redirect survivors. 703 rows in all. The 422 kept only
+  as references are **stubs**: their rows, names and search keys, but no outline. An outline
+  travels only where it changed (none on this pair), as the engine reads an outline from the
+  first layer that has one (D-191). REDIRECTS name the 2 IDs retired since. The manifest is the
+  newer release's, with `delta_of` naming the older.
+- **The engine.** A delta's copy of an ID hides the older one in every query (the rule of
+  ADR-0011). Three queries read outlines, not IDs, so they learn of deltas:
+  - `admin_at` merges a delta's admin units with its base's;
+  - `admin_at` and `countries_near` leave out a base unit whose outline the delta replaced or
+    whose ID it retired;
+  - `tz_at` skips a delta, which has no timezone index, so the base's answers.
+- **Sections keyed by row.** REGION and POSTAL name places by row, and a newer release
+  renumbers rows whenever a place is added or removed. The delta leaves them out when they mean
+  the same place by place (every other column alike, the rows naming the same IDs in order), and
+  the base's copy answers through the delta.
+- **Refused.** The delta is refused when a pair differs in what a delta cannot carry:
+  - other sections keyed by row or area (SUBSTRING, DEM, BLOBS, `ARCS_OVERVIEW`, a REGION or
+    POSTAL that changed meaning);
+  - an outline removed;
+  - the search rules, which each layer applies to its own keys.
+
+  TZ_RULES travels whole, as the first layer that holds a zone answers for it.
+
+Measured on the second pair, with the search rules' difference set aside (this pair dropped
+भन्ज्याङ's spellings, so the tool refuses it as it should):
+
+| | Bytes | Share |
+|---|--:|--:|
+| Whole asset at zstd 19 | 6,514,138 | 100 % |
+| Section re-download (§3.8) | 4,362,532 | 66.7 % |
+| **The delta pack** | 125,904 (64,057 at zstd 19) | **0.98 %** |
+| of which SEARCH and NAMES of the 703 rows | 105,152 | |
+
+The delta is about **68 times smaller than section re-download**, not the 400 times the model
+said. The model counted only the 240 changed places, but the 422 stubs carry their names and
+search keys, because a stub hides the base's copy of its ID.
+
+**The gate** (`crates/teigeodata-cli/tests/delta.rs`): the older release with the delta above
+it must answer as the newer release does, for every ID (whole records, class, outline) and for
+reverse, admin units, the timezone, countries near and search at every probe.
+
+- Synthetic pairs pass: moves, renames, heights, importance, a merge, a removal, added places,
+  and a moved outline.
+- On the real pair, all 109,171 IDs and 4,096 points answer alike (1.3 s).
+- Each check was shown to fail on a deliberate fault: no shadowing, no merge, importance not
+  compared, and the older pack in the delta's place.
+
 ## 4. Options compared
 
 **Transport form.**
@@ -455,9 +511,9 @@ size is a model until the forge emits one; its gate measures the real bytes agai
    that decodes past its size, and a frame across a section boundary are all rejected.
 3. **Streaming verify-then-write** using `Pack::blocks` (D-078) on decoded frames.
    Proof: a planted bad byte in each frame is caught before it is written.
-4. **Delta pack emission** in the forge, for the A/B only: changed rows plus tombstones, as a
-   pack of the same layout.
-   Proof: base + delta answers equal the new full pack on every golden query.
+4. **Delta packs** (D-391, §3.9): `tgd delta` builds one from two whole releases; the engine
+   reads it above its base. The forge's emission and the catalog's entries are still to come.
+   Proof: the older release with its delta answers as the newer one for every ID and probe.
 
 ## 6. Impact on the plan
 

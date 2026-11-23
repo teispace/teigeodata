@@ -35,7 +35,9 @@ more specific pack. Without one, it answers from the packs installed in the [sto
 The full listing goes on with every source's notice, every section with its component and size,
 and the bytes of each component. `tgd verify <pack>` checks the head and every section's hash
 (`--deep` also decodes every value, `--key` checks the signature); `tgd diff <old> <new>` lists
-what changed between two releases, section by section and place by place.
+what changed between two releases, section by section and place by place. `tgd delta <old> <new>
+-o <delta>` writes only the places that changed, as a pack read above the older release; it
+refuses a pair it cannot express exactly.
 
 ## Search
 

@@ -1,7 +1,7 @@
 ---
 title: "Phase 4: engine, baseline and sync"
 status: draft
-updated: 2026-11-13
+updated: 2026-11-23
 ---
 
 # Phase 4: engine, baseline and sync
@@ -271,7 +271,13 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
     re-download; the delta-pack decision waits for a release that changes records
   - second pair (D-385, 2026-11-23): 240 of 109,169 places changed; section re-download
     66.7 % of the asset, a delta pack about 0.17 %: delta packs win, about 400 times
-- [ ] If delta packs win: forge emission, compaction policy, L5 with delta layers
+- [x] Delta packs built and read (D-391, 2026-11-23): `tgd delta` from two whole releases;
+  the engine reads a delta above its base (L5). On the second pair it is 0.98 % of the asset,
+  68 times less than section re-download. The gate: base and delta answer as the newer release
+  for every ID and probe
+- [ ] Delta packs shipped: the release emits a delta against each release a client may hold,
+  the catalog lists it, the store installs it above its base and drops superseded deltas; a
+  compaction policy (re-download by section past a bound on deltas or bytes)
 
 ### 4.8 The 15 sync gates
 - [ ] Each gate of ADR-0037 (register: [sync gates](../../06-engineering/sync-gates.md); 11
@@ -552,3 +558,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-23 | 4.3: the first ceremony is one command with an encrypted vault on the everyday machine | D-383 |
 | 2026-11-23 | 4.7: delta packs decided on the first record-changing pair | D-385 |
 | 2026-11-23 | 4.3: the catalog is live; the upload item ticked, sharding replaced by one release per catalog release | D-384 |
+| 2026-11-23 | 4.7: delta packs built and read by the engine; shipping them is a new item | D-391 |

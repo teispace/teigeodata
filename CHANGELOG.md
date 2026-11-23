@@ -10,6 +10,17 @@ applied: a minor release could break the public API, and every break is listed u
 
 ## [Unreleased]
 
+### Added
+
+- CLI: `tgd delta <older> <newer> -o <out>` writes a delta pack (D-391): the places that
+  changed between two releases of a pack, read as a layer above the older. On Nepal's app pack
+  it is about 1 % of the asset. Pairs that differ in what a delta cannot carry are refused.
+- Engine: delta layers. `Layer::delta_of` names the release a delta is read above; admin units
+  at a point, countries near a point and the timezone at a point answer from a delta and its
+  base together.
+- Format: manifest tag `delta_of` (0x000A) and `extract::rows_outlined`, a slice whose
+  ancestors are stubs without outlines.
+
 ## [1.2.0] - 2026-11-23
 
 ### Added
