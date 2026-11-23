@@ -34,8 +34,8 @@ export const site = {
   changelog: `${repoUrl}/blob/main/CHANGELOG.md`,
   license: `${repoUrl}/blob/main/LICENSE`,
   /** The library's release the site documents. */
-  version: '1.1.0',
-  versionDate: '2026-11-17',
+  version: '1.2.0',
+  versionDate: '2026-11-23',
   org: {
     name: 'Teispace',
     legalName: 'Teispace Technology Private Limited',

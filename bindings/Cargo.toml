@@ -6,7 +6,7 @@ resolver = "3"
 members = ["python", "node", "jvm", "wasm"]
 
 [workspace.package]
-version = "1.1.0"
+version = "1.2.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/teispace/teigeodata"
@@ -15,8 +15,8 @@ rust-version = "1.99"
 publish = false
 
 [workspace.dependencies]
-teigeodata-api = { version = "1.1.0", path = "../crates/teigeodata-api", default-features = false }
-teigeodata-sync = { version = "1.1.0", path = "../crates/teigeodata-sync", default-features = false }
+teigeodata-api = { version = "1.2.0", path = "../crates/teigeodata-api", default-features = false }
+teigeodata-sync = { version = "1.2.0", path = "../crates/teigeodata-sync", default-features = false }
 
 # The main workspace's lint table with `unsafe_code` lowered from forbid to deny: the
 # generated shim modules allow it with a reason. `cargo xtask check-workspace` keeps every

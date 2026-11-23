@@ -10,6 +10,8 @@ applied: a minor release could break the public API, and every break is listed u
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-23
+
 ### Added
 
 - Sync: a catalog entry's `file` may start with one folder,
@@ -670,7 +672,8 @@ The first tagged version. Everything below is new.
 
 None: no version was released before this one.
 
-[Unreleased]: https://github.com/teispace/teigeodata/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/teispace/teigeodata/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/teispace/teigeodata/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/teispace/teigeodata/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/teispace/teigeodata/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/teispace/teigeodata/compare/v0.3.1...v1.0.0

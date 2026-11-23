@@ -51,7 +51,7 @@ To build from a checkout instead (a Rust toolchain is all it needs;
 
 ```sh
 git clone https://github.com/teispace/teigeodata && cd teigeodata
-git checkout v1.1.0
+git checkout v1.2.0
 PYO3_BUILD_EXTENSION_MODULE=1 cargo build --release -p teigeodata-python --manifest-path bindings/Cargo.toml
 cp bindings/target/release/libteigeodata_python.so bindings/python/teigeodata/_native.abi3.so   # .dylib on macOS
 export PYTHONPATH=$PWD/bindings/python
@@ -87,7 +87,7 @@ To build from a checkout instead (a Rust toolchain is all it needs;
 
 ```sh
 git clone https://github.com/teispace/teigeodata && cd teigeodata
-git checkout v1.1.0
+git checkout v1.2.0
 cargo build --release -p teigeodata-node --manifest-path bindings/Cargo.toml
 cp bindings/target/release/libteigeodata_node.so bindings/node/teigeodata.node   # .dylib on macOS
 npm install ./bindings/node
@@ -125,7 +125,7 @@ To build from a checkout instead (a Rust toolchain is all it needs;
 
 ```sh
 git clone https://github.com/teispace/teigeodata && cd teigeodata
-git checkout v1.1.0
+git checkout v1.2.0
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.130 --locked
 cargo xtask package-wasm          # needs binaryen's wasm-opt; writes target/wasm/full/
@@ -154,7 +154,7 @@ its checksum:
 
 ```swift title="Package.swift"
 dependencies: [
-    .package(url: "https://github.com/teispace/teigeodata", from: "1.1.0"),
+    .package(url: "https://github.com/teispace/teigeodata", from: "1.2.0"),
 ],
 targets: [
     .target(name: "MyApp", dependencies: [.product(name: "TeiGeodata", package: "teigeodata")]),
@@ -171,7 +171,7 @@ To build from a checkout instead (a Rust toolchain is all it needs;
 
 ```sh
 git clone https://github.com/teispace/teigeodata && cd teigeodata
-git checkout v1.1.0
+git checkout v1.2.0
 cargo build --release -p teigeodata-ffi        # the C library the package links
 ```
 
@@ -198,8 +198,8 @@ On Maven Central:
 
 ```kotlin title="build.gradle.kts"
 dependencies {
-    implementation("com.teispace:teigeodata:1.1.0")            // desktop JVM
-    // implementation("com.teispace:teigeodata-android:1.1.0") // Android
+    implementation("com.teispace:teigeodata:1.2.0")            // desktop JVM
+    // implementation("com.teispace:teigeodata-android:1.2.0") // Android
 }
 ```
 
@@ -211,7 +211,7 @@ To build from a checkout instead (a Rust toolchain is all it needs;
 
 ```sh
 git clone https://github.com/teispace/teigeodata && cd teigeodata
-git checkout v1.1.0
+git checkout v1.2.0
 cargo xtask package-jvm --desktop         # target/jvm/teigeodata-<version>.jar
 cargo xtask package-jvm --android         # target/jvm/teigeodata-<version>.aar (needs the NDK)
 ```
@@ -233,8 +233,8 @@ On Maven Central:
 
 ```kotlin title="build.gradle.kts"
 dependencies {
-    implementation("com.teispace:teigeodata:1.1.0")            // desktop JVM
-    // implementation("com.teispace:teigeodata-android:1.1.0") // Android
+    implementation("com.teispace:teigeodata:1.2.0")            // desktop JVM
+    // implementation("com.teispace:teigeodata-android:1.2.0") // Android
 }
 ```
 
@@ -246,7 +246,7 @@ To build from a checkout instead (a Rust toolchain is all it needs;
 
 ```sh
 git clone https://github.com/teispace/teigeodata && cd teigeodata
-git checkout v1.1.0
+git checkout v1.2.0
 cargo xtask package-jvm --desktop         # target/jvm/teigeodata-<version>.jar
 cargo xtask package-jvm --android         # target/jvm/teigeodata-<version>.aar (needs the NDK)
 ```
@@ -276,7 +276,7 @@ dependencies:
   teigeodata:
     git:
       url: https://github.com/teispace/teigeodata
-      ref: v1.1.0
+      ref: v1.2.0
       path: bindings/dart
 ```
 
@@ -353,7 +353,7 @@ To build from a checkout instead (a Rust toolchain is all it needs;
 
 ```sh
 git clone https://github.com/teispace/teigeodata && cd teigeodata
-git checkout v1.1.0
+git checkout v1.2.0
 cargo xtask package-c        # target/package/teigeodata-c-<version>-<target>/
 ```
 
@@ -399,7 +399,7 @@ To build from a checkout instead (a Rust toolchain is all it needs;
 
 ```sh
 git clone https://github.com/teispace/teigeodata && cd teigeodata
-git checkout v1.1.0
+git checkout v1.2.0
 cargo xtask package-dotnet    # target/dotnet/Teispace.TeiGeodata.<version>.nupkg
 ```
 

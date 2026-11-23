@@ -1,6 +1,6 @@
 {
   "about": "Expected results every binding's parity test checks; teigeodata-api's tests check this file against Rust.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "components": "point, elevation, admin, names, search, timezone, timezone-index, boundaries, admin-index, postal, dem, extra, tz-rules, substring, dem-coarse",
   "fold": [
     ["São Paulo", "sao paulo"],
