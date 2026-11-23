@@ -1,7 +1,7 @@
 ---
 title: "Phase 8: hardening and release"
 status: accepted
-updated: 2026-11-15
+updated: 2026-11-23
 ---
 
 # Phase 8: hardening and release
@@ -358,7 +358,47 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   from CI by trusted publishing** ([run 43931508857](https://github.com/teispace/teigeodata/actions/runs/43931508857),
   pub.dev run 43943423993), 2026-11-16. A new patch release replaced the planned "publish an
   existing tag" mode: simpler, and it proved trusted publishing end to end
-- [ ] M8 criteria met, each with its evidence; progress updated
+- [x] M8 criteria met (2026-11-23, D-390), each against the [roadmap](../roadmap.md):
+  - **Fuzzing campaign** (8.1, D-331, D-332):
+    - 16 libFuzzer targets nightly, the last three nights green (2026-11-20 to 2026-11-22);
+    - the weekly 3-hour campaign green on all 17 jobs on 2026-11-21 (run 44914567942), with its
+      coverage gate: every section kind's decoder reached;
+    - every failure accounted for, each fault kept as a `found_by_libfuzzer` test, red with its
+      fix reverted.
+  - **Security review** (8.2):
+    - the threat model's seven boundaries;
+    - the unsafe inventory with `cargo xtask unsafe-audit` (D-333);
+    - resource limits on every server route and MCP tool (D-334);
+    - zizmor on every workflow in fast-check;
+    - CodeQL on every push;
+    - OpenSSF Scorecard 6.8 of 10 (2026-11-16; 5.3 on its first run);
+    - `SECURITY.md` with the 1.0 support window.
+  - **Performance pass** (8.3):
+    - a profile of every Q and L suite (`cargo xtask profile`, D-338);
+    - two measured speed-ups on an alternating A/B;
+    - the scaling gate at 1 to 8 threads;
+    - suite C, the competitive report on GitHub's runners (D-340).
+  - **Docs complete** (8.4):
+    - the format frozen at 1.0 (D-335, D-336);
+    - growable enums `#[non_exhaustive]` (D-337);
+    - the API review (D-341) and the docs audit, every page read against the code (D-343);
+    - [what 1.0 promises](../../06-engineering/semver.md), held by the ABI gate and the Rust API
+      gate at each release and since D-389 nightly too.
+  - **First data release, Nepal** (8.5, 8.5b):
+    - [data-2026.11.15](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.15)
+      from CI with populations, then four more up to data-2026.11.22.2;
+    - since 2026-11-23 the signed catalog is live and installs them by name (D-383, D-384).
+  - **v1.0.0** (D-352). Since then, 1.0.1, 1.1.0 and **1.2.0 on every registry from CI by
+    trusted publishing**; 1.2.0 on 2026-11-23, release run 45147206368, pub.dev run 45152650087.
+- [x] Not blocking M8, recorded:
+  - **Scorecard checks only the maintainer can satisfy:** Branch-Protection, Code-Review,
+    CII-Best-Practices. Signed-Releases scores 0, though releases carry GitHub attestations
+    that the check does not count.
+  - **Ranking and data:** Q-028's ranking lever (settlements' populations, D-386), Q-009 (lite
+    postal codes) and the maintainer's corrections review.
+  - **Delta packs** are decided (D-385); building them is phase 4.7's next item.
+  - **Bindings:** 5.5d (Dart static linking), the APK path of D-306 on a real APK, and .NET runs
+    only in CI (D-299).
 
 ## Changelog
 
@@ -405,3 +445,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-23 | 8.5b: the Nepal data release data-2026.11.22.2 with TG-31, TG-32, Q-036, Q-037 and D-380; layers carry their parts' redirects | D-382 |
 | 2026-11-23 | The key ceremony becomes one command with an encrypted vault; `DOCS_DEPLOY` dropped from the maintainer's list | D-383 |
 | 2026-11-23 | The catalog live and 1.2.0 released everywhere; the catalog items ticked | D-384, D-388 |
+| 2026-11-23 | 8.6: M8 met; the exit review with its evidence | D-390 |
