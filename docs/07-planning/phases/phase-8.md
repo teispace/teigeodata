@@ -266,7 +266,7 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   with populations: [data-2026.11.15](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.15)
   (a GitHub pre-release from `data-build` run 43733977409 at `6b234d4`; every asset's digest
   checked against the run's `SHA256SUMS`; lite has the places of data-2026.11.14 by `tgd diff`)
-- [ ] The same packs through the signed catalog, after the key ceremony (phase 4.3)
+- [x] The same packs through the signed catalog (2026-11-23, D-384): data-2026.11.22.2's packs and layers in `catalog-2026.11.23`, installed and queried from the live host with `tgd`
 - [x] A dry run of `release.yml` end to end at the release commit: run 43719097976 on
   `chore/release-1.0.0` (the version bumped to 1.0.0 with `cargo xtask bump`, D-346), 53 jobs
   green, the ABI and Rust API gates clean. Rerun on the rebased branch at tag `v1.0.0-rc.2`
@@ -274,7 +274,7 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   green, 2026-11-16
 - [x] The release environment and registry accounts (5.10c), set up with the maintainer
   2026-11-16; the runbook records them
-- [ ] The maintainer: the key ceremony (phase 4.3; one command since D-383, [steps](../../06-engineering/catalog-keys.md#first-ceremony-the-maintainer)). `DOCS_DEPLOY` is not needed: the docs are on Vercel (D-353) and Pages serves the catalog
+- [x] The maintainer: the key ceremony (2026-11-23, D-383) and the timestamp secret. `DOCS_DEPLOY` is not needed: the docs are on Vercel (D-353)
 
 ### 8.5b Packs at run time on every platform (TG-24, TG-25, TG-26; D-362)
 
@@ -311,7 +311,7 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   out; measured 2026-11-17 in [sizes](../../05-data/sizes.md#embedded-layers-built-from-profiles)
 - [x] A public page on running a mirror (TG-24): [running a mirror](https://teigeodata.teispace.com/docs/concepts/mirrors)
   (layout, HTTP rules, sync order, server examples, a check), 2026-11-22
-- [ ] The catalog live through a mirror, after the key ceremony
+- [x] The catalog live (2026-11-23): the metadata on the `catalog` branch's raw host, the assets in GitHub releases; SDK 1.2.0 released on every registry to read it (D-384, D-388)
 - [x] TG-27 (D-363): research note on assembling OSM boundary relations into areas (multipolygon
   rules, invalid rings, matching to the boundary source's parents, ID reuse); then a main-build
   stage giving a country's deepest admin level outlines from OSM (Nepal: 6,741 wards), a
@@ -404,3 +404,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-22 | 8.5b: the wasm store split into five sub-steps (async pack driver, browser layout, wasm exports, worker and browser tests, docs) | the pack driver's transport is the async part |
 | 2026-11-23 | 8.5b: the Nepal data release data-2026.11.22.2 with TG-31, TG-32, Q-036, Q-037 and D-380; layers carry their parts' redirects | D-382 |
 | 2026-11-23 | The key ceremony becomes one command with an encrypted vault; `DOCS_DEPLOY` dropped from the maintainer's list | D-383 |
+| 2026-11-23 | The catalog live and 1.2.0 released everywhere; the catalog items ticked | D-384, D-388 |

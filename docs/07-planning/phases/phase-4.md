@@ -193,9 +193,13 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
 - [x] The timestamp workflow `catalog-timestamp` (daily, 14-day expiry, fails 7 days before
   expiry), off until the maintainer's first ceremony; the [ceremony
   document](../../06-engineering/catalog-keys.md) (2026-11-10, D-163)
-- [ ] Upload to sharded immutable releases (at most 1,000 assets each) and the first ceremony
-  (the maintainer: `xtask tuf ceremony`, one command and one passphrase, D-383; then the
-  `catalog` branch and Pages, the environment secret)
+- [x] The first ceremony and the live catalog (2026-11-23): the maintainer ran `xtask tuf
+  ceremony` (D-383); two catalogs, `main/` and `lite/`, on the `catalog` branch, served from
+  `raw.githubusercontent.com` (Pages redirects to the organisation's site); assets in the
+  immutable release `catalog-2026.11.23`, each entry naming its release as a folder (D-384,
+  SDK 1.2); the timestamp secret set and `catalog-timestamp` on, its first run signing both
+  (timestamp 2); a fresh client store verified each. One release per catalog release keeps
+  every release far under 1,000 assets
 - [x] Discovery: `catalog.find(name)` over the baseline (and the gazetteer pack when present),
   then the locator, then the catalog; `Resolver` trait (2026-11-10, D-164)
 
@@ -547,3 +551,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-16 | TG-14: reviewed names as a tier, keyed by stable ID, guarded, licence-classed by source | D-359 |
 | 2026-11-23 | 4.3: the first ceremony is one command with an encrypted vault on the everyday machine | D-383 |
 | 2026-11-23 | 4.7: delta packs decided on the first record-changing pair | D-385 |
+| 2026-11-23 | 4.3: the catalog is live; the upload item ticked, sharding replaced by one release per catalog release | D-384 |

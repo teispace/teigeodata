@@ -80,8 +80,10 @@ that needs a newer reader than its own.
 
 ## Data
 
-Until the signed catalog is live ([catalog keys](catalog-keys.md): the offline key ceremony
-comes first), data is released by hand as a GitHub pre-release (D-247):
+The signed catalog is live since 2026-11-23 (D-384). A data release is a GitHub release of its
+files, then a catalog release that signs them: [catalog keys, a release](catalog-keys.md#a-release),
+which asks the maintainer for the vault's passphrase. The files' release follows the steps
+below; the pre-releases before the catalog were made the same way (D-247):
 
 1. Build the packs and layers from a commit on `main` whose CI is green.
 2. Tag `data-YYYY.MM.DD` on that commit: `gh release create data-YYYY.MM.DD --target <sha>
@@ -102,7 +104,7 @@ comes first), data is released by hand as a GitHub pre-release (D-247):
    `world-np-lite.tgd`), and no gate or doc of a consumer is cited.
 
 The first: [data-2026.11.12](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.12). The latest: [data-2026.11.22.2](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.22.2), built in CI (`data-build` run 45031540294) from `c05cc20` (Nepal's packs) with the app layers from `59d88f9`: landmarks as `locality` with a class (D-381), काठमाडौं on every level (D-377), the world part's first-level units in English (D-379), and layers that answer the IDs their parts retired (D-382), with the ID registries and the lite-to-main bridge. Before it, [data-2026.11.22](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.22) (Nepal main with wards, `app-np`, `app-world`, the terrain layer and the first bridge, D-366) and [data-2026.11.17](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.17) (the app-sized layer, TG-26). Earlier, [data-2026.11.15](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.15), built in CI (`data-build` run 43733977409) from `6b234d4` for format-1 readers at that commit or later: Nepal's main build for the first time and the lite build, each with populations (D-351), their baselines and ID registries. The world layer and points layer still come from [data-2026.11.14.3](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.14.3), built from `eb8ab5c` for readers at `v0.2.0` or later: ISO 3166 codes world-wide (D-271) in the layer, the baseline and the points layer, every ID kept. Before it, [data-2026.11.14.2](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.14.2) (the layer's aliases, D-268) and [data-2026.11.14](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.14) (one importance scale, D-266; the ID registries and Nepal's pack still come from it).
-Once the catalog is live, data releases go through it and these pre-releases stop.
+Since the catalog is live, each data release's packs also go through it: an app on SDK 1.2 or later installs them by name, verified, and readers before 1.2 refuse the catalog's entries (D-384).
 
 ## Changelog
 
