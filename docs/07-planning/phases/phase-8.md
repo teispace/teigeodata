@@ -333,7 +333,7 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
     `admin_at` gives OSM's ward at four points; the lite-to-main bridge; released as
     [data-2026.11.22](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.22)
 
-- [ ] The consumer's second review (TG-30..34) and the open name questions, then one data
+- [x] The consumer's second review (TG-30..34) and the open name questions, then one data
   release with them:
   - [x] TG-30: IDs across lite and main (D-368, the bridge in data-2026.11.22); TG-33 and
     TG-34 released in data-2026.11.22
@@ -342,7 +342,9 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   - [x] Q-037: Devanagari spelling folds in search (D-378: न before any stop, both folds kept)
   - [x] Q-036: the world part's unit names in English (D-379: `name_en` less the unit's type; 886 units)
   - [x] TG-14's 42 held rows read a second time where a rule decides (D-380: 11 apply; 31 wait for a person)
-  - [ ] The Nepal data release with these, from CI, its error rates, the consumer told
+  - [x] The Nepal data release with these, from CI, its error rates, the consumer told:
+    [data-2026.11.22.2](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.22.2) (packs from CI run 45031540294 at `c05cc20`,
+    layers from `59d88f9`; D-382 found while staging it)
 
 ### 8.6 Exit review
 
@@ -400,3 +402,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-22 | 8.5b d: the store worker; per-file read locks replace the generation lock | D-376 |
 | 2026-11-22 | 8.5b e: the browser store documented; TG-24 to TG-26's store work done | - |
 | 2026-11-22 | 8.5b: the wasm store split into five sub-steps (async pack driver, browser layout, wasm exports, worker and browser tests, docs) | the pack driver's transport is the async part |
+| 2026-11-23 | 8.5b: the Nepal data release data-2026.11.22.2 with TG-31, TG-32, Q-036, Q-037 and D-380; layers carry their parts' redirects | D-382 |
