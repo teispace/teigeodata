@@ -1230,26 +1230,27 @@ impl Engine {
                     && let Some(p) = self.winning(i, p)?
                     && !out.iter().any(|o| o.id == p.id)
                 {
-                    out.push(p);
+                    // Coarse to fine across a delta and its base, as one pack's regions are
+                    // ordered: a base unit goes after the delta's of its level or coarser.
+                    let at = match answered {
+                        Some(_) => out
+                            .iter()
+                            .position(|o| o.admin_level > p.admin_level)
+                            .unwrap_or(out.len()),
+                        None => out.len(),
+                    };
+                    out.insert(at, p);
                 }
             }
             match (answered, l.delta_of()) {
                 (None, Some(base)) => {
                     answered = Some((l.id, l.address(), l.component(), base));
                 }
-                (Some((id, ..)), _) => {
-                    // Coarse to fine across the two, as one pack's regions are ordered.
-                    out.sort_by_key(|p| p.admin_level);
-                    return Ok(Some(id));
-                }
+                (Some((id, ..)), _) => return Ok(Some(id)),
                 (None, None) => return Ok(Some(l.id)),
             }
         }
-        if let Some((id, ..)) = answered {
-            out.sort_by_key(|p| p.admin_level);
-            return Ok(Some(id));
-        }
-        Ok(None)
+        Ok(answered.map(|(id, ..)| id))
     }
 
     /// Sets [`Near::inside`] on `near` (as [`reverse`](Self::reverse) answered for `at`): for a
