@@ -188,6 +188,26 @@ countries = ["NP"]
 used_by = "postal codes of Nepal (step 3.5): the check of data/countries/np/postal-codes.tsv"
 attribution = "Postal codes: General Post Office, Department of Postal Services, Government of Nepal (https://gpo.gov.np)"
 [[source]]
+id = "nso-np-sae-2023"
+title = "Small Area Estimation of Poverty 2023, National Statistics Office, Nepal: sheet \"2. Municipal estimates\", the 753 local levels' households and 2021 census population (xlsx)"
+kind = "http"
+# The portal serves the file to a form POST only (dataset 79: POST id=79 to this URL), so a
+# fetch reads our mirror; re-pinning is by hand.
+url = "http://113.199.192.53:82/app/home/download.php"
+mirror_url = "https://github.com/teispace/teigeodata/releases/download/sources-2026.11.23/{sha256}"
+moving = true
+version = "NSO Central Data Portal dataset 79, served 2026-11-23"
+retrieved = "2026-11-23"
+sha256 = "8d750770ece545f200b7cf042ea3512bdb46a7858105b38b3c7fe10ad076a023"
+size = 109286
+licence = "none stated on the portal"
+# No stated terms: main build only, as the postal codes (D-105, D-386).
+licence_class = "proprietary"
+countries = ["NP"]
+used_by = "forge build: census population of Nepal's local levels (data/countries/np/census.yaml, D-386)"
+attribution = "Population: National Population and Housing Census 2021, National Statistics Office, Government of Nepal (https://nsonepal.gov.np)"
+
+[[source]]
 id = "wikidata-np"
 title = "Wikidata places in Nepal with a coordinate (QLever snapshot)"
 kind = "sparql"

@@ -678,6 +678,14 @@ fn fetch_inputs(
             ids.push(id);
         }
     }
+    // The census tables (D-386), through the licence gate as every input.
+    for id in build::census::sources(root, cc)? {
+        if !ids.contains(&id)
+            && (!lite || build::LITE.contains(&lock.get(&id)?.licence_class.as_str()))
+        {
+            ids.push(id);
+        }
+    }
     for xlit in build::Profile::read(root, cc)?.transliterate {
         for id in crate::xlit::sources(root, &xlit)? {
             if !ids.contains(&id) {

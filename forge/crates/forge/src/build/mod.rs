@@ -35,6 +35,7 @@
 
 mod admins;
 pub(crate) mod baseline;
+pub(crate) mod census;
 mod cluster;
 mod corrections;
 mod dedupe;
@@ -390,6 +391,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
         (&a.cc, &g.official, &profile.romanise),
         &mut places,
     )?;
+    let census = census::run(root, &lock, (&a.cc, &g.census), &mut places)?;
     let corrected = corrections::run(root, who, &g.sources, &mut places, &units.levels, &out_dir)?;
     // Units named by number take their parent's names after every tier (below), so the donor
     // and transliteration tiers neither fill them nor count them (G-donor, D-363).
@@ -414,7 +416,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     let unnamed = keep_named(&mut places) + unnamed_clusters;
     let elevations = elevation::load(root, (&build, &g.sources), g.dem.as_deref(), &places)?;
 
-    let modelled_population = modelled.modelled(&places);
+    let modelled_population = census.mark(modelled.modelled(&places));
     let f = PackInputs::read(root, &a, &g.sources, &out_dir)?;
     let input = pack::Input {
         root,
@@ -459,6 +461,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     }
     summary.push_str(&dedupe::report(&joined, &merged, &out_dir, a.build_name())?);
     summary.push_str(&officials);
+    summary.push_str(&census.report);
     summary.push_str(&corrected);
     summary.push_str(&donated);
     summary.push_str(&transliterated);
@@ -547,6 +550,8 @@ struct Gated {
     attribution: String,
     /// The official name lists' sources the build may read (D-232).
     official: Vec<String>,
+    /// The census tables' sources the build may read (D-386).
+    census: Vec<String>,
 }
 
 /// The schedule-time licence gate (G-lic): a source the build may not read is never opened.
@@ -612,6 +617,10 @@ fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
         .into_iter()
         .filter_map(|id| allowed(&id).map(|ok| ok.then_some(id)).transpose())
         .collect::<Result<Vec<_>, _>>()?;
+    let census = census::sources(root, &a.cc)?
+        .into_iter()
+        .filter_map(|id| allowed(&id).map(|ok| ok.then_some(id)).transpose())
+        .collect::<Result<Vec<_>, _>>()?;
     let attribution = notices(lock, &read)?;
     Ok(Gated {
         sources,
@@ -622,6 +631,7 @@ fn gate(root: &Path, a: &Args, lock: &Lock) -> Result<Gated, String> {
         skipped,
         attribution,
         official,
+        census,
     })
 }
 

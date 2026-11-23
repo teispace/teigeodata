@@ -10,6 +10,19 @@ applied: a minor release could break the public API, and every break is listed u
 
 ## [Unreleased]
 
+### Added
+
+- Forge: census populations (D-386). A country's `census.yaml` joins a census table, read
+  straight from its xlsx, to an official list's units row by row, with every row checked by
+  name. Nepal's main build gives the 753 local levels their 2021 census counts; their wards
+  are scaled to them and the levels above re-summed.
+
+### Changed
+
+- xtask: `mirror` uploads to the release each source's `mirror_url` names, creating a new
+  one as a draft and publishing it once filled. Releases here are immutable, so new inputs go
+  to `sources-<date>` (D-387). `check-data` allows an http upstream for a mirrored source.
+
 ## [1.2.0] - 2026-11-23
 
 ### Added

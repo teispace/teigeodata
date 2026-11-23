@@ -1,0 +1,21 @@
+# Census population of Nepal's local levels (D-386): the National Population and Housing
+# Census 2021 count of each of the 753 local levels, from NSO's Small Area Estimation of
+# Poverty 2023 workbook (sheet "2. Municipal estimates": households in F, population in G).
+# The sheet lists the local levels in the CBS list's order, so each row is joined through the
+# official-names crosswalk (official-names.yaml) and checked by its Nepali name (column E).
+# No licence is stated, so the main build only reads it (the source's licence class).
+schema: teigeodata/census/v1
+tables:
+  - source: nso-np-sae-2023
+    year: 2021
+    list: cbs-np-local-levels
+    sheet: xl/worksheets/sheet1.xml
+    first_row: 3
+    name: E
+    population: G
+    # Rows far from their list row's name, each checked to be the same unit: the same
+    # district, the same place in the list's order between two matching rows, and the table's
+    # English name (column D) a spelling of the list's (2026-11-23).
+    checked:
+      298: "Rasuwa: Shuva Kalika Rural Municipality in the table, Kalika Rural Municipality (30304) in the list"
+      407: "Manang: Nason Rural Municipality in the table, Nashong Rural Municipality (40204) in the list"

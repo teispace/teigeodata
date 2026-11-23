@@ -182,6 +182,64 @@ pub(super) fn cut<'t>(text: &'t str, strip: &[String]) -> &'t str {
         .unwrap_or(text)
 }
 
+/// One row of an official list, for another table that follows the list row by row (D-386).
+pub(super) struct Row {
+    /// The joined unit's key in the build, when the crosswalk joins the row's code.
+    pub(super) key: Option<String>,
+    /// The names a table may write for the row, unit-type words cut: the list's own, the
+    /// crosswalk's mended one (a misaligned row) and, for a unit renamed after the list was
+    /// made, its name since.
+    pub(super) names: Vec<String>,
+}
+
+/// A list's rows and its unit-type words.
+pub(super) type ListRows = (Vec<Row>, Vec<String>);
+
+/// The rows of the list read from `source` in `cc`'s official names, in the list's order, and
+/// its unit-type words. None when the country has no such list.
+pub(super) fn rows(
+    root: &Path,
+    lock: &Lock,
+    cc: &str,
+    source: &str,
+) -> Result<Option<ListRows>, String> {
+    let Some(f) = read_file(root, cc)? else {
+        return Ok(None);
+    };
+    let Some(l) = f.lists.into_iter().find(|l| l.source == source) else {
+        return Ok(None);
+    };
+    let by_code: BTreeMap<&str, (&str, &Join)> = l
+        .units
+        .iter()
+        .map(|(k, j)| (j.code.as_str(), (k.as_str(), j)))
+        .collect();
+    let rows = csv_columns(&lock.path(root, source)?, &[&l.code, &l.name])?;
+    let out = rows
+        .iter()
+        .filter_map(|r| match r.as_slice() {
+            [c, n] if !c.is_empty() && !n.is_empty() => Some((c, n)),
+            _ => None,
+        })
+        .map(|(c, n)| {
+            let joined = by_code.get(c.as_str());
+            Row {
+                key: joined.map(|(k, _)| (*k).to_string()),
+                names: std::iter::once(n.as_str())
+                    .chain(joined.and_then(|(_, j)| j.name.as_deref()))
+                    .chain(
+                        joined
+                            .and_then(|(_, j)| j.renamed.as_ref())
+                            .map(|r| r.name.as_str()),
+                    )
+                    .map(|n| cut(n, &l.strip).to_string())
+                    .collect(),
+            }
+        })
+        .collect();
+    Ok(Some((out, l.strip)))
+}
+
 /// Gives each joined unit its official name; returns the summary's lines. `allowed` is the
 /// lists' sources the build may read.
 pub(super) fn run(

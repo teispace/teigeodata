@@ -130,9 +130,7 @@ pub(crate) fn check_text(
                 "{at}: attribution must be one line of at most {ATTRIBUTION_MAX} bytes"
             ));
         }
-        if !s.url.starts_with("https://") {
-            p.push(format!("{at}: url must be https"));
-        }
+        p.extend(url_problem(s, &at));
         if s.mirror_url
             .as_deref()
             .is_some_and(|m| !m.starts_with("https://"))
@@ -303,6 +301,14 @@ fn check_tileset(s: &Source, root: &Path, at: &str, p: &mut Vec<String>) {
     }
 }
 
+/// An upstream URL is https, or http when the source has a mirror: a pinned fetch reads the
+/// bytes from the https mirror and checks them by their SHA-256 either way (D-386).
+fn url_problem(s: &Source, at: &str) -> Option<String> {
+    let ok =
+        s.url.starts_with("https://") || (s.mirror_url.is_some() && s.url.starts_with("http://"));
+    (!ok).then(|| format!("{at}: url must be https, or http with a mirror_url"))
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -448,6 +454,11 @@ attribution = "© OpenStreetMap contributors, ODbL 1.0"
                 "needs a mirror_url",
             ),
             (
+                "url = \"https://download",
+                "url = \"http://download",
+                "url must be https, or http with a mirror_url",
+            ),
+            (
                 "attribution = \"© OpenStreetMap contributors, ODbL 1.0\"",
                 "attribution = \"a\\nb\"",
                 "one line",
@@ -467,6 +478,16 @@ attribution = "© OpenStreetMap contributors, ODbL 1.0"
                 "expected `{expect}` for `{to}`, got {p:?}"
             );
         }
+        // An http upstream with a mirror: the pinned bytes come from the mirror (D-386).
+        let mirrored = GOOD
+            .replacen("url = \"https://download", "url = \"http://download", 1)
+            .replacen(
+                "version =",
+                "mirror_url = \"https://m/{sha256}\"\nversion =",
+                1,
+            );
+        let (_, p) = check_text(&mirrored, Path::new("."), &countries());
+        assert!(!p.iter().any(|m| m.contains("https")), "{p:?}");
         let dup = format!("{GOOD}{}", GOOD.split("\n\n").nth(1).unwrap_or_default());
         let (_, p) = check_text(&dup, Path::new("."), &countries());
         assert!(p.iter().any(|m| m.contains("duplicate id")), "{p:?}");
