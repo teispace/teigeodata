@@ -311,7 +311,7 @@ pub(crate) fn plan(
         search_of(&old).map_err(bad_old)?,
         search_of(&new).map_err(bad_new)?,
     );
-    let (mut ba, mut bb) = (Bufs::default(), Bufs::default());
+    let (mut bufs_old, mut bufs_new) = (Bufs::default(), Bufs::default());
     let (mut oa, mut ob) = (Outline::default(), Outline::default());
     let bad = |e: teigeodata_engine::Error| Fail::Refused(e.to_string());
     let (mut changed, mut outlined) = (Vec::new(), Vec::new());
@@ -321,9 +321,9 @@ pub(crate) fn plan(
             continue;
         };
         let r = u32::try_from(row).map_err(|_| Fail::Refused("too many rows".into()))?;
-        let (record, shape) = fingerprint(&en, sn.as_ref(), now, &mut bb, &mut ob)?;
+        let (record, shape) = fingerprint(&en, sn.as_ref(), now, &mut bufs_new, &mut ob)?;
         let before = match ids_old.row(id).and_then(|_| eo.get(id).ok().flatten()) {
-            Some(was) => Some(fingerprint(&eo, so.as_ref(), was, &mut ba, &mut oa)?),
+            Some(was) => Some(fingerprint(&eo, so.as_ref(), was, &mut bufs_old, &mut oa)?),
             None => None,
         };
         let (record_differs, shape_differs) = match &before {

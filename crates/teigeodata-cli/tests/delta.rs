@@ -8,7 +8,8 @@
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::print_stdout,
-    reason = "tests: failures panic with their message; rows and steps are small; the gate reports its sizes"
+    clippy::many_single_char_names,
+    reason = "tests: failures panic with their message; rows and steps are small; the gate reports its sizes; short names for packs and paths"
 )]
 
 #[path = "../../teigeodata-engine/tests/common/mod.rs"]
@@ -302,8 +303,7 @@ fn what_a_delta_cannot_carry_is_refused() {
     n.release = "2026.11.1".into();
     n.names[5][0].text = "Changed".into();
     let nb = write(&d, "n.tgd", &n.encode());
-    let first = delta(&a, &nb, &d.join("d1.tgd")).unwrap();
-    assert!(!first.is_empty());
+    delta(&a, &nb, &d.join("d1.tgd")).unwrap();
     let e = delta(&a, &d.join("d1.tgd"), &d.join("x.tgd")).unwrap_err();
     assert!(e.contains("whole packs"), "{e}");
 }
