@@ -1,0 +1,296 @@
+{
+  "signatures": [
+    {
+      "keyid": "1fc532e0fbb8aec537b7f25647634334f4e03c6496752b848d11a705d36ce663",
+      "sig": "e876d1b6ba523e89bb1e0e7107030c1b9b0b444ab90b518ce86ff255444d332d97693b2093ee22a07437590d844d62cbe9036a86333c6771bc0b027a451d8608"
+    }
+  ],
+  "signed": {
+    "_type": "targets",
+    "delegations": {
+      "keys": {
+        "1fc532e0fbb8aec537b7f25647634334f4e03c6496752b848d11a705d36ce663": {
+          "keytype": "ed25519",
+          "keyval": {
+            "public": "3540e264deb7fbe18a200a2eaa44023d8fbbd19ca22a4af6c486502eb6014550"
+          },
+          "scheme": "ed25519"
+        }
+      },
+      "roles": [
+        {
+          "keyids": [
+            "1fc532e0fbb8aec537b7f25647634334f4e03c6496752b848d11a705d36ce663"
+          ],
+          "name": "np",
+          "paths": [
+            "np.*",
+            "np-*"
+          ],
+          "terminating": true,
+          "threshold": 1
+        }
+      ]
+    },
+    "expires": "2027-11-23T08:07:57Z",
+    "spec_version": "1.0.31",
+    "targets": {
+      "app-np-100.baseline.tgd": {
+        "custom": {
+          "address": "app-np-100",
+          "block_hashes": {
+            "for": [
+              "names",
+              "search"
+            ],
+            "size": [
+              11914,
+              11904
+            ]
+          },
+          "component": "baseline",
+          "deps": [],
+          "file": "catalog-2026.11.23/app-np-100.baseline.2026.11.23.5fa1b3c2.tgd.zst",
+          "licence": "ODbL-1.0",
+          "min_reader": 1,
+          "pack": {
+            "head": "9624dc9b78d06c87d74c75c302cc03eb",
+            "length": 9227728
+          },
+          "release": "2026.11.23",
+          "schema": 1,
+          "sizes": {
+            "admin": [
+              345599,
+              448704
+            ],
+            "admin-index": [
+              552981,
+              643712
+            ],
+            "boundaries": [
+              826988,
+              935232
+            ],
+            "elevation": [
+              141750,
+              155584
+            ],
+            "names": [
+              1161838,
+              3268032
+            ],
+            "point": [
+              637947,
+              971520
+            ],
+            "search": [
+              1853533,
+              2778304
+            ],
+            "timezone": [
+              506,
+              9024
+            ],
+            "tz-rules": [
+              692,
+              2800
+            ]
+          },
+          "transport": {
+            "encoding": "zstd-seekable",
+            "head": [
+              1759,
+              2880
+            ],
+            "seek_table": 193
+          }
+        },
+        "hashes": {
+          "sha256": "5fa1b3c2e36683ff1e42138a86794d37a46323db2ff9503da17be7fce920c983"
+        },
+        "length": 5535700
+      },
+      "app-np.baseline.tgd": {
+        "custom": {
+          "address": "app-np",
+          "block_hashes": {
+            "for": [
+              "names",
+              "search",
+              "boundaries"
+            ],
+            "size": [
+              14858,
+              14848
+            ]
+          },
+          "component": "baseline",
+          "deps": [],
+          "file": "catalog-2026.11.23/app-np.baseline.2026.11.23.5e7866bc.tgd.zst",
+          "licence": "ODbL-1.0",
+          "min_reader": 1,
+          "pack": {
+            "head": "2bdd39c98768e3ba25b69e977ee2fc17",
+            "length": 10277840
+          },
+          "release": "2026.11.23",
+          "schema": 1,
+          "sizes": {
+            "admin": [
+              345599,
+              448704
+            ],
+            "admin-index": [
+              740870,
+              855104
+            ],
+            "boundaries": [
+              1642992,
+              1771008
+            ],
+            "elevation": [
+              141750,
+              155584
+            ],
+            "names": [
+              1161838,
+              3268032
+            ],
+            "point": [
+              637947,
+              971520
+            ],
+            "search": [
+              1853533,
+              2778304
+            ],
+            "timezone": [
+              506,
+              9024
+            ],
+            "tz-rules": [
+              692,
+              2800
+            ]
+          },
+          "transport": {
+            "encoding": "zstd-seekable",
+            "head": [
+              1760,
+              2880
+            ],
+            "seek_table": 201
+          }
+        },
+        "hashes": {
+          "sha256": "5e7866bce9a4f11a85733975d7b1a1004b1a6da5441d82f4a2e11ff740162e33"
+        },
+        "length": 6542546
+      },
+      "app-world.baseline.tgd": {
+        "custom": {
+          "address": "app-world",
+          "block_hashes": {
+            "for": [
+              "names",
+              "search"
+            ],
+            "size": [
+              7690,
+              7680
+            ]
+          },
+          "component": "baseline",
+          "deps": [],
+          "file": "catalog-2026.11.23/app-world.baseline.2026.11.23.5bc87d50.tgd.zst",
+          "licence": "CC-BY-4.0",
+          "min_reader": 1,
+          "pack": {
+            "head": "42936cf0cc7f3142b3c90e3937c4d34a",
+            "length": 5456936
+          },
+          "release": "2026.11.23",
+          "schema": 1,
+          "sizes": {
+            "admin": [
+              167945,
+              329152
+            ],
+            "elevation": [
+              108697,
+              176832
+            ],
+            "names": [
+              860321,
+              1779968
+            ],
+            "point": [
+              589711,
+              925248
+            ],
+            "search": [
+              1311570,
+              2107520
+            ],
+            "timezone": [
+              12999,
+              45696
+            ],
+            "tz-rules": [
+              63524,
+              83272
+            ]
+          },
+          "transport": {
+            "encoding": "zstd-seekable",
+            "head": [
+              981,
+              1536
+            ],
+            "seek_table": 137
+          }
+        },
+        "hashes": {
+          "sha256": "5bc87d50b56491d5c9db165e56c8bb937f45261ab86d9a4cce9d213f7f29a7d4"
+        },
+        "length": 3123575
+      },
+      "dem-coarse-np.baseline.tgd": {
+        "custom": {
+          "address": "dem-coarse-np",
+          "component": "baseline",
+          "deps": [],
+          "file": "catalog-2026.11.23/dem-coarse-np.baseline.2026.11.22.fe76dc3b.tgd.zst",
+          "licence": "CC-BY-4.0",
+          "min_reader": 1,
+          "pack": {
+            "head": "ac165ff86cb865e5d180334cd4e3ba6d",
+            "length": 527424
+          },
+          "release": "2026.11.22",
+          "schema": 1,
+          "sizes": {
+            "dem-coarse": [
+              517806,
+              526240
+            ]
+          },
+          "transport": {
+            "encoding": "zstd-seekable",
+            "head": [
+              722,
+              1152
+            ],
+            "seek_table": 33
+          }
+        },
+        "hashes": {
+          "sha256": "fe76dc3b42a83b6e7b814fb223b39c809b163c284b9b251c685e28fc99de0a17"
+        },
+        "length": 518561
+      }
+    },
+    "version": 1
+  }
+}
