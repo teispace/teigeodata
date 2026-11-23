@@ -4,10 +4,10 @@
 //! ```text
 //! forge make <cc> --release <version> [--lite] [--key <seed-file>] [--ids <registry> | --fresh-ids] [--split] [--force] [--fetch]
 //!
-//! Without `--ids`, the build reads the newest registry of the country's builds in its pack
-//! directory (D-240), so IDs stay stable from one run to the next, and fails when there is
-//! none (D-261: `cargo xtask ids restore` puts the released ones back); `--fresh-ids` numbers
-//! a first build on purpose.
+//! Without `--ids`, the build reads its own line's registry in its pack directory
+//! (`<cc>-ids-main.tsv`, or `<cc>-ids-lite.tsv` with `--lite`; D-240, D-401), so IDs stay
+//! stable from one run to the next, and fails when there is none (D-261: `cargo xtask ids
+//! restore` puts the released ones back); `--fresh-ids` numbers a first build on purpose.
 //! ```
 //!
 //! The recipe is `data/countries/<cc>/build.yaml`. The stages are `read` for each points
@@ -847,10 +847,12 @@ fn split_input(pass: &[String], country: &Path) -> Result<Vec<u8>, String> {
 
 /// The country code and the arguments `make` passes on to `build` (all but `--force` and
 /// `--fetch`); `--release` is required.
-/// `pass` with `--ids` naming the newest ID registry of the country's builds (main or lite) when
-/// none is named (D-240): a build without the last registry numbers every place afresh, and a
-/// place left out then shifts every later ID. `--fresh-ids` asks for a first build; with
-/// neither and no registry, the build is refused (D-261), never numbered afresh unasked.
+/// `pass` with `--ids` naming this build's own ID registry (`<cc>-ids-lite.tsv` with `--lite`,
+/// else `<cc>-ids-main.tsv`) when none is named (D-240): a build without the last registry
+/// numbers every place afresh, and a place left out then shifts every later ID. Lite and main
+/// are two ID lines (D-368), so one never starts from the other's registry, however new it is
+/// (D-401). `--fresh-ids` asks for a first build; with neither and no registry, the build is
+/// refused (D-261), never numbered afresh unasked.
 fn with_registry(root: &Path, cc: &str, mut pass: Vec<String>) -> Result<Vec<String>, String> {
     if let Some(i) = pass.iter().position(|a| a == "--fresh-ids") {
         pass.remove(i);
@@ -859,17 +861,18 @@ fn with_registry(root: &Path, cc: &str, mut pass: Vec<String>) -> Result<Vec<Str
     if pass.iter().any(|a| a == "--ids") {
         return Ok(pass);
     }
-    let newest = ["main", "lite"]
-        .into_iter()
-        .map(|b| format!("data/build/pack/{cc}/{cc}-ids-{b}.tsv"))
-        .filter_map(|p| Some((fs::metadata(root.join(&p)).ok()?.modified().ok()?, p)))
-        .max();
-    let (_, p) = newest.ok_or_else(|| {
-        format!(
-            "{cc}: no ID registry in data/build/pack/{cc}/: run `cargo xtask ids restore`, name \
-             one with --ids, or pass --fresh-ids for a first build (D-261)"
-        )
-    })?;
+    let build = if pass.iter().any(|a| a == "--lite") {
+        "lite"
+    } else {
+        "main"
+    };
+    let p = format!("data/build/pack/{cc}/{cc}-ids-{build}.tsv");
+    if !root.join(&p).is_file() {
+        return Err(format!(
+            "{cc}: no {build} ID registry at {p}: run `cargo xtask ids restore --build {build}`, \
+             name one with --ids, or pass --fresh-ids for a first build (D-261)"
+        ));
+    }
     pass.extend(["--ids".to_string(), p]);
     Ok(pass)
 }
@@ -941,10 +944,10 @@ mod tests {
     use std::cell::Cell;
     use std::fs;
 
-    /// D-240: without `--ids`, the newest registry in the pack directory is the input;
-    /// a named one and `--fresh-ids` win; no registry is refused (D-261).
+    /// D-240, D-401: without `--ids`, the build's own line's registry is the input, never the
+    /// other line's however new; a named one and `--fresh-ids` win; no registry is refused (D-261).
     #[test]
-    fn make_reads_the_newest_registry_unless_told() {
+    fn make_reads_its_own_lines_registry_unless_told() {
         let root = std::env::temp_dir().join(format!("tgd-make-ids-{}", std::process::id()));
         let dir = root.join("data/build/pack/zz");
         fs::create_dir_all(&dir).unwrap();
@@ -953,12 +956,21 @@ mod tests {
         let none = with_registry(&root, "zz", base.clone()).unwrap_err();
         assert!(none.contains("--fresh-ids"), "{none}");
         fs::write(dir.join("zz-ids-main.tsv"), "").unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(20));
+        let other = with_registry(&root, "zz", base.clone()).unwrap_err();
+        assert!(other.contains("no lite ID registry"), "{other}");
         fs::write(dir.join("zz-ids-lite.tsv"), "").unwrap();
         let got = with_registry(&root, "zz", base.clone()).unwrap();
         assert_eq!(
             got.get(3..),
             Some(&args(&["--ids", "data/build/pack/zz/zz-ids-lite.tsv"])[..])
+        );
+        // Main reads main's even when lite's is newer (the bug: the newest of either).
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(dir.join("zz-ids-lite.tsv"), "").unwrap();
+        let main = with_registry(&root, "zz", args(&["--release", "1"])).unwrap();
+        assert_eq!(
+            main.get(2..),
+            Some(&args(&["--ids", "data/build/pack/zz/zz-ids-main.tsv"])[..])
         );
         let named = args(&["--release", "1", "--ids", "mine.tsv"]);
         assert_eq!(with_registry(&root, "zz", named.clone()).unwrap(), named);
