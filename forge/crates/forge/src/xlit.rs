@@ -1024,7 +1024,7 @@ mod tests {
         .collect()
     }
 
-    /// Each build trains on what its licence admits (D-399): lite never reads an ODbL source,
+    /// Each build trains on what its licence admits (D-399): lite never reads an `ODbL` source,
     /// main reads every one.
     #[test]
     fn each_build_reads_only_the_sources_it_admits() {
