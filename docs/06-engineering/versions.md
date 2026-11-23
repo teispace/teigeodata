@@ -15,6 +15,7 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | Rust edition | 2024 | 2026-11-06 | Rust reference | — |
 | Node.js (site, Node binding) | 26.13.0 | 2026-11-06 | `node --version` | 2026-12-06 |
 | pnpm | 12.16.1 | 2026-11-06 | `pnpm --version` | 2026-12-06 |
+| age (key vault, D-383) | 1.3.2 | 2026-11-23 | `age --version` (Homebrew); CI uses Ubuntu's `age` package | 2027-05-23 |
 | Contributor Covenant | 3.0 | 2026-11-06 | EthicalSource repository | 2027-05-06 |
 | DCO | 1.1 | 2026-11-06 | developercertificate.org | — |
 | napi / napi-derive / napi-build (napi-rs) | 3.16.2 / 3.7.1 / 2.6.0 | 2026-11-14 | crates.io | 2026-12-14 |

@@ -274,7 +274,7 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
   green, 2026-11-16
 - [x] The release environment and registry accounts (5.10c), set up with the maintainer
   2026-11-16; the runbook records them
-- [ ] The maintainer: the key ceremony (phase 4.3), Pages (`DOCS_DEPLOY`)
+- [ ] The maintainer: the key ceremony (phase 4.3; one command since D-383, [steps](../../06-engineering/catalog-keys.md#first-ceremony-the-maintainer)). `DOCS_DEPLOY` is not needed: the docs are on Vercel (D-353) and Pages serves the catalog
 
 ### 8.5b Packs at run time on every platform (TG-24, TG-25, TG-26; D-362)
 
@@ -403,3 +403,4 @@ machine (D-080, [AGENTS.md](../../../AGENTS.md) §7). Nothing names a country in
 | 2026-11-22 | 8.5b e: the browser store documented; TG-24 to TG-26's store work done | - |
 | 2026-11-22 | 8.5b: the wasm store split into five sub-steps (async pack driver, browser layout, wasm exports, worker and browser tests, docs) | the pack driver's transport is the async part |
 | 2026-11-23 | 8.5b: the Nepal data release data-2026.11.22.2 with TG-31, TG-32, Q-036, Q-037 and D-380; layers carry their parts' redirects | D-382 |
+| 2026-11-23 | The key ceremony becomes one command with an encrypted vault; `DOCS_DEPLOY` dropped from the maintainer's list | D-383 |

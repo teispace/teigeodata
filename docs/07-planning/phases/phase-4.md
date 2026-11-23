@@ -194,7 +194,8 @@ Research: [baseline](../../02-research/notes/baseline.md) (D-144, 2026-11-09).
   expiry), off until the maintainer's first ceremony; the [ceremony
   document](../../06-engineering/catalog-keys.md) (2026-11-10, D-163)
 - [ ] Upload to sharded immutable releases (at most 1,000 assets each) and the first ceremony
-  (the maintainer: keys, the `catalog` branch and Pages, the environment secret)
+  (the maintainer: `xtask tuf ceremony`, one command and one passphrase, D-383; then the
+  `catalog` branch and Pages, the environment secret)
 - [x] Discovery: `catalog.find(name)` over the baseline (and the gazetteer pack when present),
   then the locator, then the catalog; `Resolver` trait (2026-11-10, D-164)
 
@@ -542,3 +543,4 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
 | 2026-11-14 | TG-15 step 4 done: codes, names measured, India's golden set 47/47 | D-270, D-271 |
 | 2026-11-14 | 4.7: the first real release pair measured; delta packs wait for a record-changing release | D-273 |
 | 2026-11-16 | TG-14: reviewed names as a tier, keyed by stable ID, guarded, licence-classed by source | D-359 |
+| 2026-11-23 | 4.3: the first ceremony is one command with an encrypted vault on the everyday machine | D-383 |

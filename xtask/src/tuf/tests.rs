@@ -25,7 +25,7 @@ fn scratch(name: &str) -> PathBuf {
     d
 }
 
-fn pack(dir: &Path, release: &str, fill: u8) -> PathBuf {
+pub(super) fn pack(dir: &Path, release: &str, fill: u8) -> PathBuf {
     pack_of(dir, "zz", release, fill)
 }
 

@@ -8,8 +8,9 @@
 //! client fetches only the countries it needs. A release re-signs only the roles whose packs
 //! changed, or that would expire within half their lifetime. Transport assets go to a
 //! separate directory, named as the catalog says (`address.component.release.hash8.tgd.zst`),
-//! for the release upload. Keys are 32-byte Ed25519 seeds in hex, in a file or in an
-//! environment variable (`env:NAME`), never in the repository. Every command that writes ends by
+//! for the release upload. Keys are 32-byte Ed25519 seeds in hex, in a file encrypted to the
+//! maintainer's vault (`*.key.age`, D-383, [`vault`]) or in an environment variable
+//! (`env:NAME`), never in the repository. Every command that writes ends by
 //! verifying the whole repository with the client, from root 1.
 
 use std::collections::BTreeMap;
@@ -36,7 +37,15 @@ const MIN_DAYS: i64 = 7;
 
 const USAGE: &str = "\
 cargo xtask tuf <command>
-  keygen <out.key>                       a new Ed25519 key (32-byte seed, hex), printed public key
+  ceremony <dir> [--identity FILE [--to RECIPIENT]] [--days 365]
+                                         every key, encrypted to a new passphrase vault (or to
+                                         an identity you hold, such as a hardware key), and
+                                         root 1 signed; nothing plain touches the disk
+  keygen <out.key.age> [--to RECIPIENT]  a new Ed25519 key, encrypted to the vault beside it
+                                         (a name without .age writes it plain, for tests)
+  secret <key.age> --env ENV --name NAME [--repo OWNER/REPO]
+                                         puts a key into a GitHub environment secret via gh,
+                                         never printed
   pubkey <key>                           the public key and key ID of a key
   root <repo> --root PUB… [--root-threshold 2] --timestamp PUB --snapshot PUB --targets PUB
        [--days 365]                      writes the next root, unsigned
@@ -52,7 +61,7 @@ cargo xtask tuf <command>
                                          sync gate 12: a generated world catalog delegated by
                                          country; each file's gzip bytes against 512 KiB, and
                                          the time to verify and read it
-KEY is a key file or env:NAME; PUB is a public key in hex.";
+KEY is a key file (*.key.age opens with its vault) or env:NAME; PUB is a public key in hex.";
 
 pub(crate) fn run(args: &[String]) -> Result<String, Vec<String>> {
     dispatch(args).map_err(|e| vec![e])
@@ -67,7 +76,19 @@ fn dispatch(args: &[String]) -> Result<String, String> {
         .map_err(|_| "the clock is past 2262".to_string())?;
     let a = Args(args.get(1..).unwrap_or_default());
     match args.first().map(String::as_str) {
-        Some("keygen") => keygen(Path::new(a.pos(0)?)),
+        Some("keygen") => keygen(Path::new(a.pos(0)?), a.opt("--to")),
+        Some("ceremony") => ceremony(
+            Path::new(a.pos(0)?),
+            a.opt("--identity").map(Path::new),
+            a.opt("--to"),
+            now + a.num("--days", ROOT_DAYS)? * DAY,
+        ),
+        Some("secret") => secret(
+            Path::new(a.pos(0)?),
+            a.req("--env")?,
+            a.req("--name")?,
+            a.opt("--repo"),
+        ),
         Some("pubkey") => {
             let k = load_key(a.pos(0)?)?;
             Ok(describe(&k))
@@ -105,40 +126,7 @@ fn dispatch(args: &[String]) -> Result<String, String> {
             },
             now,
         ),
-        Some("world-catalog") => {
-            let n =
-                usize::try_from(a.num("--targets", i64::try_from(world::WORLD).unwrap_or(5_000))?)
-                    .map_err(|e| e.to_string())?;
-            let runs = usize::try_from(a.num("--runs", 5)?).map_err(|e| e.to_string())?;
-            let m = world::measure(n, runs)?;
-            let line = |what: &str, b: world::Bytes| {
-                format!(
-                    "  {what}: {} B of JSON, {} B gzip{}",
-                    b.json,
-                    b.gzip,
-                    if b.gzip <= world::BUDGET { "" } else { " OVER" }
-                )
-            };
-            let (name, count, largest) = &m.largest;
-            let out = [
-                format!(
-                    "{} targets in {} country roles; each file within {} B gzip: {}",
-                    m.targets,
-                    m.roles,
-                    world::BUDGET,
-                    if m.within() { "yes" } else { "NO" }
-                ),
-                line("top-level targets", m.top),
-                line("snapshot", m.snapshot),
-                line(&format!("largest role, {name} ({count} targets)"), *largest),
-                format!(
-                    "  verified and read: every role {:.1} ms, {name} alone {:.1} ms",
-                    m.read_all_ms, m.read_one_ms
-                ),
-            ]
-            .join("\n");
-            if m.within() { Ok(out) } else { Err(out) }
-        }
+        Some("world-catalog") => world_catalog(&a),
         Some("timestamp") => timestamp(
             Path::new(a.pos(0)?),
             &load_key(a.req("--key")?)?,
@@ -153,6 +141,41 @@ fn dispatch(args: &[String]) -> Result<String, String> {
         ),
         _ => Err(USAGE.to_string()),
     }
+}
+
+/// Sync gate 12: a generated world catalog against its budget.
+fn world_catalog(a: &Args<'_>) -> Result<String, String> {
+    let n = usize::try_from(a.num("--targets", i64::try_from(world::WORLD).unwrap_or(5_000))?)
+        .map_err(|e| e.to_string())?;
+    let runs = usize::try_from(a.num("--runs", 5)?).map_err(|e| e.to_string())?;
+    let m = world::measure(n, runs)?;
+    let line = |what: &str, b: world::Bytes| {
+        format!(
+            "  {what}: {} B of JSON, {} B gzip{}",
+            b.json,
+            b.gzip,
+            if b.gzip <= world::BUDGET { "" } else { " OVER" }
+        )
+    };
+    let (name, count, largest) = &m.largest;
+    let out = [
+        format!(
+            "{} targets in {} country roles; each file within {} B gzip: {}",
+            m.targets,
+            m.roles,
+            world::BUDGET,
+            if m.within() { "yes" } else { "NO" }
+        ),
+        line("top-level targets", m.top),
+        line("snapshot", m.snapshot),
+        line(&format!("largest role, {name} ({count} targets)"), *largest),
+        format!(
+            "  verified and read: every role {:.1} ms, {name} alone {:.1} ms",
+            m.read_all_ms, m.read_one_ms
+        ),
+    ]
+    .join("\n");
+    if m.within() { Ok(out) } else { Err(out) }
 }
 
 /// The command's arguments after its name.
@@ -219,10 +242,11 @@ fn hex32(s: &str) -> Result<[u8; 32], String> {
     Ok(out)
 }
 
-/// A key from `env:NAME` or a file.
+/// A key from `env:NAME`, an encrypted file (`*.age`, opened with its vault) or a plain file.
 fn load_key(source: &str) -> Result<SigningKey, String> {
     let text = match source.strip_prefix("env:") {
         Some(var) => std::env::var(var).map_err(|_| format!("{var} is not set"))?,
+        None if source.ends_with(vault::SUFFIX) => vault::decrypt(Path::new(source))?,
         None => fs::read_to_string(source).map_err(|e| format!("{source}: {e}"))?,
     };
     Ok(SigningKey::from_bytes(
@@ -257,22 +281,143 @@ fn hex(b: &[u8]) -> String {
         })
 }
 
-fn keygen(out: &Path) -> Result<String, String> {
+fn new_seed() -> Result<[u8; 32], String> {
     let mut seed = [0_u8; 32];
     getrandom::fill(&mut seed).map_err(|e| format!("no randomness: {e}"))?;
-    let mut opts = fs::OpenOptions::new();
-    opts.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
-    let mut f = opts
-        .open(out)
-        .map_err(|e| format!("{}: {e}", out.display()))?;
-    std::io::Write::write_all(&mut f, format!("{}\n", hex(&seed)).as_bytes())
-        .map_err(|e| format!("{}: {e}", out.display()))?;
+    Ok(seed)
+}
+
+/// A new key at `out`: encrypted to `to` (or the vault's recipient beside it) when `out` ends
+/// in `.age`, plain otherwise.
+fn keygen(out: &Path, to: Option<&str>) -> Result<String, String> {
+    let seed = new_seed()?;
+    let text = format!("{}\n", hex(&seed));
+    let bytes = if out.to_string_lossy().ends_with(vault::SUFFIX) {
+        let recipient = match to {
+            Some(r) => r.to_string(),
+            None => vault::recipient_near(out)?,
+        };
+        vault::encrypt(&recipient, text.as_bytes())?
+    } else {
+        text.into_bytes()
+    };
+    vault::write_new(out, &bytes)?;
     Ok(format!(
-        "wrote {} (keep it offline)\n{}",
+        "wrote {}\n{}",
         out.display(),
         describe(&SigningKey::from_bytes(&seed))
+    ))
+}
+
+/// The roles' keys a ceremony makes, in the order root 1 lists them.
+const CEREMONY_KEYS: [&str; 6] = [
+    "root-1",
+    "root-2",
+    "root-3",
+    "timestamp",
+    "snapshot",
+    "targets",
+];
+
+/// The first ceremony (D-383): a vault, every key encrypted to it, root 1 signed by two root
+/// keys, and the public keys. Signing happens in memory; the plain keys are never written.
+/// Ends by opening one key through the vault, so a vault that cannot be opened (a mistyped
+/// passphrase, a missing hardware key) fails here, not at the first release.
+fn ceremony(
+    dir: &Path,
+    identity: Option<&Path>,
+    to: Option<&str>,
+    expires: i64,
+) -> Result<String, String> {
+    if dir.exists()
+        && fs::read_dir(dir)
+            .map_err(|e| format!("{}: {e}", dir.display()))?
+            .next()
+            .is_some()
+    {
+        return Err(format!(
+            "{} is not empty: a ceremony starts in a new directory",
+            dir.display()
+        ));
+    }
+    let keys_dir = dir.join("keys");
+    fs::create_dir_all(&keys_dir).map_err(|e| format!("{}: {e}", keys_dir.display()))?;
+    let recipient = match identity {
+        Some(id) => vault::adopt(dir, id, to)?,
+        None => vault::create(dir)?,
+    };
+    let mut keys = Vec::new();
+    for name in CEREMONY_KEYS {
+        let seed = new_seed()?;
+        let sealed = vault::encrypt(&recipient, format!("{}\n", hex(&seed)).as_bytes())?;
+        vault::write_new(
+            &keys_dir.join(format!("{name}.key{}", vault::SUFFIX)),
+            &sealed,
+        )?;
+        keys.push(SigningKey::from_bytes(&seed));
+    }
+    let [r1, r2, r3, ts, sn, tg] = keys.as_slice() else {
+        return Err("six keys".into());
+    };
+    let pk = |k: &SigningKey| k.verifying_key().to_bytes();
+    let repo = dir.join("metadata");
+    write_root(
+        &repo,
+        &[pk(r1), pk(r2), pk(r3)],
+        2,
+        [pk(ts), pk(sn), pk(tg)],
+        expires,
+    )?;
+    let root = repo.join("1.root.json");
+    sign_file(&root, RoleName::Root, r1)?;
+    sign_file(&root, RoleName::Root, r2)?;
+    // The vault opens: root-3 is read back through it.
+    let back = load_key(
+        &keys_dir
+            .join(format!("root-3.key{}", vault::SUFFIX))
+            .to_string_lossy(),
+    )?;
+    if back.verifying_key() != r3.verifying_key() {
+        return Err("root-3 read back through the vault differs".into());
+    }
+    let mut table = String::from("| Key | Public key | Key ID |\n|---|---|---|\n");
+    for (name, k) in CEREMONY_KEYS.iter().zip(&keys) {
+        let p = pk(k);
+        let _ = writeln!(table, "| {name} | `{}` | `{}` |", hex(&p), repo::key_id(&p));
+    }
+    vault::write_new(&dir.join("public-keys.md"), table.as_bytes())?;
+    Ok(format!(
+        "ceremony done in {}: {} signed by root-1 and root-2; the vault opens.\n\
+         Copy the whole directory to at least two places (it holds no plain key).\n{table}",
+        dir.display(),
+        root.display()
+    ))
+}
+
+/// Puts the key in `file` into the GitHub environment secret `name` of `env`, through
+/// `gh secret set` on its standard input: the key is never printed or passed as an argument.
+fn secret(file: &Path, env: &str, name: &str, repo_name: Option<&str>) -> Result<String, String> {
+    let key = load_key(&file.to_string_lossy())?;
+    let mut args = vec!["secret", "set", name, "--env", env];
+    if let Some(r) = repo_name {
+        args.extend(["--repo", r]);
+    }
+    let mut child = std::process::Command::new("gh")
+        .args(&args)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("gh: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        std::io::Write::write_all(&mut stdin, hex(key.as_bytes()).as_bytes())
+            .map_err(|e| format!("gh: {e}"))?;
+    }
+    let status = child.wait().map_err(|e| format!("gh: {e}"))?;
+    if !status.success() {
+        return Err(format!("gh secret set {name} --env {env} failed"));
+    }
+    Ok(format!(
+        "set {name} in the environment {env}: {}",
+        repo::key_id(key.verifying_key().as_bytes())
     ))
 }
 
@@ -783,4 +928,7 @@ mod session_tests;
 mod store_tests;
 #[cfg(test)]
 mod tests;
+mod vault;
+#[cfg(test)]
+mod vault_tests;
 mod world;

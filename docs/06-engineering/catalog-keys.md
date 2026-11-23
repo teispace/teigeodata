@@ -1,59 +1,86 @@
 ---
 title: "Catalog keys: the ceremony, releases and rotation"
 status: draft
-updated: 2026-11-10
+updated: 2026-11-23
 ---
 
 # Catalog keys: the ceremony, releases and rotation
 
 How the signed catalog's keys are made, used and replaced
-([ADR-0037](../03-decisions/adr/ADR-0037-keys-and-hosting.md), D-163). The tooling is
+([ADR-0037](../03-decisions/adr/ADR-0037-keys-and-hosting.md), D-163, D-383). The tooling is
 `cargo xtask tuf`; the background is in
-[catalog repository tooling](../02-research/notes/catalog-repository-tooling.md).
+[catalog repository tooling](../02-research/notes/catalog-repository-tooling.md) and
+[catalog key custody](../02-research/notes/catalog-key-custody.md).
 
 ## Keys
 
 | Role | Keys | Where it lives | Signs |
 |---|---|---|---|
-| root | 3, any 2 sign | three offline media in three places | every root (the keys of all roles) |
-| targets | 1 | offline medium | each release's list of packs |
-| snapshot | 1 | offline medium (with targets) | each release |
-| timestamp | 1 | the `catalog-timestamp` environment secret `TUF_TIMESTAMP_KEY` | daily, 14 days |
+| root | 3, any 2 sign | the vault | every root (the keys of all roles) |
+| targets | 1 | the vault | each release's list of packs |
+| snapshot | 1 | the vault | each release |
+| timestamp | 1 | the vault, and the `catalog-timestamp` environment secret `TUF_TIMESTAMP_KEY` | daily, 14 days |
 
-A key is a file holding a 32-byte Ed25519 seed in hex, written with mode 0600 by
-`cargo xtask tuf keygen`. Keys never enter the repository, a chat or an issue. Losing two root
-keys loses the catalog: apps then need a new trusted root shipped in an app update. Keep the
-three root keys apart.
+**The vault** (D-383) is one directory:
+
+- `vault.age`: an [age](https://age-encryption.org) identity sealed with a passphrase;
+- `vault.pub`: its recipient;
+- `keys/<role>.key.age`: every private key, encrypted to the vault;
+- `metadata/`: the signed root;
+- `public-keys.md`: the public keys.
+
+No plain key is ever written. A copy is useless without the passphrase, so keep the directory
+in **at least two places** (a cloud drive and a USB stick). Keep the passphrase in a password
+manager and on paper.
+
+Losing the passphrase loses the catalog: apps then need a new trusted root shipped in an app
+update. Every `--key` and `--*-key` option takes a `*.key.age` file and asks for the
+passphrase once per command. Keys never enter the repository, a chat or an issue.
 
 ## First ceremony (the maintainer)
 
-Before you start (D-210): on the everyday machine, build the tool once,
-`cargo build --release -p xtask`, and copy `target/release/xtask` and this page to a fresh USB
-drive. Have four more drives ready: one per root key and one for targets and snapshot. On the
-offline machine (network off, ideally a fresh account), run the copied binary as
-`./xtask tuf …` wherever the steps say `cargo xtask tuf …`. Only public keys and the signed
-`metadata/` leave that machine; the timestamp key leaves once, for step 5.
+About ten minutes, on the everyday Mac. It needs `age` (`brew install age`) and `gh`, signed in.
 
-1. On an offline machine, for each key: `cargo xtask tuf keygen <name>.key`. Note each printed
-   `public` key. Copy each root key to its own medium; keep targets and snapshot together.
-2. Write root 1:
-   `cargo xtask tuf root metadata --root <r1> --root <r2> --root <r3> --timestamp <ts> --snapshot <sn> --targets <tg>`.
-3. Sign it with two root keys, one medium at a time:
-   `cargo xtask tuf sign metadata/1.root.json --role root --key <medium>/r1.key`, then `r2`.
-4. Create the `catalog` branch with `metadata/`'s contents at its root, and serve it with
-   GitHub Pages (this repository's Pages site is the catalog's alone; the docs are on Vercel,
-   D-353). `1.root.json` is also the trusted root apps ship.
-5. Create the GitHub environment `catalog-timestamp` with deployment branch `main`, add the
-   timestamp key's hex as the secret `TUF_TIMESTAMP_KEY`, and set the repository variable
-   `CATALOG_LIVE` to `true`. Delete the timestamp key file afterwards.
+1. Pull `main` and build the tool: `cargo build --release -p xtask`. Then turn the network off.
+2. Run the ceremony in a new directory:
+   ```sh
+   target/release/xtask tuf ceremony ~/teigeodata-keys
+   ```
+   - **The passphrase:** age asks for it twice. Press Enter both times to have age generate a
+     strong one, and save what it prints in your password manager and on paper. Then type it
+     once more: the ceremony opens a key back through the vault to prove it.
+   - **What it writes:** the vault, six encrypted keys, `metadata/1.root.json` signed by two
+     root keys, and `public-keys.md`.
+3. Turn the network on. Copy `~/teigeodata-keys` to two places: the cloud drive of your
+   choice and a USB stick.
+4. Create the `catalog` branch with `metadata/`'s contents at its root, and serve it with GitHub
+   Pages. This repository's Pages site is the catalog's alone; the docs are on Vercel (D-353).
+   `1.root.json` is also the trusted root that apps ship.
+5. Create the GitHub environment `catalog-timestamp`, limited to the deployment branch `main`.
+   Put the timestamp key into it and switch the workflow on:
+   ```sh
+   target/release/xtask tuf secret ~/teigeodata-keys/keys/timestamp.key.age \
+     --env catalog-timestamp --name TUF_TIMESTAMP_KEY
+   gh variable set CATALOG_LIVE --body true
+   ```
+
+Steps 4 and 5 publish only public files and a secret, so an agent may do them with you. Steps
+1 to 3 and the passphrase are yours alone.
+
+**With a hardware key** (later, or from the start): give the ceremony an age identity you
+hold, such as a YubiKey's from `age-plugin-yubikey`, instead of a passphrase vault:
+`xtask tuf ceremony <dir> --identity <stub> --to <recipient>`. Opening a key then asks for the
+key's PIN and a touch. Use a YubiKey with firmware 5.7 or later (YSA-2024-03).
 
 ## A release
 
-With the targets and snapshot keys at hand (the timestamp key may be `env:NAME`):
+With the vault at hand (one passphrase; the timestamp key may be `env:NAME`):
 
 ```
 cargo xtask tuf release catalog --assets out/assets --pack np.tgd --pack in.tgd \
-  --targets-key tg.key --snapshot-key sn.key --timestamp-key env:TUF_TIMESTAMP_KEY
+  --targets-key ~/teigeodata-keys/keys/targets.key.age \
+  --snapshot-key ~/teigeodata-keys/keys/snapshot.key.age \
+  --timestamp-key ~/teigeodata-keys/keys/timestamp.key.age
 ```
 
 It writes each pack's transport asset as `address.component.release.hash8.tgd.zst` into
@@ -73,7 +100,7 @@ has stopped (GitHub stops schedules after 60 quiet days), re-enable it with
 
 Any key is replaced by a new root that lists the new key:
 
-1. `cargo xtask tuf keygen` the new key.
+1. `cargo xtask tuf keygen <vault>/keys/<name>.key.age`: the new key, encrypted to the vault.
 2. `cargo xtask tuf root metadata …` with the new set: it writes the next root (`N+1`).
 3. Sign it with a threshold of the **previous** root's keys and a threshold of its **own**.
    Keys in both count for both.
@@ -88,6 +115,9 @@ The rotation drill runs in every test run:
 - `xtask` `tuf::tests::a_release_publishes_a_verified_catalog_and_the_drill_rotates_keys`:
   root 2 drops a root key and rotates the timestamp key; a timestamp of the old key is refused;
   partial signatures and short expiry are refused;
-- `teigeodata-sync` `repo::tests::the_rotation_drill`: a client holding root 1 walks to root 2.
+- `teigeodata-sync` `repo::tests::the_rotation_drill`: a client holding root 1 walks to root 2;
+- `xtask` `tuf::vault_tests`: a ceremony writes only encrypted keys and a root signed twice, and
+  those keys sign a release that verifies; a key without its vault, with another vault, or
+  changed by a byte is refused.
 
-Before the first public release, the maintainer also runs it once by hand with real media.
+Before the first public release, the maintainer also runs it once by hand with the vault.

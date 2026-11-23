@@ -16,7 +16,7 @@ Apps download packs from hosts we do not control end to end. Trust must not depe
 
 - **Catalog trust:** a TUF 1.0 subset with four top-level roles (root, timestamp, snapshot, targets).
   - No delegations; consistent snapshots; pack details go in each target's `custom` field.
-  - **Root:** offline keys, threshold 2 of 3.
+  - **Root:** offline keys, threshold 2 of 3. Offline means held by the maintainer, never on a server: the keys are kept encrypted in one vault ([D-383](../log.md)).
   - **Timestamp:** an online key in a scheduled CI job, signing a 14-day timestamp.
   - Snapshot and targets are signed at release.
   - Our own small client; `tough` and python-tuf are differential oracles in tests.
