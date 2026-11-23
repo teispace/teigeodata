@@ -1,8 +1,9 @@
 # zizmor's configuration (fast-check). Each ignore says why; an inline `# zizmor: ignore`
 # comment cannot sit inside a `run: |` block, where it is shell text, so those live here.
+# The ignores are by line: an edit above one moves it, and fast-check fails until it is moved here.
 rules:
   adhoc-packages:
     ignore:
       # npm 11.5.1 or later for trusted publishing, when the runner's is older: an exact
       # version from the registry the job publishes to.
-      - release.yml:462
+      - release.yml:440
