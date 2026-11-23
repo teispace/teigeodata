@@ -699,9 +699,9 @@ impl Mcp {
                 .ok_or_else(|| QueryError::new(Code::Internal, "the answer failed"))
         })?;
         let mut bufs = Bufs::default();
-        let r = output::record(&e, &item, &mut bufs, false)?;
+        let r = output::full(&e, &item, &mut bufs, false)?;
         let mut f = Vec::with_capacity(1024);
-        output::feature(&mut f, &item.place, r)
+        output::feature_full(&mut f, &item.place, r)
             .map_err(|_| QueryError::new(Code::Internal, "the answer failed"))?;
         let mut v: Value = serde_json::from_slice(&f)
             .map_err(|_| QueryError::new(Code::Internal, "the answer failed"))?;

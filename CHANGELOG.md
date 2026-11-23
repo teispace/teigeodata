@@ -10,23 +10,14 @@ applied: a minor release could break the public API, and every break is listed u
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-23
+
 ### Added
 
 - Forge: census populations (D-386). A country's `census.yaml` joins a census table, read
   straight from its xlsx, to an official list's units row by row, with every row checked by
   name. Nepal's main build gives the 753 local levels their 2021 census counts; their wards
   are scaled to them and the levels above re-summed.
-
-### Changed
-
-- xtask: `mirror` uploads to the release each source's `mirror_url` names, creating a new
-  one as a draft and publishing it once filled. Releases here are immutable, so new inputs go
-  to `sources-<date>` (D-387). `check-data` allows an http upstream for a mirrored source.
-
-## [1.2.0] - 2026-11-23
-
-### Added
-
 - Sync: a catalog entry's `file` may start with one folder,
   `data-2026.11.22.2/np.places….tgd.zst`, fetched at the mirror base joined with it, so each
   release's assets can live in their own immutable GitHub release under one base;
@@ -35,8 +26,10 @@ applied: a minor release could break the public API, and every break is listed u
 - xtask: the catalog keys in an encrypted vault and a one-command ceremony (`tuf ceremony`,
   `*.key.age` keys, `tuf secret`), and `tuf release --folder` (D-383, D-384).
 - Engine and every binding: a place's class (`Engine::class`; a nullable `class` column in
-  place blobs; `class` in the server's and MCP's records). Landmarks are `locality` places with a
-  class such as `palace`, `temple` or `airport`, one growable list for every country (D-381).
+  place blobs; `class` in the server's JSON, GeoJSON, text and MCP output). Landmarks are
+  `locality` places with a class such as `palace`, `temple` or `airport`, one growable list for
+  every country (D-381). The server's Rust `output::Record` keeps its 1.0 fields, because a
+  caller may build it with a literal; Rust callers read a class with `Engine::class` (D-388).
 - Engine: `Layer::from_sections` opens a pack from its head and some of its sections, each in
   its own buffer, so the sections not read stay out of memory; format:
   `Pack::open_sections` and `Pack::check_blocks` (D-370).
@@ -61,6 +54,9 @@ applied: a minor release could break the public API, and every break is listed u
 
 ### Changed
 
+- xtask: `mirror` uploads to the release each source's `mirror_url` names, creating a new
+  one as a draft and publishing it once filled. Releases here are immutable, so new inputs go
+  to `sources-<date>` (D-387). `check-data` allows an http upstream for a mirrored source.
 - Names: the search fold turns Devanagari's न with a virama before a stop of any class into the
   anusvara, as Nepali and Hindi write a loanword's n (`लन्डन` finds लण्डन's London,
   `काउन्टी` = `काउंटी`). Packs keep each such name's key under the 1.0 fold too, and the engine

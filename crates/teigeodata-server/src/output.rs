@@ -127,9 +127,6 @@ pub struct Record<'a> {
     /// grid, D-123).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub population_kind: Option<&'static str>,
-    /// Its class (`temple`, `palace`, …; D-381), when it has one.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub class: Option<&'static str>,
     /// Distance from the point asked about, metres (one decimal).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meters: Option<f64>,
@@ -162,12 +159,37 @@ struct Geometry {
     coordinates: [f64; 2],
 }
 
+/// A [`Record`] with the fields added since 1.0, which `Record` cannot gain in 1.x because a
+/// caller may build it with a literal (D-388): what every writer here serializes. Callers of
+/// [`record`] read these through the engine (`Engine::class`).
+#[derive(Debug, Serialize)]
+pub(crate) struct Full<'a> {
+    #[serde(flatten)]
+    pub(crate) record: Record<'a>,
+    /// Its class (`temple`, `palace`, …; D-381), when it has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) class: Option<&'static str>,
+}
+
+/// The [`Full`] record of `item`, as [`record`].
+pub(crate) fn full<'b>(
+    engine: &Engine,
+    item: &Item,
+    bufs: &'b mut Bufs,
+    with_point: bool,
+) -> Result<Full<'b>, Error> {
+    Ok(Full {
+        class: engine.class(&item.place)?,
+        record: record(engine, item, bufs, with_point)?,
+    })
+}
+
 #[derive(Serialize)]
 struct Feature<'a> {
     r#type: &'static str,
     id: Shown<PlaceId>,
     geometry: Geometry,
-    properties: Record<'a>,
+    properties: Full<'a>,
 }
 
 /// Buffers for one record's names.
@@ -299,7 +321,6 @@ pub fn record<'b>(
         iso_code: installed(engine.iso_code(place))?.map(Shown),
         population: people.map(|p| p.people),
         population_kind: people.and_then(|p| p.source).map(PopulationSource::name),
-        class: engine.class(place)?,
         meters: item.meters.map(|m| (m * 10.0).round() / 10.0),
         bearing: item.bearing.map(|b| (b * 10.0).round() / 10.0),
         inside: item.inside,
@@ -323,6 +344,19 @@ pub fn feature(
     out: &mut dyn Write,
     place: &Place,
     properties: Record<'_>,
+) -> Result<(), OutputError> {
+    let properties = Full {
+        record: properties,
+        class: None,
+    };
+    feature_full(out, place, properties)
+}
+
+/// [`feature`] with a [`Full`] record.
+pub(crate) fn feature_full(
+    out: &mut dyn Write,
+    place: &Place,
+    properties: Full<'_>,
 ) -> Result<(), OutputError> {
     let f = Feature {
         r#type: "Feature",
@@ -449,7 +483,7 @@ pub fn write(
     match mode {
         Mode::Text => {
             for item in items {
-                let r = record(engine, item, &mut bufs, true)?;
+                let r = full(engine, item, &mut bufs, true)?;
                 text(out, &r)?;
             }
         }
@@ -457,7 +491,7 @@ pub fn write(
             out.write_all(b"[")?;
             for (i, item) in items.iter().enumerate() {
                 out.write_all(if i == 0 { b"\n" } else { b",\n" })?;
-                let r = record(engine, item, &mut bufs, true)?;
+                let r = full(engine, item, &mut bufs, true)?;
                 serde_json::to_writer(&mut *out, &r)?;
             }
             out.write_all(b"\n]\n")?;
@@ -468,8 +502,8 @@ pub fn write(
                 if i > 0 {
                     out.write_all(b",\n")?;
                 }
-                let r = record(engine, item, &mut bufs, false)?;
-                feature(out, &item.place, r)?;
+                let r = full(engine, item, &mut bufs, false)?;
+                feature_full(out, &item.place, r)?;
             }
             close_collection(out)?;
         }
@@ -486,7 +520,8 @@ pub fn write(
     Ok(())
 }
 
-fn text(out: &mut dyn Write, r: &Record<'_>) -> Result<(), OutputError> {
+fn text(out: &mut dyn Write, f: &Full<'_>) -> Result<(), OutputError> {
+    let r = &f.record;
     write!(
         out,
         "{}  {}",
@@ -496,7 +531,7 @@ fn text(out: &mut dyn Write, r: &Record<'_>) -> Result<(), OutputError> {
     if r.admin_level > 0 {
         write!(out, " {}", r.admin_level)?;
     }
-    if let Some(c) = r.class {
+    if let Some(c) = f.class {
         write!(out, " {c}")?;
     }
     if let Some(c) = &r.iso_code {
@@ -695,7 +730,7 @@ pub fn outline(
     out: &mut Vec<u8>,
 ) -> Result<(), OutputError> {
     let mut bufs = Bufs::default();
-    let r = record(engine, &Item::from(*place), &mut bufs, true)?;
+    let r = full(engine, &Item::from(*place), &mut bufs, true)?;
     out.extend_from_slice(b"{\"type\":\"Feature\",\"id\":");
     serde_json::to_writer(&mut *out, &place.id.to_string())?;
     out.extend_from_slice(b",\"geometry\":");

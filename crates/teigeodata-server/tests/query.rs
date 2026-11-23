@@ -532,3 +532,34 @@ fn a_distance_measures_between_places_and_points() {
         Code::InvalidArgument
     );
 }
+
+/// A place's class (D-381) is in every writer's output, though the public `Record` keeps its
+/// 1.0 fields (D-388).
+#[test]
+fn a_class_reaches_json_geojson_and_text() {
+    let mut model = common::synthetic(20, 3);
+    let temple = teigeodata_core::class::class_code("temple").unwrap();
+    model.classes = (0..model.ids.len())
+        .map(|r| if r == 0 { temple } else { 0 })
+        .collect();
+    let e = engine(&[model.encode()]);
+    let place = e.get(model.ids[0]).unwrap().unwrap();
+    let items = [Item::from(place)];
+    let write = |mode| {
+        let mut out = Vec::new();
+        output::write(&e, &items, mode, &mut out).unwrap();
+        String::from_utf8(out).unwrap()
+    };
+    let json: Value = serde_json::from_str(&write(Mode::Json)).unwrap();
+    assert_eq!(json[0]["class"], "temple", "{json}");
+    assert_eq!(json[0]["id"], model.ids[0].to_string());
+    let geo: Value = serde_json::from_str(&write(Mode::Geojson)).unwrap();
+    assert_eq!(geo["features"][0]["properties"]["class"], "temple", "{geo}");
+    assert!(write(Mode::Text).contains(" temple"));
+    // A place without one has no field.
+    let other = [Item::from(e.get(model.ids[1]).unwrap().unwrap())];
+    let mut out = Vec::new();
+    output::write(&e, &other, Mode::Json, &mut out).unwrap();
+    let json: Value = serde_json::from_slice(&out).unwrap();
+    assert!(json[0].get("class").is_none(), "{json}");
+}
