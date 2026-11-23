@@ -25,7 +25,7 @@
 //! forge baseline <cc> [--lite] …                a country pack's slice of the embedded baseline
 //! forge world --release <v> [--lite] …           the world part of the embedded baseline
 //! forge embed [--lite] [--key <seed-file>]       the shipped baseline: the world part and every slice, one file
-//! forge xlit-eval <lang>-Latn-<Script> […]         train a transliteration model, gate G-xlit
+//! forge xlit-eval <lang>-Latn-<Script> | --country <cc> [--lite] […]  train the lite and main models, gate G-xlit
 //! forge reviewed-import <cc> <tsv> --ids <registry> --build <b>   a reviewer's table as reviewed names
 //! forge path <source-id>                          print a fetched source's store path
 //! ```

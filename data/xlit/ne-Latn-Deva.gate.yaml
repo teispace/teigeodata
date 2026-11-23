@@ -38,6 +38,17 @@ sets:
       cut: [","]
       latin: ["rural municipality", "sub metropolitan city", "metropolitan city", "municipality", "village development committee", "vdc"]
       native: ["गाउँपालिका", "उपमहानगरपालिका", "महानगरपालिका", "नगरपालिका", "गा.वि.स.", "गाउँ विकास समिति"]
+  # Main build only (ODbL): OSM's `name`/`name:en` against `name:ne`, training only. Its own
+  # test fold would hold thousands of Wikidata labels out of training and blur the comparison
+  # with lite, so the main model is measured on the same `cbs` and `wd` folds (D-399).
+  - name: osm
+    parts:
+      - { source: geofabrik-np, reader: osm, latin: en, native: ne, kinds: [populated_place, admin, locality] }
+    measured: false
+    strip:
+      cut: [","]
+      latin: ["rural municipality", "sub metropolitan city", "metropolitan city", "municipality", "village development committee", "vdc"]
+      native: ["गाउँपालिका", "उपमहानगरपालिका", "महानगरपालिका", "नगरपालिका", "गा.वि.स.", "गाउँ विकास समिति"]
 # Floors, set at the first Rust measurement (2026-11-12: cbs 44.0% / 44.7% / 0.123, wd 36.1% /
 # 36.2% / 0.192), raised on main with the D-220 search fold (2026-11-12: cbs 45.28% / 50.31% /
 # 0.109, wd 37.2% / 42.26% / 0.176), raised again with CBS's misaligned district rows left
@@ -45,3 +56,9 @@ sets:
 floors:
   cbs: { exact: 0.455, folded: 0.506, cer: 0.104 }
   wd: { exact: 0.371, folded: 0.422, cer: 0.177 }
+# The main model (lite's sources plus OSM, D-399), measured 2026-11-23 on the same folds: cbs
+# 49.4% / 55.7% / 0.088, wd 37.4% / 41.8% / 0.171 (dev fold: cbs +8.0 and wd +2.3 folded over
+# lite). Rounded down; they only rise.
+main_floors:
+  cbs: { exact: 0.49, folded: 0.55, cer: 0.089 }
+  wd: { exact: 0.37, folded: 0.418, cer: 0.172 }

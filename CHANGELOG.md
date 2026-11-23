@@ -27,6 +27,20 @@ applied: a minor release could break the public API, and every break is listed u
   in the journal's `deltas` (version 4, written only with a delta); `store::current`,
   `Client::deltas`, `Client::delta_path` and `Engine::follow_with` open and report it. `tgd status`
   shows `delta_of`. `cargo xtask tuf release --delta` lists a delta in its pack's entry.
+- CLI: `tgd inspect --json` gives each section's `part` (`base`, `*`, a language); the table
+  names it (`NAMES \`ne\``, `ARCS to level 2 at lod 1`).
+
+### Fixed
+
+- CLI: `tgd diff` compares a kind split into parts part by part. It compared only the base
+  part, so a changed language part of NAMES, SEARCH or SUBSTRING was counted as unchanged.
+
+### Changed
+
+- Forge: each build ships its own transliteration model (D-399). Main's also trains on
+  OpenStreetMap's Latin and Nepali names: on official names 55.7 % folded exact and CER 0.088,
+  against 51.9 % and 0.099 for lite's, which is unchanged. `forge xlit-eval --country <cc>
+  [--lite]` gates both, and the data build runs it.
 
 ## [1.2.0] - 2026-11-23
 

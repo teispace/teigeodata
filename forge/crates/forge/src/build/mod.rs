@@ -403,7 +403,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
             &profile.type_words,
             rest,
         )?;
-        let transliterated = xlit_fill::run(root, &profile.transliterate, rest)?;
+        let transliterated = xlit_fill::run(root, &profile.transliterate, a.lite, rest)?;
         Ok::<_, String>((donated, transliterated))
     })?;
     // The top of the names chain, after every other tier so its guards see the final names.

@@ -687,7 +687,7 @@ fn fetch_inputs(
         }
     }
     for xlit in build::Profile::read(root, cc)?.transliterate {
-        for id in crate::xlit::sources(root, &xlit)? {
+        for id in crate::xlit::sources(root, &xlit, lite)? {
             if !ids.contains(&id) {
                 ids.push(id);
             }

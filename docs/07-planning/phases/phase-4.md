@@ -416,9 +416,12 @@ Order as in [embedded layer](../../02-research/notes/embedded-layer.md); statuse
     the 71 rows of other countries with the world builds
   - [x] the transliterator: a generic engine over `data/xlit/<from>-<to>.yaml`, its character
     model trained in the forge on the build's licence class; gate G-xlit with floors
-    (`forge xlit-eval ne-Latn-Deva`: cbs 44.7%, wd 36.2% folded; D-222, 2026-11-12). Open: the
-    §5.3 v1 targets (on main, with the D-220 fold: cbs 50.3%, wd 42.3% folded; wd meets its
-    target)
+    (`forge xlit-eval ne-Latn-Deva`: cbs 44.7%, wd 36.2% folded; D-222, 2026-11-12). Each
+    build ships its own model since D-399 (2026-11-23): main trains on OSM's names too, cbs
+    55.7% folded and CER 0.088 (lite 51.9%, 0.099), G-xlit in `data-build`. Of the §5.3 v1
+    targets, CER (both sets) and wd folded are met; cbs folded is not, and the gap is Latin's
+    unwritten vowel length and letters ([note §5.5b](../../02-research/notes/nepali-names.md#55b-per-build-models-and-the-v1-targets-measured-2026-11-23-d-399));
+    the levers left are in [ideas](../../01-product/ideas.md)
   - [x] a profile's languages are complete: every place of the layer has each, or the build
     names the gap (the layer summary's table per country, 2026-11-12; `tithipatra`: Nepal
     1.1% `ne-Deva`, D-227)

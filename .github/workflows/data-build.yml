@@ -79,6 +79,8 @@ jobs:
           fi
       - name: Fetch and build
         run: forge/target/fast/forge make ${{ matrix.cc }} --release "$RELEASE" ${{ matrix.flag }} ${IDS:+"$IDS"} --fetch
+      - name: G-xlit (each build's transliteration model on held-out names, D-222, D-399)
+        run: forge/target/fast/forge xlit-eval --country ${{ matrix.cc }} ${{ matrix.flag }}
       - name: G-det (the build stage again, byte for byte)
         run: |
           dir=data/build/pack/${{ matrix.cc }}

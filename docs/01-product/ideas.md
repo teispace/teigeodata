@@ -1,7 +1,7 @@
 ---
 title: "Ideas inbox"
 status: living
-updated: 2026-11-07
+updated: 2026-11-23
 ---
 
 # Ideas inbox
@@ -34,6 +34,7 @@ Ideas not yet planned. Each is researched before it is scheduled.
 | 2026-11-15 | `reverse`: a heap of 8-byte indices into a fixed arena of boxes instead of 40-byte entries, so its sift moves less memory (push and pop are 20–30% of self time) | [Profiling note](../02-research/notes/profiling.md) §4 |
 | 2026-11-15 | A second labelled set for suite C drawn from OpenStreetMap's own Nepal places (names as OSM spells them), marked on imagery the same way, so the competitive report scores every rival on names it was not built from | The first report's golden set and labelled names come from GeoNames, which teigeodata reads: Nominatim and Photon score near 0% on its romanisation variants ([suite C §3b](../02-research/notes/competitive-suite.md)) |
 | 2026-11-15 | Fit the settlement core's parameters (radius, weights) on the 222 blind labels instead of the silver labels they were fitted on | The blind labels (D-339) are independent truth; the core was fitted before they existed (D-096) |
-| 2026-11-15 | Link a municipality and the city of its name inside it as one place (a same-as in conflation), so search returns one of them and the golden set expects one key | Biratnagar, Damak, Kamalamai and 9 others are two records each (the COD-AB unit and the GeoNames city), one point apart in importance; the golden set wants the unit for some and the city for others (D-347) |
 | 2026-11-15 | Link a municipality and the city of its name inside it as one place (a same-as in conflation), so search returns one record and the golden set expects one key | Biratnagar, Damak, Kamalamai and others are two records each (the COD-AB unit and the GeoNames city), one point apart in importance in the main build; the golden set accepts both for nine queries (D-347, Q-028) |
 | 2026-11-22 | A patched ramp coding for IDMAP's `ID_LO` and `ORDER`: a block keeps its ramp width and lists the few rows whose IDs are new (PFOR exceptions), so stable IDs stay near the 860 B of a freshly numbered pack | Nepal's 6,717 new wards widened the two columns from 1.7 kB to 63 kB on the wire (D-365); every release that adds places pays it. A format 2.0 candidate: a new coding of an existing column is a major change under the 1.0 freeze (D-336), and 1.x readers still need `ID_LO` itself, so an extension column cannot stand in |
+| 2026-11-23 | A morpheme memory for the transliterator: Latin pieces of known compounds ("-nagar", "-pur", "-kot", "-tar", "-khola") mapped to their Devanagari form from aligned pairs, so a new compound of known parts is written as its parts | Vowel length of Latin "a" is the largest class of misses (21 of 76 on cbs, D-399); a whole-word memory cannot reach unseen compounds |
+| 2026-11-23 | An A/B of IndicXlit against the forge's transliterator on the G-xlit folds | Tells how far a neural model gets on the same held-out names before any change; a heavy install, so on a quiet machine ([nepali-names §5.5b](../02-research/notes/nepali-names.md#55b-per-build-models-and-the-v1-targets-measured-2026-11-23-d-399)) |

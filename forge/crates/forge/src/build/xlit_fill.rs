@@ -14,10 +14,12 @@ use teigeodata_names::xlit::{Scratch, transliterate_with};
 
 use super::{Origin, Place, PlaceName};
 
-/// Adds the machine names; returns the summary's line.
+/// Adds the machine names with the model the lite or main build ships; returns the summary's
+/// line.
 pub(super) fn run(
     root: &std::path::Path,
     profiles: &[String],
+    lite: bool,
     places: &mut [Place],
 ) -> Result<String, String> {
     let mut out = String::new();
@@ -29,7 +31,7 @@ pub(super) fn run(
             .next()
             .filter(|l| !l.is_empty())
             .ok_or_else(|| format!("{id}: not a transliteration profile ID"))?;
-        let (profile, model, script) = crate::xlit::shipping(root, id)?;
+        let (profile, model, script) = crate::xlit::shipping(root, id, lite)?;
         let (added, had) = fill(places, lang, &script, |latin, buf| {
             thread_local! {
                 static SCRATCH: std::cell::RefCell<Scratch> = std::cell::RefCell::default();

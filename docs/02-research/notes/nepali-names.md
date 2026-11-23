@@ -1,7 +1,7 @@
 ---
 title: "Nepali names for every place (TG-14)"
 status: research
-updated: 2026-11-12
+updated: 2026-11-23
 owner: teigeodata maintainers
 revisit: 2027-05-11
 ---
@@ -434,6 +434,41 @@ under load. Folded rises because the comparison fold now also treats vowel lengt
 vowels and nasal conjuncts as one. wd folded passes the v1 target (0.40); cbs folded (0.65)
 does not yet. The floors were raised to these values, rounded down, and a floor set above
 them fails the gate.
+
+### 5.5b Per-build models and the v1 targets (measured 2026-11-23, D-399)
+
+Nepal's main pack takes 97,967 of its Nepali names from this model, so its accuracy is most of
+the names' accuracy. What was measured, on the gate's test fold unless said:
+
+- **The noise ceiling is high, so the target is fair.** Where CBS and Wikidata both name a
+  local level (194 units joined by English name), their Nepali names agree 78.9% exactly and
+  84.5% folded. A 0.65 target sits below that.
+- **What the misses are** (cbs 76, wd 557 folded misses, each counted once per variant that
+  alone would join it): vowel length of Latin "a" (ा or not) 21 and 134; a virama against an
+  inherent vowel 7 and 32; ट against त 0 and 27; ब against व 6 and 19; स, श, ष 6 and 15. Latin
+  does not write these, so only a known word decides them.
+- **The profile's costs are spent.** A coordinate search over ten unit costs on the dev fold
+  gains 1.3 points on average, within the noise (one cbs pair is 0.66 points; dev and test
+  folds differ by 14 points on cbs). The language model weight is at its best (0.6).
+- **GeoNames adds nothing:** 76 Devanagari `ne` alternate names in all of Nepal.
+- **A stem before a generic suffix stays a word end.** Searching "chandra" + नगर with the
+  stem's last vowel priced as mid-word (so चन्द्रनगर, not चन्द्रानगर) and the model scoring the
+  join was tried and rejected: wd −1.8 folded on the test fold, main cbs −2.0 on dev. The
+  word-final ा habit is right before a generic more often than not (Lahachowk, लहाचोक).
+- **OSM's names are the lever for main.** Trained also on OSM's `name`/`name:en` and `name:ne`
+  pairs (ODbL, so main only; training only, so the folds compare with lite), main's model
+  scores cbs 49.4% / 55.7% folded / CER 0.088 and wd 37.4% / 41.8% / 0.171 on the test fold
+  (lite: 45.6 / 51.9 / 0.099 and 37.2 / 42.9 / 0.171), and on the dev fold cbs +8.0 and wd
+  +2.3 folded. Its word memory holds 129 words instead of 15.
+
+So each build ships its own model: lite trains on lite-clean sources and meets `floors`, main
+on every source its licence admits and meets `main_floors` (`forge xlit-eval --country np`,
+`--lite` for lite alone; run by `data-build` from D-399). The v1 targets (cbs 0.65 folded,
+CER 0.15; wd 0.40, 0.22) now stand at: CER met on both sets by both builds, wd folded met by
+both, cbs folded at 51.9% (lite) and 55.7% (main). The rest of the gap is Latin's ambiguity;
+the levers left are a word or morpheme memory from more pairs (names joined across sources,
+such as compounds of a known word and "-nagar", "-pur") and an A/B against IndicXlit
+([ideas](../../01-product/ideas.md)).
 
 ### 5.6 The name-origin marker (built 2026-11-12, D-227; `machine_names` D-256)
 

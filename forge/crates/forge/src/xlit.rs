@@ -2,7 +2,7 @@
 //! held-out name pairs ([note](../../../../docs/02-research/notes/nepali-names.md) §5.3, D-222).
 //!
 //! ```text
-//! forge xlit-eval <lang>-Latn-<Script> [--lm-weight <w>] [--misses <file>]
+//! forge xlit-eval <lang>-Latn-<Script> | --country <cc> [--lite] [--lm-weight <w>] [--misses <file>]
 //! ```
 //!
 //! Everything language-specific is data: the profile `data/xlit/<id>.yaml`, the gate
@@ -11,7 +11,9 @@
 //! and the gate's text sources, never on a test item or on a label holding a test reference as
 //! a run of whole words. The report gives exact, folded exact and CER per set, the model's
 //! size and the time per name; the run fails when a set is below its floor or the profile's
-//! examples do not come out as written.
+//! examples do not come out as written. Each build ships its own model (D-399): lite trains
+//! on the lite-clean sources only and meets `floors`, main on every source and meets
+//! `main_floors`; `--lite` measures lite alone.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -42,7 +44,11 @@ struct Gate {
     #[serde(default)]
     train: Vec<Train>,
     sets: Vec<Set>,
+    /// The lite model's floors: trained on lite-clean sources only.
     floors: BTreeMap<String, Floor>,
+    /// The main model's floors, when a source only the main build admits trains it.
+    #[serde(default)]
+    main_floors: BTreeMap<String, Floor>,
 }
 
 const SCHEMA: &str = "teigeodata/xlit-gate/v1";
@@ -69,10 +75,18 @@ struct Set {
     memory_weight: u32,
     #[serde(default)]
     strip: Strip,
+    /// Whether the set has held-out folds and is measured (default); a training-only set
+    /// trains on every pair and has no floor.
+    #[serde(default = "yes")]
+    measured: bool,
 }
 
 fn one() -> u32 {
     1
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// One source of pairs.
@@ -149,9 +163,11 @@ struct Args {
     order: Option<usize>,
     misses: Option<String>,
     input: Option<String>,
+    /// Measure the lite build's model only (the main build's sources may not be fetched).
+    lite: bool,
 }
 
-const USAGE: &str = "usage: forge xlit-eval <lang>-Latn-<Script> [--lm-weight <w>] [--misses <file>] [--input <file>] [--dev] [--order <n>]";
+const USAGE: &str = "usage: forge xlit-eval <lang>-Latn-<Script> | --country <cc> [--lite] [--lm-weight <w>] [--misses <file>] [--input <file>] [--dev] [--order <n>]";
 
 fn parse_args(args: &[String]) -> Result<Args, String> {
     let mut a = Args::default();
@@ -160,6 +176,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--dev" => a.dev = true,
+            "--lite" => a.lite = true,
             "--order" => {
                 let o = it.next().ok_or(USAGE)?;
                 a.order = Some(o.parse::<usize>().map_err(|e| format!("--order: {e}"))?);
@@ -214,10 +231,13 @@ fn fetched_in<'l>(
     move |source: &str| lock.path(root, source)
 }
 
-/// Every source profile `id`'s shipping model reads: its gate's training texts and pairs, in
-/// file order, each once (`forge make --fetch`, D-228).
-pub(crate) fn sources(root: &Path, id: &str) -> Result<Vec<String>, String> {
+/// Every source profile `id`'s shipping model reads in the lite or main build: its gate's
+/// training texts and pairs that build admits, in file order, each once (`forge make --fetch`,
+/// D-228).
+pub(crate) fn sources(root: &Path, id: &str, lite: bool) -> Result<Vec<String>, String> {
     let gate = gate(root, id)?;
+    let lock = Lock::read(&root.join("data/sources.lock"))?;
+    let admit = admits(&lock, lite);
     let mut out: Vec<String> = Vec::new();
     let all = gate.train.iter().map(|t| &t.source).chain(
         gate.sets
@@ -225,24 +245,37 @@ pub(crate) fn sources(root: &Path, id: &str) -> Result<Vec<String>, String> {
             .flat_map(|s| s.parts.iter().map(|p| &p.source)),
     );
     for s in all {
-        if !out.contains(s) {
+        if !out.contains(s) && admit(s)? {
             out.push(s.clone());
         }
     }
     Ok(out)
 }
 
-/// The model a build ships for profile `id` (D-222): trained on every fold of its gate's
-/// sources, as `xlit-eval` checks its examples; with the profile and its target script.
-pub(crate) fn shipping(root: &Path, id: &str) -> Result<(Profile, Model, String), String> {
+/// Whether the lite or main build admits `source` (`CLEAN_ROOM.md` rule 3).
+fn admits(lock: &Lock, lite: bool) -> impl Fn(&str) -> Result<bool, String> + '_ {
+    move |source: &str| {
+        Ok(!lite || crate::build::LITE.contains(&lock.get(source)?.licence_class.as_str()))
+    }
+}
+
+/// The model the lite or main build ships for profile `id` (D-222): trained on every fold of
+/// the gate's sources that build admits, as `xlit-eval` checks its examples; with the profile
+/// and its target script.
+pub(crate) fn shipping(
+    root: &Path,
+    id: &str,
+    lite: bool,
+) -> Result<(Profile, Model, String), String> {
     let gate = gate(root, id)?;
     let (profile, script) = load_profile(root, id, &gate.lexicon)?;
     let lock = Lock::read(&root.join("data/sources.lock"))?;
     let fetched = fetched_in(root, &lock);
-    let (sets, hidden) = load_sets(&gate, &fetched, 0)?;
+    let admit = admits(&lock, lite);
+    let (sets, hidden) = load_sets(&gate, &fetched, &admit, 0)?;
     let mut all: Vec<&Pair> = sets.iter().flat_map(|(_, train, _)| train).collect();
     all.extend(&hidden);
-    let texts = train_texts(&gate, &fetched, &all, &script)?;
+    let texts = train_texts(&gate, &fetched, &admit, &all, &script)?;
     let train = Training {
         profile: &profile,
         order: gate.order,
@@ -254,6 +287,27 @@ pub(crate) fn shipping(root: &Path, id: &str) -> Result<(Profile, Model, String)
 }
 
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
+    // `--country <cc>`: every profile the country's `profile.yaml` transliterates with.
+    if let Some(at) = args.iter().position(|a| a == "--country") {
+        let cc = args.get(at + 1).ok_or(USAGE)?;
+        let mut rest: Vec<String> = args.to_vec();
+        rest.drain(at..at + 2);
+        let mut out = Vec::new();
+        for id in crate::build::Profile::read(root, cc)?.transliterate {
+            let mut one = vec![id];
+            one.extend(rest.iter().cloned());
+            out.push(run_one(root, &one)?);
+        }
+        return Ok(if out.is_empty() {
+            format!("xlit-eval: {cc} transliterates with no profile")
+        } else {
+            out.join("\n")
+        });
+    }
+    run_one(root, args)
+}
+
+fn run_one(root: &Path, args: &[String]) -> Result<String, String> {
     let args = parse_args(args)?;
     let id = args.id.as_str();
     let gate = gate(root, id)?;
@@ -268,68 +322,129 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
     };
     let lock = Lock::read(&root.join("data/sources.lock"))?;
     let fetched = fetched_in(root, &lock);
-    // The fold measured: 0 (test), or 1 (dev) for tuning, so the test fold stays unseen.
-    let (sets, hidden) = load_sets(&gate, &fetched, u64::from(args.dev))?;
-    // Held-out references as runs of words, so no training text holds one.
-    let held: BTreeSet<String> = hidden
-        .iter()
-        .map(|p| join_key(&p.native))
-        .filter(|k| !k.is_empty())
-        .collect();
-    let hidden_ids: BTreeSet<&str> = hidden.iter().map(|p| p.id.as_str()).collect();
-
-    // Training.
-    let t0 = Instant::now();
-    let mut all: Vec<&Pair> = Vec::new();
-    for (_, train, _) in &sets {
-        all.extend(train);
-    }
-    all.extend(&hidden);
-    let texts = train_texts(&gate, &fetched, &all, &script)?;
-    let train = Training {
+    let lite_only = gate_sources(&gate)
+        .map(|s| admits(&lock, true)(s))
+        .collect::<Result<Vec<bool>, String>>()?
+        .into_iter()
+        .all(|b| b);
+    let eval = Eval {
+        gate: &gate,
         profile: &profile,
-        order: args.order.unwrap_or(gate.order),
-        texts: &texts,
-        pairs: &all,
+        script: &script,
+        fetched: &fetched,
+        args: &args,
     };
-    let (model, used, dropped) = train.model(&hidden_ids, &held)?;
-    let trained_s = t0.elapsed().as_secs_f64();
-    // The model a build ships: trained on everything, held-out folds included.
-    let (full, _, _) = train.model(&BTreeSet::new(), &BTreeSet::new())?;
-    if let Some(file) = &args.input {
-        return write_input(&profile, &full, file);
+    let mut report = String::new();
+    let mut failures = eval.build(&admits(&lock, true), "", &gate.floors, &mut report)?;
+    if let Some(r) = failures.pop_if(|f| f.starts_with("input:")) {
+        return Ok(r.trim_start_matches("input:").to_string());
     }
-
-    let mut report = format!(
-        "xlit-eval {id}: order {}, {used} training labels ({dropped} held out), {} n-gram entries, {} memory words, {:.2} MB, trained in {trained_s:.1} s\n",
-        model.order(),
-        model.entries(),
-        model.memory_words(),
-        mb(model.size_bytes()),
-    );
-    let mut failures = measure(
-        &profile,
-        &model,
-        &sets,
-        &gate.floors,
-        args.misses.as_deref(),
-        &mut report,
-    )?;
-    let failed = profile.failed_examples(&full);
-    let _ = write!(
-        report,
-        "  examples (model trained on every fold): {} of {} as written",
-        profile.examples().len() - failed.len(),
-        profile.examples().len()
-    );
-    failures.extend(failed.into_iter().map(|f| format!("example {f}")));
+    if !lite_only && !args.lite {
+        failures.extend(eval.build(
+            &admits(&lock, false),
+            "main ",
+            &gate.main_floors,
+            &mut report,
+        )?);
+    }
     if failures.is_empty() {
-        Ok(report)
+        Ok(report.trim_end().to_string())
     } else {
         Err(format!(
-            "{report}\nG-xlit failed:\n  {}",
+            "{}\nG-xlit failed:\n  {}",
+            report.trim_end(),
             failures.join("\n  ")
         ))
+    }
+}
+
+/// Every source a gate names, training texts first.
+fn gate_sources(gate: &Gate) -> impl Iterator<Item = &str> {
+    gate.train.iter().map(|t| t.source.as_str()).chain(
+        gate.sets
+            .iter()
+            .flat_map(|s| s.parts.iter().map(|p| p.source.as_str())),
+    )
+}
+
+/// One `xlit-eval` run's inputs.
+struct Eval<'a> {
+    gate: &'a Gate,
+    profile: &'a Profile,
+    script: &'a str,
+    fetched: &'a dyn Fn(&str) -> Result<std::path::PathBuf, String>,
+    args: &'a Args,
+}
+
+impl Eval<'_> {
+    /// Trains and measures the model of one build (`admit` chooses its sources) against
+    /// `floors`; appends to `report` and returns the floors missed. With `--input`, the lite
+    /// build's transliterations are written instead and returned as one `input:` entry.
+    fn build(
+        &self,
+        admit: &dyn Fn(&str) -> Result<bool, String>,
+        label: &str,
+        floors: &BTreeMap<String, Floor>,
+        report: &mut String,
+    ) -> Result<Vec<String>, String> {
+        let (gate, profile, args) = (self.gate, self.profile, self.args);
+        // The fold measured: 0 (test), or 1 (dev) for tuning, so the test fold stays unseen.
+        let (sets, hidden) = load_sets(gate, self.fetched, admit, u64::from(args.dev))?;
+        // Held-out references as runs of words, so no training text holds one.
+        let held: BTreeSet<String> = hidden
+            .iter()
+            .map(|p| join_key(&p.native))
+            .filter(|k| !k.is_empty())
+            .collect();
+        let hidden_ids: BTreeSet<&str> = hidden.iter().map(|p| p.id.as_str()).collect();
+        let t0 = Instant::now();
+        let mut all: Vec<&Pair> = Vec::new();
+        for (_, train, _) in &sets {
+            all.extend(train);
+        }
+        all.extend(&hidden);
+        let texts = train_texts(gate, self.fetched, admit, &all, self.script)?;
+        let train = Training {
+            profile,
+            order: args.order.unwrap_or(gate.order),
+            texts: &texts,
+            pairs: &all,
+        };
+        let (model, used, dropped) = train.model(&hidden_ids, &held)?;
+        let trained_s = t0.elapsed().as_secs_f64();
+        // The model a build ships: trained on everything, held-out folds included.
+        let (full, _, _) = train.model(&BTreeSet::new(), &BTreeSet::new())?;
+        if let Some(file) = &args.input {
+            return Ok(vec![format!(
+                "input:{}",
+                write_input(profile, &full, file)?
+            )]);
+        }
+        let _ = writeln!(
+            report,
+            "{label}xlit-eval {}: order {}, {used} training labels ({dropped} held out), {} n-gram entries, {} memory words, {:.2} MB, trained in {trained_s:.1} s",
+            args.id,
+            model.order(),
+            model.entries(),
+            model.memory_words(),
+            mb(model.size_bytes()),
+        );
+        let misses = (label.is_empty())
+            .then_some(args.misses.as_deref())
+            .flatten();
+        let mut failures = measure(profile, &model, &sets, floors, misses, report)?;
+        let failed = profile.failed_examples(&full);
+        let _ = writeln!(
+            report,
+            "  examples (model trained on every fold): {} of {} as written",
+            profile.examples().len() - failed.len(),
+            profile.examples().len()
+        );
+        failures.extend(failed.into_iter().map(|f| format!("{label}example {f}")));
+        Ok(failures
+            .into_iter()
+            .map(|f| format!("{label}{f}"))
+            .collect())
     }
 }
 
@@ -338,17 +453,27 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<String, String> {
 fn load_sets(
     gate: &Gate,
     fetched: &dyn Fn(&str) -> Result<std::path::PathBuf, String>,
+    admit: &dyn Fn(&str) -> Result<bool, String>,
     target: u64,
 ) -> Result<(Vec<Split>, Vec<Pair>), String> {
     let mut sets = Vec::new();
     let mut hidden = Vec::new();
     for set in &gate.sets {
+        // A set is the build's when the build admits every part of it.
+        let mut admitted = true;
+        for part in &set.parts {
+            admitted &= admit(&part.source)?;
+        }
+        if !admitted {
+            continue;
+        }
         let mut pairs = Vec::new();
         for part in &set.parts {
             let path = fetched(&part.source)?;
             match part.reader.as_str() {
                 "csv" => csv_pairs(&path, &part.source, part, &mut pairs)?,
                 "wikidata" => wikidata_pairs(&path, part, &mut pairs)?,
+                "osm" => osm_pairs(&path, part, &mut pairs)?,
                 r => return Err(format!("set {}: unknown reader {r}", set.name)),
             }
         }
@@ -364,7 +489,7 @@ fn load_sets(
         pairs.dedup_by(|a, b| a.id == b.id);
         let (out, train): (Vec<Pair>, Vec<Pair>) = pairs.into_iter().partition(|p| {
             let f = fold(&p.id, gate.folds);
-            f == 0 || f == target
+            set.measured && (f == 0 || f == target)
         });
         // In dev mode the test fold is held out of training too, and never measured.
         let measured = out
@@ -373,7 +498,11 @@ fn load_sets(
             .cloned()
             .collect();
         hidden.extend(out);
-        sets.push((set.name.clone(), train, measured));
+        if set.measured {
+            sets.push((set.name.clone(), train, measured));
+        } else {
+            sets.push((String::new(), train, Vec::new()));
+        }
     }
     Ok((sets, hidden))
 }
@@ -383,11 +512,15 @@ fn load_sets(
 fn train_texts(
     gate: &Gate,
     fetched: &dyn Fn(&str) -> Result<std::path::PathBuf, String>,
+    admit: &dyn Fn(&str) -> Result<bool, String>,
     pairs: &[&Pair],
     script: &str,
 ) -> Result<Vec<(String, String)>, String> {
     let mut texts: Vec<(String, String)> = Vec::new();
     for t in &gate.train {
+        if !admit(&t.source)? {
+            continue;
+        }
         let path = fetched(&t.source)?;
         match t.reader.as_str() {
             "labels" => label_texts(&path, &mut texts)?,
@@ -427,7 +560,7 @@ fn measure(
         None => None,
     };
     let (mut count, mut seconds) = (0_usize, 0.0_f64);
-    for (name, train, test) in sets {
+    for (name, train, test) in sets.iter().filter(|(n, _, _)| !n.is_empty()) {
         let t = Instant::now();
         let (score, outputs) = evaluate(profile, model, test);
         seconds += t.elapsed().as_secs_f64();
@@ -753,6 +886,51 @@ fn wikidata_pairs(path: &Path, part: &Part, out: &mut Vec<Pair>) -> Result<(), S
     Ok(())
 }
 
+/// Pairs of an OSM element's names from an extract: the Latin side is `name:<latin>`, else a
+/// `name` in Latin script; the target side `name:<native>`, else a `name` in another script.
+fn osm_pairs(path: &Path, part: &Part, out: &mut Vec<Pair>) -> Result<(), String> {
+    let o = crate::read::osm::read(path)?;
+    let keep: BTreeSet<&str> = o
+        .records
+        .iter()
+        .filter(|r| part.kinds.is_empty() || part.kinds.contains(&r.kind))
+        .map(|r| r.id.as_str())
+        .collect();
+    // (name:<latin>, name:<native>, plain name).
+    let mut by: BTreeMap<&str, [Option<&str>; 3]> = BTreeMap::new();
+    for n in &o.names {
+        if n.kind != "name" || !keep.contains(n.id.as_str()) {
+            continue;
+        }
+        let e = by.entry(n.id.as_str()).or_default();
+        let slot = if n.lang == part.latin {
+            0
+        } else if n.lang == part.native {
+            1
+        } else if n.lang.is_empty() {
+            2
+        } else {
+            continue;
+        };
+        if let Some(v) = e.get_mut(slot) {
+            *v = Some(&n.text);
+        }
+    }
+    for (id, [l, n, plain]) in by {
+        let latin = l.or(plain.filter(|t| script_code(t) == Some("Latn")));
+        let native = n.or(plain.filter(|t| !matches!(script_code(t), Some("Latn") | None)));
+        if let (Some(l), Some(n)) = (latin, native) {
+            out.push(Pair {
+                id: id.to_string(),
+                latin: l.to_string(),
+                native: n.to_string(),
+                weight: 1,
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Labels and aliases in `lang` from a places snapshot, by item.
 fn wikidata_texts(path: &Path, lang: &str, out: &mut Vec<(String, String)>) -> Result<(), String> {
     let o = crate::read::wikidata::read(path)?;
@@ -844,6 +1022,19 @@ mod tests {
             weight: 1,
         })
         .collect()
+    }
+
+    /// Each build trains on what its licence admits (D-399): lite never reads an ODbL source,
+    /// main reads every one.
+    #[test]
+    fn each_build_reads_only_the_sources_it_admits() {
+        let lite = super::sources(&root(), "ne-Latn-Deva", true).expect("lite");
+        let main = super::sources(&root(), "ne-Latn-Deva", false).expect("main");
+        assert!(!lite.iter().any(|s| s == "geofabrik-np"), "{lite:?}");
+        assert!(main.iter().any(|s| s == "geofabrik-np"), "{main:?}");
+        assert!(lite.iter().all(|s| main.contains(s)));
+        let gate = super::gate(&root(), "ne-Latn-Deva").expect("gate");
+        assert!(gate.main_floors.contains_key("cbs") && gate.main_floors.contains_key("wd"));
     }
 
     #[test]
