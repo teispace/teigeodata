@@ -1,7 +1,7 @@
 ---
 title: "The engine: layered packs"
 status: draft
-updated: 2026-11-11
+updated: 2026-11-23
 ---
 
 # The engine: layered packs
@@ -207,8 +207,8 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 | `nearby(place, k)` | As `reverse` | `reverse` from the place's point, without the place |
 | `mark_inside(at, near)` | As `admin_at`, once for the whole answer | none: sets `inside` on each country and unit of a `reverse` answer by its outline, and on each settlement and locality as the nearest of its kind within `SETTLEMENT_RADIUS_M` 750 m or `LOCALITY_RADIUS_M` 700 m (D-238); every answer also carries `bearing_deg`, from the place to the point (D-223) |
 | `reverse_in_country(at, k)` | `admin_at` once, then `reverse` for 4k (×4 each round, at most 16,384) | the nearest places in the country holding `at`, by each place's country ancestor (or, with no parent, the country at its point); a place in no known country is kept; no outline at `at`: `reverse` (D-237) |
-| `admin_at(at)` | The first layer in precedence order whose ADMIN_REGION holds the point (coverage beats existence) | none; a unit whose ID a higher layer claims is answered from that layer |
-| `tz_at(at)` | The first layer whose REGION (timezones) holds the point; a layer without REGION but with PLACE_TZ and admin outlines (the baseline) answers with the zone of its deepest unit holding the point (D-151); embedded layers answer this way, checked against the country pack by G-tz-layer (D-245) | as `admin_at` |
+| `admin_at(at)` | The first layer in precedence order whose ADMIN_REGION holds the point (coverage beats existence); a delta answers with its base (D-391) | none, but for a delta: its units and its base's, coarse to fine. A unit whose ID a higher layer claims is answered from that layer; a base unit whose outline a delta above replaced, or whose ID it retired, is left out |
+| `tz_at(at)` | The first layer whose REGION (timezones) holds the point; a layer without REGION but with PLACE_TZ and admin outlines (the baseline) answers with the zone of its deepest unit holding the point (D-151); embedded layers answer this way, checked against the country pack by G-tz-layer (D-245); a delta, which has no REGION, is passed (D-391) | as `admin_at` |
 | `elevation_at(at)` | The first layer covering the point whose DEM has samples around it; a layer whose DEM has an absent tile there (masked away, the sea) is passed (D-192) | none: a `Height`, bilinear between four samples, within half the DEM's step (±1 m), with the DEM product, its spacing in metres, the datum and the layer (D-195) |
 | `tz_offset_at(zone, t)`, `tz_local_candidates(zone, civil)` | The first layer by precedence whose `TZ_RULES` holds the zone name or link (D-196) | none: an `Offset` (seconds east of UTC, tzdb's abbreviation, `is_dst`, the layer), from the stored transitions, then the POSIX TZ footer; a civil time is `Local::Unique`, `Gap { before, after }` or `Overlap { earlier, later }` (offset `o` is valid when the offset at `civil − o` is `o`). Years ±9,999; no allocation, no text parsing |
 | `tz_version()` | The first layer by precedence with `TZ_RULES` | its manifest's `tzdb` (`2026f`) |
@@ -219,7 +219,7 @@ pack's address, component and release). Hot paths write into caller-owned `Scrat
 | `postal_codes_of(place)` | The first layer by precedence holding the place's ID whose `POSTAL` has records for it: a part without codes is passed | in code order: an area code and its parts (a local level and its wards), a post office |
 | `postal_at(at)` | `admin_at(at)`, then the deepest unit that an admin-aligned scheme gives codes to | that unit and its codes; a scheme that is not admin-aligned is never answered from a point |
 | `by_iso(code)` | Layers with `ISO_CODES` in precedence order, a scan of each one's codes | none: the place as the winning layer answers for its ID, while that answer still has the code |
-| `countries_near(at, r)` | Every layer with outlines: POLY_INDEX boxes that meet the circle's box, then `Polygons::within` (holds the point or a border within `r`) on the country polygons (the locator, D-149) | union by ID, each answered by the layer that wins it |
+| `countries_near(at, r)` | Every layer with outlines: POLY_INDEX boxes that meet the circle's box, then `Polygons::within` (holds the point or a border within `r`) on the country polygons (the locator, D-149) | union by ID, each answered by the layer that wins it; a base country whose outline a delta above replaced is left out (D-391) |
 | `missing_packs(at, r)` | As `countries_near` | its countries whose pack (the ID's namespace, `np`) is not installed; a partial pack (`ae-du`) counts where its box holds the point |
 | `search(q, k)` | Every layer with SEARCH | Each layer scores its rows and keeps its best k visible; k-way merge by score, then ID. Fuzzy keys share the first letter unless no layer has a visible strong match; a context after a comma matches ancestors in the row's own pack (D-119); the layer's query rules add matches (D-121); the substring tier reads every layer with SUBSTRING installed (D-199) |
 | `search_with(q, k, opts)` | As `search` | As `search`, plus a focus point's gain on each match before each layer's cut and, when strict, the match tier first (D-226) |

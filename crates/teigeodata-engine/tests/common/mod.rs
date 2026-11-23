@@ -768,7 +768,11 @@ pub fn ring(w: i32, s: i32, e: i32, n: i32) -> (Vec<Point<E7>>, Vec<u8>) {
 /// 8 districts. Returns the model and each outlined row with its exact box `[w, s, e, n]` on
 /// the 1e-7° grid.
 pub fn outlined(country_only: bool) -> (Model, Vec<(u32, [i32; 4])>) {
-    let mut m = synthetic(300, 7);
+    outlined_from(synthetic(300, 7), country_only)
+}
+
+/// [`outlined`] on model `m`: each district's square is around its point.
+pub fn outlined_from(mut m: Model, country_only: bool) -> (Model, Vec<(u32, [i32; 4])>) {
     // The admin index stays off: it was written for these regions without arcs.
     m.admin = None;
     let mut shapes = Vec::new();

@@ -443,6 +443,39 @@ impl Engine {
         Ok(false)
     }
 
+    /// Whether a delta layer above layer `i` decides `id` where outlines are read (D-391): it
+    /// holds an outline of its own for it, or retires it. Such a place's copy in layer `i` holds
+    /// the point it holds only as the older release drew it, so it is left out of answers read
+    /// from outlines; a place the delta holds without an outline (an unchanged ancestor, or a
+    /// change that kept its outline) keeps the older outline, which is the newer one too.
+    #[cfg(feature = "admin-index")]
+    pub(crate) fn shadowed(&self, i: usize, id: PlaceId) -> Result<bool, Error> {
+        for l in self.layers.get(..i).unwrap_or_default() {
+            if l.delta_of().is_none() || !l.may_hold(id) {
+                continue;
+            }
+            l.ensure(Kind::IDMAP)?;
+            l.ensure(Kind::REDIRECTS)?;
+            let v = l.views();
+            if v.redirects.as_ref().is_some_and(|r| r.get(id).is_some()) {
+                return Ok(true);
+            }
+            let (Some(row), Some(polygons)) = (v.ids.as_ref().and_then(|m| m.row(id)), &v.polygons)
+            else {
+                continue;
+            };
+            l.ensure(Kind::POLYGONS)?;
+            if u32::try_from(row)
+                .ok()
+                .and_then(|r| polygons.polygon_of(r))
+                .is_some()
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     /// The terrain height at `at` in metres above EGM2008, with where it came from (its DEM
     /// product, sample spacing and datum, D-195). The fine DEM answers first: the first layer
     /// covering the point whose DEM (`dem`) has samples around it (D-089, D-192); where none
@@ -1165,7 +1198,15 @@ impl Engine {
         out: &mut Vec<Place>,
     ) -> Result<Option<LayerId>, Error> {
         out.clear();
+        // A delta answers with the pack it is a delta over (D-391): its changed outlines, and
+        // the older pack's that it leaves alone.
+        let mut answered: Option<(LayerId, &str, &str, &str)> = None;
         for (i, l) in self.layers.iter().enumerate() {
+            if let Some((_, address, component, base)) = answered
+                && (l.address(), l.component(), l.release()) != (address, component, base)
+            {
+                continue;
+            }
             if !l.covers(at) {
                 continue;
             }
@@ -1185,12 +1226,28 @@ impl Engine {
                     continue;
                 };
                 if let Some(p) = self.place(i, row as usize)?
+                    && !self.shadowed(i, p.id)?
                     && let Some(p) = self.winning(i, p)?
+                    && !out.iter().any(|o| o.id == p.id)
                 {
                     out.push(p);
                 }
             }
-            return Ok(Some(l.id));
+            match (answered, l.delta_of()) {
+                (None, Some(base)) => {
+                    answered = Some((l.id, l.address(), l.component(), base));
+                }
+                (Some((id, ..)), _) => {
+                    // Coarse to fine across the two, as one pack's regions are ordered.
+                    out.sort_by_key(|p| p.admin_level);
+                    return Ok(Some(id));
+                }
+                (None, None) => return Ok(Some(l.id)),
+            }
+        }
+        if let Some((id, ..)) = answered {
+            out.sort_by_key(|p| p.admin_level);
+            return Ok(Some(id));
         }
         Ok(None)
     }
@@ -1423,6 +1480,7 @@ impl Engine {
         };
         if place.kind != Some(PlaceKind::Country)
             || !polygons.within_chunked(arcs, chunks, p, at, r_cm)
+            || self.shadowed(i, place.id)?
         {
             return Ok(None);
         }
@@ -1445,6 +1503,11 @@ impl Engine {
             }
             l.ensure(Kind::REGION)?;
             let v = l.views();
+            // A delta carries no timezone index (D-391): the pack below answers, its place
+            // read through the delta.
+            if v.zones.is_none() && l.delta_of().is_some() {
+                continue;
+            }
             let row = match &v.zones {
                 Some(zones) => zones.region(at).and_then(|r| zones.place(r)),
                 #[cfg(all(feature = "timezone", feature = "admin-index"))]

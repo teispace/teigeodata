@@ -895,6 +895,13 @@ impl Layer {
         self.owned.views().pack.manifest().release()
     }
 
+    /// The release this pack is a delta over (`2026.11.0`), `None` for a whole pack (D-391): a
+    /// delta holds the places that changed since that release and is read above it.
+    #[must_use]
+    pub fn delta_of(&self) -> Option<&str> {
+        self.owned.views().pack.manifest().delta_of()
+    }
+
     /// The notices of the sources the pack was built from, one per line (D-126): show them
     /// wherever the data is shown. `None` for a pack built before they were carried.
     #[must_use]
