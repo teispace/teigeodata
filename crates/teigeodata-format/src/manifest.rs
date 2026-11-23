@@ -54,6 +54,11 @@ impl Tag {
     /// The tzdb release the pack's `TZ_RULES` were compiled from (`2026f`, D-196); present
     /// exactly when the pack has `TZ_RULES`.
     pub const TZDB: Self = Self(0x0009);
+    /// The release a delta pack applies over (D-391): the pack holds only the places that
+    /// changed since that release, the ones they refer to, and the IDs retired since, and is
+    /// read as a layer above its base. Not critical: an older reader reads it as the partial
+    /// pack it is.
+    pub const DELTA_OF: Self = Self(0x000A);
 
     /// The "must understand" bit.
     pub const CRITICAL: u16 = 0x8000;
@@ -91,6 +96,7 @@ pub(crate) const KNOWN: &[(Tag, &str, Value)] = &[
     (Tag::PERSPECTIVE, "perspective", Value::Ident),
     (Tag::ATTRIBUTION, "attribution", Value::Text),
     (Tag::TZDB, "tzdb", Value::Release),
+    (Tag::DELTA_OF, "delta_of", Value::Release),
 ];
 
 /// The longest text value: half the head's 16 KiB, so the manifest keeps room for the table and
@@ -307,6 +313,12 @@ impl<'a> Manifest<'a> {
     #[must_use]
     pub fn release(&self) -> &'a str {
         self.text(Tag::RELEASE).unwrap_or_default()
+    }
+
+    /// The release a delta pack applies over ([`Tag::DELTA_OF`]); `None` for a whole pack.
+    #[must_use]
+    pub fn delta_of(&self) -> Option<&'a str> {
+        self.text(Tag::DELTA_OF)
     }
 
     /// The sources' notices ([`Tag::ATTRIBUTION`]), if present.

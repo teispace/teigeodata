@@ -112,6 +112,7 @@ Tags known to format 1.0. A test fails if a tag in the code is missing here.
 | `0x0007` | `perspective` | as `address`: the default perspective, a country code ([ADR-0006](../03-decisions/adr/ADR-0006-perspective.md)) | |
 | `0x0008` | `attribution` | UTF-8, 1–8,192 bytes, no control character but the line feed: the notices of the sources the pack was built from, one per line (D-126), signed with the head | |
 | `0x0009` | `tzdb` | as `release`: the tzdb release the pack's [TZ_RULES](#tz_rules) were compiled from (`2026f`, D-196); present exactly when the pack has TZ_RULES | |
+| `0x000a` | `delta_of` | as `release`: the release a **delta pack** is read above (D-391). It holds the newer release's rows of the places changed since that release, with the rows they refer to (ancestors, timezone areas, redirect survivors) as stubs without outlines, an outline only where one changed, and REDIRECTS for the IDs retired since. Read above its base, it hides the base's copies of those IDs; outlines, admin units and postal codes it lacks are read from the base | |
 
 Tags a format minor may still add, each without the critical bit so that older readers skip
 it: dependencies (other packs by address and hash; the catalog carries them today), source

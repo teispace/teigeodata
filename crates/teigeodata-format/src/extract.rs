@@ -113,6 +113,38 @@ pub fn rows_with(
     )
 }
 
+/// [`rows`], with admin geometry only on rows `outlined` (increasing, each one of `keep`): the
+/// other kept rows are stubs that hold their place in the hierarchy, their outline left to the
+/// layer below, as an outline is read from the first layer with one (D-191). A delta pack keeps
+/// its unchanged ancestors so (D-391).
+///
+/// # Errors
+/// As [`rows`]; [`Error::Write`] if `outlined` is not increasing rows of `keep`.
+pub fn rows_outlined(
+    pack: &Pack<'_>,
+    keep: &[u32],
+    outlined: &[u32],
+    lod: u8,
+    region: &Options,
+) -> Result<Vec<Body>, Error> {
+    if outlined.windows(2).any(|w| matches!(w, [a, b] if a >= b))
+        || outlined.iter().any(|r| keep.binary_search(r).is_err())
+    {
+        return Err(fail("the outlined rows are not increasing kept rows"));
+    }
+    merge_outlined(
+        &[Part {
+            pack,
+            keep,
+            lod,
+            names: None,
+            arcs: None,
+        }],
+        Some(outlined),
+        region,
+    )
+}
+
 /// One pack's share of a [`merge`].
 #[derive(Clone, Copy, Debug)]
 pub struct Part<'p, 'a> {
@@ -161,6 +193,15 @@ impl core::fmt::Debug for ArcRewrite<'_> {
 /// As [`rows`], and [`Error::Write`] if the parts name two phonetic keys or more than 255 unit
 /// types between them.
 pub fn merge(parts: &[Part<'_, '_>], region: &Options) -> Result<Vec<Body>, Error> {
+    merge_outlined(parts, None, region)
+}
+
+/// [`merge`], with admin geometry only on the rows `outlined` of each part (all for `None`).
+fn merge_outlined(
+    parts: &[Part<'_, '_>],
+    outlined: Option<&[u32]>,
+    region: &Options,
+) -> Result<Vec<Body>, Error> {
     let mut open = Vec::with_capacity(parts.len());
     for (at, &part) in parts.iter().enumerate() {
         let ids = IdMap::open(&part.pack.section(Kind::IDMAP).ok_or(fail("no IDMAP"))?)?;
@@ -178,6 +219,7 @@ pub fn merge(parts: &[Part<'_, '_>], region: &Options) -> Result<Vec<Body>, Erro
             places,
             own: Vec::new(),
             own_of: vec![u32::MAX; n],
+            outlined,
         });
     }
     // The last part holding an ID owns its row.
@@ -261,6 +303,7 @@ pub fn outlines(
             places,
             own: Vec::new(),
             own_of,
+            outlined: None,
         }],
         by_id: BTreeMap::new(),
         total: 0,
@@ -279,6 +322,8 @@ struct Opened<'p, 'a> {
     own: Vec<u32>,
     /// Each of its rows' new row, `u32::MAX` if not its own.
     own_of: Vec<u32>,
+    /// Its rows that keep their admin geometry, increasing; `None` for all.
+    outlined: Option<&'p [u32]>,
 }
 
 impl<'a> Opened<'_, 'a> {
@@ -838,6 +883,9 @@ impl Geometry<'_, '_> {
             let Some(&new) = o.own_of.get(row as usize).filter(|&&n| n != u32::MAX) else {
                 continue;
             };
+            if o.outlined.is_some_and(|k| k.binary_search(&row).is_err()) {
+                continue;
+            }
             for ring in self.polys.all_rings(p) {
                 used.extend(self.polys.refs(ring).map(|(a, _)| a));
             }
