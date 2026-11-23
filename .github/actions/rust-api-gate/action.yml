@@ -1,0 +1,49 @@
+# The Rust API gate (semver.md): every published library crate, default features, against the
+# last release's tag, by cargo-semver-checks. One copy for release.yml (the version must cover
+# the changes) and nightly.yml (`release-type: minor`: main must never need a major, D-389).
+# Needs a full clone (fetch-depth 0): the tool checks the tag out through its own git library.
+name: Rust API gate
+description: cargo-semver-checks of the published crates against the last release tag.
+inputs:
+  release-type:
+    description: The release the changes must fit (minor, patch); empty for the version in Cargo.toml.
+    default: ""
+  warn-only:
+    description: "true: a failure is a warning (a dry run)."
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
+      with:
+        tool: cargo-semver-checks@0.51.0
+    - name: cargo semver-checks against the last release
+      shell: bash
+      env:
+        RELEASE_TYPE: ${{ inputs.release-type }}
+        WARN_ONLY: ${{ inputs.warn-only }}
+      run: |
+        # The newest release tag reachable from HEAD (a release in progress is not tagged yet).
+        prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude 'v*-*' HEAD)
+        # The checks build every feature; `baseline` embeds the file this names at compile
+        # time. Any pack does for the API, so the bindings' fixture stands in (absolute path,
+        # read by both the current and the baseline build).
+        export TEIGEODATA_BASELINE="$PWD/bindings/fixtures/synth.tgd"
+        # Each published library that existed at the last tag; one added since has no
+        # baseline to compare with (cargo-semver-checks stops on it).
+        pkgs=()
+        while read -r name manifest; do
+          if git cat-file -e "$prev:$manifest" 2>/dev/null; then
+            pkgs+=(--package "$name")
+          else
+            echo "$name: new since $prev, nothing to compare"
+          fi
+        done < <(cargo metadata --no-deps --format-version 1 | jq -r --arg root "$PWD/" \
+          '.packages[] | select(.publish == null and any(.targets[]; .kind | index("lib")))
+            | "\(.name) \(.manifest_path | ltrimstr($root))"')
+        args=()
+        if [ -n "$RELEASE_TYPE" ]; then args+=(--release-type "$RELEASE_TYPE"); fi
+        if ! cargo semver-checks "${pkgs[@]}" --baseline-rev "$prev" "${args[@]}"; then
+          echo "::warning::the Rust API gate fails against $prev"
+          test "$WARN_ONLY" = true
+        fi

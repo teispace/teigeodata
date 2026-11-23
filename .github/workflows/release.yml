@@ -63,34 +63,12 @@ jobs:
             echo "::warning::the ABI release gate fails: a real release stops here"
             test "$DRY_RUN" = true
           fi
-      - uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
-        with:
-          tool: cargo-semver-checks@0.51.0
       - name: Rust API release gate (the version covers the published crates' changes)
-        # Every crate with `publish = true`, default features, against the last release's
-        # tag. Before 1.0 a minor bump may break; from 1.0 only a major may (semver.md).
-        run: |
-          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude 'v*-*' HEAD)
-          # The checks build every feature; `baseline` embeds the file this names at compile
-          # time. Any pack does for the API, so the bindings' fixture stands in (absolute path,
-          # read by both the current and the baseline build).
-          export TEIGEODATA_BASELINE="$PWD/bindings/fixtures/synth.tgd"
-          # Each published library that existed at the last tag; one added since has no
-          # baseline to compare with (cargo-semver-checks stops on it).
-          pkgs=()
-          while read -r name manifest; do
-            if git cat-file -e "$prev:$manifest" 2>/dev/null; then
-              pkgs+=(--package "$name")
-            else
-              echo "$name: new since $prev, nothing to compare"
-            fi
-          done < <(cargo metadata --no-deps --format-version 1 | jq -r --arg root "$PWD/" \
-            '.packages[] | select(.publish == null and any(.targets[]; .kind | index("lib")))
-              | "\(.name) \(.manifest_path | ltrimstr($root))"')
-          if ! cargo semver-checks "${pkgs[@]}" --baseline-rev "$prev"; then
-            echo "::warning::the Rust API release gate fails: a real release stops here"
-            test "$DRY_RUN" = true
-          fi
+        # Before 1.0 a minor bump may break; from 1.0 only a major may (semver.md). A dry run
+        # warns; nightly fails on any break the day it lands (D-389).
+        uses: ./.github/actions/rust-api-gate # zizmor: ignore[self-repository] the same commit; the $/ form is too new to rely on
+        with:
+          warn-only: ${{ inputs.dry_run }}
 
   c:
     needs: version

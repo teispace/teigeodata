@@ -1,5 +1,5 @@
 # Nightly hardening (docs/06-engineering/ci.md): libFuzzer on every harness, Miri on the
-# reader and codec tests, and the world-size install. Budget: well under the 6 h per job limit.
+# reader and codec tests, the world-size install, and the Rust API gate (D-389). Budget: well under the 6 h per job limit.
 name: nightly
 
 on:
@@ -148,3 +148,21 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: World-size install
         run: cargo test --release --locked -p xtask a_world_size -- --ignored --nocapture
+
+  # main may add to the public Rust API but never break it within 1.x (semver.md): the release
+  # gate found 1.2.0's break only at release time (D-388); this finds one the night it lands.
+  rust-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: No break since the last release
+        uses: ./.github/actions/rust-api-gate # zizmor: ignore[self-repository] the same commit; the $/ form is too new to rely on
+        with:
+          release-type: minor

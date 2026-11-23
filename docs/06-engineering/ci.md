@@ -67,6 +67,10 @@ The criterion suites stay for wall-clock numbers on the results pages.
 `.github/workflows/nightly.yml` runs at 02:17 UTC and on demand (`workflow_dispatch`, with the
 fuzzing time per target as an input).
 
+- **rust-api**: the Rust API gate (`.github/actions/rust-api-gate`, cargo-semver-checks, the
+  one `release.yml` runs) on `main` with `--release-type minor`: every published crate against
+  the last release tag, failing on any change a 1.x release cannot carry (D-389).
+
 - **fuzz**: one job per libFuzzer target in `fuzz/` (its own Cargo workspace), 300 s each by
   default, inputs up to 4 KiB. The targets call the same `fn(&[u8])` harnesses that
   `cargo test` runs on seeded inputs on every PR (D-072, `crates/teigeodata-format/tests/fuzz.rs`):
