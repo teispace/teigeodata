@@ -53,9 +53,8 @@ About ten minutes, on the everyday Mac. It needs `age` (`brew install age`) and 
      root keys, and `public-keys.md`.
 3. Turn the network on. Copy `~/teigeodata-keys` to two places: the cloud drive of your
    choice and a USB stick.
-4. Create the `catalog` branch with `metadata/`'s contents at its root, and serve it with GitHub
-   Pages. This repository's Pages site is the catalog's alone; the docs are on Vercel (D-353).
-   `1.root.json` is also the trusted root that apps ship.
+4. Create the `catalog` branch with `metadata/`'s root in `main/` and `lite/` (D-384); it is
+   served from GitHub's raw host. `1.root.json` is also the trusted root that apps ship.
 5. Create the GitHub environment `catalog-timestamp`, limited to the deployment branch `main`.
    Put the timestamp key into it and switch the workflow on:
    ```sh
@@ -78,8 +77,11 @@ key's PIN and a touch. Use a YubiKey with firmware 5.7 or later (YSA-2024-03).
 
 - **Two catalogs under one root:** `main/` (ODbL packs, and the CC BY ones a main app also
   uses) and `lite/` (CC BY 4.0 only), because an app chooses its licence once. Both start
-  from the ceremony's `1.root.json`. They are served on GitHub Pages at
-  `https://teispace.github.io/teigeodata/main/` and `…/lite/`.
+  from the ceremony's `1.root.json`. They are served from the `catalog` branch at
+  `https://raw.githubusercontent.com/teispace/teigeodata/catalog/main/` and `…/lite/` (D-384): that host sends
+  `Access-Control-Allow-Origin: *`, ETags, gzip, a 5-minute cache and a `404` for a root
+  that does not exist yet. GitHub Pages cannot serve them, because the organisation's site
+  redirects every project page to `teispace.com`, which another host serves.
 - **The assets:** in a GitHub release of their own, `catalog-<date>`, created as a draft and
   published once every asset is up. The catalog names each asset with that folder
   (`--folder`), so the one asset base `https://github.com/teispace/teigeodata/releases/download/`
