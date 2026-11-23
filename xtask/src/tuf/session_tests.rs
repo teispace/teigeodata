@@ -248,3 +248,43 @@ fn a_file_a_reader_holds_stays_until_it_is_let_go() {
         "the file goes once let go"
     );
 }
+
+/// D-384: assets in a release folder under the asset base install, and the installed packs are
+/// named without the folder.
+#[test]
+fn assets_in_a_release_folder_install_by_their_name() {
+    let disk = MemFs(Rc::default());
+    let waits = Rc::new(Cell::new(0));
+    let (meta, assets) =
+        super::policy_tests::published_in("2026.11.0", &[("alpha", &[])], Some("data-2026.11.0"));
+    assert!(assets.keys().all(|k| k.starts_with("data-2026.11.0/")));
+    let mut fs = Web(disk.clone(), Rc::clone(&waits), Rc::default());
+    block_on(session::init(
+        &mut fs,
+        &["m".into()],
+        &["a/".into()],
+        &root_file(1, 10),
+        NOW,
+    ))
+    .unwrap();
+    let net = Net {
+        meta,
+        assets,
+        waits: Rc::clone(&waits),
+        got: 0,
+    };
+    let (mut s, _) = block_on(Session::open(fs, net)).unwrap();
+    let r = block_on(s.install(&["alpha.places.tgd".into()], &Want::default(), true, NOW)).unwrap();
+    assert_eq!(r.done.len(), 1);
+    assert!(s.net().got > 0);
+    let installed: Vec<_> = s.packs().iter().map(|r| r.file.clone()).collect();
+    assert_eq!(installed.len(), 1, "{installed:?}");
+    assert!(
+        installed
+            .iter()
+            .all(|f| !f.contains('/') && f.starts_with("alpha.places.")),
+        "{installed:?}"
+    );
+    let st = block_on(s.status(true, NOW)).unwrap();
+    assert!(st.packs.iter().all(|(_, h)| *h == Health::Good));
+}

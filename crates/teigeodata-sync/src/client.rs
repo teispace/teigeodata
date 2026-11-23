@@ -286,7 +286,7 @@ impl<N: Transport> Packs for Downloaded<'_, N> {
     }
 
     async fn install(&mut self, entry: &Entry, asset_len: u64, set: Selection) -> Result<Outcome> {
-        let at = self.dir.join(&entry.file);
+        let at = self.dir.join(entry.name());
         let mut parts =
             Downloads::open(&at, asset_len).map_err(|e| ClientError::of(at.display(), e))?;
         let mut mirrors = Mirrors::new(["downloads/"]);

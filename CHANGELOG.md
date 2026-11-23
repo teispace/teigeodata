@@ -12,6 +12,13 @@ applied: a minor release could break the public API, and every break is listed u
 
 ### Added
 
+- Sync: a catalog entry's `file` may start with one folder,
+  `data-2026.11.22.2/np.places….tgd.zst`, fetched at the mirror base joined with it, so each
+  release's assets can live in their own immutable GitHub release under one base;
+  `Entry::name` is the asset's name without it, which the installed pack is named after.
+  Readers before 1.2 refuse such an entry (D-384).
+- xtask: the catalog keys in an encrypted vault and a one-command ceremony (`tuf ceremony`,
+  `*.key.age` keys, `tuf secret`), and `tuf release --folder` (D-383, D-384).
 - Engine and every binding: a place's class (`Engine::class`; a nullable `class` column in
   place blobs; `class` in the server's and MCP's records). Landmarks are `locality` places with a
   class such as `palace`, `temple` or `airport`, one growable list for every country (D-381).

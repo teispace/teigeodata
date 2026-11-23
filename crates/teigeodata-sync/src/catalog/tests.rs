@@ -210,6 +210,48 @@ fn an_entry_round_trips_through_its_custom_object() {
     assert!(bytes.len() <= 550, "{} B", bytes.len());
 }
 
+/// D-384: an asset may sit in one folder (its GitHub release) under the mirror base; the
+/// installed pack is named by the asset's name alone.
+#[test]
+fn an_asset_may_sit_in_one_release_folder() {
+    let name = entry().file;
+    for folder in ["data-2026.11.22.2", "packs", "0", "a..b"] {
+        let t = set("file", json!(alloc::format!("{folder}/{name}")));
+        let e = Entry::from_target("np.places.tgd", &t).unwrap();
+        assert_eq!(e.file, alloc::format!("{folder}/{name}"));
+        assert_eq!(e.name(), name);
+        assert_eq!(
+            Entry::from_target("np.places.tgd", &target(e.to_custom())).unwrap(),
+            e
+        );
+    }
+    assert_eq!(entry().name(), name);
+    let refused = [
+        "../".to_string(),
+        "./".to_string(),
+        "/".to_string(),
+        "Data/".to_string(),
+        "a/b/".to_string(),
+        ".hidden/".to_string(),
+        "a b/".to_string(),
+        "a\\b/".to_string(),
+        alloc::format!("{}/", "a".repeat(65)),
+        "a".to_string(),
+    ];
+    for folder in refused {
+        let t = set("file", json!(alloc::format!("{folder}{name}")));
+        assert!(Entry::from_target("np.places.tgd", &t).is_err(), "{folder}");
+    }
+    // The folder never reaches the installed name.
+    #[cfg(feature = "store")]
+    {
+        let t = set("file", json!(alloc::format!("data-2026.11.22.2/{name}")));
+        let e = Entry::from_target("np.places.tgd", &t).unwrap();
+        let installed = crate::store::pack_name(&e, Components::all()).unwrap();
+        assert!(!installed.contains('/'), "{installed}");
+    }
+}
+
 #[test]
 fn unknown_fields_and_components_are_skipped() {
     let t = with(|m| {
@@ -258,7 +300,7 @@ fn set(key: &str, v: Value) -> Target {
 #[test]
 #[allow(clippy::too_many_lines, reason = "one row per case")]
 fn every_malformed_or_disagreeing_entry_is_refused() {
-    let file = "file is not address.component.release.hash8.tgd.zst";
+    let file = "file is not [folder/]address.component.release.hash8.tgd.zst";
     let cases: Vec<(&str, Target, Error)> = alloc::vec![
         ("schema 2", set("schema", json!(2)), Error::Schema(2)),
         (
@@ -619,7 +661,7 @@ fn an_asset_name_never_leaves_the_store() {
     for bad in [
         "../np.places.tgd.zst",
         "np/../../etc.tgd.zst",
-        "np/places.tgd.zst",
+        "Np/places.tgd.zst",
         "np\\places.tgd.zst",
         "/etc/np.tgd.zst",
         ".np.tgd.zst",
@@ -633,4 +675,6 @@ fn an_asset_name_never_leaves_the_store() {
     ] {
         assert!(named(bad).is_err(), "{bad:?} was accepted");
     }
+    // A release folder (D-384) is dropped from the installed name.
+    assert_eq!(named("np/places.tgd.zst").unwrap(), "places.all.tgd");
 }

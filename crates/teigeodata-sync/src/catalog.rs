@@ -24,7 +24,10 @@
 //!
 //! - `file` is the asset's name on the host: release and the first 8 hex digits of the asset's
 //!   SHA-256, so files are immutable and never overwritten (ADR-0010). It must agree with the
-//!   target's own `sha256`, the one hash every TUF client knows (D-162).
+//!   target's own `sha256`, the one hash every TUF client knows (D-162). It may start with one
+//!   folder, `data-2026.11.22.2/np.places….tgd.zst` (D-384): the asset is fetched at the
+//!   mirror base joined with `file`, so each release's assets can live in their own immutable
+//!   GitHub release under one base. The installed file is named by [`Entry::name`] alone.
 //! - `pack.head` is the pack's 16-byte head hash (header bytes 112–127): equal heads mean equal
 //!   packs, so an update with the installed head costs nothing.
 //! - `sizes` gives, per component of the pack (D-135), its download bytes (the frames of its
@@ -106,7 +109,8 @@ pub struct Entry {
     pub component: String,
     /// Its release: `2026.11.0`.
     pub release: String,
-    /// The asset's name on the host.
+    /// The asset's path on the host, relative to a mirror base: its name, or one folder and
+    /// its name (D-384).
     pub file: String,
     /// The installed pack's length in bytes.
     pub pack_length: u64,
@@ -182,6 +186,15 @@ pub fn country_of(address: &str) -> Option<[u8; 2]> {
     }
 }
 
+/// A folder an asset may sit in (D-384): 1 to 64 of `a-z`, `0-9`, `.` and `-`, starting with a
+/// letter or digit, so never `.`, `..` or a path.
+pub(crate) fn folder(f: &str) -> bool {
+    let lead = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit();
+    f.len() <= 64
+        && f.chars().next().is_some_and(lead)
+        && f.chars().all(|c| lead(c) || c == '.' || c == '-')
+}
+
 /// The logical path of a pack: `address.component.tgd`.
 #[must_use]
 pub fn path(address: &str, component: &str) -> String {
@@ -225,9 +238,14 @@ impl Entry {
             .get("sha256")
             .ok_or(Error::Name("the target has no sha256"))?;
         let file = text(c, "file")?;
-        if file != file_name(&address, &component, &release, sha256) {
+        let name = file_name(&address, &component, &release, sha256);
+        let in_folder = file
+            .strip_suffix(name.as_str())
+            .and_then(|f| f.strip_suffix('/'))
+            .is_some_and(folder);
+        if file != name && !in_folder {
             return Err(Error::Name(
-                "file is not address.component.release.hash8.tgd.zst",
+                "file is not [folder/]address.component.release.hash8.tgd.zst",
             ));
         }
         let pack = obj(c, "pack")?;
@@ -286,6 +304,12 @@ impl Entry {
             return Err(Error::Field("sizes"));
         }
         Ok(entry)
+    }
+
+    /// The asset's name without its folder: what the installed pack is named after.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        self.file.rsplit('/').next().unwrap_or(&self.file)
     }
 
     /// The entry's logical path.

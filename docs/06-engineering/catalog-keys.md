@@ -74,25 +74,43 @@ key's PIN and a touch. Use a YubiKey with firmware 5.7 or later (YSA-2024-03).
 
 ## A release
 
-With the vault at hand (one passphrase; the timestamp key may be `env:NAME`):
+**The layout** (D-384):
+
+- **Two catalogs under one root:** `main/` (ODbL packs, and the CC BY ones a main app also
+  uses) and `lite/` (CC BY 4.0 only), because an app chooses its licence once. Both start
+  from the ceremony's `1.root.json`. They are served on GitHub Pages at
+  `https://teispace.github.io/teigeodata/main/` and `…/lite/`.
+- **The assets:** in a GitHub release of their own, `catalog-<date>`, created as a draft and
+  published once every asset is up. The catalog names each asset with that folder
+  (`--folder`), so the one asset base `https://github.com/teispace/teigeodata/releases/download/`
+  serves every release, although immutable releases cannot take new files after publishing.
+
+For each catalog, with the vault at hand (one passphrase per command):
 
 ```
-cargo xtask tuf release catalog --assets out/assets --pack np.tgd --pack in.tgd \
+cargo xtask tuf release catalog/main --assets out/assets --folder catalog-2026.11.23 \
+  --pack np-places-main.tgd --pack app-np-main.tgd … \
   --targets-key ~/teigeodata-keys/keys/targets.key.age \
   --snapshot-key ~/teigeodata-keys/keys/snapshot.key.age \
   --timestamp-key ~/teigeodata-keys/keys/timestamp.key.age
 ```
 
-It writes each pack's transport asset as `address.component.release.hash8.tgd.zst` into
-`out/assets` (an existing asset is never overwritten with other bytes), adds or replaces the
-packs' entries, writes the next targets and snapshot and a new timestamp, and verifies the whole
-repository from root 1 with the client. A refused release leaves the repository as it was.
-Upload the assets to the release, then commit the new metadata to `catalog`.
+It does the following:
+
+- writes each pack's transport asset as `address.component.release.hash8.tgd.zst` into
+  `out/assets`, never overwriting an existing asset with other bytes;
+- adds or replaces the packs' entries;
+- writes the next targets and snapshot and a new timestamp;
+- verifies the whole repository from root 1 with the client.
+
+A refused release leaves the repository as it was. Upload the assets to the draft release and
+publish it, then commit the new metadata to `catalog`. Readers before 1.2 cannot read an
+entry with a folder.
 
 ## The daily timestamp
 
-The `catalog-timestamp` workflow runs `cargo xtask tuf timestamp catalog --key env:TUF_TIMESTAMP_KEY`
-every day and pushes the result. It fails when anything expires within 7 days. If the schedule
+The `catalog-timestamp` workflow runs `cargo xtask tuf timestamp catalog/<main|lite> --key env:TUF_TIMESTAMP_KEY`
+for both catalogs every day and pushes the result. It fails when anything expires within 7 days. If the schedule
 has stopped (GitHub stops schedules after 60 quiet days), re-enable it with
 `gh workflow enable catalog-timestamp`.
 

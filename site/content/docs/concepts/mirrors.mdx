@@ -40,11 +40,13 @@ A store reads `timestamp.json`, then only the versioned files it names. A file t
 there is a `404`; a store looks for the next root (`N+1.root.json`) on every refresh, and the
 `404` tells it there is none.
 
-**The assets** (the `assets` base), flat under it, one per pack component and release:
+**The assets** (the `assets` base), one per pack and release, at the path the catalog names:
+the asset's name, or one folder and its name. teigeodata's own catalog puts each release's
+assets in a folder, the GitHub release that holds them; a mirror keeps that folder.
 
 ```
-<address>.<component>.<release>.<hash8>.tgd.zst
-np.places.2026.11.0.065cf3cd.tgd.zst
+[<folder>/]<address>.<component>.<release>.<hash8>.tgd.zst
+catalog-2026.11.23/np.places.2026.11.2.065cf3cd.tgd.zst
 ```
 
 A name is never reused for other bytes, so every asset can be cached forever.
@@ -69,8 +71,8 @@ A name is never reused for other bytes, so every asset can be cached forever.
 
 Copy the catalog's metadata and the release assets, metadata last:
 
-1. Copy every asset not already on the mirror (assets are immutable, so a copy never
-   replaces one).
+1. Copy every asset not already on the mirror, in its folder (assets are immutable, so a
+   copy never replaces one).
 2. Copy the versioned metadata files (`*.root.json`, `*.snapshot.json`, `*.targets.json`,
    `*.<role>.json`).
 3. Copy `timestamp.json` last. It is the commit point: a store that reads the new timestamp

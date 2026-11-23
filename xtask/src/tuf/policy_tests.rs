@@ -25,11 +25,24 @@ pub(super) fn published(
     release: &str,
     packs: &[(&str, &[&str])],
 ) -> (BTreeMap<String, Vec<u8>>, BTreeMap<String, Vec<u8>>) {
+    published_in(release, packs, None)
+}
+
+/// As [`published`], with every asset in `folder` under the mirror base (D-384); the assets
+/// map is keyed by the path the catalog names.
+pub(super) fn published_in(
+    release: &str,
+    packs: &[(&str, &[&str])],
+    folder: Option<&str>,
+) -> (BTreeMap<String, Vec<u8>>, BTreeMap<String, Vec<u8>>) {
     let mut files = BTreeMap::new();
     let mut assets = BTreeMap::new();
     for (address, deps) in packs {
         let (mut e, asset, _) = super::entry_of(&pack_at(address, release)).unwrap();
         e.deps = deps.iter().map(|d| format!("{d}.places.tgd")).collect();
+        if let Some(f) = folder {
+            e.file = format!("{f}/{}", e.file);
+        }
         files.insert(
             e.path(),
             TargetFile {

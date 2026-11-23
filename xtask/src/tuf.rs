@@ -52,8 +52,9 @@ cargo xtask tuf <command>
   sign <file> --role root|timestamp|snapshot|targets --key KEY
                                          adds a signature in place
   release <repo> --assets DIR --pack P.tgd… --targets-key KEY --snapshot-key KEY
-       --timestamp-key KEY               assets and catalog entries from packs; new targets,
-                                         snapshot and timestamp
+       --timestamp-key KEY [--folder TAG] assets and catalog entries from packs; new targets,
+                                         snapshot and timestamp; --folder: the assets sit in
+                                         the GitHub release TAG under the mirror base
   timestamp <repo> --key KEY [--days 14] a fresh timestamp for the same snapshot
   verify <repo> [--assets DIR] [--min-days 7]
                                          the whole chain with the client, every entry, the assets
@@ -112,7 +113,7 @@ fn dispatch(args: &[String]) -> Result<String, String> {
             role(a.req("--role")?)?,
             &load_key(a.req("--key")?)?,
         ),
-        Some("release") => release(
+        Some("release") => release_in(
             Path::new(a.pos(0)?),
             Path::new(a.req("--assets")?),
             &a.all("--pack")
@@ -125,6 +126,7 @@ fn dispatch(args: &[String]) -> Result<String, String> {
                 timestamp: load_key(a.req("--timestamp-key")?)?,
             },
             now,
+            a.opt("--folder"),
         ),
         Some("world-catalog") => world_catalog(&a),
         Some("timestamp") => timestamp(
@@ -677,12 +679,26 @@ fn country_roles(
     Ok(roles)
 }
 
+#[cfg(test)]
 pub(crate) fn release(
     repo: &Path,
     assets: &Path,
     packs: &[PathBuf],
     keys: &Keys,
     now: i64,
+) -> Result<String, String> {
+    release_in(repo, assets, packs, keys, now, None)
+}
+
+/// A release whose assets sit in `folder` under the mirror base (D-384): the GitHub release
+/// of that tag. The assets are still written flat into `assets`, for its upload.
+pub(crate) fn release_in(
+    repo: &Path,
+    assets: &Path,
+    packs: &[PathBuf],
+    keys: &Keys,
+    now: i64,
+    folder: Option<&str>,
 ) -> Result<String, String> {
     if packs.is_empty() {
         return Err("no --pack".into());
@@ -695,8 +711,11 @@ pub(crate) fn release(
     } = current(repo)?;
     let mut out = String::new();
     for p in packs {
-        let (entry, asset, hashes) =
+        let (mut entry, asset, hashes) =
             entry_of(&read(p)?).map_err(|e| format!("{}: {e}", p.display()))?;
+        if let Some(f) = folder {
+            entry.file = format!("{f}/{}", entry.file);
+        }
         let file = TargetFile {
             length: asset.len() as u64,
             hashes,
@@ -709,7 +728,7 @@ pub(crate) fn release(
             custom: file.custom.clone(),
         };
         Entry::from_target(&entry.path(), &target).map_err(|e| format!("{}: {e}", p.display()))?;
-        let dest = assets.join(&entry.file);
+        let dest = assets.join(entry.name());
         match fs::read(&dest) {
             Ok(old) if old != asset => {
                 return Err(format!("{} exists with other bytes", dest.display()));
@@ -864,7 +883,7 @@ pub(crate) fn verify(
     for (path, target) in t.trusted_targets() {
         let entry = Entry::from_target(path, target).map_err(|err| format!("{path}: {err}"))?;
         if let Some(dir) = assets {
-            t.verify_target(path, &read(&dir.join(&entry.file))?)
+            t.verify_target(path, &read(&dir.join(entry.name()))?)
                 .map_err(e(path))?;
         }
         bytes += target.length;

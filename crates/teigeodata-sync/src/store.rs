@@ -43,7 +43,7 @@ use teigeodata_format::{Kind, PackHead, Part, SectionEntry};
 /// One installed section a derive reads: its kind, part (ADR-0040), item count and bytes.
 pub type DeriveInput = (Kind, Part, u64, Vec<u8>);
 
-use crate::catalog::{self, Entry};
+use crate::catalog::{self, Entry, folder};
 use crate::fetch::{
     Asset, AsyncTransport, FetchError, Mirrors, Ready, Transport, install_from_async,
     update_from_async,
@@ -1387,8 +1387,15 @@ fn set_tag(set: Components) -> String {
 /// [`FetchError::Response`] for a name that is not plain lowercase ASCII (the catalog is signed,
 /// but a path is still checked before it touches the disk).
 pub fn pack_name(entry: &Entry, set: Components) -> Result<String, FetchError> {
+    // An asset in a folder (D-384) is installed by its name alone; the folder must be one
+    // the catalog allows, even for an entry built by hand.
+    if let Some((dir, _)) = entry.file.rsplit_once('/')
+        && !folder(dir)
+    {
+        return Err(FetchError::Response("an unsafe pack name"));
+    }
     let base = entry
-        .file
+        .name()
         .strip_suffix(".tgd.zst")
         .ok_or(FetchError::Response("an asset name not ending .tgd.zst"))?;
     let name = alloc::format!("{base}.{}.tgd", set_tag(set));
