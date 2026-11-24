@@ -39,7 +39,7 @@ public sealed class TeiGeodataException : Exception
 public static class Library
 {
     /// <summary>The library version this package's generated code calls.</summary>
-    public const string Version = "1.2.0";
+    public const string Version = "1.3.0";
 
     internal const string Name = "teigeodata";
 
