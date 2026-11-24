@@ -281,7 +281,7 @@ fn delta_for(
     let (_, target) = t
         .trusted_targets()
         .find(|(p, _)| *p == path)
-        .ok_or_else(|| ClientError::Refused(format!("{path}: not in the catalog")))?;
+        .ok_or_else(|| absent(t, path))?;
     let deltas = catalog::Delta::list(path, target, entry).map_err(|e| ClientError::of(path, e))?;
     let whole = entry.size_of(set).wire;
     Ok(deltas.into_iter().find(|d| {
@@ -469,9 +469,27 @@ pub(crate) fn target(t: &Trusted, path: &str) -> Result<(Entry, u64)> {
     let (_, target) = t
         .trusted_targets()
         .find(|(p, _)| *p == path)
-        .ok_or_else(|| ClientError::Refused(format!("{path}: not in the catalog")))?;
+        .ok_or_else(|| absent(t, path))?;
     let entry = Entry::from_target(path, target).map_err(|e| ClientError::of(path, e))?;
     Ok((entry, target.length))
+}
+
+/// A path the catalog does not list, with the packs it lists at the same address: `app-np`
+/// names `app-np.places.tgd`, while that layer is `app-np.baseline.tgd`.
+fn absent(t: &Trusted, path: &str) -> ClientError {
+    let address = path.split('.').next().unwrap_or(path);
+    let same: Vec<&str> = t
+        .trusted_targets()
+        .map(|(p, _)| p)
+        .filter(|p| p.split('.').next() == Some(address))
+        .collect();
+    if same.is_empty() {
+        return ClientError::Refused(format!("{path}: not in the catalog"));
+    }
+    ClientError::Refused(format!(
+        "{path}: not in the catalog; at `{address}` it lists {}",
+        same.join(", ")
+    ))
 }
 
 /// What to install of `entry`: `want` added to what is `installed` (components added, the

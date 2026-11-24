@@ -260,3 +260,28 @@ fn a_stale_catalog_names_the_network_and_an_update_takes_a_new_release() {
     let e = block_on(policy::update(&mut f, &paths(&["bb"]))).unwrap_err();
     assert!(matches!(e, ClientError::Refused(_)), "{e}");
 }
+
+/// A path the catalog does not list names the packs it lists at that address (`app-np` is a
+/// baseline, not `app-np.places.tgd`); an address it does not know keeps the plain refusal.
+#[test]
+fn a_missing_path_names_what_its_address_holds() {
+    let (t, assets) = catalog("2026.11.0", &[("aa", &[])]);
+    let mut f = Fake::new(t, assets);
+    let want = Want::default();
+    let err = block_on(policy::install(
+        &mut f,
+        &["aa.dem.tgd".into()],
+        &want,
+        false,
+    ))
+    .unwrap_err()
+    .to_string();
+    assert!(
+        err.contains("aa.dem.tgd: not in the catalog; at `aa` it lists aa.places.tgd"),
+        "{err}"
+    );
+    let err = block_on(policy::install(&mut f, &paths(&["zz"]), &want, false))
+        .unwrap_err()
+        .to_string();
+    assert!(err.ends_with("zz.places.tgd: not in the catalog"), "{err}");
+}
