@@ -32,10 +32,8 @@ applied: a minor release could break the public API, and every break is listed u
 
 ### Fixed
 
-- Sync: a pack the catalog does not list is refused with the packs it lists at that address
-  (`app-np.places.tgd: not in the catalog; at \`app-np\` it lists app-np.baseline.tgd`), for
-  layers that are not `places`.
-
+- Sync: a pack the catalog does not list is refused with the packs it lists at that address,
+  so `tgd install app-np` (read as `app-np.places.tgd`) points to `app-np.baseline.tgd`.
 - CLI: `tgd diff` compares a kind split into parts part by part. It compared only the base
   part, so a changed language part of NAMES, SEARCH or SUBSTRING was counted as unchanged.
 
