@@ -8,10 +8,17 @@ packs exist. It is how an app downloads data when a user needs it: the user sear
 "Dubai", the app finds that the UAE pack holds it, installs that pack, and from then on answers
 offline.
 
-<Callout type="warn" title="The catalog is not live yet">
-The store is built and tested, but the signed catalog it reads goes live with the first catalog
-release, after the offline key ceremony. Until then, data comes as GitHub pre-releases:
-download a pack, check its SHA-256, and open it with `open_file`.
+<Callout title="The live catalog">
+Two signed catalogs share one root, because an app chooses its licence once:
+
+- **main** (ODbL packs, and the CC BY 4.0 ones a main app also uses):
+  `https://raw.githubusercontent.com/teispace/teigeodata/catalog/main/`
+- **lite** (CC BY 4.0 only): `https://raw.githubusercontent.com/teispace/teigeodata/catalog/lite/`
+- **Packs** for both: `https://github.com/teispace/teigeodata/releases/download/`
+
+The trust anchor is `1.root.json` from the catalog's directory. Ship it in the app; the store
+finds every later root by itself. Readers need SDK 1.2 or later. What each catalog holds is on
+the [data page](/docs/data).
 </Callout>
 
 ## What it does
@@ -30,8 +37,8 @@ a network.
   next time the store opens; the installed packs are never half-written.
 - **Updates and evicts.** `update` moves installed packs to the catalog's releases, keeping the
   components and languages installed. Where the catalog lists a delta from the installed
-  release, it fetches only the places that changed (often about 1 % of the pack) and reads
-  them above the installed pack; otherwise it fetches the sections that changed. Pinned packs are kept when room is made; `remove` takes a
+  release and it costs at most a quarter of the pack, it fetches only the places that changed
+  and reads them above the installed pack; otherwise it fetches the sections that changed. Pinned packs are kept when room is made; `remove` takes a
   pack out with the dependencies nothing else needs.
 - **Gives you an engine.** `engine()` opens every installed pack, with the parts installed.
 

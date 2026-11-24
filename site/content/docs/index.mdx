@@ -16,9 +16,9 @@ teigeodata answers questions about places, on the device, with no network and no
 - **The hierarchy, ISO 3166 codes, postal codes** and stable IDs that survive data updates.
 
 The data is cleaned, deduplicated and merged from the best open sources, and ships as **packs**:
-compact, memory-mapped files, every section hashed and checked as it is read (and signed, from
-the first catalog release). Bundle one in your app, or download a country when a user
-needs it. Every pack credits its sources, and you may keep and redistribute what it answers.
+compact, memory-mapped files, every section hashed and checked as it is read, and listed in a
+signed catalog. Bundle one in your app, or download a country when a user needs it and update
+it by sending only what changed. Every pack credits its sources, and you may keep and redistribute what it answers.
 
 To try it before installing anything, open the [playground](/playground): the WebAssembly
 engine and a released pack in your browser, every query with the code that produced it.
@@ -47,8 +47,9 @@ agents the same queries as tools.
 
 ## Status
 
-The code is at 1.1, on every package registry, and the data is published as pre-releases (the
-latest is `data-2026.11.15`, Nepal's main and lite packs with populations). Nepal is covered in full, with the world's countries, first-level units
+The code is at 1.2, on every package registry, and the data is served by a live, signed catalog
+that apps install from and update by delta (Nepal main 2026.11.3, lite 2026.11.2, and app-sized
+layers; see [data](/docs/data)). Nepal is covered in full, with the world's countries, first-level units
 and cities of 5,000 or more, and India's districts and towns; coverage grows by data releases,
 India next. The packages are on crates.io, PyPI, npm, Maven Central, pub.dev and the Go module
 proxy; Swift installs from the release tags and C from the release archives

@@ -7,34 +7,41 @@ Coverage grows by data releases: Nepal first, then India, South Asia, Asia, the 
 of the world. Every release is built from a commit on `main`, keeps every published ID, and
 lists its checksums.
 
-## The latest release: data-2026.11.14.3
+## What the catalog holds
 
-| File | What | Places | Disk | Wire |
-|---|---|--:|--:|--:|
-| [`world-np-lite.tgd`](https://github.com/teispace/teigeodata/releases/download/data-2026.11.14.3/world-np-lite.tgd) | The world's countries, first-level units and cities of 5,000 or more; India's districts and statutory towns; Nepal in full. Names in Nepali, Hindi and English. | 172,339 | 15.6 MB | 9.8 MB |
-| [`baseline-lite.tgd`](https://github.com/teispace/teigeodata/releases/download/data-2026.11.14.3/baseline-lite.tgd) | The baseline to ship in an app: countries, first-level units, cities of 15,000 or more. | | 5.0 MB | |
-| [`points-en-lite.tgd`](https://github.com/teispace/teigeodata/releases/download/data-2026.11.14.3/points-en-lite.tgd) | The baseline's points and English names alone. | | 1.9 MB | |
+The packs are served by the signed catalog ([the store](/docs/concepts/store) has its
+addresses). An app installs the parts it needs and updates by delta where one is listed.
+Sizes are the download (wire) and the whole pack on disk; a part costs less. Checked
+2026-11-24.
 
-All three are the **lite build** (CC BY 4.0). Check them with the release's `SHA256SUMS`:
+**main** (ODbL, with full credits):
 
-```sh
-shasum -a 256 -c SHA256SUMS
-```
+| Pack | Release | What | Wire | Disk |
+|---|---|---|--:|--:|
+| `np` | 2026.11.3 | Nepal in full: provinces, districts, local levels and wards with their boundaries, about 90,000 settlements, localities and natural features, terrain, names in Nepali and English | 95.9 MB | 104.0 MB |
+| `app-np` | 2026.11.23.2 | Nepal sized for an app: every place, boundaries down to the ward at 50 m, names in Nepali, English, Hindi and Sanskrit; a delta from 2026.11.23 (1.4 MB) | 6.5 MB | 10.3 MB |
+| `app-np-100` | 2026.11.23.2 | The same with boundaries at 100 m | 5.5 MB | 9.2 MB |
+| `app-world` | 2026.11.23 | The world beside `app-np`: countries, first-level units and cities of 5,000 or more by point, and India's towns (CC BY 4.0) | 3.1 MB | 5.5 MB |
+| `dem-coarse-np` | 2026.11.22 | Nepal's coarse terrain grid: a height anywhere in the country (CC BY 4.0) | 0.5 MB | 0.5 MB |
 
-The release notes and each file's summary are on the
-[release page](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.14.3).
+**lite** (CC BY 4.0 only):
 
-### Inside world-np-lite.tgd
+| Pack | Release | What | Wire | Disk |
+|---|---|---|--:|--:|
+| `np` | 2026.11.2 | Nepal from public-domain and attribution-only sources: down to the local level, settlements and features, terrain | 82.8 MB | 87.7 MB |
+| `app` | 2026.11.23 | One app-sized layer: Nepal in full with boundaries down to the local level, and the world as in `app-world` | 7.0 MB | 12.6 MB |
+| `app-world` | 2026.11.23 | As in main | 3.1 MB | 5.5 MB |
+| `dem-coarse-np` | 2026.11.22 | As in main | 0.5 MB | 0.5 MB |
 
-Every component's bytes, and every country's places by kind and admin level, are on the
-[coverage page](/docs/data/coverage), read from the pack itself.
+Stack `app-np` with `app-world`, never with `app`: lite and main number their places
+separately. Every release also ships the ID registries and a lite-to-main ID bridge on its
+[data release](https://github.com/teispace/teigeodata/releases), with each pack's summary and
+attribution.
 
-Places with a name in each language:
-
-| Places | Rows | Nepali | Hindi | English |
-|---|--:|--:|--:|--:|
-| Nepal | 95,715 | 99.9% | 0.4% | 0.3% |
-| The rest of the world | 76,247 | 2.7% | 20.2% | 12.7% |
+The docs' examples run on an older lite pack, `world-np-lite.tgd` of
+[data-2026.11.14.3](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.14.3)
+(172,339 places), so that CI can check every printed answer; the
+[coverage page](/docs/data/coverage) is read from it.
 
 ## Countries
 

@@ -197,7 +197,7 @@ const faq = [
   },
   {
     q: 'Does it need a network connection or an API key?',
-    a: 'No. Every query runs on a pack on the device or server, and every section of a pack is hashed and checked as it is read. A network is only used to download a pack; the store, which fetches countries on demand from a signed catalog, goes live with the first catalog release.',
+    a: 'No. Every query runs on a pack on the device or server, and every section of a pack is hashed and checked as it is read. A network is only used to download a pack: the store fetches countries on demand from a live, signed catalog, checks every byte, and updates them later by sending only what changed.',
   },
   {
     q: 'Which countries are covered?',
@@ -453,7 +453,7 @@ export default function HomePage() {
             </p>
             <ul className="mt-8 space-y-4 text-sm">
               {[
-                [ShieldCheck, 'Verified as it is read', 'Every section hashed and checked before a query uses it; packs are signed from the first catalog release.'],
+                [ShieldCheck, 'Verified as it is read', 'Every section hashed and checked before a query uses it; every pack listed in a signed catalog.'],
                 [FileCheck2, 'Yours to store and ship', 'Main build under ODbL, lite build under CC BY 4.0, every source credited.'],
                 [Globe2, 'One stated perspective', "Disputed borders drawn from Nepal's official map of 2020, recorded with sources."],
               ].map(([Icon, title, body]) => {

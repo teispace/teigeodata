@@ -162,8 +162,17 @@ platform's data directory, or where `--store` or `TEIGEODATA_STORE` says.
 | `tgd remove`, `tgd pin` | Remove a pack (and what nothing else needs), or keep one when room is made. |
 | `tgd status`, `tgd repair` | The installed packs and their health; fetch what a damaged one lacks. |
 
-The signed catalog goes live with the first catalog release; until then, packs are downloaded
-from the data releases and opened with `--pack`. See [the store](/docs/concepts/store).
+The store reads the live signed catalog: its addresses and the trust anchor are on
+[the store](/docs/concepts/store) page. A pack downloaded by hand still opens with `--pack`.
+
+```sh
+curl -LO https://raw.githubusercontent.com/teispace/teigeodata/catalog/main/1.root.json
+tgd init --repo https://raw.githubusercontent.com/teispace/teigeodata/catalog/main/ \
+  --assets https://github.com/teispace/teigeodata/releases/download/ --root 1.root.json
+tgd refresh --countries np
+tgd install np --components point,names,search
+tgd search Pokhara
+```
 
 ## Serve
 

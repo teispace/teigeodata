@@ -19,8 +19,8 @@ system shares between processes and drops under memory pressure.
   time a query reads it (`Verify::Lazy`); `Eager` checks everything when the pack opens.
 - **Signed.** Released packs are signed with Ed25519 over the head, which holds every section's
   hash. `tgd verify --key` checks a signature; the store checks every pack it installs against
-  the signed catalog. The data pre-releases published so far are not signed yet: check them by
-  the SHA-256 their release lists, until the signing key is made for 1.0.
+  the signed catalog. A pack downloaded by hand from a data release is checked by the SHA-256
+  its release lists.
 - **Forward compatible.** A reader skips sections it does not know, so older code keeps reading
   newer packs, and a pack states the oldest reader that can open it.
 
@@ -92,6 +92,6 @@ and queries already running finish on the one they started with.
 
 ## Where packs come from
 
-Today, packs are published as data pre-releases on GitHub, with checksums: download one and open
-it. Once the signed catalog is live, the [store](/docs/concepts/store) finds, downloads, verifies
-and updates packs for you.
+The [store](/docs/concepts/store) finds, downloads, verifies and updates packs for you from the
+live signed catalog, which lists each pack's releases and the deltas between them. Every pack is
+also in a data release on GitHub, with checksums, to download and open by hand.
