@@ -110,7 +110,7 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | Go | 1.27.4 (module floor 1.26, also tested: 1.26.11) | 2026-11-14 | go.dev/dl JSON | 2026-12-14 |
 | .NET SDK | 11.0.100 (builds), target `net10.0` (LTS, runtime 10.0.15; SDK 10.0.404 in Alpine) | 2026-11-14 | releases-index.json | 2026-12-14 |
 | osmpbf | 0.3.8 | 2026-11-06 | crates.io | 2026-12-06 |
-| parquet / arrow | 60.1 | 2026-11-06 | crates.io | 2026-12-06 |
+| parquet / arrow | 60.2 (RUSTSEC-2026-0595 fixed; the forge only reads, never writes encrypted Parquet) | 2026-11-24 | crates.io | 2026-12-24 |
 | geoarrow / geoparquet | 0.10 | 2026-11-06 | crates.io | 2026-12-06 |
 | i_overlay (forge: `topo::pov`, `i64` engine, D-150) | 9.1.0 | 2026-11-10 | crates.io | 2026-12-10 |
 | geo | 0.33 | 2026-11-06 | crates.io | 2026-12-06 |
@@ -136,7 +136,7 @@ Every pinned tool, toolchain and major dependency, with when it was checked. Che
 | GeographicLib geoid grid egm2008-5 | 2009-08-29 | 2026-11-07 | SourceForge `geoids-distrib` | 2027-11-07 |
 | toml (lock files) | 1.2.1 | 2026-11-06 | crates.io | 2026-12-06 |
 | zip (forge readers; releases almost daily) | 9.4.1 | 2026-11-06 | crates.io | 2026-12-06 |
-| arrow-array / arrow-schema (forge) | 60.1.0 | 2026-11-06 | crates.io | 2026-12-06 |
+| arrow-array / arrow-schema (forge) | 60.2.0 | 2026-11-24 | crates.io | 2026-12-24 |
 | QLever (Wikidata endpoint, moved to qlever.dev) | service | 2026-11-06 | qlever.dev | 2026-12-06 |
 | TUF specification | 1.0.37 | 2026-11-06 | theupdateframework.github.io | 2027-02-06 |
 | memmap2 (engine, mapped packs) | 0.9.12 | 2026-11-09 | crates.io | 2026-12-09 |
