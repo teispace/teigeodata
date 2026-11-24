@@ -902,6 +902,14 @@ impl Layer {
         self.owned.views().pack.manifest().delta_of()
     }
 
+    /// The pack's data licence: `odbl` for a main build, `cc-by-4.0` for a lite one. It names
+    /// the pack's ID line (D-368): an ID saved from one line is looked up only in packs of the
+    /// same line. `None` for a pack whose manifest carries no licence.
+    #[must_use]
+    pub fn licence(&self) -> Option<&str> {
+        self.owned.views().pack.manifest().licence()
+    }
+
     /// The notices of the sources the pack was built from, one per line (D-126): show them
     /// wherever the data is shown. `None` for a pack built before they were carried.
     #[must_use]

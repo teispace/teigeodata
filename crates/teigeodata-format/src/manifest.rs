@@ -321,6 +321,13 @@ impl<'a> Manifest<'a> {
         self.text(Tag::DELTA_OF)
     }
 
+    /// The data licence ([`Tag::LICENCE`]): `odbl` for a main build, `cc-by-4.0` for a lite
+    /// one, which also names its ID line (D-368). `None` when absent.
+    #[must_use]
+    pub fn licence(&self) -> Option<&'a str> {
+        self.text(Tag::LICENCE)
+    }
+
     /// The sources' notices ([`Tag::ATTRIBUTION`]), if present.
     #[must_use]
     pub fn attribution(&self) -> Option<&'a str> {
@@ -421,6 +428,7 @@ mod tests {
             );
             assert_eq!(m.u32(Tag::SCHEMA), Some(7));
             assert_eq!(m.text(Tag::LICENCE), Some("odbl"));
+            assert_eq!(m.licence(), Some("odbl"));
             assert_eq!(m.bbox().map(|b| b.max.lon()), Some(88_2000000));
             assert_eq!(
                 m.bbox().map(super::Bbox::to_bytes).as_ref().map(|b| &b[..]),

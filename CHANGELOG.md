@@ -12,6 +12,9 @@ applied: a minor release could break the public API, and every break is listed u
 
 ### Added
 
+- Engine: `Layer::licence` names a pack's data licence (`odbl` main, `cc-by-4.0` lite), which
+  is its ID line (D-368), so a saved ID can be looked up again only in packs of its own line.
+  Format: `Manifest::licence`.
 - CLI: `tgd delta <older> <newer> -o <out>` writes a delta pack (D-391): the places that
   changed between two releases of a pack, read as a layer above the older. On Nepal's app pack
   it is about 1 % of the asset. Pairs that differ in what a delta cannot carry are refused;

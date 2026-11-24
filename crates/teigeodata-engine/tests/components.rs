@@ -22,6 +22,36 @@ use teigeodata_format::blocks::MIN_COVERED;
 use teigeodata_format::tz_rules;
 use teigeodata_format::{Encoding, Kind, Pack, Writer};
 
+/// `pack` rewritten with `licence` as its manifest's licence, or with none.
+fn with_licence(pack: &[u8], licence: Option<&[u8]>) -> Vec<u8> {
+    let p = Pack::open(pack).unwrap();
+    let sections: Vec<(Kind, Encoding, u64, &[u8])> = p
+        .sections()
+        .filter(|s| s.kind() != Kind::BLOCK_HASHES)
+        .map(|s| (s.kind(), s.encoding(), s.item_count(), s.bytes()))
+        .collect();
+    let m = p.manifest();
+    let mut w = Writer::new(m.address(), m.component(), m.release()).unwrap();
+    if let Some(l) = licence {
+        w.manifest(teigeodata_format::Tag::LICENCE, l).unwrap();
+    }
+    w.pack(&sections, None).unwrap()
+}
+
+#[test]
+fn a_layer_names_its_licence_and_so_its_id_line() {
+    let pack = synthetic(50, 3).encode();
+    for (licence, want) in [
+        (Some(&b"odbl"[..]), Some("odbl")),
+        (Some(&b"cc-by-4.0"[..]), Some("cc-by-4.0")),
+        (None, None),
+    ] {
+        let layer =
+            Layer::from_bytes(with_licence(&pack, licence), LayerOptions::default()).unwrap();
+        assert_eq!(layer.licence(), want);
+    }
+}
+
 /// `pack` with a 2 MiB BLOBS section (`extra`) added, so it has `BLOCK_HASHES`.
 fn with_blobs(pack: &[u8]) -> Vec<u8> {
     let p = Pack::open(pack).unwrap();
