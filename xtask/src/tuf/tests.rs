@@ -398,7 +398,7 @@ fn a_release_lists_its_deltas() {
             &repo,
             &assets,
             std::slice::from_ref(&p2),
-            &keys(10),
+            &|| Ok(keys(10)),
             NOW + DAY,
             None,
             extra,
@@ -435,4 +435,63 @@ fn a_release_lists_its_deltas() {
     std::fs::write(assets.join(&file), b"not the delta").unwrap();
     let e = verify(&repo, Some(&assets), NOW + DAY, 7).unwrap_err();
     assert!(e.contains("not its asset"), "{e}");
+}
+
+/// D-403: a release missing the asset of an entry it keeps is refused before any key is
+/// opened, and names the asset; with the asset back, it publishes.
+#[test]
+fn a_missing_kept_asset_is_found_before_the_keys_are_opened() {
+    let d = scratch("kept-assets");
+    let (repo, assets) = (d.join("metadata"), d.join("assets"));
+    root(&repo, &[1, 2, 3], 10);
+    let r1 = repo.join("1.root.json");
+    sign_file(&r1, RoleName::Root, &key(1)).unwrap();
+    sign_file(&r1, RoleName::Root, &key(2)).unwrap();
+    let kept = pack_of(&d, "earth", "2026.11.0", 4);
+    let first = pack_of(&d, "np", "2026.11.0", 1);
+    release(&repo, &assets, &[kept, first], &keys(10), NOW).unwrap();
+    // A fresh assets folder, as for the next catalog release: only the new pack's asset.
+    let fresh = d.join("fresh");
+    let next = pack_of(&d, "np", "2026.12.0", 2);
+    let opened = std::cell::Cell::new(false);
+    let loader = || {
+        opened.set(true);
+        Ok(keys(10))
+    };
+    let run = |dir: &Path| {
+        super::release_in(
+            &repo,
+            dir,
+            std::slice::from_ref(&next),
+            &loader,
+            NOW + DAY,
+            None,
+            &[],
+        )
+    };
+    let err = run(&fresh).unwrap_err();
+    assert!(
+        err.contains("missing the assets") && err.contains("earth.places.2026.11.0."),
+        "{err}"
+    );
+    assert!(
+        !opened.get(),
+        "the keys were opened for a release that could not finish"
+    );
+    assert_eq!(
+        listing(&repo)
+            .iter()
+            .filter(|f| f.ends_with("targets.json"))
+            .count(),
+        1
+    );
+    for e in std::fs::read_dir(&assets).unwrap() {
+        let e = e.unwrap();
+        if e.file_name().to_string_lossy().starts_with("earth.") {
+            std::fs::copy(e.path(), fresh.join(e.file_name())).unwrap();
+        }
+    }
+    let out = run(&fresh).unwrap();
+    assert!(opened.get() && out.contains("every asset"), "{out}");
+    std::fs::remove_dir_all(&d).unwrap();
 }

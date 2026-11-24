@@ -25,10 +25,10 @@ A short status. The numbers and evidence live in each phase file and the
 
 - **Now (2026-11-23):** every phase exit, M0 to M8, is met; v1.2.0 is on every registry and the
   signed catalog is live (D-383, D-384, D-390). Delta packs are the default update (D-395).
-  **Catalog release 2026.11.23.2 staged** (D-402): Nepal main 2026.11.3 (Nepali names from the
+  **Catalog release 2026.11.23.2 published** 2026-11-24 (D-402, D-403): Nepal main 2026.11.3 (Nepali names from the
   per-build model, D-399; every ID kept, no place changed) and `app-np`/`app-np-100`
-  2026.11.23.2, with the first live delta (`app-np` from 2026.11.23, 1.42 MB against 6.51 MB);
-  it waits for the maintainer's signature. Data waves (India first) are planned only after the
+  2026.11.23.2, with the first live delta (`app-np` from 2026.11.23, 1.42 MB against 6.54 MB).
+  Data waves (India first) are planned only after the
   items below are closed (D-393).
 - **Open, the project's own:** Q-028's ranking lever (a settlement and the unit it names);
   the second reading of TG-14's 42 held name rows and a data release with the error rates;

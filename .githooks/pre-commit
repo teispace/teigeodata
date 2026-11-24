@@ -4,6 +4,8 @@
 # Formatting is checked on the Rust files being committed only, so unfinished work elsewhere
 # in the tree (a parallel agent's, say) never blocks a commit; CI checks every file.
 set -e
+# The `catalog` branch holds signed metadata only, no code: nothing here applies.
+[ -f Cargo.toml ] || exit 0
 files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')
 if [ -n "$files" ]; then
     # shellcheck disable=SC2086 # one argument per path; paths have no spaces

@@ -87,6 +87,12 @@ key's PIN and a touch. Use a YubiKey with firmware 5.7 or later (YSA-2024-03).
   (`--folder`), so the one asset base `https://github.com/teispace/teigeodata/releases/download/`
   serves every release, although immutable releases cannot take new files after publishing.
 
+`--assets` must hold the asset of **every** entry the catalog will list, not only the new
+ones: the release verifies the whole repository against it. Download the assets of the
+entries it keeps from their catalog release first (`gh release download catalog-<date> -p
+'<asset>'`, the names from `tgd catalog` or the `custom.file` of each target). A missing one
+is reported before any key is opened (D-403).
+
 For each catalog, with the vault at hand (one passphrase per command):
 
 ```
@@ -117,8 +123,11 @@ It does the following:
 - writes the next targets and snapshot and a new timestamp;
 - verifies the whole repository from root 1 with the client.
 
-A refused release leaves the repository as it was. Upload the assets to the draft release and
-publish it, then commit the new metadata to `catalog`. Readers before 1.2 cannot read an
+A refused release leaves the repository as it was. Upload the new assets to the draft release
+(`gh release create catalog-<date> --draft --prerelease --target <full SHA>`; a short SHA is
+refused), check their digests against the local files, and publish it; then commit the new
+metadata to `catalog`. The repository's hooks work in a worktree of that branch: with no code
+there, the commit message is checked from the main checkout (D-403). Readers before 1.2 cannot read an
 entry with a folder.
 
 ## The daily timestamp

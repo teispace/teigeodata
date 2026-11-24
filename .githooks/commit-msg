@@ -1,3 +1,7 @@
 #!/bin/sh
 # Conventional Commits, known scope, DCO sign-off, no AI attribution (AGENTS.md §8).
-exec cargo xtask check-commit "$1"
+# On a checkout without the code (the `catalog` branch's worktree), the check runs from the
+# repository's main checkout, so every branch's messages follow the same rules.
+msg=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+[ -f Cargo.toml ] || cd "$(git rev-parse --git-common-dir)/.."
+exec cargo xtask check-commit "$msg"

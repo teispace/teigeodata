@@ -123,10 +123,12 @@ fn dispatch(args: &[String]) -> Result<String, String> {
                 .iter()
                 .map(PathBuf::from)
                 .collect::<Vec<_>>(),
-            &Keys {
-                targets: load_key(a.req("--targets-key")?)?,
-                snapshot: load_key(a.req("--snapshot-key")?)?,
-                timestamp: load_key(a.req("--timestamp-key")?)?,
+            &|| {
+                Ok(Keys {
+                    targets: load_key(a.req("--targets-key")?)?,
+                    snapshot: load_key(a.req("--snapshot-key")?)?,
+                    timestamp: load_key(a.req("--timestamp-key")?)?,
+                })
             },
             now,
             a.opt("--folder"),
@@ -232,6 +234,7 @@ impl Args<'_> {
 }
 
 /// The signing keys of a release.
+#[derive(Clone)]
 pub(crate) struct Keys {
     pub(crate) targets: SigningKey,
     pub(crate) snapshot: SigningKey,
@@ -694,7 +697,37 @@ pub(crate) fn release(
     keys: &Keys,
     now: i64,
 ) -> Result<String, String> {
-    release_in(repo, assets, packs, keys, now, None, &[])
+    release_in(repo, assets, packs, &|| Ok(keys.clone()), now, None, &[])
+}
+
+/// Refuses a release when an asset of the entries in `files` or of their deltas is not in
+/// `assets`: what the release's final verification would stop on, found before any key is
+/// opened (D-403).
+fn all_assets(files: &Files, assets: &Path) -> Result<(), String> {
+    let mut missing = Vec::new();
+    for (path, f) in files {
+        let target = teigeodata_sync::trust::Target {
+            length: f.length,
+            hashes: f.hashes.clone(),
+            custom: f.custom.clone(),
+        };
+        let entry = Entry::from_target(path, &target).map_err(|e| format!("{path}: {e}"))?;
+        let deltas = Delta::list(path, &target, &entry).map_err(|e| format!("{path}: {e}"))?;
+        for name in std::iter::once(entry.name()).chain(deltas.iter().map(|d| d.entry.name())) {
+            if !assets.join(name).is_file() {
+                missing.push(name.to_owned());
+            }
+        }
+    }
+    if missing.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "{}: missing the assets of entries this release keeps (download them from their \
+         catalog release first): {}",
+        assets.display(),
+        missing.join(", ")
+    ))
 }
 
 /// Writes `asset` as `name` in `assets`, never over an asset with other bytes.
@@ -759,11 +792,14 @@ fn deltas_of(
 /// A release whose assets sit in `folder` under the mirror base (D-384): the GitHub release
 /// of that tag. The assets are still written flat into `assets`, for its upload. Each of
 /// `deltas` is listed in its pack's entry (D-395).
+///
+/// `keys` is called only once every input is checked, the assets of the entries the release
+/// keeps included, so a release that would fail never asks for a passphrase (D-403).
 pub(crate) fn release_in(
     repo: &Path,
     assets: &Path,
     packs: &[PathBuf],
-    keys: &Keys,
+    keys: &dyn Fn() -> Result<Keys, String>,
     now: i64,
     folder: Option<&str>,
     deltas: &[PathBuf],
@@ -825,6 +861,8 @@ pub(crate) fn release_in(
         }
         files.insert(entry.path(), file);
     }
+    all_assets(&files, assets)?;
+    let keys = &keys()?;
     let expires = now + OFFLINE_DAYS * DAY;
     let e = |err: teigeodata_sync::trust::Error| err.to_string();
     let (top, countries) = repo::by_country(files);
