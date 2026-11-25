@@ -1,0 +1,56 @@
+# In the browser (/docs/tutorials/in-the-browser)
+
+`teigeodata-wasm` is the engine compiled to WebAssembly: the same calls as the
+Node.js package, at most 256 KiB gzipped, or 150 KiB without name search. A page has no file
+system, so it opens a pack from its bytes; after that one download, every query runs locally.
+The [playground](/playground) is this package in a page.
+
+<Steps>
+<Step>
+### Install [#install]
+
+Install the package as the [install page](/docs/getting-started/install) shows (the
+**Browser** tab). Bundlers (Vite, webpack, esbuild) treat the `.wasm` file as an asset, and the
+package's `exports` pick the right entry for browsers, Node.js, Deno and Cloudflare Workers.
+</Step>
+
+<Step>
+### Load the module and a pack [#load-the-module-and-a-pack]
+
+`init()` loads and compiles the module once; then open the pack's bytes:
+
+```js
+import { init, Engine, Reader } from "teigeodata-wasm";
+
+await init();
+const engine = new Engine();
+const bytes = new Uint8Array(await (await fetch("/packs/world-np-lite.tgd")).arrayBuffer());
+engine.openBytes(bytes);
+```
+</Step>
+
+<Step>
+### Keep the pack for offline visits [#keep-the-pack-for-offline-visits]
+
+Serve the pack with a long `Cache-Control` and a content hash in its name, so a later visit
+opens it with no network. To install packs as the user needs them, verified and resumable, use
+the browser store (`teigeodata-wasm/store`): see [the store](/docs/concepts/store#in-the-browser).
+</Step>
+
+<Step>
+### Query, off the main thread for large packs [#query-off-the-main-thread-for-large-packs]
+
+Every query of the other languages works here:
+
+<TourCode region="reverse" />
+
+Opening copies the bytes into the module's memory once; queries then take microseconds. For a
+pack of tens of megabytes, open it in a Web Worker so the page stays responsive while it loads.
+</Step>
+</Steps>
+
+## Next [#next]
+
+- [Install](/docs/getting-started/install), the **Browser** tab: `npm install teigeodata-wasm`,
+  or a build from a checkout.
+- [Measured](/docs/data/measured#webassembly-packages): the module sizes and their budgets.

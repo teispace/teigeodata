@@ -1,0 +1,14 @@
+{
+  "buildCommand": "",
+  "installCommand": "",
+  "framework": null,
+  "outputDirectory": ".",
+  "trailingSlash": true,
+  "redirects": [
+    {
+      "source": "/docs/guides/:lang(rust|python|node|wasm|swift|kotlin-java|dart-flutter|go|c|cpp|dotnet)",
+      "destination": "/docs/getting-started/install/",
+      "permanent": true
+    }
+  ]
+}

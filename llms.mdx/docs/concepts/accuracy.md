@@ -1,0 +1,52 @@
+# Accuracy (/docs/concepts/accuracy)
+
+teigeodata's data is built to be right first, then complete. Each kind of answer has a target,
+and each target is a **gate**: a build that misses it fails, and the measured figures ship in
+each pack's summary.
+
+## The order of importance [#the-order-of-importance]
+
+1. **Coordinates and elevation.** A place's height is read from the terrain at its point, so the
+   two are judged together: the target is a vertical error of at most 50 m at the 90th
+   percentile. Because the height error is mostly the position error times the slope, the point
+   targets follow from it: a populated place within 500 m of its settlement core (P90) on gentle
+   ground and within 150 m where the slope is 5° or steeper; an admin unit's point always inside
+   its own outline.
+2. **Names.** Spellings follow each country's official sources and its lexicon, each rule with its
+   source. Search is measured on a curated set of real queries per country (golden queries) for
+   how often the right place comes first.
+3. **Population**, where it is published. Optional values are null rather than guessed.
+
+## How heights are found [#how-heights-are-found]
+
+Every place's `elevation` is sampled from a digital elevation model at the place's point,
+bilinearly, in metres above EGM2008 (mean sea level). The source tells you how it was found:
+`model` from the terrain, `surveyed` from a source that measured it (summits keep their surveyed
+height where it agrees with the terrain). The lite build uses NASADEM; the main build Copernicus
+GLO-30.
+
+`elevation_at` reads the finest grid a pack has at the point: a country's 1″ grid (about 30 m)
+where its terrain pack is installed, and the world's coarse 15″ grid (about 460 m) everywhere
+else. Measured on Nepal (2026-11-12), the coarse grid is within 61 m of the fine one at P90 and
+110 m at P99: enough for sunrise and sunset times, not for hiking. Install the country's `dem`
+component where heights must be precise.
+
+## Timezones [#timezones]
+
+Zones are the IANA tz database's, at the release each pack names (`tz_version`), and offsets are
+computed from the tzdb rules in the pack, not from the device. The lite build draws a country with
+one zone over that country's outline; the main build uses the zone boundaries of
+timezone-boundary-builder. Each build is checked against an independent source.
+
+## Boundaries and perspective [#boundaries-and-perspective]
+
+Boundaries are the official ones where they are open, stored as shared arcs so neighbouring
+units never overlap or leave gaps. Where a boundary is disputed, teigeodata draws it from one
+stated perspective: Nepal's official map of 2020, including Kalapani, Lipulekh and Limpiyadhura.
+The perspective is recorded in each country's profile, with its sources.
+
+## Measured, per country [#measured-per-country]
+
+Every pack's summary states its rows, the sources of every field, the share of places with a
+name in each language, and the gates it passed. The [data pages](/docs/data) collect them per
+country and release.

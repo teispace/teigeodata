@@ -1,0 +1,83 @@
+# Results (/docs/concepts/results)
+
+Every query of the bindings returns its rows as one **result blob**: a few bytes of header, then
+each column stored contiguously. One blob crosses from the engine into your language in a single
+copy, however many rows it holds, and a `Reader` reads it in place: whole columns as arrays with
+no per-row work, or each row as your language's map or record.
+
+```python
+from teigeodata.blob import Reader
+
+for place in Reader(engine.search("Pokhara", 3)):   # each row: a dict
+    print(place["name"], place["lat"], place["lon"])
+
+reader = Reader(engine.reverse(27.7172, 85.324, 100))  # whole columns, no per-row objects
+lats, lons = reader.numbers("lat"), reader.numbers("lon")
+```
+
+## The same Reader everywhere [#the-same-reader-everywhere]
+
+| | Rows and shape | A whole column | Each row |
+|---|---|---|---|
+| Python | `reader.rows`, `reader.columns`, `has` | `numbers`, `strings`, `nulls`, `column` | iterate: `dict` |
+| Node.js, WebAssembly | `rows`, `columns`, `has` | `numbers` (typed array), `strings`, `nulls`, `column` | iterate: object |
+| Swift | `rows`, `columns`, `has` | `numbers`, `strings`, `nulls`, `column` | iterate: `Record` |
+| Kotlin and Java | `rows()`, `columns()`, `has` | `numbers`, `strings`, `nulls`, `column` | iterate: `Map` |
+| Dart | `rows`, `columns`, `has` | `numbers`, `strings`, `nulls`, `column` | iterate: `Map` |
+| Go | `Rows()`, `Columns()`, `Has` | `Values[T]`, `Strings`, `Nulls`, `Column` | `Records()`: `map` |
+| C | `tg_reader_init`, `tg_reader_find` | | `tg_reader_string`, `_number`, `_int`, `_is_null` |
+| C++ | `rows()`, `columns()`, `has` | `numbers`, `strings`, `nulls`, `column` | iterate: `Row` |
+| .NET | `Rows`, `Columns`, `Has` | `Values<T>` (span), `Strings`, `Nulls`, `Column` | iterate: dictionary |
+
+Rust's typed engine returns `Place` values instead; `teigeodata-api` gives Rust the blobs too.
+
+## Place columns [#place-columns]
+
+Every query that returns places has these columns:
+
+| Column | Type | Null when |
+|---|---|---|
+| `id` | string | never |
+| `name` | string | the place has no name in the languages installed |
+| `kind` | string | the place's kind is one this reader does not know (a newer pack) |
+| `level` | integer | never (0 for anything that is not an admin unit) |
+| `lat`, `lon` | number (degrees) | never |
+| `elevation` | integer (metres, EGM2008) | no height is known |
+| `parent` | string (an ID) | a root (a country, a timezone area), or a pack without the admin hierarchy |
+| `tz` | string (an IANA zone) | the pack has no timezones there |
+| `iso` | string (ISO 3166) | the place has no ISO code |
+| `population` | integer (people) | no count is known, the place is a former unit, or the layer was installed without `extra` |
+| `population_kind` | string: `stated` (a source's count) or `modelled` (a population grid over an admin unit) | as `population` |
+
+and some queries add their own:
+
+| Query | Added columns |
+|---|---|
+| `search`, `search_with` | `score`: compares the rows of one query only |
+| `reverse`, `within_radius`, `nearby` | `meters` (great-circle distance), `bearing` (degrees clockwise from north, from the place to the point) |
+| postal queries | `postal`, `scheme`, `code_kind`, `valid_from`, `valid_to` |
+
+Queries that do not return places have their own columns: `elevation_at` (`meters`, `source`,
+`resolution_m`, `datum`), `tz_offset_at` (`seconds`, `dst`, `abbr`), `tz_local` (`kind`,
+`before`, `after`), `tz_zones` (`zone`), `distance` (`meters`, `bearing`), `boundary` (`id`,
+`lod`, `tolerance_m`, `vertices`, `geojson`). The [reference](/docs/reference) lists every query.
+
+## Nulls, numbers and strings [#nulls-numbers-and-strings]
+
+- **Null is not zero.** A whole number column reads a null row as zero; check `nulls(column)`
+  (or read rows, where nulls are your language's null) before trusting a 0.
+- **Numbers keep their type.** A column is stored as 8, 16, 32 or 64-bit integers or 32 or
+  64-bit floats; the readers give each in the language's natural type. 64-bit integers are exact
+  to 2^53 where a language has only doubles (JavaScript).
+- **Strings are UTF-8,** stored once per distinct value where a column repeats (`kind`, `tz`):
+  reading them costs a lookup, not a decode per row.
+
+## The format [#the-format]
+
+A blob starts with the magic `TGB1`, the row count, the column count and the total length (16
+bytes), then one 40-byte descriptor per column: its name, type, where its values are, where its
+strings or dictionary are, and where its null bitmap is. Every offset is checked when the reader
+is made, so no read can leave the blob, even for bytes from an untrusted source. The format is
+specified in [bindings](https://github.com/teispace/teigeodata/blob/main/docs/04-architecture/bindings.md)
+and tested in every language against the same fixtures, including malformed blobs each reader
+must refuse.

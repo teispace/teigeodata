@@ -1,0 +1,78 @@
+# Data (/docs/data)
+
+Coverage grows by data releases: Nepal first, then India, South Asia, Asia, the USA and the rest
+of the world. Every release is built from a commit on `main`, keeps every published ID, and
+lists its checksums.
+
+## What the catalog holds [#what-the-catalog-holds]
+
+The packs are served by the signed catalog ([the store](/docs/concepts/store) has its
+addresses). An app installs the parts it needs and updates by delta where one is listed.
+Sizes are the download (wire) and the whole pack on disk; a part costs less. Checked
+2026-11-24.
+
+**main** (ODbL, with full credits):
+
+| Pack | Release | What | Wire | Disk |
+|---|---|---|--:|--:|
+| `np` | 2026.11.3 | Nepal in full: provinces, districts, local levels and wards with their boundaries, about 90,000 settlements, localities and natural features, terrain, names in Nepali and English | 95.9 MB | 104.0 MB |
+| `app-np` | 2026.11.23.2 | Nepal sized for an app: every place, boundaries down to the ward at 50 m, names in Nepali, English, Hindi and Sanskrit; a delta from 2026.11.23 (1.4 MB) | 6.5 MB | 10.3 MB |
+| `app-np-100` | 2026.11.23.2 | The same with boundaries at 100 m | 5.5 MB | 9.2 MB |
+| `app-world` | 2026.11.23 | The world beside `app-np`: countries, first-level units and cities of 5,000 or more by point, and India's towns (CC BY 4.0) | 3.1 MB | 5.5 MB |
+| `dem-coarse-np` | 2026.11.22 | Nepal's coarse terrain grid: a height anywhere in the country (CC BY 4.0) | 0.5 MB | 0.5 MB |
+
+**lite** (CC BY 4.0 only):
+
+| Pack | Release | What | Wire | Disk |
+|---|---|---|--:|--:|
+| `np` | 2026.11.2 | Nepal from public-domain and attribution-only sources: down to the local level, settlements and features, terrain | 82.8 MB | 87.7 MB |
+| `app` | 2026.11.23 | One app-sized layer: Nepal in full with boundaries down to the local level, and the world as in `app-world` | 7.0 MB | 12.6 MB |
+| `app-world` | 2026.11.23 | As in main | 3.1 MB | 5.5 MB |
+| `dem-coarse-np` | 2026.11.22 | As in main | 0.5 MB | 0.5 MB |
+
+Stack `app-np` with `app-world`, never with `app`: lite and main number their places
+separately. Every release also ships the ID registries and a lite-to-main ID bridge on its
+[data release](https://github.com/teispace/teigeodata/releases), with each pack's summary and
+attribution.
+
+The docs' examples run on an older lite pack, `world-np-lite.tgd` of
+[data-2026.11.14.3](https://github.com/teispace/teigeodata/releases/tag/data-2026.11.14.3)
+(172,339 places), so that CI can check every printed answer; the
+[coverage page](/docs/data/coverage) is read from it.
+
+## Countries [#countries]
+
+| Country | Today | Levels |
+|---|---|---|
+| [Nepal](/docs/data/countries/np) | In full: provinces, districts and local levels with their boundaries, the provinces' ISO codes, wards, about 90,000 settlements, localities (toles, chowks) and natural features (peaks, passes), every one with a height. | country, province, district, local level, ward |
+| [India](/docs/data/countries/in) | Districts and statutory towns, with the states' current ISO codes. Full coverage is next. | country, state, district |
+| Every other country | The country, its first-level units with ISO codes and boundaries, and its cities of 5,000 or more. | country, first level |
+
+Every country, with its places by kind and level, is on the [coverage page](/docs/data/coverage).
+Each country's rules (its admin ladder, the spellings of its generic terms, its sources and its
+perspective on borders) are data in
+[`data/countries`](https://github.com/teispace/teigeodata/tree/main/data/countries), each rule
+with its source.
+
+## Sources [#sources]
+
+The lite build reads only public-domain and attribution-only sources:
+
+| Source | What it gives | Licence |
+|---|---|---|
+| Natural Earth | Country and first-level outlines | Public domain |
+| GeoNames | Cities and settlements, alternative names | CC BY 4.0 |
+| Wikidata | Nepal's places and their links between sources; the world's names in Nepali and Hindi with English aliases; ISO codes; units' populations | CC0 1.0 |
+| IANA tz database | Timezones and their rules | Public domain |
+| Unicode CLDR | Current ISO 3166 subdivision codes | Unicode License v3 |
+| OCHA HDX COD-AB (Nepal) | Nepal's provinces, districts and local levels | CC BY-IGO 3.0 |
+| Nepal's Central Bureau of Statistics, via Open Data Nepal | Codes and Nepali names | Creative Commons Attribution |
+| India's Local Government Directory | India's districts and towns | Free reproduction with acknowledgement |
+| NASADEM | Terrain heights | Public domain (NASA) |
+| Microsoft and Google building footprints | Where settlements' cores are | CDLA-Permissive 2.0, CC BY 4.0 |
+
+The main build adds OpenStreetMap (ODbL), Overture's divisions for the world's countries and
+first-level units (ODbL), timezone-boundary-builder's zone outlines (ODbL), WorldPop's modelled
+populations (CC BY 4.0, kept to the main build) and Copernicus GLO-30 heights. Every source is pinned
+by version and SHA-256, and every pack lists the notices of the sources it was built from: see
+[licences](/docs/concepts/licences).

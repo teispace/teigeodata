@@ -1,0 +1,103 @@
+# Types, constants and errors (/docs/reference/types)
+
+## Options records [#options-records]
+
+Every field's zero value is its default, so a record made with no fields set asks for the
+defaults (in C, a null pointer does too). Each language spells a field
+its own way: `focus_lat` is `focusLat` in JavaScript, Swift, Java, Kotlin and Dart, and
+`FocusLat` in Go and C#.
+
+### `SearchOptions` [#searchoptions]
+
+How `Engine::search_with` ranks. Every field's zero value is its default.
+
+| Field | Type | Default | What |
+|---|---|---|---|
+| `focus_lat` | `Option<f64>` | none | Prefer places near this latitude (with `focus_lon`): the user's location, or a point in their home country with a wide scale. |
+| `focus_lon` | `Option<f64>` | none | The focus longitude; set with `focus_lat` or not at all. |
+| `focus_scale_m` | `Option<f64>` | none | The distance in metres at which the focus gain halves (a place at the focus gains 30, one scale away 15); `None` is 50 km. |
+| `strict` | `bool` | `false` | Rank by match tier first (exact, loose, prefix, one edit, substring, two edits, phonetic), then importance and focus, instead of one additive score. |
+
+### `OpenOptions` [#openoptions]
+
+How `Engine::open_file_with` and `Engine::open_bytes_with` open a pack. Every field's zero value is its default.
+
+| Field | Type | Default | What |
+|---|---|---|---|
+| `priority` | `i32` | `0` | Precedence over the other packs: a higher one wins where packs disagree (default 0). |
+| `verify` | `Verify` | `Lazy` | When sections are verified. |
+| `load` | `Load` | `Map` | How a file is loaded; ignored for bytes. |
+| `outline_level` | `Option<u32>` | none | The deepest admin level whose outlines are read, in a pack that splits its outlines by level: admin units below it are not found at a point, and their outlines are not loaded. `None` reads every level. |
+| `outline_tolerance_m` | `u32` | `0` | The largest simplification of the outlines read, in metres, when the pack has coarser outlines; 0 is full resolution. Admin units at a point may then differ within that distance of a border. |
+| `components` | `String` | empty | The components the pack holds, by name and comma-separated (`point,names,search`), for a pack installed in part; what they need is added. Empty for a whole pack. A query that needs a component left out answers nothing, or `MissingComponent` where it cannot. |
+| `languages` | `String` | empty | The languages whose names and search sections are read, as comma-separated BCP 47 tags (`en,ne`), at most 8; a language without a part of its own reads the pack's shared part. Empty reads every language. |
+
+### `InstallOptions` [#installoptions]
+
+What `Store::install` takes of each pack. Every field's zero value is its default: the whole pack.
+
+| Field | Type | Default | What |
+|---|---|---|---|
+| `components` | `String` | empty | The components, by name and comma-separated (`point,names,search`); what they need is added. Empty for every component. |
+| `languages` | `String` | empty | The languages besides the base names, as comma-separated BCP 47 tags (`en,ne`), at most 8. Empty for every language. |
+| `outline_level` | `Option<u32>` | none | The deepest admin level of the one outline part installed; `None` for every outline. |
+| `outline_tolerance_m` | `u32` | `0` | The tolerance in metres of that outline part; 0 is full resolution. |
+| `pin` | `bool` | `false` | Keeps the packs when room is made. |
+
+## Enums [#enums]
+
+### `Verify` [#verify]
+
+When a pack's sections are verified against their hashes.
+
+| Variant | Value | What |
+|---|--:|---|
+| `Lazy` | 0 | On first use: each section, or each 16 KiB block of a large one, is checked the first time a query reads it. Opening costs only the head checks. |
+| `Eager` | 1 | Every section when the pack opens. |
+| `Trusted` | 2 | Never: only for bytes already verified, by the store's installer for instance. |
+
+### `Load` [#load]
+
+How a pack file is loaded.
+
+| Variant | Value | What |
+|---|--:|---|
+| `Map` | 0 | Map the file into memory where the platform can, read it otherwise. The file must not be written over while it is open. |
+| `Read` | 1 | Read the whole file into memory: for files the application does not own. |
+
+## Constants [#constants]
+
+| Constant | Value | What |
+|---|--:|---|
+| `SAMPLE_ROWS_MAX` | 1000000 | Most rows `sample_rows` builds in one call. |
+| `LIMIT_MAX` | 10000 | Most places one query returns. |
+| `COARSEST_LOD` | 6 | The coarsest level of detail `Engine::boundary` reads; 0 is full resolution. |
+
+## Errors [#errors]
+
+A call that fails gives one of these codes and a message, the same in every language. Each
+language raises it in its own way:
+
+| Language | A failure is |
+|---|---|
+| Rust | `teigeodata_api::Error`, with `code` (an `ErrorCode`) and `message` |
+| Python | `TeiGeodataError`, or its subclass for the code: `InvalidArgumentError`, `CancelledError`, `InternalError`, `IoError`, `CorruptError`, `MissingComponentError`, `NetworkError`, `RefusedError` |
+| JavaScript | an `Error` whose `code` is the code's name, such as `"InvalidArgument"` |
+| Swift | a thrown `TeiGeodataError`, with `code` (`TeiGeodataError.Code`) |
+| Java and Kotlin | `TeiGeodataException` (unchecked), or its subclass for the code, such as `TeiGeodataException.Cancelled`; `code()` gives the value |
+| Dart | the sealed `TeiGeodataException`: `InvalidArgumentException`, `CancelledException`, `InternalException`, `IoException`, `CorruptException`, `MissingComponentException`, `NetworkException`, `RefusedException` |
+| Go | an `error` holding a `*teigeodata.Error`; test it with `errors.Is(err, teigeodata.CodeInvalidArgument)` |
+| C | the code as the return value (0 is success); `tg_last_error` gives the message on the same thread |
+| C++ | `teigeodata::Error` (a `std::runtime_error`), with `code()` |
+| .NET | `TeiGeodataException`, with `Code` (an `ErrorCode`) |
+
+| Code | Value | Meaning |
+|---|--:|---|
+| `InvalidArgument` | 1 | An argument is outside its documented range. |
+| `Cancelled` | 2 | A callback asked to stop. |
+| `Internal` | 3 | A bug inside teigeodata (a panic caught at the boundary, or a broken invariant). |
+| `Io` | 4 | A file could not be read. |
+| `Corrupt` | 5 | The bytes are not a valid pack, or a section does not match its hash. |
+| `MissingComponent` | 6 | The query needs a component of a pack that is not installed: install it, or ask a pack that has it. |
+| `Network` | 7 | The network failed: no mirror answered, or the connection broke. Try again later. |
+| `Refused` | 8 | The store refused: the catalog did not verify, a pack is not in it or not installed, a pack another needs, or the store's files cannot be written. |

@@ -1,0 +1,61 @@
+1:"$Sreact.fragment"
+2:"/_next/static/chunks/084tt3matl82_.js"
+3:"/_next/static/chunks/2qwysztsufk-9.js"
+4:"/_next/static/chunks/1ejxlizzfmzex.js"
+5:"/_next/static/chunks/039b2uykstso8.js"
+6:"/_next/static/chunks/0m1zuzmkxump6.js"
+7:"/_next/static/chunks/24w1226o9srmt.js"
+8:I[98117,["$2","$3","$4","$5","$6","$7"],"Provider"]
+9:I[39756,["$2","$3","$4","$5","$6","$7"],"default"]
+a:I[37457,["$2","$3","$4","$5","$6","$7"],"default"]
+e:"/_next/static/chunks/23eyv3n4bczbg.js"
+f:"/_next/static/chunks/0spfcbng1vbz5.js"
+10:I[64345,["$2","$3","$4","$5","$6","$7","$e","$f"],"HomeLayout"]
+19:"ViewportBoundary"
+1a:I[97367,["$2","$3","$4","$5","$6","$7"],"$19"]
+1b:"MetadataBoundary"
+1c:I[97367,["$2","$3","$4","$5","$6","$7"],"$1b"]
+1d:"$Sreact.suspense"
+:HL["/_next/static/chunks/3od0g0avc6pr7.css","style"]
+c:X
+15:X
+15:C
+16:[["children",{"s":"__PAGE__","h":160,"d":{"r":"$L17","p":"$@18","v":null,"s":"$c"}}]]
+12:[["children",{"s":"playground","h":96,"d":{"r":["$","$1","c",{"children":[null,["$","$L9",null,{"parallelRouterKey":"children","template":"$L13"}]]}],"p":"$@14","v":"$15","s":"$c"},"c":"$Q16"}]]
+d:[["children",{"s":"(tool)","h":96,"d":{"r":["$","$1","c",{"children":[[["$","script","script-0",{"src":"/_next/static/chunks/23eyv3n4bczbg.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/0spfcbng1vbz5.js","async":true}]],["$","$L10",null,{"nav":{"title":["$","span",null,{"className":"inline-flex items-center gap-2 font-semibold tracking-tight","children":[["$","svg",null,{"width":"22","height":"22","viewBox":"0 0 24 24","aria-hidden":"true","className":"text-fd-primary","children":[["$","path",null,{"d":"M12 2.5c-3.6 0-6.5 2.8-6.5 6.4 0 4.6 5.1 10.5 6 11.5a.7.7 0 0 0 1 0c.9-1 6-6.9 6-11.5 0-3.6-2.9-6.4-6.5-6.4Z","fill":"currentColor","opacity":"0.18"}],["$","path",null,{"d":"M12 2.5c-3.6 0-6.5 2.8-6.5 6.4 0 4.6 5.1 10.5 6 11.5a.7.7 0 0 0 1 0c.9-1 6-6.9 6-11.5 0-3.6-2.9-6.4-6.5-6.4Z","fill":"none","stroke":"currentColor","strokeWidth":"1.6"}],["$","circle",null,{"cx":"12","cy":"9","r":"2.4","fill":"currentColor"}]]}],"teigeodata"]}]},"githubUrl":"https://github.com/teispace/teigeodata","links":[{"text":"Docs","url":"/docs","active":"nested-url"},{"text":"Reference","url":"/docs/reference","active":"nested-url"},{"text":"Playground","url":"/playground","active":"url"}],"children":["$","$L9",null,{"parallelRouterKey":"children","template":["$","$La",null,{}],"notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":"$0:t:t:d:r:props:children:1:props:children:1:props:children:props:children:props:notFound:0:1:props:style","children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":"$0:t:t:d:r:props:children:1:props:children:1:props:children:props:children:props:notFound:0:1:props:children:props:children:1:props:style","children":404}],["$","div",null,{"style":"$0:t:t:d:r:props:children:1:props:children:1:props:children:props:children:props:notFound:0:1:props:children:props:children:2:props:style","children":["$","h2",null,{"style":"$0:t:t:d:r:props:children:1:props:children:1:props:children:props:children:props:notFound:0:1:props:children:props:children:2:props:children:props:style","children":"This page could not be found."}]}]]}]}]],[]]}]}]]}],"p":"$@11","v":null,"s":"$c"},"c":"$Q12"}]]
+0:{"t":{"t":{"s":"","h":80,"d":{"r":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/3od0g0avc6pr7.css","precedence":"next"}],["$","script","script-0",{"src":"/_next/static/chunks/084tt3matl82_.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/2qwysztsufk-9.js","async":true}],["$","script","script-2",{"src":"/_next/static/chunks/1ejxlizzfmzex.js","async":true}],["$","script","script-3",{"src":"/_next/static/chunks/039b2uykstso8.js","async":true}],["$","script","script-4",{"src":"/_next/static/chunks/0m1zuzmkxump6.js","async":true}],["$","script","script-5",{"src":"/_next/static/chunks/24w1226o9srmt.js","async":true}]],["$","html",null,{"lang":"en","suppressHydrationWarning":true,"children":[["$","head",null,{"children":["$","script",null,{"dangerouslySetInnerHTML":{"__html":"(()=>{try{if(matchMedia(\"(prefers-reduced-motion: reduce)\").matches)return;var d=document.documentElement;d.classList.add(\"tg-motion\");setTimeout(function(){if(!window.__tgReveal)d.classList.remove(\"tg-motion\")},4000)}catch(e){}})()"}}]}],["$","body",null,{"className":"flex min-h-screen flex-col antialiased","children":["$","$L8",null,{"children":["$","$L9",null,{"parallelRouterKey":"children","template":["$","$La",null,{}],"notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]]}]}]}]]}]]}],"p":"$@b","v":null,"s":"$c"},"c":"$Qd"},"h":{"r":["$","$1","h",{"children":[null,["$","$L1a",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","2",{"name":"theme-color","content":"#ffffff","media":"(prefers-color-scheme: light)"}],["$","meta","3",{"name":"theme-color","content":"#0a0a0a","media":"(prefers-color-scheme: dark)"}],["$","meta","4",{"name":"color-scheme","content":"light dark"}]]}],["$","$L1c",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$1d",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"Playground · teigeodata"}],["$","meta","1",{"name":"description","content":"Every query of teigeodata : search, reverse, admin units, timezones, elevation, nearby places, outlines, distances and radii on an OpenStreetMap map, run by the WebAssembly engine on a released pack in your browser."}],["$","meta","2",{"name":"application-name","content":"teigeodata"}],["$","link","3",{"rel":"author","href":"https://teispace.com"}],["$","meta","4",{"name":"author","content":"Teispace"}],["$","meta","5",{"name":"keywords","content":"offline geocoding,reverse geocoding,geocoder SDK,place search,gazetteer,admin boundaries,administrative hierarchy,timezone lookup,IANA timezone from coordinates,elevation API,Nominatim alternative,GeoNames,OpenStreetMap,Nepal places,Rust geocoder,WebAssembly geocoding,MCP server"}],["$","meta","6",{"name":"creator","content":"Teispace"}],["$","meta","7",{"name":"publisher","content":"Teispace"}],["$","meta","8",{"name":"robots","content":"index, follow, max-image-preview:large, max-snippet:-1"}],["$","meta","9",{"name":"category","content":"technology"}],["$","link","10",{"rel":"canonical","href":"https://teigeodata.teispace.com/playground/"}],["$","meta","11",{"name":"format-detection","content":"telephone=no, address=no, email=no"}],["$","meta","12",{"property":"og:title","content":"Playground"}],"$L1e","$L1f","$L20","$L21","$L22","$L23","$L24","$L25","$L26","$L27","$L28","$L29","$L2a","$L2b","$L2c","$L2d","$L2e"]}]}],null]}],null]}],"p":"$@2f","v":null,"s":"$c"}},"a":"$@30","u":"$@31","b":"rsEfWhBAaihaPnL-ZC4rR"}
+32:"/_next/static/chunks/1jua7d4084dqu.js"
+33:"/_next/static/chunks/0p8yaw2-0xhps.js"
+34:I[63775,["$2","$3","$4","$5","$6","$7","$e","$f","$32","$33"],"Playground"]
+35:I[97367,["$2","$3","$4","$5","$6","$7"],"OutletBoundary"]
+37:I[27201,["$2","$3","$4","$5","$6","$7"],"IconMark"]
+:HL["/_next/static/chunks/0n8kzvw2z_6as.css","style"]
+13:["$","$La",null,{}]
+17:["$","$1","c",{"children":[["$","main",null,{"className":"flex h-[calc(100dvh-var(--fd-nav-height,3.5rem))] min-h-[560px] flex-col","children":["$","$L34",null,{}]}],[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/0n8kzvw2z_6as.css","precedence":"next"}],["$","script","script-0",{"src":"/_next/static/chunks/1jua7d4084dqu.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/0p8yaw2-0xhps.js","async":true}]],["$","$L35",null,{"children":["$","$1d",null,{"name":"Next.MetadataOutlet","children":"$@36"}]}]]}]
+1e:["$","meta","13",{"property":"og:description","content":"Every query of teigeodata : search, reverse, admin units, timezones, elevation, nearby places, outlines, distances and radii on an OpenStreetMap map, run by the WebAssembly engine on a released pack in your browser."}]
+1f:["$","meta","14",{"property":"og:url","content":"https://teigeodata.teispace.com/playground/"}]
+20:["$","meta","15",{"property":"og:site_name","content":"teigeodata"}]
+21:["$","meta","16",{"property":"og:locale","content":"en_US"}]
+22:["$","meta","17",{"property":"og:image","content":"https://teigeodata.teispace.com/og/playground/image.png"}]
+23:["$","meta","18",{"property":"og:image:width","content":"1200"}]
+24:["$","meta","19",{"property":"og:image:height","content":"630"}]
+25:["$","meta","20",{"property":"og:image:alt","content":"Playground"}]
+26:["$","meta","21",{"property":"og:type","content":"website"}]
+27:["$","meta","22",{"name":"twitter:card","content":"summary_large_image"}]
+28:["$","meta","23",{"name":"twitter:title","content":"Playground"}]
+29:["$","meta","24",{"name":"twitter:description","content":"Every query of teigeodata : search, reverse, admin units, timezones, elevation, nearby places, outlines, distances and radii on an OpenStreetMap map, run by the WebAssembly engine on a released pack in your browser."}]
+2a:["$","meta","25",{"name":"twitter:image","content":"https://teigeodata.teispace.com/og/playground/image.png"}]
+2b:["$","link","26",{"rel":"icon","href":"/icon.svg","type":"image/svg+xml"}]
+2c:["$","link","27",{"rel":"icon","href":"/brand/icon.png"}]
+2d:["$","link","28",{"rel":"apple-touch-icon","href":"/brand/icon.png"}]
+2e:["$","$L37","29",{}]
+c:300
+36:null
+31:true
+c:C
+30:0
+14:"$undefined"
+11:"$undefined"
+b:"$undefined"
+2f:"$undefined"
+18:"$undefined"

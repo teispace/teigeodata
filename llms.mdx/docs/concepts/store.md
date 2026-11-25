@@ -1,0 +1,111 @@
+# The store (/docs/concepts/store)
+
+The **store** keeps the packs installed on a device and the signed **catalog** that says which
+packs exist. It is how an app downloads data when a user needs it: the user searches for
+"Dubai", the app finds that the UAE pack holds it, installs that pack, and from then on answers
+offline.
+
+<Callout title="The live catalog">
+Two signed catalogs share one root, because an app chooses its licence once:
+
+- **main** (ODbL packs, and the CC BY 4.0 ones a main app also uses):
+  `https://raw.githubusercontent.com/teispace/teigeodata/catalog/main/`
+- **lite** (CC BY 4.0 only): `https://raw.githubusercontent.com/teispace/teigeodata/catalog/lite/`
+- **Packs** for both: `https://github.com/teispace/teigeodata/releases/download/`
+
+The trust anchor is `1.root.json` from the catalog's directory. Ship it in the app; the store
+finds every later root by itself. Readers need SDK 1.2 or later. What each catalog holds is on
+the [data page](/docs/data).
+</Callout>
+
+## What it does [#what-it-does]
+
+- **Finds packs offline.** `find` takes a name and returns the places it matches with the
+  catalog's packs that hold each one; `locate` does the same for the countries at a point. Both
+  read the stored catalog alone, so the app can offer the download, with its size, before it has
+a network.
+- **Installs a part.** Install a pack whole, or some components, the names of some languages,
+  and boundaries down to a level: the same choices as in [packs](/docs/concepts/packs).
+- **Verifies every byte.** The catalog is signed metadata (TUF): every pack it lists has its
+  head's hash, the head holds every section's hash, and large sections hold a hash per 16 KiB
+  block. Nothing is written before it is checked against that chain, so a bad mirror or a broken
+  download is refused and the next mirror resumes.
+- **Survives crashes.** An install that a crash or a kill cuts short is finished or undone the
+  next time the store opens; the installed packs are never half-written.
+- **Updates and evicts.** `update` moves installed packs to the catalog's releases, keeping the
+  components and languages installed. Where the catalog lists a delta from the installed
+  release and it costs at most a quarter of the pack, it fetches only the places that changed
+  and reads them above the installed pack; otherwise it fetches the sections that changed. Pinned packs are kept when room is made; `remove` takes a
+  pack out with the dependencies nothing else needs.
+- **Gives you an engine.** `engine()` opens every installed pack, with the parts installed.
+
+## In code [#in-code]
+
+The store's calls block on the network and the disk, so call them off the UI thread or use the
+language's asynchronous form (`…Async` in Swift, Kotlin and Java, Dart, Node.js and .NET; `aio`
+in Python). An install runs as a `Job` that reports its bytes as it goes and can be cancelled:
+cancelled, it leaves the store as it was.
+
+```python
+import teigeodata
+from teigeodata import aio
+
+store = teigeodata.Store.open(path)  # set up once with Store.create
+job = store.install("ae", teigeodata.InstallOptions(components="point,names,search"))
+async for done, total in aio.progress(job):
+    print(f"{done} of {total} bytes")
+await aio.result(job)                  # raises the job's error, if any
+engine = store.engine()                # every installed pack, opened
+```
+
+On iOS and Android a download may need to go on while the app is suspended. `install_pass`
+splits an install so the platform's own download service fetches the bytes (a background
+`URLSession`, `WorkManager`): each pass lists the byte ranges still missing, the platform fetches
+them into files, and the next pass verifies and installs what arrived.
+
+## In the browser [#in-the-browser]
+
+`teigeodata-wasm/store` is the same store in a page's origin: the same journal, recovery,
+signed catalog and resumable installs, with the files in the origin private file system (OPFS)
+and the network through `fetch`. It is its own module inside the `teigeodata-wasm` package, so
+a page that only reads packs never loads it.
+
+The store writes from a dedicated Web Worker, `store-worker.js`, since only a worker can write
+OPFS files at an offset. Any page or worker reads what it installed, with any engine:
+
+```js
+import { init, Engine, Reader, installedSections } from "teigeodata-wasm";
+import { openInstalled, storeLock, storeWorker } from "teigeodata-wasm/opfs";
+
+const store = storeWorker(
+  new Worker(new URL("teigeodata-wasm/store/store-worker.js", import.meta.url), { type: "module" }),
+);
+const root = "teigeodata"; // the store's directory in the origin private file system
+await store.init(root, [catalogUrl], [assetsUrl], trustedRoot); // once
+await store.open(root);
+await store.install("np", { components: "point,names,search" });
+
+await init();
+const engine = new Engine();
+const installed = await openInstalled(engine, installedSections, root);
+new Reader(engine.search("Pokhara", 5)).records();
+
+// After the store changes, open again and let go of the old files.
+new BroadcastChannel(storeLock(root)).onmessage = () => { /* reopen, then installed.close() */ };
+```
+
+- **Lazy by section.** `openInstalled` reads each pack's head, then only the sections of the
+  components installed, each checked against the head.
+- **Files in use are kept.** A reader holds a shared Web Lock on each file it has open. A
+  removal or an update leaves such a file until it is let go, and the next call removes it.
+- **One writer at a time.** Each call runs under the store's Web Lock on a store opened afresh,
+  so tabs share one store and each sees the others' installs.
+- **Mirrors on another origin** must allow it (CORS) and expose `Content-Range` and `ETag`.
+  Range requests need no preflight. See [running a mirror](/docs/concepts/mirrors).
+
+## From the command line [#from-the-command-line]
+
+`tgd init`, `refresh`, `catalog`, `find`, `locate`, `install`, `update`, `remove`, `pin`,
+`status` and `repair` do the same from a shell; see the [command line](/docs/cli#the-store).
+`tgd serve` and `tgd mcp` follow the store: a pack installed or updated while they run is
+answered from within seconds.
